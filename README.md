@@ -48,10 +48,10 @@ Use a clean, unmodified installation of the original game.
 
 13. Copy the following into your Urban Assault installation folder:
     
-UA_source.exe
-res/
-fonts/
-locale/language.lng
+UA_source.exe,
+res,
+fonts,
+locale
 
 15. If UA_source.exe reports missing DLL files at startup:
 Copy the required DLLs from:
