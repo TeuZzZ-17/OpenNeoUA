@@ -63,7 +63,7 @@ UA_source.exe
 ldd build/UA_source.exe
 This shows all runtime dependencies used by the executable.
 
-17. Automatically copy all required MinGW64 DLLs: instead of manually copying DLLs one by one, you can automatically copy all required MinGW64 runtime DLLs into the build folder using:
+17. instead of manually copying DLLs one by one, you can automatically copy all required MinGW64 runtime DLLs into the build folder using:
 ldd build/UA_source.exe | grep mingw64/bin | awk '{print $3}' | xargs -I {} cp -v {} build/
 
 This command:
@@ -73,7 +73,7 @@ This command:
     • automatically copies them into:
 build/
 
-This avoids copying hundreds of unnecessary DLLs like many old 32-bit guides do.
+This avoids copying hundreds of unnecessary DLLs.
 After this step, build/UA_source.exe should be portable and runnable outside the MSYS2 environment.
 
 -----------------------------------------------------------------------------------------------------------------
