@@ -1359,6 +1359,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_vp_wait = _vhclModels.at( vhcl.vp_wait );
         bacto->_vp_megadeth = _vhclModels.at( vhcl.vp_megadeth );
         bacto->_vp_genesis = _vhclModels.at( vhcl.vp_genesis );
+        bacto->_visual_scale = vhcl.visual_scale;
 
         bacto->_destroyFX = vhcl.dest_fx;
         bacto->_extDestroyFX = vhcl.ExtDestroyFX;
@@ -1493,6 +1494,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_vp_wait =     _vhclModels.at(wproto.vp_wait);
     wobj->_vp_megadeth = _vhclModels.at(wproto.vp_megadeth);
     wobj->_vp_genesis =  _vhclModels.at(wproto.vp_genesis);
+    wobj->_visual_scale = wproto.visual_scale;
 
     wobj->_destroyFX = wproto.dfx;
     wobj->_extDestroyFX = wproto.ExtDestroyFX;
