@@ -72,6 +72,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _fly_dir_length = 0.0;
     _height = 0.0;
     _height_max_user = 0.0;
+    _visual_scale = 1.0;
 
     _vp_active = 0;
 
@@ -696,6 +697,9 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 _current_vp->Bas->TForm().Pos = _tForm.Pos;
                 _current_vp->Bas->TForm().SclRot = _tForm.SclRot;
 
+                if ( _visual_scale != 1.0 )
+                    _current_vp->Bas->TForm().SclRot *= mat3x3::Scale(vec3d(_visual_scale));
+
                 _current_vp->Bas->Render(arg, _current_vp);
             }
         }
@@ -715,6 +719,9 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                     bd->vp->Bas->TForm().SclRot = bd->rotate.Transpose() * mat3x3::Scale( vec3d(bd->scale, bd->scale, bd->scale) );
                 else
                     bd->vp->Bas->TForm().SclRot = bd->rotate.Transpose();
+
+                if ( _visual_scale != 1.0 )
+                    bd->vp->Bas->TForm().SclRot *= mat3x3::Scale(vec3d(_visual_scale));
 
                 bd->vp->Bas->Render(arg, bd->vp);
             }

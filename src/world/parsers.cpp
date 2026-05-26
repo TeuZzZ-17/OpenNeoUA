@@ -706,6 +706,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vp_genesis = parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "visual_scale") )
+    {
+        _vhcl->visual_scale = parser.stof(p2, 0);
+    }
     else if ( !StriCmp(p1, "type_icon") )
     {
         _vhcl->type_icon = p2[0];
@@ -1436,6 +1440,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "vp_genesis") )
     {
         _wpn->vp_genesis = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "visual_scale") )
+    {
+        _wpn->visual_scale = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "type_icon") )
     {

@@ -8518,8 +8518,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
     {
         if ( v23 )
         {
-            if ( bact )
-                yw_RenderInfoWeaponName(yw, wis, cur, weap->name, xpos,  ypos - wis->field_92 * 12.0);
+            yw_RenderInfoWeaponName(yw, wis, cur, weap->name, xpos,  ypos - wis->field_92 * 12.0);
 
             yw_RenderInfoWeaponWire(yw, wis, weap, xpos,   ypos - wis->field_92 * 9.0);
 

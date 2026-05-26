@@ -658,6 +658,7 @@ public:
     float _height;
     float _height_max_user;
     vec3d _scale;
+    float _visual_scale = 1.0;
     NC_STACK_base *_vp_normal;
     NC_STACK_base *_vp_fire;
     NC_STACK_base *_vp_wait;
