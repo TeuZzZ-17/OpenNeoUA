@@ -1223,6 +1223,9 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->radius_flyer = 0;
         _wpn->radius_robo = 0;
         _wpn->start_speed = 70.0;
+        _wpn->spread = 0.0;
+        _wpn->spread_user = 0.0;
+        _wpn->spread_user_set = false;
         _wpn->life_time = 20000;
         _wpn->life_time_nt = 0;
         _wpn->drive_time = 7000;
@@ -1396,6 +1399,15 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "start_speed") )
     {
         _wpn->start_speed = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "spread") )
+    {
+        _wpn->spread = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "spread_user") )
+    {
+        _wpn->spread_user = parser.stof(p2, 0);
+        _wpn->spread_user_set = true;
     }
     else if ( !StriCmp(p1, "life_time") )
     {

@@ -273,6 +273,9 @@ struct TWeapProto
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
     float start_speed = 0.0;
+    float spread = 0.0;
+    float spread_user = 0.0;
+    bool spread_user_set = false;
     NC_STACK_skeleton *wireframe = NULL;
     IDVList initParams;
     

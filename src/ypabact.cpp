@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 #include <stack>
 #include "yw.h"
 #include "ypabact.h"
@@ -3328,6 +3329,35 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         else
         {
             wobj->_fly_dir = _rotation.AxisZ();
+        }
+
+        float weaponSpread = wproto.spread;
+        if ( (_oflags & BACT_OFLAG_USERINPT) && wproto.spread_user_set )
+            weaponSpread = wproto.spread_user;
+
+        if ( weaponSpread > 0.0 )
+        {
+            vec3d aimDir = wobj->_fly_dir;
+
+            if ( aimDir.normalise() > 0.001 )
+            {
+                float maxOffset = tan(weaponSpread * C_PI_180);
+                float randRadius = sqrt((float)rand() / (float)RAND_MAX) * maxOffset;
+                float randAngle = ((float)rand() / (float)RAND_MAX) * C_2PI;
+                vec3d refAxis = fabs(aimDir.y) < 0.99 ? vec3d::OY(1.0) : vec3d::OX(1.0);
+                vec3d right = refAxis * aimDir;
+
+                if ( right.normalise() > 0.001 )
+                {
+                    vec3d up = aimDir * right;
+                    up.normalise();
+
+                    aimDir += right * (cos(randAngle) * randRadius) + up * (sin(randAngle) * randRadius);
+
+                    if ( aimDir.normalise() > 0.001 )
+                        wobj->_fly_dir = aimDir;
+                }
+            }
         }
 
         wobj->_fly_dir_length = _fly_dir_length + wproto.start_speed;
