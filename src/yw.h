@@ -3,6 +3,8 @@
 
 #include <string.h>
 #include <array>
+#include <list>
+#include <memory>
 #include <string>
 
 #include "types.h"
@@ -2327,6 +2329,8 @@ public:
     void ProtosFreeSounds();
     
     void FreeGameDataCursors();
+
+    void SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime);
     
     void SetCmdrIdToSelect(int32_t id) { _cmdrIdToSelect = id; };
         
@@ -2393,6 +2397,19 @@ public:
     //Data
     static constexpr const char * __ClassName = "ypaworld.class";
   
+    struct TTransientVP
+    {
+        std::unique_ptr<NC_STACK_base::Instance> vp;
+        vec3d pos;
+        mat3x3 rot;
+        int32_t age = 0;
+        int32_t lifeTime = 0;
+
+        TTransientVP(NC_STACK_base *base, const vec3d &p, const mat3x3 &r, int32_t life)
+        : vp(base ? base->GenRenderInstance() : NULL), pos(p), rot(r), lifeTime(life)
+        {};
+    };
+
     
     
     UserData *_GameShell = NULL;
@@ -2425,6 +2442,7 @@ public:
     std::vector<World::TRoboProto> _roboProtos;
     
     std::list<NC_STACK_base *> _overrideModels;
+    std::list<TTransientVP> _transientVPs;
     
     std::map<int32_t, TConstructInfo> _inBuildProcess; // Buildings in creation process
     std::array<int16_t, 256> _buildHealthModelId = Common::ArrayInit<int16_t, 256>(0);

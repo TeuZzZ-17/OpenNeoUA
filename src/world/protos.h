@@ -227,6 +227,7 @@ struct TWeapProto
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
+    int16_t vp_launch = 0;
     float visual_scale = 1.0;
     std::vector<DestFX> dfx;
     std::vector<DestFX> ExtDestroyFX; // ext_dest_fx
