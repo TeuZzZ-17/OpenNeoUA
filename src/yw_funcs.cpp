@@ -12,6 +12,7 @@
 #include "env.h"
 #include "loaders.h"
 #include "system/inivals.h"
+#include "utils.h"
 
 extern GuiList stru_5C91D0;
 
@@ -347,7 +348,16 @@ bool NC_STACK_ypaworld::InitMapRegionsNet()
 {
     _iniColors.fill( GFX::Engine.Color(255, 255, 0) );
 
-    if ( !yw_ParseWorldIni("env:world.ini") && !yw_ParseWorldIni("data:world.ini"))
+    bool parsedWorldIni = false;
+
+    // Current layout stores world.ini under data; env is kept as legacy fallback.
+    if ( uaFileExist("data:world.ini") )
+        parsedWorldIni = yw_ParseWorldIni("data:world.ini");
+
+    if ( !parsedWorldIni && uaFileExist("env:world.ini") )
+        parsedWorldIni = yw_ParseWorldIni("env:world.ini");
+
+    if ( !parsedWorldIni )
     {
         ypa_log_out("yw_ParseWorldIni() failed.\n");
         return false;
@@ -1133,7 +1143,13 @@ int loadTOD(NC_STACK_ypaworld *yw, const char *fname)
     int tod = 0;
     if ( yw->_GameShell )
     {
-        FSMgr::FileHandle *fil = uaOpenFileAlloc( fmt::sprintf("save:%s/%s", yw->_GameShell->UserName, fname), "r");
+        std::string path = fmt::sprintf("save:%s/%s", yw->_GameShell->UserName, fname);
+
+        // Optional per-profile tip-of-day state. New profiles create it after first read.
+        if ( !uaFileExist(path) )
+            return tod;
+
+        FSMgr::FileHandle *fil = uaOpenFileAlloc(path, "r");
 
         if ( fil )
         {

@@ -234,6 +234,9 @@ struct TWeapProto
 //    int field_870 = 0;
 //    int field_874 = 0;
     int energy = 0;
+    int aoe_unit_energy = 0;
+    int aoe_building_energy = 0;
+    int aoe_sector_energy = 0;
 //    int field_87C = 0;
     int life_time = 0;
     int life_time_nt = 0;
@@ -260,7 +263,12 @@ struct TWeapProto
     float airconst = 0.0;
     float maxrot = 0.0;
     float heightStd = 0;
+    // radius is direct projectile collision. AoE has separate unit/building/sector values.
+    // visual_scale never affects any gameplay radius.
     float radius = 0.0;
+    float aoe_unit_radius = 0.0;
+    float aoe_building_radius = 0.0;
+    float aoe_sector_radius = 0.0;
     float overeof = 0.0;
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
