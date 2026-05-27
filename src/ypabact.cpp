@@ -3377,6 +3377,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
                 wobj->_position = wobj->_position - wobj->_rotation.AxisZ() * 30.0;
         }
 
+        if ( wproto.vp_launch > 0 )
+            _world->SpawnTransientVP(wproto.vp_launch, wobj->_position, wobj->_rotation, 1000);
+
         /** Missiles will be stored in another list
          *  so kidref will be not attached to anything.
          *  Looks it's somehow related to mentioned problem with dead cache.

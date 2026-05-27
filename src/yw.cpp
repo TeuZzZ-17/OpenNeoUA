@@ -203,6 +203,7 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
     _unitsList.clear();
     _guiActive.clear();
     _deadCacheList.clear();
+    _transientVPs.clear();
 
 
     _fxLimit = 16;
@@ -2011,6 +2012,8 @@ void NC_STACK_ypaworld::DeleteLevel()
     // NetRemove can fill deadcache, so clean it again
     while ( !_deadCacheList.empty() )
         _deadCacheList.front()->Delete();
+
+    _transientVPs.clear();
 
     ProtosFreeSounds();
 

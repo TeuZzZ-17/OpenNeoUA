@@ -1854,6 +1854,37 @@ void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
     }
 }
 
+void NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime)
+{
+    if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() || lifeTime <= 0 )
+        return;
+
+    NC_STACK_base *base = _vhclModels.at(modelId);
+
+    if ( base )
+        _transientVPs.emplace_back(base, pos, rot, lifeTime);
+}
+
+static void yw_RenderTransientVPs(std::list<NC_STACK_ypaworld::TTransientVP> *effects, baseRender_msg *arg)
+{
+    for (auto it = effects->begin(); it != effects->end();)
+    {
+        it->age += arg->frameTime;
+
+        if ( !it->vp || it->age >= it->lifeTime )
+        {
+            it = effects->erase(it);
+            continue;
+        }
+
+        it->vp->Bas->TForm().Pos = it->pos;
+        it->vp->Bas->TForm().SclRot = it->rot.Transpose();
+        it->vp->Bas->Render(arg, it->vp.get());
+
+        ++it;
+    }
+}
+
 void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 {
     if ( !_viewerBact )
@@ -1925,6 +1956,8 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     RenderSuperItems(&rndrs);
 
     RenderFillers(&rndrs);
+
+    yw_RenderTransientVPs(&_transientVPs, &rndrs);
 
     bs64->field_C = rndrs.adeCount;
 

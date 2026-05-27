@@ -1239,6 +1239,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_wait = 3;
         _wpn->vp_dead = 4;
         _wpn->vp_genesis = 5;
+        _wpn->vp_launch = 0;
         _wpn->type_icon = 65;
 
         for (TVhclSound &fx : _wpn->sndFXes)
@@ -1492,6 +1493,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "vp_genesis") )
     {
         _wpn->vp_genesis = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "vp_launch") )
+    {
+        _wpn->vp_launch = parser.stol(p2, NULL, 0);
     }
     else if ( !StriCmp(p1, "visual_scale") )
     {
