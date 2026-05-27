@@ -1,6 +1,8 @@
 #ifndef YMISSILE_H_INCLUDED
 #define YMISSILE_H_INCLUDED
 
+#include <vector>
+
 #include "nucleas.h"
 #include "ypabact.h"
 
@@ -85,6 +87,8 @@ public:
     virtual void SetPowerTank(int);
     virtual void SetPowerFlyer(int);
     virtual void SetPowerRobo(int);
+    virtual void SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
+                               float sectorRadius, int sectorEnergy);
     virtual void SetRadiusHeli(float);
     virtual void SetRadiusTank(float);
     virtual void SetRadiusFlyer(float);
@@ -110,6 +114,32 @@ public:
     vec3d CalcForceVector();
     bool TubeCollisionTest();
 
+protected:
+    int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
+    int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy);
+    const char *GetAreaDamageSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const;
+    bool IsDirectHitUnit(NC_STACK_ypabact *bct) const;
+    void RememberDirectHitUnit(NC_STACK_ypabact *bct);
+    vec3d GetBuildingSlotCenter(const cellArea &cell, int bldX, int bldY) const;
+    bool GetBuildingSlotAtPosition(const vec3d &pos, Common::Point *cellId, int *bldX, int *bldY) const;
+    const char *GetAreaBuildingSkipReason(const cellArea &cell, int bldX, int bldY) const;
+    bool IsDirectHitBuilding(const Common::Point &cellId, int bldX, int bldY) const;
+    void RememberDirectHitBuildingAt(const vec3d &pos);
+    bool GetSectorSlotAtPosition(const vec3d &pos, Common::Point *cellId, int *bldX, int *bldY) const;
+    const char *GetAreaSectorSkipReason(const cellArea &cell, int bldX, int bldY) const;
+    bool IsDirectHitSector(const Common::Point &cellId, int bldX, int bldY) const;
+    void RememberDirectHitSectorAt(const vec3d &pos);
+    void ApplyAreaDamage();
+    void ApplyBuildingAreaDamage();
+    void ApplySectorAreaDamage();
+
+    struct TBuildingHitRef
+    {
+        Common::Point cellId;
+        int bldX = 0;
+        int bldY = 0;
+    };
+
     //Data
 public:
     static constexpr const char * __ClassName = "ypamissile.class";
@@ -126,6 +156,15 @@ protected:
     float _mislEnergyTank   = 0.0;
     float _mislEnergyFlyer  = 0.0;
     float _mislEnergyRobo   = 0.0;
+    float _mislAoeUnitRadius    = 0.0;
+    int _mislAoeUnitEnergy      = 0;
+    float _mislAoeBuildingRadius = 0.0;
+    int _mislAoeBuildingEnergy   = 0;
+    float _mislAoeSectorRadius   = 0.0;
+    int _mislAoeSectorEnergy     = 0;
+    std::vector<NC_STACK_ypabact *> _mislDirectHitUnits;
+    std::vector<TBuildingHitRef> _mislDirectHitBuildings;
+    std::vector<TBuildingHitRef> _mislDirectHitSectors;
     // Legacy/deprecated: kept for script/API compatibility, ignored for gameplay.
     float _mislRadiusHeli   = 0.0;
     float _mislRadiusTank   = 0.0;

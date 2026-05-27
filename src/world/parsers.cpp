@@ -6,6 +6,7 @@
 #include "../ypaflyer.h"
 #include "../ypacar.h"
 #include "../log.h"
+#include "../utils.h"
 
 namespace World
 {
@@ -20,6 +21,11 @@ bool UserParser::ReadUserNameFile(const std::string &filename)
         return false;
 
     std::string buf = fmt::sprintf("save:%s/%s", _o._GameShell->UserName, filename);
+
+    // Optional legacy callsign storage. It is created on save when needed.
+    if ( !uaFileExist(buf) )
+        return false;
+
     FSMgr::FileHandle *signFile = uaOpenFileAlloc(buf, "r");
 
     if ( !signFile )
@@ -1194,11 +1200,17 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->unitID = 4;
         _wpn->name.clear();
         _wpn->energy = 10000;
+        _wpn->aoe_unit_energy = 0;
+        _wpn->aoe_building_energy = 0;
+        _wpn->aoe_sector_energy = 0;
         _wpn->mass = 50.0;
         _wpn->force = 5000.0;
         _wpn->airconst = 50.0;
         _wpn->maxrot = 2.0;
         _wpn->radius = 20.0;
+        _wpn->aoe_unit_radius = 0.0;
+        _wpn->aoe_building_radius = 0.0;
+        _wpn->aoe_sector_radius = 0.0;
         _wpn->overeof = 10.0;
         _wpn->vwr_radius = 20.0;
         _wpn->vwr_overeof = 20.0;
@@ -1289,6 +1301,18 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->energy = parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "aoe_unit_energy") )
+    {
+        _wpn->aoe_unit_energy = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "aoe_building_energy") )
+    {
+        _wpn->aoe_building_energy = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "aoe_sector_energy") )
+    {
+        _wpn->aoe_sector_energy = parser.stol(p2, NULL, 0);
+    }
     else if ( !StriCmp(p1, "energy_heli") )
     {
         _wpn->energy_heli = parser.stof(p2, 0);
@@ -1324,6 +1348,18 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "radius") )
     {
         _wpn->radius = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "aoe_unit_radius") )
+    {
+        _wpn->aoe_unit_radius = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "aoe_building_radius") )
+    {
+        _wpn->aoe_building_radius = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "aoe_sector_radius") )
+    {
+        _wpn->aoe_sector_radius = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "radius_heli") )
     {

@@ -9,6 +9,7 @@
 
 #include "log.h"
 
+#include <algorithm>
 #include <math.h>
 
 size_t NC_STACK_ypamissile::Init(IDVList &stak)
@@ -182,6 +183,8 @@ void NC_STACK_ypamissile::AI_layer2(update_msg *arg)
 
 bool NC_STACK_ypamissile::TubeCollisionTest()
 {
+    _mislDirectHitUnits.clear();
+
     vec3d collisionSumPosition(0.0, 0.0, 0.0);
     int collisionCount = 0;
     float collisionSumRadius = 0.0;
@@ -319,8 +322,6 @@ bool NC_STACK_ypamissile::TubeCollisionTest()
                                     Will hit only when distance ~ wpn_radius */
                                 if ( sqrt( POW2(dist_vect_len) + POW2(vp_len) ) > fabs(to_enemy_len - wpn_radius) )
                                 {
-                                    NC_STACK_ypabact *a1 = _world->getYW_userHostStation();
-
                                     collisionSumRadius += radius;
                                     collisionCount++;
                                     collisionSumPosition += bct->_position;
@@ -329,59 +330,8 @@ bool NC_STACK_ypamissile::TubeCollisionTest()
 
                                     
 
-                                    int v83 = bct->getBACT_inputting();
-
-                                    int v92 = 0;
-
-                                    switch ( bct->_bact_type )
-                                    {
-                                    case BACT_TYPES_BACT:
-                                        v92 = _energy * _mislEnergyHeli;
-                                        break;
-
-                                    case BACT_TYPES_TANK:
-                                    case BACT_TYPES_CAR:
-                                        v92 = _energy * _mislEnergyTank;
-                                        break;
-
-                                    case BACT_TYPES_FLYER:
-                                    case BACT_TYPES_UFO:
-                                        v92 = _energy * _mislEnergyFlyer;
-                                        break;
-
-                                    case BACT_TYPES_ROBO:
-                                        v92 = _energy * _mislEnergyRobo;
-                                        break;
-
-                                    default:
-                                        v92 = _energy;
-                                        break;
-                                    }
-
-                                    float v46;
-                                    float v47;
-
-                                    if ( v83 || bct->getBACT_viewer() )
-                                    {
-                                        v46 = v92 * (100 - bct->_shield);
-                                        v47 = 250;
-                                    }
-                                    else
-                                    {
-                                        v46 = v92 * (100 - bct->_shield);
-                                        v47 = 100.0;
-                                    }
-
-                                    v92 = ceil(v46 / v47); //Missile damage (ceil for less damage)
-                                    if ( v92 )
-                                    {
-                                        bact_arg84 arg84;
-                                        arg84.energy = -v92;
-                                        arg84.unit = _mislEmitter;
-
-                                        if ( a1->_owner == _owner || !_world->_isNetGame )
-                                            bct->ModifyEnergy(&arg84);
-                                    }
+                                    RememberDirectHitUnit(bct);
+                                    ApplyDamageToBact(bct, _energy);
 
                                     break;
                                 }
@@ -414,6 +364,502 @@ bool NC_STACK_ypamissile::TubeCollisionTest()
     }
 
     return collisionCount > 0;
+}
+
+int NC_STACK_ypamissile::CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy)
+{
+    if ( !bct || baseEnergy <= 0 )
+        return 0;
+
+    int damage = 0;
+
+    switch ( bct->_bact_type )
+    {
+    case BACT_TYPES_BACT:
+        damage = baseEnergy * _mislEnergyHeli;
+        break;
+
+    case BACT_TYPES_TANK:
+    case BACT_TYPES_CAR:
+        damage = baseEnergy * _mislEnergyTank;
+        break;
+
+    case BACT_TYPES_FLYER:
+    case BACT_TYPES_UFO:
+        damage = baseEnergy * _mislEnergyFlyer;
+        break;
+
+    case BACT_TYPES_ROBO:
+        damage = baseEnergy * _mislEnergyRobo;
+        break;
+
+    default:
+        damage = baseEnergy;
+        break;
+    }
+
+    float shieldedDamage = damage * (100 - bct->_shield);
+    float divisor = ( bct->getBACT_inputting() || bct->getBACT_viewer() ) ? 250.0 : 100.0;
+
+    return ceil(shieldedDamage / divisor);
+}
+
+int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy)
+{
+    int damage = CalcDamageForBact(bct, baseEnergy);
+
+    if ( !damage )
+        return 0;
+
+    bact_arg84 arg84;
+    arg84.energy = -damage;
+    arg84.unit = _mislEmitter;
+
+    NC_STACK_ypabact *userHost = _world->getYW_userHostStation();
+
+    if ( userHost->_owner == _owner || !_world->_isNetGame )
+    {
+        bct->ModifyEnergy(&arg84);
+        return damage;
+    }
+
+    return 0;
+}
+
+const char *NC_STACK_ypamissile::GetAreaDamageSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const
+{
+    if ( !bct || bct == this || bct == _mislEmitter )
+    {
+        if ( !bct )
+            return "null";
+        if ( bct == this )
+            return "projectile_self";
+        return "emitter";
+    }
+
+    if ( bct->_bact_type == BACT_TYPES_MISSLE )
+        return "missile";
+
+    if ( bct->_status == BACT_STATUS_DEAD )
+        return "dead";
+
+    if ( bct->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2) )
+        return "death_fx";
+
+    if (bct->_bact_type == BACT_TYPES_GUN && bct->_shield >= 100)
+    {
+        NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( bct );
+
+        if ( gun && gun->IsRoboGun() )
+            return "shielded_robo_gun";
+    }
+
+    if ( _mislEmitter && !allowFriendly && bct->_owner == _mislEmitter->_owner )
+        return "friendly";
+
+    if ( _mislEmitter && _mislEmitter->_bact_type == BACT_TYPES_GUN )
+    {
+        NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( _mislEmitter );
+
+        if ( gun && bct->_owner == _owner && gun->IsRoboGun() )
+        {
+            if ( bct->_bact_type == BACT_TYPES_ROBO )
+                return "own_robo_gun_robo";
+
+            if ( bct->_bact_type == BACT_TYPES_GUN )
+            {
+                NC_STACK_ypagun *bgun = dynamic_cast<NC_STACK_ypagun *>( bct );
+
+                if ( bgun && bgun->IsRoboGun() )
+                    return "own_robo_gun";
+            }
+        }
+    }
+
+    if ( _mislType == MISL_BOMB && bct->_position.y < _mislStartHeight )
+        return "bomb_below_start_height";
+
+    return NULL;
+}
+
+bool NC_STACK_ypamissile::IsDirectHitUnit(NC_STACK_ypabact *bct) const
+{
+    return std::find(_mislDirectHitUnits.begin(), _mislDirectHitUnits.end(), bct) != _mislDirectHitUnits.end();
+}
+
+void NC_STACK_ypamissile::RememberDirectHitUnit(NC_STACK_ypabact *bct)
+{
+    if ( bct && !IsDirectHitUnit(bct) )
+        _mislDirectHitUnits.push_back(bct);
+}
+
+vec3d NC_STACK_ypamissile::GetBuildingSlotCenter(const cellArea &cell, int bldX, int bldY) const
+{
+    vec3d pos = World::SectorIDToCenterPos3(cell.CellId);
+    pos.y = cell.height;
+
+    if ( cell.SectorType != 1 )
+    {
+        pos.x += (bldX - 1) * 300.0;
+        pos.z += (bldY - 1) * 300.0;
+    }
+
+    return pos;
+}
+
+bool NC_STACK_ypamissile::GetBuildingSlotAtPosition(const vec3d &pos, Common::Point *cellId, int *bldX, int *bldY) const
+{
+    Common::Point sec = World::PositionToSectorID(pos);
+
+    if ( !_world || !_world->IsSector(sec) )
+        return false;
+
+    cellArea &cell = _world->SectorAt(sec);
+
+    if ( !cell.IsGamePlaySector() || cell.PurposeType == cellArea::PT_NONE || cell.PurposeType == cellArea::PT_CONSTRUCTING )
+        return false;
+
+    int outX = 0;
+    int outY = 0;
+
+    if ( cell.SectorType != 1 )
+    {
+        int sx = (int)(pos.x / 150.0) % 8;
+        int sy = (int)(-pos.z / 150.0) % 8;
+
+        int xSlot = sx < 3 ? 1 : (sx < 5 ? 2 : 3);
+        int ySlot = sy < 3 ? 1 : (sy < 5 ? 2 : 3);
+
+        outX = xSlot - 1;
+        outY = 2 - (ySlot - 1);
+    }
+
+    if ( cell.buildings_health.At(outX, outY) <= 0 )
+        return false;
+
+    if ( cellId )
+        *cellId = sec;
+    if ( bldX )
+        *bldX = outX;
+    if ( bldY )
+        *bldY = outY;
+
+    return true;
+}
+
+const char *NC_STACK_ypamissile::GetAreaBuildingSkipReason(const cellArea &cell, int bldX, int bldY) const
+{
+    if ( !cell.IsGamePlaySector() || cell.PurposeType == cellArea::PT_NONE || cell.PurposeType == cellArea::PT_CONSTRUCTING )
+    {
+        if ( !cell.IsGamePlaySector() )
+            return "non_gameplay_sector";
+        if ( cell.PurposeType == cellArea::PT_NONE )
+            return "no_functional_building";
+        return "constructing";
+    }
+
+    if ( cell.buildings_health.Get(bldX, bldY) <= 0 )
+        return "destroyed_slot";
+
+    return NULL;
+}
+
+bool NC_STACK_ypamissile::IsDirectHitBuilding(const Common::Point &cellId, int bldX, int bldY) const
+{
+    for ( const TBuildingHitRef &hit : _mislDirectHitBuildings )
+    {
+        if ( hit.cellId == cellId && hit.bldX == bldX && hit.bldY == bldY )
+            return true;
+    }
+
+    return false;
+}
+
+void NC_STACK_ypamissile::RememberDirectHitBuildingAt(const vec3d &pos)
+{
+    TBuildingHitRef hit;
+
+    if ( !GetBuildingSlotAtPosition(pos, &hit.cellId, &hit.bldX, &hit.bldY) )
+        return;
+
+    if ( !IsDirectHitBuilding(hit.cellId, hit.bldX, hit.bldY) )
+        _mislDirectHitBuildings.push_back(hit);
+}
+
+bool NC_STACK_ypamissile::GetSectorSlotAtPosition(const vec3d &pos, Common::Point *cellId, int *bldX, int *bldY) const
+{
+    Common::Point sec = World::PositionToSectorID(pos);
+
+    if ( !_world || !_world->IsSector(sec) )
+        return false;
+
+    cellArea &cell = _world->SectorAt(sec);
+
+    if ( !cell.IsGamePlaySector() || cell.PurposeType != cellArea::PT_NONE )
+        return false;
+
+    int outX = 0;
+    int outY = 0;
+
+    if ( cell.SectorType != 1 )
+    {
+        int sx = (int)(pos.x / 150.0) % 8;
+        int sy = (int)(-pos.z / 150.0) % 8;
+
+        int xSlot = sx < 3 ? 1 : (sx < 5 ? 2 : 3);
+        int ySlot = sy < 3 ? 1 : (sy < 5 ? 2 : 3);
+
+        outX = xSlot - 1;
+        outY = 2 - (ySlot - 1);
+    }
+
+    if ( cell.buildings_health.At(outX, outY) <= 0 )
+        return false;
+
+    if ( cellId )
+        *cellId = sec;
+    if ( bldX )
+        *bldX = outX;
+    if ( bldY )
+        *bldY = outY;
+
+    return true;
+}
+
+const char *NC_STACK_ypamissile::GetAreaSectorSkipReason(const cellArea &cell, int bldX, int bldY) const
+{
+    if ( !cell.IsGamePlaySector() )
+        return "non_gameplay_sector";
+
+    if ( cell.PurposeType != cellArea::PT_NONE )
+        return "functional_building_layer";
+
+    if ( cell.buildings_health.Get(bldX, bldY) <= 0 )
+        return "destroyed_slot";
+
+    return NULL;
+}
+
+bool NC_STACK_ypamissile::IsDirectHitSector(const Common::Point &cellId, int bldX, int bldY) const
+{
+    for ( const TBuildingHitRef &hit : _mislDirectHitSectors )
+    {
+        if ( hit.cellId == cellId && hit.bldX == bldX && hit.bldY == bldY )
+            return true;
+    }
+
+    return false;
+}
+
+void NC_STACK_ypamissile::RememberDirectHitSectorAt(const vec3d &pos)
+{
+    TBuildingHitRef hit;
+
+    if ( !GetSectorSlotAtPosition(pos, &hit.cellId, &hit.bldX, &hit.bldY) )
+        return;
+
+    if ( !IsDirectHitSector(hit.cellId, hit.bldX, hit.bldY) )
+        _mislDirectHitSectors.push_back(hit);
+}
+
+void NC_STACK_ypamissile::ApplyAreaDamage()
+{
+    if ( _mislAoeUnitRadius <= 0.0 || _mislAoeUnitEnergy <= 0 || !_world )
+        return;
+
+    bool allowFriendly = getBACT_viewer();
+
+    if ( _mislEmitter && _mislEmitter->getBACT_inputting() )
+        allowFriendly = true;
+
+    Common::Point impactCell = World::PositionToSectorID(_position);
+
+    if ( !_world->IsSector(impactCell) )
+        return;
+
+    int cellRadius = (int)ceil(_mislAoeUnitRadius / World::CVSectorLength) + 1;
+    std::vector<NC_STACK_ypabact *> damagedUnits;
+
+    for ( int dy = -cellRadius; dy <= cellRadius; dy++ )
+    {
+        for ( int dx = -cellRadius; dx <= cellRadius; dx++ )
+        {
+            Common::Point cellId = impactCell + Common::Point(dx, dy);
+
+            if ( !_world->IsSector(cellId) )
+                continue;
+
+            cellArea &cell = _world->SectorAt(cellId);
+
+            for ( NC_STACK_ypabact *bct : cell.unitsList.safe_iter() )
+            {
+                if ( GetAreaDamageSkipReason(bct, allowFriendly) )
+                    continue;
+
+                if ( (bct->_position - _position).length() > _mislAoeUnitRadius )
+                    continue;
+
+                if ( IsDirectHitUnit(bct) )
+                    continue;
+
+                if ( std::find(damagedUnits.begin(), damagedUnits.end(), bct) != damagedUnits.end() )
+                    continue;
+
+                damagedUnits.push_back(bct);
+
+                ApplyDamageToBact(bct, _mislAoeUnitEnergy);
+            }
+        }
+    }
+}
+
+void NC_STACK_ypamissile::ApplyBuildingAreaDamage()
+{
+    if ( _mislAoeBuildingRadius <= 0.0 || _mislAoeBuildingEnergy <= 0 || !_world )
+        return;
+
+    if ( _mislFlags & FLAG_MISL_IGNOREBUILDS )
+        return;
+
+    if ( _world->_isNetGame && _world->_userRobo->_owner != _owner )
+        return;
+
+    Common::Point impactCell = World::PositionToSectorID(_position);
+
+    if ( !_world->IsSector(impactCell) )
+        return;
+
+    int cellRadius = (int)ceil(_mislAoeBuildingRadius / World::CVSectorLength) + 1;
+
+    for ( int dy = -cellRadius; dy <= cellRadius; dy++ )
+    {
+        for ( int dx = -cellRadius; dx <= cellRadius; dx++ )
+        {
+            Common::Point cellId = impactCell + Common::Point(dx, dy);
+
+            if ( !_world->IsSector(cellId) )
+                continue;
+
+            cellArea &cell = _world->SectorAt(cellId);
+            int slots = cell.SectorType == 1 ? 1 : 3;
+            bool valid = false;
+            bool directHit = false;
+            float bestDistance = 0.0;
+            int bestBldX = 0;
+            int bestBldY = 0;
+            vec3d bestPos(0.0, 0.0, 0.0);
+
+            for ( int bldY = 0; bldY < slots; bldY++ )
+            {
+                for ( int bldX = 0; bldX < slots; bldX++ )
+                {
+                    if ( IsDirectHitBuilding(cellId, bldX, bldY) )
+                        directHit = true;
+
+                    if ( GetAreaBuildingSkipReason(cell, bldX, bldY) )
+                        continue;
+
+                    vec3d bldPos = GetBuildingSlotCenter(cell, bldX, bldY);
+                    float distance = (bldPos - _position).length();
+
+                    if ( !valid || distance < bestDistance )
+                    {
+                        valid = true;
+                        bestDistance = distance;
+                        bestBldX = bldX;
+                        bestBldY = bldY;
+                        bestPos = bldPos;
+                    }
+                }
+            }
+
+            if ( !valid || bestDistance > _mislAoeBuildingRadius || directHit )
+                continue;
+
+            yw_arg129 arg129;
+            arg129.field_0 = 0;
+            arg129.pos = bestPos;
+            arg129.field_10 = _mislAoeBuildingEnergy;
+            arg129.unit = _mislEmitter;
+
+            ChangeSectorEnergy(&arg129);
+        }
+    }
+}
+
+void NC_STACK_ypamissile::ApplySectorAreaDamage()
+{
+    if ( _mislAoeSectorRadius <= 0.0 || _mislAoeSectorEnergy <= 0 || !_world )
+        return;
+
+    if ( _mislFlags & FLAG_MISL_IGNOREBUILDS )
+        return;
+
+    if ( _world->_isNetGame && _world->_userRobo->_owner != _owner )
+        return;
+
+    Common::Point impactCell = World::PositionToSectorID(_position);
+
+    if ( !_world->IsSector(impactCell) )
+        return;
+
+    int cellRadius = (int)ceil(_mislAoeSectorRadius / World::CVSectorLength) + 1;
+
+    for ( int dy = -cellRadius; dy <= cellRadius; dy++ )
+    {
+        for ( int dx = -cellRadius; dx <= cellRadius; dx++ )
+        {
+            Common::Point cellId = impactCell + Common::Point(dx, dy);
+
+            if ( !_world->IsSector(cellId) )
+                continue;
+
+            cellArea &cell = _world->SectorAt(cellId);
+            int slots = cell.SectorType == 1 ? 1 : 3;
+            bool valid = false;
+            bool directHit = false;
+            float bestDistance = 0.0;
+            int bestBldX = 0;
+            int bestBldY = 0;
+            vec3d bestPos(0.0, 0.0, 0.0);
+
+            for ( int bldY = 0; bldY < slots; bldY++ )
+            {
+                for ( int bldX = 0; bldX < slots; bldX++ )
+                {
+                    if ( IsDirectHitSector(cellId, bldX, bldY) )
+                        directHit = true;
+
+                    if ( GetAreaSectorSkipReason(cell, bldX, bldY) )
+                        continue;
+
+                    vec3d sectorPos = GetBuildingSlotCenter(cell, bldX, bldY);
+                    float distance = (sectorPos - _position).length();
+
+                    if ( !valid || distance < bestDistance )
+                    {
+                        valid = true;
+                        bestDistance = distance;
+                        bestBldX = bldX;
+                        bestBldY = bldY;
+                        bestPos = sectorPos;
+                    }
+                }
+            }
+
+            if ( !valid || bestDistance > _mislAoeSectorRadius || directHit )
+                continue;
+
+            yw_arg129 arg129;
+            arg129.field_0 = 0;
+            arg129.pos = bestPos;
+            arg129.field_10 = _mislAoeSectorEnergy;
+            arg129.unit = _mislEmitter;
+
+            // Sector AoE uses the same path as direct hits on normal sector architecture.
+            ChangeSectorEnergy(&arg129);
+        }
+    }
 }
 
 vec3d NC_STACK_ypamissile::CalcForceVector()
@@ -450,6 +896,16 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
         if ( (_mislFlags & FLAG_MISL_COUNTDELAY)  &&  _mislDelayTime <= 0 )
         {
+            bool applySectorDamage = (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) || _pSector->PurposeType == cellArea::PT_NONE) &&
+                                     (_world->_userRobo->_owner == _owner || !_world->_isNetGame);
+            vec3d directDamagePos = _position + _fly_dir * 5.0;
+
+            if ( applySectorDamage )
+            {
+                RememberDirectHitBuildingAt(directDamagePos);
+                RememberDirectHitSectorAt(directDamagePos);
+            }
+
             Impact();
 
             _status = BACT_STATUS_DEAD;
@@ -461,19 +917,16 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
             SetState(&arg78);
 
-            if ( !(_mislFlags & FLAG_MISL_IGNOREBUILDS) || _pSector->PurposeType == cellArea::PT_NONE )
+            if ( applySectorDamage )
             {
-                if ( _world->_userRobo->_owner == _owner || !_world->_isNetGame )
-                {
-                    yw_arg129 v25;
+                yw_arg129 v25;
 
-                    v25.pos.x = _fly_dir.x * 5.0 + _position.x;
-                    v25.pos.z = _fly_dir.z * 5.0 + _position.z;
-                    v25.field_10 = _energy;
-                    v25.unit = _mislEmitter;
+                v25.pos.x = directDamagePos.x;
+                v25.pos.z = directDamagePos.z;
+                v25.field_10 = _energy;
+                v25.unit = _mislEmitter;
 
-                    ChangeSectorEnergy(&v25);
-                }
+                ChangeSectorEnergy(&v25);
             }
         }
         else
@@ -552,6 +1005,16 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
                 if ( !_mislDelayTime )
                 {
+                    bool applySectorDamage = (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) || _pSector->PurposeType == cellArea::PT_NONE) &&
+                                             (_world->_userRobo->_owner == _owner || !_world->_isNetGame);
+                    vec3d directDamagePos = _position + _fly_dir * 5.0;
+
+                    if ( applySectorDamage )
+                    {
+                        RememberDirectHitBuildingAt(directDamagePos);
+                        RememberDirectHitSectorAt(directDamagePos);
+                    }
+
                     Impact();
 
                     _status = BACT_STATUS_DEAD;
@@ -563,19 +1026,16 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
                     SetState(&arg78);
 
-                    if ( !(_mislFlags & FLAG_MISL_IGNOREBUILDS) || _pSector->PurposeType == cellArea::PT_NONE )
+                    if ( applySectorDamage )
                     {
-                        if ( _world->_userRobo->_owner == _owner || !_world->_isNetGame )
-                        {
-                            yw_arg129 v25;
+                        yw_arg129 v25;
 
-                            v25.pos.x = _fly_dir.x * 5.0 + _position.x;
-                            v25.pos.z = _fly_dir.z * 5.0 + _position.z;
-                            v25.field_10 = _energy;
-                            v25.unit = _mislEmitter;
+                        v25.pos.x = directDamagePos.x;
+                        v25.pos.z = directDamagePos.z;
+                        v25.field_10 = _energy;
+                        v25.unit = _mislEmitter;
 
-                            ChangeSectorEnergy(&v25);
-                        }
+                        ChangeSectorEnergy(&v25);
                     }
                 }
 
@@ -831,6 +1291,14 @@ void NC_STACK_ypamissile::Impact()
 
         _world->NetBroadcastMessage(&impMsg, sizeof(impMsg), true);
     }
+
+    ApplyAreaDamage();
+    ApplyBuildingAreaDamage();
+    ApplySectorAreaDamage();
+
+    _mislDirectHitUnits.clear();
+    _mislDirectHitBuildings.clear();
+    _mislDirectHitSectors.clear();
 }
 
 void NC_STACK_ypamissile::AlignMissile(float dtime)
@@ -977,6 +1445,17 @@ void NC_STACK_ypamissile::SetPowerFlyer(int po)
 void NC_STACK_ypamissile::SetPowerRobo(int po)
 {
     _mislEnergyRobo = po * 0.001;
+}
+
+void NC_STACK_ypamissile::SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
+                                        float sectorRadius, int sectorEnergy)
+{
+    _mislAoeUnitRadius = unitRadius;
+    _mislAoeUnitEnergy = unitEnergy;
+    _mislAoeBuildingRadius = buildingRadius;
+    _mislAoeBuildingEnergy = buildingEnergy;
+    _mislAoeSectorRadius = sectorRadius;
+    _mislAoeSectorEnergy = sectorEnergy;
 }
 
 void NC_STACK_ypamissile::SetRadiusHeli(float rad)

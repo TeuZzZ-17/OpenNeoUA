@@ -18,6 +18,7 @@
 #include "system/inivals.h"
 #include "loaders.h"
 #include "obj3d.h"
+#include "utils.h"
 
 extern int vertMenuSpace;
 extern int dword_5A50B2;
@@ -777,7 +778,11 @@ void sub_44A1FC(NC_STACK_ypaworld *yw)
 
     if ( yw->_GameShell )
     {
-        FSMgr::FileHandle *fil = uaOpenFileAlloc("env:levels.def", "r");
+        FSMgr::FileHandle *fil = NULL;
+
+        // Optional legacy level-index file. Modern builds scan level folders.
+        if ( uaFileExist("env:levels.def") )
+            fil = uaOpenFileAlloc("env:levels.def", "r");
 
         if ( fil )
         {
@@ -4740,7 +4745,11 @@ bool UserData::ShellSoundsLoad()
         new World::Parsers::ShellTracksParser(this),
     };
 
-    return ScriptParser::ParseFile("env:world.ini", hndls, 0) || ScriptParser::ParseFile("data:world.ini", hndls, 0);
+    // Current layout stores world.ini under data; env is kept as legacy fallback.
+    if ( uaFileExist("data:world.ini") && ScriptParser::ParseFile("data:world.ini", hndls, 0) )
+        return true;
+
+    return uaFileExist("env:world.ini") && ScriptParser::ParseFile("env:world.ini", hndls, 0);
 }
 
 int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)

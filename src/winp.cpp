@@ -81,7 +81,12 @@ SDL_JoystickGUID NC_STACK_winp::sdlReadJoyGuid()
 {
     SDL_JoystickGUID guid;
 
-    FSMgr::FileHandle *f = uaOpenFileAlloc("env/sdlJoy.txt", "r");
+    FSMgr::FileHandle *f = NULL;
+
+    // Optional legacy joystick selection. Missing file means "auto/default".
+    if ( uaFileExist("env/sdlJoy.txt") )
+        f = uaOpenFileAlloc("env/sdlJoy.txt", "r");
+
     if ( f )
     {
         std::string buf;
