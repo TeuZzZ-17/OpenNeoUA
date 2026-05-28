@@ -1366,6 +1366,11 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_vp_megadeth = _vhclModels.at( vhcl.vp_megadeth );
         bacto->_vp_genesis = _vhclModels.at( vhcl.vp_genesis );
         bacto->_visual_scale = vhcl.visual_scale;
+        bacto->_damage_fx_vp = vhcl.damage_fx_vp;
+        bacto->_damage_fx_threshold = vhcl.damage_fx_threshold;
+        bacto->_damage_fx_interval = vhcl.damage_fx_interval;
+        bacto->_damage_fx_random_pos = vhcl.damage_fx_random_pos;
+        bacto->_damage_fx_last_time = 0;
 
         bacto->_destroyFX = vhcl.dest_fx;
         bacto->_extDestroyFX = vhcl.ExtDestroyFX;
@@ -1408,6 +1413,16 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
                 smpl_inf->PSample = vhcl.sndFX[i].MainSample.Sample->GetSampleData();
             else
                 smpl_inf->PSample = 0;
+
+            smpl_inf->SampleVariants.clear();
+            if ( smpl_inf->PSample )
+                smpl_inf->SampleVariants.push_back(smpl_inf->PSample);
+
+            for (const World::TVhclSound::TSndSample &sample : vhcl.sndFX[i].MainSampleVariants)
+            {
+                if ( sample.Sample )
+                    smpl_inf->SampleVariants.push_back(sample.Sample->GetSampleData());
+            }
 
             if ( vhcl.sndFX[i].sndPrm.slot )
             {
@@ -1573,6 +1588,16 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
             v25->PSample = wproto.sndFXes[i].MainSample.Sample->GetSampleData();
         else
             v25->PSample = 0;
+
+        v25->SampleVariants.clear();
+        if ( v25->PSample )
+            v25->SampleVariants.push_back(v25->PSample);
+
+        for (const World::TVhclSound::TSndSample &sample : wproto.sndFXes[i].MainSampleVariants)
+        {
+            if ( sample.Sample )
+                v25->SampleVariants.push_back(sample.Sample->GetSampleData());
+        }
 
         if ( wproto.sndFXes[i].sndPrm.slot )
         {

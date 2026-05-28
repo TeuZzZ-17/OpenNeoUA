@@ -74,6 +74,11 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _height = 0.0;
     _height_max_user = 0.0;
     _visual_scale = 1.0;
+    _damage_fx_vp = 0;
+    _damage_fx_threshold = 0.25;
+    _damage_fx_interval = 500;
+    _damage_fx_random_pos = 15.0;
+    _damage_fx_last_time = 0;
 
     _vp_active = 0;
 
@@ -181,6 +186,11 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _yls_time = 3000;
     _aggr = 50;
     _energy_max = 10000;
+    _damage_fx_vp = 0;
+    _damage_fx_threshold = 0.25;
+    _damage_fx_interval = 500;
+    _damage_fx_random_pos = 15.0;
+    _damage_fx_last_time = 0;
 //    ypabact.field_3CE = 0;
     _height_max_user = 1600.0;
     _gun_radius = 5.0;
@@ -629,6 +639,8 @@ void NC_STACK_ypabact::Update(update_msg *arg)
 
     _clock += arg->frameTime;
 
+    UpdateDamageFX(arg);
+
     AI_layer1(arg);
 
     for( NC_STACK_ypamissile *misl : Utils::IterateListCopy<NC_STACK_ypamissile *>(_missiles_list))
@@ -685,6 +697,66 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     _soundcarrier.Vector = _fly_dir * _fly_dir_length;
 
     SFXEngine::SFXe.UpdateSoundCarrier(&_soundcarrier);
+}
+
+void NC_STACK_ypabact::UpdateDamageFX(update_msg *)
+{
+    if ( !_world || _damage_fx_vp <= 0 || _energy <= 0 || _energy_max <= 0 )
+        return;
+
+    if ( _bact_type == BACT_TYPES_MISSLE || _status == BACT_STATUS_DEAD || _status == BACT_STATUS_CREATE || _status == BACT_STATUS_BEAM )
+        return;
+
+    if ( _status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER) )
+        return;
+
+    float threshold = _damage_fx_threshold;
+    if ( threshold <= 0.0 )
+        return;
+    if ( threshold > 1.0 )
+        threshold = 1.0;
+
+    float energyRatio = (float)_energy / (float)_energy_max;
+    if ( energyRatio >= threshold )
+        return;
+
+    int interval = _damage_fx_interval > 0 ? _damage_fx_interval : 500;
+    if ( _clock - _damage_fx_last_time < interval )
+        return;
+
+    _damage_fx_last_time = _clock;
+
+    float radius = _damage_fx_random_pos;
+    if ( radius < 0.0 )
+        radius = 0.0;
+
+    vec3d fxPos = _position;
+
+    if ( radius > 0.0 )
+    {
+        float angle = ((float)rand() / (float)RAND_MAX) * (2.0 * C_PI);
+        float dist = ((float)rand() / (float)RAND_MAX) * radius;
+
+        fxPos.x += cos(angle) * dist;
+        fxPos.z += sin(angle) * dist;
+    }
+
+    float heightOffset = _overeof * 0.25;
+    if ( heightOffset < 5.0 )
+        heightOffset = 5.0;
+    else if ( heightOffset > 60.0 )
+        heightOffset = 60.0;
+
+    fxPos.y -= heightOffset;
+
+    if ( _pSector )
+    {
+        float groundSafeY = _pSector->height - 5.0;
+        if ( fxPos.y > groundSafeY )
+            fxPos.y = groundSafeY;
+    }
+
+    _world->SpawnTransientVP(_damage_fx_vp, fxPos, _rotation, 1000);
 }
 
 void NC_STACK_ypabact::Render(baseRender_msg *arg)
@@ -4939,6 +5011,11 @@ void NC_STACK_ypabact::Renew()
     _scale_delay = 0;
     _beam_time = 0;
     _energy_time = 0;
+    _damage_fx_vp = 0;
+    _damage_fx_threshold = 0.25;
+    _damage_fx_interval = 500;
+    _damage_fx_random_pos = 15.0;
+    _damage_fx_last_time = 0;
     _fe_time = -45000;
     _salve_counter = 0;
     _kill_after_shot = 0;
@@ -6875,6 +6952,8 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     }
 
     _clock += upd->frameTime;
+
+    UpdateDamageFX(upd);
 
     ypabact_func117(upd);
 
