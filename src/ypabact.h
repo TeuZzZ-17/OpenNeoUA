@@ -393,6 +393,7 @@ public:
     virtual size_t SetPosition(bact_arg80 *arg);
     virtual void GetSummary(bact_arg81 *arg);
     virtual void EnergyInteract(update_msg *arg);
+    void UpdateDamageFX(update_msg *arg);
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual void ModifyEnergy(bact_arg84 *arg);
     virtual bool ypabact_func85(vec3d *arg);
@@ -665,6 +666,11 @@ public:
     NC_STACK_base *_vp_dead;
     NC_STACK_base *_vp_megadeth;
     NC_STACK_base *_vp_genesis;
+    int32_t _damage_fx_vp;
+    float _damage_fx_threshold;
+    int32_t _damage_fx_interval;
+    float _damage_fx_random_pos;
+    int32_t _damage_fx_last_time;
     int _vp_active;
     extra_vproto _vp_extra[3];
     int _vp_extra_mode;

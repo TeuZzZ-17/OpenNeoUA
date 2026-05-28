@@ -82,6 +82,7 @@ struct TVhclSound
     };
     
     TSndSample MainSample;
+    std::vector<TSndSample> MainSampleVariants;
     
     std::vector<TSndSample> ExtSamples;
     int16_t volume = 0;
@@ -90,6 +91,7 @@ struct TVhclSound
     TSndFxPosParam sndPrm_shk;
     std::vector<TSampleParams> extS;
     
+    void SetMainSampleVariant(size_t variant, const std::string &name);
     void LoadSamples();
     void ClearSounds();
 };
@@ -147,6 +149,10 @@ struct TVhclProto
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
     float visual_scale = 1.0;
+    int16_t damage_fx_vp = 0;
+    float damage_fx_threshold = 0.25;
+    int damage_fx_interval = 500;
+    float damage_fx_random_pos = 15.0;
     std::vector<DestFX> dest_fx;      // dest_fx
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFX;
