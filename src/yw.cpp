@@ -1366,11 +1366,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_vp_megadeth = _vhclModels.at( vhcl.vp_megadeth );
         bacto->_vp_genesis = _vhclModels.at( vhcl.vp_genesis );
         bacto->_visual_scale = vhcl.visual_scale;
-        bacto->_damage_fx_vp = vhcl.damage_fx_vp;
-        bacto->_damage_fx_threshold = vhcl.damage_fx_threshold;
-        bacto->_damage_fx_interval = vhcl.damage_fx_interval;
-        bacto->_damage_fx_random_pos = vhcl.damage_fx_random_pos;
-        bacto->_damage_fx_last_time = 0;
+        bacto->_damage_fx = vhcl.damage_fx;
+        bacto->_damage_fx_last_time.fill(0);
 
         bacto->_destroyFX = vhcl.dest_fx;
         bacto->_extDestroyFX = vhcl.ExtDestroyFX;

@@ -666,11 +666,8 @@ public:
     NC_STACK_base *_vp_dead;
     NC_STACK_base *_vp_megadeth;
     NC_STACK_base *_vp_genesis;
-    int32_t _damage_fx_vp;
-    float _damage_fx_threshold;
-    int32_t _damage_fx_interval;
-    float _damage_fx_random_pos;
-    int32_t _damage_fx_last_time;
+    std::array<World::TDamageFXSlot, World::DAMAGE_FX_SLOT_COUNT> _damage_fx;
+    std::array<int32_t, World::DAMAGE_FX_SLOT_COUNT> _damage_fx_last_time;
     int _vp_active;
     extra_vproto _vp_extra[3];
     int _vp_extra_mode;
