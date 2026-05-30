@@ -96,6 +96,16 @@ struct TVhclSound
     void ClearSounds();
 };
 
+constexpr int DAMAGE_FX_SLOT_COUNT = 8;
+
+struct TDamageFXSlot
+{
+    int16_t vp = 0;
+    float threshold = 0.25;
+    int interval = 500;
+    float random_pos = 15.0;
+};
+
 struct TVhclProto
 {
     enum
@@ -149,10 +159,7 @@ struct TVhclProto
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
     float visual_scale = 1.0;
-    int16_t damage_fx_vp = 0;
-    float damage_fx_threshold = 0.25;
-    int damage_fx_interval = 500;
-    float damage_fx_random_pos = 15.0;
+    std::array<TDamageFXSlot, DAMAGE_FX_SLOT_COUNT> damage_fx;
     std::vector<DestFX> dest_fx;      // dest_fx
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFX;

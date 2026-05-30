@@ -36,6 +36,32 @@ static int ParseSampleVariantId(const std::string &token)
     return variant - 1;
 }
 
+static int ParseDamageFXSlotId(const std::string &key, const char *base)
+{
+    std::string baseStr(base);
+
+    if ( key.size() < baseStr.size() || StriCmp(key.substr(0, baseStr.size()), baseStr) )
+        return -1;
+
+    std::string suffix = key.substr(baseStr.size());
+    if ( suffix.empty() )
+        return 0;
+
+    int slot = 0;
+    for (char ch : suffix)
+    {
+        if ( ch < '0' || ch > '9' )
+            return -1;
+
+        slot = slot * 10 + (ch - '0');
+    }
+
+    if ( slot < 2 || slot > World::DAMAGE_FX_SLOT_COUNT )
+        return -1;
+
+    return slot - 1;
+}
+
 
 
 bool UserParser::ReadUserNameFile(const std::string &filename)
@@ -546,6 +572,7 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
     TRoboProto *robo = _vhcl->RoboProto;
+    int damageFxSlot = -1;
     
     if (!robo)
         robo = &_roboTmp;    
@@ -737,12 +764,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vp_genesis = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "damage_fx_vp") )
+    else if ( (damageFxSlot = ParseDamageFXSlotId(p1, "damage_fx_vp")) >= 0 )
     {
         int vp = parser.stol(p2, NULL, 0);
-        _vhcl->damage_fx_vp = vp > 0 ? vp : 0;
+        _vhcl->damage_fx[damageFxSlot].vp = vp > 0 ? vp : 0;
     }
-    else if ( !StriCmp(p1, "damage_fx_threshold") )
+    else if ( (damageFxSlot = ParseDamageFXSlotId(p1, "damage_fx_threshold")) >= 0 )
     {
         float threshold = parser.stof(p2, 0);
 
@@ -751,17 +778,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         else if ( threshold > 1.0 )
             threshold = 1.0;
 
-        _vhcl->damage_fx_threshold = threshold;
+        _vhcl->damage_fx[damageFxSlot].threshold = threshold;
     }
-    else if ( !StriCmp(p1, "damage_fx_interval") )
+    else if ( (damageFxSlot = ParseDamageFXSlotId(p1, "damage_fx_interval")) >= 0 )
     {
         int interval = parser.stol(p2, NULL, 0);
-        _vhcl->damage_fx_interval = interval > 0 ? interval : 500;
+        _vhcl->damage_fx[damageFxSlot].interval = interval > 0 ? interval : 500;
     }
-    else if ( !StriCmp(p1, "damage_fx_random_pos") )
+    else if ( (damageFxSlot = ParseDamageFXSlotId(p1, "damage_fx_random_pos")) >= 0 )
     {
         float radius = parser.stof(p2, 0);
-        _vhcl->damage_fx_random_pos = radius > 0.0 ? radius : 0.0;
+        _vhcl->damage_fx[damageFxSlot].random_pos = radius > 0.0 ? radius : 0.0;
     }
     else if ( !StriCmp(p1, "visual_scale") )
     {
