@@ -64,6 +64,7 @@ void UAMessageBox::Init(uint8_t type)
 void UAMessageBox::SetInform(bool onlyInform)
 {
     _inform = onlyInform;
+    Update();
 }
 
 void UAMessageBox::Update()
