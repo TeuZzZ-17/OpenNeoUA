@@ -29,6 +29,10 @@ extern uint32_t bact_id;
 GuiBase *dword_5BAFAC = NULL;
 std::string dword_5BAF98;
 
+static const SDL_Color *yw_GetFactionUiAccent(NC_STACK_ypaworld *yw, SDL_Color *accent);
+static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw);
+static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Color color);
+
 ////////////////////////////////////////
 
 int dword_5BAF9C;
@@ -255,7 +259,7 @@ NC_STACK_bitmap *StatusIconLoad(const std::string &path)
     return inserted.first->second.bitmap;
 }
 
-void StatusIconRenderBitmap(NC_STACK_ypaworld *yw, NC_STACK_bitmap *bitmap, int left, int top, int size)
+void StatusIconRenderBitmap(NC_STACK_ypaworld *yw, NC_STACK_bitmap *bitmap, int left, int top, int size, uint8_t opacity = 255)
 {
     if ( !bitmap || !bitmap->GetBitmap() )
         return;
@@ -271,6 +275,7 @@ void StatusIconRenderBitmap(NC_STACK_ypaworld *yw, NC_STACK_bitmap *bitmap, int 
         ((float)top / halfH) - 1.0,
         ((float)(left + size) / halfW) - 1.0,
         ((float)(top + size) / halfH) - 1.0);
+    arg.opacity = opacity;
 
     GFX::Engine.raster_func204(&arg);
 }
@@ -433,20 +438,23 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
     return iconCount;
 }
 
-void StatusIconRenderList(NC_STACK_ypaworld *yw, const StatusIconList &icons, int iconCount, int left, int top, int size)
+void StatusIconRenderList(NC_STACK_ypaworld *yw, const StatusIconList &icons, int iconCount, int left, int top, int size, uint8_t opacity = 255)
 {
     for (int i = 0; i < iconCount; i++)
     {
         NC_STACK_bitmap *bitmap = StatusIconLoad(icons[i]);
         if ( bitmap )
-            StatusIconRenderBitmap(yw, bitmap, left, top, size);
+            StatusIconRenderBitmap(yw, bitmap, left, top, size, opacity);
 
         left += size + STATUS_ICON_SPACING;
     }
 }
 
-void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, int barLeft, int barTop, int barWidth, int barHeight)
+void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, int barLeft, int barTop, int barWidth, int barHeight, uint8_t opacity, int bottomReserve, int *markerCenterX)
 {
+    if ( markerCenterX )
+        *markerCenterX = barLeft + barWidth / 2 - yw->_screenSize.x / 2;
+
     StatusIconList icons;
     int iconCount = StatusIconCollect(yw, bact, vhcl, icons);
 
@@ -455,7 +463,7 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
 
     int iconBlockWidth = iconCount * STATUS_ICON_SIZE + (iconCount - 1) * STATUS_ICON_SPACING;
     int left = barLeft + (barWidth - iconBlockWidth) / 2;
-    int top = barTop - STATUS_ICON_SIZE - STATUS_ICON_SPACING;
+    int top = barTop - bottomReserve - STATUS_ICON_SIZE - STATUS_ICON_SPACING;
 
     if ( left < 4 )
         left = 4;
@@ -464,7 +472,10 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
     if ( top < 4 )
         top = 4;
 
-    StatusIconRenderList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE);
+    if ( markerCenterX )
+        *markerCenterX = left + iconBlockWidth / 2 - yw->_screenSize.x / 2;
+
+    StatusIconRenderList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE, opacity);
 }
 
 static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile)
@@ -548,7 +559,15 @@ bool StatusIconCanRenderCockpitUnit(NC_STACK_ypabact *bact)
 
 void StatusIconRenderCockpit(NC_STACK_ypaworld *yw, sklt_wis *wis, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, float hudX, float hudY)
 {
-    if ( !yw || !wis || !StatusIconCanRenderCockpitUnit(bact) || !vhcl )
+    if ( !yw || !wis )
+        return;
+
+    float nameY = hudY + wis->field_92 * 12.0;
+    int nameCenterX = (yw->_screenSize.x / 2) + (yw->_screenSize.x / 2) * hudX;
+    int nameCenterY = (yw->_screenSize.y / 2) + (yw->_screenSize.y / 2) * nameY;
+    int belowNameTop = nameCenterY + yw->_fontH + 4;
+
+    if ( !StatusIconCanRenderCockpitUnit(bact) || !vhcl )
         return;
 
     StatusIconList icons;
@@ -558,12 +577,8 @@ void StatusIconRenderCockpit(NC_STACK_ypaworld *yw, sklt_wis *wis, NC_STACK_ypab
 
     int iconBlockWidth = iconCount * STATUS_ICON_SIZE + (iconCount - 1) * STATUS_ICON_SPACING;
 
-    float nameY = hudY + wis->field_92 * 12.0;
-
-    int nameCenterX = (yw->_screenSize.x / 2) + (yw->_screenSize.x / 2) * hudX;
-    int nameCenterY = (yw->_screenSize.y / 2) + (yw->_screenSize.y / 2) * nameY;
     int left = nameCenterX - (iconBlockWidth / 2);
-    int top = nameCenterY + yw->_fontH + 4;
+    int top = belowNameTop;
 
     int maxLeft = yw->_screenSize.x - iconBlockWidth - 4;
     if ( left > maxLeft )
@@ -2783,7 +2798,9 @@ void sb_0x4f8f64(NC_STACK_ypaworld *yw)
     sb_0x4f8f64__sub0(yw, &robo_map.t1_cmdbuf_3);
     FontUA::set_end(&robo_map.t1_cmdbuf_3);
 
-    GFX::Engine.ProcessDrawSeq(robo_map.t1_cmdbuf_3);
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(robo_map.t1_cmdbuf_3, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
 
     // OpenUA custom: draw the mortar cooldown/readiness bar on top of the
     // strategic-map unit icons/HP bars, using the same parent/child mortar
@@ -4054,7 +4071,6 @@ int sb_0x451034(NC_STACK_ypaworld *yw)
     yw->_prevMousePos = Common::Point();
     yw->_bactPrevClicked = NULL;
     yw_ResetWorldSelectionDrag(yw);
-    yw->_worldSelectHighlightCmdrID = -1;
     yw->_moveOrderFeedbackActive = false;
 
     sb_0x451034__sub9(yw);
@@ -4100,20 +4116,25 @@ int sb_0x451034(NC_STACK_ypaworld *yw)
 }
 
 
-void sb_0x4d7c08__sub0__sub1()
+void sb_0x4d7c08__sub0__sub1(const SDL_Color *uiAccent)
 {
     if ( bzda.IsOpen() )
     {
-        GFX::Engine.ProcessDrawSeq(bzda.cmdCommands, &bzda.cmdInclude);
+        GFX::Engine.ProcessDrawSeq(bzda.cmdCommands, &bzda.cmdInclude, uiAccent);
 
         if ( gui_lstvw.IsOpen() )
-            GFX::Engine.ProcessDrawSeq(gui_lstvw.cmdCommands, &gui_lstvw.cmdInclude);
+            GFX::Engine.ProcessDrawSeq(gui_lstvw.cmdCommands, &gui_lstvw.cmdInclude, uiAccent);
     }
 }
 
 
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 {
+    yw->UpdateFactionGameplayUiAtlases();
+
+    SDL_Color uiAccentColor;
+    const SDL_Color *uiAccent = yw_GetFactionUiAccent(yw, &uiAccentColor);
+
     if ( yw->_hideHudForScreenshots )
         return;
 
@@ -4130,11 +4151,12 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
             {
                 if ( lstnode->flags & GuiBase::FLAG_ICONIFED )
                 {
-                    GFX::Engine.ProcessDrawSeq(lstnode->iconString);
+                    GFX::Engine.ProcessDrawSeq(lstnode->iconString, NULL, uiAccent);
                 }
                 else
                 {
-                    GFX::Engine.ProcessDrawSeq(lstnode->cmdCommands, &lstnode->cmdInclude);
+                    GFX::Engine.ProcessDrawSeq(lstnode->cmdCommands, &lstnode->cmdInclude,
+                                               uiAccent);
 
                     if ( lstnode->postDraw )
                         lstnode->postDraw(yw);
@@ -4147,9 +4169,9 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
             sb_0x4d7c08__sub0__sub0(yw);
             sb_0x4d7c08__sub0__sub2(yw);
         }
-        draw_tooltip(yw);
-        GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude);
-        sb_0x4d7c08__sub0__sub1();
+        draw_tooltip(yw, uiAccent);
+        GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude, uiAccent);
+        sb_0x4d7c08__sub0__sub1(uiAccent);
     }
 }
 
@@ -4734,7 +4756,9 @@ void ypaworld_func64__sub7__sub2__sub1__sub0(NC_STACK_ypaworld *yw, CmdStream *c
 
             int v30 = -(yw->_downScreenBorder + 7 * yw->_fontH);
 
-            FontUA::set_txtColor(cur, yw->_iniColors[63].r, yw->_iniColors[63].g, yw->_iniColors[63].b);
+            const SDL_Color factionTextColor = yw_GetFactionUiTextColor(yw);
+            FontUA::set_txtColorRaw(cur, factionTextColor.r,
+                                    factionTextColor.g, factionTextColor.b);
 
             sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_VSROBO), v5, v6);
 
@@ -7166,14 +7190,7 @@ void ypaworld_func64__sub7__sub1__sub0(NC_STACK_ypaworld *yw)
         bzda.field_1D0 = bzda.field_1CC & 0x20;
 
     if ( v13 )
-    {
         yw->_activeCmdrID = v13->_commandID;
-        yw->_worldSelectHighlightCmdrID = v13->_commandID;
-    }
-    else if ( v8 )
-    {
-        yw->_worldSelectHighlightCmdrID = -1;
-    }
 
     yw->sub_4C40AC();
 }
@@ -7186,8 +7203,14 @@ static void yw_ResetWorldSelectionDrag(NC_STACK_ypaworld *yw)
     yw->_worldSelectDragCurrent = Common::Point();
 }
 
-static SDL_Color yw_GetNeutralSelectionColor()
+static SDL_Color yw_GetFactionSelectionColor(NC_STACK_ypaworld *yw)
 {
+    if (yw && yw->_userRobo && yw->_userRobo->_owner >= 1 &&
+        yw->_userRobo->_owner <= 6)
+    {
+        return yw->GetColor(yw->_userRobo->_owner);
+    }
+
     return GFX::Engine.Color(210, 210, 195);
 }
 
@@ -7196,15 +7219,48 @@ static SDL_Color yw_GetNeutralSelectionShadowColor()
     return GFX::Engine.Color(55, 55, 50);
 }
 
-static SDL_Color yw_GetNeutralLeaderColor()
+static const SDL_Color *yw_GetFactionUiAccent(NC_STACK_ypaworld *yw, SDL_Color *accent)
 {
-    return GFX::Engine.Color(255, 220, 32);
+    if (!yw || !accent || !yw->_userRobo ||
+        yw->_userRobo->_owner < 1 || yw->_userRobo->_owner > 6)
+    {
+        return NULL;
+    }
+
+    // Muted, UI-specific faction palette: recognizable without flooding the
+    // neutral panels. Resistance deliberately keeps the original vanilla UI.
+    switch (yw->_userRobo->_owner)
+    {
+    case 1: return NULL;                                       // Resistance
+    case 2: *accent = GFX::Engine.Color(55, 145, 90); break;    // Sulgogar
+    case 3: *accent = GFX::Engine.Color(255, 255, 248); break;  // Myko
+    case 4: *accent = GFX::Engine.Color(220, 205, 110); break;  // Taerkasten
+    case 5: *accent = GFX::Engine.Color(170, 165, 158); break;  // Black Sect
+    case 6: *accent = GFX::Engine.Color(220, 60, 70); break;    // Ghorkov
+    default: *accent = yw->GetColor(yw->_userRobo->_owner); break;
+    }
+    return accent;
 }
 
-static float yw_GetWorldSelectionMaxDistance()
+static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw)
+{
+    SDL_Color accent;
+    if (yw_GetFactionUiAccent(yw, &accent))
+        return accent;
+
+    if (yw && yw->_userRobo && yw->_userRobo->_owner >= 1 &&
+        yw->_userRobo->_owner <= 6)
+    {
+        return yw->GetColor(yw->_userRobo->_owner);
+    }
+
+    return GFX::Engine.Color(210, 210, 195);
+}
+
+static float yw_GetWorldUiMaxDistance()
 {
     constexpr float DEFAULT_DISTANCE = 2500.0f;
-    const std::string value = System::IniConf::GameWorldSelectionMaxDistance.Get<std::string>();
+    const std::string value = System::IniConf::GameWorldUiMaxDistance.Get<std::string>();
 
     if ( value.empty() || value.find(',') != std::string::npos )
         return DEFAULT_DISTANCE;
@@ -7214,17 +7270,43 @@ static float yw_GetWorldSelectionMaxDistance()
         size_t pos = 0;
         float distance = std::stof(value, &pos);
         if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
-             !isfinite(distance) || distance <= 0.0f )
+             !isfinite(distance) || distance < 0.0f )
         {
             return DEFAULT_DISTANCE;
         }
 
+        if (distance == 0.0f)
+            return 0.0f;
         return std::max(100.0f, std::min(distance, 20000.0f));
     }
     catch (...)
     {
         return DEFAULT_DISTANCE;
     }
+}
+
+static uint8_t yw_GetWorldUiOpacity(NC_STACK_ypaworld *yw, const vec3d &worldPos)
+{
+    if (!yw)
+        return 0;
+
+    const float maxDistance = yw_GetWorldUiMaxDistance();
+    if (maxDistance <= 0.0f)
+        return 255;
+
+    const float fadeStart = maxDistance * 0.75f;
+    const float distance = (worldPos - yw->_viewerPosition).length();
+
+    if (distance >= maxDistance)
+        return 0;
+    if (distance <= fadeStart)
+        return 255;
+
+    float ratio = (maxDistance - distance) / (maxDistance - fadeStart);
+    ratio = std::max(0.0f, std::min(1.0f, ratio));
+    // Smoothstep avoids a visible brightness step where the fade begins.
+    ratio = ratio * ratio * (3.0f - 2.0f * ratio);
+    return (uint8_t)dround(ratio * 255.0f);
 }
 
 static bool yw_ProjectWorldSelectionPoint(NC_STACK_ypaworld *yw, const vec3d &worldPos, Common::Point *screenPos)
@@ -7276,6 +7358,62 @@ static bool yw_IsWorldSelectionUnitValid(NC_STACK_ypaworld *yw, NC_STACK_ypabact
     }
 }
 
+static bool yw_TryAddClickedUnitToActiveSquad(NC_STACK_ypaworld *yw, TInputState *inpt)
+{
+    if ( !Input::Engine.GetKeyState(Input::KC_CTRL) ||
+         !(inpt->ClickInf.flag & TClickBoxInf::FLAG_LM_DOWN) ||
+         bzda.field_1D0 != 1 ||
+         !(yw->_guiActFlags & 0x20) ||
+         !yw_IsWorldSelectionUnitValid(yw, yw->_bactOnMouse) ||
+         yw->_activeCmdrRemapIndex < 0 ||
+         (size_t)yw->_activeCmdrRemapIndex >= yw->_cmdrsRemap.size() )
+    {
+        return false;
+    }
+
+    NC_STACK_ypabact *activeCommander = yw->_cmdrsRemap[yw->_activeCmdrRemapIndex];
+    NC_STACK_ypabact *clickedUnit = yw->_bactOnMouse;
+    if ( !activeCommander ||
+         activeCommander->_status == BACT_STATUS_CREATE ||
+         activeCommander->_status == BACT_STATUS_BEAM ||
+         activeCommander->_status == BACT_STATUS_DEAD )
+    {
+        return false;
+    }
+
+    bact_arg109 reorganize;
+    uint32_t activeCommandID = activeCommander->_commandID;
+
+    if ( clickedUnit == activeCommander )
+    {
+        // A squad cannot become empty. With members present, vanilla group
+        // reorganization promotes one of them and makes the old leader solo.
+        if ( activeCommander->_kidList.empty() )
+            return true;
+
+        reorganize.field_0 = 3;
+        reorganize.field_4 = NULL;
+        clickedUnit->ReorganizeGroup(&reorganize);
+    }
+    else if ( clickedUnit->_parent == activeCommander )
+    {
+        reorganize.field_0 = 3;
+        reorganize.field_4 = NULL;
+        clickedUnit->ReorganizeGroup(&reorganize);
+    }
+    else
+    {
+        reorganize.field_0 = 4;
+        reorganize.field_4 = clickedUnit;
+        activeCommander->ReorganizeGroup(&reorganize);
+    }
+
+    yw->_activeCmdrID = activeCommandID;
+    sub_4C707C(yw);
+    yw->sub_4C40AC();
+    return true;
+}
+
 static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
 {
     int left = std::min(yw->_worldSelectDragStart.x, yw->_worldSelectDragCurrent.x);
@@ -7285,7 +7423,9 @@ static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
 
     std::vector<NC_STACK_ypabact *> selected;
     selected.reserve(32);
-    const float maxDistance = yw_GetWorldSelectionMaxDistance();
+    float maxDistance = yw_GetWorldUiMaxDistance();
+    if (maxDistance <= 0.0f)
+        maxDistance = 2500.0f;
     const float maxDistanceSquared = maxDistance * maxDistance;
 
     auto collect = [&](NC_STACK_ypabact *bact)
@@ -7338,7 +7478,6 @@ static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
     }
 
     yw->_activeCmdrID = leader->_commandID;
-    yw->_worldSelectHighlightCmdrID = leader->_commandID;
     yw->sub_4C40AC();
 }
 
@@ -7459,7 +7598,7 @@ static void yw_RenderWorldSelectionDrag(NC_STACK_ypaworld *yw)
     GFX::Engine.raster_func201(Common::Line(right + 1, bottom + 1, left + 1, bottom + 1));
     GFX::Engine.raster_func201(Common::Line(left + 1, bottom + 1, left + 1, top + 1));
 
-    GFX::Engine.raster_func217(yw_GetNeutralSelectionColor());
+    GFX::Engine.raster_func217(yw_GetFactionSelectionColor(yw));
     GFX::Engine.raster_func201(Common::Line(left, top, right, top));
     GFX::Engine.raster_func201(Common::Line(right, top, right, bottom));
     GFX::Engine.raster_func201(Common::Line(right, bottom, left, bottom));
@@ -7496,9 +7635,12 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
     int centerX = point.x - yw->_screenSize.x / 2;
     int centerY = point.y - yw->_screenSize.y / 2;
     int radius = 7 + (int)((age % 240) * 7 / 240);
+    SDL_Color factionColor = yw_GetFactionSelectionColor(yw);
     SDL_Color pulseColor = ((age / 90) & 1) ?
-                           GFX::Engine.Color(155, 155, 145) :
-                           yw_GetNeutralSelectionColor();
+                           GFX::Engine.Color(factionColor.r * 3 / 5,
+                                             factionColor.g * 3 / 5,
+                                             factionColor.b * 3 / 5) :
+                           factionColor;
 
     yw_DrawNeutralDiamond(centerX + 1, centerY + 1, radius, yw_GetNeutralSelectionShadowColor());
     yw_DrawNeutralDiamond(centerX, centerY, radius, pulseColor);
@@ -8129,7 +8271,8 @@ void ypaworld_func64__sub7__sub6__sub3(NC_STACK_ypaworld *yw, int a2, int a4)
     exit_menu.itemBlock.clear();
     exit_menu.ItemsPreLayout(yw, &exit_menu.itemBlock, 0, "{ }");
 
-    FontUA::set_txtColor(&exit_menu.itemBlock, yw->_iniColors[68].r, yw->_iniColors[68].g, yw->_iniColors[68].b);
+    FontUA::set_txtColorRaw(&exit_menu.itemBlock, yw->_iniColors[63].r,
+                            yw->_iniColors[63].g, yw->_iniColors[63].b);
 
     sub_4DA8DC(yw, &exit_menu.itemBlock, a4 & 0x100, a2 & 0x100, Locale::Text::Common(Locale::CMN_EXITMISN));
     sub_4DA8DC(yw, &exit_menu.itemBlock, a4 & 0x200, a2 & 0x200, Locale::Text::Common(Locale::CMN_SAVE));
@@ -8459,12 +8602,14 @@ void NC_STACK_ypaworld::ypaworld_func64__sub7__sub4__sub0(int a2)
     lstvw2.itemBlock.clear();
     lstvw2.ItemsPreLayout(this, &lstvw2.itemBlock, 0, "{ }");
 
-    FontUA::set_txtColor(&lstvw2.itemBlock, _iniColors[60].r, _iniColors[60].g, _iniColors[60].b);
+    FontUA::set_txtColorRaw(&lstvw2.itemBlock, _iniColors[63].r,
+                            _iniColors[63].g, _iniColors[63].b);
 
     sub_4C8534(this, &lstvw2.itemBlock, dword_5BAF98);
     sub_4C8534(this, &lstvw2.itemBlock, " ");
 
-    FontUA::set_txtColor(&lstvw2.itemBlock, _iniColors[68].r, _iniColors[68].g, _iniColors[68].b);
+    FontUA::set_txtColorRaw(&lstvw2.itemBlock, _iniColors[63].r,
+                            _iniColors[63].g, _iniColors[63].b);
 
     ypaworld_func64__sub7__sub4__sub0__sub0(this, &lstvw2.itemBlock, a2);
     lstvw2.ItemsPostLayout(this, &lstvw2.itemBlock, 0, "xyz");
@@ -8864,9 +9009,6 @@ void NC_STACK_ypaworld::sub_4C40AC()
                 _activeCmdrKidsCount++;
         }
     }
-
-    if ( _worldSelectHighlightCmdrID >= 0 && _activeCmdrID != (uint32_t)_worldSelectHighlightCmdrID )
-        _worldSelectHighlightCmdrID = -1;
 
     _lastMsgSender = GetLastMsgSender();
 }
@@ -9797,7 +9939,9 @@ void sb_0x4d7c08__sub0__sub0(NC_STACK_ypaworld *yw)
 
     FontUA::set_end(&buf);
 
-    GFX::Engine.ProcessDrawSeq(buf);
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buf, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
 }
 
 
@@ -10746,7 +10890,9 @@ static bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw)
     }
 
     FontUA::set_end(&buffer);
-    GFX::Engine.ProcessDrawSeq(buffer);
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buffer, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
     return true;
 }
 
@@ -10820,7 +10966,9 @@ int sb_0x4d7c08__sub0__sub0__sub0(NC_STACK_ypaworld *yw)
 
     FontUA::set_end(&buf);
 
-    GFX::Engine.ProcessDrawSeq(buf);
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buf, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
 
     if ( v6 && (size_t)v6 < yw->_vhclProtos.size() )
         StatusIconRenderHudInfoRoles(yw, wis, &yw->_vhclProtos[v6], 0.0, -0.5);
@@ -11100,7 +11248,38 @@ void yw_RenderHUDVectorGFX(NC_STACK_ypaworld *yw, CmdStream *cur)
     {
         uint8_t protoId = yw->_userUnit->_mimic_disguise_vehicleID ? yw->_userUnit->_mimic_disguise_vehicleID : yw->_userUnit->_vehicleID;
         if ( (size_t)protoId < yw->_vhclProtos.size() )
-            StatusIconRenderCockpit(yw, wis, yw->_userUnit, &yw->_vhclProtos[protoId], -0.7, 0.3);
+        {
+            constexpr float hudX = -0.7f;
+            constexpr float hudY = 0.3f;
+            StatusIconRenderCockpit(yw, wis, yw->_userUnit,
+                                    &yw->_vhclProtos[protoId], hudX, hudY);
+
+            if ( yw->_userUnit->_sessionKillMarks > 0 &&
+                 yw->_userUnit->_bact_type != BACT_TYPES_ROBO )
+            {
+                constexpr int markGap = 2;
+                constexpr int markHeight = 3;
+                const float weaponNameY = hudY - wis->field_92 * 12.0f;
+                const int weaponNameCenterX = (yw->_screenSize.x / 2) +
+                                              (yw->_screenSize.x / 2) * hudX;
+                const int weaponNameCenterY = (yw->_screenSize.y / 2) +
+                                              (yw->_screenSize.y / 2) * weaponNameY;
+                const int tipYScreen = weaponNameCenterY - yw->_fontH - markGap;
+                if ( tipYScreen - markHeight >= 4 )
+                {
+                    const int killMarkCenterX = weaponNameCenterX -
+                                                yw->_screenSize.x / 2;
+                    const int tipY = tipYScreen - yw->_screenSize.y / 2;
+                    SDL_Color markerColor = yw->GetColor(yw->_userUnit->_owner);
+                    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+
+                    yw_DrawWorldKillMarks(killMarkCenterX + 1, tipY + 1,
+                                          yw->_userUnit->_sessionKillMarks, shadowColor);
+                    yw_DrawWorldKillMarks(killMarkCenterX, tipY,
+                                          yw->_userUnit->_sessionKillMarks, markerColor);
+                }
+            }
+        }
     }
 }
 
@@ -11166,6 +11345,10 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
+    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    if (worldUiOpacity == 0)
+        return;
+
     // Render fraction triangles above units
 
     float v6 = bact->_position.x - yw->_viewerPosition.x;
@@ -11228,6 +11411,7 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                     {
                         if ( barHeight + shieldTop < yw->_screenSize.y )
                         {
+                            FontUA::set_opacity(cur, worldUiOpacity);
                             yw_RenderUnitSquareBar(yw, cur, v42, lifeTop, v13, bact->_energy, bact->_energy_max, 2, 6);
                             yw_RenderUnitSquareBar(yw, cur, v42, shieldTop, v13, (int)bact->GetEffectiveShield(), 100, 1, 5);
 
@@ -11240,8 +11424,35 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                             }
 
                             uint8_t protoId = bact->_mimic_disguise_vehicleID ? bact->_mimic_disguise_vehicleID : bact->_vehicleID;
+                            const bool showKillMarks = bact->_sessionKillMarks > 0 &&
+                                                       bact->_bact_type != BACT_TYPES_ROBO;
+                            constexpr int markGap = 2;
+                            constexpr int markHeight = 3;
+                            const int killMarkReserve = showKillMarks ? markGap + markHeight + markGap : 0;
+                            int killMarkCenterX = v42 + v43 / 2 - yw->_screenSize.x / 2;
                             if ( (size_t)protoId < yw->_vhclProtos.size() )
-                                StatusIconRenderWorld(yw, bact, &yw->_vhclProtos[protoId], v42, statusAnchorTop, v43, barHeight);
+                                StatusIconRenderWorld(yw, bact, &yw->_vhclProtos[protoId],
+                                                      v42, statusAnchorTop, v43, barHeight,
+                                                      worldUiOpacity, killMarkReserve,
+                                                      &killMarkCenterX);
+
+                            if ( showKillMarks )
+                            {
+                                if ( statusAnchorTop - markGap - markHeight >= 0 )
+                                {
+                                    const int tipY = statusAnchorTop - markGap - yw->_screenSize.y / 2;
+                                    SDL_Color markerColor = yw->GetColor(bact->_owner);
+                                    markerColor.a = worldUiOpacity;
+                                    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+                                    shadowColor.a = worldUiOpacity;
+
+                                    yw_DrawWorldKillMarks(killMarkCenterX + 1, tipY + 1,
+                                                          bact->_sessionKillMarks, shadowColor);
+                                    yw_DrawWorldKillMarks(killMarkCenterX, tipY,
+                                                          bact->_sessionKillMarks, markerColor);
+                                }
+                            }
+                            FontUA::set_opacity(cur, 255);
                         }
                     }
                 }
@@ -11286,7 +11497,7 @@ static void yw_RenderSpectatorWorldStatus(NC_STACK_ypaworld *yw, CmdStream *cur,
 }
 
 static void yw_DrawWorldSelectionCornerLines(int centerX, int centerY, int halfWidth,
-                                            int halfHeight, int cornerLength, SDL_Color color)
+                                             int halfHeight, int cornerLength, SDL_Color color)
 {
     GFX::Engine.raster_func217(color);
 
@@ -11308,12 +11519,39 @@ static void yw_DrawWorldSelectionCornerLines(int centerX, int centerY, int halfW
                                             centerX + halfWidth, centerY + halfHeight - cornerLength));
 }
 
-static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
-                                              float maxDistanceSquared)
+static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Color color)
 {
-    float distanceX = bact->_position.x - yw->_viewerPosition.x;
-    float distanceZ = bact->_position.z - yw->_viewerPosition.z;
-    if ( distanceX * distanceX + distanceZ * distanceZ > maxDistanceSquared )
+    marks = std::min<uint8_t>(marks, 4);
+    if ( marks == 0 )
+        return;
+
+    constexpr int halfMarkWidth = 4;
+    constexpr int markHeight = 3;
+    constexpr int markSpacing = 2;
+    constexpr int opticalCenterOffsetX = -1;
+    const int markWidth = halfMarkWidth * 2;
+    const int totalWidth = marks * markWidth + (marks - 1) * markSpacing;
+    const int firstCenterX = centerX + opticalCenterOffsetX -
+                             totalWidth / 2 + halfMarkWidth;
+    const int baseY = tipY - markHeight;
+
+    GFX::Engine.raster_func217(color);
+    for (uint8_t i = 0; i < marks; i++)
+    {
+        const int markCenterX = firstCenterX + i * (markWidth + markSpacing);
+        GFX::Engine.raster_func201(Common::Line(markCenterX, tipY,
+                                                markCenterX - halfMarkWidth, baseY));
+        GFX::Engine.raster_func201(Common::Line(markCenterX - halfMarkWidth, baseY,
+                                                markCenterX + halfMarkWidth, baseY));
+        GFX::Engine.raster_func201(Common::Line(markCenterX + halfMarkWidth, baseY,
+                                                markCenterX, tipY));
+    }
+}
+
+static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+{
+    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    if (worldUiOpacity == 0)
         return;
 
     Common::Point point;
@@ -11349,48 +11587,44 @@ static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_yp
                                            (yw->_screenSize.y / 2)) + 2);
     int cornerLength = 2;
 
-    SDL_Color markerColor = isSquadLeader ? yw_GetNeutralLeaderColor() :
-                                           yw_GetNeutralSelectionColor();
+    SDL_Color markerColor = yw_GetFactionSelectionColor(yw);
+    markerColor.a = worldUiOpacity;
+    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+    shadowColor.a = worldUiOpacity;
 
     yw_DrawWorldSelectionCornerLines(centerX + 1, centerY + 1, halfWidth, halfHeight,
-                                     cornerLength, yw_GetNeutralSelectionShadowColor());
+                                     cornerLength, shadowColor);
     yw_DrawWorldSelectionCornerLines(centerX, centerY, halfWidth, halfHeight,
                                      cornerLength, markerColor);
-
 }
 
 void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
 {
-    if ( yw->_worldSelectHighlightCmdrID >= 0 &&
-         yw->_activeCmdrID == (uint32_t)yw->_worldSelectHighlightCmdrID )
+    NC_STACK_ypabact *activeCommander = NULL;
+
+    if ( yw->_activeCmdrRemapIndex >= 0 &&
+         (size_t)yw->_activeCmdrRemapIndex < yw->_cmdrsRemap.size() )
     {
-        float maxDistance = yw_GetWorldSelectionMaxDistance();
-        float maxDistanceSquared = maxDistance * maxDistance;
-
-        for ( NC_STACK_ypabact *commander : yw->_cmdrsRemap )
+        activeCommander = yw->_cmdrsRemap[yw->_activeCmdrRemapIndex];
+        if ( activeCommander->_status != BACT_STATUS_CREATE &&
+             activeCommander->_status != BACT_STATUS_BEAM &&
+             activeCommander->_status != BACT_STATUS_DEAD &&
+             !activeCommander->ShouldHideFromStrategicUI() )
         {
-            if ( commander->_commandID != (uint32_t)yw->_worldSelectHighlightCmdrID )
-                continue;
+            yw_RenderCursorOverUnit(yw, activeCommander);
+            yw_RenderWorldSelectionUnitMarker(yw, activeCommander);
+        }
 
-            if ( commander->_status != BACT_STATUS_CREATE &&
-                 commander->_status != BACT_STATUS_BEAM &&
-                 commander->_status != BACT_STATUS_DEAD &&
-                 !commander->ShouldHideFromStrategicUI() )
+        for ( NC_STACK_ypabact *unit : activeCommander->_kidList )
+        {
+            if ( unit->_status != BACT_STATUS_CREATE &&
+                 unit->_status != BACT_STATUS_BEAM &&
+                 unit->_status != BACT_STATUS_DEAD &&
+                 !unit->ShouldHideFromStrategicUI() )
             {
-                yw_RenderWorldSelectionUnitMarker(yw, commander, maxDistanceSquared);
+                yw_RenderCursorOverUnit(yw, unit);
+                yw_RenderWorldSelectionUnitMarker(yw, unit);
             }
-
-            for ( NC_STACK_ypabact *unit : commander->_kidList )
-            {
-                if ( unit->_status != BACT_STATUS_CREATE &&
-                     unit->_status != BACT_STATUS_BEAM &&
-                     unit->_status != BACT_STATUS_DEAD &&
-                     !unit->ShouldHideFromStrategicUI() )
-                {
-                    yw_RenderWorldSelectionUnitMarker(yw, unit, maxDistanceSquared);
-                }
-            }
-            break;
         }
     }
 
@@ -11424,6 +11658,10 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
                     for ( NC_STACK_ypabact* &bct : v8.unitsList )
                     {
                         if ( bct->ShouldHideFromStrategicUI() )
+                            continue;
+
+                        if ( activeCommander &&
+                             (bct == activeCommander || bct->_parent == activeCommander) )
                             continue;
 
                         if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_bact_type != BACT_TYPES_ROBO )
@@ -11882,6 +12120,10 @@ void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
+    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    if (worldUiOpacity == 0)
+        return;
+
     float v6 = bact->_position.x - yw->_viewerPosition.x;
     float v4 = bact->_position.y - yw->_viewerPosition.y;
     float v8 = bact->_position.z - yw->_viewerPosition.z;
@@ -11898,6 +12140,7 @@ void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
         if ( a3 > -v30 && v33 < v30 && v33 > -v30 )
         {
             SDL_Color v11 = yw->GetColor(bact->_owner);
+            v11.a = worldUiOpacity;
             UAskeleton::Data *v12 = yw->_hud.sklts_intern[13];
 
             float a3a = a3 / v30;
@@ -12305,7 +12548,9 @@ void sb_0x4d7c08__sub0__sub2(NC_STACK_ypaworld *yw)
 
     FontUA::set_end(&buf);
 
-    GFX::Engine.ProcessDrawSeq(buf);
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buf, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
 }
 
 
@@ -13027,9 +13272,6 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
             {
                 _activeCmdrID = _bactOnMouse->_commandID;
                 sub_4C40AC();
-
-                if ( _guiActFlags & 8 )
-                    _worldSelectHighlightCmdrID = _activeCmdrID;
             }
         }
 
@@ -13160,6 +13402,14 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
     {
         yw_MouseSelect(arg);
         ypaworld_func64__sub21__sub7();
+
+        if ( !IsSpectatorControlled() && yw_TryAddClickedUnitToActiveSquad(this, arg) )
+        {
+            _bactPrevClicked = NULL;
+            _prevMousePos = Common::Point();
+            arg->ClickInf.flag &= ~TClickBoxInf::FLAG_LM_DOWN;
+            return;
+        }
 
         if ( IsSpectatorControlled() &&
              (arg->ClickInf.flag & TClickBoxInf::FLAG_LM_DOWN) &&
@@ -13933,7 +14183,6 @@ void NC_STACK_ypaworld::GUI_Close()
     if ( _guiLoaded )
     {
         yw_ResetWorldSelectionDrag(this);
-        _worldSelectHighlightCmdrID = -1;
         _moveOrderFeedbackActive = false;
         ypaworld_func140(&lstvw2);
         ypaworld_func140(&exit_menu);

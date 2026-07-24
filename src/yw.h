@@ -1453,13 +1453,13 @@ struct TBriefObject
     int TileSet = 0;
     int TileID = 0;
     int Color = 0;
+    int Owner = 0;
     std::string Title;
-
-    NC_STACK_base::Instance *VP = NULL; // Must not be copied
 
     TBriefObject() = default;
 
-    TBriefObject(int16_t tp, int16_t oid, float sx, float sy, int tset, int tid, int clr, const std::string &ttl)
+    TBriefObject(int16_t tp, int16_t oid, float sx, float sy, int tset, int tid,
+                 int clr, const std::string &ttl, int owner = 0)
     {
 		Pos.x = sx;
         Pos.y = sy;
@@ -1468,39 +1468,14 @@ struct TBriefObject
         TileSet = tset;
         TileID = tid;
         Color = clr;
+        Owner = owner;
         Title = ttl;
     }
 
-    TBriefObject(const TBriefObject &b)
-    {
-		Pos = b.Pos;
-        ObjType = b.ObjType;
-        ID = b.ID;
-        TileSet = b.TileSet;
-        TileID = b.TileID;
-        Color = b.Color;
-        Title = b.Title;
-    }
-
-    TBriefObject(TBriefObject &&b) = default; //Pointer also can be moved
-
-    ~TBriefObject()
-    {
-        Common::DeleteAndNull(&VP);
-    }
-
-    TBriefObject &operator=(const TBriefObject &b)
-    {
-        Pos = b.Pos;
-        ObjType = b.ObjType;
-        ID = b.ID;
-        TileSet = b.TileSet;
-        TileID = b.TileID;
-        Color = b.Color;
-        Title = b.Title;
-        Common::DeleteAndNull(&VP);
-        return *this;
-    }
+    TBriefObject(const TBriefObject &b) = default;
+    TBriefObject(TBriefObject &&b) = default;
+    TBriefObject &operator=(const TBriefObject &b) = default;
+    TBriefObject &operator=(TBriefObject &&b) = default;
 
     bool operator==(const TBriefObject &b) const
     {
@@ -1586,12 +1561,9 @@ struct TBriefengScreen
     bool AddObjectsFlag = false;
     TBriefObject ViewingObject;
     Common::FRect ViewingObjectRect;
-    int32_t ViewingObjectAngle = 0;
     uint32_t ViewingObjectStartTime = 0;
 
     std::vector<TBriefObject> Objects;
-
-    baseRender_msg ObjRenderParams;
 
     bool ZoomFromGate = false;
 
@@ -1660,7 +1632,6 @@ struct TBriefengScreen
         ViewingObject = TBriefObject();
 
         ViewingObjectRect = Common::FRect();
-        ViewingObjectAngle = 0;
         ViewingObjectStartTime = 0;
 
         MapBlitParams = GFX::rstr_arg204();
@@ -1671,7 +1642,6 @@ struct TBriefengScreen
 
         Objects.clear();
 
-        ObjRenderParams = baseRender_msg();
         ZoomFromGate = false;
 
         //_owner = 0;
@@ -2326,6 +2296,7 @@ public:
     int yw_RestoreVehicleData();
     void EnableLevelPasses();
     int load_fonts_and_icons();
+    void UpdateFactionGameplayUiAtlases();
     int yw_LoadSet(int setID);
 
     void FreeLegos();
@@ -2795,6 +2766,7 @@ public:
     bool _guiLoaded = false;
 
     std::array<TileMap *, 92> _guiTiles = Common::ArrayInit<TileMap *, 92>(NULL);
+    int32_t _factionGameplayUiOwner = -1;
 
     GuiBaseList _guiActive;
 
@@ -2854,7 +2826,6 @@ public:
     bool _worldSelectDragActive = false;
     Common::Point _worldSelectDragStart;
     Common::Point _worldSelectDragCurrent;
-    int32_t _worldSelectHighlightCmdrID = -1;
     bool _moveOrderFeedbackActive = false;
     vec3d _moveOrderFeedbackPos;
     uint32_t _moveOrderFeedbackStartTime = 0;

@@ -1103,6 +1103,9 @@ public:
     float _heading_speed;
     NC_STACK_ypabact *_killer;
     int16_t _killer_owner;
+    // OpenUA custom: transient single-player kill marks (0..4).
+    // Intentionally not serialized or synchronized over the network.
+    uint8_t _sessionKillMarks = 0;
     int16_t _reb_count;
     int _atk_ret;
     uint32_t _lastFrmStamp;

@@ -219,7 +219,7 @@ void NC_STACK_ypaworld::BriefingSetObject(const TBriefObject &obj, bool doAdd)
     _briefScreen.ViewingObject = obj;
 
     if ( doAdd )
-        _briefScreen.Objects.push_back( obj );
+        _briefScreen.Objects.push_back( _briefScreen.ViewingObject );
 
     if ( _GameShell )
         SFXEngine::SFXe.startSound(&_GameShell->samples1_info, 11);
@@ -238,7 +238,7 @@ void ypaworld_func158__sub4__sub1__sub4__sub7(NC_STACK_ypaworld *yw, TInputState
         brf->ActiveElementID = 0;
         yw->BriefingSetObject( TBriefObject(TBriefObject::TYPE_VEHICLE, robo.VhclID, robo.Pos.x, robo.Pos.z,
                                            26, 128 + robo.Owner, 25,
-                                           yw->GetVehicleName(robo.VhclID)),
+                                           yw->GetVehicleName(robo.VhclID), robo.Owner),
                                brf->AddObjectsFlag);
     }
 }
@@ -404,7 +404,7 @@ void ypaworld_func158__sub4__sub1__sub4__sub13(NC_STACK_ypaworld *yw, TInputStat
         }
 
         yw->BriefingSetObject( TBriefObject( TBriefObject::TYPE_VEHICLE, robo->VhclID, robo->Pos.x, robo->Pos.z, 26, 128 + robo->Owner, 25,
-                                            yw->GetVehicleName(robo->VhclID) ),
+                                            yw->GetVehicleName(robo->VhclID), robo->Owner ),
                                brf->AddObjectsFlag);
     }
 }
@@ -459,7 +459,7 @@ void ypaworld_func158__sub4__sub1__sub4__sub15(NC_STACK_ypaworld *yw, TInputStat
             std::string nm = fmt::sprintf("%d %s", squad->Count, yw->GetVehicleName(squad->VhclID));
 
             yw->BriefingSetObject( TBriefObject( TBriefObject::TYPE_VEHICLE, squad->VhclID, squad->X, squad->Z, 26, 136 + squad->Owner, 36,
-                                                nm ),
+                                                nm, squad->Owner ),
                                    brf->AddObjectsFlag);
         }
     }
@@ -517,7 +517,7 @@ void ypaworld_func158__sub4__sub1__sub4__sub17(NC_STACK_ypaworld *yw, TInputStat
             std::string nm = fmt::sprintf("%d %s", squad->Count, yw->GetVehicleName(squad->VhclID));
 
             yw->BriefingSetObject( TBriefObject( TBriefObject::TYPE_VEHICLE, squad->VhclID, squad->X, squad->Z, 26, 136 + squad->Owner, 25,
-                                                nm ),
+                                                nm, squad->Owner ),
                                    brf->AddObjectsFlag);
         }
     }
@@ -864,18 +864,42 @@ void ypaworld_func158__sub4__sub1__sub4__sub2(NC_STACK_ypaworld *yw, TBriefengSc
                 else
                     v13 = 100 * v11 / 500;
 
-                int xpos = ((brf->ViewingObjectRect.left + brf->ViewingObjectRect.right) / 2.0) * (yw->_screenSize.x / 2);
-                int ypos = ((yw->_screenSize.y / 2) * brf->ViewingObjectRect.bottom - yw->_guiTiles[16]->h + -1.0);
+                // The briefing renderer clips the larger font atlas in this
+                // legacy panel. Keep the stable briefing font while centring
+                // it in the now model-free preview area.
+                const int fontID = 16;
+                int xpos = ((brf->ViewingObjectRect.left +
+                             brf->ViewingObjectRect.right) * 0.5) *
+                           (yw->_screenSize.x / 2);
+                int ypos = ((brf->ViewingObjectRect.top +
+                             brf->ViewingObjectRect.bottom) * 0.5) *
+                           (yw->_screenSize.y / 2);
+
+                SDL_Color titleColor = yw->_iniColors[66];
+                if ( brf->ViewingObject.ObjType == TBriefObject::TYPE_VEHICLE &&
+                     brf->ViewingObject.Owner >= 1 &&
+                     brf->ViewingObject.Owner <= 6 )
+                {
+                    titleColor = yw->GetColor(brf->ViewingObject.Owner);
+                }
 
                 CmdStream cmdbuf;
-                cmdbuf.reserve(128);
+                cmdbuf.reserve(256);
 
-                FontUA::select_tileset(&cmdbuf, 16);
+                FontUA::select_tileset(&cmdbuf, fontID);
+                FontUA::set_center_xpos(&cmdbuf, xpos + 1);
+                FontUA::set_center_ypos(&cmdbuf, ypos + 1);
+                FontUA::set_txtColor(&cmdbuf, 20, 20, 20);
+                FontUA::TextRelWidthItem(yw->_guiTiles[fontID], &cmdbuf,
+                                         brf->ViewingObject.Title.c_str(), v13, 16);
+
+                FontUA::select_tileset(&cmdbuf, fontID);
                 FontUA::set_center_xpos(&cmdbuf, xpos);
                 FontUA::set_center_ypos(&cmdbuf, ypos);
-                FontUA::set_txtColor(&cmdbuf, yw->_iniColors[66].r, yw->_iniColors[66].g, yw->_iniColors[66].b);
-
-                FontUA::TextRelWidthItem(yw->_guiTiles[16], &cmdbuf, brf->ViewingObject.Title.c_str(), v13, 16);
+                FontUA::set_txtColor(&cmdbuf, titleColor.r,
+                                     titleColor.g, titleColor.b);
+                FontUA::TextRelWidthItem(yw->_guiTiles[fontID], &cmdbuf,
+                                         brf->ViewingObject.Title.c_str(), v13, 16);
 
                 FontUA::set_end(&cmdbuf);
 
@@ -1058,8 +1082,6 @@ void ypaworld_func158__sub4__sub1__sub4(NC_STACK_ypaworld *yw, UserData *usr, TI
         GFX::Engine.raster_func204(&brf->MapBlitParams);
 
         GFX::Engine.draw2DandFlush();
-
-        ypaworld_func158__DrawVehicle(yw, brf, inpt);
 
         ypaworld_func158__sub4__sub1__sub4__sub1(yw, brf);
         ypaworld_func158__sub4__sub1__sub4__sub0(yw);

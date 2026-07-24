@@ -1756,6 +1756,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _heading_speed = 0.0;
     _killer = NULL;
     _killer_owner = 0;
+    _sessionKillMarks = 0;
     _reb_count = 0;
     _atk_ret = 0;
     _lastFrmStamp = 0;
@@ -6152,6 +6153,34 @@ void NC_STACK_ypabact::Die()
 {
     if ( _status_flg & BACT_STFLAG_DEATH1 )
         return;
+
+    // OpenUA custom: lightweight single-player kill marks. Damage from missiles
+    // already identifies the launcher; attached guns/dummies are normalized to
+    // their carrying unit. Components and friendly/self kills never award marks.
+    if ( _world && !_world->_isNetGame && _killer &&
+         _owner != World::OWNER_0 && _killer_owner != World::OWNER_0 &&
+         _owner != _killer_owner &&
+         _bact_type != BACT_TYPES_MISSLE && !_isUnitGunChild && !_isDummy )
+    {
+        NC_STACK_ypabact *creditedKiller = _killer;
+        while ( creditedKiller &&
+                (creditedKiller->_isUnitGunChild || creditedKiller->_isDummy) &&
+                creditedKiller->_parent && creditedKiller->_parent != creditedKiller )
+        {
+            creditedKiller = creditedKiller->_parent;
+        }
+
+        if ( creditedKiller && creditedKiller != this &&
+             creditedKiller->_owner == _killer_owner &&
+             creditedKiller->_bact_type != BACT_TYPES_MISSLE &&
+             creditedKiller->_bact_type != BACT_TYPES_ROBO )
+        {
+            if ( _bact_type == BACT_TYPES_ROBO )
+                creditedKiller->_sessionKillMarks = 4;
+            else if ( creditedKiller->_sessionKillMarks < 4 )
+                creditedKiller->_sessionKillMarks++;
+        }
+    }
 
     if ( _isUnitGunChild )
         ypabact_SafeDetachControlFrom(this, _parent);
@@ -12662,6 +12691,7 @@ void NC_STACK_ypabact::Renew()
     _mimic_disguise_vehicleID = 0;
 //    bact->field_3D1 = 1;
     _killer = NULL;
+    _sessionKillMarks = 0;
     _brkfr_time = 0;
     _brkfr_time2 = 0;
     _mpos.x = 0;
