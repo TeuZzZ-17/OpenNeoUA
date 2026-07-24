@@ -29,9 +29,6 @@ int yw_InitNetwork(NC_STACK_ypaworld *yw);
 int loadTOD(NC_STACK_ypaworld *yw, const char *fname);
 int writeTOD(NC_STACK_ypaworld *yw, const char *fname, int tod);
 
-void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc, int a5);
-void ypaworld_func158__DrawVehicle(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc);
-
 void set_keys_vals(NC_STACK_ypaworld *yw);
 void yw_draw_input_list(NC_STACK_ypaworld *yw, UserData *usr);
 
@@ -109,7 +106,7 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
 void create_squad_man(NC_STACK_ypaworld *yw);
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw);
 
-void draw_tooltip(NC_STACK_ypaworld *yw);
+void draw_tooltip(NC_STACK_ypaworld *yw, const SDL_Color *uiAccent = NULL);
 
 void sub_4C40AC(NC_STACK_ypaworld *yw);
 

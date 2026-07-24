@@ -3,6 +3,7 @@
 
 #include <array>
 #include <deque>
+#include <map>
 #include <math.h>
 #include <inttypes.h>
 
@@ -384,6 +385,7 @@ struct rstr_arg204
     ResBitmap *pbitm = NULL;
     Common::FRect float4;
     Common::FRect float14;
+    uint8_t opacity = 255;
 };
 
 struct rstr_218_arg
@@ -606,9 +608,10 @@ public:
     static GLint GetGlPixType() { return _glPixtype; };
 
 
-    static void DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb);
+    static void DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha = 255);
     static void BlitScaleMasked(SDL_Surface *src, Common::Rect sRect, SDL_Surface *mask, uint8_t index, SDL_Surface *dst, Common::Rect dRect);
     static void DrawFill(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, const Common::Rect &dRect);
+    static void DrawFillAlpha(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, const Common::Rect &dRect, uint8_t opacity);
 
     static void Draw(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, Common::Point dPoint);
     static void Draw(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, Common::PointRect dRect);
@@ -644,7 +647,8 @@ public:
     virtual TileMap *raster_func208(int id);
     virtual int raster_func208(TileMap *tiles);
 
-    virtual void ProcessDrawSeq(const CmdStream &cmdline, const CmdIncludes *arr = NULL);
+    virtual void ProcessDrawSeq(const CmdStream &cmdline, const CmdIncludes *arr = NULL,
+                                const SDL_Color *uiAccent = NULL);
 
     virtual void raster_func210(const Common::FRect &arg);
     virtual void raster_func211(const Common::Rect &arg);
@@ -770,7 +774,7 @@ protected:
 
     void _setFrustumClip(float near, float far);
 
-    void sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b);
+    void sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha = 255);
     char * windd_func322__sub0(const char *box_title, const char *box_ok, const char *box_cancel, const char *box_startText, uint32_t timer_time, void (*timer_func)(int, int, int), void *timer_context, int replace, int maxLen);
 
     void ApplyResolution();
@@ -845,12 +849,25 @@ public:
     Common::Rect _clip;
     Common::Rect _inverseClip;
     std::array<TileMap *, 256> _tiles;
+    std::map<std::pair<SDL_Surface *, uint8_t>, SDL_Surface *> _uiAccentSurfaces;
+    SDL_Color _uiAccentCacheColor = {0};
+    bool _uiAccentCacheValid = false;
     int _field_54c   = 0;
     int _field_550   = 0;
     float _field_554 = 0;
     float _field_558 = 0;
 
     UA_PALETTE _palette;
+
+    void ClearUiAccentCache();
+    SDL_Surface *GetUiAccentSurface(SDL_Surface *source, const SDL_Color &accent,
+                                    uint8_t tilesetId);
+    static bool IsUiAccentTileset(uint8_t id);
+    static bool IsUiAccentNeutralHighlightTileset(uint8_t id);
+    static SDL_Color RemapUiAccentColor(const SDL_Color &source, const SDL_Color &accent,
+                                        bool includeNeutralHighlights = false,
+                                        int neutralThreshold = 180,
+                                        bool tintAllNonDark = false);
 
 protected:
     // Display class

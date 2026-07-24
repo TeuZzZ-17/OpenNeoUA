@@ -786,7 +786,8 @@ size_t GFXEngine::raster_func198(const Common::FLine &arg)
                       Common::Line(x1, y1, x2, y2),
                       _field_4.r,
                       _field_4.g,
-                      _field_4.b);
+                      _field_4.b,
+                      _field_4.a);
     return 1;
 }
 
@@ -798,12 +799,13 @@ size_t GFXEngine::raster_func199(const Common::Line &arg)
                                    _field_54c + arg.x2, _field_550 + arg.y2),
                       _field_4.r,
                       _field_4.g,
-                      _field_4.b );
+                      _field_4.b,
+                      _field_4.a );
 
     return 1;
 }
 
-void GFXEngine::sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b)
+void GFXEngine::sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha)
 {
     if ( line.ClipBy(_clip) )
     {
@@ -811,7 +813,7 @@ void GFXEngine::sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b)
 
         if ( _inverseClip.IsEmpty() || !tmp2.ClipBy(_inverseClip) )
         {
-            DrawLine(Screen(), line, r, g, b);
+            DrawLine(Screen(), line, r, g, b, alpha);
         }
         else
         {
@@ -819,17 +821,17 @@ void GFXEngine::sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b)
             {
                 if ( tmp2.P1() != line.P1() )
                 {
-                    DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b);
-                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b);
+                    DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha);
+                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha);
                 }
                 else
                 {
-                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b);
+                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha);
                 }
             }
             else
             {
-                DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b);
+                DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha);
             }
         }
     }
@@ -846,7 +848,8 @@ size_t GFXEngine::raster_func200(const Common::FLine &arg)
                             , (arg.y2 + 1.0) * tY),
                         _field_4.r,
                         _field_4.g,
-                        _field_4.b);
+                        _field_4.b,
+                        _field_4.a);
 
     return 1;
 }
@@ -859,7 +862,8 @@ size_t GFXEngine::raster_func201(const Common::Line &l)
                             , _field_550 + l.y2),
                         _field_4.r,
                         _field_4.g,
-                        _field_4.b );
+                        _field_4.b,
+                        _field_4.a );
 
     return 1;
 }
@@ -928,7 +932,21 @@ size_t GFXEngine::raster_func204(rstr_arg204 *arg)
 
         SDL_Rect src = r1;
         SDL_Rect dst = r2;
+        if (arg->opacity == 255)
+        {
+            SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
+            return 1;
+        }
+
+        uint8_t oldOpacity = 255;
+        SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
+        SDL_GetSurfaceAlphaMod(arg->pbitm->swTex, &oldOpacity);
+        SDL_GetSurfaceBlendMode(arg->pbitm->swTex, &oldBlendMode);
+        SDL_SetSurfaceAlphaMod(arg->pbitm->swTex, arg->opacity);
+        SDL_SetSurfaceBlendMode(arg->pbitm->swTex, SDL_BLENDMODE_BLEND);
         SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
+        SDL_SetSurfaceAlphaMod(arg->pbitm->swTex, oldOpacity);
+        SDL_SetSurfaceBlendMode(arg->pbitm->swTex, oldBlendMode);
     }
 
     return 1;
@@ -1729,6 +1747,9 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
 
 void GFXEngine::raster_func207(int id, TileMap *t)
 {
+    if (_tiles[id] != t)
+        ClearUiAccentCache();
+
     _tiles[id] = t;
 }
 
@@ -1750,7 +1771,174 @@ int GFXEngine::raster_func208(TileMap *t)
     return -1;
 }
 
-void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *includes)
+void GFXEngine::ClearUiAccentCache()
+{
+    for (auto &entry : _uiAccentSurfaces)
+        SDL_FreeSurface(entry.second);
+
+    _uiAccentSurfaces.clear();
+    _uiAccentCacheValid = false;
+}
+
+bool GFXEngine::IsUiAccentTileset(uint8_t id)
+{
+    // H_E_P (30) and the lower action-bar atlases H_IBN/H_IBP/H_IBD
+    // (21-23) are selected from authored faction PNGs and must not receive
+    // the runtime accent remap used by the rest of the gameplay UI.
+    return id == 0 || id == 2 || id == 3 || id == 5 || id == 8 ||
+           (id >= 9 && id <= 15) || id == 24 || id == 25;
+}
+
+bool GFXEngine::IsUiAccentNeutralHighlightTileset(uint8_t id)
+{
+    // Limit neutral recolouring to control atlases. Font atlases (notably 0
+    // and 15) must keep their authored white highlights for legible resource
+    // numbers and labels, especially with the Taerkasten yellow theme.
+    return id >= 9 && id <= 14;
+}
+
+SDL_Color GFXEngine::RemapUiAccentColor(const SDL_Color &source, const SDL_Color &accent,
+                                        bool includeNeutralHighlights,
+                                        int neutralThreshold,
+                                        bool tintAllNonDark)
+{
+    const int sourceMax = std::max(source.r, std::max(source.g, source.b));
+    const int sourceMin = std::min(source.r, std::min(source.g, source.b));
+    const bool tealAccent = source.g > source.r + 8 && source.b > source.r + 8;
+    const bool neutralHighlight = includeNeutralHighlights &&
+                                  sourceMax >= neutralThreshold &&
+                                  sourceMax - sourceMin <= 36;
+
+    // Dark teal pixels form the neutral panel fill in the original artwork.
+    // Only medium/bright accents are themed. Very dark panel fills and grey
+    // backgrounds remain neutral; bright UI highlights are admitted so
+    // gauges, borders and buttons cannot remain patchy.
+    const int darkThreshold = tintAllNonDark ? 48 : 72;
+    if (sourceMax < darkThreshold ||
+        (!tintAllNonDark && !tealAccent && !neutralHighlight))
+    {
+        return source;
+    }
+
+    const int accentValue = std::max(1, (int)std::max(accent.r,
+                                                      std::max(accent.g, accent.b)));
+    int themedValue = sourceMax;
+
+    // Near-white faction accents need a small luminance lift; otherwise the
+    // original teal value survives merely as grey despite the white target.
+    const int accentMin = std::min(accent.r, std::min(accent.g, accent.b));
+    if (accentMin >= 245)
+        themedValue = std::min(255, sourceMax + 28);
+
+    SDL_Color themed = source;
+    themed.r = (uint8_t)std::min(255, accent.r * themedValue / accentValue);
+    themed.g = (uint8_t)std::min(255, accent.g * themedValue / accentValue);
+    themed.b = (uint8_t)std::min(255, accent.b * themedValue / accentValue);
+    return themed;
+}
+
+SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color &accent,
+                                           uint8_t tilesetId)
+{
+    if (!source)
+        return source;
+
+    if (!_uiAccentCacheValid ||
+        _uiAccentCacheColor.r != accent.r ||
+        _uiAccentCacheColor.g != accent.g ||
+        _uiAccentCacheColor.b != accent.b)
+    {
+        ClearUiAccentCache();
+        _uiAccentCacheColor = accent;
+        _uiAccentCacheValid = true;
+    }
+
+    const std::pair<SDL_Surface *, uint8_t> cacheKey(source, tilesetId);
+    auto cached = _uiAccentSurfaces.find(cacheKey);
+    if (cached != _uiAccentSurfaces.end())
+        return cached->second;
+
+    SDL_Surface *copy = SDL_ConvertSurface(source, source->format, 0);
+    if (!copy)
+        return source;
+
+    const int bytesPerPixel = copy->format->BytesPerPixel;
+    if (bytesPerPixel >= 2 && bytesPerPixel <= 4 && SDL_LockSurface(copy) == 0)
+    {
+        for (int y = 0; y < copy->h; ++y)
+        {
+            uint8_t *row = (uint8_t *)copy->pixels + y * copy->pitch;
+            for (int x = 0; x < copy->w; ++x)
+            {
+                uint8_t *pixel = row + x * bytesPerPixel;
+                uint32_t value = 0;
+
+                if (bytesPerPixel == 2)
+                    memcpy(&value, pixel, 2);
+                else if (bytesPerPixel == 3)
+                {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                    value = pixel[0] << 16 | pixel[1] << 8 | pixel[2];
+#else
+                    value = pixel[0] | pixel[1] << 8 | pixel[2] << 16;
+#endif
+                }
+                else
+                    memcpy(&value, pixel, 4);
+
+                SDL_Color original;
+                SDL_GetRGBA(value, copy->format, &original.r, &original.g,
+                            &original.b, &original.a);
+                const bool ghorkRedAccent =
+                    accent.r >= 180 && accent.r > accent.g + 80 &&
+                    accent.r > accent.b + 70;
+                // Ghorkov red exposed dark teal pixels in the scrollbar
+                // atlases as abrupt green/grey breaks. These atlases contain
+                // controls only, so tint their darker teal ramp as well.
+                const bool tintAllMapControls =
+                    tilesetId == 10 ||
+                    (ghorkRedAccent && tilesetId >= 11 && tilesetId <= 13);
+                const bool includeNeutralHighlights =
+                    IsUiAccentNeutralHighlightTileset(tilesetId);
+                const int neutralThreshold = tilesetId == 10 ? 90 : 180;
+                SDL_Color themed = RemapUiAccentColor(
+                    original, accent, includeNeutralHighlights, neutralThreshold,
+                    tintAllMapControls);
+                if (themed.r == original.r && themed.g == original.g &&
+                    themed.b == original.b)
+                {
+                    continue;
+                }
+
+                value = SDL_MapRGBA(copy->format, themed.r, themed.g,
+                                    themed.b, original.a);
+                if (bytesPerPixel == 2)
+                    memcpy(pixel, &value, 2);
+                else if (bytesPerPixel == 3)
+                {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                    pixel[0] = (value >> 16) & 0xff;
+                    pixel[1] = (value >> 8) & 0xff;
+                    pixel[2] = value & 0xff;
+#else
+                    pixel[0] = value & 0xff;
+                    pixel[1] = (value >> 8) & 0xff;
+                    pixel[2] = (value >> 16) & 0xff;
+#endif
+                }
+                else
+                    memcpy(pixel, &value, 4);
+            }
+        }
+        SDL_UnlockSurface(copy);
+    }
+
+    _uiAccentSurfaces[cacheKey] = copy;
+    return copy;
+}
+
+void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *includes,
+                               const SDL_Color *uiAccent)
 {
     struct CmdStkEntr
     {
@@ -1767,6 +1955,8 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
 
     int w_pixels = Screen()->pitch / bytesPerColor;
     TileMap *tile = NULL;
+    uint8_t tileId = 0;
+    uint8_t opacity = 255;
 
     int x_out = 0;
     int y_out = 0;
@@ -1828,7 +2018,13 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
             else
                 srcR.right = chrr.x + x_off + 1;
 
-            DrawFill(tile->img->GetSwTex(), srcR, Screen(), dstR);
+            SDL_Surface *source = tile->img->GetSwTex();
+            if (uiAccent && IsUiAccentTileset(tileId))
+                source = GetUiAccentSurface(source, *uiAccent, tileId);
+            if (opacity == 255)
+                DrawFill(source, srcR, Screen(), dstR);
+            else
+                DrawFillAlpha(source, srcR, Screen(), dstR, opacity);
 
             /*srcR.h = cpy_height;
 
@@ -1930,7 +2126,8 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
                 break;
 
             case 8: // Select tileset
-                tile = _tiles[FontUA::get_u8(*curStream, &curPos)];
+                tileId = FontUA::get_u8(*curStream, &curPos);
+                tile = _tiles[tileId];
                 break;
 
             case 9: // Include another cmdlist source
@@ -1977,7 +2174,8 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
                 break;
 
             case 16: // Full reset tileset
-                tile = _tiles[FontUA::get_u8(*curStream, &curPos)];
+                tileId = FontUA::get_u8(*curStream, &curPos);
+                tile = _tiles[tileId];
                 line_height = tile->h;
                 y_off = 0;
                 break;
@@ -2026,9 +2224,32 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
 
                 int b = FontUA::get_u16(*curStream, &curPos);
 
+                if (uiAccent)
+                {
+                    SDL_Color themed = RemapUiAccentColor({(uint8_t)r, (uint8_t)g,
+                                                           (uint8_t)b, 255},
+                                                          *uiAccent);
+                    r = themed.r;
+                    g = themed.g;
+                    b = themed.b;
+                }
+
                 AddScreenText("", r, g, b, 0, 0x20);
             }
             break;
+
+            case 23: // set text color without UI accent remapping
+            {
+                int r = FontUA::get_u16(*curStream, &curPos);
+                int g = FontUA::get_u16(*curStream, &curPos);
+                int b = FontUA::get_u16(*curStream, &curPos);
+                AddScreenText("", r, g, b, 0, 0x20);
+            }
+            break;
+
+            case 24: // set tile opacity
+                opacity = FontUA::get_u16(*curStream, &curPos);
+                break;
             }
         }
     }
@@ -3193,6 +3414,8 @@ void GFXEngine::Init()
 
 void GFXEngine::Deinit()
 {
+    ClearUiAccentCache();
+
     if ( _font.ttfFont )
     {
         TTF_CloseFont(_font.ttfFont);
@@ -4018,7 +4241,7 @@ SDL_Surface *GFXEngine::Screen()
 
 
 // Draw line Bresenham's algorithm
-void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb )
+void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha)
 {
     if ((line.Width() == 0 && line.Height() == 0) ||
          !Common::Rect(surface->w, surface->h).IsIn(line.P1()) ||
@@ -4084,7 +4307,8 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
 
             for (int i = 0; i <= steps; i++) // Verify i bound
             {
-                *surf = color;
+                if (alpha >= 128)
+                    *surf = color;
                 if ( t > 0 )
                 {
                     t += incr2;
@@ -4104,7 +4328,17 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
 
             for (int i = 0; i <= steps; i++) // Verify i bound
             {
-                *surf = color;
+                if (alpha == 255)
+                    *surf = color;
+                else
+                {
+                    uint8_t dr, dg, db;
+                    SDL_GetRGB(*surf, surface->format, &dr, &dg, &db);
+                    *surf = SDL_MapRGB(surface->format,
+                        (uint8_t)((cr * alpha + dr * (255 - alpha)) / 255),
+                        (uint8_t)((cg * alpha + dg * (255 - alpha)) / 255),
+                        (uint8_t)((cb * alpha + db * (255 - alpha)) / 255));
+                }
                 if ( t > 0 )
                 {
                     t += incr2;
@@ -4124,7 +4358,17 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
 
             for (int i = 0; i <= steps; i++) // Verify i bound
             {
-                *surf = color;
+                if (alpha == 255)
+                    *surf = color;
+                else
+                {
+                    uint8_t dr, dg, db;
+                    SDL_GetRGB(*surf, surface->format, &dr, &dg, &db);
+                    *surf = SDL_MapRGB(surface->format,
+                        (uint8_t)((cr * alpha + dr * (255 - alpha)) / 255),
+                        (uint8_t)((cg * alpha + dg * (255 - alpha)) / 255),
+                        (uint8_t)((cb * alpha + db * (255 - alpha)) / 255));
+                }
                 if ( t > 0 )
                 {
                     t += incr2;
@@ -4651,6 +4895,42 @@ void GFXEngine::DrawFill(SDL_Surface *src, const Common::Rect &sRect, SDL_Surfac
             }
         }
     }
+}
+
+void GFXEngine::DrawFillAlpha(SDL_Surface *src, const Common::Rect &sRect,
+                              SDL_Surface *dst, const Common::Rect &dRect,
+                              uint8_t opacity)
+{
+    if (opacity == 0 || sRect.IsEmpty() || dRect.IsEmpty())
+        return;
+    if (opacity == 255)
+    {
+        DrawFill(src, sRect, dst, dRect);
+        return;
+    }
+
+    uint8_t oldOpacity = 255;
+    SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
+    SDL_GetSurfaceAlphaMod(src, &oldOpacity);
+    SDL_GetSurfaceBlendMode(src, &oldBlendMode);
+    SDL_SetSurfaceAlphaMod(src, opacity);
+    SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_BLEND);
+
+    SDL_Rect source = sRect;
+    SDL_Rect target;
+    for (target.y = dRect.top; target.y < dRect.bottom; target.y += sRect.Height())
+    {
+        source.h = std::min(sRect.Height(), dRect.bottom - target.y);
+        source.w = sRect.Width();
+        for (target.x = dRect.left; target.x < dRect.right; target.x += sRect.Width())
+        {
+            source.w = std::min(sRect.Width(), dRect.right - target.x);
+            SDL_BlitSurface(src, &source, dst, &target);
+        }
+    }
+
+    SDL_SetSurfaceAlphaMod(src, oldOpacity);
+    SDL_SetSurfaceBlendMode(src, oldBlendMode);
 }
 
 void GFXEngine::Draw(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, Common::Point dPoint)
