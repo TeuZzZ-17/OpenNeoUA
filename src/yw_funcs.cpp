@@ -129,6 +129,119 @@ static NC_STACK_bitmap *FontPageLoadImage(const std::string &bitmapName, bool di
     return loadImage(bitmapName);
 }
 
+static const char *FontPageFactionSuffix(int owner)
+{
+    switch (owner)
+    {
+    case 1: return "RESISTANCE";
+    case 2: return "SULGOGAR";
+    case 3: return "MYKONIAN";
+    case 4: return "TAERKASTEN";
+    case 5: return "BLACKSECT";
+    case 6: return "GHORKOV";
+    default: return NULL;
+    }
+}
+
+struct FactionUiAtlasSpec
+{
+    int tilesetId;
+    const char *baseName;
+};
+
+static void FontPageReplaceFactionAtlas(TileMap *tileset, const char *baseName,
+                                        const char *suffix)
+{
+    if (!tileset || !baseName)
+        return;
+
+    NC_STACK_bitmap *replacement = NULL;
+
+    if (suffix)
+    {
+        const std::string factionPng = std::string(baseName) + "_" + suffix + ".PNG";
+        if (uaFileExist("rsrc:" + factionPng))
+        {
+            replacement = FontPageLoadImage(factionPng, true);
+            if (!replacement || !replacement->GetBitmap() || !replacement->GetSwTex())
+            {
+                if (replacement)
+                {
+                    replacement->Delete();
+                    replacement = NULL;
+                }
+                ypa_log_out("FontPageReplaceFactionAtlas(): faction PNG %s failed, using generic %s.\n",
+                            factionPng.c_str(), baseName);
+            }
+            else if (tileset->img && tileset->img->GetBitmap())
+            {
+                const ResBitmap *current = tileset->img->GetBitmap();
+                const ResBitmap *candidate = replacement->GetBitmap();
+                if (candidate->width != current->width || candidate->height != current->height)
+                {
+                    ypa_log_out("FontPageReplaceFactionAtlas(): faction PNG %s size %dx%d differs from %s size %dx%d; using generic atlas.\n",
+                                factionPng.c_str(), candidate->width, candidate->height,
+                                baseName, current->width, current->height);
+                    replacement->Delete();
+                    replacement = NULL;
+                }
+            }
+        }
+    }
+
+    if (!replacement)
+        replacement = FontPageLoadImage(std::string(baseName) + ".ilbm", true);
+
+    if (!replacement || !replacement->GetSwTex())
+    {
+        if (replacement)
+            replacement->Delete();
+        ypa_log_out("FontPageReplaceFactionAtlas(): could not load faction or generic %s atlas.\n",
+                    baseName);
+        return;
+    }
+
+    FontPageNormalizeSurface(replacement->GetSwTex());
+    SDL_SetColorKey(replacement->GetSwTex(), SDL_TRUE,
+                    SDL_MapRGB(replacement->GetSwTex()->format, 255, 255, 0));
+
+    NC_STACK_bitmap *previous = tileset->img;
+    tileset->img = replacement;
+
+    if (previous)
+        previous->Delete();
+}
+
+// The upper energy strip uses H_E_P. The lower action bar uses three atlases:
+// H_IBN (normal), H_IBP (pressed) and H_IBD (disabled). Their .FON geometry
+// remains untouched; only a matching faction-authored PNG is selected.
+void NC_STACK_ypaworld::UpdateFactionGameplayUiAtlases()
+{
+    int owner = 0;
+    if (_userRobo && _userRobo->_owner >= 1 && _userRobo->_owner <= 6)
+        owner = _userRobo->_owner;
+
+    if (_factionGameplayUiOwner == owner)
+        return;
+
+    _factionGameplayUiOwner = owner;
+
+    static const std::array<FactionUiAtlasSpec, 4> atlasSpecs = {{
+        {30, "H_E_P"},
+        {21, "H_IBN"},
+        {22, "H_IBP"},
+        {23, "H_IBD"}
+    }};
+
+    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:fonts");
+    const char *suffix = FontPageFactionSuffix(owner);
+
+    for (const FactionUiAtlasSpec &spec : atlasSpecs)
+        FontPageReplaceFactionAtlas(_guiTiles[spec.tilesetId], spec.baseName, suffix);
+
+    Common::Env.SetPrefix("rsrc", oldRsrc);
+}
+
 
 TileMap * NC_STACK_ypaworld::yw_LoadFont(const std::string &fontname)
 {
@@ -282,6 +395,8 @@ TileMap * NC_STACK_ypaworld::yw_LoadTileSet(const std::string &bitmap, Common::P
 
 int NC_STACK_ypaworld::load_fonts_and_icons()
 {
+    _factionGameplayUiOwner = -1;
+
     const std::array<std::string, 32> fontNames
     {
         "default.font", //0

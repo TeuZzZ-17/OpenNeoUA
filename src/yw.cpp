@@ -1851,7 +1851,11 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             {
                 if ( arg->field_8->KbdLastHit != Input::KC_NONE )
                 {
-                    if ( arg->field_8->KbdLastHit != Input::KC_LMB && arg->field_8->KbdLastHit != Input::KC_RMB && arg->field_8->KbdLastHit != Input::KC_MMB && !(arg->field_8->Buttons.Is(4)) )
+                    if ( arg->field_8->KbdLastHit != Input::KC_LMB &&
+                         arg->field_8->KbdLastHit != Input::KC_RMB &&
+                         arg->field_8->KbdLastHit != Input::KC_MMB &&
+                         arg->field_8->KbdLastHit != Input::KC_CTRL &&
+                         !(arg->field_8->Buttons.Is(4)) )
                     {
                         _mouseCursorHidden = true;
                         _mouseCursorHidePos = winp->move.ScreenPos;
@@ -8147,7 +8151,7 @@ void NC_STACK_ypaworld::GameShellBkgProcess()
     }
 }
 
-void draw_tooltip(NC_STACK_ypaworld *yw)
+void draw_tooltip(NC_STACK_ypaworld *yw, const SDL_Color *uiAccent)
 {
     if ( yw->_mouseGrabbed || (yw->_toolTipId && !yw->_mouseCursorHidden) )
     {
@@ -8190,7 +8194,7 @@ void draw_tooltip(NC_STACK_ypaworld *yw)
 
         FontUA::set_end(&buf);
 
-        GFX::Engine.ProcessDrawSeq(buf);
+        GFX::Engine.ProcessDrawSeq(buf, NULL, uiAccent);
     }
 
     yw->_toolTipHotKeyId = -1;
