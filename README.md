@@ -78,7 +78,7 @@ The third-party-derived assets contained in `Data/fonts/` are not covered by the
 
 Users remain responsible for complying with applicable copyright law and should use OpenUA together with a lawfully obtained copy of Urban Assault.
 
-If you are an authorised rights holder and believe that any material in this repository should be removed, replaced, or otherwise modified, please me.
+If you are an authorised rights holder and believe that any material in this repository should be removed, replaced, or otherwise modified, please contact me.
 
 Any legitimate request will be reviewed promptly and in good faith.
 
