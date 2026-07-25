@@ -59,3 +59,27 @@ into the same folder as:
 UA_source.exe
 
 16. After this step, build/UA_source.exe should be portable and runnable outside the MSYS2 environment.
+
+# Third-Party Derived Interface Assets Notice
+
+Certain PNG files located under `Data/fonts/` are unofficial, fan-made interface variants created for OpenUA.
+
+These files are based on, converted from, or visually derived from original user-interface artwork distributed with Microsoft Urban Assault (1998). The original assets were provided in legacy ILBM/ILB formats; the versions included here have been converted to PNG and modified with new faction-specific colours and related visual adjustments.
+
+Urban Assault, its original artwork, interface elements, names, trademarks, and all associated intellectual-property rights remain the property of their respective copyright and trademark holders.
+
+OpenUA is an independent, free, non-commercial fan project. It is not affiliated with, endorsed by, sponsored by, or officially approved by Microsoft, TerraTools, or any other current or former rights holder.
+
+No ownership is claimed over the underlying original Urban Assault artwork. No claim is made beyond any original modifications or contributions that may be protectable under applicable law.
+
+These interface assets are provided solely to support and demonstrate OpenUA's optional faction-specific user-interface functionality. They do not represent a complete redistribution of the original game's asset library.
+
+The third-party-derived assets contained in `Data/fonts/` are not covered by the GNU General Public License that applies to the OpenUA source code. No licence or permission concerning the underlying third-party artwork is granted by this repository.
+
+Users remain responsible for complying with applicable copyright law and should use OpenUA together with a lawfully obtained copy of Urban Assault.
+
+If you are an authorised rights holder and believe that any material in this repository should be removed, replaced, or otherwise modified, please me.
+
+Any legitimate request will be reviewed promptly and in good faith.
+
+The GPL licence applies to the OpenUA source code only.
