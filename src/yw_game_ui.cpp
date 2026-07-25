@@ -5,6 +5,7 @@
 #include <array>
 #include <algorithm>
 #include <map>
+#include <vector>
 #include "env.h"
 #include "includes.h"
 #include "yw_internal.h"
@@ -43,15 +44,10 @@ namespace
 constexpr int STATUS_ICON_MAX_COUNT = 8;
 constexpr int STATUS_ICON_SIZE = 16;
 constexpr int STATUS_ICON_SPACING = 2;
-constexpr const char *STATUS_ICON_REGEN = "StatusIcons/regen.png";
-constexpr const char *STATUS_ICON_DRAIN = "StatusIcons/drain.png";
-constexpr const char *STATUS_ICON_DAMAGED = "StatusIcons/damaged.png";
-constexpr const char *STATUS_ICON_SPAWN = "StatusIcons/mobile_spawner.png";
-constexpr const char *STATUS_ICON_RADAR = "StatusIcons/mobile_radar.png";
-constexpr const char *STATUS_ICON_POWER = "StatusIcons/mobile_power.png";
-constexpr const char *STATUS_ICON_SEEK_AND_EXPLODE = "StatusIcons/true_kamikaze.png";
-constexpr const char *STATUS_ICON_INVISIBLE = "StatusIcons/invisible.png";
-constexpr const char *STATUS_ICON_PROXIMITY_DEFENSE = "StatusIcons/proximity_defense.png";
+constexpr uint32_t STATUS_ICON_BLINK_PHASE_MS = 200;
+constexpr int STATUS_ICON_BLINK_MAX_COUNT = 10;
+constexpr uint32_t STATUS_ICON_BLINK_STATE_TTL_MS = 10000;
+constexpr uint32_t STATUS_ICON_BLINK_PRUNE_INTERVAL_MS = 5000;
 
 struct StatusIconCacheEntry
 {
@@ -60,9 +56,151 @@ struct StatusIconCacheEntry
 
 using StatusIconList = std::array<std::string, STATUS_ICON_MAX_COUNT>;
 
+enum StatusIconBlinkMode
+{
+    STATUS_ICON_BLINK_STEADY = 0,
+    STATUS_ICON_BLINK_IN,
+    STATUS_ICON_BLINK_OUT
+};
+
+struct StatusIconBlinkEntry
+{
+    std::string path;
+    StatusIconBlinkMode mode = STATUS_ICON_BLINK_STEADY;
+    uint32_t transitionStart = 0;
+    bool desired = false;
+};
+
+struct StatusIconBlinkState
+{
+    NC_STACK_ypaworld *world = NULL;
+    uint32_t gid = 0;
+    uint32_t lastTouched = 0;
+    std::vector<StatusIconBlinkEntry> entries;
+};
+
+struct StatusIconBlinkRenderEntry
+{
+    std::string path;
+    bool visible = true;
+};
+
+using StatusIconBlinkRenderList = std::array<StatusIconBlinkRenderEntry, STATUS_ICON_MAX_COUNT>;
+
 std::map<std::string, StatusIconCacheEntry> g_statusIconCache;
+std::map<std::string, std::string> g_statusIconConfiguredPathCache;
+std::map<const NC_STACK_ypabact *, StatusIconBlinkState> g_statusIconBlinkStates;
+NC_STACK_ypaworld *g_statusIconBlinkWorld = NULL;
+int32_t g_statusIconBlinkLastGameTime = 0;
+uint32_t g_statusIconBlinkLastPrune = 0;
 std::map<std::string, bool> g_voicepackLoggedUsed;
 std::map<std::string, bool> g_voicepackLoggedFallback;
+
+std::string StatusIconTrimPath(std::string path)
+{
+    const size_t begin = path.find_first_not_of(" \t\r\n");
+    if ( begin == std::string::npos )
+        return "";
+
+    const size_t end = path.find_last_not_of(" \t\r\n");
+    return path.substr(begin, end - begin + 1);
+}
+
+bool StatusIconResourceExists(const std::string &path)
+{
+    if ( path.empty() )
+        return false;
+
+    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+    const bool exists = uaFileExist("rsrc:" + path);
+    Common::Env.SetPrefix("rsrc", oldRsrc);
+    return exists;
+}
+
+const std::string &StatusIconConfiguredPath(Common::Ini::Key &key)
+{
+    auto cached = g_statusIconConfiguredPathCache.find(key.Name);
+    if ( cached != g_statusIconConfiguredPathCache.end() )
+        return cached->second;
+
+    std::string resolved;
+
+    // Status icons are opt-in through Nucleus.ini. Missing, empty or invalid
+    // paths disable only this icon category without affecting gameplay.
+    if ( key.WasSet )
+    {
+        const std::string configured = StatusIconTrimPath(key.Get<std::string>());
+        if ( !configured.empty() && StatusIconResourceExists(configured) )
+            resolved = configured;
+    }
+
+    return g_statusIconConfiguredPathCache.emplace(key.Name, resolved).first->second;
+}
+
+const std::string &StatusIconOverridePath(const std::string &overridePath, const std::string &fallbackPath)
+{
+    const std::string normalized = StatusIconTrimPath(overridePath);
+    if ( normalized.empty() )
+        return fallbackPath;
+
+    const std::string cacheKey = "override:" + normalized + "\n" + fallbackPath;
+    auto cached = g_statusIconConfiguredPathCache.find(cacheKey);
+    if ( cached != g_statusIconConfiguredPathCache.end() )
+        return cached->second;
+
+    const std::string resolved = StatusIconResourceExists(normalized) ? normalized : fallbackPath;
+    return g_statusIconConfiguredPathCache.emplace(cacheKey, resolved).first->second;
+}
+
+const std::string &StatusIconRegenPath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconRegen);
+}
+
+const std::string &StatusIconDrainPath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconDrain);
+}
+
+const std::string &StatusIconDamagedPath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconDamaged);
+}
+
+const std::string &StatusIconSpawnPath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconSpawn);
+}
+
+const std::string &StatusIconRadarPath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconRadar);
+}
+
+const std::string &StatusIconPowerPath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconPower);
+}
+
+const std::string &StatusIconSeekAndExplodePath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconSeekAndExplode);
+}
+
+const std::string &StatusIconInvisiblePath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconInvisible);
+}
+
+const std::string &StatusIconProximityDefensePath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconProximityDefense);
+}
+
+const std::string &StatusIconSprintPath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconSprint);
+}
 
 const char *VoicepackEventKeyFromMsgID(int msgID)
 {
@@ -207,6 +345,233 @@ bool StatusIconAdd(StatusIconList &icons, int &count, const std::string &path)
     return true;
 }
 
+bool StatusIconListContains(const StatusIconList &icons, int count, const std::string &path)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if ( !StriCmp(icons[i], path) )
+            return true;
+    }
+
+    return false;
+}
+
+int StatusIconFindBlinkEntry(const std::vector<StatusIconBlinkEntry> &entries, const std::string &path)
+{
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        if ( !StriCmp(entries[i].path, path) )
+            return (int)i;
+    }
+
+    return -1;
+}
+
+int StatusIconGetBlinkCount()
+{
+    int count = System::IniConf::UiStatusIconBlinkCount.Get<int32_t>();
+
+    if ( count < 0 )
+        return 0;
+    if ( count > STATUS_ICON_BLINK_MAX_COUNT )
+        return STATUS_ICON_BLINK_MAX_COUNT;
+
+    return count;
+}
+
+void StatusIconPrepareBlinkStates(NC_STACK_ypaworld *yw, uint32_t now)
+{
+    if ( g_statusIconBlinkWorld != yw || yw->_timeStamp < g_statusIconBlinkLastGameTime )
+    {
+        g_statusIconBlinkStates.clear();
+        g_statusIconBlinkWorld = yw;
+        g_statusIconBlinkLastGameTime = yw->_timeStamp;
+        g_statusIconBlinkLastPrune = now;
+        return;
+    }
+
+    g_statusIconBlinkLastGameTime = yw->_timeStamp;
+
+    if ( (uint32_t)(now - g_statusIconBlinkLastPrune) < STATUS_ICON_BLINK_PRUNE_INTERVAL_MS )
+        return;
+
+    for (auto it = g_statusIconBlinkStates.begin(); it != g_statusIconBlinkStates.end(); )
+    {
+        const StatusIconBlinkState &state = it->second;
+        if ( state.world != yw ||
+             (uint32_t)(now - state.lastTouched) > STATUS_ICON_BLINK_STATE_TTL_MS )
+            it = g_statusIconBlinkStates.erase(it);
+        else
+            ++it;
+    }
+
+    g_statusIconBlinkLastPrune = now;
+}
+
+bool StatusIconBlinkTransitionComplete(const StatusIconBlinkEntry &entry, int blinkCount, uint32_t now)
+{
+    if ( entry.mode == STATUS_ICON_BLINK_STEADY )
+        return false;
+
+    const uint32_t totalDuration = (uint32_t)blinkCount * STATUS_ICON_BLINK_PHASE_MS * 2U;
+    return (uint32_t)(now - entry.transitionStart) >= totalDuration;
+}
+
+bool StatusIconBlinkPhaseVisible(const StatusIconBlinkEntry &entry, uint32_t now)
+{
+    if ( entry.mode == STATUS_ICON_BLINK_STEADY )
+        return true;
+
+    const uint32_t elapsed = (uint32_t)(now - entry.transitionStart);
+    return ((elapsed / STATUS_ICON_BLINK_PHASE_MS) & 1U) == 0U;
+}
+
+int StatusIconBuildBlinkRenderList(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+                                   const StatusIconList &desiredIcons, int desiredCount,
+                                   StatusIconBlinkRenderList &renderIcons)
+{
+    if ( !yw || !bact )
+        return 0;
+
+    const int blinkCount = StatusIconGetBlinkCount();
+    if ( blinkCount <= 0 )
+    {
+        g_statusIconBlinkStates.erase(bact);
+
+        for (int i = 0; i < desiredCount; i++)
+        {
+            renderIcons[i].path = desiredIcons[i];
+            renderIcons[i].visible = true;
+        }
+        return desiredCount;
+    }
+
+    // Status-icon transitions belong to the gameplay time domain. GEM slowdown
+    // therefore slows their blink cadence together with AI, physics and other
+    // gameplay timers. The GEM notification blink remains explicitly real-time.
+    const uint32_t now = yw->_timeStamp;
+    StatusIconPrepareBlinkStates(yw, now);
+
+    auto stateIt = g_statusIconBlinkStates.find(bact);
+    if ( stateIt == g_statusIconBlinkStates.end() )
+    {
+        if ( desiredCount <= 0 )
+            return 0;
+
+        StatusIconBlinkState state;
+        state.world = yw;
+        state.gid = bact->_gid;
+        state.lastTouched = now;
+        stateIt = g_statusIconBlinkStates.emplace(bact, state).first;
+    }
+
+    StatusIconBlinkState &state = stateIt->second;
+    if ( state.world != yw || state.gid != bact->_gid )
+    {
+        state = StatusIconBlinkState();
+        state.world = yw;
+        state.gid = bact->_gid;
+    }
+
+    state.lastTouched = now;
+
+    for (StatusIconBlinkEntry &entry : state.entries)
+        entry.desired = false;
+
+    for (int i = 0; i < desiredCount; i++)
+    {
+        int entryIndex = StatusIconFindBlinkEntry(state.entries, desiredIcons[i]);
+        if ( entryIndex < 0 )
+        {
+            if ( state.entries.size() >= (size_t)STATUS_ICON_MAX_COUNT )
+            {
+                for (auto it = state.entries.begin(); it != state.entries.end(); ++it)
+                {
+                    if ( !StatusIconListContains(desiredIcons, desiredCount, it->path) )
+                    {
+                        state.entries.erase(it);
+                        break;
+                    }
+                }
+            }
+
+            if ( state.entries.size() < (size_t)STATUS_ICON_MAX_COUNT )
+            {
+                StatusIconBlinkEntry entry;
+                entry.path = desiredIcons[i];
+                entry.mode = STATUS_ICON_BLINK_IN;
+                entry.transitionStart = now;
+                entry.desired = true;
+                state.entries.push_back(entry);
+                entryIndex = (int)state.entries.size() - 1;
+            }
+        }
+
+        if ( entryIndex >= 0 )
+        {
+            StatusIconBlinkEntry &entry = state.entries[entryIndex];
+            entry.desired = true;
+
+            if ( entry.mode == STATUS_ICON_BLINK_OUT )
+            {
+                entry.mode = STATUS_ICON_BLINK_IN;
+                entry.transitionStart = now;
+            }
+        }
+    }
+
+    for (StatusIconBlinkEntry &entry : state.entries)
+    {
+        if ( !entry.desired && entry.mode != STATUS_ICON_BLINK_OUT )
+        {
+            entry.mode = STATUS_ICON_BLINK_OUT;
+            entry.transitionStart = now;
+        }
+
+        if ( entry.mode == STATUS_ICON_BLINK_IN &&
+             StatusIconBlinkTransitionComplete(entry, blinkCount, now) )
+            entry.mode = STATUS_ICON_BLINK_STEADY;
+    }
+
+    std::vector<StatusIconBlinkEntry> ordered;
+    ordered.reserve(STATUS_ICON_MAX_COUNT);
+
+    for (int i = 0; i < desiredCount; i++)
+    {
+        int entryIndex = StatusIconFindBlinkEntry(state.entries, desiredIcons[i]);
+        if ( entryIndex >= 0 )
+            ordered.push_back(state.entries[entryIndex]);
+    }
+
+    for (const StatusIconBlinkEntry &entry : state.entries)
+    {
+        if ( ordered.size() >= (size_t)STATUS_ICON_MAX_COUNT )
+            break;
+
+        if ( entry.desired )
+            continue;
+
+        if ( entry.mode == STATUS_ICON_BLINK_OUT &&
+             !StatusIconBlinkTransitionComplete(entry, blinkCount, now) )
+            ordered.push_back(entry);
+    }
+
+    state.entries.swap(ordered);
+
+    int renderCount = 0;
+    for (const StatusIconBlinkEntry &entry : state.entries)
+    {
+        renderIcons[renderCount].path = entry.path;
+        renderIcons[renderCount].visible = StatusIconBlinkPhaseVisible(entry, now);
+        renderCount++;
+    }
+
+    if ( state.entries.empty() )
+        g_statusIconBlinkStates.erase(stateIt);
+
+    return renderCount;
+}
+
 static uint8_t ApplyWireframeTintComponent(uint8_t value, float tint)
 {
     float scaled = (float)value * tint;
@@ -336,10 +701,10 @@ void StatusIconCollectMobilePower(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
     TMobilePowerInfluence mobilePower = yw->FindMobilePowerInfluenceForUnit(bact);
 
     if ( mobilePower.AlliedPower > 0 && bact->_energy < bact->_energy_max )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_REGEN);
+        StatusIconAdd(icons, iconCount, StatusIconRegenPath());
 
     if ( mobilePower.EnemyPower > 0 )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_DRAIN);
+        StatusIconAdd(icons, iconCount, StatusIconDrainPath());
 }
 
 void StatusIconCollectMountedUnitGunIcons(const std::vector<World::TRoboGun> &guns, const std::string &fallbackIcon, StatusIconList &icons, int &iconCount)
@@ -401,37 +766,46 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
         StatusIconAdd(icons, iconCount, bact->_active_debuff.icon);
 
     if ( bact->_damaged_fx_active )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_DAMAGED);
+        StatusIconAdd(icons, iconCount, StatusIconDamagedPath());
+
+    // Tank Sprint may still be finishing its force/pitch ramp-down after the
+    // vehicle has already come to a complete stop. At that point the gameplay
+    // state remains untouched, but the Sprint icon is no longer desired, so
+    // the shared Status Icon system starts its normal blink-out transition.
+    const bool stoppedTankSprint = bact->_bact_type == BACT_TYPES_TANK &&
+                                   fabs(bact->_fly_dir_length) <= 0.001f;
+    if ( yw && yw->IsPlayerSprintActiveFor(bact) && !stoppedTankSprint )
+        StatusIconAdd(icons, iconCount, StatusIconSprintPath());
 
     if ( StatusIconCanUseVehicleCapabilityUnit(bact) )
     {
         if ( bact->CanUseCarrierSpawn() )
-            StatusIconAdd(icons, iconCount, STATUS_ICON_SPAWN);
+            StatusIconAdd(icons, iconCount, StatusIconSpawnPath());
 
         if ( bact->_radar >= 2 )
-            StatusIconAdd(icons, iconCount, STATUS_ICON_RADAR);
+            StatusIconAdd(icons, iconCount, StatusIconRadarPath());
 
         if ( StatusIconCanUseMobilePowerUnit(bact) )
             StatusIconCollectMountedUnitGunIcons(bact->_unitGuns, vhcl->unit_gun_icon, icons, iconCount);
 
         if ( yw && yw->IsValidMobilePowerGenerator(bact) )
-            StatusIconAdd(icons, iconCount, STATUS_ICON_POWER);
+            StatusIconAdd(icons, iconCount, StatusIconPowerPath());
 
         if ( bact->IsSeekAndExplodeArmed() )
-            StatusIconAdd(icons, iconCount, STATUS_ICON_SEEK_AND_EXPLODE);
+            StatusIconAdd(icons, iconCount, StatusIconSeekAndExplodePath());
 
         if ( bact->IsInvisibleUnrevealed() )
-            StatusIconAdd(icons, iconCount, STATUS_ICON_INVISIBLE);
+            StatusIconAdd(icons, iconCount, StatusIconInvisiblePath());
 
         if ( bact->CanUseProximityDefense() || bact->CanUseProximityDefenseAtDeath() )
-            StatusIconAdd(icons, iconCount, STATUS_ICON_PROXIMITY_DEFENSE);
+            StatusIconAdd(icons, iconCount, StatusIconProximityDefensePath());
     }
 
     StatusIconPowerState powerState = StatusIconGetPowerStationState(yw, bact);
     if ( powerState == STATUS_ICON_POWER_DRAIN )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_DRAIN);
+        StatusIconAdd(icons, iconCount, StatusIconDrainPath());
     else if ( powerState == STATUS_ICON_POWER_REGEN )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_REGEN);
+        StatusIconAdd(icons, iconCount, StatusIconRegenPath());
 
     StatusIconCollectMobilePower(yw, bact, icons, iconCount);
 
@@ -450,13 +824,33 @@ void StatusIconRenderList(NC_STACK_ypaworld *yw, const StatusIconList &icons, in
     }
 }
 
+void StatusIconRenderBlinkList(NC_STACK_ypaworld *yw, const StatusIconBlinkRenderList &icons,
+                               int iconCount, int left, int top, int size,
+                               uint8_t opacity = 255)
+{
+    for (int i = 0; i < iconCount; i++)
+    {
+        if ( icons[i].visible )
+        {
+            NC_STACK_bitmap *bitmap = StatusIconLoad(icons[i].path);
+            if ( bitmap )
+                StatusIconRenderBitmap(yw, bitmap, left, top, size, opacity);
+        }
+
+        left += size + STATUS_ICON_SPACING;
+    }
+}
+
 void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, int barLeft, int barTop, int barWidth, int barHeight, uint8_t opacity, int bottomReserve, int *markerCenterX)
 {
     if ( markerCenterX )
         *markerCenterX = barLeft + barWidth / 2 - yw->_screenSize.x / 2;
 
-    StatusIconList icons;
-    int iconCount = StatusIconCollect(yw, bact, vhcl, icons);
+    StatusIconList desiredIcons;
+    int desiredCount = StatusIconCollect(yw, bact, vhcl, desiredIcons);
+
+    StatusIconBlinkRenderList icons;
+    int iconCount = StatusIconBuildBlinkRenderList(yw, bact, desiredIcons, desiredCount, icons);
 
     if ( iconCount <= 0 )
         return;
@@ -475,7 +869,7 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
     if ( markerCenterX )
         *markerCenterX = left + iconBlockWidth / 2 - yw->_screenSize.x / 2;
 
-    StatusIconRenderList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE, opacity);
+    StatusIconRenderBlinkList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE, opacity);
 }
 
 static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile)
@@ -570,8 +964,11 @@ void StatusIconRenderCockpit(NC_STACK_ypaworld *yw, sklt_wis *wis, NC_STACK_ypab
     if ( !StatusIconCanRenderCockpitUnit(bact) || !vhcl )
         return;
 
-    StatusIconList icons;
-    int iconCount = StatusIconCollect(yw, bact, vhcl, icons);
+    StatusIconList desiredIcons;
+    int desiredCount = StatusIconCollect(yw, bact, vhcl, desiredIcons);
+
+    StatusIconBlinkRenderList icons;
+    int iconCount = StatusIconBuildBlinkRenderList(yw, bact, desiredIcons, desiredCount, icons);
     if ( iconCount <= 0 )
         return;
 
@@ -590,7 +987,7 @@ void StatusIconRenderCockpit(NC_STACK_ypaworld *yw, sklt_wis *wis, NC_STACK_ypab
     if ( top > yw->_screenSize.y - STATUS_ICON_SIZE - 4 )
         top = yw->_screenSize.y - STATUS_ICON_SIZE - 4;
 
-    StatusIconRenderList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE);
+    StatusIconRenderBlinkList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE);
 }
 
 int StatusIconCollectVehicleRoleIcons(NC_STACK_ypaworld *yw, World::TVhclProto *vhcl, StatusIconList &icons)
@@ -601,24 +998,24 @@ int StatusIconCollectVehicleRoleIcons(NC_STACK_ypaworld *yw, World::TVhclProto *
     int iconCount = 0;
 
     if ( StatusIconHasVehicleSpawnConfig(yw, *vhcl) )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_SPAWN);
+        StatusIconAdd(icons, iconCount, StatusIconSpawnPath());
 
     if ( vhcl->radar >= 2 )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_RADAR);
+        StatusIconAdd(icons, iconCount, StatusIconRadarPath());
 
     StatusIconCollectMountedUnitGunIcons(vhcl->unit_guns, vhcl->unit_gun_icon, icons, iconCount);
 
     if ( vhcl->power > 0 && vhcl->power_radius > 0.0 )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_POWER);
+        StatusIconAdd(icons, iconCount, StatusIconPowerPath());
 
     if ( StatusIconHasVehicleSeekAndExplodeConfig(yw, *vhcl) )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_SEEK_AND_EXPLODE);
+        StatusIconAdd(icons, iconCount, StatusIconSeekAndExplodePath());
 
     if ( vhcl->invisible )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_INVISIBLE);
+        StatusIconAdd(icons, iconCount, StatusIconInvisiblePath());
 
     if ( StatusIconHasVehicleProximityDefenseConfig(yw, *vhcl) )
-        StatusIconAdd(icons, iconCount, STATUS_ICON_PROXIMITY_DEFENSE);
+        StatusIconAdd(icons, iconCount, StatusIconProximityDefensePath());
 
     return iconCount;
 }
@@ -631,7 +1028,7 @@ int StatusIconCollectBuildingRoleIcons(World::TBuildingProto *bld, StatusIconLis
     int iconCount = 0;
 
     if ( bld->spawn_units )
-        StatusIconAdd(icons, iconCount, bld->spawn_icon);
+        StatusIconAdd(icons, iconCount, StatusIconOverridePath(bld->spawn_icon, StatusIconSpawnPath()));
 
     return iconCount;
 }
@@ -762,6 +1159,7 @@ static void yw_ResetWorldSelectionDrag(NC_STACK_ypaworld *yw);
 static void yw_WorldSelectionDragInput(NC_STACK_ypaworld *yw, TInputState *inpt);
 static void yw_RenderWorldSelectionDrag(NC_STACK_ypaworld *yw);
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw);
+static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw);
 
 
 ///////// up panel ///////////
@@ -4142,6 +4540,7 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
     {
         yw_RenderWorldSelectionDrag(yw);
         yw_RenderMoveOrderFeedback(yw);
+        yw_RenderRoboRelocationMarker(yw);
         sb_0x4d7c08__sub0__sub4(yw);
 
         for(GuiBaseList::iterator it = yw->_guiActive.begin(); it != yw->_guiActive.end(); it++)
@@ -7285,6 +7684,14 @@ static float yw_GetWorldUiMaxDistance()
     }
 }
 
+static bool yw_ShouldHideControlledUnitWorldUi(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+{
+    // The directly controlled unit already has its cockpit/HUD presentation.
+    // Hiding only its world-space overlays prevents the same information from
+    // clipping into close cockpit cameras without affecting other units.
+    return yw && bact && !yw->IsSpectatorControlled() && bact == yw->_userUnit;
+}
+
 static uint8_t yw_GetWorldUiOpacity(NC_STACK_ypaworld *yw, const vec3d &worldPos)
 {
     if (!yw)
@@ -7614,6 +8021,89 @@ static void yw_DrawNeutralDiamond(int centerX, int centerY, int radius, SDL_Colo
     GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY, centerX, centerY - radius));
 }
 
+static void yw_DrawRoboRelocationGlyph(int centerX, int centerY, int radius,
+                                       bool teleport, SDL_Color color)
+{
+    const int tick = teleport ? 5 : 4;
+
+    // Minimal diamond: the main outline is fully connected, matching the
+    // existing move-order marker. Only the four external cardinal tabs remain
+    // detached, preserving the small tactical accents chosen for this glyph.
+    yw_DrawNeutralDiamond(centerX, centerY, radius, color);
+
+    GFX::Engine.raster_func217(color);
+
+    GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius - tick,
+                                            centerX, centerY - radius - 1));
+    GFX::Engine.raster_func201(Common::Line(centerX + radius + 1, centerY,
+                                            centerX + radius + tick, centerY));
+    GFX::Engine.raster_func201(Common::Line(centerX, centerY + radius + 1,
+                                            centerX, centerY + radius + tick));
+    GFX::Engine.raster_func201(Common::Line(centerX - radius - tick, centerY,
+                                            centerX - radius - 1, centerY));
+
+    // Thick square-ended cross, intentionally drawn with lines only so the
+    // marker remains asset-free and follows the existing raster path.
+    GFX::Engine.raster_func201(Common::Line(centerX - 4, centerY - 1,
+                                            centerX + 4, centerY - 1));
+    GFX::Engine.raster_func201(Common::Line(centerX - 4, centerY,
+                                            centerX + 4, centerY));
+    GFX::Engine.raster_func201(Common::Line(centerX - 4, centerY + 1,
+                                            centerX + 4, centerY + 1));
+    GFX::Engine.raster_func201(Common::Line(centerX - 1, centerY - 4,
+                                            centerX - 1, centerY + 4));
+    GFX::Engine.raster_func201(Common::Line(centerX, centerY - 4,
+                                            centerX, centerY + 4));
+    GFX::Engine.raster_func201(Common::Line(centerX + 1, centerY - 4,
+                                            centerX + 1, centerY + 4));
+}
+
+static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->_userRobo || yw->IsSpectatorControlled() )
+        return;
+
+    NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(yw->_userRobo);
+    if ( !robo )
+        return;
+
+    vec3d target;
+    bool teleport = false;
+    if ( !robo->GetPlayerRoboRelocationTarget(&target, &teleport) )
+        return;
+
+    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, target);
+    if ( worldUiOpacity == 0 )
+        return;
+
+    Common::Point point;
+    if ( !yw_ProjectWorldSelectionPoint(yw, target, &point) )
+        return;
+
+    const int centerX = point.x - yw->_screenSize.x / 2;
+    const int centerY = point.y - yw->_screenSize.y / 2;
+    const uint32_t pulsePeriod = teleport ? 320 : 880;
+    const uint32_t halfPeriod = pulsePeriod / 2;
+    const uint32_t pulseTime = yw->_timeStamp % pulsePeriod;
+    const uint32_t triangle = pulseTime <= halfPeriod ? pulseTime : pulsePeriod - pulseTime;
+    const int radius = 14 + (int)(triangle * (teleport ? 5 : 3) / halfPeriod);
+
+    SDL_Color markerColor = yw_GetFactionSelectionColor(yw);
+    if ( teleport && ((yw->_timeStamp / 80) & 1) )
+    {
+        markerColor.r = (uint8_t)std::min(255, markerColor.r + 35);
+        markerColor.g = (uint8_t)std::min(255, markerColor.g + 35);
+        markerColor.b = (uint8_t)std::min(255, markerColor.b + 35);
+    }
+    markerColor.a = worldUiOpacity;
+
+    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+    shadowColor.a = worldUiOpacity;
+
+    yw_DrawRoboRelocationGlyph(centerX + 1, centerY + 1, radius, teleport, shadowColor);
+    yw_DrawRoboRelocationGlyph(centerX, centerY, radius, teleport, markerColor);
+}
+
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
 {
     constexpr uint32_t FEEDBACK_DURATION = 720;
@@ -7628,6 +8118,10 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
         return;
     }
 
+    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, yw->_moveOrderFeedbackPos);
+    if ( worldUiOpacity == 0 )
+        return;
+
     Common::Point point;
     if ( !yw_ProjectWorldSelectionPoint(yw, yw->_moveOrderFeedbackPos, &point) )
         return;
@@ -7636,13 +8130,15 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
     int centerY = point.y - yw->_screenSize.y / 2;
     int radius = 7 + (int)((age % 240) * 7 / 240);
     SDL_Color factionColor = yw_GetFactionSelectionColor(yw);
-    SDL_Color pulseColor = ((age / 90) & 1) ?
-                           GFX::Engine.Color(factionColor.r * 3 / 5,
-                                             factionColor.g * 3 / 5,
-                                             factionColor.b * 3 / 5) :
-                           factionColor;
+    SDL_Color pulseColor = factionColor;
+    pulseColor.r = (uint8_t)std::min(255, pulseColor.r + 35);
+    pulseColor.g = (uint8_t)std::min(255, pulseColor.g + 35);
+    pulseColor.b = (uint8_t)std::min(255, pulseColor.b + 35);
+    pulseColor.a = worldUiOpacity;
+    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+    shadowColor.a = worldUiOpacity;
 
-    yw_DrawNeutralDiamond(centerX + 1, centerY + 1, radius, yw_GetNeutralSelectionShadowColor());
+    yw_DrawNeutralDiamond(centerX + 1, centerY + 1, radius, shadowColor);
     yw_DrawNeutralDiamond(centerX, centerY, radius, pulseColor);
 
     GFX::Engine.raster_func217(pulseColor);
@@ -9321,7 +9817,7 @@ void ypaworld_func64__sub15(NC_STACK_ypaworld *yw)
     }
 }
 
-bool NC_STACK_ypaworld::VoiceMessagePlayResourceFile(const std::string &filename, NC_STACK_ypabact *unit, int priority)
+bool NC_STACK_ypaworld::VoiceMessagePlayResourceFile(const std::string &filename, NC_STACK_ypabact *unit, int priority, bool ignoreTimeScale)
 {
     if ( IsSpectatorControlled() )
         return false;
@@ -9346,6 +9842,7 @@ bool NC_STACK_ypaworld::VoiceMessagePlayResourceFile(const std::string &filename
     _voiceMessage.Carrier.Sounds[0].Pitch = 0;
     _voiceMessage.Carrier.Sounds[0].Volume = priority + 500;
     _voiceMessage.Carrier.Sounds[0].PriorityBias = 512;
+    _voiceMessage.Carrier.Sounds[0].IgnoreTimeScale = ignoreTimeScale;
     _voiceMessage.Carrier.Sounds[0].PSample = v23->GetSampleData();
 
     _voiceMessage.Priority = priority;
@@ -9360,7 +9857,7 @@ bool NC_STACK_ypaworld::VoiceMessagePlayResourceFile(const std::string &filename
     return true;
 }
 
-bool NC_STACK_ypaworld::VoiceMessagePlayFile(const std::string &flname, NC_STACK_ypabact *unit, int priority)
+bool NC_STACK_ypaworld::VoiceMessagePlayFile(const std::string &flname, NC_STACK_ypabact *unit, int priority, bool ignoreTimeScale)
 {
     if ( IsSpectatorControlled() )
         return false;
@@ -9386,9 +9883,9 @@ bool NC_STACK_ypaworld::VoiceMessagePlayFile(const std::string &flname, NC_STACK
     }
 
     Common::Env.SetPrefix("rsrc", oldRsrc);
-    return VoiceMessagePlayResourceFile(filename, unit, priority);
+    return VoiceMessagePlayResourceFile(filename, unit, priority, ignoreTimeScale);
 }
-void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority, int msgID)
+void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority, int msgID, bool ignoreTimeScale)
 {
     if ( IsSpectatorControlled() )
         return;
@@ -9755,7 +10252,7 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
 
                     if ( !voicepackFile.empty() )
                     {
-                        if ( VoiceMessagePlayResourceFile(voicepackFile, unit, priority) )
+                        if ( VoiceMessagePlayResourceFile(voicepackFile, unit, priority, ignoreTimeScale) )
                         {
                             VoicepackLogOnce(g_voicepackLoggedUsed,
                                              voicepackFile,
@@ -9790,7 +10287,7 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
             if ( msgvals.num > 1 )
                 v16 = rand() % msgvals.num + 1;
 
-            VoiceMessagePlayFile(fmt::sprintf("%x%x%x%x%x.wav", msgvals.v1, vo_type, msgvals.v3, msgvals.v4, v16), unit, priority);
+            VoiceMessagePlayFile(fmt::sprintf("%x%x%x%x%x.wav", msgvals.v1, vo_type, msgvals.v3, msgvals.v4, v16), unit, priority, ignoreTimeScale);
         }
     }
 }
@@ -11285,6 +11782,9 @@ void yw_RenderHUDVectorGFX(NC_STACK_ypaworld *yw, CmdStream *cur)
 
 void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact)
 {
+    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
+        return;
+
     if ( yw->_GameShell )
     {
         if ( yw->_isNetGame )
@@ -11341,6 +11841,9 @@ void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, 
 
 void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact)
 {
+    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
+        return;
+
     // OpenUA invisible: no HP/shield/status bar or fraction triangle over a cloaked unit.
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
@@ -11550,6 +12053,9 @@ static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Colo
 
 static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
+    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
+        return;
+
     uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
     if (worldUiOpacity == 0)
         return;
@@ -12116,6 +12622,9 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
 
 void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
+    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
+        return;
+
     // OpenUA invisible: never draw the targeting cursor/box over a cloaked stealth unit.
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
@@ -13998,8 +14507,6 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
             inpt->Buttons.Set(3);
             inpt->HandBrakePressed = true;
         }
-
-        SetShowingTooltip(Locale::TIP_MOUSECAPTURED);
     }
 
     if ( !v38 )

@@ -419,6 +419,8 @@ bool NC_STACK_winp::GetState()
             return false;
         break;
     default:
+        if ( _bindedKey == Input::KC_SHIFT )
+            return Input::Engine.GetKeyState(Input::KC_SHIFT);
         return Input::Engine.KeyMatrix.at(_bindedKey).down;
     }
 
@@ -833,7 +835,7 @@ void NC_STACK_winp::InitFirst()
     KBDMapping[SDL_SCANCODE_LCTRL]       = Input::KC_CTRL;
     KBDMapping[SDL_SCANCODE_RCTRL]       = Input::KC_CTRL;
     KBDMapping[SDL_SCANCODE_RSHIFT]      = Input::KC_SHIFT;
-    KBDMapping[SDL_SCANCODE_LSHIFT]      = Input::KC_SHIFT;
+    KBDMapping[SDL_SCANCODE_LSHIFT]      = Input::KC_LSHIFT;
     KBDMapping[SDL_SCANCODE_LALT]        = Input::KC_ALT;
     KBDMapping[SDL_SCANCODE_RALT]        = Input::KC_ALT;
     KBDMapping[SDL_SCANCODE_PAUSE]       = Input::KC_PAUSE;

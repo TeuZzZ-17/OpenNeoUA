@@ -7053,6 +7053,33 @@ bool NC_STACK_yparobo::GetPlayerRoboAIBehaviorMoveTarget(vec3d *target) const
     return true;
 }
 
+bool NC_STACK_yparobo::GetPlayerRoboRelocationTarget(vec3d *target, bool *isTeleport) const
+{
+    if ( !target || !isTeleport || !IsPlayerRobo() || !_world ||
+         this != _world->getYW_userHostStation() ||
+         _status != BACT_STATUS_NORMAL ||
+         (_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) )
+    {
+        return false;
+    }
+
+    if ( IsPlayerRoboAIBehaviorMoveActive() )
+    {
+        *target = _primTpos;
+        *isTeleport = false;
+        return true;
+    }
+
+    if ( _roboState & ROBOSTATE_MOVE )
+    {
+        *target = _roboBeamPos;
+        *isTeleport = true;
+        return true;
+    }
+
+    return false;
+}
+
 
 NC_STACK_yparobo::NC_STACK_yparobo()
 {

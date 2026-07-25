@@ -1,0 +1,21 @@
+new_vehicle spectator
+        model           =    ufo
+        name            =    OpenUA_Spectator
+        hidden          =    yes
+        invulnerable    =    1
+
+        energy         =   5000
+    	shield      	= 	200
+    	mass        	= 	200
+    	force       	= 	23500
+    	maxrot      	= 	3.0
+    	airconst    	= 	100.0
+
+
+        vp_normal       =       323
+        vp_fire         =       178
+        vp_megadeth     =       181
+        vp_wait         =       179
+        vp_dead         =       180
+        vp_genesis      =       323
+end

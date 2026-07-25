@@ -342,8 +342,9 @@ enum INPUT_BIND
     INPUT_BIND_HELP       = 44,
     INPUT_BIND_ANALYZER   = 45,
     INPUT_BIND_COCKPIT_CAMERA = 46,
+    INPUT_BIND_SPRINT     = 47,
 
-    INPUT_BIND_MAX        = 47,
+    INPUT_BIND_MAX        = 48,
 };
 
 enum SOUND_ID
@@ -1962,6 +1963,7 @@ struct yw_arg159
     int Priority;
     std::string txt;
     int MsgID;
+    bool IgnoreAudioTimeScale = false;
 };
 
 struct yw_arg176
@@ -2190,6 +2192,7 @@ public:
 
     bool IsSpectatorModeEnabled() const;
     bool IsSpectatorVehicleID(int vehicleID) const;
+    int GetSpectatorVehicleProtoID() const { return _spectatorVehicleProtoID; }
     bool IsSpectatorBact(const NC_STACK_ypabact *bact) const;
     bool IsSpectatorControlled() const;
     bool CanControlUnitInSpectatorMode(const NC_STACK_ypabact *bact) const;
@@ -2232,8 +2235,6 @@ protected:
     void GameShellInitBkgMode(int mode);
     bool GameShellInitBkg();
 
-    int  InputConfigLoadDefault();
-
     static uint32_t PointToUint32(const Common::Point &point)
     { return (0xFFFF & point.y) << 16 | (0xFFFF & point.x); }
 
@@ -2256,6 +2257,7 @@ public:
 //protected:
     void sub_4491A0(const std::string &movie_fname);
     bool LoadProtosScript(const std::string &filename);
+    bool LoadSpectatorVehicleProto();
     bool sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const std::string &fname);
     void ypaworld_func158__sub4__sub1();
     bool InitDebrief();
@@ -2523,9 +2525,9 @@ public:
     void ypaworld_func137__sub0(ypaworld_arg137 *arg, const TSectorCollision &a2);
 
     void VoiceMessageUpdate();
-    bool VoiceMessagePlayFile(const std::string &flname, NC_STACK_ypabact *unit, int a5);
-    bool VoiceMessagePlayResourceFile(const std::string &filename, NC_STACK_ypabact *unit, int priority);
-    void VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority, int msgID);
+    bool VoiceMessagePlayFile(const std::string &flname, NC_STACK_ypabact *unit, int priority, bool ignoreTimeScale = false);
+    bool VoiceMessagePlayResourceFile(const std::string &filename, NC_STACK_ypabact *unit, int priority, bool ignoreTimeScale = false);
+    void VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority, int msgID, bool ignoreTimeScale = false);
     void VoiceMessageCalcPositionToUnit();
 
     bool ProtosInit();
@@ -2593,6 +2595,12 @@ public:
     bool HasActiveNewGemNotification() const;
     uint32_t GetNewGemNotificationElapsedTime() const;
     bool IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const;
+    bool IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const;
+    bool IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) const;
+    float GetPlayerSprintForce(const NC_STACK_ypabact *bact) const;
+    float GetPlayerSprintPitchScale(const NC_STACK_ypabact *bact) const;
+    void UpdatePlayerSprint(TInputState *inpt, int32_t frameTime);
+    void ResetPlayerSprint();
     void RecordGemNotificationChange(uint8_t targetKind, int32_t targetProtoId,
                                      uint8_t changeKind, int32_t previousRawValue,
                                      int32_t newRawValue, bool newlyEnabled = false);
@@ -2716,6 +2724,9 @@ public:
     float _spectatorFollowTargetDistance = 900.0;
     float _spectatorFollowYaw = 0.0;
     float _spectatorFollowPitch = 0.25;
+    float _spectatorFollowTerrainRaise = 0.0;
+    bool _spectatorFollowCameraInitialized = false;
+    int32_t _spectatorVehicleProtoID = -1;
 
     NC_STACK_base *_skyObject  = NULL;
 
@@ -2889,6 +2900,17 @@ public:
 
     NC_STACK_ypabact *_userRobo = NULL;
     NC_STACK_ypabact *_userUnit = NULL;
+    enum PlayerSprintState : uint8_t
+    {
+        PLAYER_SPRINT_READY,
+        PLAYER_SPRINT_RAMP_UP,
+        PLAYER_SPRINT_ACTIVE,
+        PLAYER_SPRINT_RAMP_DOWN
+    };
+    PlayerSprintState _playerSprintState = PLAYER_SPRINT_READY;
+    NC_STACK_ypabact *_playerSprintUnit = NULL;
+    int32_t _playerSprintPhaseElapsed = 0;
+    float _playerSprintFactor = 0.0f;
 
     std::array<uint32_t, 8> _countSectorsPerOwner = Common::ArrayInit<uint32_t, 8>(0);
     std::array<uint32_t, 8>  _countUnitsPerOwner = Common::ArrayInit<uint32_t, 8>(0);

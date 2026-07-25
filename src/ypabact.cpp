@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <stack>
 #include <set>
+#include <map>
+#include <functional>
 #include <algorithm>
 #include <limits>
 #include <vector>
@@ -26,6 +28,61 @@
 
 int ypabact_id = 1;
 extern int dword_5B1128;
+
+struct TUnitCollisionPairKey
+{
+    const NC_STACK_ypaworld *world;
+    int gidLow;
+    int gidHigh;
+
+    bool operator<(const TUnitCollisionPairKey &other) const
+    {
+        if ( world != other.world )
+            return std::less<const NC_STACK_ypaworld *>()(world, other.world);
+        if ( gidLow != other.gidLow )
+            return gidLow < other.gidLow;
+        return gidHigh < other.gidHigh;
+    }
+};
+
+static bool ypabact_BeginUnitCollisionEvent(NC_STACK_ypabact *first,
+                                             NC_STACK_ypabact *second,
+                                             int frameTime)
+{
+    if ( !first || !second )
+        return false;
+
+    NC_STACK_ypaworld *world = first->getBACT_pWorld();
+    if ( !world || world != second->getBACT_pWorld() )
+        return false;
+
+    static std::map<TUnitCollisionPairKey, int> activeContacts;
+
+    const int low = std::min(first->_gid, second->_gid);
+    const int high = std::max(first->_gid, second->_gid);
+    const int now = world->_timeStamp;
+    const int safeFrameTime = std::max(0, frameTime);
+    const int contactGap = std::max(100, safeFrameTime * 3 + 1);
+    TUnitCollisionPairKey key = { world, low, high };
+
+    if ( activeContacts.size() > 4096 )
+    {
+        for (auto it = activeContacts.begin(); it != activeContacts.end(); )
+        {
+            if ( it->first.world != world || now < it->second || now - it->second > 5000 )
+                it = activeContacts.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    auto found = activeContacts.find(key);
+    const bool isNewContact = found == activeContacts.end() ||
+                              now < found->second ||
+                              now - found->second > contactGap;
+    activeContacts[key] = now;
+    return isNewContact;
+}
 
 static bool ypabact_IsGenesisSeparationVehicle(const NC_STACK_ypabact *unit)
 {
@@ -112,6 +169,15 @@ static float ypabact_ReadHandBrakeRecoilReduction()
         System::IniConf::GameHandBrakeRecoilReduction, 0.8f));
 }
 
+static int ypabact_ReadUnitCollisionDamagePercent()
+{
+    int percent = System::IniConf::GameUnitCollisionDamagePercent.Get<int>();
+    if ( percent < 0 )
+        return 0;
+    if ( percent > 100 )
+        return 100;
+    return percent;
+}
 
 static bool ypabact_IsCustomFallDamageConfigActive()
 {
@@ -840,6 +906,51 @@ static void ypabact_StartStatusSoundIfIdle(NC_STACK_ypabact *bact, TSndCarrier *
         SFXEngine::SFXe.startSound(carrier, 0);
         SFXEngine::SFXe.UpdateSoundCarrier(carrier);
     }
+}
+
+static bool ypabact_ShouldUsePlayerLaunchShake(NC_STACK_ypabact *bact,
+                                                const World::TWeapProto &wproto)
+{
+    NC_STACK_ypaworld *world = bact ? bact->getBACT_pWorld() : NULL;
+
+    return world &&
+           world->getYW_userVehicle() == bact &&
+           bact->getBACT_inputting() &&
+           wproto.player_shk_launch.slot > 0 &&
+           wproto.player_shk_launch.time > 0;
+}
+
+static void ypabact_TriggerPlayerLaunchShake(NC_STACK_ypabact *bact,
+                                              World::TWeapProto &wproto)
+{
+    if ( !ypabact_ShouldUsePlayerLaunchShake(bact, wproto) )
+        return;
+
+    if ( bact->_player_launch_shake_carrier.Sounds.empty() )
+        bact->_player_launch_shake_carrier.Resize(1);
+
+    TSoundSource &snd = bact->_player_launch_shake_carrier.Sounds[0];
+    snd.PSample = NULL;
+    snd.SampleVariants.clear();
+    snd.PFragments = NULL;
+    snd.PPFx = NULL;
+    snd.PShkFx = &wproto.player_shk_launch;
+    snd.Volume = 0;
+    snd.Pitch = 0;
+    snd.PriorityBias = 0;
+    snd.SetLoop(false);
+    snd.SetFragmented(false);
+    snd.SetPFx(false);
+    snd.SetPFxEnable(false);
+    snd.SetShk(true);
+
+    bact->_player_launch_shake_carrier.Position = bact->_position;
+    bact->_player_launch_shake_carrier.Vector = bact->_fly_dir * bact->_fly_dir_length;
+
+    // Reuse one local carrier so a multi-projectile shot produces one clean
+    // event instead of stacking one shake for every spawned projectile.
+    SFXEngine::SFXe.startSound(&bact->_player_launch_shake_carrier, 0);
+    SFXEngine::SFXe.UpdateSoundCarrier(&bact->_player_launch_shake_carrier);
 }
 
 static void ypabact_UpdateMimicSoundCarrier(NC_STACK_ypabact *bact)
@@ -1597,6 +1708,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _active_debuff.Clear();
     _debuff_soundcarrier.Clear();
     _damaged_shake_carrier.Clear();
+    _player_launch_shake_carrier.Clear();
     _mimic_soundcarrier.Clear();
 
     _vp_active = 0;
@@ -1874,6 +1986,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _fire_x_random_order.clear();
     _debuff_soundcarrier.Clear();
     _damaged_shake_carrier.Clear();
+    _player_launch_shake_carrier.Clear();
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;
@@ -2091,6 +2204,7 @@ size_t NC_STACK_ypabact::Deinit()
     SFXEngine::SFXe.StopCarrier(&_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_damaged_shake_carrier);
+    SFXEngine::SFXe.StopCarrier(&_player_launch_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mgun_soundcarrier);
@@ -2777,6 +2891,23 @@ void NC_STACK_ypabact::BeforeSoundCarrierUpdate()
 {
 }
 
+void NC_STACK_ypabact::ClearPlayerSprintPitchExtra()
+{
+    if ( !_soundcarrier.Sounds.empty() )
+    {
+        TSoundSource &sound = _soundcarrier.Sounds[0];
+        if ( _playerSprintPitchExtra != 0 )
+            sound.Pitch -= _playerSprintPitchExtra;
+
+        // The extended rate is a sprint-only opt-in. Clear it before rebuilding
+        // this frame's vanilla movement pitch so release always returns to the
+        // historical audio ceiling, even while the vehicle keeps moving.
+        sound.AllowExtendedRate = false;
+    }
+
+    _playerSprintPitchExtra = 0;
+}
+
 bool NC_STACK_ypabact::HasMinigun() const
 {
     if ( _mgun_set )
@@ -2800,6 +2931,8 @@ int NC_STACK_ypabact::GetMinigunShotTime(bool userControlled, int frameDeltaMs) 
 
 void NC_STACK_ypabact::Update(update_msg *arg)
 {
+    ClearPlayerSprintPitchExtra();
+
     if ( _kidRef.IsListType(World::BLIST_CACHE) ) // Do not update units in dead list
         return;
 
@@ -2959,6 +3092,32 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     _soundcarrier.Vector = _fly_dir * _fly_dir_length;
 
     ypabact_ApplyDamagedSoundPitch(this);
+    if ( _world && !_soundcarrier.Sounds.empty() && _soundcarrier.Sounds[0].PSample )
+    {
+        const float sprintPitchScale = _world->GetPlayerSprintPitchScale(this);
+        if ( sprintPitchScale > 0.0f )
+        {
+            TSoundSource &sound = _soundcarrier.Sounds[0];
+            const int sampleRate = sound.PSample->SampleRate;
+            const int vanillaPitch = sound.Pitch;
+            const int vanillaRate = sampleRate + vanillaPitch;
+            const int legacyMaxRate = sampleRate > 44100 ? 192000 : 44100;
+            const int audibleVanillaRate = std::max(2000, std::min(vanillaRate, legacyMaxRate));
+
+            // Preserve the existing curve for loops that are naturally below
+            // the legacy playback ceiling. Loops already saturated at 44.1 kHz
+            // receive only sampleRate * sprintScale of extra headroom. This
+            // prevents Fox/Wasp-style loops from jumping to an excessively high
+            // pitch while keeping the smooth Weasel/Hornet response unchanged.
+            const float desiredRate = audibleVanillaRate * (1.0f + sprintPitchScale);
+            const float sprintRateCeiling = legacyMaxRate + sampleRate * sprintPitchScale;
+            const int sprintRate = (int)floorf(std::min(desiredRate, sprintRateCeiling) + 0.5f);
+
+            sound.Pitch = sprintRate - sampleRate;
+            _playerSprintPitchExtra = sound.Pitch - vanillaPitch;
+            sound.AllowExtendedRate = sprintRate > legacyMaxRate;
+        }
+    }
     BeforeSoundCarrierUpdate();
 
     // OpenUA invisible: a still-cloaked stealth unit emits no loop/idle/engine/ambient
@@ -2989,6 +3148,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         }
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
+        ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
     }
 
     ypabact_UpdateMimicSoundCarrier(this);
@@ -4143,19 +4303,26 @@ static void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
         return;
 
     NC_STACK_ypaworld *world = bact->getBACT_pWorld();
-    if ( !arg || !arg->inpt || !world ||
-         !world->IsNewGemNotificationBlockingPlayerWeapons(bact) )
+    if ( !arg || !arg->inpt || !world )
     {
         bact->User_layer(arg);
         return;
     }
 
-    TInputState blockedInput = *arg->inpt;
-    blockedInput.Buttons.UnSet({0, 1, 2});
+    const bool blockWeapons = world->IsNewGemNotificationBlockingPlayerWeapons(bact);
+    if ( !blockWeapons )
+    {
+        bact->User_layer(arg);
+        return;
+    }
 
-    update_msg blockedArg = *arg;
-    blockedArg.inpt = &blockedInput;
-    bact->User_layer(&blockedArg);
+    TInputState filteredInput = *arg->inpt;
+    if ( blockWeapons )
+        filteredInput.Buttons.UnSet({0, 1, 2});
+
+    update_msg filteredArg = *arg;
+    filteredArg.inpt = &filteredInput;
+    bact->User_layer(&filteredArg);
 }
 
 void NC_STACK_ypabact::AI_layer2(update_msg *arg)
@@ -5386,6 +5553,8 @@ void NC_STACK_ypabact::Move(move_msg *arg)
         v54 = -_rotation.AxisY();
 
         thraction = _thraction;
+        if ( _world && _force > 0.0f )
+            thraction *= _world->GetPlayerSprintForce(this) / _force;
 
         if ( _oflags & BACT_OFLAG_USERINPT )
         {
@@ -10446,6 +10615,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         return 0;
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(selectedWeapon);
+    const bool usePlayerLaunchShake = ypabact_ShouldUsePlayerLaunchShake(this, wproto);
 
     // OpenUA custom: mortar weapons are driven exclusively by UpdateMortar()'s
     // barrage AI. Never fire them through the normal direct/missile path.
@@ -10656,7 +10826,20 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         wobj->_host_station = _host_station;
         _weapon_time = arg->g_time;
 
-        SFXEngine::SFXe.startSound(&wobj->_soundcarrier, 1);
+        if ( usePlayerLaunchShake &&
+             wobj->_soundcarrier.Sounds.size() > World::TWeapProto::SND_LAUNCH )
+        {
+            // The player-specific event replaces only the generic launch shake on
+            // this local projectile. Launch sound and palette FX remain untouched.
+            TSoundSource &launchSource =
+                wobj->_soundcarrier.Sounds[World::TWeapProto::SND_LAUNCH];
+            launchSource.PShkFx = NULL;
+            launchSource.SetShk(false);
+            launchSource.SetShkEnable(false);
+            launchSource.SetShkPlay(false);
+        }
+
+        SFXEngine::SFXe.startSound(&wobj->_soundcarrier, World::TWeapProto::SND_LAUNCH);
 
         if ( _world->_isNetGame )
         {
@@ -10723,6 +10906,8 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         if ( recoilAmount > 0.0f )
             ApplyWeaponRecoil(recoilDirSum, recoilAmount);
     }
+
+    ypabact_TriggerPlayerLaunchShake(this, wproto);
 
     if ( _kill_after_shot )
     {
@@ -11229,7 +11414,8 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
     // missiles, lasers, guns, AoE...), so the malus is applied exactly once per hit
     // and never compounds. Only actual damage (negative delta) from a real attacker
     // is scaled; healing/energy transfer and prototype values stay untouched.
-    if ( arg->energy < 0 && World::CloneBalance::IsCloneActor(arg->unit) )
+    if ( arg->energy < 0 && !arg->bypassAttackerDamageModifiers &&
+         World::CloneBalance::IsCloneActor(arg->unit) )
     {
         int scaled = (int)((float)arg->energy * World::CloneBalance::DownFactor());
         // Never let rounding turn a real hit into zero damage.
@@ -11270,6 +11456,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
                 bact_arg84 dmgArg;
                 dmgArg.energy = arg->energy;
                 dmgArg.unit   = arg->unit;
+                dmgArg.bypassAttackerDamageModifiers = arg->bypassAttackerDamageModifiers;
                 prot->ModifyEnergy(&dmgArg);
                 return;
             }
@@ -11278,6 +11465,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
             bact_arg84 dmgArg;
             dmgArg.energy = -dummyHP;
             dmgArg.unit   = arg->unit;
+            dmgArg.bypassAttackerDamageModifiers = arg->bypassAttackerDamageModifiers;
             prot->ModifyEnergy(&dmgArg);
 
             arg->energy += dummyHP;        // reduce parent damage by absorbed part
@@ -12022,6 +12210,51 @@ float NC_STACK_ypabact::GetCollisionBroadRadius()
     return broadRadius;
 }
 
+void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int frameTime)
+{
+    if ( !other || other == this || !_world || other->_world != _world ||
+         IsDestroyed() || other->IsDestroyed() )
+        return;
+
+    // Both actors can evaluate the same overlap in the same update. Keep one
+    // pair-level contact event, and keep refreshing it while the bodies remain
+    // touching so a continuous push never reapplies fixed damage every frame.
+    if ( !ypabact_BeginUnitCollisionEvent(this, other, frameTime) )
+        return;
+
+    const int damagePercent = ypabact_ReadUnitCollisionDamagePercent();
+    if ( damagePercent <= 0 || _owner == World::OWNER_0 ||
+         other->_owner == World::OWNER_0 || _owner == other->_owner )
+        return;
+
+    const int selfRawDamage = _energy_max > 0
+                            ? std::max(1, (int)((int64_t)_energy_max * damagePercent / 100))
+                            : 0;
+    const int otherRawDamage = other->_energy_max > 0
+                             ? std::max(1, (int)((int64_t)other->_energy_max * damagePercent / 100))
+                             : 0;
+    const int selfDamage = ypabact_CalcShieldedCustomDamage(this, selfRawDamage);
+    const int otherDamage = ypabact_CalcShieldedCustomDamage(other, otherRawDamage);
+
+    if ( selfDamage > 0 )
+    {
+        bact_arg84 damage;
+        damage.energy = -selfDamage;
+        damage.unit = other;
+        damage.bypassAttackerDamageModifiers = true;
+        ModifyEnergy(&damage);
+    }
+
+    if ( otherDamage > 0 )
+    {
+        bact_arg84 damage;
+        damage.energy = -otherDamage;
+        damage.unit = this;
+        damage.bypassAttackerDamageModifiers = true;
+        other->ModifyEnergy(&damage);
+    }
+}
+
 size_t NC_STACK_ypabact::CollisionWithBact(int arg)
 {
     bool isViewer = getBACT_viewer();
@@ -12048,6 +12281,8 @@ size_t NC_STACK_ypabact::CollisionWithBact(int arg)
 
         if ( !plasma )
         {
+            HandleUnitCollisionContact(bnode, arg);
+
             // Feed the coll-sphere pair into the exact vanilla radius response:
             // same averaging, angle gate and Recoil, only the tested centers differ.
             collisionCenters += _position + (targetCenter - selfCenter);
@@ -12674,6 +12909,8 @@ void NC_STACK_ypabact::ypabact_func95(IDVPair *arg)
 // Reset
 void NC_STACK_ypabact::Renew()
 {
+    ClearPlayerSprintPitchExtra();
+
     _oflags = BACT_OFLAG_EXACTCOLL;
     _status_flg = 0;
     _host_station = NULL;
@@ -15375,6 +15612,7 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     SFXEngine::SFXe.UpdateSoundCarrier(&_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
+    ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
 }
 
 void NC_STACK_ypabact::ypabact_func117(update_msg *upd)
@@ -16430,6 +16668,7 @@ void NC_STACK_ypabact::setBACT_inputting(bool inpt)
     }
     else
     {
+        ClearPlayerSprintPitchExtra();
         _oflags &= ~BACT_OFLAG_USERINPT;
     }
 }

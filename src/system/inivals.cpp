@@ -207,6 +207,7 @@ Common::Ini::Key IniConf::InputHotkey44("input.hotkey[44]", Common::Ini::KT_WORD
 Common::Ini::Key IniConf::InputHotkey45("input.hotkey[45]", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::InputHotkey46("input.hotkey[46]", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::InputHotkey47("input.hotkey[47]", Common::Ini::KT_WORD);
+Common::Ini::Key IniConf::InputHotkey48("input.hotkey[48]", Common::Ini::KT_WORD);
 
 // Audio Engine
 Common::Ini::Key IniConf::AudioChannels("audio.channels", Common::Ini::KT_DIGIT, (int32_t)64);
@@ -237,14 +238,21 @@ Common::Ini::Key IniConf::GameFixedTick("game.fixed_tick", Common::Ini::KT_BOOL,
 // OpenUA custom: tank ground-pose response used only when game.fixed_tick = yes.
 // 2.0 is near vanilla alignment; 5.5 is the balanced default; 10.0 is very reactive.
 Common::Ini::Key IniConf::GameFixedTickTankGroundPoseMult("game.fixed_tick_tank_ground_pose_mult", Common::Ini::KT_WORD, std::string("5.5"));
+// OpenUA custom: player-only tank coast braking after releasing forward/reverse.
+// Value is the approximate stop time from canonical top speed, in milliseconds.
+// Missing, zero or negative keeps the vanilla endless-coast behavior.
+Common::Ini::Key IniConf::GamePlayerTankBrakeTime("game.player_tank_brake_time", Common::Ini::KT_DIGIT, (int32_t)0);
 Common::Ini::Key IniConf::GameTimeLine("game.timeline", Common::Ini::KT_DIGIT, (int32_t)600000);
 Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GameSpectatorVehicleID("game.spectator_vehicle_id", Common::Ini::KT_DIGIT, (int32_t)0);
 Common::Ini::Key IniConf::GameWeaponWeaponCollision("game.weapon_weapon_collision", Common::Ini::KT_BOOL, false);
 // OpenUA custom: radius-only scale for automatic weapon VP collision spheres.
 Common::Ini::Key IniConf::GameWeaponAutoCollisionScale("game.weapon_auto_collision_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameRoboBuildingCollisionDamagePercent("game.robo_building_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
+// OpenUA custom: raw max-energy percentage exchanged once when two hostile
+// non-neutral units begin a physical collision. The target's effective shield
+// reduces the final damage. Zero preserves current behavior.
+Common::Ini::Key IniConf::GameUnitCollisionDamagePercent("game.unit_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
 // OpenUA custom: multiplier for the vanilla power-station sector energy effect.
 // game.powerstation_energy_multiplier = 1.0 keeps vanilla; 3.0 triples recharge/drain.
 Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_energy_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
@@ -258,6 +266,23 @@ Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::I
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameGemUnlockTimeScale("game.gem_unlock_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("2500"));
+
+// OpenUA custom: opt-in Data/-relative paths used by the automatic status-icon
+// renderer. Missing, empty or invalid paths disable only that icon category.
+Common::Ini::Key IniConf::UiStatusIconRegen("ui.status_icon_regen", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconDrain("ui.status_icon_drain", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconDamaged("ui.status_icon_damaged", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconSpawn("ui.status_icon_spawn", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconRadar("ui.status_icon_radar", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconPower("ui.status_icon_power", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconSeekAndExplode("ui.status_icon_seek_and_explode", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconInvisible("ui.status_icon_invisible", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconProximityDefense("ui.status_icon_proximity_defense", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconSprint("ui.status_icon_sprint", Common::Ini::KT_STRING);
+// Number of complete 200 ms on/off blink cycles used both when a dynamic
+// status icon appears and when it disappears. Zero keeps the previous
+// immediate behavior; runtime clamps the value to 0..10.
+Common::Ini::Key IniConf::UiStatusIconBlinkCount("ui.status_icon_blink_count", Common::Ini::KT_DIGIT, (int32_t)0);
 
 // OpenUA custom: Black Sect "imperfect grey clone" runtime balance (owner/faction 5).
 // When enabled, live Black Sect actors get a small malus (default 5%) to effective
@@ -447,6 +472,7 @@ void IniConf::Init()
         , &InputHotkey45
         , &InputHotkey46
         , &InputHotkey47
+        , &InputHotkey48
 
         , &AudioChannels
         , &AudioVolume
@@ -468,13 +494,14 @@ void IniConf::Init()
         , &GameNewAI
         , &GameFixedTick
         , &GameFixedTickTankGroundPoseMult
+        , &GamePlayerTankBrakeTime
         , &GameTimeLine
         , &GameRoboPlayerAIBehavior
         , &GameSpectatorMode
-        , &GameSpectatorVehicleID
         , &GameWeaponWeaponCollision
         , &GameWeaponAutoCollisionScale
         , &GameRoboBuildingCollisionDamagePercent
+        , &GameUnitCollisionDamagePercent
         , &GamePowerStationEnergyMultiplier
         , &GameFallDamageMultiplier
         , &GamePushAtDeathMultiplier
@@ -485,6 +512,17 @@ void IniConf::Init()
         , &GameGemUnlockSound
         , &GameGemUnlockTimeScale
         , &GameWorldUiMaxDistance
+        , &UiStatusIconRegen
+        , &UiStatusIconDrain
+        , &UiStatusIconDamaged
+        , &UiStatusIconSpawn
+        , &UiStatusIconRadar
+        , &UiStatusIconPower
+        , &UiStatusIconSeekAndExplode
+        , &UiStatusIconInvisible
+        , &UiStatusIconProximityDefense
+        , &UiStatusIconSprint
+        , &UiStatusIconBlinkCount
         , &GameBlackSectCloneBalance
         , &GameBlackSectCloneMalusPercent
         , &GameBlackSectCloneTint

@@ -330,6 +330,12 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
     int i = 0;
     for (const World::TVhclProto &proto : yw->_vhclProtos)
     {
+        if ( i == yw->_spectatorVehicleProtoID )
+        {
+            i++;
+            continue;
+        }
+
         if ( proto.model_id != BACT_TYPES_NOPE )
         {
             fil->printf("modify_vehicle %d\n", i);

@@ -669,14 +669,14 @@ void NC_STACK_ypaworld::yw_InitSquads(const std::vector<MapSquad> &squads)
 
 bool NC_STACK_ypaworld::IsSpectatorModeEnabled() const
 {
-    return System::IniConf::GameSpectatorMode.Get<bool>() &&
-           System::IniConf::GameSpectatorVehicleID.Get<int32_t>() > 0;
+    return System::IniConf::GameSpectatorMode.Get<bool>();
 }
 
 bool NC_STACK_ypaworld::IsSpectatorVehicleID(int vehicleID) const
 {
     return IsSpectatorModeEnabled() &&
-           vehicleID == System::IniConf::GameSpectatorVehicleID.Get<int32_t>();
+           _spectatorVehicleProtoID > 0 &&
+           vehicleID == _spectatorVehicleProtoID;
 }
 
 bool NC_STACK_ypaworld::IsSpectatorBact(const NC_STACK_ypabact *bact) const
@@ -762,6 +762,8 @@ void NC_STACK_ypaworld::SetSpectatorFollowTarget(NC_STACK_ypabact *bact)
     _spectatorFollowTargetDistance = _spectatorFollowDistance;
     _spectatorFollowPitch = 0.25;
     _spectatorFollowYaw = atan2(-bact->_rotation.m20, bact->_rotation.m22);
+    _spectatorFollowTerrainRaise = 0.0;
+    _spectatorFollowCameraInitialized = false;
 
     if ( _userUnit && IsSpectatorBact(_userUnit) )
         _userUnit->setBACT_inputting(false);
@@ -772,6 +774,8 @@ void NC_STACK_ypaworld::SetSpectatorFollowTarget(NC_STACK_ypabact *bact)
 void NC_STACK_ypaworld::ClearSpectatorFollowTarget()
 {
     _spectatorFollowTarget = NULL;
+    _spectatorFollowTerrainRaise = 0.0;
+    _spectatorFollowCameraInitialized = false;
 }
 
 void NC_STACK_ypaworld::ReturnToSpectatorVehicle()
@@ -857,6 +861,21 @@ bool NC_STACK_ypaworld::UpdateSpectatorFollowCamera(TInputState *inpt)
         followMaxDistance = 3600.0f;
     if ( followMinDistance > followMaxDistance )
         followMinDistance = followMaxDistance;
+
+    // A newly selected follow target can have very different viewer bounds
+    // from the previous one.  Initialise both zoom values inside the valid
+    // range before accepting wheel input, otherwise the first zoom tick can
+    // expose the old/default 900-unit camera state for one frame and look like
+    // a hard camera cut before the normal interpolation takes over.
+    if ( !_spectatorFollowCameraInitialized )
+    {
+        if ( _spectatorFollowDistance < followMinDistance )
+            _spectatorFollowDistance = followMinDistance;
+        else if ( _spectatorFollowDistance > followMaxDistance )
+            _spectatorFollowDistance = followMaxDistance;
+
+        _spectatorFollowTargetDistance = _spectatorFollowDistance;
+    }
 
     float wheelStep = 180.0f;
     if ( targetExtent > 160.0f )
@@ -1000,8 +1019,31 @@ bool NC_STACK_ypaworld::UpdateSpectatorFollowCamera(TInputState *inpt)
         }
     }
 
-    if ( raiseCamera > 0.0 )
-        camPos.y -= raiseCamera;
+    // The required terrain lift can change discontinuously when zoom crosses
+    // a sampling-distance boundary.  Blending only the orbit distance was not
+    // enough: the first wheel tick after entering a vehicle could still snap
+    // the final camera vertically, then become smooth on following frames.
+    // Initialise the safe lift immediately for the new target, then smooth any
+    // later changes so terrain protection remains intact without the visual
+    // tear.
+    if ( !_spectatorFollowCameraInitialized )
+    {
+        _spectatorFollowTerrainRaise = raiseCamera;
+        _spectatorFollowCameraInitialized = true;
+    }
+    else if ( inpt && inpt->Period > 0 )
+    {
+        const float fperiod = inpt->Period / 1000.0f;
+        const float terrainBlend = 1.0f - exp(-fperiod * 12.0f);
+        _spectatorFollowTerrainRaise +=
+            (raiseCamera - _spectatorFollowTerrainRaise) * terrainBlend;
+
+        if ( fabs(_spectatorFollowTerrainRaise - raiseCamera) < 0.05f )
+            _spectatorFollowTerrainRaise = raiseCamera;
+    }
+
+    if ( _spectatorFollowTerrainRaise > 0.0f )
+        camPos.y -= _spectatorFollowTerrainRaise;
 
     // Rebuild the view matrix from the final camera position to the focus point
     // with world-down locked as the camera vertical reference. This keeps the
@@ -1148,12 +1190,10 @@ void NC_STACK_ypaworld::TryActivateSpectatorMode()
     if ( !System::IniConf::GameSpectatorMode.Get<bool>() || _levelInfo.Mode == 1 )
         return;
 
-    int spectatorVehicleID = System::IniConf::GameSpectatorVehicleID.Get<int32_t>();
-    if ( spectatorVehicleID <= 0 || spectatorVehicleID >= (int)_vhclProtos.size() )
-    {
-        ypa_log_out("WARNING: game.spectator_vehicle_id %d is invalid; spectator mode disabled for this level.\n", spectatorVehicleID);
+    if ( !LoadSpectatorVehicleProto() )
         return;
-    }
+
+    int spectatorVehicleID = _spectatorVehicleProtoID;
 
     NC_STACK_ypabact *spectator = yw_FindSpectatorBactInList(this, _unitsList);
 

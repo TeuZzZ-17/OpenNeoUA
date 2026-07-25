@@ -48,6 +48,7 @@ static constexpr int SETTINGS_CHANGE_MENU_FONT             = 0x200000;
 static constexpr int SETTINGS_CHANGE_DEFAULT_CAMERA_VIEW   = 0x400000;
 static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
     SETTINGS_CHANGE_BLENDING | SETTINGS_CHANGE_MENU_FONT;
+static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
 
 static std::string DefaultCameraViewLabel(bool cockpit)
 {
@@ -459,6 +460,7 @@ void NC_STACK_ypaworld::LoadKeyNames()
     Input::Engine.KeyTitle[Input::KC_JOYB5]      = Locale::Text::KeyName(Locale::KEYNAME_JOYB5);
     Input::Engine.KeyTitle[Input::KC_JOYB6]      = Locale::Text::KeyName(Locale::KEYNAME_JOYB6);
     Input::Engine.KeyTitle[Input::KC_JOYB7]      = Locale::Text::KeyName(Locale::KEYNAME_JOYB7);
+    Input::Engine.KeyTitle[Input::KC_LSHIFT]     = Locale::Text::KeyName(Locale::KEYNAME_LSHIFT);
 }
 
 
@@ -721,6 +723,7 @@ void  UserData::sb_0x46ca74()
 
         profile.name = userNameDir;
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
+        InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
 
         std::string tmp = fmt::sprintf("save:%s", userNameDir);
         if ( !uaCreateDir(tmp) )
@@ -1934,28 +1937,8 @@ void UserData::InputConfCopyToBackup()
     }
 }
 
-int NC_STACK_ypaworld::InputConfigLoadDefault()
-{
-    std::string file = fmt::sprintf("data:settings/%s/input.def", Locale::Text::GetLocaleName());
-
-    ScriptParser::HandlersList hndls
-    {
-        new World::Parsers::InputParser(this)
-    };
-
-    return ScriptParser::ParseFile(file, hndls, 0);
-}
-
 void UserData::InputConfigRestoreDefault()
 {
-    if ( p_YW->InputConfigLoadDefault() )
-    {
-        for(TInputConf &konf : InputConfig)
-        {
-            konf.PKeyCodeDef = konf.PKeyCode;
-            konf.NKeyCodeDef = konf.NKeyCode;
-        }
-    }
     for(TInputConf &konf : InputConfig)
     {
         konf.PKeyCode = konf.PKeyCodeDef;
@@ -2695,7 +2678,7 @@ static void db_collect_valid(const UserData *usr, std::vector<int> &out)
     if (usr->db_tab == 0)
     {
         for (int i = 0; i < (int)vhcls.size(); i++)
-            if (vhcls[i].Index >= 0) out.push_back(i);
+            if (vhcls[i].Index >= 0 && i != usr->p_YW->GetSpectatorVehicleProtoID()) out.push_back(i);
     }
     else if (usr->db_tab == 1)
     {
@@ -3765,6 +3748,28 @@ void UserData::GameShellUiHandleInput()
 {
     int v3 = 0;
 
+    if ( _menuMsgBox )
+    {
+        Gui::UAMessageBox *menuBox = _menuMsgBox->GetMsgBox();
+
+        if ( _menuMsgBoxCode == MENU_MSGBOX_RESTORE_DEFAULT_KEYS &&
+             !_menuMsgBox->IsEnabled() && menuBox->Result != 0 )
+        {
+            const uint8_t result = menuBox->Result;
+            menuBox->Result = 0;
+            _menuMsgBoxCode = 0;
+
+            if ( result == 1 )
+                InputConfigRestoreDefault();
+        }
+
+        // The classic menu message box is modal for the old settings UI.
+        // Do not let the click that confirms/cancels also activate controls
+        // underneath it.
+        if ( _menuMsgBox->IsEnabled() )
+            return;
+    }
+
     if ( Input->ClickInf.flag & TClickBoxInf::FLAG_BTN_DOWN )
         SFXEngine::SFXe.startSound(&samples1_info, 3);
 
@@ -4400,6 +4405,8 @@ void UserData::GameShellUiHandleInput()
             inputChangedParts = 0;
             sub_46D2B4();
             InputConfCopyToBackup();
+            if ( !UserName.empty() )
+                SaveSettings();
 
             button_input_button->HideScreen();
 
@@ -4410,7 +4417,9 @@ void UserData::GameShellUiHandleInput()
         }
         else if (r.code == 1053)
         {
-            InputConfigRestoreDefault();
+            ShowMenuMsgBox(MENU_MSGBOX_RESTORE_DEFAULT_KEYS,
+                           "Restore Default Keys?",
+                           "All custom key bindings will be reset.", false);
         }
         else if (r.code == 1054)
         {
@@ -6556,7 +6565,7 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_DRIVE_SPEED,World::INPUT_BIND_GUN_HEIGHT,
     };
 
-    static const std::array<int, 48> HOTKEY
+    static const std::array<int, 49> HOTKEY
     {
         World::INPUT_BIND_ORDER,      World::INPUT_BIND_ATTACK,
         World::INPUT_BIND_NEW,        World::INPUT_BIND_ADD,
@@ -6589,7 +6598,8 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_AGGR_3,     World::INPUT_BIND_AGGR_4,
         World::INPUT_BIND_AGGR_5,     World::INPUT_BIND_HELP,
         World::INPUT_BIND_LAST_SEAT,  World::INPUT_BIND_SET_COMM,
-        World::INPUT_BIND_ANALYZER,    World::INPUT_BIND_COCKPIT_CAMERA
+        World::INPUT_BIND_ANALYZER,    World::INPUT_BIND_COCKPIT_CAMERA,
+        World::INPUT_BIND_SPRINT
     };
 
     if ( type == World::INPUT_BIND_TYPE_BUTTON && index < BUTTON.size())

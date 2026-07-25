@@ -279,6 +279,9 @@ struct bact_arg84
 {
     int energy;
     NC_STACK_ypabact *unit;
+    // Fixed contact/environmental damage can opt out of attacker-side damage
+    // multipliers while preserving the normal invulnerability/death/net path.
+    bool bypassAttackerDamageModifiers = false;
 };
 
 struct bact_arg88
@@ -464,6 +467,7 @@ public:
     virtual void GetSummary(bact_arg81 *arg);
     virtual void EnergyInteract(update_msg *arg);
     virtual void BeforeSoundCarrierUpdate();
+    void ClearPlayerSprintPitchExtra();
     void UpdateCarrierSpawn(update_msg *arg);
     bool CanUseCarrierSpawn();
     void UpdateProximityDefense(update_msg *arg);
@@ -511,6 +515,7 @@ public:
     virtual bool ypabact_func85(vec3d *arg);
     virtual size_t CrashOrLand(bact_arg86 *arg);
     virtual size_t CollisionWithBact(int arg);
+    void HandleUnitCollisionContact(NC_STACK_ypabact *other, int frameTime);
     virtual void Recoil(bact_arg88 *arg);
     virtual void ypabact_func89(IDVPair *arg);
     virtual NC_STACK_ypabact *GetSectorTarget(Common::Point CellId) const;
@@ -768,6 +773,7 @@ public:
     int _base_snd_normal_pitch;
     int _base_snd_fire_pitch;
     int _base_snd_wait_pitch;
+    int _playerSprintPitchExtra = 0;
     int _energy;
     int _energy_max;
     bool _invulnerable;
@@ -806,6 +812,10 @@ public:
     float _base_force;
     float _base_maxrot;
     float _force;
+    bool _sprint_enable = false;
+    float _sprint_force_up_percent = 0.0f;
+    int32_t _sprint_ramp_time = 0;
+    float _sprint_pitch_up_percent = 0.0f;
     float _airconst;
     float _airconst_static;
     float _maxrot;
@@ -871,6 +881,7 @@ public:
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _damaged_shake_carrier;
+    TSndCarrier _player_launch_shake_carrier; // OpenUA custom: one local-player shake per successful weapon launch
     TSndCarrier _laser_soundcarrier; // OpenUA custom: managed loop sound for model = laser
     TSndCarrier _vertical_laser_soundcarrier; // OpenUA custom: managed loop sound for model = vertical_laser
     TSndCarrier _mgun_soundcarrier; // OpenUA custom: one-shot pulse sound for vehicle-controlled MG

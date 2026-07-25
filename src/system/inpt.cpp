@@ -222,6 +222,7 @@ int INPEngine::Init()
     ,   &System::IniConf::InputHotkey45
     ,   &System::IniConf::InputHotkey46
     ,   &System::IniConf::InputHotkey47
+    ,   &System::IniConf::InputHotkey48
     };
 
     i = 0;
@@ -575,6 +576,18 @@ int16_t INPEngine::CheckHotKey(int16_t key)
         if (_hotKeys[i] == key)
             return i;
     }
+
+    // Preserve legacy generic Shift hotkeys when the physical left Shift key
+    // is pressed. Exact KC_LSHIFT hotkeys are checked first above.
+    if ( key == KC_LSHIFT )
+    {
+        for (size_t i = 0; i < _hotKeys.size(); i++)
+        {
+            if ( _hotKeys[i] == KC_SHIFT )
+                return i;
+        }
+    }
+
     return -1;
 }
 
@@ -934,7 +947,8 @@ std::array<KeyInfo, KC_MAX> INPEngine::KeyMatrix {{
     {KC_JOYB6, false},      {KC_JOYB7, false},
     {KC_JOYX, true},        {KC_JOYY, true},
     {KC_JOYTHROTTLE, true}, {KC_JOYHATX, true},
-    {KC_JOYHATY, true},     {KC_JOYRUDDER, true}
+    {KC_JOYHATY, true},     {KC_JOYRUDDER, true},
+    {KC_LSHIFT, false}
 }};
 
 std::array<KeyMapName, KC_MAX> INPEngine::KeyNamesTable {{
@@ -1000,11 +1014,12 @@ std::array<KeyMapName, KC_MAX> INPEngine::KeyNamesTable {{
     {"joyb6", KC_JOYB6},     {"joyb7", KC_JOYB7},
     {"joyx", KC_JOYX},       {"joyy", KC_JOYY},
     {"joythrottle", KC_JOYTHROTTLE},{"joyhatx", KC_JOYHATX},
-    {"joyhaty", KC_JOYHATY}, {"joyrudder", KC_JOYRUDDER}
+    {"joyhaty", KC_JOYHATY}, {"joyrudder", KC_JOYRUDDER},
+    {"lshift", KC_LSHIFT}
 }};
 
 std::vector<KeyMapName> INPEngine::KeyAltNamesTable ({
-    {"shift", KC_SHIFT},    {"lshift", KC_SHIFT},
+    {"shift", KC_SHIFT},    {"leftshift", KC_LSHIFT},
     {"lctrl", KC_CTRL},      {"rctrl", KC_CTRL},
     {"lalt", KC_ALT},        {"ralt", KC_CTRL},
 });

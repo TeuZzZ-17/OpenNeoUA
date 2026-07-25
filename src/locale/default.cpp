@@ -604,7 +604,8 @@ std::array<std::string, KEYNAME_MAX> DefaultStrings::Keynames = Common::ArrayIni
     {KEYNAME_JOYB4, "JOYB4"},
     {KEYNAME_JOYB5, "JOYB5"},
     {KEYNAME_JOYB6, "JOYB6"},
-    {KEYNAME_JOYB7, "JOYB7"}
+    {KEYNAME_JOYB7, "JOYB7"},
+    {KEYNAME_LSHIFT, "LEFT SHIFT"}
 });
 
 std::array<std::string, ADV_MAX> DefaultStrings::Advanced = Common::ArrayInit<std::string, ADV_MAX>(
