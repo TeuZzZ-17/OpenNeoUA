@@ -226,6 +226,7 @@ public:
     bool IsPlayerRoboAIBehavior() const;
     bool IsPlayerRoboAIBehaviorMoveActive() const;
     bool GetPlayerRoboAIBehaviorMoveTarget(vec3d *target) const;
+    bool GetPlayerRoboRelocationTarget(vec3d *target, bool *isTeleport) const;
 
 public:
     void HandleUserCommands(update_msg *arg);

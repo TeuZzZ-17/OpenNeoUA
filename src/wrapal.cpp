@@ -858,6 +858,19 @@ void CTsmpl::playback_rate(int newfreq)
     }
 }
 
+void CTsmpl::playback_scale(float scale)
+{
+    if ( scale != scale || scale <= 0.0f )
+        scale = 1.0f;
+
+    if ( SDL_LockMutex(_mutex) == 0)
+    {
+        alCheck(alSourcef(_source, AL_PITCH, scale));
+
+        SDL_UnlockMutex(_mutex);
+    }
+}
+
 void CTsmpl::play()
 {
     if ( SDL_LockMutex(_mutex) == 0)

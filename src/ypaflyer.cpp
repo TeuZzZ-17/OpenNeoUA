@@ -1180,6 +1180,8 @@ void NC_STACK_ypaflyer::Move(move_msg *arg)
     {
         tmp = _rotation.AxisZ().X0Z();
         v47 = _thraction;
+        if ( _world && _force > 0.0f )
+            v47 *= _world->GetPlayerSprintForce(this) / _force;
     }
 
     float v35 = 0.0;

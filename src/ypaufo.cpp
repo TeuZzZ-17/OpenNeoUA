@@ -870,7 +870,12 @@ void NC_STACK_ypaufo::Move(move_msg *arg)
         if ( v9 <= 0.001 )
             mv = -_rotation.AxisY().X0Z() * _ufoBoost;
         else
-            mv = az * (_thraction / v9);
+        {
+            float thraction = _thraction;
+            if ( _world && _force > 0.0f )
+                thraction *= _world->GetPlayerSprintForce(this) / _force;
+            mv = az * (thraction / v9);
+        }
     }
 
     float v44 = 0.0;
