@@ -122,6 +122,19 @@ static float ClampRecoilMultiplier(float value)
     return value;
 }
 
+static float ClampSprintPercent(float value, float maximum)
+{
+    if ( !std::isfinite(value) || value <= 0.0f )
+        return 0.0f;
+
+    return std::min(value, maximum);
+}
+
+static int32_t ClampSprintTime(int32_t value)
+{
+    return std::max<int32_t>(0, std::min<int32_t>(value, 600000));
+}
+
 static void InitStatusSoundFXDefaults(World::TVhclSound &snd, int defaultVolume)
 {
     snd.volume = defaultVolume;
@@ -307,7 +320,7 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
     {
         for (size_t i = 0; i < _o._GameShell->InputConfig.size(); i++)
         {
-            if ( i == World::INPUT_BIND_COCKPIT_CAMERA )
+            if ( i == World::INPUT_BIND_COCKPIT_CAMERA || i == World::INPUT_BIND_SPRINT )
                 continue;
 
             UserData::TInputConf &k = _o._GameShell->InputConfig[i];
@@ -1353,6 +1366,22 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "force") )
     {
         _vhcl->force = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "sprint_enable") )
+    {
+        _vhcl->sprint_enable = StrGetBool(p2);
+    }
+    else if ( !StriCmp(p1, "sprint_force_up_percent") )
+    {
+        _vhcl->sprint_force_up_percent = ClampSprintPercent(parser.stof(p2, 0), 1000.0f);
+    }
+    else if ( !StriCmp(p1, "sprint_ramp_time") )
+    {
+        _vhcl->sprint_ramp_time = ClampSprintTime(parser.stol(p2, NULL, 0));
+    }
+    else if ( !StriCmp(p1, "sprint_pitch_up_percent") )
+    {
+        _vhcl->sprint_pitch_up_percent = ClampSprintPercent(parser.stof(p2, 0), 100.0f);
     }
     else if ( !StriCmp(p1, "maxrot") )
     {
@@ -2684,7 +2713,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _unitGunID = -1;
         _unitDummyID = -1;
         _collID = -1;
-        _vhclID = parser.stol(opt, NULL, 0);
+        _vhclID = _forcedVhclID >= 0 ? _forcedVhclID : parser.stol(opt, NULL, 0);
         _vhcl = &_o._vhclProtos.at(_vhclID);
 
         *_vhcl = TVhclProto();
@@ -3001,6 +3030,16 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
             fx.sndPrm.time = 1000;
             fx.sndPrm_shk.time = 1000;
         }
+
+        // OpenUA custom: player-only launch shake defaults. Slot 0 keeps the
+        // feature disabled; mute 0 makes the local feedback independent from
+        // third-person camera distance.
+        _wpn->player_shk_launch.mag0 = 1.0;
+        _wpn->player_shk_launch.time = 1000;
+        _wpn->player_shk_launch.mute = 0.0;
+        _wpn->player_shk_launch.pos.x = 0.2;
+        _wpn->player_shk_launch.pos.y = 0.2;
+        _wpn->player_shk_launch.pos.z = 0.2;
 
         _wpn->initParams.clear();
         return true;
@@ -3483,6 +3522,26 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "shot_time_user") )
     {
         _wpn->shot_time_user = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "player_shk_launch_slot") )
+    {
+        const int slot = parser.stol(p2, NULL, 0);
+        _wpn->player_shk_launch.slot = slot > 0 ? slot : 0;
+    }
+    else if ( !StriCmp(p1, "player_shk_launch_time") )
+    {
+        const int time = parser.stol(p2, NULL, 0);
+        _wpn->player_shk_launch.time = time > 0 ? time : 0;
+    }
+    else if ( !StriCmp(p1, "player_shk_launch_mag0") )
+    {
+        const float mag = parser.stof(p2, 0);
+        _wpn->player_shk_launch.mag0 = std::isfinite(mag) && mag >= 0.0f ? mag : 0.0f;
+    }
+    else if ( !StriCmp(p1, "player_shk_launch_mag1") )
+    {
+        const float mag = parser.stof(p2, 0);
+        _wpn->player_shk_launch.mag1 = std::isfinite(mag) && mag >= 0.0f ? mag : 0.0f;
     }
     else if ( !StriCmp(p1, "salve_shots") )
     {

@@ -8,6 +8,7 @@
 #include "common/common.h"
 #include "inivals.h"
 #include "../utils.h"
+#include <algorithm>
 
 
 SFXEngine SFXEngine::SFXe;
@@ -73,6 +74,8 @@ int SFXEngine::init()
     audio_rev_stereo = false;
     dword_546F0C = 0;
     currentTime = 0;
+    timeScale = 1.0f;
+    timeScaleRemainder = 0.0;
     dword_546F14 = 0;
 
     for (int i = 0; i < 64; i++)
@@ -159,6 +162,25 @@ void SFXEngine::setMasterVolume(int vol)
         snd_channels[i].hSample->setMasterVolume(audio_volume);
 
 //    wrapper_setVolume(digDriver, vol);
+}
+
+void SFXEngine::SetTimeScale(float scale)
+{
+    if ( !isfinite(scale) || scale <= 0.0f )
+        scale = 1.0f;
+
+    scale = std::max(0.05f, std::min(scale, 1.0f));
+
+    if ( fabs(timeScale - scale) < 0.0001f )
+        return;
+
+    timeScale = scale;
+    timeScaleRemainder = 0.0;
+
+    // Music uses the same global time dilation as gameplay sounds. Menu and
+    // replay explicitly restore 1.0 before advancing their audio frame.
+    if ( musPlayer )
+        musPlayer->playback_scale(timeScale);
 }
 
 void SFXEngine::setReverseStereo(bool rev)
@@ -744,11 +766,17 @@ void SFXEngine::sb_0x424c74__sub2__sub1(TSoundSource *smpl)
         v14 = smpl->Pitch + baseRate;
     }
 
+    // Global gameplay time dilation changes normal playback rates. Selected
+    // one-shot UI/voice sources may opt out without changing the rest of the
+    // audio mix or the global gameplay time domain.
+    const float sourceTimeScale = smpl->IgnoreTimeScale ? 1.0f : timeScale;
+    v14 = (int)floor((double)v14 * (double)sourceTimeScale + 0.5);
+
     if ( v14 < 2000 )
         v14 = 2000;
     else
     {
-        int maxRate = baseRate > 44100 ? 192000 : 44100;
+        const int maxRate = (baseRate > 44100 || smpl->AllowExtendedRate) ? 192000 : 44100;
 
         if ( v14 > maxRate )
             v14 = maxRate;
@@ -1065,7 +1093,10 @@ const mat3x3 &SFXEngine::sb_0x424c74()
 
 void SFXEngine::sub_423EFC(int a1, const vec3d &a2, const vec3d &a3, const mat3x3 &a4)
 {
-    currentTime += a1;
+    const double scaledExact = (double)std::max(a1, 0) * (double)timeScale + timeScaleRemainder;
+    const size_t scaledDelta = (size_t)floor(scaledExact);
+    timeScaleRemainder = scaledExact - (double)scaledDelta;
+    currentTime += scaledDelta;
 
     stru_547018 = a2;
     stru_547024 = a3;

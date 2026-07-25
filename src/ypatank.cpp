@@ -124,6 +124,33 @@ static float ypatank_FixedTickGroundPoseRotMult()
     return mult;
 }
 
+static int32_t ypatank_PlayerTankBrakeTimeMs()
+{
+    int32_t brakeTime = System::IniConf::GamePlayerTankBrakeTime.Get<int32_t>();
+
+    if ( brakeTime <= 0 )
+        return 0;
+
+    // Keep malformed/extreme configuration from producing an effectively
+    // permanent braking phase. Positive values below 100 ms remain a valid
+    // near-instant stop; the upper bound is deliberately generous.
+    return std::min<int32_t>(brakeTime, 60000);
+}
+
+static float ypatank_ApproachZero(float value, float amount)
+{
+    if ( amount <= 0.0f || !std::isfinite(amount) )
+        return value;
+
+    if ( value > amount )
+        return value - amount;
+
+    if ( value < -amount )
+        return value + amount;
+
+    return 0.0f;
+}
+
 size_t NC_STACK_ypatank::Init(IDVList &stak)
 {
     if ( !NC_STACK_ypabact::Init(stak) )
@@ -1029,23 +1056,61 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         }
 
         float v75 = fabs(v88);
+        bool handBrakePressed = arg->inpt->Buttons.Is(3);
+        int32_t playerTankBrakeTimeMs = ypatank_PlayerTankBrakeTimeMs();
+        bool applyPlayerCoastBrake = playerTankBrakeTimeMs > 0 &&
+                                    !handBrakePressed &&
+                                    fabs(v88) <= 0.001f &&
+                                    (_status_flg & BACT_STFLAG_LAND);
 
-        _thraction += _force * (v90 * 0.75) * v88;
+        if ( applyPlayerCoastBrake )
+        {
+            // User_layer is the direct-player path. Releasing forward/reverse
+            // removes engine traction immediately, then the actual ground
+            // speed approaches zero over the configured time. AI_layer3 and
+            // shared prototype force/airconst remain untouched.
+            _thraction = 0.0f;
 
-        float v78;
+            float referenceSpeed = 0.0f;
+            if ( _force > 0.0f && _airconst_static > 0.0001f )
+                referenceSpeed = _force / _airconst_static;
 
-        if ( arg->inpt->Buttons.Is(31) )
-            v78 = _force * v75;
+            if ( !std::isfinite(referenceSpeed) || referenceSpeed <= 0.0001f )
+                referenceSpeed = fabs(_fly_dir_length);
+
+            float brakeTimeSeconds = playerTankBrakeTimeMs * 0.001f;
+            float speedStep = referenceSpeed * v90 / brakeTimeSeconds;
+            _fly_dir_length = ypatank_ApproachZero(_fly_dir_length, speedStep);
+
+            if ( fabs(_fly_dir_length) <= 0.001f )
+            {
+                _fly_dir_length = 0.0f;
+                _status_flg &= ~BACT_STFLAG_MOVE;
+            }
+            else
+            {
+                _status_flg |= BACT_STFLAG_MOVE;
+            }
+        }
         else
-            v78 = _force;
+        {
+            _thraction += _force * (v90 * 0.75) * v88;
 
-        if ( _thraction > v78 )
-            _thraction = v78;
-        if ( _thraction < -v78 )
-            _thraction = -v78;
+            float v78;
 
-        if ( fabs(v88) > 0.001 )
-            _status_flg |= BACT_STFLAG_MOVE;
+            if ( arg->inpt->Buttons.Is(31) )
+                v78 = _force * v75;
+            else
+                v78 = _force;
+
+            if ( _thraction > v78 )
+                _thraction = v78;
+            if ( _thraction < -v78 )
+                _thraction = -v78;
+
+            if ( fabs(v88) > 0.001 )
+                _status_flg |= BACT_STFLAG_MOVE;
+        }
 
         _gun_angle_user += v90 * arg->inpt->Sliders[5];
 
@@ -1155,7 +1220,7 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         {
             move_msg arg74;
 
-            if ( arg->inpt->Buttons.Is(3) )
+            if ( handBrakePressed )
             {
                 HandBrake(arg);
                 if ( GetHandBrakePower() > 0.0f )
@@ -1233,7 +1298,12 @@ void NC_STACK_ypatank::Move(move_msg *arg)
     if ( arg->flag & 1 )
         v47 = vec3d::OY(v50 * 2.0);
     else
-        v47 = _rotation.AxisZ() * _thraction;
+    {
+        float thraction = _thraction;
+        if ( _world && _force > 0.0f )
+            thraction *= _world->GetPlayerSprintForce(this) / _force;
+        v47 = _rotation.AxisZ() * thraction;
+    }
 
     vec3d v40 = vec3d::OY(v50) + v47 - _fly_dir * (_fly_dir_length * _airconst);
 
@@ -1447,6 +1517,14 @@ size_t NC_STACK_ypatank::CollisionWithBact(int arg)
                     && (!v12->IsDestroyed() || v114)
                     && v12 != this )
             {
+
+                if ( !v114 )
+                {
+                    vec3d collisionSelfCenter;
+                    vec3d collisionTargetCenter;
+                    if ( GetUnitCollisionContact(v12, &collisionSelfCenter, &collisionTargetCenter, NULL) )
+                        HandleUnitCollisionContact(v12, arg);
+                }
 
                 World::rbcolls *targetCompound = v12->getBACT_collNodes();
                 bool useSingleCompoundContact = !v114 &&

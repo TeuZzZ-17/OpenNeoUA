@@ -203,6 +203,7 @@ public:
     static Common::Ini::Key InputHotkey45;
     static Common::Ini::Key InputHotkey46;
     static Common::Ini::Key InputHotkey47;
+    static Common::Ini::Key InputHotkey48;
 
     static Common::Ini::Key AudioChannels;
     static Common::Ini::Key AudioVolume;
@@ -227,13 +228,14 @@ public:
     // "no" keeps vanilla biased timing; "yes" uses the true measured frame delta.
     static Common::Ini::Key GameFixedTick;
     static Common::Ini::Key GameFixedTickTankGroundPoseMult;
+    static Common::Ini::Key GamePlayerTankBrakeTime;
     static Common::Ini::Key GameTimeLine;
     static Common::Ini::Key GameRoboPlayerAIBehavior;
     static Common::Ini::Key GameSpectatorMode;
-    static Common::Ini::Key GameSpectatorVehicleID;
     static Common::Ini::Key GameWeaponWeaponCollision;
     static Common::Ini::Key GameWeaponAutoCollisionScale;
     static Common::Ini::Key GameRoboBuildingCollisionDamagePercent;
+    static Common::Ini::Key GameUnitCollisionDamagePercent;
     static Common::Ini::Key GamePowerStationEnergyMultiplier;
     static Common::Ini::Key GameFallDamageMultiplier;
     static Common::Ini::Key GamePushAtDeathMultiplier;
@@ -244,6 +246,21 @@ public:
     static Common::Ini::Key GameGemUnlockSound;
     static Common::Ini::Key GameGemUnlockTimeScale;
     static Common::Ini::Key GameWorldUiMaxDistance;
+
+    // OpenUA: opt-in global asset paths for automatically rendered status icons.
+    // Paths are relative to Data/. Missing, empty or invalid paths disable only
+    // that icon category. Blink count zero preserves immediate rendering.
+    static Common::Ini::Key UiStatusIconRegen;
+    static Common::Ini::Key UiStatusIconDrain;
+    static Common::Ini::Key UiStatusIconDamaged;
+    static Common::Ini::Key UiStatusIconSpawn;
+    static Common::Ini::Key UiStatusIconRadar;
+    static Common::Ini::Key UiStatusIconPower;
+    static Common::Ini::Key UiStatusIconSeekAndExplode;
+    static Common::Ini::Key UiStatusIconInvisible;
+    static Common::Ini::Key UiStatusIconProximityDefense;
+    static Common::Ini::Key UiStatusIconSprint;
+    static Common::Ini::Key UiStatusIconBlinkCount;
 
     // OpenUA: Black Sect "imperfect grey clone" runtime balance (owner/faction 5 only).
     // Pure runtime maluses applied to live actors; never mutate shared prototypes.

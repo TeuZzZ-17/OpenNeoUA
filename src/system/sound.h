@@ -74,9 +74,14 @@ struct TSoundSource
     int16_t Volume = 0;
     uint16_t Flags = 0;
     int Pitch = 0;
+    // Some runtime effects intentionally raise a loop above the legacy 44.1 kHz
+    // playback ceiling. Disabled by default so vanilla sounds keep their exact
+    // historical rate limit.
+    bool AllowExtendedRate = false;
     TSndCarrier *PCarrier = NULL;
     int16_t Priority = 0;
     int16_t PriorityBias = 0;
+    bool IgnoreTimeScale = false;
     size_t CurrentFrag = 0;
     size_t StartTime = 0;
     float PFxMag = 0.0;
@@ -273,6 +278,7 @@ public:
     void SetMusicTrack(int trackID, int minDelay, int maxDelay);
     void StopMusicTrack(bool reset = true);
     void PlayMusicTrack();
+    void SetTimeScale(float scale);
 
     void UpdateSoundCarrier(TSndCarrier *smpls);
     const mat3x3 &sb_0x424c74(); //Update sounds and return shake matrix
@@ -329,6 +335,8 @@ public:
     bool audio_rev_stereo;
     int dword_546F0C;
     size_t currentTime;
+    float timeScale;
+    double timeScaleRemainder;
     int dword_546F14;
     float flt_546F18[64];
     vec3d stru_547018;

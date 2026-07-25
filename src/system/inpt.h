@@ -245,6 +245,10 @@ namespace Input
         KC_JOYHATY,
         KC_JOYRUDDER,
 
+        // OpenUA: distinct left Shift binding. Appended to preserve all
+        // existing serialized key-code values.
+        KC_LSHIFT,
+
 
         KC_MAX
     };
@@ -351,6 +355,12 @@ public:
 
     static bool GetKeyState(uint16_t id)
     {
+        // Legacy KC_SHIFT remains a generic Shift binding. Keep Left Shift
+        // compatible with old actions while allowing new actions to bind only
+        // the physical left key through KC_LSHIFT.
+        if ( id == KC_SHIFT )
+            return KeyMatrix.at(KC_SHIFT).down || KeyMatrix.at(KC_LSHIFT).down;
+
         return KeyMatrix.at(id).down;
     }
 
@@ -387,7 +397,7 @@ public:
     TQueryState _keyboard;
     std::array<InputNodeList, 32> _buttons;
     std::array<InputNodeList, 32> _sliders;
-    std::array<int16_t, 48>       _hotKeys;
+    std::array<int16_t, 49>       _hotKeys;
 
     static std::array<KeyInfo, KC_MAX>      KeyMatrix;
     static std::array<std::string, KC_MAX>  KeyTitle;

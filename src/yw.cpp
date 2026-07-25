@@ -55,7 +55,6 @@ uint32_t bact_id = 0x10000;
 
 static constexpr uint32_t GEM_NEW_UI_NOTIFICATION_DURATION_MS = 8000;
 static constexpr float GEM_NEW_UI_MIN_TIME_SCALE = 0.05f;
-
 static float yw_GetGemUnlockTimeScale()
 {
     const std::string value = System::IniConf::GameGemUnlockTimeScale.Get<std::string>();
@@ -78,19 +77,20 @@ static float yw_GetGemUnlockTimeScale()
     }
 }
 
-static int32_t yw_GetGemScaledFrameTime(NC_STACK_ypaworld *yw, int32_t frameTime)
+static float yw_GetActiveGemUnlockTimeScale(NC_STACK_ypaworld *yw)
 {
     if ( !yw || yw->_isNetGame || !yw->HasActiveNewGemNotification() )
+        return 1.0f;
+
+    return yw_GetGemUnlockTimeScale();
+}
+
+static int32_t yw_GetGemScaledFrameTime(NC_STACK_ypaworld *yw, int32_t frameTime, float scale)
+{
+    if ( !yw || scale >= 1.0f )
     {
         if ( yw )
             yw->_gemUnlockTimeScaleRemainder = 0.0;
-        return frameTime;
-    }
-
-    const float scale = yw_GetGemUnlockTimeScale();
-    if ( scale >= 1.0f )
-    {
-        yw->_gemUnlockTimeScaleRemainder = 0.0;
         return frameTime;
     }
 
@@ -1527,6 +1527,61 @@ bool ParseAssignFile(const std::string &file)
 }
 
 
+bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
+{
+    static const std::string spectatorScript = "data:scripts/spectator_vehicle.txt";
+
+    if ( !uaFileExist(spectatorScript) )
+    {
+        ypa_log_out("WARNING: spectator vehicle file %s is missing. Spectator mode disabled for this level.\n", spectatorScript.c_str());
+        _spectatorVehicleProtoID = -1;
+        return false;
+    }
+
+    int32_t targetID = _spectatorVehicleProtoID;
+    if ( targetID <= 0 || targetID >= (int32_t)_vhclProtos.size() )
+    {
+        targetID = -1;
+        for ( int32_t i = (int32_t)_vhclProtos.size() - 1; i > 0; --i )
+        {
+            if ( _vhclProtos[i].Index < 0 || _vhclProtos[i].model_id == BACT_TYPES_NOPE )
+            {
+                targetID = i;
+                break;
+            }
+        }
+    }
+
+    if ( targetID < 0 )
+    {
+        ypa_log_out("WARNING: no free vehicle prototype slot is available for spectator mode.\n");
+        _spectatorVehicleProtoID = -1;
+        return false;
+    }
+
+    World::TVhclProto previous = _vhclProtos[targetID];
+    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+    ScriptParser::HandlersList parsers {
+        new World::Parsers::VhclProtoParser(this, targetID)
+    };
+
+    bool parsed = ScriptParser::ParseFile(spectatorScript, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    Common::Env.SetPrefix("rsrc", oldRsrc);
+
+    if ( !parsed || _vhclProtos[targetID].Index != targetID || _vhclProtos[targetID].model_id == BACT_TYPES_NOPE )
+    {
+        _vhclProtos[targetID] = previous;
+        _spectatorVehicleProtoID = -1;
+        ypa_log_out("WARNING: spectator vehicle file %s is invalid. Spectator mode disabled for this level.\n", spectatorScript.c_str());
+        return false;
+    }
+
+    _vhclProtos[targetID].disable_enable_bitmask = 0;
+    _spectatorVehicleProtoID = targetID;
+    ypa_log_out("Loaded OpenUA spectator vehicle from %s into runtime prototype slot %d.\n", spectatorScript.c_str(), targetID);
+    return true;
+}
+
 bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
 {
     std::string buf = Common::Env.SetPrefix("rsrc", "data:");
@@ -1809,6 +1864,13 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             arg->TimeStamp += arg->DTime;
         }
 
+        const int32_t unscaledFrameTime = arg->DTime;
+        const float gemTimeScale = yw_GetActiveGemUnlockTimeScale(this);
+
+        // The GEM slowdown is one global gameplay time domain. Audio advances
+        // and plays back with the same scale as physics, AI, timers and sprint.
+        SFXEngine::SFXe.SetTimeScale(gemTimeScale);
+
         if ( _userUnit )
         {
             if ( _framesElapsed == 1 )
@@ -1872,9 +1934,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
         bool gameplayFrozen = openUADebug && _debugGameplayFrozen;
 
-        const int32_t unscaledFrameTime = arg->DTime;
         if ( !gameplayFrozen )
-            arg->DTime = yw_GetGemScaledFrameTime(this, arg->DTime);
+            arg->DTime = yw_GetGemScaledFrameTime(this, arg->DTime, gemTimeScale);
         else
             _gemUnlockTimeScaleRemainder = 0.0;
 
@@ -1889,6 +1950,16 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         _updateMessage.frameTime = arg->DTime;
         _updateMessage.units_count = 0;
         _updateMessage.inpt = arg->field_8;
+        int32_t sprintFrameTime = unscaledFrameTime;
+        if ( !System::IniConf::GameFixedTick.Get<bool>() && !_screenShotSeq )
+            // Preserve the existing real-time sprint ramp when no GEM slowdown
+            // is active by removing the legacy per-frame +1 gameplay bias.
+            sprintFrameTime = std::max(sprintFrameTime - 1, 1);
+        if ( gemTimeScale < 1.0f )
+            // The same global GEM scale must also govern the sprint state
+            // machine; otherwise pitch reaches full boost before physics does.
+            sprintFrameTime = std::max((int32_t)floor((double)sprintFrameTime * gemTimeScale + 0.5), 1);
+        UpdatePlayerSprint(_updateMessage.inpt, gameplayFrozen ? 0 : sprintFrameTime);
         _FPS = 1024 / unscaledFrameTime;
         _profileVals[PFID_FPS] = _FPS;
 
@@ -2210,6 +2281,288 @@ bool NC_STACK_ypaworld::IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK
            HasActiveNewGemNotification();
 }
 
+bool NC_STACK_ypaworld::IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const
+{
+    if ( _isNetGame || !bact || bact != _userUnit || !bact->_sprint_enable ||
+         bact->_sprint_force_up_percent <= 0.0f || bact->_isDummy || IsSpectatorBact(bact) ||
+         !bact->getBACT_inputting() ||
+         (bact->_status != BACT_STATUS_NORMAL && bact->_status != BACT_STATUS_IDLE) )
+    {
+        return false;
+    }
+
+    switch ( bact->_bact_type )
+    {
+    case BACT_TYPES_BACT:
+    case BACT_TYPES_TANK:
+    case BACT_TYPES_ZEPP:
+    case BACT_TYPES_FLYER:
+    case BACT_TYPES_UFO:
+    case BACT_TYPES_CAR:
+    case BACT_TYPES_HOVER:
+        return true;
+    default:
+        return false;
+    }
+}
+
+float NC_STACK_ypaworld::GetPlayerSprintForce(const NC_STACK_ypabact *bact) const
+{
+    if ( !IsPlayerSprintEnabledFor(bact) || bact != _playerSprintUnit )
+        return bact ? bact->_force : 0.0f;
+
+    return bact->_force * (1.0f + bact->_sprint_force_up_percent * 0.01f * _playerSprintFactor);
+}
+
+float NC_STACK_ypaworld::GetPlayerSprintPitchScale(const NC_STACK_ypabact *bact) const
+{
+    if ( !IsPlayerSprintEnabledFor(bact) || bact != _playerSprintUnit )
+        return 0.0f;
+
+    return bact->_sprint_pitch_up_percent * 0.01f * _playerSprintFactor;
+}
+
+bool NC_STACK_ypaworld::IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) const
+{
+    return IsPlayerSprintEnabledFor(bact) && bact == _playerSprintUnit &&
+           _playerSprintFactor > 0.0f &&
+           (_playerSprintState == PLAYER_SPRINT_RAMP_UP ||
+            _playerSprintState == PLAYER_SPRINT_ACTIVE ||
+            _playerSprintState == PLAYER_SPRINT_RAMP_DOWN);
+}
+
+static bool yw_PlayerSprintAcceleratorPressed(const NC_STACK_ypabact *bact, const TInputState *inpt)
+{
+    if ( !bact || !inpt )
+        return false;
+
+    // Ground units use Drive Speed, while all supported air/hover classes use
+    // Fly Speed.  Positive input is the forward/increase-thrust accelerator;
+    // reverse or decrease-thrust input must not arm Sprint.
+    switch ( bact->_bact_type )
+    {
+    case BACT_TYPES_TANK:
+    case BACT_TYPES_CAR:
+        return inpt->Sliders[4] > 0.001f;
+
+    case BACT_TYPES_BACT:
+    case BACT_TYPES_ZEPP:
+    case BACT_TYPES_FLYER:
+    case BACT_TYPES_UFO:
+    case BACT_TYPES_HOVER:
+        return inpt->Sliders[2] > 0.001f;
+
+    default:
+        return false;
+    }
+}
+
+static bool yw_PlayerSprintCanRun(const NC_STACK_ypabact *bact, const TInputState *inpt)
+{
+    if ( !bact )
+        return false;
+
+    const bool airborne = !(bact->_status_flg & BACT_STFLAG_LAND);
+
+    // Helicopters and UFOs may engage Sprint whenever they are airborne.
+    // Their flight model supports useful thrust while hovering in place.
+    if ( bact->_bact_type == BACT_TYPES_BACT ||
+         bact->_bact_type == BACT_TYPES_UFO )
+    {
+        return airborne;
+    }
+
+    // Plane, glider and zeppelin scripts all use the flyer runtime class.
+    // They must already have real translational speed: yawing in place changes
+    // orientation only and must not count as forward/backward movement.  The
+    // 1.5 threshold matches the flyer Move() cut-off below which position is
+    // not advanced by the physics path.
+    if ( bact->_bact_type == BACT_TYPES_FLYER ||
+         bact->_bact_type == BACT_TYPES_ZEPP )
+    {
+        return airborne && fabs(bact->_fly_dir_length) > 1.5f;
+    }
+
+    // Ground units still cannot preload Sprint while stationary and must keep
+    // their positive accelerator pressed. The small threshold matches the
+    // movement cut-off already used by vehicle physics.
+    return yw_PlayerSprintAcceleratorPressed(bact, inpt) &&
+           fabs(bact->_fly_dir_length) > 0.1f;
+}
+
+static void yw_ClampTankSprintExcessSpeed(NC_STACK_ypabact *bact, float sprintFactor)
+{
+    if ( !bact || bact->_bact_type != BACT_TYPES_TANK || bact->_force <= 0.0f ||
+         fabs(bact->_airconst_static) <= 0.001f )
+        return;
+
+    sprintFactor = std::max(0.0f, std::min(sprintFactor, 1.0f));
+
+    const float normalSpeed = fabs(bact->_force / bact->_airconst_static);
+    const float sprintSpeedLimit = normalSpeed *
+        (1.0f + bact->_sprint_force_up_percent * 0.01f * sprintFactor);
+
+    if ( fabs(bact->_fly_dir_length) > sprintSpeedLimit )
+        bact->_fly_dir_length = bact->_fly_dir_length < 0.0f ? -sprintSpeedLimit : sprintSpeedLimit;
+}
+
+void NC_STACK_ypaworld::ResetPlayerSprint()
+{
+    _playerSprintState = PLAYER_SPRINT_READY;
+    _playerSprintUnit = NULL;
+    _playerSprintPhaseElapsed = 0;
+    _playerSprintFactor = 0.0f;
+}
+
+void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
+{
+    (void)inpt;
+
+    if ( !IsPlayerSprintEnabledFor(_userUnit) )
+    {
+        ResetPlayerSprint();
+        return;
+    }
+
+    if ( _playerSprintUnit != _userUnit )
+    {
+        ResetPlayerSprint();
+        _playerSprintUnit = _userUnit;
+    }
+
+    const UserData::TInputConf &bind = _GameShell->InputConfig[World::INPUT_BIND_SPRINT];
+    const bool bindingAssigned =
+        bind.Type == World::INPUT_BIND_TYPE_HOTKEY &&
+        bind.PKeyCode > Input::KC_NONE && bind.PKeyCode < Input::KC_MAX;
+    const bool sprintKeyDown = bindingAssigned && Input::Engine.GetKeyState(bind.PKeyCode);
+    const bool sprintRequested = sprintKeyDown &&
+                                 yw_PlayerSprintCanRun(_playerSprintUnit, inpt);
+
+    const int32_t rampDuration = std::max(_playerSprintUnit->_sprint_ramp_time, 0);
+
+    // Hold-to-sprint with no duration limit or cooldown. Sprint can only run
+    // while the unit is moving and its forward accelerator is held. Pressing
+    // again during the return ramp reverses it smoothly instead of waiting for
+    // zero.
+    if ( sprintRequested )
+    {
+        if ( _playerSprintState == PLAYER_SPRINT_READY )
+        {
+            _playerSprintState = PLAYER_SPRINT_RAMP_UP;
+            _playerSprintPhaseElapsed = 0;
+            _playerSprintFactor = 0.0f;
+        }
+        else if ( _playerSprintState == PLAYER_SPRINT_RAMP_DOWN )
+        {
+            if ( rampDuration == 0 )
+            {
+                _playerSprintState = PLAYER_SPRINT_ACTIVE;
+                _playerSprintPhaseElapsed = 0;
+                _playerSprintFactor = 1.0f;
+            }
+            else
+            {
+                _playerSprintState = PLAYER_SPRINT_RAMP_UP;
+                _playerSprintPhaseElapsed = (int32_t)(_playerSprintFactor * rampDuration);
+                _playerSprintPhaseElapsed = std::max(0, std::min(_playerSprintPhaseElapsed, rampDuration));
+            }
+        }
+    }
+
+    if ( !sprintRequested && (_playerSprintState == PLAYER_SPRINT_RAMP_UP ||
+                              _playerSprintState == PLAYER_SPRINT_ACTIVE) )
+    {
+        if ( rampDuration == 0 || _playerSprintFactor <= 0.0f )
+        {
+            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f);
+            _playerSprintState = PLAYER_SPRINT_READY;
+            _playerSprintPhaseElapsed = 0;
+            _playerSprintFactor = 0.0f;
+        }
+        else
+        {
+            _playerSprintState = PLAYER_SPRINT_RAMP_DOWN;
+            _playerSprintPhaseElapsed = (int32_t)((1.0f - _playerSprintFactor) * rampDuration);
+            _playerSprintPhaseElapsed = std::max(0, std::min(_playerSprintPhaseElapsed, rampDuration));
+        }
+    }
+
+    int32_t remaining = std::max(frameTime, 0);
+    while ( remaining > 0 )
+    {
+        int32_t phaseDuration = 0;
+        switch ( _playerSprintState )
+        {
+        case PLAYER_SPRINT_READY:
+            _playerSprintFactor = 0.0f;
+            return;
+
+        case PLAYER_SPRINT_RAMP_UP:
+            phaseDuration = rampDuration;
+            if ( phaseDuration == 0 )
+            {
+                _playerSprintState = PLAYER_SPRINT_ACTIVE;
+                _playerSprintPhaseElapsed = 0;
+                _playerSprintFactor = 1.0f;
+                continue;
+            }
+            break;
+
+        case PLAYER_SPRINT_ACTIVE:
+            _playerSprintFactor = 1.0f;
+            return;
+
+        case PLAYER_SPRINT_RAMP_DOWN:
+            phaseDuration = rampDuration;
+            if ( phaseDuration == 0 )
+            {
+                yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f);
+                _playerSprintState = PLAYER_SPRINT_READY;
+                _playerSprintPhaseElapsed = 0;
+                _playerSprintFactor = 0.0f;
+                continue;
+            }
+            break;
+        }
+
+        const int32_t phaseRemaining = std::max(phaseDuration - _playerSprintPhaseElapsed, 0);
+        const int32_t step = std::min(remaining, phaseRemaining);
+        _playerSprintPhaseElapsed += step;
+        remaining -= step;
+
+        if ( _playerSprintState == PLAYER_SPRINT_RAMP_UP )
+            _playerSprintFactor = (float)_playerSprintPhaseElapsed / (float)phaseDuration;
+        else if ( _playerSprintState == PLAYER_SPRINT_RAMP_DOWN )
+        {
+            _playerSprintFactor = 1.0f - (float)_playerSprintPhaseElapsed / (float)phaseDuration;
+            // Tank traction returns to vanilla immediately, but its accumulated
+            // overspeed (and therefore the vanilla engine pitch) otherwise lingers
+            // until the player brakes. Recover only the sprint-created excess
+            // along the same smooth ramp-down curve.
+            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, _playerSprintFactor);
+        }
+
+        if ( _playerSprintPhaseElapsed < phaseDuration )
+            return;
+
+        _playerSprintPhaseElapsed = 0;
+        switch ( _playerSprintState )
+        {
+        case PLAYER_SPRINT_RAMP_UP:
+            _playerSprintState = PLAYER_SPRINT_ACTIVE;
+            _playerSprintFactor = 1.0f;
+            break;
+        case PLAYER_SPRINT_RAMP_DOWN:
+            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f);
+            _playerSprintState = PLAYER_SPRINT_READY;
+            _playerSprintFactor = 0.0f;
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 void NC_STACK_ypaworld::RecordGemNotificationChange(uint8_t targetKind, int32_t targetProtoId,
                                                      uint8_t changeKind, int32_t previousRawValue,
                                                      int32_t newRawValue, bool newlyEnabled)
@@ -2338,6 +2691,7 @@ void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
     source.PSample = sample->GetSampleData();
     source.Volume = 100;
     source.Pitch = 0;
+    source.IgnoreTimeScale = true;
     SFXEngine::SFXe.startSound(&_GameShell->samples1_info, soundId);
 }
 
@@ -2427,6 +2781,7 @@ void sub_47C29C(NC_STACK_ypaworld *yw, cellArea *cell, int a3)
     else
         v14.MsgID = 0;
 
+    v14.IgnoreAudioTimeScale = true;
     yw->ypaworld_func159(&v14);
     yw->PlayConfiguredGemUnlockSound();
 
@@ -2536,6 +2891,7 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
     else
         arg159.MsgID = 0;
 
+    arg159.IgnoreAudioTimeScale = true;
     ypaworld_func159(&arg159);
 
     if ( parseSuccessful )
@@ -3095,6 +3451,10 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_base_force = vhcl.force;
         bacto->_base_maxrot = vhcl.maxrot;
         bacto->_force = vhcl.force;
+        bacto->_sprint_enable = vhcl.sprint_enable;
+        bacto->_sprint_force_up_percent = vhcl.sprint_force_up_percent;
+        bacto->_sprint_ramp_time = vhcl.sprint_ramp_time;
+        bacto->_sprint_pitch_up_percent = vhcl.sprint_pitch_up_percent;
         bacto->_maxrot = vhcl.maxrot;
         bacto->_height = vhcl.height;
         bacto->_radius = vhcl.radius;
@@ -4174,6 +4534,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _viewerBact = NULL;
     _userRobo = NULL;
     _userUnit = NULL;
+    ResetPlayerSprint();
     _bactOnMouse = NULL;
     _bactPrevClicked = NULL;
     _cellOnMouse = NULL;
@@ -4360,52 +4721,53 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     if (usr->_gfxModeIndex < 0)
         usr->_gfxModeIndex = 0;
 
-    usr->InputConfig[World::INPUT_BIND_DRIVE_DIR]   = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 3,  Input::KC_RIGHT, Input::KC_LEFT);
-    usr->InputConfig[World::INPUT_BIND_DRIVE_SPEED] = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 4,  Input::KC_UP, Input::KC_DOWN);
-    usr->InputConfig[World::INPUT_BIND_FLY_DIR]     = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 0,  Input::KC_RIGHT, Input::KC_LEFT);
-    usr->InputConfig[World::INPUT_BIND_FLY_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 1,  Input::KC_UP, Input::KC_DOWN);
-    usr->InputConfig[World::INPUT_BIND_FLY_SPEED]   = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 2,  Input::KC_CTRL, Input::KC_SHIFT);
-    usr->InputConfig[World::INPUT_BIND_GUN_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 5,  Input::KC_A, Input::KC_Y);
-    usr->InputConfig[World::INPUT_BIND_FIRE]        = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 0,  Input::KC_SPACE);
+    usr->InputConfig[World::INPUT_BIND_DRIVE_DIR]   = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 3,  Input::KC_D, Input::KC_A);
+    usr->InputConfig[World::INPUT_BIND_DRIVE_SPEED] = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 4,  Input::KC_W, Input::KC_S);
+    usr->InputConfig[World::INPUT_BIND_FLY_DIR]     = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 0,  Input::KC_D, Input::KC_A);
+    usr->InputConfig[World::INPUT_BIND_FLY_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 1,  Input::KC_W, Input::KC_S);
+    usr->InputConfig[World::INPUT_BIND_FLY_SPEED]   = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 2,  Input::KC_Q, Input::KC_Z);
+    usr->InputConfig[World::INPUT_BIND_GUN_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 5,  Input::KC_2, Input::KC_1);
+    usr->InputConfig[World::INPUT_BIND_FIRE]        = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 0,  Input::KC_RETURN);
     usr->InputConfig[World::INPUT_BIND_CAMFIRE]     = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1,  Input::KC_TAB);
-    usr->InputConfig[World::INPUT_BIND_GUN]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 2,  Input::KC_RETURN);
-    usr->InputConfig[World::INPUT_BIND_BRAKE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3,  Input::KC_NUM0);
-    usr->InputConfig[World::INPUT_BIND_HUD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 25, Input::KC_V);
-    usr->InputConfig[World::INPUT_BIND_NEW]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 2,  Input::KC_N);
-    usr->InputConfig[World::INPUT_BIND_ADD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 3,  Input::KC_A);
+    usr->InputConfig[World::INPUT_BIND_GUN]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 2,  Input::KC_X);
+    usr->InputConfig[World::INPUT_BIND_BRAKE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3,  Input::KC_SPACE);
+    usr->InputConfig[World::INPUT_BIND_HUD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 25, Input::KC_H);
+    usr->InputConfig[World::INPUT_BIND_NEW]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 2,  Input::KC_C);
+    usr->InputConfig[World::INPUT_BIND_ADD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 3,  Input::KC_Q);
     usr->InputConfig[World::INPUT_BIND_ORDER]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 0,  Input::KC_O);
     usr->InputConfig[World::INPUT_BIND_ATTACK]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 1,  Input::KC_SPACE);
-    usr->InputConfig[World::INPUT_BIND_CONTROL]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 4,  Input::KC_C);
-    usr->InputConfig[World::INPUT_BIND_AUTOPILOT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 7,  Input::KC_G);
+    usr->InputConfig[World::INPUT_BIND_CONTROL]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 4,  Input::KC_J);
+    usr->InputConfig[World::INPUT_BIND_AUTOPILOT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 7,  Input::KC_B);
     usr->InputConfig[World::INPUT_BIND_MAP]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 8,  Input::KC_M);
-    usr->InputConfig[World::INPUT_BIND_SQ_MANAGE]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 9,  Input::KC_F);
-    usr->InputConfig[World::INPUT_BIND_LANDLAYER]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 10, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_OWNER]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 11, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_HEIGHT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 12, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_LOCKVIEW]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 14, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_ZOOMIN]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 16, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_ZOOMOUT]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 17, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_MINIMAP]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 18, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_NEXT_COMM]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 20, Input::KC_F1);
-    usr->InputConfig[World::INPUT_BIND_TO_HOST]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 21, Input::KC_F2);
-    usr->InputConfig[World::INPUT_BIND_NEXT_UNIT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 22, Input::KC_F3);
-    usr->InputConfig[World::INPUT_BIND_TO_COMM]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 23, Input::KC_F4);
+    usr->InputConfig[World::INPUT_BIND_SQ_MANAGE]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 9,  Input::KC_E);
+    usr->InputConfig[World::INPUT_BIND_LANDLAYER]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 10, Input::KC_NUM1);
+    usr->InputConfig[World::INPUT_BIND_OWNER]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 11, Input::KC_NUM2);
+    usr->InputConfig[World::INPUT_BIND_HEIGHT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 12, Input::KC_NUM3);
+    usr->InputConfig[World::INPUT_BIND_LOCKVIEW]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 14, Input::KC_NUM5);
+    usr->InputConfig[World::INPUT_BIND_ZOOMIN]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 16, Input::KC_NUMPLUS);
+    usr->InputConfig[World::INPUT_BIND_ZOOMOUT]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 17, Input::KC_NUMMINUS);
+    usr->InputConfig[World::INPUT_BIND_MINIMAP]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 18, Input::KC_NUM4);
+    usr->InputConfig[World::INPUT_BIND_NEXT_COMM]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 20, Input::KC_F7);
+    usr->InputConfig[World::INPUT_BIND_TO_HOST]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 21, Input::KC_F4);
+    usr->InputConfig[World::INPUT_BIND_NEXT_UNIT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 22, Input::KC_F6);
+    usr->InputConfig[World::INPUT_BIND_TO_COMM]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 23, Input::KC_F5);
     usr->InputConfig[World::INPUT_BIND_QUIT]        = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 24, Input::KC_ESCAPE);
-    usr->InputConfig[World::INPUT_BIND_LOG_WND]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 27, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_LAST_MSG]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 31, Input::KC_BACKSPACE);
-    usr->InputConfig[World::INPUT_BIND_PAUSE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 32, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_TO_ALL]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 37, Input::KC_NUM5);
+    usr->InputConfig[World::INPUT_BIND_LOG_WND]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 27, Input::KC_I);
+    usr->InputConfig[World::INPUT_BIND_LAST_MSG]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 31, Input::KC_F8);
+    usr->InputConfig[World::INPUT_BIND_PAUSE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 32, Input::KC_P);
+    usr->InputConfig[World::INPUT_BIND_TO_ALL]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 37, Input::KC_SHIFT);
     usr->InputConfig[World::INPUT_BIND_AGGR_1]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 38, Input::KC_1);
     usr->InputConfig[World::INPUT_BIND_AGGR_2]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 39, Input::KC_2);
     usr->InputConfig[World::INPUT_BIND_AGGR_3]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 40, Input::KC_3);
     usr->InputConfig[World::INPUT_BIND_AGGR_4]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 41, Input::KC_4);
     usr->InputConfig[World::INPUT_BIND_AGGR_5]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 42, Input::KC_5);
     usr->InputConfig[World::INPUT_BIND_WAPOINT]     = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 4,  Input::KC_SHIFT);
-    usr->InputConfig[World::INPUT_BIND_HELP]        = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 43, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_LAST_SEAT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 44, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_SET_COMM]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 45, Input::KC_NONE);
-    usr->InputConfig[World::INPUT_BIND_ANALYZER]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 46, Input::KC_NONE);
+    usr->InputConfig[World::INPUT_BIND_HELP]        = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 43, Input::KC_F1);
+    usr->InputConfig[World::INPUT_BIND_LAST_SEAT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 44, Input::KC_BACKSPACE);
+    usr->InputConfig[World::INPUT_BIND_SET_COMM]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 45, Input::KC_L);
+    usr->InputConfig[World::INPUT_BIND_ANALYZER]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 46, Input::KC_F2);
     usr->InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
+    usr->InputConfig[World::INPUT_BIND_SPRINT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
 
     usr->sub_46D2B4();
 
@@ -7881,6 +8243,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_HELP]        = Locale::Text::Inputs(Locale::INPUTS_HELP);
     _GameShell->InputConfigTitle[World::INPUT_BIND_ANALYZER]    = Locale::Text::Inputs(Locale::INPUTS_ANALYZER);
     _GameShell->InputConfigTitle[World::INPUT_BIND_COCKPIT_CAMERA] = "Toggle Cockpit Camera";
+    _GameShell->InputConfigTitle[World::INPUT_BIND_SPRINT]      = "Sprint";
 
 
 
@@ -8228,6 +8591,7 @@ void NC_STACK_ypaworld::ProcessGameShell()
 {
     _GameShell->envAction.action = EnvAction::ACTION_NONE;
 
+    SFXEngine::SFXe.SetTimeScale(1.0f);
     SFXEngine::SFXe.sub_423EFC(_GameShell->DTime, vec3d(0.0), vec3d(0.0), mat3x3::Ident());
 
     GFX::Engine.BeginFrame();
@@ -8291,7 +8655,7 @@ void NC_STACK_ypaworld::ProcessGameShell()
 void NC_STACK_ypaworld::ypaworld_func159(yw_arg159 *arg)
 {
     if ( arg->MsgID )
-        VoiceMessagePlayMsg(arg->unit, arg->Priority, arg->MsgID);
+        VoiceMessagePlayMsg(arg->unit, arg->Priority, arg->MsgID, arg->IgnoreAudioTimeScale);
 
     if ( IsSpectatorControlled() && (arg->MsgID || arg->unit) )
         return;
@@ -8593,6 +8957,7 @@ void NC_STACK_ypaworld::ypaworld_func163(base_64arg *arg)
 
     vec3d a3a = _userUnit->_fly_dir * _userUnit->_fly_dir_length;
 
+    SFXEngine::SFXe.SetTimeScale(1.0f);
     SFXEngine::SFXe.sub_423EFC(arg->DTime, _userUnit->_position, a3a, _userUnit->_rotation);
 
     for ( NC_STACK_ypabact* &bct : _userUnit->_kidList )
@@ -9371,6 +9736,11 @@ bool NC_STACK_ypaworld::ReloadInput(size_t id)
 
     if ( kconf.Type == World::INPUT_BIND_TYPE_HOTKEY )
     {
+        // Sprint is polled directly so it can use Left Shift without stealing
+        // legacy generic Shift hotkeys such as the existing message controls.
+        if ( id == World::INPUT_BIND_SPRINT )
+            return true;
+
         if ( !Input::Engine.SetHotKey(kconf.KeyID, keyConfStr) )
             ypa_log_out("input.engine: WARNING: Hotkey[%d] (%s) not accepted.\n", kconf.KeyID, keyConfStr.c_str());
     }

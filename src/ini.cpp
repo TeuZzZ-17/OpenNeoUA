@@ -60,6 +60,7 @@ void ParseLine(std::string line, std::vector<T> *lst)
         {
             if ( !StriCmp(Deref(v).Name, token) )
             {
+                Deref(v).WasSet = true;
                 std::string tmp;
                 switch ( Deref(v).Type )
                 {
@@ -86,6 +87,8 @@ void ParseLine(std::string line, std::vector<T> *lst)
                 case KT_STRING:
                     if ( splt.GetNext(&tmp, "=") )
                         Deref(v).Value = std::string(tmp);
+                    else
+                        Deref(v).Value = std::string();
                     break;
 
                 default:
