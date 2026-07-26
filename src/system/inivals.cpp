@@ -279,6 +279,7 @@ Common::Ini::Key IniConf::UiStatusIconSeekAndExplode("ui.status_icon_seek_and_ex
 Common::Ini::Key IniConf::UiStatusIconInvisible("ui.status_icon_invisible", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconProximityDefense("ui.status_icon_proximity_defense", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconSprint("ui.status_icon_sprint", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Common::Ini::KT_STRING);
 // Number of complete 200 ms on/off blink cycles used both when a dynamic
 // status icon appears and when it disappears. Zero keeps the previous
 // immediate behavior; runtime clamps the value to 0..10.
@@ -522,6 +523,7 @@ void IniConf::Init()
         , &UiStatusIconInvisible
         , &UiStatusIconProximityDefense
         , &UiStatusIconSprint
+        , &UiStatusIconHandbrake
         , &UiStatusIconBlinkCount
         , &GameBlackSectCloneBalance
         , &GameBlackSectCloneMalusPercent

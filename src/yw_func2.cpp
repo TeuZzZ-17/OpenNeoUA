@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <algorithm>
+#include <cctype>
 
 #include "includes.h"
 #include "yw.h"
@@ -52,16 +53,16 @@ static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
 
 static std::string DefaultCameraViewLabel(bool cockpit)
 {
-    return cockpit ? "Cockpit" : "POV";
+    return Locale::Text::OpenUA(cockpit ? Locale::OUA_COCKPIT : Locale::OUA_POV);
 }
 
 static std::string BlendingLabel(int v)
 {
     switch (v)
     {
-        case 1:  return "Additive";
-        case 2:  return "Sharp";
-        default: return "Default";
+        case 1:  return Locale::Text::OpenUA(Locale::OUA_ADDITIVE);
+        case 2:  return Locale::Text::OpenUA(Locale::OUA_SHARP);
+        default: return Locale::Text::OpenUA(Locale::OUA_DEFAULT);
     }
 }
 
@@ -132,6 +133,14 @@ static std::string NormalizeMenuFontName(std::string fontName)
         return std::string("Default");
 
     return fontName;
+}
+
+static std::string MenuFontDisplayName(const std::string &fontName)
+{
+    const std::string normalized = NormalizeMenuFontName(fontName);
+    if (!StriCmp(normalized, "Default"))
+        return Locale::Text::OpenUA(Locale::OUA_DEFAULT);
+    return normalized;
 }
 
 static bool LoadPaletteThemeCache(std::string *theme)
@@ -213,7 +222,7 @@ static int VisualFilterStrengthPercentFromString(std::string s, int fallback)
 static std::string PaletteThemeDisplayName(const std::string &fileName)
 {
     if (fileName.empty())
-        return "Standard";
+        return Locale::Text::OpenUA(Locale::OUA_STANDARD);
 
     std::string name = fileName;
     if (name.size() >= 4 && !StriCmp(name.substr(name.size() - 4), ".pal"))
@@ -553,50 +562,31 @@ void NC_STACK_ypaworld::listSaveDir(const std::string &saveDir)
 
 void listLocaleDir(UserData *usr, const char *dirname)
 {
-    std::string *deflng = NULL;
+    if (!usr)
+        return;
+
+    // OpenUA supports only the English vanilla catalogue. Retail layouts may
+    // call it LANGUAGE.DLL or ENGLISH.DLL, but both map to one ENGLISH entry.
+    usr->default_lang_dll = nullptr;
+
+    bool englishCatalogueFound = false;
     FSMgr::DirIter dir = uaOpenDir(dirname);
-    if ( dir )
+    if (dir)
     {
-        FSMgr::iNode *v18;
-        while ( dir.getNext(&v18) )
+        FSMgr::iNode *node = nullptr;
+        while (dir.getNext(&node))
         {
-            std::string tmp = v18->getName();
-            size_t v3 = tmp.rfind(".LNG");
-            if ( v3 == std::string::npos )
-                v3 = tmp.rfind(".lng");;
-            /*if ( !v3 )
-              v3 = strstr(v18.e_name, ".dll");
-            if ( !v3 )
-              v3 = strstr(v18.e_name, ".DLL");*/
+            if (!node || node->getType() != FSMgr::iNode::NTYPE_FILE)
+                continue;
 
-            if ( v18->getType() == FSMgr::iNode::NTYPE_FILE && v3 != std::string::npos )
+            std::string filename = node->getName();
+            std::transform(filename.begin(), filename.end(), filename.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            if (filename == "language.dll" || filename == "english.dll")
             {
-                tmp.erase(v3);
-
-                for (size_t i = 0; i < tmp.length(); i++)
-                    tmp[i] = std::toupper(tmp[i]);
-
-                bool finded = false;
-
-                for(const auto &x : usr->lang_dlls)
-                {
-                    if ( !StriCmp( x, tmp ) )
-                    {
-                        finded = true;
-                        break;
-                    }
-                }
-
-                if ( !finded )
-                {
-                    usr->lang_dlls.emplace_back();
-                    std::string &elm = usr->lang_dlls.back();
-
-                    elm = tmp;
-
-                    if ( !StriCmp(elm, "language") )
-                        deflng = &elm;
-                }
+                englishCatalogueFound = true;
+                break;
             }
         }
     }
@@ -605,8 +595,11 @@ void listLocaleDir(UserData *usr, const char *dirname)
         ypa_log_out("Unknown Locale-Directory %s\n", dirname);
     }
 
-    if ( deflng )
-        usr->default_lang_dll = deflng;
+    if (englishCatalogueFound)
+    {
+        usr->lang_dlls.push_back("ENGLISH");
+        usr->default_lang_dll = &usr->lang_dlls.back();
+    }
 }
 
 void UserData::sub_46A7F8()
@@ -2216,7 +2209,7 @@ void UserData::RefreshMenuFonts()
 
 void UserData::UpdateMenuFontText()
 {
-    video_button->SetText(1186, NormalizeMenuFontName(confMenuFont));
+    video_button->SetText(1186, MenuFontDisplayName(confMenuFont));
 }
 
 void UserData::CycleMenuFont()
@@ -2785,7 +2778,7 @@ static std::string db_weapon_model_display_name(const World::TWeapProto &p)
 static std::string db_weapon_aoe_atk_display(const World::TWeapProto &p)
 {
     if ( p.aoe_unit_energy <= 0 )
-        return "None";
+        return Locale::Text::OpenUA(Locale::OUA_DB_NONE);
 
     // Keep the same player-facing damage scale used by the normal ATK row.
     return fmt::sprintf("%d", p.aoe_unit_energy / 100);
@@ -2794,7 +2787,7 @@ static std::string db_weapon_aoe_atk_display(const World::TWeapProto &p)
 static std::string db_optional_int_display(int value)
 {
     if ( value <= 0 )
-        return "None";
+        return Locale::Text::OpenUA(Locale::OUA_DB_NONE);
 
     return fmt::sprintf("%d", value);
 }
@@ -2863,22 +2856,22 @@ static void db_add_vehicle_job_lines(std::vector<std::string> *lines,
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            "Vs Host", db_vehicle_job_stars(p.job_fightrobo), p.job_fightrobo_defined,
-            "Tanks", db_vehicle_job_stars(p.job_fighttank), p.job_fighttank_defined));
+            Locale::Text::OpenUA(Locale::OUA_DB_VS_HOST), db_vehicle_job_stars(p.job_fightrobo), p.job_fightrobo_defined,
+            Locale::Text::OpenUA(Locale::OUA_DB_TANKS), db_vehicle_job_stars(p.job_fighttank), p.job_fighttank_defined));
     }
     if ( (p.job_fightflyer_defined || p.job_fighthelicopter_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            "Vs Planes", db_vehicle_job_stars(p.job_fightflyer), p.job_fightflyer_defined,
-            "Helis", db_vehicle_job_stars(p.job_fighthelicopter), p.job_fighthelicopter_defined));
+            Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_vehicle_job_stars(p.job_fightflyer), p.job_fightflyer_defined,
+            Locale::Text::OpenUA(Locale::OUA_DB_HELIS), db_vehicle_job_stars(p.job_fighthelicopter), p.job_fighthelicopter_defined));
     }
     if ( (p.job_conquer_defined || p.job_reconnoitre_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            "Conquer", db_vehicle_job_stars(p.job_conquer), p.job_conquer_defined,
-            "Recon", db_vehicle_job_stars(p.job_reconnoitre), p.job_reconnoitre_defined));
+            Locale::Text::OpenUA(Locale::OUA_DB_CONQUER), db_vehicle_job_stars(p.job_conquer), p.job_conquer_defined,
+            Locale::Text::OpenUA(Locale::OUA_DB_RECON), db_vehicle_job_stars(p.job_reconnoitre), p.job_reconnoitre_defined));
     }
 }
 
@@ -2913,15 +2906,15 @@ static void db_add_weapon_energy_lines(std::vector<std::string> *lines,
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            "Vs Host", db_weapon_energy_stars(p.energy_robo), p.energy_robo_defined,
-            "Tanks", db_weapon_energy_stars(p.energy_tank), p.energy_tank_defined));
+            Locale::Text::OpenUA(Locale::OUA_DB_VS_HOST), db_weapon_energy_stars(p.energy_robo), p.energy_robo_defined,
+            Locale::Text::OpenUA(Locale::OUA_DB_TANKS), db_weapon_energy_stars(p.energy_tank), p.energy_tank_defined));
     }
     if ( (p.energy_flyer_defined || p.energy_heli_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            "Vs Planes", db_weapon_energy_stars(p.energy_flyer), p.energy_flyer_defined,
-            "Helis", db_weapon_energy_stars(p.energy_heli), p.energy_heli_defined));
+            Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_weapon_energy_stars(p.energy_flyer), p.energy_flyer_defined,
+            Locale::Text::OpenUA(Locale::OUA_DB_HELIS), db_weapon_energy_stars(p.energy_heli), p.energy_heli_defined));
     }
 }
 
@@ -2932,12 +2925,12 @@ static void db_add_speciality_lines(std::vector<std::string> *lines,
     if ( !lines || (int)lines->size() >= maxLines )
         return;
 
-    lines->push_back("Specialities:");
+    lines->push_back(Locale::Text::OpenUA(Locale::OUA_DB_SPECIALITIES));
 
     if ( items.empty() )
     {
         if ( (int)lines->size() < maxLines )
-            lines->push_back("- None");
+            lines->push_back("- " + Locale::Text::OpenUA(Locale::OUA_DB_NONE));
         return;
     }
 
@@ -2960,19 +2953,19 @@ static std::vector<std::string> db_weapon_specialties(const World::TWeapProto &p
     std::vector<std::string> items;
 
     if ( p.cluster.enable || p.cluster.generations > 0 || p.cluster.count > 0 )
-        items.push_back("Cluster Weapon");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_CLUSTER_WEAPON));
     if ( p.chain.allow )
-        items.push_back("Chain Weapon");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_CHAIN_WEAPON));
     if ( p.armor_penetration_targets > 0 )
-        items.push_back("Armor Penetration");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_ARMOR_PENETRATION));
     if ( p.debuff.allow || p.debuff.damage != 0 || p.debuff.damage_percent != 0.0 ||
          p.debuff.duration > 0 && (!p.debuff.name.empty() || p.debuff.mindcontrol ||
          p.debuff.force_malus != 0.0 || p.debuff.maxrot_malus != 0.0 ||
          p.debuff.shield_malus != 0.0 || p.debuff.snd_pitch_mult != 1.0 ||
          !p.debuff.fx_vps.empty()) )
-        items.push_back("Debuff");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_DEBUFF));
     if ( p.missile_multi_target > 0 )
-        items.push_back("Multi-Target Missile");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MULTI_TARGET_MISSILE));
     return items;
 }
 
@@ -2981,29 +2974,29 @@ static std::vector<std::string> db_vehicle_specialties(const World::TVhclProto &
     std::vector<std::string> items;
 
     if ( p.spawn_units )
-        items.push_back("Spawner");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_SPAWNER));
     if ( p.spawn_at_death_units )
-        items.push_back("Spawn On Death");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_SPAWN_ON_DEATH));
     if ( p.power > 0 )
-        items.push_back("Mobile Power Generator");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MOBILE_POWER_GENERATOR));
     if ( p.radar >= 2 )
-        items.push_back("Radar Unit");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_RADAR_UNIT));
     if ( !p.unit_guns.empty() )
-        items.push_back("Mobile Gun Platform");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MOBILE_GUN_PLATFORM));
     if ( p.is_mimic )
-        items.push_back("Mimic");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MIMIC));
     if ( p.invisible )
-        items.push_back("Invisibility");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVISIBILITY));
     if ( p.invulnerable )
-        items.push_back("Invulnerable");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVULNERABLE));
     if ( p.seek_and_explode )
-        items.push_back("Seek And Explode");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_SEEK_AND_EXPLODE));
     if ( p.proximity_defense_enable || p.proximity_defense_at_death )
-        items.push_back(p.proximity_defense_at_death ? "Proximity Defense: At Death" : "Proximity Defense");
+        items.push_back(Locale::Text::OpenUA(p.proximity_defense_at_death ? Locale::OUA_DB_PROXIMITY_DEFENSE_AT_DEATH : Locale::OUA_DB_PROXIMITY_DEFENSE));
     if ( p.extra_weapons[0] > 0 || p.extra_weapons[1] > 0 || p.extra_weapons[2] > 0 )
-        items.push_back("Multi-Weapon");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MULTI_WEAPON));
     if ( db_static_gun_support_active(p) )
-        items.push_back("Static Gun Support");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_STATIC_GUN_SUPPORT));
 
     return items;
 }
@@ -3013,13 +3006,13 @@ static std::vector<std::string> db_building_specialties(const World::TBuildingPr
     std::vector<std::string> items;
 
     if ( p.Power > 0 )
-        items.push_back("Power Generator");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_POWER_GENERATOR));
     if ( p.spawn_units )
-        items.push_back("Spawner");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_SPAWNER));
     if ( !p.Guns.empty() )
-        items.push_back("Defensive Guns");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_DEFENSIVE_GUNS));
     if ( p.ModelID == 2 )
-        items.push_back("Radar Building");
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_RADAR_BUILDING));
 
     return items;
 }
@@ -3532,13 +3525,17 @@ void UserData::PopulateDatabasePage()
     if (db_selected >= entries_on_page) db_selected = (entries_on_page > 0) ? entries_on_page - 1 : 0;
     if (db_selected < 0) db_selected = 0;
 
-    static const char *tab_labels[] = { "Units", "Weapons", "Buildings" };
+    const std::string tabLabels[] = {
+        Locale::Text::OpenUA(Locale::OUA_DB_UNITS),
+        Locale::Text::OpenUA(Locale::OUA_DB_WEAPONS),
+        Locale::Text::OpenUA(Locale::OUA_DB_BUILDINGS)
+    };
     std::string page_lbl;
     if (total == 0)
-        page_lbl = fmt::sprintf("%s  -- no prototype data available --", tab_labels[db_tab]);
+        page_lbl = fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_NO_PROTOTYPE_FORMAT), tabLabels[db_tab]);
     else
-        page_lbl = fmt::sprintf("%s  page %d / %d  (%d entries)",
-            tab_labels[db_tab], db_page + 1, total_pages, total);
+        page_lbl = fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_PAGE_FORMAT),
+            tabLabels[db_tab], db_page + 1, total_pages, total);
     database_button->SetText(UIWidgets::DB_LABEL_PAGE, page_lbl);
 
     int start = db_page * LINES;
@@ -3598,7 +3595,7 @@ void UserData::PopulateDetailPane()
     db_collect_valid(this, valid);
     int total = (int)valid.size();
 
-    database_button->SetText(UIWidgets::DB_DETAIL_HEADER, "Database");
+    database_button->SetText(UIWidgets::DB_DETAIL_HEADER, Locale::Text::OpenUA(Locale::OUA_DATABASE));
     database_button->SetText(UIWidgets::DB_IMAGE_TEXT, " ");
     database_button->SetText(UIWidgets::DB_STATS_HEADER, " ");
     for (int k = 0; k < 12; k++)
@@ -3642,41 +3639,40 @@ void UserData::PopulateDetailPane()
     static const int DB_STATS_LINES = 12;
     std::vector<std::string> statLines;
     statLines.reserve(DB_STATS_LINES);
-    std::string statHeader = "STATS";
+    std::string statHeader = Locale::Text::OpenUA(Locale::OUA_DB_STATS);
     if ( db_tab == 0 )
     {
         const World::TVhclProto &p = vhcls[pid];
-        statLines.push_back("Model: " + db_trunc(db_vehicle_model_display_name(p), 18));
-        statLines.push_back(fmt::sprintf("HP: %d", p.energy));
-        statLines.push_back(fmt::sprintf("DEF: %d", p.shield));
-        statLines.push_back("Weapon: " + db_trunc(db_weapon_display_name(wpns, p.weapon), 20));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_MODEL_FORMAT), db_trunc(db_vehicle_model_display_name(p), 18)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_HP_FORMAT), p.energy));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_DEF_FORMAT), p.shield));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_WEAPON_FORMAT), db_trunc(db_weapon_display_name(wpns, p.weapon), 20)));
         statLines.push_back(p.has_push_resistance && p.push_resistance > 0.0 ?
-                            fmt::sprintf("Push Resistance: %.2f", p.push_resistance) :
-                            "Push Resistance: None");
+                            fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_PUSH_RESISTANCE_FORMAT), p.push_resistance) :
+                            Locale::Text::OpenUA(Locale::OUA_DB_PUSH_RESISTANCE_NONE));
         db_add_vehicle_job_lines(&statLines, DB_STATS_LINES, p);
         db_add_speciality_lines(&statLines, DB_STATS_LINES, db_vehicle_specialties(p));
     }
     else if ( db_tab == 1 )
     {
         const World::TWeapProto &p = wpns[pid];
-        statLines.push_back("Model: " + db_trunc(db_weapon_model_display_name(p), 18));
-        statLines.push_back(fmt::sprintf("ATK: %d", p.energy / 100));
-        statLines.push_back("AoE ATK: " + db_weapon_aoe_atk_display(p));
-        statLines.push_back("Push: " + db_optional_int_display(p.push));
-        statLines.push_back("AoE Push: " + db_optional_int_display(p.aoe_unit_push));
-        statLines.push_back(p.recoil > 0.0 ?
-                            "Weapon Recoil: " + db_float_display(p.recoil) :
-                            "Weapon Recoil: None");
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_MODEL_FORMAT), db_trunc(db_weapon_model_display_name(p), 18)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_ATK_FORMAT), p.energy / 100));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_AOE_ATK_FORMAT), db_weapon_aoe_atk_display(p)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_PUSH_FORMAT), db_optional_int_display(p.push)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_AOE_PUSH_FORMAT), db_optional_int_display(p.aoe_unit_push)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_WEAPON_RECOIL_FORMAT),
+                            p.recoil > 0.0 ? db_float_display(p.recoil) : Locale::Text::OpenUA(Locale::OUA_DB_NONE)));
         db_add_weapon_energy_lines(&statLines, DB_STATS_LINES, p);
         db_add_speciality_lines(&statLines, DB_STATS_LINES, db_weapon_specialties(p));
     }
     else
     {
         const World::TBuildingProto &p = blds[pid];
-        statLines.push_back("Model: " + db_trunc(db_building_model_display_name(p), 18));
-        statLines.push_back(fmt::sprintf("HP: %d", p.Energy));
-        statLines.push_back(fmt::sprintf("Power: %d", p.Power));
-        statLines.push_back(fmt::sprintf("Guns: %d", (int)p.Guns.size()));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_MODEL_FORMAT), db_trunc(db_building_model_display_name(p), 18)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_HP_FORMAT), p.Energy));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_POWER_FORMAT), p.Power));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_GUNS_FORMAT), (int)p.Guns.size()));
         db_add_speciality_lines(&statLines, DB_STATS_LINES, db_building_specialties(p));
     }
 
@@ -3686,7 +3682,7 @@ void UserData::PopulateDetailPane()
 
     std::string body;
     if ( !db_load_database_text(db_tab, pid, &body) || body.empty() )
-        body = "No database entry available.";
+        body = Locale::Text::OpenUA(Locale::OUA_DB_NO_ENTRY);
 
     const int wrapColumns = db_detail_text_columns(p_YW);
     std::vector<std::string> wrapped = db_wrap_text_columns(body, wrapColumns, DETAIL_LINES);
@@ -3703,7 +3699,7 @@ void UserData::PopulateDetailPane()
     }
 
     if ( !db_entry_has_image )
-        database_button->SetText(UIWidgets::DB_IMAGE_TEXT, "No image");
+        database_button->SetText(UIWidgets::DB_IMAGE_TEXT, Locale::Text::OpenUA(Locale::OUA_DB_NO_IMAGE));
 
     for (int k = 0; k < DETAIL_LINES; k++)
         database_button->SetText(UIWidgets::DB_DETAIL_0 + k, lines[k]);
@@ -4418,8 +4414,8 @@ void UserData::GameShellUiHandleInput()
         else if (r.code == 1053)
         {
             ShowMenuMsgBox(MENU_MSGBOX_RESTORE_DEFAULT_KEYS,
-                           "Restore Default Keys?",
-                           "All custom key bindings will be reset.", false);
+                           Locale::Text::OpenUA(Locale::OUA_RESTORE_DEFAULT_KEYS_TITLE),
+                           Locale::Text::OpenUA(Locale::OUA_RESTORE_DEFAULT_KEYS_TEXT), false);
         }
         else if (r.code == 1054)
         {
@@ -4596,7 +4592,7 @@ void UserData::GameShellUiHandleInput()
         else if ( r.code == 1306 ) // Blending cycle
         {
             if ( !(_settingsChangeOptions & SETTINGS_CHANGE_BLENDING) )
-                ShowMenuMsgBox(0, "Restart Required", "Restart game to apply.", true);
+                ShowMenuMsgBox(0, Locale::Text::OpenUA(Locale::OUA_RESTART_REQUIRED_TITLE), Locale::Text::OpenUA(Locale::OUA_RESTART_REQUIRED_TEXT), true);
             confBlending = CycleBlending(confBlending);
             video_button->SetText(1183, BlendingLabel(confBlending));
             _settingsChangeOptions |= SETTINGS_CHANGE_BLENDING;
@@ -4635,7 +4631,7 @@ void UserData::GameShellUiHandleInput()
             if ( (_settingsChangeOptions & SETTINGS_CHANGE_MENU_FONT) &&
                  !alreadyWarnedForMenuFont &&
                  StriCmp(oldMenuFont, confMenuFont) )
-                ShowMenuMsgBox(0, "Restart Required", "Restart game to apply.", true);
+                ShowMenuMsgBox(0, Locale::Text::OpenUA(Locale::OUA_RESTART_REQUIRED_TITLE), Locale::Text::OpenUA(Locale::OUA_RESTART_REQUIRED_TEXT), true);
         }
         else if ( r.code == 1313 ) // Default View cycle
         {
@@ -6137,8 +6133,8 @@ void UserData::GameShellUiHandleInput()
         break;
 
     case NETSCREEN_ENTER_IP:
-        network_button->SetText(UIWidgets::NETWORK_MENU_WIDGET_IDS::TXT_MENU_TITLE, "Server address");
-        network_button->SetText(UIWidgets::NETWORK_MENU_WIDGET_IDS::TXT_MENU_DESCR_LINE1, "Please enter server IP");
+        network_button->SetText(UIWidgets::NETWORK_MENU_WIDGET_IDS::TXT_MENU_TITLE, Locale::Text::OpenUA(Locale::OUA_NETWORK_SERVER_ADDRESS));
+        network_button->SetText(UIWidgets::NETWORK_MENU_WIDGET_IDS::TXT_MENU_DESCR_LINE1, Locale::Text::OpenUA(Locale::OUA_NETWORK_ENTER_SERVER_IP));
         network_button->SetText(UIWidgets::NETWORK_MENU_WIDGET_IDS::TXT_MENU_DESCR_LINE2, " ");
         break;
 

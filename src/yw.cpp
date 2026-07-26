@@ -5,6 +5,7 @@
 #include <cctype>
 #include <limits>
 #include <map>
+#include <set>
 #include <string>
 #include <tuple>
 #include "includes.h"
@@ -1674,7 +1675,12 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
 
     System::IniConf::ReadFromNucleusIni();
     Locale::Text::SetLangDefault();
-    ypaworld_func166("language"); // Load lang strings
+    if (!ypaworld_func166("language")) // Auto-detect an original vanilla language catalogue.
+    {
+        ypa_log_out("ERROR: no readable original language DLL was found in Locale/.\n");
+        Deinit();
+        return 0;
+    }
 
 //		if ( !make_CD_CHECK(1, 1, v10, v9) )
 //		{
@@ -2416,8 +2422,6 @@ void NC_STACK_ypaworld::ResetPlayerSprint()
 
 void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
 {
-    (void)inpt;
-
     if ( !IsPlayerSprintEnabledFor(_userUnit) )
     {
         ResetPlayerSprint();
@@ -2428,6 +2432,17 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
     {
         ResetPlayerSprint();
         _playerSprintUnit = _userUnit;
+    }
+
+    // The explicit handbrake is an immediate gameplay cancel for Sprint.
+    // It removes the temporary force and pitch bonus in the same frame and
+    // blocks Sprint for as long as the handbrake remains held.  The handbrake
+    // keeps ownership of the actual deceleration curve, so no extra velocity
+    // clamp or prototype mutation is introduced here.
+    if ( inpt && inpt->HandBrakePressed )
+    {
+        ResetPlayerSprint();
+        return;
     }
 
     const UserData::TInputConf &bind = _GameShell->InputConfig[World::INPUT_BIND_SPRINT];
@@ -5352,7 +5367,7 @@ bool NC_STACK_ypaworld::CreateSubBarControls(){
 
                             btn_64arg.xpos = (_screenSize.x - playAsWidth) / 2;
                             btn_64arg.width = playAsWidth;
-                            btn_64arg.caption = "Play As";
+                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_PLAY_AS);
                             btn_64arg.caption2.clear();
                             btn_64arg.pressedCode = 0;
                             btn_64arg.downCode = 1251;
@@ -6601,7 +6616,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     btn_64arg.xpos = 0;
     btn_64arg.ypos = 4 * (_fontH + vertMenuSpace); // OpenUA: Atmosphere now sits below Display Resolution
     btn_64arg.width = v98;
-    btn_64arg.caption = "Atmosphere";
+    btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_ATMOSPHERE);
     btn_64arg.caption2.clear();
     btn_64arg.downCode = 0;
     btn_64arg.upCode = 0;
@@ -6624,7 +6639,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
     btn_64arg.xpos = buttonsSpace + v294 * 0.4;
     btn_64arg.width = v294 * 0.6;
-    btn_64arg.caption = "Standard"; // OpenUA: Atmosphere now selects a fullscreen visual filter
+    btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_STANDARD); // OpenUA: Atmosphere now selects a fullscreen visual filter
     btn_64arg.caption2.clear();
     btn_64arg.downCode = 0;
     btn_64arg.upCode = 1136;
@@ -6653,7 +6668,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.xpos = 0;
         btn_64arg.ypos = 5 * (_fontH + vertMenuSpace);
         btn_64arg.width = v98;
-        btn_64arg.caption = "Blending";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_BLENDING);
         btn_64arg.caption2.clear();
         btn_64arg.button_id = 2;
         btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
@@ -6673,7 +6688,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
         btn_64arg.xpos = buttonsSpace + v294 * 0.4;
         btn_64arg.width = v294 * 0.6;
-        btn_64arg.caption = "Default";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DEFAULT);
         btn_64arg.caption2.clear();
         btn_64arg.upCode = 1306;
         btn_64arg.button_id = 1183;
@@ -6696,7 +6711,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.xpos = 0;
         btn_64arg.ypos = 6 * (_fontH + vertMenuSpace);
         btn_64arg.width = v98;
-        btn_64arg.caption = "Menu Font";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_MENU_FONT);
         btn_64arg.caption2.clear();
         btn_64arg.downCode = 0;
         btn_64arg.upCode = 0;
@@ -6720,7 +6735,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.xpos = buttonsSpace + v294 * 0.4;
         btn_64arg.ypos = 6 * (_fontH + vertMenuSpace);
         btn_64arg.width = v294 * 0.6;
-        btn_64arg.caption = "Default";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DEFAULT);
         btn_64arg.caption2.clear();
         btn_64arg.downCode = 0;
         btn_64arg.upCode = 1311;
@@ -6748,7 +6763,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.xpos = 0;
         btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
         btn_64arg.width = v98;
-        btn_64arg.caption = "Default View";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DEFAULT_VIEW);
         btn_64arg.caption2.clear();
         btn_64arg.downCode = 0;
         btn_64arg.upCode = 0;
@@ -6772,7 +6787,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.xpos = buttonsSpace + v294 * 0.4;
         btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
         btn_64arg.width = v294 * 0.6;
-        btn_64arg.caption = "Cockpit";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_COCKPIT);
         btn_64arg.caption2.clear();
         btn_64arg.downCode = 0;
         btn_64arg.upCode = 1313;
@@ -6817,7 +6832,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
         btn_64arg.xpos = checkBoxWidth + buttonsSpace;
         btn_64arg.width = gv120;
-        btn_64arg.caption = "VHS Filter";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_VHS_FILTER);
         btn_64arg.caption2.clear();
         btn_64arg.downCode = 0;
         btn_64arg.upCode = 0;
@@ -6867,7 +6882,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
         btn_64arg.xpos = 4 * buttonsSpace + gv120 + 2 * checkBoxWidth;
         btn_64arg.width = gv120;
-        btn_64arg.caption = "Intro Movies";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_INTRO_MOVIES);
         btn_64arg.caption2.clear();
         btn_64arg.downCode = 0;
         btn_64arg.upCode = 0;
@@ -6894,7 +6909,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.xpos = 0;
         btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
         btn_64arg.width = v98;
-        btn_64arg.caption = "FPS Limit";
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_FPS_LIMIT);
         btn_64arg.caption2.clear();
         btn_64arg.downCode = 0;
         btn_64arg.upCode = 0;
@@ -7538,11 +7553,11 @@ bool NC_STACK_ypaworld::CreateDatabaseControls()
     btn.ypos         = 0;
     btn.width        = _screenSize.x / 3;
 
-    btn.xpos = 0;                        btn.caption = "Units";     btn.button_id = UIWidgets::DB_BTN_UNITS;     btn.upCode = UIWidgets::DB_UP_UNITS;
+    btn.xpos = 0;                        btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_UNITS);     btn.button_id = UIWidgets::DB_BTN_UNITS;     btn.upCode = UIWidgets::DB_UP_UNITS;
     if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = _screenSize.x / 3;       btn.caption = "Weapons";   btn.button_id = UIWidgets::DB_BTN_WEAPONS;   btn.upCode = UIWidgets::DB_UP_WEAPONS;
+    btn.xpos = _screenSize.x / 3;       btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_WEAPONS);   btn.button_id = UIWidgets::DB_BTN_WEAPONS;   btn.upCode = UIWidgets::DB_UP_WEAPONS;
     if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = (2 * _screenSize.x) / 3; btn.caption = "Buildings"; btn.button_id = UIWidgets::DB_BTN_BUILDINGS; btn.upCode = UIWidgets::DB_UP_BUILDINGS;
+    btn.xpos = (2 * _screenSize.x) / 3; btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BUILDINGS); btn.button_id = UIWidgets::DB_BTN_BUILDINGS; btn.upCode = UIWidgets::DB_UP_BUILDINGS;
     if (!_GameShell->database_button->Add(&btn)) ok = false;
 
     // --- LEFT PANEL: page label (TYPE_CAPTION, left-aligned) ---
@@ -7589,7 +7604,7 @@ bool NC_STACK_ypaworld::CreateDatabaseControls()
     btn.width        = textW;
     btn.flags        = NC_STACK_button::FLAG_TEXT;
     btn.ypos         = lh;
-    btn.caption      = "-- Details --";
+    btn.caption      = std::string("-- ") + Locale::Text::OpenUA(Locale::OUA_DB_DETAILS) + " --";
     btn.button_id    = UIWidgets::DB_DETAIL_HEADER;
     if (!_GameShell->database_button->Add(&btn)) ok = false;
 
@@ -7642,11 +7657,11 @@ bool NC_STACK_ypaworld::CreateDatabaseControls()
     btn.ypos         = nav_y;
     btn.width        = _screenSize.x / 3;
 
-    btn.xpos = 0;                        btn.caption = "< Prev"; btn.button_id = UIWidgets::DB_BTN_PREV; btn.upCode = UIWidgets::DB_UP_PREV;
+    btn.xpos = 0;                        btn.caption = std::string("< ") + Locale::Text::OpenUA(Locale::OUA_DB_PREV); btn.button_id = UIWidgets::DB_BTN_PREV; btn.upCode = UIWidgets::DB_UP_PREV;
     if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = _screenSize.x / 3;       btn.caption = "Back";   btn.button_id = UIWidgets::DB_BTN_BACK; btn.upCode = UIWidgets::DB_UP_BACK;
+    btn.xpos = _screenSize.x / 3;       btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);   btn.button_id = UIWidgets::DB_BTN_BACK; btn.upCode = UIWidgets::DB_UP_BACK;
     if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = (2 * _screenSize.x) / 3; btn.caption = "Next >"; btn.button_id = UIWidgets::DB_BTN_NEXT; btn.upCode = UIWidgets::DB_UP_NEXT;
+    btn.xpos = (2 * _screenSize.x) / 3; btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_NEXT) + " >"; btn.button_id = UIWidgets::DB_BTN_NEXT; btn.upCode = UIWidgets::DB_UP_NEXT;
     if (!_GameShell->database_button->Add(&btn)) ok = false;
 
     if ( !ok )
@@ -8159,8 +8174,11 @@ bool NC_STACK_ypaworld::OpenGameShell()
 
     if ( _GameShell->default_lang_dll )
     {
-        if ( ! ypaworld_func166(*_GameShell->default_lang_dll) )
-            ypa_log_out("Warning: Catalogue not found\n");
+        if (!ypaworld_func166(*_GameShell->default_lang_dll))
+        {
+            ypa_log_out("ERROR: selected language catalogue could not be loaded.\n");
+            return false;
+        }
     }
     else
     {
@@ -8242,8 +8260,8 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_TO_ALL]      = Locale::Text::Inputs(Locale::INPUTS_MSGTOALL);
     _GameShell->InputConfigTitle[World::INPUT_BIND_HELP]        = Locale::Text::Inputs(Locale::INPUTS_HELP);
     _GameShell->InputConfigTitle[World::INPUT_BIND_ANALYZER]    = Locale::Text::Inputs(Locale::INPUTS_ANALYZER);
-    _GameShell->InputConfigTitle[World::INPUT_BIND_COCKPIT_CAMERA] = "Toggle Cockpit Camera";
-    _GameShell->InputConfigTitle[World::INPUT_BIND_SPRINT]      = "Sprint";
+    _GameShell->InputConfigTitle[World::INPUT_BIND_COCKPIT_CAMERA] = Locale::Text::OpenUA(Locale::OUA_TOGGLE_COCKPIT_CAMERA);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_SPRINT]      = Locale::Text::OpenUA(Locale::OUA_SPRINT);
 
 
 
@@ -9065,20 +9083,127 @@ size_t NC_STACK_ypaworld::ypaworld_func166(const std::string &langname)
 {
     Locale::Text::SetLangDefault();
 
-    Locale::Text::SetLocaleName(langname);
-
-    if ( !Locale::Text::LngFileLoad( fmt::sprintf("locale:%s.lng", langname) ) )
+    // OpenUA currently supports the English vanilla catalogue only. Depending
+    // on the retail layout it may be named LANGUAGE.DLL or ENGLISH.DLL. Other
+    // locale catalogues are intentionally ignored instead of being selected as
+    // an automatic fallback.
+    struct LocaleCatalogueCandidate
     {
+        std::string path;
+        int priority = 0; // LANGUAGE.DLL before ENGLISH.DLL.
+    };
+
+    std::vector<LocaleCatalogueCandidate> candidates;
+    FSMgr::DirIter localeDir = uaOpenDir("locale:");
+    if (localeDir)
+    {
+        FSMgr::iNode *node = nullptr;
+        while (localeDir.getNext(&node))
+        {
+            if (!node || node->getType() != FSMgr::iNode::NTYPE_FILE)
+                continue;
+
+            const std::string filename = node->getName();
+            std::string lower = filename;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            int priority = 0;
+            if (lower == "language.dll")
+                priority = 2;
+            else if (lower == "english.dll")
+                priority = 1;
+            else
+                continue;
+
+            candidates.push_back({fmt::sprintf("locale:%s", filename), priority});
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](const LocaleCatalogueCandidate &a, const LocaleCatalogueCandidate &b)
+              {
+                  if (a.priority != b.priority)
+                      return a.priority > b.priority;
+                  return a.path < b.path;
+              });
+
+    std::set<std::string> attemptedPaths;
+    const auto tryPath = [&](const std::string &path) -> bool
+    {
+        if (!attemptedPaths.insert(path).second)
+            return false;
+        return Locale::Text::DllFileLoad(path);
+    };
+
+    bool baseLoaded = false;
+    for (const LocaleCatalogueCandidate &candidate : candidates)
+    {
+        if (tryPath(candidate.path))
+        {
+            baseLoaded = true;
+            break;
+        }
+    }
+
+    // Preserve direct lookups when directory enumeration is unavailable or the
+    // filesystem is case-sensitive. Both accepted names contain the English
+    // vanilla catalogue; no other language is probed.
+    if (!baseLoaded)
+    {
+        const std::array<std::string, 6> directCandidates{{
+            "locale:LANGUAGE.DLL",
+            "locale:language.dll",
+            "locale:Language.dll",
+            "locale:ENGLISH.DLL",
+            "locale:english.dll",
+            "locale:English.dll"
+        }};
+
+        for (const std::string &candidate : directCandidates)
+        {
+            if (tryPath(candidate))
+            {
+                baseLoaded = true;
+                break;
+            }
+        }
+    }
+
+    if (StriCmp(langname, "language") && StriCmp(langname, "english"))
+    {
+        ypa_log_out("Locale: '%s' is unsupported; OpenUA uses English only.\n",
+                    langname.c_str());
+    }
+
+    if (baseLoaded)
+    {
+        // Keep the historical runtime locale key. Existing level titles,
+        // messages and speech assets use title_language/msg_language and the
+        // sounds/speech/language directory even when the catalogue file itself
+        // is named ENGLISH.DLL.
+        Locale::Text::SetLocaleName("language");
+    }
+
+    // OpenUA-owned strings are always a separate overlay and cannot overwrite
+    // IDs belonging to the original game catalogue.
+    const bool openUALoaded =
+        Locale::Text::OpenUALngFileLoad("locale:New_Language.lng") ||
+        Locale::Text::OpenUALngFileLoad("locale:new_language.lng");
+
+    if (!openUALoaded)
+        ypa_log_out("Warning: Locale/New_Language.lng not found or contains no valid OpenUA strings.\n");
+
+    if (!baseLoaded)
+    {
+        ypa_log_out("ERROR: English vanilla catalogue not found. Expected Locale/LANGUAGE.DLL or Locale/ENGLISH.DLL.\n");
         Locale::Text::SetLangDefault();
         return 0;
     }
 
-    std::string fontStr;
-
-    if ( _screenSize.x >= 512 )
-        fontStr = Locale::Text::Font();
-    else
-        fontStr = Locale::Text::SmallFont();
+    std::string fontStr = _screenSize.x >= 512
+                              ? Locale::Text::Font()
+                              : Locale::Text::SmallFont();
 
     fontStr = System::ResolveMenuFontDescr(fontStr);
     GFX::Engine.LoadFontByDescr(fontStr);
@@ -9086,7 +9211,6 @@ size_t NC_STACK_ypaworld::ypaworld_func166(const std::string &langname)
 
     return 1;
 }
-
 
 // Update menu values
 void NC_STACK_ypaworld::UpdateGameShell()
@@ -9834,8 +9958,11 @@ size_t NC_STACK_ypaworld::ReloadLanguage()
         v6 = 0;
     }
 
-    if ( !ypaworld_func166(*_GameShell->default_lang_dll) )
-        ypa_log_out("Warning: SETLANGUAGE failed\n");
+    if (!ypaworld_func166(*_GameShell->default_lang_dll))
+    {
+        ypa_log_out("ERROR: SETLANGUAGE failed.\n");
+        return 0;
+    }
 
     if ( v6 && !OpenGameShell() )
     {
