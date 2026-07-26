@@ -4267,7 +4267,7 @@ void NC_STACK_ypaworld::sub_4D12D8(int id, int a3)
     else
     {
         arg159.MsgID = 0;
-        arg159.txt = "Cant happen.";
+        arg159.txt = Locale::Text::OpenUA(Locale::OUA_INTERNAL_CANNOT_HAPPEN);
     }
 
     ypaworld_func159(&arg159);
@@ -4308,7 +4308,7 @@ void NC_STACK_ypaworld::sub_4D1594(int id)
     else
     {
         arg159.MsgID = 0;
-        arg159.txt = "Cant happen.";
+        arg159.txt = Locale::Text::OpenUA(Locale::OUA_INTERNAL_CANNOT_HAPPEN);
     }
 
     ypaworld_func159(&arg159);
@@ -4351,7 +4351,7 @@ void NC_STACK_ypaworld::sub_4D1444(int id)
     else
     {
         arg159.MsgID = 0;
-        arg159.txt = "Cant happen.";
+        arg159.txt = Locale::Text::OpenUA(Locale::OUA_INTERNAL_CANNOT_HAPPEN);
     }
 
     ypaworld_func159(&arg159);
@@ -4700,7 +4700,7 @@ void NC_STACK_ypaworld::sub_4D16C4(int id)
     else
     {
         arg159.MsgID = 0;
-        arg159.txt = "Cant happen.";
+        arg159.txt = Locale::Text::OpenUA(Locale::OUA_INTERNAL_CANNOT_HAPPEN);
     }
 
     ypaworld_func159(&arg159);
@@ -5293,7 +5293,7 @@ void sb_0x447720(NC_STACK_ypaworld *yw, TInputState *inpt)
         sub_4476AC(yw);
 
         yw_arg159 info_msg;
-        info_msg.txt = "Screenshot saved.";
+        info_msg.txt = Locale::Text::OpenUA(Locale::OUA_SCREENSHOT_SAVED);
         info_msg.unit = NULL;
         info_msg.Priority = 100;
         info_msg.MsgID = 0;
@@ -5309,7 +5309,7 @@ void sb_0x447720(NC_STACK_ypaworld *yw, TInputState *inpt)
             yw->_screenShotSeq = false;
 
             yw_arg159 info_msg;
-            info_msg.txt = "Screenshotting: stopped.";
+            info_msg.txt = Locale::Text::OpenUA(Locale::OUA_SCREENSHOTTING_STOPPED);
             info_msg.unit = NULL;
             info_msg.Priority = 100;
             info_msg.MsgID = 0;
@@ -5328,7 +5328,7 @@ void sb_0x447720(NC_STACK_ypaworld *yw, TInputState *inpt)
         yw->_screenShotSeqId++;
 
         yw_arg159 info_msg;
-        info_msg.txt = "Screenshotting: started.";
+        info_msg.txt = Locale::Text::OpenUA(Locale::OUA_SCREENSHOTTING_STARTED);
         info_msg.unit = NULL;
         info_msg.Priority = 100;
         info_msg.MsgID = 0;
@@ -5343,7 +5343,7 @@ void sb_0x447720(NC_STACK_ypaworld *yw, TInputState *inpt)
             recorder_stoprec(yw);
 
             yw_arg159 info_msg;
-            info_msg.txt = "Replay recordering: stopped.";
+            info_msg.txt = Locale::Text::OpenUA(Locale::OUA_REPLAY_RECORDING_STOPPED);
             info_msg.unit = NULL;
             info_msg.Priority = 100;
             info_msg.MsgID = 0;
@@ -5359,7 +5359,7 @@ void sb_0x447720(NC_STACK_ypaworld *yw, TInputState *inpt)
             recorder_startrec(yw);
 
             yw_arg159 info_msg;
-            info_msg.txt = "Replay recordering: started.";
+            info_msg.txt = Locale::Text::OpenUA(Locale::OUA_REPLAY_RECORDING_STARTED);
             info_msg.unit = NULL;
             info_msg.Priority = 100;
             info_msg.MsgID = 0;

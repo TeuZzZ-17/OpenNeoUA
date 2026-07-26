@@ -260,6 +260,7 @@ public:
     static Common::Ini::Key UiStatusIconInvisible;
     static Common::Ini::Key UiStatusIconProximityDefense;
     static Common::Ini::Key UiStatusIconSprint;
+    static Common::Ini::Key UiStatusIconHandbrake;
     static Common::Ini::Key UiStatusIconBlinkCount;
 
     // OpenUA: Black Sect "imperfect grey clone" runtime balance (owner/faction 5 only).

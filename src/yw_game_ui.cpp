@@ -202,6 +202,11 @@ const std::string &StatusIconSprintPath()
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconSprint);
 }
 
+const std::string &StatusIconHandbrakePath()
+{
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconHandbrake);
+}
+
 const char *VoicepackEventKeyFromMsgID(int msgID)
 {
     switch ( msgID )
@@ -776,6 +781,18 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
                                    fabs(bact->_fly_dir_length) <= 0.001f;
     if ( yw && yw->IsPlayerSprintActiveFor(bact) && !stoppedTankSprint )
         StatusIconAdd(icons, iconCount, StatusIconSprintPath());
+
+    // The handbrake is a local player input state, not a permanent vehicle
+    // capability. Show its icon only while the current player-controlled unit
+    // is in a live control state and the explicit handbrake input is held.
+    const bool localPlayerHandbrakeActive = yw &&
+                                            bact == yw->_userUnit &&
+                                            (bact->_oflags & BACT_OFLAG_USERINPT) &&
+                                            (bact->_status == BACT_STATUS_NORMAL ||
+                                             bact->_status == BACT_STATUS_IDLE) &&
+                                            bact->_handbrakeHeld;
+    if ( localPlayerHandbrakeActive )
+        StatusIconAdd(icons, iconCount, StatusIconHandbrakePath());
 
     if ( StatusIconCanUseVehicleCapabilityUnit(bact) )
     {

@@ -4043,7 +4043,8 @@ int yw_NetCheckPlayersInGame(NC_STACK_ypaworld *yw)
             return 1;
 
         FontUA::copy_position(&buf);
-        FontUA::add_txt(&buf, yw->_screenSize.x - 1, 1, "WAITING FOR HOST");
+        FontUA::add_txt(&buf, yw->_screenSize.x - 1, 1,
+                        Locale::Text::OpenUA(Locale::OUA_WAITING_FOR_HOST));
         FontUA::next_line(&buf);
     }
 

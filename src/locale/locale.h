@@ -8,9 +8,7 @@
 #include "strid.h"
 #include "default.h"
 
-
 namespace Locale {
-
 
 class Text
 {
@@ -18,101 +16,117 @@ public:
     static void SetLangDefault();
     static std::string Get(int32_t id, const std::string &def);
 
-    static bool LngFileLoad(const std::string &filename);
+    // OpenUA overlay loader. Only IDs in OPENUA_STRING_BASE..LIMIT are accepted.
+    static bool OpenUALngFileLoad(const std::string &filename);
+    // Reads RT_STRING resources directly from an original Urban Assault DLL.
+    static bool DllFileLoad(const std::string &filename);
 
+    static std::string OpenUA(uint32_t id);
 
     static std::string Tooltip(uint32_t id)
     {
-        // OpenUA-only options may collide with stale strings in existing
-        // language.lng files. Force their source defaults until language packs
-        // are explicitly updated.
-        if ( id == TIP_CONF_HOSTSTATIONAI || id == TIP_CONF_SPECTATORMODE )
-            return DefaultStrings::Tooltips[ id ];
-        // TIP_MENU_HELP (ID 137, lng index 937) can now be overridden by
-        // Language.lng. Set entry 937 = <> to keep the default fallback
-        // "Browse game database", or set it to a localized string.
-
-        return Get(LBL_TIPS + id, DefaultStrings::Tooltips[ id ]);
+        if (id == TIP_MENU_HELP)
+            return OpenUA(OUA_DATABASE_TOOLTIP);
+        if (id == TIP_MENU_WINDOWED)
+            return OpenUA(OUA_WINDOWED_MODE_TOOLTIP);
+        if (id == TIP_GUI_RETURNSPECTATOR)
+            return OpenUA(OUA_RETURN_SPECTATOR_CAMERA);
+        if (id == TIP_CONF_HOSTSTATIONAI)
+            return OpenUA(OUA_HOST_STATION_AI_TOOLTIP);
+        if (id == TIP_CONF_SPECTATORMODE)
+            return OpenUA(OUA_SPECTATOR_MODE_TOOLTIP);
+        return Get(LBL_TIPS + id, DefaultStrings::Tooltips[id]);
     }
 
     static std::string Common(uint32_t id)
     {
-        return Get(LBL_COMMON + id, DefaultStrings::Commons[ id ]);
+        if (id == CMN_QUITGAME)
+            return OpenUA(OUA_QUIT_GAME);
+        return Get(LBL_COMMON + id, DefaultStrings::Commons[id]);
     }
 
     static std::string Advice(uint32_t id)
     {
-        return Get(LBL_ADVICE + id, DefaultStrings::Advices[ id ]);
+        return Get(LBL_ADVICE + id, DefaultStrings::Advices[id]);
     }
 
     static std::string KeyName(uint32_t id)
     {
-        return Get(LBL_KEYNAME + id, DefaultStrings::Keynames[ id ]);
+        if (id == KEYNAME_LSHIFT)
+            return OpenUA(OUA_LEFT_SHIFT);
+        return Get(LBL_KEYNAME + id, DefaultStrings::Keynames[id]);
     }
 
     static std::string HUD(uint32_t id)
     {
-        return Get(LBL_HUDTXT + id, DefaultStrings::HudStrings[ id ]);
+        return Get(LBL_HUDTXT + id, DefaultStrings::HudStrings[id]);
     }
 
     static std::string Gem(uint32_t id)
     {
-        return Get(LBL_GEM + id, DefaultStrings::GemStrings[ id ]);
+        if (id >= GEMSTR_MAX)
+            return OpenUA(OUA_GEM_UPGRADE_UNLOCKED);
+        return OpenUA(OUA_GEM_UPGRADE_UNLOCKED + id);
     }
 
     static std::string WinName(uint32_t id)
     {
-        return Get(LBL_WINNAMES + id, DefaultStrings::WinNames[ id ]);
+        return Get(LBL_WINNAMES + id, DefaultStrings::WinNames[id]);
     }
 
     static std::string Title(uint32_t id)
     {
-        return Get(LBL_TITLES + id, DefaultStrings::Titles[ id ]);
+        if (id == TITLE_DATABASE)
+            return OpenUA(OUA_DATABASE);
+        return Get(LBL_TITLES + id, DefaultStrings::Titles[id]);
     }
 
     static std::string Brief(uint32_t id)
     {
-        return Get(LBL_BRIEF + id, DefaultStrings::BriefTexts[ id ]);
+        return Get(LBL_BRIEF + id, DefaultStrings::BriefTexts[id]);
     }
 
     static std::string Feedback(uint32_t id)
     {
-        return Get(LBL_FEEDBACK + id, DefaultStrings::Feedbacks[ id ]);
+        return Get(LBL_FEEDBACK + id, DefaultStrings::Feedbacks[id]);
     }
 
     static std::string Dialogs(uint32_t id)
     {
-        return Get(LBL_DIALOGS + id, DefaultStrings::Dialogs[ id ]);
+        if (id == DLG_S_HOSTSTATIONAI)
+            return OpenUA(OUA_HOST_STATION_AI);
+        if (id == DLG_S_SPECTATORMODE)
+            return OpenUA(OUA_SPECTATOR_MODE);
+        return Get(LBL_DIALOGS + id, DefaultStrings::Dialogs[id]);
     }
 
     static std::string Netdlg(uint32_t id)
     {
-        return Get(LBL_NETDLG + id, DefaultStrings::NetDlgs[ id ]);
+        return Get(LBL_NETDLG + id, DefaultStrings::NetDlgs[id]);
     }
 
     static std::string Inputs(uint32_t id)
     {
-        return Get(LBL_INPUTS + id, DefaultStrings::Inputs[ id ]);
+        return Get(LBL_INPUTS + id, DefaultStrings::Inputs[id]);
     }
 
     static std::string GlobMap(uint32_t id)
     {
-        return Get(LBL_GLOBMAP + id, DefaultStrings::GlobMaps[ id ]);
+        return Get(LBL_GLOBMAP + id, DefaultStrings::GlobMaps[id]);
     }
 
     static std::string Help(uint32_t id)
     {
-        return Get(LBL_HELP + id, DefaultStrings::Helps[ id ]);
+        return Get(LBL_HELP + id, DefaultStrings::Helps[id]);
     }
 
     static std::string Advanced(uint32_t id)
     {
-        // OpenUA-only confirmation string: old language.lng files can already
-        // contain unrelated text at this index, so keep the source default.
-        if ( id == ADV_RLYQUITGAME )
-            return DefaultStrings::Advanced[ id ];
-
-        return Get(LBL_ADVANCED + id, DefaultStrings::Advanced[ id ]);
+        if (id == ADV_WINDOWEDMODE)
+            return OpenUA(OUA_WINDOWED_MODE);
+        if (id == ADV_RLYQUITGAME)
+            return OpenUA(OUA_QUIT_GAME_CONFIRM);
+        return Get(LBL_ADVANCED + id, DefaultStrings::Advanced[id]);
     }
 
     static std::string VehicleName(uint32_t id, const std::string &dflt)
@@ -147,12 +161,12 @@ public:
 
     static std::string Font()
     {
-        return Get(LBL_COMMON + CMN_FONT, DefaultStrings::Commons[ CMN_FONT ]);
+        return Get(LBL_COMMON + CMN_FONT, DefaultStrings::Commons[CMN_FONT]);
     }
 
     static std::string SmallFont()
     {
-        return Get(LBL_COMMON + CMN_SMALLFONT, DefaultStrings::Commons[ CMN_SMALLFONT ]);
+        return Get(LBL_COMMON + CMN_SMALLFONT, DefaultStrings::Commons[CMN_SMALLFONT]);
     }
 
     static const std::string &GetLocaleName()
@@ -166,7 +180,7 @@ public:
     }
 
 protected:
-    static std::string _localeName; // locale name
+    static std::string _localeName;
     static std::vector<std::string> _localeStrings;
 };
 

@@ -1510,24 +1510,24 @@ void NC_STACK_ypaworld::FreeBriefing()
     stru_5C91D0.Free();
 }
 
-static const char *yw_BriefingPlayAsOwnerName(int owner)
+static std::string yw_BriefingPlayAsOwnerName(int owner)
 {
-    switch ( owner )
+    switch (owner)
     {
     case 1:
-        return "Resistance";
+        return Locale::Text::Advanced(Locale::ADV_RESIST);
     case 2:
-        return "Sulgogar";
+        return Locale::Text::Advanced(Locale::ADV_SULG);
     case 3:
-        return "Mykonian";
+        return Locale::Text::Advanced(Locale::ADV_MYKO);
     case 4:
-        return "Taerkasten";
+        return Locale::Text::Advanced(Locale::ADV_TAER);
     case 5:
-        return "Black Sect";
+        return Locale::Text::Advanced(Locale::ADV_BLKSCT);
     case 6:
-        return "Ghorkov";
+        return Locale::Text::Advanced(Locale::ADV_GHOR);
     default:
-        return "Unknown";
+        return Locale::Text::OpenUA(Locale::OUA_UNKNOWN);
     }
 }
 
@@ -1612,7 +1612,7 @@ void NC_STACK_ypaworld::BriefingCyclePlayAsOwner()
         _briefScreen.PlayAsSelectedIndex = 0;
 
     int owner = BriefingSelectedPlayAsOwner();
-    ypa_log_out("Play As: selected owner %d (%s)\n", owner, yw_BriefingPlayAsOwnerName(owner));
+    ypa_log_out("Play As: selected owner %d (%s)\n", owner, yw_BriefingPlayAsOwnerName(owner).c_str());
 }
 
 std::vector<MapRobo> NC_STACK_ypaworld::BriefingReorderRobosForPlayAs(const std::vector<MapRobo> &Robos) const
@@ -1625,7 +1625,7 @@ std::vector<MapRobo> NC_STACK_ypaworld::BriefingReorderRobosForPlayAs(const std:
     if ( !yw_BriefingPlayAsOwnerValid(owner) || Robos.empty() )
         return Robos;
 
-    ypa_log_out("Play As: start mission selected owner %d (%s)\n", owner, yw_BriefingPlayAsOwnerName(owner));
+    ypa_log_out("Play As: start mission selected owner %d (%s)\n", owner, yw_BriefingPlayAsOwnerName(owner).c_str());
 
     size_t selectedIndex = Robos.size();
     for ( size_t i = 0; i < Robos.size(); i++ )
@@ -1668,10 +1668,11 @@ std::string NC_STACK_ypaworld::BriefingPlayAsButtonText() const
 {
     int owner = BriefingSelectedPlayAsOwner();
 
-    if ( !yw_BriefingPlayAsOwnerValid(owner) )
-        return "Play As";
+    if (!yw_BriefingPlayAsOwnerValid(owner))
+        return Locale::Text::OpenUA(Locale::OUA_PLAY_AS);
 
-    return fmt::sprintf("Play As: %s", yw_BriefingPlayAsOwnerName(owner));
+    return fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_PLAY_AS_FORMAT),
+                        yw_BriefingPlayAsOwnerName(owner));
 }
 
 void NC_STACK_ypaworld::FreeDebrief()
