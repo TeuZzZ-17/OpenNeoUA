@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <cctype>
 #include <string.h>
 
 #include "includes.h"
@@ -762,50 +763,289 @@ int NC_STACK_ypaworld::yw_ScanLevels()
     return v2;
 }
 
-NC_STACK_base * sub_44AD8C(const std::string &fname)
+enum class BaseListParsePolicy
 {
-    NC_STACK_base *obj = Nucleus::CInit<NC_STACK_base>();
-    if ( obj )
-    {
-        FSMgr::FileHandle *fil = uaOpenFileAlloc(fname, "r");
-        if ( !fil )
-        {
-            obj->Delete();
-            return NULL;
-        }
+    LEGACY,
+    STRICT_LOOSE
+};
 
-        std::string line;
-        while ( fil->ReadLine(&line) && !line.empty() && line[0] != '>' )
+struct BaseListLoadResult
+{
+    NC_STACK_base *base = NULL;
+    size_t entryCount = 0;
+    size_t errorSlot = 0;
+    size_t errorLine = 0;
+    std::string errorToken;
+    std::string errorReason;
+};
+
+struct SetLooseVisprotoCandidate
+{
+    NC_STACK_base *base = NULL;
+    size_t entryCount = 0;
+    IFFile::SetLooseOverride overrideInfo;
+};
+
+static std::string TrimBaseListLine(const std::string &line)
+{
+    size_t begin = 0;
+    while (begin < line.size() && std::isspace((unsigned char)line[begin]))
+        begin++;
+
+    size_t end = line.size();
+    while (end > begin && std::isspace((unsigned char)line[end - 1]))
+        end--;
+
+    return line.substr(begin, end - begin);
+}
+
+static BaseListLoadResult LoadBaseList(FSMgr::FileHandle *fil, BaseListParsePolicy policy)
+{
+    BaseListLoadResult result;
+    if ( !fil )
+    {
+        result.errorToken = "<list>";
+        result.errorReason = "could not open list file";
+        return result;
+    }
+
+    NC_STACK_base *obj = Nucleus::CInit<NC_STACK_base>();
+    if ( !obj )
+    {
+        result.errorToken = "<container>";
+        result.errorReason = "could not create BASE list container";
+        return result;
+    }
+
+    bool terminated = false;
+    size_t lineNumber = 0;
+    std::string line;
+
+    while ( fil->ReadLine(&line) )
+    {
+        lineNumber++;
+        std::string token;
+
+        if ( policy == BaseListParsePolicy::STRICT_LOOSE )
         {
+            std::string parsedLine = TrimBaseListLine(line);
+            if ( parsedLine.empty() || parsedLine[0] == ';' || parsedLine[0] == '#' )
+                continue;
+
+            if ( parsedLine[0] == '>' )
+            {
+                std::string trailing = TrimBaseListLine(parsedLine.substr(1));
+                if ( !trailing.empty() && trailing[0] != ';' && trailing[0] != '#' )
+                {
+                    result.errorSlot = result.entryCount;
+                    result.errorLine = lineNumber;
+                    result.errorToken = parsedLine;
+                    result.errorReason = "unexpected content after list terminator";
+                    obj->Delete();
+                    return result;
+                }
+
+                terminated = true;
+                continue;
+            }
+
+            if ( terminated )
+            {
+                result.errorSlot = result.entryCount;
+                result.errorLine = lineNumber;
+                result.errorToken = parsedLine;
+                result.errorReason = "unexpected content after list terminator";
+                obj->Delete();
+                return result;
+            }
+
+            size_t pos = parsedLine.find_first_of(" \t;#\n\r");
+            token = parsedLine.substr(0, pos);
+        }
+        else
+        {
+            if ( line.empty() || line[0] == '>' )
+                break;
+
             size_t pos = line.find_first_of(" ;#\n\r");
             if ( pos != std::string::npos )
                 line.erase(pos);
 
-            if (line.empty())
+            if ( line.empty() )
                 continue;
 
-            std::string basName = fmt::sprintf("rsrc:objects/%s", line);
-
-            NC_STACK_base *kid = Utils::ProxyLoadBase(basName);
-
-            if ( !kid )
-            {
-                ypa_log_out("init: Could not load %s.\n", basName.c_str());
-                delete fil;
-                obj->Delete();
-                return NULL;
-            }
-
-            obj->AddKid(kid); //Add to kid list
+            token = line;
         }
-        delete fil;
+
+        std::string basName = fmt::sprintf("rsrc:objects/%s", token);
+        NC_STACK_base *kid = Utils::ProxyLoadBase(basName);
+
+        if ( !kid )
+        {
+            result.errorSlot = result.entryCount;
+            result.errorLine = lineNumber;
+            result.errorToken = token;
+            result.errorReason = "referenced BASE is missing or malformed";
+            obj->Delete();
+            return result;
+        }
+
+        obj->AddKid(kid);
+        result.entryCount++;
     }
-    return obj;
+
+    if ( policy == BaseListParsePolicy::STRICT_LOOSE )
+    {
+        if ( !terminated )
+        {
+            result.errorSlot = result.entryCount;
+            result.errorLine = lineNumber + 1;
+            result.errorToken = "<end-of-file>";
+            result.errorReason = "missing '>' list terminator";
+            obj->Delete();
+            return result;
+        }
+
+        if ( result.entryCount == 0 )
+        {
+            result.errorSlot = 0;
+            result.errorLine = lineNumber;
+            result.errorToken = "<none>";
+            result.errorReason = "list contains no BASE entries";
+            obj->Delete();
+            return result;
+        }
+    }
+
+    result.base = obj;
+    return result;
+}
+
+NC_STACK_base * sub_44AD8C(const std::string &fname)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc(fname, "r");
+    if ( !fil )
+        return NULL;
+
+    BaseListLoadResult result = LoadBaseList(fil, BaseListParsePolicy::LEGACY);
+    delete fil;
+
+    if ( !result.base && !result.errorToken.empty() && result.errorToken[0] != '<' )
+    {
+        std::string basName = fmt::sprintf("rsrc:objects/%s", result.errorToken);
+        ypa_log_out("init: Could not load %s.\n", basName.c_str());
+    }
+
+    return result.base;
+}
+
+static SetLooseVisprotoCandidate LoadSetLooseVisprotoCandidate()
+{
+    SetLooseVisprotoCandidate candidate;
+    if ( !IFFile::FindSetLooseVisprotoListOverride("r",
+                                                   &candidate.overrideInfo,
+                                                   "load_set_base") )
+        return candidate;
+
+    FSMgr::FileHandle fil = FSMgr::iDir::openFile(candidate.overrideInfo.resolvedPath, "r");
+    BaseListLoadResult result;
+    if ( fil.OK() )
+        result = LoadBaseList(&fil, BaseListParsePolicy::STRICT_LOOSE);
+    else
+    {
+        result.errorToken = "<list>";
+        result.errorReason = "could not open resolved loose list";
+    }
+
+    if ( !result.base )
+    {
+        std::string reason = fmt::sprintf("slot %zu, line %zu, token '%s': %s",
+                                          result.errorSlot,
+                                          result.errorLine,
+                                          result.errorToken.c_str(),
+                                          result.errorReason.c_str());
+        IFFile::ReportSetLooseOverrideFailed(candidate.overrideInfo, reason);
+        ypa_log_out("VP table: loose override invalid at slot %zu, falling back to embedded visproto.base.\n",
+                    result.errorSlot);
+        ypa_log_out("WARNING: OpenUA SET loose VISPROTO rejected for Set %d (%s): %s; standard VISPROTO fallback retained.\n",
+                    candidate.overrideInfo.setId,
+                    candidate.overrideInfo.resolvedPath.c_str(),
+                    reason.c_str());
+        return candidate;
+    }
+
+    candidate.base = result.base;
+    candidate.entryCount = result.entryCount;
+    return candidate;
+}
+
+static void ReportSetLooseVisprotoUsed(const SetLooseVisprotoCandidate &candidate)
+{
+    IFFile::ReportSetLooseOverrideUsed(candidate.overrideInfo);
+    ypa_log_out("VP table: using loose VISPROTO.LST for Set%d.\n",
+                candidate.overrideInfo.setId);
+    ypa_log_out("OpenUA SET loose VISPROTO used for Set %d: %s (%zu BASE entries).\n",
+                candidate.overrideInfo.setId,
+                candidate.overrideInfo.resolvedPath.c_str(),
+                candidate.entryCount);
+}
+
+static bool ReplaceSetVisproto(NC_STACK_base *setBase, NC_STACK_base *replacement)
+{
+    if ( !setBase || !replacement )
+        return false;
+
+    BaseList &kids = setBase->GetKidList();
+    if ( kids.empty() || !kids.front() )
+        return false;
+
+    NC_STACK_base *embeddedVisproto = kids.front();
+    setBase->AddKid(replacement);
+
+    BaseList::iterator replacementIt = kids.end();
+    replacementIt--;
+    kids.splice(kids.begin(), kids, replacementIt);
+
+    embeddedVisproto->ChangeParentTo(NULL, NULL);
+    embeddedVisproto->Delete();
+    return true;
 }
 
 NC_STACK_base *load_set_base()
 {
     NC_STACK_base *base = NC_STACK_base::LoadBaseFromFile("rsrc:objects/set.base");
+    SetLooseVisprotoCandidate looseVisproto = LoadSetLooseVisprotoCandidate();
+
+    if ( base )
+    {
+        if ( looseVisproto.base )
+        {
+            if ( ReplaceSetVisproto(base, looseVisproto.base) )
+            {
+                ReportSetLooseVisprotoUsed(looseVisproto);
+                looseVisproto.base = NULL;
+            }
+            else
+            {
+                looseVisproto.base->Delete();
+                looseVisproto.base = NULL;
+                const std::string reason = "loaded SET has no embedded VISPROTO child to replace";
+                IFFile::ReportSetLooseOverrideFailed(looseVisproto.overrideInfo, reason);
+                ypa_log_out("WARNING: OpenUA SET loose VISPROTO rejected for Set %d (%s): %s; loaded SET retained.\n",
+                            looseVisproto.overrideInfo.setId,
+                            looseVisproto.overrideInfo.resolvedPath.c_str(),
+                            reason.c_str());
+                ypa_log_out("VP table: using embedded visproto.base.\n");
+            }
+        }
+        else
+        {
+            ypa_log_out("VP table: using embedded visproto.base.\n");
+        }
+
+        return base;
+    }
+
     if ( !base )
     {
         ypa_log_out("init: no set.base, trying fragment load.\n");
@@ -813,11 +1053,22 @@ NC_STACK_base *load_set_base()
         base = Nucleus::CInit<NC_STACK_base>();
         if ( base )
         {
-            NC_STACK_base *visproto = NC_STACK_base::LoadBaseFromFile("rsrc:objects/visproto.base");
+            const bool usingLooseVisproto = looseVisproto.base != NULL;
+            bool usingEmbeddedVisproto = false;
+            bool usingLegacyVisproto = false;
+            NC_STACK_base *visproto = looseVisproto.base;
+            looseVisproto.base = NULL;
+
+            if ( !visproto )
+            {
+                visproto = NC_STACK_base::LoadBaseFromFile("rsrc:objects/visproto.base");
+                usingEmbeddedVisproto = visproto != NULL;
+            }
             if ( !visproto )
             {
                 ypa_log_out("init: no visproto.base, trying single load.\n");
                 visproto = sub_44AD8C("rsrc:scripts/visproto.lst");
+                usingLegacyVisproto = visproto != NULL;
             }
             if ( !visproto )
             {
@@ -851,8 +1102,19 @@ NC_STACK_base *load_set_base()
                 return NULL;
             }
             base->AddKid(slurp);
+
+            if ( usingLooseVisproto )
+                ReportSetLooseVisprotoUsed(looseVisproto);
+            else if ( usingEmbeddedVisproto )
+                ypa_log_out("VP table: using embedded visproto.base.\n");
+            else if ( usingLegacyVisproto )
+                ypa_log_out("VP table: using legacy scripts/visproto.lst fallback.\n");
         }
     }
+
+    if ( looseVisproto.base )
+        looseVisproto.base->Delete();
+
     return base;
 }
 

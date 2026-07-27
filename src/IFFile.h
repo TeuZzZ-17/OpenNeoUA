@@ -116,6 +116,7 @@ public:
 
     static bool FindSetLooseOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction = NULL);
     static bool FindSetLooseEmbeddedOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction = NULL);
+    static bool FindSetLooseVisprotoListOverride(const std::string &mode, SetLooseOverride *out, const char *sourceFunction = NULL);
     static bool FindSetLooseBaseObjectOverride(const std::string &objectName, const std::string &mode, SetLooseOverride *out, const char *sourceFunction = NULL);
     static bool FindSetLooseEmrsOverride(const std::string &filename, const std::string &mode, const std::string &className, const std::string &payload, SetLooseOverride *out, const char *sourceFunction = NULL, size_t currentOffset = (size_t)-1);
     static bool FindSetLooseEmrsPngOverride(const std::string &filename, const std::string &mode, const std::string &className, const std::string &payload, SetLooseOverride *out, const char *sourceFunction = NULL, size_t currentOffset = (size_t)-1);
