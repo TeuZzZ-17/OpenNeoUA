@@ -275,7 +275,7 @@ int32_t setLooseCurrentSetId()
         pos++;
     }
 
-    if (!hasDigit || setId < 1 || setId > 6)
+    if (!hasDigit || setId < 1 || setId > 7)
         return 0;
 
     return setId;
@@ -1322,6 +1322,49 @@ bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std
     }
 
     return false;
+}
+
+bool IFFile::FindSetLooseVisprotoListOverride(const std::string &mode, SetLooseOverride *out, const char *sourceFunction)
+{
+    if (out)
+        *out = SetLooseOverride();
+
+    if ( !setLooseIsReadMode(mode) )
+        return false;
+
+    int32_t setId = setLooseCurrentSetId();
+    if ( !setId || !setLooseEnsureReport(setId) )
+        return false;
+
+    const std::string requested = "VISPROTO.LST";
+    const std::string candidate = "Data/Set" + std::to_string(setId) + "/Loose/" + requested;
+    std::string resolvedPath;
+    const bool exists = setLooseResolveReadableFile(candidate, &resolvedPath);
+
+    setLooseAddLookup(setId,
+                      requested,
+                      candidate,
+                      exists,
+                      "<none>",
+                      false,
+                      sourceFunction,
+                      false);
+
+    if ( !exists )
+        return false;
+
+    if (out)
+    {
+        out->active = true;
+        out->setId = setId;
+        out->requested = requested;
+        out->resolvedPath = resolvedPath;
+        out->extensionForm = "per-set VISPROTO list override";
+        out->vanillaPath = "Data/Set" + std::to_string(setId) + "/Scripts/VISPROTO.LST";
+        out->sourceFunction = sourceFunction ? sourceFunction : "load_set_base";
+    }
+
+    return true;
 }
 
 bool IFFile::FindSetLooseBaseObjectOverride(const std::string &objectName, const std::string &mode, SetLooseOverride *out, const char *sourceFunction)
