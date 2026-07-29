@@ -266,6 +266,10 @@ Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::I
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameGemUnlockTimeScale("game.gem_unlock_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("2500"));
+// OpenUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
+Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
+Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
+Common::Ini::Key IniConf::GameMgunDamageSectors("game.mgun_damage_sectors", Common::Ini::KT_BOOL, false);
 
 // OpenUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -513,6 +517,9 @@ void IniConf::Init()
         , &GameGemUnlockSound
         , &GameGemUnlockTimeScale
         , &GameWorldUiMaxDistance
+        , &GameMgunRange
+        , &GameMgunAiFireAlignment
+        , &GameMgunDamageSectors
         , &UiStatusIconRegen
         , &UiStatusIconDrain
         , &UiStatusIconDamaged

@@ -246,6 +246,9 @@ public:
     static Common::Ini::Key GameGemUnlockSound;
     static Common::Ini::Key GameGemUnlockTimeScale;
     static Common::Ini::Key GameWorldUiMaxDistance;
+    static Common::Ini::Key GameMgunRange;
+    static Common::Ini::Key GameMgunAiFireAlignment;
+    static Common::Ini::Key GameMgunDamageSectors;
 
     // OpenUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only
