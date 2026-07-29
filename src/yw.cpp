@@ -3598,8 +3598,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_angle = vhcl.mgun_angle;
         bacto->_mgun_power_set = vhcl.mgun_power_set;
         bacto->_mgun_angle_set = vhcl.mgun_angle_set;
-        bacto->_mgun_ai_fire_alignment = vhcl.mgun_ai_fire_alignment;
-        bacto->_mgun_damage_sectors = vhcl.mgun_damage_sectors;
         bacto->_mgun_sector_damage_accum = 0.0;
         bacto->_weapon_spread_x = vhcl.weapon_spread_x;
         bacto->_weapon_spread_y = vhcl.weapon_spread_y;
