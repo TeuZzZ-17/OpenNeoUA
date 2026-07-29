@@ -158,6 +158,54 @@ static float ypabact_ReadFallDamageMultiplier()
     return ypabact_ReadNonNegativeFloatIni(System::IniConf::GameFallDamageMultiplier, 1.0f);
 }
 
+static float ypabact_GetMinigunRange()
+{
+    static const float range = []()
+    {
+        float parsed = ypabact_ReadNonNegativeFloatIni(System::IniConf::GameMgunRange, 1000.0f);
+        if ( !isfinite(parsed) || parsed <= 0.0f )
+            return 1000.0f;
+
+        // Avoid unbounded continuous-fire world scans from extreme values.
+        return std::min(parsed, 6000.0f);
+    }();
+
+    return range;
+}
+
+static float ypabact_GetMinigunAiFireAlignment()
+{
+    static const float alignment = []()
+    {
+        const float dflt = 0.85f;
+        std::string value = System::IniConf::GameMgunAiFireAlignment.Get<std::string>();
+        if ( value.empty() || value.find(',') != std::string::npos )
+            return dflt;
+
+        try
+        {
+            size_t pos = 0;
+            float parsed = std::stof(value, &pos);
+            if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+                 !isfinite(parsed) )
+                return dflt;
+
+            return std::max(-1.0f, std::min(parsed, 1.0f));
+        }
+        catch (...)
+        {
+            return dflt;
+        }
+    }();
+
+    return alignment;
+}
+
+static bool ypabact_IsMinigunSectorDamageEnabled()
+{
+    return System::IniConf::GameMgunDamageSectors.Get<bool>();
+}
+
 static float ypabact_ReadHandBrakePower()
 {
     return ypabact_ReadNonNegativeFloatIni(System::IniConf::GameHandBrakePower, 1.0f);
@@ -1764,8 +1812,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_angle = 0.0;
     _mgun_power_set = false;
     _mgun_angle_set = false;
-    _mgun_ai_fire_alignment = 0.85;
-    _mgun_damage_sectors = false;
     _mgun_sector_damage_accum = 0.0;
     _mgun_vp_fire_end_time = 0;
     _weapon_spread_x = 0.0;
@@ -1990,7 +2036,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;
-    _mgun_damage_sectors = false;
     _mgun_sector_damage_accum = 0.0;
     _mgun_vp_fire_end_time = 0;
 //    ypabact.field_3CE = 0;
@@ -5824,8 +5869,8 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             }
 
             bool minigunHasLineOfSight = false;
-            if ( v45 < 1000.0f && HasMinigun() &&
-                 v40.dot(_rotation.AxisZ()) > _mgun_ai_fire_alignment )
+            if ( v45 < ypabact_GetMinigunRange() && HasMinigun() &&
+                 v40.dot(_rotation.AxisZ()) > ypabact_GetMinigunAiFireAlignment() )
             {
                 ypaworld_arg136 sight;
                 sight.stPos = _position;
@@ -6202,17 +6247,15 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                 _status_flg &= ~BACT_STFLAG_ATTACK;
             }
 
-            // Optional sector/building minigun attack.  The script switch is
-            // intentionally the opt-in gate: vanilla data remains unchanged,
-            // while mgun_damage_sectors = 1 both authorises the AI shot and the
-            // actual ChangeSectorEnergy path inside FireMinigun().
+            // Optional global sector/building minigun attack. The Nucleus
+            // switch both authorises the AI shot and the actual damage path.
             vec3d minigunDir = arg->pos - _position;
             float minigunDistance = minigunDir.normalise();
-            bool fireSectorMinigun = _mgun_damage_sectors &&
+            bool fireSectorMinigun = ypabact_IsMinigunSectorDamageEnabled() &&
                                      HasMinigun() &&
                                      minigunDistance > 0.01f &&
-                                     minigunDistance <= 1000.0f &&
-                                     minigunDir.dot(_rotation.AxisZ()) > _mgun_ai_fire_alignment;
+                                     minigunDistance <= ypabact_GetMinigunRange() &&
+                                     minigunDir.dot(_rotation.AxisZ()) > ypabact_GetMinigunAiFireAlignment();
 
             if ( fireSectorMinigun )
             {
@@ -12967,8 +13010,6 @@ void NC_STACK_ypabact::Renew()
     _mgun_angle = 0.0;
     _mgun_power_set = false;
     _mgun_angle_set = false;
-    _mgun_ai_fire_alignment = 0.85;
-    _mgun_damage_sectors = false;
     _mgun_sector_damage_accum = 0.0;
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
@@ -13985,7 +14026,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         if ( cockpitAim )
             fireDir = ypabact_GetCockpitViewDirection(this, fireDir);
         vec3d shotDir = ypabact_ApplyDirectionalSpread(_rotation, fireDir, spreadX, spreadY);
-        float minigunTraceRange = 1000.0f;
+        float minigunTraceRange = ypabact_GetMinigunRange();
 
         NC_STACK_ypabact *v108 = NULL;
         float v123 = 0.0;
@@ -14002,34 +14043,34 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         if ( !_world->GetSectorInfo(&arg130) )
             continue;
 
-        cellArea *pCells[3];
-        pCells[0] = arg130.pcell;
-
         arg130.pos_x = tmp.x;
         arg130.pos_z = tmp.y;
 
         if ( !_world->GetSectorInfo(&arg130) )
             continue;
 
-        pCells[2] = arg130.pcell;
+        // Longer configurable traces may cross more than the vanilla
+        // start/middle/end sample. Include every sector in the segment's
+        // bounding rectangle, then retain the existing exact ray/body test.
+        Common::Point startCellId = World::PositionToSectorID(shotPos);
+        Common::Point endCellId = World::PositionToSectorID(tmp);
+        int minCellX = std::min(startCellId.x, endCellId.x);
+        int maxCellX = std::max(startCellId.x, endCellId.x);
+        int minCellY = std::min(startCellId.y, endCellId.y);
+        int maxCellY = std::max(startCellId.y, endCellId.y);
+        std::vector<cellArea *> pCells;
 
-        if ( arg130.pcell == pCells[0] )
+        for (int cellY = minCellY; cellY <= maxCellY; cellY++)
         {
-            pCells[1] = pCells[0];
-        }
-        else
-        {
-            vec2d tmp2 = shotPos.XZ() + (tmp - shotPos.XZ()) * 0.5;
-            arg130.pos_x = tmp2.x;
-            arg130.pos_z = tmp2.y;
-
-            if ( !_world->GetSectorInfo(&arg130) )
-                continue;
-
-            pCells[1] = arg130.pcell;
+            for (int cellX = minCellX; cellX <= maxCellX; cellX++)
+            {
+                Common::Point cellId(cellX, cellY);
+                if ( _world->IsSector(cellId) )
+                    pCells.push_back(&_world->SectorAt(cellId));
+            }
         }
 
-        for(int i = 0; i < 3; i++)
+        for(size_t i = 0; i < pCells.size(); i++)
         {
             if ( i <= 0 || pCells[ i ] != pCells[ i - 1 ] )
             {
@@ -14178,7 +14219,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             }
         }
 
-        if ( _mgun_damage_sectors && minigunWorldHit )
+        if ( ypabact_IsMinigunSectorDamageEnabled() && minigunWorldHit )
         {
             NC_STACK_ypabact *userHost = _world->getYW_userHostStation();
             bool canApplyDamage = !_world->_isNetGame ||
