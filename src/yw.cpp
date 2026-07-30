@@ -1934,9 +1934,31 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
         bool openUADebug = System::IniConf::IsGameNewDebugEnabled();
         if ( !openUADebug )
+        {
             _debugGameplayFrozen = false;
-        else if ( arg->field_8 && arg->field_8->KbdLastHit == Input::KC_F12 )
-            _debugGameplayFrozen = !_debugGameplayFrozen;
+            _debugGlobalInvulnerability = false;
+        }
+        else if ( arg->field_8 )
+        {
+            // F9: runtime-only global unit invulnerability. Handle it before
+            // simulation so the toggle applies to damage in the same frame.
+            if ( arg->field_8->KbdLastHit == Input::KC_F9 )
+            {
+                _debugGlobalInvulnerability = !_debugGlobalInvulnerability;
+
+                yw_arg159 infoMsg;
+                infoMsg.txt = _debugGlobalInvulnerability ?
+                              "Global Invulnerability ON" :
+                              "Global Invulnerability OFF";
+                infoMsg.unit = NULL;
+                infoMsg.Priority = 100;
+                infoMsg.MsgID = 0;
+                ypaworld_func159(&infoMsg);
+            }
+
+            if ( arg->field_8->KbdLastHit == Input::KC_F12 )
+                _debugGameplayFrozen = !_debugGameplayFrozen;
+        }
 
         bool gameplayFrozen = openUADebug && _debugGameplayFrozen;
 
@@ -4530,6 +4552,7 @@ void NC_STACK_ypaworld::DeleteLevel()
 void NC_STACK_ypaworld::BeginLevelTeardown()
 {
     _levelTeardownInProgress = true;
+    _debugGlobalInvulnerability = false;
 
     // NC_STACK_ypaworld is reused by restart/load/menu transitions. Invalidate
     // every mission-owned reference before the first BACT is destroyed so UI,
