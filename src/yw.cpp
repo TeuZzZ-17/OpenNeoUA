@@ -3906,6 +3906,11 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_vp_tint = wproto.vp_tint;
     wobj->_vp_orientation = wproto.vp_orientation;
     wobj->_vp_spin_strength = wproto.vp_spin;
+    const bool supportsProjectileCorkspin = wproto.SupportsProjectileCorkspin();
+    wobj->_projectile_corkspin_speed = supportsProjectileCorkspin ? wproto.projectile_corkspin_speed : 0.0f;
+    wobj->_projectile_corkspin_radius = supportsProjectileCorkspin ? wproto.projectile_corkspin_radius : 0.0f;
+    wobj->_projectile_corkspin_forward = supportsProjectileCorkspin ? wproto.projectile_corkspin_forward : 0.0f;
+    wobj->ResetProjectileCorkspinVisualFreeze();
     wobj->_vp_trail_scale = wproto.vp_trail_scale;
     wobj->_vp_trail_tint = wproto.vp_trail_tint;
     wobj->_vp_trail_spin_strength = wproto.vp_trail_spin;
