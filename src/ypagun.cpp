@@ -228,7 +228,8 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 
                 if ( !CheckPedestal() )
                 {
-                    _energy = -10;
+                    if ( !_world || !_world->IsDebugGlobalInvulnerabilityEnabled() )
+                        _energy = -10;
                     break;
                 }
             }
@@ -580,7 +581,8 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
         }
         else
         {
-            _energy = -10;
+            if ( !_world || !_world->IsDebugGlobalInvulnerabilityEnabled() )
+                _energy = -10;
         }
     }
     else if ( _status == BACT_STATUS_DEAD )
@@ -735,7 +737,7 @@ void NC_STACK_ypagun::EnergyInteract(update_msg *arg)
         TMobilePowerInfluence mobilePower = _world->FindMobilePowerInfluenceForUnit(this);
         float mobileDelta = _energy_max * (arg->frameTime / 1000.0) * (mobilePower.AlliedEnergyPower - mobilePower.EnemyEnergyPower) / 40000.0;
 
-        if ( mobileDelta >= 0.0 || !_invulnerable )
+        if ( mobileDelta >= 0.0 || !IsInvulnerableToDamage() )
             _energy += mobileDelta;
 
         if ( _energy < 0 )

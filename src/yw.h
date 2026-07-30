@@ -2215,6 +2215,7 @@ public:
     virtual int getYW_destroyFX();
     virtual NC_STACK_windp *getYW_pNET();
     virtual int getYW_invulnerable();
+    bool IsDebugGlobalInvulnerabilityEnabled() const { return _debugGlobalInvulnerability; }
 
 protected:
     int LevelCommonLoader(TLevelDescription *mapp, int levelID, int a5);
@@ -2763,6 +2764,7 @@ public:
     bool _gamePaused = false;
     uint32_t _gamePausedTimeStamp = 0;
     bool _debugGameplayFrozen = false;
+    bool _debugGlobalInvulnerability = false;
     bool _levelTeardownInProgress = false;
 
     int32_t _timeStamp = 0;

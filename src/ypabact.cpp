@@ -3182,7 +3182,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
 
     _pSector = sect_info.pcell;
 
-    if ( _invulnerable && _energy <= 0 )
+    if ( IsInvulnerableToDamage() && _energy <= 0 )
         _energy = _energy_max > 0 ? _energy_max : 1;
 
     if ( oldcell != sect_info.pcell ) // If cell changed
@@ -3361,9 +3361,18 @@ void NC_STACK_ypabact::Update(update_msg *arg)
              !(_status_flg & BACT_STFLAG_FIRE) && _vp_active == 7 &&
              (_status == BACT_STATUS_NORMAL || _status == BACT_STATUS_IDLE) )
         {
-            const bool idle = _status == BACT_STATUS_IDLE;
-            SetVP(idle ? _vp_wait : _vp_normal);
-            _vp_active = idle ? 6 : 1;
+            // IDLE starts the landing procedure before an air vehicle is
+            // physically on the ground.  When a timed MGUN fire VP expires in
+            // that window, keep the animated NORMAL pose until LAND is real;
+            // otherwise helicopters can descend with their WAIT rotor stopped.
+            const bool useWaitVP =
+                _status == BACT_STATUS_IDLE &&
+                (!ypabact_IsAirVehicle(this) ||
+                 !getBACT_landingOnWait() ||
+                 (_status_flg & BACT_STFLAG_LAND));
+
+            SetVP(useWaitVP ? _vp_wait : _vp_normal);
+            _vp_active = useWaitVP ? 6 : 1;
             _mgun_vp_fire_end_time = 0;
         }
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
@@ -6854,7 +6863,7 @@ void NC_STACK_ypabact::Die()
 
 void NC_STACK_ypabact::SetState(setState_msg *arg)
 {
-    if ( _invulnerable && arg->newStatus == BACT_STATUS_DEAD )
+    if ( IsInvulnerableToDamage() && arg->newStatus == BACT_STATUS_DEAD )
     {
         if ( _energy <= 0 )
             _energy = _energy_max > 0 ? _energy_max : 1;
@@ -10585,6 +10594,12 @@ void NC_STACK_ypabact::UpdateSeekAndExplode(update_msg *)
         payload->DetonateSeekAndExplodePayload(target);
     }
 
+    // Global debug invulnerability protects the carrier while preserving the
+    // payload detonation and its visual/gameplay reactions. Keep the trigger
+    // latched so the same unit does not emit a new payload every frame.
+    if ( _world && _world->IsDebugGlobalInvulnerabilityEnabled() )
+        return;
+
     bool wasInvulnerable = _invulnerable;
     _invulnerable = false;
 
@@ -10954,7 +10969,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         if ( missileArg.tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive() )
             missileArg.direction = ypabact_GetCockpitAimDirection(this, arg147.pos, missileArg.direction, _rotation.AxisZ(), 1400.0);
 
-        if ( _bact_type != BACT_TYPES_GUN && !_invulnerable )
+        if ( _bact_type != BACT_TYPES_GUN && !IsInvulnerableToDamage() )
             _energy -= wobj->_energy / 300;
 
         if ( missileArg.direction.x != 0.0 || missileArg.direction.y != 0.0 || missileArg.direction.z != 0.0 )
@@ -11525,13 +11540,13 @@ void NC_STACK_ypabact::EnergyInteract(update_msg *arg)
 
             if ( _owner == _pSector->owner )
                 _energy += denerg;
-            else if ( !_invulnerable )
+            else if ( !IsInvulnerableToDamage() )
                 _energy -= denerg;
 
             TMobilePowerInfluence mobilePower = _world->FindMobilePowerInfluenceForUnit(this);
             float mobileDelta = 2.0 * _energy_max * v14 * (mobilePower.AlliedEnergyPower - mobilePower.EnemyEnergyPower) / 7000.0;
 
-            if ( mobileDelta >= 0.0 || !_invulnerable )
+            if ( mobileDelta >= 0.0 || !IsInvulnerableToDamage() )
                 _energy += mobileDelta;
 
             if ( _energy < 0 )
@@ -11630,6 +11645,19 @@ float NC_STACK_ypabact::GetEffectiveShield() const
     return GetEffectiveShieldWithAdditionalMalus(0.0f);
 }
 
+bool NC_STACK_ypabact::IsInvulnerableToDamage() const
+{
+    if ( _invulnerable )
+        return true;
+
+    // Projectiles must retain their normal lifetime and impact/destruction
+    // path. The F9 debug feature protects gameplay units, not missiles.
+    if ( _bact_type == BACT_TYPES_MISSLE )
+        return false;
+
+    return _world && _world->IsDebugGlobalInvulnerabilityEnabled();
+}
+
 void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
 {
     // OpenUA Black Sect clone balance: when the *attacker* is an imperfect grey
@@ -11648,7 +11676,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
         arg->energy = scaled;
     }
 
-    if ( _invulnerable && arg->energy < 0 )
+    if ( IsInvulnerableToDamage() && arg->energy < 0 )
         return;
 
     if (_world && (_oflags & BACT_OFLAG_VIEWER))
@@ -11975,7 +12003,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                         if ( arg->field_one & 1 )
                         {
-                            if ( !_invulnerable )
+                            if ( !IsInvulnerableToDamage() )
                                 _energy -= fabs(_fly_dir_length) * 10.0 * ypabact_ReadFallDamageMultiplier();
 
                             if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
@@ -12026,7 +12054,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                                 if ( _reb_count > 50 )
                                 {
-                                    if ( !_invulnerable )
+                                    if ( !IsInvulnerableToDamage() )
                                         _energy = -10000;
 
                                     _status_flg |= BACT_STFLAG_LAND;
@@ -12068,7 +12096,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                         if ( arg->field_one & 1 )
                         {
-                            if ( !_invulnerable )
+                            if ( !IsInvulnerableToDamage() )
                                 _energy -= fabs(_fly_dir_length) * 10.0 * ypabact_ReadFallDamageMultiplier();
 
                             if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
@@ -12107,7 +12135,8 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                                 if ( _reb_count > 50 )
                                 {
-                                    _energy = -10000;
+                                    if ( !_world || !_world->IsDebugGlobalInvulnerabilityEnabled() )
+                                        _energy = -10000;
                                     _status_flg |= BACT_STFLAG_LAND;
                                 }
                             }
@@ -14135,7 +14164,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         if ( a4 )
             v107 = 1;
     }
-    else if ( !_invulnerable )
+    else if ( !IsInvulnerableToDamage() )
     {
         _energy -= mgunPower * arg->field_C / 300.0;
     }

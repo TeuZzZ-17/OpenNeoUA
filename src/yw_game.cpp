@@ -212,6 +212,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     _gamePaused = false;
     _gamePausedTimeStamp = 0;
     _debugGameplayFrozen = false;
+    _debugGlobalInvulnerability = false;
     _joyIgnoreX = 1;
     _joyIgnoreY = 1;
     _joyIgnoreZ = 0;
@@ -6489,6 +6490,10 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
             else
                 sub_445654(this, &dbg_txt, buf_sprintf, "invulnerable: %s", "NO");
             FontUA::next_line(&dbg_txt);
+
+            sub_445654(this, &dbg_txt, buf_sprintf, "global invulnerability: %s",
+                       _debugGlobalInvulnerability ? "YES" : "NO");
+            FontUA::next_line(&dbg_txt);
         }
         else if ( _showDebugMode == 2 )
         {
@@ -6818,6 +6823,7 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
         _showCollDebug = false;
         _hideHudForScreenshots = false;
         _debugGameplayFrozen = false;
+        _debugGlobalInvulnerability = false;
     }
     else
     {
