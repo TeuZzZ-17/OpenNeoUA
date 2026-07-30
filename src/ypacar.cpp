@@ -182,7 +182,7 @@ void NC_STACK_ypacar::DoKamikaze()
                             if ( World::CloneBalance::IsCloneActor(this) )
                                 v67 = (int)((float)v67 * World::CloneBalance::DownFactor());
 
-                            if ( !v19->_invulnerable )
+                            if ( !v19->IsInvulnerableToDamage() )
                             {
                                 v19->_energy -= v67;
 
@@ -202,7 +202,10 @@ void NC_STACK_ypacar::DoKamikaze()
                             }
                         }
 
-                        if ( v19->_energy <= 0 || v19->_bact_type == BACT_TYPES_MISSLE )
+                        NC_STACK_ypaworld *targetWorld = v19->getBACT_pWorld();
+                        if ( (v19->_energy <= 0 &&
+                              (!targetWorld || !targetWorld->IsDebugGlobalInvulnerabilityEnabled())) ||
+                             v19->_bact_type == BACT_TYPES_MISSLE )
                         {
                             setState_msg arg78;
                             arg78.setFlags = 0;
@@ -296,7 +299,7 @@ void NC_STACK_ypacar::DoKamikaze()
 
     _bact_type = BACT_TYPES_CAR;
 
-    if ( !_invulnerable )
+    if ( !IsInvulnerableToDamage() )
         _energy = -10;
 }
 

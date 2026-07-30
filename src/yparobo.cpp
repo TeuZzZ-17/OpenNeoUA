@@ -923,7 +923,7 @@ void NC_STACK_yparobo::ChangeSectorEnergyFromRoboCollision(yw_arg129 *arg)
     }
 
     int destroyedBuildings = buildingsBefore - buildingsAfter;
-    if ( destroyedBuildings <= 0 || _energy_max <= 0 || _invulnerable )
+    if ( destroyedBuildings <= 0 || _energy_max <= 0 || IsInvulnerableToDamage() )
         return;
 
     int damagePercent = System::IniConf::GameRoboBuildingCollisionDamagePercent.Get<int>();
@@ -5926,7 +5926,8 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
             }
             else
             {
-                _energy -= v71;
+                if ( !_world || !_world->IsDebugGlobalInvulnerabilityEnabled() )
+                    _energy -= v71;
             }
         }
 
