@@ -2630,7 +2630,7 @@ void NC_STACK_ypaworld::UpdateDecorationFX(const World::TDecorationFXConfig &con
                                    TTransientVPParticleControls(config));
 }
 
-int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale, bool useOwnerTransform, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, bool playerFirstPersonOnly, const vec3d &localRotation, bool hideInOwnerMissileCamera, const TTransientVPParticleControls &particleControls)
+int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale, bool useOwnerTransform, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, bool playerFirstPersonOnly, const vec3d &localRotation, bool hideInOwnerMissileCamera, const TTransientVPParticleControls &particleControls, bool followOwnerVisualTransform)
 {
     if ( !owner || modelId <= 0 || modelId >= (int32_t)_vhclModels.size() )
         return 0;
@@ -2651,6 +2651,7 @@ int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_yp
     fx.followOwnerGid = owner->_gid;
     fx.followLocalOffset = localOffset;
     fx.followUseOwnerTransform = useOwnerTransform;
+    fx.followOwnerVisualTransform = followOwnerVisualTransform;
     fx.playerFirstPersonOnly = playerFirstPersonOnly;
     fx.localRotation = localRotation;
     fx.hideInOwnerMissileCamera = hideInOwnerMissileCamera;
@@ -3258,8 +3259,22 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
             // which is the intermittent "floating FX" bug seen in-game.
             if ( it->followUseOwnerTransform )
             {
-                it->pos = owner->_position + owner->_rotation.Transpose().Transform(it->followLocalOffset);
-                it->rot = owner->_rotation;
+                vec3d ownerPos = owner->_position;
+                mat3x3 ownerRenderRot = owner->_rotation.Transpose();
+
+                if ( it->followOwnerVisualTransform )
+                {
+                    vec3d visualOffset;
+                    mat3x3 visualRotationDelta;
+                    if ( owner->GetProjectileCorkspinVisualDelta(&visualOffset, &visualRotationDelta) )
+                    {
+                        ownerPos += visualOffset;
+                        ownerRenderRot *= visualRotationDelta;
+                    }
+                }
+
+                it->pos = ownerPos + ownerRenderRot.Transform(it->followLocalOffset);
+                it->rot = ownerRenderRot.Transpose();
             }
             else
             {

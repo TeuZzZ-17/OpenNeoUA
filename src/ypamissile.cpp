@@ -2811,6 +2811,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
 
     if ( arg->newStatus == BACT_STATUS_DEAD )
     {
+        FreezeProjectileCorkspinVisual();
         SetVP(_vp_dead);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 2);
@@ -2823,6 +2824,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
 
     if ( arg->newStatus == BACT_STATUS_NORMAL )
     {
+        ResetProjectileCorkspinVisualFreeze();
         SetVP(_vp_normal);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 0);
@@ -2830,6 +2832,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
 
     if ( arg->unsetFlags == BACT_STFLAG_DEATH2 )
     {
+        ResetProjectileCorkspinVisualFreeze();
         SetVP(_vp_normal);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 0);
@@ -2839,6 +2842,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
     {
         _status = BACT_STATUS_DEAD;
 
+        FreezeProjectileCorkspinVisual();
         SetVP(_vp_megadeth);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 2);

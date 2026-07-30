@@ -658,6 +658,15 @@ struct TWeapProto
         return (_weaponFlags & WEAPON_FLAG_VERTICAL_LASER) != 0;
     }
 
+    // OpenUA custom: the render-only projectile corkscrew is available to every
+    // physical projectile class. Continuous laser classes deliberately remain
+    // excluded because they render beams instead of a travelling projectile VP.
+    bool SupportsProjectileCorkspin() const
+    {
+        return (_weaponFlags & WEAPON_FLAG_PROJECTILE) != 0 &&
+               !IsLaser() && !IsVerticalLaser();
+    }
+
     bool IsBombLike() const
     {
         return _weaponFlags == WEAPON_FLAGS_BOMB || IsHomingBomb() || IsVerticalLaser();
@@ -681,6 +690,15 @@ struct TWeapProto
     vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_orientation = vec3d(0.0, 0.0, 0.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
+    // OpenUA custom: render-only corkscrew orbit for every physical projectile
+    // class except model = laser and model = vertical_laser.
+    // Speed uses the shared 0..10 revolutions-per-second scale. Radius is the
+    // radial orbit distance in model/world units (0..1000). Forward is the maximum
+    // bounded longitudinal visual excursion during each turn (0..1000). The
+    // projectile's physical position, direction and collision path stay central.
+    float projectile_corkspin_speed = 0.0f;
+    float projectile_corkspin_radius = 0.0f;
+    float projectile_corkspin_forward = 0.0f;
     TVisualTint vp_tint; // OpenUA custom: main VP visual-only RGBA tint multiplier
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
