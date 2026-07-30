@@ -510,6 +510,7 @@ public:
     void UpdateActiveDebuffDisorientFire(update_msg *arg);
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual void ModifyEnergy(bact_arg84 *arg);
+    bool IsInvulnerableToDamage() const;
     float GetEffectiveShield() const;
     float GetEffectiveShieldWithAdditionalMalus(float additionalMalus) const;
     virtual bool ypabact_func85(vec3d *arg);
