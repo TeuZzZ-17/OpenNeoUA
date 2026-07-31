@@ -7130,10 +7130,13 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         bool isSelfControlled = (unit == _userUnit || unit == _viewerBact || unit->getBACT_inputting());
         vec3d pos = unit->_position;
         World::rbcolls *colls = unit->getBACT_collNodes();
-        bool compoundReplacesDebugRadius = unit->_bact_type == BACT_TYPES_ROBO && colls;
+        bool legacyRadiusCollisionEnabled = unit->UsesLegacyRadiusCollision();
 
-        // Red broad/fallback radius. Skip only the self radius to avoid cockpit cross lines.
-        if (!isSelfControlled && !compoundReplacesDebugRadius)
+        // Red legacy radius. Manual coll_* suppresses the default radius only
+        // when the script did not explicitly author radius. Native Robo volumes
+        // and explicitly authored hybrid radius + coll_* keep the red sphere.
+        // The self radius remains hidden to avoid cockpit cross lines.
+        if (!isSelfControlled && legacyRadiusCollisionEnabled)
         {
             float R = unit->_radius;
             if (R > 0.01f)

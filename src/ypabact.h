@@ -677,6 +677,17 @@ public:
     virtual World::rbcolls *getBACT_collNodes()
     { return _collNodes.roboColls.empty() ? NULL : &_collNodes; } // OpenUA: universal compound spheres
 
+    bool HasManualCompoundCollision() const
+    {
+        // Robo/Host Station keeps its dedicated vanilla robo_coll_* volume set.
+        // The yparobo override does not expose the base vehicle _collNodes.
+        return _bact_type != BACT_TYPES_ROBO &&
+               _manualCompoundCollision && !_collNodes.roboColls.empty();
+    }
+
+    bool UsesLegacyRadiusCollision() const
+    { return !HasManualCompoundCollision() || _legacyRadiusDefined; }
+
     virtual float getBACT_collPadding() const
     { return 0.0f; }
 
@@ -1119,6 +1130,8 @@ public:
     bool _isDummy;
     // OpenUA custom: universal compound collision spheres for non-robo vehicles
     World::rbcolls _collNodes;
+    bool _manualCompoundCollision = false;
+    bool _legacyRadiusDefined = false;
     float _heading_speed;
     NC_STACK_ypabact *_killer;
     int16_t _killer_owner;

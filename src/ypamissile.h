@@ -95,6 +95,10 @@ public:
     virtual void SetPowerTank(int);
     virtual void SetPowerFlyer(int);
     virtual void SetPowerRobo(int);
+    virtual void SetRadiusHeli(float);
+    virtual void SetRadiusTank(float);
+    virtual void SetRadiusFlyer(float);
+    virtual void SetRadiusRobo(float);
     virtual void SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
                                float sectorRadius, int sectorEnergy, int falloff);
     virtual void SetAoeUnitPush(int push);
@@ -113,6 +117,10 @@ public:
     virtual int GetPowerTank();
     virtual int GetPowerFlyer();
     virtual int GetPowerRobo();
+    virtual float GetRadiusHeli();
+    virtual float GetRadiusTank();
+    virtual float GetRadiusFlyer();
+    virtual float GetRadiusRobo();
     virtual float GetStartHeight();
 
     vec3d CalcForceVector();
@@ -183,6 +191,10 @@ protected:
     float _mislEnergyTank   = 0.0;
     float _mislEnergyFlyer  = 0.0;
     float _mislEnergyRobo   = 0.0;
+    float _mislRadiusHeli   = 0.0;
+    float _mislRadiusTank   = 0.0;
+    float _mislRadiusFlyer  = 0.0;
+    float _mislRadiusRobo   = 0.0;
     float _mislAoeUnitRadius    = 0.0;
     int _mislAoeUnitEnergy      = 0;
     float _mislAoeBuildingRadius = 0.0;

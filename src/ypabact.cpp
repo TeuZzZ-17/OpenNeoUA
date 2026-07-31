@@ -9102,46 +9102,43 @@ static bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapPr
                 bool bodyHit = false;
                 World::rbcolls *colls = bct->getBACT_collNodes();
 
+                auto testBodySphere = [&](const vec3d &sphereCenter, float sphereRadius)
+                {
+                    if ( sphereRadius <= 0.01f )
+                        return;
+
+                    vec3d to = sphereCenter - origin;
+                    float along = to.dot(dir);
+                    if ( along <= 0.0f || along > range )
+                        return;
+
+                    vec3d closest = origin + dir * along;
+                    if ( (sphereCenter - closest).length() > sphereRadius + weaponRadius )
+                        return;
+
+                    if ( along < bodyAlong )
+                    {
+                        bodyAlong = along;
+                        bodyHitPoint = closest;
+                        bodyHit = true;
+                    }
+                };
+
                 if ( colls )
                 {
+                    if ( bct->HasManualCompoundCollision() && bct->UsesLegacyRadiusCollision() )
+                        testBodySphere(bct->_position, bct->_radius);
+
                     mat3x3 rotT = bct->_rotation.Transpose();
                     for (const World::TRoboColl &sphere : colls->roboColls)
                     {
-                        if ( sphere.robo_coll_radius <= 0.01f )
-                            continue;
-
-                        vec3d center = bct->_position + rotT.Transform(sphere.coll_pos);
-                        vec3d to = center - origin;
-                        float along = to.dot(dir);
-                        if ( along <= 0.0f || along > range )
-                            continue;
-
-                        vec3d closest = origin + dir * along;
-                        if ( (center - closest).length() > sphere.robo_coll_radius + weaponRadius )
-                            continue;
-
-                        if ( along < bodyAlong )
-                        {
-                            bodyAlong = along;
-                            bodyHitPoint = closest;
-                            bodyHit = true;
-                        }
+                        vec3d sphereCenter = bct->_position + rotT.Transform(sphere.coll_pos);
+                        testBodySphere(sphereCenter, sphere.robo_coll_radius);
                     }
                 }
                 else
                 {
-                    vec3d to = bct->_position - origin;
-                    float along = to.dot(dir);
-                    if ( along > 0.0f && along <= range )
-                    {
-                        vec3d closest = origin + dir * along;
-                        if ( (bct->_position - closest).length() <= bct->_radius + weaponRadius )
-                        {
-                            bodyAlong = along;
-                            bodyHitPoint = closest;
-                            bodyHit = true;
-                        }
-                    }
+                    testBodySphere(bct->_position, bct->_radius);
                 }
 
                 if ( !bodyHit )
@@ -12245,6 +12242,10 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
 
     World::rbcolls *selfColls = getBACT_collNodes();
     World::rbcolls *otherColls = other->getBACT_collNodes();
+    const bool selfManual = HasManualCompoundCollision();
+    const bool otherManual = other->HasManualCompoundCollision();
+    const bool selfLegacy = UsesLegacyRadiusCollision();
+    const bool otherLegacy = other->UsesLegacyRadiusCollision();
     vec3d selfOrigin = _position;
     vec3d otherOrigin = other->_position;
 
@@ -12254,11 +12255,15 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
         otherOrigin.y += other->_viewer_overeof - other->_overeof;
 
     float broad = GetCollisionBroadRadius() + other->GetCollisionBroadRadius();
-    if ( (selfOrigin - otherOrigin).square() > broad * broad )
+    if ( broad <= 0.01f || (selfOrigin - otherOrigin).square() > broad * broad )
         return false;
 
-    int selfCount = selfColls ? (int)selfColls->roboColls.size() : 1;
-    int otherCount = otherColls ? (int)otherColls->roboColls.size() : 1;
+    const int selfLegacySlots = selfManual && selfLegacy ? 1 : 0;
+    const int otherLegacySlots = otherManual && otherLegacy ? 1 : 0;
+    int selfCount = selfManual ? selfLegacySlots + (int)selfColls->roboColls.size()
+                              : (selfColls ? (int)selfColls->roboColls.size() : 1);
+    int otherCount = otherManual ? otherLegacySlots + (int)otherColls->roboColls.size()
+                                 : (otherColls ? (int)otherColls->roboColls.size() : 1);
     mat3x3 selfRotT = _rotation.Transpose();
     mat3x3 otherRotT = other->_rotation.Transpose();
     float bestPenetration = 0.0f;
@@ -12268,8 +12273,20 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
     for (int i = 0; i < selfCount; i++)
     {
         vec3d a = selfOrigin;
-        float ar = getBACT_viewer() && !selfColls ? _viewer_radius : _radius;
-        if ( selfColls )
+        float ar = getBACT_viewer() ? _viewer_radius : _radius;
+
+        if ( selfManual )
+        {
+            if ( i >= selfLegacySlots )
+            {
+                const World::TRoboColl &sphere = selfColls->roboColls[i - selfLegacySlots];
+                if ( sphere.robo_coll_radius <= 0.01f )
+                    continue;
+                a += selfRotT.Transform(sphere.coll_pos);
+                ar = sphere.robo_coll_radius;
+            }
+        }
+        else if ( selfColls )
         {
             const World::TRoboColl &sphere = selfColls->roboColls[i];
             if ( sphere.robo_coll_radius <= 0.01f )
@@ -12278,11 +12295,26 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
             ar = sphere.robo_coll_radius;
         }
 
+        if ( ar <= 0.01f )
+            continue;
+
         for (int j = 0; j < otherCount; j++)
         {
             vec3d b = otherOrigin;
-            float br = other->_radius;
-            if ( otherColls )
+            float br = other->getBACT_viewer() ? other->_viewer_radius : other->_radius;
+
+            if ( otherManual )
+            {
+                if ( j >= otherLegacySlots )
+                {
+                    const World::TRoboColl &sphere = otherColls->roboColls[j - otherLegacySlots];
+                    if ( sphere.robo_coll_radius <= 0.01f )
+                        continue;
+                    b += otherRotT.Transform(sphere.coll_pos);
+                    br = sphere.robo_coll_radius;
+                }
+            }
+            else if ( otherColls )
             {
                 const World::TRoboColl &sphere = otherColls->roboColls[j];
                 if ( sphere.robo_coll_radius <= 0.01f )
@@ -12290,6 +12322,9 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
                 b += otherRotT.Transform(sphere.coll_pos);
                 br = sphere.robo_coll_radius;
             }
+
+            if ( br <= 0.01f )
+                continue;
 
             float overlap = ar + br - (b - a).length();
             if ( overlap > bestPenetration )
@@ -12410,7 +12445,7 @@ bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
 
 float NC_STACK_ypabact::GetCollisionBroadRadius()
 {
-    float broadRadius = _radius;
+    float broadRadius = UsesLegacyRadiusCollision() ? _radius : 0.0f;
     World::rbcolls *colls = getBACT_collNodes();
     if ( !colls )
         return broadRadius;
@@ -12480,35 +12515,21 @@ size_t NC_STACK_ypabact::CollisionWithBact(int arg)
     if ( _fly_dir_length == 0.0 || !_pSector )
         return 0;
 
-    vec3d collisionCenters(0.0, 0.0, 0.0);
-    int collisionCount = 0;
+    const float trad = isViewer ? _viewer_radius : _radius;
+    World::rbcolls *selfColls = getBACT_collNodes();
+    const bool selfManual = HasManualCompoundCollision();
+    const bool selfHasNativeColls = selfColls && !selfManual;
+    bool sawVanillaTargetColls = false;
 
-    for ( NC_STACK_ypabact *bnode : _pSector->unitsList.safe_iter() )
+    vec3d manualCenters(0.0, 0.0, 0.0);
+    vec3d vanillaCenters(0.0, 0.0, 0.0);
+    int manualCount = 0;
+    int vanillaCount = 0;
+    std::vector<NC_STACK_ypabact *> manualContacts;
+    std::vector<NC_STACK_ypabact *> vanillaContacts;
+
+    auto finishPlasma = [&](NC_STACK_ypabact *bnode)
     {
-        int plasma = bnode && bnode->_status == BACT_STATUS_DEAD &&
-                     (bnode->_vp_extra[0].flags & 1) &&
-                     (_oflags & BACT_OFLAG_USERINPT) && bnode->_scale_time > 0;
-
-        if ( !bnode || bnode == this || bnode->_bact_type == BACT_TYPES_MISSLE ||
-             (bnode->IsDestroyed() && !plasma) )
-            continue;
-
-        vec3d selfCenter;
-        vec3d targetCenter;
-        if ( !GetUnitCollisionContact(bnode, &selfCenter, &targetCenter, NULL) )
-            continue;
-
-        if ( !plasma )
-        {
-            HandleUnitCollisionContact(bnode, arg);
-
-            // Feed the coll-sphere pair into the exact vanilla radius response:
-            // same averaging, angle gate and Recoil, only the tested centers differ.
-            collisionCenters += _position + (targetCenter - selfCenter);
-            collisionCount++;
-            continue;
-        }
-
         CollisionWithBact__sub0(this, bnode);
         bnode->_scale_time = -1;
 
@@ -12529,18 +12550,104 @@ size_t NC_STACK_ypabact::CollisionWithBact(int arg)
                 bnode->_vp_extra[0].SetVP((NC_STACK_base::Instance *)NULL);
             }
         }
+    };
+
+    for ( NC_STACK_ypabact *bnode : _pSector->unitsList.safe_iter() )
+    {
+        int plasma = bnode && bnode->_status == BACT_STATUS_DEAD &&
+                     (bnode->_vp_extra[0].flags & 1) &&
+                     (_oflags & BACT_OFLAG_USERINPT) && bnode->_scale_time > 0;
+
+        if ( !bnode || bnode == this || bnode->_bact_type == BACT_TYPES_MISSLE ||
+             (bnode->IsDestroyed() && !plasma) )
+            continue;
+
+        const bool pairUsesManualCompound = selfManual || bnode->HasManualCompoundCollision();
+        if ( pairUsesManualCompound )
+        {
+            vec3d selfCenter;
+            vec3d targetCenter;
+            if ( !GetUnitCollisionContact(bnode, &selfCenter, &targetCenter, NULL) )
+                continue;
+
+            if ( plasma )
+            {
+                finishPlasma(bnode);
+                continue;
+            }
+
+            manualCenters += _position + (targetCenter - selfCenter);
+            manualCount++;
+            if ( std::find(manualContacts.begin(), manualContacts.end(), bnode) == manualContacts.end() )
+                manualContacts.push_back(bnode);
+            continue;
+        }
+
+        // Vanilla radius / Robo compound path. This intentionally preserves the
+        // original asymmetry and the Robo gate: a Robo's native collision nodes
+        // do not make it recoil against ordinary single-radius units. Restoring
+        // that rule prevents stationary floating Host Stations from being nudged
+        // continuously by nearby simple actors or mounted units.
+        World::rbcolls *targetColls = bnode->getBACT_collNodes();
+        const int targetCount = targetColls ? (int)targetColls->roboColls.size() : 1;
+        if ( targetColls )
+            sawVanillaTargetColls = true;
+
+        for (int i = targetCount - 1; i >= 0; i--)
+        {
+            float targetRadius = trad;
+            vec3d targetPosition = bnode->_position;
+
+            if ( targetColls )
+            {
+                const World::TRoboColl &sphere = targetColls->roboColls[i];
+                targetRadius = sphere.robo_coll_radius;
+                if ( targetRadius < 0.01f )
+                    continue;
+
+                targetPosition += bnode->_rotation.Transpose().Transform(sphere.coll_pos);
+            }
+
+            if ( (_position - targetPosition).length() > trad + targetRadius )
+                continue;
+
+            if ( plasma )
+            {
+                finishPlasma(bnode);
+                break;
+            }
+
+            vanillaCenters += targetPosition;
+            vanillaCount++;
+            if ( std::find(vanillaContacts.begin(), vanillaContacts.end(), bnode) == vanillaContacts.end() )
+                vanillaContacts.push_back(bnode);
+        }
     }
 
-    if ( !collisionCount )
+    const bool useVanillaContacts = vanillaCount > 0 &&
+                                    (!selfHasNativeColls || sawVanillaTargetColls);
+    const int collisionCount = manualCount + (useVanillaContacts ? vanillaCount : 0);
+    if ( collisionCount == 0 )
     {
         _status_flg &= ~BACT_STFLAG_BCRASH;
         return 0;
     }
 
+    for (NC_STACK_ypabact *contact : manualContacts)
+        HandleUnitCollisionContact(contact, arg);
+    if ( useVanillaContacts )
+    {
+        for (NC_STACK_ypabact *contact : vanillaContacts)
+            HandleUnitCollisionContact(contact, arg);
+    }
+
+    vec3d collisionCenters = manualCenters;
+    if ( useVanillaContacts )
+        collisionCenters += vanillaCenters;
     collisionCenters /= (double)collisionCount;
+
     vec3d collisionDir = collisionCenters - _position;
     float collisionDirLength = collisionDir.length();
-
     if ( collisionDirLength < 0.0001 )
         return 0;
 
@@ -14267,10 +14374,13 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                             {
 
                                 World::rbcolls *v93 = cellUnit->getBACT_collNodes();
+                                const bool targetManualCompound = cellUnit->HasManualCompoundCollision();
+                                const int targetLegacySlots =
+                                    targetManualCompound && cellUnit->UsesLegacyRadiusCollision() ? 1 : 0;
 
                                 int v109;
                                 if ( v93 )
-                                    v109 = v93->roboColls.size();
+                                    v109 = targetLegacySlots + v93->roboColls.size();
                                 else
                                     v109 = 1;
 
@@ -14281,11 +14391,12 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                     vec3d v77;
                                     float v27;
 
-                                    if ( v93 )
+                                    if ( v93 && (!targetManualCompound || j >= targetLegacySlots) )
                                     {
-                                        v77 = cellUnit->_position + cellUnit->_rotation.Transpose().Transform( v93->roboColls[j].coll_pos );
+                                        int sphereIndex = targetManualCompound ? j - targetLegacySlots : j;
+                                        v77 = cellUnit->_position + cellUnit->_rotation.Transpose().Transform( v93->roboColls[sphereIndex].coll_pos );
 
-                                        v27 = v93->roboColls[j].robo_coll_radius;
+                                        v27 = v93->roboColls[sphereIndex].robo_coll_radius;
                                     }
                                     else
                                     {
