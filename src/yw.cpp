@@ -1160,8 +1160,81 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
             }
 
+            // F8: one-shot destruction of the selected vehicle. F8 is also
+            // the vanilla last-message hotkey, so consume that binding only
+            // while the OpenUA debug mode is active.
+            if ( arg->field_8->KbdLastHit == Input::KC_F8 )
+            {
+                arg->field_8->HotKeyID = -1;
+
+                auto isDebugDestroyableVehicle = [](const NC_STACK_ypabact *unit)
+                {
+                    if ( !unit ||
+                         (unit->_status != BACT_STATUS_NORMAL && unit->_status != BACT_STATUS_IDLE) ||
+                         unit->_energy <= 0 ||
+                         (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) )
+                        return false;
+
+                    switch ( unit->_bact_type )
+                    {
+                    case BACT_TYPES_BACT:
+                    case BACT_TYPES_TANK:
+                    case BACT_TYPES_ZEPP:
+                    case BACT_TYPES_FLYER:
+                    case BACT_TYPES_UFO:
+                    case BACT_TYPES_CAR:
+                    case BACT_TYPES_HOVER:
+                        return true;
+
+                    default:
+                        return false;
+                    }
+                };
+
+                NC_STACK_ypabact *selectedVehicle = _bactOnMouse;
+                if ( selectedVehicle && !isDebugDestroyableVehicle(selectedVehicle) &&
+                     selectedVehicle->_parent && selectedVehicle->_parent != selectedVehicle->_host_station )
+                    selectedVehicle = selectedVehicle->_parent;
+
+                const bool destroyed = isDebugDestroyableVehicle(selectedVehicle);
+                if ( destroyed )
+                {
+                    selectedVehicle->_killer = NULL;
+                    selectedVehicle->_killer_owner = 0;
+                    selectedVehicle->_energy = 0;
+
+                    setState_msg deathState;
+                    deathState.newStatus = BACT_STATUS_DEAD;
+                    deathState.unsetFlags = 0;
+                    deathState.setFlags = 0;
+                    selectedVehicle->SetStateInternal(&deathState);
+                    selectedVehicle->Die();
+                    _bactOnMouse = NULL;
+                }
+
+                yw_arg159 infoMsg;
+                infoMsg.txt = destroyed ?
+                              "Vehicle Destroyed" :
+                              "No Vehicle Selected";
+                infoMsg.unit = NULL;
+                infoMsg.Priority = 100;
+                infoMsg.MsgID = 0;
+                ypaworld_func159(&infoMsg);
+            }
+
             if ( arg->field_8->KbdLastHit == Input::KC_F12 )
+            {
                 _debugGameplayFrozen = !_debugGameplayFrozen;
+
+                yw_arg159 infoMsg;
+                infoMsg.txt = _debugGameplayFrozen ?
+                              "Game Time Frozen" :
+                              "Game Time Resumed";
+                infoMsg.unit = NULL;
+                infoMsg.Priority = 100;
+                infoMsg.MsgID = 0;
+                ypaworld_func159(&infoMsg);
+            }
         }
 
         bool gameplayFrozen = openUADebug && _debugGameplayFrozen;

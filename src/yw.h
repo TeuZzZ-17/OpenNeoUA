@@ -2363,7 +2363,6 @@ public:
     void debug_draw_coll_spheres();
     void ExpireDebugAoeRings();
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
-    void DebugAddSphere(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b, int durationMs);
 
     // OpenUA custom: mortar bombardment markers + manual map-click control.
     void AddMortarMarker(const vec3d &pos, float radius, int owner, int lingerMs);
@@ -2868,7 +2867,6 @@ public:
         uint8_t r           = 255;
         uint8_t g           = 255;
         uint8_t b           = 255;
-        bool    sphere      = false;
         int32_t createdStamp = 0;
         int32_t expireStamp = 0;
     };
