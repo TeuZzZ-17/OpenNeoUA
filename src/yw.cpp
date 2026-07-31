@@ -1204,9 +1204,25 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     selectedVehicle->_energy = 0;
 
                     setState_msg deathState;
-                    deathState.newStatus = BACT_STATUS_DEAD;
                     deathState.unsetFlags = 0;
-                    deathState.setFlags = 0;
+
+                    // Match the normal lethal-damage transition for tanks and
+                    // cars: their death state is DEATH2, which emits the
+                    // begin_chain_fx trigger "crash". Keep this as a direct
+                    // internal transition so F8 remains a forced debug kill
+                    // even while global invulnerability (F9) is enabled.
+                    if ( selectedVehicle->_bact_type == BACT_TYPES_TANK ||
+                         selectedVehicle->_bact_type == BACT_TYPES_CAR )
+                    {
+                        deathState.newStatus = BACT_STATUS_NOPE;
+                        deathState.setFlags = BACT_STFLAG_DEATH2;
+                    }
+                    else
+                    {
+                        deathState.newStatus = BACT_STATUS_DEAD;
+                        deathState.setFlags = 0;
+                    }
+
                     selectedVehicle->SetStateInternal(&deathState);
                     selectedVehicle->Die();
                     _bactOnMouse = NULL;
