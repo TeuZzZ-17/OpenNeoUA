@@ -15542,20 +15542,89 @@ void NC_STACK_ypabact::BeamingTimeUpdate(update_msg *arg)
     }
 }
 
+static bool ypabact_GetCompoundFXGeometry(NC_STACK_ypabact *bact,
+                                           vec3d *center,
+                                           float *radius)
+{
+    if ( !bact || !bact->HasManualCompoundCollision() || bact->UsesLegacyRadiusCollision() )
+        return false;
+
+    World::rbcolls *colls = bact->getBACT_collNodes();
+    if ( !colls )
+        return false;
+
+    vec3d weightedCenter(0.0, 0.0, 0.0);
+    double totalWeight = 0.0;
+
+    for (const World::TRoboColl &sphere : colls->roboColls)
+    {
+        if ( sphere.robo_coll_radius <= 0.01f )
+            continue;
+
+        double sphereRadius = sphere.robo_coll_radius;
+        double weight = sphereRadius * sphereRadius * sphereRadius;
+        weightedCenter += sphere.coll_pos * weight;
+        totalWeight += weight;
+    }
+
+    if ( totalWeight <= 0.0 )
+        return false;
+
+    weightedCenter /= totalWeight;
+
+    if ( center )
+        *center = weightedCenter;
+
+    if ( radius )
+    {
+        float broadRadius = 0.0f;
+        float padding = bact->getBACT_collPadding();
+
+        for (const World::TRoboColl &sphere : colls->roboColls)
+        {
+            if ( sphere.robo_coll_radius <= 0.01f )
+                continue;
+
+            float extent = (sphere.coll_pos - weightedCenter).length() +
+                           sphere.robo_coll_radius + padding;
+            if ( extent > broadRadius )
+                broadRadius = extent;
+        }
+
+        *radius = broadRadius;
+    }
+
+    return true;
+}
+
 void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx)
 {
     ypaworld_arg146 arg146;
 
+    vec3d compoundCenter;
+    float compoundRadius = 0.0f;
+    const bool hasCompoundFXGeometry =
+        ypabact_GetCompoundFXGeometry(this, &compoundCenter, &compoundRadius);
+
     arg146.pos = _position;
+    float effectRadius = _radius;
+
+    if ( hasCompoundFXGeometry )
+    {
+        arg146.pos += _rotation.Transpose().Transform(compoundCenter);
+        effectRadius = compoundRadius;
+    }
+
     arg146.vehicle_id = fx.ModelID;
 
-    if ( _radius > 31.0 )    // 31.0
+    if ( (hasCompoundFXGeometry && effectRadius > 0.01f) ||
+         (!hasCompoundFXGeometry && _radius > 31.0) )
     {
         float len = fx.Pos.length();
 
         if ( len > 0.1 )
         {
-            vec3d pos = fx.Pos / len * _radius;
+            vec3d pos = fx.Pos / len * effectRadius;
 
             arg146.pos += _rotation.Transform(pos);
         }
@@ -15633,6 +15702,10 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger)
         {
             vec3d visualPos = _position;
             mat3x3 visualRot = _rotation;
+            vec3d compoundCenter;
+            if ( ypabact_GetCompoundFXGeometry(this, &compoundCenter, NULL) )
+                visualPos += _rotation.Transpose().Transform(compoundCenter);
+
             vec3d visualOffset;
             mat3x3 visualRotationDelta;
             if ( GetProjectileCorkspinVisualDelta(&visualOffset, &visualRotationDelta) )
