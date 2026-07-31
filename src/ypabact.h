@@ -682,10 +682,6 @@ public:
 
     float GetCollisionBroadRadius();
 
-    bool UsesAutoCollisionSpheres() const
-    { return _autoCollisionSpheres; }
-
-    void GetClosestCollisionBodySphere(const vec3d &target, vec3d *center, float *radius) const;
     bool GetUnitCollisionContact(NC_STACK_ypabact *other, vec3d *selfCenter,
                                  vec3d *otherCenter, float *penetration);
     bool ResolveGenesisCompoundOverlap(int frameTime);
@@ -1123,7 +1119,6 @@ public:
     bool _isDummy;
     // OpenUA custom: universal compound collision spheres for non-robo vehicles
     World::rbcolls _collNodes;
-    bool _autoCollisionSpheres = false;
     float _heading_speed;
     NC_STACK_ypabact *_killer;
     int16_t _killer_owner;
