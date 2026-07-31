@@ -6829,11 +6829,33 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
     {
         // F10 collision debug overlay: direct key check, no RMB/easy-cheat helper.
         if ( inpt && inpt->KbdLastHit == Input::KC_F10 )
+        {
             _showCollDebug = !_showCollDebug;
+
+            yw_arg159 infoMsg;
+            infoMsg.txt = _showCollDebug ?
+                          "Collision Debug ON" :
+                          "Collision Debug OFF";
+            infoMsg.unit = NULL;
+            infoMsg.Priority = 100;
+            infoMsg.MsgID = 0;
+            ypaworld_func159(&infoMsg);
+        }
 
         // F11 screenshot mode: hide the gameplay HUD without enabling debug overlays.
         if ( inpt && inpt->KbdLastHit == Input::KC_F11 )
+        {
             _hideHudForScreenshots = !_hideHudForScreenshots;
+
+            yw_arg159 infoMsg;
+            infoMsg.txt = _hideHudForScreenshots ?
+                          "HUD Hidden" :
+                          "HUD Visible";
+            infoMsg.unit = NULL;
+            infoMsg.Priority = 100;
+            infoMsg.MsgID = 0;
+            ypaworld_func159(&infoMsg);
+        }
     }
 
     ExpireDebugAoeRings();
@@ -7177,6 +7199,15 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
 
+        // Fuchsia = the vehicle death_damage_radius. It is rendered only when
+        // the vehicle explicitly has a positive radius configured.
+        if ( unit->_death_damage_radius > 0.01f )
+        {
+            drawRing(pos, unit->_death_damage_radius, 0, 255, 0, 255);
+            drawRing(pos, unit->_death_damage_radius, 1, 255, 0, 255);
+            drawRing(pos, unit->_death_damage_radius, 2, 255, 0, 255);
+        }
+
         // --- GAMEPLAY RANGE RADII (single horizontal ring, distinct colors) ---
         // Drawn flat to keep the overlay readable. Each only appears if its value is set.
 
@@ -7239,16 +7270,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
     for (const DebugAoeRing &ring : _debugAoeRings)
     {
         if ((ring.pos - camPos).length() <= RING_MAX_DIST)
-        {
-            if ( ring.sphere )
-            {
-                drawRing(ring.pos, ring.radius, 0, ring.r, ring.g, ring.b);
-                drawRing(ring.pos, ring.radius, 1, ring.r, ring.g, ring.b);
-                drawRing(ring.pos, ring.radius, 2, ring.r, ring.g, ring.b);
-            }
-            else
-                drawFlatRing(ring.pos, ring.radius, ring.r, ring.g, ring.b);
-        }
+            drawFlatRing(ring.pos, ring.radius, ring.r, ring.g, ring.b);
     }
 
     FontUA::reset_tileset(&labels, 15);
@@ -7287,26 +7309,6 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
     ring.expireStamp = _timeStamp + 1536; // ~1.5s (1024 ticks = 1s)
 
     _debugAoeRings.push_back(ring);
-    if ( _debugAoeRings.size() > 256 )
-        _debugAoeRings.erase(_debugAoeRings.begin());
-}
-
-void NC_STACK_ypaworld::DebugAddSphere(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b, int durationMs)
-{
-    if ( !_showCollDebug || radius < 0.01f || durationMs <= 0 )
-        return;
-
-    DebugAoeRing sphere;
-    sphere.pos = pos;
-    sphere.radius = radius;
-    sphere.r = r;
-    sphere.g = g;
-    sphere.b = b;
-    sphere.sphere = true;
-    sphere.createdStamp = _timeStamp;
-    sphere.expireStamp = _timeStamp + (int32_t)(((int64_t)durationMs * 1024 + 999) / 1000);
-
-    _debugAoeRings.push_back(sphere);
     if ( _debugAoeRings.size() > 256 )
         _debugAoeRings.erase(_debugAoeRings.begin());
 }

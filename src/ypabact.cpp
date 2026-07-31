@@ -1455,8 +1455,6 @@ static void ypabact_ApplyDeathDamage(NC_STACK_ypabact *unit, bool megadethPhase)
     std::vector<NC_STACK_ypabact *> targets;
     std::set<NC_STACK_ypabact *> visited;
 
-    world->DebugAddSphere(eventPos, unit->_death_damage_radius, 255, 0, 0, 3000);
-
     for (int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++)
     {
         for (int x = center.x - sectorRadius; x <= center.x + sectorRadius; x++)
