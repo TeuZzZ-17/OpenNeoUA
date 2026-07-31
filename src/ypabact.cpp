@@ -12235,40 +12235,6 @@ void CollisionWithBact__sub0(NC_STACK_ypabact *bact, NC_STACK_ypabact *a2)
     }
 }
 
-void NC_STACK_ypabact::GetClosestCollisionBodySphere(const vec3d &target, vec3d *center, float *radius) const
-{
-    *center = _position;
-    *radius = _radius;
-
-    if ( !_autoCollisionSpheres || _collNodes.roboColls.empty() )
-        return;
-
-    // Viewer vehicles are placed below the same ground point by
-    // vwr_overeof instead of overeof. Keep compound spheres attached to the
-    // vehicle's normal world-space body, not to that viewer-only offset.
-    vec3d collisionOrigin = _position;
-    if ( getBACT_viewer() )
-        collisionOrigin.y += _viewer_overeof - _overeof;
-
-    float bestSeparation = std::numeric_limits<float>::max();
-    mat3x3 rotT = _rotation.Transpose();
-
-    for (const World::TRoboColl &sphere : _collNodes.roboColls)
-    {
-        if ( sphere.robo_coll_radius <= 0.01 )
-            continue;
-
-        vec3d sphereCenter = collisionOrigin + rotT.Transform(sphere.coll_pos);
-        float separation = (target - sphereCenter).length() - sphere.robo_coll_radius;
-        if ( separation < bestSeparation )
-        {
-            bestSeparation = separation;
-            *center = sphereCenter;
-            *radius = sphere.robo_coll_radius;
-        }
-    }
-}
-
 bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
                                                 vec3d *selfCenter,
                                                 vec3d *otherCenter,
@@ -14472,17 +14438,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
                 if ( gunFireBact )
                 {
-                    // Vehicle-side MGUN is hitscan.  The temporary missile below
-                    // exists only for the impact VP; keep it out of compound/F10
-                    // weapon-sphere handling.  Static model = gun actors retain
-                    // the normal physical-weapon path.
-                    if ( _bact_type != BACT_TYPES_GUN )
-                    {
-                        gunFireBact->_collNodes.roboColls.clear();
-                        gunFireBact->_autoCollisionSpheres = false;
-                        gunFireBact->_status_flg |= BACT_STFLAG_CLEAN;
-                    }
-
                     gunFireBact->_owner = _owner;
 
                     gunFireBact->_kidRef.Detach();

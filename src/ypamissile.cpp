@@ -11,7 +11,6 @@
 #include "log.h"
 
 #include <algorithm>
-#include <limits>
 #include <math.h>
 
 static float ypamissile_Clamp01(float value)
@@ -960,155 +959,6 @@ void NC_STACK_ypamissile::TrySpawnChainProjectile(NC_STACK_ypabact *currentHit, 
         setBACT_yourLastSeconds(_mislChainPendingDelay + 100);
 }
 
-bool NC_STACK_ypamissile::AutoCollisionSpheresHitBact(NC_STACK_ypabact *target) const
-{
-    if ( !_autoCollisionSpheres || _collNodes.roboColls.empty() || !target )
-        return false;
-
-    float broadRadius = _radius + target->GetCollisionBroadRadius();
-    float broadDistanceSq = ypamissile_SegmentSegmentDistanceSq(_old_pos, _position,
-                                                                 target->_position, target->_position);
-    if ( broadDistanceSq > broadRadius * broadRadius )
-        return false;
-
-    World::rbcolls *targetColls = target->getBACT_collNodes();
-    mat3x3 missileRotT = _rotation.Transpose();
-    mat3x3 targetRotT = target->_rotation.Transpose();
-
-    for (const World::TRoboColl &missileSphere : _collNodes.roboColls)
-    {
-        if ( missileSphere.robo_coll_radius <= 0.01 )
-            continue;
-
-        vec3d offset = missileRotT.Transform(missileSphere.coll_pos);
-        vec3d start = _old_pos + offset;
-        vec3d end = _position + offset;
-
-        int targetCount = targetColls ? (int)targetColls->roboColls.size() : 1;
-        for (int i = 0; i < targetCount; i++)
-        {
-            vec3d targetCenter = target->_position;
-            float targetRadius = target->_radius;
-
-            if ( targetColls )
-            {
-                const World::TRoboColl &targetSphere = targetColls->roboColls[i];
-                if ( targetSphere.robo_coll_radius <= 0.01 )
-                    continue;
-
-                targetCenter += targetRotT.Transform(targetSphere.coll_pos);
-                targetRadius = targetSphere.robo_coll_radius;
-            }
-
-            float radiusSum = missileSphere.robo_coll_radius + targetRadius;
-            float distanceSq = ypamissile_SegmentSegmentDistanceSq(start, end, targetCenter, targetCenter);
-            if ( distanceSq <= radiusSum * radiusSum )
-                return true;
-        }
-    }
-
-    return false;
-}
-
-bool NC_STACK_ypamissile::AutoCollisionSpheresHitWorld(vec3d *impactPos, vec3d *impactNormal)
-{
-    if ( !_autoCollisionSpheres || _collNodes.roboColls.empty() || !_world )
-        return false;
-
-    // During the first instants after launch, keep vanilla's centre-line world
-    // trace as the authority.  A full visual hull can already overlap the
-    // ground at a low tank muzzle even though the projectile's flight line is
-    // clear, which caused immediate blue impact bursts beside the shooter.
-    if ( _mislClusterAge < 120 )
-        return false;
-
-    vec3d motion = _position - _old_pos;
-    float distance = motion.length();
-    if ( distance <= 0.001 )
-        return false;
-
-    vec3d direction = motion / distance;
-    mat3x3 rotT = _rotation.Transpose();
-    float leadingExtent = -std::numeric_limits<float>::max();
-    float minProbeRadius = std::numeric_limits<float>::max();
-
-    for (const World::TRoboColl &sphere : _collNodes.roboColls)
-    {
-        if ( sphere.robo_coll_radius <= 0.01f )
-            continue;
-
-        vec3d offset = rotT.Transform(sphere.coll_pos);
-        leadingExtent = std::max(leadingExtent,
-                                 (float)offset.dot(direction) + sphere.robo_coll_radius);
-
-        // World collision uses a compact core, not the complete visual hull.
-        // Unit/weapon collisions still use the full generated spheres.  This
-        // preserves reliable hits on targets while preventing fins, tails or
-        // the underside of a low-flying missile from grazing terrain early.
-        float probeRadius = std::max(2.0f, std::min(12.0f, sphere.robo_coll_radius * 0.35f));
-        minProbeRadius = std::min(minProbeRadius, probeRadius);
-    }
-
-    if ( minProbeRadius == std::numeric_limits<float>::max() )
-        return false;
-
-    int samples = (int)ceil(distance / std::max(3.0f, minProbeRadius * 0.75f));
-    if ( samples < 1 )
-        samples = 1;
-    if ( samples > 24 )
-        samples = 24;
-
-    for (int sample = 1; sample <= samples; sample++)
-    {
-        vec3d samplePos = _old_pos + motion * ((float)sample / (float)samples);
-        for (const World::TRoboColl &sphere : _collNodes.roboColls)
-        {
-            if ( sphere.robo_coll_radius <= 0.01 )
-                continue;
-
-            vec3d offset = rotT.Transform(sphere.coll_pos);
-            float sphereLeadingExtent = (float)offset.dot(direction) + sphere.robo_coll_radius;
-            float leadingBand = std::max(8.0f, sphere.robo_coll_radius * 0.6f);
-            if ( sphereLeadingExtent < leadingExtent - leadingBand )
-                continue;
-
-            float probeRadius = std::max(2.0f, std::min(12.0f, sphere.robo_coll_radius * 0.35f));
-
-            yw_137col collisions[32];
-            ypaworld_arg137 arg137;
-            arg137.pos = samplePos + offset;
-            arg137.pos2 = direction;
-            arg137.radius = probeRadius;
-            arg137.collisions = collisions;
-            arg137.coll_max = 32;
-            arg137.field_30 = 0;
-
-            _world->ypaworld_func137(&arg137);
-            for (int collisionIndex = 0; collisionIndex < arg137.coll_count; collisionIndex++)
-            {
-                const vec3d &normal = collisions[collisionIndex].pos2;
-
-                // Floor, slope and roof contacts caused only by the compound
-                // hull are deliberately ignored here. The original centre-line
-                // ray below remains authoritative for those surfaces, so a
-                // missile still detonates when its actual flight path enters
-                // the terrain. This removes premature ground grazing without
-                // allowing the projectile to pass through walls or buildings.
-                if ( fabs(normal.y) > normal.XZ().length() * 0.75f )
-                    continue;
-
-                if ( impactPos )
-                    *impactPos = collisions[collisionIndex].pos1;
-                if ( impactNormal )
-                    *impactNormal = normal;
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypabact **hitTarget)
 {
     _mislDirectHitUnits.clear();
@@ -1219,33 +1069,6 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
 
                 if ( _mislType == MISL_BOMB && bct->_position.y < _mislStartHeight )
                     continue;
-
-                if ( _autoCollisionSpheres )
-                {
-                    if ( !AutoCollisionSpheresHitBact(bct) )
-                        continue;
-
-                    if ( applyDirectDamage && ShouldArmorPenetrateTarget(bct) )
-                    {
-                        ApplyDirectHitToBact(bct);
-                        RememberArmorPenetratedTarget(bct);
-                        _mislArmorPenetrationRemaining--;
-                        ApplyArmorPenetrationUnitImpactFX();
-                        continue;
-                    }
-
-                    collisionSumRadius += bct->_radius;
-                    collisionCount++;
-                    collisionSumPosition += bct->_position;
-
-                    if ( hitTarget && !*hitTarget )
-                        *hitTarget = bct;
-
-                    if ( applyDirectDamage )
-                        ApplyDirectHitToBact(bct);
-
-                    continue;
-                }
 
                 World::rbcolls *v82 = bct->getBACT_collNodes();
 
@@ -1656,64 +1479,12 @@ bool NC_STACK_ypamissile::CanCollideWithWeapon(NC_STACK_ypamissile *other) const
     if ( !_world || other->getBACT_pWorld() != _world )
         return false;
 
-    if ( !_autoCollisionSpheres && !other->_autoCollisionSpheres )
-    {
-        float radiusSum = _radius + other->_radius;
-        if ( radiusSum <= 0.0f )
-            return false;
-
-        float distSq = ypamissile_SegmentSegmentDistanceSq(_old_pos, _position, other->_old_pos, other->_position);
-        return distSq <= radiusSum * radiusSum;
-    }
-
-    float broadRadiusSum = _radius + other->_radius;
-    float broadDistanceSq = ypamissile_SegmentSegmentDistanceSq(_old_pos, _position,
-                                                                 other->_old_pos, other->_position);
-    if ( broadDistanceSq > broadRadiusSum * broadRadiusSum )
+    float radiusSum = _radius + other->_radius;
+    if ( radiusSum <= 0.0f )
         return false;
 
-    int selfCount = _autoCollisionSpheres ? (int)_collNodes.roboColls.size() : 1;
-    int otherCount = other->_autoCollisionSpheres ? (int)other->_collNodes.roboColls.size() : 1;
-    mat3x3 selfRotT = _rotation.Transpose();
-    mat3x3 otherRotT = other->_rotation.Transpose();
-
-    for (int i = 0; i < selfCount; i++)
-    {
-        vec3d selfOffset(0.0, 0.0, 0.0);
-        float selfRadius = _radius;
-        if ( _autoCollisionSpheres )
-        {
-            const World::TRoboColl &sphere = _collNodes.roboColls[i];
-            if ( sphere.robo_coll_radius <= 0.01 )
-                continue;
-            selfOffset = selfRotT.Transform(sphere.coll_pos);
-            selfRadius = sphere.robo_coll_radius;
-        }
-
-        for (int j = 0; j < otherCount; j++)
-        {
-            vec3d otherOffset(0.0, 0.0, 0.0);
-            float otherRadius = other->_radius;
-            if ( other->_autoCollisionSpheres )
-            {
-                const World::TRoboColl &sphere = other->_collNodes.roboColls[j];
-                if ( sphere.robo_coll_radius <= 0.01 )
-                    continue;
-                otherOffset = otherRotT.Transform(sphere.coll_pos);
-                otherRadius = sphere.robo_coll_radius;
-            }
-
-            float radiusSum = selfRadius + otherRadius;
-            float distanceSq = ypamissile_SegmentSegmentDistanceSq(_old_pos + selfOffset,
-                                                                    _position + selfOffset,
-                                                                    other->_old_pos + otherOffset,
-                                                                    other->_position + otherOffset);
-            if ( distanceSq <= radiusSum * radiusSum )
-                return true;
-        }
-    }
-
-    return false;
+    float distSq = ypamissile_SegmentSegmentDistanceSq(_old_pos, _position, other->_old_pos, other->_position);
+    return distSq <= radiusSum * radiusSum;
 }
 
 void NC_STACK_ypamissile::DetonateWeaponCollision(NC_STACK_ypamissile *other)
@@ -2446,26 +2217,19 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 return;
             }
 
-            vec3d compoundImpactPos;
-            vec3d compoundImpactNormal;
-            bool compoundWorldHit = AutoCollisionSpheresHitWorld(&compoundImpactPos, &compoundImpactNormal);
-
             ypaworld_arg136 arg136;
-            if ( !compoundWorldHit )
-            {
-                arg136.stPos = _old_pos;
-                arg136.vect = _position - _old_pos;
-                arg136.flags = 0;
-                _world->ypaworld_func136(&arg136);
-            }
+            arg136.stPos = _old_pos;
+            arg136.vect = _position - _old_pos;
+            arg136.flags = 0;
 
-            if ( compoundWorldHit || arg136.isect )
+            _world->ypaworld_func136(&arg136);
+
+            if ( arg136.isect )
             {
-                vec3d impactNormal = compoundWorldHit ?
-                    compoundImpactNormal : arg136.skel->polygons[ arg136.polyID ].Normal();
+                vec3d impactNormal = arg136.skel->polygons[ arg136.polyID ].Normal();
                 AlignMissileByNormal( impactNormal );
 
-                _position = compoundWorldHit ? compoundImpactPos : arg136.isectPos;
+                _position = arg136.isectPos;
 
                 ResetViewing();
 
