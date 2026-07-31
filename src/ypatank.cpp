@@ -1528,7 +1528,8 @@ size_t NC_STACK_ypatank::CollisionWithBact(int arg)
                 World::rbcolls *targetCompound = v12->getBACT_collNodes();
                 bool useSingleCompoundContact = !v114 &&
                                                 ypatank_IsVehicleCollisionTarget(v12) &&
-                                                (v12->_bact_type == BACT_TYPES_TANK || targetCompound);
+                                                (HasManualCompoundCollision() ||
+                                                 v12->HasManualCompoundCollision());
 
                 // Feed every live compound vehicle through one symmetric
                 // sphere-pair contact. This preserves the existing response
