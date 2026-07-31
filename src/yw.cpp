@@ -2703,20 +2703,15 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
         // OpenUA: universal compound collision spheres. If the prototype defines
         // coll_* spheres, copy them so getBACT_collNodes() exposes them to the
-        // existing narrow-phase collision/hit tests (same path Robo uses). The
-        // broad-phase radius is never shrunk; it is only grown to cover spheres
-        // that stick out beyond the authored radius. Robo/Host Station keep their
-        // own _roboColls path, so vhcl.coll is empty for them (no change).
+        // existing narrow-phase collision/hit tests (same path Robo uses).
+        //
+        // Presence matters: coll_* with no explicit radius uses compound-only
+        // collision, while an authored radius keeps the vanilla sphere active
+        // alongside the compound set. The prototype default radius remains
+        // available to non-collision systems without silently becoming a hitbox.
         bacto->_collNodes = vhcl.coll;
-        for (const World::TRoboColl &cs : bacto->_collNodes.roboColls)
-        {
-            if ( cs.robo_coll_radius > 0.01 )
-            {
-                float ext = cs.coll_pos.length() + cs.robo_coll_radius;
-                if ( ext > bacto->_radius )
-                    bacto->_radius = ext;
-            }
-        }
+        bacto->_manualCompoundCollision = !vhcl.coll.roboColls.empty();
+        bacto->_legacyRadiusDefined = vhcl.radius_defined;
 
         bacto->_overeof = vhcl.overeof;
         bacto->_viewer_overeof = vhcl.vwr_overeof;
@@ -3117,6 +3112,10 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetPowerTank(wproto.energy_tank * 1000.0);
     wobj->SetPowerFlyer(wproto.energy_flyer * 1000.0);
     wobj->SetPowerRobo(wproto.energy_robo * 1000.0);
+    wobj->SetRadiusHeli(wproto.radius_heli);
+    wobj->SetRadiusTank(wproto.radius_tank);
+    wobj->SetRadiusFlyer(wproto.radius_flyer);
+    wobj->SetRadiusRobo(wproto.radius_robo);
     wobj->SetAreaDamage(wproto.aoe_unit_radius, wproto.aoe_unit_energy,
                          wproto.aoe_building_radius, wproto.aoe_building_energy,
                          wproto.aoe_sector_radius, wproto.aoe_sector_energy,

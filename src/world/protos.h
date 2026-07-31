@@ -510,6 +510,10 @@ struct TVhclProto
     float maxrot = 0.0;
     float height = 0.0;
     float radius = 0.0;
+    // Tracks whether the script explicitly authored radius. The numeric value
+    // still keeps the vanilla default, but manual coll_* spheres may suppress
+    // that default collision unless radius was really present in the script.
+    bool radius_defined = false;
     float overeof = 0.0;
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
@@ -758,8 +762,8 @@ struct TWeapProto
     bool energy_tank_defined = false;
     bool energy_flyer_defined = false;
     bool energy_robo_defined = false;
-    // Legacy/deprecated: parsed for old SCR compatibility, ignored for gameplay.
-    // Projectile collision uses the generic radius.
+    // Vanilla class-specific direct-hit radii. A zero value falls back to the
+    // generic weapon radius, matching the original Urban Assault behaviour.
     float radius_heli = 0.0;
     float radius_tank = 0.0;
     float radius_flyer = 0.0;

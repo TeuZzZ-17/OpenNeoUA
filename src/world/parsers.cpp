@@ -1420,6 +1420,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "radius") )
     {
         _vhcl->radius = parser.stof(p2, 0);
+        _vhcl->radius_defined = true;
     }
     else if ( !StriCmp(p1, "overeof") )
     {
@@ -2814,6 +2815,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->maxrot = 0.8;
         _vhcl->height = 150.0;
         _vhcl->radius = 25.0;
+        _vhcl->radius_defined = false;
         _vhcl->overeof = 25.0;
         _vhcl->vwr_radius = 30.0;
         _vhcl->vwr_overeof = 30.0;
@@ -3322,22 +3324,18 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "radius_heli") )
     {
-        // Legacy/deprecated: keep parsing for old SCR files, gameplay ignores it.
         _wpn->radius_heli = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "radius_tank") )
     {
-        // Legacy/deprecated: keep parsing for old SCR files, gameplay ignores it.
         _wpn->radius_tank = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "radius_flyer") )
     {
-        // Legacy/deprecated: keep parsing for old SCR files, gameplay ignores it.
         _wpn->radius_flyer = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "radius_robo") )
     {
-        // Legacy/deprecated: keep parsing for old SCR files, gameplay ignores it.
         _wpn->radius_robo = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "overeof") )

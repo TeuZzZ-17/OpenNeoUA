@@ -419,11 +419,19 @@ size_t NC_STACK_ypamissile::SetParameters(IDVList &stak)
                 break;
 
             case MISS_ATT_RAD_HELI:
+                SetRadiusHeli(val.Get<float>());
+                break;
+
             case MISS_ATT_RAD_TANK:
+                SetRadiusTank(val.Get<float>());
+                break;
+
             case MISS_ATT_RAD_FLYER:
+                SetRadiusFlyer(val.Get<float>());
+                break;
+
             case MISS_ATT_RAD_ROBO:
-                // Legacy object tags remain accepted, but class-specific collision
-                // radii are obsolete and intentionally ignored.
+                SetRadiusRobo(val.Get<float>());
                 break;
 
             case MISS_ATT_STHEIGHT:
@@ -1071,10 +1079,13 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                     continue;
 
                 World::rbcolls *v82 = bct->getBACT_collNodes();
+                const bool targetManualCompound = bct->HasManualCompoundCollision();
+                const int targetLegacySlots =
+                    targetManualCompound && bct->UsesLegacyRadiusCollision() ? 1 : 0;
 
                 int v7;
                 if ( v82 )
-                    v7 = v82->roboColls.size();
+                    v7 = targetLegacySlots + v82->roboColls.size();
                 else
                     v7 = 1;
 
@@ -1083,9 +1094,10 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                     float radius;
                     vec3d ttmp;
 
-                    if ( v82 )
+                    if ( v82 && (!targetManualCompound || j >= targetLegacySlots) )
                     {
-                        World::TRoboColl *v8 = &v82->roboColls[j];
+                        int sphereIndex = targetManualCompound ? j - targetLegacySlots : j;
+                        World::TRoboColl *v8 = &v82->roboColls[sphereIndex];
                         radius = v8->robo_coll_radius;
 
                         ttmp = bct->_position + bct->_rotation.Transpose().Transform(v8->coll_pos);
@@ -1107,9 +1119,35 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
 
                             vec3d vp = dist_vect * to_enemy;
 
-                            // Experimental OpenUA behavior: unit collision uses only weapon.radius.
-                            // Legacy class-specific weapon radii are parsed but intentionally ignored.
-                            float wpn_radius = _radius;
+                            float wpn_radius = 0.0f;
+
+                            switch ( bct->_bact_type )
+                            {
+                            case BACT_TYPES_BACT:
+                                wpn_radius = _mislRadiusHeli;
+                                break;
+
+                            case BACT_TYPES_TANK:
+                            case BACT_TYPES_CAR:
+                                wpn_radius = _mislRadiusTank;
+                                break;
+
+                            case BACT_TYPES_FLYER:
+                            case BACT_TYPES_UFO:
+                                wpn_radius = _mislRadiusFlyer;
+                                break;
+
+                            case BACT_TYPES_ROBO:
+                                wpn_radius = _mislRadiusRobo;
+                                break;
+
+                            default:
+                                wpn_radius = _radius;
+                                break;
+                            }
+
+                            if ( wpn_radius == 0.0f )
+                                wpn_radius = _radius;
 
                             float vp_len = vp.length();
                             float to_enemy_len = to_enemy.length();
@@ -2903,6 +2941,26 @@ void NC_STACK_ypamissile::SetPowerRobo(int po)
     _mislEnergyRobo = po * 0.001;
 }
 
+void NC_STACK_ypamissile::SetRadiusHeli(float rad)
+{
+    _mislRadiusHeli = rad;
+}
+
+void NC_STACK_ypamissile::SetRadiusTank(float rad)
+{
+    _mislRadiusTank = rad;
+}
+
+void NC_STACK_ypamissile::SetRadiusFlyer(float rad)
+{
+    _mislRadiusFlyer = rad;
+}
+
+void NC_STACK_ypamissile::SetRadiusRobo(float rad)
+{
+    _mislRadiusRobo = rad;
+}
+
 void NC_STACK_ypamissile::SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
                                         float sectorRadius, int sectorEnergy, int falloff)
 {
@@ -2993,6 +3051,26 @@ int NC_STACK_ypamissile::GetPowerFlyer()
 int NC_STACK_ypamissile::GetPowerRobo()
 {
     return _mislEnergyRobo * 1000.0;
+}
+
+float NC_STACK_ypamissile::GetRadiusHeli()
+{
+    return _mislRadiusHeli;
+}
+
+float NC_STACK_ypamissile::GetRadiusTank()
+{
+    return _mislRadiusTank;
+}
+
+float NC_STACK_ypamissile::GetRadiusFlyer()
+{
+    return _mislRadiusFlyer;
+}
+
+float NC_STACK_ypamissile::GetRadiusRobo()
+{
+    return _mislRadiusRobo;
 }
 
 float NC_STACK_ypamissile::GetStartHeight()
