@@ -510,14 +510,9 @@ struct TVhclProto
     float maxrot = 0.0;
     float height = 0.0;
     float radius = 0.0;
-    bool radius_defined = false;             // OpenUA: true only when radius is explicitly authored
-    bool auto_collision = false;             // OpenUA: compound collision; missing runtime bounds are automatic
     float overeof = 0.0;
-    bool overeof_defined = false;            // OpenUA: true only when overeof is explicitly authored
     float vwr_radius = 0.0;
-    bool vwr_radius_defined = false;         // OpenUA: true only when vwr_radius is explicitly authored
     float vwr_overeof = 0.0;
-    bool vwr_overeof_defined = false;        // OpenUA: true only when vwr_overeof is explicitly authored
     bool cockpit_camera_enable = false;    // OpenUA custom: optional per-vehicle cockpit/player camera offset
     vec3d cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     bool mgun_pov_fx_enable = false;
@@ -589,7 +584,6 @@ struct TVhclProto
     TVhclSound snd_mimic;                   // OpenUA: model = mimic persistent shell loop
 
     rbcolls coll;                           // OpenUA: universal compound collision spheres (coll_*)
-    bool coll_defined = false;              // OpenUA: true when coll_* was explicitly authored
 
     ~TVhclProto();
 };
@@ -765,7 +759,7 @@ struct TWeapProto
     bool energy_flyer_defined = false;
     bool energy_robo_defined = false;
     // Legacy/deprecated: parsed for old SCR compatibility, ignored for gameplay.
-    // Projectile collision uses generic radius or automatic compound spheres.
+    // Projectile collision uses the generic radius.
     float radius_heli = 0.0;
     float radius_tank = 0.0;
     float radius_flyer = 0.0;
@@ -775,12 +769,9 @@ struct TWeapProto
     float airconst = 0.0;
     float maxrot = 0.0;
     float heightStd = 0;
-    // Explicit radius keeps legacy direct projectile collision unless
-    // auto_collision selects VP spheres and retains radius as metadata only.
+    // radius is direct projectile collision. AoE has separate unit/building/sector values.
+    // vp_scale never affects any gameplay radius.
     float radius = 0.0;
-    bool radius_defined = false;
-    bool auto_collision = false;
-    rbcolls coll; // cached automatic projectile collision spheres
     float aoe_unit_radius = 0.0;
     float aoe_building_radius = 0.0;
     float aoe_sector_radius = 0.0;

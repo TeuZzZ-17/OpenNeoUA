@@ -7130,8 +7130,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         bool isSelfControlled = (unit == _userUnit || unit == _viewerBact || unit->getBACT_inputting());
         vec3d pos = unit->_position;
         World::rbcolls *colls = unit->getBACT_collNodes();
-        bool compoundReplacesDebugRadius = unit->UsesAutoCollisionSpheres() ||
-                                           (unit->_bact_type == BACT_TYPES_ROBO && colls);
+        bool compoundReplacesDebugRadius = unit->_bact_type == BACT_TYPES_ROBO && colls;
 
         // Red broad/fallback radius. Skip only the self radius to avoid cockpit cross lines.
         if (!isSelfControlled && !compoundReplacesDebugRadius)
@@ -7153,8 +7152,8 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         }
 
         // Compound collision spheres: green for vehicles, blue for weapons.
-        // Generated coll slot/radius/offset labels are intentionally omitted;
-        // only the manually meaningful vanilla radius keeps a numeric label.
+        // Compound slot/radius/offset labels are intentionally omitted;
+        // only the legacy radius keeps a numeric label.
         if (colls)
         {
             mat3x3 rotT = unit->_rotation.Transpose();

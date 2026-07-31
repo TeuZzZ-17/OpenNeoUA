@@ -4,7 +4,6 @@
 #include <string.h>
 #include <math.h>
 #include <algorithm>
-#include <limits>
 #include <string>
 #include "yw.h"
 #include "ypatank.h"
@@ -1628,17 +1627,13 @@ size_t NC_STACK_ypatank::CollisionWithBact(int arg)
 
                     if (!v96 || v19 >= 0.01 )
                     {
-                        vec3d selfCenter;
-                        float selfRadius;
-                        GetClosestCollisionBodySphere(v89, &selfCenter, &selfRadius);
-
-                        vec3d v93 = v89 - selfCenter;
+                        vec3d v93 = v89 - _position;
 
                         float v126 = v93.length();
 
                         if ( v126 < 300.0 )
                         {
-                            float v115 = selfRadius + v19;
+                            float v115 = _radius + v19;
 
                             if ( v114 && v126 < v115 )
                             {
@@ -2345,20 +2340,8 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
                     return 2;
                 }
 
-                if ( _autoCollisionSpheres )
-                {
-                    // A compound tank re-enters an oblique wall every frame if
-                    // the legacy 10-unit correction keeps its forward motion.
-                    // Consume that motion just like the frontal wall branch.
-                    _thraction = 0;
-                    _fly_dir_length = 0;
-                    _position = _old_pos;
-                }
-                else
-                {
-                    _position.x = _old_pos.x - v48.x * 10.0;
-                    _position.z = _old_pos.z - v48.z * 10.0;
-                }
+                _position.x = _old_pos.x - v48.x * 10.0;
+                _position.z = _old_pos.z - v48.z * 10.0;
             }
             return 2;
         }
@@ -2415,17 +2398,8 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
                     return 1;
                 }
 
-                if ( _autoCollisionSpheres )
-                {
-                    _thraction = 0;
-                    _fly_dir_length = 0;
-                    _position = _old_pos;
-                }
-                else
-                {
-                    _position.x = _old_pos.x - v54.x * 10.0;
-                    _position.z = _old_pos.z - v54.z * 10.0;
-                }
+                _position.x = _old_pos.x - v54.x * 10.0;
+                _position.z = _old_pos.z - v54.z * 10.0;
             }
             return 1;
         }

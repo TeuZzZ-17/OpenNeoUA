@@ -1420,26 +1420,18 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "radius") )
     {
         _vhcl->radius = parser.stof(p2, 0);
-        _vhcl->radius_defined = true;
-    }
-    else if ( !StriCmp(p1, "auto_collision") )
-    {
-        _vhcl->auto_collision = parser.stol(p2, NULL, 0) != 0;
     }
     else if ( !StriCmp(p1, "overeof") )
     {
         _vhcl->overeof = parser.stof(p2, 0);
-        _vhcl->overeof_defined = true;
     }
     else if ( !StriCmp(p1, "vwr_radius") )
     {
         _vhcl->vwr_radius = parser.stof(p2, 0);
-        _vhcl->vwr_radius_defined = true;
     }
     else if ( !StriCmp(p1, "vwr_overeof") )
     {
         _vhcl->vwr_overeof = parser.stof(p2, 0);
-        _vhcl->vwr_overeof_defined = true;
     }
     else if ( !StriCmp(p1, "adist_sector") )
     {
@@ -2559,7 +2551,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "coll_num") )
     {
         int cnt = parser.stol(p2, NULL, 0);
-        _vhcl->coll_defined = true;
 
         if ( cnt < 0 )
             cnt = 0;
@@ -2574,7 +2565,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "coll_act") )
     {
         _collID = parser.stol(p2, NULL, 0);
-        _vhcl->coll_defined = true;
 
         if ( _collID < 0 )
             _collID = 0;
@@ -2587,25 +2577,21 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "coll_radius") )
     {
-        _vhcl->coll_defined = true;
         if (TRoboColl *c = getColl())
             c->robo_coll_radius = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "coll_x") )
     {
-        _vhcl->coll_defined = true;
         if (TRoboColl *c = getColl())
             c->coll_pos.x = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "coll_y") )
     {
-        _vhcl->coll_defined = true;
         if (TRoboColl *c = getColl())
             c->coll_pos.y = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "coll_z") )
     {
-        _vhcl->coll_defined = true;
         if (TRoboColl *c = getColl())
             c->coll_pos.z = parser.stof(p2, 0);
     }
@@ -2828,14 +2814,9 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->maxrot = 0.8;
         _vhcl->height = 150.0;
         _vhcl->radius = 25.0;
-        _vhcl->radius_defined = false;
-        _vhcl->auto_collision = false;
         _vhcl->overeof = 25.0;
-        _vhcl->overeof_defined = false;
         _vhcl->vwr_radius = 30.0;
-        _vhcl->vwr_radius_defined = false;
         _vhcl->vwr_overeof = 30.0;
-        _vhcl->vwr_overeof_defined = false;
         _vhcl->cockpit_camera_enable = false;
         _vhcl->cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
         _vhcl->mgun_pov_fx_enable = false;
@@ -2876,7 +2857,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mimic_vp_tint = TVisualTint();
         _vhcl->snd_mimic = TVhclSound();
         _vhcl->coll = rbcolls();
-        _vhcl->coll_defined = false;
         return true;
     }
     else if ( !StriCmp(word, "modify_vehicle") )
@@ -2945,9 +2925,6 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->airconst = 50.0;
         _wpn->maxrot = 2.0;
         _wpn->radius = 20.0;
-        _wpn->radius_defined = false;
-        _wpn->auto_collision = false;
-        _wpn->coll = rbcolls();
         _wpn->aoe_unit_radius = 0.0;
         _wpn->aoe_building_radius = 0.0;
         _wpn->aoe_sector_radius = 0.0;
@@ -3330,11 +3307,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "radius") )
     {
         _wpn->radius = parser.stof(p2, 0);
-        _wpn->radius_defined = true;
-    }
-    else if ( !StriCmp(p1, "auto_collision") )
-    {
-        _wpn->auto_collision = parser.stol(p2, NULL, 0) != 0;
     }
     else if ( !StriCmp(p1, "aoe_unit_radius") )
     {
