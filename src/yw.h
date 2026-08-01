@@ -1464,6 +1464,8 @@ struct TBriefObject
     int Owner = 0;
     std::string Title;
 
+    NC_STACK_base::Instance *VP = NULL; // Must not be copied
+
     TBriefObject() = default;
 
     TBriefObject(int16_t tp, int16_t oid, float sx, float sy, int tset, int tid,
@@ -1480,10 +1482,59 @@ struct TBriefObject
         Title = ttl;
     }
 
-    TBriefObject(const TBriefObject &b) = default;
-    TBriefObject(TBriefObject &&b) = default;
-    TBriefObject &operator=(const TBriefObject &b) = default;
-    TBriefObject &operator=(TBriefObject &&b) = default;
+    TBriefObject(const TBriefObject &b)
+        : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), TileSet(b.TileSet),
+          TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title)
+    {
+    }
+
+    TBriefObject(TBriefObject &&b) noexcept
+        : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), TileSet(b.TileSet),
+          TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title), VP(b.VP)
+    {
+        b.VP = NULL;
+    }
+
+    ~TBriefObject()
+    {
+        Common::DeleteAndNull(&VP);
+    }
+
+    TBriefObject &operator=(const TBriefObject &b)
+    {
+        if (this != &b)
+        {
+            Pos = b.Pos;
+            ObjType = b.ObjType;
+            ID = b.ID;
+            TileSet = b.TileSet;
+            TileID = b.TileID;
+            Color = b.Color;
+            Owner = b.Owner;
+            Title = b.Title;
+            Common::DeleteAndNull(&VP);
+        }
+        return *this;
+    }
+
+    TBriefObject &operator=(TBriefObject &&b) noexcept
+    {
+        if (this != &b)
+        {
+            Common::DeleteAndNull(&VP);
+            Pos = b.Pos;
+            ObjType = b.ObjType;
+            ID = b.ID;
+            TileSet = b.TileSet;
+            TileID = b.TileID;
+            Color = b.Color;
+            Owner = b.Owner;
+            Title = b.Title;
+            VP = b.VP;
+            b.VP = NULL;
+        }
+        return *this;
+    }
 
     bool operator==(const TBriefObject &b) const
     {
@@ -1569,9 +1620,12 @@ struct TBriefengScreen
     bool AddObjectsFlag = false;
     TBriefObject ViewingObject;
     Common::FRect ViewingObjectRect;
+    int32_t ViewingObjectAngle = 0;
     uint32_t ViewingObjectStartTime = 0;
 
     std::vector<TBriefObject> Objects;
+
+    baseRender_msg ObjRenderParams;
 
     bool ZoomFromGate = false;
 
@@ -1640,6 +1694,7 @@ struct TBriefengScreen
         ViewingObject = TBriefObject();
 
         ViewingObjectRect = Common::FRect();
+        ViewingObjectAngle = 0;
         ViewingObjectStartTime = 0;
 
         MapBlitParams = GFX::rstr_arg204();
@@ -1650,6 +1705,7 @@ struct TBriefengScreen
 
         Objects.clear();
 
+        ObjRenderParams = baseRender_msg();
         ZoomFromGate = false;
 
         //_owner = 0;
