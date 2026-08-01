@@ -233,6 +233,180 @@ static std::string PaletteThemeDisplayName(const std::string &fileName)
     return name;
 }
 
+void sb_0x4eb94c__sub0(NC_STACK_ypaworld *yw, bool clockwise, int a3, vec3d *pos, baseRender_msg *arg)
+{
+    NC_STACK_base *model_base = yw->_vhclModels.at(yw->_vhclProtos[yw->_briefScreen.ViewingObject.ID].vp_normal);
+
+    model_base->SetVizLimit(16000);
+    model_base->SetFadeLength(100);
+
+    model_base->SetPosition(*pos);
+
+    if (clockwise)
+    {
+        yw->_briefScreen.ViewingObjectAngle += (arg->frameTime / 5);
+        if (yw->_briefScreen.ViewingObjectAngle >= 360)
+            yw->_briefScreen.ViewingObjectAngle -= 360;
+    }
+    else
+    {
+        yw->_briefScreen.ViewingObjectAngle -= (arg->frameTime / 5);
+        if (yw->_briefScreen.ViewingObjectAngle < 0)
+            yw->_briefScreen.ViewingObjectAngle += 360;
+    }
+
+    model_base->SetEulerRotation(a3 + 10, yw->_briefScreen.ViewingObjectAngle, 0);
+
+    NC_STACK_base::CheckOpts(&yw->_briefScreen.ViewingObject.VP, model_base);
+
+    model_base->Render(arg, yw->_briefScreen.ViewingObject.VP);
+}
+
+void sb_0x4eb94c__sub1(NC_STACK_ypaworld *yw, bool clockwise, int rot, vec3d *pos, baseRender_msg *arg)
+{
+    TSectorDesc *scType = &yw->_secTypeArray[yw->_briefScreen.ViewingObject.ID];
+
+    NC_STACK_base *v7 = yw->_vhclModels.at(0);
+
+    if (clockwise)
+    {
+        yw->_briefScreen.ViewingObjectAngle += (arg->frameTime / 5);
+        if (yw->_briefScreen.ViewingObjectAngle >= 360)
+            yw->_briefScreen.ViewingObjectAngle -= 360;
+    }
+    else
+    {
+        yw->_briefScreen.ViewingObjectAngle -= (arg->frameTime / 5);
+        if (yw->_briefScreen.ViewingObjectAngle < 0)
+            yw->_briefScreen.ViewingObjectAngle += 360;
+    }
+
+    v7->SetEulerRotation(rot + 10, yw->_briefScreen.ViewingObjectAngle, 0);
+
+    int first;
+    int demens;
+
+    if (scType->SectorType == 1)
+    {
+        first = 0;
+        demens = 1;
+    }
+    else
+    {
+        first = -1;
+        demens = 3;
+    }
+
+    int v22 = first;
+    for (int y = 0; y < demens; y++)
+    {
+        int v30 = first;
+        for (int x = 0; x < demens; x++)
+        {
+            vec3d inSectorPos = vec3d(v30, 0.0, v22) * 300.0;
+
+            NC_STACK_base *lego = yw->_legoArray[scType->SubSectors.At(x, y)->HPModels[0]].Base;
+            lego->SetStatic(false);
+            lego->SetVizLimit(16000);
+            lego->SetFadeLength(100);
+
+            lego->SetEulerRotation(rot + 10, yw->_briefScreen.ViewingObjectAngle, 0);
+            lego->SetPosition(*pos + v7->TForm().SclRot.Transform(inSectorPos));
+
+            NC_STACK_base::CheckOpts(&yw->_briefScreen.ViewingObject.VP, lego);
+
+            lego->Render(arg, yw->_briefScreen.ViewingObject.VP);
+
+            v30++;
+        }
+        v22++;
+    }
+}
+
+void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc, int a5)
+{
+    brf->ObjRenderParams.frameTime = struc->Period;
+    brf->ObjRenderParams.globTime = brf->CurrTime;
+
+    TF::TForm3D v14;
+    v14.Scale = vec3d(1.0, 1.0, 1.0);
+    v14.SclRot = mat3x3::Ident();
+
+    TF::Engine.SetViewPoint(&v14);
+    v14.CalcGlobal();
+
+    vec3d pos;
+
+    if (brf->ViewingObject)
+    {
+        pos.x = (brf->ViewingObjectRect.right + brf->ViewingObjectRect.left) / 2.0;
+        pos.y = (brf->ViewingObjectRect.bottom + brf->ViewingObjectRect.top) / 2.0;
+
+        float v16;
+        float v17;
+        float v18;
+        int rot;
+
+        if (brf->ViewingObject.ObjType == TBriefObject::TYPE_SECTOR)
+        {
+            v16 = 9600.0;
+            v17 = 3600.0;
+        }
+        else if (brf->ViewingObject.ObjType == TBriefObject::TYPE_VEHICLE)
+        {
+            float radius = yw->_vhclProtos[brf->ViewingObject.ID].radius;
+
+            v17 = radius * 7.0;
+            v16 = radius * 32.0;
+        }
+
+        if (a5 >= 500)
+        {
+            v18 = v17;
+            rot = 0;
+        }
+        else
+        {
+            v18 = v16 + (v17 - v16) * a5 / 500.0;
+            rot = -90 * a5 / 500 + 90;
+        }
+
+        pos.z = v18;
+        pos.y = pos.y * v18;
+        pos.x = pos.x * v18;
+
+        if (brf->ViewingObject.ObjType == TBriefObject::TYPE_SECTOR)
+            sb_0x4eb94c__sub1(yw, true, rot, &pos, &brf->ObjRenderParams);
+        else if (brf->ViewingObject.ObjType == TBriefObject::TYPE_VEHICLE)
+            sb_0x4eb94c__sub0(yw, true, rot, &pos, &brf->ObjRenderParams);
+    }
+}
+
+void ypaworld_func158__DrawVehicle(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc)
+{
+    GFX::Engine.SetFBOBlending(1);
+    GFX::Engine.BeginScene();
+
+    brf->ObjRenderParams.frameTime = 1;
+    brf->ObjRenderParams.globTime = 1;
+    brf->ObjRenderParams.adeCount = 0;
+    brf->ObjRenderParams.minZ = 17.0;
+    brf->ObjRenderParams.maxZ = 32000.0;
+    brf->ObjRenderParams.flags = 0;
+
+    if (brf->ViewingObject)
+    {
+        int v7 = brf->CurrTime - brf->ViewingObjectStartTime;
+        if (v7 > 50)
+            sb_0x4eb94c(yw, brf, struc, v7 - 50);
+    }
+
+    GFX::Engine.Rasterize();
+
+    GFX::Engine.EndScene();
+    GFX::Engine.SetFBOBlending(0);
+}
+
 void yw_draw_input_list(NC_STACK_ypaworld *yw, UserData *usr)
 {
     usr->input_listview.SetRect(yw, -2, -2);

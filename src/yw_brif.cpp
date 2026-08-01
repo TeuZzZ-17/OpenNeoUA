@@ -7,6 +7,7 @@
 #include "lstvw.h"
 #include "font.h"
 #include "env.h"
+#include "system/inivals.h"
 
 extern GuiList stru_5C91D0;
 
@@ -852,7 +853,8 @@ void ypaworld_func158__sub4__sub1__sub4__sub2(NC_STACK_ypaworld *yw, TBriefengSc
             }
         }
 
-        if ( v8 > 50 && !brf->ViewingObject.Title.empty() )
+        if ( !System::IniConf::GameBriefingVPRender.Get<bool>() &&
+             v8 > 50 && !brf->ViewingObject.Title.empty() )
         {
             if ( a4 & 2 )
             {
@@ -1082,6 +1084,9 @@ void ypaworld_func158__sub4__sub1__sub4(NC_STACK_ypaworld *yw, UserData *usr, TI
         GFX::Engine.raster_func204(&brf->MapBlitParams);
 
         GFX::Engine.draw2DandFlush();
+
+        if ( System::IniConf::GameBriefingVPRender.Get<bool>() )
+            ypaworld_func158__DrawVehicle(yw, brf, inpt);
 
         ypaworld_func158__sub4__sub1__sub4__sub1(yw, brf);
         ypaworld_func158__sub4__sub1__sub4__sub0(yw);
