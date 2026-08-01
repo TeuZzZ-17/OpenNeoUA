@@ -116,6 +116,7 @@ public:
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "new_video"); };
 protected:
     NC_STACK_ypaworld &_o;
+    bool _initialized = false;
 };
 
 class SoundParser : public ScriptParser::DataHandler

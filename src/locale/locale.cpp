@@ -392,8 +392,17 @@ std::string Text::OpenUA(uint32_t id)
     if (id < OPENUA_STRING_BASE || id >= OPENUA_STRING_LIMIT)
         return "[OpenUA text]";
 
-    return Get(static_cast<int32_t>(id),
-               std::string("[OpenUA ") + std::to_string(id) + "]");
+    std::string fallback = std::string("[OpenUA ") + std::to_string(id) + "]";
+    switch (id)
+    {
+        case OUA_INTERFACE_STYLE: fallback = "Interface Style"; break;
+        case OUA_RETRO:           fallback = "Retro"; break;
+        case OUA_SMOOTH:          fallback = "Smooth"; break;
+        case OUA_RETRO_INTERFACE: fallback = "Retro Interface"; break;
+        default: break;
+    }
+
+    return Get(static_cast<int32_t>(id), fallback);
 }
 
 bool Text::OpenUALngFileLoad(const std::string &filename)

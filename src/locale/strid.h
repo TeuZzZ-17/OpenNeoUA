@@ -166,6 +166,12 @@ enum OPENUA_STRING
     OUA_REPLAY_RECORDING_STARTED,
     OUA_WAITING_FOR_HOST,
 
+    // OpenUA virtual UI style. Appended to preserve all existing string IDs.
+    OUA_INTERFACE_STYLE,
+    OUA_RETRO,
+    OUA_SMOOTH,
+    OUA_RETRO_INTERFACE,
+
     OUA_STRING_MAX
 };
 
