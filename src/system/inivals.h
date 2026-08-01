@@ -47,9 +47,6 @@ public:
     static Common::Ini::Key GfxHorizonDarkColor;
     static Common::Ini::Key GfxRenderSectors;
     static Common::Ini::Key GfxNormalVisualLimit;
-    static Common::Ini::Key GfxNormalFadeLength;
-    static Common::Ini::Key GfxSkyVisualLimit;
-    static Common::Ini::Key GfxSkyFadeLength;
     static Common::Ini::Key GfxSkyHeight;
     static Common::Ini::Key GfxSkyRender;
     static Common::Ini::Key GfxAdditionalModes;

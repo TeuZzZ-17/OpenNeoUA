@@ -2419,7 +2419,7 @@ void NC_STACK_ypaworld::PrepareAllFillers()
 
 
 
-TRenderingSector rendering_sectors[YW_RENDER_SECTORS_DEF * 2][ YW_RENDER_SECTORS_DEF * 2];
+TRenderingSector rendering_sectors[YW_RENDER_SECTORS_MAX + 1][ YW_RENDER_SECTORS_MAX + 1];
 
 void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
 {

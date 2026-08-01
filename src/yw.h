@@ -42,7 +42,9 @@
 
 
 
-#define YW_RENDER_SECTORS_DEF   8
+// Maximum value accepted by gfx.render_sectors. The centered render window
+// remains odd-sized internally, so an input value of 50 is normalized to 49.
+#define YW_RENDER_SECTORS_MAX   50
 
 class NC_STACK_ypaworld;
 class NC_STACK_button;

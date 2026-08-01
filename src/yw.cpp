@@ -532,8 +532,11 @@ static int32_t yw_ClampRenderSectors(int32_t sectors)
 {
     if (sectors < 3)
         sectors = 3;
-    if (sectors > YW_RENDER_SECTORS_DEF * 2 - 1)
-        sectors = YW_RENDER_SECTORS_DEF * 2 - 1;
+    if (sectors > YW_RENDER_SECTORS_MAX)
+        sectors = YW_RENDER_SECTORS_MAX;
+    // The render window is centered on the viewer and must have an odd side
+    // count. Therefore gfx.render_sectors=50 uses the largest centered window,
+    // 49 sectors wide.
     if ((sectors & 1) == 0)
         sectors -= 1;
 
@@ -549,12 +552,6 @@ static void yw_ApplyNucleusViewDistanceOverrides(NC_STACK_ypaworld *yw)
         yw->_renderSectors = yw_ClampRenderSectors(v);
     if (yw_ParseOptionalInt(System::IniConf::GfxNormalVisualLimit.Get<std::string>(), &v) && v > 0)
         yw->_normalVizLimit = v;
-    if (yw_ParseOptionalInt(System::IniConf::GfxNormalFadeLength.Get<std::string>(), &v) && v > 0)
-        yw->_normalFadeLength = v;
-    if (yw_ParseOptionalInt(System::IniConf::GfxSkyVisualLimit.Get<std::string>(), &v) && v > 0)
-        yw->_skyVizLimit = v;
-    if (yw_ParseOptionalInt(System::IniConf::GfxSkyFadeLength.Get<std::string>(), &v) && v > 0)
-        yw->_skyFadeLength = v;
     if (yw_ParseOptionalInt(System::IniConf::GfxSkyHeight.Get<std::string>(), &v))
         yw->_skyHeight = v;
     if (yw_ParseOptionalBool(System::IniConf::GfxSkyRender.Get<std::string>(), &b))
@@ -912,7 +909,7 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
     _nextTransientVPId = 1;
     _damageHoverTargets.clear();
     _fxLimit = 16;
-    _renderSectors = stak.Get<int32_t>(YW_ATT_VISSECTORS, 9);
+    _renderSectors = yw_ClampRenderSectors(stak.Get<int32_t>(YW_ATT_VISSECTORS, 9));
     _normalVizLimit = stak.Get<int32_t>(YW_ATT_NORMVISLIMIT, 3100);
     _normalFadeLength = stak.Get<int32_t>(YW_ATT_FADELENGTH, 2100);
     _skyVizLimit = stak.Get<int32_t>(YW_ATT_SKYVISLIMIT, 4200);
@@ -9513,7 +9510,7 @@ void NC_STACK_ypaworld::setYW_doEnergyRecalc(int doRecalc)
 
 void NC_STACK_ypaworld::setYW_visSectors(int visSectors)
 {
-    _renderSectors = visSectors;
+    _renderSectors = yw_ClampRenderSectors(visSectors);
 }
 
 void NC_STACK_ypaworld::setYW_userHostStation(NC_STACK_ypabact *host)
