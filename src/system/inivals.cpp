@@ -39,9 +39,6 @@ Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Co
 Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0_0_0"));
 Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxNormalVisualLimit("gfx.normal_visual_limit", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxNormalFadeLength("gfx.normal_fade_length", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxSkyVisualLimit("gfx.sky_visual_limit", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxSkyFadeLength("gfx.sky_fade_length", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyRender("gfx.sky_render", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxAdditionalModes("gfx.custommodes", Common::Ini::KT_STRING);
@@ -346,9 +343,6 @@ void IniConf::Init()
         , &GfxHorizonDarkColor
         , &GfxRenderSectors
         , &GfxNormalVisualLimit
-        , &GfxNormalFadeLength
-        , &GfxSkyVisualLimit
-        , &GfxSkyFadeLength
         , &GfxSkyHeight
         , &GfxSkyRender
         , &GfxMode
