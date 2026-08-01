@@ -3827,7 +3827,61 @@ static float ypabact_ClampWeaponRecoil(float recoil)
     return recoil;
 }
 
-static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, update_msg *arg, float tau)
+static bool ypabact_ConstrainWeaponRecoilStepToLevelBox(NC_STACK_ypabact *unit,
+                                                         const vec3d &requestedStep,
+                                                         vec3d *constrainedStep,
+                                                         bool *blockedX,
+                                                         bool *blockedZ)
+{
+    *constrainedStep = requestedStep;
+    *blockedX = false;
+    *blockedZ = false;
+
+    NC_STACK_ypaworld *world = unit ? unit->getBACT_pWorld() : NULL;
+    if ( !world )
+        return false;
+
+    const vec2d worldSize = World::SectorIDToPos2(world->GetMapSize());
+    const float levelBoxEdge = World::CVSectorLength + 10.0f;
+    const float minX = levelBoxEdge;
+    const float maxX = worldSize.x - levelBoxEdge;
+    const float minZ = worldSize.y + levelBoxEdge;
+    const float maxZ = -levelBoxEdge;
+
+    if ( !isfinite(worldSize.x) || !isfinite(worldSize.y) ||
+         maxX < minX || maxZ < minZ )
+        return false;
+
+    vec3d candidate = unit->_position + requestedStep;
+
+    if ( candidate.x < minX )
+    {
+        candidate.x = minX;
+        *blockedX = true;
+    }
+    else if ( candidate.x > maxX )
+    {
+        candidate.x = maxX;
+        *blockedX = true;
+    }
+
+    if ( candidate.z < minZ )
+    {
+        candidate.z = minZ;
+        *blockedZ = true;
+    }
+    else if ( candidate.z > maxZ )
+    {
+        candidate.z = maxZ;
+        *blockedZ = true;
+    }
+
+    *constrainedStep = candidate - unit->_position;
+    return *blockedX || *blockedZ;
+}
+
+static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, update_msg *arg,
+                                      float tau, bool confineToLevelBox)
 {
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
     if ( !world )
@@ -3867,9 +3921,26 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
 
     for (int i = 0; i < slices; i++)
     {
+        vec3d moveStep = step;
+        bool blockedX = false;
+        bool blockedZ = false;
+        if ( confineToLevelBox &&
+             ypabact_ConstrainWeaponRecoilStepToLevelBox(unit, step, &moveStep, &blockedX, &blockedZ) )
+        {
+            // Remove only the outward component. A recoil vector parallel to
+            // the wall may still move the unit along the valid map area.
+            if ( blockedX )
+                step.x = pushVel->x = 0.0f;
+            if ( blockedZ )
+                step.z = pushVel->z = 0.0f;
+        }
+
+        if ( moveStep.length() <= 0.001f )
+            break;
+
         ypaworld_arg136 moveTest;
         moveTest.stPos = unit->_position;
-        moveTest.vect  = step;
+        moveTest.vect  = moveStep;
         moveTest.flags = 0;
 
         world->ypaworld_func136(&moveTest);
@@ -3880,7 +3951,7 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
             break;
         }
 
-        unit->_position += step;
+        unit->_position += moveStep;
 
         if ( groundAligned && !ypabact_SnapAoePushGroundUnit(unit) )
         {
@@ -3985,7 +4056,7 @@ void NC_STACK_ypabact::ApplyWeaponRecoil(const vec3d &dir, float recoil)
 
 void NC_STACK_ypabact::UpdateAoePush(update_msg *arg)
 {
-    ypabact_UpdateFakePushVel(this, &_aoePushVel, arg, AOE_PUSH_TAU);
+    ypabact_UpdateFakePushVel(this, &_aoePushVel, arg, AOE_PUSH_TAU, false);
 }
 
 void NC_STACK_ypabact::UpdateWeaponRecoilPush(update_msg *arg)
@@ -3997,7 +4068,7 @@ void NC_STACK_ypabact::UpdateWeaponRecoilPush(update_msg *arg)
         return;
     }
 
-    ypabact_UpdateFakePushVel(this, &_weaponRecoilPushVel, arg, WEAPON_RECOIL_TAU);
+    ypabact_UpdateFakePushVel(this, &_weaponRecoilPushVel, arg, WEAPON_RECOIL_TAU, true);
 }
 
 void NC_STACK_ypabact::Render(baseRender_msg *arg)
