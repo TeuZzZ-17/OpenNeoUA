@@ -1523,17 +1523,18 @@ bool NC_STACK_yparobo::ShouldUsePlayerMobileMove() const
 
 bool NC_STACK_yparobo::ShouldUsePlayerRoboIdleMotion() const
 {
-    // This helper means: may the player Host Station use the AI-style idle
-    // motion code path at all? Do not suppress it just because the player is
-    // currently inside the Host Station: robo_does_flux must keep working there
-    // to avoid broken-looking settling after AI-style movement finishes.
+    // Manual Host Station movement must keep using the AI movement path after
+    // arrival even when robo_does_flux / robo_does_twist are absent. Falling
+    // back to wallow() would restore the vanilla teleport-only vertical bob
+    // around the stale pre-move _roboYPos, causing a Y-axis snap at destination.
+    // AI_doMove() keeps the reached position stable and still applies the two
+    // optional idle effects when their script flags are present.
     return _playerRoboAIBehavior &&
            !_playerRoboAIBehaviorMoveActive &&
            IsPlayerRobo() &&
            _world &&
            this == _world->getYW_userHostStation() &&
            _status == BACT_STATUS_NORMAL &&
-           (_roboWFlags & 3) &&
            !(_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
 }
 
