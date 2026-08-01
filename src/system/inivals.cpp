@@ -88,6 +88,8 @@ Common::Ini::Key IniConf::UiHideMenuHints("ui.hide_menu_hints", Common::Ini::KT_
 // Stored as a single token when saved by Options, e.g. Liberation_Mono_Regular.
 // KT_STRING is intentionally kept so older test builds with spaces still parse.
 Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std::string("Default"));
+// OpenUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
+Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
 
 
 // Input Engine
@@ -569,6 +571,7 @@ void IniConf::Init()
 
         , &UiHideMenuHints
         , &UiMenuFont
+        , &UiRetroInterface
     };
 }
 

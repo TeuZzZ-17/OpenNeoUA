@@ -47,6 +47,7 @@ static constexpr int SETTINGS_CHANGE_BLENDING              = 0x80000;
 static constexpr int SETTINGS_CHANGE_MOVIE_PLAYER          = 0x100000;
 static constexpr int SETTINGS_CHANGE_MENU_FONT             = 0x200000;
 static constexpr int SETTINGS_CHANGE_DEFAULT_CAMERA_VIEW   = 0x400000;
+static constexpr int SETTINGS_CHANGE_INTERFACE_STYLE       = 0x800000;
 static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
     SETTINGS_CHANGE_BLENDING | SETTINGS_CHANGE_MENU_FONT;
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
@@ -1192,7 +1193,17 @@ void UserData::sb_0x46aa8c()
     {
         defaultCockpitCamera = confDefaultCockpitCamera;
         cockpitCameraRuntimeMode = confDefaultCockpitCamera;
+    }
 
+    if ( _settingsChangeOptions & SETTINGS_CHANGE_INTERFACE_STYLE )
+    {
+        interfaceStyle = confInterfaceStyle;
+        GFX::Engine.SetVirtualUIStyle(interfaceStyle);
+
+        const bool retroInterface = interfaceStyle == GFX::VirtualUIStyle::RETRO;
+        System::IniConf::UiRetroInterface.Value = retroInterface;
+        if ( !SaveKeyToNucleusIni("ui.retro_interface", retroInterface ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save ui.retro_interface to nucleus.ini\n");
     }
 
     if ( forceChange )
@@ -1625,6 +1636,7 @@ void UserData::ShowOptionsMenu()
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confDefaultCockpitCamera = defaultCockpitCamera;
+    confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     UpdatePaletteThemeText();
     UpdateMenuFontText();
@@ -1637,6 +1649,10 @@ void UserData::ShowOptionsMenu()
 
     state.butID = 1175;
     state.field_4 = (!confSpectatorMode) + 1;
+    video_button->SetState(&state);
+
+    state.butID = 1189;
+    state.field_4 = (confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
     video_button->SetState(&state);
 
     video_button->ShowScreen();
@@ -1960,6 +1976,7 @@ void UserData::sub_46A3C0()
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confDefaultCockpitCamera = defaultCockpitCamera;
+    confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
 
     int gfxId = GFX::GFXEngine::Instance.GetGfxModeIndex(p_YW->_gfxMode);
@@ -2031,6 +2048,9 @@ void UserData::sub_46A3C0()
     video_button->SetState(&v10);
     v10.field_4 = (!confVhsFilter) + 1;
     v10.butID = 1185;
+    video_button->SetState(&v10);
+    v10.field_4 = (confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
+    v10.butID = 1189;
     video_button->SetState(&v10);
     UpdateGfxOptionTexts();
     UpdateMenuFontText();
@@ -4638,6 +4658,16 @@ void UserData::GameShellUiHandleInput()
             confDefaultCockpitCamera = !confDefaultCockpitCamera;
             video_button->SetText(1188, DefaultCameraViewLabel(confDefaultCockpitCamera));
             _settingsChangeOptions |= SETTINGS_CHANGE_DEFAULT_CAMERA_VIEW;
+        }
+        else if ( r.code == 1314 ) // Retro Interface checkbox (checked)
+        {
+            confInterfaceStyle = GFX::VirtualUIStyle::RETRO;
+            _settingsChangeOptions |= SETTINGS_CHANGE_INTERFACE_STYLE;
+        }
+        else if ( r.code == 1315 ) // Retro Interface checkbox (unchecked)
+        {
+            confInterfaceStyle = GFX::VirtualUIStyle::SMOOTH;
+            _settingsChangeOptions |= SETTINGS_CHANGE_INTERFACE_STYLE;
         }
         else if ( r.code == 1124 )
         {

@@ -1475,13 +1475,25 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
                 if ( _userUnit->_cellId ) // if cell is not 0,0
                 {
-                    RenderGame(arg, 1);
+                    RenderGame(arg, 0);
+
+                    GFX::Engine.BeginVirtualUI(_screenSize);
+
+                    uint32_t uiRenderStart = profiler_begin();
+                    sb_0x4d7c08__sub0(this);
+                    _profileVals[PFID_NEWGUITIME] = profiler_end(uiRenderStart);
 
                     if ( _isNetGame )
                         yw_NetDrawStats(this);
                 }
+                else
+                {
+                    GFX::Engine.BeginVirtualUI(_screenSize);
+                }
 
                 debug_info_draw(arg->field_8);
+
+                GFX::Engine.EndVirtualUI();
 
                 GFX::Engine.EndFrame();
 
@@ -3884,6 +3896,18 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->EnvMode = ENVMODE_TITLE;
 
     System::IniConf::ReadFromNucleusIni();
+
+    // OpenUA: Nucleus.ini supplies the default Retro Interface state for new
+    // users and profiles that predate the profile-side interface_style key.
+    // A saved profile may still override this value when its video block loads.
+    const GFX::VirtualUIStyle nucleusInterfaceStyle =
+        System::IniConf::UiRetroInterface.Get<bool>()
+            ? GFX::VirtualUIStyle::RETRO
+            : GFX::VirtualUIStyle::SMOOTH;
+    usr->interfaceStyle = nucleusInterfaceStyle;
+    usr->confInterfaceStyle = nucleusInterfaceStyle;
+    GFX::Engine.SetVirtualUIStyle(nucleusInterfaceStyle);
+
     usr->RefreshPaletteThemes();
     usr->RefreshMenuFonts();
 
@@ -5517,6 +5541,53 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                             if ( !_GameShell->video_button->Add(&btn_64arg) )
                                                                                             {
                                                                                                 ypa_log_out("Unable to add spectator mode label\n");
+                                                                                                return false;
+                                                                                            }
+
+                                                                                            // OpenUA: profile-saved Retro Interface checkbox.
+                                                                                            // Checked = Retro/nearest; unchecked = Smooth/linear.
+                                                                                            // It shares row 12 with Spectator Mode and uses the free right column.
+                                                                                            btn_64arg.width = checkBoxWidth;
+                                                                                            btn_64arg.tileset_down = 19;
+                                                                                            btn_64arg.tileset_up = 18;
+                                                                                            btn_64arg.field_3A = 30;
+                                                                                            btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + v120;
+                                                                                            btn_64arg.ypos = 12 * (vertMenuSpace + _fontH);
+                                                                                            btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
+                                                                                            btn_64arg.pressedCode = 0;
+                                                                                            btn_64arg.flags = 0;
+                                                                                            btn_64arg.caption = "g";
+                                                                                            btn_64arg.caption2 = "g";
+                                                                                            btn_64arg.downCode = 1314;
+                                                                                            btn_64arg.upCode = 1315;
+                                                                                            btn_64arg.button_id = 1189;
+
+                                                                                            if ( !_GameShell->video_button->Add(&btn_64arg) )
+                                                                                            {
+                                                                                                ypa_log_out("Unable to add Retro Interface checkbox\n");
+                                                                                                return false;
+                                                                                            }
+
+                                                                                            btn_64arg.tileset_down = 16;
+                                                                                            btn_64arg.tileset_up = 16;
+                                                                                            btn_64arg.field_3A = 16;
+                                                                                            btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+                                                                                            btn_64arg.xpos = 4 * buttonsSpace + v120 + 2 * checkBoxWidth;
+                                                                                            btn_64arg.width = v120;
+                                                                                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_RETRO_INTERFACE);
+                                                                                            btn_64arg.caption2.clear();
+                                                                                            btn_64arg.downCode = 0;
+                                                                                            btn_64arg.upCode = 0;
+                                                                                            btn_64arg.pressedCode = 0;
+                                                                                            btn_64arg.button_id = 0;
+                                                                                            btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
+                                                                                            btn_64arg.txt_r = _iniColors[60].r;
+                                                                                            btn_64arg.txt_g = _iniColors[60].g;
+                                                                                            btn_64arg.txt_b = _iniColors[60].b;
+
+                                                                                            if ( !_GameShell->video_button->Add(&btn_64arg) )
+                                                                                            {
+                                                                                                ypa_log_out("Unable to add Retro Interface label\n");
                                                                                                 return false;
                                                                                             }
 
@@ -7803,6 +7874,7 @@ void NC_STACK_ypaworld::ProcessGameShell()
     SFXEngine::SFXe.sub_423EFC(_GameShell->DTime, vec3d(0.0), vec3d(0.0), mat3x3::Ident());
 
     GFX::Engine.BeginFrame();
+    GFX::Engine.BeginVirtualUI(_screenSize);
 
     int oldMode = _GameShell->EnvMode;
     _GameShell->EnvModeChanged = false;
@@ -7833,7 +7905,7 @@ void NC_STACK_ypaworld::ProcessGameShell()
 
     SFXEngine::SFXe.sb_0x424c74();
 
-
+    GFX::Engine.EndVirtualUI();
     GFX::Engine.EndFrame();
 
 
@@ -8190,7 +8262,9 @@ void NC_STACK_ypaworld::ypaworld_func163(base_64arg *arg)
 
     RenderGame(arg, 0);
 
+    GFX::Engine.BeginVirtualUI(_screenSize);
     debug_info_draw(arg->field_8);
+    GFX::Engine.EndVirtualUI();
 
     GFX::Engine.EndFrame();
 
@@ -8495,6 +8569,8 @@ void NC_STACK_ypaworld::UpdateGameShell()
     _GameShell->confMenuFont = _GameShell->menuFont;
     _GameShell->cockpitCameraRuntimeMode = _GameShell->defaultCockpitCamera;
     _GameShell->confDefaultCockpitCamera = _GameShell->defaultCockpitCamera;
+    _GameShell->confInterfaceStyle = _GameShell->interfaceStyle;
+    GFX::Engine.SetVirtualUIStyle(_GameShell->interfaceStyle);
 
     v16.butID = 1184; // Intro Movies checkbox
     v16.field_4 = (!_GameShell->confMoviePlayer) + 1;
@@ -8502,6 +8578,10 @@ void NC_STACK_ypaworld::UpdateGameShell()
 
     v16.butID = 1185; // VHS Filter checkbox
     v16.field_4 = (!_GameShell->confVhsFilter) + 1;
+    _GameShell->video_button->SetState(&v16);
+
+    v16.butID = 1189; // Retro Interface checkbox
+    v16.field_4 = (_GameShell->confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
     _GameShell->video_button->SetState(&v16);
 
     _GameShell->video_button->SetText(1156, _GameShell->p_YW->_gfxMode.name);
@@ -9085,7 +9165,13 @@ size_t NC_STACK_ypaworld::SetGameShellVideoMode(bool windowed)
         windowed = true;
 
     if ( _shellGfxMode == GFX::Engine.GetGfxMode() && windowed == GFX::Engine.GetGfxMode().windowed )
+    {
+        const Common::Point physicalSize = GFX::Engine.GetScreenSize();
+        _screenSize = GFX::Engine.GetVirtualUIResolution();
+        Input::Engine.SetPointerResolution(physicalSize, _screenSize);
+        Gui::Root::Instance.SetScreenSize(_screenSize);
         return 1;
+    }
 
     int v6;
 
@@ -9101,7 +9187,10 @@ size_t NC_STACK_ypaworld::SetGameShellVideoMode(bool windowed)
 
     GFX::Engine.SetResolution( _shellGfxMode, windowed );
 
-    _screenSize = GFX::Engine.GetScreenSize();
+    const Common::Point physicalSize = GFX::Engine.GetScreenSize();
+    _screenSize = GFX::Engine.GetVirtualUIResolution();
+    Input::Engine.SetPointerResolution(physicalSize, _screenSize);
+    Gui::Root::Instance.SetScreenSize(_screenSize);
 
     if ( v6 && !OpenGameShell())
     {

@@ -828,7 +828,8 @@ void StreamTex::Stream(Common::Point sz, int32_t fmt, int32_t type, const void *
     }
 
     pStates.Tex = Texs[nextTex];
-    pStates.LinearFilter = true;
+    pStates.LinearFilter =
+        (GFX::Engine.GetVirtualUIStyle() == GFX::VirtualUIStyle::SMOOTH);
     GFX::Engine.SetRenderStates(0);
 
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Size.x, Size.y, fmt, type, data);

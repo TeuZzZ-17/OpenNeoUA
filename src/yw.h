@@ -675,6 +675,11 @@ public:
     bool confMoviePlayer;         // gfx.movie_player
     bool confVhsFilter;           // gfx.vhs_filter
 
+    // OpenUA: profile-saved virtual UI magnification style. Nucleus.ini
+    // supplies the fallback for new/legacy profiles; a saved profile overrides it.
+    GFX::VirtualUIStyle interfaceStyle = GFX::VirtualUIStyle::RETRO;
+    GFX::VirtualUIStyle confInterfaceStyle = GFX::VirtualUIStyle::RETRO;
+
     int _settingsChangeOptions;
 
     NC_STACK_button *disk_button;

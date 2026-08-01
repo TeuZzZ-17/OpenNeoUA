@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cstdint>
 #include "common/common.h"
 #include "../ini.h"
 #include "../log.h"
@@ -26,6 +28,9 @@ int INPEngine::Init()
 
     for (int16_t &k : _hotKeys)
         k = KC_NONE;
+
+    _pointerPhysicalResolution = Common::Point();
+    _pointerLogicalResolution = Common::Point();
 
     SDL_Haptic *joyHaptic = NC_STACK_winp::GetJoyHaptic();
     if (joyHaptic)
@@ -272,6 +277,10 @@ void INPEngine::QueryInput(TInputState *state)
         if ( _wimp.PointerQuery )
             _wimp.PointerQuery(&state->ClickInf);
 
+        ApplyPointerResolution(&state->ClickInf.move);
+        ApplyPointerResolution(&state->ClickInf.ldw_pos);
+        ApplyPointerResolution(&state->ClickInf.lup_pos);
+
         ClickCheck.CheckClick(&state->ClickInf);
 
         for (size_t i = 0; i < _buttons.size(); i++)
@@ -298,6 +307,42 @@ void INPEngine::QueryInput(TInputState *state)
         for ( InputNodeList &lst : _sliders )
             UpdateList(&lst);
     }
+}
+
+void INPEngine::SetPointerResolution(const Common::Point &physicalSize,
+                                     const Common::Point &logicalSize)
+{
+    if (physicalSize.x <= 0 || physicalSize.y <= 0 ||
+        logicalSize.x <= 0 || logicalSize.y <= 0 ||
+        physicalSize == logicalSize)
+    {
+        _pointerPhysicalResolution = Common::Point();
+        _pointerLogicalResolution = Common::Point();
+        return;
+    }
+
+    _pointerPhysicalResolution = physicalSize;
+    _pointerLogicalResolution = logicalSize;
+}
+
+void INPEngine::ApplyPointerResolution(TMousePos *mouse) const
+{
+    if (!mouse ||
+        _pointerPhysicalResolution.x <= 0 || _pointerPhysicalResolution.y <= 0 ||
+        _pointerLogicalResolution.x <= 0 || _pointerLogicalResolution.y <= 0)
+    {
+        return;
+    }
+
+    const int64_t mappedX = (int64_t)mouse->ScreenPos.x * _pointerLogicalResolution.x /
+                            _pointerPhysicalResolution.x;
+    const int64_t mappedY = (int64_t)mouse->ScreenPos.y * _pointerLogicalResolution.y /
+                            _pointerPhysicalResolution.y;
+
+    mouse->ScreenPos.x = std::max(0, std::min((int)mappedX,
+                                              _pointerLogicalResolution.x - 1));
+    mouse->ScreenPos.y = std::max(0, std::min((int)mappedY,
+                                              _pointerLogicalResolution.y - 1));
 }
 
 void INPEngine::AddClickBoxFront(ClickBox *box)

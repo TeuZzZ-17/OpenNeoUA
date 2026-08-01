@@ -1968,8 +1968,9 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
     int y_pos_line = 0;
     int x_pos_line = 0;
 
-    int halfWidth = _resolution.x / 2;
-    int halfHeight = _resolution.y / 2;
+    const Common::Point drawResolution = _virtualUiPass ? _virtualUiResolution : _resolution;
+    int halfWidth = drawResolution.x / 2;
+    int halfHeight = drawResolution.y / 2;
 
     int line_width = 0;
     int line_height = 0;
@@ -2099,7 +2100,7 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
             case 4: //ypos
                 y_out = FontUA::get_s16(*curStream, &curPos);
                 if ( y_out < 0 )
-                    y_out += _resolution.y;
+                    y_out += drawResolution.y;
 
                 x_pos_line = x_out;
                 y_pos_line = y_out;
@@ -2376,6 +2377,7 @@ void GFXEngine::EndFrame()
 
         Gui::Root::Instance.Draw(Screen());
         DrawScreenSurface();
+        DrawVirtualUISurface();
         Gui::Root::Instance.HwCompose();
 
         if (_colorEffects == 1)
@@ -2418,6 +2420,7 @@ void GFXEngine::EndFrame()
 
     Gui::Root::Instance.Draw(Screen());
     DrawScreenSurface();
+    DrawVirtualUISurface();
     Gui::Root::Instance.HwCompose();
 
     if (_colorEffects == 1 && !_vhsFilterActive)
@@ -2725,7 +2728,20 @@ void GFXEngine::draw2DandFlush()
         Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     Gui::Root::Instance.Draw(Screen());
-    DrawScreenSurface();
+    if (_virtualUiPass)
+    {
+        // Briefing/debriefing performs an intermediate 2D flush while the
+        // shell virtual-UI pass is still open. Present the current low-res
+        // layer now, then let the caller continue drawing into the cleared
+        // virtual surface for the final composition.
+        _virtualUiPending = true;
+        DrawVirtualUISurface();
+    }
+    else
+    {
+        DrawScreenSurface();
+        DrawVirtualUISurface();
+    }
     Gui::Root::Instance.HwCompose();
 
     SDL_FillRect(Screen(), NULL, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
@@ -3426,6 +3442,20 @@ void GFXEngine::Deinit()
         SDL_FreeSurface(ScreenSurface);
 
     ScreenSurface = NULL;
+
+    if (VirtualUISurface)
+        SDL_FreeSurface(VirtualUISurface);
+
+    VirtualUISurface = NULL;
+    _virtualUiPass = false;
+    _virtualUiPending = false;
+    _virtualUiResolution = Common::Point();
+    _virtualUiTextureSize = Common::Point();
+
+    if (virtualUiTex)
+        glDeleteTextures(1, &virtualUiTex);
+
+    virtualUiTex = 0;
 
     if (_stdQuadDataBuf)
         Glext::GLDeleteBuffers(1, &_stdQuadDataBuf);
@@ -4235,6 +4265,9 @@ uint8_t *GFXEngine::MakeDepthScreenCopy(int *ow, int *oh)
 
 SDL_Surface *GFXEngine::Screen()
 {
+    if (_virtualUiPass && VirtualUISurface)
+        return VirtualUISurface;
+
     return ScreenSurface;
 }
 
@@ -4951,6 +4984,91 @@ void GFXEngine::Draw(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *d
     SDL_BlitSurface(src, &Ssrc, dst, &Sdst);
 }
 
+Common::Point GFXEngine::GetVirtualUIResolution() const
+{
+    if (_resolution.x <= 0 || _resolution.y <= 0)
+        return Common::Point(640, 480);
+
+    // Urban Assault's in-game interface was authored around a 480-line
+    // canvas. Keep that visual size at modern resolutions while extending the
+    // logical width to the current aspect ratio, so widescreen layouts reach
+    // both edges without stretching the original 4:3 geometry.
+    if (_resolution.y <= 480)
+        return _resolution;
+
+    const int logicalHeight = 480;
+    const int logicalWidth = std::max(640,
+                                      (_resolution.x * logicalHeight + _resolution.y / 2) /
+                                      _resolution.y);
+    return Common::Point(logicalWidth, logicalHeight);
+}
+
+void GFXEngine::BeginVirtualUI(const Common::Point &logicalSize)
+{
+    if (_virtualUiPass || logicalSize.x <= 0 || logicalSize.y <= 0 || !ScreenSurface)
+        return;
+
+    if (!VirtualUISurface ||
+        VirtualUISurface->w != logicalSize.x ||
+        VirtualUISurface->h != logicalSize.y ||
+        VirtualUISurface->format->format != ScreenSurface->format->format)
+    {
+        if (VirtualUISurface)
+            SDL_FreeSurface(VirtualUISurface);
+
+        VirtualUISurface = SDL_CreateRGBSurface(0,
+                                             logicalSize.x,
+                                             logicalSize.y,
+                                             ScreenSurface->format->BitsPerPixel,
+                                             ScreenSurface->format->Rmask,
+                                             ScreenSurface->format->Gmask,
+                                             ScreenSurface->format->Bmask,
+                                             ScreenSurface->format->Amask);
+        if (!VirtualUISurface)
+            return;
+
+        SDL_SetSurfaceBlendMode(VirtualUISurface, SDL_BLENDMODE_BLEND);
+    }
+
+    SDL_FillRect(VirtualUISurface, NULL,
+                 SDL_MapRGBA(VirtualUISurface->format, 0, 0, 0, 0));
+
+    _virtualUiSavedClip = _clip;
+    _virtualUiSavedInverseClip = _inverseClip;
+    _virtualUiSavedField54c = _field_54c;
+    _virtualUiSavedField550 = _field_550;
+    _virtualUiSavedField554 = _field_554;
+    _virtualUiSavedField558 = _field_558;
+
+    _virtualUiResolution = logicalSize;
+    _virtualUiPending = false;
+    _virtualUiPass = true;
+
+    _clip = logicalSize - Common::Point(1, 1);
+    _inverseClip = Common::Rect();
+    _field_54c = logicalSize.x / 2;
+    _field_550 = logicalSize.y / 2;
+    _field_554 = logicalSize.x / 2;
+    _field_558 = logicalSize.y / 2;
+}
+
+void GFXEngine::EndVirtualUI()
+{
+    if (!_virtualUiPass)
+        return;
+
+    _virtualUiPass = false;
+
+    _clip = _virtualUiSavedClip;
+    _inverseClip = _virtualUiSavedInverseClip;
+    _field_54c = _virtualUiSavedField54c;
+    _field_550 = _virtualUiSavedField550;
+    _field_554 = _virtualUiSavedField554;
+    _field_558 = _virtualUiSavedField558;
+
+    _virtualUiPending = VirtualUISurface != NULL;
+}
+
 void GFXEngine::GetGlPixTypeFmt(GLint *format, GLint *type)
 {
     *format = _glPixfmt;
@@ -5073,6 +5191,67 @@ void GFXEngine::DrawScreenSurface()
     DrawVtxQuad(vtx);
 
     _states = save;
+}
+
+void GFXEngine::DrawVirtualUISurface()
+{
+    if (!_virtualUiPending || !VirtualUISurface)
+        return;
+
+    GfxStates save = _states;
+
+    Common::Point scrSz = System::GetResolution();
+    glViewport(0, 0, scrSz.x, scrSz.y);
+
+    SetProjectionMatrix(mat4x4f());
+    SetModelViewMatrix(mat4x4f());
+
+    if (!virtualUiTex)
+        glGenTextures(1, &virtualUiTex);
+
+    _states.DepthTest = false;
+    _states.Zwrite = false;
+    _states.AlphaBlend = true;
+    _states.SrcBlend = GL_SRC_ALPHA;
+    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    _states.Tex = virtualUiTex;
+    _states.TexBlend = 2;
+    _states.Prog = _stdShaderProg;
+    _states.AlphaTest = false;
+    _states.Shaded = true;
+    _states.LinearFilter = (_virtualUiStyle == VirtualUIStyle::SMOOTH);
+
+    SetRenderStates(0);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    SDL_LockSurface(VirtualUISurface);
+    const Common::Point surfaceSize(VirtualUISurface->w, VirtualUISurface->h);
+    if (_virtualUiTextureSize != surfaceSize)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surfaceSize.x, surfaceSize.y, 0,
+                     _glPixfmt, _glPixtype, VirtualUISurface->pixels);
+        _virtualUiTextureSize = surfaceSize;
+    }
+    else
+    {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, surfaceSize.x, surfaceSize.y,
+                        _glPixfmt, _glPixtype, VirtualUISurface->pixels);
+    }
+    SDL_UnlockSurface(VirtualUISurface);
+
+    static std::array<TVertex, 4> vtx = {
+        GFX::TVertex(vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 0.0)),
+        GFX::TVertex(vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 1.0)),
+        GFX::TVertex(vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 1.0)),
+        GFX::TVertex(vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 0.0))
+    };
+
+    DrawVtxQuad(vtx);
+
+    _states = save;
+    _virtualUiPending = false;
 }
 
 uint32_t GFXEngine::CompileShader(int32_t type, const std::string &string)

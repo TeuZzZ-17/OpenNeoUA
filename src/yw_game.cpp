@@ -248,15 +248,18 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     {
         GFX::Engine.SetResolution(_gfxMode, _GameShell->IsWindowedFlag());
 
-        _screenSize = GFX::Engine.GetScreenSize();
-
         GFX::Engine.setWDD_cursor( (_preferences & World::PREF_SOFTMOUSE) != 0 );
 
-        std::string fontStr = _screenSize.x >= 512 ? Locale::Text::Font() : Locale::Text::SmallFont();
+        const Common::Point physicalScreenSize = GFX::Engine.GetScreenSize();
+        std::string fontStr = physicalScreenSize.x >= 512 ? Locale::Text::Font() : Locale::Text::SmallFont();
         fontStr = System::ResolveMenuFontDescr(fontStr);
         GFX::Engine.LoadFontByDescr(fontStr);
         Gui::UA::LoadFont(fontStr);
     }
+
+    // Loading screens still use the real output resolution. The gameplay UI
+    // switches to its 480-line logical canvas only after loading is complete.
+    _screenSize = GFX::Engine.GetScreenSize();
 
     NC_STACK_bitmap *diskScreenImage = loadDisk_screen(this);
 
@@ -287,6 +290,10 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
         drawSplashScreenWithTOD(this, diskScreenImage, Locale::Text::ToD(tod, " "));
         diskScreenImage->Delete();
     }
+
+    _screenSize = GFX::Engine.GetVirtualUIResolution();
+    Input::Engine.SetPointerResolution(GFX::Engine.GetScreenSize(), _screenSize);
+    Gui::Root::Instance.SetScreenSize(_screenSize);
 
     _profileFramesCount = 0;
     for (int i = 0; i < PFID_MAX; i++)
@@ -6930,8 +6937,8 @@ static bool yw_DebugIsCurrentControlledBact(NC_STACK_ypaworld *world, NC_STACK_y
 void NC_STACK_ypaworld::debug_draw_coll_spheres()
 {
     SDL_Surface *scr = GFX::Engine.Screen();
-    int screenW = GFX::Engine.GetScreenW();
-    int screenH = GFX::Engine.GetScreenH();
+    int screenW = _screenSize.x;
+    int screenH = _screenSize.y;
 
     TF::TForm3D *view = TF::Engine.GetViewPoint();
     if (!view)
