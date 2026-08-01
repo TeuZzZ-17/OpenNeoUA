@@ -334,6 +334,8 @@ public:
     void Deinit();
 
     void QueryInput(TInputState *state);
+    void SetPointerResolution(const Common::Point &physicalSize,
+                              const Common::Point &logicalSize);
 
     void AddClickBoxFront(ClickBox *box);
     void AddClickBoxBack(ClickBox *box);
@@ -372,6 +374,7 @@ protected:
     int16_t CheckHotKey(int16_t key);
 
     TQueryState FindInterface(const std::string &name);
+    void ApplyPointerResolution(TMousePos *mouse) const;
 
     void FFstopAll();
     void FFDOTankEngine(int state, float p1, float p2);
@@ -390,6 +393,8 @@ public:
 
 protected:
     std::vector<TQueryState> Interfaces;
+    Common::Point _pointerPhysicalResolution;
+    Common::Point _pointerLogicalResolution;
 
 public:
     NC_STACK_itimer *_timer    = NULL;

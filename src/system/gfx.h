@@ -517,6 +517,12 @@ enum DISP_ATT
     ATT_DISPLAY_WIN = 0x8000100A,
 };
 
+enum class VirtualUIStyle
+{
+    RETRO = 0,
+    SMOOTH = 1
+};
+
 enum RASTER
 {
     RASTER_SOLID   = (1 << 0),
@@ -551,6 +557,13 @@ public:
 
     void RecreateScreenSurface();
     void DrawScreenSurface();
+    void DrawVirtualUISurface();
+    Common::Point GetVirtualUIResolution() const;
+    void BeginVirtualUI(const Common::Point &logicalSize);
+    void EndVirtualUI();
+    void SetVirtualUIStyle(VirtualUIStyle style) { _virtualUiStyle = style; }
+    VirtualUIStyle GetVirtualUIStyle() const { return _virtualUiStyle; }
+    bool IsVirtualUIPass() const { return _virtualUiPass; }
 
     uint32_t LoadShader(int32_t type, const std::string &fl);
     uint32_t CompileShader(int32_t type, const std::string &string);
@@ -800,7 +813,21 @@ private:
     GfxMode GfxSelectedMode;
 
     SDL_Surface *ScreenSurface = NULL;
+    SDL_Surface *VirtualUISurface = NULL;
     GLuint screenTex = 0;
+    GLuint virtualUiTex = 0;
+
+    bool _virtualUiPass = false;
+    bool _virtualUiPending = false;
+    VirtualUIStyle _virtualUiStyle = VirtualUIStyle::RETRO;
+    Common::Point _virtualUiResolution;
+    Common::Point _virtualUiTextureSize;
+    Common::Rect _virtualUiSavedClip;
+    Common::Rect _virtualUiSavedInverseClip;
+    int _virtualUiSavedField54c = 0;
+    int _virtualUiSavedField550 = 0;
+    float _virtualUiSavedField554 = 0.0f;
+    float _virtualUiSavedField558 = 0.0f;
 
     static const std::string _stdPShaderText;
     static const std::string _stdVShaderText;

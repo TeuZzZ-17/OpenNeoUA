@@ -5738,6 +5738,22 @@ int LevelMapsParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
 int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if (!_initialized)
+    {
+        // Existing profiles predate interface_style. Reset each parsed video
+        // block to the Nucleus.ini default so loading another profile cannot
+        // inherit the previous profile's choice. A profile-side value, when
+        // present, is parsed below and remains authoritative for that profile.
+        const GFX::VirtualUIStyle defaultStyle =
+            System::IniConf::UiRetroInterface.Get<bool>()
+                ? GFX::VirtualUIStyle::RETRO
+                : GFX::VirtualUIStyle::SMOOTH;
+        _o._GameShell->interfaceStyle = defaultStyle;
+        _o._GameShell->confInterfaceStyle = defaultStyle;
+        GFX::Engine.SetVirtualUIStyle(defaultStyle);
+        _initialized = true;
+    }
+
     if ( !StriCmp(p1, "end") )
     {
         if ( GFX::Engine.getWDD_drawPrim() )
@@ -5841,6 +5857,15 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
             _o._GameShell->defaultCockpitCamera = true;
             _o._GameShell->cockpitCameraRuntimeMode = true;
         }
+    }
+    else if ( !StriCmp(p1, "interface_style") )
+    {
+        const GFX::VirtualUIStyle style = !StriCmp(p2, "smooth")
+                                              ? GFX::VirtualUIStyle::SMOOTH
+                                              : GFX::VirtualUIStyle::RETRO;
+        _o._GameShell->interfaceStyle = style;
+        _o._GameShell->confInterfaceStyle = style;
+        GFX::Engine.SetVirtualUIStyle(style);
     }
     else if ( !StriCmp(p1, "palette_theme") )
     {
