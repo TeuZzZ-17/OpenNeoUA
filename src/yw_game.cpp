@@ -2219,8 +2219,10 @@ void NC_STACK_ypaworld::yw_renderSky(baseRender_msg *rndr_params)
 
         _skyObject->SetPosition( _viewerBact->_position + vec3d::OY(_skyHeight) );
 
-        rndr_params->maxZ = 32000.0;
-        rndr_params->flags = GFX::RFLAGS_SKY | GFX::RFLAGS_COMPUTED_COLOR;
+        rndr_params->maxZ = GFX::SKY_FAR_CLIP;
+        rndr_params->flags = GFX::RFLAGS_SKY
+                           | GFX::RFLAGS_COMPUTED_COLOR
+                           | GFX::RFLAGS_DISABLE_ZWRITE;
 
         _skyObject->Render(rndr_params, NULL);
 

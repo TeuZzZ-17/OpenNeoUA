@@ -122,6 +122,14 @@ enum RFLAGS
     RFLAGS_ALPHA_FOG =      (1 << 11),
 };
 
+// OpenUA extended projection limits.
+//
+// The world far plane is unlocked natively instead of exposing another
+// low-level INI knob. 65536 safely covers gfx.render_sectors up to 99
+// (derived model visibility reaches 60000) while the sky keeps a larger pass.
+constexpr float WORLD_FAR_CLIP = 65536.0f;
+constexpr float SKY_FAR_CLIP = 262144.0f;
+
 struct __attribute__((packed)) TGLColor
 {
     float r = 1.0;
@@ -372,6 +380,7 @@ struct GfxStates
     float AFogStart = 3496.0;
     float AFogLength = 600.0;
     float AFogStrength = 1.0;
+    TGLColor AFogColor = TGLColor(0.588235f, 0.607843f, 0.627451f, 1.0f);
 
     bool DepthTest = true;
 
@@ -621,7 +630,7 @@ public:
     static GLint GetGlPixType() { return _glPixtype; };
 
 
-    static void DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha = 255);
+    static void DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha = 255, bool preserveSurfaceAlpha = false);
     static void BlitScaleMasked(SDL_Surface *src, Common::Rect sRect, SDL_Surface *mask, uint8_t index, SDL_Surface *dst, Common::Rect dRect);
     static void DrawFill(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, const Common::Rect &dRect);
     static void DrawFillAlpha(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, const Common::Rect &dRect, uint8_t opacity);
@@ -921,7 +930,8 @@ protected:
     // OpenUA custom: VP tint multiplier (std140 vec4 -> 16-byte aligned at 176)
     static constexpr int32_t _vboColorMul = 176; // 4 * 4 = 16
     static constexpr int32_t _vboFogColor = 192; // 4 * 4 = 16
-    static constexpr int32_t _vboParamsSize = 208;
+    static constexpr int32_t _vboAtmosphereColor = 208; // 4 * 4 = 16
+    static constexpr int32_t _vboParamsSize = 224;
     static constexpr int32_t _vboParamsBlockBinding = 0;
 
     struct
@@ -942,6 +952,7 @@ protected:
         int32_t _pad2 = 0;
         float   ColorMul[4] = {1.0, 1.0, 1.0, 1.0}; // std140 vec4 at offset 176
         float   FogColor[4] = {0.0, 0.0, 0.0, 1.0}; // std140 vec4 at offset 192
+        float   AtmosphereColor[4] = {0.588235f, 0.607843f, 0.627451f, 1.0f}; // offset 208
     } _vboStatesBlock;
 
     bool _vboStatesChanged = true;
