@@ -399,6 +399,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_RETRO:           fallback = "Retro"; break;
         case OUA_SMOOTH:          fallback = "Smooth"; break;
         case OUA_RETRO_INTERFACE: fallback = "Retro Interface"; break;
+        case OUA_RENDER_DISTANCE: fallback = "Render Distance"; break;
         default: break;
     }
 

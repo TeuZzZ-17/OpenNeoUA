@@ -46,6 +46,8 @@ int dword_5A50B6_h;
 int scaledFontHeight;
 int bottomButtonsY;
 int button1LineWidth;
+int bottomCenteredFirstBtnPosX;
+int bottomCenteredSecondBtnPosX;
 int bottomSecondBtnPosX;
 int bottomThirdBtnPosX;
 
@@ -535,12 +537,31 @@ static int32_t yw_ClampRenderSectors(int32_t sectors)
     if (sectors > YW_RENDER_SECTORS_MAX)
         sectors = YW_RENDER_SECTORS_MAX;
     // The render window is centered on the viewer and must have an odd side
-    // count. Therefore gfx.render_sectors=50 uses the largest centered window,
-    // 49 sectors wide.
+    // count. Even values are rounded down to the nearest valid window.
     if ((sectors & 1) == 0)
         sectors -= 1;
 
     return sectors;
+}
+
+static int32_t yw_RenderSectorsToNormalVizLimit(int32_t sectors)
+{
+    const int32_t normalized = yw_ClampRenderSectors(sectors);
+
+    // _renderSectors is a centered sector-window width, while maxZ is a
+    // camera-space radial clip. Using only the window radius leaves almost no
+    // allowance for the camera position inside its sector, tall/large assets,
+    // SEN2 bounds and spectator-camera offsets; outer sectors can therefore be
+    // prepared but rejected by the CPU far clip. Use the full requested window
+    // width as a conservative internal visibility budget and cap it just below
+    // the native world projection far plane. gfx.render_sectors remains the
+    // only public control: the sector window still decides what can be drawn.
+    const int32_t requested =
+        (int32_t)((normalized + 1) * World::CVSectorLength);
+    const int32_t safeMaximum =
+        (int32_t)GFX::WORLD_FAR_CLIP - (int32_t)World::CVSectorLength;
+
+    return std::min(requested, safeMaximum);
 }
 
 static void yw_ApplyNucleusViewDistanceOverrides(NC_STACK_ypaworld *yw)
@@ -549,9 +570,7 @@ static void yw_ApplyNucleusViewDistanceOverrides(NC_STACK_ypaworld *yw)
     bool b = false;
 
     if (yw_ParseOptionalInt(System::IniConf::GfxRenderSectors.Get<std::string>(), &v))
-        yw->_renderSectors = yw_ClampRenderSectors(v);
-    if (yw_ParseOptionalInt(System::IniConf::GfxNormalVisualLimit.Get<std::string>(), &v) && v > 0)
-        yw->_normalVizLimit = v;
+        yw->setYW_visSectors(v);
     if (yw_ParseOptionalInt(System::IniConf::GfxSkyHeight.Get<std::string>(), &v))
         yw->_skyHeight = v;
     if (yw_ParseOptionalBool(System::IniConf::GfxSkyRender.Get<std::string>(), &b))
@@ -4934,7 +4953,7 @@ bool NC_STACK_ypaworld::CreateInputControls()
 
                                                 if ( _GameShell->button_input_button->Add(&btn_64arg) )
                                                 {
-                                                    btn_64arg.xpos = 0;
+                                                    btn_64arg.xpos = bottomCenteredFirstBtnPosX;
                                                     btn_64arg.ypos = bottomButtonsY;
                                                     btn_64arg.width = button1LineWidth;
                                                     btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
@@ -4958,10 +4977,10 @@ bool NC_STACK_ypaworld::CreateInputControls()
 
                                                         if ( _GameShell->button_input_button->Add(&btn_64arg) )
                                                         {
-                                                            btn_64arg.xpos = bottomSecondBtnPosX;
+                                                            btn_64arg.xpos = bottomCenteredSecondBtnPosX;
                                                             btn_64arg.ypos = bottomButtonsY;
                                                             btn_64arg.width = button1LineWidth;
-                                                            btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
+                                                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
                                                             btn_64arg.upCode = 1054;
                                                             btn_64arg.button_id = 1054;
                                                             btn_64arg.caption2.clear();
@@ -5783,7 +5802,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                                                         btn_64arg.tileset_up = 18;
                                                                                                                                         btn_64arg.field_3A = 30;
                                                                                                                                         btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
-                                                                                                                                        btn_64arg.xpos = 0;
+                                                                                                                                        btn_64arg.xpos = bottomCenteredFirstBtnPosX;
                                                                                                                                         btn_64arg.ypos = bottomButtonsY;
                                                                                                                                         btn_64arg.width = button1LineWidth;
                                                                                                                                         btn_64arg.tileset_down = 19;
@@ -5812,10 +5831,10 @@ bool NC_STACK_ypaworld::CreateVideoControls()
 
                                                                                                                                             if ( _GameShell->video_button->Add(&btn_64arg) )
                                                                                                                                             {
-                                                                                                                                                btn_64arg.xpos = bottomSecondBtnPosX;
+                                                                                                                                                btn_64arg.xpos = bottomCenteredSecondBtnPosX;
                                                                                                                                                 btn_64arg.ypos = bottomButtonsY;
                                                                                                                                                 btn_64arg.width = button1LineWidth;
-                                                                                                                                                btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
+                                                                                                                                                btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
                                                                                                                                                 btn_64arg.upCode = 1125;
                                                                                                                                                 btn_64arg.caption2.clear();
                                                                                                                                                 btn_64arg.downCode = 0;
@@ -6208,6 +6227,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
             return false;
         }
     }
+
     // ===== end OpenUA modern graphics options ==================================
 
     _GameShell->UpdatePaletteThemeText();
@@ -6231,6 +6251,10 @@ bool NC_STACK_ypaworld::CreateDiskControls()
 {
     int menuWidth = _screenSize.x * 0.7;
     int posLeftPaddingX = (_screenSize.x - menuWidth) / 2;
+    // OpenUA: keep all Save/Load actions on one row. Back sits immediately
+    // to the right of Save; Delete keeps its own final slot when enabled.
+    const int diskActionButtonWidth = (menuWidth - 4 * buttonsSpace) / 5;
+    const int diskActionButtonY = 7 * buttonsSpace + 15 * _fontH;
 
     GuiList::tInit args;
     args = GuiList::tInit();
@@ -6349,9 +6373,9 @@ bool NC_STACK_ypaworld::CreateDiskControls()
                         btn_64arg.tileset_up = 18;
                         btn_64arg.field_3A = 30;
                         btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
-                        btn_64arg.xpos = buttonsSpace + (menuWidth - 3 * buttonsSpace) * 0.25;
-                        btn_64arg.ypos = 7 * buttonsSpace + 15 * _fontH;
-                        btn_64arg.width = (menuWidth - 3 * buttonsSpace) * 0.25;
+                        btn_64arg.xpos = buttonsSpace + diskActionButtonWidth;
+                        btn_64arg.ypos = diskActionButtonY;
+                        btn_64arg.width = diskActionButtonWidth;
                         btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_P_LOAD);
                         btn_64arg.downCode = 1251;
                         btn_64arg.upCode = 1160;
@@ -6365,7 +6389,7 @@ bool NC_STACK_ypaworld::CreateDiskControls()
 
                         if ( _GameShell->disk_button->Add(&btn_64arg) )
                         {
-                            btn_64arg.xpos = (3 * buttonsSpace) + (menuWidth - 3 * buttonsSpace) * 0.75;
+                            btn_64arg.xpos = 4 * (buttonsSpace + diskActionButtonWidth);
                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_P_DELETE);;
                             btn_64arg.caption2.clear();
                             btn_64arg.upCode = 1161;
@@ -6381,7 +6405,7 @@ bool NC_STACK_ypaworld::CreateDiskControls()
 
                                 if ( _GameShell->disk_button->Add(&btn_64arg) )
                                 {
-                                    btn_64arg.xpos = (2 * buttonsSpace) + (menuWidth - 3 * buttonsSpace) * 0.5;
+                                    btn_64arg.xpos = 2 * (buttonsSpace + diskActionButtonWidth);
                                     btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_P_SAVE);
                                     btn_64arg.button_id = 1104;
                                     btn_64arg.caption2.clear();
@@ -6411,10 +6435,10 @@ bool NC_STACK_ypaworld::CreateDiskControls()
 
                                             if ( _GameShell->disk_button->Add(&btn_64arg) )
                                             {
-                                                btn_64arg.ypos = bottomButtonsY;
-                                                btn_64arg.width = button1LineWidth;
-                                                btn_64arg.xpos = bottomSecondBtnPosX;
-                                                btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
+                                                btn_64arg.ypos = diskActionButtonY;
+                                                btn_64arg.width = diskActionButtonWidth;
+                                                btn_64arg.xpos = 3 * (buttonsSpace + diskActionButtonWidth);
+                                                btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
                                                 btn_64arg.button_id = 1106;
                                                 btn_64arg.caption2.clear();
                                                 btn_64arg.upCode = 1165;
@@ -6550,7 +6574,7 @@ bool NC_STACK_ypaworld::CreateLocaleControls()
                     btn_64arg.tileset_up = 18;
                     btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
                     btn_64arg.field_3A = 30;
-                    btn_64arg.xpos = 0;
+                    btn_64arg.xpos = bottomCenteredFirstBtnPosX;
                     btn_64arg.ypos = bottomButtonsY;
                     btn_64arg.width = button1LineWidth;
                     btn_64arg.caption = Locale::Text::Common(Locale::CMN_OK);
@@ -6578,10 +6602,10 @@ bool NC_STACK_ypaworld::CreateLocaleControls()
 
                         if ( _GameShell->locale_button->Add(&btn_64arg) )
                         {
-                            btn_64arg.xpos = bottomSecondBtnPosX;
+                            btn_64arg.xpos = bottomCenteredSecondBtnPosX;
                             btn_64arg.ypos = bottomButtonsY;
                             btn_64arg.width = button1LineWidth;
-                            btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
+                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
                             btn_64arg.caption2.clear();
                             btn_64arg.downCode = 0;
                             btn_64arg.pressedCode = 0;
@@ -7155,7 +7179,7 @@ bool NC_STACK_ypaworld::CreateNetworkControls()
 
                                                 if ( _GameShell->network_button->Add(&btn_64arg) )
                                                 {
-                                                    btn_64arg.xpos = 0;
+                                                    btn_64arg.xpos = bottomCenteredFirstBtnPosX;
                                                     btn_64arg.ypos = bottomButtonsY + _fontH;
                                                     btn_64arg.width = button1LineWidth;
                                                     btn_64arg.caption = Locale::Text::Netdlg(Locale::NETDLG_NEXT);
@@ -7177,10 +7201,10 @@ bool NC_STACK_ypaworld::CreateNetworkControls()
 
                                                         if ( _GameShell->network_button->Add(&btn_64arg) )
                                                         {
-                                                            btn_64arg.xpos = bottomSecondBtnPosX;
+                                                            btn_64arg.xpos = bottomCenteredSecondBtnPosX;
                                                             btn_64arg.ypos = bottomButtonsY + _fontH;
                                                             btn_64arg.width = button1LineWidth;
-                                                            btn_64arg.caption = Locale::Text::Netdlg(Locale::NETDLG_CANCEL);
+                                                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
                                                             btn_64arg.caption2.clear();
                                                             btn_64arg.upCode = 1202;
                                                             btn_64arg.pressedCode = 0;
@@ -7564,6 +7588,10 @@ bool NC_STACK_ypaworld::OpenGameShell()
 
 
 
+    bottomCenteredFirstBtnPosX =
+        ( menuWidth - 2 * button1LineWidth - buttonsSpace ) / 2;
+    bottomCenteredSecondBtnPosX =
+        bottomCenteredFirstBtnPosX + button1LineWidth + buttonsSpace;
     bottomSecondBtnPosX = buttonsSpace + button1LineWidth;
     bottomThirdBtnPosX = 2 * buttonsSpace + 2 * button1LineWidth;
 
@@ -8591,6 +8619,7 @@ void NC_STACK_ypaworld::UpdateGameShell()
 
     _GameShell->video_button->Refresh(1159);
 
+
     NC_STACK_button::button_66arg v9;
     v9.butID = 1050;
     v9.field_4 = ((_GameShell->p_YW->_preferences & World::PREF_JOYDISABLE) != 0) + 1;
@@ -9511,6 +9540,7 @@ void NC_STACK_ypaworld::setYW_doEnergyRecalc(int doRecalc)
 void NC_STACK_ypaworld::setYW_visSectors(int visSectors)
 {
     _renderSectors = yw_ClampRenderSectors(visSectors);
+    _normalVizLimit = yw_RenderSectorsToNormalVizLimit(_renderSectors);
 }
 
 void NC_STACK_ypaworld::setYW_userHostStation(NC_STACK_ypabact *host)

@@ -52,6 +52,33 @@ static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
     SETTINGS_CHANGE_BLENDING | SETTINGS_CHANGE_MENU_FONT;
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
 
+static void LayoutSaveLoadActionButtons(UserData *usr, bool deleteVisible)
+{
+    if ( !usr || !usr->p_YW || !usr->disk_button )
+        return;
+
+    const int menuWidth = (int)(usr->p_YW->_screenSize.x * 0.7);
+    const int buttonWidth = (menuWidth - 4 * buttonsSpace) / 5;
+    const int buttonStep = buttonWidth + buttonsSpace;
+    const int firstX = deleteVisible ? 0 : buttonStep / 2;
+    const int primaryIds[] = {1103, 1101, 1104, 1106}; // New, Load, Save, Back
+
+    NC_STACK_button::button_arg76 layout;
+    layout.ypos = -1;
+    layout.width = (int16_t)buttonWidth;
+
+    for (int index = 0; index < 4; index++)
+    {
+        layout.butID = primaryIds[index];
+        layout.xpos = (int16_t)(firstX + index * buttonStep);
+        usr->disk_button->setXYWidth(&layout);
+    }
+
+    layout.butID = 1102; // Delete occupies the fifth slot when available.
+    layout.xpos = (int16_t)(4 * buttonStep);
+    usr->disk_button->setXYWidth(&layout);
+}
+
 static std::string DefaultCameraViewLabel(bool cockpit)
 {
     return Locale::Text::OpenUA(cockpit ? Locale::OUA_COCKPIT : Locale::OUA_POV);
@@ -1829,6 +1856,7 @@ void UserData::ShowOptionsMenu()
     state.field_4 = (confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
     video_button->SetState(&state);
 
+
     video_button->ShowScreen();
 
     EnvMode = ENVMODE_SETTINGS;
@@ -1846,6 +1874,9 @@ void UserData::ShowSaveLoadMenu()
 {
     titel_button->HideScreen();
 
+    // UserAll/current profile cannot be deleted, so center the four visible
+    // primary actions as one group when the menu first opens.
+    LayoutSaveLoadActionButtons(this, false);
     disk_button->ShowScreen();
 
     EnvMode = ENVMODE_SELPLAYER;
@@ -2240,6 +2271,7 @@ void UserData::sub_46A3C0()
     tmp = video_button->GetSliderData(1154);
     tmp->value = musicVolume;
     video_button->Refresh(1154);
+
 
     video_button->HideScreen();
 
@@ -5003,6 +5035,7 @@ void UserData::GameShellUiHandleInput()
 
     SFXEngine::SFXe.SetMusicVolume(confMusicVolume);
 
+
     if ( EnvMode == ENVMODE_SELPLAYER ) //Load/Save
     {
         if ( Input->KbdLastHit != Input::KC_NONE || Input->chr )
@@ -5351,11 +5384,15 @@ void UserData::GameShellUiHandleInput()
         disk_button->Disable(&v410);
 
         v410.butID = 1102;
-        if ( !StriCmp(userNameDir, UserName) )
+        const bool deleteVisible = StriCmp(userNameDir, UserName) != 0;
+        if ( !deleteVisible )
             disk_button->Disable(&v410);
         else
             disk_button->Enable(&v410);
 
+        // Keep the visible row centered: four buttons for UserAll/current
+        // profile, five buttons when Delete is actually available.
+        LayoutSaveLoadActionButtons(this, deleteVisible);
         disk_button->SetText(1100, userNameDir);
     }
 

@@ -40,13 +40,13 @@ public:
     static Common::Ini::Key GfxHorizonFogStart;
     static Common::Ini::Key GfxHorizonFogLength;
     static Common::Ini::Key GfxHorizonFogStrength;
+    static Common::Ini::Key GfxHorizonFogColor;
     static Common::Ini::Key GfxHorizonDarkEnable;
     static Common::Ini::Key GfxHorizonDarkStart;
     static Common::Ini::Key GfxHorizonDarkLength;
     static Common::Ini::Key GfxHorizonDarkStrength;
     static Common::Ini::Key GfxHorizonDarkColor;
     static Common::Ini::Key GfxRenderSectors;
-    static Common::Ini::Key GfxNormalVisualLimit;
     static Common::Ini::Key GfxSkyHeight;
     static Common::Ini::Key GfxSkyRender;
     static Common::Ini::Key GfxAdditionalModes;
