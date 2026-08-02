@@ -2,6 +2,7 @@
 #include <string.h>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 
 #include "includes.h"
 #include "yw.h"
@@ -41,7 +42,6 @@ static constexpr int SETTINGS_CHANGE_PALETTE_THEME = 0x2000;
 static constexpr int SETTINGS_CHANGE_PLAYER_ROBO_AI_BEHAVIOR = 0x4000;
 static constexpr int SETTINGS_CHANGE_SPECTATOR_MODE = 0x8000;
 // OpenUA: modern graphics options
-static constexpr int SETTINGS_CHANGE_VHS_FILTER             = 0x20000;
 static constexpr int SETTINGS_CHANGE_MAXFPS                 = 0x40000;
 static constexpr int SETTINGS_CHANGE_BLENDING              = 0x80000;
 static constexpr int SETTINGS_CHANGE_MOVIE_PLAYER          = 0x100000;
@@ -171,26 +171,6 @@ static std::string MenuFontDisplayName(const std::string &fontName)
     return normalized;
 }
 
-static bool LoadPaletteThemeCache(std::string *theme)
-{
-    FSMgr::FileHandle *fil = uaOpenFileAlloc("env:visual_filter.txt", "r");
-    if (!fil)
-        return false;
-
-    std::string line;
-    bool ok = fil->ReadLine(&line);
-    delete fil;
-
-    if (!ok)
-    {
-        *theme = std::string();
-        return true;
-    }
-
-    *theme = NormalizePaletteThemeName(line);
-    return true;
-}
-
 static void SavePaletteThemeCache(const std::string &theme)
 {
     FSMgr::FileHandle *fil = uaOpenFileAlloc("env:visual_filter.txt", "w");
@@ -245,6 +225,67 @@ static int VisualFilterStrengthPercentFromString(std::string s, int fallback)
     {
         return fallback;
     }
+}
+
+
+static int FloatHundredFromString(std::string s, int fallback, int minValue, int maxValue)
+{
+    s = TrimIniValue(s);
+    if (s.empty())
+        return fallback;
+
+    try
+    {
+        if (s.find(',') != std::string::npos)
+            return fallback;
+
+        size_t pos = 0;
+        float value = std::stof(s, &pos);
+        if (TrimIniValue(s.substr(pos)).size() != 0 || !std::isfinite(value))
+            return fallback;
+
+        int scaled = (int)(value * 100.0f + (value >= 0.0f ? 0.5f : -0.5f));
+        if (scaled < minValue) scaled = minValue;
+        if (scaled > maxValue) scaled = maxValue;
+        return scaled;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static int IntFromString(std::string s, int fallback, int minValue, int maxValue)
+{
+    s = TrimIniValue(s);
+    if (s.empty())
+        return fallback;
+
+    try
+    {
+        size_t pos = 0;
+        int value = std::stoi(s, &pos);
+        if (TrimIniValue(s.substr(pos)).size() != 0)
+            return fallback;
+        if (value < minValue) value = minValue;
+        if (value > maxValue) value = maxValue;
+        return value;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static std::string HundredStorageValue(int value)
+{
+    const bool negative = value < 0;
+    int absValue = negative ? -value : value;
+    std::string out = std::to_string(absValue / 100) + ".";
+    if ((absValue % 100) < 10)
+        out += "0";
+    out += std::to_string(absValue % 100);
+    return negative ? "-" + out : out;
 }
 
 static std::string PaletteThemeDisplayName(const std::string &fileName)
@@ -1365,14 +1406,6 @@ void UserData::sb_0x46aa8c()
             ypa_log_out("WARNING: Could not save gfx.movie_player to nucleus.ini\n");
     }
 
-    if ( _settingsChangeOptions & SETTINGS_CHANGE_VHS_FILTER )
-    {
-        System::IniConf::GfxVhsFilter.Value = confVhsFilter;
-        GFX::Engine.SetVhsFilterEnabled(confVhsFilter);
-        if ( !SaveKeyToNucleusIni("gfx.vhs_filter", confVhsFilter ? "yes" : "no") )
-            ypa_log_out("WARNING: Could not save gfx.vhs_filter to nucleus.ini\n");
-    }
-
     if ( _settingsChangeOptions & SETTINGS_CHANGE_MENU_FONT )
     {
         // OpenUA: persist menu font with the same nucleus.ini writer used by
@@ -1828,6 +1861,9 @@ void UserData::ShowToolTip(int id)
 // Go to options menu
 void UserData::ShowOptionsMenu()
 {
+    atmospherePageActive = false;
+    if (atmosphere_button)
+        atmosphere_button->HideScreen();
     titel_button->HideScreen();
 
     RefreshPaletteThemes();
@@ -1868,6 +1904,312 @@ void UserData::ShowOptionsMenu()
     }
 
     video_listvw.selectedEntry = _gfxModeIndex;
+}
+
+
+void UserData::AtmosphereOptionsLoad()
+{
+    atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] =
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), 40);
+    atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH] =
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 100);
+    atmosphereValues[ATMOPT_EXPOSURE] =
+        FloatHundredFromString(System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 100, 25, 200);
+    atmosphereValues[ATMOPT_CONTRAST] =
+        FloatHundredFromString(System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 100, 50, 200);
+    atmosphereValues[ATMOPT_SATURATION] =
+        FloatHundredFromString(System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 100, 0, 200);
+    atmosphereValues[ATMOPT_VIGNETTE] =
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0);
+
+    atmosphereValues[ATMOPT_FOG_START] =
+        IntFromString(System::IniConf::GfxHorizonFogStart.Get<std::string>(), 3000, 0, 10000);
+    atmosphereValues[ATMOPT_FOG_LENGTH] =
+        IntFromString(System::IniConf::GfxHorizonFogLength.Get<std::string>(), 2000, 0, 10000);
+    atmosphereValues[ATMOPT_FOG_STRENGTH] =
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonFogStrength.Get<std::string>(), 60);
+
+    atmosphereValues[ATMOPT_DARK_START] =
+        IntFromString(System::IniConf::GfxHorizonDarkStart.Get<std::string>(), 3000, 0, 10000);
+    atmosphereValues[ATMOPT_DARK_LENGTH] =
+        IntFromString(System::IniConf::GfxHorizonDarkLength.Get<std::string>(), 2000, 0, 10000);
+    atmosphereValues[ATMOPT_DARK_STRENGTH] =
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 60);
+
+    atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE] =
+        IntFromString(System::IniConf::GameWorldUiMaxDistance.Get<std::string>(), 4500, 100, 20000);
+
+    atmosphereValues[ATMOPT_VHS_STRENGTH] =
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 15);
+
+    atmosphereSavedValues = atmosphereValues;
+
+    for (int i = 0; i < ATMOPT_COUNT; ++i)
+    {
+        NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400 + i);
+        if (slider)
+        {
+            slider->value = (int16_t)atmosphereValues[i];
+            atmosphere_button->Refresh(1400 + i);
+        }
+    }
+    UpdateAtmosphereOptionTexts();
+}
+
+void UserData::UpdateAtmosphereOptionTexts()
+{
+    if (!atmosphere_button)
+        return;
+
+    for (int i = 0; i < ATMOPT_COUNT; ++i)
+    {
+        std::string text;
+        switch (i)
+        {
+            case ATMOPT_VISUAL_FILTER_STRENGTH:
+            case ATMOPT_ATMOSPHERE_STRENGTH:
+            case ATMOPT_VIGNETTE:
+            case ATMOPT_FOG_STRENGTH:
+            case ATMOPT_DARK_STRENGTH:
+            case ATMOPT_VHS_STRENGTH:
+                text = std::to_string(atmosphereValues[i]) + "%";
+                break;
+            case ATMOPT_EXPOSURE:
+            case ATMOPT_CONTRAST:
+            case ATMOPT_SATURATION:
+                text = HundredStorageValue(atmosphereValues[i]);
+                break;
+            default:
+                text = std::to_string(atmosphereValues[i]);
+                break;
+        }
+        atmosphere_button->SetText(1420 + i, text);
+    }
+}
+
+void UserData::AtmosphereOptionsApplyLive()
+{
+    if (!atmosphere_button)
+        return;
+
+    bool changed = false;
+    for (int i = 0; i < ATMOPT_COUNT; ++i)
+    {
+        NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400 + i);
+        if (slider && atmosphereValues[i] != slider->value)
+        {
+            atmosphereValues[i] = slider->value;
+            changed = true;
+        }
+    }
+
+    if (!changed)
+        return;
+
+    UpdateAtmosphereOptionTexts();
+
+    // Keep the framebuffer and world-only atmosphere path active internally.
+    System::IniConf::GfxAtmosphereFx.Value = true;
+    System::IniConf::GfxVisualFilterStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH]);
+    System::IniConf::GfxAtmosphereStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH]);
+    System::IniConf::GfxAtmosphereExposure.Value = HundredStorageValue(atmosphereValues[ATMOPT_EXPOSURE]);
+    System::IniConf::GfxAtmosphereContrast.Value = HundredStorageValue(atmosphereValues[ATMOPT_CONTRAST]);
+    System::IniConf::GfxAtmosphereSaturation.Value = HundredStorageValue(atmosphereValues[ATMOPT_SATURATION]);
+    System::IniConf::GfxAtmosphereVignette.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VIGNETTE]);
+
+    System::IniConf::GfxHorizonFogEnable.Value = true;
+    System::IniConf::GfxHorizonFogStart.Value = std::to_string(atmosphereValues[ATMOPT_FOG_START]);
+    System::IniConf::GfxHorizonFogLength.Value = std::to_string(atmosphereValues[ATMOPT_FOG_LENGTH]);
+    System::IniConf::GfxHorizonFogStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_FOG_STRENGTH]);
+
+    System::IniConf::GfxHorizonDarkEnable.Value = true;
+    System::IniConf::GfxHorizonDarkStart.Value = std::to_string(atmosphereValues[ATMOPT_DARK_START]);
+    System::IniConf::GfxHorizonDarkLength.Value = std::to_string(atmosphereValues[ATMOPT_DARK_LENGTH]);
+    System::IniConf::GfxHorizonDarkStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_DARK_STRENGTH]);
+
+    System::IniConf::GameWorldUiMaxDistance.Value =
+        std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE]);
+
+    System::IniConf::GfxVhsFilterStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH]);
+
+    GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
+    GFX::Engine.ApplyAtmosphereFromConfig();
+    GFX::Engine.ReloadHorizonConfig();
+    GFX::Engine.SetVhsFilterEnabled(true);
+}
+
+void UserData::AtmosphereOptionsSave()
+{
+    AtmosphereOptionsApplyLive();
+
+    paletteTheme = confPaletteTheme;
+    System::IniConf::GfxVisualFilter.Value = PaletteThemeStorageValue(paletteTheme);
+    SavePaletteThemeCache(paletteTheme);
+    GFX::Engine.SetVisualFilter(PaletteThemeStorageValue(paletteTheme));
+    if (!SavePaletteThemeToNucleusIni())
+        ypa_log_out("WARNING: Could not save gfx.visual_filter to nucleus.ini\n");
+
+    const std::array<std::pair<const char *, std::string>, 14> values =
+    {{
+        {"gfx.visual_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
+        {"gfx.atmosphere_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH])},
+        {"gfx.atmosphere_exposure", HundredStorageValue(atmosphereValues[ATMOPT_EXPOSURE])},
+        {"gfx.atmosphere_contrast", HundredStorageValue(atmosphereValues[ATMOPT_CONTRAST])},
+        {"gfx.atmosphere_saturation", HundredStorageValue(atmosphereValues[ATMOPT_SATURATION])},
+        {"gfx.atmosphere_vignette", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VIGNETTE])},
+        {"gfx.horizon_fog_start", std::to_string(atmosphereValues[ATMOPT_FOG_START])},
+        {"gfx.horizon_fog_length", std::to_string(atmosphereValues[ATMOPT_FOG_LENGTH])},
+        {"gfx.horizon_fog_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_FOG_STRENGTH])},
+        {"gfx.horizon_dark_start", std::to_string(atmosphereValues[ATMOPT_DARK_START])},
+        {"gfx.horizon_dark_length", std::to_string(atmosphereValues[ATMOPT_DARK_LENGTH])},
+        {"gfx.horizon_dark_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_DARK_STRENGTH])},
+        {"game.world_ui_max_distance", std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE])},
+        {"gfx.vhs_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH])}
+    }};
+
+    for (const auto &entry : values)
+    {
+        if (!SaveKeyToNucleusIni(entry.first, entry.second))
+            ypa_log_out("WARNING: Could not save %s to nucleus.ini\n", entry.first);
+    }
+
+    // These are infrastructure switches now enabled by safe internal defaults.
+    // Removing them keeps Nucleus.ini focused on artistic values while preserving
+    // backward compatibility for users who deliberately add the keys again.
+    RemoveKeyFromNucleusIni("gfx.color_effects");
+    RemoveKeyFromNucleusIni("gfx.atmosphere_fx");
+
+    System::IniConf::GfxAtmosphereFx.Value = true;
+    System::IniConf::GfxHorizonFogEnable.Value = true;
+    System::IniConf::GfxHorizonDarkEnable.Value = true;
+    SaveKeyToNucleusIni("gfx.horizon_fog_enable", "yes");
+    SaveKeyToNucleusIni("gfx.horizon_dark_enable", "yes");
+
+    // Force the final saved state into the current session even when the user
+    // opened the page and pressed Save without moving a slider.
+    GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
+    GFX::Engine.ApplyAtmosphereFromConfig();
+    GFX::Engine.ReloadHorizonConfig();
+    GFX::Engine.SetVhsFilterEnabled(true);
+
+    atmosphereSavedValues = atmosphereValues;
+    _settingsChangeOptions &= ~SETTINGS_CHANGE_PALETTE_THEME;
+    atmospherePageActive = false;
+    atmosphere_button->HideScreen();
+    video_button->ShowScreen();
+}
+
+void UserData::AtmosphereOptionsCancel()
+{
+    atmosphereValues = atmosphereSavedValues;
+
+    for (int i = 0; i < ATMOPT_COUNT; ++i)
+    {
+        NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400 + i);
+        if (slider)
+        {
+            slider->value = (int16_t)atmosphereValues[i];
+            atmosphere_button->Refresh(1400 + i);
+        }
+    }
+
+    // Force one live re-apply of the saved snapshot.
+    if (ATMOPT_COUNT > 0)
+    {
+        NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400);
+        if (slider)
+            slider->value = (int16_t)atmosphereValues[0];
+    }
+    UpdateAtmosphereOptionTexts();
+
+    // Apply snapshot directly.
+    System::IniConf::GfxVisualFilterStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH]);
+    System::IniConf::GfxAtmosphereStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH]);
+    System::IniConf::GfxAtmosphereExposure.Value = HundredStorageValue(atmosphereValues[ATMOPT_EXPOSURE]);
+    System::IniConf::GfxAtmosphereContrast.Value = HundredStorageValue(atmosphereValues[ATMOPT_CONTRAST]);
+    System::IniConf::GfxAtmosphereSaturation.Value = HundredStorageValue(atmosphereValues[ATMOPT_SATURATION]);
+    System::IniConf::GfxAtmosphereVignette.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VIGNETTE]);
+    System::IniConf::GfxHorizonFogStart.Value = std::to_string(atmosphereValues[ATMOPT_FOG_START]);
+    System::IniConf::GfxHorizonFogLength.Value = std::to_string(atmosphereValues[ATMOPT_FOG_LENGTH]);
+    System::IniConf::GfxHorizonFogStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_FOG_STRENGTH]);
+    System::IniConf::GfxHorizonDarkStart.Value = std::to_string(atmosphereValues[ATMOPT_DARK_START]);
+    System::IniConf::GfxHorizonDarkLength.Value = std::to_string(atmosphereValues[ATMOPT_DARK_LENGTH]);
+    System::IniConf::GfxHorizonDarkStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_DARK_STRENGTH]);
+    System::IniConf::GameWorldUiMaxDistance.Value =
+        std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE]);
+    System::IniConf::GfxVhsFilterStrength.Value =
+        VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH]);
+
+    GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
+    GFX::Engine.ApplyAtmosphereFromConfig();
+    GFX::Engine.ReloadHorizonConfig();
+    GFX::Engine.SetVhsFilterEnabled(true);
+
+    confPaletteTheme = paletteTheme;
+    _settingsChangeOptions &= ~SETTINGS_CHANGE_PALETTE_THEME;
+    UpdatePaletteThemeText();
+
+    atmospherePageActive = false;
+    atmosphere_button->HideScreen();
+    video_button->ShowScreen();
+}
+
+void UserData::AtmosphereOptionsReset()
+{
+    atmosphereValues =
+    {{
+        40, 100, 120, 100, 90, 50,
+        3000, 2000, 60,
+        3000, 2000, 60,
+        4500,
+        15
+    }};
+
+    confPaletteTheme = "Black_Wadi.pal";
+    _settingsChangeOptions |= SETTINGS_CHANGE_PALETTE_THEME;
+    UpdatePaletteThemeText();
+
+    for (int i = 0; i < ATMOPT_COUNT; ++i)
+    {
+        NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400 + i);
+        if (slider)
+        {
+            slider->value = (int16_t)atmosphereValues[i];
+            atmosphere_button->Refresh(1400 + i);
+        }
+    }
+
+    UpdateAtmosphereOptionTexts();
+
+    // Nudge the live path by temporarily changing the cached first value.
+    int first = atmosphereValues[0];
+    atmosphereValues[0] = first == 100 ? 99 : first + 1;
+    AtmosphereOptionsApplyLive();
+}
+
+void UserData::ShowAtmosphereOptionsMenu()
+{
+    if (!atmosphere_button)
+        return;
+
+    RefreshPaletteThemes();
+    confPaletteTheme = paletteTheme;
+    AtmosphereOptionsLoad();
+    UpdatePaletteThemeText();
+    atmospherePageActive = true;
+    video_button->HideScreen();
+    atmosphere_button->ShowScreen();
 }
 
 void UserData::ShowSaveLoadMenu()
@@ -2246,13 +2588,9 @@ void UserData::sub_46A3C0()
     // OpenUA: reset modern graphics options to the saved/config values
     confBlending = System::IniConf::GfxBlending.Get<int32_t>();
     confMoviePlayer = System::IniConf::GfxMoviePlayer.Get<bool>();
-    confVhsFilter = System::IniConf::GfxVhsFilter.Get<bool>();
     confMenuFont = menuFont;
     v10.field_4 = (!confMoviePlayer) + 1;
     v10.butID = 1184;
-    video_button->SetState(&v10);
-    v10.field_4 = (!confVhsFilter) + 1;
-    v10.butID = 1185;
     video_button->SetState(&v10);
     v10.field_4 = (confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
     v10.butID = 1189;
@@ -2340,25 +2678,10 @@ void UserData::RefreshPaletteThemes()
     std::sort(paletteThemes.begin() + 1, paletteThemes.end(),
         [](const std::string &a, const std::string &b) { return StriCmp(a, b) < 0; });
 
-    // Keep the currently loaded user-profile palette when available.
-    // If the profile has not been loaded yet, use a tiny env cache written immediately
-    // when pressing OK in Options. This avoids relying on savegame/shutdown timing and
-    // prevents nucleus.ini from silently resetting the menu back to Original.
-    std::string currentTheme = paletteTheme;
-    bool hasThemeSource = !currentTheme.empty();
-
-    if (!hasThemeSource)
-    {
-        std::string cachedTheme;
-        if (LoadPaletteThemeCache(&cachedTheme))
-        {
-            currentTheme = cachedTheme;
-            hasThemeSource = true;
-        }
-    }
-
-    if (!hasThemeSource)
-        currentTheme = NormalizePaletteThemeName(System::IniConf::GfxVisualFilter.Get<std::string>());
+    // gfx.visual_filter is global: Nucleus.ini remains authoritative across
+    // restarts and player-profile creation/switching.
+    std::string currentTheme =
+        NormalizePaletteThemeName(System::IniConf::GfxVisualFilter.Get<std::string>());
 
     bool found = currentTheme.empty();
     for (const std::string &theme : paletteThemes)
@@ -2376,7 +2699,8 @@ void UserData::RefreshPaletteThemes()
 
 void UserData::UpdatePaletteThemeText()
 {
-    video_button->SetText(1173, PaletteThemeDisplayName(confPaletteTheme));
+    if (atmosphere_button)
+        atmosphere_button->SetText(1392, PaletteThemeDisplayName(confPaletteTheme));
 }
 
 void UserData::CyclePaletteTheme()
@@ -2575,6 +2899,45 @@ bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &va
     for (const std::string &line : lines)
         out->puts(line + "\n");
 
+    delete out;
+    return true;
+}
+
+
+bool UserData::RemoveKeyFromNucleusIni(const std::string &key)
+{
+    const std::string nucleusIni = uaDataFirstNucleusIniPath();
+    FSMgr::FileHandle *in = uaOpenFileAlloc(nucleusIni, "r");
+    if (!in)
+        return true;
+
+    std::vector<std::string> lines;
+    std::string line;
+    while (in->ReadLine(&line))
+    {
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+            line.pop_back();
+
+        std::string test = line;
+        size_t comment = test.find_first_of(";");
+        if (comment != std::string::npos)
+            test.erase(comment);
+
+        Stok tokens(test, "= \t");
+        std::string token;
+        if (tokens.GetNext(&token) && !StriCmp(token, key))
+            continue;
+
+        lines.push_back(line);
+    }
+    delete in;
+
+    FSMgr::FileHandle *out = uaOpenFileAlloc(nucleusIni, "w");
+    if (!out)
+        return false;
+
+    for (const std::string &kept : lines)
+        out->puts(kept + "\n");
     delete out;
     return true;
 }
@@ -4693,7 +5056,35 @@ void UserData::GameShellUiHandleInput()
         input_listview.Formate(p_YW);
     }
 
-    if ( EnvMode == ENVMODE_SETTINGS )
+    if ( EnvMode == ENVMODE_SETTINGS && atmospherePageActive )
+    {
+        if (Input->KbdLastHit == Input::KC_ESCAPE)
+        {
+            AtmosphereOptionsCancel();
+        }
+        else
+        {
+            NC_STACK_button::ResCode atmosphereResult = atmosphere_button->ProcessWidgetsEvents(Input);
+            if (atmosphereResult)
+            {
+                if (atmosphereResult.btn)
+                    ShowToolTip(atmosphereResult.btn);
+
+                if (atmosphereResult.code == 1450)
+                    AtmosphereOptionsSave();
+                else if (atmosphereResult.code == 1451)
+                    AtmosphereOptionsReset();
+                else if (atmosphereResult.code == 1452)
+                    AtmosphereOptionsCancel();
+                else if (atmosphereResult.code == 1136)
+                    CyclePaletteTheme();
+            }
+
+            if (atmospherePageActive)
+                AtmosphereOptionsApplyLive();
+        }
+    }
+    else if ( EnvMode == ENVMODE_SETTINGS )
     {
         if ( Input->KbdLastHit == Input::KC_RETURN )
         {
@@ -4815,6 +5206,10 @@ void UserData::GameShellUiHandleInput()
             _settingsChangeOptions |= 0x100;
         }
         // OpenUA: modern graphics options
+        else if ( r.code == 1320 ) // Atmosphere & Visibility page
+        {
+            ShowAtmosphereOptionsMenu();
+        }
         else if ( r.code == 1306 ) // Blending cycle
         {
             if ( !(_settingsChangeOptions & SETTINGS_CHANGE_BLENDING) )
@@ -4838,16 +5233,6 @@ void UserData::GameShellUiHandleInput()
         {
             confMoviePlayer = false;
             _settingsChangeOptions |= SETTINGS_CHANGE_MOVIE_PLAYER;
-        }
-        else if ( r.code == 1309 ) // VHS Filter checkbox (checked)
-        {
-            confVhsFilter = true;
-            _settingsChangeOptions |= SETTINGS_CHANGE_VHS_FILTER;
-        }
-        else if ( r.code == 1310 ) // VHS Filter checkbox (unchecked)
-        {
-            confVhsFilter = false;
-            _settingsChangeOptions |= SETTINGS_CHANGE_VHS_FILTER;
         }
         else if ( r.code == 1311 ) // Menu Font cycle
         {

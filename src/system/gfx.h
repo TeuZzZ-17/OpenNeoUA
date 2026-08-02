@@ -338,6 +338,18 @@ struct TColorEffectsProg : TShaderProg
     TColorEffectsProg(uint32_t id);
 };
 
+struct TAtmosphereProg : TColorEffectsProg
+{
+    int32_t StrengthLoc = -1;
+    int32_t ExposureLoc = -1;
+    int32_t ContrastLoc = -1;
+    int32_t SaturationLoc = -1;
+    int32_t VignetteLoc = -1;
+
+    TAtmosphereProg() = default;
+    TAtmosphereProg(uint32_t id);
+};
+
 struct TVhsFilterProg : TShaderProg
 {
     int32_t RandLoc = -1;
@@ -615,10 +627,14 @@ public:
     // luminance-indexed LUT applied on the final post-process pass). Vanilla-safe:
     // "Standard"/empty/strength 0 produce no change at all.
     void SetVisualFilter(const std::string &filterName);
+    void SetVisualFilterStrength(float strength);
     void ApplyVisualFilterFromConfig();
+    void ApplyAtmosphereFromConfig();
+    void ReloadHorizonConfig();
     void SetVhsFilterEnabled(bool enabled);
     void ApplyVhsFilterFromConfig();
     bool IsVisualFilterActive() const { return _visualFilterActive; }
+    bool IsAtmosphereActive() const { return _atmosphereActive; }
     float GetVisualFilterStrength() const { return _visualFilterStrength; }
     const std::string &GetVisualFilterName() const { return _visualFilterName; }
 
@@ -802,6 +818,8 @@ protected:
     void ApplyResolution();
 
     bool SetResVariables(Common::Point res);
+    bool LoadAtmosphereShader();
+    void FreeAtmosphereShader();
     bool LoadVhsFilterShader();
     void FreeVhsFilterShader();
     bool EnsureVhsFilterTexture(const Common::Point &scrSz);
@@ -978,6 +996,18 @@ protected:
     uint32_t _psShader = 0;
     uint32_t _vsShader = 0;
     TColorEffectsProg _colorEffectsShaderProg;
+
+    // OpenUA custom: optional world-only atmospheric color pass. It reuses the
+    // existing scene FBO and fullscreen quad; no extra framebuffer is created.
+    uint32_t _atmospherePsShader = 0;
+    TAtmosphereProg _atmosphereShaderProg;
+    bool _atmosphereEnabled = false;
+    bool _atmosphereActive = false;
+    float _atmosphereStrength = 1.0f;
+    float _atmosphereExposure = 1.0f;
+    float _atmosphereContrast = 1.0f;
+    float _atmosphereSaturation = 1.0f;
+    float _atmosphereVignette = 0.0f;
 
     // OpenUA custom: fullscreen visual filter state
     uint32_t _visualFilterLut = 0;        // GL texture, 256x1 RGB LUT
