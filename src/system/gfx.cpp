@@ -21,6 +21,8 @@
 #include "inivals.h"
 #include "glfuncs.h"
 
+#include <cmath>
+
 namespace GFX
 {
 GFXEngine GFXEngine::Instance;
@@ -199,6 +201,11 @@ static void HorizonLoadConfigFromIni()
     cfg.DarkColor = HorizonParseColor(System::IniConf::GfxHorizonDarkColor.Get<std::string>(), cfg.DarkColor);
 
     gHorizonFogConfig = cfg;
+}
+
+void GFXEngine::ReloadHorizonConfig()
+{
+    HorizonLoadConfigFromIni();
 }
 
 
@@ -2383,9 +2390,15 @@ void GFXEngine::BeginFrame()
 
 void GFXEngine::EndFrame()
 {
+    // The optional atmospheric pass must process the 3D scene only. When it is
+    // active, resolve the scene FBO before composing the software/HW UI even
+    // with the legacy gfx.color_effects = 1 ordering. With the feature absent
+    // or disabled, the original ordering remains byte-for-byte equivalent.
+    const bool drawWorldBeforeUi = (_colorEffects > 1) || _atmosphereActive;
+
     if (_vhsFilterActive)
     {
-        if (_colorEffects > 1)
+        if (drawWorldBeforeUi)
         {
             Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
             DrawFBO();
@@ -2396,7 +2409,7 @@ void GFXEngine::EndFrame()
         DrawVirtualUISurface();
         Gui::Root::Instance.HwCompose();
 
-        if (_colorEffects == 1)
+        if (_colorEffects == 1 && !_atmosphereActive)
         {
             Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
             DrawFBO();
@@ -2428,7 +2441,7 @@ void GFXEngine::EndFrame()
         System::Flip();
         return;
     }
-    else if (_colorEffects > 1)
+    else if (drawWorldBeforeUi)
     {
         Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
         DrawFBO();
@@ -2439,7 +2452,7 @@ void GFXEngine::EndFrame()
     DrawVirtualUISurface();
     Gui::Root::Instance.HwCompose();
 
-    if (_colorEffects == 1 && !_vhsFilterActive)
+    if (_colorEffects == 1 && !_vhsFilterActive && !_atmosphereActive)
     {
         Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
         DrawFBO();
@@ -3440,7 +3453,12 @@ void GFXEngine::Init()
     // Safe no-op when "Standard"/empty or when the file is missing.
     ApplyVisualFilterFromConfig();
 
-    // OpenUA experimental: optional VHS pass, loaded from its own INI shader path.
+    // OpenUA custom: optional world-only atmospheric color pass. The feature
+    // is disabled by default and falls back to the existing DrawFBO shader if
+    // its dedicated shader is absent or cannot be linked.
+    ApplyAtmosphereFromConfig();
+
+    // OpenUA: VHS pass enabled by default, loaded from its own INI shader path.
     ApplyVhsFilterFromConfig();
 }
 
@@ -3495,6 +3513,12 @@ void GFXEngine::Deinit()
     _stdShaderProg.ID = 0;
     _stdVsShader = 0;
     _stdPsShader = 0;
+
+    // The atmospheric program reuses the color-effects vertex shader, so
+    // release its program before deleting that shared shader object.
+    FreeAtmosphereShader();
+    _atmosphereEnabled = false;
+    _atmosphereActive = false;
 
     if (_colorEffectsShaderProg.ID)
         Glext::GLDeleteProgram(_colorEffectsShaderProg.ID);
@@ -4036,6 +4060,15 @@ void GFXEngine::SetVisualFilter(const std::string &filterName)
                 postFxOn ? "" : " (WARNING: gfx.color_effects=0 -> post-process pass disabled, filter not visible)");
 }
 
+void GFXEngine::SetVisualFilterStrength(float strength)
+{
+    if (!std::isfinite(strength))
+        strength = 0.0f;
+    if (strength < 0.0f) strength = 0.0f;
+    if (strength > 1.0f) strength = 1.0f;
+    _visualFilterStrength = strength;
+}
+
 // OpenUA custom: apply the visual filter selected in nucleus.ini (gfx.visual_filter).
 void GFXEngine::ApplyVisualFilterFromConfig()
 {
@@ -4068,6 +4101,166 @@ static std::string TrimConfigString(std::string s)
 
     size_t last = s.find_last_not_of(" \t\r\n");
     return s.substr(first, last - first + 1);
+}
+
+static float ParseAtmosphereValue(std::string s, float fallback, float minValue, float maxValue)
+{
+    s = TrimConfigString(s);
+    if (s.empty() || s.find(',') != std::string::npos)
+        return fallback;
+
+    try
+    {
+        size_t pos = 0;
+        float value = std::stof(s, &pos);
+        if (s.find_first_not_of(" \t\r\n", pos) != std::string::npos || !std::isfinite(value))
+            return fallback;
+
+        if (value < minValue) value = minValue;
+        if (value > maxValue) value = maxValue;
+        return value;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+void GFXEngine::FreeAtmosphereShader()
+{
+    if (_atmosphereShaderProg.ID)
+        Glext::GLDeleteProgram(_atmosphereShaderProg.ID);
+    if (_atmospherePsShader)
+        Glext::GLDeleteShader(_atmospherePsShader);
+
+    _atmosphereShaderProg = TAtmosphereProg();
+    _atmospherePsShader = 0;
+}
+
+bool GFXEngine::LoadAtmosphereShader()
+{
+    if (_atmosphereShaderProg.ID)
+        return true;
+
+    const std::string shaderPath = _vbo ? "res/atmosphere_vbo.ps" : "res/atmosphere.ps";
+    _atmospherePsShader = LoadShader(GL_FRAGMENT_SHADER, shaderPath);
+    if (!_atmospherePsShader)
+    {
+        ypa_log_out("WARNING: Atmospheric pass shader [%s] is missing or failed to compile; continuing with the existing renderer.\n",
+                    shaderPath.c_str());
+        return false;
+    }
+
+    if (!_vsShader)
+    {
+        ypa_log_out("WARNING: Atmospheric pass cannot reuse the fullscreen vertex shader; continuing with the existing renderer.\n");
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    uint32_t progID = Glext::GLCreateProgram();
+    if (!progID)
+    {
+        ypa_log_out("WARNING: Atmospheric pass program could not be created; continuing with the existing renderer.\n");
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    Glext::GLAttachShader(progID, _atmospherePsShader);
+    Glext::GLAttachShader(progID, _vsShader);
+    Glext::GLLinkProgram(progID);
+
+    GLint linked = GL_FALSE;
+    Glext::GLGetProgramiv(progID, GL_LINK_STATUS, &linked);
+    if (linked == GL_FALSE)
+    {
+        GLint logLength = 0;
+        Glext::GLGetProgramiv(progID, GL_INFO_LOG_LENGTH, &logLength);
+        if (logLength > 0)
+        {
+            std::vector<char> logBuffer((size_t)logLength + 1, 0);
+            Glext::GLGetProgramInfoLog(progID, logLength, NULL, logBuffer.data());
+            ypa_log_out("WARNING: Atmospheric pass shader link failed: %s\n", logBuffer.data());
+        }
+        else
+        {
+            ypa_log_out("WARNING: Atmospheric pass shader link failed; continuing with the existing renderer.\n");
+        }
+
+        Glext::GLDeleteProgram(progID);
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    _atmosphereShaderProg = TAtmosphereProg(progID);
+    if (_vbo)
+        BindVBOParameters(_atmosphereShaderProg);
+
+    if (_atmosphereShaderProg.NormLoc < 0 ||
+        _atmosphereShaderProg.InvLoc < 0 ||
+        _atmosphereShaderProg.ScrSizeLoc < 0 ||
+        _atmosphereShaderProg.FilterLutLoc < 0 ||
+        _atmosphereShaderProg.FilterStrengthLoc < 0 ||
+        _atmosphereShaderProg.StrengthLoc < 0 ||
+        _atmosphereShaderProg.ExposureLoc < 0 ||
+        _atmosphereShaderProg.ContrastLoc < 0 ||
+        _atmosphereShaderProg.SaturationLoc < 0 ||
+        _atmosphereShaderProg.VignetteLoc < 0)
+    {
+        ypa_log_out("WARNING: Atmospheric pass shader [%s] is missing one or more required uniforms; continuing with the existing renderer.\n",
+                    shaderPath.c_str());
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    return true;
+}
+
+void GFXEngine::ApplyAtmosphereFromConfig()
+{
+    _atmosphereEnabled = System::IniConf::GfxAtmosphereFx.Get<bool>();
+    _atmosphereActive = false;
+
+    if (!_atmosphereEnabled)
+    {
+        FreeAtmosphereShader();
+        ypa_log_out("Atmospheric pass: disabled (gfx.atmosphere_fx=no; rendering order unchanged)\n");
+        return;
+    }
+
+    _atmosphereStrength = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 1.0f, 0.0f, 1.0f);
+    _atmosphereExposure = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 1.0f, 0.25f, 2.0f);
+    _atmosphereContrast = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 1.0f, 0.50f, 2.0f);
+    _atmosphereSaturation = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 1.0f, 0.0f, 2.0f);
+    _atmosphereVignette = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0.0f, 0.0f, 1.0f);
+
+    if (!_glext)
+    {
+        ypa_log_out("WARNING: Atmospheric pass requested but GL extensions are unavailable; continuing with the existing renderer.\n");
+        return;
+    }
+
+    if (_colorEffects <= 0)
+    {
+        ypa_log_out("WARNING: Atmospheric pass requested but gfx.color_effects=0 disables the scene framebuffer; continuing with the existing renderer.\n");
+        return;
+    }
+
+    if (!LoadAtmosphereShader())
+        return;
+
+    _atmosphereActive = true;
+    ypa_log_out("Atmospheric pass: ENABLED strength=%.2f exposure=%.2f contrast=%.2f saturation=%.2f vignette=%.2f scope=world_before_ui\n",
+                _atmosphereStrength,
+                _atmosphereExposure,
+                _atmosphereContrast,
+                _atmosphereSaturation,
+                _atmosphereVignette);
 }
 
 static std::string VhsBlendShaderText(bool vbo)
@@ -4149,7 +4342,7 @@ void GFXEngine::SetVhsFilterEnabled(bool enabled)
 
 void GFXEngine::ApplyVhsFilterFromConfig()
 {
-    SetVhsFilterEnabled(System::IniConf::GfxVhsFilter.Get<bool>());
+    SetVhsFilterEnabled(true);
 }
 
 void GFXEngine::FreeVhsFilterShader()
@@ -5353,6 +5546,10 @@ void GFXEngine::DrawFBO()
 {
     GfxStates save = _states;
 
+    TColorEffectsProg *postProg = &_colorEffectsShaderProg;
+    if (_atmosphereActive && _atmosphereShaderProg.ID)
+        postProg = &_atmosphereShaderProg;
+
     Common::Point scrSz = System::GetResolution();
     glViewport(0, 0, scrSz.x, scrSz.y);
 
@@ -5376,7 +5573,7 @@ void GFXEngine::DrawFBO()
 
     _states.Tex = _fboTex;
     _states.TexBlend = 2;
-    _states.Prog = _colorEffectsShaderProg;
+    _states.Prog = *postProg;
 
     _states.AlphaTest = false;
     _states.Shaded = true;
@@ -5385,31 +5582,45 @@ void GFXEngine::DrawFBO()
     // Apply texture and program
     SetRenderStates(0);
 
-    if (_colorEffectsShaderProg.NormLoc >= 0)
-        Glext::GLUniform3f(_colorEffectsShaderProg.NormLoc, _normClr.x, _normClr.y, _normClr.z);
+    if (postProg->NormLoc >= 0)
+        Glext::GLUniform3f(postProg->NormLoc, _normClr.x, _normClr.y, _normClr.z);
 
-    if (_colorEffectsShaderProg.InvLoc >= 0)
-        Glext::GLUniform3f(_colorEffectsShaderProg.InvLoc, _invClr.x, _invClr.y, _invClr.z);
+    if (postProg->InvLoc >= 0)
+        Glext::GLUniform3f(postProg->InvLoc, _invClr.x, _invClr.y, _invClr.z);
 
-    if (_colorEffectsShaderProg.RandLoc >= 0)
-        Glext::GLUniform1i(_colorEffectsShaderProg.RandLoc, rand());
+    if (postProg->RandLoc >= 0)
+        Glext::GLUniform1i(postProg->RandLoc, rand());
 
-    if (_colorEffectsShaderProg.ScrSizeLoc >= 0)
-        Glext::GLUniform2i(_colorEffectsShaderProg.ScrSizeLoc, scrSz.x, scrSz.y);
+    if (postProg->ScrSizeLoc >= 0)
+        Glext::GLUniform2i(postProg->ScrSizeLoc, scrSz.x, scrSz.y);
 
-    if (_colorEffectsShaderProg.MillisecsLoc >= 0)
-        Glext::GLUniform1i(_colorEffectsShaderProg.MillisecsLoc, SDL_GetTicks());
+    if (postProg->MillisecsLoc >= 0)
+        Glext::GLUniform1i(postProg->MillisecsLoc, SDL_GetTicks());
+
+    if (_atmosphereActive && postProg == &_atmosphereShaderProg)
+    {
+        if (_atmosphereShaderProg.StrengthLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.StrengthLoc, _atmosphereStrength);
+        if (_atmosphereShaderProg.ExposureLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.ExposureLoc, _atmosphereExposure);
+        if (_atmosphereShaderProg.ContrastLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.ContrastLoc, _atmosphereContrast);
+        if (_atmosphereShaderProg.SaturationLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.SaturationLoc, _atmosphereSaturation);
+        if (_atmosphereShaderProg.VignetteLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.VignetteLoc, _atmosphereVignette);
+    }
 
     // OpenUA custom: fullscreen visual filter LUT.
     // Strength 0 => shader passthrough (identical to vanilla post-process output).
-    if (_colorEffectsShaderProg.FilterStrengthLoc >= 0)
+    if (postProg->FilterStrengthLoc >= 0)
     {
         float strength = (_visualFilterActive && _visualFilterLut) ? _visualFilterStrength : 0.0f;
-        Glext::GLUniform1f(_colorEffectsShaderProg.FilterStrengthLoc, strength);
+        Glext::GLUniform1f(postProg->FilterStrengthLoc, strength);
 
-        if (strength > 0.0f && _colorEffectsShaderProg.FilterLutLoc >= 0)
+        if (strength > 0.0f && postProg->FilterLutLoc >= 0)
         {
-            Glext::GLUniform1i(_colorEffectsShaderProg.FilterLutLoc, 1);
+            Glext::GLUniform1i(postProg->FilterLutLoc, 1);
             Glext::GLActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, _visualFilterLut);
             Glext::GLActiveTexture(GL_TEXTURE0); // engine assumes unit 0 is active
@@ -5908,6 +6119,16 @@ TColorEffectsProg::TColorEffectsProg(uint32_t id)
     // OpenUA custom: fullscreen visual filter
     FilterLutLoc = Glext::GLGetUniformLocation(ID, "filterLut");
     FilterStrengthLoc = Glext::GLGetUniformLocation(ID, "filterStrength");
+}
+
+TAtmosphereProg::TAtmosphereProg(uint32_t id)
+: TColorEffectsProg(id)
+{
+    StrengthLoc = Glext::GLGetUniformLocation(ID, "atmosphereStrength");
+    ExposureLoc = Glext::GLGetUniformLocation(ID, "atmosphereExposure");
+    ContrastLoc = Glext::GLGetUniformLocation(ID, "atmosphereContrast");
+    SaturationLoc = Glext::GLGetUniformLocation(ID, "atmosphereSaturation");
+    VignetteLoc = Glext::GLGetUniformLocation(ID, "atmosphereVignette");
 }
 
 TVhsFilterProg::TVhsFilterProg(uint32_t id)

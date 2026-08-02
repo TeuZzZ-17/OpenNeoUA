@@ -85,7 +85,7 @@ static const float YPATANK_FIXED_TICK_GROUND_POSE_ROT_MULT_DEFAULT = 5.5f;
 
 static bool ypatank_UseFixedTickGroundPose()
 {
-    return System::IniConf::GameFixedTick.Get<bool>();
+    return true;
 }
 
 static float ypatank_FixedTickGroundPoseRotMult()

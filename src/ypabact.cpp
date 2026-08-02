@@ -204,7 +204,7 @@ static float ypabact_GetMinigunAiFireAlignment()
 
 static bool ypabact_IsMinigunSectorDamageEnabled()
 {
-    return System::IniConf::GameMgunDamageSectors.Get<bool>();
+    return true;
 }
 
 static float ypabact_ReadHandBrakePower()
@@ -214,13 +214,12 @@ static float ypabact_ReadHandBrakePower()
 
 static float ypabact_ReadHandBrakeRecoilReduction()
 {
-    return std::min(1.0f, ypabact_ReadNonNegativeFloatIni(
-        System::IniConf::GameHandBrakeRecoilReduction, 0.8f));
+    return std::min(1.0f, ypabact_ReadHandBrakePower());
 }
 
-static int ypabact_ReadUnitCollisionDamagePercent()
+static int ypabact_ReadUnitCollisionDamagePercent(Common::Ini::Key &key)
 {
-    int percent = System::IniConf::GameUnitCollisionDamagePercent.Get<int>();
+    int percent = key.Get<int>();
     if ( percent < 0 )
         return 0;
     if ( percent > 100 )
@@ -11201,10 +11200,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     {
         float recoilAmount = wproto.recoil * (float)recoilShotCount;
 
-        // OpenUA custom: handbrake stabilizes first-person firing.  This is
-        // intentionally applied only when the input path explicitly marks the
-        // shot, so AI/third-person behavior stays unchanged and recoil remains
-        // completely independent from push_resistance.
+        // OpenUA custom: game.handbrake_power controls both braking strength
+        // and recoil reduction.  The recoil part is applied only when the
+        // input path explicitly marks the shot, so AI/third-person behavior
+        // stays unchanged and remains independent from push_resistance.
         if ( arg->flags & BACT_ARG79_FLAG_RECOIL_BRAKE_HELD )
             recoilAmount *= 1.0f - ypabact_ReadHandBrakeRecoilReduction();
 
@@ -12545,9 +12544,15 @@ void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int f
     if ( !ypabact_BeginUnitCollisionEvent(this, other, frameTime) )
         return;
 
-    const int damagePercent = ypabact_ReadUnitCollisionDamagePercent();
-    if ( damagePercent <= 0 || _owner == World::OWNER_0 ||
-         other->_owner == World::OWNER_0 || _owner == other->_owner )
+    if ( _owner == World::OWNER_0 || other->_owner == World::OWNER_0 )
+        return;
+
+    const bool friendlyCollision = _owner == other->_owner;
+    Common::Ini::Key &damageKey = friendlyCollision
+                                ? System::IniConf::GameUnitFriendlyCollisionDamagePercent
+                                : System::IniConf::GameUnitEnemyCollisionDamagePercent;
+    const int damagePercent = ypabact_ReadUnitCollisionDamagePercent(damageKey);
+    if ( damagePercent <= 0 )
         return;
 
     const int selfRawDamage = _energy_max > 0

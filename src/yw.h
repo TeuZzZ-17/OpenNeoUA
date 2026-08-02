@@ -562,6 +562,25 @@ public:
     };
 
 public:
+    enum AtmosphereOptionIndex
+    {
+        ATMOPT_VISUAL_FILTER_STRENGTH = 0,
+        ATMOPT_ATMOSPHERE_STRENGTH,
+        ATMOPT_EXPOSURE,
+        ATMOPT_CONTRAST,
+        ATMOPT_SATURATION,
+        ATMOPT_VIGNETTE,
+        ATMOPT_FOG_START,
+        ATMOPT_FOG_LENGTH,
+        ATMOPT_FOG_STRENGTH,
+        ATMOPT_DARK_START,
+        ATMOPT_DARK_LENGTH,
+        ATMOPT_DARK_STRENGTH,
+        ATMOPT_WORLD_UI_MAX_DISTANCE,
+        ATMOPT_VHS_STRENGTH,
+        ATMOPT_COUNT
+    };
+
     struct TInputConf
     {
         uint8_t Type = 0;
@@ -622,6 +641,10 @@ public:
     uint8_t inputChangedParts;
 
     NC_STACK_button *video_button;
+    NC_STACK_button *atmosphere_button = NULL;
+    bool atmospherePageActive = false;
+    std::array<int, ATMOPT_COUNT> atmosphereValues = {};
+    std::array<int, ATMOPT_COUNT> atmosphereSavedValues = {};
     GuiList video_listvw;
     int game_default_res;
 
@@ -675,7 +698,6 @@ public:
     int confBlending;             // gfx.blending  0=Default 1=Additive 2=Sharp
     int confMaxFps;               // gfx.maxfps, validated against the Options FPS list
     bool confMoviePlayer;         // gfx.movie_player
-    bool confVhsFilter;           // gfx.vhs_filter
 
     // OpenUA: profile-saved virtual UI magnification style. Nucleus.ini
     // supplies the fallback for new/legacy profiles; a saved profile overrides it.
@@ -911,6 +933,13 @@ public:
     void sub_46DC1C();
     void sub_46D960();
     void ShowOptionsMenu();
+    void ShowAtmosphereOptionsMenu();
+    void AtmosphereOptionsLoad();
+    void AtmosphereOptionsApplyLive();
+    void AtmosphereOptionsSave();
+    void AtmosphereOptionsCancel();
+    void AtmosphereOptionsReset();
+    void UpdateAtmosphereOptionTexts();
     void GameShellUiOpenNetwork();
     int ypaworld_func158__sub0__sub7();
     void ShowConfirmDialog(int a2, const std::string &txt1, const std::string &txt2, int a5);
@@ -930,6 +959,7 @@ public:
     // OpenUA: modern graphics options helpers
     void UpdateGfxOptionTexts();   // refresh Blending/Atmosphere-Strength captions
     bool SaveKeyToNucleusIni(const std::string &key, const std::string &value);
+    bool RemoveKeyFromNucleusIni(const std::string &key);
     bool SavePlayerRoboAIBehaviorToNucleusIni();
     bool SaveSpectatorModeToNucleusIni();
     void sub_46A7F8();
@@ -2148,6 +2178,7 @@ public:
     virtual bool CreateConfirmControls();
     virtual bool CreateInputControls();
     virtual bool CreateVideoControls();
+    virtual bool CreateAtmosphereControls();
     virtual bool CreateDiskControls();
     virtual bool CreateLocaleControls();
     virtual bool CreateAboutControls();

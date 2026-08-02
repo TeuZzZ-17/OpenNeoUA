@@ -3366,13 +3366,20 @@ void ypaworld_func158__sub3(NC_STACK_ypaworld *yw, UserData *usr)
         break;
 
     case ENVMODE_SETTINGS:
-        usr->video_button->Draw();
+        if ( usr->atmospherePageActive && usr->atmosphere_button )
+        {
+            usr->atmosphere_button->Draw();
+        }
+        else
+        {
+            usr->video_button->Draw();
 
-        if ( usr->video_listvw.IsOpen() )
-            ypaworld_func158__video_list_draw(yw, usr);
+            if ( usr->video_listvw.IsOpen() )
+                ypaworld_func158__video_list_draw(yw, usr);
 
-        if ( usr->d3d_listvw.IsOpen() )
-            ypaworld_func158__d3d_list_draw(yw, usr);
+            if ( usr->d3d_listvw.IsOpen() )
+                ypaworld_func158__d3d_list_draw(yw, usr);
+        }
         break;
 
     case ENVMODE_TUTORIAL:

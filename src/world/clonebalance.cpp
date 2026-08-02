@@ -13,9 +13,9 @@ namespace World
 namespace CloneBalance
 {
 
-// Cached config (filled by Init() from the INI). Defaults match the documented
-// out-of-the-box behavior: feature off, 5% malus, neutral-until-parsed grey tint.
-static bool        s_enabled          = false;
+// Cached config (filled by Init() from the INI). The balance feature is always
+// enabled; the remaining values retain their documented defaults.
+static bool        s_enabled          = true;
 static float       s_downFactor       = 0.95f; // 1 - 5/100
 static float       s_attackTimeFactor = 1.05f; // 1 + 5/100
 static TVisualTint s_tint;                      // overwritten by Init()
@@ -84,8 +84,6 @@ static TVisualTint ParseTint(const std::string &str)
 
 void Init()
 {
-    s_enabled = System::IniConf::GameBlackSectCloneBalance.Get<bool>();
-
     int percent = System::IniConf::GameBlackSectCloneMalusPercent.Get<int32_t>();
     // Keep the derived multipliers sane and positive even with odd INI values.
     if ( percent < 0 )  percent = 0;

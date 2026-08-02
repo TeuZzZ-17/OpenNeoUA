@@ -33,7 +33,7 @@ void ParticleSystem::AddParticle(NC_STACK_particle *base, const vec3d& pos, cons
     if ( !std::isfinite(lifetimeScale) || lifetimeScale <= 0.0f )
         lifetimeScale = 1.0f;
 
-    if (!_disableAdd && (int32_t)_particles.size() < System::IniConf::ParticlesLimit.Get<int32_t>())
+    if (!_disableAdd && (int32_t)_particles.size() < System::IniConf::GfxParticlesLimit.Get<int32_t>())
         _particles.emplace_back( base, pos, vec, age, tint, scale, spin, lifetimeScale );
 }
 
