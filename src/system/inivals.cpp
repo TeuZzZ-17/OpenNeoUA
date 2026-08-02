@@ -29,16 +29,16 @@ Common::Ini::Key IniConf::GfxNewSky("gfx.newsky", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GfxSkyDistance("gfx.skydistance", Common::Ini::KT_DIGIT, (int32_t)3000);
 Common::Ini::Key IniConf::GfxSkyLength("gfx.skylength", Common::Ini::KT_DIGIT, (int32_t)500);
 Common::Ini::Key IniConf::GfxHorizonFogEnable("gfx.horizon_fog_enable", Common::Ini::KT_BOOL, true);
-Common::Ini::Key IniConf::GfxHorizonFogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxHorizonFogLength("gfx.horizon_fog_length", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxHorizonFogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxHorizonFogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string("3000"));
+Common::Ini::Key IniConf::GfxHorizonFogLength("gfx.horizon_fog_length", Common::Ini::KT_WORD, std::string("2000"));
+Common::Ini::Key IniConf::GfxHorizonFogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string("0.60"));
 // OpenUA Horizon Atmosphere V2: RGB colour used to blend opaque world geometry
 // into the distant atmosphere. The effect preserves depth and object alpha.
 Common::Ini::Key IniConf::GfxHorizonFogColor("gfx.horizon_fog_color", Common::Ini::KT_WORD, std::string("150_155_160"));
 Common::Ini::Key IniConf::GfxHorizonDarkEnable("gfx.horizon_dark_enable", Common::Ini::KT_BOOL, true);
-Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxHorizonDarkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::Ini::KT_WORD, std::string("3000"));
+Common::Ini::Key IniConf::GfxHorizonDarkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string("2000"));
+Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("0.60"));
 Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0_0_0"));
 Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
@@ -52,13 +52,18 @@ Common::Ini::Key IniConf::GfxYRes("gfx.yres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxPalette("gfx.palette", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxPaletteTheme("gfx.palette_theme", Common::Ini::KT_WORD);
 // OpenUA custom: modern fullscreen visual filter (replaces the legacy palette-theme remap).
-Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Standard"));
-Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.30"));
-Common::Ini::Key IniConf::GfxVhsFilter("gfx.vhs_filter", Common::Ini::KT_BOOL, false);
+Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
+Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.40"));
+Common::Ini::Key IniConf::GfxAtmosphereFx("gfx.atmosphere_fx", Common::Ini::KT_BOOL, true);
+Common::Ini::Key IniConf::GfxAtmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string("1.20"));
+Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string("1.00"));
+Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("0.90"));
+Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.50"));
 Common::Ini::Key IniConf::GfxVhsFilterName("gfx.vhs_filter_name", Common::Ini::KT_WORD, std::string("VHS"));
 Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/vhs.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/vhs_vbo.ps"));
-Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.20"));
+Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.15"));
 Common::Ini::Key IniConf::GfxDisplay("gfx.display", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxDisplay2("gfx.display2", Common::Ini::KT_WORD);
 
@@ -228,18 +233,14 @@ Common::Ini::Key IniConf::NetVersionCheck("net.versioncheck", Common::Ini::KT_BO
 
 Common::Ini::Key IniConf::GameDebug("game.debug", Common::Ini::KT_BOOL);
 Common::Ini::Key IniConf::GameNewDebug("game.new.debug", Common::Ini::KT_WORD, std::string("no"));
-Common::Ini::Key IniConf::GameCrashDiagnostics("game.crash_diagnostics", Common::Ini::KT_BOOL, false);
 // OpenUA custom: choose the original VP model preview or the text-only briefing preview.
 // The default keeps the current text mode for vanilla-safe behavior.
 Common::Ini::Key IniConf::GameBriefingVPRender("game.briefing_vp_render", Common::Ini::KT_BOOL, false);
 
 // Yparobo keys
 Common::Ini::Key IniConf::GameNewAI("game.newai",    Common::Ini::KT_BOOL, true);
-// OpenUA: frame-rate independent gameplay timing (historical key name).
-// game.fixed_tick = no keeps vanilla biased timing. Set yes to use the true
-// measured frame delta (no legacy +1 bias) for frame-rate independent gameplay.
-Common::Ini::Key IniConf::GameFixedTick("game.fixed_tick", Common::Ini::KT_BOOL, false);
-// OpenUA custom: tank ground-pose response used only when game.fixed_tick = yes.
+// OpenUA: frame-rate independent gameplay timing is always enabled.
+// This multiplier remains configurable for tank ground-pose response.
 // 2.0 is near vanilla alignment; 5.5 is the balanced default; 10.0 is very reactive.
 Common::Ini::Key IniConf::GameFixedTickTankGroundPoseMult("game.fixed_tick_tank_ground_pose_mult", Common::Ini::KT_WORD, std::string("5.5"));
 // OpenUA custom: player-only tank coast braking after releasing forward/reverse.
@@ -251,10 +252,13 @@ Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior
 Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameWeaponWeaponCollision("game.weapon_weapon_collision", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameRoboBuildingCollisionDamagePercent("game.robo_building_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenUA custom: raw max-energy percentage exchanged once when two hostile
+// OpenUA custom: raw max-energy percentage exchanged once when two enemy
 // non-neutral units begin a physical collision. The target's effective shield
 // reduces the final damage. Zero preserves current behavior.
-Common::Ini::Key IniConf::GameUnitCollisionDamagePercent("game.unit_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
+Common::Ini::Key IniConf::GameUnitEnemyCollisionDamagePercent("game.unit_enemy_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
+// OpenUA custom: same shield-aware collision damage for allied non-neutral units.
+// Zero preserves current behavior.
+Common::Ini::Key IniConf::GameUnitFriendlyCollisionDamagePercent("game.unit_friendly_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
 // OpenUA custom: multiplier for the vanilla power-station sector energy effect.
 // game.powerstation_energy_multiplier = 1.0 keeps vanilla; 3.0 triples recharge/drain.
 Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_energy_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
@@ -263,15 +267,13 @@ Common::Ini::Key IniConf::GameFallDamageMultiplier("game.fall_damage_mult", Comm
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
-Common::Ini::Key IniConf::GameHandBrakeRecoilReduction("game.handbrake_recoil_reduction", Common::Ini::KT_WORD, std::string("0.8"));
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameGemUnlockTimeScale("game.gem_unlock_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("2500"));
+Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("4500"));
 // OpenUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
 Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
-Common::Ini::Key IniConf::GameMgunDamageSectors("game.mgun_damage_sectors", Common::Ini::KT_BOOL, false);
 
 // OpenUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -296,8 +298,6 @@ Common::Ini::Key IniConf::UiStatusIconBlinkCount("ui.status_icon_blink_count", C
 // defense, attack speed, outgoing damage, force, maxrot and sound pitch, plus an
 // automatic grey identity tint. These are RUNTIME-only effective-value adjustments:
 // they never modify the shared vehicle/weapon prototypes and never touch energy/maxHP.
-// game.black_sect_clone_balance = no    ; master switch (default off, vanilla behavior)
-Common::Ini::Key IniConf::GameBlackSectCloneBalance("game.black_sect_clone_balance", Common::Ini::KT_BOOL, false);
 // game.black_sect_clone_malus_percent = 5 ; malus magnitude in percent (defense/damage/force/maxrot/pitch -p%, shot_time +p%)
 Common::Ini::Key IniConf::GameBlackSectCloneMalusPercent("game.black_sect_clone_malus_percent", Common::Ini::KT_DIGIT, (int32_t)5);
 // game.black_sect_clone_tint = 140_140_140_255 ; grey clone identity tint, R_G_B_A each 0..255
@@ -308,8 +308,8 @@ Common::Ini::Key IniConf::NetGameExclusiveGem("netgame.exclusivegem", Common::In
 Common::Ini::Key IniConf::NetWaitStart("net.waitstart", Common::Ini::KT_DIGIT, (int32_t)150000);
 Common::Ini::Key IniConf::NetKickoff("net.kickoff", Common::Ini::KT_DIGIT, (int32_t)20000);
 
-// Particles
-Common::Ini::Key IniConf::ParticlesLimit("particles.limit", Common::Ini::KT_DIGIT, (int32_t)5000);
+// Graphics particles
+Common::Ini::Key IniConf::GfxParticlesLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)5000);
 
 Common::Ini::Key IniConf::MenuWindowed("menu.windowed", Common::Ini::KT_BOOL, false);
 
@@ -357,6 +357,12 @@ void IniConf::Init()
         , &GfxPaletteTheme
         , &GfxVisualFilter
         , &GfxVisualFilterStrength
+        , &GfxAtmosphereFx
+        , &GfxAtmosphereStrength
+        , &GfxAtmosphereExposure
+        , &GfxAtmosphereContrast
+        , &GfxAtmosphereSaturation
+        , &GfxAtmosphereVignette
         , &GfxDisplay
         , &GfxDisplay2
 
@@ -493,11 +499,9 @@ void IniConf::Init()
 
         , &GameDebug
         , &GameNewDebug
-        , &GameCrashDiagnostics
         , &GameBriefingVPRender
 
         , &GameNewAI
-        , &GameFixedTick
         , &GameFixedTickTankGroundPoseMult
         , &GamePlayerTankBrakeTime
         , &GameTimeLine
@@ -505,20 +509,19 @@ void IniConf::Init()
         , &GameSpectatorMode
         , &GameWeaponWeaponCollision
         , &GameRoboBuildingCollisionDamagePercent
-        , &GameUnitCollisionDamagePercent
+        , &GameUnitEnemyCollisionDamagePercent
+        , &GameUnitFriendlyCollisionDamagePercent
         , &GamePowerStationEnergyMultiplier
         , &GameFallDamageMultiplier
         , &GamePushAtDeathMultiplier
         , &GameHandBrakePower
         , &GameHandBrakeSound
-        , &GameHandBrakeRecoilReduction
         , &GameGemUnlockNewUI
         , &GameGemUnlockSound
         , &GameGemUnlockTimeScale
         , &GameWorldUiMaxDistance
         , &GameMgunRange
         , &GameMgunAiFireAlignment
-        , &GameMgunDamageSectors
         , &UiStatusIconRegen
         , &UiStatusIconDrain
         , &UiStatusIconDamaged
@@ -531,7 +534,6 @@ void IniConf::Init()
         , &UiStatusIconSprint
         , &UiStatusIconHandbrake
         , &UiStatusIconBlinkCount
-        , &GameBlackSectCloneBalance
         , &GameBlackSectCloneMalusPercent
         , &GameBlackSectCloneTint
 
@@ -557,13 +559,12 @@ void IniConf::Init()
         , &GfxColorEffPower15
         , &GfxColorEffPower16
 
-        , &ParticlesLimit
+        , &GfxParticlesLimit
 
         , &MenuWindowed
 
         , &GfxAdditionalModes
         , &GfxVBO
-        , &GfxVhsFilter
         , &GfxVhsFilterName
         , &GfxVhsFilterShader
         , &GfxVhsFilterShaderVbo

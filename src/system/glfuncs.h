@@ -35,6 +35,8 @@ public:
     static PFNGLDELETEPROGRAMPROC GLDeleteProgram;
     static PFNGLATTACHSHADERPROC GLAttachShader;
     static PFNGLLINKPROGRAMPROC GLLinkProgram;
+    static PFNGLGETPROGRAMIVPROC GLGetProgramiv;
+    static PFNGLGETPROGRAMINFOLOGPROC GLGetProgramInfoLog;
     static PFNGLUSEPROGRAMPROC GLUseProgram;
     static PFNGLGETUNIFORMLOCATIONPROC GLGetUniformLocation;
     static PFNGLUNIFORM1FPROC GLUniform1f;

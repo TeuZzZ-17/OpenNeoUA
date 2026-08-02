@@ -57,8 +57,13 @@ public:
     static Common::Ini::Key GfxPalette;
     static Common::Ini::Key GfxPaletteTheme;       // DEPRECATED/inert: legacy SET palette-theme remap (bypassed)
     static Common::Ini::Key GfxVisualFilter;       // OpenUA: fullscreen visual filter name (Data/Filters/*.pal), "Standard" = none
-    static Common::Ini::Key GfxVisualFilterStrength; // OpenUA: visual filter blend strength 0.0..1.0 (default 0.65)
-    static Common::Ini::Key GfxVhsFilter;          // OpenUA experimental: optional VHS post-process filter
+    static Common::Ini::Key GfxVisualFilterStrength; // OpenUA: visual filter blend strength 0.0..1.0 (default 0.40)
+    static Common::Ini::Key GfxAtmosphereFx;       // OpenUA: optional world-only atmospheric post-process
+    static Common::Ini::Key GfxAtmosphereStrength;
+    static Common::Ini::Key GfxAtmosphereExposure;
+    static Common::Ini::Key GfxAtmosphereContrast;
+    static Common::Ini::Key GfxAtmosphereSaturation;
+    static Common::Ini::Key GfxAtmosphereVignette;
     static Common::Ini::Key GfxVhsFilterName;
     static Common::Ini::Key GfxVhsFilterShader;
     static Common::Ini::Key GfxVhsFilterShaderVbo;
@@ -217,14 +222,10 @@ public:
 
     static Common::Ini::Key GameDebug;
     static Common::Ini::Key GameNewDebug;
-    static Common::Ini::Key GameCrashDiagnostics;
     static Common::Ini::Key GameBriefingVPRender;
     static bool IsGameNewDebugEnabled();
 
     static Common::Ini::Key GameNewAI;
-    // OpenUA: frame-rate independent gameplay timing (game.fixed_tick, default no).
-    // "no" keeps vanilla biased timing; "yes" uses the true measured frame delta.
-    static Common::Ini::Key GameFixedTick;
     static Common::Ini::Key GameFixedTickTankGroundPoseMult;
     static Common::Ini::Key GamePlayerTankBrakeTime;
     static Common::Ini::Key GameTimeLine;
@@ -232,20 +233,19 @@ public:
     static Common::Ini::Key GameSpectatorMode;
     static Common::Ini::Key GameWeaponWeaponCollision;
     static Common::Ini::Key GameRoboBuildingCollisionDamagePercent;
-    static Common::Ini::Key GameUnitCollisionDamagePercent;
+    static Common::Ini::Key GameUnitEnemyCollisionDamagePercent;
+    static Common::Ini::Key GameUnitFriendlyCollisionDamagePercent;
     static Common::Ini::Key GamePowerStationEnergyMultiplier;
     static Common::Ini::Key GameFallDamageMultiplier;
     static Common::Ini::Key GamePushAtDeathMultiplier;
     static Common::Ini::Key GameHandBrakePower;
     static Common::Ini::Key GameHandBrakeSound;
-    static Common::Ini::Key GameHandBrakeRecoilReduction;
     static Common::Ini::Key GameGemUnlockNewUI;
     static Common::Ini::Key GameGemUnlockSound;
     static Common::Ini::Key GameGemUnlockTimeScale;
     static Common::Ini::Key GameWorldUiMaxDistance;
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
-    static Common::Ini::Key GameMgunDamageSectors;
 
     // OpenUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only
@@ -265,7 +265,6 @@ public:
 
     // OpenUA: Black Sect "imperfect grey clone" runtime balance (owner/faction 5 only).
     // Pure runtime maluses applied to live actors; never mutate shared prototypes.
-    static Common::Ini::Key GameBlackSectCloneBalance;     // game.black_sect_clone_balance (default no)
     static Common::Ini::Key GameBlackSectCloneMalusPercent; // game.black_sect_clone_malus_percent (default 5)
     static Common::Ini::Key GameBlackSectCloneTint;         // game.black_sect_clone_tint (default 140_140_140_255)
 
@@ -273,7 +272,7 @@ public:
     static Common::Ini::Key NetWaitStart;
     static Common::Ini::Key NetKickoff;
 
-    static Common::Ini::Key ParticlesLimit;
+    static Common::Ini::Key GfxParticlesLimit;
     static Common::Ini::Key MenuWindowed;
 
     static Common::Ini::Key GameHideBlacksect;

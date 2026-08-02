@@ -29,11 +29,12 @@ namespace CloneBalance
     // Black Sect faction/owner id (the imperfect grey clones).
     constexpr int OWNER_BLACK_SECT = 5;
 
-    // Read the game.black_sect_clone_* keys from System::IniConf and cache them.
+    // Read the remaining game.black_sect_clone_* tuning keys from System::IniConf
+    // and cache them. The balance feature itself is always enabled.
     // Call once after nucleus.ini has been parsed. Idempotent: safe to re-run.
     void Init();
 
-    // Master switch (game.black_sect_clone_balance). False = vanilla behavior.
+    // The clone balance is permanently enabled.
     bool Enabled();
 
     // Multipliers derived from game.black_sect_clone_malus_percent (default 5):

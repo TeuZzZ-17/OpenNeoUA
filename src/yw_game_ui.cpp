@@ -7675,7 +7675,7 @@ static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw)
 
 static float yw_GetWorldUiMaxDistance()
 {
-    constexpr float DEFAULT_DISTANCE = 2500.0f;
+    constexpr float DEFAULT_DISTANCE = 4500.0f;
     const std::string value = System::IniConf::GameWorldUiMaxDistance.Get<std::string>();
 
     if ( value.empty() || value.find(',') != std::string::npos )
@@ -7874,7 +7874,7 @@ static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
     selected.reserve(32);
     float maxDistance = yw_GetWorldUiMaxDistance();
     if (maxDistance <= 0.0f)
-        maxDistance = 2500.0f;
+        maxDistance = 4500.0f;
     const float maxDistanceSquared = maxDistance * maxDistance;
 
     auto collect = [&](NC_STACK_ypabact *bact)

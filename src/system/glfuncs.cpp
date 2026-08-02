@@ -21,6 +21,8 @@ PFNGLCREATEPROGRAMPROC Glext::GLCreateProgram = NULL;
 PFNGLDELETEPROGRAMPROC Glext::GLDeleteProgram = NULL;
 PFNGLATTACHSHADERPROC Glext::GLAttachShader = NULL;
 PFNGLLINKPROGRAMPROC Glext::GLLinkProgram = NULL;
+PFNGLGETPROGRAMIVPROC Glext::GLGetProgramiv = NULL;
+PFNGLGETPROGRAMINFOLOGPROC Glext::GLGetProgramInfoLog = NULL;
 PFNGLUSEPROGRAMPROC Glext::GLUseProgram = NULL;
 PFNGLGETUNIFORMLOCATIONPROC Glext::GLGetUniformLocation = NULL;
 PFNGLUNIFORM1FPROC Glext::GLUniform1f = NULL;
@@ -106,6 +108,8 @@ bool Glext::init()
     SetGLFunc(GLDeleteProgram, "glDeleteProgram");
     SetGLFunc(GLAttachShader, "glAttachShader");
     SetGLFunc(GLLinkProgram, "glLinkProgram");
+    SetGLFunc(GLGetProgramiv, "glGetProgramiv");
+    SetGLFunc(GLGetProgramInfoLog, "glGetProgramInfoLog");
     SetGLFunc(GLUseProgram, "glUseProgram");
     SetGLFunc(GLGetUniformLocation, "glGetUniformLocation");
 

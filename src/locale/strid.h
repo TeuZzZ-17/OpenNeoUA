@@ -175,6 +175,27 @@ enum OPENUA_STRING
     // Appended to preserve all existing OpenUA string IDs.
     OUA_RENDER_DISTANCE,
 
+    // Atmosphere & Visibility controls. Appended to preserve existing IDs.
+    OUA_ATMOSPHERE_VISIBILITY,
+    OUA_VISUAL_FILTER_STRENGTH,
+    OUA_ATMOSPHERE_STRENGTH,
+    OUA_EXPOSURE,
+    OUA_CONTRAST,
+    OUA_SATURATION,
+    OUA_VIGNETTE,
+    OUA_FOG_START,
+    OUA_FOG_LENGTH,
+    OUA_FOG_STRENGTH,
+    OUA_DARK_START,
+    OUA_DARK_LENGTH,
+    OUA_DARK_STRENGTH,
+    OUA_SKY_HEIGHT,
+    OUA_VHS_STRENGTH,
+    OUA_RESET,
+    OUA_VISUAL_FILTER,
+    OUA_SAVE_SETTINGS,
+    OUA_WORLD_UI_MAX_DISTANCE,
+
     OUA_STRING_MAX
 };
 
