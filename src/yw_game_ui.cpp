@@ -7709,6 +7709,18 @@ static bool yw_ShouldHideControlledUnitWorldUi(NC_STACK_ypaworld *yw, NC_STACK_y
     return yw && bact && !yw->IsSpectatorControlled() && bact == yw->_userUnit;
 }
 
+static float yw_GetWorldUiFadeStart(float maxDistance)
+{
+    // Keep the configured value as the hard cutoff, but reserve a visible
+    // transition band before it. A proportional band works at normal ranges,
+    // while the clamps avoid an imperceptibly short fade at low values or an
+    // excessively long translucent zone at very large OpenUA distances.
+    const float fadeLength = std::min(maxDistance,
+                                      std::max(400.0f,
+                                               std::min(maxDistance * 0.35f, 2500.0f)));
+    return maxDistance - fadeLength;
+}
+
 static uint8_t yw_GetWorldUiOpacity(NC_STACK_ypaworld *yw, const vec3d &worldPos)
 {
     if (!yw)
@@ -7718,7 +7730,7 @@ static uint8_t yw_GetWorldUiOpacity(NC_STACK_ypaworld *yw, const vec3d &worldPos
     if (maxDistance <= 0.0f)
         return 255;
 
-    const float fadeStart = maxDistance * 0.75f;
+    const float fadeStart = yw_GetWorldUiFadeStart(maxDistance);
     const float distance = (worldPos - yw->_viewerPosition).length();
 
     if (distance >= maxDistance)
@@ -7728,9 +7740,22 @@ static uint8_t yw_GetWorldUiOpacity(NC_STACK_ypaworld *yw, const vec3d &worldPos
 
     float ratio = (maxDistance - distance) / (maxDistance - fadeStart);
     ratio = std::max(0.0f, std::min(1.0f, ratio));
-    // Smoothstep avoids a visible brightness step where the fade begins.
+    // Smoothstep gives the same continuous curve in both directions: moving
+    // away fades out, moving closer fades in, without a visible threshold pop.
     ratio = ratio * ratio * (3.0f - 2.0f * ratio);
     return (uint8_t)dround(ratio * 255.0f);
+}
+
+static int yw_GetWorldUiSectorRadius(float maxDistance)
+{
+    if (maxDistance <= 0.0f)
+        return 1;
+
+    // A target can sit near the far edge of its sector while the viewer sits
+    // near the opposite edge of another one, so keep one safety sector beyond
+    // the pure distance/sector quotient. This prevents the candidate scan from
+    // dropping an overlay before its opacity curve reaches zero.
+    return std::max(1, (int)ceil(maxDistance / World::CVSectorLength) + 1);
 }
 
 static bool yw_ProjectWorldSelectionPoint(NC_STACK_ypaworld *yw, const vec3d &worldPos, Common::Point *screenPos)
@@ -11987,12 +12012,18 @@ static bool yw_ShouldRenderSpectatorWorldStatus(NC_STACK_ypaworld *yw, NC_STACK_
         return false;
 
     NC_STACK_ypabact *followTarget = yw->GetSpectatorFollowTarget();
-    const float spectatorStatusMaxDist = 2350.0;
+    const float spectatorStatusMaxDist = yw_GetWorldUiMaxDistance();
     vec3d statusOrigin = yw->_viewerPosition;
     vec3d delta = bact->_position - statusOrigin;
 
-    if ( bact != followTarget && delta.dot(delta) > POW2(spectatorStatusMaxDist) )
+    // Do not stop spectator overlays at the old fixed 2350-unit boundary:
+    // let the shared opacity function complete its fade up to the configured
+    // world-UI cutoff. The followed target keeps the legacy exemption.
+    if ( bact != followTarget && spectatorStatusMaxDist > 0.0f &&
+         delta.dot(delta) >= POW2(spectatorStatusMaxDist) )
+    {
         return false;
+    }
 
     return bact->_owner != World::OWNER_0 &&
            !yw->IsSpectatorBact(bact) &&
@@ -12153,10 +12184,12 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
 
     if ( yw->_preferences & World::PREF_ENEMYINDICATOR )
     {
-        int v5 = yw->_userUnit->_cellId.x - 1;
-        int v16 = yw->_userUnit->_cellId.x + 1;
-        int v17 = yw->_userUnit->_cellId.y - 1;
-        int v14 = yw->_userUnit->_cellId.y + 1;
+        const int worldUiSectorRadius =
+            yw_GetWorldUiSectorRadius(yw_GetWorldUiMaxDistance());
+        int v5 = yw->_userUnit->_cellId.x - worldUiSectorRadius;
+        int v16 = yw->_userUnit->_cellId.x + worldUiSectorRadius;
+        int v17 = yw->_userUnit->_cellId.y - worldUiSectorRadius;
+        int v14 = yw->_userUnit->_cellId.y + worldUiSectorRadius;
 
         if ( v5 < 1 )
             v5 = 1;
@@ -12187,7 +12220,12 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
                              (bct == activeCommander || bct->_parent == activeCommander) )
                             continue;
 
-                        if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_bact_type != BACT_TYPES_ROBO )
+                        // Host Stations use the same world-space inverted triangle as
+                        // ordinary units. Previously ROBO actors were excluded from the
+                        // persistent enemy-indicator pass, so their marker appeared only
+                        // through the mouse-hover path. Keep missiles excluded, but let
+                        // yw_RenderCursorOverUnit apply the shared distance fade to ROBOs.
+                        if ( bct->_bact_type != BACT_TYPES_MISSLE )
                         {
 
                             if ( bct->_status != BACT_STATUS_CREATE && bct->_status != BACT_STATUS_BEAM && bct->_status != BACT_STATUS_DEAD )
@@ -12675,7 +12713,9 @@ void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
             if ( v12 )
             {
                 float a4 = v34 - 0.08;
-                bool isSquadLeader = bact->IsParentMyRobo() && bact->_owner == yw->_userRobo->_owner;
+                // Host Stations use the large squad-leader inverted triangle.
+                bool isSquadLeader = bact->_bact_type == BACT_TYPES_ROBO ||
+                                     (bact->IsParentMyRobo() && bact->_owner == yw->_userRobo->_owner);
 
                 if ( isSquadLeader )
                 {

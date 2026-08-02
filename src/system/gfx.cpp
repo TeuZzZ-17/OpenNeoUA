@@ -79,6 +79,7 @@ struct HorizonFogConfig
     float FogStart = 0.0f;
     float FogLength = 0.0f;
     float FogStrength = 1.0f;
+    TGLColor FogColor = TGLColor(150.0f / 255.0f, 155.0f / 255.0f, 160.0f / 255.0f, 1.0f);
 
     bool DarkEnable = true;
     bool DarkStartOverride = false;
@@ -189,6 +190,7 @@ static void HorizonLoadConfigFromIni()
     cfg.FogStartOverride = HorizonParseFloat(System::IniConf::GfxHorizonFogStart.Get<std::string>(), &cfg.FogStart);
     cfg.FogLengthOverride = HorizonParseFloat(System::IniConf::GfxHorizonFogLength.Get<std::string>(), &cfg.FogLength);
     cfg.FogStrength = HorizonReadStrength(System::IniConf::GfxHorizonFogStrength.Get<std::string>(), 1.0f);
+    cfg.FogColor = HorizonParseColor(System::IniConf::GfxHorizonFogColor.Get<std::string>(), cfg.FogColor);
 
     cfg.DarkEnable = System::IniConf::GfxHorizonDarkEnable.Get<bool>();
     cfg.DarkStartOverride = HorizonParseFloat(System::IniConf::GfxHorizonDarkStart.Get<std::string>(), &cfg.DarkStart);
@@ -279,12 +281,17 @@ static bool HorizonDarkFogEnabled(float fogLength)
         && HorizonDarkFogLength(fogLength) > 0.0f;
 }
 
-static float HorizonFogFactor(float z, float start, float length)
+static float HorizonFogFactor(const vec3d &viewPos, float start, float length)
 {
     if (length <= 0.0f)
         return 0.0f;
 
-    return HorizonClamp01((z - start) / length);
+    // Horizon Atmosphere V2 uses horizontal radial distance around the viewer,
+    // not a flat camera-Z plane. Smoothstep removes the visible start/end seam.
+    const float radialDistance = (float)sqrt(viewPos.x * viewPos.x +
+                                             viewPos.z * viewPos.z);
+    float t = HorizonClamp01((radialDistance - start) / length);
+    return t * t * (3.0f - 2.0f * t);
 }
 
 bool TRenderParams::operator==(const TRenderParams &b)
@@ -357,7 +364,7 @@ GFXEngine::GFXEngine()
 
     _solidFont = true;
 
-    _setFrustumClip(1.0, 8192.0);
+    _setFrustumClip(1.0f, WORLD_FAR_CLIP);
 
     _normClr = vec3d(1.0, 1.0, 1.0);
     _invClr = vec3d(0.0, 0.0, 0.0);
@@ -787,7 +794,8 @@ size_t GFXEngine::raster_func198(const Common::FLine &arg)
                       _field_4.r,
                       _field_4.g,
                       _field_4.b,
-                      _field_4.a);
+                      _field_4.a,
+                      _virtualUiPass);
     return 1;
 }
 
@@ -800,7 +808,8 @@ size_t GFXEngine::raster_func199(const Common::Line &arg)
                       _field_4.r,
                       _field_4.g,
                       _field_4.b,
-                      _field_4.a );
+                      _field_4.a,
+                      _virtualUiPass );
 
     return 1;
 }
@@ -813,7 +822,7 @@ void GFXEngine::sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b, u
 
         if ( _inverseClip.IsEmpty() || !tmp2.ClipBy(_inverseClip) )
         {
-            DrawLine(Screen(), line, r, g, b, alpha);
+            DrawLine(Screen(), line, r, g, b, alpha, _virtualUiPass);
         }
         else
         {
@@ -821,17 +830,17 @@ void GFXEngine::sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b, u
             {
                 if ( tmp2.P1() != line.P1() )
                 {
-                    DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha);
-                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha);
+                    DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha, _virtualUiPass);
+                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha, _virtualUiPass);
                 }
                 else
                 {
-                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha);
+                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha, _virtualUiPass);
                 }
             }
             else
             {
-                DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha);
+                DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha, _virtualUiPass);
             }
         }
     }
@@ -1061,7 +1070,10 @@ void GFXEngine::SetRenderStates(int setAll)
         if ((forceSetShader || (newStates->AFog != _lastStates.AFog) ||
             (newStates->AFogLength != _lastStates.AFogLength) ||
             (newStates->AFogStart != _lastStates.AFogStart) ||
-            (newStates->AFogStrength != _lastStates.AFogStrength)) )
+            (newStates->AFogStrength != _lastStates.AFogStrength) ||
+            (newStates->AFogColor.r != _lastStates.AFogColor.r) ||
+            (newStates->AFogColor.g != _lastStates.AFogColor.g) ||
+            (newStates->AFogColor.b != _lastStates.AFogColor.b)) )
         {
             if (newStates->AFog)
             {
@@ -1069,6 +1081,10 @@ void GFXEngine::SetRenderStates(int setAll)
                 _vboStatesBlock.AFogStart = newStates->AFogStart;
                 _vboStatesBlock.AFogLength = newStates->AFogLength;
                 _vboStatesBlock.AFogStrength = newStates->AFogStrength;
+                _vboStatesBlock.AtmosphereColor[0] = newStates->AFogColor.r;
+                _vboStatesBlock.AtmosphereColor[1] = newStates->AFogColor.g;
+                _vboStatesBlock.AtmosphereColor[2] = newStates->AFogColor.b;
+                _vboStatesBlock.AtmosphereColor[3] = 1.0;
             }
             else
             {
@@ -1360,56 +1376,48 @@ void GFXEngine::RenderingMeshOld(TRenderNode *nod)
 
     if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && nod->FogLength > 0.0f)
     {
-        bool alphaFog = HorizonAlphaFogEnabled(nod->FogLength);
-        bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
+        const bool atmosphereFog = HorizonAlphaFogEnabled(nod->FogLength);
+        const bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
 
+        // Fixed-function fallback: emulate Atmosphere V2 per vertex. Unlike the
+        // old path, world geometry never loses alpha, so the sky cannot bleed
+        // through opaque terrain/buildings. VBO mode performs the same blend
+        // per pixel in the standard fragment shader.
         _states.Fog = false;
+        _states.AFog = false;
 
-        float darkStart = HorizonDarkFogStart(nod->FogStart, nod->FogLength);
-        float darkLength = HorizonDarkFogLength(nod->FogLength);
-        bool fixedDarkFog = darkFog && gHorizonFogConfig.DarkStrength >= 1.0f;
-
-        if (fixedDarkFog)
+        if (atmosphereFog || darkFog)
         {
-            _states.Fog = true;
-            _states.FogStart = darkStart;
-            _states.FogLength = darkLength;
-            _states.FogStrength = 1.0f;
-            _states.FogColor = gHorizonFogConfig.DarkColor;
-        }
-
-        if (alphaFog)
-        {
-            _states.AlphaBlend = true;
-            _states.SrcBlend = GL_SRC_ALPHA;
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-        }
-
-        if (alphaFog || (darkFog && !fixedDarkFog))
-        {
-            float alphaStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
-            float alphaLength = HorizonAlphaFogLength(nod->FogLength);
+            const float atmosphereStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
+            const float atmosphereLength = HorizonAlphaFogLength(nod->FogLength);
+            const float darkStart = HorizonDarkFogStart(nod->FogStart, nod->FogLength);
+            const float darkLength = HorizonDarkFogLength(nod->FogLength);
 
             for (TVertex &v : mesh->Vertexes)
             {
-                TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
+                const TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
                 TGLColor out = src;
-                float z = nod->TForm.Transform(v.Pos).z;
+                const vec3d viewPos = nod->TForm.Transform(v.Pos);
 
-                if (darkFog && !fixedDarkFog)
+                if (atmosphereFog)
                 {
-                    float f = HorizonFogFactor(z, darkStart, darkLength) * gHorizonFogConfig.DarkStrength;
-                    out.r = src.r + (gHorizonFogConfig.DarkColor.r - src.r) * f;
-                    out.g = src.g + (gHorizonFogConfig.DarkColor.g - src.g) * f;
-                    out.b = src.b + (gHorizonFogConfig.DarkColor.b - src.b) * f;
+                    const float f = HorizonFogFactor(viewPos, atmosphereStart, atmosphereLength) *
+                                    gHorizonFogConfig.FogStrength;
+                    out.r += (gHorizonFogConfig.FogColor.r - out.r) * f;
+                    out.g += (gHorizonFogConfig.FogColor.g - out.g) * f;
+                    out.b += (gHorizonFogConfig.FogColor.b - out.b) * f;
                 }
 
-                if (alphaFog)
+                if (darkFog)
                 {
-                    float f = HorizonFogFactor(z, alphaStart, alphaLength) * gHorizonFogConfig.FogStrength;
-                    out.a = src.a * (1.0f - f);
+                    const float f = HorizonFogFactor(viewPos, darkStart, darkLength) *
+                                    gHorizonFogConfig.DarkStrength;
+                    out.r += (gHorizonFogConfig.DarkColor.r - out.r) * f;
+                    out.g += (gHorizonFogConfig.DarkColor.g - out.g) * f;
+                    out.b += (gHorizonFogConfig.DarkColor.b - out.b) * f;
                 }
 
+                out.a = src.a;
                 v.ComputedColor = out;
             }
             useComputedColor = true;
@@ -1574,11 +1582,19 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
 
     if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && nod->FogLength > 0.0f)
     {
-        bool alphaFog = HorizonAlphaFogEnabled(nod->FogLength);
-        bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
+        const bool atmosphereFog = HorizonAlphaFogEnabled(nod->FogLength);
+        const bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
 
         _states.Fog = false;
-        _states.AFog = false;
+        _states.AFog = atmosphereFog || darkFog; // also selects radial Atmosphere V2 mode
+
+        if (_states.AFog)
+        {
+            _states.AFogStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
+            _states.AFogLength = HorizonAlphaFogLength(nod->FogLength);
+            _states.AFogStrength = atmosphereFog ? gHorizonFogConfig.FogStrength : 0.0f;
+            _states.AFogColor = gHorizonFogConfig.FogColor;
+        }
 
         if (darkFog)
         {
@@ -1589,16 +1605,8 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
             _states.FogColor = gHorizonFogConfig.DarkColor;
         }
 
-        if (alphaFog)
-        {
-            _states.AFog = true;
-            _states.AFogStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
-            _states.AFogLength = HorizonAlphaFogLength(nod->FogLength);
-            _states.AFogStrength = gHorizonFogConfig.FogStrength;
-            _states.AlphaBlend = true;
-            _states.SrcBlend = GL_SRC_ALPHA;
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-        }
+        // Atmosphere V2 blends RGB and preserves the original alpha/depth.
+        // Do not force transparent sorting/blending for opaque world geometry.
     }
 
     // OpenUA custom VP tint: enable a local alpha blend when the tint lowers alpha.
@@ -1701,6 +1709,11 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
 {
     if (RasterEtapes & RASTER_SKY)
     {
+        // OpenUA: render the camera-following sky with its own extended
+        // projection, then restore the unlocked world projection immediately.
+        SetProjectionMatrix(
+            mat4x4f::UAFrustum(_frustumNear, SKY_FAR_CLIP));
+
         _renderSkyBoxList.sort(TRenderNode::CompareSolid);
 
         while(!_renderSkyBoxList.empty())
@@ -1708,6 +1721,9 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
             RenderNode( _renderSkyBoxList.front() );
             _renderSkyBoxList.pop_front();
         }
+
+        // Every non-sky queue must continue with the normal world projection.
+        SetProjectionMatrix(_frustum);
     }
 
     if (RasterEtapes & RASTER_SOLID)
@@ -4274,7 +4290,7 @@ SDL_Surface *GFXEngine::Screen()
 
 
 // Draw line Bresenham's algorithm
-void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha)
+void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha, bool preserveSurfaceAlpha)
 {
     if ((line.Width() == 0 && line.Height() == 0) ||
          !Common::Rect(surface->w, surface->h).IsIn(line.P1()) ||
@@ -4287,6 +4303,49 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
     int yCount = line.Height();
 
     uint32_t color = SDL_MapRGBA(surface->format, cr, cg, cb, 255);
+
+    // The virtual UI surface is transparent and composited over the 3D world
+    // later. Pre-blending a partially transparent line against its cleared
+    // black RGB turns the fade into an opaque black silhouette. Preserve the
+    // destination alpha here so the final OpenGL composition performs the
+    // actual fade against the world framebuffer.
+    auto blendPixel = [&](uint32_t dstPixel) -> uint32_t
+    {
+        if (!preserveSurfaceAlpha)
+        {
+            if (alpha == 255)
+                return color;
+
+            uint8_t dr, dg, db;
+            SDL_GetRGB(dstPixel, surface->format, &dr, &dg, &db);
+            return SDL_MapRGB(surface->format,
+                (uint8_t)((cr * alpha + dr * (255 - alpha)) / 255),
+                (uint8_t)((cg * alpha + dg * (255 - alpha)) / 255),
+                (uint8_t)((cb * alpha + db * (255 - alpha)) / 255));
+        }
+
+        if (alpha == 0)
+            return dstPixel;
+        if (alpha == 255)
+            return color;
+
+        uint8_t dr, dg, db, da;
+        SDL_GetRGBA(dstPixel, surface->format, &dr, &dg, &db, &da);
+
+        const uint32_t invAlpha = 255u - alpha;
+        const uint32_t outAlpha = alpha + (da * invAlpha + 127u) / 255u;
+        if (outAlpha == 0)
+            return SDL_MapRGBA(surface->format, 0, 0, 0, 0);
+
+        const uint32_t denominator = outAlpha * 255u;
+        const uint32_t outR = (cr * alpha * 255u + dr * da * invAlpha + denominator / 2u) / denominator;
+        const uint32_t outG = (cg * alpha * 255u + dg * da * invAlpha + denominator / 2u) / denominator;
+        const uint32_t outB = (cb * alpha * 255u + db * da * invAlpha + denominator / 2u) / denominator;
+
+        return SDL_MapRGBA(surface->format,
+                           (uint8_t)outR, (uint8_t)outG, (uint8_t)outB,
+                           (uint8_t)outAlpha);
+    };
 
     int stepAdd, stepOdd;
     int steps, subSteps;
@@ -4361,17 +4420,7 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
 
             for (int i = 0; i <= steps; i++) // Verify i bound
             {
-                if (alpha == 255)
-                    *surf = color;
-                else
-                {
-                    uint8_t dr, dg, db;
-                    SDL_GetRGB(*surf, surface->format, &dr, &dg, &db);
-                    *surf = SDL_MapRGB(surface->format,
-                        (uint8_t)((cr * alpha + dr * (255 - alpha)) / 255),
-                        (uint8_t)((cg * alpha + dg * (255 - alpha)) / 255),
-                        (uint8_t)((cb * alpha + db * (255 - alpha)) / 255));
-                }
+                *surf = (uint16_t)blendPixel(*surf);
                 if ( t > 0 )
                 {
                     t += incr2;
@@ -4391,17 +4440,7 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
 
             for (int i = 0; i <= steps; i++) // Verify i bound
             {
-                if (alpha == 255)
-                    *surf = color;
-                else
-                {
-                    uint8_t dr, dg, db;
-                    SDL_GetRGB(*surf, surface->format, &dr, &dg, &db);
-                    *surf = SDL_MapRGB(surface->format,
-                        (uint8_t)((cr * alpha + dr * (255 - alpha)) / 255),
-                        (uint8_t)((cg * alpha + dg * (255 - alpha)) / 255),
-                        (uint8_t)((cb * alpha + db * (255 - alpha)) / 255));
-                }
+                *surf = blendPixel(*surf);
                 if ( t > 0 )
                 {
                     t += incr2;

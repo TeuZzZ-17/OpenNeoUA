@@ -172,6 +172,9 @@ enum OPENUA_STRING
     OUA_SMOOTH,
     OUA_RETRO_INTERFACE,
 
+    // Appended to preserve all existing OpenUA string IDs.
+    OUA_RENDER_DISTANCE,
+
     OUA_STRING_MAX
 };
 

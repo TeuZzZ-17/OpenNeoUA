@@ -32,13 +32,15 @@ Common::Ini::Key IniConf::GfxHorizonFogEnable("gfx.horizon_fog_enable", Common::
 Common::Ini::Key IniConf::GfxHorizonFogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxHorizonFogLength("gfx.horizon_fog_length", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxHorizonFogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string("1.0"));
+// OpenUA Horizon Atmosphere V2: RGB colour used to blend opaque world geometry
+// into the distant atmosphere. The effect preserves depth and object alpha.
+Common::Ini::Key IniConf::GfxHorizonFogColor("gfx.horizon_fog_color", Common::Ini::KT_WORD, std::string("150_155_160"));
 Common::Ini::Key IniConf::GfxHorizonDarkEnable("gfx.horizon_dark_enable", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxHorizonDarkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0_0_0"));
 Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
-Common::Ini::Key IniConf::GfxNormalVisualLimit("gfx.normal_visual_limit", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyRender("gfx.sky_render", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxAdditionalModes("gfx.custommodes", Common::Ini::KT_STRING);
@@ -339,13 +341,13 @@ void IniConf::Init()
         , &GfxHorizonFogStart
         , &GfxHorizonFogLength
         , &GfxHorizonFogStrength
+        , &GfxHorizonFogColor
         , &GfxHorizonDarkEnable
         , &GfxHorizonDarkStart
         , &GfxHorizonDarkLength
         , &GfxHorizonDarkStrength
         , &GfxHorizonDarkColor
         , &GfxRenderSectors
-        , &GfxNormalVisualLimit
         , &GfxSkyHeight
         , &GfxSkyRender
         , &GfxMode
