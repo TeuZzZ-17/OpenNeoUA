@@ -3864,7 +3864,7 @@ static float ParseVisualFilterStrength(std::string s, float fallback)
 
 static float ReadVisualFilterStrength()
 {
-    const float defaultStrength = 0.30f; // default if missing/invalid
+    const float defaultStrength = 0.25f; // default if missing/invalid
 
     return ParseVisualFilterStrength(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), defaultStrength);
 }
@@ -4231,13 +4231,13 @@ void GFXEngine::ApplyAtmosphereFromConfig()
     _atmosphereStrength = ParseAtmosphereValue(
         System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 1.0f, 0.0f, 1.0f);
     _atmosphereExposure = ParseAtmosphereValue(
-        System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 1.5f, 0.25f, 2.0f);
+        System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 1.7f, 0.25f, 2.0f);
     _atmosphereContrast = ParseAtmosphereValue(
-        System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 1.0f, 0.50f, 2.0f);
+        System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 0.95f, 0.50f, 2.0f);
     _atmosphereSaturation = ParseAtmosphereValue(
-        System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 1.0f, 0.0f, 2.0f);
+        System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 0.8f, 0.0f, 2.0f);
     _atmosphereVignette = ParseAtmosphereValue(
-        System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0.7f, 0.0f, 1.0f);
+        System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0.6f, 0.0f, 1.0f);
 
     if (!_glext)
     {
@@ -4298,7 +4298,7 @@ static std::string VhsBlendShaderText(bool vbo)
 void GFXEngine::SetVhsFilterEnabled(bool enabled)
 {
     _vhsFilterEnabled = enabled;
-    _vhsFilterStrength = ParseVhsFilterStrength(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 0.65f);
+    _vhsFilterStrength = ParseVhsFilterStrength(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 0.60f);
 
     if (!enabled)
     {

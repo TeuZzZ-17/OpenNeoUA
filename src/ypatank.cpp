@@ -1057,9 +1057,13 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         float v75 = fabs(v88);
         bool handBrakePressed = arg->inpt->Buttons.Is(3);
         int32_t playerTankBrakeTimeMs = ypatank_PlayerTankBrakeTimeMs();
+        bool tractionMatchesRequestedDirection =
+            (_thraction < -0.001f && v88 < -0.001f) ||
+            (_thraction > 0.001f && v88 > 0.001f);
         bool playerTankDirectionReversal =
-            (_fly_dir_length > 0.001f && v88 < -0.001f) ||
-            (_fly_dir_length < -0.001f && v88 > 0.001f);
+            (((_fly_dir_length > 0.001f && v88 < -0.001f) ||
+              (_fly_dir_length < -0.001f && v88 > 0.001f)) &&
+             !tractionMatchesRequestedDirection);
         bool applyPlayerCoastBrake = playerTankBrakeTimeMs > 0 &&
                                     !handBrakePressed &&
                                     (fabs(v88) <= 0.001f || playerTankDirectionReversal) &&
@@ -1068,12 +1072,14 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         if ( applyPlayerCoastBrake )
         {
             // User_layer is the direct-player path. Releasing forward/reverse
-            // or requesting the opposite direction removes engine traction
+            // or starting a genuine direction change removes engine traction
             // immediately, then the actual ground speed approaches zero over
-            // the configured time. Only after reaching zero can the opposite
-            // traction be applied; this prevents a forward tank from being
-            // pushed farther forward before it starts reversing. AI_layer3 and
-            // shared prototype force/airconst remain untouched.
+            // the configured time. Once traction is already accumulating in
+            // the requested direction, do not classify a small opposite slope
+            // drift as a new reversal every frame: doing so reset traction to
+            // zero forever and prevented a stopped tank from pulling away
+            // uphill or backing down an incline. AI_layer3 and shared prototype
+            // force/airconst remain untouched.
             _thraction = 0.0f;
 
             float referenceSpeed = 0.0f;
@@ -2237,6 +2243,18 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
     int v151 = 0;
     int v148 = 0;
 
+    // The legacy three-probe support triangle changes shape when the signed
+    // tank speed changes from forward to reverse. Its centroid is not the
+    // vehicle centre, so averaging the three hit heights produces two
+    // different vertical positions on the same planar slope. The custom
+    // player coast brake makes that sign transition happen from a true stop,
+    // exposing the difference as a visible one-frame "step". Keep vanilla
+    // placement when the feature is disabled; with brake-time enabled, derive
+    // the support height at the tank centre from the same three-hit plane.
+    const bool useCenteredBrakeTimeGroundHeight = ypatank_PlayerTankBrakeTimeMs() > 0;
+    bool haveCenteredGroundHeight = false;
+    float centeredGroundHeight = 0.0f;
+
     bool isViewer = getBACT_viewer();
 
     int v143 = getBACT_inputting();
@@ -2516,6 +2534,17 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
         if ( v170.y < -0.1 )
             v170 = -v170;
 
+        if ( useCenteredBrakeTimeGroundHeight && fabs(v170.y) > 0.0001f )
+        {
+            // Solve the support plane at the tank centre X/Z instead of at
+            // the direction-dependent probe triangle centroid. Forward and
+            // reverse probe layouts then yield the same Y on a planar slope.
+            centeredGroundHeight = arg136_2.isectPos.y -
+                                   (v170.x * (_position.x - arg136_2.isectPos.x) +
+                                    v170.z * (_position.z - arg136_2.isectPos.z)) / v170.y;
+            haveCenteredGroundHeight = std::isfinite(centeredGroundHeight);
+        }
+
         bool fixedTickGroundPose = ypatank_UseFixedTickGroundPose();
 
         if ( !fixedTickGroundPose && (_tankFlags & FLAG_TANK_TIP) )
@@ -2584,7 +2613,10 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
         }
         else
         {
-            _position.y = (arg136.isectPos.y + arg136_1.isectPos.y + arg136_2.isectPos.y) * 0.33333334 - v5;
+            if ( haveCenteredGroundHeight )
+                _position.y = centeredGroundHeight - v5;
+            else
+                _position.y = (arg136.isectPos.y + arg136_1.isectPos.y + arg136_2.isectPos.y) * 0.33333334 - v5;
         }
     }
     else

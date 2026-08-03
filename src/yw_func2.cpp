@@ -1910,17 +1910,17 @@ void UserData::ShowOptionsMenu()
 void UserData::AtmosphereOptionsLoad()
 {
     atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), 30);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), 25);
     atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 100);
     atmosphereValues[ATMOPT_EXPOSURE] =
-        FloatHundredFromString(System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 150, 25, 200);
+        FloatHundredFromString(System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 170, 25, 200);
     atmosphereValues[ATMOPT_CONTRAST] =
-        FloatHundredFromString(System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 100, 50, 200);
+        FloatHundredFromString(System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 95, 50, 200);
     atmosphereValues[ATMOPT_SATURATION] =
-        FloatHundredFromString(System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 100, 0, 200);
+        FloatHundredFromString(System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 80, 0, 200);
     atmosphereValues[ATMOPT_VIGNETTE] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 70);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 60);
 
     atmosphereValues[ATMOPT_FOG_START] =
         IntFromString(System::IniConf::GfxHorizonFogStart.Get<std::string>(), 4000, 0, 10000);
@@ -1940,7 +1940,7 @@ void UserData::AtmosphereOptionsLoad()
         IntFromString(System::IniConf::GameWorldUiMaxDistance.Get<std::string>(), 5000, 100, 20000);
 
     atmosphereValues[ATMOPT_VHS_STRENGTH] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 65);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 60);
 
     atmosphereSavedValues = atmosphereValues;
 
@@ -2169,14 +2169,14 @@ void UserData::AtmosphereOptionsReset()
 {
     atmosphereValues =
     {{
-        30, 100, 150, 100, 100, 70,
+        25, 100, 170, 95, 80, 60,
         4000, 2000, 80,
         2000, 2000, 65,
         5000,
-        65
+        60
     }};
 
-    confPaletteTheme = "Taerkasten_Golden_Order.pal";
+    confPaletteTheme = "Black_Wadi.pal";
     _settingsChangeOptions |= SETTINGS_CHANGE_PALETTE_THEME;
     UpdatePaletteThemeText();
 
@@ -2850,7 +2850,7 @@ bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &va
 {
     std::string saveValue = value;
     if (!StriCmp(key, "gfx.visual_filter_strength"))
-        saveValue = VisualFilterStrengthStorageValue(VisualFilterStrengthPercentFromString(value, 30));
+        saveValue = VisualFilterStrengthStorageValue(VisualFilterStrengthPercentFromString(value, 25));
 
     const std::string newLine = key + " = " + saveValue;
 
