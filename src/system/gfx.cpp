@@ -80,7 +80,7 @@ struct HorizonFogConfig
     bool FogLengthOverride = false;
     float FogStart = 0.0f;
     float FogLength = 0.0f;
-    float FogStrength = 1.0f;
+    float FogStrength = 0.8f;
     TGLColor FogColor = TGLColor(150.0f / 255.0f, 155.0f / 255.0f, 160.0f / 255.0f, 1.0f);
 
     bool DarkEnable = true;
@@ -88,7 +88,7 @@ struct HorizonFogConfig
     bool DarkLengthOverride = false;
     float DarkStart = 0.0f;
     float DarkLength = 0.0f;
-    float DarkStrength = 1.0f;
+    float DarkStrength = 0.65f;
     TGLColor DarkColor = TGLColor(0.0, 0.0, 0.0, 1.0);
 };
 
@@ -191,13 +191,13 @@ static void HorizonLoadConfigFromIni()
     cfg.FogEnable = System::IniConf::GfxHorizonFogEnable.Get<bool>();
     cfg.FogStartOverride = HorizonParseFloat(System::IniConf::GfxHorizonFogStart.Get<std::string>(), &cfg.FogStart);
     cfg.FogLengthOverride = HorizonParseFloat(System::IniConf::GfxHorizonFogLength.Get<std::string>(), &cfg.FogLength);
-    cfg.FogStrength = HorizonReadStrength(System::IniConf::GfxHorizonFogStrength.Get<std::string>(), 1.0f);
+    cfg.FogStrength = HorizonReadStrength(System::IniConf::GfxHorizonFogStrength.Get<std::string>(), 0.8f);
     cfg.FogColor = HorizonParseColor(System::IniConf::GfxHorizonFogColor.Get<std::string>(), cfg.FogColor);
 
     cfg.DarkEnable = System::IniConf::GfxHorizonDarkEnable.Get<bool>();
     cfg.DarkStartOverride = HorizonParseFloat(System::IniConf::GfxHorizonDarkStart.Get<std::string>(), &cfg.DarkStart);
     cfg.DarkLengthOverride = HorizonParseFloat(System::IniConf::GfxHorizonDarkLength.Get<std::string>(), &cfg.DarkLength);
-    cfg.DarkStrength = HorizonReadStrength(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 1.0f);
+    cfg.DarkStrength = HorizonReadStrength(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 0.65f);
     cfg.DarkColor = HorizonParseColor(System::IniConf::GfxHorizonDarkColor.Get<std::string>(), cfg.DarkColor);
 
     gHorizonFogConfig = cfg;
@@ -4231,13 +4231,13 @@ void GFXEngine::ApplyAtmosphereFromConfig()
     _atmosphereStrength = ParseAtmosphereValue(
         System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 1.0f, 0.0f, 1.0f);
     _atmosphereExposure = ParseAtmosphereValue(
-        System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 1.0f, 0.25f, 2.0f);
+        System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 1.5f, 0.25f, 2.0f);
     _atmosphereContrast = ParseAtmosphereValue(
         System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 1.0f, 0.50f, 2.0f);
     _atmosphereSaturation = ParseAtmosphereValue(
         System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 1.0f, 0.0f, 2.0f);
     _atmosphereVignette = ParseAtmosphereValue(
-        System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0.0f, 0.0f, 1.0f);
+        System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0.7f, 0.0f, 1.0f);
 
     if (!_glext)
     {
@@ -4298,7 +4298,7 @@ static std::string VhsBlendShaderText(bool vbo)
 void GFXEngine::SetVhsFilterEnabled(bool enabled)
 {
     _vhsFilterEnabled = enabled;
-    _vhsFilterStrength = ParseVhsFilterStrength(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 0.20f);
+    _vhsFilterStrength = ParseVhsFilterStrength(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 0.65f);
 
     if (!enabled)
     {

@@ -57,7 +57,7 @@ public:
     static Common::Ini::Key GfxPalette;
     static Common::Ini::Key GfxPaletteTheme;       // DEPRECATED/inert: legacy SET palette-theme remap (bypassed)
     static Common::Ini::Key GfxVisualFilter;       // OpenUA: fullscreen visual filter name (Data/Filters/*.pal), "Standard" = none
-    static Common::Ini::Key GfxVisualFilterStrength; // OpenUA: visual filter blend strength 0.0..1.0 (default 0.40)
+    static Common::Ini::Key GfxVisualFilterStrength; // OpenUA: visual filter blend strength 0.0..1.0 (default 0.30)
     static Common::Ini::Key GfxAtmosphereFx;       // OpenUA: optional world-only atmospheric post-process
     static Common::Ini::Key GfxAtmosphereStrength;
     static Common::Ini::Key GfxAtmosphereExposure;

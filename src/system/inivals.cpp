@@ -29,16 +29,16 @@ Common::Ini::Key IniConf::GfxNewSky("gfx.newsky", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GfxSkyDistance("gfx.skydistance", Common::Ini::KT_DIGIT, (int32_t)3000);
 Common::Ini::Key IniConf::GfxSkyLength("gfx.skylength", Common::Ini::KT_DIGIT, (int32_t)500);
 Common::Ini::Key IniConf::GfxHorizonFogEnable("gfx.horizon_fog_enable", Common::Ini::KT_BOOL, true);
-Common::Ini::Key IniConf::GfxHorizonFogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string("3000"));
+Common::Ini::Key IniConf::GfxHorizonFogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string("4000"));
 Common::Ini::Key IniConf::GfxHorizonFogLength("gfx.horizon_fog_length", Common::Ini::KT_WORD, std::string("2000"));
-Common::Ini::Key IniConf::GfxHorizonFogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string("0.60"));
+Common::Ini::Key IniConf::GfxHorizonFogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string("0.80"));
 // OpenUA Horizon Atmosphere V2: RGB colour used to blend opaque world geometry
 // into the distant atmosphere. The effect preserves depth and object alpha.
 Common::Ini::Key IniConf::GfxHorizonFogColor("gfx.horizon_fog_color", Common::Ini::KT_WORD, std::string("150_155_160"));
 Common::Ini::Key IniConf::GfxHorizonDarkEnable("gfx.horizon_dark_enable", Common::Ini::KT_BOOL, true);
-Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::Ini::KT_WORD, std::string("3000"));
+Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::Ini::KT_WORD, std::string("2000"));
 Common::Ini::Key IniConf::GfxHorizonDarkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string("2000"));
-Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("0.60"));
+Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("0.65"));
 Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0_0_0"));
 Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
@@ -52,18 +52,18 @@ Common::Ini::Key IniConf::GfxYRes("gfx.yres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxPalette("gfx.palette", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxPaletteTheme("gfx.palette_theme", Common::Ini::KT_WORD);
 // OpenUA custom: modern fullscreen visual filter (replaces the legacy palette-theme remap).
-Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
-Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.40"));
+Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Taerkasten_Golden_Order.pal"));
+Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.30"));
 Common::Ini::Key IniConf::GfxAtmosphereFx("gfx.atmosphere_fx", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::GfxAtmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string("1.20"));
+Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string("1.50"));
 Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string("1.00"));
-Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("0.90"));
-Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.50"));
+Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("1.00"));
+Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.70"));
 Common::Ini::Key IniConf::GfxVhsFilterName("gfx.vhs_filter_name", Common::Ini::KT_WORD, std::string("VHS"));
 Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/vhs.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/vhs_vbo.ps"));
-Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.15"));
+Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.65"));
 Common::Ini::Key IniConf::GfxDisplay("gfx.display", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxDisplay2("gfx.display2", Common::Ini::KT_WORD);
 
