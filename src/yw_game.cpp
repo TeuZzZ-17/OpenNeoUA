@@ -22,6 +22,12 @@
 
 extern uint32_t bact_id;
 
+namespace
+{
+constexpr int kMapBorderWallFirstLego = 210;
+constexpr int kMapBorderWallLastLego = 213;
+constexpr float kMapBorderWallVanillaHeight = 2700.0f;
+}
 
 NC_STACK_bitmap * loadDisk_screen(NC_STACK_ypaworld *yw)
 {
@@ -432,6 +438,8 @@ bool NC_STACK_ypaworld::LoadOwnerMap(const std::string &mapName)
 
 bool NC_STACK_ypaworld::LoadHightMap(const std::string &mapName)
 {
+    _borderWallTopReady = false;
+
     if ( _lvlHeightMap.IsNull() )
         _lvlHeightMap = World::LoadMapDataFromImage(mapName);
 
@@ -464,6 +472,29 @@ bool NC_STACK_ypaworld::LoadHightMap(const std::string &mapName)
                                          _cells(x - 1,     y).height +
                                          _cells(x - 1, y - 1).height +
                                          _cells(x    , y - 1).height ) / 4.0;
+        }
+    }
+
+    // The four vanilla RAND wall skeletons have a 2700-unit vertical span.
+    // Their local ground stays at Y=0, so a per-cell Y scale can align only
+    // the upper edge without moving the terrain strip at the map boundary.
+    for (int y = 0; y < _mapSize.y; y++)
+    {
+        for (int x = 0; x < _mapSize.x; x++)
+        {
+            const bool corner = (x == 0 || x == _mapSize.x - 1) &&
+                                (y == 0 || y == _mapSize.y - 1);
+            const cellArea &cell = _cells(x, y);
+
+            if ( !cell.IsBorder() || corner )
+                continue;
+
+            const float vanillaTopY = cell.height - kMapBorderWallVanillaHeight;
+            if ( !_borderWallTopReady || vanillaTopY < _borderWallTopY )
+            {
+                _borderWallTopY = vanillaTopY;
+                _borderWallTopReady = true;
+            }
         }
     }
 
@@ -2174,12 +2205,6 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
             {
                 vec3d pos = sct->p_cell->CenterPos + vec3d((v17 + xx) * 300.0, 0.0, (v17 + zz) * 300.0);
 
-                // Border sectors keep their gameplay/level-box behavior but
-                // contribute no visual geometry. Units in those cells are still
-                // rendered below through the normal unitsList path.
-                if ( pcell->IsBorder() )
-                    continue;
-
                 if ( v22 )
                 {
                     NC_STACK_base *bld = _legoArray[ _secTypeArray[ pcell->type_id ].SubSectors.At(xx, zz)->HPModels[0] ].Base;
@@ -2197,13 +2222,48 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
                 }
                 else
                 {
-                    NC_STACK_base *bld = _legoArray[ GetLegoBld(pcell, xx, zz) ].Base;
+                    const int legoId = GetLegoBld(pcell, xx, zz);
+                    NC_STACK_base *bld = _legoArray[ legoId ].Base;
+
+                    const bool straightenBorderWall =
+                        _borderWallTopReady && pcell->IsBorder() &&
+                        legoId >= kMapBorderWallFirstLego &&
+                        legoId <= kMapBorderWallLastLego;
+
+                    vec3d originalScale;
+                    bool originalStatic = false;
+
+                    if ( straightenBorderWall )
+                    {
+                        originalScale = bld->GetScale();
+                        originalStatic = bld->IsStatic();
+
+                        vec3d straightScale = originalScale;
+                        straightScale.y = (pcell->CenterPos.y - _borderWallTopY) /
+                                          kMapBorderWallVanillaHeight;
+
+                        // The target is selected from the highest vanilla wall,
+                        // therefore this normally only extends shorter segments.
+                        if ( !isfinite(straightScale.y) || straightScale.y < 1.0 )
+                            straightScale.y = 1.0;
+
+                        // Static BASE rendering ignores scale. Temporarily use the
+                        // full transform and restore the shared model immediately.
+                        bld->SetStatic(false);
+                        bld->SetScale(straightScale, NC_STACK_base::UF_Y);
+                    }
 
                     bld->SetPosition(pos);
 
                     NC_STACK_base::CheckOpts( &pcell->BldVPOpts.At(xx, zz), bld );
 
                     bld->Render(bs77, pcell->BldVPOpts.At(xx, zz));
+
+                    if ( straightenBorderWall )
+                    {
+                        bld->SetScale(originalScale, NC_STACK_base::UF_Y);
+                        bld->SetStatic(originalStatic);
+                    }
                 }
             }
         }
@@ -2440,7 +2500,6 @@ void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
             TRenderingSector &sct2 = rendering_sectors[j + 1][i];
 
             if (sct.dword4 == 1 && sct2.dword4 == 1 &&
-                !sct.p_cell->IsBorder() && !sct2.p_cell->IsBorder() &&
                 (sct.dword8 == 1 || sct2.dword8 == 1))
             {
                 float h;
@@ -2464,7 +2523,6 @@ void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
             TRenderingSector &sct2 = rendering_sectors[j][i + 1];
 
             if (sct.dword4 == 1 && sct2.dword4 == 1 &&
-                !sct.p_cell->IsBorder() && !sct2.p_cell->IsBorder() &&
                 (sct.dword8 == 1 || sct2.dword8 == 1))
             {
                 float h;

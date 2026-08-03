@@ -2791,6 +2791,11 @@ public:
     Common::PlaneVector<TCellFillerCh> _cellsVFCache;
     Common::PlaneVector<TCellFillerCh> _cellsHFCache;
 
+    // Visual-only target used to keep the upper edge of the vanilla RAND
+    // border walls level while preserving their ground geometry and gameplay.
+    float _borderWallTopY = 0.0f;
+    bool _borderWallTopReady = false;
+
     vec2d _mapLength;
 
     Common::PlaneVector<EnergyAccum> _energyAccumMap;
