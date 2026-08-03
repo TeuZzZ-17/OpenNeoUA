@@ -2699,6 +2699,10 @@ public:
     bool IsGemNotificationCaptureActive() const;
     bool HasActiveNewGemNotification() const;
     uint32_t GetNewGemNotificationElapsedTime() const;
+    int32_t GetGameplayRenderTimeStamp() const
+    {
+        return _gameplayRenderTimeBaseSet ? _gameplayRenderTimeBase + _timeStamp : _timeStamp;
+    }
     bool IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) const;
@@ -2774,6 +2778,7 @@ public:
         vec3d orientation = vec3d(0.0, 0.0, 0.0);
         std::vector<TAttachedFXTriangle> triangles;
         std::vector<vec3d> volumePoints;
+        vec3d geometryCenter = vec3d(0.0, 0.0, 0.0);
         float totalArea = 0.0f;
     };
 
@@ -3054,6 +3059,8 @@ public:
     int32_t _upgradeId = 0;
     uint32_t _upgradeTimeStamp = 0;
     double _gemUnlockTimeScaleRemainder = 0.0;
+    int32_t _gameplayRenderTimeBase = 0;
+    bool _gameplayRenderTimeBaseSet = false;
     int32_t _upgradeVehicleId = 0;
     int32_t _upgradeWeaponId = 0;
     int32_t _upgradeBuildId = 0;

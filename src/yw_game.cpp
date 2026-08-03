@@ -192,6 +192,8 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
 
     _debugAoeRings.clear();
     _timeStamp = 0;
+    _gameplayRenderTimeBase = 0;
+    _gameplayRenderTimeBaseSet = false;
     _msgTimestampHSReturn = 0;
     _msgTimestampEnemySector = 0;
     _msgTimestampGates = 0;
@@ -3461,7 +3463,11 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 
     rndrs.flags = (_skyRender && _skyObject) ? GFX::RFLAGS_ALPHA_FOG : 0;
     rndrs.frameTime = bs64->DTime;
-    rndrs.globTime = bs64->TimeStamp;
+    // Render-side animation belongs to the same gameplay clock as physics,
+    // AI and timers.  Using the platform timestamp here let animated VP
+    // textures and particle emitters continue at real speed during GEM
+    // slowdown even though their spawn intervals and lifetimes were scaled.
+    rndrs.globTime = GetGameplayRenderTimeStamp();
     rndrs.adeCount = 0;
 
     rndrs.minZ = 1.0;
@@ -3528,7 +3534,7 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 
 
     area_arg_65 rrg;
-    rrg.timeStamp = bs64->TimeStamp;
+    rrg.timeStamp = GetGameplayRenderTimeStamp();
     rrg.frameTime = bs64->DTime;
     rrg.minZ = 1.0;
     rrg.maxZ = rndrs.maxZ;
