@@ -1910,37 +1910,37 @@ void UserData::ShowOptionsMenu()
 void UserData::AtmosphereOptionsLoad()
 {
     atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), 40);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), 30);
     atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 100);
     atmosphereValues[ATMOPT_EXPOSURE] =
-        FloatHundredFromString(System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 100, 25, 200);
+        FloatHundredFromString(System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 150, 25, 200);
     atmosphereValues[ATMOPT_CONTRAST] =
         FloatHundredFromString(System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 100, 50, 200);
     atmosphereValues[ATMOPT_SATURATION] =
         FloatHundredFromString(System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 100, 0, 200);
     atmosphereValues[ATMOPT_VIGNETTE] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 70);
 
     atmosphereValues[ATMOPT_FOG_START] =
-        IntFromString(System::IniConf::GfxHorizonFogStart.Get<std::string>(), 3000, 0, 10000);
+        IntFromString(System::IniConf::GfxHorizonFogStart.Get<std::string>(), 4000, 0, 10000);
     atmosphereValues[ATMOPT_FOG_LENGTH] =
         IntFromString(System::IniConf::GfxHorizonFogLength.Get<std::string>(), 2000, 0, 10000);
     atmosphereValues[ATMOPT_FOG_STRENGTH] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonFogStrength.Get<std::string>(), 60);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonFogStrength.Get<std::string>(), 80);
 
     atmosphereValues[ATMOPT_DARK_START] =
-        IntFromString(System::IniConf::GfxHorizonDarkStart.Get<std::string>(), 3000, 0, 10000);
+        IntFromString(System::IniConf::GfxHorizonDarkStart.Get<std::string>(), 2000, 0, 10000);
     atmosphereValues[ATMOPT_DARK_LENGTH] =
         IntFromString(System::IniConf::GfxHorizonDarkLength.Get<std::string>(), 2000, 0, 10000);
     atmosphereValues[ATMOPT_DARK_STRENGTH] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 60);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 65);
 
     atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE] =
         IntFromString(System::IniConf::GameWorldUiMaxDistance.Get<std::string>(), 5000, 100, 20000);
 
     atmosphereValues[ATMOPT_VHS_STRENGTH] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 15);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 65);
 
     atmosphereSavedValues = atmosphereValues;
 
@@ -2169,14 +2169,14 @@ void UserData::AtmosphereOptionsReset()
 {
     atmosphereValues =
     {{
-        40, 100, 120, 100, 90, 50,
-        3000, 2000, 60,
-        3000, 2000, 60,
+        30, 100, 150, 100, 100, 70,
+        4000, 2000, 80,
+        2000, 2000, 65,
         5000,
-        15
+        65
     }};
 
-    confPaletteTheme = "Black_Wadi.pal";
+    confPaletteTheme = "Taerkasten_Golden_Order.pal";
     _settingsChangeOptions |= SETTINGS_CHANGE_PALETTE_THEME;
     UpdatePaletteThemeText();
 
