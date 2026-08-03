@@ -52,18 +52,18 @@ Common::Ini::Key IniConf::GfxYRes("gfx.yres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxPalette("gfx.palette", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxPaletteTheme("gfx.palette_theme", Common::Ini::KT_WORD);
 // OpenUA custom: modern fullscreen visual filter (replaces the legacy palette-theme remap).
-Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Taerkasten_Golden_Order.pal"));
-Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.30"));
+Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
+Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.25"));
 Common::Ini::Key IniConf::GfxAtmosphereFx("gfx.atmosphere_fx", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::GfxAtmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string("1.50"));
-Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string("1.00"));
-Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("1.00"));
-Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.70"));
+Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string("1.70"));
+Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string("0.95"));
+Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("0.80"));
+Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.60"));
 Common::Ini::Key IniConf::GfxVhsFilterName("gfx.vhs_filter_name", Common::Ini::KT_WORD, std::string("VHS"));
 Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/vhs.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/vhs_vbo.ps"));
-Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.65"));
+Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.60"));
 Common::Ini::Key IniConf::GfxDisplay("gfx.display", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxDisplay2("gfx.display2", Common::Ini::KT_WORD);
 
