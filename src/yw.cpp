@@ -477,13 +477,9 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
     if ( !owner || !localPosition )
         return false;
 
-    if ( randomOffsetPercent <= 0.0f )
-    {
-        *localPosition = vec3d(0.0, 0.0, 0.0);
-        return true;
-    }
-
-    if ( randomOffsetPercent > 100.0f )
+    if ( randomOffsetPercent < 0.0f )
+        randomOffsetPercent = 0.0f;
+    else if ( randomOffsetPercent > 100.0f )
         randomOffsetPercent = 100.0f;
 
     NC_STACK_base *source = owner->_vp_normal;
@@ -517,14 +513,17 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
         mat3x3 transform = yw_BuildVPRotationMatrix(owner->_vp_orientation);
         transform *= mat3x3::Scale(yw_SafeVPScale(owner->_vp_scale));
         yw_CollectAttachedFXTriangles(source, transform, vec3d(0.0, 0.0, 0.0), cache, &bounds);
+        if ( bounds.valid )
+            cache->geometryCenter = (bounds.min + bounds.max) * 0.5f;
         if ( !cache->triangles.empty() )
             yw_BuildAttachedFXVolumeCache(cache, bounds);
     }
 
+    vec3d sampledPosition;
     if ( !cache->volumePoints.empty() )
     {
         size_t index = (size_t)(rand() % (int)cache->volumePoints.size());
-        *localPosition = cache->volumePoints[index];
+        sampledPosition = cache->volumePoints[index];
     }
     else
     {
@@ -545,12 +544,21 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
         float r1 = (float)rand() / ((float)RAND_MAX + 1.0f);
         float r2 = (float)rand() / ((float)RAND_MAX + 1.0f);
         float root = sqrt(r1);
-        *localPosition = selected->a * (1.0f - root) +
-                         selected->b * (root * (1.0f - r2)) +
-                         selected->c * (root * r2);
+        sampledPosition = selected->a * (1.0f - root) +
+                          selected->b * (root * (1.0f - r2)) +
+                          selected->c * (root * r2);
     }
 
-    *localPosition = *localPosition * (randomOffsetPercent / 100.0f);
+    // random_offset_percent is a maximum radius measured from the real
+    // geometry centre, not a fixed contraction from the model pivot.  A value
+    // of 25 now picks a random point from the centre up to 25% of the sampled
+    // geometry direction; 100 covers the complete local geometry.  This keeps
+    // the same data-driven percentage meaningful for small, large and
+    // off-centre models.
+    const float maxFactor = randomOffsetPercent / 100.0f;
+    const float factor = ((float)rand() / ((float)RAND_MAX + 1.0f)) * maxFactor;
+    *localPosition = cache->geometryCenter +
+                     (sampledPosition - cache->geometryCenter) * factor;
 
     return true;
 }
@@ -1347,6 +1355,16 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         if ( !gameplayFrozen )
             _timeStamp += arg->DTime;
 
+        // Keep render animation phase identical to the platform timestamp when
+        // gameplay runs at 1.0, then advance it only through the scaled world
+        // clock during GEM slowdown.  This avoids both a phase change in normal
+        // play and a real-time animation leak while slowed.
+        if ( !_gameplayRenderTimeBaseSet )
+        {
+            _gameplayRenderTimeBase = arg->TimeStamp - _timeStamp;
+            _gameplayRenderTimeBaseSet = true;
+        }
+
         _frameTime = arg->DTime;
         _framesElapsed++;
 
@@ -1355,12 +1373,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         _updateMessage.frameTime = arg->DTime;
         _updateMessage.units_count = 0;
         _updateMessage.inpt = arg->field_8;
-        int32_t sprintFrameTime = unscaledFrameTime;
-        if ( gemTimeScale < 1.0f )
-            // The same global GEM scale must also govern the sprint state
-            // machine; otherwise pitch reaches full boost before physics does.
-            sprintFrameTime = std::max((int32_t)floor((double)sprintFrameTime * gemTimeScale + 0.5), 1);
-        UpdatePlayerSprint(_updateMessage.inpt, gameplayFrozen ? 0 : sprintFrameTime);
+        // Sprint consumes the same already-scaled gameplay delta as every
+        // other update path.  New systems should use _updateMessage.frameTime
+        // or _timeStamp rather than adding feature-specific GEM scaling.
+        UpdatePlayerSprint(_updateMessage.inpt, gameplayFrozen ? 0 : _updateMessage.frameTime);
         _FPS = 1024 / unscaledFrameTime;
         _profileVals[PFID_FPS] = _FPS;
 
@@ -3862,6 +3878,8 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _upgradeId = 0;
     _upgradeTimeStamp = 0;
     _gemUnlockTimeScaleRemainder = 0.0;
+    _gameplayRenderTimeBase = 0;
+    _gameplayRenderTimeBaseSet = false;
     _upgradeVehicleId = 0;
     _upgradeWeaponId = 0;
     _upgradeBuildId = 0;
@@ -8399,6 +8417,8 @@ size_t NC_STACK_ypaworld::ypaworld_func162(const std::string &fname)
     repl->filename = fname;
     _debugAoeRings.clear();
     _timeStamp = 0;
+    _gameplayRenderTimeBase = 0;
+    _gameplayRenderTimeBaseSet = false;
 
     if ( !recorder_open_replay(repl) )
         return 0;
