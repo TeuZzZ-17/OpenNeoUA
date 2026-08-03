@@ -303,13 +303,6 @@ std::string VoicepackFindEventFile(const std::string &dir, const char *eventKey)
     return "";
 }
 
-enum StatusIconPowerState
-{
-    STATUS_ICON_POWER_NONE = 0,
-    STATUS_ICON_POWER_REGEN,
-    STATUS_ICON_POWER_DRAIN
-};
-
 bool StatusIconIsNonRoboGun(NC_STACK_ypabact *bact)
 {
     if ( !bact || bact->_bact_type != BACT_TYPES_GUN )
@@ -650,66 +643,11 @@ void StatusIconRenderBitmap(NC_STACK_ypaworld *yw, NC_STACK_bitmap *bitmap, int 
     GFX::Engine.raster_func204(&arg);
 }
 
-StatusIconPowerState StatusIconGetPowerStationState(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
-{
-    if ( !yw || !bact || !bact->_pSector )
-        return STATUS_ICON_POWER_NONE;
-
-    if ( bact->_owner == World::OWNER_0 || bact->_status == BACT_STATUS_DEAD )
-        return STATUS_ICON_POWER_NONE;
-
-    cellArea *cell = bact->_pSector;
-    if ( !cell->owner || cell->energy_power <= 0 )
-        return STATUS_ICON_POWER_NONE;
-
-    bool hasPowerStationInRange = false;
-    for (const auto &psNode : yw->_powerStations)
-    {
-        const TPowerStationInfo &ps = psNode.second;
-        if ( !ps.pCell || ps.EffectivePower <= 0 || ps.pCell->owner != cell->owner )
-            continue;
-
-        if ( Common::ABS(ps.CellId.x - bact->_cellId.x) <= 1 &&
-             Common::ABS(ps.CellId.y - bact->_cellId.y) <= 1 )
-        {
-            hasPowerStationInRange = true;
-            break;
-        }
-    }
-
-    if ( !hasPowerStationInRange )
-        return STATUS_ICON_POWER_NONE;
-
-    if ( bact->_owner == cell->owner )
-    {
-        if ( bact->_energy >= bact->_energy_max )
-            return STATUS_ICON_POWER_NONE;
-
-        return STATUS_ICON_POWER_REGEN;
-    }
-
-    return STATUS_ICON_POWER_DRAIN;
-}
-
 bool StatusIconCanUseMobilePowerUnit(NC_STACK_ypabact *bact)
 {
     return StatusIconCanUseVehicleCapabilityUnit(bact) &&
            bact->_energy > 0 &&
            bact->_energy_max > 0;
-}
-
-void StatusIconCollectMobilePower(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, StatusIconList &icons, int &iconCount)
-{
-    if ( !yw || !StatusIconCanUseMobilePowerUnit(bact) )
-        return;
-
-    TMobilePowerInfluence mobilePower = yw->FindMobilePowerInfluenceForUnit(bact);
-
-    if ( mobilePower.AlliedPower > 0 && bact->_energy < bact->_energy_max )
-        StatusIconAdd(icons, iconCount, StatusIconRegenPath());
-
-    if ( mobilePower.EnemyPower > 0 )
-        StatusIconAdd(icons, iconCount, StatusIconDrainPath());
 }
 
 void StatusIconCollectMountedUnitGunIcons(const std::vector<World::TRoboGun> &guns, const std::string &fallbackIcon, StatusIconList &icons, int &iconCount)
@@ -818,13 +756,14 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
             StatusIconAdd(icons, iconCount, StatusIconProximityDefensePath());
     }
 
-    StatusIconPowerState powerState = StatusIconGetPowerStationState(yw, bact);
-    if ( powerState == STATUS_ICON_POWER_DRAIN )
-        StatusIconAdd(icons, iconCount, StatusIconDrainPath());
-    else if ( powerState == STATUS_ICON_POWER_REGEN )
+    // Regen/Drain icons and global unit FX consume the same world-side state.
+    // Icon assets, blink phase and HUD visibility do not participate in the
+    // decision, so disabling a PNG never disables the gameplay-linked FX.
+    const uint8_t energyState = yw ? yw->GetUnitEnergyVisualState(bact) : UNIT_ENERGY_VISUAL_NONE;
+    if ( energyState & UNIT_ENERGY_VISUAL_REGEN )
         StatusIconAdd(icons, iconCount, StatusIconRegenPath());
-
-    StatusIconCollectMobilePower(yw, bact, icons, iconCount);
+    if ( energyState & UNIT_ENERGY_VISUAL_DRAIN )
+        StatusIconAdd(icons, iconCount, StatusIconDrainPath());
 
     return iconCount;
 }
@@ -7675,7 +7614,7 @@ static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw)
 
 static float yw_GetWorldUiMaxDistance()
 {
-    constexpr float DEFAULT_DISTANCE = 4500.0f;
+    constexpr float DEFAULT_DISTANCE = 5000.0f;
     const std::string value = System::IniConf::GameWorldUiMaxDistance.Get<std::string>();
 
     if ( value.empty() || value.find(',') != std::string::npos )
@@ -7874,7 +7813,7 @@ static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
     selected.reserve(32);
     float maxDistance = yw_GetWorldUiMaxDistance();
     if (maxDistance <= 0.0f)
-        maxDistance = 4500.0f;
+        maxDistance = 5000.0f;
     const float maxDistanceSquared = maxDistance * maxDistance;
 
     auto collect = [&](NC_STACK_ypabact *bact)

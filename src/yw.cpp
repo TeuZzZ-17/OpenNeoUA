@@ -79,6 +79,74 @@ static float yw_GetGemUnlockTimeScale()
     }
 }
 
+struct PlayerSprintConfig
+{
+    bool complete = false;
+    float forceUpPercent = 0.0f;
+    float pitchUpPercent = 0.0f;
+    int32_t rampTime = 0;
+};
+
+static float yw_ParseSprintPercent(Common::Ini::Key &key, float maximum)
+{
+    const std::string value = key.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return 0.0f;
+
+    try
+    {
+        size_t pos = 0;
+        const float parsed = std::stof(value, &pos);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             !isfinite(parsed) || parsed <= 0.0f )
+            return 0.0f;
+
+        return std::min(parsed, maximum);
+    }
+    catch (...)
+    {
+        return 0.0f;
+    }
+}
+
+static int32_t yw_ParseSprintTime(Common::Ini::Key &key)
+{
+    const std::string value = key.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return 0;
+
+    try
+    {
+        size_t pos = 0;
+        const long parsed = std::stol(value, &pos, 0);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos )
+            return 0;
+
+        return (int32_t)std::max<long>(0, std::min<long>(parsed, 600000));
+    }
+    catch (...)
+    {
+        return 0;
+    }
+}
+
+static PlayerSprintConfig yw_GetPlayerSprintConfig()
+{
+    PlayerSprintConfig config;
+    config.complete = System::IniConf::GameSprintForceUpPercent.WasSet &&
+                      System::IniConf::GameSprintPitchUpPercent.WasSet &&
+                      System::IniConf::GameSprintRampTime.WasSet;
+    if ( !config.complete )
+        return config;
+
+    config.forceUpPercent = yw_ParseSprintPercent(
+        System::IniConf::GameSprintForceUpPercent, 1000.0f);
+    config.pitchUpPercent = yw_ParseSprintPercent(
+        System::IniConf::GameSprintPitchUpPercent, 100.0f);
+    config.rampTime = yw_ParseSprintTime(System::IniConf::GameSprintRampTime);
+    return config;
+}
+
 static float yw_GetActiveGemUnlockTimeScale(NC_STACK_ypaworld *yw)
 {
     if ( !yw || yw->_isNetGame || !yw->HasActiveNewGemNotification() )
@@ -1628,8 +1696,9 @@ bool NC_STACK_ypaworld::IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK
 
 bool NC_STACK_ypaworld::IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const
 {
-    if ( _isNetGame || !bact || bact != _userUnit || !bact->_sprint_enable ||
-         bact->_sprint_force_up_percent <= 0.0f || bact->_isDummy || IsSpectatorBact(bact) ||
+    const PlayerSprintConfig config = yw_GetPlayerSprintConfig();
+    if ( _isNetGame || !config.complete || config.forceUpPercent <= 0.0f ||
+         !bact || bact != _userUnit || bact->_isDummy || IsSpectatorBact(bact) ||
          !bact->getBACT_inputting() ||
          (bact->_status != BACT_STATUS_NORMAL && bact->_status != BACT_STATUS_IDLE) )
     {
@@ -1653,18 +1722,20 @@ bool NC_STACK_ypaworld::IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) c
 
 float NC_STACK_ypaworld::GetPlayerSprintForce(const NC_STACK_ypabact *bact) const
 {
+    const PlayerSprintConfig config = yw_GetPlayerSprintConfig();
     if ( !IsPlayerSprintEnabledFor(bact) || bact != _playerSprintUnit )
         return bact ? bact->_force : 0.0f;
 
-    return bact->_force * (1.0f + bact->_sprint_force_up_percent * 0.01f * _playerSprintFactor);
+    return bact->_force * (1.0f + config.forceUpPercent * 0.01f * _playerSprintFactor);
 }
 
 float NC_STACK_ypaworld::GetPlayerSprintPitchScale(const NC_STACK_ypabact *bact) const
 {
+    const PlayerSprintConfig config = yw_GetPlayerSprintConfig();
     if ( !IsPlayerSprintEnabledFor(bact) || bact != _playerSprintUnit )
         return 0.0f;
 
-    return bact->_sprint_pitch_up_percent * 0.01f * _playerSprintFactor;
+    return config.pitchUpPercent * 0.01f * _playerSprintFactor;
 }
 
 bool NC_STACK_ypaworld::IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) const
@@ -1735,7 +1806,9 @@ static bool yw_PlayerSprintCanRun(const NC_STACK_ypabact *bact, const TInputStat
            fabs(bact->_fly_dir_length) > 0.1f;
 }
 
-static void yw_ClampTankSprintExcessSpeed(NC_STACK_ypabact *bact, float sprintFactor)
+static void yw_ClampTankSprintExcessSpeed(NC_STACK_ypabact *bact,
+                                           float sprintFactor,
+                                           float sprintForceUpPercent)
 {
     if ( !bact || bact->_bact_type != BACT_TYPES_TANK || bact->_force <= 0.0f ||
          fabs(bact->_airconst_static) <= 0.001f )
@@ -1745,7 +1818,7 @@ static void yw_ClampTankSprintExcessSpeed(NC_STACK_ypabact *bact, float sprintFa
 
     const float normalSpeed = fabs(bact->_force / bact->_airconst_static);
     const float sprintSpeedLimit = normalSpeed *
-        (1.0f + bact->_sprint_force_up_percent * 0.01f * sprintFactor);
+        (1.0f + sprintForceUpPercent * 0.01f * sprintFactor);
 
     if ( fabs(bact->_fly_dir_length) > sprintSpeedLimit )
         bact->_fly_dir_length = bact->_fly_dir_length < 0.0f ? -sprintSpeedLimit : sprintSpeedLimit;
@@ -1761,7 +1834,8 @@ void NC_STACK_ypaworld::ResetPlayerSprint()
 
 void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
 {
-    if ( !IsPlayerSprintEnabledFor(_userUnit) )
+    const PlayerSprintConfig sprintConfig = yw_GetPlayerSprintConfig();
+    if ( !sprintConfig.complete || !IsPlayerSprintEnabledFor(_userUnit) )
     {
         ResetPlayerSprint();
         return;
@@ -1792,7 +1866,7 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
     const bool sprintRequested = sprintKeyDown &&
                                  yw_PlayerSprintCanRun(_playerSprintUnit, inpt);
 
-    const int32_t rampDuration = std::max(_playerSprintUnit->_sprint_ramp_time, 0);
+    const int32_t rampDuration = sprintConfig.rampTime;
 
     // Hold-to-sprint with no duration limit or cooldown. Sprint can only run
     // while the unit is moving and its forward accelerator is held. Pressing
@@ -1828,7 +1902,8 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
     {
         if ( rampDuration == 0 || _playerSprintFactor <= 0.0f )
         {
-            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f);
+            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f,
+                                          sprintConfig.forceUpPercent);
             _playerSprintState = PLAYER_SPRINT_READY;
             _playerSprintPhaseElapsed = 0;
             _playerSprintFactor = 0.0f;
@@ -1870,7 +1945,8 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
             phaseDuration = rampDuration;
             if ( phaseDuration == 0 )
             {
-                yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f);
+                yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f,
+                                              sprintConfig.forceUpPercent);
                 _playerSprintState = PLAYER_SPRINT_READY;
                 _playerSprintPhaseElapsed = 0;
                 _playerSprintFactor = 0.0f;
@@ -1893,7 +1969,8 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
             // overspeed (and therefore the vanilla engine pitch) otherwise lingers
             // until the player brakes. Recover only the sprint-created excess
             // along the same smooth ramp-down curve.
-            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, _playerSprintFactor);
+            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, _playerSprintFactor,
+                                          sprintConfig.forceUpPercent);
         }
 
         if ( _playerSprintPhaseElapsed < phaseDuration )
@@ -1907,7 +1984,8 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
             _playerSprintFactor = 1.0f;
             break;
         case PLAYER_SPRINT_RAMP_DOWN:
-            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f);
+            yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f,
+                                          sprintConfig.forceUpPercent);
             _playerSprintState = PLAYER_SPRINT_READY;
             _playerSprintFactor = 0.0f;
             break;
@@ -2805,10 +2883,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_base_force = vhcl.force;
         bacto->_base_maxrot = vhcl.maxrot;
         bacto->_force = vhcl.force;
-        bacto->_sprint_enable = vhcl.sprint_enable;
-        bacto->_sprint_force_up_percent = vhcl.sprint_force_up_percent;
-        bacto->_sprint_ramp_time = vhcl.sprint_ramp_time;
-        bacto->_sprint_pitch_up_percent = vhcl.sprint_pitch_up_percent;
         bacto->_maxrot = vhcl.maxrot;
         bacto->_height = vhcl.height;
         bacto->_radius = vhcl.radius;
@@ -5891,20 +5965,20 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     btn_64arg.xpos = bottomThirdBtnPosX;
     btn_64arg.ypos = bottomButtonsY;
     btn_64arg.width = button1LineWidth;
-    btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_ATMOSPHERE_VISIBILITY);
+    btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_MORE_OPTIONS);
     btn_64arg.caption2.clear();
     btn_64arg.downCode = 0;
     btn_64arg.upCode = 1320;
     btn_64arg.pressedCode = 0;
     btn_64arg.flags = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
     btn_64arg.button_id = 2;
-    btn_64arg.txt_r = _iniColors[68].r;
-    btn_64arg.txt_g = _iniColors[68].g;
-    btn_64arg.txt_b = _iniColors[68].b;
+    btn_64arg.txt_r = _iniColors[60].r;
+    btn_64arg.txt_g = _iniColors[60].g;
+    btn_64arg.txt_b = _iniColors[60].b;
 
     if ( !_GameShell->video_button->Add(&btn_64arg) )
     {
-        ypa_log_out("Unable to add Atmosphere & Visibility button\n");
+        ypa_log_out("Unable to add More Options button\n");
         return false;
     }
 

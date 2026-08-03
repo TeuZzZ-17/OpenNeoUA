@@ -144,19 +144,6 @@ static float ClampProjectileCorkspinForward(float value)
     return std::min(value, 1000.0f);
 }
 
-static float ClampSprintPercent(float value, float maximum)
-{
-    if ( !std::isfinite(value) || value <= 0.0f )
-        return 0.0f;
-
-    return std::min(value, maximum);
-}
-
-static int32_t ClampSprintTime(int32_t value)
-{
-    return std::max<int32_t>(0, std::min<int32_t>(value, 600000));
-}
-
 static void InitStatusSoundFXDefaults(World::TVhclSound &snd, int defaultVolume)
 {
     snd.volume = defaultVolume;
@@ -1388,22 +1375,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "force") )
     {
         _vhcl->force = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "sprint_enable") )
-    {
-        _vhcl->sprint_enable = StrGetBool(p2);
-    }
-    else if ( !StriCmp(p1, "sprint_force_up_percent") )
-    {
-        _vhcl->sprint_force_up_percent = ClampSprintPercent(parser.stof(p2, 0), 1000.0f);
-    }
-    else if ( !StriCmp(p1, "sprint_ramp_time") )
-    {
-        _vhcl->sprint_ramp_time = ClampSprintTime(parser.stol(p2, NULL, 0));
-    }
-    else if ( !StriCmp(p1, "sprint_pitch_up_percent") )
-    {
-        _vhcl->sprint_pitch_up_percent = ClampSprintPercent(parser.stof(p2, 0), 100.0f);
     }
     else if ( !StriCmp(p1, "maxrot") )
     {

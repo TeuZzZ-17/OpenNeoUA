@@ -247,6 +247,14 @@ Common::Ini::Key IniConf::GameFixedTickTankGroundPoseMult("game.fixed_tick_tank_
 // Value is the approximate stop time from canonical top speed, in milliseconds.
 // Missing, zero or negative keeps the vanilla endless-coast behavior.
 Common::Ini::Key IniConf::GamePlayerTankBrakeTime("game.player_tank_brake_time", Common::Ini::KT_DIGIT, (int32_t)0);
+// OpenUA custom: maximum altitude above the current sector for player-controlled aerial units.
+// 1600.0 preserves the existing vanilla user-flight limiter.
+Common::Ini::Key IniConf::GamePlayerMaxAltitude("game.player_max_altitude", Common::Ini::KT_WORD, std::string("1600.0"));
+// OpenUA custom: the player Sprint exists only when all three Sprint values are
+// explicitly present in Nucleus.ini. Missing any one of them disables Sprint.
+Common::Ini::Key IniConf::GameSprintForceUpPercent("game.sprint_force_up_percent", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameSprintPitchUpPercent("game.sprint_pitch_up_percent", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameTimeLine("game.timeline", Common::Ini::KT_DIGIT, (int32_t)600000);
 Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::KT_BOOL, false);
@@ -270,10 +278,40 @@ Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameGemUnlockTimeScale("game.gem_unlock_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("4500"));
+Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5000"));
 // OpenUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
 Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
+
+// OpenUA custom: opt-in regen/drain unit FX. All numeric values use KT_WORD so
+// malformed user input can be validated safely by World::EnergyFX instead of
+// throwing while Nucleus.ini is parsed. VP/interval/count default to zero, so
+// an absent or incomplete profile is fully disabled.
+Common::Ini::Key IniConf::GfxRegenDecorationFXVP("gfx.regen_decoration_fx_vp", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXVPScale("gfx.regen_decoration_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXVPSpinX("gfx.regen_decoration_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXVPSpinY("gfx.regen_decoration_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXVPSpinZ("gfx.regen_decoration_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXVPTint("gfx.regen_decoration_fx_vp_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXDuration("gfx.regen_decoration_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXIntervalMin("gfx.regen_decoration_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXIntervalMax("gfx.regen_decoration_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXCountMin("gfx.regen_decoration_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXCountMax("gfx.regen_decoration_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXRandomOffsetPercent("gfx.regen_decoration_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
+
+Common::Ini::Key IniConf::GfxDrainDecorationFXVP("gfx.drain_decoration_fx_vp", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXVPScale("gfx.drain_decoration_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXVPSpinX("gfx.drain_decoration_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXVPSpinY("gfx.drain_decoration_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXVPSpinZ("gfx.drain_decoration_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXVPTint("gfx.drain_decoration_fx_vp_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXDuration("gfx.drain_decoration_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXIntervalMin("gfx.drain_decoration_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXIntervalMax("gfx.drain_decoration_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXCountMin("gfx.drain_decoration_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXCountMax("gfx.drain_decoration_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXRandomOffsetPercent("gfx.drain_decoration_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
 
 // OpenUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -504,6 +542,10 @@ void IniConf::Init()
         , &GameNewAI
         , &GameFixedTickTankGroundPoseMult
         , &GamePlayerTankBrakeTime
+        , &GamePlayerMaxAltitude
+        , &GameSprintForceUpPercent
+        , &GameSprintPitchUpPercent
+        , &GameSprintRampTime
         , &GameTimeLine
         , &GameRoboPlayerAIBehavior
         , &GameSpectatorMode
@@ -522,6 +564,30 @@ void IniConf::Init()
         , &GameWorldUiMaxDistance
         , &GameMgunRange
         , &GameMgunAiFireAlignment
+        , &GfxRegenDecorationFXVP
+        , &GfxRegenDecorationFXVPScale
+        , &GfxRegenDecorationFXVPSpinX
+        , &GfxRegenDecorationFXVPSpinY
+        , &GfxRegenDecorationFXVPSpinZ
+        , &GfxRegenDecorationFXVPTint
+        , &GfxRegenDecorationFXDuration
+        , &GfxRegenDecorationFXIntervalMin
+        , &GfxRegenDecorationFXIntervalMax
+        , &GfxRegenDecorationFXCountMin
+        , &GfxRegenDecorationFXCountMax
+        , &GfxRegenDecorationFXRandomOffsetPercent
+        , &GfxDrainDecorationFXVP
+        , &GfxDrainDecorationFXVPScale
+        , &GfxDrainDecorationFXVPSpinX
+        , &GfxDrainDecorationFXVPSpinY
+        , &GfxDrainDecorationFXVPSpinZ
+        , &GfxDrainDecorationFXVPTint
+        , &GfxDrainDecorationFXDuration
+        , &GfxDrainDecorationFXIntervalMin
+        , &GfxDrainDecorationFXIntervalMax
+        , &GfxDrainDecorationFXCountMin
+        , &GfxDrainDecorationFXCountMax
+        , &GfxDrainDecorationFXRandomOffsetPercent
         , &UiStatusIconRegen
         , &UiStatusIconDrain
         , &UiStatusIconDamaged

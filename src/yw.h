@@ -1914,6 +1914,16 @@ struct TMobilePowerInfluence
     float EnemyEnergyPower = 0.0;
 };
 
+// Shared runtime state used by both the automatic Regen/Drain Status Icons
+// and the optional global unit FX. Keep this independent from icon assets,
+// blinking and HUD visibility so world visuals never depend on UI rendering.
+enum UnitEnergyVisualState
+{
+    UNIT_ENERGY_VISUAL_NONE  = 0,
+    UNIT_ENERGY_VISUAL_REGEN = 1 << 0,
+    UNIT_ENERGY_VISUAL_DRAIN = 1 << 1
+};
+
 struct TLego
 {
     NC_STACK_base *Base = NULL;
@@ -2377,6 +2387,7 @@ public:
     void AddMobileVehiclePowerToAccumMap();
     bool IsValidMobilePowerGenerator(NC_STACK_ypabact *unit);
     TMobilePowerInfluence FindMobilePowerInfluenceForUnit(NC_STACK_ypabact *target);
+    uint8_t GetUnitEnergyVisualState(NC_STACK_ypabact *target);
 
     void sub_4D12D8(int id, int a3);
     void sub_4D1594(int id);

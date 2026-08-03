@@ -2174,6 +2174,12 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
             {
                 vec3d pos = sct->p_cell->CenterPos + vec3d((v17 + xx) * 300.0, 0.0, (v17 + zz) * 300.0);
 
+                // Border sectors keep their gameplay/level-box behavior but
+                // contribute no visual geometry. Units in those cells are still
+                // rendered below through the normal unitsList path.
+                if ( pcell->IsBorder() )
+                    continue;
+
                 if ( v22 )
                 {
                     NC_STACK_base *bld = _legoArray[ _secTypeArray[ pcell->type_id ].SubSectors.At(xx, zz)->HPModels[0] ].Base;
@@ -2433,7 +2439,9 @@ void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
             TRenderingSector &sct = rendering_sectors[j][i];
             TRenderingSector &sct2 = rendering_sectors[j + 1][i];
 
-            if (sct.dword4 == 1 && sct2.dword4 == 1 && (sct.dword8 == 1 || sct2.dword8 == 1))
+            if (sct.dword4 == 1 && sct2.dword4 == 1 &&
+                !sct.p_cell->IsBorder() && !sct2.p_cell->IsBorder() &&
+                (sct.dword8 == 1 || sct2.dword8 == 1))
             {
                 float h;
                 if (rendering_sectors[j + 1][i + 1].dword4 == 1)
@@ -2455,7 +2463,9 @@ void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
             TRenderingSector &sct = rendering_sectors[j][i];
             TRenderingSector &sct2 = rendering_sectors[j][i + 1];
 
-            if (sct.dword4 == 1 && sct2.dword4 == 1 && (sct.dword8 == 1 || sct2.dword8 == 1))
+            if (sct.dword4 == 1 && sct2.dword4 == 1 &&
+                !sct.p_cell->IsBorder() && !sct2.p_cell->IsBorder() &&
+                (sct.dword8 == 1 || sct2.dword8 == 1))
             {
                 float h;
                 if (rendering_sectors[j + 1][i + 1].dword4 == 1)
@@ -4211,6 +4221,102 @@ TMobilePowerInfluence NC_STACK_ypaworld::FindMobilePowerInfluenceForUnit(NC_STAC
         yw_AddMobilePowerInfluenceFromGenerator(this, target, generator, influence);
 
     return influence;
+}
+
+
+uint8_t NC_STACK_ypaworld::GetUnitEnergyVisualState(NC_STACK_ypabact *target)
+{
+    if ( !target )
+        return UNIT_ENERGY_VISUAL_NONE;
+
+    // Match the actor domain where a Regen/Drain Status Icon can be meaningful.
+    // Missiles and strategic-UI-hidden helper actors must never start unit FX.
+    if ( target->_owner == World::OWNER_0 ||
+         target->_bact_type == BACT_TYPES_MISSLE ||
+         target->ShouldHideFromStrategicUI() )
+    {
+        target->_energy_visual_state_time = _timeStamp;
+        target->_energy_visual_state = UNIT_ENERGY_VISUAL_NONE;
+        return UNIT_ENERGY_VISUAL_NONE;
+    }
+
+    // Both the actor update and world-space UI may query this in the same frame.
+    // Cache per world timestamp so the shared condition is evaluated once rather
+    // than duplicating power-station and mobile-generator scans.
+    if ( target->_energy_visual_state_time == _timeStamp )
+        return target->_energy_visual_state;
+
+    uint8_t state = UNIT_ENERGY_VISUAL_NONE;
+
+    // Preserve the exact power-station condition previously used by the Status
+    // Icon renderer: a powered station owned by the sector must be within the
+    // legacy 3x3 sector neighbourhood. Friendly units regen only below max
+    // energy; hostile units are in drain state.
+    cellArea *cell = target->_pSector;
+    if ( cell &&
+         target->_owner != World::OWNER_0 &&
+         target->_status != BACT_STATUS_DEAD &&
+         cell->owner &&
+         cell->energy_power > 0 )
+    {
+        bool hasPowerStationInRange = false;
+        for (const auto &psNode : _powerStations)
+        {
+            const TPowerStationInfo &ps = psNode.second;
+            if ( !ps.pCell || ps.EffectivePower <= 0 || ps.pCell->owner != cell->owner )
+                continue;
+
+            if ( Common::ABS(ps.CellId.x - target->_cellId.x) <= 1 &&
+                 Common::ABS(ps.CellId.y - target->_cellId.y) <= 1 )
+            {
+                hasPowerStationInRange = true;
+                break;
+            }
+        }
+
+        if ( hasPowerStationInRange )
+        {
+            if ( target->_owner == cell->owner )
+            {
+                if ( target->_energy < target->_energy_max )
+                    state |= UNIT_ENERGY_VISUAL_REGEN;
+            }
+            else
+            {
+                state |= UNIT_ENERGY_VISUAL_DRAIN;
+            }
+        }
+    }
+
+    // Preserve the exact mobile-power eligibility that the Status Icon path
+    // used before this condition was moved into the world: ordinary live
+    // vehicle units only, with a meaningful energy pool and no hidden/death
+    // transition state. Regen and drain remain independent because allied and
+    // enemy mobile influences can overlap.
+    const bool canUseMobilePower =
+        target->_owner != World::OWNER_0 &&
+        target->_bact_type != BACT_TYPES_MISSLE &&
+        target->_bact_type != BACT_TYPES_ROBO &&
+        target->_bact_type != BACT_TYPES_GUN &&
+        target->_status != BACT_STATUS_DEAD &&
+        target->_status != BACT_STATUS_CREATE &&
+        target->_status != BACT_STATUS_BEAM &&
+        !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER)) &&
+        target->_energy > 0 &&
+        target->_energy_max > 0;
+
+    if ( canUseMobilePower )
+    {
+        TMobilePowerInfluence mobilePower = FindMobilePowerInfluenceForUnit(target);
+        if ( mobilePower.AlliedPower > 0 && target->_energy < target->_energy_max )
+            state |= UNIT_ENERGY_VISUAL_REGEN;
+        if ( mobilePower.EnemyPower > 0 )
+            state |= UNIT_ENERGY_VISUAL_DRAIN;
+    }
+
+    target->_energy_visual_state_time = _timeStamp;
+    target->_energy_visual_state = state;
+    return state;
 }
 
 void NC_STACK_ypaworld::AddMobileVehiclePowerToAccumMap()

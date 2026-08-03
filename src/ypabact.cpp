@@ -22,6 +22,7 @@
 #include "system/inpt.h"
 #include "system/inivals.h"
 #include "world/clonebalance.h"
+#include "world/energyfx.h"
 #include "world/spin.h"
 
 #include "log.h"
@@ -157,6 +158,16 @@ static float ypabact_ReadNonNegativeFloatIni(Common::Ini::Key &key, float dflt)
 static float ypabact_ReadFallDamageMultiplier()
 {
     return ypabact_ReadNonNegativeFloatIni(System::IniConf::GameFallDamageMultiplier, 1.0f);
+}
+
+static float ypabact_ReadPlayerMaxAltitude()
+{
+    constexpr float DefaultAltitude = 1600.0f;
+    float altitude = ypabact_ReadNonNegativeFloatIni(System::IniConf::GamePlayerMaxAltitude, DefaultAltitude);
+    if ( !isfinite(altitude) || altitude <= 0.0f )
+        return DefaultAltitude;
+
+    return altitude;
 }
 
 static float ypabact_GetMinigunRange()
@@ -2211,7 +2222,8 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mgun_sector_damage_accum = 0.0;
     _mgun_vp_fire_end_time = 0;
 //    ypabact.field_3CE = 0;
-    _height_max_user = 1600.0;
+    // Keep the vanilla user-flight limiter shape; only its altitude is configurable.
+    _height_max_user = ypabact_ReadPlayerMaxAltitude();
     _gun_radius = 5.0;
     _gun_power = 4000.0;
     _spawn_units = 0;
@@ -3240,6 +3252,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateMortar(arg);
     ResolveGenesisCompoundOverlap(arg->frameTime);
     AI_layer1(arg);
+    UpdateEnergyStatusFX(arg);
     UpdateLaser(arg); // OpenUA custom: process this frame's laser fire request (must run after AI_layer1 firing)
     UpdateVerticalLaser(arg);
     UpdateAoePush(arg);
@@ -3705,6 +3718,91 @@ void NC_STACK_ypabact::UpdateDamageFX(update_msg *)
 
     ypabact_SpawnDamagedFXEvent(this);
     ypabact_PlayDamagedEventShake(this);
+}
+
+
+static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
+                                             const World::EnergyFX::Config &config)
+{
+    if ( !bact || !config.IsEnabled() )
+        return;
+
+    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
+    if ( !world )
+        return;
+
+    int spawnCount = ypabact_RandomInRange(config.count_min, config.count_max);
+    const vec3d axisScale(config.vp_scale, config.vp_scale, config.vp_scale);
+
+    for (int i = 0; i < spawnCount; i++)
+    {
+        vec3d localOffset(0.0, 0.0, 0.0);
+        world->SampleAttachedFXLocalPosition(bact,
+                                             config.random_offset_percent,
+                                             &localOffset);
+
+        // Reuse the attached transient-VP path used by vehicle Decoration FX.
+        // The effect follows the unit and its visual transform but never affects
+        // collision, energy, AI or the Status Icon renderer itself.
+        world->SpawnAttachedTransientVP(config.vp,
+                                        bact,
+                                        localOffset,
+                                        config.duration,
+                                        1.0,
+                                        true,
+                                        config.vp_tint,
+                                        axisScale,
+                                        config.vp_spin,
+                                        false,
+                                        vec3d(0.0, 0.0, 0.0),
+                                        true,
+                                        NC_STACK_ypaworld::TTransientVPParticleControls(),
+                                        true);
+    }
+}
+
+static void ypabact_UpdateEnergyStatusFXProfile(NC_STACK_ypabact *bact,
+                                                bool active,
+                                                const World::EnergyFX::Config &config,
+                                                int32_t &nextTime)
+{
+    if ( !active || !config.IsEnabled() || !ypabact_CanSpawnDecorationFX(bact) )
+    {
+        nextTime = 0;
+        return;
+    }
+
+    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
+    if ( !world || !world->UpdateRandomFXTimer(config.interval_min, config.interval_max, nextTime) )
+        return;
+
+    ypabact_SpawnEnergyStatusFXEvent(bact, config);
+}
+
+void NC_STACK_ypabact::UpdateEnergyStatusFX(update_msg *)
+{
+    const World::EnergyFX::Config &regenConfig = World::EnergyFX::Regen();
+    const World::EnergyFX::Config &drainConfig = World::EnergyFX::Drain();
+
+    // Default vanilla-safe fast path: with both profiles absent/incomplete, do
+    // not perform any additional power-source scan for visual effects.
+    if ( !_world || (!regenConfig.IsEnabled() && !drainConfig.IsEnabled()) )
+    {
+        _regen_fx_next_time = 0;
+        _drain_fx_next_time = 0;
+        return;
+    }
+
+    const uint8_t state = _world->GetUnitEnergyVisualState(this);
+
+    ypabact_UpdateEnergyStatusFXProfile(this,
+                                        (state & UNIT_ENERGY_VISUAL_REGEN) != 0,
+                                        regenConfig,
+                                        _regen_fx_next_time);
+    ypabact_UpdateEnergyStatusFXProfile(this,
+                                        (state & UNIT_ENERGY_VISUAL_DRAIN) != 0,
+                                        drainConfig,
+                                        _drain_fx_next_time);
 }
 
 void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
@@ -13462,6 +13560,10 @@ void NC_STACK_ypabact::Renew()
     _aoePushVel = vec3d(0.0, 0.0, 0.0);
     _deinitInProgress = false;
     ypabact_ResetDamagedFX(this);
+    _regen_fx_next_time = 0;
+    _drain_fx_next_time = 0;
+    _energy_visual_state_time = -1;
+    _energy_visual_state = UNIT_ENERGY_VISUAL_NONE;
     ClearActiveDebuff();
     _fe_time = -45000;
     _salve_counter = 0;
@@ -16047,6 +16149,7 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     UpdateActiveDebuff(upd);
     UpdateDamageFX(upd);
     UpdateDecorationFX(upd);
+    UpdateEnergyStatusFX(upd);
 
     ypabact_func117(upd);
 
