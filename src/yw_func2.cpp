@@ -1937,7 +1937,7 @@ void UserData::AtmosphereOptionsLoad()
         VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 60);
 
     atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE] =
-        IntFromString(System::IniConf::GameWorldUiMaxDistance.Get<std::string>(), 4500, 100, 20000);
+        IntFromString(System::IniConf::GameWorldUiMaxDistance.Get<std::string>(), 5000, 100, 20000);
 
     atmosphereValues[ATMOPT_VHS_STRENGTH] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 15);
@@ -2172,7 +2172,7 @@ void UserData::AtmosphereOptionsReset()
         40, 100, 120, 100, 90, 50,
         3000, 2000, 60,
         3000, 2000, 60,
-        4500,
+        5000,
         15
     }};
 

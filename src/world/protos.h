@@ -502,10 +502,6 @@ struct TVhclProto
     bool has_push_resistance = false; // true only when push_resistance is explicitly authored
     float mass = 0.0;
     float force = 0.0;
-    bool sprint_enable = false;
-    float sprint_force_up_percent = 0.0f;
-    int32_t sprint_ramp_time = 0;
-    float sprint_pitch_up_percent = 0.0f;
     float airconst = 0.0;
     float maxrot = 0.0;
     float height = 0.0;

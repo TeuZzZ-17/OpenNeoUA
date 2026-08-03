@@ -1057,16 +1057,22 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         float v75 = fabs(v88);
         bool handBrakePressed = arg->inpt->Buttons.Is(3);
         int32_t playerTankBrakeTimeMs = ypatank_PlayerTankBrakeTimeMs();
+        bool playerTankDirectionReversal =
+            (_fly_dir_length > 0.001f && v88 < -0.001f) ||
+            (_fly_dir_length < -0.001f && v88 > 0.001f);
         bool applyPlayerCoastBrake = playerTankBrakeTimeMs > 0 &&
                                     !handBrakePressed &&
-                                    fabs(v88) <= 0.001f &&
+                                    (fabs(v88) <= 0.001f || playerTankDirectionReversal) &&
                                     (_status_flg & BACT_STFLAG_LAND);
 
         if ( applyPlayerCoastBrake )
         {
             // User_layer is the direct-player path. Releasing forward/reverse
-            // removes engine traction immediately, then the actual ground
-            // speed approaches zero over the configured time. AI_layer3 and
+            // or requesting the opposite direction removes engine traction
+            // immediately, then the actual ground speed approaches zero over
+            // the configured time. Only after reaching zero can the opposite
+            // traction be applied; this prevents a forward tank from being
+            // pushed farther forward before it starts reversing. AI_layer3 and
             // shared prototype force/airconst remain untouched.
             _thraction = 0.0f;
 

@@ -495,6 +495,7 @@ public:
     void StopVerticalLaser();
     void UpdateDamageFX(update_msg *arg);
     void UpdateDecorationFX(update_msg *arg);
+    void UpdateEnergyStatusFX(update_msg *arg);
     void AddAoePush(const vec3d &dir, float distance); // queue smooth weapon knockback
     void ApplyWeaponRecoil(const vec3d &dir, float recoil);
     void UpdateAoePush(update_msg *arg);
@@ -828,10 +829,6 @@ public:
     float _base_force;
     float _base_maxrot;
     float _force;
-    bool _sprint_enable = false;
-    float _sprint_force_up_percent = 0.0f;
-    int32_t _sprint_ramp_time = 0;
-    float _sprint_pitch_up_percent = 0.0f;
     float _airconst;
     float _airconst_static;
     float _maxrot;
@@ -896,6 +893,10 @@ public:
     World::TDecorationFXConfig _decoration_fx;
     int32_t _decoration_fx_next_time = 0;
     int32_t _decoration_fx_persistent_id = 0;
+    int32_t _regen_fx_next_time = 0;
+    int32_t _drain_fx_next_time = 0;
+    int32_t _energy_visual_state_time = -1;
+    uint8_t _energy_visual_state = 0;
     float _damaged_force_malus;
     float _damaged_maxrot_malus;
     float _damaged_snd_pitch_mult;

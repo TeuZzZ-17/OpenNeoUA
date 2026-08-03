@@ -228,6 +228,10 @@ public:
     static Common::Ini::Key GameNewAI;
     static Common::Ini::Key GameFixedTickTankGroundPoseMult;
     static Common::Ini::Key GamePlayerTankBrakeTime;
+    static Common::Ini::Key GamePlayerMaxAltitude;
+    static Common::Ini::Key GameSprintForceUpPercent;
+    static Common::Ini::Key GameSprintPitchUpPercent;
+    static Common::Ini::Key GameSprintRampTime;
     static Common::Ini::Key GameTimeLine;
     static Common::Ini::Key GameRoboPlayerAIBehavior;
     static Common::Ini::Key GameSpectatorMode;
@@ -246,6 +250,35 @@ public:
     static Common::Ini::Key GameWorldUiMaxDistance;
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
+
+    // OpenUA: global opt-in visual profiles for units currently under the same
+    // regen/drain conditions used by the automatic Status Icons. A missing or
+    // incomplete profile is disabled and never changes energy gameplay.
+    static Common::Ini::Key GfxRegenDecorationFXVP;
+    static Common::Ini::Key GfxRegenDecorationFXVPScale;
+    static Common::Ini::Key GfxRegenDecorationFXVPSpinX;
+    static Common::Ini::Key GfxRegenDecorationFXVPSpinY;
+    static Common::Ini::Key GfxRegenDecorationFXVPSpinZ;
+    static Common::Ini::Key GfxRegenDecorationFXVPTint;
+    static Common::Ini::Key GfxRegenDecorationFXDuration;
+    static Common::Ini::Key GfxRegenDecorationFXIntervalMin;
+    static Common::Ini::Key GfxRegenDecorationFXIntervalMax;
+    static Common::Ini::Key GfxRegenDecorationFXCountMin;
+    static Common::Ini::Key GfxRegenDecorationFXCountMax;
+    static Common::Ini::Key GfxRegenDecorationFXRandomOffsetPercent;
+
+    static Common::Ini::Key GfxDrainDecorationFXVP;
+    static Common::Ini::Key GfxDrainDecorationFXVPScale;
+    static Common::Ini::Key GfxDrainDecorationFXVPSpinX;
+    static Common::Ini::Key GfxDrainDecorationFXVPSpinY;
+    static Common::Ini::Key GfxDrainDecorationFXVPSpinZ;
+    static Common::Ini::Key GfxDrainDecorationFXVPTint;
+    static Common::Ini::Key GfxDrainDecorationFXDuration;
+    static Common::Ini::Key GfxDrainDecorationFXIntervalMin;
+    static Common::Ini::Key GfxDrainDecorationFXIntervalMax;
+    static Common::Ini::Key GfxDrainDecorationFXCountMin;
+    static Common::Ini::Key GfxDrainDecorationFXCountMax;
+    static Common::Ini::Key GfxDrainDecorationFXRandomOffsetPercent;
 
     // OpenUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only
