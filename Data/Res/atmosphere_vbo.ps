@@ -33,17 +33,27 @@ void main()
     color *= atmosphereExposure;
     color = (color - 0.5) * atmosphereContrast + 0.5;
 
-    float grey = uaLuma(color);
+    float grey = max(uaLuma(color), 0.0);
     color = mix(vec3(grey), color, atmosphereSaturation);
 
-    grey = uaLuma(color);
-    float shadow = 1.0 - smoothstep(0.10, 0.54, grey);
-    float highlight = smoothstep(0.46, 0.91, grey);
-    color *= mix(vec3(1.0), vec3(0.88, 0.97, 1.06), shadow * 0.44);
-    color *= mix(vec3(1.0), vec3(1.07, 1.01, 0.87), highlight * 0.33);
+    grey = clamp(uaLuma(color), 0.0, 1.0);
+    float mappedLum = pow(grey, 1.20);
+    float highlightKeep = smoothstep(0.68, 0.96, grey);
+    mappedLum = mix(mappedLum, grey, highlightKeep * 0.38);
+    color *= mappedLum / max(grey, 0.001);
 
-    color = pow(max(color, vec3(0.0)), vec3(1.055));
-    color = color / (vec3(1.0) + max(color - vec3(0.82), vec3(0.0)) * 0.32);
+    float shadow = 1.0 - smoothstep(0.08, 0.48, mappedLum);
+    float midtone = smoothstep(0.16, 0.43, mappedLum)
+                  * (1.0 - smoothstep(0.56, 0.80, mappedLum));
+    float highlight = smoothstep(0.50, 0.92, mappedLum);
+
+    color *= mix(vec3(1.0), vec3(0.92, 0.95, 0.99), shadow * 0.30);
+    color *= mix(vec3(1.0), vec3(1.025, 1.000, 0.91), midtone * 0.20);
+    color *= mix(vec3(1.0), vec3(1.07, 1.015, 0.86), highlight * 0.34);
+
+    color = max(color - vec3(0.006), vec3(0.0));
+    color = pow(color, vec3(1.025));
+    color = color / (vec3(1.0) + max(color - vec3(0.80), vec3(0.0)) * 0.38);
 
     vec2 size = max(vec2(screenSize), vec2(1.0));
     float aspect = size.x / size.y;

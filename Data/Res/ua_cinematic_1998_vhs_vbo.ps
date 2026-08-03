@@ -1,5 +1,6 @@
 #version 140
 
+
 uniform sampler2D texture;
 uniform ivec2 screenSize;
 uniform int randval;
@@ -31,6 +32,8 @@ void main()
     vec2 realSize = max(vec2(screenSize), vec2(1.0));
     float aspect = realSize.x / realSize.y;
 
+    // Final-frame reconstruction only. World geometry, depth, culling,
+    // skybox, far plane and render distance are never changed.
     float virtualHeight = 480.0;
     float virtualWidth = max(640.0, floor(virtualHeight * aspect + 0.5));
     vec2 virtualSize = vec2(virtualWidth, virtualHeight);
@@ -38,7 +41,6 @@ void main()
 
     float strength = clamp(vhsStrength, 0.0, 1.0);
     float analogue = clamp(0.30 + strength * 1.10, 0.0, 1.0);
-    // OpenUA performs a second vhsStrength blend after this shader.
     float time = float(millisecs) * 0.001;
     float frame24 = floor(time * 24.0);
     float frame12 = floor(time * 12.0);
@@ -55,16 +57,16 @@ void main()
     float trackingBand = uaBell(bandDist) * sin(time * 2.7 + originalUv.y * 31.0);
 
     float horizontalShiftPixels =
-          (lineRnd - 0.5) * 1.15
-        + slowWobble * 0.42
-        + trackingBand * 2.80;
+          (lineRnd - 0.5) * 1.05
+        + slowWobble * 0.38
+        + trackingBand * 2.55;
 
     vec2 warpedUv = originalUv;
     warpedUv.x += horizontalShiftPixels * virtualPixel.x * analogue;
 
-    float headZone = smoothstep(0.955, 1.0, originalUv.y);
+    float headZone = smoothstep(0.958, 1.0, originalUv.y);
     float headNoise = uaHash(vec2(line + frame24 * 7.0, seed + 37.0)) - 0.5;
-    warpedUv.x += headNoise * virtualPixel.x * headZone * analogue * 4.0;
+    warpedUv.x += headNoise * virtualPixel.x * headZone * analogue * 3.5;
     warpedUv = clamp(warpedUv, vec2(0.0), vec2(1.0));
 
     vec2 snappedUv = (floor(warpedUv * virtualSize) + 0.5) / virtualSize;
@@ -75,71 +77,97 @@ void main()
     vec3 right  = texture2D(texture, clamp(snappedUv + vec2(virtualPixel.x, 0.0), vec2(0.0), vec2(1.0))).rgb;
     vec3 down   = texture2D(texture, clamp(snappedUv - vec2(0.0, virtualPixel.y), vec2(0.0), vec2(1.0))).rgb;
     vec3 up     = texture2D(texture, clamp(snappedUv + vec2(0.0, virtualPixel.y), vec2(0.0), vec2(1.0))).rgb;
+    vec3 farLeft = texture2D(texture, clamp(snappedUv - vec2(virtualPixel.x * 2.0, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 farRight = texture2D(texture, clamp(snappedUv + vec2(virtualPixel.x * 2.0, 0.0), vec2(0.0), vec2(1.0))).rgb;
 
-    vec3 soft = center * 0.52 + (left + right + down + up) * 0.12;
+    // v4: broader, less pixel-grid-like reconstruction. Horizontal softness
+    // resembles low-bandwidth video while preserving distant silhouettes.
+    vec3 soft = center * 0.38
+              + (left + right) * 0.16
+              + (down + up) * 0.08
+              + (farLeft + farRight) * 0.07;
 
+    // Wider but weaker chroma bleed: less RGB outline, more analogue smear.
     float chromaPulse = 0.5 + 0.5 * sin(time * 0.93);
-    float chromaOffset = mix(1.25, 2.10, analogue) + chromaPulse * 0.35;
-    vec3 redTap = texture2D(texture,
-        clamp(snappedUv + vec2(virtualPixel.x * chromaOffset, 0.0), vec2(0.0), vec2(1.0))).rgb;
-    vec3 blueTap = texture2D(texture,
-        clamp(snappedUv - vec2(virtualPixel.x * chromaOffset, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    float redOffset = 2.15 + chromaPulse * 0.45;
+    float blueOffset = 2.55 + chromaPulse * 0.55;
+    vec3 redNear = texture2D(texture,
+        clamp(snappedUv + vec2(virtualPixel.x * redOffset, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 redFar = texture2D(texture,
+        clamp(snappedUv + vec2(virtualPixel.x * (redOffset + 1.45), 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 blueNear = texture2D(texture,
+        clamp(snappedUv - vec2(virtualPixel.x * blueOffset, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 blueFar = texture2D(texture,
+        clamp(snappedUv - vec2(virtualPixel.x * (blueOffset + 1.65), 0.0), vec2(0.0), vec2(1.0))).rgb;
+
     vec3 chroma = soft;
-    chroma.r = mix(soft.r, redTap.r, 0.44 * analogue);
-    chroma.b = mix(soft.b, blueTap.b, 0.48 * analogue);
+    float redBleed = mix(redNear.r, redFar.r, 0.42);
+    float blueBleed = mix(blueNear.b, blueFar.b, 0.46);
+    chroma.r = mix(soft.r, redBleed, 0.27 * analogue);
+    chroma.b = mix(soft.b, blueBleed, 0.29 * analogue);
 
     vec3 ghostTap = texture2D(texture,
-        clamp(snappedUv - vec2(virtualPixel.x * 2.0, 0.0), vec2(0.0), vec2(1.0))).rgb;
-    float ghostLum = max(uaLuma(ghostTap) - 0.58, 0.0);
-    chroma += vec3(1.00, 0.74, 0.45) * ghostLum * analogue * 0.15;
+        clamp(snappedUv - vec2(virtualPixel.x * 2.8, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    float ghostLum = max(uaLuma(ghostTap) - 0.60, 0.0);
+    chroma += vec3(1.00, 0.72, 0.40) * ghostLum * analogue * 0.12;
 
     vec3 neighbour = (left + right + down + up) * 0.25;
-    vec3 highlight = max(neighbour - vec3(0.56), vec3(0.0));
-    vec3 color = chroma + highlight * vec3(0.22, 0.15, 0.07);
+    vec3 highlight = max(neighbour - vec3(0.58), vec3(0.0));
+    vec3 color = chroma + highlight * vec3(0.18, 0.12, 0.05);
 
+    // Reduced cyan cast. Keep cool-neutral shadows and add contaminated
+    // olive/ochre mainly to the middle and upper range.
     float lum = uaLuma(color);
-    float shadow = 1.0 - smoothstep(0.12, 0.52, lum);
-    float bright = smoothstep(0.48, 0.90, lum);
-    color *= mix(vec3(1.0), vec3(0.87, 0.96, 1.07), shadow * 0.48);
-    color *= mix(vec3(1.0), vec3(1.07, 1.01, 0.88), bright * 0.35);
+    float shadow = 1.0 - smoothstep(0.11, 0.50, lum);
+    float midtone = smoothstep(0.18, 0.42, lum)
+                  * (1.0 - smoothstep(0.58, 0.82, lum));
+    float bright = smoothstep(0.50, 0.90, lum);
+    color *= mix(vec3(1.0), vec3(0.93, 0.96, 1.00), shadow * 0.30);
+    color *= mix(vec3(1.0), vec3(1.025, 1.000, 0.93), midtone * 0.20);
+    color *= mix(vec3(1.0), vec3(1.075, 1.015, 0.86), bright * 0.34);
 
     float grey = uaLuma(color);
-    color = mix(vec3(grey), color, 0.80);
-    color = (color - 0.5) * 1.08 + 0.5;
-    color = pow(max(color, vec3(0.0)), vec3(1.06));
+    color = mix(vec3(grey), color, 0.82);
+    color = (color - 0.5) * 1.07 + 0.5;
+    color = pow(max(color, vec3(0.0)), vec3(1.075));
 
+    // v4 grain is luma-only, less uniform and less tied to every virtual pixel.
     vec2 virtualCoord = floor(snappedUv * virtualSize);
-    float grainRnd = uaHash(virtualCoord + vec2(frame24 * 1.37, seed));
-    float blockRnd = uaHash(floor(virtualCoord / 8.0) + vec2(frame24 * 0.17, seed + 19.0));
+    float fineRnd = uaHash(floor(virtualCoord / 2.0) + vec2(frame24 * 1.37, seed));
+    float coarseRnd = uaHash(floor(virtualCoord / 4.0) + vec2(frame24 * 0.41, seed + 29.0));
+    float grainRnd = (fineRnd - 0.5) * 0.72 + (coarseRnd - 0.5) * 0.28;
+    float blockRnd = uaHash(floor(virtualCoord / 12.0) + vec2(frame24 * 0.13, seed + 19.0));
     lum = uaLuma(color);
-    color += (grainRnd - 0.5) * (0.020 + 0.020 * strength) * (1.0 - lum * 0.55);
-    color += (blockRnd - 0.5) * 0.010 * (1.0 - lum);
+    color += grainRnd * (0.014 + 0.012 * strength) * (1.0 - lum * 0.48);
+    color += (blockRnd - 0.5) * 0.005 * (1.0 - lum);
 
+    // About one third weaker than v3: visible texture without a regular grid.
     float scanWave = 0.5 + 0.5 * sin((line + 0.5) * UA_PI);
-    color *= 1.0 - scanWave * analogue * 0.085;
+    color *= 1.0 - scanWave * analogue * 0.058;
 
     float dropoutRnd = uaHash(vec2(floor(line / 2.0) + frame12 * 5.0, seed + 73.0));
-    float dropout = step(0.9920, dropoutRnd) * analogue;
-    color *= 1.0 - dropout * 0.22;
+    float dropout = step(0.9940, dropoutRnd) * analogue;
+    color *= 1.0 - dropout * 0.16;
 
     float frameFlicker = uaHash(vec2(frame24, seed + 101.0)) - 0.5;
     float flicker = 1.0
-                  + sin(time * 6.2) * analogue * 0.014
-                  + frameFlicker * analogue * 0.030;
+                  + sin(time * 6.2) * analogue * 0.012
+                  + frameFlicker * analogue * 0.024;
     color *= flicker;
 
-    // Visible moving tracking band. It changes only the completed frame, never
-    // world visibility, geometry, depth or render distance.
     float trackingLuma = uaBell((originalUv.y - bandCenter) * 48.0);
-    color *= 1.0 + trackingLuma * analogue * 0.075;
+    color *= 1.0 + trackingLuma * analogue * 0.060;
 
-    float levels = mix(58.0, 40.0, strength);
-    color = floor(clamp(color, 0.0, 1.0) * levels + grainRnd * 0.70) / levels;
+    // More colour levels than v3 to avoid patterned terrain while retaining
+    // the compressed 1998 capture character.
+    float levels = mix(68.0, 50.0, strength);
+    float dither = fineRnd * 0.42 + coarseRnd * 0.20;
+    color = floor(clamp(color, 0.0, 1.0) * levels + dither) / levels;
 
     vec2 edge = originalUv * 2.0 - 1.0;
     edge.x *= aspect;
     float vignette = smoothstep(0.42, 1.48, dot(edge, edge));
-    color *= 1.0 - vignette * (0.045 + 0.055 * strength);
+    color *= 1.0 - vignette * (0.045 + 0.050 * strength);
 
     gl_FragColor = vec4(clamp(color, 0.0, 1.0), centerSample.a);
 }
