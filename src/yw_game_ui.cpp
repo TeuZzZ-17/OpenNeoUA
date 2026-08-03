@@ -33,6 +33,8 @@ std::string dword_5BAF98;
 static const SDL_Color *yw_GetFactionUiAccent(NC_STACK_ypaworld *yw, SDL_Color *accent);
 static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw);
 static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Color color);
+static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+                                               const vec3d &renderPosition, uint8_t visibilityOpacity);
 
 ////////////////////////////////////////
 
@@ -87,12 +89,29 @@ struct StatusIconBlinkRenderEntry
 
 using StatusIconBlinkRenderList = std::array<StatusIconBlinkRenderEntry, STATUS_ICON_MAX_COUNT>;
 
+constexpr uint32_t ENEMY_INDICATOR_VISIBILITY_FADE_MS = 300;
+constexpr uint32_t ENEMY_INDICATOR_VISIBILITY_STATE_TTL_MS = 1500;
+constexpr uint32_t ENEMY_INDICATOR_VISIBILITY_PRUNE_INTERVAL_MS = 500;
+
+struct EnemyIndicatorVisibilityState
+{
+    NC_STACK_ypaworld *world = NULL;
+    uint32_t gid = 0;
+    uint32_t lastTouched = 0;
+    float opacity = 0.0f;
+    vec3d lastVisiblePosition;
+};
+
 std::map<std::string, StatusIconCacheEntry> g_statusIconCache;
 std::map<std::string, std::string> g_statusIconConfiguredPathCache;
 std::map<const NC_STACK_ypabact *, StatusIconBlinkState> g_statusIconBlinkStates;
 NC_STACK_ypaworld *g_statusIconBlinkWorld = NULL;
 int32_t g_statusIconBlinkLastGameTime = 0;
 uint32_t g_statusIconBlinkLastPrune = 0;
+std::map<const NC_STACK_ypabact *, EnemyIndicatorVisibilityState> g_enemyIndicatorVisibilityStates;
+NC_STACK_ypaworld *g_enemyIndicatorVisibilityWorld = NULL;
+int32_t g_enemyIndicatorVisibilityLastGameTime = 0;
+uint32_t g_enemyIndicatorVisibilityLastPrune = 0;
 std::map<std::string, bool> g_voicepackLoggedUsed;
 std::map<std::string, bool> g_voicepackLoggedFallback;
 
@@ -7697,6 +7716,119 @@ static int yw_GetWorldUiSectorRadius(float maxDistance)
     return std::max(1, (int)ceil(maxDistance / World::CVSectorLength) + 1);
 }
 
+static void yw_PrepareEnemyIndicatorVisibilityStates(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return;
+
+    const uint32_t now = (uint32_t)yw->_timeStamp;
+    if ( g_enemyIndicatorVisibilityWorld != yw ||
+         yw->_timeStamp < g_enemyIndicatorVisibilityLastGameTime )
+    {
+        g_enemyIndicatorVisibilityStates.clear();
+        g_enemyIndicatorVisibilityWorld = yw;
+        g_enemyIndicatorVisibilityLastGameTime = yw->_timeStamp;
+        g_enemyIndicatorVisibilityLastPrune = now;
+        return;
+    }
+
+    g_enemyIndicatorVisibilityLastGameTime = yw->_timeStamp;
+    if ( (uint32_t)(now - g_enemyIndicatorVisibilityLastPrune) <
+         ENEMY_INDICATOR_VISIBILITY_PRUNE_INTERVAL_MS )
+    {
+        return;
+    }
+
+    for (auto it = g_enemyIndicatorVisibilityStates.begin();
+         it != g_enemyIndicatorVisibilityStates.end(); )
+    {
+        const EnemyIndicatorVisibilityState &state = it->second;
+        if ( state.world != yw ||
+             (uint32_t)(now - state.lastTouched) >
+                 ENEMY_INDICATOR_VISIBILITY_STATE_TTL_MS )
+        {
+            it = g_enemyIndicatorVisibilityStates.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    g_enemyIndicatorVisibilityLastPrune = now;
+}
+
+static uint8_t yw_GetEnemyIndicatorVisibilityOpacity(NC_STACK_ypaworld *yw,
+                                                      NC_STACK_ypabact *bact,
+                                                      bool currentlyVisible,
+                                                      vec3d *renderPosition)
+{
+    if ( !yw || !bact || !renderPosition )
+        return 0;
+
+    const uint32_t now = (uint32_t)yw->_timeStamp;
+    auto stateIt = g_enemyIndicatorVisibilityStates.find(bact);
+
+    if ( stateIt == g_enemyIndicatorVisibilityStates.end() )
+    {
+        // Never create a state for an enemy the player has not actually seen.
+        // This keeps fog-of-war/radar semantics intact and avoids leaking
+        // undiscovered units merely because they are within the UI distance.
+        if ( !currentlyVisible )
+            return 0;
+
+        EnemyIndicatorVisibilityState state;
+        state.world = yw;
+        state.gid = bact->_gid;
+        state.lastTouched = now;
+        state.lastVisiblePosition = bact->_position;
+        stateIt = g_enemyIndicatorVisibilityStates.emplace(bact, state).first;
+    }
+
+    EnemyIndicatorVisibilityState &state = stateIt->second;
+    if ( state.world != yw || state.gid != bact->_gid )
+    {
+        if ( !currentlyVisible )
+        {
+            g_enemyIndicatorVisibilityStates.erase(stateIt);
+            return 0;
+        }
+
+        state = EnemyIndicatorVisibilityState();
+        state.world = yw;
+        state.gid = bact->_gid;
+        state.lastVisiblePosition = bact->_position;
+    }
+
+    state.lastTouched = now;
+    if ( currentlyVisible )
+        state.lastVisiblePosition = bact->_position;
+
+    // game.world_ui_max_distance still owns the spatial fade. This short
+    // time-domain transition only smooths the discrete radar/sector visibility
+    // bit which otherwise removes enemy markers before distance opacity runs.
+    const int32_t frameTime = std::max(0, std::min(yw->_frameTime, 100));
+    const float opacityStep = ENEMY_INDICATOR_VISIBILITY_FADE_MS > 0
+                                ? 255.0f * (float)frameTime /
+                                      (float)ENEMY_INDICATOR_VISIBILITY_FADE_MS
+                                : 255.0f;
+
+    if ( currentlyVisible )
+        state.opacity = std::min(255.0f, state.opacity + opacityStep);
+    else
+        state.opacity = std::max(0.0f, state.opacity - opacityStep);
+
+    *renderPosition = currentlyVisible ? bact->_position : state.lastVisiblePosition;
+
+    if ( !currentlyVisible && state.opacity <= 0.0f )
+    {
+        g_enemyIndicatorVisibilityStates.erase(stateIt);
+        return 0;
+    }
+
+    return (uint8_t)dround(state.opacity);
+}
+
 static bool yw_ProjectWorldSelectionPoint(NC_STACK_ypaworld *yw, const vec3d &worldPos, Common::Point *screenPos)
 {
     vec3d delta = worldPos - yw->_viewerPosition;
@@ -12142,58 +12274,59 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
         if ( v14 >= yw->_mapSize.y )
             v14 = yw->_mapSize.y - 1;
 
+        yw_PrepareEnemyIndicatorVisibilityStates(yw);
+
         for (int i = v17; i <= v14; i++ )
         {
             for (int  j = v5; j <= v16; j++ )
             {
                 cellArea &v8 = yw->_cells(j, i);
+                const bool cellVisible = (robo_map.MapViewMask & v8.view_mask) != 0;
 
-                if ( robo_map.MapViewMask & v8.view_mask )
+                for ( NC_STACK_ypabact* &bct : v8.unitsList )
                 {
-                    for ( NC_STACK_ypabact* &bct : v8.unitsList )
+                    if ( bct->ShouldHideFromStrategicUI() )
+                        continue;
+
+                    if ( activeCommander &&
+                         (bct == activeCommander || bct->_parent == activeCommander) )
+                        continue;
+
+                    // Host Stations use the same world-space inverted triangle as
+                    // ordinary units. Keep missiles and hidden Robo guns excluded.
+                    if ( bct->_bact_type == BACT_TYPES_MISSLE ||
+                         bct->_status == BACT_STATUS_CREATE ||
+                         bct->_status == BACT_STATUS_BEAM ||
+                         bct->_status == BACT_STATUS_DEAD )
                     {
-                        if ( bct->ShouldHideFromStrategicUI() )
-                            continue;
-
-                        if ( activeCommander &&
-                             (bct == activeCommander || bct->_parent == activeCommander) )
-                            continue;
-
-                        // Host Stations use the same world-space inverted triangle as
-                        // ordinary units. Previously ROBO actors were excluded from the
-                        // persistent enemy-indicator pass, so their marker appeared only
-                        // through the mouse-hover path. Keep missiles excluded, but let
-                        // yw_RenderCursorOverUnit apply the shared distance fade to ROBOs.
-                        if ( bct->_bact_type != BACT_TYPES_MISSLE )
-                        {
-
-                            if ( bct->_status != BACT_STATUS_CREATE && bct->_status != BACT_STATUS_BEAM && bct->_status != BACT_STATUS_DEAD )
-                            {
-                                if ( bct->_bact_type != BACT_TYPES_GUN )
-                                    yw_RenderCursorOverUnit(yw, bct);
-                                else
-                                {
-                                    NC_STACK_ypagun *gun = (NC_STACK_ypagun *)bct;
-
-                                    if ( !gun->IsRoboGun() )
-                                        yw_RenderCursorOverUnit(yw, bct);
-                                }
-
-                                if ( yw->_isNetGame )
-                                {
-                                    if ( bct->_status_flg & BACT_STFLAG_ISVIEW )
-                                    {
-                                        if ( yw->_GameShell )
-                                            sb_0x4d7c08__sub0__sub4__sub0__sub0(yw, cur, bct);
-                                    }
-                                }
-                            }
-
-                        }
+                        continue;
                     }
 
+                    if ( bct->_bact_type == BACT_TYPES_GUN )
+                    {
+                        NC_STACK_ypagun *gun = (NC_STACK_ypagun *)bct;
+                        if ( gun->IsRoboGun() )
+                            continue;
+                    }
 
+                    vec3d renderPosition;
+                    const uint8_t visibilityOpacity =
+                        yw_GetEnemyIndicatorVisibilityOpacity(yw, bct, cellVisible,
+                                                              &renderPosition);
+                    if ( visibilityOpacity > 0 )
+                    {
+                        yw_RenderCursorOverUnitWithOpacity(yw, bct, renderPosition,
+                                                           visibilityOpacity);
+                    }
 
+                    if ( cellVisible && yw->_isNetGame )
+                    {
+                        if ( bct->_status_flg & BACT_STFLAG_ISVIEW )
+                        {
+                            if ( yw->_GameShell )
+                                sb_0x4d7c08__sub0__sub4__sub0__sub0(yw, cur, bct);
+                        }
+                    }
                 }
             }
         }
@@ -12614,7 +12747,8 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
     }
 }
 
-void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+                                               const vec3d &renderPosition, uint8_t visibilityOpacity)
 {
     if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
         return;
@@ -12623,13 +12757,14 @@ void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
-    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, renderPosition);
+    worldUiOpacity = (uint8_t)(((uint32_t)worldUiOpacity * visibilityOpacity + 127U) / 255U);
     if (worldUiOpacity == 0)
         return;
 
-    float v6 = bact->_position.x - yw->_viewerPosition.x;
-    float v4 = bact->_position.y - yw->_viewerPosition.y;
-    float v8 = bact->_position.z - yw->_viewerPosition.z;
+    float v6 = renderPosition.x - yw->_viewerPosition.x;
+    float v4 = renderPosition.y - yw->_viewerPosition.y;
+    float v8 = renderPosition.z - yw->_viewerPosition.z;
 
     mat3x3 corrected = yw->_viewerRotation;
     GFX::Engine.matrixAspectCorrection(corrected, false);
@@ -12676,6 +12811,15 @@ void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 
 
 
+
+
+void yw_RenderCursorOverUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+{
+    if ( !bact )
+        return;
+
+    yw_RenderCursorOverUnitWithOpacity(yw, bact, bact->_position, 255);
+}
 
 
 void sb_0x4d7c08__sub0__sub4__sub2__sub0(NC_STACK_ypaworld *yw)

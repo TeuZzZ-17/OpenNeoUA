@@ -6232,7 +6232,12 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
                 sight.stPos = _position;
                 sight.vect = arg->target.pbact->_position - _position;
                 sight.flags = 0;
-                _world->ypaworld_func136(&sight);
+                // The short world trace only samples the start/end collision
+                // cells and can miss an intermediate building on a long MGUN
+                // line. Use the existing full stepped trace so AI fire is
+                // gated by every terrain/building cell between shooter and
+                // target.
+                _world->ypaworld_func149(&sight);
                 minigunHasLineOfSight = !sight.isect;
             }
 
@@ -14346,6 +14351,37 @@ static bool ypabact_GetMinigunSpreadImpactPoint(const vec3d &origin, const vec3d
     return true;
 }
 
+static bool ypabact_GetRaySphereEntryDistance(const vec3d &origin, const vec3d &dir,
+                                               const vec3d &center, float radius,
+                                               float *outDistance)
+{
+    if ( radius <= 0.0f )
+        return false;
+
+    vec3d rayDir = dir;
+    if ( rayDir.normalise() <= 0.001f )
+        return false;
+
+    vec3d toCenter = center - origin;
+    float along = toCenter.dot(rayDir);
+    if ( along < 0.0f )
+        return false;
+
+    float perpendicularSq = toCenter.dot(toCenter) - along * along;
+    float radiusSq = radius * radius;
+    if ( perpendicularSq > radiusSq )
+        return false;
+
+    float entryDistance = along - sqrt(std::max(0.0f, radiusSq - perpendicularSq));
+    if ( entryDistance < 0.0f )
+        entryDistance = 0.0f;
+
+    if ( outDistance )
+        *outDistance = entryDistance;
+
+    return true;
+}
+
 static void ypabact_UpdateGunMinigunRecoilVisual(NC_STACK_ypabact *bact, const bact_arg105 *arg)
 {
     if ( bact->_bact_type != BACT_TYPES_GUN ||
@@ -14487,6 +14523,27 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         vec3d shotDir = ypabact_ApplyDirectionalSpread(_rotation, fireDir, spreadX, spreadY);
         float minigunTraceRange = ypabact_GetMinigunRange();
 
+        // Resolve the nearest world obstruction before applying unit damage.
+        // The legacy order damaged every intersected unit first and traced the
+        // world only when no unit was found, so MGUN hits could pass through a
+        // power station, wall or terrain ridge. ypaworld_func149 is the
+        // existing full stepped terrain/building trace used by projectiles.
+        ypaworld_arg136 v59;
+        v59.stPos = shotPos;
+        v59.vect = shotDir * minigunTraceRange;
+        v59.flags = 0;
+
+        _world->ypaworld_func149(&v59);
+
+        vec3d v80;
+        bool minigunWorldHit = v59.isect;
+        float minigunWorldHitDistance = minigunTraceRange + 1.0f;
+        if ( minigunWorldHit )
+        {
+            v80 = v59.isectPos;
+            minigunWorldHitDistance = std::max(0.0f, v59.tVal * minigunTraceRange);
+        }
+
         NC_STACK_ypabact *v108 = NULL;
         float v123 = 0.0;
         float v121 = 0.0;
@@ -14600,6 +14657,20 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                             {
                                                 if ( sqrt( POW2(v110) + POW2(minigunTraceRange) ) > v111 )
                                                 {
+                                                    float unitEntryDistance = v111;
+                                                    if ( !ypabact_GetRaySphereEntryDistance(
+                                                             shotPos, shotDir, v77, v37,
+                                                             &unitEntryDistance) )
+                                                        continue;
+
+                                                    // A solid world surface wins when it is reached
+                                                    // before the target collision sphere. Preserve the
+                                                    // existing MGUN multi-hit behavior for units that are
+                                                    // all genuinely in front of that surface.
+                                                    if ( minigunWorldHit &&
+                                                         unitEntryDistance >= minigunWorldHitDistance - 0.01f )
+                                                        continue;
+
                                                     if ( !v22 )
                                                     {
                                                         int energ;
@@ -14661,28 +14732,9 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         }
 
         int v55 = 0;
-        int v96 = 0;
-        ypaworld_arg136 v59;
-        vec3d v80;
-        bool minigunWorldHit = false;
+        int v96 = minigunWorldHit && !v108 ? 1 : 0;
 
-        if ( !v108 )
-        {
-            v59.stPos = shotPos;
-            v59.vect = shotDir * minigunTraceRange;
-            v59.flags = 0;
-
-            _world->ypaworld_func149(&v59);
-
-            if ( v59.isect )
-            {
-                v80 = v59.isectPos;
-                v96 = 1;
-                minigunWorldHit = true;
-            }
-        }
-
-        if ( ypabact_IsMinigunSectorDamageEnabled() && minigunWorldHit )
+        if ( ypabact_IsMinigunSectorDamageEnabled() && minigunWorldHit && !v108 )
         {
             NC_STACK_ypabact *userHost = _world->getYW_userHostStation();
             bool canApplyDamage = !_world->_isNetGame ||
