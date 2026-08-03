@@ -1,70 +1,57 @@
 #version 140
 
-layout(std140) uniform Parameters
-{
-    mat4 MProj;
-    mat4 MView;
-    vec3 Fog;
-    vec3 AlphaFog;
-    bool Textured;
-    bool Flat;
-    bool ATest;
-};
-
 uniform sampler2D texture;
-in vec4 smoothColor;
-in vec2 texCoords;
-
 uniform vec3 normclr;
 uniform vec3 invclr;
-
-// OpenUA fullscreen visual filter compatibility.
+uniform ivec2 screenSize;
 uniform sampler2D filterLut;
 uniform float filterStrength;
-
-// OpenUA optional atmospheric color pass.
-uniform ivec2 screenSize;
 uniform float atmosphereStrength;
 uniform float atmosphereExposure;
 uniform float atmosphereContrast;
 uniform float atmosphereSaturation;
 uniform float atmosphereVignette;
 
+in vec2 texCoords;
+
+float uaLuma(vec3 c)
+{
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
 void main()
 {
     vec2 uv = texCoords;
-    vec4 clr = texture2D(texture, uv);
-    vec3 base = clr.rgb * normclr + (1.0 - clr.rgb) * invclr;
+    vec4 source = texture2D(texture, uv);
 
-    // Apply the optional atmospheric grade first. The existing OpenUA
-    // Atmosphere/visual-filter palette is applied afterwards so saturation and
-    // exposure cannot erase or neutralize the selected palette.
-    float fxStrength = clamp(atmosphereStrength, 0.0, 1.0);
-    float exposure = mix(1.0, atmosphereExposure, fxStrength);
-    float contrast = mix(1.0, atmosphereContrast, fxStrength);
-    float saturation = mix(1.0, atmosphereSaturation, fxStrength);
-    base *= exposure;
-    base = (base - vec3(0.5)) * contrast + vec3(0.5);
+    vec3 base = source.rgb * normclr + (1.0 - source.rgb) * invclr;
+    float lum = clamp(uaLuma(base), 0.0, 1.0);
 
-    float lum = dot(base, vec3(0.2126, 0.7152, 0.0722));
-    base = mix(vec3(lum), base, saturation);
+    vec3 lutColor = texture2D(filterLut, vec2(lum, 0.5)).rgb;
+    vec3 color = mix(base, lutColor, clamp(filterStrength, 0.0, 1.0));
 
-    if (filterStrength > 0.0)
-    {
-        float filterLum = clamp(dot(base, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
-        float lutX = (filterLum * 255.0 + 0.5) / 256.0;
-        vec3 graded = texture2D(filterLut, vec2(lutX, 0.5)).rgb;
-        base = mix(base, graded, filterStrength);
-    }
+    color *= atmosphereExposure;
+    color = (color - 0.5) * atmosphereContrast + 0.5;
 
-    float width = max(float(screenSize.x), 1.0);
-    float height = max(float(screenSize.y), 1.0);
-    float aspect = width / height;
-    vec2 centered = uv * 2.0 - 1.0;
-    centered.x *= aspect;
-    float cornerRadius = max(length(vec2(aspect, 1.0)), 0.0001);
-    float edge = smoothstep(0.30, 1.0, length(centered) / cornerRadius);
-    base *= 1.0 - clamp(atmosphereVignette, 0.0, 1.0) * fxStrength * edge;
+    float grey = uaLuma(color);
+    color = mix(vec3(grey), color, atmosphereSaturation);
 
-    gl_FragColor = vec4(clamp(base, 0.0, 1.0), clr.a);
+    grey = uaLuma(color);
+    float shadow = 1.0 - smoothstep(0.10, 0.54, grey);
+    float highlight = smoothstep(0.46, 0.91, grey);
+    color *= mix(vec3(1.0), vec3(0.88, 0.97, 1.06), shadow * 0.44);
+    color *= mix(vec3(1.0), vec3(1.07, 1.01, 0.87), highlight * 0.33);
+
+    color = pow(max(color, vec3(0.0)), vec3(1.055));
+    color = color / (vec3(1.0) + max(color - vec3(0.82), vec3(0.0)) * 0.32);
+
+    vec2 size = max(vec2(screenSize), vec2(1.0));
+    float aspect = size.x / size.y;
+    vec2 edge = uv * 2.0 - 1.0;
+    edge.x *= aspect;
+    float vignette = smoothstep(0.38, 1.50, dot(edge, edge));
+    color *= 1.0 - vignette * clamp(atmosphereVignette, 0.0, 1.0) * 0.34;
+
+    color = mix(base, color, clamp(atmosphereStrength, 0.0, 1.0));
+    gl_FragColor = vec4(clamp(color, 0.0, 1.0), source.a);
 }
