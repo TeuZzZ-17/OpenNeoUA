@@ -44,6 +44,7 @@
 #include "system/movie.h"
 #include "system/inivals.h"
 #include "world/clonebalance.h"
+#include "world/energyfx.h"
 #include "obj3d.h"
 
 
@@ -817,8 +818,9 @@ int main(int argc, char *argv[])
 
     System::IniConf::ReadFromNucleusIni();
 
-    // OpenUA: cache the Black Sect clone-balance config once, after the INI is parsed.
+    // OpenUA: cache global runtime configuration after Nucleus.ini is parsed.
     World::CloneBalance::Init();
+    World::EnergyFX::Init();
 
     uint32_t ticks = 0;
 
