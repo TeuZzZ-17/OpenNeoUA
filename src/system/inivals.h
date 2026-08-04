@@ -9,8 +9,6 @@ namespace System
 class IniConf
 {
 public:
-
-public:
     static void Init();
     static bool ReadFromNucleusIni();
     static bool ReadFromIni(const std::string &fname);
@@ -55,7 +53,6 @@ public:
     static Common::Ini::Key GfxXRes;
     static Common::Ini::Key GfxYRes;
     static Common::Ini::Key GfxPalette;
-    static Common::Ini::Key GfxPaletteTheme;       // DEPRECATED/inert: legacy SET palette-theme remap (bypassed)
     static Common::Ini::Key GfxVisualFilter;       // OpenUA: fullscreen visual filter name (Data/Filters/*.pal), "Standard" = none
     static Common::Ini::Key GfxVisualFilterStrength; // OpenUA: visual filter blend strength 0.0..1.0 (default 0.25)
     static Common::Ini::Key GfxAtmosphereFx;       // OpenUA: optional world-only atmospheric post-process
@@ -248,6 +245,7 @@ public:
     static Common::Ini::Key GameGemUnlockSound;
     static Common::Ini::Key GameGemUnlockTimeScale;
     static Common::Ini::Key GameWorldUiMaxDistance;
+    static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
 
@@ -307,8 +305,6 @@ public:
 
     static Common::Ini::Key GfxParticlesLimit;
     static Common::Ini::Key MenuWindowed;
-
-    static Common::Ini::Key GameHideBlacksect;
 
     static Common::Ini::Key GfxVBO;
 

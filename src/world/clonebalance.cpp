@@ -15,7 +15,6 @@ namespace CloneBalance
 
 // Cached config (filled by Init() from the INI). The balance feature is always
 // enabled; the remaining values retain their documented defaults.
-static bool        s_enabled          = true;
 static float       s_downFactor       = 0.95f; // 1 - 5/100
 static float       s_attackTimeFactor = 1.05f; // 1 + 5/100
 static TVisualTint s_tint;                      // overwritten by Init()
@@ -60,8 +59,16 @@ static bool ParseTintComponents(const std::string &str, int comp[4])
 static TVisualTint ParseTint(const std::string &str)
 {
     int comp[4] = { 140, 140, 140, 255 };
+    int parsed[4] = { 140, 140, 140, 255 };
 
-    if ( !ParseTintComponents(str, comp) )
+    if ( ParseTintComponents(str, parsed) )
+    {
+        comp[0] = parsed[0];
+        comp[1] = parsed[1];
+        comp[2] = parsed[2];
+        comp[3] = parsed[3];
+    }
+    else
     {
         ypa_log_out("Warning: invalid game.black_sect_clone_tint '%s', using 140_140_140_255\n",
                     str.c_str());
@@ -95,7 +102,6 @@ void Init()
     s_tint = ParseTint(System::IniConf::GameBlackSectCloneTint.Get<std::string>());
 }
 
-bool  Enabled()         { return s_enabled; }
 float DownFactor()      { return s_downFactor; }
 float AttackTimeFactor(){ return s_attackTimeFactor; }
 const TVisualTint &Tint() { return s_tint; }
@@ -103,7 +109,7 @@ const TVisualTint &Tint() { return s_tint; }
 bool IsCloneActor(const NC_STACK_ypabact *bact)
 {
     // Fast out when the feature is off (the common case).
-    if ( !s_enabled || !bact )
+    if ( !bact )
         return false;
 
     if ( bact->_owner != OWNER_BLACK_SECT )

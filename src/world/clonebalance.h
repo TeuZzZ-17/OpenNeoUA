@@ -29,13 +29,10 @@ namespace CloneBalance
     // Black Sect faction/owner id (the imperfect grey clones).
     constexpr int OWNER_BLACK_SECT = 5;
 
-    // Read the remaining game.black_sect_clone_* tuning keys from System::IniConf
-    // and cache them. The balance feature itself is always enabled.
+    // Read the game.black_sect_clone_* tuning keys from System::IniConf and cache
+    // them. The balance feature itself is always enabled.
     // Call once after nucleus.ini has been parsed. Idempotent: safe to re-run.
     void Init();
-
-    // The clone balance is permanently enabled.
-    bool Enabled();
 
     // Multipliers derived from game.black_sect_clone_malus_percent (default 5):
     //   DownFactor()       = 1 - p/100  (0.95) -> effective defense, outgoing
@@ -48,7 +45,6 @@ namespace CloneBalance
     const TVisualTint &Tint();
 
     // The single gate every runtime malus funnels through. True only when:
-    //   * the clone balance is enabled, AND
     //   * the actor is a Black Sect (owner 5) actor, AND
     //   * the actor is an actual combat UNIT (bact/tank/flyer/ufo/car/gun/hover).
     // Exempt actors (return false even for owner 5):

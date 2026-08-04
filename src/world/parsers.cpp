@@ -1198,6 +1198,20 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         return &_vhcl->coll.roboColls.at(_collID);
     };
 
+    auto getRoboColl = [this, robo]() -> TRoboColl *
+    {
+        if ( _collID < 0 || (size_t)_collID >= robo->coll.roboColls.size() )
+            return NULL;
+
+        return &robo->coll.roboColls.at(_collID);
+    };
+
+    auto parseCollisionFloat = [&parser](const std::string &value) -> float
+    {
+        float parsed = parser.stof(value, 0);
+        return std::isfinite(parsed) ? parsed : 0.0f;
+    };
+
     if ( !StriCmp(p1, "end") )
     {
         bool fireXAdvancedAuthored = _vhcl->fire_x_start_defined ||
@@ -2557,46 +2571,69 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "coll_radius") )
     {
         if (TRoboColl *c = getColl())
-            c->robo_coll_radius = parser.stof(p2, 0);
+            c->robo_coll_radius = std::max(0.0f, parseCollisionFloat(p2));
     }
     else if ( !StriCmp(p1, "coll_x") )
     {
         if (TRoboColl *c = getColl())
-            c->coll_pos.x = parser.stof(p2, 0);
+            c->coll_pos.x = parseCollisionFloat(p2);
     }
     else if ( !StriCmp(p1, "coll_y") )
     {
         if (TRoboColl *c = getColl())
-            c->coll_pos.y = parser.stof(p2, 0);
+            c->coll_pos.y = parseCollisionFloat(p2);
     }
     else if ( !StriCmp(p1, "coll_z") )
     {
         if (TRoboColl *c = getColl())
-            c->coll_pos.z = parser.stof(p2, 0);
+            c->coll_pos.z = parseCollisionFloat(p2);
     }
     else if ( !StriCmp(p1, "robo_coll_num") )
     {
-        robo->coll.roboColls.resize( parser.stol(p2, NULL, 0) );
+        int cnt = parser.stol(p2, NULL, 0);
+
+        if ( cnt < 0 )
+            cnt = 0;
+        else if ( cnt > (int)UNIT_COLL_MAX_COUNT )
+            cnt = UNIT_COLL_MAX_COUNT;
+
+        robo->coll.roboColls.resize(cnt);
+
+        if ( _collID >= cnt )
+            _collID = cnt - 1;
     }
     else if ( !StriCmp(p1, "robo_coll_act") )
     {
         _collID = parser.stol(p2, NULL, 0);
+
+        if ( _collID < 0 )
+            _collID = 0;
+
+        if ( _collID >= (int)UNIT_COLL_MAX_COUNT )
+            _collID = UNIT_COLL_MAX_COUNT - 1;
+
+        if ( (size_t)_collID >= robo->coll.roboColls.size() )
+            robo->coll.roboColls.resize(_collID + 1);
     }
     else if ( !StriCmp(p1, "robo_coll_radius") )
     {
-        robo->coll.roboColls[ _collID ].robo_coll_radius = parser.stof(p2, 0);
+        if (TRoboColl *c = getRoboColl())
+            c->robo_coll_radius = std::max(0.0f, parseCollisionFloat(p2));
     }
     else if ( !StriCmp(p1, "robo_coll_x") )
     {
-        robo->coll.roboColls[ _collID ].coll_pos.x = parser.stof(p2, 0);
+        if (TRoboColl *c = getRoboColl())
+            c->coll_pos.x = parseCollisionFloat(p2);
     }
     else if ( !StriCmp(p1, "robo_coll_y") )
     {
-        robo->coll.roboColls[ _collID ].coll_pos.y = parser.stof(p2, 0);
+        if (TRoboColl *c = getRoboColl())
+            c->coll_pos.y = parseCollisionFloat(p2);
     }
     else if ( !StriCmp(p1, "robo_coll_z") )
     {
-        robo->coll.roboColls[ _collID ].coll_pos.z = parser.stof(p2, 0);
+        if (TRoboColl *c = getRoboColl())
+            c->coll_pos.z = parseCollisionFloat(p2);
     }
     else if ( !StriCmp(p1, "robo_viewer_x") )
     {
@@ -5852,7 +5889,6 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
 
         _o._GameShell->paletteTheme = theme;
         _o._GameShell->confPaletteTheme = theme;
-        System::IniConf::GfxPaletteTheme.Value = theme.empty() ? std::string("Original") : theme;
     }
     else if ( !StriCmp(p1, "enemyindicator") )
     {
