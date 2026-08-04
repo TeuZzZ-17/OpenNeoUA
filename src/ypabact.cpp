@@ -206,6 +206,29 @@ static float ypabact_GetMinigunRange()
     return range;
 }
 
+struct TAiTargetRangeConfig
+{
+    float range;
+    bool enforceViewerRange;
+};
+
+static const TAiTargetRangeConfig &ypabact_GetAiTargetRangeConfig()
+{
+    static const TAiTargetRangeConfig config = []()
+    {
+        constexpr float VanillaRange = 1800.0f;
+        constexpr float MaxRange = 2160.0f;
+
+        float parsed = ypabact_ReadNonNegativeFloatIni(System::IniConf::GameAiTargetRange, 0.0f);
+        if ( !isfinite(parsed) || parsed <= 0.0f )
+            return TAiTargetRangeConfig{VanillaRange, false};
+
+        return TAiTargetRangeConfig{std::min(parsed, MaxRange), true};
+    }();
+
+    return config;
+}
+
 static float ypabact_GetMinigunAiFireAlignment()
 {
     static const float alignment = []()
@@ -232,11 +255,6 @@ static float ypabact_GetMinigunAiFireAlignment()
     }();
 
     return alignment;
-}
-
-static bool ypabact_IsMinigunSectorDamageEnabled()
-{
-    return true;
 }
 
 static float ypabact_ReadHandBrakePower()
@@ -6646,12 +6664,10 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                 _status_flg &= ~BACT_STFLAG_ATTACK;
             }
 
-            // Optional global sector/building minigun attack. The Nucleus
-            // switch both authorises the AI shot and the actual damage path.
+            // Optional global sector/building minigun attack.
             vec3d minigunDir = arg->pos - _position;
             float minigunDistance = minigunDir.normalise();
-            bool fireSectorMinigun = ypabact_IsMinigunSectorDamageEnabled() &&
-                                     HasMinigun() &&
+            bool fireSectorMinigun = HasMinigun() &&
                                      minigunDistance > 0.01f &&
                                      minigunDistance <= ypabact_GetMinigunRange() &&
                                      minigunDir.dot(_rotation.AxisZ()) > ypabact_GetMinigunAiFireAlignment();
@@ -13000,6 +13016,7 @@ bool NC_STACK_ypabact::IsAnyKidWithoutSecondUnitTarget() const
 NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &cell, float *radius, char *job) const
 {
     NC_STACK_ypabact *lastSelectedUnit = NULL;
+    const TAiTargetRangeConfig &aiTargetRange = ypabact_GetAiTargetRangeConfig();
 
     uint8_t protoId = _mimic_disguise_vehicleID ? _mimic_disguise_vehicleID : _vehicleID;
     const World::TVhclProto &proto = _world->GetVhclProtos().at( protoId );
@@ -13058,7 +13075,8 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &c
         float radivs = (_position - cel_unit->_position).length();
 
         // do not target if distance more than for old selected unit
-        if ( radivs > *radius && !cel_unit->getBACT_viewer() )
+        if ( radivs > *radius &&
+             (!cel_unit->getBACT_viewer() || !aiTargetRange.enforceViewerRange) )
             continue;
 
         // If own unit is not gun or robo do additional checks for distance
@@ -13150,15 +13168,28 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetSectorTarget(Common::Point CellId) const
 
     if ( _world->IsSector(CellId) )
     {
-        float rad = 1800.0;
+        const TAiTargetRangeConfig &aiTargetRange = ypabact_GetAiTargetRangeConfig();
+        float rad = aiTargetRange.range;
         char job = 0;
 
-        for (int x = -1; x < 2; x++)
+        // Vanilla scans only the current sector and its eight neighbours. That
+        // fixed 3x3 window can miss units which are physically inside a custom
+        // range when the seeker is close to a sector boundary. Keep the exact
+        // vanilla window when the option is disabled; for an explicit positive
+        // range, cover every sector that can contain a target inside that radius.
+        const int sectorRadius = aiTargetRange.enforceViewerRange
+                               ? std::max(1, (int)std::ceil(aiTargetRange.range / World::CVSectorLength))
+                               : 1;
+
+        for (int x = -sectorRadius; x <= sectorRadius; x++)
         {
-            for (int y = -1; y < 2; y++)
+            for (int y = -sectorRadius; y <= sectorRadius; y++)
             {
                 Common::Point pt = CellId + Common::Point(x, y);
-                NC_STACK_ypabact *unit = GetEnemyCandidateInSector( _world->SectorAt(pt), &rad, &job);
+                if ( !_world->IsSector(pt) )
+                    continue;
+
+                NC_STACK_ypabact *unit = GetEnemyCandidateInSector(_world->SectorAt(pt), &rad, &job);
 
                 if ( unit ) enemy = unit;
             }
@@ -14835,7 +14866,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         int v55 = 0;
         int v96 = minigunWorldHit && !v108 ? 1 : 0;
 
-        if ( ypabact_IsMinigunSectorDamageEnabled() && minigunWorldHit && !v108 )
+        if ( minigunWorldHit && !v108 )
         {
             NC_STACK_ypabact *userHost = _world->getYW_userHostStation();
             bool canApplyDamage = !_world->_isNetGame ||

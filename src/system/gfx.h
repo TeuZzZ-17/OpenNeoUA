@@ -620,7 +620,6 @@ public:
     TileMap * GetTileset(int id);
 
     bool LoadPalette(const std::string &palette_ilbm);
-    std::string GetPaletteThemeOverridePath(const std::string &palette_ilbm);
     SDL_Cursor *LoadCursor(const std::string &name);
 
     // OpenUA custom: modern fullscreen visual filter (Data/Filters/*.pal used as a
@@ -1027,7 +1026,6 @@ protected:
     bool _vhsFboReady = false;
     TVhsFilterProg _vhsFilterProg;
     TVhsBlendProg _vhsBlendProg;
-    bool _vhsFilterEnabled = false;
     bool _vhsFilterActive = false;
     float _vhsFilterStrength = 0.0f;
     std::string _vhsFilterShaderPath;
