@@ -8286,6 +8286,18 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         if ( yw->_showDebugMode )
             robo_map.MapViewMask = -1;
 
+        // OpenUA: use the existing four map zoom levels for mouse-wheel input.
+        if ( inpt->ClickInf.wheel > 0 )
+        {
+            for ( int i = 0; i < inpt->ClickInf.wheel; i++ )
+                sub_4C1970(yw, 1);
+        }
+        else if ( inpt->ClickInf.wheel < 0 )
+        {
+            for ( int i = 0; i > inpt->ClickInf.wheel; i-- )
+                sub_4C1970(yw, 2);
+        }
+
         switch ( inpt->HotKeyID )
         {
         case 10:
