@@ -1131,7 +1131,46 @@ float flt_516530;
 
 tehMap robo_map;
 
+namespace
+{
+constexpr int MAP_DYNAMIC_LOD_DETAILED = 4;
+constexpr float MAP_DYNAMIC_ZOOM_NEAR = 18.75f;
+constexpr float MAP_DYNAMIC_ZOOM_FAR = 150.0f;
+constexpr float MAP_DYNAMIC_ZOOM_WHEEL_STEPS = 18.0f;
+constexpr int MAP_DYNAMIC_ZOOM_SAVE_SCALE = 1000;
+
+bool yw_IsDynamicMapZoomEnabled()
+{
+    return System::IniConf::UiDynamicMapZoom.Get<bool>();
+}
+
+int yw_MapSavedContinuousZoom(float zoom)
+{
+    if ( !yw_IsDynamicMapZoomEnabled() )
+        return 0;
+
+    return dround(zoom * MAP_DYNAMIC_ZOOM_SAVE_SCALE);
+}
+
+float yw_MapLoadContinuousZoom(int saved, int legacyLod)
+{
+    if ( saved > 0 )
+    {
+        const float restored = (float)saved / MAP_DYNAMIC_ZOOM_SAVE_SCALE;
+        return std::max(MAP_DYNAMIC_ZOOM_NEAR, std::min(MAP_DYNAMIC_ZOOM_FAR, restored));
+    }
+
+    const int clampedLod = std::max(1, std::min(4, legacyLod));
+    const float restored = 300.0f / (float)(1 << clampedLod);
+    return std::max(MAP_DYNAMIC_ZOOM_NEAR, std::min(MAP_DYNAMIC_ZOOM_FAR, restored));
+}
+}
+
 typedef int (*mapFunc)(NC_STACK_ypaworld *yw, int x, int y);
+
+int sub_4F60A4(NC_STACK_ypaworld *yw, int x, int y);
+int sub_4F6048(NC_STACK_ypaworld *yw, int x, int y);
+int sub_4F5CEC(NC_STACK_ypaworld *yw, int x, int y);
 
 NC_STACK_ypaworld *dword_5BAA60; // For sort func
 
@@ -1321,8 +1360,440 @@ Common::Point sub_4F681C(vec2d in)
 
 void sub_4F68FC(float a3, float a4, float a5, float a6, SDL_Color a7)
 {
+    if ( !robo_map.renderMapLines )
+        return;
+
     GFX::Engine.raster_func217(a7);
     GFX::Engine.raster_func201( Common::Line( sub_4F681C({a3, a4}), sub_4F681C({a5, a6}) )  );
+}
+
+
+static SDL_Color yw_MapToolbarColor(NC_STACK_ypaworld *yw, bool active)
+{
+    SDL_Color clr = (yw && yw->_userRobo)
+        ? yw->GetColor(yw->_userRobo->_owner)
+        : GFX::Engine.Color(90, 190, 190);
+
+    if ( active )
+    {
+        clr.r = (uint8_t)std::min(255, (int)clr.r + 28);
+        clr.g = (uint8_t)std::min(255, (int)clr.g + 28);
+        clr.b = (uint8_t)std::min(255, (int)clr.b + 28);
+    }
+    else
+    {
+        clr.r = (uint8_t)((int)clr.r * 2 / 3);
+        clr.g = (uint8_t)((int)clr.g * 2 / 3);
+        clr.b = (uint8_t)((int)clr.b * 2 / 3);
+    }
+    clr.a = 255;
+    return clr;
+}
+
+static SDL_Color yw_MapToolbarFrameColor(NC_STACK_ypaworld *yw)
+{
+    // The PNG glyphs stay neutral, while the corner accents identify the
+    // current faction. Keep them deliberately bright so Resistance blue and
+    // the darker themes remain readable against the title bar.
+    SDL_Color clr = yw_MapToolbarColor(yw, true);
+    const int peak = std::max((int)clr.r, std::max((int)clr.g, (int)clr.b));
+    if ( peak > 0 && peak < 215 )
+    {
+        const float scale = 215.0f / (float)peak;
+        clr.r = (uint8_t)std::min(255, dround((float)clr.r * scale));
+        clr.g = (uint8_t)std::min(255, dround((float)clr.g * scale));
+        clr.b = (uint8_t)std::min(255, dround((float)clr.b * scale));
+    }
+    clr.a = 255;
+    return clr;
+}
+
+static void yw_DrawMapToolbarLine(int x0, int y0, int x1, int y1)
+{
+    GFX::Engine.raster_func201(Common::Line(x0, y0, x1, y1));
+}
+
+static void yw_DrawMapToolbarStroke(int x0, int y0, int x1, int y1, int thickness = 1)
+{
+    yw_DrawMapToolbarLine(x0, y0, x1, y1);
+    if ( thickness <= 1 )
+        return;
+
+    const int dx = abs(x1 - x0);
+    const int dy = abs(y1 - y0);
+    for ( int i = 1; i < thickness; i++ )
+    {
+        if ( dx >= dy )
+            yw_DrawMapToolbarLine(x0, y0 + i, x1, y1 + i);
+        else
+            yw_DrawMapToolbarLine(x0 + i, y0, x1 + i, y1);
+    }
+}
+
+static void yw_DrawMapToolbarRect(int left, int top, int right, int bottom, int thickness = 1)
+{
+    for ( int i = 0; i < thickness; i++ )
+    {
+        yw_DrawMapToolbarLine(left + i, top + i, right - i, top + i);
+        yw_DrawMapToolbarLine(right - i, top + i, right - i, bottom - i);
+        yw_DrawMapToolbarLine(right - i, bottom - i, left + i, bottom - i);
+        yw_DrawMapToolbarLine(left + i, bottom - i, left + i, top + i);
+    }
+}
+
+static void yw_DrawMapToolbarCircle(int cx, int cy, int radius, int segments = 16)
+{
+    Common::Point prev;
+    bool hasPrev = false;
+    for ( int i = 0; i <= segments; i++ )
+    {
+        const float angle = C_2PI * (float)i / (float)segments;
+        Common::Point cur(cx + dround(cosf(angle) * radius),
+                          cy + dround(sinf(angle) * radius));
+        if ( hasPrev )
+            yw_DrawMapToolbarLine(prev.x, prev.y, cur.x, cur.y);
+        prev = cur;
+        hasPrev = true;
+    }
+}
+
+static void yw_DrawMapToolbarButtonFrame(NC_STACK_ypaworld *yw,
+                                         int left, int top, int right, int bottom,
+                                         bool active)
+{
+    GFX::Engine.raster_func217(yw_MapToolbarFrameColor(yw));
+
+    const int corner = std::max(4, std::min(right - left, bottom - top) / 3);
+    const int thickness = 2;
+    yw_DrawMapToolbarStroke(left + 1, top + corner, left + 1, top + 1, thickness);
+    yw_DrawMapToolbarStroke(left + 1, top + 1, left + corner, top + 1, thickness);
+    yw_DrawMapToolbarStroke(right - corner, top + 1, right - 1, top + 1, thickness);
+    yw_DrawMapToolbarStroke(right - 1, top + 1, right - 1, top + corner, thickness);
+    yw_DrawMapToolbarStroke(left + 1, bottom - corner, left + 1, bottom - 1, thickness);
+    yw_DrawMapToolbarStroke(left + 1, bottom - 1, left + corner, bottom - 1, thickness);
+    yw_DrawMapToolbarStroke(right - corner, bottom - 1, right - 1, bottom - 1, thickness);
+    yw_DrawMapToolbarStroke(right - 1, bottom - corner, right - 1, bottom - 1, thickness);
+
+    if ( active )
+    {
+        GFX::Engine.raster_func217(yw_MapToolbarColor(yw, true));
+        yw_DrawMapToolbarStroke(left + 3, bottom - 3, right - 3, bottom - 3, 3);
+    }
+}
+
+static const char *yw_MapToolbarIconName(int buttonId)
+{
+    switch ( buttonId )
+    {
+    case 0: return "close";
+    case 3: return "detail";
+    case 4: return "owners";
+    case 5: return "energy";
+    case 6: return "lock";
+    case 9: return "marker";
+    default: return NULL;
+    }
+}
+
+static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw);
+
+static bool yw_RenderMapToolbarPng(NC_STACK_ypaworld *yw,
+                                    int buttonId, bool active,
+                                    const ButtonBox &box)
+{
+    const char *iconName = yw_MapToolbarIconName(buttonId);
+    if ( !yw || !iconName )
+        return false;
+
+    NC_STACK_bitmap *bitmap = NULL;
+    const int owner = yw_RoboMapMarkerOwner(yw);
+
+    // Prefer the standalone faction-specific toolbar set. Each faction owns
+    // actual PNG assets rather than receiving a coloured frame at runtime.
+    // This keeps the title bar clean and makes the art fully replaceable.
+    if ( owner > World::OWNER_0 )
+    {
+        std::string path = "TacticalMap/Icons/UI/Factions/owner_";
+        path += std::to_string(owner);
+        path += "/";
+        path += iconName;
+        if ( active )
+            path += "_active";
+        path += ".png";
+        bitmap = StatusIconLoad(path);
+
+        if ( (!bitmap || !bitmap->GetBitmap()) && active )
+        {
+            path = "TacticalMap/Icons/UI/Factions/owner_";
+            path += std::to_string(owner);
+            path += "/";
+            path += iconName;
+            path += ".png";
+            bitmap = StatusIconLoad(path);
+        }
+    }
+
+    // Missing custom assets are always safe: use the neutral shared set,
+    // then finally fall back to the small vector glyph below.
+    if ( !bitmap || !bitmap->GetBitmap() )
+    {
+        std::string path = "TacticalMap/Icons/UI/";
+        path += iconName;
+        if ( active )
+            path += "_active";
+        path += ".png";
+        bitmap = StatusIconLoad(path);
+
+        if ( (!bitmap || !bitmap->GetBitmap()) && active )
+        {
+            path = "TacticalMap/Icons/UI/";
+            path += iconName;
+            path += ".png";
+            bitmap = StatusIconLoad(path);
+        }
+    }
+
+    if ( !bitmap || !bitmap->GetBitmap() )
+        return false;
+
+    const int iconSize = std::max(8, std::min(box.w, box.h) - 4);
+    const int screenLeft = robo_map.x + box.x + (box.w - iconSize) / 2;
+    const int screenTop = robo_map.y + box.y + (box.h - iconSize) / 2;
+
+    StatusIconRenderBitmap(yw, bitmap, screenLeft, screenTop, iconSize, 255);
+    return true;
+}
+
+static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool active)
+{
+    if ( buttonId < 0 || buttonId >= (int)robo_map.buttons.size() )
+        return;
+
+    if ( buttonId != 0 && buttonId != 3 && buttonId != 4
+            && buttonId != 5 && buttonId != 6 && buttonId != 9 )
+        return;
+
+    const ButtonBox &box = robo_map.buttons[buttonId];
+    if ( !box )
+        return;
+
+    const int screenHalfW = yw->_screenSize.x / 2;
+    const int screenHalfH = yw->_screenSize.y / 2;
+    const int left = robo_map.x + box.x - screenHalfW;
+    const int top = robo_map.y + box.y - screenHalfH;
+    const int right = left + box.w - 1;
+    const int bottom = top + box.h - 1;
+    const int cx = (left + right) / 2;
+    const int cy = (top + bottom) / 2;
+    const int pad = std::max(3, std::min(box.w, box.h) / 5);
+    const int x0 = left + pad;
+    const int x1 = right - pad;
+    const int y0 = top + pad;
+    const int y1 = bottom - pad;
+
+    // The old coloured corner frame was too visually aggressive and could
+    // dominate the actual controls. Faction identity now lives inside the PNG
+    // artwork itself; no extra lines are drawn around toolbar icons.
+    if ( yw_RenderMapToolbarPng(yw, buttonId, active, box) )
+        return;
+
+    GFX::Engine.raster_func217(yw_MapToolbarColor(yw, true));
+
+    switch ( buttonId )
+    {
+    case 0: // custom close button
+        yw_DrawMapToolbarStroke(x0 + 1, y0 + 1, x1 - 1, y1 - 1, 2);
+        yw_DrawMapToolbarStroke(x0 + 1, y1 - 1, x1 - 1, y0 + 1, 2);
+        break;
+
+    case 3: // detailed-map grid
+    {
+        const int gap = 2;
+        const int cellW = std::max(2, (x1 - x0 - gap) / 2);
+        const int cellH = std::max(2, (y1 - y0 - gap) / 2);
+        yw_DrawMapToolbarRect(x0, y0, x0 + cellW, y0 + cellH);
+        yw_DrawMapToolbarRect(x1 - cellW, y0, x1, y0 + cellH);
+        yw_DrawMapToolbarRect(x0, y1 - cellH, x0 + cellW, y1);
+        yw_DrawMapToolbarRect(x1 - cellW, y1 - cellH, x1, y1);
+        break;
+    }
+
+    case 4: // owner-colour flag
+        yw_DrawMapToolbarStroke(x0 + 1, y0, x0 + 1, y1, 2);
+        yw_DrawMapToolbarLine(x0 + 3, y0 + 1, x1 - 1, y0 + 3);
+        yw_DrawMapToolbarLine(x1 - 1, y0 + 3, x1 - 4, cy);
+        yw_DrawMapToolbarLine(x1 - 4, cy, x0 + 3, cy - 1);
+        yw_DrawMapToolbarStroke(x0, y1, x0 + 5, y1, 2);
+        break;
+
+    case 5: // unit energy information
+    {
+        const int barBottom = y0 + 3;
+        yw_DrawMapToolbarRect(x0, y0, x1, barBottom);
+        const int segmentW = std::max(2, (x1 - x0 - 4) / 3);
+        yw_DrawMapToolbarStroke(x0 + 2, y0 + 1,
+                                std::min(x1 - 1, x0 + 1 + segmentW), y0 + 1, 2);
+        yw_DrawMapToolbarStroke(x0 + 3 + segmentW, y0 + 1,
+                                std::min(x1 - 1, x0 + 2 + segmentW * 2), y0 + 1, 2);
+        yw_DrawMapToolbarRect(x0 + 2, cy, x1 - 2, y1 - 1);
+        yw_DrawMapToolbarStroke(cx - 2, cy - 2, cx + 2, cy - 2, 2);
+        yw_DrawMapToolbarLine(x0 + 1, y1, x0 + 4, y1);
+        yw_DrawMapToolbarLine(x1 - 4, y1, x1 - 1, y1);
+        break;
+    }
+
+    case 6: // lock viewer
+        yw_DrawMapToolbarRect(x0 + 2, cy - 1, x1 - 2, y1, 2);
+        yw_DrawMapToolbarLine(x0 + 4, cy - 2, x0 + 4, y0 + 3);
+        yw_DrawMapToolbarLine(x0 + 4, y0 + 3, cx, y0);
+        yw_DrawMapToolbarLine(cx, y0, x1 - 4, y0 + 3);
+        yw_DrawMapToolbarLine(x1 - 4, y0 + 3, x1 - 4, cy - 2);
+        yw_DrawMapToolbarStroke(cx, cy + 1, cx, y1 - 2, 2);
+        break;
+
+    case 9: // marker / bullseye
+    {
+        const int radius = std::max(3, std::min(x1 - x0, y1 - y0) / 2);
+        yw_DrawMapToolbarCircle(cx, cy, radius, 16);
+        yw_DrawMapToolbarCircle(cx, cy, std::max(2, radius / 2), 12);
+        yw_DrawMapToolbarStroke(cx - 1, cy, cx + 1, cy, 2);
+        yw_DrawMapToolbarLine(cx - radius - 2, cy, cx - radius + 1, cy);
+        yw_DrawMapToolbarLine(cx + radius - 1, cy, cx + radius + 2, cy);
+        yw_DrawMapToolbarLine(cx, cy - radius - 2, cx, cy - radius + 1);
+        yw_DrawMapToolbarLine(cx, cy + radius - 1, cx, cy + radius + 2);
+        break;
+    }
+    }
+}
+
+static void yw_RenderMapTitleToolbar(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || robo_map.IsClosed() )
+        return;
+
+    Common::Rect titleRect(robo_map.x - yw->_screenSize.x / 2,
+                           robo_map.y - yw->_screenSize.y / 2,
+                           robo_map.x + robo_map.w - yw->_screenSize.x / 2 - 1,
+                           robo_map.y + yw->_fontH - yw->_screenSize.y / 2 - 1);
+    GFX::Engine.raster_func211(titleRect);
+
+    yw_DrawMapToolbarGlyph(yw, 3, (robo_map.field_1EC & 1) != 0);
+    yw_DrawMapToolbarGlyph(yw, 4, (robo_map.field_1EC & 2) != 0);
+    yw_DrawMapToolbarGlyph(yw, 5, (robo_map.field_1EC & 4) != 0);
+    yw_DrawMapToolbarGlyph(yw, 6, robo_map.field_1ED == 1);
+    yw_DrawMapToolbarGlyph(yw, 9, robo_map.markerMode);
+
+    // The close control represents the currently open Map window.  Use the
+    // illuminated faction variant for the entire lifetime of the window; when
+    // the map is closed the toolbar is not rendered at all.
+    yw_DrawMapToolbarGlyph(yw, 0, true);
+}
+
+static int yw_RoboMapMarkerSizePx()
+{
+    const float zoom = std::max(MAP_DYNAMIC_ZOOM_NEAR,
+                                std::min(MAP_DYNAMIC_ZOOM_FAR, robo_map.field_1E0));
+    const float t = (zoom - MAP_DYNAMIC_ZOOM_NEAR)
+        / (MAP_DYNAMIC_ZOOM_FAR - MAP_DYNAMIC_ZOOM_NEAR);
+    return std::max(7, std::min(16, dround(16.0f - 9.0f * t)));
+}
+
+static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return 0;
+    if ( yw->_userRobo )
+        return yw->_userRobo->_owner;
+    if ( yw->_userUnit )
+        return yw->_userUnit->_owner;
+    return 0;
+}
+
+static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw)
+{
+    const int owner = yw_RoboMapMarkerOwner(yw);
+    if ( owner > World::OWNER_0 )
+    {
+        // Keep the marker artwork in the same replaceable faction folder as
+        // the toolbar.  This is the asset layout used by UA Rising:
+        //   TacticalMap/Icons/UI/Factions/owner_<id>/marker_active.png
+        // Prefer the active variant because a marker placed on the map is an
+        // active annotation, not the inactive toolbar button.
+        std::string factionPath = "TacticalMap/Icons/UI/Factions/owner_";
+        factionPath += std::to_string(owner);
+        factionPath += "/marker_active.png";
+        NC_STACK_bitmap *ownerBitmap = StatusIconLoad(factionPath);
+        if ( ownerBitmap && ownerBitmap->GetBitmap() )
+            return ownerBitmap;
+
+        factionPath = "TacticalMap/Icons/UI/Factions/owner_";
+        factionPath += std::to_string(owner);
+        factionPath += "/marker.png";
+        ownerBitmap = StatusIconLoad(factionPath);
+        if ( ownerBitmap && ownerBitmap->GetBitmap() )
+            return ownerBitmap;
+
+        // Backward compatibility with the Iteration 5 standalone assets.
+        const std::string legacyOwnerPath = std::string("TacticalMap/Icons/UI/map_marker_owner_")
+            + std::to_string(owner) + ".png";
+        ownerBitmap = StatusIconLoad(legacyOwnerPath);
+        if ( ownerBitmap && ownerBitmap->GetBitmap() )
+            return ownerBitmap;
+    }
+
+    NC_STACK_bitmap *neutral = StatusIconLoad("TacticalMap/Icons/UI/marker_active.png");
+    if ( neutral && neutral->GetBitmap() )
+        return neutral;
+
+    neutral = StatusIconLoad("TacticalMap/Icons/UI/marker.png");
+    if ( neutral && neutral->GetBitmap() )
+        return neutral;
+
+    return StatusIconLoad("TacticalMap/Icons/UI/map_marker.png");
+}
+
+static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
+{
+    // Marker mode controls both editing and visibility, matching the other
+    // map-layer toggles: markers remain stored for the session, but disappear
+    // immediately while the layer is disabled.
+    if ( !yw || !robo_map.markerMode || robo_map.customMarkers.empty() )
+        return;
+
+    SDL_Color color = yw_MapToolbarColor(yw, true);
+    GFX::Engine.raster_func217(color);
+
+    const int clipLeft = robo_map.field_200;
+    const int clipTop = robo_map.field_204;
+    const int clipRight = robo_map.field_200 + robo_map.field_1F8 - 1;
+    const int clipBottom = robo_map.field_204 + robo_map.field_1FC - 1;
+
+    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw);
+
+    for ( const vec2d &marker : robo_map.customMarkers )
+    {
+        const Common::Point p = sub_4F681C(marker);
+        if ( p.x < clipLeft || p.x > clipRight || p.y < clipTop || p.y > clipBottom )
+            continue;
+
+        if ( markerBitmap && markerBitmap->GetBitmap() )
+        {
+            const int size = yw_RoboMapMarkerSizePx();
+            const int screenX = p.x + yw->_screenSize.x / 2;
+            const int screenY = p.y + yw->_screenSize.y / 2;
+            StatusIconRenderBitmap(yw, markerBitmap,
+                                   screenX - size / 2, screenY - size / 2,
+                                   size, 255);
+            continue;
+        }
+
+        // Asset-free fallback.
+        const int r = std::max(3, yw_RoboMapMarkerSizePx() / 3);
+        yw_DrawMapToolbarLine(p.x - r, p.y - r, p.x + r, p.y + r);
+        yw_DrawMapToolbarLine(p.x - r, p.y + r, p.x + r, p.y - r);
+        yw_DrawMapToolbarLine(p.x - r - 2, p.y, p.x - r + 1, p.y);
+        yw_DrawMapToolbarLine(p.x + r - 1, p.y, p.x + r + 2, p.y);
+    }
 }
 
 static void yw_RenderMortarCooldownRadarBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
@@ -1789,7 +2260,59 @@ bool GetPlayerRoboAIBehaviorMapTarget(NC_STACK_ypaworld *yw, vec3d *target)
 }
 
 
-void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
+static void yw_EmitMapTileRect(CmdStream *cur, char tileId,
+                                   int sourceWidth, int sourceHeight,
+                                   int left, int top, int right, int bottom)
+{
+    if ( !cur || !tileId || sourceWidth <= 0 || sourceHeight <= 0 ||
+         right <= left || bottom <= top )
+        return;
+
+    const int clipLeft = robo_map.field_200;
+    const int clipTop = robo_map.field_204;
+    const int clipRight = robo_map.field_200 + robo_map.field_1F8;
+    const int clipBottom = robo_map.field_204 + robo_map.field_1FC;
+
+    if ( left >= clipRight || top >= clipBottom ||
+         right <= clipLeft || bottom <= clipTop )
+        return;
+
+    const int drawLeft = std::max(left, clipLeft);
+    const int drawTop = std::max(top, clipTop);
+    const int drawRight = std::min(right, clipRight);
+    const int drawBottom = std::min(bottom, clipBottom);
+    const int dstWidth = drawRight - drawLeft;
+    const int dstHeight = drawBottom - drawTop;
+    const int fullWidth = right - left;
+    const int fullHeight = bottom - top;
+
+    int sourceLeft = (int)floorf((float)(drawLeft - left) * sourceWidth / fullWidth);
+    int sourceTop = (int)floorf((float)(drawTop - top) * sourceHeight / fullHeight);
+    int sourceRight = (int)ceilf((float)(drawRight - left) * sourceWidth / fullWidth);
+    int sourceBottom = (int)ceilf((float)(drawBottom - top) * sourceHeight / fullHeight);
+
+    sourceLeft = std::max(0, std::min(sourceWidth - 1, sourceLeft));
+    sourceTop = std::max(0, std::min(sourceHeight - 1, sourceTop));
+    sourceRight = std::max(sourceLeft + 1, std::min(sourceWidth, sourceRight));
+    sourceBottom = std::max(sourceTop + 1, std::min(sourceHeight, sourceBottom));
+
+    FontUA::set_center_xpos(cur, drawLeft);
+    FontUA::set_center_ypos(cur, drawTop);
+
+    if ( sourceTop > 0 )
+        FontUA::set_yoff(cur, (uint8_t)sourceTop);
+    if ( sourceBottom < sourceHeight )
+        FontUA::set_yheight(cur, (uint8_t)sourceBottom);
+    if ( sourceLeft > 0 )
+        FontUA::set_xoff(cur, (uint8_t)sourceLeft);
+    if ( sourceRight < sourceWidth )
+        FontUA::set_xwidth(cur, (uint8_t)sourceRight);
+
+    FontUA::set_tile_size(cur, (uint16_t)dstWidth, (uint16_t)dstHeight);
+    FontUA::store_u8(cur, tileId);
+}
+
+static void yw_EmitLegacyMapTile(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
 {
     Common::Point tmp = sub_4F681C( {a1, a2} );
 
@@ -1861,6 +2384,36 @@ void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
 
         FontUA::store_u8(cur, a3);
     }
+}
+
+
+
+static void yw_EmitScaledMapTile(CmdStream *cur, float worldX, float worldZ,
+                                 char tileId, int sourceWidth, int sourceHeight)
+{
+    if ( !cur || sourceWidth <= 0 || sourceHeight <= 0 )
+        return;
+
+    const float scale = std::max(0.01f, robo_map.renderTileScale);
+    const Common::Point center = sub_4F681C( {worldX, worldZ} );
+    const int screenWidth = std::max(1, dround(sourceWidth * scale));
+    const int screenHeight = std::max(1, dround(sourceHeight * scale));
+    const int left = center.x - screenWidth / 2;
+    const int top = center.y - screenHeight / 2;
+
+    yw_EmitMapTileRect(cur, tileId, sourceWidth, sourceHeight,
+                       left, top, left + screenWidth, top + screenHeight);
+}
+
+void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
+{
+    if ( fabsf(robo_map.renderTileScale - 1.0f) <= 0.0001f )
+    {
+        yw_EmitLegacyMapTile(cur, a1, a2, a3, a4, a5);
+        return;
+    }
+
+    yw_EmitScaledMapTile(cur, a1, a2, a3, a4, a5);
 }
 
 void sub_4F72E8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
@@ -2146,7 +2699,7 @@ void sb_0x4f8f64__sub1(NC_STACK_ypaworld *yw)
 }
 
 
-void sb_0x4f8f64__sub2__sub0(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
+static void yw_EmitLegacyPowerBar(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
 {
     Common::Point tmp = sub_4F681C( {a1, a2} );
 
@@ -2212,6 +2765,35 @@ void sb_0x4f8f64__sub2__sub0(CmdStream *cur, float a1, float a2, char a3, int a4
 
         FontUA::store_u8(cur, a3);
     }
+}
+
+
+
+void sb_0x4f8f64__sub2__sub0(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
+{
+    if ( fabsf(robo_map.renderTileScale - 1.0f) <= 0.0001f )
+    {
+        yw_EmitLegacyPowerBar(cur, a1, a2, a3, a4, a5);
+        return;
+    }
+
+    if ( !cur || a4 <= 0 || a5 <= 0 )
+        return;
+
+    // This is the short power-strength bar drawn along the top edge of a
+    // Power Station marker. Vanilla centres it using the full square marker
+    // height (a4), not its own short height (a5); preserve that placement
+    // while applying the continuous scale.
+    const float scale = std::max(0.01f, robo_map.renderTileScale);
+    const Common::Point center = sub_4F681C( {a1, a2} );
+    const int screenWidth = std::max(1, dround(a4 * scale));
+    const int screenHeight = std::max(1, dround(a5 * scale));
+    const int markerHeight = std::max(1, dround(a4 * scale));
+    const int left = center.x - screenWidth / 2;
+    const int top = center.y - markerHeight / 2;
+
+    yw_EmitMapTileRect(cur, a3, a4, a5,
+                       left, top, left + screenWidth, top + screenHeight);
 }
 
 static bool yw_IsStrategicMapCellVisible(NC_STACK_ypaworld *yw, const cellArea *cell)
@@ -2609,9 +3191,11 @@ void sub_4F6DFC(NC_STACK_ypaworld *yw, CmdStream *cur, int height, int width, NC
                 sub_4F68FC(a3, v28, v27, v29, clr); // Also draw base of view triangle
         }
 
-        const bool drawHealthBar = yw->IsSpectatorControlled()
-            ? (bact->_owner != World::OWNER_0 && !yw->IsSpectatorBact(bact))
-            : (bact->_owner == yw->_userRobo->_owner);
+        // This function is reached only for units in cells visible through
+        // MapViewMask. When the Energy layer is enabled, show HP for every
+        // currently visible non-neutral unit, including enemies.
+        const bool drawHealthBar = bact->_owner != World::OWNER_0
+            && (!yw->IsSpectatorControlled() || !yw->IsSpectatorBact(bact));
 
         if ( bact->_bact_type != BACT_TYPES_MISSLE && bact->_bact_type != BACT_TYPES_ROBO && drawHealthBar )
         {
@@ -2979,43 +3563,264 @@ void sb_0x4f8f64__sub3(NC_STACK_ypaworld *yw, CmdStream *cur)
 
 void sb_0x4f8f64__sub0(NC_STACK_ypaworld *yw, CmdStream *cur)
 {
-    FontUA::select_tileset(cur, 10);
-    FontUA::set_center_xpos(cur, robo_map.x + robo_map.field_234 + robo_map.field_244 - (yw->_screenSize.x / 2));
-    FontUA::set_center_ypos(cur, robo_map.y + robo_map.h - (robo_map.field_230 + robo_map.field_240) - (yw->_screenSize.y / 2));
-
-    if ( robo_map.field_1EC & 1 )
-        FontUA::store_u8(cur, 97);
-    else
-        FontUA::store_u8(cur, 65);
-
-    if ( robo_map.field_1EC & 2 )
-        FontUA::store_u8(cur, 98);
-    else
-        FontUA::store_u8(cur, 66);
-
-    if ( robo_map.field_1EC & 4 )
-        FontUA::store_u8(cur, 100);
-    else
-        FontUA::store_u8(cur, 68);
-
-    if ( robo_map.field_1ED == 1 )
-        FontUA::store_u8(cur, 102);
-    else
-        FontUA::store_u8(cur, 70);
-
-    if ( robo_map.field_1E8 & 0x40 )
-        FontUA::store_u8(cur, 106);
-    else
-        FontUA::store_u8(cur, 74);
-
-    if ( robo_map.field_1E8 & 0x80 )
-        FontUA::store_u8(cur, 107);
-    else
-        FontUA::store_u8(cur, 75);
+    // OpenUA: the strategic-map controls are now drawn in the title bar.
+    // Keep this legacy hook as a no-op so the map render order stays intact.
+    (void)yw;
+    (void)cur;
 }
 
-void sb_0x4f8f64(NC_STACK_ypaworld *yw)
+static int yw_MapScreenX(float worldX)
 {
+    return robo_map.field_200 + dround(worldX / robo_map.field_1E0) - robo_map.field_1F0;
+}
+
+static int yw_MapScreenY(float mapDepth)
+{
+    return robo_map.field_204 + dround(mapDepth / robo_map.field_1E4) - robo_map.field_1F4;
+}
+
+static void yw_RenderContinuousMapBackground(NC_STACK_ypaworld *yw,
+                                             float worldLeft, float worldRight,
+                                             float depthTop, float depthBottom)
+{
+    CmdStream &buf = robo_map.dynamicMapBuffer;
+    buf.clear();
+    FontUA::set_opacity(&buf, 255);
+
+    const float sector = World::CVSectorLength;
+    const int sectorX0 = (int)floorf(worldLeft / sector) - 1;
+    const int sectorX1 = (int)ceilf(worldRight / sector) + 1;
+    const int sectorY0 = (int)floorf(depthTop / sector) - 1;
+    const int sectorY1 = (int)ceilf(depthBottom / sector) + 1;
+
+    FontUA::reset_tileset(&buf, 54); // legacy detailed map ownership/fog tiles
+    for ( int sy = sectorY0; sy <= sectorY1; sy++ )
+    {
+        const int top = yw_MapScreenY(sy * sector);
+        const int bottom = yw_MapScreenY((sy + 1) * sector);
+
+        for ( int sx = sectorX0; sx <= sectorX1; sx++ )
+        {
+            const int left = yw_MapScreenX(sx * sector);
+            const int right = yw_MapScreenX((sx + 1) * sector);
+            const char tileId = (char)(sub_4F60A4(yw, sx, sy) & 0xFF);
+            yw_EmitMapTileRect(&buf, tileId, 64, 64, left, top, right, bottom);
+        }
+    }
+
+    if ( robo_map.field_1EC & 2 )
+    {
+        FontUA::reset_tileset(&buf, 54);
+        for ( int sy = sectorY0; sy <= sectorY1; sy++ )
+        {
+            const int top = yw_MapScreenY(sy * sector);
+            const int bottom = yw_MapScreenY((sy + 1) * sector);
+
+            for ( int sx = sectorX0; sx <= sectorX1; sx++ )
+            {
+                const int left = yw_MapScreenX(sx * sector);
+                const int right = yw_MapScreenX((sx + 1) * sector);
+                const char tileId = (char)(sub_4F6048(yw, sx, sy) & 0xFF);
+                yw_EmitMapTileRect(&buf, tileId, 64, 64, left, top, right, bottom);
+            }
+        }
+    }
+
+    if ( robo_map.field_1EC & 1 )
+    {
+        const float quarterSector = sector * 0.25f;
+        const int gridX0 = std::max(0, (int)floorf(worldLeft / quarterSector) - 1);
+        const int gridX1 = std::min(yw->_mapSize.x * 4,
+                                   (int)ceilf(worldRight / quarterSector) + 1);
+        const int gridY0 = std::max(0, (int)floorf(depthTop / quarterSector) - 1);
+        const int gridY1 = std::min(yw->_mapSize.y * 4,
+                                   (int)ceilf(depthBottom / quarterSector) + 1);
+
+        FontUA::reset_tileset(&buf, 40); // legacy level-4 LEGO/terrain tiles
+        const float halfQuarter = quarterSector * 0.5f;
+        for ( int gy = gridY0; gy <= gridY1; gy++ )
+        {
+            // The legacy terrain callbacks address grid points, not cells.
+            // Their tiles are centred on each quarter-sector coordinate.
+            const int top = yw_MapScreenY(gy * quarterSector - halfQuarter);
+            const int bottom = yw_MapScreenY(gy * quarterSector + halfQuarter);
+
+            for ( int gx = gridX0; gx <= gridX1; gx++ )
+            {
+                const int left = yw_MapScreenX(gx * quarterSector - halfQuarter);
+                const int right = yw_MapScreenX(gx * quarterSector + halfQuarter);
+                const char tileId = (char)(sub_4F5CEC(yw, gx, gy) & 0xFF);
+                yw_EmitMapTileRect(&buf, tileId, 16, 16, left, top, right, bottom);
+            }
+        }
+    }
+
+    FontUA::set_end(&buf);
+
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buf, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
+}
+
+static void yw_RenderStrategicMapIconPass(NC_STACK_ypaworld *yw, int lod,
+                                          float tileScale, uint8_t opacity,
+                                          bool drawUnitLines,
+                                          int cellX0, int cellY0,
+                                          int cellX1, int cellY1)
+{
+    if ( opacity == 0 )
+        return;
+
+    robo_map.field_1EE = (uint8_t)lod;
+    robo_map.renderTileScale = tileScale;
+    robo_map.renderMapLines = drawUnitLines;
+
+    const bool detailedIcons = lod >= MAP_DYNAMIC_LOD_DETAILED;
+    const int setid = detailedIcons ? 28 : 61;
+    const int iconHeight = yw->_guiTiles[setid]->map[128].w;
+    const int iconWidth = yw->_guiTiles[setid]->h;
+    int unitCount = 0;
+
+    CmdStream &buf = robo_map.dynamicMapBuffer;
+    buf.clear();
+    FontUA::set_opacity(&buf, opacity);
+
+    sb_0x4f8f64__sub2(yw, &buf);
+    FontUA::select_tileset(&buf, setid);
+
+    for ( int cellY = cellY0; cellY <= cellY1; cellY++ )
+    {
+        for ( int cellX = cellX0; cellX <= cellX1; cellX++ )
+        {
+            if ( unitCount >= 2048 )
+                break;
+
+            cellArea &cell = yw->_cells(cellX, cellY);
+            if ( !(robo_map.MapViewMask & cell.view_mask) )
+                continue;
+
+            for ( NC_STACK_ypabact *bct : cell.unitsList )
+            {
+                if ( unitCount >= 2048 )
+                    break;
+                if ( bct->ShouldHideFromStrategicUI() ||
+                     bct->_bact_type == BACT_TYPES_ROBO )
+                    continue;
+
+                if ( bct->_bact_type == BACT_TYPES_GUN )
+                {
+                    NC_STACK_ypagun *gun = (NC_STACK_ypagun *)bct;
+                    if ( gun->IsRoboGun() )
+                        continue;
+                }
+
+                sub_4F6DFC(yw, &buf, iconHeight, iconWidth, bct,
+                           detailedIcons ? 1 : 0);
+                unitCount++;
+            }
+        }
+    }
+
+    FontUA::set_end(&buf);
+
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buf, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
+}
+
+static void yw_RenderStrategicMapCriticalOverlay(NC_STACK_ypaworld *yw,
+                                                  int lod, float tileScale,
+                                                  int cellX0, int cellY0,
+                                                  int cellX1, int cellY1)
+{
+    robo_map.field_1EE = (uint8_t)lod;
+    robo_map.renderTileScale = tileScale;
+    robo_map.renderMapLines = true;
+
+    const int setid = lod >= MAP_DYNAMIC_LOD_DETAILED ? 28 : 61;
+    const int iconHeight = yw->_guiTiles[setid]->map[128].w;
+    const int iconWidth = yw->_guiTiles[setid]->h;
+
+    CmdStream &buf = robo_map.dynamicMapBuffer;
+    buf.clear();
+    FontUA::set_opacity(&buf, 255);
+
+    // Host Stations remain full-opacity critical markers, but follow the
+    // same smooth size reduction as the other detailed icons.
+    FontUA::select_tileset(&buf, 1);
+    const float savedScale = robo_map.renderTileScale;
+    robo_map.renderTileScale = std::max(0.55f, tileScale);
+    for ( int cellY = cellY0; cellY <= cellY1; cellY++ )
+    {
+        for ( int cellX = cellX0; cellX <= cellX1; cellX++ )
+        {
+            cellArea &cell = yw->_cells(cellX, cellY);
+            if ( !(robo_map.MapViewMask & cell.view_mask) )
+                continue;
+
+            for ( NC_STACK_ypabact *bct : cell.unitsList )
+            {
+                if ( bct->ShouldHideFromStrategicUI() ||
+                     bct->_bact_type != BACT_TYPES_ROBO )
+                    continue;
+
+                sub_4F6DFC(yw, &buf,
+                           yw->_guiTiles[1]->h,
+                           yw->_guiTiles[1]->map[24].w,
+                           bct, 0);
+            }
+        }
+    }
+    robo_map.renderTileScale = savedScale;
+
+    FontUA::select_tileset(&buf, setid);
+
+    // Drag-selection feedback is logical state, not icon LOD: draw it once.
+    if ( robo_map.field_1E8 & 0x200 )
+    {
+        for ( int cellY = cellY0; cellY <= cellY1; cellY++ )
+        {
+            for ( int cellX = cellX0; cellX <= cellX1; cellX++ )
+            {
+                cellArea &cell = yw->_cells(cellX, cellY);
+                if ( !(robo_map.MapViewMask & cell.view_mask) )
+                    continue;
+
+                for ( NC_STACK_ypabact *bct : cell.unitsList )
+                {
+                    if ( bct->_owner == yw->_userRobo->_owner
+                            && bct->_position.x > flt_516524
+                            && bct->_position.z > flt_516528
+                            && bct->_position.x < flt_51652C
+                            && bct->_position.z < flt_516530
+                            && bct->_bact_type != BACT_TYPES_MISSLE
+                            && bct->_bact_type != BACT_TYPES_ROBO
+                            && bct->_bact_type != BACT_TYPES_GUN
+                            && bct->_status != BACT_STATUS_CREATE
+                            && bct->_status != BACT_STATUS_BEAM
+                            && bct->_status != BACT_STATUS_DEAD )
+                    {
+                        sub_4F6980(&buf, bct->_position.x, bct->_position.z,
+                                   0x85, iconHeight, iconWidth);
+                    }
+                }
+            }
+        }
+    }
+
+    sb_0x4f8f64__sub3(yw, &buf);
+    FontUA::set_end(&buf);
+
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buf, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
+}
+
+static void yw_RenderLegacyStrategicMap(NC_STACK_ypaworld *yw)
+{
+    robo_map.renderTileScale = 1.0f;
+    robo_map.renderMapLines = true;
+
     int v41 = 0;
 
     int v39 = robo_map.field_1EE + 2;
@@ -3187,6 +3992,94 @@ void sb_0x4f8f64(NC_STACK_ypaworld *yw)
     yw_RenderMortarCooldownRadarBars(yw, v33, v38, v43, vii);
 }
 
+
+
+void sb_0x4f8f64(NC_STACK_ypaworld *yw)
+{
+    if ( !yw_IsDynamicMapZoomEnabled() )
+    {
+        yw_RenderLegacyStrategicMap(yw);
+        yw_RenderCustomMapMarkers(yw);
+        yw_RenderMapTitleToolbar(yw);
+        return;
+    }
+
+    robo_map.field_1F8 = robo_map.w - robo_map.field_24C;
+    robo_map.field_1FC = robo_map.h - robo_map.field_250;
+    robo_map.field_200 = robo_map.x + robo_map.field_244 - (yw->_screenSize.x / 2);
+    robo_map.field_204 = robo_map.y + robo_map.field_23C - (yw->_screenSize.y / 2);
+
+    Common::Rect rect;
+    rect.left = robo_map.field_200;
+    rect.right = robo_map.field_200 + robo_map.field_1F8 - 1;
+    rect.top = robo_map.field_204;
+    rect.bottom = robo_map.field_204 + robo_map.field_1FC - 1;
+
+    // Keep the legacy integer anchoring so icons, picking and terrain retain
+    // their established pixel alignment at the two preserved zoom endpoints.
+    robo_map.field_1F0 = robo_map.field_1D8 / robo_map.field_1E0
+        - robo_map.field_1F8 / 2;
+    robo_map.field_1F4 = -(robo_map.field_1DC / robo_map.field_1E4
+        + robo_map.field_1FC / 2);
+
+    GFX::Engine.raster_func211(rect);
+
+    const float halfWorldWidth = robo_map.field_1F8 * robo_map.field_1E0 * 0.5f;
+    const float halfWorldHeight = robo_map.field_1FC * robo_map.field_1E4 * 0.5f;
+    const float worldLeft = robo_map.field_1D8 - halfWorldWidth;
+    const float worldRight = robo_map.field_1D8 + halfWorldWidth;
+    const float depthTop = -robo_map.field_1DC - halfWorldHeight;
+    const float depthBottom = -robo_map.field_1DC + halfWorldHeight;
+
+    int cellX0 = (int)floorf(worldLeft / World::CVSectorLength) - 1;
+    int cellX1 = (int)ceilf(worldRight / World::CVSectorLength) + 1;
+    int cellY0 = (int)floorf(depthTop / World::CVSectorLength) - 1;
+    int cellY1 = (int)ceilf(depthBottom / World::CVSectorLength) + 1;
+
+    cellX0 = std::max(1, cellX0);
+    cellY0 = std::max(1, cellY0);
+    cellX1 = std::min(yw->_mapSize.x - 1, cellX1);
+    cellY1 = std::min(yw->_mapSize.y - 1, cellY1);
+
+    // Terrain uses the highest-detail legacy LEGO set at a continuously scaled
+    // size. Only iconography cross-fades, so the map itself never darkens or
+    // doubles during the LOD transition.
+    yw_RenderContinuousMapBackground(yw, worldLeft, worldRight,
+                                     depthTop, depthBottom);
+
+    // The continuously zoomed map always uses the original detailed unit icons.
+    // Their screen size shrinks smoothly, but they never switch to the old
+    // circle/square/triangle class glyphs.
+    const float detailedScale = std::max(0.40f,
+                                         std::min(1.0f,
+                                                  MAP_DYNAMIC_ZOOM_NEAR / robo_map.continuousZoom));
+    const int detailedSet = 28;
+
+    robo_map.field_1EE = MAP_DYNAMIC_LOD_DETAILED;
+    robo_map.renderTileScale = detailedScale;
+    robo_map.renderMapLines = true;
+    sb_0x4f8f64__sub1(yw);
+    yw->RenderMortarMapMarkers();
+    yw->RenderLaserMapBeams(detailedSet);
+
+    yw_RenderStrategicMapIconPass(yw, MAP_DYNAMIC_LOD_DETAILED,
+                                  detailedScale, 255, true,
+                                  cellX0, cellY0, cellX1, cellY1);
+
+    yw_RenderStrategicMapCriticalOverlay(yw, MAP_DYNAMIC_LOD_DETAILED,
+                                         detailedScale,
+                                         cellX0, cellY0, cellX1, cellY1);
+
+    robo_map.field_1EE = MAP_DYNAMIC_LOD_DETAILED;
+    robo_map.renderTileScale = 1.0f;
+    robo_map.renderMapLines = true;
+
+    GFX::Engine.raster_func211(rect);
+    yw_RenderMortarCooldownRadarBars(yw, cellX0, cellY0, cellX1, cellY1);
+    yw_RenderCustomMapMarkers(yw);
+    yw_RenderMapTitleToolbar(yw);
+}
+
 void sub_4C157C(NC_STACK_ypaworld *yw)
 {
     float v1 = (robo_map.h - robo_map.field_250) * robo_map.field_1E4;
@@ -3262,38 +4155,32 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
     int v22 = robo_map.w;
     int v23 = robo_map.h;
 
-    robo_map.buttons[0] = ButtonBox(robo_map.w - yw->_fontDefCloseW,     0,
-                                    yw->_fontDefCloseW,    yw->_fontH);
+    const int closeW = std::max(18, yw->_fontDefCloseW);
+    const int toolW = std::max(18, std::min(24, yw->_fontH));
+    const int toolbarIds[] = {3, 4, 5, 6, 9};
+    const int toolCount = (int)(sizeof(toolbarIds) / sizeof(toolbarIds[0]));
+    const int toolStart = std::max(0, robo_map.w - closeW - toolCount * toolW);
 
-    robo_map.buttons[2] = ButtonBox(robo_map.w - 2 * yw->_fontDefCloseW, 0,
-                                    yw->_fontDefCloseW,    yw->_fontH);
+    robo_map.buttons[0] = ButtonBox(robo_map.w - closeW, 0,
+                                    closeW, yw->_fontH);
+    robo_map.buttons[1] = ButtonBox(0, 0, toolStart, yw->_fontH);
+    robo_map.buttons[2] = ButtonBox();
+    robo_map.buttons[7] = ButtonBox();
+    robo_map.buttons[8] = ButtonBox();
 
-    robo_map.buttons[1] = ButtonBox(0, 0,
-                                    robo_map.buttons[2].x - robo_map.field_238, yw->_fontH);
-
-    robo_map.buttons[9] = ButtonBox(robo_map.buttons[2].x - robo_map.field_238, 0,
-                                    robo_map.field_238,       yw->_fontH);
-
-    int v5 = robo_map.field_234 + robo_map.field_244;
-
-    for (int i = 3; i < 9; i++)
-    {
-        robo_map.buttons[i] = ButtonBox(v5,  v23 - robo_map.field_240 - robo_map.field_230,
-                                        robo_map.field_22C,  robo_map.field_230);
-
-        v5 += robo_map.field_22C;
-    }
-
-    int v7;
-
-    if ( robo_map.field_1E8 & 0x20 )
-        v7 = 's'; //default fon
-    else
-        v7 = 'q'; //default fon (
+    for ( int i = 0; i < toolCount; i++ )
+        robo_map.buttons[toolbarIds[i]] = ButtonBox(toolStart + i * toolW, 0,
+                                                    toolW, yw->_fontH);
 
     robo_map.cmdCommands.clear();
 
-    GuiBase::FormateTitle(yw, v20, v21, v22, Locale::Text::WinName(Locale::WINNAME_MAP), &robo_map.cmdCommands, v7, robo_map.flags);
+    // Keep FLAG_WITH_CLOSE on the window so the existing input/close lifecycle
+    // remains untouched, but suppress the legacy atlas X. A matching vector X
+    // is drawn by yw_RenderMapTitleToolbar() in the exact ButtonBox[0].
+    GuiBase::FormateTitle(yw, v20, v21, v22,
+                          Locale::Text::WinName(Locale::WINNAME_MAP),
+                          &robo_map.cmdCommands, 0,
+                          robo_map.flags & ~GuiBase::FLAG_WITH_CLOSE);
 
     FontUA::next_line(&robo_map.cmdCommands);
     FontUA::reset_tileset(&robo_map.cmdCommands, 13);
@@ -3638,7 +4525,7 @@ int sub_4F60A4(NC_STACK_ypaworld *yw, int x, int y)
             return 9;
     }
     else
-        return 9;
+        return 0;
 }
 
 int sub_4F6048(NC_STACK_ypaworld *yw, int x, int y)
@@ -3864,11 +4751,186 @@ void MapRoboUpdateMapInt(NC_STACK_ypaworld *yw)
                                      robo_map.w - robo_map.field_24C,
                                      robo_map.h - robo_map.field_250);
 
-    int v15 = robo_map.x + robo_map.field_244 - (yw->_screenSize.x / 2);
-    int v14 = robo_map.y + robo_map.field_23C - (yw->_screenSize.y / 2);
-
     robo_map.t1_cmdbuf_3.clear();
-    sb_0x4f6650(yw, &robo_map.t1_cmdbuf_3, v15, v14);
+
+    if ( !yw_IsDynamicMapZoomEnabled() )
+    {
+        const int mapX = robo_map.x + robo_map.field_244 - (yw->_screenSize.x / 2);
+        const int mapY = robo_map.y + robo_map.field_23C - (yw->_screenSize.y / 2);
+        sb_0x4f6650(yw, &robo_map.t1_cmdbuf_3, mapX, mapY);
+        return;
+    }
+
+    // The dynamic map renders its continuously scaled terrain and icon
+    // LOD passes in postDraw. Keep the legacy include valid but empty so a
+    // stale discrete background is never drawn underneath.
+    FontUA::set_end(&robo_map.t1_cmdbuf_3);
+}
+
+
+static void yw_RebuildRoboMapLayout(NC_STACK_ypaworld *yw)
+{
+    sub_4C157C(yw);
+    sub_4C1814(yw, robo_map.field_1CC - robo_map.field_244, robo_map.field_1D2);
+    sub_4C0C00(yw);
+    sub_4C0FEC(yw);
+    sub_4C1214(yw);
+    MapRoboUpdateMapInt(yw);
+}
+
+static void yw_ToggleRoboMapFullscreen(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return;
+
+    if ( !robo_map.maximized )
+    {
+        robo_map.restoreX = robo_map.x;
+        robo_map.restoreY = robo_map.y;
+        robo_map.restoreW = robo_map.w;
+        robo_map.restoreH = robo_map.h;
+        robo_map.restoreRectValid = true;
+
+        robo_map.x = 0;
+        robo_map.y = yw->_upScreenBorder;
+        robo_map.w = yw->_screenSize.x;
+        robo_map.h = yw->_screenSize.y - yw->_upScreenBorder - yw->_downScreenBorder;
+        robo_map.maximized = true;
+    }
+    else
+    {
+        if ( robo_map.restoreRectValid )
+        {
+            const int maxW = yw->_screenSize.x;
+            const int maxH = yw->_screenSize.y - yw->_upScreenBorder - yw->_downScreenBorder;
+            robo_map.x = std::max(0, robo_map.restoreX);
+            robo_map.y = std::max(yw->_upScreenBorder, robo_map.restoreY);
+            robo_map.w = std::min(maxW, std::max((int)robo_map.field_210, robo_map.restoreW));
+            robo_map.h = std::min(maxH, std::max((int)robo_map.field_212, robo_map.restoreH));
+
+            if ( robo_map.x + robo_map.w > yw->_screenSize.x )
+                robo_map.x = std::max(0, yw->_screenSize.x - robo_map.w);
+            if ( robo_map.y + robo_map.h > yw->_screenSize.y - yw->_downScreenBorder )
+                robo_map.y = std::max(yw->_upScreenBorder,
+                                      yw->_screenSize.y - yw->_downScreenBorder - robo_map.h);
+        }
+        robo_map.maximized = false;
+    }
+
+    robo_map.middlePanActive = false;
+    robo_map.field_1E8 &= ~(1 | 2 | 4 | 0x10 | 0x20 | 0x200);
+    yw->_guiDragDefaultMouse = false;
+    yw->_guiDragging = false;
+    yw->_guiDragElement = NULL;
+    yw_RebuildRoboMapLayout(yw);
+}
+
+static vec2d yw_RoboMapButtonPosToWorld(const Common::Point &btnPos)
+{
+    const float contentW = (float)(robo_map.w - robo_map.field_24C);
+    const float contentH = (float)(robo_map.h - robo_map.field_250);
+
+    return vec2d(robo_map.field_1D8 + ((float)btnPos.x - contentW * 0.5f) * robo_map.field_1E0,
+                 robo_map.field_1DC - ((float)btnPos.y - contentH * 0.5f) * robo_map.field_1E4);
+}
+
+static bool yw_IsRoboMapMarkerPositionValid(NC_STACK_ypaworld *yw, const vec2d &worldPos)
+{
+    return yw && yw->IsGamePlaySector(World::PositionToSectorID(worldPos));
+}
+
+static bool yw_RoboMapMarkerOverlaps(const vec2d &worldPos, int ignoreIndex = -1)
+{
+    const Common::Point candidate = sub_4F681C(worldPos);
+    const int markerSize = yw_RoboMapMarkerSizePx();
+    const int minDistance = markerSize + 3;
+    const int minDistanceSq = minDistance * minDistance;
+
+    for ( size_t i = 0; i < robo_map.customMarkers.size(); i++ )
+    {
+        if ( (int)i == ignoreIndex )
+            continue;
+
+        const Common::Point other = sub_4F681C(robo_map.customMarkers[i]);
+        const int dx = other.x - candidate.x;
+        const int dy = other.y - candidate.y;
+        if ( dx * dx + dy * dy < minDistanceSq )
+            return true;
+    }
+
+    return false;
+}
+
+static int yw_FindRoboMapMarkerAt(const Common::Point &btnPos)
+{
+    if ( robo_map.customMarkers.empty() )
+        return -1;
+
+    const vec2d worldPos = yw_RoboMapButtonPosToWorld(btnPos);
+    const float hitRadius = (float)(yw_RoboMapMarkerSizePx() / 2 + 4);
+    const float maxDx = hitRadius * robo_map.field_1E0;
+    const float maxDz = hitRadius * robo_map.field_1E4;
+    int bestIndex = -1;
+    float bestScore = 1.0e30f;
+
+    for ( size_t i = 0; i < robo_map.customMarkers.size(); i++ )
+    {
+        const float dx = (robo_map.customMarkers[i].x - worldPos.x) / std::max(1.0f, maxDx);
+        const float dz = (robo_map.customMarkers[i].y - worldPos.y) / std::max(1.0f, maxDz);
+        const float score = dx * dx + dz * dz;
+        if ( score <= 1.0f && score < bestScore )
+        {
+            bestScore = score;
+            bestIndex = (int)i;
+        }
+    }
+
+    return bestIndex;
+}
+
+static int yw_AddRoboMapMarker(NC_STACK_ypaworld *yw, const Common::Point &btnPos)
+{
+    const vec2d worldPos = yw_RoboMapButtonPosToWorld(btnPos);
+    if ( !yw_IsRoboMapMarkerPositionValid(yw, worldPos) )
+        return -1;
+
+    // Markers are personal annotations and may be placed in unexplored
+    // gameplay sectors. They do not reveal terrain, units or ownership.
+    if ( yw_RoboMapMarkerOverlaps(worldPos) )
+        return -1;
+
+    robo_map.customMarkers.push_back(worldPos);
+    return (int)robo_map.customMarkers.size() - 1;
+}
+
+static bool yw_MoveRoboMapMarker(NC_STACK_ypaworld *yw, int markerIndex,
+                                 const Common::Point &btnPos)
+{
+    if ( markerIndex < 0 || markerIndex >= (int)robo_map.customMarkers.size() )
+        return false;
+
+    const vec2d worldPos = yw_RoboMapButtonPosToWorld(btnPos);
+    if ( !yw_IsRoboMapMarkerPositionValid(yw, worldPos) )
+        return false;
+    if ( yw_RoboMapMarkerOverlaps(worldPos, markerIndex) )
+        return false;
+
+    robo_map.customMarkers[markerIndex] = worldPos;
+    return true;
+}
+
+static bool yw_RemoveNearestRoboMapMarker(const Common::Point &btnPos)
+{
+    const int markerIndex = yw_FindRoboMapMarkerAt(btnPos);
+    if ( markerIndex < 0 )
+        return false;
+
+    robo_map.customMarkers.erase(robo_map.customMarkers.begin() + markerIndex);
+    if ( robo_map.markerDragIndex == markerIndex )
+        robo_map.markerDragIndex = -1;
+    else if ( robo_map.markerDragIndex > markerIndex )
+        robo_map.markerDragIndex--;
+    return true;
 }
 
 void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
@@ -3876,6 +4938,7 @@ void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
     robo_map.t1_cmdbuf_1.reserve(256);
     robo_map.t1_cmdbuf_2.reserve(256);
     robo_map.t1_cmdbuf_3.reserve(32768);
+    robo_map.dynamicMapBuffer.reserve(65536);
 
     robo_map.flags = (GuiBase::FLAG_CLOSED | GuiBase::FLAG_WITH_CLOSE | GuiBase::FLAG_WITH_DRAGBAR);
     robo_map.field_228 = 8;
@@ -3898,6 +4961,7 @@ void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
     robo_map.w = 2 * yw->_screenSize.x / 3;
     robo_map.h = 2 * yw->_screenSize.y / 3;
     robo_map.field_1EE = 4;
+    robo_map.continuousZoom = MAP_DYNAMIC_ZOOM_NEAR;
     robo_map.field_1EC = 7;
     robo_map.buttons.resize(18);
 
@@ -3917,37 +4981,17 @@ void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
         robo_map.field_1D8 = 39000.0;
     }
 
-    switch ( robo_map.field_1EE )
-    {
-    case 0:
-        robo_map.field_1E4 = 300.0;
-        robo_map.field_1E0 = 300.0;
-        break;
-
-    case 1:
-        robo_map.field_1E4 = 150.0;
-        robo_map.field_1E0 = 150.0;
-        break;
-
-    case 2:
-        robo_map.field_1E4 = 75.0;
-        robo_map.field_1E0 = 75.0;
-        break;
-
-    case 3:
-        robo_map.field_1E4 = 37.5;
-        robo_map.field_1E0 = 37.5;
-        break;
-
-    case 4:
-        robo_map.field_1E4 = 18.75;
-        robo_map.field_1E0 = 18.75;
-        break;
-    }
+    robo_map.field_1E4 = robo_map.continuousZoom;
+    robo_map.field_1E0 = robo_map.continuousZoom;
 
     robo_map.field_1ED = 0;
     robo_map.field_1E8 = 0;
     robo_map.middlePanActive = false;
+    robo_map.markerMode = true;
+    robo_map.markerDragIndex = -1;
+    robo_map.maximized = false;
+    robo_map.restoreRectValid = false;
+    robo_map.customMarkers.clear();
     robo_map.MapViewMask = cellArea::ViewMask(1);
 
     robo_map.field_254 = 0.45;
@@ -3992,44 +5036,70 @@ void sub_4C32A8(NC_STACK_ypaworld *yw, TMFWinStatus *status)
 
 void sub_4C1970(NC_STACK_ypaworld *yw, int a2)
 {
-    if ( a2 == 1 )
-        robo_map.field_1EE++;
-    else if ( a2 == 2 )
-        robo_map.field_1EE--;
+    (void)yw;
 
-
-    if ( robo_map.field_1EE > 4 )
-        robo_map.field_1EE = 4;
-    else if ( robo_map.field_1EE < 1 )
-        robo_map.field_1EE = 1;
-
-    switch ( robo_map.field_1EE )
+    if ( !yw_IsDynamicMapZoomEnabled() )
     {
-    case 0:
-        robo_map.field_1E4 = 300.0;
-        robo_map.field_1E0 = 300.0;
-        break;
+        if ( a2 == 1 )
+            robo_map.field_1EE++;
+        else if ( a2 == 2 )
+            robo_map.field_1EE--;
 
-    case 1:
-        robo_map.field_1E4 = 150.0;
-        robo_map.field_1E0 = 150.0;
-        break;
+        if ( robo_map.field_1EE > 4 )
+            robo_map.field_1EE = 4;
+        else if ( robo_map.field_1EE < 1 )
+            robo_map.field_1EE = 1;
 
-    case 2:
-        robo_map.field_1E4 = 75.0;
-        robo_map.field_1E0 = 75.0;
-        break;
+        switch ( robo_map.field_1EE )
+        {
+        case 0:
+            robo_map.field_1E4 = 300.0f;
+            robo_map.field_1E0 = 300.0f;
+            break;
 
-    case 3:
-        robo_map.field_1E4 = 37.5;
-        robo_map.field_1E0 = 37.5;
-        break;
+        case 1:
+            robo_map.field_1E4 = 150.0f;
+            robo_map.field_1E0 = 150.0f;
+            break;
 
-    case 4:
-        robo_map.field_1E4 = 18.75;
-        robo_map.field_1E0 = 18.75;
-        break;
+        case 2:
+            robo_map.field_1E4 = 75.0f;
+            robo_map.field_1E0 = 75.0f;
+            break;
+
+        case 3:
+            robo_map.field_1E4 = 37.5f;
+            robo_map.field_1E0 = 37.5f;
+            break;
+
+        case 4:
+            robo_map.field_1E4 = MAP_DYNAMIC_ZOOM_NEAR;
+            robo_map.field_1E0 = MAP_DYNAMIC_ZOOM_NEAR;
+            break;
+        }
+        return;
     }
+
+    if ( a2 == 1 || a2 == 2 )
+    {
+        const float wheelFactor = powf(2.0f, 1.0f / MAP_DYNAMIC_ZOOM_WHEEL_STEPS);
+        if ( a2 == 1 )
+            robo_map.continuousZoom /= wheelFactor;
+        else
+            robo_map.continuousZoom *= wheelFactor;
+    }
+    else if ( robo_map.continuousZoom < MAP_DYNAMIC_ZOOM_NEAR ||
+              robo_map.continuousZoom > MAP_DYNAMIC_ZOOM_FAR )
+    {
+        robo_map.continuousZoom = yw_MapLoadContinuousZoom(0, robo_map.field_1EE);
+    }
+
+    robo_map.continuousZoom = std::max(MAP_DYNAMIC_ZOOM_NEAR,
+                                       std::min(MAP_DYNAMIC_ZOOM_FAR,
+                                                robo_map.continuousZoom));
+    robo_map.field_1E0 = robo_map.continuousZoom;
+    robo_map.field_1E4 = robo_map.continuousZoom;
+    robo_map.field_1EE = MAP_DYNAMIC_LOD_DETAILED;
 }
 
 int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
@@ -4146,6 +5216,8 @@ int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
         robo_map.field_1EC = yw->_roboMapStatus.Data[0];
         robo_map.field_1ED = yw->_roboMapStatus.Data[1];
         robo_map.field_1EE = yw->_roboMapStatus.Data[2];
+        robo_map.continuousZoom = yw_MapLoadContinuousZoom(yw->_roboMapStatus.Data[7],
+                                                           robo_map.field_1EE);
         robo_map.field_208 = yw->_roboMapStatus.Data[3];
         robo_map.field_20A = yw->_roboMapStatus.Data[4];
         robo_map.field_20C = yw->_roboMapStatus.Data[5];
@@ -5648,6 +6720,7 @@ void ypaworld_func64__sub7__sub2__sub2(NC_STACK_ypaworld *yw)
             yw->_roboMapStatus.Data[4] = robo_map.field_20A;
             yw->_roboMapStatus.Data[5] = robo_map.field_20C;
             yw->_roboMapStatus.Data[6] = robo_map.field_20E;
+            yw->_roboMapStatus.Data[7] = yw_MapSavedContinuousZoom(robo_map.continuousZoom);
 
             yw->_roboFinderStatus.Valid = true;
             yw->_roboFinderStatus.IsOpen = squadron_manager.IsOpen();
@@ -5672,6 +6745,7 @@ void ypaworld_func64__sub7__sub2__sub2(NC_STACK_ypaworld *yw)
             yw->_vhclMapStatus.Data[4] = robo_map.field_20A;
             yw->_vhclMapStatus.Data[5] = robo_map.field_20C;
             yw->_vhclMapStatus.Data[6] = robo_map.field_20E;
+            yw->_vhclMapStatus.Data[7] = yw_MapSavedContinuousZoom(robo_map.continuousZoom);
 
             yw->_vhclFinderStatus.Valid = true;
             yw->_vhclFinderStatus.IsOpen = squadron_manager.IsOpen();
@@ -8286,16 +9360,50 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         if ( yw->_showDebugMode )
             robo_map.MapViewMask = -1;
 
-        // OpenUA: use the existing four map zoom levels for mouse-wheel input.
-        if ( inpt->ClickInf.wheel > 0 )
+        if ( yw_IsDynamicMapZoomEnabled() )
         {
-            for ( int i = 0; i < inpt->ClickInf.wheel; i++ )
-                sub_4C1970(yw, 1);
+            // Smooth cursor-centred zoom. The detailed unit icon set remains
+            // active through the entire range; only its screen size changes.
+            if ( winpt->selected_btn == &robo_map && winpt->selected_btnID == 17
+                    && inpt->ClickInf.wheel != 0 )
+            {
+                const Common::Point mouseInMap = winpt->move.BtnPos;
+                const vec2d anchorBefore = yw_RoboMapButtonPosToWorld(mouseInMap);
+
+                if ( inpt->ClickInf.wheel > 0 )
+                {
+                    for ( int i = 0; i < inpt->ClickInf.wheel; i++ )
+                        sub_4C1970(yw, 1);
+                }
+                else
+                {
+                    for ( int i = 0; i > inpt->ClickInf.wheel; i-- )
+                        sub_4C1970(yw, 2);
+                }
+
+                const float contentW = (float)(robo_map.w - robo_map.field_24C);
+                const float contentH = (float)(robo_map.h - robo_map.field_250);
+                robo_map.field_1D8 = anchorBefore.x
+                    - ((float)mouseInMap.x - contentW * 0.5f) * robo_map.field_1E0;
+                robo_map.field_1DC = anchorBefore.y
+                    + ((float)mouseInMap.y - contentH * 0.5f) * robo_map.field_1E4;
+                sub_4C1814(yw, robo_map.field_1CC - robo_map.field_244, robo_map.field_1D2);
+            }
         }
-        else if ( inpt->ClickInf.wheel < 0 )
+        else
         {
-            for ( int i = 0; i > inpt->ClickInf.wheel; i-- )
-                sub_4C1970(yw, 2);
+            // Preserve the existing discrete wheel behaviour byte-for-byte in
+            // effect when the opt-in parameter is absent or disabled.
+            if ( inpt->ClickInf.wheel > 0 )
+            {
+                for ( int i = 0; i < inpt->ClickInf.wheel; i++ )
+                    sub_4C1970(yw, 1);
+            }
+            else if ( inpt->ClickInf.wheel < 0 )
+            {
+                for ( int i = 0; i > inpt->ClickInf.wheel; i-- )
+                    sub_4C1970(yw, 2);
+            }
         }
 
         switch ( inpt->HotKeyID )
@@ -8325,25 +9433,28 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             break;
 
         case 16:
-            winpt->selected_btn = &robo_map;
-            winpt->selected_btnID = 7;
-            winpt->flag |= TClickBoxInf::FLAG_BTN_UP;
+            // The title-bar +/- buttons were removed. Preserve the existing
+            // keyboard zoom actions without manufacturing an invisible click.
+            sub_4C1970(yw, 1);
             break;
 
         case 17:
-            winpt->selected_btn = &robo_map;
-            winpt->selected_btnID = 8;
-            winpt->flag |= TClickBoxInf::FLAG_BTN_UP;
-            break;
-
-        case 18:
-            winpt->selected_btn = &robo_map;
-            winpt->selected_btnID = 9;
-            winpt->flag |= TClickBoxInf::FLAG_BTN_UP;
+            sub_4C1970(yw, 2);
             break;
 
         default:
             break;
+        }
+
+        if ( winpt->selected_btn == &robo_map
+                && (winpt->selected_btnID == 1 || winpt->selected_btnID == 16)
+                && (winpt->flag & TClickBoxInf::FLAG_DBL_CLICK) )
+        {
+            yw_ToggleRoboMapFullscreen(yw);
+            winpt->flag &= ~(TClickBoxInf::FLAG_LM_DOWN |
+                             TClickBoxInf::FLAG_LM_HOLD |
+                             TClickBoxInf::FLAG_BTN_DOWN |
+                             TClickBoxInf::FLAG_BTN_HOLD);
         }
 
         if ( robo_map.middlePanActive )
@@ -8358,6 +9469,20 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             else
             {
                 robo_map.middlePanActive = false;
+                yw->_guiDragDefaultMouse = false;
+            }
+        }
+        else if ( robo_map.markerDragIndex >= 0 )
+        {
+            if ( winpt->flag & TClickBoxInf::FLAG_LM_HOLD )
+            {
+                yw_MoveRoboMapMarker(yw, robo_map.markerDragIndex,
+                                     winpt->move.BtnPos);
+                yw->_guiDragDefaultMouse = true;
+            }
+            else
+            {
+                robo_map.markerDragIndex = -1;
                 yw->_guiDragDefaultMouse = false;
             }
         }
@@ -8476,6 +9601,10 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             {
                 if ( winpt->selected_btnID == 17 )
                 {
+                    // The wheel button is reserved for map panning again.
+                    // Marker creation uses only a right click while the marker
+                    // layer is enabled, leaving selection and wheel controls
+                    // consistent with the normal map.
                     robo_map.middlePanActive = true;
                     robo_map.middlePanStartMouse = winpt->move.ScreenPos;
                     robo_map.middlePanStartX = robo_map.field_1D8;
@@ -8487,7 +9616,17 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 
             if ( winpt->flag & TClickBoxInf::FLAG_RM_DOWN )
             {
-                if ( winpt->selected_btnID == 17 )
+                if ( winpt->selected_btnID == 17 && robo_map.markerMode )
+                {
+                    // Right click on empty map space creates a marker. Right
+                    // click directly on an existing marker removes it, so the
+                    // same button remains sufficient for both basic actions.
+                    if ( !yw_RemoveNearestRoboMapMarker(winpt->move.BtnPos) )
+                        yw_AddRoboMapMarker(yw, winpt->move.BtnPos);
+                    winpt->flag &= ~TClickBoxInf::FLAG_RM_DOWN;
+                    yw->_guiDragDefaultMouse = false;
+                }
+                else if ( winpt->selected_btnID == 17 )
                 {
                     robo_map.field_220 = robo_map.field_1D8;
                     robo_map.field_21C = winpt->move.ScreenPos.x;
@@ -8500,7 +9639,21 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 
             if ( winpt->flag & TClickBoxInf::FLAG_LM_DOWN )
             {
-                if ( winpt->selected_btnID == 17 && !yw->IsSpectatorControlled() )
+                bool markerDragStarted = false;
+                if ( winpt->selected_btnID == 17 && robo_map.markerMode )
+                {
+                    const int markerIndex = yw_FindRoboMapMarkerAt(winpt->move.BtnPos);
+                    if ( markerIndex >= 0 )
+                    {
+                        robo_map.markerDragIndex = markerIndex;
+                        yw->_guiDragDefaultMouse = true;
+                        winpt->flag &= ~TClickBoxInf::FLAG_LM_DOWN;
+                        markerDragStarted = true;
+                    }
+                }
+
+                if ( !markerDragStarted && winpt->selected_btnID == 17
+                        && !yw->IsSpectatorControlled() )
                 {
                     robo_map.field_1E8 |= 0x200;
                     dword_516510 = winpt->move.ScreenPos.x;
@@ -8580,6 +9733,13 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                     robo_map.field_1ED = robo_map.field_1ED != 1;
                     break;
 
+                case 9:
+                    robo_map.markerMode = !robo_map.markerMode;
+                    robo_map.markerDragIndex = -1;
+                    robo_map.field_1E8 &= ~(0x10 | 0x200);
+                    yw->_guiDragDefaultMouse = false;
+                    break;
+
                 default:
                     break;
                 }
@@ -8623,61 +9783,6 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                 }
                 break;
 
-            case 9:
-                if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN | TClickBoxInf::FLAG_BTN_HOLD) )
-                    robo_map.field_1E8 |= 0x20;
-
-                if ( winpt->flag & TClickBoxInf::FLAG_BTN_UP )
-                {
-                    int tmp1, tmp2, tmp3, tmp4;
-                    tmp1 = robo_map.field_208;
-                    tmp2 = robo_map.field_20A;
-                    tmp3 = robo_map.field_20C;
-                    tmp4 = robo_map.field_20E;
-
-                    robo_map.field_208 = robo_map.x;
-                    robo_map.field_20A = robo_map.y;
-                    robo_map.field_20C = robo_map.w;
-                    robo_map.field_20E = robo_map.h;
-
-                    robo_map.x = tmp1;
-                    robo_map.y = tmp2;
-                    robo_map.w = tmp3;
-                    robo_map.h = tmp4;
-                }
-                break;
-
-            case 2:
-                if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN | TClickBoxInf::FLAG_BTN_HOLD) )
-                    robo_map.flags |= GuiBase::FLAG_HELP_DOWN;
-
-                if ( winpt->flag & TClickBoxInf::FLAG_BTN_UP )
-                {
-                    robo_map.flags &= ~GuiBase::FLAG_HELP_DOWN;
-                    yw->sub_449DE8(Locale::Text::Help(Locale::HELP_MAPWND)); //MAKE ME
-                }
-
-                yw->SetShowingTooltip(Locale::TIP_ONLINEHELP);
-                break;
-
-            case 7:
-                if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN | TClickBoxInf::FLAG_BTN_HOLD) )
-                    robo_map.field_1E8 |= 0x40;
-
-                if ( winpt->flag & TClickBoxInf::FLAG_BTN_UP )
-                    sub_4C1970(yw, 1);
-
-                break;
-
-            case 8:
-                if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN | TClickBoxInf::FLAG_BTN_HOLD) )
-                    robo_map.field_1E8 |= 0x80;
-
-                if ( winpt->flag & TClickBoxInf::FLAG_BTN_UP )
-                    sub_4C1970(yw, 2);
-
-                break;
-
             default:
                 break;
             }
@@ -8698,18 +9803,6 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 
             case 6:
                 yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_LOCKVIEWER, 14);
-                break;
-
-            case 7:
-                yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_ZOOMIN, 16);
-                break;
-
-            case 8:
-                yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_ZOOMOUT, 17);
-                break;
-
-            case 9:
-                yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_SIZE, 18);
                 break;
 
             default:
@@ -12973,11 +14066,15 @@ void yw_RenderHUDRadare(NC_STACK_ypaworld *yw)
     int v7 = robo_map.field_1EC;
     int32_t v8 = robo_map.MapViewMask;
     int v9 = robo_map.field_1EE;
+    float savedRenderTileScale = robo_map.renderTileScale;
+    bool savedRenderMapLines = robo_map.renderMapLines;
 
     robo_map.field_1EC = 1;
     robo_map.MapViewMask = -1;
     robo_map.field_1E8 |= 0x100;
     robo_map.field_1EE = 3;
+    robo_map.renderTileScale = 1.0f;
+    robo_map.renderMapLines = true;
     robo_map.field_1D8 = yw->_viewerBact->_position.x;
     robo_map.field_1DC = yw->_viewerBact->_position.z;
     robo_map.field_1E0 = 4800.0 / ((float)(yw->_screenSize.x / 2) * (robo_map.field_25C - robo_map.field_254));
@@ -13015,6 +14112,8 @@ void yw_RenderHUDRadare(NC_STACK_ypaworld *yw)
     robo_map.field_1E0 = v14;
     robo_map.field_1E8 &= 0xFFFFFEFF;
     robo_map.field_1E4 = v13;
+    robo_map.renderTileScale = savedRenderTileScale;
+    robo_map.renderMapLines = savedRenderMapLines;
 }
 
 
@@ -13244,6 +14343,8 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
             robo_map.field_1EC = yw->_roboMapStatus.Data[0];
             robo_map.field_1ED = yw->_roboMapStatus.Data[1];
             robo_map.field_1EE = yw->_roboMapStatus.Data[2];
+            robo_map.continuousZoom = yw_MapLoadContinuousZoom(yw->_roboMapStatus.Data[7],
+                                                               robo_map.field_1EE);
             robo_map.field_208 = yw->_roboMapStatus.Data[3];
             robo_map.field_20A = yw->_roboMapStatus.Data[4];
             robo_map.field_20C = yw->_roboMapStatus.Data[5];
@@ -13289,6 +14390,8 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
             robo_map.field_1EC = yw->_vhclMapStatus.Data[0];
             robo_map.field_1ED = yw->_vhclMapStatus.Data[1];
             robo_map.field_1EE = yw->_vhclMapStatus.Data[2];
+            robo_map.continuousZoom = yw_MapLoadContinuousZoom(yw->_vhclMapStatus.Data[7],
+                                                               robo_map.field_1EE);
             robo_map.field_208 = yw->_vhclMapStatus.Data[3];
             robo_map.field_20A = yw->_vhclMapStatus.Data[4];
             robo_map.field_20C = yw->_vhclMapStatus.Data[5];
@@ -13670,12 +14773,84 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub1__sub0(TInputState *arg)
 
 void NC_STACK_ypaworld::yw_MAP_MouseSelect(TClickBoxInf *winp)
 {
-    int v23 = winp->move.BtnPos.x + robo_map.field_1D8 / robo_map.field_1E0 - (robo_map.field_1F8 / 2);
-    int v24 = winp->move.BtnPos.y - (robo_map.field_1DC / robo_map.field_1E4) - (robo_map.field_1FC / 2);
+    if ( !yw_IsDynamicMapZoomEnabled() )
+    {
+        int v23 = winp->move.BtnPos.x + robo_map.field_1D8 / robo_map.field_1E0 - (robo_map.field_1F8 / 2);
+        int v24 = winp->move.BtnPos.y - (robo_map.field_1DC / robo_map.field_1E4) - (robo_map.field_1FC / 2);
 
-    int v9 = robo_map.field_1EE + 2;
+        int v9 = robo_map.field_1EE + 2;
 
-    Common::Point pt( v23 >> v9, v24 >> v9);
+        Common::Point pt( v23 >> v9, v24 >> v9);
+
+        if ( IsGamePlaySector( pt ) )
+        {
+            cellArea &cell = _cells( pt );
+
+            if ( _guiActFlags & 1 )
+            {
+                _cellOnMouse = &cell;
+                _guiActFlags |= 0x10;
+                _cellMouseIsectPos.x = (float)v23 * robo_map.field_1E0 + 0.5;
+                _cellMouseIsectPos.y = cell.height;
+                _cellMouseIsectPos.z = -((float)v24 * robo_map.field_1E4 + 0.75);
+            }
+
+            bool canSelectCell = IsSpectatorControlled() ? ((robo_map.MapViewMask & cell.view_mask) != 0) : cell.IsCanSee(_userRobo->_owner);
+
+            if ( _guiActFlags & 2 && !(bzda.field_1D0 & 0x30) && canSelectCell )
+            {
+
+                int v16 = 0;
+
+                while ( v16 < 2 )
+                {
+                    for( NC_STACK_ypabact* &v17 : cell.unitsList )
+                    {
+                        if ( v17->ShouldHideFromStrategicUI() )
+                            continue;
+
+                        if ( IsSpectatorControlled() && v17->_owner == World::OWNER_0 )
+                            continue;
+
+                        if ( (v16 != 1 || v17->_owner != _userRobo->_owner) && (v16 || v17->_owner == _userRobo->_owner) )
+                        {
+                            if ( v17->_status != BACT_STATUS_CREATE && v17->_status != BACT_STATUS_DEAD && v17->_status != BACT_STATUS_BEAM && v17->_bact_type != BACT_TYPES_MISSLE )
+                            {
+                                int v19 = v17->_position.x / robo_map.field_1E0;
+                                int v20 = v17->_position.z / robo_map.field_1E4;
+
+                                if ( abs(v19 - v23) <= 8 && abs(-v20 - v24) <= 8 )
+                                {
+                                    _guiActFlags |= 0x20;
+
+                                    _bactOnMouse = v17;
+                                    _guiActFlags &= ~0x10;
+
+                                    v16 = 2;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    v16++;
+                }
+            }
+        }
+        return;
+    }
+
+    const float mapPixelX = winp->move.BtnPos.x
+        + robo_map.field_1D8 / robo_map.field_1E0
+        - robo_map.field_1F8 * 0.5f;
+    const float mapPixelY = winp->move.BtnPos.y
+        - robo_map.field_1DC / robo_map.field_1E4
+        - robo_map.field_1FC * 0.5f;
+    const float worldX = mapPixelX * robo_map.field_1E0;
+    const float worldZ = -mapPixelY * robo_map.field_1E4;
+
+    Common::Point pt((int)floorf(worldX / World::CVSectorLength),
+                     (int)floorf(-worldZ / World::CVSectorLength));
 
     if ( IsGamePlaySector( pt ) )
     {
@@ -13685,50 +14860,56 @@ void NC_STACK_ypaworld::yw_MAP_MouseSelect(TClickBoxInf *winp)
         {
             _cellOnMouse = &cell;
             _guiActFlags |= 0x10;
-            _cellMouseIsectPos.x = (float)v23 * robo_map.field_1E0 + 0.5;
+            _cellMouseIsectPos.x = worldX + 0.5f;
             _cellMouseIsectPos.y = cell.height;
-            _cellMouseIsectPos.z = -((float)v24 * robo_map.field_1E4 + 0.75);
+            _cellMouseIsectPos.z = worldZ - 0.75f;
         }
 
-        bool canSelectCell = IsSpectatorControlled() ? ((robo_map.MapViewMask & cell.view_mask) != 0) : cell.IsCanSee(_userRobo->_owner);
+        bool canSelectCell = IsSpectatorControlled()
+            ? ((robo_map.MapViewMask & cell.view_mask) != 0)
+            : cell.IsCanSee(_userRobo->_owner);
 
         if ( _guiActFlags & 2 && !(bzda.field_1D0 & 0x30) && canSelectCell )
         {
+            const int cursorMapX = dround(mapPixelX);
+            const int cursorMapY = dround(mapPixelY);
+            int pass = 0;
 
-            int v16 = 0;
-
-            while ( v16 < 2 )
+            while ( pass < 2 )
             {
-                for( NC_STACK_ypabact* &v17 : cell.unitsList )
+                for ( NC_STACK_ypabact *bact : cell.unitsList )
                 {
-                    if ( v17->ShouldHideFromStrategicUI() )
+                    if ( bact->ShouldHideFromStrategicUI() )
                         continue;
 
-                    if ( IsSpectatorControlled() && v17->_owner == World::OWNER_0 )
+                    if ( IsSpectatorControlled() && bact->_owner == World::OWNER_0 )
                         continue;
 
-                    if ( (v16 != 1 || v17->_owner != _userRobo->_owner) && (v16 || v17->_owner == _userRobo->_owner) )
+                    if ( (pass != 1 || bact->_owner != _userRobo->_owner)
+                            && (pass || bact->_owner == _userRobo->_owner) )
                     {
-                        if ( v17->_status != BACT_STATUS_CREATE && v17->_status != BACT_STATUS_DEAD && v17->_status != BACT_STATUS_BEAM && v17->_bact_type != BACT_TYPES_MISSLE )
+                        if ( bact->_status != BACT_STATUS_CREATE
+                                && bact->_status != BACT_STATUS_DEAD
+                                && bact->_status != BACT_STATUS_BEAM
+                                && bact->_bact_type != BACT_TYPES_MISSLE )
                         {
-                            int v19 = v17->_position.x / robo_map.field_1E0;
-                            int v20 = v17->_position.z / robo_map.field_1E4;
+                            const int unitMapX = dround(bact->_position.x / robo_map.field_1E0);
+                            const int unitMapY = dround(-bact->_position.z / robo_map.field_1E4);
 
-                            if ( abs(v19 - v23) <= 8 && abs(-v20 - v24) <= 8 )
+                            if ( abs(unitMapX - cursorMapX) <= 8
+                                    && abs(unitMapY - cursorMapY) <= 8 )
                             {
                                 _guiActFlags |= 0x20;
-
-                                _bactOnMouse = v17;
+                                _bactOnMouse = bact;
                                 _guiActFlags &= ~0x10;
-
-                                v16 = 2;
+                                pass = 2;
                                 break;
                             }
                         }
                     }
                 }
 
-                v16++;
+                pass++;
             }
         }
     }
