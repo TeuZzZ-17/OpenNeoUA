@@ -6,6 +6,8 @@
 #include "../sample.h"
 #include "../skeleton.h"
 
+#include <map>
+
 class NC_STACK_ypabact;
 
 namespace World
@@ -483,7 +485,9 @@ struct TVhclProto
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFX;
     int vo_type = 0;
-    std::string voicepack;
+    // OpenUA custom: sparse per-vehicle speech event path stems.
+    // Missing or invalid entries fall back to the vanilla vo_type voice.
+    std::map<std::string, std::string> speech_events;
     float max_pitch = 0.0;
     int16_t field_1D6D = 0;
     int16_t field_1D6F = 0;

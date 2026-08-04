@@ -112,8 +112,8 @@ std::map<const NC_STACK_ypabact *, EnemyIndicatorVisibilityState> g_enemyIndicat
 NC_STACK_ypaworld *g_enemyIndicatorVisibilityWorld = NULL;
 int32_t g_enemyIndicatorVisibilityLastGameTime = 0;
 uint32_t g_enemyIndicatorVisibilityLastPrune = 0;
-std::map<std::string, bool> g_voicepackLoggedUsed;
-std::map<std::string, bool> g_voicepackLoggedFallback;
+std::map<std::string, bool> g_speechEventLoggedUsed;
+std::map<std::string, bool> g_speechEventLoggedFallback;
 
 std::string StatusIconTrimPath(std::string path)
 {
@@ -226,7 +226,7 @@ const std::string &StatusIconHandbrakePath()
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconHandbrake);
 }
 
-const char *VoicepackEventKeyFromMsgID(int msgID)
+const char *SpeechEventKeyFromMsgID(int msgID)
 {
     switch ( msgID )
     {
@@ -267,21 +267,7 @@ const char *VoicepackEventKeyFromMsgID(int msgID)
     }
 }
 
-std::string VoicepackJoinPath(std::string dir, const std::string &file)
-{
-    if ( dir.compare(0, 5, "rsrc:") == 0 )
-        dir.erase(0, 5);
-
-    while ( !dir.empty() && (dir.back() == '/' || dir.back() == '\\') )
-        dir.pop_back();
-
-    if ( dir.empty() )
-        return file;
-
-    return dir + "/" + file;
-}
-
-void VoicepackLogOnce(std::map<std::string, bool> &cache, const std::string &key, const char *fmt, const std::string &path)
+void SpeechEventLogOnce(std::map<std::string, bool> &cache, const std::string &key, const char *fmt, const std::string &path)
 {
     if ( cache[key] )
         return;
@@ -290,16 +276,35 @@ void VoicepackLogOnce(std::map<std::string, bool> &cache, const std::string &key
     ypa_log_out(fmt, path.c_str());
 }
 
-std::string VoicepackFindEventFile(const std::string &dir, const char *eventKey)
+std::string SpeechEventFindFile(const std::string &path)
 {
-    std::vector<std::string> variants;
-    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+    if ( path.empty() )
+        return "";
 
+    std::string normalizedPath = path;
+    if ( normalizedPath.compare(0, 5, "rsrc:") == 0 )
+        normalizedPath.erase(0, 5);
+
+    std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
+
+    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+    auto exists = [](const std::string &candidate) {
+        return uaFileExist("rsrc:" + candidate);
+    };
+
+    if ( normalizedPath.size() >= 4 && normalizedPath.substr(normalizedPath.size() - 4) == ".wav" )
+    {
+        const bool found = exists(normalizedPath);
+        Common::Env.SetPrefix("rsrc", oldRsrc);
+        return found ? normalizedPath : "";
+    }
+
+    std::vector<std::string> variants;
     for (int i = 1; i <= 99; i++)
     {
-        std::string filename = VoicepackJoinPath(dir, fmt::sprintf("%s_%02d.wav", eventKey, i));
+        std::string filename = fmt::sprintf("%s_%02d.wav", normalizedPath, i);
 
-        if ( uaFileExist("rsrc:" + filename) )
+        if ( exists(filename) )
             variants.push_back(filename);
     }
 
@@ -310,9 +315,9 @@ std::string VoicepackFindEventFile(const std::string &dir, const char *eventKey)
         return filename;
     }
 
-    std::string filename = VoicepackJoinPath(dir, std::string(eventKey) + ".wav");
+    std::string filename = normalizedPath + ".wav";
 
-    if ( uaFileExist("rsrc:" + filename) )
+    if ( exists(filename) )
     {
         Common::Env.SetPrefix("rsrc", oldRsrc);
         return filename;
@@ -10357,35 +10362,29 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
             {
                 uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
                 World::TVhclProto &vhclProto = _vhclProtos[protoId];
-                const char *voicepackEventKey = VoicepackEventKeyFromMsgID(msgID);
+                const char *speechEventKey = SpeechEventKeyFromMsgID(msgID);
 
-                if ( voicepackEventKey && !vhclProto.voicepack.empty() )
+                if ( speechEventKey )
                 {
-                    std::string voicepackFile = VoicepackFindEventFile(vhclProto.voicepack, voicepackEventKey);
+                    auto speechEvent = vhclProto.speech_events.find(speechEventKey);
 
-                    if ( !voicepackFile.empty() )
+                    if ( speechEvent != vhclProto.speech_events.end() && !speechEvent->second.empty() )
                     {
-                        if ( VoiceMessagePlayResourceFile(voicepackFile, unit, priority, ignoreTimeScale) )
+                        std::string speechFile = SpeechEventFindFile(speechEvent->second);
+
+                        if ( !speechFile.empty() && VoiceMessagePlayResourceFile(speechFile, unit, priority, ignoreTimeScale) )
                         {
-                            VoicepackLogOnce(g_voicepackLoggedUsed,
-                                             voicepackFile,
-                                             "Voicepack: using %s\n",
-                                             voicepackFile);
+                            SpeechEventLogOnce(g_speechEventLoggedUsed,
+                                               speechFile,
+                                               "Speech event: using %s\n",
+                                               speechFile);
                             return;
                         }
 
-                        VoicepackLogOnce(g_voicepackLoggedFallback,
-                                         voicepackFile,
-                                         "Voicepack: failed to load %s, falling back to vanilla voice\n",
-                                         voicepackFile);
-                    }
-                    else
-                    {
-                        std::string missingKey = VoicepackJoinPath(vhclProto.voicepack, voicepackEventKey);
-                        VoicepackLogOnce(g_voicepackLoggedFallback,
-                                         missingKey,
-                                         "Voicepack: missing %s*.wav, falling back to vanilla voice\n",
-                                         missingKey);
+                        SpeechEventLogOnce(g_speechEventLoggedFallback,
+                                           speechEvent->second,
+                                           "Speech event: missing or failed to load %s, falling back to vanilla voice\n",
+                                           speechEvent->second);
                     }
                 }
 
