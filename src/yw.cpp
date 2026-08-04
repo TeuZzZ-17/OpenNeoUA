@@ -2135,6 +2135,60 @@ void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
     SFXEngine::SFXe.startSound(&_GameShell->samples1_info, soundId);
 }
 
+
+void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
+{
+    if ( !_GameShell )
+        return;
+
+    const std::string path = System::IniConf::UiMapMarkerSound.Get<std::string>();
+    if ( path.empty() )
+        return;
+
+    const size_t soundId = World::SOUND_ID_MAP_MARKER;
+    if ( soundId >= _GameShell->samples1.size() || soundId >= _GameShell->samples1_info.Sounds.size() )
+        return;
+
+    NC_STACK_sample *&sample = _GameShell->samples1[soundId];
+    TSoundSource &source = _GameShell->samples1_info.Sounds[soundId];
+
+    if ( _mapMarkerSoundAttemptedPath != path )
+    {
+        if ( sample )
+        {
+            SFXEngine::SFXe.sub_424000(&_GameShell->samples1_info, soundId);
+            SFXEngine::SFXe.ForceStopSource(&_GameShell->samples1_info, soundId);
+            sample->Delete();
+            sample = NULL;
+            source.PSample = NULL;
+            source.SampleVariants.clear();
+        }
+
+        _mapMarkerSoundAttemptedPath = path;
+        std::string previousRsrc = Common::Env.SetPrefix("rsrc", "data:");
+        NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, path}});
+        Common::Env.SetPrefix("rsrc", previousRsrc);
+
+        if ( !wav )
+        {
+            ypa_log_out("Warning: Could not load map marker sample %s. Marker audio disabled.\n", path.c_str());
+            return;
+        }
+
+        sample = wav;
+        source.PSample = wav->GetSampleData();
+    }
+
+    if ( !sample )
+        return;
+
+    source.PSample = sample->GetSampleData();
+    source.Volume = 100;
+    source.Pitch = 0;
+    source.IgnoreTimeScale = true;
+    SFXEngine::SFXe.startSound(&_GameShell->samples1_info, soundId);
+}
+
 void sub_47C1EC(NC_STACK_ypaworld *yw, TMapGem *gemProt, int *a3, int *a4)
 {
     switch ( yw->_GameShell->netPlayerOwner )

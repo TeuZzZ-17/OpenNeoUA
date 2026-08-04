@@ -377,6 +377,7 @@ enum SOUND_ID
 
     SOUND_ID_CHAT = 21,
     SOUND_ID_GEM_UNLOCK = 22,
+    SOUND_ID_MAP_MARKER = 23,
 
     SOUND_ID_MAX
 };
@@ -2715,6 +2716,7 @@ public:
                                      uint8_t changeKind, int32_t previousRawValue,
                                      int32_t newRawValue, bool newlyEnabled = false);
     void PlayConfiguredGemUnlockSound();
+    void PlayConfiguredMapMarkerSound();
 
     std::string GetLevelName(uint32_t id) const;
     std::string GetLevelName(const TLevelInfo &lvl) const;
@@ -3069,6 +3071,7 @@ public:
     bool _gemNotificationCaptureActive = false;
     uint32_t _gemNotificationActionOrder = 0;
     std::string _gemUnlockSoundAttemptedPath;
+    std::string _mapMarkerSoundAttemptedPath;
 
     TMapRegionsNet _globalMapRegions; // level selector
     TLevelInfo _levelInfo; // current level information

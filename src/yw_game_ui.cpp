@@ -9703,7 +9703,10 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                     // click directly on an existing marker removes it, so the
                     // same button remains sufficient for both basic actions.
                     if ( !yw_RemoveNearestRoboMapMarker(winpt->move.BtnPos) )
-                        yw_AddRoboMapMarker(yw, winpt->move.BtnPos);
+                    {
+                        if ( yw_AddRoboMapMarker(yw, winpt->move.BtnPos) >= 0 )
+                            yw->PlayConfiguredMapMarkerSound();
+                    }
                     winpt->flag &= ~TClickBoxInf::FLAG_RM_DOWN;
                     yw->_guiDragDefaultMouse = false;
                 }
