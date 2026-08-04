@@ -845,6 +845,10 @@ public:
     float _thraction;
     vec3d _fly_dir;
     float _fly_dir_length;
+    // OpenUA: custom percentage fall damage is armed only after a real
+    // airborne interval, and consumed once before stable ground contact.
+    bool _fallDamageAirborne = false;
+    bool _fallDamageConsumed = false;
     bool _handbrakeHeld = false;
     float _heliLandingVisualOffsetY = 0.0f; // OpenUA: render/camera-only smoothing of the vanilla heli ground snap
     int _weaponRecoilVisualEndTime = 0; // OpenUA: render-only tank firing tilt, does not affect physics

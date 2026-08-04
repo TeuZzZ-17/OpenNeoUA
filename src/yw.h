@@ -2778,7 +2778,6 @@ public:
         vec3d orientation = vec3d(0.0, 0.0, 0.0);
         std::vector<TAttachedFXTriangle> triangles;
         std::vector<vec3d> volumePoints;
-        vec3d geometryCenter = vec3d(0.0, 0.0, 0.0);
         float totalArea = 0.0f;
     };
 

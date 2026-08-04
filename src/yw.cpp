@@ -477,9 +477,13 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
     if ( !owner || !localPosition )
         return false;
 
-    if ( randomOffsetPercent < 0.0f )
-        randomOffsetPercent = 0.0f;
-    else if ( randomOffsetPercent > 100.0f )
+    if ( randomOffsetPercent <= 0.0f )
+    {
+        *localPosition = vec3d(0.0, 0.0, 0.0);
+        return true;
+    }
+
+    if ( randomOffsetPercent > 100.0f )
         randomOffsetPercent = 100.0f;
 
     NC_STACK_base *source = owner->_vp_normal;
@@ -513,17 +517,14 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
         mat3x3 transform = yw_BuildVPRotationMatrix(owner->_vp_orientation);
         transform *= mat3x3::Scale(yw_SafeVPScale(owner->_vp_scale));
         yw_CollectAttachedFXTriangles(source, transform, vec3d(0.0, 0.0, 0.0), cache, &bounds);
-        if ( bounds.valid )
-            cache->geometryCenter = (bounds.min + bounds.max) * 0.5f;
         if ( !cache->triangles.empty() )
             yw_BuildAttachedFXVolumeCache(cache, bounds);
     }
 
-    vec3d sampledPosition;
     if ( !cache->volumePoints.empty() )
     {
         size_t index = (size_t)(rand() % (int)cache->volumePoints.size());
-        sampledPosition = cache->volumePoints[index];
+        *localPosition = cache->volumePoints[index];
     }
     else
     {
@@ -544,21 +545,12 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
         float r1 = (float)rand() / ((float)RAND_MAX + 1.0f);
         float r2 = (float)rand() / ((float)RAND_MAX + 1.0f);
         float root = sqrt(r1);
-        sampledPosition = selected->a * (1.0f - root) +
-                          selected->b * (root * (1.0f - r2)) +
-                          selected->c * (root * r2);
+        *localPosition = selected->a * (1.0f - root) +
+                         selected->b * (root * (1.0f - r2)) +
+                         selected->c * (root * r2);
     }
 
-    // random_offset_percent is a maximum radius measured from the real
-    // geometry centre, not a fixed contraction from the model pivot.  A value
-    // of 25 now picks a random point from the centre up to 25% of the sampled
-    // geometry direction; 100 covers the complete local geometry.  This keeps
-    // the same data-driven percentage meaningful for small, large and
-    // off-centre models.
-    const float maxFactor = randomOffsetPercent / 100.0f;
-    const float factor = ((float)rand() / ((float)RAND_MAX + 1.0f)) * maxFactor;
-    *localPosition = cache->geometryCenter +
-                     (sampledPosition - cache->geometryCenter) * factor;
+    *localPosition = *localPosition * (randomOffsetPercent / 100.0f);
 
     return true;
 }
