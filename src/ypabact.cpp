@@ -2027,9 +2027,10 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _energy_time = 0;
     _weapon = 0;
     _extra_weapons = {0, 0, 0};
-    _weapon_switch_mode = 0;
+    _weapon_switch_mode = World::TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
     _weapon_slot_index = 0;
     _current_weapon_id = -1;
+    _current_weapon_source_slot = 0;
     _lowhp_weapon_enable = 0;
     _lowhp_threshold = 0.30;
     _lowhp_weapon = 0;
@@ -2057,6 +2058,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_spread_x = 0.0;
     _mgun_spread_y = 0.0;
     _num_weapons = 0;
+    _weapon_projectile_counts = {0, 0, 0, 0};
     _weapon_time = 0;
     _fire_x_mode = World::TVhclProto::FIRE_X_MODE_VANILLA;
     _fire_x_start = 0.0;
@@ -4774,7 +4776,7 @@ static void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
 
     TInputState filteredInput = *arg->inpt;
     if ( blockWeapons )
-        filteredInput.Buttons.UnSet({0, 1, 2});
+        filteredInput.Buttons.UnSet({0, 2, 5});
 
     update_msg filteredArg = *arg;
     filteredArg.inpt = &filteredInput;
@@ -5768,7 +5770,7 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
             v61.tgType = BACT_TGT_TYPE_UNIT;
         }
 
-        if ( arg->inpt->Buttons.IsAny({0, 1}) )
+        if ( arg->inpt->Buttons.IsAny({0, 5}) )
         {
             v61.direction = vec3d(0.0, 0.0, 0.0);
             v61.weapon = _weapon;
@@ -5781,7 +5783,7 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
 
             v61.start_point.y = _fire_pos.y;
             v61.start_point.z = _fire_pos.z;
-            v61.flags = (arg->inpt->Buttons.Is(1) ? 1 : 0) | 2;
+            v61.flags = (arg->inpt->Buttons.Is(5) ? 1 : 0) | 2;
             if ( (_oflags & BACT_OFLAG_VIEWER) && arg->inpt->Buttons.Is(3) )
                 v61.flags |= BACT_ARG79_FLAG_RECOIL_BRAKE_HELD;
 
@@ -7387,20 +7389,87 @@ bool NC_STACK_ypabact::ApplySeekAndExplodeRammingGuidance()
     return true;
 }
 
-static int ypabact_GetPrimaryWeaponSlots(NC_STACK_ypabact *bact, int *outSlots)
+static int ypabact_GetPrimaryWeaponSlots(NC_STACK_ypabact *bact, int *outSlots, int *outSourceSlots = NULL)
 {
     int count = 0;
 
     if ( ypabact_IsValidWeaponId(bact, bact->_weapon) )
-        outSlots[count++] = bact->_weapon;
-
-    for (int weaponId : bact->_extra_weapons)
     {
+        outSlots[count] = bact->_weapon;
+        if ( outSourceSlots )
+            outSourceSlots[count] = 0;
+        count++;
+    }
+
+    for (size_t extraSlot = 0; extraSlot < bact->_extra_weapons.size(); extraSlot++)
+    {
+        int weaponId = bact->_extra_weapons[extraSlot];
         if ( weaponId > 0 && ypabact_IsValidWeaponId(bact, weaponId) )
-            outSlots[count++] = weaponId;
+        {
+            outSlots[count] = weaponId;
+            if ( outSourceSlots )
+                outSourceSlots[count] = (int)extraSlot + 1;
+            count++;
+        }
     }
 
     return count;
+}
+
+static int ypabact_NormalizeWeaponProjectileCount(int count)
+{
+    return count <= 1 ? 1 : count;
+}
+
+static int ypabact_GetWeaponProjectileCountForSourceSlot(NC_STACK_ypabact *bact, int sourceSlot)
+{
+    if ( !bact || sourceSlot < 0 || sourceSlot >= (int)bact->_weapon_projectile_counts.size() )
+        return bact ? ypabact_NormalizeWeaponProjectileCount(bact->_num_weapons) : 1;
+
+    return ypabact_NormalizeWeaponProjectileCount(bact->_weapon_projectile_counts[sourceSlot]);
+}
+
+static int ypabact_GetWeaponIdForSourceSlot(NC_STACK_ypabact *bact, int sourceSlot)
+{
+    if ( !bact )
+        return -1;
+
+    if ( sourceSlot == 0 )
+        return bact->_weapon;
+
+    if ( sourceSlot > 0 && sourceSlot <= (int)bact->_extra_weapons.size() )
+        return bact->_extra_weapons[sourceSlot - 1];
+
+    return -1;
+}
+
+static int ypabact_GetCurrentPrimaryWeaponSourceSlot(NC_STACK_ypabact *bact)
+{
+    int slots[4];
+    int sourceSlots[4];
+    int count = ypabact_GetPrimaryWeaponSlots(bact, slots, sourceSlots);
+
+    if ( count <= 0 )
+        return 0;
+
+    if ( count == 1 )
+        return sourceSlots[0];
+
+    if ( bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM )
+    {
+        int sourceSlot = bact->_current_weapon_source_slot;
+        int weaponId = ypabact_GetWeaponIdForSourceSlot(bact, sourceSlot);
+        if ( weaponId == bact->_current_weapon_id && ypabact_IsValidWeaponId(bact, weaponId) )
+            return sourceSlot;
+
+        return sourceSlots[0];
+    }
+
+    int index = bact->_weapon_slot_index % count;
+    if ( index < 0 )
+        index = 0;
+
+    return sourceSlots[index];
 }
 
 struct TMissileMultiTargetCandidate
@@ -7720,33 +7789,49 @@ static void ypabact_UpdateHUDMissileMultiLockTargets(NC_STACK_ypabact *launcher,
     ypabact_StoreHUDMissileMultiLockTargets(launcher, missileTargets);
 }
 
-static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact, int requestedWeapon)
+static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact, int requestedWeapon, int *outSourceSlot)
 {
+    if ( outSourceSlot )
+        *outSourceSlot = 0;
+
     if ( requestedWeapon != bact->_weapon )
         return requestedWeapon;
 
     int slots[4];
-    int count = ypabact_GetPrimaryWeaponSlots(bact, slots);
+    int sourceSlots[4];
+    int count = ypabact_GetPrimaryWeaponSlots(bact, slots, sourceSlots);
 
     if ( count <= 0 )
         return -1;
 
-    if ( count == 1 )
-        return slots[0];
+    int index = 0;
+    if ( count > 1 )
+    {
+        if ( bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM )
+            index = rand() % count;
+        else
+        {
+            index = bact->_weapon_slot_index % count;
+            if ( index < 0 )
+                index = 0;
+        }
+    }
 
-    if ( bact->_weapon_switch_mode == 1 )
-        return slots[rand() % count];
-
-    int index = bact->_weapon_slot_index % count;
-    if ( index < 0 )
-        index = 0;
+    if ( outSourceSlot )
+        *outSourceSlot = sourceSlots[index];
 
     return slots[index];
 }
 
 static void ypabact_AdvancePrimaryWeaponSlot(NC_STACK_ypabact *bact, int requestedWeapon)
 {
-    if ( requestedWeapon != bact->_weapon || bact->_weapon_switch_mode == 1 )
+    const bool playerControlledMode =
+        bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_CONTROLLED &&
+        (bact->_oflags & BACT_OFLAG_USERINPT);
+
+    if ( requestedWeapon != bact->_weapon ||
+         bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM ||
+         playerControlledMode )
         return;
 
     int slots[4];
@@ -7763,28 +7848,43 @@ int NC_STACK_ypabact::GetCurrentWeaponId()
     if ( ypabact_IsLowHPWeaponActive(this) )
         return _lowhp_weapon;
 
+    int sourceSlot = ypabact_GetCurrentPrimaryWeaponSourceSlot(this);
+    int weaponId = ypabact_GetWeaponIdForSourceSlot(this, sourceSlot);
+    return ypabact_IsValidWeaponId(this, weaponId) ? weaponId : -1;
+}
+
+int NC_STACK_ypabact::GetCurrentWeaponProjectileCount()
+{
+    // Low-HP weapon is an override, not a fifth selectable slot; preserve the
+    // legacy/global num_weapons count for it.
+    if ( ypabact_IsLowHPWeaponActive(this) )
+        return ypabact_NormalizeWeaponProjectileCount(_num_weapons);
+
+    return ypabact_GetWeaponProjectileCountForSourceSlot(
+        this, ypabact_GetCurrentPrimaryWeaponSourceSlot(this));
+}
+
+bool NC_STACK_ypabact::CycleControlledWeapon()
+{
+    if ( !(_oflags & BACT_OFLAG_USERINPT) ||
+         _weapon_switch_mode != World::TVhclProto::WEAPON_SWITCH_MODE_CONTROLLED ||
+         _status == BACT_STATUS_DEAD || ypabact_IsLowHPWeaponActive(this) )
+        return false;
+
     int slots[4];
-    int count = ypabact_GetPrimaryWeaponSlots(this, slots);
-
-    if ( count <= 0 )
-        return -1;
-
-    if ( count == 1 )
-        return slots[0];
-
-    if ( _weapon_switch_mode == 1 )
-    {
-        if ( ypabact_IsValidWeaponId(this, _current_weapon_id) )
-            return _current_weapon_id;
-
-        return slots[0];
-    }
+    int sourceSlots[4];
+    int count = ypabact_GetPrimaryWeaponSlots(this, slots, sourceSlots);
+    if ( count <= 1 )
+        return false;
 
     int index = _weapon_slot_index % count;
     if ( index < 0 )
         index = 0;
 
-    return slots[index];
+    _weapon_slot_index = (index + 1) % count;
+    _current_weapon_id = slots[_weapon_slot_index];
+    _current_weapon_source_slot = sourceSlots[_weapon_slot_index];
+    return true;
 }
 
 static bool ypabact_CanUseProximityDefense(NC_STACK_ypabact *unit)
@@ -10994,24 +11094,33 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     bool useLowHPWeapon = arg->weapon == _weapon && ypabact_IsLowHPWeaponActive(this);
     int slots[4];
-    int slotCount = ypabact_GetPrimaryWeaponSlots(this, slots);
-    bool useRandomSlots = !useLowHPWeapon && arg->weapon == _weapon && _weapon_switch_mode == 1 && slotCount > 1;
+    int sourceSlots[4];
+    int slotCount = ypabact_GetPrimaryWeaponSlots(this, slots, sourceSlots);
+    bool useRandomSlots = !useLowHPWeapon && arg->weapon == _weapon &&
+                          _weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM &&
+                          slotCount > 1;
 
     int selectedWeapon = -1;
+    int selectedWeaponSourceSlot = 0;
     int cooldownWeapon = -1;
 
     if ( useLowHPWeapon )
     {
         selectedWeapon = _lowhp_weapon;
+        selectedWeaponSourceSlot = 0;
         cooldownWeapon = selectedWeapon;
     }
     else if ( useRandomSlots )
     {
-        cooldownWeapon = ypabact_IsValidWeaponId(this, _current_weapon_id) ? _current_weapon_id : slots[0];
+        int currentWeapon = ypabact_GetWeaponIdForSourceSlot(this, _current_weapon_source_slot);
+        cooldownWeapon = currentWeapon == _current_weapon_id &&
+                         ypabact_IsValidWeaponId(this, currentWeapon)
+                             ? currentWeapon
+                             : slots[0];
     }
     else
     {
-        selectedWeapon = ypabact_SelectPrimaryWeaponSlot(this, arg->weapon);
+        selectedWeapon = ypabact_SelectPrimaryWeaponSlot(this, arg->weapon, &selectedWeaponSourceSlot);
 
         cooldownWeapon = selectedWeapon;
     }
@@ -11072,7 +11181,11 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     }
 
     if ( useRandomSlots )
-        selectedWeapon = slots[rand() % slotCount];
+    {
+        int randomSlot = rand() % slotCount;
+        selectedWeapon = slots[randomSlot];
+        selectedWeaponSourceSlot = sourceSlots[randomSlot];
+    }
 
     if ( selectedWeapon == -1 || !ypabact_IsValidWeaponId(this, selectedWeapon) )
         return 0;
@@ -11108,12 +11221,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         _world->ypaworld_func180(&v26);
     }
 
-    int v13;
-
-    if ( _num_weapons <= 1 )
-        v13 = 1;
-    else
-        v13 = _num_weapons;
+    int v13 = ypabact_GetWeaponProjectileCountForSourceSlot(this, selectedWeaponSourceSlot);
 
     std::vector<NC_STACK_ypabact *> weaponTargets;
     int maxTargets = ypabact_GetMissileMultiTargetLimit(wproto, v13);
@@ -11381,11 +11489,20 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     }
 
     if ( !useLowHPWeapon )
+    {
         ypabact_AdvancePrimaryWeaponSlot(this, arg->weapon);
-    _current_weapon_id = GetCurrentWeaponId();
 
-    if ( !useLowHPWeapon && _weapon_switch_mode == 1 )
-        _current_weapon_id = selectedWeapon;
+        if ( _weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM )
+        {
+            _current_weapon_id = selectedWeapon;
+            _current_weapon_source_slot = selectedWeaponSourceSlot;
+        }
+        else
+        {
+            _current_weapon_source_slot = ypabact_GetCurrentPrimaryWeaponSourceSlot(this);
+            _current_weapon_id = GetCurrentWeaponId();
+        }
+    }
 
     return 1;
 }
@@ -13577,9 +13694,10 @@ void NC_STACK_ypabact::Renew()
     _mgun_time = 0;
     _weapon_time = 0;
     _extra_weapons = {0, 0, 0};
-    _weapon_switch_mode = 0;
+    _weapon_switch_mode = World::TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
     _weapon_slot_index = 0;
     _current_weapon_id = -1;
+    _current_weapon_source_slot = 0;
     _lowhp_weapon_enable = 0;
     _lowhp_threshold = 0.30;
     _lowhp_weapon = 0;
@@ -15234,24 +15352,25 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     {
         sub_4843BC(targeto, a3a);
 
-        if ( _weapon != -1 && !a3a )
+        int previewWeaponId = GetCurrentWeaponId();
+        if ( previewWeaponId != -1 && !a3a )
         {
             bact_arg79 previewArg = {};
             previewArg.direction = vec3d(0.0, 0.0, 0.0);
             previewArg.tgType = BACT_TGT_TYPE_UNIT;
             previewArg.target.pbact = targeto;
             previewArg.tgt_pos = targeto->_position;
-            previewArg.weapon = _weapon;
+            previewArg.weapon = previewWeaponId;
 
-            World::TWeapProto &previewProto = _world->GetWeaponsProtos().at(_weapon);
+            World::TWeapProto &previewProto = _world->GetWeaponsProtos().at(previewWeaponId);
             if ( previewProto.IsLaser() )
             {
                 ypabact_UpdateHUDLaserMultiLockTargets(this, &previewArg, previewProto);
             }
             else
             {
-                int weaponCount = _num_weapons <= 1 ? 1 : _num_weapons;
-                ypabact_UpdateHUDMissileMultiLockTargets(this, &previewArg, previewProto, weaponCount);
+                ypabact_UpdateHUDMissileMultiLockTargets(
+                    this, &previewArg, previewProto, GetCurrentWeaponProjectileCount());
             }
         }
         else if ( _oflags & BACT_OFLAG_USERINPT )

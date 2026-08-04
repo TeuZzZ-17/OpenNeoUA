@@ -2928,6 +2928,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_weapon_switch_mode = vhcl.weapon_switch_mode;
         bacto->_weapon_slot_index = 0;
         bacto->_current_weapon_id = vhcl.weapon;
+        bacto->_current_weapon_source_slot = 0;
         bacto->_lowhp_weapon_enable = vhcl.lowhp_weapon_enable;
         bacto->_lowhp_threshold = vhcl.lowhp_threshold > 0.0 ? vhcl.lowhp_threshold : 0.30;
         bacto->_lowhp_weapon = vhcl.lowhp_weapon > 0 ? vhcl.lowhp_weapon : 0;
@@ -2977,6 +2978,13 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_gun_angle = vhcl.gun_angle;
         bacto->_gun_angle_user = vhcl.gun_angle;
         bacto->_num_weapons = vhcl.num_weapons;
+        bacto->_weapon_projectile_counts[0] = bacto->_num_weapons;
+        for (size_t weaponSlot = 0; weaponSlot < vhcl.extra_num_weapons.size(); weaponSlot++)
+        {
+            int configuredCount = vhcl.extra_num_weapons[weaponSlot];
+            bacto->_weapon_projectile_counts[weaponSlot + 1] =
+                configuredCount > 0 ? (uint8_t)configuredCount : bacto->_num_weapons;
+        }
         bacto->_kill_after_shot = vhcl.kill_after_shot;
         bacto->_vp_normal = _vhclModels.at( vhcl.vp_normal );
         bacto->_vp_fire = _vhclModels.at( vhcl.vp_fire );
@@ -4051,10 +4059,11 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_FLY_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 1,  Input::KC_W, Input::KC_S);
     usr->InputConfig[World::INPUT_BIND_FLY_SPEED]   = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 2,  Input::KC_Q, Input::KC_Z);
     usr->InputConfig[World::INPUT_BIND_GUN_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 5,  Input::KC_2, Input::KC_1);
-    usr->InputConfig[World::INPUT_BIND_FIRE]        = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 0,  Input::KC_RETURN);
-    usr->InputConfig[World::INPUT_BIND_CAMFIRE]     = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1,  Input::KC_TAB);
-    usr->InputConfig[World::INPUT_BIND_GUN]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 2,  Input::KC_X);
-    usr->InputConfig[World::INPUT_BIND_BRAKE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3,  Input::KC_SPACE);
+    usr->InputConfig[World::INPUT_BIND_FIRE]          = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 0, Input::KC_RETURN);
+    usr->InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_TAB);
+    usr->InputConfig[World::INPUT_BIND_GUN]           = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 2, Input::KC_X);
+    usr->InputConfig[World::INPUT_BIND_BRAKE]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3, Input::KC_SPACE);
+    usr->InputConfig[World::INPUT_BIND_CAMFIRE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_NONE);
     usr->InputConfig[World::INPUT_BIND_HUD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 25, Input::KC_H);
     usr->InputConfig[World::INPUT_BIND_NEW]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 2,  Input::KC_C);
     usr->InputConfig[World::INPUT_BIND_ADD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 3,  Input::KC_Q);
@@ -7743,9 +7752,9 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_FLY_SPEED]   = Locale::Text::Inputs(Locale::INPUTS_FLYSPD);
     _GameShell->InputConfigTitle[World::INPUT_BIND_FLY_DIR]     = Locale::Text::Inputs(Locale::INPUTS_FLYDIR);
     _GameShell->InputConfigTitle[World::INPUT_BIND_BRAKE]       = Locale::Text::Inputs(Locale::INPUTS_STOP);
-    _GameShell->InputConfigTitle[World::INPUT_BIND_FIRE]        = Locale::Text::Inputs(Locale::INPUTS_FIRE);
-    _GameShell->InputConfigTitle[World::INPUT_BIND_CAMFIRE]     = Locale::Text::Inputs(Locale::INPUTS_FIREVW);
-    _GameShell->InputConfigTitle[World::INPUT_BIND_GUN]         = Locale::Text::Inputs(Locale::INPUTS_FIREGUN);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_FIRE]          = Locale::Text::Inputs(Locale::INPUTS_FIRE);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_SWITCH_WEAPON] = Locale::Text::OpenUA(Locale::OUA_SWITCH_WEAPON);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_GUN]           = Locale::Text::Inputs(Locale::INPUTS_FIREGUN);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SET_COMM]    = Locale::Text::Inputs(Locale::INPUTS_MAKECOMM);
     _GameShell->InputConfigTitle[World::INPUT_BIND_HUD]         = Locale::Text::Inputs(Locale::INPUTS_HEADUPDISP);
     _GameShell->InputConfigTitle[World::INPUT_BIND_AUTOPILOT]   = Locale::Text::Inputs(Locale::INPUTS_AUTOPILOT);
@@ -7781,6 +7790,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_ANALYZER]    = Locale::Text::Inputs(Locale::INPUTS_ANALYZER);
     _GameShell->InputConfigTitle[World::INPUT_BIND_COCKPIT_CAMERA] = Locale::Text::OpenUA(Locale::OUA_TOGGLE_COCKPIT_CAMERA);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SPRINT]      = Locale::Text::OpenUA(Locale::OUA_SPRINT);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_CAMFIRE]     = Locale::Text::Inputs(Locale::INPUTS_FIREVW);
 
 
 
