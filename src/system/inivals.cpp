@@ -50,7 +50,6 @@ Common::Ini::Key IniConf::GfxMode("gfx.mode", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxXRes("gfx.xres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxYRes("gfx.yres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxPalette("gfx.palette", Common::Ini::KT_WORD);
-Common::Ini::Key IniConf::GfxPaletteTheme("gfx.palette_theme", Common::Ini::KT_WORD);
 // OpenUA custom: modern fullscreen visual filter (replaces the legacy palette-theme remap).
 Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
 Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.25"));
@@ -60,9 +59,9 @@ Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Commo
 Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string("0.95"));
 Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("0.80"));
 Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.60"));
-Common::Ini::Key IniConf::GfxVhsFilterName("gfx.vhs_filter_name", Common::Ini::KT_WORD, std::string("VHS"));
-Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/vhs.ps"));
-Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/vhs_vbo.ps"));
+Common::Ini::Key IniConf::GfxVhsFilterName("gfx.vhs_filter_name", Common::Ini::KT_WORD, std::string("UA_Cinematic_1998_VHS"));
+Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs.ps"));
+Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs_vbo.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.60"));
 Common::Ini::Key IniConf::GfxDisplay("gfx.display", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxDisplay2("gfx.display2", Common::Ini::KT_WORD);
@@ -281,6 +280,9 @@ Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::I
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameGemUnlockTimeScale("game.gem_unlock_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5000"));
+// OpenUA custom: optional global distance for automatic AI target acquisition.
+// Zero or an invalid value preserves the vanilla acquisition behavior.
+Common::Ini::Key IniConf::GameAiTargetRange("game.ai_target_range", Common::Ini::KT_WORD, std::string("0"));
 // OpenUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
 Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
@@ -394,7 +396,6 @@ void IniConf::Init()
         , &GfxXRes
         , &GfxYRes
         , &GfxPalette
-        , &GfxPaletteTheme
         , &GfxVisualFilter
         , &GfxVisualFilterStrength
         , &GfxAtmosphereFx
@@ -564,6 +565,7 @@ void IniConf::Init()
         , &GameGemUnlockSound
         , &GameGemUnlockTimeScale
         , &GameWorldUiMaxDistance
+        , &GameAiTargetRange
         , &GameMgunRange
         , &GameMgunAiFireAlignment
         , &GfxRegenDecorationFXVP

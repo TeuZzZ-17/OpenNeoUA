@@ -21,10 +21,13 @@ struct Key
     const std::string Name;
     KEYTYPE Type;
     nonstd::any Value;
+    nonstd::any DefaultValue;
     bool WasSet = false;
 
     Key(const std::string &k, KEYTYPE t, nonstd::any v);
     Key(const std::string &k, KEYTYPE t);
+
+    void Reset();
 
     template <typename T>
     T Get()

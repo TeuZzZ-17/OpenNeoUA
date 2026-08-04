@@ -3453,9 +3453,9 @@ void GFXEngine::Init()
     // Safe no-op when "Standard"/empty or when the file is missing.
     ApplyVisualFilterFromConfig();
 
-    // OpenUA custom: optional world-only atmospheric color pass. The feature
-    // is disabled by default and falls back to the existing DrawFBO shader if
-    // its dedicated shader is absent or cannot be linked.
+    // OpenUA custom: world-only atmospheric color pass. When enabled, it uses
+    // the dedicated shader; if that shader is absent or cannot be linked, the
+    // renderer falls back to the existing DrawFBO path without changing vanilla.
     ApplyAtmosphereFromConfig();
 
     // OpenUA: VHS pass enabled by default, loaded from its own INI shader path.
@@ -3785,29 +3785,9 @@ void GFXEngine::SetTileset(TileMap *tileset, int id)
 
 bool GFXEngine::LoadPalette(const std::string &palette_ilbm)
 {
-    std::string loadPath = GetPaletteThemeOverridePath(palette_ilbm);
-    std::string oldRsrc;
-    if (loadPath != palette_ilbm)
-        oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
-
     NC_STACK_bitmap *ilbm = Nucleus::CInit<NC_STACK_ilbm>( {
-        {NC_STACK_rsrc::RSRC_ATT_NAME, loadPath},
+        {NC_STACK_rsrc::RSRC_ATT_NAME, palette_ilbm},
         {NC_STACK_bitmap::BMD_ATT_HAS_COLORMAP, (int32_t)1}} );
-
-    if (loadPath != palette_ilbm)
-        Common::Env.SetPrefix("rsrc", oldRsrc);
-
-    if (!ilbm && loadPath != palette_ilbm)
-    {
-        ypa_log_out("WARNING: Could not load palette theme [%s] from [%s], falling back to [%s].\n",
-                    System::IniConf::GfxPaletteTheme.Get<std::string>().c_str(),
-                    loadPath.c_str(),
-                    palette_ilbm.c_str());
-
-        ilbm = Nucleus::CInit<NC_STACK_ilbm>( {
-            {NC_STACK_rsrc::RSRC_ATT_NAME, std::string(palette_ilbm)},
-            {NC_STACK_bitmap::BMD_ATT_HAS_COLORMAP, (int32_t)1}} );
-    }
 
     if (!ilbm)
         return false;
@@ -3817,20 +3797,6 @@ bool GFXEngine::LoadPalette(const std::string &palette_ilbm)
     ilbm->Delete();
 
     return true;
-}
-
-std::string GFXEngine::GetPaletteThemeOverridePath(const std::string &palette_ilbm)
-{
-    // OpenUA: the legacy "palette theme" system used to remap the base SET palette
-    // (palette/standard.pal / slot0) to one of the alternative palettes in Data/Palette
-    // (red.pal, blau.pal, gruen.pal, ...). With loose/extracted SET textures this
-    // remapping no longer works correctly, so the behaviour is intentionally bypassed.
-    //
-    // The base/vanilla palette behaviour is preserved by always returning the original
-    // requested palette: standard.pal (and per-level slot0) load exactly as in vanilla.
-    // Modern color grading is now handled by the fullscreen visual filter (see
-    // SetVisualFilter / DrawFBO and Data/Filters/*.pal), not by swapping the SET palette.
-    return palette_ilbm;
 }
 
 // OpenUA custom: read gfx.visual_filter_strength ("0.0".."1.0") with a safe default.
@@ -4082,7 +4048,12 @@ static float ParseVhsFilterStrength(std::string s, float fallback)
 
     try
     {
-        float strength = std::stof(s);
+        size_t pos = 0;
+        float strength = std::stof(s, &pos);
+        if ( s.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             !std::isfinite(strength) )
+            return fallback;
+
         if (strength < 0.0f) strength = 0.0f;
         if (strength > 1.0f) strength = 1.0f;
         return strength;
@@ -4297,7 +4268,6 @@ static std::string VhsBlendShaderText(bool vbo)
 
 void GFXEngine::SetVhsFilterEnabled(bool enabled)
 {
-    _vhsFilterEnabled = enabled;
     _vhsFilterStrength = ParseVhsFilterStrength(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 0.60f);
 
     if (!enabled)
