@@ -235,13 +235,6 @@ void FontUA::set_opacity(CmdStream *pos, uint8_t opacity)
     FontUA::store_u16(pos, opacity);
 }
 
-void FontUA::set_tile_size(CmdStream *pos, uint16_t width, uint16_t height)
-{
-    FontUA::store_u16(pos, 25);
-    FontUA::store_u16(pos, width);
-    FontUA::store_u16(pos, height);
-}
-
 
 
 
