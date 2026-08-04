@@ -1693,9 +1693,40 @@ static int yw_RoboMapMarkerSizePx()
 {
     const float zoom = std::max(MAP_DYNAMIC_ZOOM_NEAR,
                                 std::min(MAP_DYNAMIC_ZOOM_FAR, robo_map.field_1E0));
-    const float t = (zoom - MAP_DYNAMIC_ZOOM_NEAR)
-        / (MAP_DYNAMIC_ZOOM_FAR - MAP_DYNAMIC_ZOOM_NEAR);
-    return std::max(7, std::min(16, dround(16.0f - 9.0f * t)));
+
+    // Keep markers readable at close range without letting them dominate the
+    // map at the two farthest legacy-equivalent zoom ranges.  The anchors
+    // correspond to the old 18.75 / 37.5 / 75 / 150 zoom steps, while the
+    // interpolation remains continuous for the modern wheel zoom.
+    struct MarkerZoomAnchor
+    {
+        float zoom;
+        float size;
+    };
+
+    static constexpr MarkerZoomAnchor anchors[] =
+    {
+        { 18.75f, 20.0f }, // maximum zoom: slightly larger and more readable
+        { 37.50f, 15.0f }, // first zoom-out: preserve the current balance
+        { 75.00f, 10.0f }, // penultimate range: substantially less intrusive
+        {150.00f,  7.0f }  // maximum zoom-out: compact strategic marker
+    };
+
+    for ( size_t i = 1; i < sizeof(anchors) / sizeof(anchors[0]); ++i )
+    {
+        if ( zoom <= anchors[i].zoom )
+        {
+            const float span = anchors[i].zoom - anchors[i - 1].zoom;
+            const float t = span > 0.0f
+                ? (zoom - anchors[i - 1].zoom) / span
+                : 0.0f;
+            const float size = anchors[i - 1].size
+                + (anchors[i].size - anchors[i - 1].size) * t;
+            return std::max(7, std::min(20, dround(size)));
+        }
+    }
+
+    return 7;
 }
 
 static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw)
@@ -1793,6 +1824,56 @@ static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
         yw_DrawMapToolbarLine(p.x - r, p.y + r, p.x + r, p.y - r);
         yw_DrawMapToolbarLine(p.x - r - 2, p.y, p.x - r + 1, p.y);
         yw_DrawMapToolbarLine(p.x + r - 1, p.y, p.x + r + 2, p.y);
+    }
+}
+
+static void yw_RenderCustomHudRadarMarkers(NC_STACK_ypaworld *yw)
+{
+    // Keep personal map annotations useful after the large strategic map is
+    // closed.  The small gameplay radar uses the same world-to-map transform,
+    // but renders a deliberately compact symbol so markers cannot be confused
+    // with unit icons or dominate the compass.
+    if ( !yw || !robo_map.markerMode || robo_map.customMarkers.empty() )
+        return;
+
+    Common::Rect clipRect;
+    clipRect.left = robo_map.field_200;
+    clipRect.top = robo_map.field_204;
+    clipRect.right = robo_map.field_200 + robo_map.field_1F8 - 1;
+    clipRect.bottom = robo_map.field_204 + robo_map.field_1FC - 1;
+    GFX::Engine.raster_func211(clipRect);
+
+    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw);
+    constexpr int markerSize = 8;
+
+    for ( const vec2d &marker : robo_map.customMarkers )
+    {
+        const Common::Point p = sub_4F681C(marker);
+        if ( p.x < clipRect.left || p.x > clipRect.right
+                || p.y < clipRect.top || p.y > clipRect.bottom )
+        {
+            continue;
+        }
+
+        if ( markerBitmap && markerBitmap->GetBitmap() )
+        {
+            const int screenX = p.x + yw->_screenSize.x / 2;
+            const int screenY = p.y + yw->_screenSize.y / 2;
+            StatusIconRenderBitmap(yw, markerBitmap,
+                                   screenX - markerSize / 2,
+                                   screenY - markerSize / 2,
+                                   markerSize, 255);
+            continue;
+        }
+
+        // Asset-free fallback: a tiny hollow diamond is visually distinct from
+        // the circle/square/triangle unit vocabulary of the legacy radar.
+        GFX::Engine.raster_func217(yw_MapToolbarColor(yw, true));
+        const int r = 3;
+        yw_DrawMapToolbarLine(p.x, p.y - r, p.x + r, p.y);
+        yw_DrawMapToolbarLine(p.x + r, p.y, p.x, p.y + r);
+        yw_DrawMapToolbarLine(p.x, p.y + r, p.x - r, p.y);
+        yw_DrawMapToolbarLine(p.x - r, p.y, p.x, p.y - r);
     }
 }
 
@@ -14055,6 +14136,10 @@ void sb_0x4d7c08__sub0__sub4__sub2__sub0(NC_STACK_ypaworld *yw)
     // drawing it after unit icons so it stays visible.
     GFX::Engine.raster_func211(drect);
     yw_RenderMortarCooldownRadarBars(yw, v14, v29, v28, v30);
+
+    // Draw custom annotations last so they remain readable above unit icons and
+    // cooldown bars while the player is controlling a unit.
+    yw_RenderCustomHudRadarMarkers(yw);
 }
 
 void yw_RenderHUDRadare(NC_STACK_ypaworld *yw)
