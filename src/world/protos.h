@@ -418,12 +418,11 @@ struct TVhclProto
     bool mgun_angle_set = false;
     float weapon_spread_x = 0.0;
     float weapon_spread_y = 0.0;
+    float weapon_arc_x = 0.0;
+    float weapon_arc_y = 0.0;
+    float weapon_cone_xy = 0.0;
     float mgun_spread_x = 0.0;
     float mgun_spread_y = 0.0;
-    float weapon_spread_x_user = 0.0;
-    float weapon_spread_y_user = 0.0;
-    bool weapon_spread_x_user_set = false;
-    bool weapon_spread_y_user_set = false;
     uint8_t type_icon = 0;
     std::string name;
     int16_t vp_normal = 0;

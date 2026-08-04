@@ -985,12 +985,11 @@ public:
     float _mgun_sector_damage_accum;
     float _weapon_spread_x;
     float _weapon_spread_y;
+    float _weapon_arc_x;
+    float _weapon_arc_y;
+    float _weapon_cone_xy;
     float _mgun_spread_x;
     float _mgun_spread_y;
-    float _weapon_spread_x_user;
-    float _weapon_spread_y_user;
-    bool _weapon_spread_x_user_set;
-    bool _weapon_spread_y_user_set;
     uint8_t _num_weapons;
 
     World::MissileList _missiles_list;
