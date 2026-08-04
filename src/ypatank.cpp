@@ -1169,7 +1169,7 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
             arg79.tgType = BACT_TGT_TYPE_UNIT;
         }
 
-        if ( arg->inpt->Buttons.IsAny({0, 1}) )
+        if ( arg->inpt->Buttons.IsAny({0, 5}) )
         {
             arg79.direction = v67;
             arg79.weapon = _weapon;
@@ -1182,7 +1182,7 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
 
             arg79.start_point.y = _fire_pos.y;
             arg79.start_point.z = _fire_pos.z;
-            arg79.flags = (arg->inpt->Buttons.Is(1) ? 1 : 0);
+            arg79.flags = (arg->inpt->Buttons.Is(5) ? 1 : 0);
             arg79.flags |= 2;
             if ( (_oflags & BACT_OFLAG_VIEWER) && arg->inpt->Buttons.Is(3) )
                 arg79.flags |= BACT_ARG79_FLAG_RECOIL_BRAKE_HELD;

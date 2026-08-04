@@ -1252,19 +1252,35 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         const bool weaponArcXActive = _vhcl->weapon_arc_x > 0.0f;
         const bool weaponArcYActive = _vhcl->weapon_arc_y > 0.0f;
         const bool weaponConeActive = _vhcl->weapon_cone_xy > 0.0f;
-        const int weaponCount = _vhcl->num_weapons <= 1 ? 1 : _vhcl->num_weapons;
+        const int primaryWeaponCount = _vhcl->num_weapons <= 1 ? 1 : _vhcl->num_weapons;
 
         if ( (weaponArcXActive || weaponArcYActive) && weaponConeActive )
         {
-            ypa_log_out("WARNING: vehicle %d weapon Arc/Cone conflict (arc_x=%.3f, arc_y=%.3f, cone_xy=%.3f, num_weapons=%d); Arc and Cone disabled, normal launch direction retained.\n",
+            ypa_log_out("WARNING: vehicle %d weapon Arc/Cone conflict (arc_x=%.3f, arc_y=%.3f, cone_xy=%.3f); Arc and Cone disabled, normal launch direction retained for every weapon slot.\n",
                         _vhclID, _vhcl->weapon_arc_x, _vhcl->weapon_arc_y,
-                        _vhcl->weapon_cone_xy, weaponCount);
+                        _vhcl->weapon_cone_xy);
         }
-        else if ( weaponArcXActive && weaponArcYActive &&
-                  weaponCount > 1 && weaponCount % 4 != 0 && weaponCount % 4 != 1 )
+        else if ( weaponArcXActive && weaponArcYActive )
         {
-            ypa_log_out("WARNING: vehicle %d weapon Arc cross requires num_weapons=4k or 4k+1 (got %d); Arc disabled, normal launch direction retained.\n",
-                        _vhclID, weaponCount);
+            const int weaponIds[4] = {_vhcl->weapon, _vhcl->extra_weapons[0],
+                                      _vhcl->extra_weapons[1], _vhcl->extra_weapons[2]};
+
+            for (int weaponSlot = 0; weaponSlot < 4; weaponSlot++)
+            {
+                if ( (weaponSlot == 0 && weaponIds[weaponSlot] < 0) ||
+                     (weaponSlot > 0 && weaponIds[weaponSlot] <= 0) )
+                    continue;
+
+                int weaponCount = primaryWeaponCount;
+                if ( weaponSlot > 0 && _vhcl->extra_num_weapons[weaponSlot - 1] > 0 )
+                    weaponCount = _vhcl->extra_num_weapons[weaponSlot - 1];
+
+                if ( weaponCount > 1 && weaponCount % 4 != 0 && weaponCount % 4 != 1 )
+                {
+                    ypa_log_out("WARNING: vehicle %d weapon slot %d Arc cross requires effective projectile count 4k or 4k+1 (got %d); Arc disabled for that slot and normal launch direction retained.\n",
+                                _vhclID, weaponSlot + 1, weaponCount);
+                }
+            }
         }
 
         if ( _vhcl->model_id == BACT_TYPES_ROBO )
@@ -1971,9 +1987,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "weapon_switch_mode") )
     {
         if ( !StriCmp(p2, "random") )
-            _vhcl->weapon_switch_mode = 1;
+            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_RANDOM;
+        else if ( !StriCmp(p2, "controlled") )
+            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_CONTROLLED;
+        else if ( !StriCmp(p2, "sequence") )
+            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
         else
-            _vhcl->weapon_switch_mode = 0;
+        {
+            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
+            ypa_log_out("WARNING: vehicle %d unknown weapon_switch_mode '%s'; sequence used.\n",
+                        _vhclID, p2.c_str());
+        }
     }
     else if ( !StriCmp(p1, "mgun") )
     {
@@ -2198,6 +2222,24 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
                                            TGemNotificationEntry::CHANGE_NUM_WEAPONS,
                                            previousValue, _vhcl->num_weapons);
+    }
+    else if ( !StriCmp(p1, "num_weapons2") ||
+              !StriCmp(p1, "num_weapons3") ||
+              !StriCmp(p1, "num_weapons4") )
+    {
+        int sourceSlot = p1.back() - '2';
+        int count = parser.stol(p2, NULL, 0);
+
+        if ( count == 0 )
+            _vhcl->extra_num_weapons[sourceSlot] = 0;
+        else if ( count < 1 || count > 255 )
+        {
+            _vhcl->extra_num_weapons[sourceSlot] = 0;
+            ypa_log_out("WARNING: vehicle %d %s=%d is outside range 1-255; num_weapons inherited.\n",
+                        _vhclID, p1.c_str(), count);
+        }
+        else
+            _vhcl->extra_num_weapons[sourceSlot] = count;
     }
     else if ( !StriCmp(p1, "kill_after_shot") )
     {
@@ -2755,7 +2797,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->model_id = BACT_TYPES_TANK;
         _vhcl->weapon = -1;
         _vhcl->extra_weapons = {0, 0, 0};
-        _vhcl->weapon_switch_mode = 0;
+        _vhcl->extra_num_weapons = {0, 0, 0};
+        _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
         _vhcl->lowhp_weapon_enable = 0;
         _vhcl->lowhp_threshold = 0.30;
         _vhcl->lowhp_weapon = 0;

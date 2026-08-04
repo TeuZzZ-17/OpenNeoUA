@@ -308,7 +308,7 @@ enum INPUT_BIND
     INPUT_BIND_FLY_DIR    = 8,
     INPUT_BIND_BRAKE      = 9,
     INPUT_BIND_FIRE       = 10,
-    INPUT_BIND_CAMFIRE    = 11,
+    INPUT_BIND_SWITCH_WEAPON = 11,
     INPUT_BIND_GUN        = 12,
     INPUT_BIND_SET_COMM   = 13,
     INPUT_BIND_HUD        = 14,
@@ -345,8 +345,9 @@ enum INPUT_BIND
     INPUT_BIND_ANALYZER   = 45,
     INPUT_BIND_COCKPIT_CAMERA = 46,
     INPUT_BIND_SPRINT     = 47,
+    INPUT_BIND_CAMFIRE    = 48,
 
-    INPUT_BIND_MAX        = 48,
+    INPUT_BIND_MAX        = 49,
 };
 
 enum SOUND_ID
@@ -2890,6 +2891,7 @@ public:
 
     bool _fireBtnIsDown = false; // true - fire btn is down, contigues
     bool _fireBtnDownHappen = false; // true happen on down, single
+    bool _weaponSwitchBtnIsDown = false; // edge-triggered manual weapon selection
     bool _guiLoaded = false;
 
     std::array<TileMap *, 92> _guiTiles = Common::ArrayInit<TileMap *, 92>(NULL);

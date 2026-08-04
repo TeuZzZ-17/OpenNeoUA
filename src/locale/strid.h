@@ -197,6 +197,9 @@ enum OPENUA_STRING
     OUA_WORLD_UI_MAX_DISTANCE,
     OUA_MORE_OPTIONS,
 
+    // Manual weapon selection binding. Appended to preserve existing IDs.
+    OUA_SWITCH_WEAPON,
+
     OUA_STRING_MAX
 };
 

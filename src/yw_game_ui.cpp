@@ -10991,10 +10991,17 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
             if ( weap->laser_multi_target > 1 )
                 txt2 += fmt::sprintf(" x%d", weap->laser_multi_target);
         }
-        else if ( vhcl->num_weapons <= 1 )
-            txt2 = fmt::sprintf("%d", weap->energy / 100);
         else
-            txt2 = fmt::sprintf("%d x%d", weap->energy / 100, vhcl->num_weapons);
+        {
+            int weaponCount = bact
+                                  ? bact->GetCurrentWeaponProjectileCount()
+                                  : (vhcl->num_weapons <= 1 ? 1 : vhcl->num_weapons);
+
+            if ( weaponCount <= 1 )
+                txt2 = fmt::sprintf("%d", weap->energy / 100);
+            else
+                txt2 = fmt::sprintf("%d x%d", weap->energy / 100, weaponCount);
+        }
 
         sub_4E4F80(yw, wis, cur, xpos, ypos, weap->energy, 100, 7, 7, Locale::Text::HUD(Locale::HUDSTR_DMG), txt2, 1 | 2);
     }
@@ -14576,6 +14583,11 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
 
     inpt->Buttons.UnSet(31);
     inpt->HandBrakePressed = inpt->Buttons.Is(3);
+
+    const bool weaponSwitchPressed = inpt->Buttons.Is(1);
+    if ( weaponSwitchPressed && !_weaponSwitchBtnIsDown && _userUnit )
+        _userUnit->CycleControlledWeapon();
+    _weaponSwitchBtnIsDown = weaponSwitchPressed;
 
     int v38 = 0;
 

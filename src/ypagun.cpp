@@ -466,7 +466,7 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
 
             if ( _status_flg & BACT_STFLAG_FIRE )
             {
-                if ( !arg->inpt->Buttons.IsAny({0, 1}) )
+                if ( !arg->inpt->Buttons.IsAny({0, 5}) )
                 {
                     setState_msg arg78;
                     arg78.setFlags = 0;
@@ -491,7 +491,7 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
                 arg79.tgType = BACT_TGT_TYPE_UNIT;
             }
 
-            if ( arg->inpt->Buttons.IsAny({0, 1}) )
+            if ( arg->inpt->Buttons.IsAny({0, 5}) )
             {
                 if ( _gunType == GUN_TYPE_REAL )
                 {
@@ -499,7 +499,7 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
                     arg79.direction = _rotation.AxisZ();
                     arg79.g_time = _clock;
                     arg79.start_point = _fire_pos;
-                    arg79.flags = (arg->inpt->Buttons.Is(1) ? 1 : 0) | 2;
+                    arg79.flags = (arg->inpt->Buttons.Is(5) ? 1 : 0) | 2;
                     if ( (_oflags & BACT_OFLAG_VIEWER) && arg->inpt->Buttons.Is(3) )
                         arg79.flags |= BACT_ARG79_FLAG_RECOIL_BRAKE_HELD;
 
