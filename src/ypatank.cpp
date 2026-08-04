@@ -43,7 +43,7 @@ static const float YPATANK_PLAYER_RECOIL_FORWARD_SCALE = 0.20f;
 static bool ypatank_ShouldPlayCrashlandSound(const NC_STACK_ypatank *tank, float speed, float minSpeed)
 {
     // The crash-land sample belongs to the vehicle prototype, not to the
-    // optional modern fall-damage multiplier. AI tanks therefore make the
+    // optional modern fall-damage percentage mode. AI tanks therefore make the
     // same hard-landing sound as a player-controlled tank whenever the impact
     // is strong enough. Pure viewer/spectator actors remain excluded.
     if ( !tank || fabs(speed) <= minSpeed )
