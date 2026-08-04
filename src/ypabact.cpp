@@ -2051,12 +2051,11 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_vp_fire_end_time = 0;
     _weapon_spread_x = 0.0;
     _weapon_spread_y = 0.0;
+    _weapon_arc_x = 0.0;
+    _weapon_arc_y = 0.0;
+    _weapon_cone_xy = 0.0;
     _mgun_spread_x = 0.0;
     _mgun_spread_y = 0.0;
-    _weapon_spread_x_user = 0.0;
-    _weapon_spread_y_user = 0.0;
-    _weapon_spread_x_user_set = false;
-    _weapon_spread_y_user_set = false;
     _num_weapons = 0;
     _weapon_time = 0;
     _fire_x_mode = World::TVhclProto::FIRE_X_MODE_VANILLA;
@@ -7128,6 +7127,9 @@ void NC_STACK_ypabact::SetState(setState_msg *arg)
     }
 }
 
+static vec3d ypabact_ApplyWeaponDirectionPattern(const mat3x3 &rotation, const vec3d &direction,
+                                                   int shotIndex, int weaponCount,
+                                                   float arcX, float arcY, float coneXY);
 static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY);
 static vec3d ypabact_GetCockpitAimDirection(NC_STACK_ypabact *bact, const vec3d &origin, const vec3d &viewDir, const vec3d &fallbackDir, float range);
 
@@ -11203,21 +11205,14 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             wobj->_fly_dir = _rotation.AxisZ();
         }
 
-        bool userInput = (_oflags & BACT_OFLAG_USERINPT);
-        float weaponSpreadX = _weapon_spread_x;
-        float weaponSpreadY = _weapon_spread_y;
+        wobj->_fly_dir = ypabact_ApplyWeaponDirectionPattern(_rotation, wobj->_fly_dir,
+                                                               i, v13,
+                                                               _weapon_arc_x, _weapon_arc_y,
+                                                               _weapon_cone_xy);
 
-        if ( userInput )
-        {
-            if ( _weapon_spread_x_user_set )
-                weaponSpreadX = _weapon_spread_x_user;
-
-            if ( _weapon_spread_y_user_set )
-                weaponSpreadY = _weapon_spread_y_user;
-        }
-
-        if ( weaponSpreadX > 0.0 || weaponSpreadY > 0.0 )
-            wobj->_fly_dir = ypabact_ApplyDirectionalSpread(_rotation, wobj->_fly_dir, weaponSpreadX, weaponSpreadY);
+        if ( _weapon_spread_x > 0.0 || _weapon_spread_y > 0.0 )
+            wobj->_fly_dir = ypabact_ApplyDirectionalSpread(_rotation, wobj->_fly_dir,
+                                                            _weapon_spread_x, _weapon_spread_y);
 
         wobj->_fly_dir_length = _fly_dir_length + wproto.start_speed;
 
@@ -14160,6 +14155,110 @@ void NC_STACK_ypabact::StuckFree(update_msg *arg)
             }
         }
     }
+}
+
+static vec3d ypabact_ApplyWeaponDirectionPattern(const mat3x3 &rotation, const vec3d &direction,
+                                                   int shotIndex, int weaponCount,
+                                                   float arcX, float arcY, float coneXY)
+{
+    if ( weaponCount <= 1 || shotIndex < 0 || shotIndex >= weaponCount )
+        return direction;
+
+    const bool arcXActive = std::isfinite(arcX) && arcX > 0.0f;
+    const bool arcYActive = std::isfinite(arcY) && arcY > 0.0f;
+    const bool coneActive = std::isfinite(coneXY) && coneXY > 0.0f;
+
+    if ( (!(arcXActive || arcYActive) && !coneActive) ||
+         ((arcXActive || arcYActive) && coneActive) )
+        return direction;
+
+    if ( arcXActive && arcYActive && weaponCount % 4 != 0 && weaponCount % 4 != 1 )
+        return direction;
+
+    vec3d forward = direction;
+    if ( forward.normalise() <= 0.001 )
+        return direction;
+
+    vec3d right = rotation.AxisX();
+    right -= forward * right.dot(forward);
+
+    if ( right.normalise() <= 0.001 )
+    {
+        vec3d refAxis = fabs(forward.y) < 0.99 ? vec3d::OY(1.0) : vec3d::OX(1.0);
+        right = refAxis * forward;
+    }
+
+    if ( right.normalise() <= 0.001 )
+        return forward;
+
+    vec3d up = forward * right;
+    if ( up.normalise() <= 0.001 )
+        return forward;
+
+    if ( coneActive )
+    {
+        const double opening = (double)coneXY * C_PI_180;
+        const double around = C_2PI * (double)shotIndex / (double)weaponCount;
+        vec3d result = forward * cos(opening) +
+                       right * (sin(opening) * cos(around)) +
+                       up * (sin(opening) * sin(around));
+
+        if ( result.normalise() > 0.001 )
+            return result;
+
+        return direction;
+    }
+
+    float horizontalAngle = 0.0f;
+    float verticalAngle = 0.0f;
+
+    if ( arcXActive && arcYActive )
+    {
+        const bool hasCenter = weaponCount % 4 == 1;
+        if ( hasCenter && shotIndex == 0 )
+            return forward;
+
+        const int armShots = (weaponCount - (hasCenter ? 1 : 0)) / 4;
+        const int patternIndex = shotIndex - (hasCenter ? 1 : 0);
+        const int arm = patternIndex % 4;
+        const int level = patternIndex / 4 + 1;
+        const float fraction = (float)level / (float)armShots;
+
+        switch ( arm )
+        {
+        case 0:
+            horizontalAngle = -arcX * fraction;
+            break;
+        case 1:
+            horizontalAngle = arcX * fraction;
+            break;
+        case 2:
+            verticalAngle = -arcY * fraction;
+            break;
+        default:
+            verticalAngle = arcY * fraction;
+            break;
+        }
+    }
+    else
+    {
+        const float fraction = (float)shotIndex / (float)(weaponCount - 1);
+        if ( arcXActive )
+            horizontalAngle = -arcX + 2.0f * arcX * fraction;
+        else
+            verticalAngle = -arcY + 2.0f * arcY * fraction;
+    }
+
+    const double horizontal = (double)horizontalAngle * C_PI_180;
+    const double vertical = (double)verticalAngle * C_PI_180;
+    vec3d result = forward * (cos(horizontal) * cos(vertical)) +
+                   right * (sin(horizontal) * cos(vertical)) +
+                   up * sin(vertical);
+
+    if ( result.normalise() > 0.001 )
+        return result;
+
+    return direction;
 }
 
 static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY)

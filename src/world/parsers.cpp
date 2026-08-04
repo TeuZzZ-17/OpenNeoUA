@@ -1249,6 +1249,24 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         else
             _vhcl->fire_x_advanced = false;
 
+        const bool weaponArcXActive = _vhcl->weapon_arc_x > 0.0f;
+        const bool weaponArcYActive = _vhcl->weapon_arc_y > 0.0f;
+        const bool weaponConeActive = _vhcl->weapon_cone_xy > 0.0f;
+        const int weaponCount = _vhcl->num_weapons <= 1 ? 1 : _vhcl->num_weapons;
+
+        if ( (weaponArcXActive || weaponArcYActive) && weaponConeActive )
+        {
+            ypa_log_out("WARNING: vehicle %d weapon Arc/Cone conflict (arc_x=%.3f, arc_y=%.3f, cone_xy=%.3f, num_weapons=%d); Arc and Cone disabled, normal launch direction retained.\n",
+                        _vhclID, _vhcl->weapon_arc_x, _vhcl->weapon_arc_y,
+                        _vhcl->weapon_cone_xy, weaponCount);
+        }
+        else if ( weaponArcXActive && weaponArcYActive &&
+                  weaponCount > 1 && weaponCount % 4 != 0 && weaponCount % 4 != 1 )
+        {
+            ypa_log_out("WARNING: vehicle %d weapon Arc cross requires num_weapons=4k or 4k+1 (got %d); Arc disabled, normal launch direction retained.\n",
+                        _vhclID, weaponCount);
+        }
+
         if ( _vhcl->model_id == BACT_TYPES_ROBO )
         {
             if (!_vhcl->RoboProto)
@@ -2019,6 +2037,21 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->weapon_spread_y = parser.stof(p2, 0);
     }
+    else if ( !StriCmp(p1, "weapon_arc_x") )
+    {
+        float value = parser.stof(p2, 0);
+        _vhcl->weapon_arc_x = std::isfinite(value) && value > 0.0f ? value : 0.0f;
+    }
+    else if ( !StriCmp(p1, "weapon_arc_y") )
+    {
+        float value = parser.stof(p2, 0);
+        _vhcl->weapon_arc_y = std::isfinite(value) && value > 0.0f ? value : 0.0f;
+    }
+    else if ( !StriCmp(p1, "weapon_cone_xy") )
+    {
+        float value = parser.stof(p2, 0);
+        _vhcl->weapon_cone_xy = std::isfinite(value) && value > 0.0f ? value : 0.0f;
+    }
     else if ( !StriCmp(p1, "mgun_spread_x") )
     {
         _vhcl->mgun_spread_x = parser.stof(p2, 0);
@@ -2026,16 +2059,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "mgun_spread_y") )
     {
         _vhcl->mgun_spread_y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "weapon_spread_x_user") )
-    {
-        _vhcl->weapon_spread_x_user = parser.stof(p2, 0);
-        _vhcl->weapon_spread_x_user_set = true;
-    }
-    else if ( !StriCmp(p1, "weapon_spread_y_user") )
-    {
-        _vhcl->weapon_spread_y_user = parser.stof(p2, 0);
-        _vhcl->weapon_spread_y_user_set = true;
     }
     else if ( !StriCmp(p1, "fire_x") )
     {
@@ -2751,12 +2774,11 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_angle_set = false;
         _vhcl->weapon_spread_x = 0.0;
         _vhcl->weapon_spread_y = 0.0;
+        _vhcl->weapon_arc_x = 0.0;
+        _vhcl->weapon_arc_y = 0.0;
+        _vhcl->weapon_cone_xy = 0.0;
         _vhcl->mgun_spread_x = 0.0;
         _vhcl->mgun_spread_y = 0.0;
-        _vhcl->weapon_spread_x_user = 0.0;
-        _vhcl->weapon_spread_y_user = 0.0;
-        _vhcl->weapon_spread_x_user_set = false;
-        _vhcl->weapon_spread_y_user_set = false;
         _vhcl->type_icon = 65;
         _vhcl->vp_normal = 0;
         _vhcl->vp_fire = 1;
