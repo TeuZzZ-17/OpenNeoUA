@@ -1939,6 +1939,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _viewer_max_side = 0.0;
     _thraction = 0.0;
     _fly_dir_length = 0.0;
+    _fallDamageAirborne = false;
+    _fallDamageConsumed = false;
     _weaponRecoilVisualEndTime = 0;
     _weaponRecoilVisualDuration = 0;
     _weaponRecoilVisualPitch = 0.0f;
@@ -3768,10 +3770,14 @@ static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
 
     for (int i = 0; i < spawnCount; i++)
     {
-        vec3d localOffset(0.0, 0.0, 0.0);
-        world->SampleAttachedFXLocalPosition(bact,
-                                             config.random_offset_percent,
-                                             &localOffset);
+        // Use the same shared sampler/fallback path as damaged and debuff FX.
+        // The previous direct call left the offset at (0, 0, 0) whenever the
+        // sampler could not produce a point, making the percentage appear to
+        // be ignored for Regen/Drain effects.
+        vec3d localOffset;
+        ypabact_BuildAttachedFXOffset(bact, true,
+                                      config.random_offset_percent,
+                                      &localOffset);
 
         // Reuse the attached transient-VP path used by vehicle Decoration FX.
         // The effect follows the unit and its visual transform but never affects
@@ -11673,6 +11679,8 @@ size_t NC_STACK_ypabact::SetPosition(bact_arg80 *arg)
     _pSector = sect_info.pcell;
     _old_pos = arg->pos;
     _position = arg->pos;
+    _fallDamageAirborne = false;
+    _fallDamageConsumed = false;
     _cellId = sect_info.CellId;
 
     if ( !(arg->field_C & 2) )
@@ -12089,6 +12097,41 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
     yw_137col v58[10];
 
     int v85 = 0;
+    const bool customFallDamage = (arg->field_one & 1) &&
+                                  ypabact_IsCustomFallDamageConfigActive();
+    bool fallDamageAppliedThisCall = false;
+
+    auto applyFallDamageForContact = [&]()
+    {
+        if ( !(arg->field_one & 1) )
+            return;
+
+        // Missing/invalid configuration keeps the original per-contact
+        // vanilla calculation. The percentage mode is stateful: a normal
+        // ground correction is not a fall, and one airborne episode can
+        // consume the configured damage only once.
+        if ( !customFallDamage )
+        {
+            ypabact_ApplyFallDamage(this);
+            return;
+        }
+
+        if ( !_fallDamageAirborne || _fallDamageConsumed || fallDamageAppliedThisCall )
+            return;
+
+        ypabact_ApplyFallDamage(this);
+        _fallDamageConsumed = true;
+        fallDamageAppliedThisCall = true;
+    };
+
+    auto resetFallDamageContact = [&]()
+    {
+        if ( customFallDamage )
+        {
+            _fallDamageAirborne = false;
+            _fallDamageConsumed = false;
+        }
+    };
 
     if ( _status_flg & BACT_STFLAG_SEFFECT )
     {
@@ -12219,7 +12262,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                         if ( arg->field_one & 1 )
                         {
-                            ypabact_ApplyFallDamage(this);
+                            applyFallDamageForContact();
 
                             if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
                             {
@@ -12252,6 +12295,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                                 _position.y = _old_pos.y;
 
                                 _status_flg |= BACT_STFLAG_LAND;
+                                resetFallDamageContact();
 
                                 _fly_dir_length *= _fly_dir.XZ().length();
 
@@ -12311,7 +12355,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                         if ( arg->field_one & 1 )
                         {
-                            ypabact_ApplyFallDamage(this);
+                            applyFallDamageForContact();
 
                             if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
                             {
@@ -12359,6 +12403,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                                 _position = arg136.isectPos - vec3d(0.0, v90, 0.0);
 
                                 _status_flg |= BACT_STFLAG_LAND;
+                                resetFallDamageContact();
 
                                 _fly_dir_length *= _fly_dir.XZ().length();
 
@@ -12380,7 +12425,15 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                             _fly_dir_length = 0;
                             _reb_count = 0;
                             _status_flg |= BACT_STFLAG_LAND;
+                            resetFallDamageContact();
                         }
+                    }
+                    else if ( customFallDamage )
+                    {
+                        // No terrain contact during this step means that the
+                        // next terrain impact belongs to a real airborne
+                        // interval, not to a tank's ordinary ground correction.
+                        _fallDamageAirborne = true;
                     }
                 }
 
@@ -13609,6 +13662,8 @@ void NC_STACK_ypabact::Renew()
     _weaponRecoilPlayerRecoveryEndTime = 0;
     _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
     _aoePushVel = vec3d(0.0, 0.0, 0.0);
+    _fallDamageAirborne = false;
+    _fallDamageConsumed = false;
     _deinitInProgress = false;
     ypabact_ResetDamagedFX(this);
     _regen_fx_next_time = 0;
