@@ -11,6 +11,7 @@
 #include "spin.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 
@@ -2276,9 +2277,18 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vo_type = parser.stol(p2, NULL, 16);
     }
-    else if ( !StriCmp(p1, "voicepack") )
+    else if ( !StriCmp(p1, "speech_event") )
     {
-        _vhcl->voicepack = p2;
+        Stok stok(p2, " \t");
+        std::string eventKey;
+        std::string path;
+
+        if ( !stok.GetNext(&eventKey) || !stok.GetNext(&path) )
+            return ScriptParser::RESULT_BAD_DATA;
+
+        std::transform(eventKey.begin(), eventKey.end(), eventKey.begin(),
+                       [](unsigned char ch) { return (char)std::tolower(ch); });
+        _vhcl->speech_events[eventKey] = path;
     }
     else if ( !StriCmp(p1, "max_pitch") )
     {
@@ -2768,7 +2778,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->seek_and_explode_weapon = 0;
         _vhcl->seek_and_explode_trigger_radius = 0.0;
         _vhcl->ai_max_active_at_once = 0;
-        _vhcl->voicepack.clear();
         _vhcl->shield = 50;
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
