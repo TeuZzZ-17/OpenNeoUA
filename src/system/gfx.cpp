@@ -1980,6 +1980,8 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
     TileMap *tile = NULL;
     uint8_t tileId = 0;
     uint8_t opacity = 255;
+    int tileDstWidth = 0;
+    int tileDstHeight = 0;
 
     int x_out = 0;
     int y_out = 0;
@@ -2026,7 +2028,9 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
             int cpy_height = line_height - y_off;
 
             //SDL_Rect srcR, dstR;
-            Common::Rect dstR(x_out, y_out, x_out + cpy_width, y_out + cpy_height);
+            const int dstWidth = tileDstWidth > 0 ? tileDstWidth : cpy_width;
+            const int dstHeight = tileDstHeight > 0 ? tileDstHeight : cpy_height;
+            Common::Rect dstR(x_out, y_out, x_out + dstWidth, y_out + dstHeight);
             /*dstR.x = x_out;
             dstR.y = y_out;
             dstR.w = cpy_width;
@@ -2045,10 +2049,37 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
             SDL_Surface *source = tile->img->GetSwTex();
             if (uiAccent && IsUiAccentTileset(tileId))
                 source = GetUiAccentSurface(source, *uiAccent, tileId);
-            if (opacity == 255)
-                DrawFill(source, srcR, Screen(), dstR);
-            else
-                DrawFillAlpha(source, srcR, Screen(), dstR, opacity);
+            const bool scaled = dstWidth != cpy_width || dstHeight != cpy_height;
+            if ( !scaled )
+            {
+                if ( opacity == 255 )
+                    DrawFill(source, srcR, Screen(), dstR);
+                else
+                    DrawFillAlpha(source, srcR, Screen(), dstR, opacity);
+            }
+            else if ( opacity != 0 )
+            {
+                SDL_Rect scaledSrc = srcR;
+                SDL_Rect scaledDst = dstR;
+
+                uint8_t oldOpacity = 255;
+                SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
+                if ( opacity != 255 )
+                {
+                    SDL_GetSurfaceAlphaMod(source, &oldOpacity);
+                    SDL_GetSurfaceBlendMode(source, &oldBlendMode);
+                    SDL_SetSurfaceAlphaMod(source, opacity);
+                    SDL_SetSurfaceBlendMode(source, SDL_BLENDMODE_BLEND);
+                }
+
+                SDL_BlitScaled(source, &scaledSrc, Screen(), &scaledDst);
+
+                if ( opacity != 255 )
+                {
+                    SDL_SetSurfaceAlphaMod(source, oldOpacity);
+                    SDL_SetSurfaceBlendMode(source, oldBlendMode);
+                }
+            }
 
             /*srcR.h = cpy_height;
 
@@ -2065,7 +2096,9 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
 
             line_width = 0;
             x_off = 0;
-            x_out += cpy_width;
+            x_out += dstWidth;
+            tileDstWidth = 0;
+            tileDstHeight = 0;
             v11 = 1;
         }
         else // 0
@@ -2273,6 +2306,11 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
 
             case 24: // set tile opacity
                 opacity = FontUA::get_u16(*curStream, &curPos);
+                break;
+
+            case 25: // one-shot destination size for the next tile
+                tileDstWidth = FontUA::get_u16(*curStream, &curPos);
+                tileDstHeight = FontUA::get_u16(*curStream, &curPos);
                 break;
             }
         }

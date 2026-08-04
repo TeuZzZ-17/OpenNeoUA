@@ -93,6 +93,8 @@ Common::Ini::Key IniConf::UiHideMenuHints("ui.hide_menu_hints", Common::Ini::KT_
 Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std::string("Default"));
 // OpenUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
+// OpenUA: opt-in continuous strategic map zoom. Missing/no preserves the legacy four-state map.
+Common::Ini::Key IniConf::UiDynamicMapZoom("ui.dynamic_map_zoom", Common::Ini::KT_BOOL, false);
 
 
 // Input Engine
@@ -643,6 +645,7 @@ void IniConf::Init()
         , &UiHideMenuHints
         , &UiMenuFont
         , &UiRetroInterface
+        , &UiDynamicMapZoom
     };
 }
 
