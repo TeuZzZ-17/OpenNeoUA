@@ -935,9 +935,13 @@ void NC_STACK_yparobo::ChangeSectorEnergyFromRoboCollision(yw_arg129 *arg)
     if ( damagePercent == 0 )
         return;
 
-    int selfDamage = (int)((int64_t)_energy_max * damagePercent / 100);
-    if ( selfDamage < 1 )
-        selfDamage = 1;
+    int rawDamage = (int)((int64_t)_energy_max * damagePercent / 100);
+    if ( rawDamage < 1 )
+        rawDamage = 1;
+
+    const int selfDamage = CalcShieldedCustomDamage(rawDamage);
+    if ( selfDamage <= 0 )
+        return;
 
     while ( destroyedBuildings > 0 && _energy > 0 )
     {

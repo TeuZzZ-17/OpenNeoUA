@@ -514,6 +514,7 @@ public:
     bool IsInvulnerableToDamage() const;
     float GetEffectiveShield() const;
     float GetEffectiveShieldWithAdditionalMalus(float additionalMalus) const;
+    int CalcShieldedCustomDamage(int rawDamage) const;
     virtual bool ypabact_func85(vec3d *arg);
     virtual size_t CrashOrLand(bact_arg86 *arg);
     virtual size_t CollisionWithBact(int arg);
