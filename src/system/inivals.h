@@ -311,6 +311,7 @@ public:
     static Common::Ini::Key UiHideMenuHints; // OpenUA: ui.hide_menu_hints (default yes) — suppress passive menu hover/help hints
     static Common::Ini::Key UiMenuFont; // OpenUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
+    static Common::Ini::Key UiDynamicMapZoom; // OpenUA: ui.dynamic_map_zoom (default no) - continuous M-map zoom and two-level icon LOD
 
 private:
     static Common::Ini::PKeyList _varList;

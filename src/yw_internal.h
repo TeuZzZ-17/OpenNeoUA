@@ -1,6 +1,8 @@
 #ifndef  YWINT_H_INCLUDED
 #define YWINT_H_INCLUDED
 
+#include <vector>
+
 namespace World { struct TVisualTint; }
 
 struct TSectorCollision
@@ -268,6 +270,27 @@ public:
     Common::Point middlePanStartMouse;
     float middlePanStartX = 0.0;
     float middlePanStartZ = 0.0;
+
+    // OpenUA dynamic strategic-map zoom. field_1E0/field_1E4 remain the
+    // authoritative world-units-per-screen-pixel scale used by picking,
+    // panning and overlays. These extra fields are only the current render
+    // pass state used to cross-fade the existing level-3/level-4 icons.
+    float continuousZoom = 18.75f;
+    float renderTileScale = 1.0f;
+    bool renderMapLines = true;
+    CmdStream dynamicMapBuffer;
+
+    // OpenUA vanilla-map modernization: title-bar controls, fullscreen toggle
+    // and session-local tactical markers.
+    bool markerMode = true;
+    bool maximized = false;
+    bool restoreRectValid = false;
+    int restoreX = 0;
+    int restoreY = 0;
+    int restoreW = 0;
+    int restoreH = 0;
+    std::vector<vec2d> customMarkers;
+    int markerDragIndex = -1;
 
     CmdStream t1_cmdbuf_1;
     CmdStream t1_cmdbuf_2;
