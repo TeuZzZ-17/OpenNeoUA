@@ -344,6 +344,13 @@ struct TUnitDummy
 
 struct TVhclProto
 {
+    enum WeaponSwitchMode
+    {
+        WEAPON_SWITCH_MODE_SEQUENCE = 0,
+        WEAPON_SWITCH_MODE_RANDOM = 1,
+        WEAPON_SWITCH_MODE_CONTROLLED = 2
+    };
+
     enum FireXMode
     {
         FIRE_X_MODE_VANILLA = 0,
@@ -398,7 +405,10 @@ struct TVhclProto
     uint8_t disable_enable_bitmask = 0;
     int8_t weapon = 0;
     std::array<int16_t, 3> extra_weapons = {0, 0, 0};
-    int weapon_switch_mode = 0; // 0 sequence, 1 random
+    // OpenUA custom: optional projectile-count overrides for weapon2/3/4.
+    // A zero value inherits the primary num_weapons count.
+    std::array<int16_t, 3> extra_num_weapons = {0, 0, 0};
+    int weapon_switch_mode = WEAPON_SWITCH_MODE_SEQUENCE;
     int lowhp_weapon_enable = 0;
     float lowhp_threshold = 0.30;
     int16_t lowhp_weapon = 0;

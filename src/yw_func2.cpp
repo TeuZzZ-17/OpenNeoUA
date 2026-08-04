@@ -958,6 +958,8 @@ void  UserData::sb_0x46ca74()
         ProfilesNode &profile = profiles.back();
 
         profile.name = userNameDir;
+        InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_TAB);
+        InputConfig[World::INPUT_BIND_CAMFIRE] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_NONE);
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
 
@@ -7173,11 +7175,11 @@ bool UserData::ShellSoundsLoad()
 
 int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
 {
-    static const std::array<int, 5> BUTTON
+    static const std::array<int, 6> BUTTON
     {
-        World::INPUT_BIND_FIRE,       World::INPUT_BIND_CAMFIRE,
+        World::INPUT_BIND_FIRE,       World::INPUT_BIND_SWITCH_WEAPON,
         World::INPUT_BIND_GUN,        World::INPUT_BIND_BRAKE,
-        World::INPUT_BIND_WAPOINT
+        World::INPUT_BIND_WAPOINT,    World::INPUT_BIND_CAMFIRE
     };
 
     static const std::array<int, 6> SLIDER

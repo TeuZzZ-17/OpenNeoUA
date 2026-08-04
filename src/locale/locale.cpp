@@ -400,6 +400,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_SMOOTH:          fallback = "Smooth"; break;
         case OUA_RETRO_INTERFACE: fallback = "Retro Interface"; break;
         case OUA_RENDER_DISTANCE: fallback = "Render Distance"; break;
+        case OUA_SWITCH_WEAPON:   fallback = "Switch Weapon"; break;
         default: break;
     }
 

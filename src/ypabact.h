@@ -635,6 +635,8 @@ public:
     { return _world; }
 
     int GetCurrentWeaponId();
+    int GetCurrentWeaponProjectileCount();
+    bool CycleControlledWeapon();
 
     virtual TF::TForm3D *getBACT_pTransform()
     { return &_tForm; }
@@ -965,6 +967,7 @@ public:
     int _weapon_switch_mode;
     int _weapon_slot_index;
     int _current_weapon_id;
+    int _current_weapon_source_slot;
     int _lowhp_weapon_enable;
     float _lowhp_threshold;
     int _lowhp_weapon;
@@ -991,6 +994,7 @@ public:
     float _mgun_spread_x;
     float _mgun_spread_y;
     uint8_t _num_weapons;
+    std::array<uint8_t, 4> _weapon_projectile_counts;
 
     World::MissileList _missiles_list;
     int _weapon_time;

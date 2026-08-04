@@ -1,3 +1,18 @@
 {
-    "cmake.sourceDirectory": "C:/Users/proto/Desktop/OpenUA/src"
+    "cmake.useCMakePresets": "never",
+
+    "cmake.cmakePath": "C:/msys64/mingw64/bin/cmake.exe",
+    "cmake.sourceDirectory": "${workspaceFolder}/src",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+
+    "cmake.generator": "Ninja",
+    "cmake.parallelJobs": 24,
+
+    "cmake.environment": {
+        "PATH": "C:/msys64/mingw64/bin;C:/msys64/usr/bin;${env:PATH}",
+        "PKG_CONFIG_PATH": "C:/msys64/mingw64/lib/pkgconfig;C:/msys64/mingw64/share/pkgconfig"
+    },
+
+    "cmake.configureOnOpen": false,
+    "cmake.saveBeforeBuild": true
 }
