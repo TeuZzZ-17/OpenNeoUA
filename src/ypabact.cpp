@@ -155,9 +155,30 @@ static float ypabact_ReadNonNegativeFloatIni(Common::Ini::Key &key, float dflt)
     }
 }
 
-static float ypabact_ReadFallDamageMultiplier()
+static bool ypabact_ReadFallDamagePercent(float *outPercent)
 {
-    return ypabact_ReadNonNegativeFloatIni(System::IniConf::GameFallDamageMultiplier, 1.0f);
+    if ( !outPercent || !System::IniConf::GameFallDamagePercent.WasSet )
+        return false;
+
+    std::string value = System::IniConf::GameFallDamagePercent.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return false;
+
+    try
+    {
+        size_t pos = 0;
+        float percent = std::stof(value, &pos);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             !isfinite(percent) || percent < 0.0f )
+            return false;
+
+        *outPercent = std::min(percent, 100.0f);
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 static float ypabact_ReadPlayerMaxAltitude()
@@ -240,7 +261,34 @@ static int ypabact_ReadUnitCollisionDamagePercent(Common::Ini::Key &key)
 
 static bool ypabact_IsCustomFallDamageConfigActive()
 {
-    return fabs(ypabact_ReadFallDamageMultiplier() - 1.0f) > 0.0001f;
+    float percent = 0.0f;
+    return ypabact_ReadFallDamagePercent(&percent);
+}
+
+static void ypabact_ApplyFallDamage(NC_STACK_ypabact *unit)
+{
+    if ( !unit || unit->IsInvulnerableToDamage() )
+        return;
+
+    float percent = 0.0f;
+    if ( !ypabact_ReadFallDamagePercent(&percent) )
+    {
+        unit->_energy -= fabs(unit->_fly_dir_length) * 10.0;
+        return;
+    }
+
+    if ( percent <= 0.0f || unit->_energy_max <= 0 )
+        return;
+
+    double rawDamage = (double)unit->_energy_max * (double)percent / 100.0;
+    if ( rawDamage <= 0.0 )
+        return;
+
+    if ( rawDamage > (double)std::numeric_limits<int>::max() )
+        rawDamage = (double)std::numeric_limits<int>::max();
+
+    const int shieldedDamage = unit->CalcShieldedCustomDamage((int)ceil(rawDamage));
+    unit->_energy -= shieldedDamage;
 }
 
 static bool ypabact_ShouldPlayCustomAiCrashlandSound(const NC_STACK_ypabact *unit)
@@ -1430,22 +1478,6 @@ static bool ypabact_IsDeathDamageTarget(NC_STACK_ypabact *source, NC_STACK_ypaba
            !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER));
 }
 
-static int ypabact_CalcShieldedCustomDamage(NC_STACK_ypabact *target, int rawDamage)
-{
-    if ( !target || rawDamage <= 0 )
-        return 0;
-
-    float shield = target->GetEffectiveShield();
-    if ( shield < 0.0f )
-        shield = 0.0f;
-
-    if ( shield >= 100.0f )
-        return 0;
-
-    int damage = (int)ceil((float)rawDamage * (100.0f - shield) / 100.0f);
-    return damage > 0 ? damage : 0;
-}
-
 static void ypabact_ApplyDeathDamage(NC_STACK_ypabact *unit, bool megadethPhase)
 {
     if ( !unit || !unit->getBACT_pWorld() || unit->_death_damage <= 0 || unit->_death_damage_radius <= 0.0 )
@@ -1492,7 +1524,7 @@ static void ypabact_ApplyDeathDamage(NC_STACK_ypabact *unit, bool megadethPhase)
         if ( !ypabact_IsDeathDamageTarget(unit, target) )
             continue;
 
-        int shieldedDamage = ypabact_CalcShieldedCustomDamage(target, unit->_death_damage);
+        int shieldedDamage = target->CalcShieldedCustomDamage(unit->_death_damage);
         if ( shieldedDamage <= 0 )
             continue;
 
@@ -3543,7 +3575,7 @@ void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
 
     int tickDamage = 0;
     if ( _active_debuff.damage > 0 )
-        tickDamage = ypabact_CalcShieldedCustomDamage(this, _active_debuff.damage);
+        tickDamage = CalcShieldedCustomDamage(_active_debuff.damage);
 
     if ( _active_debuff.damage_percent > 0.0 && _energy_max > 0 )
     {
@@ -11813,6 +11845,22 @@ float NC_STACK_ypabact::GetEffectiveShield() const
     return GetEffectiveShieldWithAdditionalMalus(0.0f);
 }
 
+int NC_STACK_ypabact::CalcShieldedCustomDamage(int rawDamage) const
+{
+    if ( rawDamage <= 0 )
+        return 0;
+
+    float shield = GetEffectiveShield();
+    if ( shield < 0.0f )
+        shield = 0.0f;
+
+    if ( shield >= 100.0f )
+        return 0;
+
+    int damage = (int)ceil((float)rawDamage * (100.0f - shield) / 100.0f);
+    return damage > 0 ? damage : 0;
+}
+
 bool NC_STACK_ypabact::IsInvulnerableToDamage() const
 {
     if ( _invulnerable )
@@ -12171,8 +12219,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                         if ( arg->field_one & 1 )
                         {
-                            if ( !IsInvulnerableToDamage() )
-                                _energy -= fabs(_fly_dir_length) * 10.0 * ypabact_ReadFallDamageMultiplier();
+                            ypabact_ApplyFallDamage(this);
 
                             if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
                             {
@@ -12264,8 +12311,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                         if ( arg->field_one & 1 )
                         {
-                            if ( !IsInvulnerableToDamage() )
-                                _energy -= fabs(_fly_dir_length) * 10.0 * ypabact_ReadFallDamageMultiplier();
+                            ypabact_ApplyFallDamage(this);
 
                             if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
                             {
@@ -12664,8 +12710,8 @@ void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int f
     const int otherRawDamage = other->_energy_max > 0
                              ? std::max(1, (int)((int64_t)other->_energy_max * damagePercent / 100))
                              : 0;
-    const int selfDamage = ypabact_CalcShieldedCustomDamage(this, selfRawDamage);
-    const int otherDamage = ypabact_CalcShieldedCustomDamage(other, otherRawDamage);
+    const int selfDamage = CalcShieldedCustomDamage(selfRawDamage);
+    const int otherDamage = other->CalcShieldedCustomDamage(otherRawDamage);
 
     if ( selfDamage > 0 )
     {

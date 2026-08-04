@@ -240,7 +240,7 @@ public:
     static Common::Ini::Key GameUnitEnemyCollisionDamagePercent;
     static Common::Ini::Key GameUnitFriendlyCollisionDamagePercent;
     static Common::Ini::Key GamePowerStationEnergyMultiplier;
-    static Common::Ini::Key GameFallDamageMultiplier;
+    static Common::Ini::Key GameFallDamagePercent;
     static Common::Ini::Key GamePushAtDeathMultiplier;
     static Common::Ini::Key GameHandBrakePower;
     static Common::Ini::Key GameHandBrakeSound;

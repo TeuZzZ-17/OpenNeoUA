@@ -270,8 +270,10 @@ Common::Ini::Key IniConf::GameUnitFriendlyCollisionDamagePercent("game.unit_frie
 // OpenUA custom: multiplier for the vanilla power-station sector energy effect.
 // game.powerstation_energy_multiplier = 1.0 keeps vanilla; 3.0 triples recharge/drain.
 Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_energy_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenUA custom: fall damage and lethal weapon-push tuning.
-Common::Ini::Key IniConf::GameFallDamageMultiplier("game.fall_damage_mult", Common::Ini::KT_WORD, std::string("1.0"));
+// OpenUA custom: when explicitly present, replaces vanilla fall damage with a
+// shield-aware percentage of the unit's maximum energy. Missing/invalid keeps
+// the vanilla fall-damage calculation.
+Common::Ini::Key IniConf::GameFallDamagePercent("game.fall_damage_percent", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
@@ -554,7 +556,7 @@ void IniConf::Init()
         , &GameUnitEnemyCollisionDamagePercent
         , &GameUnitFriendlyCollisionDamagePercent
         , &GamePowerStationEnergyMultiplier
-        , &GameFallDamageMultiplier
+        , &GameFallDamagePercent
         , &GamePushAtDeathMultiplier
         , &GameHandBrakePower
         , &GameHandBrakeSound

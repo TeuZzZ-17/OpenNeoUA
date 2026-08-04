@@ -2277,18 +2277,15 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vo_type = parser.stol(p2, NULL, 16);
     }
-    else if ( !StriCmp(p1, "speech_event") )
+    else if ( p1.size() > 13 && !StriCmp(p1.substr(0, 13), "speech_event_") )
     {
-        Stok stok(p2, " \t");
-        std::string eventKey;
-        std::string path;
-
-        if ( !stok.GetNext(&eventKey) || !stok.GetNext(&path) )
+        std::string eventKey = p1.substr(13);
+        if ( eventKey.empty() || p2.empty() )
             return ScriptParser::RESULT_BAD_DATA;
 
         std::transform(eventKey.begin(), eventKey.end(), eventKey.begin(),
                        [](unsigned char ch) { return (char)std::tolower(ch); });
-        _vhcl->speech_events[eventKey] = path;
+        _vhcl->speech_events[eventKey] = p2;
     }
     else if ( !StriCmp(p1, "max_pitch") )
     {
