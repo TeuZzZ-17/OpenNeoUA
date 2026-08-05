@@ -1,5 +1,8 @@
 # Area locale privata: guide, backup, runtime, build e materiali
 /Guide-Backup-Materiali/
+.agents/
+.codex/
+.vscode/
 Pulizia_Git.bat
 desktop.ini
 Thumbs.db
