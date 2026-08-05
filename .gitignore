@@ -1,1 +1,5 @@
-/build/
+# Area locale privata: guide, backup, runtime, build e materiali
+/Guide-Backup-Materiali/
+Pulizia_Git.bat
+desktop.ini
+Thumbs.db
