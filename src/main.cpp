@@ -46,6 +46,7 @@
 #include "world/clonebalance.h"
 #include "world/energyfx.h"
 #include "obj3d.h"
+#include "crashdiag.h"
 
 
 int dword_513638 = 0;
@@ -67,20 +68,30 @@ enum GAME_SCREEN_MODE {
 GAME_SCREEN_MODE GameScreenMode;
 UserData userdata;
 
+static int DiagnosticLevelId()
+{
+    return ypaworld ? ypaworld->GetLevelInfo().LevelID : -1;
+}
+
 int ProcessGameplayFrame()
 {
+    CrashDiag::SetPhase("GameplayWorldProcess");
     ypaworld->Process(&world_update_arg);
+    CrashDiag::SetPhase("GameplayStateTransition");
 
     const TLevelInfo &levelInfo = ypaworld->GetLevelInfo();
 
     switch( levelInfo.State )
     {
     case TLevelInfo::STATE_QUIT_GAME:
+        CrashDiag::Breadcrumb("LEVEL", "quit requested level=%d", levelInfo.LevelID);
         return 0;
 
     case TLevelInfo::STATE_COMPLETED:
     case TLevelInfo::STATE_ABORTED:
     {
+        CrashDiag::Breadcrumb("LEVEL", "leave level=%d state=%d", levelInfo.LevelID, levelInfo.State);
+        CrashDiag::SetPhase("DeleteLevel");
         ypaworld->DeleteLevel();
 
         if ( dword_513638 || levelInfo.State == TLevelInfo::STATE_ABORTED )
@@ -134,6 +145,8 @@ int ProcessGameplayFrame()
 
     case TLevelInfo::STATE_RESTART:
     {
+        CrashDiag::Breadcrumb("LEVEL", "restart level=%d", levelInfo.LevelID);
+        CrashDiag::SetPhase("RestartDeleteLevel");
         ypaworld->DeleteLevel();
 
         if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.rst", userdata.UserName, levelInfo.LevelID) ) )
@@ -158,6 +171,8 @@ int ProcessGameplayFrame()
 
     case TLevelInfo::STATE_LOAD:
     {
+        CrashDiag::Breadcrumb("LEVEL", "load save from level=%d", levelInfo.LevelID);
+        CrashDiag::SetPhase("LoadDeleteLevel");
         ypaworld->DeleteLevel();
 
         if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.sgm", userdata.UserName, 0) ) )
@@ -319,6 +334,8 @@ int ProcessMenuFrame()
         return 0;
     else if ( userdata.envAction.action == EnvAction::ACTION_PLAY )
     {
+        CrashDiag::Breadcrumb("LEVEL", "start requested level=%d", userdata.envAction.params[0]);
+        CrashDiag::SetPhase("LevelStart");
         userdata.SaveSettings();
         ypaworld->CloseGameShell();
 
@@ -343,6 +360,8 @@ int ProcessMenuFrame()
     }
     else if ( userdata.envAction.action == EnvAction::ACTION_LOAD )
     {
+        CrashDiag::Breadcrumb("LEVEL", "load save requested");
+        CrashDiag::SetPhase("LevelLoad");
         GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
 
         const TLevelInfo &a4 = ypaworld->GetLevelInfo();
@@ -365,6 +384,8 @@ int ProcessMenuFrame()
     }
     else if ( userdata.envAction.action == EnvAction::ACTION_NETPLAY )
     {
+        CrashDiag::Breadcrumb("LEVEL", "netplay start requested level=%d", userdata.envAction.params[0]);
+        CrashDiag::SetPhase("NetLevelStart");
         userdata.SaveSettings();
 
         if ( !userdata.SaveBuildProtoState() )
@@ -463,6 +484,9 @@ static bool FrameRateIndependentActive()
 
 int ProcessNextFrame()
 {
+    CrashDiag::FrameBegin(world_update_arg.TimeStamp, GameScreenMode, DiagnosticLevelId());
+    CrashDiag::SetPhase("InputQuery");
+
     input_states = TInputState();
     Input::Engine.QueryInput(&input_states);
 
@@ -489,30 +513,36 @@ int ProcessNextFrame()
 
     world_update_arg.DTime = input_states.Period;
     world_update_arg.field_8 = &input_states;
-
     world_update_arg.TimeStamp += input_states.Period;
 
-    // If mouse captured, enable releative mouse control
     if (ypaworld->_mouseGrabbed)
         System::SetReleativeMouse(true);
     else
         System::SetReleativeMouse(false);
 
-    Gui::Root::Instance.TimersUpdate( input_states.Period );
+    CrashDiag::SetPhase("GuiTimers");
+    Gui::Root::Instance.TimersUpdate(input_states.Period);
 
+    int result = 1;
     if ( GameScreenMode == GAME_SCREEN_MODE_MENU )
     {
-        return ProcessMenuFrame();
+        CrashDiag::SetPhase("MenuFrame");
+        result = ProcessMenuFrame();
     }
     else if ( GameScreenMode == GAME_SCREEN_MODE_GAME )
     {
-        return ProcessGameplayFrame();
+        CrashDiag::SetPhase("GameplayFrame");
+        result = ProcessGameplayFrame();
     }
     else if ( GameScreenMode == GAME_SCREEN_MODE_REPLAY )
     {
-        return ProcessReplayFrame();
+        CrashDiag::SetPhase("ReplayFrame");
+        result = ProcessReplayFrame();
     }
-    return 1;
+
+    CrashDiag::SetPhase("FrameComplete");
+    CrashDiag::FrameEnd(world_update_arg.TimeStamp, GameScreenMode, DiagnosticLevelId());
+    return result;
 }
 
 int init_classesLists_and_variables()
@@ -818,6 +848,10 @@ int main(int argc, char *argv[])
 
     System::IniConf::ReadFromNucleusIni();
 
+    CrashDiag::Init(System::IniConf::GameCrashDiagnostics.Get<bool>(),
+                    std::string("OpenUA ") + __DATE__ + " " + __TIME__);
+    CrashDiag::Breadcrumb("STARTUP", "runtime initialized");
+
     // OpenUA: cache global runtime configuration after Nucleus.ini is parsed.
     World::CloneBalance::Init();
     World::EnergyFX::Init();
@@ -912,11 +946,14 @@ int main(int argc, char *argv[])
 
     }
 
+    CrashDiag::DisarmWatchdog();
+    CrashDiag::SetPhase("Shutdown");
     ypaworld->DeleteNewGuiElements();
 
     sub_4113E8();
     Gui::UA::Deinit();
 
+    CrashDiag::Shutdown();
     System::Deinit();
 
     return 0;

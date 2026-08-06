@@ -788,6 +788,22 @@ bool NC_STACK_button::SetText(int butID, const std::string &field_4)
     return false;
 }
 
+bool NC_STACK_button::SetTextColor(int butID, uint8_t r, uint8_t g, uint8_t b)
+{
+    int id = GetIndexByID(butID);
+
+    if ( id >= 0 && id < idd )
+    {
+        button_str2 &button = field_d8[id];
+        button.txt_r = r;
+        button.txt_g = g;
+        button.txt_b = b;
+        return true;
+    }
+
+    return false;
+}
+
 int NC_STACK_button::GetIndexByID(int butid)
 {
     for (unsigned int i = 0; i < field_d8.size(); i++)

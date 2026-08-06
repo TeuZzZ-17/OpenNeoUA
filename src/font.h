@@ -68,8 +68,6 @@ void set_flag(CmdStream *pos, uint16_t flag);
 void unset_flag(CmdStream *pos, uint16_t flag);
 //Op 22: Set text color
 void set_txtColor(CmdStream *pos, uint8_t r, uint8_t g, uint8_t b);
-//Op 23: Set text color without faction UI remapping
-void set_txtColorRaw(CmdStream *pos, uint8_t r, uint8_t g, uint8_t b);
 //Op 24: Set tile opacity
 void set_opacity(CmdStream *pos, uint8_t opacity);
 

@@ -137,6 +137,7 @@ public:
     int field_2D4;
     int field_2D8;
     int field_2DC;
+    uint32_t aggressionCommandID = 0;
 };
 
 class energPanel : public GuiBase

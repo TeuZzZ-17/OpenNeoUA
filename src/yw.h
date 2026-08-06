@@ -50,6 +50,14 @@ class NC_STACK_ypaworld;
 class NC_STACK_button;
 class NC_STACK_windp;
 
+struct TAttackOrderFeedbackEntry
+{
+    uint32_t SquadCommandID = 0;
+    uint8_t SquadOwner = 0;
+    int32_t TargetGid = 0;
+    uint32_t StartTime = 0;
+};
+
 struct TLego;
 struct TSubSectorDesc;
 struct TSectorDesc;
@@ -2352,6 +2360,7 @@ public:
 
 
     SDL_Color GetColor(int color_id);
+    SDL_Color GetFactionBoxTextColor() const;
     bool ParseColorString(int color_id, const std::string &color_string);
 
 
@@ -2445,6 +2454,7 @@ public:
     static TileMap * yw_LoadFont(const std::string &fontname);
     static TileMap * yw_LoadTileSet(const std::string &bitmap, Common::Point chrSz, Common::Point delta, Common::Point cr, Common::Point offset);
     NC_STACK_ypabact * FindBactByCmdOwn(uint32_t commandID, char owner);
+    NC_STACK_ypabact * FindLiveBactByGid(int32_t gid);
 
 
     bool yw_createRobos(const std::vector<MapRobo> &Robos);
@@ -2960,6 +2970,7 @@ public:
     bool _moveOrderFeedbackActive = false;
     vec3d _moveOrderFeedbackPos;
     uint32_t _moveOrderFeedbackStartTime = 0;
+    std::vector<TAttackOrderFeedbackEntry> _attackOrderFeedbacks;
 
     bool _makingWaypointsMode = false;
     int32_t _waypointCount = 0;

@@ -221,14 +221,6 @@ void FontUA::set_txtColor(CmdStream *pos, uint8_t r, uint8_t g, uint8_t b)
     FontUA::store_u16(pos, b);
 }
 
-void FontUA::set_txtColorRaw(CmdStream *pos, uint8_t r, uint8_t g, uint8_t b)
-{
-    FontUA::store_u16(pos, 23);
-    FontUA::store_u16(pos, r);
-    FontUA::store_u16(pos, g);
-    FontUA::store_u16(pos, b);
-}
-
 void FontUA::set_opacity(CmdStream *pos, uint8_t opacity)
 {
     FontUA::store_u16(pos, 24);

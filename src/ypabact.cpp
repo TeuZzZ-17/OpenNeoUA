@@ -26,6 +26,7 @@
 #include "world/spin.h"
 
 #include "log.h"
+#include "crashdiag.h"
 
 
 int ypabact_id = 1;
@@ -3218,6 +3219,9 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     if ( _kidRef.IsListType(World::BLIST_CACHE) ) // Do not update units in dead list
         return;
 
+    CrashDiag::ScopedActiveBact diagnosticBact(this, _gid, _bact_type, _owner,
+                                                _status, _status_flg, _energy);
+
     static TF::TForm3D bact_cam;
     TF::Engine.SetViewPoint(&bact_cam);
 
@@ -4654,6 +4658,15 @@ void NC_STACK_ypabact::AI_layer1(update_msg *arg)
         StuckFree(arg);
     }
 
+    // Keep the common timing/stuck bookkeeping above, but do not let the
+    // directly controlled unit execute AI target propagation or order recovery.
+    // AI_layer2 routes it straight to the class-specific User_layer.
+    if ( _oflags & BACT_OFLAG_USERINPT )
+    {
+        AI_layer2(arg);
+        return;
+    }
+
     if ( _status == BACT_STATUS_NORMAL && _primTtype != BACT_TGT_TYPE_NONE )
     {
         if ( _primTtype == BACT_TGT_TYPE_UNIT )
@@ -4729,21 +4742,7 @@ void NC_STACK_ypabact::AI_layer1(update_msg *arg)
         }
     }
 
-    if ( _oflags & BACT_OFLAG_USERINPT )
-    {
-        if ( _primTtype == BACT_TGT_TYPE_UNIT &&
-             _primT.pbact )
-        {
-            if ( !_primT.pbact->_pSector->IsCanSee(_owner) )
-            {
-                v36.tgt_type = BACT_TGT_TYPE_NONE;
-                v36.priority = 0;
-
-                SetTarget(&v36);
-            }
-        }
-    }
-    else if ( _vp_active == 6 && _status == BACT_STATUS_NORMAL )
+    if ( _vp_active == 6 && _status == BACT_STATUS_NORMAL )
     {
         setState_msg v38;
         v38.newStatus = BACT_STATUS_NORMAL;
@@ -4785,6 +4784,15 @@ static void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
 
 void NC_STACK_ypabact::AI_layer2(update_msg *arg)
 {
+    // The directly controlled unit uses player targeting and input only.
+    // Bypass opportunistic enemy scans, AI speech/engagement messages and AI
+    // secondary-target assignment that otherwise ran every 500 ms.
+    if ( _oflags & BACT_OFLAG_USERINPT )
+    {
+        ypabact_RunPlayerUserLayer(this, arg);
+        return;
+    }
+
     constexpr float CurSectrLength = 1.05 * World::CVSectorLength;
 
     if ( (_clock - _AI_time2) < 250
@@ -4794,11 +4802,7 @@ void NC_STACK_ypabact::AI_layer2(update_msg *arg)
        || _status == BACT_STATUS_DEAD
        || _status == BACT_STATUS_BEAM )
     {
-        if ( _oflags & BACT_OFLAG_USERINPT )
-            ypabact_RunPlayerUserLayer(this, arg);
-        else
-            RunAIWithActiveDebuffDisorient(arg);
-
+        RunAIWithActiveDebuffDisorient(arg);
         return;
     }
 
@@ -4816,10 +4820,7 @@ void NC_STACK_ypabact::AI_layer2(update_msg *arg)
 
         SetTarget(&arg67);
 
-        if ( _oflags & BACT_OFLAG_USERINPT )
-            ypabact_RunPlayerUserLayer(this, arg);
-        else
-            RunAIWithActiveDebuffDisorient(arg);
+        RunAIWithActiveDebuffDisorient(arg);
         return;
     }
 
@@ -4933,25 +4934,7 @@ void NC_STACK_ypabact::AI_layer2(update_msg *arg)
             _target_vec.y = 0;
     }
 
-    if ( _oflags & BACT_OFLAG_USERINPT )
-    {
-        if ( _secndTtype == BACT_TGT_TYPE_UNIT && _secndT.pbact )
-        {
-            if ( !_secndT.pbact->_pSector->IsCanSee(_owner) ||
-                  (_position.XZ() - _secndT.pbact->_position.XZ()).length() > 2160.0 )
-            {
-                setTarget_msg arg67;
-                arg67.priority = 1;
-                arg67.tgt_type = BACT_TGT_TYPE_NONE;
-                SetTarget(&arg67);
-            }
-        }
-    }
-
-    if ( _oflags & BACT_OFLAG_USERINPT )
-        ypabact_RunPlayerUserLayer(this, arg);
-    else
-        RunAIWithActiveDebuffDisorient(arg);
+    RunAIWithActiveDebuffDisorient(arg);
 }
 
 void AI_layer3__sub1(NC_STACK_ypabact *bact, update_msg *arg)
@@ -6782,6 +6765,14 @@ void NC_STACK_ypabact::Die()
     if ( _status_flg & BACT_STFLAG_DEATH1 )
         return;
 
+    CrashDiag::Breadcrumb("BACT_DEATH",
+                          "begin ptr=%p gid=%d type=%d owner=%d status=%d flags=0x%x energy=%d killer_gid=%d killer_owner=%d parent_gid=%d host_gid=%d kids=%zu",
+                          this, _gid, _bact_type, _owner, _status, _status_flg,
+                          _energy, _killer ? _killer->_gid : 0, _killer_owner,
+                          _parent ? _parent->_gid : 0,
+                          _host_station ? _host_station->_gid : 0,
+                          _kidList.size());
+
     // OpenUA custom: lightweight single-player kill marks. Damage from missiles
     // already identifies the launcher; attached guns/dummies are normalized to
     // their carrying unit. Components and friendly/self kills never award marks.
@@ -7085,6 +7076,10 @@ void NC_STACK_ypabact::Die()
         if ( !(_status_flg & BACT_STFLAG_CLEAN) )
             _world->HistoryAktKill(this);
     }
+
+    CrashDiag::Breadcrumb("BACT_DEATH",
+                          "end ptr=%p gid=%d type=%d owner=%d status=%d flags=0x%x",
+                          this, _gid, _bact_type, _owner, _status, _status_flg);
 }
 
 void NC_STACK_ypabact::SetState(setState_msg *arg)
@@ -13195,42 +13190,28 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &c
         if ( _bact_type != BACT_TYPES_GUN && _bact_type != BACT_TYPES_ROBO )
         {
             vec3d ownTargetPos;
-            bool isLeader;
+            const NC_STACK_ypabact *commandUnit = this;
+            bool isLeader = true;
 
-            if ( IsParentMyRobo() )
+            // A detached or level-placed unit without a parent is a valid root.
+            // Only real squad members inherit the commander's primary target.
+            if ( !IsParentMyRobo() && _parent )
             {
-                if ( _primTtype == BACT_TGT_TYPE_CELL )
-                {
-                    ownTargetPos = _primTpos;
+                commandUnit = _parent;
+                isLeader = false;
+            }
 
-                }
-                else if ( _primTtype == BACT_TGT_TYPE_UNIT )
-                {
-                    ownTargetPos = _primT.pbact->_position;
-                }
-                else
-                {
-                    ownTargetPos = _position;
-                }
-
-                isLeader = true;
+            if ( commandUnit->_primTtype == BACT_TGT_TYPE_CELL )
+            {
+                ownTargetPos = commandUnit->_primTpos;
+            }
+            else if ( commandUnit->_primTtype == BACT_TGT_TYPE_UNIT )
+            {
+                ownTargetPos = commandUnit->_primT.pbact->_position;
             }
             else
             {
-                if ( _parent->_primTtype == BACT_TGT_TYPE_CELL )
-                {
-                    ownTargetPos = _parent->_primTpos;
-                }
-                else if ( _parent->_primTtype == BACT_TGT_TYPE_UNIT )
-                {
-                    ownTargetPos = _parent->_primT.pbact->_position;
-                }
-                else
-                {
-                    ownTargetPos = _position;
-                }
-
-                isLeader = false;
+                ownTargetPos = _position;
             }
 
             // if primary/secondary squad target distance is more than 3 sector length
@@ -17617,6 +17598,27 @@ void NC_STACK_ypabact::setBACT_inputting(bool inpt)
 
         _oflags |= BACT_OFLAG_USERINPT;
         _world->setYW_userVehicle(this);
+
+        // Drop the unit's own inherited AI orders when direct control begins.
+        // Child squad members keep their already assigned orders because a
+        // NONE target is not propagated by SetTarget(). Player aim/lock can
+        // immediately assign a fresh secondary target through UserTargeting().
+        setTarget_msg clearTarget = {};
+        clearTarget.tgt_type = BACT_TGT_TYPE_NONE;
+
+        if ( _primTtype != BACT_TGT_TYPE_NONE )
+        {
+            clearTarget.priority = 0;
+            SetTarget(&clearTarget);
+        }
+
+        if ( _secndTtype != BACT_TGT_TYPE_NONE )
+        {
+            clearTarget.priority = 1;
+            SetTarget(&clearTarget);
+        }
+
+        _target_vec = vec3d(0.0, 0.0, 0.0);
 
         const bool landedHelicopter =
             _bact_type == BACT_TYPES_BACT &&

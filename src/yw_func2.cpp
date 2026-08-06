@@ -1914,7 +1914,7 @@ void UserData::AtmosphereOptionsLoad()
     atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), 25);
     atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH] =
-        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 100);
+        VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 50);
     atmosphereValues[ATMOPT_EXPOSURE] =
         FloatHundredFromString(System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 170, 25, 200);
     atmosphereValues[ATMOPT_CONTRAST] =
@@ -1939,7 +1939,7 @@ void UserData::AtmosphereOptionsLoad()
         VisualFilterStrengthPercentFromString(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 65);
 
     atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE] =
-        IntFromString(System::IniConf::GameWorldUiMaxDistance.Get<std::string>(), 5000, 100, 20000);
+        IntFromString(System::IniConf::GameWorldUiMaxDistance.Get<std::string>(), 5700, 100, 20000);
 
     atmosphereValues[ATMOPT_VHS_STRENGTH] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 60);
@@ -2171,10 +2171,10 @@ void UserData::AtmosphereOptionsReset()
 {
     atmosphereValues =
     {{
-        25, 100, 170, 95, 80, 60,
+        25, 50, 170, 95, 80, 60,
         4000, 2000, 80,
         2000, 2000, 65,
-        5000,
+        5700,
         60
     }};
 
@@ -2386,6 +2386,11 @@ void UserData::ShowMenuMsgBox(int code, const std::string &txt1, const std::stri
 void UserData::ShowConfirmDialog( int a2, const std::string &txt1, const std::string &txt2, int a5)
 {
     confirmMode = a2;
+
+    const SDL_Color boxTextColor = p_YW->GetFactionBoxTextColor();
+    for ( int buttonId = 1300; buttonId <= 1303; ++buttonId )
+        confirm_button->SetTextColor(buttonId, boxTextColor.r,
+                                     boxTextColor.g, boxTextColor.b);
 
     NC_STACK_button::button_66arg v12;
     v12.butID = 1300;

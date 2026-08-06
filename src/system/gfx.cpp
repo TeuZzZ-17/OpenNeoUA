@@ -1912,15 +1912,12 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
                 SDL_Color original;
                 SDL_GetRGBA(value, copy->format, &original.r, &original.g,
                             &original.b, &original.a);
-                const bool ghorkRedAccent =
-                    accent.r >= 180 && accent.r > accent.g + 80 &&
-                    accent.r > accent.b + 70;
-                // Ghorkov red exposed dark teal pixels in the scrollbar
-                // atlases as abrupt green/grey breaks. These atlases contain
-                // controls only, so tint their darker teal ramp as well.
-                const bool tintAllMapControls =
-                    tilesetId == 10 ||
-                    (ghorkRedAccent && tilesetId >= 11 && tilesetId <= 13);
+                // Keep the dark frame/track ramp neutral for every faction.
+                // The normal accent remap still colours the authored scrollbar
+                // highlights, arrows and knob. In particular, do not tint the
+                // whole 11..13 map-control atlases for Ghorkov: that special
+                // case also coloured the outer map frame red.
+                const bool tintAllMapControls = tilesetId == 10;
                 const bool includeNeutralHighlights =
                     IsUiAccentNeutralHighlightTileset(tilesetId);
                 const int neutralThreshold = tilesetId == 10 ? 90 : 180;
@@ -1958,6 +1955,16 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
 
     _uiAccentSurfaces[cacheKey] = copy;
     return copy;
+}
+
+static bool IsFactionAccentTextSource(uint8_t r, uint8_t g, uint8_t b)
+{
+    // The original gameplay/menu accent text is cyan/azure. Remap only that
+    // chromatic family; authored white, grey and other semantic colours remain
+    // untouched.
+    return g >= 80 && b >= 80 &&
+           g >= r + 18 && b >= r + 18 &&
+           std::abs((int)g - (int)b) <= 96;
 }
 
 void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *includes,
@@ -2240,33 +2247,21 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
                 txt_flag &= ~(FontUA::get_u16(*curStream, &curPos));
                 break;
 
-            case 22: // set color for font
+            case 22: // set colour for font, with selective faction accent
             {
                 int r = FontUA::get_u16(*curStream, &curPos);
-
                 int g = FontUA::get_u16(*curStream, &curPos);
-
                 int b = FontUA::get_u16(*curStream, &curPos);
 
-                if (uiAccent)
+                if ( uiAccent && IsFactionAccentTextSource((uint8_t)r,
+                                                           (uint8_t)g,
+                                                           (uint8_t)b) )
                 {
-                    SDL_Color themed = RemapUiAccentColor({(uint8_t)r, (uint8_t)g,
-                                                           (uint8_t)b, 255},
-                                                          *uiAccent);
-                    r = themed.r;
-                    g = themed.g;
-                    b = themed.b;
+                    r = uiAccent->r;
+                    g = uiAccent->g;
+                    b = uiAccent->b;
                 }
 
-                AddScreenText("", r, g, b, 0, 0x20);
-            }
-            break;
-
-            case 23: // set text color without UI accent remapping
-            {
-                int r = FontUA::get_u16(*curStream, &curPos);
-                int g = FontUA::get_u16(*curStream, &curPos);
-                int b = FontUA::get_u16(*curStream, &curPos);
                 AddScreenText("", r, g, b, 0, 0x20);
             }
             break;
@@ -4200,7 +4195,7 @@ void GFXEngine::ApplyAtmosphereFromConfig()
     }
 
     _atmosphereStrength = ParseAtmosphereValue(
-        System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 1.0f, 0.0f, 1.0f);
+        System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 0.5f, 0.0f, 1.0f);
     _atmosphereExposure = ParseAtmosphereValue(
         System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 1.7f, 0.25f, 2.0f);
     _atmosphereContrast = ParseAtmosphereValue(
