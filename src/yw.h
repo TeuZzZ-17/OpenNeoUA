@@ -2711,6 +2711,8 @@ public:
     bool IsGemNotificationCaptureActive() const;
     bool HasActiveNewGemNotification() const;
     uint32_t GetNewGemNotificationElapsedTime() const;
+    void StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo);
+    bool HasActiveRoboDeathTimeScale() const;
     int32_t GetGameplayRenderTimeStamp() const
     {
         return _gameplayRenderTimeBaseSet ? _gameplayRenderTimeBase + _timeStamp : _timeStamp;
@@ -2718,6 +2720,10 @@ public:
     bool IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) const;
+    // True only when the configured Sprint hotkey currently belongs to a
+    // sprint-capable, directly controlled local unit. Shared by Sprint and the
+    // legacy waypoint gate so one physical key cannot activate both systems.
+    bool IsPlayerSprintInputHeld() const;
     float GetPlayerSprintForce(const NC_STACK_ypabact *bact) const;
     float GetPlayerSprintPitchScale(const NC_STACK_ypabact *bact) const;
     void UpdatePlayerSprint(TInputState *inpt, int32_t frameTime);
@@ -3072,7 +3078,9 @@ public:
     std::vector<TMapGem> _techUpgrades; // tech upgrades in level
     int32_t _upgradeId = 0;
     uint32_t _upgradeTimeStamp = 0;
-    double _gemUnlockTimeScaleRemainder = 0.0;
+    // Shared fractional accumulator for the Host Station death slowdown.
+    double _gameplayTimeScaleRemainder = 0.0;
+    uint32_t _roboDeathTimeScaleEndTick = 0;
     int32_t _gameplayRenderTimeBase = 0;
     bool _gameplayRenderTimeBaseSet = false;
     int32_t _upgradeVehicleId = 0;

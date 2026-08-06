@@ -112,6 +112,11 @@ static float Clamp01(float value)
     return value;
 }
 
+static float NonNegativeFiniteOrZero(float value)
+{
+    return std::isfinite(value) && value > 0.0f ? value : 0.0f;
+}
+
 static float ClampRecoilMultiplier(float value)
 {
     if ( !(value >= 0.0f) )
@@ -1479,6 +1484,18 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->push_resistance = Clamp01(parser.stof(p2, 0));
         _vhcl->has_push_resistance = true;
     }
+    else if ( !StriCmp(p1, "push_at_death_force") )
+    {
+        _vhcl->push_at_death_force = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    }
+    else if ( !StriCmp(p1, "push_at_death_radius") )
+    {
+        _vhcl->push_at_death_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    }
+    else if ( !StriCmp(p1, "push_at_death_falloff") )
+    {
+        _vhcl->push_at_death_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
+    }
     else if ( !StriCmp(p1, "add_energy") )
     {
         int previousValue = _vhcl->energy;
@@ -1752,16 +1769,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "snd_mimic_volume") )
     {
         _vhcl->snd_mimic.volume = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "death_damage") )
-    {
-        int damage = parser.stol(p2, NULL, 0);
-        _vhcl->death_damage = damage > 0 ? damage : 0;
-    }
-    else if ( !StriCmp(p1, "death_damage_radius") )
-    {
-        float radius = parser.stof(p2, 0);
-        _vhcl->death_damage_radius = radius > 0.0 ? radius : 0.0;
     }
     else if ( !StriCmp(p1, "proximity_defense_enable") )
     {
@@ -2855,8 +2862,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->spawn_at_death_random_pos = 0.0;
         _vhcl->spawn_at_death_instant = 0;
         _vhcl->spawn_at_death_immunity_time = 0;
-        _vhcl->death_damage = 0;
-        _vhcl->death_damage_radius = 0.0;
         _vhcl->proximity_defense_enable = 0;
         _vhcl->proximity_defense_weapon = 0;
         _vhcl->proximity_defense_trigger_radius = 0.0;
@@ -2888,6 +2893,9 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->kill_after_shot = 0;
         _vhcl->push_resistance = 0.0;
         _vhcl->has_push_resistance = false;
+        _vhcl->push_at_death_force = 0.0f;
+        _vhcl->push_at_death_radius = 0.0f;
+        _vhcl->push_at_death_falloff = 0;
         _vhcl->mass = 400.0;
         _vhcl->force = 5000.0;
         _vhcl->airconst = 80.0;

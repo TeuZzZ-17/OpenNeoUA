@@ -625,6 +625,8 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
 
         if ( _clock - _newtarget_time > 500 )
         {
+            _newtarget_time = _clock;
+
             bact_arg110 arg110;
             arg110.tgType = _secndTtype;
             arg110.priority = 1;
@@ -633,43 +635,44 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             arg110_1.tgType = _primTtype;
             arg110_1.priority = 0;
 
-            int v52 = TargetAssess(&arg110);
+            const int v52 = TargetAssess(&arg110);
+            const int v55 = TargetAssess(&arg110_1);
+            const bool secondaryNeedsAction = v52 == TA_MOVE || v52 == TA_FIGHT;
+            const bool primaryNeedsAction = v55 == TA_MOVE || v55 == TA_FIGHT;
 
-            int v55 = TargetAssess(&arg110_1);
-
-            if ( v52 != TA_IGNORE || v55 != TA_IGNORE )
+            if ( v52 == TA_CANCEL )
             {
+                setTarget_msg arg67;
+                arg67.tgt_type = BACT_TGT_TYPE_NONE;
+                arg67.priority = 1;
 
-                if ( v52 == TA_CANCEL )
-                {
-                    setTarget_msg arg67;
-                    arg67.tgt_type = BACT_TGT_TYPE_NONE;
-                    arg67.priority = 1;
+                SetTarget(&arg67);
+            }
 
-                    SetTarget(&arg67);
-                }
+            if ( v55 == TA_CANCEL )
+            {
+                setTarget_msg arg67;
+                arg67.tgt_type = BACT_TGT_TYPE_CELL;
+                arg67.tgt_pos.x = _position.x;
+                arg67.tgt_pos.z = _position.z;
+                arg67.priority = 0;
 
-                if ( v55 == TA_CANCEL )
-                {
-                    setTarget_msg arg67;
-                    arg67.tgt_type = BACT_TGT_TYPE_CELL;
-                    arg67.tgt_pos.x = _position.x;
-                    arg67.tgt_pos.z = _position.z;
-                    arg67.priority = 0;
+                SetTarget(&arg67);
+            }
 
-                    SetTarget(&arg67);
-                }
+            // A cancelled mission target is replaced by the current cell. That
+            // replacement is an idle anchor, not a reason to take off. The old
+            // "_primTtype || _secndTtype" check woke landed planes every target
+            // assessment cycle and alternated VP_WAIT/VP_NORMAL.
+            if ( secondaryNeedsAction || primaryNeedsAction )
+            {
+                setState_msg arg78;
+                arg78.unsetFlags = BACT_STFLAG_LAND;
+                arg78.setFlags = 0;
+                arg78.newStatus = BACT_STATUS_NORMAL;
 
-                if ( _primTtype || _secndTtype )
-                {
-                    setState_msg arg78;
-                    arg78.unsetFlags = BACT_STFLAG_LAND;
-                    arg78.setFlags = 0;
-                    arg78.newStatus = BACT_STATUS_NORMAL;
-
-                    SetState(&arg78);
-                    break;
-                }
+                SetState(&arg78);
+                break;
             }
         }
 

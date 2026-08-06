@@ -120,6 +120,11 @@ class squadMan: public GuiList
 {
 public:
     std::array<NC_STACK_ypabact *, 24> squads;
+    // Display-only mapping back to _cmdrsRemap. -1 is the Host Station and
+    // -2 is an empty row. The Host Station stays first while the controlled
+    // vehicle's squad is promoted to the first squad row immediately below it.
+    std::array<int, 24> squadRemapIndices;
+    uint32_t prioritizedCommandID = 0;
     int field_2A8;
     int field_2AC;
     int field_2B0;
@@ -267,10 +272,6 @@ public:
     float field_25C;
     float field_260;
     float field_264;
-    bool middlePanActive = false;
-    Common::Point middlePanStartMouse;
-    float middlePanStartX = 0.0;
-    float middlePanStartZ = 0.0;
 
     // OpenUA vanilla-map modernization: title-bar controls, fullscreen toggle
     // and session-local tactical markers.

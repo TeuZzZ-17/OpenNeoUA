@@ -241,10 +241,14 @@ public:
     static Common::Ini::Key GameFallDamagePercent;
     static Common::Ini::Key GamePushAtDeathMultiplier;
     static Common::Ini::Key GameHandBrakePower;
+    static Common::Ini::Key GameUnitKillStatBonusPercent;
     static Common::Ini::Key GameHandBrakeSound;
     static Common::Ini::Key GameGemUnlockNewUI;
     static Common::Ini::Key GameGemUnlockSound;
-    static Common::Ini::Key GameGemUnlockTimeScale;
+    static Common::Ini::Key GameGemUnlockDuration;
+    static Common::Ini::Key GameRoboDeathTimeScale;
+    static Common::Ini::Key GameRoboDeathTimeScaleDuration;
+    static Common::Ini::Key GameRoboDeathTimeScaleMaxDistance;
     static Common::Ini::Key GameWorldUiMaxDistance;
     static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;
@@ -313,8 +317,9 @@ public:
     static Common::Ini::Key UiMenuFont; // OpenUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
     static Common::Ini::Key UiMapMarkerSound; // OpenUA: optional sound played once after successful map marker deployment
-    static Common::Ini::Key UiMoveOrderTemplate; // OpenUA: move-order feedback template, 0 procedural fallback, 1..10 selectable
-    static Common::Ini::Key UiAttackOrderTemplate; // OpenUA: attack-order feedback template, 0 disabled, 1..10 selectable
+    static Common::Ini::Key UiMoveOrderTemplate; // OpenUA: direct resource path for squad move-order feedback
+    static Common::Ini::Key UiAttackOrderTemplate; // OpenUA: direct resource path for attack-order feedback
+    static Common::Ini::Key UiRoboMoveOrderTemplate; // OpenUA: direct resource path for Host Station relocation feedback
 
 private:
     static Common::Ini::PKeyList _varList;

@@ -20,10 +20,11 @@ namespace World
 //   * it is recomputed from the unmodified base/prototype values on every query,
 //     so it can never compound across save/load/respawn (no stored malus).
 //
-// Energy / max HP is intentionally left untouched, because energy is also tied to
-// unit cost / economy. See the call sites in ypabact.cpp for the exact effective
-// values that are adjusted (defense, shot_time, outgoing unit/sector damage,
-// force, maxrot, sound pitch) and the grey identity tint applied at render time.
+// Energy / max HP and sound pitch are intentionally left untouched. See the call
+// sites in ypabact.cpp for the exact effective values adjusted at runtime: force,
+// maxrot, effective shield, outgoing unit/sector damage and the selected
+// shot_time/user or mgun_shot_time/user cooldown. The grey identity tint remains
+// render-only and is not part of the stat malus.
 namespace CloneBalance
 {
     // Black Sect faction/owner id (the imperfect grey clones).
@@ -35,9 +36,9 @@ namespace CloneBalance
     void Init();
 
     // Multipliers derived from game.black_sect_clone_malus_percent (default 5):
-    //   DownFactor()       = 1 - p/100  (0.95) -> effective defense, outgoing
-    //                                             damage, force, maxrot, sound pitch
-    //   AttackTimeFactor() = 1 + p/100  (1.05) -> shot_time / cooldown (slower fire)
+    //   DownFactor()       = 1 - p/100  (0.95) -> effective shield, outgoing
+    //                                             damage, force and maxrot
+    //   AttackTimeFactor() = 1 + p/100  (1.05) -> selected weapon/MGUN cooldown
     float DownFactor();
     float AttackTimeFactor();
 

@@ -1300,6 +1300,25 @@ int yw_parse_subSect(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
 
 int yw_parse_sektor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
 {
+    auto parseArrayIndex = [](const std::string &token, int *result) -> bool
+    {
+        try
+        {
+            size_t pos = 0;
+            const long value = std::stol(token, &pos, 0);
+            if ( token.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+                 value < 0 || value >= 256 )
+                return false;
+
+            *result = (int)value;
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    };
+
     std::string line;
     while ( fil->ReadLine(&line) && !line.empty() && line[0] != '>' )
     {
@@ -1313,7 +1332,15 @@ int yw_parse_sektor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
         std::string token;
         if ( parse.GetNext(&token) )
         {
-            TSectorDesc *sektp = &yw->_secTypeArray[ std::stol(token, NULL, 0) ];
+            int sectorId = -1;
+            if ( !parseArrayIndex(token, &sectorId) )
+            {
+                ypa_log_out("Error reading '%s': sector id outside 0..255, line '%s'.\n",
+                            "set.sdf", line.c_str());
+                return 0;
+            }
+
+            TSectorDesc *sektp = &yw->_secTypeArray[sectorId];
 
             if ( !parse.GetNext(&token) )
             {
@@ -1338,32 +1365,34 @@ int yw_parse_sektor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
             }
 
             sektp->GUIElementID = std::stol(token, NULL, 0);
-
             sektp->SubSectors.fill(NULL);
 
-            if ( sektp->SectorType == 1 )
+            const int count = sektp->SectorType == 1 ? 1 : 9;
+            for (int i = 0; i < count; i++)
             {
                 if ( !parse.GetNext(&token) )
                 {
                     ypa_log_out("Error reading '%s', line '%s'.\n", "set.sdf", line.c_str());
                     return 0;
                 }
-                sektp->SubSectors.At(0, 0) = &yw->_subSectorArray[ std::stol(token, NULL, 0) ];
-            }
-            else
-            {
-                for (int yy = 0; yy < 3; yy++)
-                {
-                    for (int xx = 0; xx < 3; xx++)
-                    {
-                        if ( !parse.GetNext(&token) )
-                        {
-                            ypa_log_out("Error reading '%s', line '%s'.\n", "set.sdf", line.c_str());
-                            return 0;
-                        }
 
-                        sektp->SubSectors.At(xx, 2 - yy) = &yw->_subSectorArray[ std::stol(token, NULL, 0) ];
-                    }
+                int subSectorId = -1;
+                if ( !parseArrayIndex(token, &subSectorId) )
+                {
+                    ypa_log_out("Error reading '%s': subsector id outside 0..255, line '%s'.\n",
+                                "set.sdf", line.c_str());
+                    return 0;
+                }
+
+                if ( count == 1 )
+                {
+                    sektp->SubSectors.At(0, 0) = &yw->_subSectorArray[subSectorId];
+                }
+                else
+                {
+                    const int xx = i % 3;
+                    const int yy = i / 3;
+                    sektp->SubSectors.At(xx, 2 - yy) = &yw->_subSectorArray[subSectorId];
                 }
             }
         }
