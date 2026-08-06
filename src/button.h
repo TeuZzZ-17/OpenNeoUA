@@ -142,6 +142,7 @@ public:
     virtual size_t Draw();
     bool SetText(int butID, const std::string &field_4, const std::string &field_8);
     bool SetText(int butID, const std::string &field_4);
+    bool SetTextColor(int butID, uint8_t r, uint8_t g, uint8_t b);
     int GetIndexByID(int butid);
     virtual void SetState(button_66arg *arg);
     Slider * GetSliderData(int butid);

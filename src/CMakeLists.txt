@@ -15,6 +15,7 @@ set(SOURCES
     base.cpp
     bmpAnm.cpp
     button.cpp
+    crashdiag.cpp
     crc32.cpp
     def_parser.cpp
     embed.cpp
@@ -103,6 +104,7 @@ set(SOURCES
 )
 
 find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
 
 pkg_search_module(SDL2 REQUIRED sdl2)
 link_directories(${SDL2_LIBRARY_DIRS})
@@ -171,7 +173,12 @@ target_link_libraries(
     ${LUA_LIBRARIES}
 
     PkgConfig::FFMPEG
+    Threads::Threads
 )
+
+if(WIN32)
+    target_link_libraries(OpenUA dbghelp)
+endif()
 
 target_include_directories(
     OpenUA

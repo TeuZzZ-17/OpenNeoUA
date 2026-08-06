@@ -1142,7 +1142,11 @@ static void yw_ResetWorldSelectionDrag(NC_STACK_ypaworld *yw);
 static void yw_WorldSelectionDragInput(NC_STACK_ypaworld *yw, TInputState *inpt);
 static void yw_RenderWorldSelectionDrag(NC_STACK_ypaworld *yw);
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw);
+static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw);
 static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw);
+static void yw_PreDrawSquadronManager(NC_STACK_ypaworld *yw);
+static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw);
+static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw);
 
 
 ///////// up panel ///////////
@@ -1185,45 +1189,70 @@ void NC_STACK_ypaworld::sub_449DE8(const std::string &a2)
 
 void create_squad_man(NC_STACK_ypaworld *yw)
 {
-    auto &fnt0 = yw->_guiTiles[0]->map;
-    auto &fnt24 = yw->_guiTiles[24]->map;
     auto &fnt28 = yw->_guiTiles[28]->map;
-
-    int f0c32_w = fnt0[32].w;
-    int v6 = f0c32_w + fnt0[123].w;
-
-    int v9 = yw->_fontBorderH + yw->_fontH;
-    int v10 = yw->_fontBorderH;
-
-    int v8 = f0c32_w + v6 + 5 * fnt24[49].w;
-    int v11 = 4 * fnt0[65].w + v8 + fnt28[97].w + f0c32_w + 8;
+    const std::string title = "Squad";
+    const int iconCellWidth = fnt28[65].w;
+    const int spacerWidth = fnt28[64].w;
+    const int statusCellWidth = fnt28[97].w + spacerWidth;
+    const int leaderCellWidth = iconCellWidth + spacerWidth;
+    const int contentWidth = statusCellWidth + leaderCellWidth + iconCellWidth
+                           + yw->_guiTiles[0]->GetWidth(" x999")
+                           + 2 * yw->_fontBorderW;
+    const int titleWidth = yw->_guiTiles[6]->GetWidth(std::string(" ") + title)
+                         + yw->_fontDefCloseW + yw->_fontBorderW;
+    const int compactEntryWidth = std::max(contentWidth, titleWidth);
 
     GuiList::tInit args;
-    args.title = Locale::Text::WinName(Locale::WINNAME_FINDER);
+    args.title = title;
     args.resizeable = true;
     args.numEntries = 0;
-    args.shownEntries = 12;
+    args.shownEntries = 6;
     args.firstShownEntry = 0;
     args.selectedEntry = 0;
     args.maxShownEntries = 24;
-    args.minShownEntries = 3;
+    args.minShownEntries = 1;
     args.withIcon = false;
     args.entryHeight = yw->_fontH;
-    args.entryWidth = v11;
-    args.minEntryWidth = v11;
+    args.entryWidth = compactEntryWidth;
+    args.minEntryWidth = compactEntryWidth;
+    // The title-bar lock keeps the compact width fixed by default. Unlocking
+    // it permits horizontal expansion so additional squad members can be
+    // shown without changing the compact vanilla-safe starting layout.
     args.maxEntryWidth = 32000;
     args.enabled = true;
-    args.upperVborder = v10;
-    args.lowerVborder = v9;
+    args.upperVborder = yw->_fontBorderH;
+    // Reserve one fixed footer row for the aggression control.  The footer is
+    // outside the scrollable squad rows, so it remains visible while the list
+    // is scrolled or vertically resized.
+    args.lowerVborder = yw->_fontH + yw->_fontBorderH;
     args.closeChar = 73;
+    args.thinScrollbar = true;
+    args.thinScrollbarVisualWidth = GuiList::kThinScrollbarVisualSize;
+    args.fillThinScrollbarGap = true;
+    // Use the original titlebar close glyph: its built-in backing tile fits
+    // the legacy window frame better than the map toolbar PNG.
+    args.factionCloseVisual = false;
+    args.backgroundOpacity = 128;
+    args.wheelScroll = true;
+    args.horizontalResizeLocked = true;
 
     if ( squadron_manager.Init(yw, args) )
     {
-        squadron_manager.field_2CC = fnt28[65].w;
-        squadron_manager.field_2D0 = fnt28[64].w + fnt28[97].w + yw->_fontBorderW;
-        squadron_manager.field_2D8 = v8;
-        squadron_manager.field_2DC = v6;
-        squadron_manager.field_2D4 = fnt28[64].w + squadron_manager.field_2CC + squadron_manager.field_2D0;
+        squadron_manager.field_2CC = iconCellWidth;
+        squadron_manager.field_2D0 = yw->_fontBorderW + statusCellWidth;
+        squadron_manager.field_2D4 = squadron_manager.field_2D0 + leaderCellWidth;
+        int aggressionWidth = 0;
+        for ( int i = 0; i < 5; i++ )
+            aggressionWidth += yw->_guiTiles[24]->map[49 + i].w;
+        const int footerContentWidth = squadron_manager.entryWidth
+                                     - 2 * yw->_fontBorderW;
+        squadron_manager.field_2DC = yw->_fontBorderW
+                                   + std::max(0, (footerContentWidth
+                                                - aggressionWidth) / 2);
+        squadron_manager.aggressionCommandID = 0;
+        squadron_manager.preDraw = yw_PreDrawSquadronManager;
+        squadron_manager.postDraw = yw_PostDrawSquadronManager;
+        yw_UpdateSquadronManagerTitleButtons(yw);
     }
 }
 
@@ -1458,9 +1487,10 @@ static const char *yw_MapToolbarIconName(int buttonId)
 
 static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw);
 
-static bool yw_RenderMapToolbarPng(NC_STACK_ypaworld *yw,
-                                    int buttonId, bool active,
-                                    const ButtonBox &box)
+static bool yw_RenderFactionToolbarPng(NC_STACK_ypaworld *yw,
+                                        int windowX, int windowY,
+                                        int buttonId, bool active,
+                                        const ButtonBox &box)
 {
     const char *iconName = yw_MapToolbarIconName(buttonId);
     if ( !yw || !iconName )
@@ -1474,7 +1504,7 @@ static bool yw_RenderMapToolbarPng(NC_STACK_ypaworld *yw,
     // This keeps the title bar clean and makes the art fully replaceable.
     if ( owner > World::OWNER_0 )
     {
-        std::string path = "TacticalMap/Icons/UI/Factions/owner_";
+        std::string path = "TacticalMap/Icons/Map/owner_";
         path += std::to_string(owner);
         path += "/";
         path += iconName;
@@ -1485,7 +1515,7 @@ static bool yw_RenderMapToolbarPng(NC_STACK_ypaworld *yw,
 
         if ( (!bitmap || !bitmap->GetBitmap()) && active )
         {
-            path = "TacticalMap/Icons/UI/Factions/owner_";
+            path = "TacticalMap/Icons/Map/owner_";
             path += std::to_string(owner);
             path += "/";
             path += iconName;
@@ -1518,11 +1548,32 @@ static bool yw_RenderMapToolbarPng(NC_STACK_ypaworld *yw,
         return false;
 
     const int iconSize = std::max(8, std::min(box.w, box.h) - 4);
-    const int screenLeft = robo_map.x + box.x + (box.w - iconSize) / 2;
-    const int screenTop = robo_map.y + box.y + (box.h - iconSize) / 2;
+    const int screenLeft = windowX + box.x + (box.w - iconSize) / 2;
+    const int screenTop = windowY + box.y + (box.h - iconSize) / 2;
 
     StatusIconRenderBitmap(yw, bitmap, screenLeft, screenTop, iconSize, 255);
     return true;
+}
+
+static void yw_DrawFactionCloseFallback(NC_STACK_ypaworld *yw,
+                                        int windowX, int windowY,
+                                        const ButtonBox &box)
+{
+    const int screenHalfW = yw->_screenSize.x / 2;
+    const int screenHalfH = yw->_screenSize.y / 2;
+    const int left = windowX + box.x - screenHalfW;
+    const int top = windowY + box.y - screenHalfH;
+    const int right = left + box.w - 1;
+    const int bottom = top + box.h - 1;
+    const int pad = std::max(3, std::min(box.w, box.h) / 5);
+    const int x0 = left + pad;
+    const int x1 = right - pad;
+    const int y0 = top + pad;
+    const int y1 = bottom - pad;
+
+    GFX::Engine.raster_func217(yw_MapToolbarColor(yw, true));
+    yw_DrawMapToolbarStroke(x0 + 1, y0 + 1, x1 - 1, y1 - 1, 2);
+    yw_DrawMapToolbarStroke(x0 + 1, y1 - 1, x1 - 1, y0 + 1, 2);
 }
 
 static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool active)
@@ -1555,7 +1606,8 @@ static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool act
     // The old coloured corner frame was too visually aggressive and could
     // dominate the actual controls. Faction identity now lives inside the PNG
     // artwork itself; no extra lines are drawn around toolbar icons.
-    if ( yw_RenderMapToolbarPng(yw, buttonId, active, box) )
+    if ( yw_RenderFactionToolbarPng(yw, robo_map.x, robo_map.y,
+                                    buttonId, active, box) )
         return;
 
     GFX::Engine.raster_func217(yw_MapToolbarColor(yw, true));
@@ -1563,8 +1615,7 @@ static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool act
     switch ( buttonId )
     {
     case 0: // custom close button
-        yw_DrawMapToolbarStroke(x0 + 1, y0 + 1, x1 - 1, y1 - 1, 2);
-        yw_DrawMapToolbarStroke(x0 + 1, y1 - 1, x1 - 1, y0 + 1, 2);
+        yw_DrawFactionCloseFallback(yw, robo_map.x, robo_map.y, box);
         break;
 
     case 3: // detailed-map grid
@@ -1650,6 +1701,153 @@ static void yw_RenderMapTitleToolbar(NC_STACK_ypaworld *yw)
     yw_DrawMapToolbarGlyph(yw, 0, true);
 }
 
+static void yw_SetFullScreenUiClip(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return;
+
+    GFX::Engine.raster_func211(Common::Rect(-yw->_screenSize.x / 2,
+                                            -yw->_screenSize.y / 2,
+                                             yw->_screenSize.x / 2,
+                                             yw->_screenSize.y / 2));
+}
+
+static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || squadron_manager.buttons.size() < 8 )
+        return;
+
+    const ButtonBox &closeBox = squadron_manager.buttons[0];
+    if ( !closeBox )
+    {
+        squadron_manager.buttons[7] = ButtonBox();
+        return;
+    }
+
+    const int lockWidth = std::max(18, std::min(24, yw->_fontH));
+    const int lockX = std::max(0, closeBox.x - lockWidth);
+    squadron_manager.buttons[7] = ButtonBox(lockX, 1, lockWidth, yw->_fontH);
+
+    // Keep dragging out of both title controls. The title text is short, so
+    // no additional clipping or layout path is required.
+    squadron_manager.buttons[1] = ButtonBox(0, 0, lockX, yw->_fontH);
+}
+
+static void yw_DrawSquadronManagerLockFallback(NC_STACK_ypaworld *yw,
+                                                const ButtonBox &box,
+                                                bool locked)
+{
+    const int halfW = yw->_screenSize.x / 2;
+    const int halfH = yw->_screenSize.y / 2;
+    const int left = squadron_manager.x + box.x - halfW;
+    const int top = squadron_manager.y + box.y - halfH;
+    const int right = left + box.w - 1;
+    const int bottom = top + box.h - 1;
+    const int cx = (left + right) / 2;
+    const int cy = (top + bottom) / 2;
+    const int pad = std::max(3, std::min(box.w, box.h) / 5);
+
+    SDL_Color color = yw_MapToolbarColor(yw, locked);
+    color.a = 255;
+    GFX::Engine.raster_func217(color);
+    yw_DrawMapToolbarRect(left + pad, cy - 1, right - pad, bottom - pad, 2);
+    yw_DrawMapToolbarLine(left + pad + 2, cy - 2,
+                          left + pad + 2, top + pad + 2);
+    yw_DrawMapToolbarLine(left + pad + 2, top + pad + 2,
+                          cx, top + pad);
+    yw_DrawMapToolbarLine(cx, top + pad,
+                          right - pad - 2, top + pad + 2);
+    yw_DrawMapToolbarLine(right - pad - 2, top + pad + 2,
+                          right - pad - 2, cy - 2);
+}
+
+static bool yw_IsSquadronManagerRowSelected(NC_STACK_ypaworld *yw,
+                                            NC_STACK_ypabact *bact)
+{
+    if ( !yw || !bact )
+        return false;
+
+    if ( bact == yw->_userRobo )
+        return yw->_activeCmdrID == 0 && (bzda.field_1D0 & 0x20) != 0;
+
+    // _activeCmdrID is the stable squad identity. UI mode bits can change
+    // while the strategic map is open, but that must not erase the selected
+    // row colour from the Squadron Manager.
+    return yw->_activeCmdrID != 0
+        && bact->_commandID == yw->_activeCmdrID;
+}
+
+static void yw_PreDrawSquadronManager(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || squadron_manager.IsClosed() )
+        return;
+
+    // The Tactical Map uses a narrow title clip for its custom toolbar. Reset
+    // it here so opening the map cannot clip away the selected squad stripe.
+    yw_SetFullScreenUiClip(yw);
+
+    int selectedVisibleIndex = -1;
+    for ( int i = 0; i < squadron_manager.shownEntries; i++ )
+    {
+        if ( yw_IsSquadronManagerRowSelected(yw, squadron_manager.squads[i]) )
+        {
+            selectedVisibleIndex = i;
+            break;
+        }
+    }
+
+    if ( selectedVisibleIndex < 0 )
+        return;
+
+    const int visualScrollbarWidth = squadron_manager.thinScrollbar
+        ? std::max(1, std::min((int)squadron_manager.thinScrollbarVisualWidth,
+                              (int)yw->_fontVBScrollW))
+        : yw->_fontVBScrollW;
+    const int halfW = yw->_screenSize.x / 2;
+    const int halfH = yw->_screenSize.y / 2;
+    const int left = squadron_manager.x + 1 - halfW;
+    const int right = squadron_manager.x + squadron_manager.w
+                    - visualScrollbarWidth - 1 - halfW;
+    const int top = squadron_manager.y + yw->_fontH
+                  + squadron_manager.upperVborder
+                  + selectedVisibleIndex * squadron_manager.entryHeight - halfH;
+    const int bottom = top + squadron_manager.entryHeight - 1;
+
+    if ( right < left || bottom < top )
+        return;
+
+    SDL_Color selectedColor = yw_MapToolbarColor(yw, false);
+    selectedColor.a = 184;
+    GFX::Engine.raster_func217(selectedColor);
+    for ( int y = top; y <= bottom; y++ )
+        GFX::Engine.raster_func201(Common::Line(left, y, right, y));
+
+    yw_SetFullScreenUiClip(yw);
+}
+
+static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || squadron_manager.IsClosed() )
+        return;
+
+    yw_SetFullScreenUiClip(yw);
+    yw_UpdateSquadronManagerTitleButtons(yw);
+
+    const ButtonBox &lockBox = squadron_manager.buttons[7];
+    if ( lockBox )
+    {
+        const bool locked = squadron_manager.horizontalResizeLocked;
+        if ( !yw_RenderFactionToolbarPng(yw, squadron_manager.x,
+                                         squadron_manager.y, 6, locked,
+                                         lockBox) )
+        {
+            yw_DrawSquadronManagerLockFallback(yw, lockBox, locked);
+        }
+    }
+
+    yw_SetFullScreenUiClip(yw);
+}
+
 static int yw_RoboMapMarkerSizePx()
 {
     switch ( robo_map.field_1EE )
@@ -1687,29 +1885,23 @@ static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw)
     {
         // Keep the marker artwork in the same replaceable faction folder as
         // the toolbar.  This is the asset layout used by UA Rising:
-        //   TacticalMap/Icons/UI/Factions/owner_<id>/marker_active.png
+        //   TacticalMap/Icons/Map/owner_<id>/marker_active.png
         // Prefer the active variant because a marker placed on the map is an
         // active annotation, not the inactive toolbar button.
-        std::string factionPath = "TacticalMap/Icons/UI/Factions/owner_";
+        std::string factionPath = "TacticalMap/Icons/Map/owner_";
         factionPath += std::to_string(owner);
         factionPath += "/marker_active.png";
         NC_STACK_bitmap *ownerBitmap = StatusIconLoad(factionPath);
         if ( ownerBitmap && ownerBitmap->GetBitmap() )
             return ownerBitmap;
 
-        factionPath = "TacticalMap/Icons/UI/Factions/owner_";
+        factionPath = "TacticalMap/Icons/Map/owner_";
         factionPath += std::to_string(owner);
         factionPath += "/marker.png";
         ownerBitmap = StatusIconLoad(factionPath);
         if ( ownerBitmap && ownerBitmap->GetBitmap() )
             return ownerBitmap;
 
-        // Backward compatibility with the Iteration 5 standalone assets.
-        const std::string legacyOwnerPath = std::string("TacticalMap/Icons/UI/map_marker_owner_")
-            + std::to_string(owner) + ".png";
-        ownerBitmap = StatusIconLoad(legacyOwnerPath);
-        if ( ownerBitmap && ownerBitmap->GetBitmap() )
-            return ownerBitmap;
     }
 
     NC_STACK_bitmap *neutral = StatusIconLoad("TacticalMap/Icons/UI/marker_active.png");
@@ -1784,7 +1976,7 @@ static void yw_RenderCustomHudRadarMarkers(NC_STACK_ypaworld *yw)
     GFX::Engine.raster_func211(clipRect);
 
     NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw);
-    constexpr int markerSize = 8;
+    constexpr int markerSize = 12;
 
     for ( const vec2d &marker : robo_map.customMarkers )
     {
@@ -2281,12 +2473,12 @@ bool GetPlayerRoboAIBehaviorMapTarget(NC_STACK_ypaworld *yw, vec3d *target)
 }
 
 
-void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
+void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5, int screenYOffset = 0)
 {
     Common::Point tmp = sub_4F681C( {a1, a2} );
 
     int v7 = tmp.x - a4 / 2 - robo_map.field_200;
-    int v8 = tmp.y - a5 / 2 - robo_map.field_204;
+    int v8 = tmp.y - a5 / 2 - robo_map.field_204 + screenYOffset;
     int v9 = v7 + a4;
     int v10 = v8 + a5;
 
@@ -2356,6 +2548,14 @@ void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5)
 }
 
 
+static bool yw_IsDirectPlayerControlledUnit(NC_STACK_ypaworld *yw,
+                                             NC_STACK_ypabact *bact)
+{
+    return yw && bact &&
+           yw->_userUnit == bact &&
+           (bact->_oflags & BACT_OFLAG_USERINPT);
+}
+
 void sub_4F72E8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
     if ( !bact || bact->ShouldHideFromStrategicUI() )
@@ -2368,12 +2568,14 @@ void sub_4F72E8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
     // Keep this renderer close to vanilla. Spectator target filtering belongs in
     // gameplay/target selection, not in strategic-line drawing; filtering lines
     // here proved unsafe during in-game testing. Only null-check target pointers.
+    const bool directPlayerControl = yw_IsDirectPlayerControlledUnit(yw, bact);
+
     if ( bact != yw->_userRobo && bact->_host_station != bact->_parent && bact->_parent )
     {
         SDL_Color clr;
         NC_STACK_ypabact *bct;
 
-        if ( bact->_secndTtype == BACT_TGT_TYPE_UNIT )
+        if ( !directPlayerControl && bact->_secndTtype == BACT_TGT_TYPE_UNIT )
         {
             clr = yw->GetColor(10);
             bct = bact->_secndT.pbact;
@@ -2393,6 +2595,12 @@ void sub_4F72E8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
         sub_4F68FC(bact->_position.x, bact->_position.z, bct->_position.x, bct->_position.z, clr);
         return;
     }
+
+    // A directly controlled unit may still have a transient player lock target,
+    // but that is not an AI order and must not be represented by strategic
+    // attack/waypoint lines. Squad relationship lines above remain available.
+    if ( directPlayerControl )
+        return;
 
     if ( bact->_secndTtype == BACT_TGT_TYPE_UNIT )
     {
@@ -2539,7 +2747,8 @@ void sb_0x4f8f64__sub1(NC_STACK_ypaworld *yw)
         {
             sub_4F68FC(yw->_userUnit->_position.x, yw->_userUnit->_position.z, yw->_userUnit->_parent->_position.x, yw->_userUnit->_parent->_position.z, yw->GetColor(11));
 
-            if ( yw->_userUnit->IsParentMyRobo() )
+            if ( yw->_userUnit->IsParentMyRobo() &&
+                 !yw_IsDirectPlayerControlledUnit(yw, yw->_userUnit) )
             {
                 int v7 = 0;
                 float a5, a6;
@@ -2922,6 +3131,26 @@ void sb_0x4f8f64__sub2(NC_STACK_ypaworld *yw, CmdStream *cur)
     }
 }
 
+static int yw_RoboMapVehicleTileset()
+{
+    switch ( robo_map.field_1EE )
+    {
+    case 2:
+        return 60;
+
+    case 3:
+        return 61;
+
+    case 4:
+        return 28;
+
+    case 0:
+    case 1:
+    default:
+        return 59;
+    }
+}
+
 void sub_4F6DFC(NC_STACK_ypaworld *yw, CmdStream *cur, int height, int width, NC_STACK_ypabact *bact, int a6)
 {
     // OpenUA invisible: cloaked stealth units never appear on the strategic map / radar
@@ -3103,13 +3332,19 @@ void sub_4F6DFC(NC_STACK_ypaworld *yw, CmdStream *cur, int height, int width, NC
 
         // This function is reached only for units in cells visible through
         // MapViewMask. When the Energy layer is enabled, show HP for every
-        // currently visible non-neutral unit, including enemies.
+        // currently visible non-neutral unit, including enemies and remote
+        // Host Stations.
         const bool drawHealthBar = bact->_owner != World::OWNER_0
             && (!yw->IsSpectatorControlled() || !yw->IsSpectatorBact(bact));
+        const bool isPlayerHostStation = bact->_bact_type == BACT_TYPES_ROBO
+            && bact == yw->_userRobo;
 
-        if ( bact->_bact_type != BACT_TYPES_MISSLE && bact->_bact_type != BACT_TYPES_ROBO && drawHealthBar )
+        const bool drawHostStationAtSmallZoom = bact->_bact_type == BACT_TYPES_ROBO;
+
+        if ( bact->_bact_type != BACT_TYPES_MISSLE && !isPlayerHostStation && drawHealthBar )
         {
-            if ( robo_map.field_1EC & 4 && robo_map.field_1EE > 2 && bact->_energy_max > 0 )
+            if ( robo_map.field_1EC & 4 && bact->_energy_max > 0
+                    && (robo_map.field_1EE > 2 || drawHostStationAtSmallZoom) )
             {
                 float v32 = (float)bact->_energy / (float)bact->_energy_max;
                 int v19;
@@ -3133,7 +3368,33 @@ void sub_4F6DFC(NC_STACK_ypaworld *yw, CmdStream *cur, int height, int width, NC
                     v19 = 0x80;
                 }
 
-                sub_4F6980(cur, bact->_position.x, bact->_position.z, v19, height, width);
+                if ( bact->_bact_type == BACT_TYPES_ROBO )
+                {
+                    // Host Station icons use MAPROBO, which has no lifemeter
+                    // glyphs. Use the same zoom-dependent lifemeter tileset
+                    // and dimensions as ordinary units, then restore MAPROBO
+                    // for the caller's next Host Station icon.
+                    const int healthTileset = yw_RoboMapVehicleTileset();
+                    const int healthWidth = yw->_guiTiles[healthTileset]->map[128].w;
+                    const int healthHeight = yw->_guiTiles[healthTileset]->h;
+
+                    FontUA::select_tileset(cur, healthTileset);
+
+                    const int hostIconHeight = yw->_guiTiles[1]->h;
+                    const int healthBarYOffset = -(hostIconHeight + healthHeight) / 2 + 14;
+
+                    sub_4F6980(cur, bact->_position.x, bact->_position.z, v19,
+                                healthWidth, healthHeight, healthBarYOffset);
+                    FontUA::select_tileset(cur, 1);
+                }
+                else
+                {
+                    // Keep the vanilla vehicle lifemeter dimensions and
+                    // tileset. Only Host Stations need the separate MAPROBO
+                    // lifemeter path above.
+                    sub_4F6980(cur, bact->_position.x, bact->_position.z, v19,
+                                height, width);
+                }
             }
         }
     }
@@ -3485,28 +3746,8 @@ static void yw_RenderLegacyStrategicMap(NC_STACK_ypaworld *yw)
 
     int v39 = robo_map.field_1EE + 2;
 
-    int a6 = 0;
-    int setid = 59;
-    switch ( robo_map.field_1EE )
-    {
-    case 0:
-    case 1:
-        setid = 59;
-        break;
-
-    case 2:
-        setid = 60;
-        break;
-
-    case 3:
-        setid = 61;
-        break;
-
-    case 4:
-        a6 = 1;
-        setid = 28;
-        break;
-    }
+    const int setid = yw_RoboMapVehicleTileset();
+    const int a6 = setid == 28 ? 1 : 0;
 
     int height = yw->_guiTiles[setid]->map[128].w;
     int width = yw->_guiTiles[setid]->h;
@@ -3654,8 +3895,65 @@ static void yw_RenderLegacyStrategicMap(NC_STACK_ypaworld *yw)
 
 
 
+static SDL_Color yw_GetMapTitleBackgroundColor(NC_STACK_ypaworld *yw)
+{
+    SDL_Color fallback = {12, 24, 28, 255};
+    if ( !yw || !yw->_guiTiles[6] || !yw->_guiTiles[6]->img )
+        return fallback;
+
+    SDL_Surface *surface = yw->_guiTiles[6]->img->GetSwTex();
+    if ( !surface || !surface->format || !surface->pixels )
+        return fallback;
+
+    const Common::PointRect &glyph = yw->_guiTiles[6]->map[98];
+    if ( glyph.w <= 0 || glyph.h <= 0 )
+        return fallback;
+
+    bool locked = false;
+    if ( SDL_MUSTLOCK(surface) )
+    {
+        if ( SDL_LockSurface(surface) != 0 )
+            return fallback;
+        locked = true;
+    }
+
+    const int x = std::max(0, std::min(surface->w - 1, glyph.x + glyph.w / 2));
+    const int y = std::max(0, std::min(surface->h - 1, glyph.y + glyph.h / 2));
+    Uint32 pixel = 0;
+    const bool read = yw_ReadSurfacePixel(surface, x, y, &pixel);
+
+    if ( locked )
+        SDL_UnlockSurface(surface);
+
+    if ( !read )
+        return fallback;
+
+    SDL_Color color;
+    SDL_GetRGBA(pixel, surface->format, &color.r, &color.g, &color.b, &color.a);
+    color.a = 255;
+    return color;
+}
+
+static void yw_RenderNeutralMapLeftBorder(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || robo_map.IsClosed() || robo_map.field_244 <= 0 )
+        return;
+
+    const int left = robo_map.x - yw->_screenSize.x / 2;
+    const int top = robo_map.y + robo_map.field_23C - yw->_screenSize.y / 2;
+    const int bottom = robo_map.y + robo_map.h - robo_map.field_240
+                       - yw->_screenSize.y / 2 - 1;
+    if ( bottom < top )
+        return;
+
+    GFX::Engine.raster_func217(yw_GetMapTitleBackgroundColor(yw));
+    for ( int x = 0; x < robo_map.field_244; x++ )
+        GFX::Engine.raster_func201(Common::Line(left + x, top, left + x, bottom));
+}
+
 void sb_0x4f8f64(NC_STACK_ypaworld *yw)
 {
+    yw_RenderNeutralMapLeftBorder(yw);
     yw_RenderLegacyStrategicMap(yw);
     yw_RenderCustomMapMarkers(yw);
     yw_RenderMapTitleToolbar(yw);
@@ -3729,20 +4027,41 @@ void sub_4C157C(NC_STACK_ypaworld *yw)
     robo_map.field_1D6 = v19;
 }
 
+static constexpr int kRoboMapScrollbarVisualSize = GuiList::kThinScrollbarVisualSize;
+
+static void yw_RoboMapStoreTrimmedVerticalGlyph(CmdStream *cmd, uint8_t glyph, int trim)
+{
+    if ( trim > 0 )
+        FontUA::set_xoff(cmd, (uint8_t)trim);
+
+    FontUA::store_u8(cmd, glyph);
+}
+
+static void yw_RoboMapStoreTrimmedHorizontalGlyph(CmdStream *cmd, uint8_t glyph, int trim)
+{
+    if ( trim > 0 )
+        FontUA::set_yoff(cmd, (uint8_t)trim);
+
+    FontUA::store_u8(cmd, glyph);
+}
+
 void sub_4C0C00(NC_STACK_ypaworld *yw)
 {
     int v20 = robo_map.x - (yw->_screenSize.x / 2);
     int v21 = robo_map.y - (yw->_screenSize.y / 2);
     int v22 = robo_map.w;
     int v23 = robo_map.h;
+    const int horizontalTrim = std::max(0, robo_map.field_240 - kRoboMapScrollbarVisualSize);
 
     const int closeW = std::max(18, yw->_fontDefCloseW);
     const int toolW = std::max(18, std::min(24, yw->_fontH));
     const int toolbarIds[] = {3, 4, 5, 6, 9};
     const int toolCount = (int)(sizeof(toolbarIds) / sizeof(toolbarIds[0]));
     const int toolStart = std::max(0, robo_map.w - closeW - toolCount * toolW);
+    const int toolbarOffsetX = 1;
+    const int toolbarOffsetY = 1;
 
-    robo_map.buttons[0] = ButtonBox(robo_map.w - closeW, 0,
+    robo_map.buttons[0] = ButtonBox(robo_map.w - closeW + toolbarOffsetX, toolbarOffsetY,
                                     closeW, yw->_fontH);
     robo_map.buttons[1] = ButtonBox(0, 0, toolStart, yw->_fontH);
     robo_map.buttons[2] = ButtonBox();
@@ -3750,7 +4069,7 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
     robo_map.buttons[8] = ButtonBox();
 
     for ( int i = 0; i < toolCount; i++ )
-        robo_map.buttons[toolbarIds[i]] = ButtonBox(toolStart + i * toolW, 0,
+        robo_map.buttons[toolbarIds[i]] = ButtonBox(toolStart + i * toolW + toolbarOffsetX, toolbarOffsetY,
                                                     toolW, yw->_fontH);
 
     robo_map.cmdCommands.clear();
@@ -3764,6 +4083,10 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
                           robo_map.flags & ~GuiBase::FLAG_WITH_CLOSE);
 
     FontUA::next_line(&robo_map.cmdCommands);
+    // next_line() returns to the line origin set by FormateTitle. Keep this
+    // frame glyph on the map's left edge; the right scrollbar has its own
+    // command buffer and remains visually trimmed there.
+    FontUA::set_center_xpos(&robo_map.cmdCommands, v20);
     FontUA::reset_tileset(&robo_map.cmdCommands, 13);
 
     FontUA::store_u8(&robo_map.cmdCommands, 65);
@@ -3771,7 +4094,10 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
     FontUA::next_line(&robo_map.cmdCommands);
     FontUA::reset_tileset(&robo_map.cmdCommands, 12);
 
-    int v13 = v23 - robo_map.field_250 - 1;
+    // The visible horizontal scrollbar starts horizontalTrim pixels below
+    // its logical track. Extend only the left frame's final vertical segment
+    // by the same amount so the lower-left corner remains connected.
+    int v13 = v23 - robo_map.field_250 - 1 + horizontalTrim;
     while (v13 > yw->_fontVScrollH)
     {
         FontUA::store_u8(&robo_map.cmdCommands, 65);
@@ -3800,7 +4126,10 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
 void sub_4C0FEC(NC_STACK_ypaworld *yw)
 {
     int v1 = robo_map.x - (yw->_screenSize.x / 2);
-    int v3 = robo_map.y + robo_map.h - robo_map.field_240 - (yw->_screenSize.y / 2);
+    const int horizontalTrim = std::max(0, robo_map.field_240 - kRoboMapScrollbarVisualSize);
+    const int verticalTrim = std::max(0, robo_map.field_248 - kRoboMapScrollbarVisualSize);
+    int v3 = robo_map.y + robo_map.h - robo_map.field_240 + horizontalTrim
+             - (yw->_screenSize.y / 2);
 
     robo_map.buttons[13] = ButtonBox(0, robo_map.h - robo_map.field_240,
                                      robo_map.field_1CE, robo_map.field_240);
@@ -3824,20 +4153,20 @@ void sub_4C0FEC(NC_STACK_ypaworld *yw)
 
     if ( v4 > 0 )
     {
-        FontUA::store_u8(&robo_map.t1_cmdbuf_2, 65);
+        yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 65, horizontalTrim);
         if ( v4 > 1 )
         {
             FontUA::op17(&robo_map.t1_cmdbuf_2, v4);
-            FontUA::store_u8(&robo_map.t1_cmdbuf_2, 66);
+            yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 66, horizontalTrim);
         }
     }
 
-    FontUA::store_u8(&robo_map.t1_cmdbuf_2, 68);
+    yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 68, horizontalTrim);
 
     FontUA::op17(&robo_map.t1_cmdbuf_2, robo_map.field_1D0 + v4 - 1);
 
-    FontUA::store_u8(&robo_map.t1_cmdbuf_2, 69);
-    FontUA::store_u8(&robo_map.t1_cmdbuf_2, 70);
+    yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 69, horizontalTrim);
+    yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 70, horizontalTrim);
 
 
     int v11 = v4 + robo_map.field_1D0;
@@ -3847,19 +4176,34 @@ void sub_4C0FEC(NC_STACK_ypaworld *yw)
         {
             FontUA::op17(&robo_map.t1_cmdbuf_2, robo_map.field_1CC - 1);
 
-            FontUA::store_u8(&robo_map.t1_cmdbuf_2, 66);
+            yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 66, horizontalTrim);
         }
-        FontUA::store_u8(&robo_map.t1_cmdbuf_2, 67);
+        yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 67, horizontalTrim);
     }
 
-    FontUA::store_u8(&robo_map.t1_cmdbuf_2, 71);
+    if ( verticalTrim > 0 )
+    {
+        // Keep the resize cube trimmed, but compensate half of the removed
+        // scrollbar width so it joins the two bars without overshooting.
+        FontUA::op17(&robo_map.t1_cmdbuf_2,
+                     robo_map.field_1CC + verticalTrim - 1);
+        yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 67, horizontalTrim);
+
+        FontUA::add_xpos(&robo_map.t1_cmdbuf_2,
+                         std::max(0, verticalTrim / 2 - 1));
+        FontUA::set_xoff(&robo_map.t1_cmdbuf_2, (uint8_t)verticalTrim);
+    }
+    yw_RoboMapStoreTrimmedHorizontalGlyph(&robo_map.t1_cmdbuf_2, 71, horizontalTrim);
 
     FontUA::set_end(&robo_map.t1_cmdbuf_2);
 }
 
 void sub_4C1214(NC_STACK_ypaworld *yw)
 {
-    int v2 = robo_map.x + robo_map.w - robo_map.field_248 - (yw->_screenSize.x / 2);
+    const int horizontalTrim = std::max(0, robo_map.field_240 - kRoboMapScrollbarVisualSize);
+    const int verticalTrim = std::max(0, robo_map.field_248 - kRoboMapScrollbarVisualSize);
+    int v2 = robo_map.x + robo_map.w - robo_map.field_248 + verticalTrim
+             - (yw->_screenSize.x / 2);
     int v3 = robo_map.y + robo_map.field_23C - (yw->_screenSize.y / 2);
 
     robo_map.buttons[10] = ButtonBox(robo_map.w - robo_map.field_248,    robo_map.field_23C,
@@ -3881,16 +4225,23 @@ void sub_4C1214(NC_STACK_ypaworld *yw)
     {
         FontUA::reset_tileset(&robo_map.t1_cmdbuf_1, 13);
 
-        FontUA::store_u8(&robo_map.t1_cmdbuf_1, 67);
+        yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 67, verticalTrim);
         FontUA::next_line(&robo_map.t1_cmdbuf_1);
 
         FontUA::reset_tileset(&robo_map.t1_cmdbuf_1, 12);
 
         int v9 = robo_map.field_1D4 - 1;
+        if ( robo_map.field_1D6 <= 0
+                && robo_map.field_1D2 - robo_map.field_1D4 <= 0 )
+        {
+            // If the scrollbar has no knob or lower track, this is the
+            // final vertical segment. Extend it to the trimmed bottom bar.
+            v9 += horizontalTrim;
+        }
 
         while (v9 >= yw->_fontVScrollH )
         {
-            FontUA::store_u8(&robo_map.t1_cmdbuf_1, 66);
+            yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 66, verticalTrim);
             FontUA::next_line(&robo_map.t1_cmdbuf_1);
 
             v9 -= yw->_fontVScrollH;
@@ -3899,7 +4250,7 @@ void sub_4C1214(NC_STACK_ypaworld *yw)
         if ( v9 > 0 )
         {
             FontUA::set_yheight(&robo_map.t1_cmdbuf_1, v9);
-            FontUA::store_u8(&robo_map.t1_cmdbuf_1, 66);
+            yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 66, verticalTrim);
             FontUA::next_line(&robo_map.t1_cmdbuf_1);
         }
     }
@@ -3907,7 +4258,7 @@ void sub_4C1214(NC_STACK_ypaworld *yw)
     if ( robo_map.field_1D6 > 0 )
     {
         FontUA::reset_tileset(&robo_map.t1_cmdbuf_1, 13);
-        FontUA::store_u8(&robo_map.t1_cmdbuf_1, 69);
+        yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 69, verticalTrim);
 
         FontUA::next_line(&robo_map.t1_cmdbuf_1);
 
@@ -3915,10 +4266,12 @@ void sub_4C1214(NC_STACK_ypaworld *yw)
 
 
         int v14 = robo_map.field_1D6 - 1;
+        if ( robo_map.field_1D2 - robo_map.field_1D4 - robo_map.field_1D6 <= 0 )
+            v14 += horizontalTrim;
 
         while ( v14 > yw->_fontVScrollH )
         {
-            FontUA::store_u8(&robo_map.t1_cmdbuf_1, 67);
+            yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 67, verticalTrim);
             FontUA::next_line(&robo_map.t1_cmdbuf_1);
 
             v14 -= yw->_fontVScrollH;
@@ -3927,13 +4280,13 @@ void sub_4C1214(NC_STACK_ypaworld *yw)
         if ( v14 > 1 )
         {
             FontUA::set_yheight(&robo_map.t1_cmdbuf_1, v14 - 1);
-            FontUA::store_u8(&robo_map.t1_cmdbuf_1, 67);
+            yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 67, verticalTrim);
             FontUA::next_line(&robo_map.t1_cmdbuf_1);
         }
 
         FontUA::reset_tileset(&robo_map.t1_cmdbuf_1, 13);
 
-        FontUA::store_u8(&robo_map.t1_cmdbuf_1, 70);
+        yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 70, verticalTrim);
         FontUA::next_line(&robo_map.t1_cmdbuf_1);
     }
 
@@ -3941,11 +4294,14 @@ void sub_4C1214(NC_STACK_ypaworld *yw)
 
     if ( v21 > 0 )
     {
+        // When the lower scrollbar track is visible, continue it to the
+        // shifted horizontal scrollbar instead of leaving a lower-right gap.
+        v21 += horizontalTrim;
         FontUA::reset_tileset(&robo_map.t1_cmdbuf_1, 12);
 
         while ( v21 > yw->_fontVScrollH )
         {
-            FontUA::store_u8(&robo_map.t1_cmdbuf_1, 66);
+            yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 66, verticalTrim);
             FontUA::next_line(&robo_map.t1_cmdbuf_1);
 
             v21 -= yw->_fontVScrollH;
@@ -3955,12 +4311,12 @@ void sub_4C1214(NC_STACK_ypaworld *yw)
         {
             FontUA::set_yheight(&robo_map.t1_cmdbuf_1, v21 - 1);
 
-            FontUA::store_u8(&robo_map.t1_cmdbuf_1, 66);
+            yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 66, verticalTrim);
             FontUA::next_line(&robo_map.t1_cmdbuf_1);
         }
         FontUA::reset_tileset(&robo_map.t1_cmdbuf_1, 13);
 
-        FontUA::store_u8(&robo_map.t1_cmdbuf_1, 68);
+        yw_RoboMapStoreTrimmedVerticalGlyph(&robo_map.t1_cmdbuf_1, 68, verticalTrim);
         FontUA::next_line(&robo_map.t1_cmdbuf_1);
     }
     FontUA::set_end(&robo_map.t1_cmdbuf_1);
@@ -4096,19 +4452,6 @@ void sub_4F6114(NC_STACK_ypaworld *yw, int a2, CmdStream *cmdbuf, int a3, int a4
 
 
 
-int sub_4F60A4(NC_STACK_ypaworld *yw, int x, int y)
-{
-    if ( yw->IsSector( {x, y} ) )
-    {
-        if ( (robo_map.field_1EC & 3) && (robo_map.MapViewMask & yw->_cells(x, y).view_mask) )
-            return 0;
-        else
-            return 9;
-    }
-    else
-        return 0;
-}
-
 int sub_4F6048(NC_STACK_ypaworld *yw, int x, int y)
 {
     if ( yw->IsSector( {x, y} ) )
@@ -4127,14 +4470,46 @@ int sub_4F6048(NC_STACK_ypaworld *yw, int x, int y)
     return 0;
 }
 
+static int yw_RoboMapTerrainGlyph(int glyph)
+{
+    // LEGO16 glyph 1 is the GR_EMPTY terrain grid. Hide only that terrain
+    // marker; all other LEGO/building glyphs remain drawable.
+    return glyph == 1 ? 0 : glyph;
+}
+
+static bool yw_RoboMapSubSectorHasBuilding(TSectorDesc &sector, int bldX, int bldY)
+{
+    const TSubSectorDesc *subSector = sector.SubSectors.At(bldX, bldY);
+    return subSector && subSector->StartHealth > 0;
+}
+
+static bool yw_RoboMapCellHasBuilding(NC_STACK_ypaworld *yw, const cellArea &cell)
+{
+    TSectorDesc &sector = yw->_secTypeArray[cell.type_id];
+
+    if ( cell.SectorType == 1 )
+        return yw_RoboMapSubSectorHasBuilding(sector, 0, 0);
+
+    for ( int bldY = 0; bldY < 3; bldY++ )
+    {
+        for ( int bldX = 0; bldX < 3; bldX++ )
+        {
+            if ( yw_RoboMapSubSectorHasBuilding(sector, bldX, bldY) )
+                return true;
+        }
+    }
+
+    return false;
+}
+
 int sub_4F5FE0(NC_STACK_ypaworld *yw, int x, int y)
 {
     if ( yw->IsSector( {x, y} ) )
     {
         cellArea &v6 = yw->_cells(x, y);
 
-        if ( robo_map.MapViewMask & v6.view_mask )
-            return yw->_secTypeArray[v6.type_id].GUIElementID;
+        if ( robo_map.MapViewMask & v6.view_mask && yw_RoboMapCellHasBuilding(yw, v6) )
+            return yw_RoboMapTerrainGlyph(yw->_secTypeArray[v6.type_id].GUIElementID);
     }
 
     return 0;
@@ -4157,78 +4532,35 @@ int sub_4F5CEC(NC_STACK_ypaworld *yw, int x, int y)
 
     if ( v8 && v27 )
     {
+        const int bldX = v8 - 1;
+        const int bldY = 2 - (v27 - 1);
+        TSectorDesc &sector = yw->_secTypeArray[v12.type_id];
+
+        // Empty terrain and the empty infected-Mykonian sector use the same
+        // LEGO path as buildings, but their subsector has no starting health.
+        // Suppress that visual only; occupied buildings remain visible even
+        // after their current health reaches a destroyed model.
+        if ( !yw_RoboMapSubSectorHasBuilding(sector, bldX, bldY) )
+            return 0;
+
         if ( v12.SectorType == 1 )
         {
             TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, 0, 0) ];
             int v25 = (16 * (v27 - 1) + v8 - 1 + v26->GUIElementID) & 0xFF;
-            return v25;
+            return yw_RoboMapTerrainGlyph(v25);
         }
         else
         {
-            TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, v8 - 1, 2 - (v27 - 1))  ];
-            return v26->GUIElementID;
+            TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, bldX, bldY)  ];
+            return yw_RoboMapTerrainGlyph(v26->GUIElementID);
         }
     }
     else
     {
-        if ( v9 < 1 || v7 < 1 )
-            return 1;
-
-        int v13 = 0;
-
-        cellArea *v15;
-        cellArea *v16;
-        cellArea *v17;
-
-        if ( v8 )
-        {
-            v15 = &v12;
-            v16 = &yw->_cells(v9, v7 - 1);
-            v17 = &yw->_cells(v9, v7 - 1);
-        }
-        else if ( v27 )
-        {
-            v17 = &yw->_cells(v9 - 1, v7);
-            v15 = &yw->_cells(v9 - 1, v7);
-            v16 = &v12;
-        }
-        else
-        {
-            v15 = &yw->_cells(v9 - 1, v7);
-            v16 = &yw->_cells(v9, v7 - 1);
-            v17 = &yw->_cells(v9 - 1, v7 - 1);
-        }
-
-
-        if ( fabs(v17->height - v16->height) >= 500.0 )
-            v13 = 1;
-
-        if ( fabs(v15->height - v12.height) >= 500.0 )
-            v13 |= 2;
-
-        if ( fabs(v17->height - v15->height) >= 500.0 )
-            v13 |= 4;
-
-        if ( fabs(v16->height - v12.height) >= 500.0 )
-            v13 |= 8;
-
-        if ( v13 == 12 )
-        {
-            if ( v17->height <= v15->height )
-                v13 = 0xFD;
-            else
-                v13 = 0xFC;
-        }
-        else if ( v13 == 3 )
-        {
-            if ( v17->height <= v16->height )
-                v13 = 0xFF;
-            else
-                v13 = 0xFE;
-        }
-
-        int v22 = (v13 - 16) & 0xFF;
-        return (v22 << 8) | v22;
+        // The sector-edge callback only returns grid/elevation boundary
+        // glyphs. Keep the LEGO/building glyphs returned above, but do not
+        // draw this separate grid layer.
+        return 0;
     }
 }
 
@@ -4240,8 +4572,6 @@ void sb_0x4f6650__sub0(NC_STACK_ypaworld *yw, CmdStream *cmdbuf, int xpos, int y
     int v23 = w + v9;
     int v10 = v8 - (h / 2);
     int v22 = h + v10;
-
-    sub_4F6114(yw, 4 << robo_map.field_1EE, cmdbuf, v9, v10, v23, v22, robo_map.field_1EE + 50, sub_4F60A4, xpos, ypos);
 
     if ( robo_map.field_1EC & 2 )
         sub_4F6114(yw, 4 << robo_map.field_1EE, cmdbuf, v9, v10, v23, v22, robo_map.field_1EE + 50, sub_4F6048, xpos, ypos);
@@ -4711,6 +5041,12 @@ int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
     args.vborder = yw->_fontBorderH;
     args.instantInput = true;
     args.keyboardInput = true;
+    args.thinScrollbar = true;
+    args.fillThinScrollbarGap = true;
+    args.wheelScroll = true;
+    // Keep the Operations list translucent while reducing interference from
+    // world-space wireframes and markers behind the text.
+    args.backgroundOpacity = 216;
 
     if ( !gui_lstvw.Init(yw, args) )
         return 0;
@@ -4872,6 +5208,7 @@ void create_exit_menu(NC_STACK_ypaworld *yw)
     args.vborder = yw->_fontBorderH;
     args.staticItems = true;
     args.closeChar = 85;
+    args.factionAccentTitle = false;
 
     if ( exit_menu.Init(yw, args) )
     {
@@ -5065,6 +5402,7 @@ int sb_0x451034(NC_STACK_ypaworld *yw)
     yw->_bactPrevClicked = NULL;
     yw_ResetWorldSelectionDrag(yw);
     yw->_moveOrderFeedbackActive = false;
+    yw->_attackOrderFeedbacks.clear();
 
     sb_0x451034__sub9(yw);
     sb_0x451034__sub8(yw);
@@ -5135,6 +5473,7 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
     {
         yw_RenderWorldSelectionDrag(yw);
         yw_RenderMoveOrderFeedback(yw);
+        yw_RenderAttackOrderFeedback(yw);
         yw_RenderRoboRelocationMarker(yw);
         sb_0x4d7c08__sub0__sub4(yw);
 
@@ -5149,6 +5488,9 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
                 }
                 else
                 {
+                    if ( lstnode->preDraw )
+                        lstnode->preDraw(yw);
+
                     GFX::Engine.ProcessDrawSeq(lstnode->cmdCommands, &lstnode->cmdInclude,
                                                uiAccent);
 
@@ -5170,9 +5512,53 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 }
 
 
+static void yw_SetGuiListBackgroundOpacity(CmdStream *cur, uint8_t opacity)
+{
+    if ( opacity != 255 )
+        FontUA::set_opacity(cur, opacity);
+}
+
+static int yw_GetGuiListScrollbarGapFillWidth(const GuiList *lstvw,
+                                               NC_STACK_ypaworld *yw)
+{
+    if ( lstvw && yw && lstvw->fillThinScrollbarGap && lstvw->thinScrollbar )
+    {
+        const int visualWidth = std::max(1,
+            std::min((int)lstvw->thinScrollbarVisualWidth,
+                     (int)yw->_fontVBScrollW));
+        return yw->_fontVBScrollW - visualWidth;
+    }
+
+    return 0;
+}
+
+static void yw_StoreGuiListRowBackground(const GuiList *lstvw, CmdStream *cur,
+                                         int fillTileset, int fillWidth,
+                                         int opacityOverride = -1)
+{
+    const uint8_t opacity = opacityOverride >= 0
+        ? (uint8_t)std::min(opacityOverride, 255)
+        : (lstvw ? lstvw->backgroundOpacity : 255);
+    yw_SetGuiListBackgroundOpacity(cur, opacity);
+
+    FontUA::select_tileset(cur, 0);
+    FontUA::store_u8(cur, 123);
+
+    FontUA::select_tileset(cur, fillTileset);
+    FontUA::op17(cur, fillWidth);
+    FontUA::store_u8(cur, 32);
+
+    FontUA::select_tileset(cur, 0);
+    FontUA::store_u8(cur, 125);
+
+    if ( opacity != 255 )
+        FontUA::set_opacity(cur, 255);
+}
+
 void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStream *cur, char a5, const std::string &a6, int a7)
 {
-    int v33 = lstvw->entryWidth - 2 * yw->_fontBorderW;
+    const int scrollbarGap = yw_GetGuiListScrollbarGapFillWidth(lstvw, yw);
+    int v33 = lstvw->entryWidth - 2 * yw->_fontBorderW + scrollbarGap;
 
     FontUA::ColumnItem v24[3];
 
@@ -5226,23 +5612,40 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
     v24[2].flags = 42;
     v24[2].prefixChar = 0;
 
-    FontUA::select_tileset(cur, 0);
+    const uint8_t backgroundOpacity = lstvw->backgroundOpacity;
+    yw_SetGuiListBackgroundOpacity(cur, backgroundOpacity);
 
+    FontUA::select_tileset(cur, 0);
     FontUA::store_u8(cur, 123);
 
     FontUA::select_tileset(cur, v14);
-
     FontUA::op10(cur, squadron_manager.field_2CC);
-
     FontUA::store_u8(cur, v16);
+
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cur, 255);
 
     FontUA::add_xpos(cur, -squadron_manager.field_2CC);
 
-    FormateColumnItem(yw, cur, 3, v24);
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cur, backgroundOpacity);
 
+    FormateColumnItem(yw, cur, 1, v24);
+
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cur, backgroundOpacity);
+
+    FormateColumnItem(yw, cur, 2, &v24[1]);
+
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cur, 255);
+
+    yw_SetGuiListBackgroundOpacity(cur, backgroundOpacity);
     FontUA::select_tileset(cur, 0);
-
     FontUA::store_u8(cur, 125);
+
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cur, 255);
 
     FontUA::next_line(cur);
 }
@@ -5674,16 +6077,17 @@ void gui_update_tools(NC_STACK_ypaworld *yw, CmdStream *cur)
 void sub_449970(NC_STACK_ypaworld *yw, CmdStream *cur, int a4, int a3, const std::string &a5, int a6, int a7)
 {
     int v10, v22;
+    const int markerGap = yw->_screenSize.x >= 512 ? 8 : 6;
 
     if ( yw->_screenSize.x >= 512 )
     {
         v22 = a7 - 72;
-        v10 = a4 + a7 - 72 + 16;
+        v10 = a4 + a7 - 72 + markerGap;
     }
     else
     {
         v22 = a7 - 56;
-        v10 = a4 + a7 - 56 + 8;
+        v10 = a4 + a7 - 56 + markerGap;
     }
 
     FontUA::select_tileset(cur, 15);
@@ -5751,8 +6155,8 @@ void ypaworld_func64__sub7__sub2__sub1__sub0(NC_STACK_ypaworld *yw, CmdStream *c
             int v30 = -(yw->_downScreenBorder + 7 * yw->_fontH);
 
             const SDL_Color factionTextColor = yw_GetFactionUiTextColor(yw);
-            FontUA::set_txtColorRaw(cur, factionTextColor.r,
-                                    factionTextColor.g, factionTextColor.b);
+            FontUA::set_txtColor(cur, factionTextColor.r,
+                                 factionTextColor.g, factionTextColor.b);
 
             sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_VSROBO), v5, v6);
 
@@ -7274,6 +7678,262 @@ char sub_4C7134(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
     return icon;
 }
 
+static bool yw_IsSquadronDisplayMember(NC_STACK_ypabact *bact)
+{
+    return bact && bact->_status != BACT_STATUS_DEAD
+           && bact->_status != BACT_STATUS_CREATE && bact->_status != BACT_STATUS_BEAM
+           && !bact->ShouldHideFromStrategicUI();
+}
+
+struct SquadronDisplaySummary
+{
+    NC_STACK_ypabact *highestHpMember = NULL;
+    int visibleMemberCount = 0;
+};
+
+static SquadronDisplaySummary yw_GetSquadronDisplaySummary(NC_STACK_ypabact *leader)
+{
+    SquadronDisplaySummary summary;
+
+    if ( !leader )
+        return summary;
+
+    summary.visibleMemberCount = 1;
+
+    for ( NC_STACK_ypabact *kid : leader->_kidList )
+    {
+        if ( !yw_IsSquadronDisplayMember(kid) )
+            continue;
+
+        summary.visibleMemberCount++;
+        if ( !summary.highestHpMember || kid->_energy > summary.highestHpMember->_energy )
+            summary.highestHpMember = kid;
+    }
+
+    return summary;
+}
+
+static std::vector<NC_STACK_ypabact *> yw_GetSquadronDisplayUnits(
+    NC_STACK_ypabact *leader)
+{
+    std::vector<NC_STACK_ypabact *> units;
+    if ( !leader )
+        return units;
+
+    units.push_back(leader);
+    const SquadronDisplaySummary summary = yw_GetSquadronDisplaySummary(leader);
+
+    if ( summary.highestHpMember )
+        units.push_back(summary.highestHpMember);
+
+    for ( NC_STACK_ypabact *kid : leader->_kidList )
+    {
+        if ( !yw_IsSquadronDisplayMember(kid)
+                || kid == summary.highestHpMember )
+        {
+            continue;
+        }
+
+        units.push_back(kid);
+    }
+
+    return units;
+}
+
+static char yw_GetSquadronManagerStatusIcon(NC_STACK_ypabact *bact)
+{
+    if ( bact->_status == BACT_STATUS_NORMAL )
+    {
+        if ( bact->_status_flg & BACT_STFLAG_ESCAPE )
+            return 102;
+        if ( bact->_secndTtype )
+            return 99;
+        if ( bact->_primTtype )
+            return 98;
+    }
+    else if ( bact->_status == BACT_STATUS_IDLE
+              && bact->_status_flg & BACT_STFLAG_ESCAPE )
+    {
+        return 102;
+    }
+
+    return 97;
+}
+
+static char yw_GetSquadronManagerUnitIcon(NC_STACK_ypaworld *yw,
+                                          NC_STACK_ypabact *bact, int blink)
+{
+    if ( bact == yw->_userUnit && blink )
+        return 33;
+    if ( yw->_lastMsgSender == bact && blink )
+        return 34;
+
+    return sub_4C7134(yw, bact);
+}
+
+static uint8_t yw_GetSquadronManagerHealthGlyph(NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->_energy_max <= 0 )
+        return 128;
+
+    const float health = std::max(0.0f, std::min(1.0f,
+        (float)bact->_energy / (float)bact->_energy_max));
+
+    if ( health > 0.75f )
+        return 131;
+    if ( health > 0.50f )
+        return 130;
+    if ( health > 0.25f )
+        return 129;
+
+    return 128;
+}
+
+static bool yw_IsSquadronManagerRowHovered(NC_STACK_ypabact *bact)
+{
+    if ( !bact || squadron_manager.mouseItem < squadron_manager.firstShownEntries )
+        return false;
+
+    const int visibleIndex = squadron_manager.mouseItem
+                           - squadron_manager.firstShownEntries;
+    return visibleIndex >= 0
+        && visibleIndex < squadron_manager.shownEntries
+        && squadron_manager.squads[visibleIndex] == bact;
+}
+
+static int yw_GetSquadronManagerScrollbarGapFillWidth(NC_STACK_ypaworld *yw)
+{
+    return yw_GetGuiListScrollbarGapFillWidth(&squadron_manager, yw);
+}
+
+static int yw_GetSquadronManagerBackgroundFillWidth(NC_STACK_ypaworld *yw)
+{
+    return squadron_manager.entryWidth - yw->_fontBorderW
+         + yw_GetSquadronManagerScrollbarGapFillWidth(yw);
+}
+
+static int yw_GetSquadronManagerCountReserveWidth(NC_STACK_ypaworld *yw)
+{
+    return yw->_guiTiles[0]->GetWidth(" x999");
+}
+
+static int yw_GetSquadronManagerUnitSlotCount(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return 2;
+
+    const int iconCellWidth = squadron_manager.field_2CC;
+    const int spacerWidth = yw->_guiTiles[28]->map[64].w;
+    const int statusCellWidth = yw->_guiTiles[28]->map[97].w + spacerWidth;
+    const int leaderCellWidth = iconCellWidth + spacerWidth;
+    int available = squadron_manager.entryWidth - 2 * yw->_fontBorderW
+                  - statusCellWidth
+                  - yw_GetSquadronManagerCountReserveWidth(yw);
+
+    if ( available <= leaderCellWidth )
+        return 1;
+
+    available -= leaderCellWidth;
+    return 1 + std::max(1, available / std::max(1, iconCellWidth));
+}
+
+static void yw_UpdateSquadronManagerDynamicLayout(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return;
+
+    int aggressionWidth = 0;
+    for ( int i = 0; i < 5; i++ )
+        aggressionWidth += yw->_guiTiles[24]->map[49 + i].w;
+
+    const int footerContentWidth = squadron_manager.entryWidth
+                                 - 2 * yw->_fontBorderW;
+    squadron_manager.field_2DC = yw->_fontBorderW
+                               + std::max(0, (footerContentWidth
+                                            - aggressionWidth) / 2);
+
+    yw_UpdateSquadronManagerTitleButtons(yw);
+}
+
+static NC_STACK_ypabact *yw_GetSquadronAggressionCommander(
+    NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return NULL;
+
+    if ( yw->_activeCmdrRemapIndex >= 0
+            && (size_t)yw->_activeCmdrRemapIndex < yw->_cmdrsRemap.size() )
+    {
+        NC_STACK_ypabact *commander =
+            yw->_cmdrsRemap[yw->_activeCmdrRemapIndex];
+        if ( commander )
+        {
+            squadron_manager.aggressionCommandID = commander->_commandID;
+            return commander;
+        }
+    }
+
+    if ( squadron_manager.aggressionCommandID != 0 )
+    {
+        for ( NC_STACK_ypabact *commander : yw->_cmdrsRemap )
+        {
+            if ( commander
+                    && commander->_commandID
+                       == squadron_manager.aggressionCommandID )
+            {
+                return commander;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static int yw_GetSquadronAggressionIndexAtX(NC_STACK_ypaworld *yw, int x)
+{
+    if ( !yw || x < squadron_manager.field_2DC )
+        return -1;
+
+    int glyphX = squadron_manager.field_2DC;
+    for ( int i = 0; i < 5; i++ )
+    {
+        glyphX += yw->_guiTiles[24]->map[49 + i].w;
+        if ( x < glyphX )
+            return i;
+    }
+
+    return -1;
+}
+
+static void yw_RenderSquadronAggressionStrip(NC_STACK_ypaworld *yw, CmdStream *cur)
+{
+    NC_STACK_ypabact *commander = yw_GetSquadronAggressionCommander(yw);
+    const int aggression = commander ? commander->_aggr : -1;
+
+    if ( !commander )
+        FontUA::select_tileset(cur, 24);
+    else
+        FontUA::select_tileset(cur, 25);
+
+    FontUA::store_u8(cur, 49);
+
+    if ( !commander || aggression < 25 )
+        FontUA::select_tileset(cur, 24);
+    FontUA::store_u8(cur, 50);
+
+    if ( aggression >= 25 && aggression < 50 )
+        FontUA::select_tileset(cur, 24);
+    FontUA::store_u8(cur, 51);
+
+    if ( aggression >= 50 && aggression < 75 )
+        FontUA::select_tileset(cur, 24);
+    FontUA::store_u8(cur, 52);
+
+    if ( aggression >= 75 && aggression < 100 )
+        FontUA::select_tileset(cur, 24);
+    FontUA::store_u8(cur, 53);
+}
+
 void sub_4C7950(NC_STACK_ypaworld *yw, CmdStream *cur, int a4, int a3)
 {
     if ( a4 > 0 && a3 > 0 )
@@ -7295,14 +7955,8 @@ void sub_4C7950(NC_STACK_ypaworld *yw, CmdStream *cur, int a4, int a3)
 
 void ypaworld_func64__sub7__sub3__sub0__sub2(NC_STACK_ypaworld *yw, CmdStream *cur)
 {
-    FontUA::select_tileset(cur, 0);
-
-    FontUA::store_u8(cur, 123);
-
-    FontUA::op17(cur, squadron_manager.entryWidth - yw->_fontBorderW);
-
-    FontUA::store_u8(cur, 32);
-    FontUA::store_u8(cur, 125);
+    yw_StoreGuiListRowBackground(&squadron_manager, cur, 0,
+                                 yw_GetSquadronManagerBackgroundFillWidth(yw));
 
     FontUA::next_line(cur);
 }
@@ -7359,171 +8013,104 @@ void sub_4514F0(TileMap *tyle, CmdStream *cur, const std::string &st, int a3, ch
 
 void ypaworld_func64__sub7__sub3__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, CmdStream *cur)
 {
-    char v13[80];
-    if ( bact == yw->_userUnit && yw->_timeStamp / 300 & 1 )
+    const int blink = (yw->_timeStamp / 300) & 1;
+    char icon = sub_4C7134(yw, bact);
+    if ( bact == yw->_userUnit && blink )
+        icon = 33;
+    else if ( info_log.field_255C == bact->_gid
+              && yw->_timeStamp - info_log.msgs[info_log.field_24C].field_4 < 10000
+              && blink )
     {
-        v13[0] = 33;
+        icon = 34;
     }
-    else if ( info_log.field_255C == bact->_gid && yw->_timeStamp - info_log.msgs[info_log.field_24C].field_4 < 10000 && yw->_timeStamp / 300 & 1 )
-    {
-        v13[0] = 34;
-    }
-    else
-    {
-        v13[0] = sub_4C7134(yw, bact);
-    }
-    v13[1] = 0;
+    const bool selected = yw_IsSquadronManagerRowSelected(yw, bact);
+    const bool hovered = yw_IsSquadronManagerRowHovered(bact);
+    const int rowTileset = hovered && !selected ? 9 : 0;
+    const int rowOpacity = selected ? 0 : (hovered ? 208 : -1);
 
-    int v4;
-
-    if ( bzda.field_1D0 & 0x20 )
-        v4 = 9;
-    else
-        v4 = 0;
-
-    FontUA::select_tileset(cur, 0);
-    FontUA::store_u8(cur, 123);
-
-    FontUA::select_tileset(cur, v4);
-    FontUA::op17(cur, squadron_manager.entryWidth - yw->_fontBorderW);
-    FontUA::store_u8(cur, 32);
-
-    FontUA::select_tileset(cur, 0);
-    FontUA::store_u8(cur, 125);
-    FontUA::add_xpos(cur, -(squadron_manager.entryWidth - 2 * yw->_fontBorderW + 1));
+    yw_StoreGuiListRowBackground(&squadron_manager, cur, rowTileset,
+                                 yw_GetSquadronManagerBackgroundFillWidth(yw),
+                                 rowOpacity);
+    FontUA::add_xpos(cur,
+        -(squadron_manager.entryWidth - 2 * yw->_fontBorderW + 1
+          + yw_GetSquadronManagerScrollbarGapFillWidth(yw)));
 
     FontUA::select_tileset(cur, 28);
+    FontUA::store_u8(cur, icon);
 
-    sub_4514F0(yw->_guiTiles[28], cur, v13, squadron_manager.entryWidth - 2 * yw->_fontBorderW, 64);
+    // Keep the classic lifemeter visible for the Host Station as well.  The
+    // 128..131 glyphs carry their own vertical offset and render above the
+    // unit icon, matching the original Squadron Manager health indicator.
+    FontUA::add_xpos(cur, -yw->_guiTiles[28]->map[(uint8_t)icon].w);
+    FontUA::store_u8(cur, yw_GetSquadronManagerHealthGlyph(bact));
 
     FontUA::next_line(cur);
 }
 
-char ypaworld_func64__sub7__sub3__sub0__sub0__sub0(NC_STACK_ypabact *bact)
-{
-    if ( bact->_status == BACT_STATUS_NORMAL )
-    {
-        if ( bact->_status_flg & BACT_STFLAG_ESCAPE )
-        {
-            return 102;
-        }
-        else if ( bact->_secndTtype )
-        {
-            return 99;
-        }
-        else if ( bact->_primTtype )
-        {
-            return 98;
-        }
-    }
-    else if ( bact->_status == BACT_STATUS_IDLE )
-    {
-        if ( bact->_status_flg & BACT_STFLAG_ESCAPE )
-            return 102;
-    }
-
-    return 97;
-}
-
 void ypaworld_func64__sub7__sub3__sub0__sub0(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, CmdStream *cur)
 {
-    std::string pv;
+    const std::vector<NC_STACK_ypabact *> displayUnits =
+        yw_GetSquadronDisplayUnits(bact);
+    const int blink = (yw->_timeStamp / 300) & 1;
+    const bool selected = yw_IsSquadronManagerRowSelected(yw, bact);
+    const bool hovered = yw_IsSquadronManagerRowHovered(bact);
+    const int rowTileset = hovered && !selected ? 9 : 0;
+    const int rowOpacity = selected ? 0 : (hovered ? 208 : -1);
+    const int iconCellWidth = squadron_manager.field_2CC;
+    const int spacerWidth = yw->_guiTiles[28]->map[64].w;
+    const int statusCellWidth = yw->_guiTiles[28]->map[97].w + spacerWidth;
+    const int leaderCellWidth = iconCellWidth + spacerWidth;
+    const int unitSlotCount = yw_GetSquadronManagerUnitSlotCount(yw);
+    const int unitCellsWidth = leaderCellWidth
+                             + std::max(0, unitSlotCount - 1) * iconCellWidth;
+    const int countWidth = std::max(0,
+        squadron_manager.entryWidth - 2 * yw->_fontBorderW
+        - statusCellWidth - unitCellsWidth);
+    const int rowFillWidth = yw_GetSquadronManagerBackgroundFillWidth(yw);
+    const int rowRewind = squadron_manager.entryWidth
+                        - 2 * yw->_fontBorderW + 1
+                        + yw_GetSquadronManagerScrollbarGapFillWidth(yw);
 
-    int v46 = 0;
-    NC_STACK_ypabact *v44 = NULL;
+    yw_StoreGuiListRowBackground(&squadron_manager, cur, rowTileset,
+                                 rowFillWidth, rowOpacity);
 
-    if ( yw->_guiActFlags & 0x20 )
-        v44 = yw->_bactOnMouse;
+    FontUA::add_xpos(cur, -rowRewind);
 
-    pv += ypaworld_func64__sub7__sub3__sub0__sub0__sub0(bact);
-    pv += '@'; //64
+    FontUA::select_tileset(cur, 28);
+    sub_4514F0(yw->_guiTiles[28], cur,
+               std::string(1, yw_GetSquadronManagerStatusIcon(bact)),
+               statusCellWidth, 64);
 
-    int ttt = (yw->_timeStamp / 300) & 1;
-
-    if ( bact == yw->_userUnit && ttt )
-        pv += '!'; //33
-    else if ( yw->_lastMsgSender == bact && ttt )
-        pv += '"'; //34
-    else
-        pv += sub_4C7134(yw, bact);
-
-    pv += '@'; //64
-
-    if ( bact == v44 )
-        v46 = squadron_manager.field_2D0;
-
-    int v41 = squadron_manager.field_2D4;
-
-    for ( NC_STACK_ypabact* &kid : bact->_kidList )
+    for ( int slot = 0; slot < unitSlotCount; slot++ )
     {
-        if ( kid->_status != BACT_STATUS_DEAD && kid->_status != BACT_STATUS_CREATE && kid->_status != BACT_STATUS_BEAM && !kid->ShouldHideFromStrategicUI() )
+        const int cellWidth = slot == 0 ? leaderCellWidth : iconCellWidth;
+        NC_STACK_ypabact *unit = slot < (int)displayUnits.size()
+            ? displayUnits[slot]
+            : NULL;
+
+        std::string iconText;
+        if ( unit )
+            iconText += yw_GetSquadronManagerUnitIcon(yw, unit, blink);
+
+        sub_4514F0(yw->_guiTiles[28], cur, iconText, cellWidth, 64);
+
+        if ( unit )
         {
-            if ( kid == yw->_userUnit && ttt )
-                pv += '!'; //33
-            else if ( kid == yw->_lastMsgSender && ttt )
-                pv += '"'; //34
-            else
-                pv += sub_4C7134(yw, kid);
-
-            if ( kid == v44 )
-                v46 = v41;
-
-            v41 += squadron_manager.field_2CC;
-
-            if ( pv.size() >= 60 )
-                break;
+            const uint8_t healthGlyph = yw_GetSquadronManagerHealthGlyph(unit);
+            const int healthWidth = yw->_guiTiles[28]->map[healthGlyph].w;
+            FontUA::add_xpos(cur, -cellWidth);
+            FontUA::store_u8(cur, healthGlyph);
+            FontUA::add_xpos(cur, cellWidth - healthWidth);
         }
     }
 
-    int v22;
-    if ( yw->_activeCmdrRemapIndex == -1 || bact != yw->_cmdrsRemap[ yw->_activeCmdrRemapIndex ] || bzda.field_1D0 & 0x20 )
-        v22 = 0;
-    else
-        v22 = 9;
-
-    FontUA::select_tileset(cur, 0);
-    FontUA::store_u8(cur, 123);
-
-    FontUA::select_tileset(cur, v22);
-    FontUA::op17(cur, squadron_manager.entryWidth - yw->_fontBorderW);
-    FontUA::store_u8(cur, 32);
-
-    FontUA::select_tileset(cur, 0);
-    FontUA::store_u8(cur, 125);
-
-    FontUA::add_xpos(cur, -(squadron_manager.entryWidth - 2 * yw->_fontBorderW + 1));
-
-    FontUA::select_tileset(cur, 28);
-
-    sub_4514F0(yw->_guiTiles[28], cur, pv, squadron_manager.entryWidth - 2 * yw->_fontBorderW, 64);
-    if ( v46 )
+    if ( !displayUnits.empty() )
     {
-        if ( squadron_manager.entryWidth - squadron_manager.field_2CC - yw->_fontBorderW > v46 )
-        {
-            FontUA::add_xpos(cur, -(squadron_manager.entryWidth - 2 * yw->_fontBorderW));
-            FontUA::add_xpos(cur, v46);
-
-            float v40 = (float)v44->_energy / (float)v44->_energy_max;
-
-            if ( v40 > 0.25 )
-            {
-                if ( v40 > 0.5 )
-                {
-                    if ( v40 > 0.75 )
-                        FontUA::store_u8(cur, 131);
-                    else
-                        FontUA::store_u8(cur, 130);
-                }
-                else
-                {
-                    FontUA::store_u8(cur, 129);
-                }
-            }
-            else
-            {
-                FontUA::store_u8(cur, 128);
-            }
-        }
+        // Vehicle/status glyphs belong to tileset 28; the squad total is text.
+        FontUA::select_tileset(cur, 0);
+        FontUA::copy_position(cur);
+        FontUA::add_txt(cur, countWidth, 1,
+                       fmt::sprintf(" x%d", (int)displayUnits.size()));
     }
 
     FontUA::next_line(cur);
@@ -7531,59 +8118,24 @@ void ypaworld_func64__sub7__sub3__sub0__sub0(NC_STACK_ypaworld *yw, NC_STACK_ypa
 
 void ypaworld_func64__sub7__sub3__sub0__sub3(NC_STACK_ypaworld *yw, CmdStream *cur)
 {
-    int v23 = squadron_manager.entryWidth - yw->_fontBorderW;
+    const uint8_t backgroundOpacity = squadron_manager.backgroundOpacity;
 
-    if ( yw->_activeCmdrRemapIndex == -1 || bzda.field_1D0 & 0x20 )
-    {
-        FontUA::select_tileset(cur, 0);
-        FontUA::store_u8(cur, '{');
-    }
-    else
-    {
-        int v5 = yw->_cmdrsRemap[ yw->_activeCmdrRemapIndex ]->_aggr;
-        FontUA::select_tileset(cur, 0);
-        FontUA::store_u8(cur, '{');
-        FontUA::store_u8(cur, ' ');
+    // Fixed aggression footer.  It is rendered after all visible squad rows,
+    // inside the extra lower border reserved by create_squad_man().
+    yw_StoreGuiListRowBackground(&squadron_manager, cur, 0,
+                                 yw_GetSquadronManagerBackgroundFillWidth(yw));
+    FontUA::add_xpos(cur,
+        -(squadron_manager.entryWidth - 2 * yw->_fontBorderW + 1
+          + yw_GetSquadronManagerScrollbarGapFillWidth(yw)));
 
-        FontUA::select_tileset(cur, 25);
-        FontUA::store_u8(cur, 49);
+    const int aggressionOffset = squadron_manager.field_2DC - yw->_fontBorderW;
+    if ( aggressionOffset > 0 )
+        FontUA::add_xpos(cur, aggressionOffset);
 
-        if (v5 < 25)
-            FontUA::select_tileset(cur, 24);
-
-        FontUA::store_u8(cur, 50);
-
-        if (v5 >= 25 && v5 < 50)
-            FontUA::select_tileset(cur, 24);
-
-        FontUA::store_u8(cur, 51);
-
-        if (v5 >= 50 && v5 < 75)
-            FontUA::select_tileset(cur, 24);
-
-        FontUA::store_u8(cur, 52);
-
-        if (v5 >= 75 && v5 < 100)
-            FontUA::select_tileset(cur, 24);
-
-        FontUA::store_u8(cur, 53);
-
-        FontUA::select_tileset(cur, 0);
-
-        FontUA::set_txtColor(cur, yw->_iniColors[60].r, yw->_iniColors[60].g, yw->_iniColors[60].b);
-
-        FontUA::FormateClippedText(yw->_guiTiles[0], cur, fmt::sprintf(" %d", yw->_activeCmdrKidsCount + 1) , 4 * yw->_guiTiles[0]->map[65].w, 32);
-
-        FontUA::store_u8(cur, ' ');
-
-        FontUA::select_tileset(cur, 0);
-    }
-
-    FontUA::op17(cur, v23);
-    FontUA::store_u8(cur, ' ');
-    FontUA::store_u8(cur, '}');
-
+    yw_RenderSquadronAggressionStrip(yw, cur);
     FontUA::next_line(cur);
+
+    yw_SetGuiListBackgroundOpacity(cur, backgroundOpacity);
 
     FontUA::reset_tileset(cur, 28);
 
@@ -7591,10 +8143,13 @@ void ypaworld_func64__sub7__sub3__sub0__sub3(NC_STACK_ypaworld *yw, CmdStream *c
 
     FontUA::store_u8(cur, 38);
 
-    FontUA::op17(cur, squadron_manager.entryWidth - yw->_fontBorderW);
+    FontUA::op17(cur, yw_GetSquadronManagerBackgroundFillWidth(yw));
 
     FontUA::store_u8(cur, 47);
     FontUA::store_u8(cur, 61);
+
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cur, 255);
 }
 
 
@@ -7847,31 +8402,27 @@ NC_STACK_ypabact * NC_STACK_ypaworld::sub_4C7B0C(int sqid, int a3)
     squadron_manager.field_2B0 = -1;
     squadron_manager.field_2AC = squadron_manager.firstShownEntries + sqid - 1;
 
-    if ( a3 > squadron_manager.field_2D0 && a3 < squadron_manager.field_2D0 + squadron_manager.field_2CC )
+    const std::vector<NC_STACK_ypabact *> displayUnits =
+        yw_GetSquadronDisplayUnits(v3);
+    const int unitSlotCount = yw_GetSquadronManagerUnitSlotCount(this);
+
+    if ( a3 >= squadron_manager.field_2D0
+            && a3 < squadron_manager.field_2D0 + squadron_manager.field_2CC )
         return v3;
 
-    int v5 = a3 - squadron_manager.field_2D4;
-    if ( v5 < 0 )
+    if ( a3 < squadron_manager.field_2D4 )
     {
         squadron_manager.field_2B0 = -1;
         squadron_manager.field_2AC = -1;
         return NULL;
     }
 
-    squadron_manager.field_2B0 = v5 / squadron_manager.field_2CC;
-
-    int v6 = squadron_manager.field_2B0;
-
-    for(NC_STACK_ypabact * &bact : v3->_kidList)
+    const int slot = 1 + (a3 - squadron_manager.field_2D4)
+                         / std::max(1, squadron_manager.field_2CC);
+    if ( slot < unitSlotCount && slot < (int)displayUnits.size() )
     {
-        if (bact->_status != BACT_STATUS_DEAD && bact->_status != BACT_STATUS_CREATE && bact->_status != BACT_STATUS_BEAM && !bact->ShouldHideFromStrategicUI())
-        {
-            v6--;
-            if (v6 == -1)
-            {
-                return bact;
-            }
-        }
+        squadron_manager.field_2B0 = slot - 1;
+        return displayUnits[slot];
     }
 
     squadron_manager.field_2B0 = -1;
@@ -7919,8 +8470,7 @@ int NC_STACK_ypaworld::ypaworld_func64__sub7__sub3__sub1(TClickBoxInf *winpt)
     }
     else
     {
-        int v11 = winpt->move.BtnPos.x - squadron_manager.field_2D4;
-        squadron_manager.field_2C0 = -(v11 % squadron_manager.field_2CC);
+        squadron_manager.field_2C0 = -(winpt->move.BtnPos.x - squadron_manager.field_2D4);
     }
 
     squadron_manager.field_2C2 = -winpt->move.BtnPos.y;
@@ -7938,7 +8488,10 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
     else
     {
         TClickBoxInf *winpt = &inpt->ClickInf;
+        bool onAggressionControl = false;
+        bool onWidthLockControl = false;
         sub_4C707C(this);
+        yw_UpdateSquadronManagerDynamicLayout(this);
 
         if ( squadron_manager.field_2A8 & 1 )
         {
@@ -7964,21 +8517,40 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
         {
             if ( inpt->ClickInf.selected_btnID == 7 )
             {
-                if ( winpt->flag & TClickBoxInf::FLAG_BTN_UP )
+                onWidthLockControl = true;
+                if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN
+                                   | TClickBoxInf::FLAG_LM_DOWN) )
                 {
-                    sub_449DE8(Locale::Text::Help(Locale::HELP_FINDERWND));
+                    squadron_manager.horizontalResizeLocked =
+                        !squadron_manager.horizontalResizeLocked;
+
+                    if ( _GameShell )
+                        SFXEngine::SFXe.startSound(&_GameShell->samples1_info, 3);
                 }
-                SetShowingTooltip(Locale::TIP_ONLINEHELP);
             }
-            if ( winpt->selected_btnID == 6 && this->_activeCmdrRemapIndex != -1 && !(bzda.field_1D0 & 0x20) )
+
+            NC_STACK_ypabact *aggressionCommander =
+                yw_GetSquadronAggressionCommander(this);
+            if ( aggressionCommander )
             {
-                int v9 = (winpt->move.BtnPos.x - squadron_manager.field_2DC) / _guiTiles[24]->map[49].w;
+                const int footerTop = squadron_manager.h
+                                    - squadron_manager.lowerVborder;
+                const int localX = winpt->move.ScreenPos.x - squadron_manager.x;
+                const int localY = winpt->move.ScreenPos.y - squadron_manager.y;
+                const bool insideFooterRow = localY >= footerTop
+                                          && localY
+                                             < footerTop + squadron_manager.entryHeight;
+                const int v9 = insideFooterRow
+                    ? yw_GetSquadronAggressionIndexAtX(this, localX)
+                    : -1;
 
                 if ( v9 >= 0 && v9 <= 4 )
                 {
-                    if ( winpt->flag & TClickBoxInf::FLAG_BTN_DOWN )
+                    onAggressionControl = true;
+                    if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN
+                                      | TClickBoxInf::FLAG_LM_DOWN) )
                     {
-                        _cmdrsRemap[_activeCmdrRemapIndex]->setBACT_aggression(25 * v9);
+                        aggressionCommander->setBACT_aggression(25 * v9);
 
                         if ( _GameShell )
                             SFXEngine::SFXe.startSound(&_GameShell->samples1_info, 3);
@@ -8010,12 +8582,11 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
                 default:
                     break;
                 }
-
-                if ( winpt->move.BtnPos.x >= squadron_manager.field_2D8 )
-                    SetShowingTooltip(Locale::TIP_COUNTINSQUAD);
             }
 
-            if ( winpt->flag & (TClickBoxInf::FLAG_RM_DOWN | TClickBoxInf::FLAG_LM_DOWN) )
+            if ( !onAggressionControl && !onWidthLockControl
+                    && (winpt->flag & (TClickBoxInf::FLAG_RM_DOWN
+                                      | TClickBoxInf::FLAG_LM_DOWN)) )
             {
                 if ( ypaworld_func64__sub7__sub3__sub1(winpt) )
                 {
@@ -8045,8 +8616,24 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
             }
         }
 
+        // The footer and title lock own their clicks; do not let GuiList start
+        // row selection, title dragging or help-button handling from the same
+        // mouse event.
+        const int savedSelectedButtonId = winpt->selected_btnID;
+        if ( onAggressionControl || onWidthLockControl )
+        {
+            squadron_manager.listFlags &= ~(GuiList::GLIST_FLAG_IN_SELECT
+                                           | GuiList::GLIST_FLAG_SEL_DONE);
+            winpt->selected_btnID = -1;
+        }
+
         squadron_manager.InputHandle(this, inpt);
+
+        if ( onAggressionControl || onWidthLockControl )
+            winpt->selected_btnID = savedSelectedButtonId;
+
         squadron_manager.Formate(this);
+        yw_UpdateSquadronManagerDynamicLayout(this);
         ypaworld_func64__sub7__sub3__sub0(this, inpt);
     }
 }
@@ -8223,29 +8810,19 @@ static const SDL_Color *yw_GetFactionUiAccent(NC_STACK_ypaworld *yw, SDL_Color *
         return NULL;
     }
 
-    // Muted, UI-specific faction palette: recognizable without flooding the
-    // neutral panels. Resistance deliberately keeps the original vanilla UI.
-    switch (yw->_userRobo->_owner)
-    {
-    case 1: return NULL;                                       // Resistance
-    case 2: *accent = GFX::Engine.Color(55, 145, 90); break;    // Sulgogar
-    case 3: *accent = GFX::Engine.Color(255, 255, 248); break;  // Myko
-    case 4: *accent = GFX::Engine.Color(220, 205, 110); break;  // Taerkasten
-    case 5: *accent = GFX::Engine.Color(170, 165, 158); break;  // Black Sect
-    case 6: *accent = GFX::Engine.Color(220, 60, 70); break;    // Ghorkov
-    default: *accent = yw->GetColor(yw->_userRobo->_owner); break;
-    }
+    // Keep the Resistance on the original vanilla cyan/azure UI. Every other
+    // faction uses the authoritative owner colour loaded from world.ini.
+    if ( yw->_userRobo->_owner == World::OWNER_RESIST )
+        return NULL;
+
+    *accent = yw->GetColor(yw->_userRobo->_owner);
     return accent;
 }
 
 static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw)
 {
-    SDL_Color accent;
-    if (yw_GetFactionUiAccent(yw, &accent))
-        return accent;
-
-    if (yw && yw->_userRobo && yw->_userRobo->_owner >= 1 &&
-        yw->_userRobo->_owner <= 6)
+    if ( yw && yw->_userRobo && yw->_userRobo->_owner >= World::OWNER_RESIST &&
+         yw->_userRobo->_owner <= World::OWNER_GHOR )
     {
         return yw->GetColor(yw->_userRobo->_owner);
     }
@@ -8255,7 +8832,7 @@ static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw)
 
 static float yw_GetWorldUiMaxDistance()
 {
-    constexpr float DEFAULT_DISTANCE = 5000.0f;
+    constexpr float DEFAULT_DISTANCE = 5700.0f;
     const std::string value = System::IniConf::GameWorldUiMaxDistance.Get<std::string>();
 
     if ( value.empty() || value.find(',') != std::string::npos )
@@ -8287,6 +8864,21 @@ static bool yw_ShouldHideControlledUnitWorldUi(NC_STACK_ypaworld *yw, NC_STACK_y
     // Hiding only its world-space overlays prevents the same information from
     // clipping into close cockpit cameras without affecting other units.
     return yw && bact && !yw->IsSpectatorControlled() && bact == yw->_userUnit;
+}
+
+static bool yw_IsActiveSquadronSelectionUnit(NC_STACK_ypaworld *yw,
+                                             NC_STACK_ypabact *bact)
+{
+    if ( !yw || !bact || yw->_activeCmdrRemapIndex < 0 ||
+         (size_t)yw->_activeCmdrRemapIndex >= yw->_cmdrsRemap.size() )
+    {
+        return false;
+    }
+
+    NC_STACK_ypabact *activeCommander =
+        yw->_cmdrsRemap[yw->_activeCmdrRemapIndex];
+    return activeCommander &&
+           (bact == activeCommander || bact->_parent == activeCommander);
 }
 
 static float yw_GetWorldUiFadeStart(float maxDistance)
@@ -8567,7 +9159,7 @@ static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
     selected.reserve(32);
     float maxDistance = yw_GetWorldUiMaxDistance();
     if (maxDistance <= 0.0f)
-        maxDistance = 5000.0f;
+        maxDistance = 5700.0f;
     const float maxDistanceSquared = maxDistance * maxDistance;
 
     auto collect = [&](NC_STACK_ypabact *bact)
@@ -8756,41 +9348,279 @@ static void yw_DrawNeutralDiamond(int centerX, int centerY, int radius, SDL_Colo
     GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY, centerX, centerY - radius));
 }
 
-static void yw_DrawRoboRelocationGlyph(int centerX, int centerY, int radius,
-                                       bool teleport, SDL_Color color)
+static void yw_DrawAttackOrderOctagon(int centerX, int centerY, int radius)
 {
-    const int tick = teleport ? 5 : 4;
+    const int diagonal = radius * 7 / 10;
 
-    // Minimal diamond: the main outline is fully connected, matching the
-    // existing move-order marker. Only the four external cardinal tabs remain
-    // detached, preserving the small tactical accents chosen for this glyph.
-    yw_DrawNeutralDiamond(centerX, centerY, radius, color);
+    GFX::Engine.raster_func201(Common::Line(centerX - diagonal, centerY - radius,
+                                            centerX + diagonal, centerY - radius));
+    GFX::Engine.raster_func201(Common::Line(centerX + diagonal, centerY - radius,
+                                            centerX + radius, centerY - diagonal));
+    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY - diagonal,
+                                            centerX + radius, centerY + diagonal));
+    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY + diagonal,
+                                            centerX + diagonal, centerY + radius));
+    GFX::Engine.raster_func201(Common::Line(centerX + diagonal, centerY + radius,
+                                            centerX - diagonal, centerY + radius));
+    GFX::Engine.raster_func201(Common::Line(centerX - diagonal, centerY + radius,
+                                            centerX - radius, centerY + diagonal));
+    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY + diagonal,
+                                            centerX - radius, centerY - diagonal));
+    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY - diagonal,
+                                            centerX - diagonal, centerY - radius));
+}
 
+static void yw_DrawAttackOrderHexagon(int centerX, int centerY, int radius)
+{
+    const int halfWidth = radius * 3 / 4;
+    const int halfHeight = radius / 2;
+
+    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY - radius,
+                                            centerX + halfWidth, centerY - radius));
+    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY - radius,
+                                            centerX + radius, centerY - halfHeight));
+    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY - halfHeight,
+                                            centerX + radius, centerY + halfHeight));
+    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY + halfHeight,
+                                            centerX + halfWidth, centerY + radius));
+    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY + radius,
+                                            centerX - halfWidth, centerY + radius));
+    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY + radius,
+                                            centerX - radius, centerY + halfHeight));
+    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY + halfHeight,
+                                            centerX - radius, centerY - halfHeight));
+    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY - halfHeight,
+                                            centerX - halfWidth, centerY - radius));
+}
+
+static void yw_DrawAttackOrderSquareBrackets(int centerX, int centerY, int radius)
+{
+    const int length = std::max(3, radius / 2);
+    const int left = centerX - radius;
+    const int right = centerX + radius;
+    const int top = centerY - radius;
+    const int bottom = centerY + radius;
+
+    GFX::Engine.raster_func201(Common::Line(left, top, left + length, top));
+    GFX::Engine.raster_func201(Common::Line(left, top, left, top + length));
+    GFX::Engine.raster_func201(Common::Line(right - length, top, right, top));
+    GFX::Engine.raster_func201(Common::Line(right, top, right, top + length));
+    GFX::Engine.raster_func201(Common::Line(left, bottom - length, left, bottom));
+    GFX::Engine.raster_func201(Common::Line(left, bottom, left + length, bottom));
+    GFX::Engine.raster_func201(Common::Line(right - length, bottom, right, bottom));
+    GFX::Engine.raster_func201(Common::Line(right, bottom - length, right, bottom));
+}
+
+static void yw_DrawAttackOrderCross(int centerX, int centerY, int radius)
+{
+    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY,
+                                            centerX + radius, centerY));
+    GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
+                                            centerX, centerY + radius));
+}
+
+static void yw_DrawAttackOrderX(int centerX, int centerY, int radius)
+{
+    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY - radius,
+                                            centerX + radius, centerY + radius));
+    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY - radius,
+                                            centerX - radius, centerY + radius));
+}
+
+static void yw_DrawAttackOrderTemplate(int templateId, int centerX, int centerY,
+                                       int radius, SDL_Color color, uint32_t phase)
+{
     GFX::Engine.raster_func217(color);
 
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius - tick,
-                                            centerX, centerY - radius - 1));
-    GFX::Engine.raster_func201(Common::Line(centerX + radius + 1, centerY,
-                                            centerX + radius + tick, centerY));
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY + radius + 1,
-                                            centerX, centerY + radius + tick));
-    GFX::Engine.raster_func201(Common::Line(centerX - radius - tick, centerY,
-                                            centerX - radius - 1, centerY));
+    switch ( templateId )
+    {
+    case 1: // Diamond and cross.
+        yw_DrawNeutralDiamond(centerX, centerY, radius, color);
+        yw_DrawAttackOrderCross(centerX, centerY, std::max(3, radius / 2));
+        break;
 
-    // Thick square-ended cross, intentionally drawn with lines only so the
-    // marker remains asset-free and follows the existing raster path.
-    GFX::Engine.raster_func201(Common::Line(centerX - 4, centerY - 1,
-                                            centerX + 4, centerY - 1));
-    GFX::Engine.raster_func201(Common::Line(centerX - 4, centerY,
-                                            centerX + 4, centerY));
-    GFX::Engine.raster_func201(Common::Line(centerX - 4, centerY + 1,
-                                            centerX + 4, centerY + 1));
-    GFX::Engine.raster_func201(Common::Line(centerX - 1, centerY - 4,
-                                            centerX - 1, centerY + 4));
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY - 4,
-                                            centerX, centerY + 4));
-    GFX::Engine.raster_func201(Common::Line(centerX + 1, centerY - 4,
-                                            centerX + 1, centerY + 4));
+    case 2: // Octagonal crosshair.
+        yw_DrawAttackOrderOctagon(centerX, centerY, radius);
+        yw_DrawAttackOrderCross(centerX, centerY, radius + 4);
+        break;
+
+    case 3: // Triangular reticle.
+        GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
+                                                centerX + radius, centerY + radius));
+        GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY + radius,
+                                                centerX - radius, centerY + radius));
+        GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY + radius,
+                                                centerX, centerY - radius));
+        yw_DrawAttackOrderX(centerX, centerY + 2, std::max(3, radius / 2));
+        break;
+
+    case 4: // Four corner brackets.
+        yw_DrawAttackOrderSquareBrackets(centerX, centerY, radius);
+        yw_DrawAttackOrderCross(centerX, centerY, std::max(2, radius / 3));
+        break;
+
+    case 5: // X and center box.
+        yw_DrawAttackOrderX(centerX, centerY, radius);
+        yw_DrawAttackOrderSquareBrackets(centerX, centerY, std::max(4, radius / 2));
+        break;
+
+    case 6: // Double octagonal ring.
+        yw_DrawAttackOrderOctagon(centerX, centerY, radius);
+        yw_DrawAttackOrderOctagon(centerX, centerY, std::max(3, radius - 5));
+        break;
+
+    case 7: // Hexagonal command badge.
+        yw_DrawAttackOrderHexagon(centerX, centerY, radius);
+        GFX::Engine.raster_func201(Common::Line(centerX - 3, centerY,
+                                                centerX + 3, centerY));
+        break;
+
+    case 8: // Four inward chevrons.
+        GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY,
+                                                centerX - radius / 2, centerY - radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY,
+                                                centerX - radius / 2, centerY + radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY,
+                                                centerX + radius / 2, centerY - radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY,
+                                                centerX + radius / 2, centerY + radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
+                                                centerX - radius / 2, centerY - radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
+                                                centerX + radius / 2, centerY - radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX, centerY + radius,
+                                                centerX - radius / 2, centerY + radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX, centerY + radius,
+                                                centerX + radius / 2, centerY + radius / 2));
+        break;
+
+    case 9: // Radar rings and sweep line.
+        yw_DrawAttackOrderOctagon(centerX, centerY, radius);
+        yw_DrawAttackOrderOctagon(centerX, centerY, std::max(3, radius - 5));
+        GFX::Engine.raster_func201(Common::Line(centerX, centerY,
+                                                centerX + radius, centerY - radius / 2));
+        GFX::Engine.raster_func201(Common::Line(centerX, centerY,
+                                                centerX - radius / 2, centerY + radius));
+        break;
+
+    case 10: // Eight-point burst.
+        yw_DrawNeutralDiamond(centerX, centerY, radius, color);
+        yw_DrawAttackOrderCross(centerX, centerY, radius);
+        if ( (phase / 90) & 1 )
+            yw_DrawAttackOrderX(centerX, centerY, radius);
+        break;
+
+    default:
+        break;
+    }
+}
+
+static int yw_GetAttackOrderTemplate()
+{
+    const int templateId = System::IniConf::UiAttackOrderTemplate.Get<int>();
+    return templateId >= 0 && templateId <= 10 ? templateId : 0;
+}
+
+static int yw_GetOrderIconOwner(NC_STACK_ypaworld *yw)
+{
+    if ( yw && yw->_userRobo && yw->_userRobo->_owner >= 1 &&
+         yw->_userRobo->_owner <= 6 )
+    {
+        return yw->_userRobo->_owner;
+    }
+
+    return 0;
+}
+
+static std::string yw_OrderIconStem(const char *folder, const char *prefix,
+                                    int templateId, int owner)
+{
+    std::string stem = "TacticalMap/Icons/";
+    stem += folder;
+    stem += "/";
+
+    if ( owner >= 1 && owner <= 6 )
+    {
+        stem += "owner_";
+        stem += std::to_string(owner);
+        stem += "/";
+    }
+
+    stem += prefix;
+    if ( templateId < 10 )
+        stem += "0";
+    stem += std::to_string(templateId);
+    return stem;
+}
+
+static NC_STACK_bitmap *yw_LoadOrderTemplateBitmap(NC_STACK_ypaworld *yw,
+                                                    const char *folder,
+                                                    const char *prefix,
+                                                    int templateId)
+{
+    if ( templateId < 1 || templateId > 10 )
+        return NULL;
+
+    const int owner = yw_GetOrderIconOwner(yw);
+    const std::string factionStem = yw_OrderIconStem(folder, prefix, templateId, owner);
+    const std::string genericStem = yw_OrderIconStem(folder, prefix, templateId, 0);
+
+    // Faction artwork is preferred. The generic path keeps old custom assets
+    // usable and still gives the procedural renderer a safe fallback.
+    for ( const std::string &stem : {factionStem, genericStem} )
+    {
+        for ( const char *extension : {".png", ".svg"} )
+        {
+            const std::string path = stem + extension;
+            if ( !uaFileExist("rsrc:" + path) )
+                continue;
+
+            NC_STACK_bitmap *bitmap = StatusIconLoad(path);
+            if ( bitmap && bitmap->GetBitmap() )
+                return bitmap;
+        }
+    }
+
+    return NULL;
+}
+
+static int yw_GetMoveOrderTemplate()
+{
+    const int templateId = System::IniConf::UiMoveOrderTemplate.Get<int>();
+    return templateId >= 0 && templateId <= 10 ? templateId : 0;
+}
+
+static void yw_RenderMoveOrderTemplateAt(NC_STACK_ypaworld *yw,
+                                         const Common::Point &point,
+                                         int radius, uint8_t worldUiOpacity,
+                                         SDL_Color pulseColor,
+                                         SDL_Color shadowColor)
+{
+    const int templateId = yw_GetMoveOrderTemplate();
+    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(yw, "MoveOrder",
+                                                          "move_order_", templateId);
+    if ( bitmap && bitmap->GetBitmap() )
+    {
+        const int size = radius * 2 + 8;
+        StatusIconRenderBitmap(yw, bitmap,
+                               point.x - size / 2 + 1, point.y - size / 2 + 1,
+                               size + 2, (uint8_t)(worldUiOpacity / 3));
+        StatusIconRenderBitmap(yw, bitmap,
+                               point.x - size / 2, point.y - size / 2,
+                               size, worldUiOpacity);
+        return;
+    }
+
+    const int centerX = point.x - yw->_screenSize.x / 2;
+    const int centerY = point.y - yw->_screenSize.y / 2;
+    yw_DrawNeutralDiamond(centerX + 1, centerY + 1, radius, shadowColor);
+    yw_DrawNeutralDiamond(centerX, centerY, radius, pulseColor);
+
+    GFX::Engine.raster_func217(pulseColor);
+    GFX::Engine.raster_func201(Common::Line(centerX - 3, centerY,
+                                            centerX + 3, centerY));
+    GFX::Engine.raster_func201(Common::Line(centerX, centerY - 3,
+                                            centerX, centerY + 3));
 }
 
 static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
@@ -8807,43 +9637,38 @@ static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
     if ( !robo->GetPlayerRoboRelocationTarget(&target, &teleport) )
         return;
 
-    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, target);
-    if ( worldUiOpacity == 0 )
-        return;
+    // A Host Station relocation is also an explicit player order. Keep its
+    // marker visible beyond game.world_ui_max_distance like squad move and
+    // attack feedback.
+    const uint8_t worldUiOpacity = 255;
 
     Common::Point point;
     if ( !yw_ProjectWorldSelectionPoint(yw, target, &point) )
         return;
 
-    const int centerX = point.x - yw->_screenSize.x / 2;
-    const int centerY = point.y - yw->_screenSize.y / 2;
-    const uint32_t pulsePeriod = teleport ? 320 : 880;
-    const uint32_t halfPeriod = pulsePeriod / 2;
-    const uint32_t pulseTime = yw->_timeStamp % pulsePeriod;
-    const uint32_t triangle = pulseTime <= halfPeriod ? pulseTime : pulsePeriod - pulseTime;
-    const int radius = 14 + (int)(triangle * (teleport ? 5 : 3) / halfPeriod);
+    // Use exactly the same configurable move-order template path used by
+    // ordinary squads.  The Host Station marker remains persistent while a
+    // relocation target exists, but no longer has a separate custom glyph.
+    const int radius = 7 + (int)((yw->_timeStamp % 240) * 7 / 240);
 
     SDL_Color markerColor = yw_GetFactionSelectionColor(yw);
-    if ( teleport && ((yw->_timeStamp / 80) & 1) )
-    {
-        markerColor.r = (uint8_t)std::min(255, markerColor.r + 35);
-        markerColor.g = (uint8_t)std::min(255, markerColor.g + 35);
-        markerColor.b = (uint8_t)std::min(255, markerColor.b + 35);
-    }
+    markerColor.r = (uint8_t)std::min(255, markerColor.r + 35);
+    markerColor.g = (uint8_t)std::min(255, markerColor.g + 35);
+    markerColor.b = (uint8_t)std::min(255, markerColor.b + 35);
     markerColor.a = worldUiOpacity;
 
     SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
     shadowColor.a = worldUiOpacity;
 
-    yw_DrawRoboRelocationGlyph(centerX + 1, centerY + 1, radius, teleport, shadowColor);
-    yw_DrawRoboRelocationGlyph(centerX, centerY, radius, teleport, markerColor);
+    yw_RenderMoveOrderTemplateAt(yw, point, radius, worldUiOpacity,
+                                 markerColor, shadowColor);
 }
 
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
 {
     constexpr uint32_t FEEDBACK_DURATION = 720;
 
-    if ( !yw->_moveOrderFeedbackActive )
+    if ( !yw || !yw->_moveOrderFeedbackActive )
         return;
 
     uint32_t age = yw->_timeStamp - yw->_moveOrderFeedbackStartTime;
@@ -8853,16 +9678,15 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
         return;
     }
 
-    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, yw->_moveOrderFeedbackPos);
-    if ( worldUiOpacity == 0 )
-        return;
+    // Explicit player orders are tactical feedback, not ambient world UI.
+    // Keep them fully visible even beyond game.world_ui_max_distance so a
+    // remotely controlled vehicle can still see the order given to its squad.
+    const uint8_t worldUiOpacity = 255;
 
     Common::Point point;
     if ( !yw_ProjectWorldSelectionPoint(yw, yw->_moveOrderFeedbackPos, &point) )
         return;
 
-    int centerX = point.x - yw->_screenSize.x / 2;
-    int centerY = point.y - yw->_screenSize.y / 2;
     int radius = 7 + (int)((age % 240) * 7 / 240);
     SDL_Color factionColor = yw_GetFactionSelectionColor(yw);
     SDL_Color pulseColor = factionColor;
@@ -8873,12 +9697,415 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
     SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
     shadowColor.a = worldUiOpacity;
 
-    yw_DrawNeutralDiamond(centerX + 1, centerY + 1, radius, shadowColor);
-    yw_DrawNeutralDiamond(centerX, centerY, radius, pulseColor);
+    yw_RenderMoveOrderTemplateAt(yw, point, radius, worldUiOpacity,
+                                 pulseColor, shadowColor);
+}
 
-    GFX::Engine.raster_func217(pulseColor);
-    GFX::Engine.raster_func201(Common::Line(centerX - 3, centerY, centerX + 3, centerY));
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY - 3, centerX, centerY + 3));
+static uint64_t yw_AttackOrderSquadKey(uint32_t commandID, uint8_t owner)
+{
+    return ((uint64_t)owner << 32) | commandID;
+}
+
+static TAttackOrderFeedbackEntry *yw_FindAttackOrderFeedback(
+        NC_STACK_ypaworld *yw, uint32_t commandID, uint8_t owner)
+{
+    if ( !yw || commandID == 0 )
+        return NULL;
+
+    const uint64_t key = yw_AttackOrderSquadKey(commandID, owner);
+    for ( TAttackOrderFeedbackEntry &entry : yw->_attackOrderFeedbacks )
+    {
+        if ( yw_AttackOrderSquadKey(entry.SquadCommandID, entry.SquadOwner) == key )
+            return &entry;
+    }
+
+    return NULL;
+}
+
+static void yw_SetAttackOrderFeedback(NC_STACK_ypaworld *yw,
+                                      NC_STACK_ypabact *commander,
+                                      NC_STACK_ypabact *target)
+{
+    if ( !yw || !commander || !target )
+        return;
+
+    TAttackOrderFeedbackEntry *entry = yw_FindAttackOrderFeedback(
+        yw, commander->_commandID, commander->_owner);
+    if ( !entry )
+    {
+        yw->_attackOrderFeedbacks.push_back(TAttackOrderFeedbackEntry());
+        entry = &yw->_attackOrderFeedbacks.back();
+        entry->SquadCommandID = commander->_commandID;
+        entry->SquadOwner = commander->_owner;
+    }
+
+    entry->TargetGid = target->_gid;
+    entry->StartTime = yw->_timeStamp;
+}
+
+static void yw_ClearAttackOrderFeedback(NC_STACK_ypaworld *yw,
+                                        uint32_t commandID, uint8_t owner)
+{
+    if ( !yw || commandID == 0 )
+        return;
+
+    const uint64_t key = yw_AttackOrderSquadKey(commandID, owner);
+    yw->_attackOrderFeedbacks.erase(
+        std::remove_if(yw->_attackOrderFeedbacks.begin(),
+                       yw->_attackOrderFeedbacks.end(),
+                       [key](const TAttackOrderFeedbackEntry &entry)
+                       {
+                           return yw_AttackOrderSquadKey(entry.SquadCommandID,
+                                                         entry.SquadOwner) == key;
+                       }),
+        yw->_attackOrderFeedbacks.end());
+}
+
+static bool yw_IsActiveAttackOrderSource(NC_STACK_ypabact *unit)
+{
+    // A level-preplaced unit can receive and execute an automatic target while
+    // it is still leaving CREATE/BEAM during the opening seconds of a mission.
+    // The marker follows the real target fields, so only terminal lifetime
+    // states are rejected here; rendering state must not hide a valid attacker.
+    return unit &&
+           !(unit->_oflags & BACT_OFLAG_USERINPT) &&
+           unit->_energy > 0 &&
+           unit->_status != BACT_STATUS_DEAD &&
+           !(unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 |
+                                  BACT_STFLAG_CLEAN));
+}
+
+static bool yw_IsEnemyAttackOrderTarget(NC_STACK_ypaworld *yw,
+                                         NC_STACK_ypabact *target)
+{
+    if ( !yw || !yw->_userRobo || !target ||
+         target->_energy <= 0 ||
+         target->_status == BACT_STATUS_DEAD ||
+         (target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 |
+                                BACT_STFLAG_CLEAN)) )
+    {
+        return false;
+    }
+
+    const uint8_t playerOwner = yw->_userRobo->_owner;
+
+    // The strategic map already exposes the real unit target of a player squad
+    // while that target is still passing through an opening visibility/render
+    // transition. Do not apply IsHiddenFor() or NORENDER here: those extra UI
+    // filters can make the world marker disagree with the actual combat order
+    // during level-preplaced opening engagements. Cloaked units
+    // remain protected until their normal reveal path clears the invisible flag.
+    return target->_owner != World::OWNER_0 &&
+           target->_owner != playerOwner &&
+           !target->ShouldHideFromStrategicUI() &&
+           !target->IsInvisibleUnrevealed();
+}
+
+static void yw_AddAttackOrderTarget(NC_STACK_ypaworld *yw,
+                                    NC_STACK_ypabact *target,
+                                    std::vector<NC_STACK_ypabact *> *targets)
+{
+    if ( !targets || !yw_IsEnemyAttackOrderTarget(yw, target) )
+        return;
+
+    if ( std::find(targets->begin(), targets->end(), target) == targets->end() )
+        targets->push_back(target);
+}
+
+static bool yw_IsUnitTargetingAttackOrderTarget(NC_STACK_ypabact *unit,
+                                                 NC_STACK_ypabact *target)
+{
+    if ( !yw_IsActiveAttackOrderSource(unit) || !target )
+        return false;
+
+    if ( unit->_primTtype == BACT_TGT_TYPE_UNIT && unit->_primT.pbact == target )
+        return true;
+
+    if ( unit->_secndTtype == BACT_TGT_TYPE_UNIT && unit->_secndT.pbact == target )
+        return true;
+
+    // Ground units can temporarily follow a path toward a unit through the
+    // legacy movement target fields while still executing the same attack
+    // order. Command IDs are shared by all members of a squad.
+    return unit->_m_cmdID == (int)target->_commandID &&
+           unit->_m_owner == target->_owner;
+}
+
+static bool yw_IsSquadTargetingAttackOrderTarget(NC_STACK_ypabact *commander,
+                                                  NC_STACK_ypabact *target)
+{
+    if ( yw_IsUnitTargetingAttackOrderTarget(commander, target) )
+        return true;
+
+    if ( !yw_IsActiveAttackOrderSource(commander) )
+        return false;
+
+    for ( NC_STACK_ypabact *member : commander->_kidList )
+    {
+        if ( yw_IsUnitTargetingAttackOrderTarget(member, target) )
+            return true;
+    }
+
+    return false;
+}
+
+static void yw_CollectAlliedAttackTargetsFromUnit(
+        NC_STACK_ypaworld *yw, NC_STACK_ypabact *unit, uint8_t playerOwner,
+        bool trustedPlayerHierarchy,
+        std::vector<NC_STACK_ypabact *> *visited,
+        std::vector<NC_STACK_ypabact *> *targets)
+{
+    if ( !unit || !visited || !targets ||
+         std::find(visited->begin(), visited->end(), unit) != visited->end() )
+    {
+        return;
+    }
+
+    visited->push_back(unit);
+
+    const bool isPlayerAllied = trustedPlayerHierarchy ||
+                                unit->_owner == playerOwner;
+
+    if ( yw_IsActiveAttackOrderSource(unit) &&
+         isPlayerAllied &&
+         unit->_bact_type != BACT_TYPES_MISSLE )
+    {
+        if ( unit->_primTtype == BACT_TGT_TYPE_UNIT )
+            yw_AddAttackOrderTarget(yw, unit->_primT.pbact, targets);
+
+        if ( unit->_secndTtype == BACT_TGT_TYPE_UNIT )
+            yw_AddAttackOrderTarget(yw, unit->_secndT.pbact, targets);
+
+        // Preserve the legacy movement-target phase used while a ground unit
+        // is still approaching its unit target.
+        if ( unit->_m_cmdID > 0 && unit->_m_owner != playerOwner )
+        {
+            NC_STACK_ypabact *moveTarget =
+                yw->FindBactByCmdOwn((uint32_t)unit->_m_cmdID,
+                                     (char)unit->_m_owner);
+            yw_AddAttackOrderTarget(yw, moveTarget, targets);
+        }
+    }
+
+    for ( NC_STACK_ypabact *kid : unit->_kidList )
+    {
+        yw_CollectAlliedAttackTargetsFromUnit(yw, kid, playerOwner,
+                                              trustedPlayerHierarchy,
+                                              visited, targets);
+    }
+}
+
+static void yw_CollectAlliedAttackTargetsFromSectorUnits(
+        NC_STACK_ypaworld *yw, uint8_t playerOwner,
+        std::vector<NC_STACK_ypabact *> *visited,
+        std::vector<NC_STACK_ypabact *> *targets)
+{
+    if ( !yw || !visited || !targets )
+        return;
+
+    // Sector lists are the complete live-unit source used elsewhere in the
+    // engine for units that are not guaranteed to remain reachable through a
+    // Host Station/commander hierarchy, including units placed directly by a
+    // level. Scan them all so the marker rule is independent of squad origin;
+    // the shared visited list prevents duplicate work and duplicate targets.
+    for ( cellArea &cell : yw->Sectors() )
+    {
+        for ( NC_STACK_ypabact *unit : cell.unitsList )
+        {
+            yw_CollectAlliedAttackTargetsFromUnit(yw, unit, playerOwner,
+                                                  false, visited, targets);
+        }
+    }
+}
+
+static void yw_CollectAlliedAttackTargets(
+        NC_STACK_ypaworld *yw, std::vector<NC_STACK_ypabact *> *targets)
+{
+    if ( !yw || !yw->_userRobo || !targets )
+        return;
+
+    std::vector<NC_STACK_ypabact *> visited;
+    visited.reserve(128);
+    targets->reserve(32);
+
+    const uint8_t playerOwner = yw->_userRobo->_owner;
+
+    // The player's Host Station hierarchy is the authoritative ownership tree
+    // for its commanders and squad members. _unitsList is not sufficient here:
+    // it mostly contains root/major BACTs and can omit regular active units from
+    // the traversal used by the world UI. Start from the player Host Station,
+    // then also visit the commander remap as a safe fallback for a temporarily
+    // detached or reorganising squad. The visited list prevents duplicates.
+    yw_CollectAlliedAttackTargetsFromUnit(yw, yw->_userRobo, playerOwner,
+                                          true, &visited, targets);
+
+    for ( NC_STACK_ypabact *commander : yw->_cmdrsRemap )
+    {
+        yw_CollectAlliedAttackTargetsFromUnit(yw, commander, playerOwner,
+                                              true, &visited, targets);
+    }
+
+    // Some level-preplaced units can be present and fighting in sector lists
+    // without being reachable from the current player command hierarchy.
+    // Reuse the existing unit-target reader on those live sector units instead
+    // of adding a second targeting state or changing AI behavior.
+    yw_CollectAlliedAttackTargetsFromSectorUnits(yw, playerOwner,
+                                                 &visited, targets);
+}
+
+static void yw_AddManualAttackOrderGraceTargets(
+        NC_STACK_ypaworld *yw, std::vector<NC_STACK_ypabact *> *targets)
+{
+    constexpr uint32_t TARGET_ASSIGN_GRACE_MS = 1000;
+
+    if ( !yw || !yw->_userRobo || !targets )
+        return;
+
+    const uint8_t playerOwner = yw->_userRobo->_owner;
+    for ( auto it = yw->_attackOrderFeedbacks.begin();
+          it != yw->_attackOrderFeedbacks.end(); )
+    {
+        NC_STACK_ypabact *target = yw->FindLiveBactByGid(it->TargetGid);
+        NC_STACK_ypabact *commander =
+            yw->FindBactByCmdOwn(it->SquadCommandID, (char)it->SquadOwner);
+
+        const bool valid = it->SquadOwner == playerOwner &&
+                           yw_IsEnemyAttackOrderTarget(yw, target) &&
+                           yw_IsActiveAttackOrderSource(commander) &&
+                           commander->_owner == it->SquadOwner;
+        if ( !valid )
+        {
+            it = yw->_attackOrderFeedbacks.erase(it);
+            continue;
+        }
+
+        const uint32_t age = yw->_timeStamp - it->StartTime;
+        const bool assigned = yw_IsSquadTargetingAttackOrderTarget(commander,
+                                                                   target);
+        if ( age <= TARGET_ASSIGN_GRACE_MS || assigned )
+        {
+            yw_AddAttackOrderTarget(yw, target, targets);
+            ++it;
+        }
+        else
+        {
+            it = yw->_attackOrderFeedbacks.erase(it);
+        }
+    }
+}
+
+static bool yw_ProjectAttackOrderTargetPoint(
+        NC_STACK_ypaworld *yw, const vec3d &worldPos, Common::Point *screenPos)
+{
+    if ( !yw || !screenPos )
+        return false;
+
+    vec3d delta = worldPos - yw->_viewerPosition;
+
+    mat3x3 corrected = yw->_viewerRotation;
+    GFX::Engine.matrixAspectCorrection(corrected, false);
+
+    vec3d projected = corrected.Transform(delta);
+    if ( projected.z <= 30.0 )
+        return false;
+
+    // The ordinary selection helper rejects a target as soon as its centre
+    // leaves the viewport. Large/flying units can still be visibly fighting at
+    // the screen edge in that state. Give only the Attack marker a small
+    // overscan area, then clamp it inside the viewport. Fully off-screen targets
+    // remain hidden, avoiding a new permanent edge-indicator system.
+    const float projectedX = projected.x / projected.z;
+    const float projectedY = projected.y / projected.z;
+    constexpr float VISIBLE_MODEL_OVERSCAN = 1.20f;
+    if ( projectedX < -VISIBLE_MODEL_OVERSCAN ||
+         projectedX > VISIBLE_MODEL_OVERSCAN ||
+         projectedY < -VISIBLE_MODEL_OVERSCAN ||
+         projectedY > VISIBLE_MODEL_OVERSCAN )
+    {
+        return false;
+    }
+
+    constexpr float EDGE_MARGIN_X = 0.97f;
+    constexpr float EDGE_MARGIN_Y = 0.94f;
+    const float x = std::max(-EDGE_MARGIN_X,
+                             std::min(EDGE_MARGIN_X, projectedX));
+    const float y = std::max(-EDGE_MARGIN_Y,
+                             std::min(EDGE_MARGIN_Y, projectedY));
+
+    screenPos->x = (int)((yw->_screenSize.x / 2) * (x + 1.0f));
+    screenPos->y = (int)((yw->_screenSize.y / 2) * (y + 1.0f));
+    return true;
+}
+
+static void yw_RenderAttackOrderTargetMarker(
+        NC_STACK_ypaworld *yw, NC_STACK_ypabact *target, int templateId,
+        NC_STACK_bitmap *bitmap)
+{
+    if ( !yw || !target )
+        return;
+
+    Common::Point point;
+    if ( !yw_ProjectAttackOrderTargetPoint(yw, target->_position, &point) )
+        return;
+
+    constexpr float ATTACK_MARKER_SCALE = 0.5f;
+    const uint32_t pulseTime = yw->_timeStamp % 240;
+    const uint32_t triangle = pulseTime <= 120 ? pulseTime : 240 - pulseTime;
+    const int baseRadius = 9 + (int)(triangle * 6 / 120);
+    const int radius = std::max(3, dround(baseRadius * ATTACK_MARKER_SCALE));
+    const uint8_t worldUiOpacity = 255;
+
+    if ( bitmap && bitmap->GetBitmap() )
+    {
+        const int baseSize = baseRadius * 2 + 8;
+        const int size = std::max(8, dround(baseSize * ATTACK_MARKER_SCALE));
+        StatusIconRenderBitmap(yw, bitmap,
+                               point.x - size / 2 + 1, point.y - size / 2 + 1,
+                               size + 2, (uint8_t)(worldUiOpacity / 3));
+        StatusIconRenderBitmap(yw, bitmap,
+                               point.x - size / 2, point.y - size / 2,
+                               size, worldUiOpacity);
+        return;
+    }
+
+    const int centerX = point.x - yw->_screenSize.x / 2;
+    const int centerY = point.y - yw->_screenSize.y / 2;
+    SDL_Color attackColor = yw_GetFactionSelectionColor(yw);
+    attackColor.a = worldUiOpacity;
+    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+    shadowColor.a = worldUiOpacity;
+
+    yw_DrawAttackOrderTemplate(templateId, centerX + 1, centerY + 1,
+                                radius, shadowColor, yw->_timeStamp);
+    yw_DrawAttackOrderTemplate(templateId, centerX, centerY,
+                                radius, attackColor, yw->_timeStamp);
+}
+
+static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->_userRobo )
+        return;
+
+    const int templateId = yw_GetAttackOrderTemplate();
+    if ( templateId == 0 )
+        return;
+
+    // The marker reflects actual allied combat state, not only the currently
+    // selected squad. Every live enemy targeted by any player-owned unit gets
+    // one deduplicated marker. Manual orders keep a short grace entry so the
+    // feedback appears immediately before the legacy AI target fields update.
+    std::vector<NC_STACK_ypabact *> targets;
+    yw_CollectAlliedAttackTargets(yw, &targets);
+    yw_AddManualAttackOrderGraceTargets(yw, &targets);
+
+    if ( targets.empty() )
+        return;
+
+    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(
+        yw, "AttackOrder", "attack_order_", templateId);
+
+    for ( NC_STACK_ypabact *target : targets )
+        yw_RenderAttackOrderTargetMarker(yw, target, templateId, bitmap);
 }
 
 void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
@@ -8903,12 +10130,12 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         if ( yw->_showDebugMode )
             robo_map.MapViewMask = -1;
 
-        if ( inpt->ClickInf.wheel > 0 )
+        if ( inpt->ClickInf.selected_btn == &robo_map && inpt->ClickInf.wheel > 0 )
         {
             for ( int i = 0; i < inpt->ClickInf.wheel; i++ )
                 sub_4C1970(yw, 1);
         }
-        else if ( inpt->ClickInf.wheel < 0 )
+        else if ( inpt->ClickInf.selected_btn == &robo_map && inpt->ClickInf.wheel < 0 )
         {
             for ( int i = 0; i > inpt->ClickInf.wheel; i-- )
                 sub_4C1970(yw, 2);
@@ -9501,8 +10728,9 @@ void ypaworld_func64__sub7__sub6__sub3(NC_STACK_ypaworld *yw, int a2, int a4)
     exit_menu.itemBlock.clear();
     exit_menu.ItemsPreLayout(yw, &exit_menu.itemBlock, 0, "{ }");
 
-    FontUA::set_txtColorRaw(&exit_menu.itemBlock, yw->_iniColors[63].r,
-                            yw->_iniColors[63].g, yw->_iniColors[63].b);
+    const SDL_Color boxTextColor = yw->GetFactionBoxTextColor();
+    FontUA::set_txtColor(&exit_menu.itemBlock, boxTextColor.r,
+                         boxTextColor.g, boxTextColor.b);
 
     sub_4DA8DC(yw, &exit_menu.itemBlock, a4 & 0x100, a2 & 0x100, Locale::Text::Common(Locale::CMN_EXITMISN));
     sub_4DA8DC(yw, &exit_menu.itemBlock, a4 & 0x200, a2 & 0x200, Locale::Text::Common(Locale::CMN_SAVE));
@@ -9832,14 +11060,15 @@ void NC_STACK_ypaworld::ypaworld_func64__sub7__sub4__sub0(int a2)
     lstvw2.itemBlock.clear();
     lstvw2.ItemsPreLayout(this, &lstvw2.itemBlock, 0, "{ }");
 
-    FontUA::set_txtColorRaw(&lstvw2.itemBlock, _iniColors[63].r,
-                            _iniColors[63].g, _iniColors[63].b);
+    const SDL_Color boxTextColor = GetFactionBoxTextColor();
+    FontUA::set_txtColor(&lstvw2.itemBlock, boxTextColor.r,
+                         boxTextColor.g, boxTextColor.b);
 
     sub_4C8534(this, &lstvw2.itemBlock, dword_5BAF98);
     sub_4C8534(this, &lstvw2.itemBlock, " ");
 
-    FontUA::set_txtColorRaw(&lstvw2.itemBlock, _iniColors[63].r,
-                            _iniColors[63].g, _iniColors[63].b);
+    FontUA::set_txtColor(&lstvw2.itemBlock, boxTextColor.r,
+                         boxTextColor.g, boxTextColor.b);
 
     ypaworld_func64__sub7__sub4__sub0__sub0(this, &lstvw2.itemBlock, a2);
     lstvw2.ItemsPostLayout(this, &lstvw2.itemBlock, 0, "xyz");
@@ -11429,7 +12658,8 @@ void yw_RenderInfoShieldbar(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
 
 
 
-void yw_RenderInfoVehicleName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, const std::string &name, float xpos, float ypos)
+void yw_RenderInfoVehicleName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur,
+                              const std::string &name, float xpos, float ypos)
 {
     int v29 = (yw->_screenSize.x / 2) * xpos;
     int v33 = (yw->_screenSize.y / 2) * ypos;
@@ -11473,7 +12703,12 @@ void yw_RenderInfoVehicleName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *c
         FontUA::set_center_xpos(cur, v30);
         FontUA::set_center_ypos(cur, v34);
 
-        FontUA::set_txtColor(cur,  yw->_iniColors[65].r,  yw->_iniColors[65].g,  yw->_iniColors[65].b);
+        // wireframe_tint belongs only to the rendered wireframe graphics.
+        // Names keep the original high-contrast UI colour so dark tints do not
+        // make vehicle or weapon labels unreadable over the 3D world.
+        FontUA::set_txtColor(cur, yw->_iniColors[65].r,
+                             yw->_iniColors[65].g,
+                             yw->_iniColors[65].b);
 
         sub_451714_with_yoffset(yw->_guiTiles[15], cur, name, v31, 32, 0);
     }
@@ -11496,7 +12731,8 @@ void yw_RenderInfoVehicleName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *c
 }
 
 
-void yw_RenderInfoWeaponName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, const std::string &name, float xpos, float ypos)
+void yw_RenderInfoWeaponName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur,
+                             const std::string &name, float xpos, float ypos)
 {
     if ( name.empty() )
         return;
@@ -11683,14 +12919,18 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
         if ( bact && bact->_vehicleID >= 0 && (size_t)bact->_vehicleID < yw->_vhclProtos.size() )
             nameVhcl = &yw->_vhclProtos[bact->_vehicleID];
 
-        yw_RenderInfoVehicleName(yw, wis, cur, yw->ResolveGameplayVehicleName(bact, *nameVhcl), xpos, v15);
+        yw_RenderInfoVehicleName(yw, wis, cur,
+                                 yw->ResolveGameplayVehicleName(bact, *nameVhcl),
+                                 xpos, v15);
     }
 
     if ( weap )
     {
         if ( v23 )
         {
-            yw_RenderInfoWeaponName(yw, wis, cur, yw->ResolveGameplayWeaponName(*weap), xpos,  ypos - wis->field_92 * 12.0);
+            yw_RenderInfoWeaponName(yw, wis, cur,
+                                    yw->ResolveGameplayWeaponName(*weap), xpos,
+                                    ypos - wis->field_92 * 12.0);
 
             yw_RenderInfoWeaponWire(yw, wis, weap, xpos,   ypos - wis->field_92 * 9.0);
 
@@ -12792,12 +14032,29 @@ static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Colo
     }
 }
 
+static bool yw_IsWorldBossMarkerUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+{
+    if ( !yw || !bact )
+        return false;
+
+    return bact->_bact_type == BACT_TYPES_ROBO ||
+           (yw->_userRobo && bact->IsParentMyRobo() &&
+            bact->_owner == yw->_userRobo->_owner);
+}
+
 static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
-    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
+    const bool activeSquadronSelection =
+        yw_IsActiveSquadronSelectionUnit(yw, bact);
+    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) &&
+         !activeSquadronSelection )
         return;
 
-    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    // The selected squad is an explicit player selection, not ambient world
+    // UI. Keep its quadrants visible at any configured world-UI distance.
+    uint8_t worldUiOpacity = activeSquadronSelection
+        ? 255
+        : yw_GetWorldUiOpacity(yw, bact->_position);
     if (worldUiOpacity == 0)
         return;
 
@@ -12807,9 +14064,11 @@ static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_yp
 
     int centerX = point.x - yw->_screenSize.x / 2;
     int centerY = point.y - yw->_screenSize.y / 2 - yw->_screenSize.y * 4 / 100;
-    bool isSquadLeader = bact->IsParentMyRobo() && bact->_owner == yw->_userRobo->_owner;
-    float scaleX = isSquadLeader ? 0.015f : 0.0075f;
-    float scaleY = isSquadLeader ? 0.02f : 0.01f;
+    const bool isBossMarker = yw_IsWorldBossMarkerUnit(yw, bact);
+    // Keep the boss frame inside the same footprint as an ordinary unit so it
+    // cannot reach the HP bar. The double wireframe cursor remains the boss cue.
+    constexpr float scaleX = 0.0075f;
+    constexpr float scaleY = 0.01f;
     float correctionX = 1.0f;
     float correctionY = 1.0f;
     double maxWireX = 1.0;
@@ -12832,7 +14091,7 @@ static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_yp
                                           (yw->_screenSize.x / 2)) + 2);
     int halfHeight = std::max(6, (int)ceil(maxWireY * scaleY * correctionY *
                                            (yw->_screenSize.y / 2)) + 2);
-    int cornerLength = 2;
+    const int cornerLength = isBossMarker ? 4 : 2;
 
     SDL_Color markerColor = yw_GetFactionSelectionColor(yw);
     markerColor.a = worldUiOpacity;
@@ -13372,14 +14631,19 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
 static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
                                                const vec3d &renderPosition, uint8_t visibilityOpacity)
 {
-    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
+    const bool activeSquadronSelection =
+        yw_IsActiveSquadronSelectionUnit(yw, bact);
+    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) &&
+         !activeSquadronSelection )
         return;
 
     // OpenUA invisible: never draw the targeting cursor/box over a cloaked stealth unit.
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
-    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, renderPosition);
+    uint8_t worldUiOpacity = activeSquadronSelection
+        ? 255
+        : yw_GetWorldUiOpacity(yw, renderPosition);
     worldUiOpacity = (uint8_t)(((uint32_t)worldUiOpacity * visibilityOpacity + 127U) / 255U);
     if (worldUiOpacity == 0)
         return;
@@ -13409,18 +14673,23 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
             if ( v12 )
             {
                 float a4 = v34 - 0.08;
-                // Host Stations use the large squad-leader inverted triangle.
-                bool isSquadLeader = bact->_bact_type == BACT_TYPES_ROBO ||
-                                     (bact->IsParentMyRobo() && bact->_owner == yw->_userRobo->_owner);
+                // Render coordinates are normalized to [-1, 1], so this is
+                // exactly one physical pixel to the right of the quadrant.
+                const float arrowX = a3a + 2.0f / (float)yw->_screenSize.x;
+                // Keep boss markers compact enough to stay clear of the HP bar.
+                const bool isBossMarker = yw_IsWorldBossMarkerUnit(yw, bact);
 
-                if ( isSquadLeader )
+                if ( isBossMarker )
                 {
-                    yw_RenderVector2D(yw, v12, a3a, a4, 1.0, 0.0, 0.0, 1.0, 0.015, 0.02, v11, NULL, NULL, true);
-                    yw_RenderVector2D(yw, v12, a3a, a4, 1.0, 0.0, 0.0, 1.0, 0.005, 0.00666, v11, NULL, NULL, true);
+                    // Restore the large commander arrow. The compact corner
+                    // marker remains its surrounding frame, while the inner
+                    // pass keeps the boss identity visible.
+                    yw_RenderVector2D(yw, v12, arrowX, a4, 1.0, 0.0, 0.0, 1.0, 0.0125, 0.0165, v11, NULL, NULL, true);
+                    yw_RenderVector2D(yw, v12, arrowX, a4, 1.0, 0.0, 0.0, 1.0, 0.005, 0.00666, v11, NULL, NULL, true);
                 }
                 else
                 {
-                    yw_RenderVector2D(yw, v12, a3a, a4, 1.0, 0.0, 0.0, 1.0, 0.0075, 0.01, v11, NULL, NULL, true);
+                    yw_RenderVector2D(yw, v12, arrowX, a4, 1.0, 0.0, 0.0, 1.0, 0.0075, 0.01, v11, NULL, NULL, true);
                 }
             }
         }
@@ -14559,8 +15828,9 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
     case World::DOACTION_2:
         if (_activeCmdrRemapIndex >= 0)
         {
+            NC_STACK_ypabact *orderedSquad = _cmdrsRemap[_activeCmdrRemapIndex];
             _updateMessage.user_action = World::DOACTION_2;
-            _updateMessage.selectBact = _cmdrsRemap[_activeCmdrRemapIndex];
+            _updateMessage.selectBact = orderedSquad;
 
             if ( _guiActFlags & 0x10 )
             {
@@ -14568,19 +15838,44 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
                 _updateMessage.target_point = _cellMouseIsectPos;
                 _updateMessage.target_Bact = NULL;
 
-                if ( _cellOnMouse &&
-                     _cellOnMouse->owner == _userRobo->_owner &&
-                     _cellOnMouse->IsCanSee(_userRobo->_owner) )
+                if ( _cellOnMouse )
                 {
+                    // The move marker confirms the player's click, not sector
+                    // ownership, fog state or distance from the ordered squad.
+                    // Any valid world intersection accepted as a move order
+                    // must therefore display ui.move_order_template.
                     _moveOrderFeedbackActive = true;
                     _moveOrderFeedbackPos = _cellMouseIsectPos;
                     _moveOrderFeedbackStartTime = _timeStamp;
                 }
+
+                if ( orderedSquad )
+                    yw_ClearAttackOrderFeedback(this, orderedSquad->_commandID,
+                                                orderedSquad->_owner);
             }
             else
             {
                 _updateMessage.target_Sect = 0;
                 _updateMessage.target_Bact = _bactOnMouse;
+
+                // OpenUA custom: show a short animated feedback only for an
+                // explicit attack order on an enemy unit. Sector attacks and
+                // friendly-unit clicks do not use this marker.
+                if ( _bactOnMouse &&
+                     orderedSquad &&
+                     _bactOnMouse != _userRobo &&
+                     _bactOnMouse->_owner != _userRobo->_owner &&
+                     _bactOnMouse->_status != BACT_STATUS_CREATE &&
+                     _bactOnMouse->_status != BACT_STATUS_BEAM &&
+                     _bactOnMouse->_status != BACT_STATUS_DEAD )
+                {
+                    yw_SetAttackOrderFeedback(this, orderedSquad, _bactOnMouse);
+                }
+                else if ( orderedSquad )
+                {
+                    yw_ClearAttackOrderFeedback(this, orderedSquad->_commandID,
+                                                orderedSquad->_owner);
+                }
             }
 
             bzda.field_1D0 = bzda.field_1CC & 1;
@@ -15462,6 +16757,7 @@ void NC_STACK_ypaworld::GUI_Close()
     {
         yw_ResetWorldSelectionDrag(this);
         _moveOrderFeedbackActive = false;
+        _attackOrderFeedbacks.clear();
         ypaworld_func140(&lstvw2);
         ypaworld_func140(&exit_menu);
         ypaworld_func140(&info_log);

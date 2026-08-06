@@ -54,7 +54,7 @@ Common::Ini::Key IniConf::GfxPalette("gfx.palette", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
 Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.25"));
 Common::Ini::Key IniConf::GfxAtmosphereFx("gfx.atmosphere_fx", Common::Ini::KT_BOOL, true);
-Common::Ini::Key IniConf::GfxAtmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxAtmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string("0.50"));
 Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string("1.70"));
 Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string("0.95"));
 Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("0.80"));
@@ -94,6 +94,8 @@ Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std
 // OpenUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::UiMapMarkerSound("ui.map_marker_sound", Common::Ini::KT_STRING, std::string());
+Common::Ini::Key IniConf::UiMoveOrderTemplate("ui.move_order_template", Common::Ini::KT_DIGIT, (int32_t)1);
+Common::Ini::Key IniConf::UiAttackOrderTemplate("ui.attack_order_template", Common::Ini::KT_DIGIT, (int32_t)0);
 
 
 // Input Engine
@@ -233,6 +235,7 @@ Common::Ini::Key IniConf::NetVersionCheck("net.versioncheck", Common::Ini::KT_BO
 
 Common::Ini::Key IniConf::GameDebug("game.debug", Common::Ini::KT_BOOL);
 Common::Ini::Key IniConf::GameNewDebug("game.new.debug", Common::Ini::KT_WORD, std::string("no"));
+Common::Ini::Key IniConf::GameCrashDiagnostics("game.crash_diagnostics", Common::Ini::KT_BOOL, false);
 // OpenUA custom: choose the original VP model preview or the text-only briefing preview.
 // The default keeps the current text mode for vanilla-safe behavior.
 Common::Ini::Key IniConf::GameBriefingVPRender("game.briefing_vp_render", Common::Ini::KT_BOOL, false);
@@ -280,7 +283,7 @@ Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameGemUnlockTimeScale("game.gem_unlock_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5000"));
+Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
 // OpenUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
 Common::Ini::Key IniConf::GameAiTargetRange("game.ai_target_range", Common::Ini::KT_WORD, std::string("0"));
@@ -541,6 +544,7 @@ void IniConf::Init()
 
         , &GameDebug
         , &GameNewDebug
+        , &GameCrashDiagnostics
         , &GameBriefingVPRender
 
         , &GameNewAI
@@ -645,6 +649,8 @@ void IniConf::Init()
         , &UiMenuFont
         , &UiRetroInterface
         , &UiMapMarkerSound
+        , &UiMoveOrderTemplate
+        , &UiAttackOrderTemplate
     };
 }
 

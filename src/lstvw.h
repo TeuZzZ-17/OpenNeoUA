@@ -20,6 +20,7 @@ public:
     CmdStream cmdCommands;
     CmdIncludes cmdInclude;
 
+    void (*preDraw)(NC_STACK_ypaworld *) = NULL;
     void (*postDraw)(NC_STACK_ypaworld *) = NULL;
 
     enum FLAG
@@ -38,7 +39,11 @@ public:
     void Detach();
     void Attach(GuiBaseList &);
 
-    static void FormateTitle(NC_STACK_ypaworld *yw, int xpos, int ypos, int w, const std::string &title, CmdStream *in, uint8_t postf_char, int flag);
+    static void FormateTitle(NC_STACK_ypaworld *yw, int xpos, int ypos, int w,
+                             const std::string &title, CmdStream *in,
+                             uint8_t postf_char, int flag,
+                             bool drawCloseGlyph = true,
+                             bool factionAccentTitle = true);
 
     inline bool IsClosed() const {
         return ((flags & FLAG_CLOSED) != 0);
@@ -54,8 +59,19 @@ protected:
 class GuiList : public GuiBase
 {
 public:
+    // Keep the logical scrollbar width unchanged; this is only its visual width.
+    static constexpr int kThinScrollbarVisualSize = 5;
+
     int scrollTimer = 0;
     int listFlags = 0;
+    bool thinScrollbar = false;
+    int16_t thinScrollbarVisualWidth = kThinScrollbarVisualSize;
+    bool fillThinScrollbarGap = false;
+    bool factionCloseVisual = false;
+    bool factionAccentTitle = true;
+    bool wheelScroll = false;
+    bool horizontalResizeLocked = false;
+    uint8_t backgroundOpacity = 255;
     int closeChar = 0;
     int16_t numEntries = 0;
     int16_t shownEntries = 0;
@@ -123,6 +139,14 @@ public:
         int lowerVborder = 0;//16
         bool keyboardInput = false;//17
         bool withHelp = false;//18  // OpenUA: deprecated online-help titlebar icon hidden by default
+        bool thinScrollbar = false;//19 // OpenUA: visual-only narrow vertical scrollbar
+        uint8_t backgroundOpacity = 255;//20 // visual opacity for list background glyphs
+        bool wheelScroll = false;//21 // OpenUA: allow mouse-wheel scrolling for this list
+        int thinScrollbarVisualWidth = kThinScrollbarVisualSize;//22 // visible width; hit area stays vanilla-sized
+        bool fillThinScrollbarGap = false;//23 // extend panel fill up to the thin visible scrollbar
+        bool factionCloseVisual = false;//24 // hide legacy glyph; caller renders faction PNG close icon
+        bool horizontalResizeLocked = false;//25 // allow vertical resize while freezing the current width
+        bool factionAccentTitle = true;//26 // remap the title cyan to the current faction accent
     };
 
 
