@@ -12,7 +12,10 @@
 #include "crashdiag.h"
 
 #include <math.h>
+#include <algorithm>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 
 
@@ -5587,6 +5590,13 @@ void NC_STACK_yparobo::Die()
     if ( !(_status_flg & BACT_STFLAG_DEATH1) )
     {
         CrashDiag::RequestCheckpoint("host_station_death_begin");
+
+        // Only a real gameplay Host Station death may request the global
+        // slowdown. The world applies the configured scale, duration and
+        // maximum-distance gates, independently of the damage source.
+        if ( _world )
+            _world->StartRoboDeathTimeScale(this);
+
         hdMsg.msgID = UAMSG_HOSTDIE;
         hdMsg.owner = _owner;
 
@@ -5609,67 +5619,137 @@ void NC_STACK_yparobo::Die()
             }
         }
 
-        for (World::RefBactList::iterator kdIt = _kidList.begin(); kdIt != _kidList.end();)
+        // Snapshot the complete descendant hierarchy before the first Die().
+        // A Host Station normally owns commanders and their squad members, but
+        // regrouping and carrier-like units may create deeper levels.  Killing
+        // only two levels could therefore leave a live descendant attached to
+        // a dead hierarchy: it remained visible, but AI target filters ignored
+        // it because its Host Station was already dead.  Build a stable
+        // post-order snapshot so every descendant dies before its parent while
+        // the live RefLists are still untouched.
+        struct RoboDeathCascadeFrame
         {
-            NC_STACK_ypabact *node = *kdIt;
-            kdIt++;
+            NC_STACK_ypabact *unit;
+            bool expanded;
+        };
 
-            for (World::RefBactList::iterator sbIt = node->_kidList.begin(); sbIt != node->_kidList.end();)
+        std::vector<NC_STACK_ypabact *> deathCascade;
+        std::unordered_set<NC_STACK_ypabact *> visited;
+        std::vector<RoboDeathCascadeFrame> pending;
+
+        auto collectPendingPostOrder = [&]()
+        {
+            while ( !pending.empty() )
             {
-                NC_STACK_ypabact *subnode = *sbIt;
-                sbIt++;
+                const RoboDeathCascadeFrame frame = pending.back();
+                pending.pop_back();
 
-                subnode->_killer = _killer;
+                NC_STACK_ypabact *unit = frame.unit;
+                if ( !unit || unit == this )
+                    continue;
 
-                if ( _status_flg & BACT_STFLAG_CLEAN )
-                    subnode->_status_flg |= BACT_STFLAG_CLEAN;
+                if ( frame.expanded )
+                {
+                    deathCascade.push_back(unit);
+                    continue;
+                }
 
-                subnode->Die();
+                if ( !visited.insert(unit).second )
+                    continue;
 
-                subnode->_status_flg &= ~BACT_STFLAG_LAND;
-
-                setState_msg arg119;
-                arg119.unsetFlags = 0;
-                arg119.setFlags = 0;
-                arg119.newStatus = BACT_STATUS_CREATE;
-                subnode->SetStateInternal(&arg119);
-
-                subnode->_status = BACT_STATUS_DEAD;
-
-                SFXEngine::SFXe.sub_424000(&subnode->_soundcarrier, 3);
-                SFXEngine::SFXe.startSound(&subnode->_soundcarrier, 7);
-
-                subnode->_soundFlags &= 0xFFFFFFF7;
-                subnode->_soundFlags |= 0x80;
-
-                subnode->setBACT_yourLastSeconds(a4);
+                pending.push_back({unit, true});
+                const std::vector<NC_STACK_ypabact *> children = unit->_kidList.safe_iter();
+                for ( auto it = children.rbegin(); it != children.rend(); ++it )
+                    pending.push_back({*it, false});
             }
+        };
 
-            node->_killer = _killer;
+        const std::vector<NC_STACK_ypabact *> roots = _kidList.safe_iter();
+        for ( auto it = roots.rbegin(); it != roots.rend(); ++it )
+            pending.push_back({*it, false});
+        collectPendingPostOrder();
+
+        // A unit can remain registered in a world/cell list with this Host
+        // Station in _host_station even after a legacy reparenting path has
+        // detached it from the Robo's _kidList. Such a unit is still visually
+        // alive, but faction/AI logic treats its dead Host Station as defeated
+        // and may stop acquiring it. Recover those host-bound roots here and
+        // feed them through the same post-order cascade; missiles are excluded
+        // so already-fired projectiles preserve their vanilla lifetime.
+        size_t recoveredHostBoundRoots = 0;
+        std::unordered_set<NC_STACK_ypabact *> recoveredQueued;
+        auto queueHostBoundRoot = [&](NC_STACK_ypabact *unit)
+        {
+            if ( !unit || unit == this || unit->_host_station != this )
+                return;
+
+            const bool gameplayVehicle =
+                unit->_bact_type == BACT_TYPES_BACT
+                || unit->_bact_type == BACT_TYPES_TANK
+                || unit->_bact_type == BACT_TYPES_ZEPP
+                || unit->_bact_type == BACT_TYPES_FLYER
+                || unit->_bact_type == BACT_TYPES_UFO
+                || unit->_bact_type == BACT_TYPES_CAR
+                || unit->_bact_type == BACT_TYPES_GUN
+                || unit->_bact_type == BACT_TYPES_HOVER;
+
+            if ( !gameplayVehicle || unit->_status == BACT_STATUS_DEAD
+                    || (unit->_status_flg & (BACT_STFLAG_DEATH1
+                                           | BACT_STFLAG_DEATH2
+                                           | BACT_STFLAG_CLEAN))
+                    || visited.find(unit) != visited.end()
+                    || !recoveredQueued.insert(unit).second )
+                return;
+
+            pending.push_back({unit, false});
+            recoveredHostBoundRoots++;
+        };
+
+        if ( _world )
+        {
+            for ( NC_STACK_ypabact *unit : _world->_unitsList.safe_iter() )
+                queueHostBoundRoot(unit);
+
+            for ( cellArea &cell : _world->_cells )
+            {
+                for ( NC_STACK_ypabact *unit : cell.unitsList.safe_iter() )
+                    queueHostBoundRoot(unit);
+            }
+        }
+
+        collectPendingPostOrder();
+
+        for ( NC_STACK_ypabact *unit : deathCascade )
+        {
+            unit->_killer = _killer;
 
             if ( _status_flg & BACT_STFLAG_CLEAN )
-                node->_status_flg |= BACT_STFLAG_CLEAN;
+                unit->_status_flg |= BACT_STFLAG_CLEAN;
 
-            node->Die();
+            unit->Die();
 
-            node->_status_flg &= ~BACT_STFLAG_LAND;
+            unit->_status_flg &= ~BACT_STFLAG_LAND;
 
             setState_msg arg119;
             arg119.unsetFlags = 0;
             arg119.setFlags = 0;
             arg119.newStatus = BACT_STATUS_CREATE;
-            node->SetStateInternal(&arg119);
+            unit->SetStateInternal(&arg119);
 
-            node->_status = BACT_STATUS_DEAD;
+            unit->_status = BACT_STATUS_DEAD;
 
-            SFXEngine::SFXe.sub_424000(&node->_soundcarrier, 3);
-            SFXEngine::SFXe.startSound(&node->_soundcarrier, 7);
+            SFXEngine::SFXe.sub_424000(&unit->_soundcarrier, 3);
+            SFXEngine::SFXe.startSound(&unit->_soundcarrier, 7);
 
-            node->_soundFlags &= 0xFFFFFFF7;
-            node->_soundFlags |= 0x80;
+            unit->_soundFlags &= 0xFFFFFFF7;
+            unit->_soundFlags |= 0x80;
 
-            node->setBACT_yourLastSeconds(a4);
+            unit->setBACT_yourLastSeconds(a4);
         }
+
+        CrashDiag::Breadcrumb("HOST_DEATH",
+                              "descendant cascade count=%zu recovered_roots=%zu gid=%d",
+                              deathCascade.size(), recoveredHostBoundRoots, _gid);
 
         NC_STACK_ypabact *v20 = _world->getYW_userHostStation();
 

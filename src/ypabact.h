@@ -496,6 +496,7 @@ public:
     void UpdateDamageFX(update_msg *arg);
     void UpdateDecorationFX(update_msg *arg);
     void UpdateEnergyStatusFX(update_msg *arg);
+    float GetPushResistanceMultiplier() const;
     void AddAoePush(const vec3d &dir, float distance); // queue smooth weapon knockback
     void ApplyWeaponRecoil(const vec3d &dir, float recoil);
     void UpdateAoePush(update_msg *arg);
@@ -512,6 +513,12 @@ public:
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual void ModifyEnergy(bact_arg84 *arg);
     bool IsInvulnerableToDamage() const;
+    // OpenUA: derived from the existing transient 0..4 kill marks. These helpers
+    // are the single gameplay/UI source of truth and never mutate prototypes.
+    float GetKillStatBonusPercent() const;
+    float GetKillStatMultiplier() const;
+    int GetEffectiveShotTime(int baseShotTime) const;
+    int GetEffectiveOutgoingDamage(int baseDamage) const;
     float GetEffectiveShield() const;
     float GetEffectiveShieldWithAdditionalMalus(float additionalMalus) const;
     int CalcShieldedCustomDamage(int rawDamage) const;
@@ -581,6 +588,7 @@ public:
     bool IsPlayerFirstPersonCameraActive() const;
     bool ShouldRenderCockpitCameraBody() const;
     vec3d GetCockpitCameraPosition() const;
+    virtual float GetPlayerViewZoom() const { return 1.0f; }
     void ToggleCockpitCameraMode();
     bool HasMinigun() const;
     bool UsesVehicleMinigunTiming() const { return !_mgun_set && _mgun_shot_time > 0; }
@@ -1034,10 +1042,9 @@ public:
     bool _spawn_at_death_done;
     int _spawn_at_death_protection_end_time;
     bool _spawn_at_death_restore_vulnerable;
-    int _death_damage;
-    float _death_damage_radius;
-    bool _death_damage_applied_dead;
-    bool _death_damage_applied_megadeth;
+    float _push_at_death_force;
+    float _push_at_death_radius;
+    int _push_at_death_falloff;
     int _carrier_spawn_root_gid;
     int _carrier_spawn_root_vehicle;
     std::vector<int32_t> _carrier_spawned_gids;

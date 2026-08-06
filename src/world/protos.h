@@ -468,8 +468,6 @@ struct TVhclProto
     float spawn_at_death_random_pos = 0.0;
     int spawn_at_death_instant = 0;
     int spawn_at_death_immunity_time = 0;
-    int death_damage = 0; // OpenUA custom: direct radius damage applied on death phases
-    float death_damage_radius = 0.0; // OpenUA custom: independent 3D radius for death_damage
     int proximity_defense_enable = 0;
     int proximity_defense_weapon = 0;
     float proximity_defense_trigger_radius = 0.0;
@@ -513,6 +511,9 @@ struct TVhclProto
     int8_t radar = 0;
     float push_resistance = 0.0; // OpenUA custom: target-side resistance to push / aoe_unit_push
     bool has_push_resistance = false; // true only when push_resistance is explicitly authored
+    float push_at_death_force = 0.0f; // OpenUA custom: radial push strength emitted on actual vehicle death
+    float push_at_death_radius = 0.0f;
+    int push_at_death_falloff = 0;
     float mass = 0.0;
     float force = 0.0;
     float airconst = 0.0;

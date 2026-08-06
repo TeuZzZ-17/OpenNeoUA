@@ -1718,8 +1718,10 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
     {
         // OpenUA: render the camera-following sky with its own extended
         // projection, then restore the unlocked world projection immediately.
-        SetProjectionMatrix(
-            mat4x4f::UAFrustum(_frustumNear, SKY_FAR_CLIP));
+        mat4x4f skyFrustum = mat4x4f::UAFrustum(_frustumNear, SKY_FAR_CLIP);
+        skyFrustum.m00 *= _viewZoom;
+        skyFrustum.m11 *= _viewZoom;
+        SetProjectionMatrix(skyFrustum);
 
         _renderSkyBoxList.sort(TRenderNode::CompareSolid);
 
@@ -2348,6 +2350,7 @@ void GFXEngine::raster_func221(const Common::Rect &arg)
 
 void GFXEngine::BeginFrame()
 {
+    setViewZoom(1.0f);
     SDL_FillRect(Screen(), NULL, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
 
     Common::Point scrSz = System::GetResolution();
@@ -2810,6 +2813,13 @@ void GFXEngine::getAspectCorrection(float &cW, float &cH, bool invert)
     }
 }
 
+void GFXEngine::viewZoomCorrection(float &x, float &y, bool invert) const
+{
+    const float correction = invert ? 1.0f / _viewZoom : _viewZoom;
+    x *= correction;
+    y *= correction;
+}
+
 void GFXEngine::setFrustumClip(float _near, float _far)
 {
     if (_near != _frustumNear || _far != _frustumFar)
@@ -2823,6 +2833,27 @@ void GFXEngine::_setFrustumClip(float _near, float _far)
     _frustumFar = _far;
 
     _frustum = mat4x4f::UAFrustum(_near, _far);
+    _frustum.m00 *= _viewZoom;
+    _frustum.m11 *= _viewZoom;
+}
+
+void GFXEngine::setViewZoom(float zoom)
+{
+    if (!std::isfinite(zoom))
+        zoom = 1.0f;
+
+    if (zoom < VIEW_ZOOM_MIN)
+        zoom = VIEW_ZOOM_MIN;
+    else if (zoom > VIEW_ZOOM_MAX)
+        zoom = VIEW_ZOOM_MAX;
+
+    if (std::fabs(_viewZoom - zoom) < 0.0001f)
+        return;
+
+    _viewZoom = zoom;
+    _frustum = mat4x4f::UAFrustum(_frustumNear, _frustumFar);
+    _frustum.m00 *= _viewZoom;
+    _frustum.m11 *= _viewZoom;
 }
 
 void GFXEngine::ConvAlphaPalette(UA_PALETTE *dst, const UA_PALETTE &src, bool transp)

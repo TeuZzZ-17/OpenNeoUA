@@ -90,6 +90,9 @@ struct windd_arg256
 namespace GFX
 {
 
+constexpr float VIEW_ZOOM_MIN = 1.0f;
+constexpr float VIEW_ZOOM_MAX = 8.0f;
+
 #ifndef GFXSHORTINDEX
 
 typedef uint32_t IndexType;
@@ -753,8 +756,11 @@ public:
     int MeasureScreenTextWidth(const std::string &text) const;
     void matrixAspectCorrection(mat3x3 &inout, bool invert);
     void getAspectCorrection(float &cW, float &cH, bool invert);
+    void viewZoomCorrection(float &x, float &y, bool invert = false) const;
 
     void setFrustumClip(float near, float far);
+    void setViewZoom(float zoom);
+    float getViewZoom() const { return _viewZoom; }
 
     virtual void ConvAlphaPalette(UA_PALETTE *dst, const UA_PALETTE &src, bool transp);
 
@@ -930,6 +936,7 @@ protected:
     mat4x4f _frustum;
     float _frustumNear;
     float _frustumFar;
+    float _viewZoom = 1.0f;
 
     uint32_t _stdPsShader = 0;
     uint32_t _stdVsShader = 0;

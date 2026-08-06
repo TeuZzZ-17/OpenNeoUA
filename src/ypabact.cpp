@@ -5,12 +5,12 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stack>
-#include <set>
 #include <map>
 #include <functional>
 #include <algorithm>
 #include <limits>
 #include <vector>
+#include <unordered_set>
 #include <cmath>
 #include "yw.h"
 #include "ypabact.h"
@@ -112,7 +112,6 @@ static bool ypabact_IsGenesisSeparationVehicle(const NC_STACK_ypabact *unit)
 
 static bool ypabact_IsSeekAndExplodeArmed(NC_STACK_ypabact *unit);
 static void ypabact_FireProximityDefenseAtDeath(NC_STACK_ypabact *unit);
-static void ypabact_ApplyDeathDamage(NC_STACK_ypabact *unit, bool megadethPhase);
 
 static float ypabact_ReadPowerStationEnergyMultiplier()
 {
@@ -266,6 +265,46 @@ static float ypabact_ReadHandBrakePower()
 static float ypabact_ReadHandBrakeRecoilReduction()
 {
     return std::min(1.0f, ypabact_ReadHandBrakePower());
+}
+
+static float ypabact_ReadUnitKillStatBonusPerMarkPercent()
+{
+    static const float percent = []()
+    {
+        float parsed = ypabact_ReadNonNegativeFloatIni(
+            System::IniConf::GameUnitKillStatBonusPercent, 0.0f);
+        if ( !isfinite(parsed) || parsed <= 0.0f )
+            return 0.0f;
+
+        // Four existing marks at the maximum configured value produce at most
+        // +100%. This prevents unbounded movement and damage multipliers.
+        return std::min(parsed, 25.0f);
+    }();
+
+    return percent;
+}
+
+static bool ypabact_IsDirectLocalPlayerHandBrakeActive(NC_STACK_ypabact *bact)
+{
+    if ( !bact || !bact->_handbrakeHeld )
+        return false;
+
+    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
+    return world &&
+           !world->_isNetGame &&
+           world->getYW_userVehicle() == bact &&
+           bact->getBACT_inputting();
+}
+
+static float ypabact_GetHandBrakeRandomSpreadScale(NC_STACK_ypabact *bact)
+{
+    if ( !ypabact_IsDirectLocalPlayerHandBrakeActive(bact) )
+        return 1.0f;
+
+    // game.handbrake_power is the single canonical Hand Brake intensity.
+    // Its normalized 0..1 portion reduces both recoil and random spread; values
+    // above 1 may strengthen braking but remain capped for weapon modifiers.
+    return 1.0f - ypabact_ReadHandBrakeRecoilReduction();
 }
 
 static int ypabact_ReadUnitCollisionDamagePercent(Common::Ini::Key &key)
@@ -1073,6 +1112,12 @@ static void ypabact_ApplyDamagedRuntime(NC_STACK_ypabact *bact, bool active)
         maxrotMult *= cloneFactor;
     }
 
+    // Kill-mark bonuses use the same non-compounding runtime multiplier chain
+    // as damaged/debuff/clone effects. The immutable per-instance bases remain intact.
+    const float killStatMult = bact->GetKillStatMultiplier();
+    forceMult *= killStatMult;
+    maxrotMult *= killStatMult;
+
     bact->_force = bact->_base_force * forceMult;
     bact->_maxrot = bact->_base_maxrot * maxrotMult;
 }
@@ -1115,17 +1160,6 @@ static void ypabact_ApplyDamagedSoundPitch(NC_STACK_ypabact *bact)
         float debuffPitchMult = ypabact_SafeDamageMult(bact->_active_debuff.snd_pitch_mult);
         pitchMult *= debuffPitchMult;
         firePitchMult *= debuffPitchMult;
-    }
-
-    // OpenUA Black Sect clone balance: imperfect grey clones (owner 5) emit their
-    // engine/idle/fire loops at a slightly lower pitch, reinforcing the clone identity.
-    // Folded into the same per-frame pitch chain as the damaged/debuff multipliers,
-    // recomputed from the prototype base pitch each frame (never compounds).
-    if ( World::CloneBalance::IsCloneActor(bact) )
-    {
-        float clonePitchMult = World::CloneBalance::DownFactor();
-        pitchMult *= clonePitchMult;
-        firePitchMult *= clonePitchMult;
     }
 
     TSoundSource &normal = bact->_soundcarrier.Sounds[World::TVhclProto::SND_NORMAL];
@@ -1480,78 +1514,6 @@ static bool ypabact_HasEnemyNearby(NC_STACK_ypabact *carrier, float radius)
     }
 
     return false;
-}
-
-static bool ypabact_IsDeathDamageTarget(NC_STACK_ypabact *source, NC_STACK_ypabact *target)
-{
-    return source &&
-           target &&
-           source != target &&
-           source->getBACT_pWorld() == target->getBACT_pWorld() &&
-           target->_energy > 0 &&
-           target->_energy_max > 0 &&
-           target->_bact_type != BACT_TYPES_MISSLE &&
-           target->_status != BACT_STATUS_DEAD &&
-           target->_status != BACT_STATUS_CREATE &&
-           target->_status != BACT_STATUS_BEAM &&
-           !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER));
-}
-
-static void ypabact_ApplyDeathDamage(NC_STACK_ypabact *unit, bool megadethPhase)
-{
-    if ( !unit || !unit->getBACT_pWorld() || unit->_death_damage <= 0 || unit->_death_damage_radius <= 0.0 )
-        return;
-
-    bool &applied = megadethPhase ? unit->_death_damage_applied_megadeth : unit->_death_damage_applied_dead;
-    if ( applied )
-        return;
-
-    applied = true;
-
-    NC_STACK_ypaworld *world = unit->getBACT_pWorld();
-    const vec3d eventPos = unit->_position;
-    float radiusSq = unit->_death_damage_radius * unit->_death_damage_radius;
-    int sectorRadius = (int)(unit->_death_damage_radius / World::CVSectorLength) + 2;
-    Common::Point center = World::PositionToSectorID(eventPos);
-    std::vector<NC_STACK_ypabact *> targets;
-    std::set<NC_STACK_ypabact *> visited;
-
-    for (int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++)
-    {
-        for (int x = center.x - sectorRadius; x <= center.x + sectorRadius; x++)
-        {
-            Common::Point cellId(x, y);
-
-            if ( !world->IsSector(cellId) )
-                continue;
-
-            cellArea &cell = world->SectorAt(cellId);
-            for (NC_STACK_ypabact *target : cell.unitsList)
-            {
-                if ( !ypabact_IsDeathDamageTarget(unit, target) )
-                    continue;
-
-                vec3d delta = target->_position - eventPos;
-                if ( delta.dot(delta) <= radiusSq && visited.insert(target).second )
-                    targets.push_back(target);
-            }
-        }
-    }
-
-    for (NC_STACK_ypabact *target : targets)
-    {
-        if ( !ypabact_IsDeathDamageTarget(unit, target) )
-            continue;
-
-        int shieldedDamage = target->CalcShieldedCustomDamage(unit->_death_damage);
-        if ( shieldedDamage <= 0 )
-            continue;
-
-        bact_arg84 damage;
-        damage.energy = -shieldedDamage;
-        damage.unit = unit;
-        target->ModifyEnergy(&damage);
-    }
 }
 
 static bool ypabact_CarrierHasEnemyNearby(NC_STACK_ypabact *carrier)
@@ -2096,10 +2058,9 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _spawn_at_death_done = false;
     _spawn_at_death_protection_end_time = 0;
     _spawn_at_death_restore_vulnerable = false;
-    _death_damage = 0;
-    _death_damage_radius = 0.0;
-    _death_damage_applied_dead = false;
-    _death_damage_applied_megadeth = false;
+    _push_at_death_force = 0.0f;
+    _push_at_death_radius = 0.0f;
+    _push_at_death_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -2298,10 +2259,9 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _spawn_at_death_done = false;
     _spawn_at_death_protection_end_time = 0;
     _spawn_at_death_restore_vulnerable = false;
-    _death_damage = 0;
-    _death_damage_radius = 0.0;
-    _death_damage_applied_dead = false;
-    _death_damage_applied_megadeth = false;
+    _push_at_death_force = 0.0f;
+    _push_at_death_radius = 0.0f;
+    _push_at_death_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -3205,6 +3165,8 @@ int NC_STACK_ypabact::GetMinigunShotTime(bool userControlled, int frameDeltaMs) 
 
     if ( userControlled && _mgun_shot_time_user > 0 )
         shotTime = _mgun_shot_time_user;
+
+    shotTime = GetEffectiveShotTime(shotTime);
 
     if ( shotTime < frameDeltaMs )
         shotTime = frameDeltaMs;
@@ -4142,6 +4104,25 @@ static void ypabact_UpdateTankWeaponRecoilVisualOffset(NC_STACK_ypabact *unit, u
         dtime = AOE_PUSH_MAX_DT;
 
     unit->_weaponRecoilVisualOffset *= expf(-dtime / WEAPON_RECOIL_TAU);
+}
+
+float NC_STACK_ypabact::GetPushResistanceMultiplier() const
+{
+    if ( !_world )
+        return 1.0f;
+
+    const std::vector<World::TVhclProto> &protos = _world->GetVhclProtos();
+    const uint8_t protoId = _mimic_disguise_vehicleID
+        ? _mimic_disguise_vehicleID
+        : _vehicleID;
+    if ( protoId >= protos.size() )
+        return 1.0f;
+
+    float resistance = protos.at(protoId).push_resistance;
+    if ( !isfinite(resistance) )
+        return 0.0f;
+    resistance = std::max(0.0f, std::min(resistance, 1.0f));
+    return 1.0f - resistance;
 }
 
 void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
@@ -6760,6 +6741,116 @@ void NC_STACK_ypabact::CopyWaypointsStuff( NC_STACK_ypabact *bact)
     }
 }
 
+static bool ypabact_IsDeathPushTarget(const NC_STACK_ypabact *source,
+                                      const NC_STACK_ypabact *target)
+{
+    return source && target && source != target &&
+           target->_energy > 0 && target->_energy_max > 0 &&
+           target->_bact_type != BACT_TYPES_MISSLE &&
+           target->_bact_type != BACT_TYPES_GUN &&
+           target->_status != BACT_STATUS_DEAD &&
+           target->_status != BACT_STATUS_CREATE &&
+           target->_status != BACT_STATUS_BEAM &&
+           !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 |
+                                    BACT_STFLAG_CLEAN | BACT_STFLAG_NORENDER));
+}
+
+static void ypabact_ApplyConfiguredDeathPush(NC_STACK_ypabact *source)
+{
+    NC_STACK_ypaworld *world = source ? source->getBACT_pWorld() : NULL;
+    if ( !world || world->_isNetGame ||
+         source->_push_at_death_force <= 0.0f ||
+         source->_push_at_death_radius <= 0.0f )
+    {
+        return;
+    }
+
+    const vec3d origin = source->_position;
+    const float radius = source->_push_at_death_radius;
+    const float radiusSq = radius * radius;
+    if ( !isfinite(radiusSq) )
+        return;
+
+    const int sectorRadius = (int)(radius / World::CVSectorLength) + 2;
+    const Common::Point center = World::PositionToSectorID(origin);
+    std::unordered_set<NC_STACK_ypabact *> visited;
+
+    for ( int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++ )
+    {
+        for ( int x = center.x - sectorRadius; x <= center.x + sectorRadius; x++ )
+        {
+            const Common::Point cellId(x, y);
+            if ( !world->IsSector(cellId) )
+                continue;
+
+            for ( NC_STACK_ypabact *target : world->SectorAt(cellId).unitsList.safe_iter() )
+            {
+                if ( !ypabact_IsDeathPushTarget(source, target) ||
+                     !visited.insert(target).second )
+                {
+                    continue;
+                }
+
+                vec3d delta = target->_position - origin;
+                const float distanceSq = delta.dot(delta);
+                if ( !isfinite(distanceSq) || distanceSq <= 0.001f ||
+                     distanceSq > radiusSq )
+                {
+                    continue;
+                }
+
+                const float distance = sqrtf(distanceSq);
+                const float falloff = World::AoePushFalloffFactor(
+                    distance, radius, source->_push_at_death_falloff != 0);
+                const float appliedForce =
+                    source->_push_at_death_force *
+                    falloff *
+                    target->GetPushResistanceMultiplier();
+
+                if ( appliedForce > 0.0f )
+                    target->AddAoePush(delta / distance, appliedForce);
+            }
+        }
+    }
+}
+
+static NC_STACK_ypabact *ypabact_ResolveSessionKillCreditedUnit(NC_STACK_ypabact *victim)
+{
+    if ( !victim )
+        return NULL;
+
+    NC_STACK_ypabact *candidate = victim->_killer;
+    std::unordered_set<NC_STACK_ypabact *> visited;
+
+    // Normalize attached components and follow a bounded chain through dying
+    // damage sources. This preserves the original attacker for simultaneous
+    // chain kills instead of awarding only the first directly destroyed unit.
+    while ( candidate && candidate != victim && visited.insert(candidate).second )
+    {
+        if ( (candidate->_isUnitGunChild || candidate->_isDummy) &&
+             candidate->_parent && candidate->_parent != candidate )
+        {
+            candidate = candidate->_parent;
+            continue;
+        }
+
+        const bool candidateIsDying =
+            candidate->_status == BACT_STATUS_DEAD ||
+            (candidate->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
+
+        if ( candidateIsDying && candidate->_killer &&
+             candidate->_killer != candidate )
+        {
+            candidate = candidate->_killer;
+            continue;
+        }
+
+        return candidate;
+    }
+
+    return NULL;
+}
+
 void NC_STACK_ypabact::Die()
 {
     if ( _status_flg & BACT_STFLAG_DEATH1 )
@@ -6773,32 +6864,23 @@ void NC_STACK_ypabact::Die()
                           _host_station ? _host_station->_gid : 0,
                           _kidList.size());
 
-    // OpenUA custom: lightweight single-player kill marks. Damage from missiles
-    // already identifies the launcher; attached guns/dummies are normalized to
-    // their carrying unit. Components and friendly/self kills never award marks.
-    if ( _world && !_world->_isNetGame && _killer &&
-         _owner != World::OWNER_0 && _killer_owner != World::OWNER_0 &&
-         _owner != _killer_owner &&
-         _bact_type != BACT_TYPES_MISSLE && !_isUnitGunChild && !_isDummy )
+    // OpenUA custom: lightweight single-player kill marks. Each victim death is
+    // credited independently, including simultaneous chain kills, while attached
+    // guns/dummies are normalized to their carrying unit. Friendly/self kills,
+    // components and missiles never award marks.
+    NC_STACK_ypabact *creditedKiller = ypabact_ResolveSessionKillCreditedUnit(this);
+    const uint8_t creditedOwner = creditedKiller ? creditedKiller->_owner : World::OWNER_0;
+    if ( _world && !_world->_isNetGame && creditedKiller &&
+         _owner != World::OWNER_0 && creditedOwner != World::OWNER_0 &&
+         _owner != creditedOwner && creditedKiller != this &&
+         _bact_type != BACT_TYPES_MISSLE && !_isUnitGunChild && !_isDummy &&
+         creditedKiller->_bact_type != BACT_TYPES_MISSLE &&
+         creditedKiller->_bact_type != BACT_TYPES_ROBO )
     {
-        NC_STACK_ypabact *creditedKiller = _killer;
-        while ( creditedKiller &&
-                (creditedKiller->_isUnitGunChild || creditedKiller->_isDummy) &&
-                creditedKiller->_parent && creditedKiller->_parent != creditedKiller )
-        {
-            creditedKiller = creditedKiller->_parent;
-        }
-
-        if ( creditedKiller && creditedKiller != this &&
-             creditedKiller->_owner == _killer_owner &&
-             creditedKiller->_bact_type != BACT_TYPES_MISSLE &&
-             creditedKiller->_bact_type != BACT_TYPES_ROBO )
-        {
-            if ( _bact_type == BACT_TYPES_ROBO )
-                creditedKiller->_sessionKillMarks = 4;
-            else if ( creditedKiller->_sessionKillMarks < 4 )
-                creditedKiller->_sessionKillMarks++;
-        }
+        if ( _bact_type == BACT_TYPES_ROBO )
+            creditedKiller->_sessionKillMarks = 4;
+        else if ( creditedKiller->_sessionKillMarks < 4 )
+            creditedKiller->_sessionKillMarks++;
     }
 
     if ( _isUnitGunChild )
@@ -7025,8 +7107,8 @@ void NC_STACK_ypabact::Die()
     _secndTtype = BACT_TGT_TYPE_NONE;
     _primTtype = BACT_TGT_TYPE_NONE;
 
+    ypabact_ApplyConfiguredDeathPush(this);
     ypabact_FireProximityDefenseAtDeath(this);
-    ypabact_ApplyDeathDamage(this, false);
     ypabact_TrySpawnAtDeath(this);
 
     _status = BACT_STATUS_DEAD;
@@ -11159,17 +11241,17 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         else
             v4 = cooldownProto.shot_time;
 
-        if ( cooldownProto.salve_shots )
+        if ( cooldownProto.salve_shots &&
+             cooldownProto.salve_shots <= _salve_counter )
         {
-            if ( cooldownProto.salve_shots <= _salve_counter )
-                v4 = cooldownProto.salve_delay;
+            // salve_delay is a separate burst-pattern field, not one of the
+            // requested shot_time statistics.
+            v4 = cooldownProto.salve_delay;
         }
-
-        // OpenUA Black Sect clone balance: imperfect grey clones (owner 5) fire a
-        // little slower. We stretch the *effective* cooldown (shot_time * malus%) only;
-        // the weapon prototype's shot_time is never modified.
-        if ( World::CloneBalance::IsCloneActor(this) )
-            v4 = (int)((float)v4 * World::CloneBalance::AttackTimeFactor());
+        else
+        {
+            v4 = GetEffectiveShotTime(v4);
+        }
 
         if ( arg->g_time - _weapon_time < v4 )
             return 0;
@@ -11313,9 +11395,14 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
                                                                _weapon_arc_x, _weapon_arc_y,
                                                                _weapon_cone_xy);
 
-        if ( _weapon_spread_x > 0.0 || _weapon_spread_y > 0.0 )
+        // Hand Brake affects only the random component. Arc and cone were already
+        // applied above and intentionally keep their authored pattern unchanged.
+        const float handBrakeSpreadScale = ypabact_GetHandBrakeRandomSpreadScale(this);
+        const float effectiveSpreadX = _weapon_spread_x * handBrakeSpreadScale;
+        const float effectiveSpreadY = _weapon_spread_y * handBrakeSpreadScale;
+        if ( effectiveSpreadX > 0.0f || effectiveSpreadY > 0.0f )
             wobj->_fly_dir = ypabact_ApplyDirectionalSpread(_rotation, wobj->_fly_dir,
-                                                            _weapon_spread_x, _weapon_spread_y);
+                                                            effectiveSpreadX, effectiveSpreadY);
 
         wobj->_fly_dir_length = _fly_dir_length + wproto.start_speed;
 
@@ -11948,6 +12035,59 @@ void NC_STACK_ypabact::ApplyImpulse(bact_arg83 *arg)
     }
 }
 
+float NC_STACK_ypabact::GetKillStatBonusPercent() const
+{
+    if ( !_world || _world->_isNetGame || _sessionKillMarks == 0 )
+        return 0.0f;
+
+    const int marks = std::min((int)_sessionKillMarks, 4);
+    return marks * ypabact_ReadUnitKillStatBonusPerMarkPercent();
+}
+
+float NC_STACK_ypabact::GetKillStatMultiplier() const
+{
+    return 1.0f + GetKillStatBonusPercent() / 100.0f;
+}
+
+int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime) const
+{
+    if ( baseShotTime <= 0 )
+        return baseShotTime;
+
+    float multiplier = 1.0f;
+    if ( World::CloneBalance::IsCloneActor(this) )
+        multiplier *= World::CloneBalance::AttackTimeFactor();
+
+    // The kill bonus increases fire rate, therefore its linear stat multiplier
+    // divides the selected cooldown. This one helper is used after choosing the
+    // exact shot_time/user or mgun_shot_time/user field and never mutates a proto.
+    const float killStatMultiplier = GetKillStatMultiplier();
+    if ( killStatMultiplier > 0.0f )
+        multiplier /= killStatMultiplier;
+
+    return std::max(1, (int)floorf(baseShotTime * multiplier + 0.5f));
+}
+
+int NC_STACK_ypabact::GetEffectiveOutgoingDamage(int baseDamage) const
+{
+    if ( baseDamage == 0 )
+        return 0;
+
+    float multiplier = GetKillStatMultiplier();
+    if ( World::CloneBalance::IsCloneActor(this) )
+        multiplier *= World::CloneBalance::DownFactor();
+
+    if ( multiplier == 1.0f )
+        return baseDamage;
+
+    int scaled = (int)((float)baseDamage * multiplier);
+    // Never let truncation turn a real hit into zero damage. This helper accepts
+    // both the negative ModifyEnergy convention and positive damage magnitudes.
+    if ( scaled == 0 )
+        scaled = baseDamage < 0 ? -1 : 1;
+    return scaled;
+}
+
 float NC_STACK_ypabact::GetEffectiveShieldWithAdditionalMalus(float additionalMalus) const
 {
     float shield = (float)_shield;
@@ -11968,7 +12108,18 @@ float NC_STACK_ypabact::GetEffectiveShieldWithAdditionalMalus(float additionalMa
     if ( mult < 0.0f )
         mult = 0.0f;
 
-    return shield * mult;
+    const float killBonusPercent = GetKillStatBonusPercent();
+    const float baseEffectiveShield = shield * mult;
+    float effectiveShield = baseEffectiveShield * GetKillStatMultiplier();
+
+    // Shield 100 is complete immunity in the existing damage formula. A medal
+    // bonus may improve defense but must not turn a previously vulnerable unit
+    // invulnerable. Units already at 100+ before the medal remain unchanged.
+    if ( killBonusPercent > 0.0f && baseEffectiveShield < 100.0f &&
+         effectiveShield >= 100.0f )
+        effectiveShield = 99.0f;
+
+    return effectiveShield;
 }
 
 float NC_STACK_ypabact::GetEffectiveShield() const
@@ -12007,21 +12158,12 @@ bool NC_STACK_ypabact::IsInvulnerableToDamage() const
 
 void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
 {
-    // OpenUA Black Sect clone balance: when the *attacker* is an imperfect grey
-    // clone (owner 5), its outgoing final damage is reduced by the malus. This is
-    // the single choke point every damage source funnels through (direct weapons,
-    // missiles, lasers, guns, AoE...), so the malus is applied exactly once per hit
-    // and never compounds. Only actual damage (negative delta) from a real attacker
-    // is scaled; healing/energy transfer and prototype values stay untouched.
-    if ( arg->energy < 0 && !arg->bypassAttackerDamageModifiers &&
-         World::CloneBalance::IsCloneActor(arg->unit) )
-    {
-        int scaled = (int)((float)arg->energy * World::CloneBalance::DownFactor());
-        // Never let rounding turn a real hit into zero damage.
-        if ( scaled == 0 )
-            scaled = -1;
-        arg->energy = scaled;
-    }
+    // OpenUA attacker modifiers share this single final-damage choke point.
+    // Clone malus and the per-instance kill-mark bonus are folded into one value,
+    // applied exactly once to direct weapons, missiles, lasers, MGUN and AoE.
+    // Healing, environmental bypasses and shared weapon prototypes stay untouched.
+    if ( arg->energy < 0 && !arg->bypassAttackerDamageModifiers && arg->unit )
+        arg->energy = arg->unit->GetEffectiveOutgoingDamage(arg->energy);
 
     if ( IsInvulnerableToDamage() && arg->energy < 0 )
         return;
@@ -12589,10 +12731,18 @@ void CollisionWithBact__sub0(NC_STACK_ypabact *bact, NC_STACK_ypabact *a2)
     if ( bact->_energy + v3 > bact->_energy_max )
     {
         NC_STACK_yparobo *robo = bact->_host_station;
+        if ( !robo && bact->_bact_type == BACT_TYPES_ROBO )
+            robo = static_cast<NC_STACK_yparobo *>(bact);
 
         int v10 = v3 - (bact->_energy_max - bact->_energy);
 
         bact->_energy = bact->_energy_max;
+
+        // A Host Station is its own plasma overflow receiver. Detached/orphaned
+        // units have no valid reserve destination, so safely keep the local
+        // energy clamp and discard only the excess instead of dereferencing NULL.
+        if ( !robo )
+            return;
 
         if ( robo->_energy + v10 > robo->_energy_max )
         {
@@ -13725,10 +13875,9 @@ void NC_STACK_ypabact::Renew()
     _spawn_at_death_done = false;
     _spawn_at_death_protection_end_time = 0;
     _spawn_at_death_restore_vulnerable = false;
-    _death_damage = 0;
-    _death_damage_radius = 0.0;
-    _death_damage_applied_dead = false;
-    _death_damage_applied_megadeth = false;
+    _push_at_death_force = 0.0f;
+    _push_at_death_radius = 0.0f;
+    _push_at_death_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -14797,34 +14946,14 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         {
             v45 = GetMinigunShotTime(v88 != 0, frameDeltaMs);
         }
-        else if ( v88 )
-        {
-            int v43 = mgunProto->shot_time_user;
-            int v42 = frameDeltaMs;
-
-            if ( v43 <= v42 )
-                v45 = v42;
-            else
-                v45 = v43;
-        }
         else
         {
-            int v47 = mgunProto->shot_time;
-            int v46 = frameDeltaMs;
-
-            if ( v47 <= v46 )
-                v45 = v46;
-            else
-                v45 = v47;
+            const int configuredShotTime = v88
+                ? mgunProto->shot_time_user
+                : mgunProto->shot_time;
+            v45 = std::max(frameDeltaMs,
+                           GetEffectiveShotTime(configuredShotTime));
         }
-
-        // OpenUA Black Sect clone balance: imperfect grey clones (owner 5) fire their
-        // machine gun slower. The effective shot_time (cooldown between visible shots)
-        // is stretched by the malus % (game.black_sect_clone_malus_percent), exactly
-        // like the main weapon. Runtime-only; the weapon prototype's shot_time is never
-        // modified, and only owner-5 combat units are affected.
-        if ( World::CloneBalance::IsCloneActor(this) )
-            v45 = (int)((float)v45 * World::CloneBalance::AttackTimeFactor());
 
         if ( arg->field_10 - _mgun_time > v45 )
         {
@@ -14846,6 +14975,9 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         vec3d shotOldPos = cockpitAim ? shotPos : _old_pos;
         float spreadX = _mgun_spread_x;
         float spreadY = _mgun_spread_y;
+        const float handBrakeSpreadScale = ypabact_GetHandBrakeRandomSpreadScale(this);
+        spreadX *= handBrakeSpreadScale;
+        spreadY *= handBrakeSpreadScale;
 
         vec3d fireDir = ypabact_GetMinigunFireDir(this, arg->field_0);
         if ( cockpitAim )
@@ -15160,6 +15292,7 @@ void NC_STACK_ypabact::sub_4843BC(NC_STACK_ypabact *bact2, int a3)
         {
             v23 = v20.x / v20.z;
             v24 = v20.y / v20.z;
+            GFX::Engine.viewZoomCorrection(v23, v24);
         }
         else
         {
@@ -16625,7 +16758,6 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
         UsesVehicleMinigunTiming() && _vp_active == 7 &&
         _mgun_vp_fire_end_time > _clock &&
         (arg->newStatus == BACT_STATUS_NORMAL || arg->newStatus == BACT_STATUS_IDLE);
-
     if ( arg->newStatus == BACT_STATUS_DEAD && (_vp_active != 2 && _vp_active != 3) )
     {
         _energy = -10000;
@@ -16882,8 +17014,6 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
 
         if ( _vp_active != 3 )
         {
-            ypabact_ApplyDeathDamage(this, true);
-
             SetVP(_vp_megadeth);
             _vp_active = 3;
 
@@ -16945,15 +17075,10 @@ void NC_STACK_ypabact::ChangeSectorEnergy(yw_arg129 *arg)
     if ( _world && _world->IsSpectatorBact(this) )
         return;
 
-    // OpenUA Black Sect clone balance: sector/building damage uses ChangeSectorEnergy
-    // instead of ModifyEnergy, so apply the same attacker-side damage malus here.
-    if ( arg->field_10 > 0 && World::CloneBalance::IsCloneActor(arg->unit) )
-    {
-        int scaled = (int)((float)arg->field_10 * World::CloneBalance::DownFactor());
-        if ( scaled == 0 )
-            scaled = 1;
-        arg->field_10 = scaled;
-    }
+    // Sector/building damage bypasses ModifyEnergy, so reuse the same attacker-side
+    // damage helper used by units, missiles, lasers, MGUN and AoE.
+    if ( arg->field_10 > 0 && arg->unit )
+        arg->field_10 = arg->unit->GetEffectiveOutgoingDamage(arg->field_10);
 
     arg->OwnerID = World::OWNER_RECALC;
 

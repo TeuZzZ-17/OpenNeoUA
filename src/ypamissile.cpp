@@ -56,18 +56,9 @@ static float ypamissile_GetPushAtDeathMultiplier()
     }
 }
 
-static float ypamissile_GetTargetPushMultiplier(NC_STACK_ypaworld *world, NC_STACK_ypabact *target)
+static float ypamissile_GetTargetPushMultiplier(NC_STACK_ypabact *target)
 {
-    if ( !world || !target )
-        return 1.0f;
-
-    const std::vector<World::TVhclProto> &protos = world->GetVhclProtos();
-    uint8_t protoId = target->_mimic_disguise_vehicleID ? target->_mimic_disguise_vehicleID : target->_vehicleID;
-
-    if ( protoId >= protos.size() )
-        return 1.0f;
-
-    return 1.0f - ypamissile_Clamp01(protos.at(protoId).push_resistance);
+    return target ? target->GetPushResistanceMultiplier() : 1.0f;
 }
 
 static bool ypamissile_TargetHasPushResistance(NC_STACK_ypaworld *world, NC_STACK_ypabact *target)
@@ -1373,7 +1364,7 @@ bool NC_STACK_ypamissile::ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *ap
     if ( !ypamissile_GetDirectPushDir(this, bct, fallbackDir, &pushDir) )
         return false;
 
-    float pushStrength = (float)_mislDirectPush * ypamissile_GetTargetPushMultiplier(_world, bct);
+    float pushStrength = (float)_mislDirectPush * ypamissile_GetTargetPushMultiplier(bct);
     if ( pushStrength <= 0.0f )
         return false;
 
@@ -1804,15 +1795,12 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                     else
                         appliedPushDir = vec3d(1.0f, 0.0f, 0.0f);
 
-                    appliedPushStrength = (float)_mislAoeUnitPush;
-                    if ( _mislAoeFalloff )
-                    {
-                        float t = 1.0f - distance / _mislAoeUnitRadius;
-                        if ( t < 0.0f ) t = 0.0f;
-                        appliedPushStrength *= t;
-                    }
+                    appliedPushStrength =
+                        (float)_mislAoeUnitPush *
+                        World::AoePushFalloffFactor(distance, _mislAoeUnitRadius,
+                                                    _mislAoeFalloff != 0);
 
-                    appliedPushStrength *= ypamissile_GetTargetPushMultiplier(_world, bct);
+                    appliedPushStrength *= ypamissile_GetTargetPushMultiplier(bct);
                     hasAoePush = appliedPushStrength > 0.0f;
                 }
 

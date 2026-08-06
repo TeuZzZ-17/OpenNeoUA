@@ -19,6 +19,7 @@
 #include "system/inivals.h"
 #include "system/system.h"
 #include "world/spin.h"
+#include "crashdiag.h"
 
 extern uint32_t bact_id;
 
@@ -347,31 +348,42 @@ bool NC_STACK_ypaworld::LoadTypeMap(const std::string &mapName)
 
     SetMapSize(_lvlTypeMap.Size());
 
-    int32_t id = 0;
     for(int y = 0; y < _mapSize.y; y++)
     {
         for (int x = 0; x < _mapSize.x; x++)
         {
             cellArea &cell = _cells(x, y);
+            const uint8_t sectorId = _lvlTypeMap(cell.CellId);
+            TSectorDesc *sectp = &_secTypeArray[sectorId];
 
-            TSectorDesc *sectp = &_secTypeArray[ _lvlTypeMap( cell.CellId ) ];
-
-            cell.type_id = _lvlTypeMap( cell.CellId );
+            cell.type_id = sectorId;
             cell.SectorType = sectp->SectorType;
             cell.energy_power = 0;
 
-            if ( sectp->SectorType == 1)
+            const int maxBuildingX = sectp->SectorType == 1 ? 1 : 3;
+            const int maxBuildingY = sectp->SectorType == 1 ? 1 : 3;
+            for (int bldY = 0; bldY < maxBuildingY; bldY++)
             {
-                cell.buildings_health.At(0, 0) = sectp->SubSectors.At(0, 0)->StartHealth;
-            }
-            else
-            {
-                for (int bldY = 0; bldY < 3; bldY++)
-                    for (int bldX = 0; bldX < 3; bldX++)
-                        cell.buildings_health.At(bldX, bldY) = sectp->SubSectors.At(bldX, bldY)->StartHealth;
-            }
+                for (int bldX = 0; bldX < maxBuildingX; bldX++)
+                {
+                    TSubSectorDesc *subSector = sectp->SubSectors.At(bldX, bldY);
+                    if ( !subSector )
+                    {
+                        ypa_log_out(
+                            "LoadTypeMap: invalid SET sector descriptor: map='%s' cell=[%d,%d] sector_id=%u sector_type=%d slot=[%d,%d].\n",
+                            mapName.c_str(), x, y, (unsigned)sectorId,
+                            sectp->SectorType, bldX, bldY);
+                        CrashDiag::Breadcrumb(
+                            "LEVEL_TYPEMAP_INVALID",
+                            "map=%s cell=%d,%d sector_id=%u sector_type=%d slot=%d,%d",
+                            mapName.c_str(), x, y, (unsigned)sectorId,
+                            sectp->SectorType, bldX, bldY);
+                        return false;
+                    }
 
-            id++;
+                    cell.buildings_health.At(bldX, bldY) = subSector->StartHealth;
+                }
+            }
         }
     }
     return true;
@@ -5062,7 +5074,12 @@ void NC_STACK_ypaworld::ypaworld_func64__sub19__sub2__sub0(int id)
         }
     }
 
-    ypaworld_func64__sub19__sub2__sub0__sub0(sitem.ActivateOwner, tmp.x, tmp.y, sitem.CurrentRadius);
+    // The superbomb itself does not request a slowdown. If this damage pass
+    // actually destroys a Host Station, the normal Host Station death path
+    // decides whether to start the shared time-scale event using the configured
+    // scale, duration and maximum distance.
+    ypaworld_func64__sub19__sub2__sub0__sub0(
+        sitem.ActivateOwner, tmp.x, tmp.y, sitem.CurrentRadius);
 }
 
 void NC_STACK_ypaworld::ypaworld_func64__sub19__sub2(int id)
@@ -7364,13 +7381,14 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
 
-        // Fuchsia = the vehicle death_damage_radius. It is rendered only when
-        // the vehicle explicitly has a positive radius configured.
-        if ( unit->_death_damage_radius > 0.01f )
+        // Purple = per-vehicle push_at_death_radius. This is a true 3D sphere
+        // because the runtime distance test is also spherical.
+        if ( unit->_push_at_death_force > 0.0f &&
+             unit->_push_at_death_radius > 0.01f )
         {
-            drawRing(pos, unit->_death_damage_radius, 0, 255, 0, 255);
-            drawRing(pos, unit->_death_damage_radius, 1, 255, 0, 255);
-            drawRing(pos, unit->_death_damage_radius, 2, 255, 0, 255);
+            drawRing(pos, unit->_push_at_death_radius, 0, 185, 80, 255);
+            drawRing(pos, unit->_push_at_death_radius, 1, 185, 80, 255);
+            drawRing(pos, unit->_push_at_death_radius, 2, 185, 80, 255);
         }
 
         // --- GAMEPLAY RANGE RADII (single horizontal ring, distinct colors) ---

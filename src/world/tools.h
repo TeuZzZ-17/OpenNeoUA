@@ -34,6 +34,24 @@ inline vec3d SectorIDToCenterPos3(const Common::Point &sec)
 inline vec2d SectorIDToCenterPos2(const Common::Point &sec)
 { return vec2d((float)sec.x * CVSectorLength + CVSectorHalfLength, -((float)sec.y * CVSectorLength + CVSectorHalfLength)); };
 
+// Shared radial push attenuation. This is the same linear shape historically
+// used by aoe_unit_push when aoe_falloff is enabled.
+inline float AoePushFalloffFactor(float distance, float radius, bool falloff)
+{
+    if ( radius <= 0.0f || distance > radius )
+        return 0.0f;
+
+    if ( !falloff )
+        return 1.0f;
+
+    float factor = 1.0f - distance / radius;
+    if ( factor < 0.0f )
+        return 0.0f;
+    if ( factor > 1.0f )
+        return 1.0f;
+    return factor;
+}
+
 
 Common::PlaneBytes GetPlaneBytesFromBitmap(NC_STACK_bitmap *bitmap);
 Common::PlaneBytes LoadMapDataFromImage(const std::string &fileName);
