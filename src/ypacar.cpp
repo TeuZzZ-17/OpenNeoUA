@@ -9,7 +9,6 @@
 #include "ypacar.h"
 #include "yw_net.h"
 
-#include "world/clonebalance.h"
 
 #include "log.h"
 
@@ -174,13 +173,10 @@ void NC_STACK_ypacar::DoKamikaze()
                             int v26 = exp(tmp.length() * -2.8 / World::CVSectorLength) * _carBlast;
                             int v67 = ((1.0 - v19->GetEffectiveShield() * 0.01) * (float)v26);
 
-                            // OpenUA Black Sect clone balance: imperfect grey clones (owner 5)
-                            // deal slightly lower outgoing damage. The car self-destruct blast
-                            // applies energy directly (not via ModifyEnergy), so the attacker-side
-                            // damage malus is mirrored here. Applied before the local hit and the
-                            // net broadcast so both stay consistent; the prototype is never touched.
-                            if ( World::CloneBalance::IsCloneActor(this) )
-                                v67 = (int)((float)v67 * World::CloneBalance::DownFactor());
+                            // The car self-destruct blast applies energy directly instead of
+                            // entering ModifyEnergy. Reuse the shared attacker-side damage helper
+                            // so kill bonuses and Black Sect maluses remain identical everywhere.
+                            v67 = GetEffectiveOutgoingDamage(v67);
 
                             if ( !v19->IsInvulnerableToDamage() )
                             {

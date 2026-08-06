@@ -94,8 +94,14 @@ Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std
 // OpenUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::UiMapMarkerSound("ui.map_marker_sound", Common::Ini::KT_STRING, std::string());
-Common::Ini::Key IniConf::UiMoveOrderTemplate("ui.move_order_template", Common::Ini::KT_DIGIT, (int32_t)1);
-Common::Ini::Key IniConf::UiAttackOrderTemplate("ui.attack_order_template", Common::Ini::KT_DIGIT, (int32_t)0);
+Common::Ini::Key IniConf::UiMoveOrderTemplate(
+    "ui.move_order_template", Common::Ini::KT_STRING,
+    std::string("TacticalMap/Icons/MoveOrder/owner_{owner}/move_order_01.svg"));
+Common::Ini::Key IniConf::UiAttackOrderTemplate(
+    "ui.attack_order_template", Common::Ini::KT_STRING, std::string());
+Common::Ini::Key IniConf::UiRoboMoveOrderTemplate(
+    "ui.robo.move_order_template", Common::Ini::KT_STRING,
+    std::string("TacticalMap/Icons/MoveOrder/owner_{owner}/move_order_01.svg"));
 
 
 // Input Engine
@@ -278,11 +284,25 @@ Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_en
 // the vanilla fall-damage calculation.
 Common::Ini::Key IniConf::GameFallDamagePercent("game.fall_damage_percent", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
+// OpenUA: single Hand Brake intensity for braking strength and the normalized
+// recoil/random-spread reduction. Zero disables all three effects; values above
+// one may strengthen braking while weapon modifiers remain capped at 100%.
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
+// OpenUA: linear per-session unit stat bonus derived from the existing 0..4 kill marks.
+// The runtime clamps the configured per-mark value and never mutates shared prototypes.
+Common::Ini::Key IniConf::GameUnitKillStatBonusPercent("game.unit_kill_stat_bonus_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
-Common::Ini::Key IniConf::GameGemUnlockTimeScale("game.gem_unlock_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
+// OpenUA: display lifetime of the new GEM-unlock popup only. GEM unlocks no
+// longer alter gameplay time. Missing/invalid values preserve 8000 ms.
+Common::Ini::Key IniConf::GameGemUnlockDuration("game.gem_unlock_duration", Common::Ini::KT_WORD, std::string("8000"));
+// OpenUA: Host Station destruction slowdown. Defaults disable the feature and
+// preserve existing gameplay when scale/duration are absent. A zero maximum
+// distance keeps the previous unlimited-range behavior.
+Common::Ini::Key IniConf::GameRoboDeathTimeScale("game.robo_death_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GameRoboDeathTimeScaleDuration("game.robo_death_time_scale_duration", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameRoboDeathTimeScaleMaxDistance("game.robo_death_time_scale_max_distance", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
 // OpenUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
@@ -340,11 +360,11 @@ Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Comm
 Common::Ini::Key IniConf::UiStatusIconBlinkCount("ui.status_icon_blink_count", Common::Ini::KT_DIGIT, (int32_t)0);
 
 // OpenUA custom: Black Sect "imperfect grey clone" runtime balance (owner/faction 5).
-// When enabled, live Black Sect actors get a small malus (default 5%) to effective
-// defense, attack speed, outgoing damage, force, maxrot and sound pitch, plus an
-// automatic grey identity tint. These are RUNTIME-only effective-value adjustments:
+// When enabled, live Black Sect actors get a small malus (default 5%) to
+// effective shield, outgoing damage, force, maxrot and the selected weapon/MGUN
+// cooldown fields, plus an automatic grey identity tint. These are RUNTIME-only adjustments:
 // they never modify the shared vehicle/weapon prototypes and never touch energy/maxHP.
-// game.black_sect_clone_malus_percent = 5 ; malus magnitude in percent (defense/damage/force/maxrot/pitch -p%, shot_time +p%)
+// game.black_sect_clone_malus_percent = 5 ; malus to force/maxrot/effective shield/outgoing damage and all configured shot times
 Common::Ini::Key IniConf::GameBlackSectCloneMalusPercent("game.black_sect_clone_malus_percent", Common::Ini::KT_DIGIT, (int32_t)5);
 // game.black_sect_clone_tint = 140_140_140_255 ; grey clone identity tint, R_G_B_A each 0..255
 Common::Ini::Key IniConf::GameBlackSectCloneTint("game.black_sect_clone_tint", Common::Ini::KT_WORD, std::string("140_140_140_255"));
@@ -565,10 +585,14 @@ void IniConf::Init()
         , &GameFallDamagePercent
         , &GamePushAtDeathMultiplier
         , &GameHandBrakePower
+        , &GameUnitKillStatBonusPercent
         , &GameHandBrakeSound
         , &GameGemUnlockNewUI
         , &GameGemUnlockSound
-        , &GameGemUnlockTimeScale
+        , &GameGemUnlockDuration
+        , &GameRoboDeathTimeScale
+        , &GameRoboDeathTimeScaleDuration
+        , &GameRoboDeathTimeScaleMaxDistance
         , &GameWorldUiMaxDistance
         , &GameAiTargetRange
         , &GameMgunRange
@@ -651,6 +675,7 @@ void IniConf::Init()
         , &UiMapMarkerSound
         , &UiMoveOrderTemplate
         , &UiAttackOrderTemplate
+        , &UiRoboMoveOrderTemplate
     };
 }
 

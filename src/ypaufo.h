@@ -15,6 +15,7 @@ public:
     virtual void Move(move_msg *arg);
     virtual size_t SetPosition(bact_arg80 *arg);
     virtual void Renew();
+    virtual float GetPlayerViewZoom() const override { return _playerViewZoom; }
 
     NC_STACK_ypaufo()
     {
@@ -23,6 +24,7 @@ public:
         _ufoBoost       = 0.0;
         _ufoProcAngle   = 0.0;
         _ufoFlags       = 0;
+        _playerViewZoom = 1.0f;
     };
     virtual ~NC_STACK_ypaufo() {};
 
@@ -49,6 +51,7 @@ public:
     float _ufoBoost       = 0.0;
     float _ufoProcAngle   = 0.0;
     int   _ufoFlags       = 0;
+    float _playerViewZoom = 1.0f;
 };
 
 #endif // YUFO_H_INCLUDED

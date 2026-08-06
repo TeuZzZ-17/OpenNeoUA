@@ -56,28 +56,99 @@ GuiList stru_5C91D0;
 
 uint32_t bact_id = 0x10000;
 
-static constexpr uint32_t GEM_NEW_UI_NOTIFICATION_DURATION_MS = 8000;
-static constexpr float GEM_NEW_UI_MIN_TIME_SCALE = 0.05f;
-static float yw_GetGemUnlockTimeScale()
+static constexpr uint32_t GEM_NEW_UI_DEFAULT_DURATION_MS = 8000;
+static constexpr uint32_t GAMEPLAY_TIME_SCALE_MAX_DURATION_MS = 600000;
+static constexpr float GAMEPLAY_MIN_TIME_SCALE = 0.05f;
+static constexpr float ROBO_DEATH_TIME_SCALE_MAX_DISTANCE_LIMIT = 1000000.0f;
+
+struct TimedGameplayScaleProfile
 {
-    const std::string value = System::IniConf::GameGemUnlockTimeScale.Get<std::string>();
+    float scale = 1.0f;
+    uint32_t durationMs = 0;
+};
+
+static float yw_ReadGameplayTimeScale(Common::Ini::Key &key, float fallback)
+{
+    const std::string value = key.Get<std::string>();
     if ( value.empty() || value.find(',') != std::string::npos )
-        return 1.0f;
+        return fallback;
 
     try
     {
         size_t pos = 0;
-        float scale = std::stof(value, &pos);
+        const float scale = std::stof(value, &pos);
         if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
              !isfinite(scale) || scale <= 0.0f )
-            return 1.0f;
+            return fallback;
 
-        return std::max(GEM_NEW_UI_MIN_TIME_SCALE, std::min(scale, 1.0f));
+        return std::max(GAMEPLAY_MIN_TIME_SCALE, std::min(scale, 1.0f));
     }
     catch (...)
     {
-        return 1.0f;
+        return fallback;
     }
+}
+
+static uint32_t yw_ReadNonNegativeDuration(Common::Ini::Key &key,
+                                           uint32_t fallback)
+{
+    const std::string value = key.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return fallback;
+
+    try
+    {
+        size_t pos = 0;
+        const long long duration = std::stoll(value, &pos, 0);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             duration < 0 )
+            return fallback;
+
+        return (uint32_t)std::min<long long>(duration,
+                                             GAMEPLAY_TIME_SCALE_MAX_DURATION_MS);
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static float yw_ReadNonNegativeDistance(Common::Ini::Key &key, float fallback)
+{
+    const std::string value = key.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return fallback;
+
+    try
+    {
+        size_t pos = 0;
+        const float distance = std::stof(value, &pos);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             !isfinite(distance) || distance < 0.0f )
+            return fallback;
+
+        return std::min(distance, ROBO_DEATH_TIME_SCALE_MAX_DISTANCE_LIMIT);
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static uint32_t yw_GetGemUnlockDuration()
+{
+    return yw_ReadNonNegativeDuration(System::IniConf::GameGemUnlockDuration,
+                                      GEM_NEW_UI_DEFAULT_DURATION_MS);
+}
+
+static TimedGameplayScaleProfile yw_GetRoboDeathScaleProfile()
+{
+    TimedGameplayScaleProfile profile;
+    profile.scale = yw_ReadGameplayTimeScale(
+        System::IniConf::GameRoboDeathTimeScale, 1.0f);
+    profile.durationMs = yw_ReadNonNegativeDuration(
+        System::IniConf::GameRoboDeathTimeScaleDuration, 0);
+    return profile;
 }
 
 struct PlayerSprintConfig
@@ -148,33 +219,39 @@ static PlayerSprintConfig yw_GetPlayerSprintConfig()
     return config;
 }
 
-static float yw_GetActiveGemUnlockTimeScale(NC_STACK_ypaworld *yw)
+static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw)
 {
-    if ( !yw || yw->_isNetGame || !yw->HasActiveNewGemNotification() )
+    if ( !yw || yw->_isNetGame )
         return 1.0f;
 
-    return yw_GetGemUnlockTimeScale();
+    if ( yw->HasActiveRoboDeathTimeScale() )
+        return yw_GetRoboDeathScaleProfile().scale;
+
+    return 1.0f;
 }
 
-static int32_t yw_GetGemScaledFrameTime(NC_STACK_ypaworld *yw, int32_t frameTime, float scale)
+static int32_t yw_GetScaledGameplayFrameTime(NC_STACK_ypaworld *yw,
+                                              int32_t frameTime,
+                                              float scale)
 {
     if ( !yw || scale >= 1.0f )
     {
         if ( yw )
-            yw->_gemUnlockTimeScaleRemainder = 0.0;
+            yw->_gameplayTimeScaleRemainder = 0.0;
         return frameTime;
     }
 
-    const double scaledExact = (double)frameTime * scale + yw->_gemUnlockTimeScaleRemainder;
+    const double scaledExact = (double)frameTime * scale +
+                               yw->_gameplayTimeScaleRemainder;
     int32_t scaledFrameTime = (int32_t)floor(scaledExact);
-    yw->_gemUnlockTimeScaleRemainder = scaledExact - scaledFrameTime;
+    yw->_gameplayTimeScaleRemainder = scaledExact - scaledFrameTime;
 
     // Several legacy paths require a positive integral delta. Preserve that
     // invariant at extremely high frame rates.
     if ( scaledFrameTime < 1 )
     {
         scaledFrameTime = 1;
-        yw->_gemUnlockTimeScaleRemainder = 0.0;
+        yw->_gameplayTimeScaleRemainder = 0.0;
     }
 
     return scaledFrameTime;
@@ -1085,6 +1162,8 @@ size_t NC_STACK_ypaworld::Deinit()
 
 void sub_445230(NC_STACK_ypaworld *yw)
 {
+    GFX::Engine.setViewZoom(1.0f);
+
     if ( yw->UpdateSpectatorFollowCamera(NULL) )
         return;
 
@@ -1107,6 +1186,13 @@ void sub_445230(NC_STACK_ypaworld *yw)
             yw->_viewerPosition = yw->_viewerBact->_position;
 
         yw->_viewerRotation = yw->_viewerBact->_rotation;
+    }
+
+    if (yw->_viewerBact == yw->_userUnit && yw->_userUnit
+            && yw->_userUnit->_bact_type == BACT_TYPES_UFO
+            && yw->_userUnit->getBACT_inputting())
+    {
+        GFX::Engine.setViewZoom(yw->_userUnit->GetPlayerViewZoom());
     }
 }
 
@@ -1161,11 +1247,11 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
 
         const int32_t unscaledFrameTime = arg->DTime;
-        const float gemTimeScale = yw_GetActiveGemUnlockTimeScale(this);
+        const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this);
 
-        // The GEM slowdown is one global gameplay time domain. Audio advances
-        // and plays back with the same scale as physics, AI, timers and sprint.
-        SFXEngine::SFXe.SetTimeScale(gemTimeScale);
+        // Host Station deaths use the single global gameplay-time scale.
+        // GEM unlock notifications remain entirely on real/UI time.
+        SFXEngine::SFXe.SetTimeScale(gameplayTimeScale);
 
         if ( _userUnit )
         {
@@ -1342,16 +1428,17 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         bool gameplayFrozen = openUADebug && _debugGameplayFrozen;
 
         if ( !gameplayFrozen )
-            arg->DTime = yw_GetGemScaledFrameTime(this, arg->DTime, gemTimeScale);
+            arg->DTime = yw_GetScaledGameplayFrameTime(this, arg->DTime,
+                                                         gameplayTimeScale);
         else
-            _gemUnlockTimeScaleRemainder = 0.0;
+            _gameplayTimeScaleRemainder = 0.0;
 
         if ( !gameplayFrozen )
             _timeStamp += arg->DTime;
 
         // Keep render animation phase identical to the platform timestamp when
         // gameplay runs at 1.0, then advance it only through the scaled world
-        // clock during GEM slowdown.  This avoids both a phase change in normal
+        // clock during timed slowdown events. This avoids both a phase change in normal
         // play and a real-time animation leak while slowed.
         if ( !_gameplayRenderTimeBaseSet )
         {
@@ -1368,8 +1455,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         _updateMessage.units_count = 0;
         _updateMessage.inpt = arg->field_8;
         // Sprint consumes the same already-scaled gameplay delta as every
-        // other update path.  New systems should use _updateMessage.frameTime
-        // or _timeStamp rather than adding feature-specific GEM scaling.
+        // other update path. New systems should use _updateMessage.frameTime
+        // or _timeStamp rather than adding event-specific scaling.
         UpdatePlayerSprint(_updateMessage.inpt, gameplayFrozen ? 0 : _updateMessage.frameTime);
         _FPS = 1024 / unscaledFrameTime;
         _profileVals[PFID_FPS] = _FPS;
@@ -1722,14 +1809,57 @@ bool NC_STACK_ypaworld::IsGemNotificationCaptureActive() const
 
 bool NC_STACK_ypaworld::HasActiveNewGemNotification() const
 {
-    return System::IniConf::GameGemUnlockNewUI.Get<bool>() &&
+    const uint32_t durationMs = yw_GetGemUnlockDuration();
+    return durationMs > 0 &&
+           System::IniConf::GameGemUnlockNewUI.Get<bool>() &&
            _upgradeId != -1 &&
-           GetNewGemNotificationElapsedTime() < GEM_NEW_UI_NOTIFICATION_DURATION_MS;
+           GetNewGemNotificationElapsedTime() < durationMs;
 }
 
 uint32_t NC_STACK_ypaworld::GetNewGemNotificationElapsedTime() const
 {
     return SDL_GetTicks() - _upgradeTimeStamp;
+}
+
+void NC_STACK_ypaworld::StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo)
+{
+    if ( _isNetGame || !destroyedRobo )
+        return;
+
+    const TimedGameplayScaleProfile profile = yw_GetRoboDeathScaleProfile();
+    if ( profile.scale >= 1.0f || profile.durationMs == 0 )
+        return;
+
+    const float maxDistance = yw_ReadNonNegativeDistance(
+        System::IniConf::GameRoboDeathTimeScaleMaxDistance, 0.0f);
+    if ( maxDistance > 0.0f )
+    {
+        if ( !_userUnit )
+            return;
+
+        const float dx = destroyedRobo->_position.x - _userUnit->_position.x;
+        const float dz = destroyedRobo->_position.z - _userUnit->_position.z;
+        if ( dx * dx + dz * dz > maxDistance * maxDistance )
+            return;
+    }
+
+    const uint32_t now = SDL_GetTicks();
+    const uint32_t requestedEnd = now + profile.durationMs;
+
+    // Repeated qualifying Host Station deaths refresh/extend the one shared
+    // event instead of creating parallel timers. The trigger is requested only
+    // by a real Host Station death, regardless of the damage source; simply
+    // activating a superbomb never reaches this function. Wrap-safe signed
+    // comparisons match SDL ticks.
+    if ( !HasActiveRoboDeathTimeScale() ||
+         (int32_t)(requestedEnd - _roboDeathTimeScaleEndTick) > 0 )
+        _roboDeathTimeScaleEndTick = requestedEnd;
+}
+
+bool NC_STACK_ypaworld::HasActiveRoboDeathTimeScale() const
+{
+    return _roboDeathTimeScaleEndTick != 0 &&
+           (int32_t)(_roboDeathTimeScaleEndTick - SDL_GetTicks()) > 0;
 }
 
 bool NC_STACK_ypaworld::IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const
@@ -1789,6 +1919,24 @@ bool NC_STACK_ypaworld::IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) co
            (_playerSprintState == PLAYER_SPRINT_RAMP_UP ||
             _playerSprintState == PLAYER_SPRINT_ACTIVE ||
             _playerSprintState == PLAYER_SPRINT_RAMP_DOWN);
+}
+
+bool NC_STACK_ypaworld::IsPlayerSprintInputHeld() const
+{
+    const PlayerSprintConfig config = yw_GetPlayerSprintConfig();
+    if ( !_GameShell || _isNetGame || !config.complete ||
+         config.forceUpPercent <= 0.0f )
+        return false;
+
+    // This helper owns the configured physical Sprint key even while the player
+    // is inside the Host Station. Actual acceleration remains gated separately
+    // by IsPlayerSprintEnabledFor(), but the same Shift press can no longer leak
+    // into the legacy waypoint system.
+    const UserData::TInputConf &bind =
+        _GameShell->InputConfig[World::INPUT_BIND_SPRINT];
+    return bind.Type == World::INPUT_BIND_TYPE_HOTKEY &&
+           bind.PKeyCode > Input::KC_NONE && bind.PKeyCode < Input::KC_MAX &&
+           Input::Engine.GetKeyState(bind.PKeyCode);
 }
 
 static bool yw_PlayerSprintAcceleratorPressed(const NC_STACK_ypabact *bact, const TInputState *inpt)
@@ -1902,12 +2050,7 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
         return;
     }
 
-    const UserData::TInputConf &bind = _GameShell->InputConfig[World::INPUT_BIND_SPRINT];
-    const bool bindingAssigned =
-        bind.Type == World::INPUT_BIND_TYPE_HOTKEY &&
-        bind.PKeyCode > Input::KC_NONE && bind.PKeyCode < Input::KC_MAX;
-    const bool sprintKeyDown = bindingAssigned && Input::Engine.GetKeyState(bind.PKeyCode);
-    const bool sprintRequested = sprintKeyDown &&
+    const bool sprintRequested = IsPlayerSprintInputHeld() &&
                                  yw_PlayerSprintCanRun(_playerSprintUnit, inpt);
 
     const int32_t rampDuration = sprintConfig.rampTime;
@@ -3126,10 +3269,11 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_spawn_at_death_done = false;
         bacto->_spawn_at_death_protection_end_time = 0;
         bacto->_spawn_at_death_restore_vulnerable = false;
-        bacto->_death_damage = vhcl.death_damage > 0 ? vhcl.death_damage : 0;
-        bacto->_death_damage_radius = vhcl.death_damage_radius > 0.0 ? vhcl.death_damage_radius : 0.0;
-        bacto->_death_damage_applied_dead = false;
-        bacto->_death_damage_applied_megadeth = false;
+        bacto->_push_at_death_force = deathProto.push_at_death_force > 0.0f
+            ? deathProto.push_at_death_force : 0.0f;
+        bacto->_push_at_death_radius = deathProto.push_at_death_radius > 0.0f
+            ? deathProto.push_at_death_radius : 0.0f;
+        bacto->_push_at_death_falloff = deathProto.push_at_death_falloff ? 1 : 0;
         bacto->_carrier_spawn_root_gid = 0;
         bacto->_carrier_spawn_root_vehicle = 0;
         bacto->_carrier_spawned_gids.clear();
@@ -3966,7 +4110,8 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _playerInHSGun = false;
     _upgradeId = 0;
     _upgradeTimeStamp = 0;
-    _gemUnlockTimeScaleRemainder = 0.0;
+    _gameplayTimeScaleRemainder = 0.0;
+    _roboDeathTimeScaleEndTick = 0;
     _gameplayRenderTimeBase = 0;
     _gameplayRenderTimeBaseSet = false;
     _upgradeVehicleId = 0;

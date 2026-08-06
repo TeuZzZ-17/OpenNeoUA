@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <map>
 #include <vector>
+#include <unordered_set>
 #include "env.h"
 #include "includes.h"
 #include "yw_internal.h"
@@ -39,6 +40,13 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
 ////////////////////////////////////////
 
 int dword_5BAF9C;
+
+// Momentary top-panel feedback while the GEM popup suppresses gameplay
+// windows. These bits live in the existing per-frame button-state field and
+// therefore cannot remain latched after the mouse is released.
+static constexpr int BZDA_GEM_PRESS_CREATE = 0x800;
+static constexpr int BZDA_GEM_PRESS_MAP = 0x1000;
+static constexpr int BZDA_GEM_PRESS_SQUAD = 0x2000;
 
 namespace
 {
@@ -468,9 +476,9 @@ int StatusIconBuildBlinkRenderList(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact
         return desiredCount;
     }
 
-    // Status-icon transitions belong to the gameplay time domain. GEM slowdown
-    // therefore slows their blink cadence together with AI, physics and other
-    // gameplay timers. The GEM notification blink remains explicitly real-time.
+    // Status-icon transitions belong to the gameplay time domain, so the Host
+    // Station death slowdown affects them together with AI, physics and other
+    // gameplay timers. The GEM notification lifetime remains explicitly real-time.
     const uint32_t now = yw->_timeStamp;
     StatusIconPrepareBlinkStates(yw, now);
 
@@ -637,10 +645,18 @@ NC_STACK_bitmap *StatusIconLoad(const std::string &path)
     if ( it != g_statusIconCache.end() )
         return it->second.bitmap;
 
+    // OpenUA UI assets live below Data and must not inherit the temporary
+    // rsrc prefix of the currently loaded SET. Use the same shared resolver
+    // already used by StatusIconResourceExists(), then restore the caller's
+    // resource context immediately after loading.
+    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+
     StatusIconCacheEntry entry;
     entry.bitmap = Utils::ProxyLoadImage({
         {NC_STACK_rsrc::RSRC_ATT_NAME, path},
         {NC_STACK_bitmap::BMD_ATT_CONVCOLOR, (int32_t)1}});
+
+    Common::Env.SetPrefix("rsrc", oldRsrc);
 
     auto inserted = g_statusIconCache.emplace(path, entry);
     return inserted.first->second.bitmap;
@@ -3939,7 +3955,9 @@ static void yw_RenderNeutralMapLeftBorder(NC_STACK_ypaworld *yw)
     if ( !yw || robo_map.IsClosed() || robo_map.field_244 <= 0 )
         return;
 
-    const int left = robo_map.x - yw->_screenSize.x / 2;
+    // Align the neutral body strip with the title and lower frame. The
+    // renderer works on integral pixels, so one pixel is the smallest correction.
+    const int left = robo_map.x - yw->_screenSize.x / 2 + 1;
     const int top = robo_map.y + robo_map.field_23C - yw->_screenSize.y / 2;
     const int bottom = robo_map.y + robo_map.h - robo_map.field_240
                        - yw->_screenSize.y / 2 - 1;
@@ -4719,7 +4737,6 @@ static void yw_ToggleRoboMapFullscreen(NC_STACK_ypaworld *yw)
         robo_map.maximized = false;
     }
 
-    robo_map.middlePanActive = false;
     robo_map.field_1E8 &= ~(1 | 2 | 4 | 0x10 | 0x20 | 0x200);
     yw->_guiDragDefaultMouse = false;
     yw->_guiDragging = false;
@@ -4805,22 +4822,6 @@ static int yw_AddRoboMapMarker(NC_STACK_ypaworld *yw, const Common::Point &btnPo
     return (int)robo_map.customMarkers.size() - 1;
 }
 
-static bool yw_MoveRoboMapMarker(NC_STACK_ypaworld *yw, int markerIndex,
-                                 const Common::Point &btnPos)
-{
-    if ( markerIndex < 0 || markerIndex >= (int)robo_map.customMarkers.size() )
-        return false;
-
-    const vec2d worldPos = yw_RoboMapButtonPosToWorld(btnPos);
-    if ( !yw_IsRoboMapMarkerPositionValid(yw, worldPos) )
-        return false;
-    if ( yw_RoboMapMarkerOverlaps(worldPos, markerIndex) )
-        return false;
-
-    robo_map.customMarkers[markerIndex] = worldPos;
-    return true;
-}
-
 static bool yw_RemoveNearestRoboMapMarker(const Common::Point &btnPos)
 {
     const int markerIndex = yw_FindRoboMapMarkerAt(btnPos);
@@ -4828,10 +4829,21 @@ static bool yw_RemoveNearestRoboMapMarker(const Common::Point &btnPos)
         return false;
 
     robo_map.customMarkers.erase(robo_map.customMarkers.begin() + markerIndex);
-    if ( robo_map.markerDragIndex == markerIndex )
-        robo_map.markerDragIndex = -1;
-    else if ( robo_map.markerDragIndex > markerIndex )
-        robo_map.markerDragIndex--;
+    return true;
+}
+
+static bool yw_MoveRoboMapMarker(NC_STACK_ypaworld *yw, int markerIndex,
+                                 const Common::Point &btnPos)
+{
+    if ( markerIndex < 0 || markerIndex >= (int)robo_map.customMarkers.size() )
+        return false;
+
+    const vec2d worldPos = yw_RoboMapButtonPosToWorld(btnPos);
+    if ( !yw_IsRoboMapMarkerPositionValid(yw, worldPos)
+            || yw_RoboMapMarkerOverlaps(worldPos, markerIndex) )
+        return false;
+
+    robo_map.customMarkers[markerIndex] = worldPos;
     return true;
 }
 
@@ -4886,7 +4898,6 @@ void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
 
     robo_map.field_1ED = 0;
     robo_map.field_1E8 = 0;
-    robo_map.middlePanActive = false;
     robo_map.markerMode = true;
     robo_map.markerDragIndex = -1;
     robo_map.maximized = false;
@@ -5459,6 +5470,31 @@ void sb_0x4d7c08__sub0__sub1(const SDL_Color *uiAccent)
 }
 
 
+static void yw_CloseGameplayWindowsForGemNotification(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->_guiLoaded )
+        return;
+
+    // Close every registered gameplay window without destroying or unregistering
+    // the GUI. GUI_Close() is reserved for level teardown and would otherwise
+    // leave the interface unloaded after the notification expires.
+    std::vector<GuiBase *> activeWindows(yw->_guiActive.begin(),
+                                         yw->_guiActive.end());
+    for ( GuiBase *window : activeWindows )
+    {
+        if ( window )
+            yw->GuiWinClose(window);
+    }
+
+    // The nested vehicle/building list is not guaranteed to be registered in
+    // _guiActive, so close it explicitly through the same canonical window path.
+    yw->GuiWinClose(&gui_lstvw);
+
+    yw_ResetWorldSelectionDrag(yw);
+    yw->_moveOrderFeedbackActive = false;
+    yw->_attackOrderFeedbacks.clear();
+}
+
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 {
     yw->UpdateFactionGameplayUiAtlases();
@@ -5468,6 +5504,11 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 
     if ( yw->_hideHudForScreenshots )
         return;
+
+    // Keep the GEM upgrade popup visually isolated. Repeated calls are safe and
+    // immediately close any gameplay window reopened while the notification is active.
+    if ( yw->HasActiveNewGemNotification() )
+        yw_CloseGameplayWindowsForGemNotification(yw);
 
     if ( yw->_userUnit->_bact_type != BACT_TYPES_MISSLE )
     {
@@ -5757,7 +5798,9 @@ void gui_update_create_btn(NC_STACK_ypaworld *yw, CmdStream *cur)
         }
         else
         {
-            if ( bzda.field_1D0 & 0x16 )
+            const bool createPressed = (bzda.field_1D0 & 0x16) != 0
+                                    || (bzda.field_91C & BZDA_GEM_PRESS_CREATE) != 0;
+            if ( createPressed )
             {
                 if ( gui_lstvw.IsOpen() )
                     gui_update_create_btn__sub0(yw);
@@ -5832,18 +5875,14 @@ void gui_update_map_squad_btn(NC_STACK_ypaworld *yw, CmdStream *cur)
             v8 += yw->_iconOrderW;
         }
 
-        if ( robo_map.IsClosed() )
-            FontUA::select_tileset(cur, 21);
-        else
-            FontUA::select_tileset(cur, 22);
-
+        const bool mapPressed = robo_map.IsOpen()
+                             || (bzda.field_91C & BZDA_GEM_PRESS_MAP) != 0;
+        FontUA::select_tileset(cur, mapPressed ? 22 : 21);
         FontUA::store_u8(cur, 72);
 
-        if ( squadron_manager.IsClosed() )
-            FontUA::select_tileset(cur, 21);
-        else
-            FontUA::select_tileset(cur, 22);
-
+        const bool squadPressed = squadron_manager.IsOpen()
+                               || (bzda.field_91C & BZDA_GEM_PRESS_SQUAD) != 0;
+        FontUA::select_tileset(cur, squadPressed ? 22 : 21);
         FontUA::store_u8(cur, 73);
     }
 }
@@ -6295,6 +6334,35 @@ int ypaworld_func64__sub7__sub2__sub3(NC_STACK_ypaworld *yw, TInputState *inpt)
         }
 
         return 0;
+    }
+
+    // During the GEM popup, keyboard shortcuts must mirror the pressed visual
+    // feedback of the Creation/Map/Squad buttons without opening their windows.
+    // Mouse clicks are handled by the canonical button path below; this closes
+    // the remaining hotkey-only route that could briefly open gui_lstvw.
+    if ( yw->HasActiveNewGemNotification() )
+    {
+        switch ( inpt->HotKeyID )
+        {
+        case 2:
+        case 3:
+            bzda.field_91C |= BZDA_GEM_PRESS_CREATE;
+            yw->GuiWinClose(&gui_lstvw);
+            return 0;
+
+        case 8:
+            bzda.field_91C |= BZDA_GEM_PRESS_MAP;
+            yw->GuiWinClose(&robo_map);
+            return 0;
+
+        case 9:
+            bzda.field_91C |= BZDA_GEM_PRESS_SQUAD;
+            yw->GuiWinClose(&squadron_manager);
+            return 0;
+
+        default:
+            break;
+        }
     }
 
     switch ( inpt->HotKeyID )
@@ -6999,6 +7067,19 @@ void  ypaworld_func64__sub7__sub2(NC_STACK_ypaworld *yw, TInputState *inpt)
             switch ( winpt->selected_btnID )
             {
             case 0:
+                if ( yw->HasActiveNewGemNotification() )
+                {
+                    if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN
+                                      | TClickBoxInf::FLAG_BTN_HOLD
+                                      | TClickBoxInf::FLAG_RM_DOWN
+                                      | TClickBoxInf::FLAG_RM_HOLD) )
+                        bzda.field_91C |= BZDA_GEM_PRESS_CREATE;
+
+                    yw->GuiWinClose(&gui_lstvw);
+                    yw->SetShowingTooltipWithHotkey(Locale::TIP_GUI_NEWSQUAD, 2);
+                    break;
+                }
+
                 if ( !(winpt->flag & TClickBoxInf::FLAG_BTN_DOWN) )
                 {
                     if ( winpt->flag & TClickBoxInf::FLAG_RM_DOWN )
@@ -7071,7 +7152,21 @@ void  ypaworld_func64__sub7__sub2(NC_STACK_ypaworld *yw, TInputState *inpt)
 
             case 2: //MAP
             case 3: //SQUAD
-                if ( winpt->flag & TClickBoxInf::FLAG_BTN_DOWN )
+                if ( yw->HasActiveNewGemNotification() )
+                {
+                    if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN
+                                      | TClickBoxInf::FLAG_BTN_HOLD) )
+                    {
+                        if ( winpt->selected_btnID == 2 )
+                            bzda.field_91C |= BZDA_GEM_PRESS_MAP;
+                        else if ( !yw->IsSpectatorControlled() )
+                            bzda.field_91C |= BZDA_GEM_PRESS_SQUAD;
+                    }
+
+                    yw->GuiWinClose(&robo_map);
+                    yw->GuiWinClose(&squadron_manager);
+                }
+                else if ( winpt->flag & TClickBoxInf::FLAG_BTN_DOWN )
                 {
                     if ( winpt->selected_btnID == 2 )
                     {
@@ -8204,33 +8299,97 @@ void ypaworld_func64__sub7__sub3__sub0(NC_STACK_ypaworld *yw, TInputState *inpt)
     FontUA::set_end(&squadron_manager.itemBlock);
 }
 
+static int yw_FindControlledSquadRemapIndex(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->_userUnit || !yw->_userRobo
+            || yw->_userUnit == yw->_userRobo )
+        return -1;
+
+    NC_STACK_ypabact *commander = yw->_userUnit;
+    std::unordered_set<NC_STACK_ypabact *> visited;
+    while ( commander && commander != yw->_userRobo
+            && visited.insert(commander).second )
+    {
+        if ( commander->_parent == yw->_userRobo )
+            break;
+        commander = commander->_parent;
+    }
+
+    if ( !commander || commander == yw->_userRobo
+            || commander->_parent != yw->_userRobo )
+        return -1;
+
+    for ( size_t i = 0; i < yw->_cmdrsRemap.size(); i++ )
+    {
+        if ( yw->_cmdrsRemap[i] == commander )
+            return (int)i;
+    }
+
+    return -1;
+}
+
 void sub_4C707C(NC_STACK_ypaworld *yw)
 {
     squadron_manager.squads.fill(NULL);
+    squadron_manager.squadRemapIndices.fill(-2);
 
-    if ( (size_t)(squadron_manager.firstShownEntries + squadron_manager.shownEntries) >= yw->_cmdrsRemap.size() + 1 )
+    const int prioritizedRemapIndex = yw_FindControlledSquadRemapIndex(yw);
+    const uint32_t prioritizedCommandID = prioritizedRemapIndex >= 0
+        ? yw->_cmdrsRemap[prioritizedRemapIndex]->_commandID
+        : 0;
+
+    if ( squadron_manager.prioritizedCommandID != prioritizedCommandID )
     {
-        squadron_manager.firstShownEntries = yw->_cmdrsRemap.size() + 1 - squadron_manager.shownEntries;
+        squadron_manager.prioritizedCommandID = prioritizedCommandID;
+        squadron_manager.firstShownEntries = 0;
+    }
 
+    struct SquadronDisplayEntry
+    {
+        NC_STACK_ypabact *unit;
+        int remapIndex;
+    };
+
+    std::vector<SquadronDisplayEntry> displayOrder;
+    displayOrder.reserve(yw->_cmdrsRemap.size() + 1);
+
+    // The Host Station always owns the first row. The directly controlled
+    // vehicle's squad, when present, is promoted immediately below it; all
+    // remaining squads keep their existing command-ID order.
+    displayOrder.push_back({yw->_userRobo, -1});
+
+    if ( prioritizedRemapIndex >= 0 )
+        displayOrder.push_back({yw->_cmdrsRemap[prioritizedRemapIndex],
+                                prioritizedRemapIndex});
+
+    for ( size_t i = 0; i < yw->_cmdrsRemap.size(); i++ )
+    {
+        if ( (int)i != prioritizedRemapIndex )
+            displayOrder.push_back({yw->_cmdrsRemap[i], (int)i});
+    }
+
+    if ( (size_t)(squadron_manager.firstShownEntries
+                   + squadron_manager.shownEntries) >= displayOrder.size() )
+    {
+        squadron_manager.firstShownEntries = (int)displayOrder.size()
+                                             - squadron_manager.shownEntries;
         if ( squadron_manager.firstShownEntries < 0 )
             squadron_manager.firstShownEntries = 0;
     }
 
-    int v5 = squadron_manager.firstShownEntries;
-    for (int i = 0; i < (int)yw->_cmdrsRemap.size() + 1; i++ )
+    const int first = squadron_manager.firstShownEntries;
+    for ( int i = 0; i < (int)displayOrder.size(); i++ )
     {
-        NC_STACK_ypabact *v6;
-
-        if ( i )
-            v6 = yw->_cmdrsRemap.at(i - 1);
-        else
-            v6 = yw->_userRobo;
-
-        if ( i >= v5 && i - v5 < squadron_manager.shownEntries )
-            squadron_manager.squads[i - v5] = v6;
+        const int visibleIndex = i - first;
+        if ( visibleIndex >= 0 && visibleIndex < squadron_manager.shownEntries )
+        {
+            squadron_manager.squads[visibleIndex] = displayOrder[i].unit;
+            squadron_manager.squadRemapIndices[visibleIndex]
+                = displayOrder[i].remapIndex;
+        }
     }
 
-    squadron_manager.numEntries = yw->_cmdrsRemap.size() + 1;
+    squadron_manager.numEntries = (int)displayOrder.size();
 }
 
 
@@ -8310,8 +8469,8 @@ void ypaworld_func64__sub7__sub3__sub3(NC_STACK_ypaworld *yw, TClickBoxInf *winp
             squadron_manager.field_2BC->ReorganizeGroup(&arg109);
         }
         yw->_activeCmdrID = squadron_manager.field_2BC->_commandID;
-        sub_4C707C(yw);
         yw->sub_4C40AC();
+        sub_4C707C(yw);
     }
     else
     {
@@ -8355,13 +8514,29 @@ void ypaworld_func64__sub7__sub3__sub3(NC_STACK_ypaworld *yw, TClickBoxInf *winp
             else
             {
                 bact_arg109 arg109;
-                arg109.field_0 = 4;
-                arg109.field_4 = squadron_manager.field_2BC;
-                v6->ReorganizeGroup(&arg109);
+
+                if ( squadron_manager.field_2BC == yw->_userUnit )
+                {
+                    // Moving the directly controlled vehicle into another squad
+                    // makes it that squad's commander. Reuse the existing
+                    // ORG_BECOMECHIEF path so command ID, targets and members are
+                    // transferred atomically instead of appending the player at
+                    // the end of the destination list.
+                    arg109.field_0 = 2;
+                    arg109.field_4 = v6;
+                    yw->_userUnit->ReorganizeGroup(&arg109);
+                    v6 = yw->_userUnit;
+                }
+                else
+                {
+                    arg109.field_0 = 4;
+                    arg109.field_4 = squadron_manager.field_2BC;
+                    v6->ReorganizeGroup(&arg109);
+                }
             }
             yw->_activeCmdrID = v6->_commandID;
-            sub_4C707C(yw);
             yw->sub_4C40AC();
+            sub_4C707C(yw);
         }
     }
 }
@@ -8400,7 +8575,13 @@ NC_STACK_ypabact * NC_STACK_ypaworld::sub_4C7B0C(int sqid, int a3)
     }
 
     squadron_manager.field_2B0 = -1;
-    squadron_manager.field_2AC = squadron_manager.firstShownEntries + sqid - 1;
+    squadron_manager.field_2AC = squadron_manager.squadRemapIndices[sqid];
+    if ( squadron_manager.field_2AC < 0
+            || (size_t)squadron_manager.field_2AC >= _cmdrsRemap.size() )
+    {
+        squadron_manager.field_2AC = -1;
+        return NULL;
+    }
 
     const std::vector<NC_STACK_ypabact *> displayUnits =
         yw_GetSquadronDisplayUnits(v3);
@@ -9056,6 +9237,7 @@ static bool yw_ProjectWorldSelectionPoint(NC_STACK_ypaworld *yw, const vec3d &wo
 
     float x = projected.x / projected.z;
     float y = projected.y / projected.z;
+    GFX::Engine.viewZoomCorrection(x, y);
     if ( x < -1.0 || x > 1.0 || y < -1.0 || y > 1.0 )
         return false;
 
@@ -9143,8 +9325,8 @@ static bool yw_TryAddClickedUnitToActiveSquad(NC_STACK_ypaworld *yw, TInputState
     }
 
     yw->_activeCmdrID = activeCommandID;
-    sub_4C707C(yw);
     yw->sub_4C40AC();
+    sub_4C707C(yw);
     return true;
 }
 
@@ -9339,288 +9521,69 @@ static void yw_RenderWorldSelectionDrag(NC_STACK_ypaworld *yw)
     GFX::Engine.raster_func201(Common::Line(left, bottom, left, top));
 }
 
-static void yw_DrawNeutralDiamond(int centerX, int centerY, int radius, SDL_Color color)
-{
-    GFX::Engine.raster_func217(color);
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius, centerX + radius, centerY));
-    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY, centerX, centerY + radius));
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY + radius, centerX - radius, centerY));
-    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY, centerX, centerY - radius));
-}
-
-static void yw_DrawAttackOrderOctagon(int centerX, int centerY, int radius)
-{
-    const int diagonal = radius * 7 / 10;
-
-    GFX::Engine.raster_func201(Common::Line(centerX - diagonal, centerY - radius,
-                                            centerX + diagonal, centerY - radius));
-    GFX::Engine.raster_func201(Common::Line(centerX + diagonal, centerY - radius,
-                                            centerX + radius, centerY - diagonal));
-    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY - diagonal,
-                                            centerX + radius, centerY + diagonal));
-    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY + diagonal,
-                                            centerX + diagonal, centerY + radius));
-    GFX::Engine.raster_func201(Common::Line(centerX + diagonal, centerY + radius,
-                                            centerX - diagonal, centerY + radius));
-    GFX::Engine.raster_func201(Common::Line(centerX - diagonal, centerY + radius,
-                                            centerX - radius, centerY + diagonal));
-    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY + diagonal,
-                                            centerX - radius, centerY - diagonal));
-    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY - diagonal,
-                                            centerX - diagonal, centerY - radius));
-}
-
-static void yw_DrawAttackOrderHexagon(int centerX, int centerY, int radius)
-{
-    const int halfWidth = radius * 3 / 4;
-    const int halfHeight = radius / 2;
-
-    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY - radius,
-                                            centerX + halfWidth, centerY - radius));
-    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY - radius,
-                                            centerX + radius, centerY - halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY - halfHeight,
-                                            centerX + radius, centerY + halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY + halfHeight,
-                                            centerX + halfWidth, centerY + radius));
-    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY + radius,
-                                            centerX - halfWidth, centerY + radius));
-    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY + radius,
-                                            centerX - radius, centerY + halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY + halfHeight,
-                                            centerX - radius, centerY - halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY - halfHeight,
-                                            centerX - halfWidth, centerY - radius));
-}
-
-static void yw_DrawAttackOrderSquareBrackets(int centerX, int centerY, int radius)
-{
-    const int length = std::max(3, radius / 2);
-    const int left = centerX - radius;
-    const int right = centerX + radius;
-    const int top = centerY - radius;
-    const int bottom = centerY + radius;
-
-    GFX::Engine.raster_func201(Common::Line(left, top, left + length, top));
-    GFX::Engine.raster_func201(Common::Line(left, top, left, top + length));
-    GFX::Engine.raster_func201(Common::Line(right - length, top, right, top));
-    GFX::Engine.raster_func201(Common::Line(right, top, right, top + length));
-    GFX::Engine.raster_func201(Common::Line(left, bottom - length, left, bottom));
-    GFX::Engine.raster_func201(Common::Line(left, bottom, left + length, bottom));
-    GFX::Engine.raster_func201(Common::Line(right - length, bottom, right, bottom));
-    GFX::Engine.raster_func201(Common::Line(right, bottom - length, right, bottom));
-}
-
-static void yw_DrawAttackOrderCross(int centerX, int centerY, int radius)
-{
-    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY,
-                                            centerX + radius, centerY));
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
-                                            centerX, centerY + radius));
-}
-
-static void yw_DrawAttackOrderX(int centerX, int centerY, int radius)
-{
-    GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY - radius,
-                                            centerX + radius, centerY + radius));
-    GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY - radius,
-                                            centerX - radius, centerY + radius));
-}
-
-static void yw_DrawAttackOrderTemplate(int templateId, int centerX, int centerY,
-                                       int radius, SDL_Color color, uint32_t phase)
-{
-    GFX::Engine.raster_func217(color);
-
-    switch ( templateId )
-    {
-    case 1: // Diamond and cross.
-        yw_DrawNeutralDiamond(centerX, centerY, radius, color);
-        yw_DrawAttackOrderCross(centerX, centerY, std::max(3, radius / 2));
-        break;
-
-    case 2: // Octagonal crosshair.
-        yw_DrawAttackOrderOctagon(centerX, centerY, radius);
-        yw_DrawAttackOrderCross(centerX, centerY, radius + 4);
-        break;
-
-    case 3: // Triangular reticle.
-        GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
-                                                centerX + radius, centerY + radius));
-        GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY + radius,
-                                                centerX - radius, centerY + radius));
-        GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY + radius,
-                                                centerX, centerY - radius));
-        yw_DrawAttackOrderX(centerX, centerY + 2, std::max(3, radius / 2));
-        break;
-
-    case 4: // Four corner brackets.
-        yw_DrawAttackOrderSquareBrackets(centerX, centerY, radius);
-        yw_DrawAttackOrderCross(centerX, centerY, std::max(2, radius / 3));
-        break;
-
-    case 5: // X and center box.
-        yw_DrawAttackOrderX(centerX, centerY, radius);
-        yw_DrawAttackOrderSquareBrackets(centerX, centerY, std::max(4, radius / 2));
-        break;
-
-    case 6: // Double octagonal ring.
-        yw_DrawAttackOrderOctagon(centerX, centerY, radius);
-        yw_DrawAttackOrderOctagon(centerX, centerY, std::max(3, radius - 5));
-        break;
-
-    case 7: // Hexagonal command badge.
-        yw_DrawAttackOrderHexagon(centerX, centerY, radius);
-        GFX::Engine.raster_func201(Common::Line(centerX - 3, centerY,
-                                                centerX + 3, centerY));
-        break;
-
-    case 8: // Four inward chevrons.
-        GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY,
-                                                centerX - radius / 2, centerY - radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX - radius, centerY,
-                                                centerX - radius / 2, centerY + radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY,
-                                                centerX + radius / 2, centerY - radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX + radius, centerY,
-                                                centerX + radius / 2, centerY + radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
-                                                centerX - radius / 2, centerY - radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX, centerY - radius,
-                                                centerX + radius / 2, centerY - radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX, centerY + radius,
-                                                centerX - radius / 2, centerY + radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX, centerY + radius,
-                                                centerX + radius / 2, centerY + radius / 2));
-        break;
-
-    case 9: // Radar rings and sweep line.
-        yw_DrawAttackOrderOctagon(centerX, centerY, radius);
-        yw_DrawAttackOrderOctagon(centerX, centerY, std::max(3, radius - 5));
-        GFX::Engine.raster_func201(Common::Line(centerX, centerY,
-                                                centerX + radius, centerY - radius / 2));
-        GFX::Engine.raster_func201(Common::Line(centerX, centerY,
-                                                centerX - radius / 2, centerY + radius));
-        break;
-
-    case 10: // Eight-point burst.
-        yw_DrawNeutralDiamond(centerX, centerY, radius, color);
-        yw_DrawAttackOrderCross(centerX, centerY, radius);
-        if ( (phase / 90) & 1 )
-            yw_DrawAttackOrderX(centerX, centerY, radius);
-        break;
-
-    default:
-        break;
-    }
-}
-
-static int yw_GetAttackOrderTemplate()
-{
-    const int templateId = System::IniConf::UiAttackOrderTemplate.Get<int>();
-    return templateId >= 0 && templateId <= 10 ? templateId : 0;
-}
-
 static int yw_GetOrderIconOwner(NC_STACK_ypaworld *yw)
 {
     if ( yw && yw->_userRobo && yw->_userRobo->_owner >= 1 &&
          yw->_userRobo->_owner <= 6 )
-    {
         return yw->_userRobo->_owner;
-    }
 
     return 0;
 }
 
-static std::string yw_OrderIconStem(const char *folder, const char *prefix,
-                                    int templateId, int owner)
+static std::string yw_ResolveOrderTemplatePath(NC_STACK_ypaworld *yw,
+                                                Common::Ini::Key &key)
 {
-    std::string stem = "TacticalMap/Icons/";
-    stem += folder;
-    stem += "/";
+    std::string path = key.Get<std::string>();
+    const size_t first = path.find_first_not_of(" \t\r\n");
+    if ( first == std::string::npos )
+        return std::string();
+    path.erase(0, first);
 
-    if ( owner >= 1 && owner <= 6 )
+    const size_t last = path.find_last_not_of(" \t\r\n");
+    path.erase(last + 1);
+
+    if ( path.compare(0, 5, "rsrc:") == 0 )
+        path.erase(0, 5);
+
+    const std::string ownerText = std::to_string(yw_GetOrderIconOwner(yw));
+    const std::string token = "{owner}";
+    size_t tokenPos = 0;
+    while ( (tokenPos = path.find(token, tokenPos)) != std::string::npos )
     {
-        stem += "owner_";
-        stem += std::to_string(owner);
-        stem += "/";
+        path.replace(tokenPos, token.size(), ownerText);
+        tokenPos += ownerText.size();
     }
 
-    stem += prefix;
-    if ( templateId < 10 )
-        stem += "0";
-    stem += std::to_string(templateId);
-    return stem;
+    return path;
 }
 
 static NC_STACK_bitmap *yw_LoadOrderTemplateBitmap(NC_STACK_ypaworld *yw,
-                                                    const char *folder,
-                                                    const char *prefix,
-                                                    int templateId)
+                                                    Common::Ini::Key &key)
 {
-    if ( templateId < 1 || templateId > 10 )
+    const std::string path = yw_ResolveOrderTemplatePath(yw, key);
+    if ( path.empty() || !StatusIconResourceExists(path) )
         return NULL;
 
-    const int owner = yw_GetOrderIconOwner(yw);
-    const std::string factionStem = yw_OrderIconStem(folder, prefix, templateId, owner);
-    const std::string genericStem = yw_OrderIconStem(folder, prefix, templateId, 0);
-
-    // Faction artwork is preferred. The generic path keeps old custom assets
-    // usable and still gives the procedural renderer a safe fallback.
-    for ( const std::string &stem : {factionStem, genericStem} )
-    {
-        for ( const char *extension : {".png", ".svg"} )
-        {
-            const std::string path = stem + extension;
-            if ( !uaFileExist("rsrc:" + path) )
-                continue;
-
-            NC_STACK_bitmap *bitmap = StatusIconLoad(path);
-            if ( bitmap && bitmap->GetBitmap() )
-                return bitmap;
-        }
-    }
-
-    return NULL;
+    NC_STACK_bitmap *bitmap = StatusIconLoad(path);
+    return bitmap && bitmap->GetBitmap() ? bitmap : NULL;
 }
 
-static int yw_GetMoveOrderTemplate()
+static void yw_RenderOrderTemplateAt(NC_STACK_ypaworld *yw,
+                                     const Common::Point &point,
+                                     int radius, uint8_t worldUiOpacity,
+                                     Common::Ini::Key &templatePathKey)
 {
-    const int templateId = System::IniConf::UiMoveOrderTemplate.Get<int>();
-    return templateId >= 0 && templateId <= 10 ? templateId : 0;
-}
-
-static void yw_RenderMoveOrderTemplateAt(NC_STACK_ypaworld *yw,
-                                         const Common::Point &point,
-                                         int radius, uint8_t worldUiOpacity,
-                                         SDL_Color pulseColor,
-                                         SDL_Color shadowColor)
-{
-    const int templateId = yw_GetMoveOrderTemplate();
-    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(yw, "MoveOrder",
-                                                          "move_order_", templateId);
-    if ( bitmap && bitmap->GetBitmap() )
-    {
-        const int size = radius * 2 + 8;
-        StatusIconRenderBitmap(yw, bitmap,
-                               point.x - size / 2 + 1, point.y - size / 2 + 1,
-                               size + 2, (uint8_t)(worldUiOpacity / 3));
-        StatusIconRenderBitmap(yw, bitmap,
-                               point.x - size / 2, point.y - size / 2,
-                               size, worldUiOpacity);
+    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(yw, templatePathKey);
+    if ( !bitmap || !bitmap->GetBitmap() )
         return;
-    }
 
-    const int centerX = point.x - yw->_screenSize.x / 2;
-    const int centerY = point.y - yw->_screenSize.y / 2;
-    yw_DrawNeutralDiamond(centerX + 1, centerY + 1, radius, shadowColor);
-    yw_DrawNeutralDiamond(centerX, centerY, radius, pulseColor);
-
-    GFX::Engine.raster_func217(pulseColor);
-    GFX::Engine.raster_func201(Common::Line(centerX - 3, centerY,
-                                            centerX + 3, centerY));
-    GFX::Engine.raster_func201(Common::Line(centerX, centerY - 3,
-                                            centerX, centerY + 3));
+    const int size = std::max(1, radius * 2 + 8);
+    StatusIconRenderBitmap(yw, bitmap,
+                           point.x - size / 2 + 1, point.y - size / 2 + 1,
+                           size + 2, (uint8_t)(worldUiOpacity / 3));
+    StatusIconRenderBitmap(yw, bitmap,
+                           point.x - size / 2, point.y - size / 2,
+                           size, worldUiOpacity);
 }
 
 static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
@@ -9646,22 +9609,15 @@ static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
     if ( !yw_ProjectWorldSelectionPoint(yw, target, &point) )
         return;
 
-    // Use exactly the same configurable move-order template path used by
-    // ordinary squads.  The Host Station marker remains persistent while a
-    // relocation target exists, but no longer has a separate custom glyph.
+    // Host Station relocation uses its dedicated direct-path template and
+    // remains persistent while a relocation target exists.
     const int radius = 7 + (int)((yw->_timeStamp % 240) * 7 / 240);
 
-    SDL_Color markerColor = yw_GetFactionSelectionColor(yw);
-    markerColor.r = (uint8_t)std::min(255, markerColor.r + 35);
-    markerColor.g = (uint8_t)std::min(255, markerColor.g + 35);
-    markerColor.b = (uint8_t)std::min(255, markerColor.b + 35);
-    markerColor.a = worldUiOpacity;
-
-    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
-    shadowColor.a = worldUiOpacity;
-
-    yw_RenderMoveOrderTemplateAt(yw, point, radius, worldUiOpacity,
-                                 markerColor, shadowColor);
+    // Host Station relocation has its own direct-path template. Invalid or
+    // absent paths intentionally draw nothing: numeric/procedural fallbacks
+    // have been removed from all order markers.
+    yw_RenderOrderTemplateAt(yw, point, radius, worldUiOpacity,
+                             System::IniConf::UiRoboMoveOrderTemplate);
 }
 
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
@@ -9688,17 +9644,8 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
         return;
 
     int radius = 7 + (int)((age % 240) * 7 / 240);
-    SDL_Color factionColor = yw_GetFactionSelectionColor(yw);
-    SDL_Color pulseColor = factionColor;
-    pulseColor.r = (uint8_t)std::min(255, pulseColor.r + 35);
-    pulseColor.g = (uint8_t)std::min(255, pulseColor.g + 35);
-    pulseColor.b = (uint8_t)std::min(255, pulseColor.b + 35);
-    pulseColor.a = worldUiOpacity;
-    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
-    shadowColor.a = worldUiOpacity;
-
-    yw_RenderMoveOrderTemplateAt(yw, point, radius, worldUiOpacity,
-                                 pulseColor, shadowColor);
+    yw_RenderOrderTemplateAt(yw, point, radius, worldUiOpacity,
+                             System::IniConf::UiMoveOrderTemplate);
 }
 
 static uint64_t yw_AttackOrderSquadKey(uint32_t commandID, uint8_t owner)
@@ -10014,8 +9961,9 @@ static bool yw_ProjectAttackOrderTargetPoint(
     // the screen edge in that state. Give only the Attack marker a small
     // overscan area, then clamp it inside the viewport. Fully off-screen targets
     // remain hidden, avoiding a new permanent edge-indicator system.
-    const float projectedX = projected.x / projected.z;
-    const float projectedY = projected.y / projected.z;
+    float projectedX = projected.x / projected.z;
+    float projectedY = projected.y / projected.z;
+    GFX::Engine.viewZoomCorrection(projectedX, projectedY);
     constexpr float VISIBLE_MODEL_OVERSCAN = 1.20f;
     if ( projectedX < -VISIBLE_MODEL_OVERSCAN ||
          projectedX > VISIBLE_MODEL_OVERSCAN ||
@@ -10038,10 +9986,10 @@ static bool yw_ProjectAttackOrderTargetPoint(
 }
 
 static void yw_RenderAttackOrderTargetMarker(
-        NC_STACK_ypaworld *yw, NC_STACK_ypabact *target, int templateId,
+        NC_STACK_ypaworld *yw, NC_STACK_ypabact *target,
         NC_STACK_bitmap *bitmap)
 {
-    if ( !yw || !target )
+    if ( !yw || !target || !bitmap || !bitmap->GetBitmap() )
         return;
 
     Common::Point point;
@@ -10052,33 +10000,16 @@ static void yw_RenderAttackOrderTargetMarker(
     const uint32_t pulseTime = yw->_timeStamp % 240;
     const uint32_t triangle = pulseTime <= 120 ? pulseTime : 240 - pulseTime;
     const int baseRadius = 9 + (int)(triangle * 6 / 120);
-    const int radius = std::max(3, dround(baseRadius * ATTACK_MARKER_SCALE));
+    const int baseSize = baseRadius * 2 + 8;
+    const int size = std::max(8, dround(baseSize * ATTACK_MARKER_SCALE));
     const uint8_t worldUiOpacity = 255;
 
-    if ( bitmap && bitmap->GetBitmap() )
-    {
-        const int baseSize = baseRadius * 2 + 8;
-        const int size = std::max(8, dround(baseSize * ATTACK_MARKER_SCALE));
-        StatusIconRenderBitmap(yw, bitmap,
-                               point.x - size / 2 + 1, point.y - size / 2 + 1,
-                               size + 2, (uint8_t)(worldUiOpacity / 3));
-        StatusIconRenderBitmap(yw, bitmap,
-                               point.x - size / 2, point.y - size / 2,
-                               size, worldUiOpacity);
-        return;
-    }
-
-    const int centerX = point.x - yw->_screenSize.x / 2;
-    const int centerY = point.y - yw->_screenSize.y / 2;
-    SDL_Color attackColor = yw_GetFactionSelectionColor(yw);
-    attackColor.a = worldUiOpacity;
-    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
-    shadowColor.a = worldUiOpacity;
-
-    yw_DrawAttackOrderTemplate(templateId, centerX + 1, centerY + 1,
-                                radius, shadowColor, yw->_timeStamp);
-    yw_DrawAttackOrderTemplate(templateId, centerX, centerY,
-                                radius, attackColor, yw->_timeStamp);
+    StatusIconRenderBitmap(yw, bitmap,
+                           point.x - size / 2 + 1, point.y - size / 2 + 1,
+                           size + 2, (uint8_t)(worldUiOpacity / 3));
+    StatusIconRenderBitmap(yw, bitmap,
+                           point.x - size / 2, point.y - size / 2,
+                           size, worldUiOpacity);
 }
 
 static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
@@ -10086,8 +10017,9 @@ static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
     if ( !yw || !yw->_userRobo )
         return;
 
-    const int templateId = yw_GetAttackOrderTemplate();
-    if ( templateId == 0 )
+    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(
+        yw, System::IniConf::UiAttackOrderTemplate);
+    if ( !bitmap )
         return;
 
     // The marker reflects actual allied combat state, not only the currently
@@ -10101,11 +10033,8 @@ static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
     if ( targets.empty() )
         return;
 
-    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(
-        yw, "AttackOrder", "attack_order_", templateId);
-
     for ( NC_STACK_ypabact *target : targets )
-        yw_RenderAttackOrderTargetMarker(yw, target, templateId, bitmap);
+        yw_RenderAttackOrderTargetMarker(yw, target, bitmap);
 }
 
 void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
@@ -10113,7 +10042,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
     if ( robo_map.IsClosed() )
     {
         robo_map.field_1E8 &= 0xFFFFFDE8;
-        robo_map.middlePanActive = false;
+        robo_map.markerDragIndex = -1;
     }
     else
     {
@@ -10192,36 +10121,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                              TClickBoxInf::FLAG_BTN_HOLD);
         }
 
-        if ( robo_map.middlePanActive )
-        {
-            if ( winpt->flag & TClickBoxInf::FLAG_MM_HOLD )
-            {
-                robo_map.field_1ED = 0;
-                robo_map.field_1D8 = robo_map.middlePanStartX + (float)(robo_map.middlePanStartMouse.x - winpt->move.ScreenPos.x) * robo_map.field_1E0;
-                robo_map.field_1DC = robo_map.middlePanStartZ - (float)(robo_map.middlePanStartMouse.y - winpt->move.ScreenPos.y) * robo_map.field_1E4;
-                sub_4C1814(yw, robo_map.field_1CC - robo_map.field_244, robo_map.field_1D2);
-            }
-            else
-            {
-                robo_map.middlePanActive = false;
-                yw->_guiDragDefaultMouse = false;
-            }
-        }
-        else if ( robo_map.markerDragIndex >= 0 )
-        {
-            if ( winpt->flag & TClickBoxInf::FLAG_LM_HOLD )
-            {
-                yw_MoveRoboMapMarker(yw, robo_map.markerDragIndex,
-                                     winpt->move.BtnPos);
-                yw->_guiDragDefaultMouse = true;
-            }
-            else
-            {
-                robo_map.markerDragIndex = -1;
-                yw->_guiDragDefaultMouse = false;
-            }
-        }
-        else if ( robo_map.field_1E8 & 1 )
+        if ( robo_map.field_1E8 & 1 )
         {
             if ( winpt->flag & TClickBoxInf::FLAG_LM_HOLD )
             {
@@ -10276,6 +10176,23 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             else
             {
                 robo_map.field_1E8 &= 0xFFFFFFFB;
+                yw->_guiDragDefaultMouse = false;
+            }
+        }
+        else if ( robo_map.markerDragIndex >= 0 )
+        {
+            if ( winpt->flag & TClickBoxInf::FLAG_LM_HOLD )
+            {
+                yw_MoveRoboMapMarker(yw, robo_map.markerDragIndex,
+                                     winpt->move.BtnPos);
+                winpt->flag &= ~TClickBoxInf::FLAG_LM_DOWN;
+                yw->_guiDragDefaultMouse = true;
+            }
+            else
+            {
+                robo_map.markerDragIndex = -1;
+                winpt->flag &= ~(TClickBoxInf::FLAG_LM_DOWN
+                               | TClickBoxInf::FLAG_LM_UP);
                 yw->_guiDragDefaultMouse = false;
             }
         }
@@ -10336,61 +10253,62 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             {
                 if ( winpt->selected_btnID == 17 )
                 {
-                    // The wheel button is reserved for map panning again.
-                    // Marker creation uses only a right click while the marker
-                    // layer is enabled, leaving selection and wheel controls
-                    // consistent with the normal map.
-                    robo_map.middlePanActive = true;
-                    robo_map.middlePanStartMouse = winpt->move.ScreenPos;
-                    robo_map.middlePanStartX = robo_map.field_1D8;
-                    robo_map.middlePanStartZ = robo_map.field_1DC;
-                    robo_map.field_1ED = 0;
-                    yw->_guiDragDefaultMouse = true;
+                    // Middle click creates one personal marker. Creation is
+                    // independent of the layer toggle and enables the layer so
+                    // the newly placed marker is immediately visible.
+                    if ( yw_AddRoboMapMarker(yw, winpt->move.BtnPos) >= 0 )
+                    {
+                        robo_map.markerMode = true;
+                        yw->PlayConfiguredMapMarkerSound();
+                    }
+                    winpt->flag &= ~TClickBoxInf::FLAG_MM_DOWN;
+                    yw->_guiDragDefaultMouse = false;
                 }
             }
 
             if ( winpt->flag & TClickBoxInf::FLAG_RM_DOWN )
             {
-                if ( winpt->selected_btnID == 17 && robo_map.markerMode )
+                if ( winpt->selected_btnID == 17 )
                 {
-                    // Right click on empty map space creates a marker. Right
-                    // click directly on an existing marker removes it, so the
-                    // same button remains sufficient for both basic actions.
-                    if ( !yw_RemoveNearestRoboMapMarker(winpt->move.BtnPos) )
+                    const bool markerRemoved = robo_map.markerMode
+                        && yw_RemoveNearestRoboMapMarker(winpt->move.BtnPos);
+                    if ( markerRemoved )
                     {
-                        if ( yw_AddRoboMapMarker(yw, winpt->move.BtnPos) >= 0 )
-                            yw->PlayConfiguredMapMarkerSound();
+                        // A single right click on a marker deletes it. Do not
+                        // arm map panning from the same event.
+                        winpt->flag &= ~TClickBoxInf::FLAG_RM_DOWN;
+                        yw->_guiDragDefaultMouse = false;
                     }
-                    winpt->flag &= ~TClickBoxInf::FLAG_RM_DOWN;
-                    yw->_guiDragDefaultMouse = false;
-                }
-                else if ( winpt->selected_btnID == 17 )
-                {
-                    robo_map.field_220 = robo_map.field_1D8;
-                    robo_map.field_21C = winpt->move.ScreenPos.x;
-                    robo_map.field_21E = winpt->move.ScreenPos.y;
-                    robo_map.field_224 = robo_map.field_1DC;
-                    robo_map.field_1E8 |= 0x10;
-                    yw->_guiDragDefaultMouse = true;
+                    else
+                    {
+                        // Elsewhere the right button keeps the existing shared
+                        // pan path; no second panning implementation is added.
+                        robo_map.field_220 = robo_map.field_1D8;
+                        robo_map.field_21C = winpt->move.ScreenPos.x;
+                        robo_map.field_21E = winpt->move.ScreenPos.y;
+                        robo_map.field_224 = robo_map.field_1DC;
+                        robo_map.field_1E8 |= 0x10;
+                        yw->_guiDragDefaultMouse = true;
+                    }
                 }
             }
 
             if ( winpt->flag & TClickBoxInf::FLAG_LM_DOWN )
             {
-                bool markerDragStarted = false;
-                if ( winpt->selected_btnID == 17 && robo_map.markerMode )
-                {
-                    const int markerIndex = yw_FindRoboMapMarkerAt(winpt->move.BtnPos);
-                    if ( markerIndex >= 0 )
-                    {
-                        robo_map.markerDragIndex = markerIndex;
-                        yw->_guiDragDefaultMouse = true;
-                        winpt->flag &= ~TClickBoxInf::FLAG_LM_DOWN;
-                        markerDragStarted = true;
-                    }
-                }
+                const int markerIndex = (winpt->selected_btnID == 17
+                                         && robo_map.markerMode)
+                    ? yw_FindRoboMapMarkerAt(winpt->move.BtnPos)
+                    : -1;
 
-                if ( !markerDragStarted && winpt->selected_btnID == 17
+                if ( markerIndex >= 0 )
+                {
+                    // Left press/hold moves the marker. The drag owns the click
+                    // so unit selection and move/attack orders are not emitted.
+                    robo_map.markerDragIndex = markerIndex;
+                    winpt->flag &= ~TClickBoxInf::FLAG_LM_DOWN;
+                    yw->_guiDragDefaultMouse = true;
+                }
+                else if ( winpt->selected_btnID == 17
                         && !yw->IsSpectatorControlled() )
                 {
                     robo_map.field_1E8 |= 0x200;
@@ -12817,13 +12735,17 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
     if ( weap )
     {
         std::string txt2;
+        const int effectiveEnergy = bact
+            ? bact->GetEffectiveOutgoingDamage(weap->energy)
+            : weap->energy;
 
-        // OpenUA custom: laser-like beam weapons use the same public damage readout as
-        // vanilla weapons (energy / 100), plus a trailing "+" when connected
-        // ticks ramp up laser_energy_increment_rate.
+        // Show the actual current per-instance damage directly in DMG. Kill
+        // marks and Black Sect clone balance stay runtime-only and never mutate
+        // shared weapon prototypes, but the player readout now reflects the
+        // same effective value used by the final damage choke point.
         if ( weap->IsLaser() || weap->IsVerticalLaser() )
         {
-            txt2 = fmt::sprintf("%d", weap->energy / 100);
+            txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
 
             if ( weap->laser_energy_increment_rate > 0.0f )
                 txt2 += " +";
@@ -12838,12 +12760,13 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
                                   : (vhcl->num_weapons <= 1 ? 1 : vhcl->num_weapons);
 
             if ( weaponCount <= 1 )
-                txt2 = fmt::sprintf("%d", weap->energy / 100);
+                txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
             else
-                txt2 = fmt::sprintf("%d x%d", weap->energy / 100, weaponCount);
+                txt2 = fmt::sprintf("%d x%d", effectiveEnergy / 100, weaponCount);
         }
 
-        sub_4E4F80(yw, wis, cur, xpos, ypos, weap->energy, 100, 7, 7, Locale::Text::HUD(Locale::HUDSTR_DMG), txt2, 1 | 2);
+        sub_4E4F80(yw, wis, cur, xpos, ypos, effectiveEnergy, 100, 7, 7,
+                   Locale::Text::HUD(Locale::HUDSTR_DMG), txt2, 1 | 2);
     }
 }
 
@@ -13783,8 +13706,17 @@ void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, 
                     {
                         int v30 = yw->_guiTiles[15]->h;
 
-                        int v27_4 = ((yw->_screenSize.x / 2) * (v32 / v26 + 1.0));
-                        int v15 = (yw->_screenSize.y / 2) * (v31 / v26 + 1.0);
+                        float projectedX = v32 / v26;
+                        float projectedY = v31 / v26;
+                        GFX::Engine.viewZoomCorrection(projectedX, projectedY);
+                        if ( projectedX < -1.0f || projectedX > 1.0f ||
+                             projectedY < -1.0f || projectedY > 1.0f )
+                        {
+                            return;
+                        }
+
+                        int v27_4 = ((yw->_screenSize.x / 2) * (projectedX + 1.0f));
+                        int v15 = (yw->_screenSize.y / 2) * (projectedY + 1.0f);
 
                         int v28 = 96;
 
@@ -13861,6 +13793,9 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
 
             float v45 = v44 * (1.0 / v37);
             float v47 = v46 * (1.0 / v37);
+            GFX::Engine.viewZoomCorrection(v45, v47);
+            if ( v45 < -1.0f || v45 > 1.0f || v47 < -1.0f || v47 > 1.0f )
+                return;
 
             int v13;
 
@@ -14373,6 +14308,7 @@ static bool yw_ProjectHUDMissileLockTarget(NC_STACK_ypaworld *yw, NC_STACK_ypaba
 
     *outX = hudPos.x / hudPos.z;
     *outY = hudPos.y / hudPos.z;
+    GFX::Engine.viewZoomCorrection(*outX, *outY);
     return true;
 }
 
@@ -14669,6 +14605,9 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
 
             float a3a = a3 / v30;
             float v34 = v33 / v30;
+            GFX::Engine.viewZoomCorrection(a3a, v34);
+            if ( a3a < -1.0f || a3a > 1.0f || v34 < -1.0f || v34 > 1.0f )
+                return;
 
             if ( v12 )
             {
@@ -15233,10 +15172,13 @@ int NC_STACK_ypaworld::yw_MouseFindCreationPoint(TClickBoxInf *winp)
 {
     const World::TVhclProto &vhcl = _vhclProtos[bzda.field_2DC[bzda.field_8EC]];
 
-    vec3d v47( (float)(winp->move.ScreenPos.x - (_screenSize.x / 2)) / (float)(_screenSize.x / 2),
-               (float)(winp->move.ScreenPos.y - (_screenSize.y / 2)) / (float)(_screenSize.y / 2),
-               1.0 );
+    float mouseX = (float)(winp->move.ScreenPos.x - (_screenSize.x / 2)) /
+                   (float)(_screenSize.x / 2);
+    float mouseY = (float)(winp->move.ScreenPos.y - (_screenSize.y / 2)) /
+                   (float)(_screenSize.y / 2);
+    GFX::Engine.viewZoomCorrection(mouseX, mouseY, true);
 
+    vec3d v47(mouseX, mouseY, 1.0);
     v47.normalise();
 
     float v63 = vhcl.radius * 4.0 + 200.0;
@@ -15438,14 +15380,17 @@ int NC_STACK_ypaworld::ypaworld_func64__sub21__sub3()
 
 int NC_STACK_ypaworld::ypaworld_func64__sub21__sub4(TInputState *arg, int a3)
 {
-    if ( !_makingWaypointsMode && arg->Buttons.Is(4) )
+    const bool waypointInputHeld =
+        arg->Buttons.Is(4) && !IsPlayerSprintInputHeld();
+
+    if ( !_makingWaypointsMode && waypointInputHeld )
     {
         _makingWaypointsMode = true;
         _waypointCount = 0;
         return a3;
     }
 
-    if ( _makingWaypointsMode && !(arg->Buttons.Is(4)) )
+    if ( _makingWaypointsMode && !waypointInputHeld )
     {
         _makingWaypointsMode = false;
         return a3;
@@ -15650,6 +15595,8 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub1__sub3__sub0(TClickBoxInf *w
 {
     float v3 = (float)(winp->move.ScreenPos.x - (_screenSize.x / 2)) / (float)(_screenSize.x / 2);
     float v4 = (float)(winp->move.ScreenPos.y - (_screenSize.y / 2)) / (float)(_screenSize.y / 2);
+
+    GFX::Engine.viewZoomCorrection(v3, v4, true);
 
     mat3x3 corrected = _viewerRotation;
     GFX::Engine.matrixAspectCorrection(corrected, true);
@@ -16037,7 +15984,9 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
         else
         {
 
-            mousePointer = 1;
+            // The tactical map always permits marker placement, so its neutral
+            // cursor is Pointer rather than the blocking Cancel cursor.
+            mousePointer = (_guiActFlags & 8) ? 0 : 1;
             doAction = World::DOACTION_0;
 
             if ( bzda.field_1D0 == 1 )
@@ -16383,6 +16332,19 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
                     mousePointer = 1;   // 3D world: can't be entered
                     tooltip = 0;
                 }
+            }
+
+            const bool mouseOverMapMarker =
+                arg->ClickInf.selected_btn == &robo_map &&
+                arg->ClickInf.selected_btnID == 17 &&
+                yw_FindRoboMapMarkerAt(arg->ClickInf.move.BtnPos) >= 0;
+            if ( mouseOverMapMarker )
+            {
+                // A marker is always an annotation, never a move/attack target.
+                // Pointer feedback matches LMB drag and RMB deletion.
+                mousePointer = 0;
+                doAction = World::DOACTION_0;
+                tooltip = 0;
             }
 
             _doAction = ypaworld_func64__sub21__sub4(arg, doAction);

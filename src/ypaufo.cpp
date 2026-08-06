@@ -495,6 +495,31 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
     int a4 = getBACT_bactCollisions();
     const bool spectatorObserver = _world && _world->IsSpectatorBact(this);
 
+    if (!spectatorObserver && _world && _world->_userUnit == this && getBACT_inputting()
+            && arg->inpt->ClickInf.selected_btn == NULL && arg->inpt->ClickInf.wheel != 0)
+    {
+        const int wheel = arg->inpt->ClickInf.wheel;
+        const float zoomStep = 1.25f;
+
+        if (wheel > 0)
+        {
+            for (int i = 0; i < wheel; i++)
+                _playerViewZoom *= zoomStep;
+        }
+        else
+        {
+            for (int i = 0; i > wheel; i--)
+                _playerViewZoom /= zoomStep;
+        }
+
+        if (_playerViewZoom < GFX::VIEW_ZOOM_MIN)
+            _playerViewZoom = GFX::VIEW_ZOOM_MIN;
+        else if (_playerViewZoom > GFX::VIEW_ZOOM_MAX)
+            _playerViewZoom = GFX::VIEW_ZOOM_MAX;
+
+        arg->inpt->ClickInf.wheel = 0;
+    }
+
     _old_pos = _position;
 
     if ( _status == BACT_STATUS_DEAD )
@@ -945,6 +970,7 @@ void NC_STACK_ypaufo::Renew()
     NC_STACK_ypabact::Renew();
 
     _ufoBoost = 0;
+    _playerViewZoom = 1.0f;
 
     setBACT_landingOnWait(0);
 }
@@ -955,7 +981,10 @@ void NC_STACK_ypaufo::setBACT_inputting(bool inpt)
     NC_STACK_ypabact::setBACT_inputting(inpt);
 
     if ( !inpt )
+    {
         _rotation = mat3x3::Ident();
+        _playerViewZoom = 1.0f;
+    }
 
 }
 
