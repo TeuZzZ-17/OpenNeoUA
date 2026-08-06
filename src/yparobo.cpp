@@ -9,6 +9,7 @@
 #include "yw_net.h"
 #include "fmtlib/printf.h"
 #include "system/inivals.h"
+#include "crashdiag.h"
 
 #include <math.h>
 #include <unordered_set>
@@ -5561,12 +5562,19 @@ void NC_STACK_yparobo::Move(move_msg *arg)
 
 void NC_STACK_yparobo::Die()
 {
+    CrashDiag::Breadcrumb("HOST_DEATH",
+                          "enter ptr=%p gid=%d owner=%d status=%d flags=0x%x energy=%d killer_gid=%d killer_owner=%d commanders=%zu guns=%zu deinit=%d",
+                          this, _gid, _owner, _status, _status_flg, _energy,
+                          _killer ? _killer->_gid : 0, _killer_owner,
+                          _kidList.size(), _roboGuns.size(), _deinitInProgress ? 1 : 0);
+
     // DeleteLevel already destroys every hierarchy node. Calling the normal
     // Host death cascade from NC_STACK_ypabact::Deinit() walked squad lists
     // while child cleanup was mutating them, leaving a stale subnode pointer
     // (WER crash RVA 0x232c16). Gameplay deaths still use the full path below.
     if ( _deinitInProgress )
     {
+        CrashDiag::Breadcrumb("HOST_DEATH", "deinit shortcut gid=%d", _gid);
         _status = BACT_STATUS_DEAD;
         _status_flg |= BACT_STFLAG_DEATH1;
         return;
@@ -5578,6 +5586,7 @@ void NC_STACK_yparobo::Die()
 
     if ( !(_status_flg & BACT_STFLAG_DEATH1) )
     {
+        CrashDiag::RequestCheckpoint("host_station_death_begin");
         hdMsg.msgID = UAMSG_HOSTDIE;
         hdMsg.owner = _owner;
 
@@ -5692,7 +5701,9 @@ void NC_STACK_yparobo::Die()
             placeMessage(&arg134);
         }
 
+        CrashDiag::Breadcrumb("HOST_DEATH", "child cascade complete gid=%d", _gid);
         NC_STACK_ypabact::Die();
+        CrashDiag::Breadcrumb("HOST_DEATH", "base death complete gid=%d flags=0x%x", _gid, _status_flg);
 
         _vp_extra[1].flags = 0;
 
@@ -5712,6 +5723,9 @@ void NC_STACK_yparobo::Die()
                 }
             }
         }
+
+        CrashDiag::Breadcrumb("HOST_DEATH", "exit gid=%d status=%d flags=0x%x", _gid, _status, _status_flg);
+        CrashDiag::RequestCheckpoint("host_station_death_end");
     }
 }
 

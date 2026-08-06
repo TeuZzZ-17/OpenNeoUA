@@ -219,6 +219,7 @@ public:
 
     static Common::Ini::Key GameDebug;
     static Common::Ini::Key GameNewDebug;
+    static Common::Ini::Key GameCrashDiagnostics;
     static Common::Ini::Key GameBriefingVPRender;
     static bool IsGameNewDebugEnabled();
 
@@ -312,6 +313,8 @@ public:
     static Common::Ini::Key UiMenuFont; // OpenUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
     static Common::Ini::Key UiMapMarkerSound; // OpenUA: optional sound played once after successful map marker deployment
+    static Common::Ini::Key UiMoveOrderTemplate; // OpenUA: move-order feedback template, 0 procedural fallback, 1..10 selectable
+    static Common::Ini::Key UiAttackOrderTemplate; // OpenUA: attack-order feedback template, 0 disabled, 1..10 selectable
 
 private:
     static Common::Ini::PKeyList _varList;

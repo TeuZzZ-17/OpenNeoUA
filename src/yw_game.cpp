@@ -2825,6 +2825,14 @@ static NC_STACK_ypabact *yw_FindLiveBactByGidInList(World::RefBactList &list, in
     return NULL;
 }
 
+NC_STACK_ypabact *NC_STACK_ypaworld::FindLiveBactByGid(int32_t gid)
+{
+    if ( gid <= 0 )
+        return NULL;
+
+    return yw_FindLiveBactByGidInList(_unitsList, gid);
+}
+
 static bool yw_IsAliveBuildingSpawnedUnit(NC_STACK_ypabact *unit)
 {
     if ( !unit )

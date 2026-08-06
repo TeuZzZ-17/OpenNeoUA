@@ -1,5 +1,6 @@
 #include <inttypes.h>
 #include <string.h>
+#include <algorithm>
 #include "includes.h"
 #include "utils.h"
 
@@ -7,8 +8,19 @@
 #include "font.h"
 
 
+static void GuiListStoreTrimmedVerticalGlyph(CmdStream *cmd, uint8_t glyph, int trim)
+{
+    if ( trim > 0 )
+        FontUA::set_xoff(cmd, (uint8_t)trim);
 
-void GuiBase::FormateTitle(NC_STACK_ypaworld *yw, int xpos, int ypos, int w, const std::string &title, CmdStream *in, uint8_t postf_char, int flag)
+    FontUA::store_u8(cmd, glyph);
+}
+
+
+void GuiBase::FormateTitle(NC_STACK_ypaworld *yw, int xpos, int ypos, int w,
+                          const std::string &title, CmdStream *in,
+                          uint8_t postf_char, int flag, bool drawCloseGlyph,
+                          bool factionAccentTitle)
 {
     int v27 = 0;
     if ( flag & FLAG_WITH_CLOSE )
@@ -31,7 +43,13 @@ void GuiBase::FormateTitle(NC_STACK_ypaworld *yw, int xpos, int ypos, int w, con
 
     FontUA::store_s8(in, 98);
 
-    FontUA::set_txtColor(in, yw->_iniColors[60].r, yw->_iniColors[60].g, yw->_iniColors[60].b);
+    if ( factionAccentTitle )
+        FontUA::set_txtColor(in, yw->_iniColors[60].r, yw->_iniColors[60].g, yw->_iniColors[60].b);
+    else
+    {
+        const SDL_Color boxTextColor = yw->GetFactionBoxTextColor();
+        FontUA::set_txtColor(in, boxTextColor.r, boxTextColor.g, boxTextColor.b);
+    }
 
     FontUA::FormateClippedText(yw->_guiTiles[6], in, buf, w - v27 - v26 - v29 - yw->_fontBorderW, 99);
 
@@ -49,7 +67,7 @@ void GuiBase::FormateTitle(NC_STACK_ypaworld *yw, int xpos, int ypos, int w, con
         FontUA::store_s8(in, 65);
     }
 
-    if ( flag & FLAG_WITH_CLOSE )
+    if ( (flag & FLAG_WITH_CLOSE) && drawCloseGlyph )
     {
         int ts = ((flag & FLAG_CLOSE_DOWN) != 0) + 24;
 
@@ -68,7 +86,8 @@ int GuiList::initDialogStrings(NC_STACK_ypaworld *yw)
 
     if ( listFlags & GLIST_FLAG_WITH_TITLEBAR )
     {
-        GuiBase::FormateTitle(yw, xpos, ypos, w, title, &cmdCommands, 0, flags);
+        GuiBase::FormateTitle(yw, xpos, ypos, w, title, &cmdCommands, 0,
+                              flags, !factionCloseVisual, factionAccentTitle);
 
         FontUA::next_line(&cmdCommands);
     }
@@ -203,7 +222,8 @@ void GuiList::FormateTitle(NC_STACK_ypaworld *yw)
 
         if ( listFlags & GLIST_FLAG_WITH_TITLEBAR )
         {
-            GuiBase::FormateTitle(yw, v6, v9, w, title, &cmdCommands, 0, flags);
+            GuiBase::FormateTitle(yw, v6, v9, w, title, &cmdCommands, 0,
+                                  flags, !factionCloseVisual, factionAccentTitle);
             FontUA::next_line(&cmdCommands);
         }
         else
@@ -307,9 +327,18 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
         if ( listFlags & GLIST_FLAG_WITH_TITLEBAR )
             v35 = yw->_fontH;
 
+        const int scrollbarVisualWidth = thinScrollbar
+            ? std::max(1, std::min((int)thinScrollbarVisualWidth,
+                                  (int)yw->_fontVBScrollW))
+            : yw->_fontVBScrollW;
+        const int verticalTrim = std::max(0,
+            (int)yw->_fontVBScrollW - scrollbarVisualWidth);
+
+        // The thin scrollbar is visual-only. Keep the original logical hit
+        // area so the track and thumb remain easy to click and drag.
         buttons[2] = ButtonBox(v34, v35, yw->_fontVBScrollW, btnStart); // Scroll up part
         buttons[3] = ButtonBox(v34, btnStart + v35, yw->_fontVBScrollW, btnSize); // Scroll position
-        buttons[4] = ButtonBox(v34, btnSize + btnStart + v35,  yw->_fontVBScrollW, scrlSize - (btnSize + btnStart));
+        buttons[4] = ButtonBox(v34, btnSize + btnStart + v35, yw->_fontVBScrollW, scrlSize - (btnSize + btnStart));
         buttons[6] = ButtonBox(0, h - lowerVborder, w - yw->_fontVBScrollW, lowerVborder);
 
         if ( listFlags & GLIST_FLAG_RESIZEABLE )
@@ -317,7 +346,9 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
         else
             buttons[5] = ButtonBox();
 
-        int v7 = x + v34 - (yw->_screenSize.x / 2);
+        // Cropped thin glyphs must start after the trimmed source area so
+        // their visible right edge stays aligned with the window/title edge.
+        int v7 = x + v34 + verticalTrim - (yw->_screenSize.x / 2);
         int v11 = y + v35 - (yw->_screenSize.y / 2);
 
         FontUA::set_center_xpos(&scrollbar, v7);
@@ -326,7 +357,7 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
         if ( btnStart > 0 )
         {
             FontUA::reset_tileset(&scrollbar, 13);
-            FontUA::store_u8(&scrollbar, 67);
+            GuiListStoreTrimmedVerticalGlyph(&scrollbar, 67, verticalTrim);
             FontUA::next_line(&scrollbar);
             FontUA::reset_tileset(&scrollbar, 12);
 
@@ -334,7 +365,7 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
 
             while (v15 >= yw->_fontVScrollH)
             {
-                FontUA::store_u8(&scrollbar, 66);
+                GuiListStoreTrimmedVerticalGlyph(&scrollbar, 66, verticalTrim);
                 FontUA::next_line(&scrollbar);
                 v15 -= yw->_fontVScrollH;
             }
@@ -343,7 +374,7 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
             {
                 FontUA::set_yheight(&scrollbar, v15);
 
-                FontUA::store_u8(&scrollbar, 66);
+                GuiListStoreTrimmedVerticalGlyph(&scrollbar, 66, verticalTrim);
                 FontUA::next_line(&scrollbar);
             }
         }
@@ -352,7 +383,7 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
         if ( btnSize > 0 )
         {
             FontUA::reset_tileset(&scrollbar, 13);
-            FontUA::store_u8(&scrollbar, 69);
+            GuiListStoreTrimmedVerticalGlyph(&scrollbar, 69, verticalTrim);
             FontUA::next_line(&scrollbar);
             FontUA::reset_tileset(&scrollbar, 12);
 
@@ -360,7 +391,7 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
 
             while (v15 > yw->_fontVScrollH)
             {
-                FontUA::store_u8(&scrollbar, 67);
+                GuiListStoreTrimmedVerticalGlyph(&scrollbar, 67, verticalTrim);
                 FontUA::next_line(&scrollbar);
                 v15 -= yw->_fontVScrollH;
             }
@@ -369,13 +400,13 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
             {
                 FontUA::set_yheight(&scrollbar, v15 - 1);
 
-                FontUA::store_u8(&scrollbar, 67);
+                GuiListStoreTrimmedVerticalGlyph(&scrollbar, 67, verticalTrim);
                 FontUA::next_line(&scrollbar);
             }
         }
 
         FontUA::reset_tileset(&scrollbar, 13);
-        FontUA::store_u8(&scrollbar, 70);
+        GuiListStoreTrimmedVerticalGlyph(&scrollbar, 70, verticalTrim);
         FontUA::next_line(&scrollbar);
 
         int v26 = scrlSize - (btnStart  + btnSize);
@@ -386,7 +417,7 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
 
             while (v26 > yw->_fontVScrollH)
             {
-                FontUA::store_u8(&scrollbar, 66);
+                GuiListStoreTrimmedVerticalGlyph(&scrollbar, 66, verticalTrim);
                 FontUA::next_line(&scrollbar);
                 v26 -= yw->_fontVScrollH;
             }
@@ -395,19 +426,19 @@ void GuiList::FormateScrollbar(NC_STACK_ypaworld *yw)
             {
                 FontUA::set_yheight(&scrollbar, v26 - 1);
 
-                FontUA::store_u8(&scrollbar, 66);
+                GuiListStoreTrimmedVerticalGlyph(&scrollbar, 66, verticalTrim);
                 FontUA::next_line(&scrollbar);
             }
 
             FontUA::reset_tileset(&scrollbar, 13);
-            FontUA::store_u8(&scrollbar, 68);
+            GuiListStoreTrimmedVerticalGlyph(&scrollbar, 68, verticalTrim);
             FontUA::next_line(&scrollbar);
         }
 
         if ( listFlags & GLIST_FLAG_RESIZEABLE )
         {
             FontUA::reset_tileset(&scrollbar, 11);
-            FontUA::store_u8(&scrollbar, 71);
+            GuiListStoreTrimmedVerticalGlyph(&scrollbar, 71, verticalTrim);
         }
     }
     else
@@ -438,6 +469,14 @@ void GuiList::FormateItemBlock(NC_STACK_ypaworld *yw)
 int GuiList::Init(NC_STACK_ypaworld *yw, tInit &in)
 {
     closeChar = in.closeChar;
+    thinScrollbar = in.thinScrollbar;
+    thinScrollbarVisualWidth = (int16_t)std::max(1, in.thinScrollbarVisualWidth);
+    fillThinScrollbarGap = in.fillThinScrollbarGap;
+    factionCloseVisual = in.factionCloseVisual;
+    factionAccentTitle = in.factionAccentTitle;
+    wheelScroll = in.wheelScroll;
+    horizontalResizeLocked = in.horizontalResizeLocked;
+    backgroundOpacity = in.backgroundOpacity;
     numEntries = in.numEntries;
     shownEntries = in.shownEntries;
     firstShownEntries = in.firstShownEntry;
@@ -504,7 +543,6 @@ int GuiList::Init(NC_STACK_ypaworld *yw, tInit &in)
         // Do not show it in modern UI windows, even if legacy callers request it.
     }
 
-
     if ( listFlags & GLIST_FLAG_WITH_ICON )
     {
         iconBox.x = 16 * in.iconPos;
@@ -558,25 +596,53 @@ void GuiList::ItemsPreLayout(NC_STACK_ypaworld *yw, CmdStream *cmdbuf, int tiles
     FontUA::set_center_xpos(cmdbuf, v14);
     FontUA::set_center_ypos(cmdbuf, v12);
 
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cmdbuf, backgroundOpacity);
+
     FontUA::set_yheight(cmdbuf, upperVborder);
 
     FontUA::store_s8(cmdbuf, a5[0]);
 
-    FontUA::op17(cmdbuf, entryWidth - yw->_fontBorderW);
+    int fillWidth = entryWidth - yw->_fontBorderW;
+    if ( fillThinScrollbarGap && thinScrollbar )
+    {
+        const int visualWidth = std::max(1, std::min((int)thinScrollbarVisualWidth,
+                                                    (int)yw->_fontVBScrollW));
+        fillWidth += yw->_fontVBScrollW - visualWidth;
+    }
+
+    FontUA::op17(cmdbuf, fillWidth);
 
     FontUA::store_s8(cmdbuf, a5[1]);
     FontUA::store_s8(cmdbuf, a5[2]);
     FontUA::next_line(cmdbuf);
+
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cmdbuf, 255);
 }
 
 void GuiList::ItemsPostLayout(NC_STACK_ypaworld *yw, CmdStream *cmdbuf, int tileset, const char *a5)
 {
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cmdbuf, backgroundOpacity);
+
     FontUA::reset_tileset(cmdbuf, tileset);
     FontUA::set_yoff(cmdbuf, yw->_guiTiles[tileset]->h - lowerVborder);
     FontUA::store_s8(cmdbuf, a5[0]);
-    FontUA::op17(cmdbuf, entryWidth - yw->_fontBorderW);
+    int fillWidth = entryWidth - yw->_fontBorderW;
+    if ( fillThinScrollbarGap && thinScrollbar )
+    {
+        const int visualWidth = std::max(1, std::min((int)thinScrollbarVisualWidth,
+                                                    (int)yw->_fontVBScrollW));
+        fillWidth += yw->_fontVBScrollW - visualWidth;
+    }
+
+    FontUA::op17(cmdbuf, fillWidth);
     FontUA::store_s8(cmdbuf, a5[1]);
     FontUA::store_s8(cmdbuf, a5[2]);
+
+    if ( backgroundOpacity != 255 )
+        FontUA::set_opacity(cmdbuf, 255);
 }
 
 
@@ -600,6 +666,19 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
     int ypos = y;
 
     mouseItem = -1;
+
+    const bool pointerInside = struc->ClickInf.move.ScreenPos.x >= x
+                            && struc->ClickInf.move.ScreenPos.x < x + w
+                            && struc->ClickInf.move.ScreenPos.y >= y
+                            && struc->ClickInf.move.ScreenPos.y < y + h;
+
+    if ( wheelScroll && pointerInside
+            && struc->ClickInf.wheel != 0 && numEntries > shownEntries )
+    {
+        const int maxFirstShown = std::max(0, (int)numEntries - (int)shownEntries);
+        const int nextFirstShown = (int)firstShownEntries - struc->ClickInf.wheel;
+        firstShownEntries = (int16_t)std::max(0, std::min(nextFirstShown, maxFirstShown));
+    }
 
 
 
@@ -644,7 +723,9 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
     {
         if ( v6->flag & TClickBoxInf::FLAG_LM_HOLD )
         {
-            int xps = v6->move.ScreenPos.x + rszX;
+            int xps = horizontalResizeLocked
+                ? yw->_fontVBScrollW + entryWidth
+                : v6->move.ScreenPos.x + rszX;
             int yps = v6->move.ScreenPos.y + rszY;
 
             int v43 = lowerVborder + upperVborder + entryHeight * maxShownEntries;
@@ -656,16 +737,19 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                 v43 += yw->_fontH;
             }
 
-            int v16 = yw->_fontVBScrollW + maxEntryWidth;
-
-            if ( xps > v16 )
-                xps = v16;
-            else
+            if ( !horizontalResizeLocked )
             {
-                v16 = yw->_fontVBScrollW + minEntryWidth;
+                int v16 = yw->_fontVBScrollW + maxEntryWidth;
 
-                if ( xps < v16 )
+                if ( xps > v16 )
                     xps = v16;
+                else
+                {
+                    v16 = yw->_fontVBScrollW + minEntryWidth;
+
+                    if ( xps < v16 )
+                        xps = v16;
+                }
             }
 
             if ( yps > v43 )
@@ -691,7 +775,8 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                     firstShownEntries = 0;
             }
 
-            entryWidth = xps - yw->_fontVBScrollW;
+            if ( !horizontalResizeLocked )
+                entryWidth = xps - yw->_fontVBScrollW;
 
             SetRect(yw, -2, -2);
         }
@@ -815,15 +900,11 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                 flags &= ~FLAG_HELP_DOWN;
         }
 
-        if ( v6->flag & TClickBoxInf::FLAG_BTN_HOLD )
+        if ( v6->flag & (TClickBoxInf::FLAG_BTN_DOWN | TClickBoxInf::FLAG_BTN_HOLD) )
         {
             if ( struc->ClickInf.selected_btnID == 2 )
             {
-                if ( scrollTimer > 0 )
-                {
-                    scrollTimer -= struc->Period;
-                }
-                else
+                if ( (v6->flag & TClickBoxInf::FLAG_BTN_DOWN) || scrollTimer <= 0 )
                 {
                     scrollTimer = 70;
 
@@ -831,14 +912,14 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                     if ( firstShownEntries < 0 )
                         firstShownEntries = 0;
                 }
-            }
-            else if ( struc->ClickInf.selected_btnID == 4 )
-            {
-                if ( scrollTimer > 0 )
+                else
                 {
                     scrollTimer -= struc->Period;
                 }
-                else
+            }
+            else if ( struc->ClickInf.selected_btnID == 4 )
+            {
+                if ( (v6->flag & TClickBoxInf::FLAG_BTN_DOWN) || scrollTimer <= 0 )
                 {
                     firstShownEntries++;
                     scrollTimer = 70;
@@ -848,6 +929,10 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                         if ( firstShownEntries < 0 )
                             firstShownEntries = 0;
                     }
+                }
+                else
+                {
+                    scrollTimer -= struc->Period;
                 }
             }
         }

@@ -503,7 +503,8 @@ int NC_STACK_ypaworld::load_fonts_and_icons()
     {
         TileMap *t = _guiTiles[i];
 
-        t->map[9] = t->map[8];
+        // Keep glyph 8 empty for neutral ownership. The old map glyph 9 was
+        // the diagonal peripheral mask; the strategic map no longer emits it.
         t->map[8] = t->map[0];
     }
 

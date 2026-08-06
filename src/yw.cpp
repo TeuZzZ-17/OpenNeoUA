@@ -27,6 +27,7 @@
 #include "system/system.h"
 #include "locale/locale.h"
 #include "utils.h"
+#include "crashdiag.h"
 
 extern yw_infolog info_log;
 
@@ -1127,6 +1128,7 @@ static void yw_UpdateCockpitCameraToggle(NC_STACK_ypaworld *yw, TInputState *inp
 
 size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 {
+    CrashDiag::SetPhase("WorldPreprocess");
     extern GuiList gui_lstvw; //In yw_game_ui.cpp
     extern GuiList lstvw2; //In yw_game_ui.cpp
     extern bool SPEED_DOWN_NET; //In yw_net.cpp
@@ -1386,6 +1388,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
             uint32_t v23 = profiler_begin();
 
+            CrashDiag::SetPhase("WorldVisibility");
             for (cellArea &cell : _cells)
             {
                 cell.view_mask = cellArea::ViewMask(cell.owner);
@@ -1408,6 +1411,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
             if ( !gameplayFrozen )
             {
+                CrashDiag::SetPhase("WorldSimulationPre");
                 ypaworld_func64__sub15(this);
                 ypaworld_func64__sub16(this);
                 ypaworld_func64__sub17(this);
@@ -1425,6 +1429,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
             if ( !_doNotRender )
             {
+                CrashDiag::SetPhase("WorldGuiPrecompute");
                 uint32_t v33 = profiler_begin();
 
                 ypaworld_func64__sub8(this);
@@ -1458,6 +1463,13 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     ((NC_STACK_yparobo *)_userRobo)->HandleUserCommands(&_updateMessage);
             }
 
+            CrashDiag::UpdateWorldState(_levelInfo.LevelID,
+                                        _updateMessage.units_count,
+                                        _userRobo ? _userRobo->_gid : 0,
+                                        _userUnit ? _userUnit->_gid : 0,
+                                        _viewerBact ? _viewerBact->_gid : 0);
+            CrashDiag::SetPhase("WorldUnitUpdate");
+
             if ( gameplayFrozen )
             {
                 auto updateFrozenUserUnit = [&](NC_STACK_ypabact *unit)
@@ -1470,7 +1482,11 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                         return;
                     }
 
+                    CrashDiag::SetActiveBact(unit, unit->_gid, unit->_bact_type,
+                                                unit->_owner, unit->_status,
+                                                unit->_status_flg, unit->_energy);
                     unit->Update(&_updateMessage);
+                    CrashDiag::ClearActiveBact();
                     _updateMessage.units_count++;
                 };
 
@@ -1483,17 +1499,28 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             {
                 for ( NC_STACK_ypabact *unit : _unitsList.safe_iter() )
                 {
+                    CrashDiag::SetActiveBact(unit, unit->_gid, unit->_bact_type,
+                                                unit->_owner, unit->_status,
+                                                unit->_status_flg, unit->_energy);
                     if (_isNetGame && unit != _userRobo && unit->_bact_type == BACT_TYPES_ROBO)
                         unit->NetUpdate(&_updateMessage);
                     else
                         unit->Update(&_updateMessage);
 
+                    CrashDiag::ClearActiveBact();
                     _updateMessage.units_count++;
                 }
             }
 
+            CrashDiag::ClearActiveBact();
+            CrashDiag::UpdateWorldState(_levelInfo.LevelID,
+                                        _updateMessage.units_count,
+                                        _userRobo ? _userRobo->_gid : 0,
+                                        _userUnit ? _userUnit->_gid : 0,
+                                        _viewerBact ? _viewerBact->_gid : 0);
             _profileVals[PFID_UPDATETIME] = profiler_end(v37);
 
+            CrashDiag::SetPhase("WorldPostUpdate");
             sub_445230(this);
 
             uint32_t v41 = profiler_begin();
@@ -1542,10 +1569,16 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             //ypaworld_func64__sub22(this); // scene events
 
             if (_script && !gameplayFrozen)
+            {
+                CrashDiag::SetPhase("WorldScriptUpdate");
                 _script->CallUpdate(_timeStamp, arg->DTime);
+            }
 
             if ( !gameplayFrozen )
+            {
+                CrashDiag::SetPhase("WorldVoiceUpdate");
                 VoiceMessageUpdate(); // update sound messages
+            }
 
             const mat3x3 &v57 = SFXEngine::SFXe.sb_0x424c74();
             TF::TForm3D *v58 = TF::Engine.GetViewPoint();
@@ -1563,10 +1596,12 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
                 if ( _userUnit->_cellId ) // if cell is not 0,0
                 {
+                    CrashDiag::SetPhase("WorldRender3D");
                     RenderGame(arg, 0);
 
                     GFX::Engine.BeginVirtualUI(_screenSize);
 
+                    CrashDiag::SetPhase("WorldRenderUI");
                     uint32_t uiRenderStart = profiler_begin();
                     sb_0x4d7c08__sub0(this);
                     _profileVals[PFID_NEWGUITIME] = profiler_end(uiRenderStart);
@@ -1588,6 +1623,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 _profileVals[PFID_RENDERTIME] = profiler_end(v62);
             }
 
+            CrashDiag::SetPhase("WorldFrameFinalize");
             FFeedback_Update(); // Do vibrate joystick
 
             sb_0x447720(this, arg->field_8); // Snaps/ start/stop recording
@@ -2185,7 +2221,7 @@ void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
     source.PSample = sample->GetSampleData();
     source.Volume = 100;
     source.Pitch = 0;
-    source.IgnoreTimeScale = true;
+    source.IgnoreTimeScale = false;
     SFXEngine::SFXe.startSound(&_GameShell->samples1_info, soundId);
 }
 
@@ -4798,6 +4834,7 @@ bool NC_STACK_ypaworld::CreateConfirmControls()
     }
 
     NC_STACK_button::button_64_arg btn_64arg;
+    const SDL_Color boxTextColor = GetFactionBoxTextColor();
     btn_64arg.tileset_up = 18;
     btn_64arg.tileset_down = 19;
     btn_64arg.field_3A = 30;
@@ -4812,9 +4849,9 @@ bool NC_STACK_ypaworld::CreateConfirmControls()
     btn_64arg.upCode = 1350;
     btn_64arg.downCode = 1251;
     btn_64arg.button_id = 1300;
-    btn_64arg.txt_r = _iniColors[68].r;
-    btn_64arg.txt_g = _iniColors[68].g;
-    btn_64arg.txt_b = _iniColors[68].b;
+    btn_64arg.txt_r = boxTextColor.r;
+    btn_64arg.txt_g = boxTextColor.g;
+    btn_64arg.txt_b = boxTextColor.b;
 
     if ( _GameShell->confirm_button->Add(&btn_64arg) )
     {
@@ -4842,9 +4879,9 @@ bool NC_STACK_ypaworld::CreateConfirmControls()
             btn_64arg.flags = NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
             btn_64arg.button_id = 1302;
             btn_64arg.width = _screenSize.x * 0.5;
-            btn_64arg.txt_r = _iniColors[60].r;
-            btn_64arg.txt_g = _iniColors[60].g;
-            btn_64arg.txt_b = _iniColors[60].b;
+            btn_64arg.txt_r = boxTextColor.r;
+            btn_64arg.txt_g = boxTextColor.g;
+            btn_64arg.txt_b = boxTextColor.b;
 
             if ( _GameShell->confirm_button->Add(&btn_64arg) )
             {
@@ -10138,6 +10175,14 @@ void NC_STACK_ypaworld::DeleteNewGuiElements()
 SDL_Color NC_STACK_ypaworld::GetColor(int colorID)
 {
     return _iniColors.at(colorID);
+}
+
+SDL_Color NC_STACK_ypaworld::GetFactionBoxTextColor() const
+{
+    if ( _userRobo && _userRobo->_owner == World::OWNER_RESIST )
+        return _iniColors[World::COLOR_TEXT_TOOLTIP];
+
+    return GFX::Engine.Color(255, 255, 255);
 }
 
 
