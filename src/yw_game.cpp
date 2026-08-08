@@ -939,18 +939,42 @@ bool NC_STACK_ypaworld::UpdateSpectatorFollowCamera(TInputState *inpt)
                 _spectatorFollowPitch = 0.95;
         }
 
-        if ( !IsRoboMapOpen() && inpt->ClickInf.wheel )
+        if ( !IsRoboMapOpen() )
         {
-            _spectatorFollowTargetDistance -= inpt->ClickInf.wheel * wheelStep;
+            int zoomSteps = inpt->ClickInf.wheel;
 
-            // Spectator Follow should never zoom out far enough to expose the
-            // finite UA sky dome/skybox. Keep the camera cinematic and local,
-            // but scale the useful range with large vehicles so ROBO/Host
-            // Stations cannot swallow the camera.
-            if ( _spectatorFollowTargetDistance < followMinDistance )
-                _spectatorFollowTargetDistance = followMinDistance;
-            else if ( _spectatorFollowTargetDistance > followMaxDistance )
-                _spectatorFollowTargetDistance = followMaxDistance;
+            // Tactical map, UFO optical view and Spectator Follow are mutually
+            // exclusive contexts, so all three reuse the same Zoom In/Out pair.
+            const int zoomInHotKey =
+                _GameShell->InputConfig[World::INPUT_BIND_ZOOMIN].KeyID;
+            const int zoomOutHotKey =
+                _GameShell->InputConfig[World::INPUT_BIND_ZOOMOUT].KeyID;
+
+            if ( inpt->HotKeyID == zoomInHotKey )
+            {
+                zoomSteps++;
+                inpt->HotKeyID = -1;
+            }
+            else if ( inpt->HotKeyID == zoomOutHotKey )
+            {
+                zoomSteps--;
+                inpt->HotKeyID = -1;
+            }
+
+            if ( zoomSteps != 0 )
+            {
+                _spectatorFollowTargetDistance -= zoomSteps * wheelStep;
+                inpt->ClickInf.wheel = 0;
+
+                // Spectator Follow should never zoom out far enough to expose the
+                // finite UA sky dome/skybox. Keep the camera cinematic and local,
+                // but scale the useful range with large vehicles so ROBO/Host
+                // Stations cannot swallow the camera.
+                if ( _spectatorFollowTargetDistance < followMinDistance )
+                    _spectatorFollowTargetDistance = followMinDistance;
+                else if ( _spectatorFollowTargetDistance > followMaxDistance )
+                    _spectatorFollowTargetDistance = followMaxDistance;
+            }
         }
 
         if ( fperiod > 0.0 )

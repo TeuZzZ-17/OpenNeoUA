@@ -207,6 +207,14 @@ enum OPENUA_STRING
     OUA_KEY_CONFLICT_FORMAT,
     OUA_KEY_CONFLICT_REASSIGN,
 
+    // Contextual zoom labels shared by the tactical map, UFO Spy Camera and
+    // Spectator Follow. Appended to preserve every existing OpenUA string ID.
+    OUA_ZOOM_IN,
+    OUA_ZOOM_OUT,
+
+    // Briefing Play As visibility toggle. Appended to preserve existing IDs.
+    OUA_ENABLE_PLAY_AS,
+
     OUA_STRING_MAX
 };
 

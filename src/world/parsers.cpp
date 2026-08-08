@@ -333,9 +333,18 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
 {
     if ( !StriCmp(word, "new_input") )
     {
+        _isNewInputScope = true;
+        _legacyCameraZoomInSeen = false;
+        _legacyCameraZoomOutSeen = false;
+        _legacyCameraZoomInKey = Input::KC_NONE;
+        _legacyCameraZoomOutKey = Input::KC_NONE;
+
         for (size_t i = 0; i < _o._GameShell->InputConfig.size(); i++)
         {
-            if ( i == World::INPUT_BIND_COCKPIT_CAMERA || i == World::INPUT_BIND_SPRINT )
+            // Preserve defaults for bindings introduced after older user.txt files.
+            // Explicit entries, including nop, still override these defaults below.
+            if ( i == World::INPUT_BIND_COCKPIT_CAMERA ||
+                 i == World::INPUT_BIND_SPRINT )
                 continue;
 
             UserData::TInputConf &k = _o._GameShell->InputConfig[i];
@@ -345,7 +354,10 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
         return true;
     }
     else if ( !StriCmp(word, "modify_input") )
+    {
+        _isNewInputScope = false;
         return true;
+    }
 
     return false;
 }
@@ -353,7 +365,50 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
 int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
     if ( !StriCmp(p1, "end") )
+    {
+        if ( _isNewInputScope )
+        {
+            bool migrated = _legacyCameraZoomInSeen || _legacyCameraZoomOutSeen;
+
+            UserData::TInputConf &zoomIn =
+                _o._GameShell->InputConfig[World::INPUT_BIND_ZOOMIN];
+            UserData::TInputConf &zoomOut =
+                _o._GameShell->InputConfig[World::INPUT_BIND_ZOOMOUT];
+
+            // Import the short-lived split Camera Zoom bindings only when the
+            // surviving map binding still has that build's known Up/Down default
+            // (or is empty). Custom map bindings remain authoritative.
+            if ( zoomIn.PKeyCode == Input::KC_UP ||
+                 (zoomIn.PKeyCode == Input::KC_NONE && _legacyCameraZoomInSeen) )
+            {
+                zoomIn.PKeyCode =
+                    (_legacyCameraZoomInSeen && _legacyCameraZoomInKey != Input::KC_NONE)
+                    ? _legacyCameraZoomInKey : Input::KC_NUMPLUS;
+                _o.ReloadInput(World::INPUT_BIND_ZOOMIN);
+                migrated = true;
+            }
+
+            if ( zoomOut.PKeyCode == Input::KC_DOWN ||
+                 (zoomOut.PKeyCode == Input::KC_NONE && _legacyCameraZoomOutSeen) )
+            {
+                zoomOut.PKeyCode =
+                    (_legacyCameraZoomOutSeen && _legacyCameraZoomOutKey != Input::KC_NONE)
+                    ? _legacyCameraZoomOutKey : Input::KC_NUMMINUS;
+                _o.ReloadInput(World::INPUT_BIND_ZOOMOUT);
+                migrated = true;
+            }
+
+            // The legacy slots must never remain active: otherwise a key used
+            // only by an old Camera Zoom entry could still produce HotKeyID 50/51.
+            Input::Engine.SetHotKey(50, "nop");
+            Input::Engine.SetHotKey(51, "nop");
+
+            if ( migrated )
+                _o._GameShell->inputDefaultsMigrated = true;
+        }
+
         return ScriptParser::RESULT_SCOPE_END;
+    }
 
     _o._GameShell->savedDataFlags |= World::SDF_INPUT;
 
@@ -508,6 +563,34 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
             if ( !Input::Engine.SetHotKey(cfgIdex, buf) )
             {
                 ypa_log_out("WARNING: cannot set hotkey %d with %s\n", cfgIdex, buf.c_str());
+                return ScriptParser::RESULT_OK;
+            }
+
+            if ( cfgIdex == 50 || cfgIdex == 51 )
+            {
+                const std::string legacyKeyName = Stok::Fast(buf, " :\t\n");
+                const int legacyKey = Input::Engine.GetKeyIDByName(legacyKeyName);
+
+                if ( legacyKey == -1 )
+                {
+                    ypa_log_out("Unknown keyword for legacy camera zoom hotkey: %s\n",
+                                legacyKeyName.c_str());
+                    return ScriptParser::RESULT_OK;
+                }
+
+                if ( cfgIdex == 50 )
+                {
+                    _legacyCameraZoomInSeen = true;
+                    _legacyCameraZoomInKey = legacyKey;
+                }
+                else
+                {
+                    _legacyCameraZoomOutSeen = true;
+                    _legacyCameraZoomOutKey = legacyKey;
+                }
+
+                // Accept and immediately neutralize transient slots 50/51.
+                Input::Engine.SetHotKey(cfgIdex, "nop");
                 return ScriptParser::RESULT_OK;
             }
 

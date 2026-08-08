@@ -52,6 +52,11 @@ public:
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
 protected:
     NC_STACK_ypaworld &_o;
+    bool _isNewInputScope = false;
+    bool _legacyCameraZoomInSeen = false;
+    bool _legacyCameraZoomOutSeen = false;
+    int _legacyCameraZoomInKey = 0;
+    int _legacyCameraZoomOutKey = 0;
 };
 
 

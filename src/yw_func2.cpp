@@ -41,6 +41,7 @@ extern int dword_5A50B6_h;
 static constexpr int SETTINGS_CHANGE_PALETTE_THEME = 0x2000;
 static constexpr int SETTINGS_CHANGE_PLAYER_ROBO_AI_BEHAVIOR = 0x4000;
 static constexpr int SETTINGS_CHANGE_SPECTATOR_MODE = 0x8000;
+static constexpr int SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS = 0x10000;
 // OpenUA: modern graphics options
 static constexpr int SETTINGS_CHANGE_MAXFPS                 = 0x40000;
 static constexpr int SETTINGS_CHANGE_BLENDING              = 0x80000;
@@ -1060,6 +1061,8 @@ void  UserData::sb_0x46ca74()
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
         InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
+        InputConfig[World::INPUT_BIND_ZOOMIN] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 16, Input::KC_NUMPLUS);
+        InputConfig[World::INPUT_BIND_ZOOMOUT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 17, Input::KC_NUMMINUS);
 
         std::string tmp = fmt::sprintf("save:%s", userNameDir);
         if ( !uaCreateDir(tmp) )
@@ -1481,6 +1484,14 @@ void UserData::sb_0x46aa8c()
 
         if ( !SaveSpectatorModeToNucleusIni() )
             ypa_log_out("WARNING: Could not save game.spectator_mode to nucleus.ini\n");
+    }
+
+    if ( _settingsChangeOptions & SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS )
+    {
+        System::IniConf::GamePlayAsOtherFactions.Value = confPlayAsOtherFactions;
+
+        if ( !SaveKeyToNucleusIni("game.play_as_other_factions", confPlayAsOtherFactions ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save game.play_as_other_factions to nucleus.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_BLENDING )
@@ -1972,6 +1983,7 @@ void UserData::ShowOptionsMenu()
     confMenuFont = menuFont;
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
+    confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
     confDefaultCockpitCamera = defaultCockpitCamera;
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
@@ -1986,6 +1998,10 @@ void UserData::ShowOptionsMenu()
 
     state.butID = 1175;
     state.field_4 = (!confSpectatorMode) + 1;
+    video_button->SetState(&state);
+
+    state.butID = 1190;
+    state.field_4 = (!confPlayAsOtherFactions) + 1;
     video_button->SetState(&state);
 
     state.butID = 1189;
@@ -2628,6 +2644,7 @@ void UserData::sub_46A3C0()
     confMenuFont = menuFont;
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
+    confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
     confDefaultCockpitCamera = defaultCockpitCamera;
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
@@ -2689,6 +2706,10 @@ void UserData::sub_46A3C0()
 
     v10.field_4 = (!confSpectatorMode) + 1;
     v10.butID = 1175;
+    video_button->SetState(&v10);
+
+    v10.field_4 = (!confPlayAsOtherFactions) + 1;
+    v10.butID = 1190;
     video_button->SetState(&v10);
 
     // OpenUA: reset modern graphics options to the saved/config values
@@ -5487,6 +5508,16 @@ void UserData::GameShellUiHandleInput()
         {
             confSpectatorMode = false;
             _settingsChangeOptions |= SETTINGS_CHANGE_SPECTATOR_MODE;
+        }
+        else if ( r.code == 1316 )
+        {
+            confPlayAsOtherFactions = true;
+            _settingsChangeOptions |= SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS;
+        }
+        else if ( r.code == 1317 )
+        {
+            confPlayAsOtherFactions = false;
+            _settingsChangeOptions |= SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS;
         }
         else if ( r.code == 1250 )
             p_YW->_helpURL = Locale::Text::Help(Locale::HELP_SETTINGS);

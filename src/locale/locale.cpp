@@ -404,6 +404,9 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_PLACE_MAP_MARKER:     fallback = "Place Map Marker"; break;
         case OUA_KEY_CONFLICT_FORMAT:  fallback = "%s is already used by %s."; break;
         case OUA_KEY_CONFLICT_REASSIGN: fallback = "OK reassigns it. Cancel keeps bindings."; break;
+        case OUA_ZOOM_IN:              fallback = "Zoom In"; break;
+        case OUA_ZOOM_OUT:             fallback = "Zoom Out"; break;
+        case OUA_ENABLE_PLAY_AS:        fallback = "Enable Play As"; break;
         default: break;
     }
 
