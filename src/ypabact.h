@@ -503,6 +503,7 @@ public:
     void ApplyWeaponRecoil(const vec3d &dir, float recoil);
     void UpdateAoePush(update_msg *arg);
     void UpdateWeaponRecoilPush(update_msg *arg);      // integrate/decay weapon recoil push or visual offset
+    void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source);
     void ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source);
     void UpdateActiveDebuff(update_msg *arg);
     void ClearActiveDebuff();

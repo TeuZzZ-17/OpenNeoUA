@@ -225,6 +225,7 @@ struct TDamagedFXConfig
 struct TWeaponDebuffConfig
 {
     bool allow = false;
+    bool allow_host_station = false;
     std::string name;
     std::string icon;
     int damage = 0;
@@ -246,6 +247,60 @@ struct TWeaponDebuffConfig
     bool has_fx_random_offset_percent = false;
     bool fx_trail_only = false;
     TVhclSound tick_snd;
+
+    TWeaponDebuffConfig()
+    {
+        tick_snd.volume = 120;
+        tick_snd.sndPrm.mag0 = 1.0;
+        tick_snd.sndPrm.time = 1000;
+        tick_snd.sndPrm_shk.mag0 = 1.0;
+        tick_snd.sndPrm_shk.time = 1000;
+        tick_snd.sndPrm_shk.mute = 0.02;
+        tick_snd.sndPrm_shk.pos.x = 0.2;
+        tick_snd.sndPrm_shk.pos.y = 0.2;
+        tick_snd.sndPrm_shk.pos.z = 0.2;
+    }
+};
+
+struct TSuperItemProfile
+{
+    enum Type
+    {
+        TYPE_INVALID = 0,
+        TYPE_BOMB = 1
+    };
+
+    std::string id;
+    int type = TYPE_INVALID;
+    bool is_default = false;
+    bool valid = false;
+    bool duplicate = false;
+    std::string display_name;
+
+    int wave_vp = 0;
+    vec3d wave_vp_scale = vec3d(1.0, 1.0, 1.0);
+    float wave_vp_reference_radius = 300.0f;
+    vec3d wave_vp_offset;
+    TVisualTint wave_vp_tint;
+    float wave_speed = 0.0f;
+    float wave_max_radius = 0.0f;
+
+    int unit_damage = 0;
+    int building_perfect_destroy_percent = 0;
+    TWeaponDebuffConfig debuff;
+    TVhclSound detonate_snd;
+    std::vector<TChainFXConfig> detonate_chain_fx;
+
+    TSuperItemProfile()
+    {
+        detonate_snd.volume = 120;
+        detonate_snd.sndPrm.mag0 = 1.0;
+        detonate_snd.sndPrm.time = 1000;
+        detonate_snd.sndPrm_shk.mag0 = 1.0;
+        detonate_snd.sndPrm_shk.time = 1000;
+        detonate_snd.sndPrm_shk.mute = 0.02;
+        detonate_snd.sndPrm_shk.pos.z = 1.0;
+    }
 };
 
 struct TWeaponClusterConfig

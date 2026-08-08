@@ -3437,22 +3437,29 @@ void NC_STACK_ypabact::ClearActiveDebuff()
 
 void NC_STACK_ypabact::ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source)
 {
+    ApplyDebuff(debuff, source);
+}
+
+void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source)
+{
     if ( !debuff.allow || debuff.duration <= 0 )
         return;
 
-    if ( _bact_type == BACT_TYPES_ROBO )
+    const bool hostStation = _bact_type == BACT_TYPES_ROBO;
+    if ( hostStation && !debuff.allow_host_station )
         return;
 
     if ( !ypabact_CanUseGameplayStatusMechanics(this) )
         return;
 
-    if ( debuff.mindcontrol && !ypabact_CanBeMindcontrolled(this, source) )
+    if ( !hostStation && debuff.mindcontrol && !ypabact_CanBeMindcontrolled(this, source) )
         return;
 
-    bool canMindcontrol = debuff.mindcontrol;
-    float disorientMotionLevel =
+    bool canMindcontrol = !hostStation && debuff.mindcontrol;
+    float disorientMotionLevel = hostStation ? 0.0f :
         std::max(0.0f, std::min(debuff.disorient_motion_level, 1.0f));
-    bool startDisorientMovement = debuff.disorient && disorientMotionLevel > 0.0f &&
+    bool applyDisorient = !hostStation && debuff.disorient;
+    bool startDisorientMovement = applyDisorient && disorientMotionLevel > 0.0f &&
                                   (!_active_debuff.active ||
                                    !_active_debuff.disorient ||
                                    _active_debuff.disorient_motion_level <= 0.0f);
@@ -3465,9 +3472,9 @@ void NC_STACK_ypabact::ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_
     _active_debuff.tick_time = debuff.tick_time > 0 ? debuff.tick_time : 1000;
     _active_debuff.expire_time = _clock + debuff.duration;
     _active_debuff.next_tick_time = _clock + _active_debuff.tick_time;
-    _active_debuff.disorient = debuff.disorient;
+    _active_debuff.disorient = applyDisorient;
     _active_debuff.disorient_motion_level = disorientMotionLevel;
-    _active_debuff.disorient_fire = debuff.disorient_fire;
+    _active_debuff.disorient_fire = hostStation ? true : debuff.disorient_fire;
     if ( startDisorientMovement )
     {
         _active_debuff.disorient_move_phase = 0;

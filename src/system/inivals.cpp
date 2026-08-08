@@ -313,6 +313,9 @@ Common::Ini::Key IniConf::GameAiTargetRange("game.ai_target_range", Common::Ini:
 // OpenUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
 Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
+// OpenUA custom: exact numeric opt-in for data-driven SuperItem profiles.
+// Missing, malformed, zero or any value other than 1 keeps the legacy path.
+Common::Ini::Key IniConf::GameCustomSuperitems("game.custom_superitems", Common::Ini::KT_DIGIT, (int32_t)0);
 
 // OpenUA custom: opt-in regen/drain unit FX. All numeric values use KT_WORD so
 // malformed user input can be validated safely by World::EnergyFX instead of
@@ -601,6 +604,7 @@ void IniConf::Init()
         , &GameAiTargetRange
         , &GameMgunRange
         , &GameMgunAiFireAlignment
+        , &GameCustomSuperitems
         , &GfxRegenDecorationFXVP
         , &GfxRegenDecorationFXVPScale
         , &GfxRegenDecorationFXVPSpinX

@@ -3559,6 +3559,9 @@ void UserData::clear()
     confAltJoystickEnabled = false;
     confFFEnabled = false;
     keyCatchMode = false;
+    pendingInputTarget = -1;
+    pendingInputKeyCode = 0;
+    pendingInputPositiveSlot = true;
 
     inputChangedParts = 0;
     video_button = NULL;

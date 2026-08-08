@@ -402,7 +402,7 @@ public:
     TQueryState _keyboard;
     std::array<InputNodeList, 32> _buttons;
     std::array<InputNodeList, 32> _sliders;
-    std::array<int16_t, 49>       _hotKeys;
+    std::array<int16_t, 50>       _hotKeys;
 
     static std::array<KeyInfo, KC_MAX>      KeyMatrix;
     static std::array<std::string, KC_MAX>  KeyTitle;
