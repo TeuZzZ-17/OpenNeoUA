@@ -117,10 +117,10 @@ int yw_write_input(FSMgr::FileHandle *fil, UserData *usr)
             }
             else
             {
-                ypa_log_out("Slider(neg) %s is not declared!\n", usr->InputConfigTitle[i].c_str());
-                ypa_log_out("Use space-key for it\n");
-
-                fil->printf("space");
+                // A conflict-confirmed reassignment may intentionally leave one
+                // slider direction unbound. Persist that state instead of
+                // silently turning it into Space on the next restart.
+                fil->printf("nop");
             }
 
             fil->printf("_#");
@@ -132,10 +132,7 @@ int yw_write_input(FSMgr::FileHandle *fil, UserData *usr)
             }
             else
             {
-                ypa_log_out("Slider(pos) %s is not declared!\n", usr->InputConfigTitle[i].c_str());
-                ypa_log_out("Use space-key for it\n");
-
-                fil->printf("space");
+                fil->printf("nop");
             }
         }
         else if ( usr->InputConfig[i].Type == World::INPUT_BIND_TYPE_HOTKEY )
@@ -845,6 +842,11 @@ int yw_write_superbomb(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
         fil->printf("    last_sec          = %d\n", sitem.LastSec);
         fil->printf("    radius            = %d\n", sitem.CurrentRadius);
         fil->printf("    last_radius       = %d\n", sitem.LastRadius);
+        for (int32_t gid : sitem.CustomHitUnitGids)
+        {
+            if ( gid > 0 )
+                fil->printf("    hit_unit          = %d\n", gid);
+        }
         fil->printf("end\n");
 
         i++;

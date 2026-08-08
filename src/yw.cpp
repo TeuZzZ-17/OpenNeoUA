@@ -3,6 +3,7 @@
 #include <math.h>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <map>
 #include <set>
 #include <string>
@@ -980,6 +981,163 @@ bool NC_STACK_ypaworld::ProtosInit()
     return true;
 }
 
+static std::string yw_SuperItemProfileKey(const std::string &id)
+{
+    std::string key = id;
+    std::transform(key.begin(), key.end(), key.begin(),
+                   [](unsigned char ch) { return (char)std::tolower(ch); });
+    return key;
+}
+
+bool NC_STACK_ypaworld::LoadSuperItemProfiles()
+{
+    _superItemProfiles.clear();
+    _defaultSuperItemBombProfile = -1;
+
+    if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 )
+        return false;
+
+    ScriptParser::HandlersList parsers {
+        new World::Parsers::SuperItemProfileParser(&_superItemProfiles)
+    };
+
+    if ( !ScriptParser::ParseFile("data:SuperItemProfiles.ini", parsers,
+                                  ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
+    {
+        ypa_log_out("WARNING: custom SuperItems enabled but Data/SuperItemProfiles.ini is missing or invalid; using vanilla SuperItems.\n");
+        _superItemProfiles.clear();
+        return false;
+    }
+
+    std::map<std::string, std::vector<size_t>> profilesById;
+    for (size_t i = 0; i < _superItemProfiles.size(); ++i)
+    {
+        World::TSuperItemProfile &profile = _superItemProfiles[i];
+        profile.valid = true;
+
+        if ( profile.id.empty() )
+        {
+            profile.valid = false;
+            ypa_log_out("WARNING: SuperItem profile #%u has no id and will be ignored.\n", (unsigned)i);
+        }
+        else
+            profilesById[yw_SuperItemProfileKey(profile.id)].push_back(i);
+
+        if ( profile.type != World::TSuperItemProfile::TYPE_BOMB )
+        {
+            profile.valid = false;
+            ypa_log_out("WARNING: SuperItem profile '%s' has an unsupported type and will be ignored.\n",
+                        profile.id.empty() ? "<missing>" : profile.id.c_str());
+        }
+
+        if ( profile.wave_vp <= 0 )
+        {
+            profile.valid = false;
+            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_vp; using vanilla fallback.\n",
+                        profile.id.empty() ? "<missing>" : profile.id.c_str());
+        }
+
+        if ( !std::isfinite(profile.wave_vp_reference_radius) || profile.wave_vp_reference_radius <= 0.0f )
+        {
+            profile.valid = false;
+            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_vp_reference_radius; using vanilla fallback.\n",
+                        profile.id.empty() ? "<missing>" : profile.id.c_str());
+        }
+
+        if ( !std::isfinite(profile.wave_speed) || profile.wave_speed <= 0.0f )
+        {
+            profile.valid = false;
+            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_speed; using vanilla fallback.\n",
+                        profile.id.empty() ? "<missing>" : profile.id.c_str());
+        }
+
+        if ( !std::isfinite(profile.wave_max_radius) || profile.wave_max_radius < 0.0f )
+        {
+            profile.valid = false;
+            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_max_radius; using vanilla fallback.\n",
+                        profile.id.empty() ? "<missing>" : profile.id.c_str());
+        }
+
+        if ( !std::isfinite(profile.wave_vp_offset.x) )
+            profile.wave_vp_offset.x = 0.0f;
+        if ( !std::isfinite(profile.wave_vp_offset.y) )
+            profile.wave_vp_offset.y = 0.0f;
+        if ( !std::isfinite(profile.wave_vp_offset.z) )
+            profile.wave_vp_offset.z = 0.0f;
+
+        for (auto chainIt = profile.detonate_chain_fx.begin();
+             chainIt != profile.detonate_chain_fx.end(); )
+        {
+            World::TChainFXConfig &chain = *chainIt;
+            chain.vp_models.erase(
+                std::remove_if(chain.vp_models.begin(), chain.vp_models.end(),
+                               [](const World::TChainFXVPModel &vp) { return vp.model <= 0; }),
+                chain.vp_models.end());
+
+            if ( chain.mode != World::TChainFXConfig::MODE_VISUAL ||
+                 chain.trigger != World::TChainFXConfig::TRIGGER_DETONATE ||
+                 chain.duration <= 0 || chain.vp_models.empty() ||
+                 !std::isfinite(chain.start_size) || !std::isfinite(chain.end_size) ||
+                 !std::isfinite(chain.offset.x) || !std::isfinite(chain.offset.y) ||
+                 !std::isfinite(chain.offset.z) )
+            {
+                ypa_log_out("WARNING: invalid detonation Chain FX ignored in SuperItem profile '%s'.\n",
+                            profile.id.empty() ? "<missing>" : profile.id.c_str());
+                chainIt = profile.detonate_chain_fx.erase(chainIt);
+            }
+            else
+                ++chainIt;
+        }
+    }
+
+    for (const auto &entry : profilesById)
+    {
+        if ( entry.second.size() < 2 )
+            continue;
+
+        ypa_log_out("WARNING: duplicate SuperItem profile id '%s'; all conflicting profiles will use vanilla fallback.\n",
+                    entry.first.c_str());
+        for (size_t index : entry.second)
+        {
+            _superItemProfiles[index].duplicate = true;
+            _superItemProfiles[index].valid = false;
+        }
+    }
+
+    int declaredBombDefaults = 0;
+    for (size_t i = 0; i < _superItemProfiles.size(); ++i)
+    {
+        World::TSuperItemProfile &profile = _superItemProfiles[i];
+        if ( profile.type == World::TSuperItemProfile::TYPE_BOMB && profile.is_default )
+        {
+            ++declaredBombDefaults;
+            if ( profile.valid )
+                _defaultSuperItemBombProfile = (int32_t)i;
+        }
+    }
+
+    if ( declaredBombDefaults > 1 )
+    {
+        _defaultSuperItemBombProfile = -1;
+        ypa_log_out("WARNING: multiple default bomb SuperItem profiles found; levels without profile use vanilla fallback.\n");
+    }
+    else if ( _defaultSuperItemBombProfile >= 0 &&
+              !_superItemProfiles[_defaultSuperItemBombProfile].valid )
+        _defaultSuperItemBombProfile = -1;
+
+    for (World::TSuperItemProfile &profile : _superItemProfiles)
+    {
+        if ( !profile.valid )
+            continue;
+        profile.debuff.tick_snd.LoadSamples();
+        profile.detonate_snd.LoadSamples();
+    }
+
+    ypa_log_out("Loaded %u SuperItem profile(s) from Data/SuperItemProfiles.ini.\n",
+                (unsigned)_superItemProfiles.size());
+    return !_superItemProfiles.empty();
+}
+
 int yw_InitSceneRecorder(NC_STACK_ypaworld *yw)
 {
     yw->_replayRecorder = new TGameRecorder();
@@ -1064,6 +1222,9 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
         Deinit();
         return 0;
     }
+
+    if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 )
+        LoadSuperItemProfiles();
 
     _screenSize = GFX::Engine.GetScreenSize();
 
@@ -1154,6 +1315,13 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
 
 size_t NC_STACK_ypaworld::Deinit()
 {
+    ClearSuperItemRuntime();
+    for (World::TSuperItemProfile &profile : _superItemProfiles)
+    {
+        profile.debuff.tick_snd.ClearSounds();
+        profile.detonate_snd.ClearSounds();
+    }
+    _superItemProfiles.clear();
     _debugAoeRings.clear();
     FreeGameDataCursors();
     dprintf("MAKE ME %s\n","ypaworld_func1");
@@ -2658,6 +2826,64 @@ void ypaworld_func129__sub0(NC_STACK_ypaworld *yw, const cellArea &cell, yw_arg1
     }
 }
 
+void NC_STACK_ypaworld::ApplyBuildingHealthChange(cellArea *cell, int bldX, int bldY,
+                                                   int targetHealth, yw_arg129 *arg)
+{
+    if ( !cell || !arg )
+        return;
+
+    targetHealth = std::max(0, std::min(targetHealth, 255));
+    int currentHealth = cell->buildings_health.At(bldX, bldY);
+    int currentModel = _buildHealthModelId[currentHealth];
+    int targetModel = _buildHealthModelId[targetHealth];
+
+    if ( currentModel > targetModel )
+    {
+        while ( currentModel > targetModel )
+        {
+            sub_44FD6C(this, *cell, bldX, bldY);
+            --currentModel;
+        }
+    }
+    else if ( currentModel < targetModel )
+    {
+        while ( currentModel < targetModel )
+        {
+            sub_44FD6C(this, *cell, bldX, bldY);
+            ++currentModel;
+        }
+    }
+
+    cell->buildings_health.At(bldX, bldY) = targetHealth;
+    ypaworld_func129__sub0(this, *cell, arg);
+    CellCheckHealth(cell, arg->OwnerID, arg->unit);
+
+    if ( cell->PurposeType == cellArea::PT_TECHUPGRADE )
+    {
+        if ( _userRobo && _userRobo->_owner == cell->owner )
+        {
+            if ( _isNetGame )
+                sub_47C29C(this, cell, cell->PurposeIndex);
+            else
+                yw_ActivateWunderstein(cell, cell->PurposeIndex);
+
+            HistoryEventAdd(World::History::Upgrade(cell->CellId.x, cell->CellId.y,
+                                                    cell->owner, _techUpgrades[_upgradeId].Type,
+                                                    _upgradeVehicleId, _upgradeWeaponId,
+                                                    _upgradeBuildId));
+        }
+    }
+    else if ( cell->PurposeType == cellArea::PT_TECHDEACTIVE && _isNetGame )
+    {
+        int totalHealth = 0;
+        for (auto health : cell->buildings_health)
+            totalHealth += health;
+
+        if ( !totalHealth )
+            ypaworld_func129__sub1(this, cell, cell->PurposeIndex);
+    }
+}
+
 
 
 void NC_STACK_ypaworld::ypaworld_func129(yw_arg129 *arg)
@@ -2708,68 +2934,11 @@ void NC_STACK_ypaworld::ypaworld_func129(yw_arg129 *arg)
                 bldY = 2 - (v14 - 1);
             }
 
-            int v16 = cell.buildings_health.At(bldX, bldY);
+            int currentHealth = cell.buildings_health.At(bldX, bldY);
 
-            int v34 = v16 - arg->field_10 * (100 - _legoArray[  GetLegoBld(&cell, bldX, bldY)  ].Shield ) / 100 / 400;
+            int targetHealth = currentHealth - arg->field_10 * (100 - _legoArray[GetLegoBld(&cell, bldX, bldY)].Shield) / 100 / 400;
 
-            if ( v34 < 0 )
-                v34 = 0;
-            else if ( v34 > 255 )
-                v34 = 255;
-
-            int v18 = _buildHealthModelId[v16];
-            int v36 = _buildHealthModelId[v34];
-
-            if ( v18 > v36 )
-            {
-                while ( v18 > v36 )
-                {
-                    sub_44FD6C(this, cell, bldX, bldY);
-
-                    v18--;
-                }
-            }
-            else if ( v18 < v36 )
-            {
-                while ( v18 < v36 )
-                {
-                    sub_44FD6C(this, cell, bldX, bldY);
-
-                    v18++;
-                }
-            }
-
-            cell.buildings_health.At(bldX, bldY) = v34;
-
-            ypaworld_func129__sub0(this, cell, arg);
-
-            CellCheckHealth(&cell, arg->OwnerID, arg->unit);
-
-            if ( cell.PurposeType == cellArea::PT_TECHUPGRADE )
-            {
-                if ( _userRobo && _userRobo->_owner == cell.owner )
-                {
-                    if ( _isNetGame )
-                        sub_47C29C(this, &cell, cell.PurposeIndex);
-                    else
-                        yw_ActivateWunderstein(&cell, cell.PurposeIndex);
-
-                    HistoryEventAdd( World::History::Upgrade(sec.x, sec.y, cell.owner, _techUpgrades[ _upgradeId ].Type, _upgradeVehicleId, _upgradeWeaponId, _upgradeBuildId) );
-                }
-            }
-            else if ( cell.PurposeType == cellArea::PT_TECHDEACTIVE )
-            {
-                if ( _isNetGame )
-                {
-                    int v27 = 0;
-
-                    for (auto hlth : cell.buildings_health)
-                        v27 += hlth;
-
-                    if ( !v27 )
-                        ypaworld_func129__sub1(this, &cell, cell.PurposeIndex);
-                }
-            }
+            ApplyBuildingHealthChange(&cell, bldX, bldY, targetHealth, arg);
         }
     }
 }
@@ -4064,6 +4233,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
 {
     _levelTeardownInProgress = true;
     _debugGlobalInvulnerability = false;
+    ClearSuperItemRuntime();
 
     // NC_STACK_ypaworld is reused by restart/load/menu transitions. Invalidate
     // every mission-owned reference before the first BACT is destroyed so UI,
@@ -4212,7 +4382,7 @@ void UserData::sub_46D2B4()
 {
     int v10 = inpListActiveElement;
 
-    for (int i = 0; i <= 48; i++)
+    for (int i = 0; i <= 49; i++)
         Input::Engine.SetHotKey(i, "nop");
 
     for (int i = 1; i < World::INPUT_BIND_MAX; i++)
@@ -4298,7 +4468,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_TAB);
     usr->InputConfig[World::INPUT_BIND_GUN]           = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 2, Input::KC_X);
     usr->InputConfig[World::INPUT_BIND_BRAKE]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3, Input::KC_SPACE);
-    usr->InputConfig[World::INPUT_BIND_CAMFIRE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_NONE);
+    usr->InputConfig[World::INPUT_BIND_CAMFIRE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_CTRL);
     usr->InputConfig[World::INPUT_BIND_HUD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 25, Input::KC_H);
     usr->InputConfig[World::INPUT_BIND_NEW]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 2,  Input::KC_C);
     usr->InputConfig[World::INPUT_BIND_ADD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 3,  Input::KC_Q);
@@ -4336,6 +4506,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_ANALYZER]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 46, Input::KC_F2);
     usr->InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
     usr->InputConfig[World::INPUT_BIND_SPRINT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
+    usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
 
     usr->sub_46D2B4();
 
@@ -8027,6 +8198,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_COCKPIT_CAMERA] = Locale::Text::OpenUA(Locale::OUA_TOGGLE_COCKPIT_CAMERA);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SPRINT]      = Locale::Text::OpenUA(Locale::OUA_SPRINT);
     _GameShell->InputConfigTitle[World::INPUT_BIND_CAMFIRE]     = Locale::Text::Inputs(Locale::INPUTS_FIREVW);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_PLACE_MAP_MARKER] = Locale::Text::OpenUA(Locale::OUA_PLACE_MAP_MARKER);
 
 
 
@@ -9203,7 +9375,10 @@ int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
 
     parsers.push_back( new World::Parsers::SaveLuaScriptParser(this) );
 
-    return ScriptParser::ParseFile(filename, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    bool parsed = ScriptParser::ParseFile(filename, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    if ( parsed )
+        RestoreCustomSuperItemRuntimeAfterLoad();
+    return parsed;
 }
 
 void NC_STACK_ypaworld::LoadingUnitsRefresh()

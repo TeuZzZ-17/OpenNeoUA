@@ -354,8 +354,9 @@ enum INPUT_BIND
     INPUT_BIND_COCKPIT_CAMERA = 46,
     INPUT_BIND_SPRINT     = 47,
     INPUT_BIND_CAMFIRE    = 48,
+    INPUT_BIND_PLACE_MAP_MARKER = 49,
 
-    INPUT_BIND_MAX        = 49,
+    INPUT_BIND_MAX        = 50,
 };
 
 enum SOUND_ID
@@ -648,6 +649,11 @@ public:
     bool confAltJoystickEnabled; // Apply this to altJoystickEnabled on press "OK"
     bool confFFEnabled;
     bool keyCatchMode; // mode for catch input to configure key
+    // Pending remap kept while the duplicate-key confirmation is open.
+    // The actual binding is changed only after the player confirms.
+    int32_t pendingInputTarget = -1;
+    int16_t pendingInputKeyCode = 0;
+    bool pendingInputPositiveSlot = true;
     uint8_t inputChangedParts;
 
     NC_STACK_button *video_button;
@@ -1446,6 +1452,11 @@ struct TMapSuperItem
     int32_t LastSec = 0;
     int32_t CurrentRadius = 0; // Current radius of the propagation wave
     int32_t LastRadius = 0;
+    std::string ProfileId;
+    int32_t CustomProfileIndex = -1;
+    int32_t WaveTransientVPId = 0;
+    std::vector<int32_t> CustomHitUnitGids;
+    std::vector<uint8_t> CustomHitBuildingSlots;
 };
 
 struct TLevelInfo
@@ -2402,7 +2413,7 @@ public:
 
     void sub_4D12D8(int id, int a3);
     void sub_4D1594(int id);
-    void sub_4D1444(int id);
+    void sub_4D1444(int id, bool restoring = false);
     int LoadingParseSaveFile(const std::string &filename);
     void LoadingUnitsRefresh();
     int ParseSettingsFile(const std::string &fname, uint32_t sdfMask);
@@ -2512,6 +2523,7 @@ public:
 
     void ypaworld_func64__sub19__sub2__sub0__sub0(uint8_t activate, float a5, float a6, float a7);
     void ypaworld_func64__sub19__sub2__sub0(int id);
+    void UpdateCustomSuperItem(int id);
     void ypaworld_func64__sub19__sub2(int id);
     void ypaworld_func64__sub19__sub1(int id);
     void ypaworld_func64__sub19__sub0(int id);
@@ -2613,6 +2625,16 @@ public:
     void CellCheckHealth(cellArea *cell, int a5, NC_STACK_ypabact *a6);
     void InitBuddies();
     void InitSuperItems();
+    bool LoadSuperItemProfiles();
+    void ClearSuperItemRuntime();
+    bool IsCustomSuperItem(const TMapSuperItem &sitem) const;
+    const World::TSuperItemProfile *GetSuperItemProfile(const TMapSuperItem &sitem) const;
+    std::string GetSuperItemDisplayName(const TMapSuperItem &sitem) const;
+    void StartCustomSuperItemDetonation(int id);
+    void RestoreCustomSuperItemRuntimeAfterLoad();
+    void UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem, const World::TSuperItemProfile &profile);
+    void ApplyCustomSuperItemFront(int id, float lastRadius, float currentRadius);
+    void ApplyBuildingHealthChange(cellArea *cell, int bldX, int bldY, int targetHealth, yw_arg129 *arg);
     bool LoadBlgMap(const std::string &mapName);
     bool LoadHightMap(const std::string &mapName);
     bool LoadOwnerMap(const std::string &mapName);
@@ -2839,6 +2861,9 @@ public:
     std::vector<World::TWeapProto> _weaponProtos;
     std::vector<World::TBuildingProto> _buildProtos;
     std::vector<World::TRoboProto> _roboProtos;
+    std::vector<World::TSuperItemProfile> _superItemProfiles;
+    int32_t _defaultSuperItemBombProfile = -1;
+    std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
 
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;

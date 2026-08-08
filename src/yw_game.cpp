@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <vector>
 #include <functional>
+#include <limits>
 #include <set>
 #include "env.h"
 #include "includes.h"
@@ -1382,6 +1383,9 @@ void NC_STACK_ypaworld::InitGates()
 
 void NC_STACK_ypaworld::InitSuperItems()
 {
+    ClearSuperItemRuntime();
+    _superItemSoundCarriers.resize(_levelInfo.SuperItems.size());
+
     for ( size_t i = 0; i < _levelInfo.SuperItems.size(); i++ )
     {
         TMapSuperItem &sitem = _levelInfo.SuperItems[i];
@@ -1410,7 +1414,122 @@ void NC_STACK_ypaworld::InitSuperItems()
         sitem.TriggerTime = 0;
         sitem.ActivateOwner = 0;
         sitem.State = TMapSuperItem::STATE_INACTIVE;
+        sitem.CurrentRadius = 0;
+        sitem.LastRadius = 0;
+        sitem.CustomProfileIndex = -1;
+        sitem.WaveTransientVPId = 0;
+        sitem.CustomHitUnitGids.clear();
+        sitem.CustomHitBuildingSlots.clear();
+
+        if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 ||
+             _isNetGame || sitem.Type != TMapSuperItem::TYPE_BOMB )
+            continue;
+
+        int32_t resolvedProfile = -1;
+        if ( !sitem.ProfileId.empty() )
+        {
+            int matches = 0;
+            for (size_t profileIndex = 0; profileIndex < _superItemProfiles.size(); ++profileIndex)
+            {
+                if ( !StriCmp(_superItemProfiles[profileIndex].id, sitem.ProfileId) )
+                {
+                    resolvedProfile = (int32_t)profileIndex;
+                    ++matches;
+                }
+            }
+
+            if ( matches != 1 )
+            {
+                ypa_log_out("WARNING: SuperItem #%u profile '%s' is missing or ambiguous; using vanilla fallback.\n",
+                            (unsigned)i, sitem.ProfileId.c_str());
+                resolvedProfile = -1;
+            }
+        }
+        else
+        {
+            resolvedProfile = _defaultSuperItemBombProfile;
+            if ( resolvedProfile < 0 )
+            {
+                ypa_log_out("WARNING: SuperItem #%u has no profile and no unique valid default bomb profile; using vanilla fallback.\n",
+                            (unsigned)i);
+            }
+        }
+
+        if ( resolvedProfile < 0 || (size_t)resolvedProfile >= _superItemProfiles.size() )
+            continue;
+
+        const World::TSuperItemProfile &profile = _superItemProfiles[resolvedProfile];
+        if ( !profile.valid || profile.duplicate ||
+             profile.type != World::TSuperItemProfile::TYPE_BOMB )
+        {
+            ypa_log_out("WARNING: SuperItem #%u profile '%s' is invalid; using vanilla fallback.\n",
+                        (unsigned)i, profile.id.c_str());
+            continue;
+        }
+
+        if ( profile.wave_vp <= 0 || (size_t)profile.wave_vp >= _vhclModels.size() ||
+             !_vhclModels[profile.wave_vp] )
+        {
+            ypa_log_out("WARNING: SuperItem #%u profile '%s' wave_vp %d is unavailable in this level; using vanilla fallback.\n",
+                        (unsigned)i, profile.id.c_str(), profile.wave_vp);
+            continue;
+        }
+
+        sitem.CustomProfileIndex = resolvedProfile;
+        sitem.CustomHitBuildingSlots.assign(_cells.size() * 9, 0);
+        _superItemSoundCarriers[i].reset(new TSndCarrier());
     }
+}
+
+void NC_STACK_ypaworld::ClearSuperItemRuntime()
+{
+    for (std::unique_ptr<TSndCarrier> &carrier : _superItemSoundCarriers)
+    {
+        if ( carrier )
+            SFXEngine::SFXe.StopCarrier(carrier.get());
+    }
+    _superItemSoundCarriers.clear();
+
+    for (TMapSuperItem &sitem : _levelInfo.SuperItems)
+    {
+        if ( sitem.WaveTransientVPId > 0 )
+            RemoveTransientVP(sitem.WaveTransientVPId);
+        sitem.WaveTransientVPId = 0;
+        sitem.CustomProfileIndex = -1;
+        sitem.CustomHitUnitGids.clear();
+        sitem.CustomHitBuildingSlots.clear();
+    }
+}
+
+const World::TSuperItemProfile *NC_STACK_ypaworld::GetSuperItemProfile(const TMapSuperItem &sitem) const
+{
+    if ( sitem.CustomProfileIndex < 0 ||
+         (size_t)sitem.CustomProfileIndex >= _superItemProfiles.size() )
+        return NULL;
+
+    const World::TSuperItemProfile &profile = _superItemProfiles[sitem.CustomProfileIndex];
+    return profile.valid && !profile.duplicate ? &profile : NULL;
+}
+
+bool NC_STACK_ypaworld::IsCustomSuperItem(const TMapSuperItem &sitem) const
+{
+    return System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 &&
+           !_isNetGame &&
+           sitem.Type == TMapSuperItem::TYPE_BOMB &&
+           GetSuperItemProfile(sitem) != NULL;
+}
+
+std::string NC_STACK_ypaworld::GetSuperItemDisplayName(const TMapSuperItem &sitem) const
+{
+    const World::TSuperItemProfile *profile = GetSuperItemProfile(sitem);
+    if ( IsCustomSuperItem(sitem) && profile && !profile->display_name.empty() )
+        return profile->display_name;
+
+    if ( sitem.Type == TMapSuperItem::TYPE_BOMB )
+        return Locale::Text::Common(Locale::CMN_BOMBNAME);
+    if ( sitem.Type == TMapSuperItem::TYPE_WAVE )
+        return Locale::Text::Common(Locale::CMN_WAVENAME);
+    return "SUPER ITEM";
 }
 
 void NC_STACK_ypaworld::UpdatePowerEnergy()
@@ -2384,6 +2503,9 @@ void NC_STACK_ypaworld::RenderSuperItems(baseRender_msg *arg)
     // Render super items
     for ( const TMapSuperItem &sitem : _levelInfo.SuperItems )
     {
+        if ( IsCustomSuperItem(sitem) )
+            continue;
+
         if ( sitem.State == TMapSuperItem::STATE_TRIGGED )
         {
             vec2d pos = World::SectorIDToCenterPos2( sitem.CellId );
@@ -4525,11 +4647,12 @@ void NC_STACK_ypaworld::sub_4D1594(int id)
     ypaworld_func159(&arg159);
 }
 
-void NC_STACK_ypaworld::sub_4D1444(int id)
+void NC_STACK_ypaworld::sub_4D1444(int id, bool restoring)
 {
     TMapSuperItem &sitem = _levelInfo.SuperItems[id];
     sitem.State = TMapSuperItem::STATE_TRIGGED;
-    sitem.TriggerTime = _timeStamp;
+    if ( !restoring )
+        sitem.TriggerTime = _timeStamp;
 
     ypaworld_arg148 arg148;
     arg148.owner = sitem.PCell->owner;
@@ -4543,7 +4666,27 @@ void NC_STACK_ypaworld::sub_4D1444(int id)
     sitem.PCell->PurposeType = cellArea::PT_STOUDSON;
     sitem.PCell->PurposeIndex = id;
 
-    sitem.LastRadius = 0;
+    if ( !restoring )
+    {
+        const bool customSuperItem = IsCustomSuperItem(sitem);
+        sitem.CurrentRadius = 0;
+        sitem.LastRadius = 0;
+        sitem.CustomHitUnitGids.clear();
+        if ( customSuperItem )
+            sitem.CustomHitBuildingSlots.assign(_cells.size() * 9, 0);
+        else
+            sitem.CustomHitBuildingSlots.clear();
+
+        if ( sitem.WaveTransientVPId > 0 )
+            RemoveTransientVP(sitem.WaveTransientVPId);
+        sitem.WaveTransientVPId = 0;
+
+        if ( customSuperItem )
+            StartCustomSuperItemDetonation(id);
+    }
+
+    if ( restoring )
+        return;
 
     yw_arg159 arg159;
     arg159.Priority = 95;
@@ -4566,6 +4709,142 @@ void NC_STACK_ypaworld::sub_4D1444(int id)
     }
 
     ypaworld_func159(&arg159);
+}
+
+void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
+{
+    if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() )
+        return;
+
+    TMapSuperItem &sitem = _levelInfo.SuperItems[id];
+    if ( !IsCustomSuperItem(sitem) )
+        return;
+
+    World::TSuperItemProfile &profile = _superItemProfiles[sitem.CustomProfileIndex];
+    vec3d center = World::SectorIDToCenterPos3(sitem.CellId);
+    if ( sitem.PCell )
+        center.y = sitem.PCell->height;
+
+    for (const World::TChainFXConfig &chain : profile.detonate_chain_fx)
+    {
+        if ( chain.trigger == World::TChainFXConfig::TRIGGER_DETONATE &&
+             chain.mode == World::TChainFXConfig::MODE_VISUAL )
+            SpawnChainFX(chain, center, mat3x3::Ident());
+    }
+
+    if ( (size_t)id >= _superItemSoundCarriers.size() )
+        _superItemSoundCarriers.resize(_levelInfo.SuperItems.size());
+    if ( !_superItemSoundCarriers[id] )
+        _superItemSoundCarriers[id].reset(new TSndCarrier());
+
+    profile.detonate_snd.LoadSamples();
+    TSndCarrier *carrier = _superItemSoundCarriers[id].get();
+    SFXEngine::SFXe.StopCarrier(carrier);
+    carrier->Resize(1);
+    carrier->Position = center;
+    carrier->Vector = vec3d(0.0, 0.0, 0.0);
+
+    TSoundSource &sound = carrier->Sounds[0];
+    sound.PSample = profile.detonate_snd.MainSample.Sample
+                  ? profile.detonate_snd.MainSample.Sample->GetSampleData()
+                  : NULL;
+    sound.SampleVariants.clear();
+    if ( sound.PSample )
+        sound.SampleVariants.push_back(sound.PSample);
+    for (const World::TVhclSound::TSndSample &variant : profile.detonate_snd.MainSampleVariants)
+    {
+        if ( variant.Sample )
+            sound.SampleVariants.push_back(variant.Sample->GetSampleData());
+    }
+    sound.Volume = profile.detonate_snd.volume;
+    sound.Pitch = profile.detonate_snd.pitch;
+    sound.SetLoop(false);
+    sound.SetFragmented(false);
+
+    if ( profile.detonate_snd.sndPrm.slot )
+    {
+        sound.PPFx = &profile.detonate_snd.sndPrm;
+        sound.SetPFx(true);
+    }
+    else
+    {
+        sound.PPFx = NULL;
+        sound.SetPFx(false);
+    }
+
+    if ( profile.detonate_snd.sndPrm_shk.slot )
+    {
+        sound.PShkFx = &profile.detonate_snd.sndPrm_shk;
+        sound.SetShk(true);
+    }
+    else
+    {
+        sound.PShkFx = NULL;
+        sound.SetShk(false);
+    }
+
+    SFXEngine::SFXe.startSound(carrier, 0);
+    SFXEngine::SFXe.UpdateSoundCarrier(carrier);
+}
+
+void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
+                                                     const World::TSuperItemProfile &profile)
+{
+    if ( sitem.CurrentRadius <= 0 || profile.wave_vp_reference_radius <= 0.0f )
+        return;
+
+    vec3d center = World::SectorIDToCenterPos3(sitem.CellId);
+    if ( sitem.PCell )
+        center.y = sitem.PCell->height;
+    center += profile.wave_vp_offset;
+
+    float factor = (float)sitem.CurrentRadius / profile.wave_vp_reference_radius;
+    vec3d runtimeScale(profile.wave_vp_scale.x * factor,
+                       profile.wave_vp_scale.y,
+                       profile.wave_vp_scale.z * factor);
+
+    if ( sitem.WaveTransientVPId > 0 )
+    {
+        for (TTransientVP &effect : _transientVPs)
+        {
+            if ( effect.id == sitem.WaveTransientVPId )
+            {
+                effect.pos = center;
+                effect.axisScale = runtimeScale;
+                effect.tint = profile.wave_vp_tint;
+                return;
+            }
+        }
+        sitem.WaveTransientVPId = 0;
+    }
+
+    sitem.WaveTransientVPId = SpawnTransientVP(profile.wave_vp, center,
+                                               mat3x3::Ident(), 0, 1.0f,
+                                               profile.wave_vp_tint, runtimeScale);
+}
+
+void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
+{
+    const double mapRadius = sqrt((double)_mapLength.x * _mapLength.x +
+                                  (double)_mapLength.y * _mapLength.y);
+
+    for (TMapSuperItem &sitem : _levelInfo.SuperItems)
+    {
+        if ( sitem.State != TMapSuperItem::STATE_TRIGGED || !IsCustomSuperItem(sitem) )
+            continue;
+
+        const World::TSuperItemProfile *profile = GetSuperItemProfile(sitem);
+        if ( !profile )
+            continue;
+
+        const double maximumRadius = profile->wave_max_radius > 0.0f
+                                   ? (double)profile->wave_max_radius
+                                   : mapRadius;
+        const int32_t maximum = (int32_t)ceil(std::min(maximumRadius,
+                                                       (double)std::numeric_limits<int32_t>::max()));
+        if ( sitem.CurrentRadius > 0 && sitem.CurrentRadius < maximum )
+            UpdateCustomSuperItemWaveVP(sitem, *profile);
+    }
 }
 
 
@@ -5100,6 +5379,234 @@ void NC_STACK_ypaworld::ypaworld_func64__sub19__sub2__sub0(int id)
         sitem.ActivateOwner, tmp.x, tmp.y, sitem.CurrentRadius);
 }
 
+static uint32_t yw_SuperItemBuildingHash(const World::TSuperItemProfile &profile,
+                                         const TMapSuperItem &sitem,
+                                         const cellArea &cell,
+                                         int bldX, int bldY)
+{
+    uint32_t hash = 2166136261u;
+    auto mixByte = [&hash](uint8_t value)
+    {
+        hash ^= value;
+        hash *= 16777619u;
+    };
+    auto mixInt = [&mixByte](int value)
+    {
+        uint32_t raw = (uint32_t)value;
+        mixByte((uint8_t)(raw & 0xff));
+        mixByte((uint8_t)((raw >> 8) & 0xff));
+        mixByte((uint8_t)((raw >> 16) & 0xff));
+        mixByte((uint8_t)((raw >> 24) & 0xff));
+    };
+
+    for (unsigned char ch : profile.id)
+        mixByte(ch);
+    mixInt(sitem.CellId.x);
+    mixInt(sitem.CellId.y);
+    mixInt(cell.CellId.x);
+    mixInt(cell.CellId.y);
+    mixInt(bldX);
+    mixInt(bldY);
+    return hash;
+}
+
+void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, float currentRadius)
+{
+    if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() || currentRadius <= lastRadius )
+        return;
+
+    TMapSuperItem &sitem = _levelInfo.SuperItems[id];
+    if ( !IsCustomSuperItem(sitem) )
+        return;
+
+    World::TSuperItemProfile &profile = _superItemProfiles[sitem.CustomProfileIndex];
+    vec2d center = World::SectorIDToCenterPos2(sitem.CellId);
+    const float lastRadiusSq = lastRadius * lastRadius;
+    const float currentRadiusSq = currentRadius * currentRadius;
+
+    NC_STACK_ypabact *source = yw_getHostByOwner((uint8_t)sitem.ActivateOwner);
+    if ( source && (source->_energy <= 0 || source->_status == BACT_STATUS_DEAD ||
+                    (source->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2))) )
+        source = NULL;
+
+    for (cellArea &cell : _cells)
+    {
+        for (NC_STACK_ypabact *target : cell.unitsList.safe_iter())
+        {
+            if ( !target )
+                continue;
+
+            float dx = center.x - target->_position.x;
+            float dz = center.y - target->_position.z;
+            float distanceSq = dx * dx + dz * dz;
+            if ( distanceSq <= lastRadiusSq || distanceSq > currentRadiusSq )
+                continue;
+
+            if ( target->_gid > 0 )
+            {
+                if ( std::find(sitem.CustomHitUnitGids.begin(), sitem.CustomHitUnitGids.end(),
+                               target->_gid) != sitem.CustomHitUnitGids.end() )
+                    continue;
+                sitem.CustomHitUnitGids.push_back(target->_gid);
+            }
+
+            if ( target->_owner == sitem.ActivateOwner ||
+                 target->_energy <= 0 || target->_status == BACT_STATUS_DEAD ||
+                 (target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
+                 target->IsInvulnerableToDamage() )
+                continue;
+
+            int damage = target->CalcShieldedCustomDamage(profile.unit_damage);
+            if ( damage > 0 )
+            {
+                bact_arg84 damageArg;
+                damageArg.energy = -damage;
+                damageArg.unit = source;
+                damageArg.bypassAttackerDamageModifiers = true;
+                target->ModifyEnergy(&damageArg);
+            }
+
+            if ( profile.debuff.allow && target->_energy > 0 &&
+                 target->_status != BACT_STATUS_DEAD &&
+                 !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
+                target->ApplyDebuff(profile.debuff, source);
+        }
+    }
+
+    for (cellArea &cell : _cells)
+    {
+        if ( !cell.IsGamePlaySector() || cell.PurposeType == cellArea::PT_CONSTRUCTING ||
+             &cell == sitem.PCell )
+            continue;
+
+        int slotCount = cell.SectorType == 1 ? 1 : 3;
+        for (int bldY = 0; bldY < slotCount; ++bldY)
+        {
+            for (int bldX = 0; bldX < slotCount; ++bldX)
+            {
+                int buildingKey = cell.Id * 9 + bldY * 3 + bldX;
+                if ( buildingKey < 0 || (size_t)buildingKey >= sitem.CustomHitBuildingSlots.size() ||
+                     sitem.CustomHitBuildingSlots[buildingKey] )
+                    continue;
+
+                vec3d buildingPos = World::SectorIDToCenterPos3(cell.CellId);
+                buildingPos.y = cell.height;
+                if ( cell.SectorType != 1 )
+                {
+                    buildingPos.x += (bldX - 1) * 300.0f;
+                    buildingPos.z += (bldY - 1) * 300.0f;
+                }
+
+                float dx = center.x - buildingPos.x;
+                float dz = center.y - buildingPos.z;
+                float distanceSq = dx * dx + dz * dz;
+                if ( distanceSq <= lastRadiusSq || distanceSq > currentRadiusSq )
+                    continue;
+
+                sitem.CustomHitBuildingSlots[buildingKey] = 1;
+
+                int currentHealth = cell.buildings_health.At(bldX, bldY);
+                if ( currentHealth <= 0 )
+                    continue;
+
+                TSubSectorDesc *subSector = _secTypeArray[cell.type_id].SubSectors.At(bldX, bldY);
+                if ( !subSector )
+                    continue;
+
+                int currentLego = GetLegoBld(&cell, bldX, bldY);
+                if ( currentLego < 0 || currentLego >= (int)_legoArray.size() ||
+                     _legoArray[currentLego].Shield >= 100 )
+                    continue;
+
+                uint8_t currentVisual = subSector->HPModels[_buildHealthModelId[currentHealth]];
+                bool visuallyPerfect = currentVisual == subSector->HPModels[0];
+                int targetHealth = 0;
+
+                if ( visuallyPerfect )
+                {
+                    bool destroy = profile.building_perfect_destroy_percent >= 100;
+                    if ( profile.building_perfect_destroy_percent > 0 &&
+                         profile.building_perfect_destroy_percent < 100 )
+                    {
+                        destroy = (yw_SuperItemBuildingHash(profile, sitem, cell, bldX, bldY) % 100u) <
+                                  (uint32_t)profile.building_perfect_destroy_percent;
+                    }
+
+                    if ( !destroy )
+                    {
+                        uint8_t destroyedVisual = subSector->HPModels[3];
+                        uint8_t perfectVisual = subSector->HPModels[0];
+                        if ( subSector->HPModels[2] != destroyedVisual &&
+                             subSector->HPModels[2] != perfectVisual )
+                            targetHealth = 100;
+                        else if ( subSector->HPModels[1] != destroyedVisual &&
+                                  subSector->HPModels[1] != perfectVisual )
+                            targetHealth = 200;
+                    }
+                }
+
+                yw_arg129 buildingArg;
+                buildingArg.field_0 = 0;
+                buildingArg.pos = buildingPos;
+                buildingArg.field_10 = 0;
+                buildingArg.OwnerID = sitem.ActivateOwner;
+                buildingArg.unit = source;
+
+                int oldFxLimit = _fxLimit;
+                _fxLimit = 2;
+                ApplyBuildingHealthChange(&cell, bldX, bldY, targetHealth, &buildingArg);
+                _fxLimit = oldFxLimit;
+            }
+        }
+    }
+}
+
+void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
+{
+    if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() )
+        return;
+
+    TMapSuperItem &sitem = _levelInfo.SuperItems[id];
+    const World::TSuperItemProfile *profile = GetSuperItemProfile(sitem);
+    if ( !profile || !IsCustomSuperItem(sitem) )
+        return;
+
+    int64_t elapsed = (int64_t)_timeStamp - (int64_t)sitem.TriggerTime;
+    if ( elapsed < 0 )
+        elapsed = 0;
+
+    double calculatedRadius = (double)elapsed * (double)profile->wave_speed / 1000.0;
+    double maximumRadius = profile->wave_max_radius > 0.0f
+                         ? (double)profile->wave_max_radius
+                         : sqrt((double)_mapLength.x * _mapLength.x +
+                                (double)_mapLength.y * _mapLength.y);
+    bool reachedMaximum = calculatedRadius >= maximumRadius;
+    if ( calculatedRadius > maximumRadius )
+        calculatedRadius = maximumRadius;
+    if ( calculatedRadius > (double)std::numeric_limits<int32_t>::max() )
+        calculatedRadius = (double)std::numeric_limits<int32_t>::max();
+
+    int32_t maximum = (int32_t)ceil(std::min(maximumRadius,
+                                             (double)std::numeric_limits<int32_t>::max()));
+    int32_t computed = reachedMaximum ? maximum : (int32_t)calculatedRadius;
+    sitem.CurrentRadius = std::max(sitem.CurrentRadius, computed);
+    sitem.CurrentRadius = std::max(0, std::min(sitem.CurrentRadius, maximum));
+    sitem.LastRadius = std::max(0, std::min(sitem.LastRadius, sitem.CurrentRadius));
+
+    if ( sitem.CurrentRadius > sitem.LastRadius )
+        ApplyCustomSuperItemFront(id, (float)sitem.LastRadius, (float)sitem.CurrentRadius);
+
+    if ( sitem.CurrentRadius >= maximum )
+    {
+        if ( sitem.WaveTransientVPId > 0 )
+            RemoveTransientVP(sitem.WaveTransientVPId);
+        sitem.WaveTransientVPId = 0;
+    }
+    else
+        UpdateCustomSuperItemWaveVP(sitem, *profile);
+    sitem.LastRadius = sitem.CurrentRadius;
+}
+
 void NC_STACK_ypaworld::ypaworld_func64__sub19__sub2(int id)
 {
     const TMapSuperItem &sitem = _levelInfo.SuperItems[id];
@@ -5107,7 +5614,12 @@ void NC_STACK_ypaworld::ypaworld_func64__sub19__sub2(int id)
     if ( !sub_4D1230(id, sitem.ActivateOwner) && sub_4D12A0(sitem.ActivateOwner) )
     {
         if ( sitem.Type == TMapSuperItem::TYPE_BOMB )
-            ypaworld_func64__sub19__sub2__sub0(id);
+        {
+            if ( IsCustomSuperItem(sitem) )
+                UpdateCustomSuperItem(id);
+            else
+                ypaworld_func64__sub19__sub2__sub0(id);
+        }
     }
     else
     {
@@ -5150,6 +5662,12 @@ void NC_STACK_ypaworld::ypaworld_func64__sub19()
                 break;
             }
         }
+    }
+
+    for (const std::unique_ptr<TSndCarrier> &carrier : _superItemSoundCarriers)
+    {
+        if ( carrier )
+            SFXEngine::SFXe.UpdateSoundCarrier(carrier.get());
     }
 }
 
