@@ -2155,10 +2155,18 @@ void NC_STACK_ypaworld::RenderAdditionalBeeBox(Common::Point sect, TRenderingSec
 
 void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77)
 {
-    if ( sct->dword8 )
-    {
-        cellArea *pcell = sct->p_cell;
+    cellArea *pcell = sct->p_cell;
 
+    // The legacy sector proxy is centered on the terrain. At high altitude,
+    // looking upward can move that proxy completely outside the camera frustum
+    // even though the player cockpit body or a tall RAND border wall is still
+    // visible. Keep ordinary sector culling unchanged, but allow those two
+    // camera-relevant visuals to reach their own mesh clipping stage.
+    const bool renderSectorContents = sct->dword8 != 0;
+    const bool scanBorderWalls = !renderSectorContents && pcell->IsBorder();
+
+    if ( renderSectorContents || scanBorderWalls )
+    {
         int v22 = 0;
 
         vec3d scel;
@@ -2199,6 +2207,9 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 
                 if ( v22 )
                 {
+                    if ( !renderSectorContents )
+                        continue;
+
                     NC_STACK_base *bld = _legoArray[ _secTypeArray[ pcell->type_id ].SubSectors.At(xx, zz)->HPModels[0] ].Base;
 
                     bld->SetStatic(false);
@@ -2217,10 +2228,16 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
                     const int legoId = GetLegoBld(pcell, xx, zz);
                     NC_STACK_base *bld = _legoArray[ legoId ].Base;
 
-                    const bool straightenBorderWall =
-                        _borderWallTopReady && pcell->IsBorder() &&
+                    const bool borderWallModel =
+                        pcell->IsBorder() &&
                         legoId >= kMapBorderWallFirstLego &&
                         legoId <= kMapBorderWallLastLego;
+
+                    if ( !renderSectorContents && !borderWallModel )
+                        continue;
+
+                    const bool straightenBorderWall =
+                        _borderWallTopReady && borderWallModel;
 
                     vec3d originalScale;
                     bool originalStatic = false;
@@ -2261,11 +2278,12 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
         }
     }
 
-    for ( NC_STACK_ypabact* &bact : sct->p_cell->unitsList )
-    {
-        if ( sct->dword8 || bact->_bact_type == BACT_TYPES_ROBO)
-            bact->Render(bs77);
-    }
+    // Dynamic actors must not inherit visibility from the terrain-centered
+    // sector proxy. At high altitude that proxy can leave the frustum while an
+    // aircraft in the same sector is still visible. Each actor keeps its own
+    // VP/skeleton clipping, stealth and first-person body rules in Render().
+    for ( NC_STACK_ypabact* &bact : pcell->unitsList )
+        bact->Render(bs77);
 }
 
 void NC_STACK_ypaworld::yw_renderSky(baseRender_msg *rndr_params)

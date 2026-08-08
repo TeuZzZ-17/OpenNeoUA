@@ -484,6 +484,8 @@ public:
     void UpdateSeekAndExplode(update_msg *arg);
     bool IsSeekAndExplodeArmed();
     bool ApplySeekAndExplodeRammingGuidance();
+    bool ApplyAiMaxAltitudeAboveGround();
+    bool HasLocalPlayerForceVerticalPursuitTarget() const;
     // OpenUA custom: continuous laser beam ("model = laser"). UpdateLaser drives the
     // static tick damage, beam state and loop sound each frame; the firing paths only
     // register a per-frame request via RequestLaserFire().
@@ -882,7 +884,7 @@ public:
     mat3x3 _rotation;
 
     float _height;
-    float _height_max_user;
+    float _player_max_altitude_above_ground;
     vec3d _scale;
     vec3d _vp_scale = vec3d(1.0, 1.0, 1.0);
     World::TVisualTint _vp_tint; // OpenUA custom: main VP visual-only RGBA tint multiplier

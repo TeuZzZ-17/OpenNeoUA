@@ -256,9 +256,12 @@ Common::Ini::Key IniConf::GameFixedTickTankGroundPoseMult("game.fixed_tick_tank_
 // Value is the approximate stop time from canonical top speed, in milliseconds.
 // Missing, zero or negative keeps the vanilla endless-coast behavior.
 Common::Ini::Key IniConf::GamePlayerTankBrakeTime("game.player_tank_brake_time", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenUA custom: maximum altitude above the current sector for player-controlled aerial units.
-// 1600.0 preserves the existing vanilla user-flight limiter.
-Common::Ini::Key IniConf::GamePlayerMaxAltitude("game.player_max_altitude", Common::Ini::KT_WORD, std::string("1600.0"));
+// OpenUA custom: maximum altitude above the current sector terrain for
+// player-controlled aerial units. 1600.0 preserves the vanilla limiter.
+Common::Ini::Key IniConf::GamePlayerMaxAltitudeAboveGround("game.player_max_altitude_above_ground", Common::Ini::KT_WORD, std::string("1600.0"));
+// OpenUA custom: optional absolute AI aerial ceiling above the current sector
+// terrain. Missing, zero, negative or invalid preserves vanilla AI behavior.
+Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_above_ground", Common::Ini::KT_WORD, std::string("0.0"));
 // OpenUA custom: the player Sprint exists only when all three Sprint values are
 // explicitly present in Nucleus.ini. Missing any one of them disables Sprint.
 Common::Ini::Key IniConf::GameSprintForceUpPercent("game.sprint_force_up_percent", Common::Ini::KT_WORD, std::string("0"));
@@ -570,7 +573,8 @@ void IniConf::Init()
         , &GameNewAI
         , &GameFixedTickTankGroundPoseMult
         , &GamePlayerTankBrakeTime
-        , &GamePlayerMaxAltitude
+        , &GamePlayerMaxAltitudeAboveGround
+        , &GameAiMaxAltitudeAboveGround
         , &GameSprintForceUpPercent
         , &GameSprintPitchUpPercent
         , &GameSprintRampTime
