@@ -703,6 +703,7 @@ public:
     std::string confMenuFont;
     bool confPlayerRoboAIBehavior;
     bool confSpectatorMode;
+    bool confPlayAsOtherFactions;
     // OpenUA: saved menu default and current in-game camera preference are intentionally separate.
     // The runtime value is changed by the cockpit-camera hotkey and must survive vehicle/missile-camera
     // transitions until the player toggles it again or applies a new setting from the Options menu.
@@ -870,6 +871,7 @@ public:
 
     std::array<TInputConf, World::INPUT_BIND_MAX>  InputConfig;
     std::array<std::string, World::INPUT_BIND_MAX> InputConfigTitle;
+    bool inputDefaultsMigrated = false;
 
     /* SGM save exist
        0 - not checked

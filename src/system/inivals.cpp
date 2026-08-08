@@ -270,6 +270,9 @@ Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::In
 Common::Ini::Key IniConf::GameTimeLine("game.timeline", Common::Ini::KT_DIGIT, (int32_t)600000);
 Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::KT_BOOL, false);
+// OpenUA custom: exposes the briefing Play As selector. Disabled by default so
+// the Resistance campaign keeps its original presentation and start faction.
+Common::Ini::Key IniConf::GamePlayAsOtherFactions("game.play_as_other_factions", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameWeaponWeaponCollision("game.weapon_weapon_collision", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameRoboBuildingCollisionDamagePercent("game.robo_building_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
 // OpenUA custom: raw max-energy percentage exchanged once when two enemy
@@ -584,6 +587,7 @@ void IniConf::Init()
         , &GameTimeLine
         , &GameRoboPlayerAIBehavior
         , &GameSpectatorMode
+        , &GamePlayAsOtherFactions
         , &GameWeaponWeaponCollision
         , &GameRoboBuildingCollisionDamagePercent
         , &GameUnitEnemyCollisionDamagePercent

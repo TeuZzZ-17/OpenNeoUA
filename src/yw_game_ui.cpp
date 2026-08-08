@@ -5917,7 +5917,11 @@ void gui_update_player_panel(NC_STACK_ypaworld *yw, CmdStream *cur)
         yw->GuiWinClose( &gui_lstvw );
     }
 
-    if ( !spectatorControlled && (bzda.field_1CC & 8) )
+    // Reuse the vanilla Jump into Vehicle button and state machine. Spectator
+    // mode exposes the same button because its command mask already includes
+    // the control-mode bit; only the final action differs and starts external
+    // Spectator Follow instead of taking direct control of the unit.
+    if ( bzda.field_1CC & 8 )
     {
         bzda.buttons[1] = ButtonBox(bzda.field_90C, bzda.field_918, yw->_iconOrderW, yw->_iconOrderH); //into_vhcl_btn
 
@@ -10077,13 +10081,15 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             break;
 
         case 16:
-            // The title-bar +/- buttons were removed. Preserve the existing
-            // keyboard zoom actions without manufacturing an invisible click.
+            // The shared Zoom In/Out pair is contextual. While the tactical
+            // map is open it belongs exclusively to the map, anywhere on screen.
             sub_4C1970(yw, 1);
+            inpt->HotKeyID = -1;
             break;
 
         case 17:
             sub_4C1970(yw, 2);
+            inpt->HotKeyID = -1;
             break;
 
         case 49:
@@ -11223,6 +11229,14 @@ void NC_STACK_ypaworld::ypaworld_func64__sub7(TInputState *inpt)
             ypaworld_func64__sub7__sub0(this, inpt);
             ypaworld_func64__sub7__sub7(this, inpt);
         }
+
+        // The tactical map input handler runs first and consumes wheel/+/-
+        // whenever the map is open. Spectator Follow then receives the same
+        // contextual controls here, before sub2 discards non-map hotkeys in
+        // Spectator Mode. Keeping this call outside FLAG_OK also preserves
+        // distance interpolation on frames without a click-box event.
+        UpdateSpectatorFollowCamera(inpt);
+
         yw_WorldSelectionDragInput(this, inpt);
         ypaworld_func64__sub7__sub2(this, inpt);
     }
@@ -15919,7 +15933,16 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
              _bactOnMouse &&
              IsValidSpectatorFollowTarget(_bactOnMouse) )
         {
+            const bool jumpIntoVehicleMode = (bzda.field_1D0 & 8) != 0;
+
             SetSpectatorFollowTarget(_bactOnMouse);
+
+            // Match the vanilla one-shot control mode: after a valid unit is
+            // selected, release the Jump into Vehicle button. Direct one-click
+            // Spectator Follow remains available when the mode was not armed.
+            if ( jumpIntoVehicleMode )
+                bzda.field_1D0 = bzda.field_1CC & 1;
+
             arg->ClickInf.flag &= ~TClickBoxInf::FLAG_LM_DOWN;
             return;
         }
@@ -16281,12 +16304,28 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
             if ( IsSpectatorControlled() )
             {
                 doAction = World::DOACTION_0;
-                if ( (_guiActFlags & 0x20) && IsValidSpectatorFollowTarget(_bactOnMouse) )
-                    mousePointer = 2;
-                else
-                    mousePointer = 1;
 
-                tooltip = 0;
+                if ( (_guiActFlags & 0x20) && IsValidSpectatorFollowTarget(_bactOnMouse) )
+                {
+                    if ( bzda.field_1D0 & 8 )
+                    {
+                        // The armed button uses the same cursor and tooltip as
+                        // vanilla Jump into Vehicle, while the resulting view
+                        // remains the external Spectator Follow camera.
+                        mousePointer = 8;
+                        tooltip = Locale::TIP_DO_CONTROL;
+                    }
+                    else
+                    {
+                        mousePointer = 2;
+                        tooltip = 0;
+                    }
+                }
+                else
+                {
+                    mousePointer = 1;
+                    tooltip = 0;
+                }
             }
 
             // OpenUA custom: mortar cursor feedback.

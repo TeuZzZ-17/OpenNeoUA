@@ -501,20 +501,44 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
     const bool spectatorObserver = _world && _world->IsSpectatorBact(this);
 
     if (!spectatorObserver && _world && !_world->IsRoboMapOpen()
-            && _world->_userUnit == this && getBACT_inputting()
-            && arg->inpt->ClickInf.selected_btn == NULL && arg->inpt->ClickInf.wheel != 0)
+            && _world->_userUnit == this && getBACT_inputting())
     {
-        const int wheel = arg->inpt->ClickInf.wheel;
-        const float zoomStep = 1.25f;
+        int zoomSteps = 0;
 
-        if (wheel > 0)
+        // Keep the mouse wheel as the permanent contextual shortcut. The
+        // remappable Zoom In/Out pair is shared with the tactical map and
+        // Spectator Follow, with the open map taking absolute priority.
+        if (arg->inpt->ClickInf.selected_btn == NULL && arg->inpt->ClickInf.wheel != 0)
         {
-            for (int i = 0; i < wheel; i++)
+            zoomSteps += arg->inpt->ClickInf.wheel;
+            arg->inpt->ClickInf.wheel = 0;
+        }
+
+        const int zoomInHotKey =
+            _world->_GameShell->InputConfig[World::INPUT_BIND_ZOOMIN].KeyID;
+        const int zoomOutHotKey =
+            _world->_GameShell->InputConfig[World::INPUT_BIND_ZOOMOUT].KeyID;
+
+        if (arg->inpt->HotKeyID == zoomInHotKey)
+        {
+            zoomSteps++;
+            arg->inpt->HotKeyID = -1;
+        }
+        else if (arg->inpt->HotKeyID == zoomOutHotKey)
+        {
+            zoomSteps--;
+            arg->inpt->HotKeyID = -1;
+        }
+
+        const float zoomStep = 1.25f;
+        if (zoomSteps > 0)
+        {
+            for (int i = 0; i < zoomSteps; i++)
                 _playerViewZoom *= zoomStep;
         }
-        else
+        else if (zoomSteps < 0)
         {
-            for (int i = 0; i > wheel; i--)
+            for (int i = 0; i > zoomSteps; i--)
                 _playerViewZoom /= zoomStep;
         }
 
@@ -522,8 +546,6 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
             _playerViewZoom = GFX::VIEW_ZOOM_MIN;
         else if (_playerViewZoom > GFX::VIEW_ZOOM_MAX)
             _playerViewZoom = GFX::VIEW_ZOOM_MAX;
-
-        arg->inpt->ClickInf.wheel = 0;
     }
 
     _old_pos = _position;

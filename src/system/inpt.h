@@ -402,7 +402,10 @@ public:
     TQueryState _keyboard;
     std::array<InputNodeList, 32> _buttons;
     std::array<InputNodeList, 32> _sliders;
-    std::array<int16_t, 50>       _hotKeys;
+    // Slots 50-51 are retained only to import user.txt files produced by the
+    // short-lived separate Camera Zoom bindings. They are cleared by the
+    // input parser and are not exposed as current actions.
+    std::array<int16_t, 52>       _hotKeys;
 
     static std::array<KeyInfo, KC_MAX>      KeyMatrix;
     static std::array<std::string, KC_MAX>  KeyTitle;
