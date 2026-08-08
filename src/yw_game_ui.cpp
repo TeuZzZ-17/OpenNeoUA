@@ -10003,6 +10003,11 @@ static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
         yw_RenderAttackOrderTargetMarker(yw, target, bitmap);
 }
 
+bool NC_STACK_ypaworld::IsRoboMapOpen() const
+{
+    return robo_map.IsOpen();
+}
+
 void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 {
     if ( robo_map.IsClosed() )
@@ -10025,16 +10030,25 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         if ( yw->_showDebugMode )
             robo_map.MapViewMask = -1;
 
-        if ( inpt->ClickInf.selected_btn == &robo_map && inpt->ClickInf.wheel > 0 )
+        // While the tactical map is open, it owns mouse-wheel input globally.
+        // This is intentionally independent of the pointer position and of the
+        // currently controlled unit. Consuming the wheel here also prevents
+        // vehicle-specific zoom paths (for example UFO optical zoom) from
+        // reacting to the same input while the map is visible.
+        const int mapWheel = winpt->wheel;
+        if ( mapWheel > 0 )
         {
-            for ( int i = 0; i < inpt->ClickInf.wheel; i++ )
+            for ( int i = 0; i < mapWheel; i++ )
                 sub_4C1970(yw, 1);
         }
-        else if ( inpt->ClickInf.selected_btn == &robo_map && inpt->ClickInf.wheel < 0 )
+        else if ( mapWheel < 0 )
         {
-            for ( int i = 0; i > inpt->ClickInf.wheel; i-- )
+            for ( int i = 0; i > mapWheel; i-- )
                 sub_4C1970(yw, 2);
         }
+
+        if ( mapWheel != 0 )
+            winpt->wheel = 0;
 
         switch ( inpt->HotKeyID )
         {

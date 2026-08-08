@@ -939,7 +939,7 @@ bool NC_STACK_ypaworld::UpdateSpectatorFollowCamera(TInputState *inpt)
                 _spectatorFollowPitch = 0.95;
         }
 
-        if ( inpt->ClickInf.wheel )
+        if ( !IsRoboMapOpen() && inpt->ClickInf.wheel )
         {
             _spectatorFollowTargetDistance -= inpt->ClickInf.wheel * wheelStep;
 
