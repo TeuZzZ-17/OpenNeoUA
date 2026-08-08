@@ -164,6 +164,13 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                     }
                 }
 
+                if ( ApplyAiMaxAltitudeAboveGround() )
+                {
+                    float descentBoost = _mass * 0.3f * 9.80665f;
+                    if ( _ufoBoost > descentBoost )
+                        _ufoBoost = descentBoost;
+                }
+
                 _thraction = GetActiveDebuffDisorientTraction(_thraction, true);
 
                 move_msg arg74;
@@ -294,9 +301,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                     }
                     else
                     {
-                        NC_STACK_ypabact *v102 = _world->getYW_userVehicle();;
-
-                        if ( ( (_secndTtype != BACT_TGT_TYPE_UNIT || v102 != _secndT.pbact) && ( _primTtype != BACT_TGT_TYPE_UNIT || v102 != _primT.pbact) ) || _target_dir.y >= 0.0 )
+                        if ( !HasLocalPlayerForceVerticalPursuitTarget() || _target_dir.y >= 0.0 )
                         {
                             _ufoFlags |= 5;
                         }
@@ -625,8 +630,8 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
             _ufoBoost = (arg->inpt->Sliders[2] * 4.0 + 1.0) * _mass * 9.80665;
 
             float v85 = _pSector->height - _position.y;
-            float v96 = _height_max_user - v85;
-            float v101 = 1.0 / _height_max_user;
+            float v96 = _player_max_altitude_above_ground - v85;
+            float v101 = 1.0 / _player_max_altitude_above_ground;
 
             float v100 = 9.80665 * _mass * 5.0 * v96 * v101;
 

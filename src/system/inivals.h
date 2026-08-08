@@ -226,7 +226,8 @@ public:
     static Common::Ini::Key GameNewAI;
     static Common::Ini::Key GameFixedTickTankGroundPoseMult;
     static Common::Ini::Key GamePlayerTankBrakeTime;
-    static Common::Ini::Key GamePlayerMaxAltitude;
+    static Common::Ini::Key GamePlayerMaxAltitudeAboveGround;
+    static Common::Ini::Key GameAiMaxAltitudeAboveGround;
     static Common::Ini::Key GameSprintForceUpPercent;
     static Common::Ini::Key GameSprintPitchUpPercent;
     static Common::Ini::Key GameSprintRampTime;
