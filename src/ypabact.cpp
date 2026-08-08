@@ -181,12 +181,28 @@ static bool ypabact_ReadFallDamagePercent(float *outPercent)
     }
 }
 
-static float ypabact_ReadPlayerMaxAltitude()
+static float ypabact_ReadPlayerMaxAltitudeAboveGround()
 {
     constexpr float DefaultAltitude = 1600.0f;
-    float altitude = ypabact_ReadNonNegativeFloatIni(System::IniConf::GamePlayerMaxAltitude, DefaultAltitude);
+    float altitude = ypabact_ReadNonNegativeFloatIni(
+        System::IniConf::GamePlayerMaxAltitudeAboveGround, DefaultAltitude);
     if ( !isfinite(altitude) || altitude <= 0.0f )
         return DefaultAltitude;
+
+    return altitude;
+}
+
+static float ypabact_GetAiMaxAltitudeAboveGround()
+{
+    static const float altitude = []()
+    {
+        float parsed = ypabact_ReadNonNegativeFloatIni(
+            System::IniConf::GameAiMaxAltitudeAboveGround, 0.0f);
+        if ( !isfinite(parsed) || parsed <= 0.0f )
+            return 0.0f;
+
+        return parsed;
+    }();
 
     return altitude;
 }
@@ -1935,7 +1951,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _weaponRecoilPlayerRecoveryEndTime = 0;
     _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
     _height = 0.0;
-    _height_max_user = 0.0;
+    _player_max_altitude_above_ground = 0.0;
     _vp_scale = vec3d(1.0, 1.0, 1.0);
     _vp_tint = World::TVisualTint();
     _vp_orientation = vec3d(0.0, 0.0, 0.0);
@@ -2237,8 +2253,9 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mgun_sector_damage_accum = 0.0;
     _mgun_vp_fire_end_time = 0;
 //    ypabact.field_3CE = 0;
-    // Keep the vanilla user-flight limiter shape; only its altitude is configurable.
-    _height_max_user = ypabact_ReadPlayerMaxAltitude();
+    // The player limit is altitude above the current sector terrain and keeps
+    // the vanilla 1600 default. The optional AI ceiling is read globally.
+    _player_max_altitude_above_ground = ypabact_ReadPlayerMaxAltitudeAboveGround();
     _gun_radius = 5.0;
     _gun_power = 4000.0;
     _spawn_units = 0;
@@ -5239,11 +5256,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
         }
         else
         {
-            NC_STACK_ypabact *a4 = _world->getYW_userVehicle();
-
-            if ( ((_secndTtype != BACT_TGT_TYPE_UNIT || (a4 != _secndT.pbact && _secndT.pbact->_bact_type != BACT_TYPES_ROBO)) &&
-                    (_primTtype != BACT_TGT_TYPE_UNIT || (a4 != _primT.pbact && _primT.pbact->_bact_type != BACT_TYPES_ROBO)))
-                    || _target_dir.y >= -0.01 )
+            if ( !HasLocalPlayerForceVerticalPursuitTarget() || _target_dir.y >= -0.01 )
             {
                 if ( _target_dir.y < 0.15 )
                     _target_dir.y = 0.15;
@@ -5303,6 +5316,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
         }
 
         ApplySeekAndExplodeRammingGuidance();
+        ApplyAiMaxAltitudeAboveGround();
 
         AI_layer3__sub1(this, arg);
 
@@ -5704,12 +5718,12 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
         float v99 = _thraction;
 
         float v47 = _pSector->height - _position.y;
-        float v94 = _height_max_user * 0.8;
+        float v94 = _player_max_altitude_above_ground * 0.8;
 
         if ( v47 > v94 )
         {
             float v91 = _mass * 9.80665 - _force;
-            float v89 = _height_max_user * 0.2;
+            float v89 = _player_max_altitude_above_ground * 0.2;
             float v86 = (v47 - v94) * v91 / v89;
 
             if ( _thraction > v86 )
@@ -7269,6 +7283,55 @@ static bool ypabact_IsSeekAndExplodeArmed(NC_STACK_ypabact *unit)
 bool NC_STACK_ypabact::IsSeekAndExplodeArmed()
 {
     return ypabact_IsSeekAndExplodeArmed(this);
+}
+
+bool NC_STACK_ypabact::ApplyAiMaxAltitudeAboveGround()
+{
+    const float maxAltitudeAboveGround = ypabact_GetAiMaxAltitudeAboveGround();
+    if ( !_pSector || maxAltitudeAboveGround <= 0.0f )
+        return false;
+
+    const float altitudeAboveGround = _pSector->height - _position.y;
+    if ( !isfinite(altitudeAboveGround) ||
+         altitudeAboveGround < maxAltitudeAboveGround )
+        return false;
+
+    // Y grows downward in Urban Assault. At or above the configured ceiling,
+    // replace every upward request with the vanilla mild downward intent.
+    if ( _target_dir.y < 0.15f )
+        _target_dir.y = 0.15f;
+
+    return true;
+}
+
+bool NC_STACK_ypabact::HasLocalPlayerForceVerticalPursuitTarget() const
+{
+    if ( !_world )
+        return false;
+
+    NC_STACK_ypabact *userVehicle = _world->getYW_userVehicle();
+    const int playerOwner = _world->_userRobo ? _world->_userRobo->_owner : World::OWNER_0;
+    const bool customAiAltitudeEnabled = ypabact_GetAiMaxAltitudeAboveGround() > 0.0f;
+
+    auto isEligible = [userVehicle, playerOwner, customAiAltitudeEnabled](NC_STACK_ypabact *target)
+    {
+        if ( !target )
+            return false;
+
+        // Preserve the vanilla Host Station/current-player exceptions and extend
+        // them to the rest of the local player's force. Relinquishing direct
+        // control must not make the same target suddenly lose vertical pursuit.
+        return target->_bact_type == BACT_TYPES_ROBO ||
+               target == userVehicle ||
+               (customAiAltitudeEnabled &&
+                playerOwner != World::OWNER_0 &&
+                target->_owner == playerOwner);
+    };
+
+    if ( _secndTtype == BACT_TGT_TYPE_UNIT && isEligible(_secndT.pbact) )
+        return true;
+
+    return _primTtype == BACT_TGT_TYPE_UNIT && isEligible(_primT.pbact);
 }
 
 static bool ypabact_IsValidSeekAndExplodeTarget(NC_STACK_ypabact *unit, NC_STACK_ypabact *target)

@@ -497,11 +497,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
         }
         else
         {
-            NC_STACK_ypabact *v81 = _world->getYW_userVehicle();
-
-            if ( ( (_secndTtype != BACT_TGT_TYPE_UNIT || (_secndT.pbact->_bact_type != BACT_TYPES_ROBO && v81 != _secndT.pbact))
-                    && (_primTtype != BACT_TGT_TYPE_UNIT || (_primT.pbact->_bact_type != BACT_TYPES_ROBO && v81 != _primT.pbact)) )
-                    || _target_dir.y >= -0.01 )
+            if ( !HasLocalPlayerForceVerticalPursuitTarget() || _target_dir.y >= -0.01 )
             {
                 if ( _target_dir.y < 0.15 )
                     _target_dir.y = 0.15;
@@ -549,8 +545,15 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
         }
 
         ApplySeekAndExplodeRammingGuidance();
+        bool altitudeLimited = ApplyAiMaxAltitudeAboveGround();
 
         ypaflyer_func70__sub0(a2a);
+        if ( altitudeLimited )
+        {
+            float descentBoost = _mass * 0.7f * 9.80665f;
+            if ( _flyerBoost > descentBoost )
+                _flyerBoost = descentBoost;
+        }
         _thraction = GetActiveDebuffDisorientTraction(_thraction, true);
 
         move_msg arg74;
@@ -950,7 +953,7 @@ void NC_STACK_ypaflyer::User_layer(update_msg *arg)
 
         float v22 = _pSector->height - _position.y;
 
-        float v63 = 1.0 / _height_max_user;
+        float v63 = 1.0 / _player_max_altitude_above_ground;
 
         float v72 = _mass * 7.0 * 9.80665  * ( 1.0 - ( POW2(v22) * POW2(v63) ) );
 
