@@ -500,7 +500,8 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
     int a4 = getBACT_bactCollisions();
     const bool spectatorObserver = _world && _world->IsSpectatorBact(this);
 
-    if (!spectatorObserver && _world && _world->_userUnit == this && getBACT_inputting()
+    if (!spectatorObserver && _world && !_world->IsRoboMapOpen()
+            && _world->_userUnit == this && getBACT_inputting()
             && arg->inpt->ClickInf.selected_btn == NULL && arg->inpt->ClickInf.wheel != 0)
     {
         const int wheel = arg->inpt->ClickInf.wheel;

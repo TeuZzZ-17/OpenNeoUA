@@ -2546,6 +2546,7 @@ public:
     void ypaworld_func64__sub21__sub1__sub0(TInputState *arg);
 
     void yw_MAP_MouseSelect(TClickBoxInf *winp);
+    bool IsRoboMapOpen() const;
 
     void ypaworld_func64__sub21__sub1__sub3__sub0(TClickBoxInf *winp);
     void yw_3D_MouseSelect(TClickBoxInf *winp);
