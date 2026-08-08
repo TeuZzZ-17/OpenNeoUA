@@ -1662,7 +1662,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 _win3d->raster_func192(NULL);*/
             }
 
-            UpdateSpectatorFollowCamera(arg->field_8);
+            // Spectator Follow input is handled during the GUI input pass,
+            // immediately after the tactical map. This lets an open map consume
+            // the shared wheel/+/- controls first and prevents the later
+            // spectator hotkey filter from discarding Camera Zoom input.
 
             if ( !gameplayFrozen )
             {
@@ -4382,7 +4385,7 @@ void UserData::sub_46D2B4()
 {
     int v10 = inpListActiveElement;
 
-    for (int i = 0; i <= 49; i++)
+    for (int i = 0; i < World::INPUT_BIND_MAX; i++)
         Input::Engine.SetHotKey(i, "nop");
 
     for (int i = 1; i < World::INPUT_BIND_MAX; i++)
@@ -6407,6 +6410,59 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         return false;
     }
 
+    // --- Enable Play As checkbox (row 8, free right column) ---
+    // Disabled by default: the briefing keeps the original Resistance-only
+    // presentation until the player explicitly enables the optional selector.
+    {
+        int playAsAvailableWidth = dword_5A50B2 - 6 * buttonsSpace - 2 * checkBoxWidth;
+        int playAsColumnWidth = playAsAvailableWidth / 2;
+
+        btn_64arg.tileset_down = 19;
+        btn_64arg.tileset_up = 18;
+        btn_64arg.field_3A = 30;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
+        btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + playAsColumnWidth;
+        btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
+        btn_64arg.width = checkBoxWidth;
+        btn_64arg.caption = "g";
+        btn_64arg.caption2 = "g";
+        btn_64arg.downCode = 1316;
+        btn_64arg.upCode = 1317;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 1190;
+        btn_64arg.flags = 0;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Enable Play As checkbox\n");
+            return false;
+        }
+
+        btn_64arg.tileset_down = 16;
+        btn_64arg.tileset_up = 16;
+        btn_64arg.field_3A = 16;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+        btn_64arg.xpos = 4 * buttonsSpace + playAsColumnWidth + 2 * checkBoxWidth;
+        btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
+        btn_64arg.width = playAsColumnWidth;
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_ENABLE_PLAY_AS);
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 0;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 0;
+        btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
+        btn_64arg.txt_r = _iniColors[60].r;
+        btn_64arg.txt_g = _iniColors[60].g;
+        btn_64arg.txt_b = _iniColors[60].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Enable Play As label\n");
+            return false;
+        }
+    }
+
     // ===== OpenUA: modern graphics options =====================================
     // Blending, menu font, frame limit and the remaining main-page controls.
     {
@@ -8181,8 +8237,8 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_HEIGHT]      = Locale::Text::Inputs(Locale::INPUTS_HEIGHT);
     _GameShell->InputConfigTitle[World::INPUT_BIND_MINIMAP]     = Locale::Text::Inputs(Locale::INPUTS_MAPMINI);
     _GameShell->InputConfigTitle[World::INPUT_BIND_LOCKVIEW]    = Locale::Text::Inputs(Locale::INPUTS_LOCKVW);
-    _GameShell->InputConfigTitle[World::INPUT_BIND_ZOOMIN]      = Locale::Text::Inputs(Locale::INPUTS_ZOOMIN);
-    _GameShell->InputConfigTitle[World::INPUT_BIND_ZOOMOUT]     = Locale::Text::Inputs(Locale::INPUTS_ZOOMOUT);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_ZOOMIN]      = Locale::Text::OpenUA(Locale::OUA_ZOOM_IN);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_ZOOMOUT]     = Locale::Text::OpenUA(Locale::OUA_ZOOM_OUT);
     _GameShell->InputConfigTitle[World::INPUT_BIND_LOG_WND]     = Locale::Text::Inputs(Locale::INPUTS_LOGWIN);
     _GameShell->InputConfigTitle[World::INPUT_BIND_CONTROL]     = Locale::Text::Inputs(Locale::INPUTS_CONTROL);
     _GameShell->InputConfigTitle[World::INPUT_BIND_LAST_SEAT]   = Locale::Text::Inputs(Locale::INPUTS_TOLASTOCCUP);
@@ -9236,6 +9292,10 @@ void NC_STACK_ypaworld::UpdateGameShell()
     v16.field_4 = (!System::IniConf::GameSpectatorMode.Get<bool>()) + 1;
     _GameShell->video_button->SetState(&v16);
 
+    v16.butID = 1190;
+    v16.field_4 = (!System::IniConf::GamePlayAsOtherFactions.Get<bool>()) + 1;
+    _GameShell->video_button->SetState(&v16);
+
     v16.butID = 1157;
     v16.field_4 = ((_GameShell->GFXFlags & World::GFX_FLAG_FARVIEW) == 0) + 1;
     _GameShell->video_button->SetState(&v16);
@@ -9773,6 +9833,15 @@ size_t NC_STACK_ypaworld::LoadSettings(const std::string &fileName, const std::s
     if ( (sdfMask & World::SDF_SCORE) && (_GameShell->savedDataFlags & World::SDF_SCORE) )
     {
         _GameShell->UserName = userName;
+    }
+
+    const bool persistInputMigration = _GameShell->inputDefaultsMigrated;
+    _GameShell->inputDefaultsMigrated = false;
+
+    if ( persistInputMigration && (sdfMask & World::SDF_ALL) == World::SDF_ALL )
+    {
+        if ( !SaveSettings(_GameShell, fileName, World::SDF_ALL) )
+            ypa_log_out("Warning: unable to persist migrated input defaults in %s\n", fileName.c_str());
     }
 
     if ( sdfMask & World::SDF_INPUT )

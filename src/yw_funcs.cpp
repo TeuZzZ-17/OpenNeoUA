@@ -1834,6 +1834,9 @@ void NC_STACK_ypaworld::BriefingInitPlayAsOwners()
     _briefScreen.PlayAsSelectedIndex = 0;
     _briefScreen.PlayAsLevelID = _levelInfo.LevelID;
 
+    if ( !System::IniConf::GamePlayAsOtherFactions.Get<bool>() )
+        return;
+
     std::string ownersLog;
 
     for ( const MapRobo &robo : _briefScreen.Desc.Robos )
@@ -1879,7 +1882,8 @@ void NC_STACK_ypaworld::BriefingInitPlayAsOwners()
 
 bool NC_STACK_ypaworld::BriefingHasPlayAsChoices() const
 {
-    return _briefScreen.PlayAsOwners.size() > 1;
+    return System::IniConf::GamePlayAsOtherFactions.Get<bool>() &&
+           _briefScreen.PlayAsOwners.size() > 1;
 }
 
 int16_t NC_STACK_ypaworld::BriefingSelectedPlayAsOwner() const
@@ -1909,6 +1913,9 @@ void NC_STACK_ypaworld::BriefingCyclePlayAsOwner()
 
 std::vector<MapRobo> NC_STACK_ypaworld::BriefingReorderRobosForPlayAs(const std::vector<MapRobo> &Robos) const
 {
+    if ( !System::IniConf::GamePlayAsOtherFactions.Get<bool>() )
+        return Robos;
+
     if ( _briefScreen.PlayAsLevelID != _levelInfo.LevelID )
         return Robos;
 

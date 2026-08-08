@@ -234,6 +234,7 @@ public:
     static Common::Ini::Key GameTimeLine;
     static Common::Ini::Key GameRoboPlayerAIBehavior;
     static Common::Ini::Key GameSpectatorMode;
+    static Common::Ini::Key GamePlayAsOtherFactions;
     static Common::Ini::Key GameWeaponWeaponCollision;
     static Common::Ini::Key GameRoboBuildingCollisionDamagePercent;
     static Common::Ini::Key GameUnitEnemyCollisionDamagePercent;
