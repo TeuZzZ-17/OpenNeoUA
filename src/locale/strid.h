@@ -200,6 +200,13 @@ enum OPENUA_STRING
     // Manual weapon selection binding. Appended to preserve existing IDs.
     OUA_SWITCH_WEAPON,
 
+    // Remappable action for placing a personal marker on the tactical map.
+    OUA_PLACE_MAP_MARKER,
+
+    // Input-remapping conflict confirmation. Appended to preserve existing IDs.
+    OUA_KEY_CONFLICT_FORMAT,
+    OUA_KEY_CONFLICT_REASSIGN,
+
     OUA_STRING_MAX
 };
 

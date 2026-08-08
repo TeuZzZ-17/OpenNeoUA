@@ -96,6 +96,18 @@ protected:
     NC_STACK_ypaworld &_o;
 };
 
+class SuperItemProfileParser : public ScriptParser::DataHandler
+{
+public:
+    SuperItemProfileParser(std::vector<TSuperItemProfile> *profiles)
+    : _profiles(*profiles) {};
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+protected:
+    std::vector<TSuperItemProfile> &_profiles;
+    TSuperItemProfile *_profile = NULL;
+};
+
 class MiscParser : public ScriptParser::DataHandler
 {
 public:

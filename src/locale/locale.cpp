@@ -399,8 +399,11 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_RETRO:           fallback = "Retro"; break;
         case OUA_SMOOTH:          fallback = "Smooth"; break;
         case OUA_RETRO_INTERFACE: fallback = "Retro Interface"; break;
-        case OUA_RENDER_DISTANCE: fallback = "Render Distance"; break;
-        case OUA_SWITCH_WEAPON:   fallback = "Switch Weapon"; break;
+        case OUA_RENDER_DISTANCE:   fallback = "Render Distance"; break;
+        case OUA_SWITCH_WEAPON:        fallback = "Switch Weapon"; break;
+        case OUA_PLACE_MAP_MARKER:     fallback = "Place Map Marker"; break;
+        case OUA_KEY_CONFLICT_FORMAT:  fallback = "%s is already used by %s."; break;
+        case OUA_KEY_CONFLICT_REASSIGN: fallback = "OK reassigns it. Cancel keeps bindings."; break;
         default: break;
     }
 

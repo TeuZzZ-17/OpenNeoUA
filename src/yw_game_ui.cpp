@@ -4488,46 +4488,14 @@ int sub_4F6048(NC_STACK_ypaworld *yw, int x, int y)
     return 0;
 }
 
-static int yw_RoboMapTerrainGlyph(int glyph)
-{
-    // LEGO16 glyph 1 is the GR_EMPTY terrain grid. Hide only that terrain
-    // marker; all other LEGO/building glyphs remain drawable.
-    return glyph == 1 ? 0 : glyph;
-}
-
-static bool yw_RoboMapSubSectorHasBuilding(TSectorDesc &sector, int bldX, int bldY)
-{
-    const TSubSectorDesc *subSector = sector.SubSectors.At(bldX, bldY);
-    return subSector && subSector->StartHealth > 0;
-}
-
-static bool yw_RoboMapCellHasBuilding(NC_STACK_ypaworld *yw, const cellArea &cell)
-{
-    TSectorDesc &sector = yw->_secTypeArray[cell.type_id];
-
-    if ( cell.SectorType == 1 )
-        return yw_RoboMapSubSectorHasBuilding(sector, 0, 0);
-
-    for ( int bldY = 0; bldY < 3; bldY++ )
-    {
-        for ( int bldX = 0; bldX < 3; bldX++ )
-        {
-            if ( yw_RoboMapSubSectorHasBuilding(sector, bldX, bldY) )
-                return true;
-        }
-    }
-
-    return false;
-}
-
 int sub_4F5FE0(NC_STACK_ypaworld *yw, int x, int y)
 {
     if ( yw->IsSector( {x, y} ) )
     {
         cellArea &v6 = yw->_cells(x, y);
 
-        if ( robo_map.MapViewMask & v6.view_mask && yw_RoboMapCellHasBuilding(yw, v6) )
-            return yw_RoboMapTerrainGlyph(yw->_secTypeArray[v6.type_id].GUIElementID);
+        if ( robo_map.MapViewMask & v6.view_mask )
+            return yw->_secTypeArray[v6.type_id].GUIElementID;
     }
 
     return 0;
@@ -4550,34 +4518,22 @@ int sub_4F5CEC(NC_STACK_ypaworld *yw, int x, int y)
 
     if ( v8 && v27 )
     {
-        const int bldX = v8 - 1;
-        const int bldY = 2 - (v27 - 1);
-        TSectorDesc &sector = yw->_secTypeArray[v12.type_id];
-
-        // Empty terrain and the empty infected-Mykonian sector use the same
-        // LEGO path as buildings, but their subsector has no starting health.
-        // Suppress that visual only; occupied buildings remain visible even
-        // after their current health reaches a destroyed model.
-        if ( !yw_RoboMapSubSectorHasBuilding(sector, bldX, bldY) )
-            return 0;
-
         if ( v12.SectorType == 1 )
         {
             TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, 0, 0) ];
             int v25 = (16 * (v27 - 1) + v8 - 1 + v26->GUIElementID) & 0xFF;
-            return yw_RoboMapTerrainGlyph(v25);
+            return v25;
         }
         else
         {
-            TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, bldX, bldY)  ];
-            return yw_RoboMapTerrainGlyph(v26->GUIElementID);
+            TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, v8 - 1, 2 - (v27 - 1))  ];
+            return v26->GUIElementID;
         }
     }
     else
     {
-        // The sector-edge callback only returns grid/elevation boundary
-        // glyphs. Keep the LEGO/building glyphs returned above, but do not
-        // draw this separate grid layer.
+        // OpenUA: hide only the strategic-map grid/elevation-boundary layer.
+        // LEGO terrain and building glyphs are returned by the branch above.
         return 0;
     }
 }
@@ -4820,6 +4776,16 @@ static int yw_AddRoboMapMarker(NC_STACK_ypaworld *yw, const Common::Point &btnPo
 
     robo_map.customMarkers.push_back(worldPos);
     return (int)robo_map.customMarkers.size() - 1;
+}
+
+static bool yw_PlaceRoboMapMarker(NC_STACK_ypaworld *yw, const Common::Point &btnPos)
+{
+    if ( yw_AddRoboMapMarker(yw, btnPos) < 0 )
+        return false;
+
+    robo_map.markerMode = true;
+    yw->PlayConfiguredMapMarkerSound();
+    return true;
 }
 
 static bool yw_RemoveNearestRoboMapMarker(const Common::Point &btnPos)
@@ -10106,6 +10072,21 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             sub_4C1970(yw, 2);
             break;
 
+        case 49:
+            // The remappable action is an additional route. Middle click
+            // remains the permanent contextual shortcut handled below.
+            if ( winpt->selected_btn == &robo_map && winpt->selected_btnID == 17 )
+            {
+                yw_PlaceRoboMapMarker(yw, winpt->move.BtnPos);
+
+                // If the player explicitly binds this action to middle mouse,
+                // consume the physical click so the contextual route below
+                // does not create a second marker in the same frame.
+                winpt->flag &= ~TClickBoxInf::FLAG_MM_DOWN;
+                yw->_guiDragDefaultMouse = false;
+            }
+            break;
+
         default:
             break;
         }
@@ -10253,14 +10234,9 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             {
                 if ( winpt->selected_btnID == 17 )
                 {
-                    // Middle click creates one personal marker. Creation is
-                    // independent of the layer toggle and enables the layer so
-                    // the newly placed marker is immediately visible.
-                    if ( yw_AddRoboMapMarker(yw, winpt->move.BtnPos) >= 0 )
-                    {
-                        robo_map.markerMode = true;
-                        yw->PlayConfiguredMapMarkerSound();
-                    }
+                    // Middle click is always available as the fast map-marker
+                    // shortcut, independently of the optional remappable key.
+                    yw_PlaceRoboMapMarker(yw, winpt->move.BtnPos);
                     winpt->flag &= ~TClickBoxInf::FLAG_MM_DOWN;
                     yw->_guiDragDefaultMouse = false;
                 }
@@ -14989,12 +14965,7 @@ void sb_0x4d7c08__sub0__sub2(NC_STACK_ypaworld *yw)
         if ( sitem.Type != 0 )
         {
             std::string timeStr;
-            std::string typeStr = "SUPER ITEM";
-
-            if (sitem.Type == TMapSuperItem::TYPE_BOMB)
-                typeStr = Locale::Text::Common(Locale::CMN_BOMBNAME);
-            else if ( sitem.Type == TMapSuperItem::TYPE_WAVE )
-                typeStr = Locale::Text::Common(Locale::CMN_WAVENAME);
+            std::string typeStr = yw->GetSuperItemDisplayName(sitem);
 
             int v23 = 0;
 

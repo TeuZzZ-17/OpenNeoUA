@@ -51,6 +51,103 @@ static constexpr int SETTINGS_CHANGE_INTERFACE_STYLE       = 0x800000;
 static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
     SETTINGS_CHANGE_BLENDING | SETTINGS_CHANGE_MENU_FONT;
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
+static constexpr int MENU_MSGBOX_INPUT_KEY_CONFLICT = 2;
+
+static bool InputKeyUsesOtherSlot(const UserData *usr, int target, bool positiveSlot, int16_t keyCode)
+{
+    if ( !usr || keyCode == Input::KC_NONE )
+        return false;
+
+    for ( int i = 1; i < World::INPUT_BIND_MAX; ++i )
+    {
+        const UserData::TInputConf &cfg = usr->InputConfig[i];
+        if ( cfg.PKeyCode == keyCode && !(i == target && positiveSlot) )
+            return true;
+        if ( cfg.NKeyCode == keyCode && !(i == target && !positiveSlot) )
+            return true;
+    }
+
+    return false;
+}
+
+static std::string InputKeyConflictNames(const UserData *usr, int target, bool positiveSlot, int16_t keyCode)
+{
+    std::vector<std::string> names;
+
+    for ( int i = 1; i < World::INPUT_BIND_MAX; ++i )
+    {
+        const UserData::TInputConf &cfg = usr->InputConfig[i];
+        const bool conflict =
+            (cfg.PKeyCode == keyCode && !(i == target && positiveSlot)) ||
+            (cfg.NKeyCode == keyCode && !(i == target && !positiveSlot));
+
+        if ( !conflict )
+            continue;
+
+        std::string title = usr->InputConfigTitle[i];
+        if ( title.empty() )
+            title = fmt::sprintf("Action %d", i);
+
+        if ( std::find(names.begin(), names.end(), title) == names.end() )
+            names.push_back(title);
+    }
+
+    if ( names.empty() )
+        return "another action";
+
+    std::string result = names[0];
+    if ( names.size() >= 2 )
+        result += " / " + names[1];
+    if ( names.size() > 2 )
+        result += fmt::sprintf(" (+%d)", (int)names.size() - 2);
+
+    return result;
+}
+
+static void ClearInputKeyConflicts(UserData *usr, int target, bool positiveSlot, int16_t keyCode)
+{
+    for ( int i = 1; i < World::INPUT_BIND_MAX; ++i )
+    {
+        UserData::TInputConf &cfg = usr->InputConfig[i];
+
+        if ( cfg.PKeyCode == keyCode && !(i == target && positiveSlot) )
+            cfg.PKeyCode = Input::KC_NONE;
+        if ( cfg.NKeyCode == keyCode && !(i == target && !positiveSlot) )
+            cfg.NKeyCode = Input::KC_NONE;
+    }
+}
+
+static void ApplyCapturedInputKey(UserData *usr, int target, bool positiveSlot, int16_t keyCode)
+{
+    if ( !usr || target <= 0 || target >= World::INPUT_BIND_MAX )
+        return;
+
+    UserData::TInputConf &cfg = usr->InputConfig[target];
+
+    if ( positiveSlot )
+    {
+        cfg.PKeyCode = keyCode;
+
+        if ( cfg.Type == World::INPUT_BIND_TYPE_SLIDER )
+            usr->confFirstKey = false;
+
+        usr->keyCatchMode = false;
+        cfg.SetFlags = 0;
+    }
+    else
+    {
+        cfg.NKeyCode = keyCode;
+        cfg.SetFlags &= ~UserData::TInputConf::IF_SECOND;
+        usr->confFirstKey = true;
+    }
+}
+
+static void ClearPendingInputKey(UserData *usr)
+{
+    usr->pendingInputTarget = -1;
+    usr->pendingInputKeyCode = Input::KC_NONE;
+    usr->pendingInputPositiveSlot = true;
+}
 
 static void LayoutSaveLoadActionButtons(UserData *usr, bool deleteVisible)
 {
@@ -959,9 +1056,10 @@ void  UserData::sb_0x46ca74()
 
         profile.name = userNameDir;
         InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_TAB);
-        InputConfig[World::INPUT_BIND_CAMFIRE] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_NONE);
+        InputConfig[World::INPUT_BIND_CAMFIRE] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_CTRL);
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
+        InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
 
         std::string tmp = fmt::sprintf("save:%s", userNameDir);
         if ( !uaCreateDir(tmp) )
@@ -2471,6 +2569,7 @@ void UserData::InputPageCancel()
     sub_bar_button->SetState(&v6);
 
     inputChangedParts = 0;
+    ClearPendingInputKey(this);
 
     v6.butID = 1050;
     v6.field_4 = (joystickEnabled == false) + 1;
@@ -4344,15 +4443,40 @@ void UserData::GameShellUiHandleInput()
     {
         Gui::UAMessageBox *menuBox = _menuMsgBox->GetMsgBox();
 
-        if ( _menuMsgBoxCode == MENU_MSGBOX_RESTORE_DEFAULT_KEYS &&
-             !_menuMsgBox->IsEnabled() && menuBox->Result != 0 )
+        if ( !_menuMsgBox->IsEnabled() && menuBox->Result != 0 )
         {
             const uint8_t result = menuBox->Result;
+            const int msgBoxCode = _menuMsgBoxCode;
             menuBox->Result = 0;
             _menuMsgBoxCode = 0;
 
-            if ( result == 1 )
-                InputConfigRestoreDefault();
+            if ( msgBoxCode == MENU_MSGBOX_RESTORE_DEFAULT_KEYS )
+            {
+                if ( result == 1 )
+                    InputConfigRestoreDefault();
+            }
+            else if ( msgBoxCode == MENU_MSGBOX_INPUT_KEY_CONFLICT )
+            {
+                if ( result == 1 &&
+                     pendingInputTarget > 0 && pendingInputTarget < World::INPUT_BIND_MAX &&
+                     pendingInputKeyCode != Input::KC_NONE )
+                {
+                    ClearInputKeyConflicts(this, pendingInputTarget,
+                                           pendingInputPositiveSlot, pendingInputKeyCode);
+                    ApplyCapturedInputKey(this, pendingInputTarget,
+                                          pendingInputPositiveSlot, pendingInputKeyCode);
+                }
+
+                // Cancel leaves key-capture active on the same slot so the player
+                // can immediately choose a different key. No binding is changed.
+                ClearPendingInputKey(this);
+                Input->ClickInf.flag = 0;
+                Input->KbdLastHit = Input::KC_NONE;
+                Input->KbdLastDown = Input::KC_NONE;
+                Input->chr = 0;
+                Input->HotKeyID = -1;
+                return;
+            }
         }
 
         // The classic menu message box is modal for the old settings UI.
@@ -4891,21 +5015,27 @@ void UserData::GameShellUiHandleInput()
 
                 if ( !Input::Engine.KeyTitle.at( Input->KbdLastHit ).empty() )
                 {
-                    if ( confFirstKey )
+                    const int16_t capturedKey = Input->KbdLastHit;
+                    const bool positiveSlot = confFirstKey;
+
+                    if ( InputKeyUsesOtherSlot(this, inpListActiveElement, positiveSlot, capturedKey) )
                     {
-                        InputConfig[inpListActiveElement].PKeyCode = Input->KbdLastHit;
+                        pendingInputTarget = inpListActiveElement;
+                        pendingInputKeyCode = capturedKey;
+                        pendingInputPositiveSlot = positiveSlot;
 
-                        if ( InputConfig[inpListActiveElement].Type == World::INPUT_BIND_TYPE_SLIDER )
-                            confFirstKey = false;
-
-                        keyCatchMode = false;
-                        InputConfig[inpListActiveElement].SetFlags = 0;
+                        const std::string conflictNames =
+                            InputKeyConflictNames(this, inpListActiveElement, positiveSlot, capturedKey);
+                        ShowMenuMsgBox(
+                            MENU_MSGBOX_INPUT_KEY_CONFLICT,
+                            fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_KEY_CONFLICT_FORMAT),
+                                         Input::Engine.KeyTitle.at(capturedKey), conflictNames),
+                            Locale::Text::OpenUA(Locale::OUA_KEY_CONFLICT_REASSIGN),
+                            false);
                     }
                     else
                     {
-                        InputConfig[inpListActiveElement].NKeyCode = Input->KbdLastHit;
-                        InputConfig[inpListActiveElement].SetFlags &= ~TInputConf::IF_SECOND;
-                        confFirstKey = true;
+                        ApplyCapturedInputKey(this, inpListActiveElement, positiveSlot, capturedKey);
                     }
                 }
                 Input->KbdLastHit = Input::KC_NONE;
@@ -7194,7 +7324,7 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_DRIVE_SPEED,World::INPUT_BIND_GUN_HEIGHT,
     };
 
-    static const std::array<int, 49> HOTKEY
+    static const std::array<int, 50> HOTKEY
     {
         World::INPUT_BIND_ORDER,      World::INPUT_BIND_ATTACK,
         World::INPUT_BIND_NEW,        World::INPUT_BIND_ADD,
@@ -7227,8 +7357,8 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_AGGR_3,     World::INPUT_BIND_AGGR_4,
         World::INPUT_BIND_AGGR_5,     World::INPUT_BIND_HELP,
         World::INPUT_BIND_LAST_SEAT,  World::INPUT_BIND_SET_COMM,
-        World::INPUT_BIND_ANALYZER,    World::INPUT_BIND_COCKPIT_CAMERA,
-        World::INPUT_BIND_SPRINT
+        World::INPUT_BIND_ANALYZER,   World::INPUT_BIND_COCKPIT_CAMERA,
+        World::INPUT_BIND_SPRINT,     World::INPUT_BIND_PLACE_MAP_MARKER
     };
 
     if ( type == World::INPUT_BIND_TYPE_BUTTON && index < BUTTON.size())

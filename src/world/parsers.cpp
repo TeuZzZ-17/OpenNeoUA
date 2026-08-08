@@ -745,6 +745,120 @@ static bool ParseVPScaleParam(ScriptParser::Parser &parser,
     return false;
 }
 
+static bool ParseDebuffParam(ScriptParser::Parser &parser,
+                             const std::string &p1,
+                             const std::string &p2,
+                             TWeaponDebuffConfig &debuff)
+{
+    int debuffFxSlot = -1;
+
+    if ( !StriCmp(p1, "debuff_allow") )
+        debuff.allow = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_allow_host_station") )
+        debuff.allow_host_station = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_name") )
+        debuff.name = p2;
+    else if ( !StriCmp(p1, "debuff_damage") )
+    {
+        int damage = parser.stol(p2, NULL, 0);
+        debuff.damage = damage > 0 ? damage : 0;
+    }
+    else if ( !StriCmp(p1, "debuff_damage_percent") )
+    {
+        float damagePercent = parser.stof(p2, 0);
+        debuff.damage_percent = damagePercent > 0.0f ? damagePercent : 0.0f;
+    }
+    else if ( !StriCmp(p1, "debuff_mindcontrol") )
+        debuff.mindcontrol = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_tick_time") )
+    {
+        int tickTime = parser.stol(p2, NULL, 0);
+        debuff.tick_time = tickTime > 0 ? tickTime : 1000;
+        debuff.has_tick_time = true;
+    }
+    else if ( !StriCmp(p1, "debuff_duration") )
+    {
+        int duration = parser.stol(p2, NULL, 0);
+        debuff.duration = duration > 0 ? duration : 0;
+    }
+    else if ( !StriCmp(p1, "debuff_disorient") )
+        debuff.disorient = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_disorient_motion_level") )
+    {
+        float motionLevel = parser.stof(p2, 0);
+        if ( !std::isfinite(motionLevel) )
+            motionLevel = 0.0f;
+        debuff.disorient_motion_level = std::max(0.0f, std::min(motionLevel, 1.0f));
+    }
+    else if ( !StriCmp(p1, "debuff_disorient_fire") )
+        debuff.disorient_fire = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_force_malus") )
+    {
+        float malus = parser.stof(p2, 0);
+        debuff.force_malus = std::max(0.0f, std::min(malus, 1.0f));
+    }
+    else if ( !StriCmp(p1, "debuff_maxrot_malus") )
+    {
+        float malus = parser.stof(p2, 0);
+        debuff.maxrot_malus = std::max(0.0f, std::min(malus, 1.0f));
+    }
+    else if ( !StriCmp(p1, "debuff_shield_malus") )
+    {
+        float malus = parser.stof(p2, 0);
+        debuff.shield_malus = std::max(0.0f, std::min(malus, 1.0f));
+    }
+    else if ( !StriCmp(p1, "debuff_snd_pitch_mult") )
+    {
+        float mult = parser.stof(p2, 0);
+        debuff.snd_pitch_mult = mult >= 0.0f ? mult : 1.0f;
+    }
+    else if ( (debuffFxSlot = ParseNumberedSlotId(p1, "debuff_fx_vp", World::DAMAGED_FX_SLOT_COUNT)) >= 0 )
+    {
+        int vp = parser.stol(p2, NULL, 0);
+        EnsureDebuffFXSlot(debuff.fx_vps, debuffFxSlot);
+        debuff.fx_vps[debuffFxSlot] = vp > 0 ? vp : 0;
+    }
+    else if ( !StriCmp(p1, "debuff_fx_vp_scale") )
+        debuff.fx_vp_scale = ParseVPScaleValue(parser, p2);
+    else if ( !StriCmp(p1, "debuff_fx_random_offset_percent") )
+    {
+        debuff.fx_random_offset_percent = ParseAttachedFXRandomOffsetPercent(parser, p2);
+        debuff.has_fx_random_offset_percent = true;
+    }
+    else if ( !StriCmp(p1, "debuff_fx_trail_only") )
+        debuff.fx_trail_only = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_icon") )
+        debuff.icon = p2;
+    else if ( !StriCmp(p1, "snd_debuff_sample") )
+        debuff.tick_snd.SetMainSampleVariant(0, p2);
+    else if ( !StriCmp(p1, "snd_debuff_pitch") )
+        debuff.tick_snd.pitch = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "snd_debuff_volume") )
+        debuff.tick_snd.volume = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "pal_debuff_slot") )
+        debuff.tick_snd.sndPrm.slot = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "pal_debuff_mag0") )
+        debuff.tick_snd.sndPrm.mag0 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "pal_debuff_mag1") )
+        debuff.tick_snd.sndPrm.mag1 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "pal_debuff_time") )
+        debuff.tick_snd.sndPrm.time = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "shk_debuff_slot") )
+        debuff.tick_snd.sndPrm_shk.slot = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "shk_debuff_mag0") )
+        debuff.tick_snd.sndPrm_shk.mag0 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "shk_debuff_mag1") )
+        debuff.tick_snd.sndPrm_shk.mag1 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "shk_debuff_time") )
+        debuff.tick_snd.sndPrm_shk.time = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "shk_debuff_mute") )
+        debuff.tick_snd.sndPrm_shk.mute = parser.stof(p2, 0);
+    else
+        return false;
+
+    return true;
+}
+
 static bool ParseVPSpinParam(ScriptParser::Parser &parser,
                              const std::string &prefix,
                              const std::string &p1,
@@ -948,15 +1062,37 @@ static bool ParseWireframeTintParam(ScriptParser::Parser &parser,
     return ParseTintParam(parser, "wireframe_tint", p1, p2, tint);
 }
 
-static World::TChainFXConfig::Trigger ParseChainFXTrigger(const std::string &name, bool weaponPrototype)
+enum ChainFXParseContext
 {
-    if ( weaponPrototype )
+    CHAIN_FX_VEHICLE,
+    CHAIN_FX_WEAPON,
+    CHAIN_FX_SUPERITEM
+};
+
+static const char *ChainFXContextName(ChainFXParseContext context)
+{
+    if ( context == CHAIN_FX_WEAPON )
+        return "weapon";
+    if ( context == CHAIN_FX_SUPERITEM )
+        return "SuperItem";
+    return "vehicle";
+}
+
+static World::TChainFXConfig::Trigger ParseChainFXTrigger(const std::string &name,
+                                                          ChainFXParseContext context)
+{
+    if ( context == CHAIN_FX_WEAPON )
     {
         if ( !StriCmp(name, "detonate") )
             return World::TChainFXConfig::TRIGGER_DETONATE;
 
         if ( !StriCmp(name, "impact_world") )
             return World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
+    }
+    else if ( context == CHAIN_FX_SUPERITEM )
+    {
+        if ( !StriCmp(name, "detonate") )
+            return World::TChainFXConfig::TRIGGER_DETONATE;
     }
     else
     {
@@ -983,7 +1119,7 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
 
 static int ParseChainFXBlock(ScriptParser::Parser &parser,
                              std::vector<World::TChainFXConfig> *out,
-                             bool weaponPrototype)
+                             ChainFXParseContext context)
 {
     World::TChainFXConfig::Mode mode = World::TChainFXConfig::MODE_VISUAL;
     float startSize = 1.0;
@@ -1026,7 +1162,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             if ( !hasTrigger )
             {
                 ypa_log_out("WARNING: begin_chain_fx without trigger ignored for %s prototype\n",
-                            weaponPrototype ? "weapon" : "vehicle");
+                            ChainFXContextName(context));
                 return ScriptParser::RESULT_OK;
             }
 
@@ -1074,7 +1210,14 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         if ( !StriCmp(p1, "mode") )
         {
             if ( !StriCmp(p2, "visual") || !StriCmp(p2, "physical") )
+            {
                 mode = ParseChainFXMode(p2);
+                if ( context == CHAIN_FX_SUPERITEM && mode != World::TChainFXConfig::MODE_VISUAL )
+                {
+                    ypa_log_out("WARNING: SuperItem begin_chain_fx supports only visual mode; block ignored\n");
+                    badMode = true;
+                }
+            }
             else
             {
                 ypa_log_out("WARNING: Unknown begin_chain_fx mode '%s' ignored\n", p2.c_str());
@@ -1083,7 +1226,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "trigger") )
         {
-            trigger = ParseChainFXTrigger(p2, weaponPrototype);
+            trigger = ParseChainFXTrigger(p2, context);
             hasTrigger = true;
             if ( trigger == World::TChainFXConfig::TRIGGER_NONE )
             {
@@ -1124,9 +1267,25 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             vpModels.back().has_tint = true;
         }
         else if ( !StriCmp(p1, "physical_vehicle") )
-            physicalVehicle = parser.stol(p2, NULL, 0);
+        {
+            if ( context == CHAIN_FX_SUPERITEM )
+            {
+                ypa_log_out("WARNING: SuperItem begin_chain_fx does not support physical_vehicle; block ignored\n");
+                badMode = true;
+            }
+            else
+                physicalVehicle = parser.stol(p2, NULL, 0);
+        }
         else
+        {
+            if ( context == CHAIN_FX_SUPERITEM )
+            {
+                ypa_log_out("WARNING: Unknown SuperItem begin_chain_fx parameter '%s'; block ignored\n", p1.c_str());
+                badMode = true;
+                continue;
+            }
             return ScriptParser::RESULT_UNKNOWN;
+        }
     }
 
     return ScriptParser::RESULT_UNEXP_EOF;
@@ -1136,14 +1295,21 @@ static int ParseVehicleChainFXBlock(ScriptParser::Parser &parser, TVhclProto *vh
 {
     return ParseChainFXBlock(parser,
                              &vhcl->chain_fx,
-                             false);
+                             CHAIN_FX_VEHICLE);
 }
 
 static int ParseWeaponChainFXBlock(ScriptParser::Parser &parser, TWeapProto *wpn)
 {
     return ParseChainFXBlock(parser,
                              &wpn->chain_fx,
-                             true);
+                             CHAIN_FX_WEAPON);
+}
+
+static int ParseSuperItemChainFXBlock(ScriptParser::Parser &parser, TSuperItemProfile *profile)
+{
+    return ParseChainFXBlock(parser,
+                             &profile->detonate_chain_fx,
+                             CHAIN_FX_SUPERITEM);
 }
 
 static bool IsMimicVehicleShellParam(const std::string &p1)
@@ -3071,15 +3237,6 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->wireframe_tint = TVisualTint();
         _wpn->type_icon = 65;
         _wpn->debuff = TWeaponDebuffConfig();
-        _wpn->debuff.tick_snd.volume = 120;
-        _wpn->debuff.tick_snd.sndPrm.mag0 = 1.0;
-        _wpn->debuff.tick_snd.sndPrm.time = 1000;
-        _wpn->debuff.tick_snd.sndPrm_shk.mag0 = 1.0;
-        _wpn->debuff.tick_snd.sndPrm_shk.time = 1000;
-        _wpn->debuff.tick_snd.sndPrm_shk.mute = 0.02;
-        _wpn->debuff.tick_snd.sndPrm_shk.pos.x = 0.2;
-        _wpn->debuff.tick_snd.sndPrm_shk.pos.y = 0.2;
-        _wpn->debuff.tick_snd.sndPrm_shk.pos.z = 0.2;
         _wpn->cluster = TWeaponClusterConfig();
         _wpn->cluster.snd.volume = 120;
         _wpn->cluster.snd.sndPrm.mag0 = 1.0;
@@ -3144,8 +3301,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
 {
     if ( !StriCmp(p1, "end") )
         return ScriptParser::RESULT_SCOPE_END;
-
-    int debuffFxSlot = -1;
 
     if ( !StriCmp(p1, "model") )
     {
@@ -3217,146 +3372,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->recoil = ClampRecoilMultiplier(parser.stof(p2, 0));
     }
-    else if ( !StriCmp(p1, "debuff_allow") )
-    {
-        _wpn->debuff.allow = parser.stol(p2, NULL, 0) != 0;
-    }
-    else if ( !StriCmp(p1, "debuff_name") )
-    {
-        _wpn->debuff.name = p2;
-    }
-    else if ( !StriCmp(p1, "debuff_damage") )
-    {
-        int damage = parser.stol(p2, NULL, 0);
-        _wpn->debuff.damage = damage > 0 ? damage : 0;
-    }
-    else if ( !StriCmp(p1, "debuff_damage_percent") )
-    {
-        float damagePercent = parser.stof(p2, 0);
-        _wpn->debuff.damage_percent = damagePercent > 0.0 ? damagePercent : 0.0;
-    }
-    else if ( !StriCmp(p1, "debuff_mindcontrol") )
-    {
-        _wpn->debuff.mindcontrol = parser.stol(p2, NULL, 0) != 0;
-    }
-    else if ( !StriCmp(p1, "debuff_tick_time") )
-    {
-        int tickTime = parser.stol(p2, NULL, 0);
-        _wpn->debuff.tick_time = tickTime > 0 ? tickTime : 1000;
-        _wpn->debuff.has_tick_time = true;
-    }
-    else if ( !StriCmp(p1, "debuff_duration") )
-    {
-        int duration = parser.stol(p2, NULL, 0);
-        _wpn->debuff.duration = duration > 0 ? duration : 0;
-    }
-    else if ( !StriCmp(p1, "debuff_disorient") )
-    {
-        _wpn->debuff.disorient = parser.stol(p2, NULL, 0) != 0;
-    }
-    else if ( !StriCmp(p1, "debuff_disorient_motion_level") )
-    {
-        float motionLevel = parser.stof(p2, 0);
-        if ( !std::isfinite(motionLevel) )
-            motionLevel = 0.0f;
-        _wpn->debuff.disorient_motion_level =
-            std::max(0.0f, std::min(motionLevel, 1.0f));
-    }
-    else if ( !StriCmp(p1, "debuff_disorient_fire") )
-    {
-        _wpn->debuff.disorient_fire = parser.stol(p2, NULL, 0) != 0;
-    }
-    else if ( !StriCmp(p1, "debuff_force_malus") )
-    {
-        float malus = parser.stof(p2, 0);
-        _wpn->debuff.force_malus = std::max(0.0f, std::min(malus, 1.0f));
-    }
-    else if ( !StriCmp(p1, "debuff_maxrot_malus") )
-    {
-        float malus = parser.stof(p2, 0);
-        _wpn->debuff.maxrot_malus = std::max(0.0f, std::min(malus, 1.0f));
-    }
-    else if ( !StriCmp(p1, "debuff_shield_malus") )
-    {
-        float malus = parser.stof(p2, 0);
-        _wpn->debuff.shield_malus = std::max(0.0f, std::min(malus, 1.0f));
-    }
-    else if ( !StriCmp(p1, "debuff_snd_pitch_mult") )
-    {
-        float mult = parser.stof(p2, 0);
-        _wpn->debuff.snd_pitch_mult = mult >= 0.0 ? mult : 1.0;
-    }
-    else if ( (debuffFxSlot = ParseNumberedSlotId(p1, "debuff_fx_vp", World::DAMAGED_FX_SLOT_COUNT)) >= 0 )
-    {
-        int vp = parser.stol(p2, NULL, 0);
-        EnsureDebuffFXSlot(_wpn->debuff.fx_vps, debuffFxSlot);
-        _wpn->debuff.fx_vps[debuffFxSlot] = vp > 0 ? vp : 0;
-    }
-    else if ( !StriCmp(p1, "debuff_fx_vp_scale") )
-    {
-        _wpn->debuff.fx_vp_scale = ParseVPScaleValue(parser, p2);
-    }
-    else if ( !StriCmp(p1, "debuff_fx_random_offset_percent") )
-    {
-        _wpn->debuff.fx_random_offset_percent = ParseAttachedFXRandomOffsetPercent(parser, p2);
-        _wpn->debuff.has_fx_random_offset_percent = true;
-    }
-    else if ( !StriCmp(p1, "debuff_fx_trail_only") )
-    {
-        _wpn->debuff.fx_trail_only = parser.stol(p2, NULL, 0) != 0;
-    }
-    else if ( !StriCmp(p1, "debuff_icon") )
-    {
-        _wpn->debuff.icon = p2;
-    }
-    else if ( !StriCmp(p1, "snd_debuff_sample") )
-    {
-        _wpn->debuff.tick_snd.SetMainSampleVariant(0, p2);
-    }
-    else if ( !StriCmp(p1, "snd_debuff_pitch") )
-    {
-        _wpn->debuff.tick_snd.pitch = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "snd_debuff_volume") )
-    {
-        _wpn->debuff.tick_snd.volume = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "pal_debuff_slot") )
-    {
-        _wpn->debuff.tick_snd.sndPrm.slot = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "pal_debuff_mag0") )
-    {
-        _wpn->debuff.tick_snd.sndPrm.mag0 = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "pal_debuff_mag1") )
-    {
-        _wpn->debuff.tick_snd.sndPrm.mag1 = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "pal_debuff_time") )
-    {
-        _wpn->debuff.tick_snd.sndPrm.time = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "shk_debuff_slot") )
-    {
-        _wpn->debuff.tick_snd.sndPrm_shk.slot = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "shk_debuff_mag0") )
-    {
-        _wpn->debuff.tick_snd.sndPrm_shk.mag0 = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "shk_debuff_mag1") )
-    {
-        _wpn->debuff.tick_snd.sndPrm_shk.mag1 = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "shk_debuff_time") )
-    {
-        _wpn->debuff.tick_snd.sndPrm_shk.time = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "shk_debuff_mute") )
-    {
-        _wpn->debuff.tick_snd.sndPrm_shk.mute = parser.stof(p2, 0);
-    }
+    else if ( ParseDebuffParam(parser, p1, p2, _wpn->debuff) )
+    {}
     else if ( !StriCmp(p1, "energy_heli") )
     {
         _wpn->energy_heli = parser.stof(p2, 0);
@@ -4624,6 +4641,122 @@ int SuperItemParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     return ScriptParser::RESULT_OK;
 }
 
+bool SuperItemProfileParser::IsScope(ScriptParser::Parser &parser,
+                                     const std::string &word,
+                                     const std::string &opt)
+{
+    if ( StriCmp(word, "begin_superitem_profile") )
+        return false;
+
+    _profiles.emplace_back();
+    _profile = &_profiles.back();
+    return true;
+}
+
+static float ParseSuperItemScale(ScriptParser::Parser &parser,
+                                 const std::string &param,
+                                 const std::string &value)
+{
+    float scale = parser.stof(value, 0);
+    if ( std::isfinite(scale) && scale > 0.0f )
+        return scale;
+
+    ypa_log_out("WARNING: SuperItem profile %s must be finite and greater than zero; using 1.0\n",
+                param.c_str());
+    return 1.0f;
+}
+
+int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
+                                   const std::string &p1,
+                                   const std::string &p2)
+{
+    if ( !StriCmp(p1, "end") )
+        return ScriptParser::RESULT_SCOPE_END;
+
+    if ( !StriCmp(p1, "begin_chain_fx") )
+        return ParseSuperItemChainFXBlock(parser, _profile);
+
+    if ( !StriCmp(p1, "id") )
+        _profile->id = p2;
+    else if ( !StriCmp(p1, "type") )
+        _profile->type = !StriCmp(p2, "bomb") ? TSuperItemProfile::TYPE_BOMB : TSuperItemProfile::TYPE_INVALID;
+    else if ( !StriCmp(p1, "default") )
+        _profile->is_default = parser.stol(p2, NULL, 0) == 1;
+    else if ( !StriCmp(p1, "display_name") )
+    {
+        _profile->display_name = p2;
+        std::replace(_profile->display_name.begin(), _profile->display_name.end(), '_', ' ');
+    }
+    else if ( !StriCmp(p1, "wave_vp") )
+        _profile->wave_vp = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "wave_vp_scale_x") )
+        _profile->wave_vp_scale.x = ParseSuperItemScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "wave_vp_scale_y") )
+        _profile->wave_vp_scale.y = ParseSuperItemScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "wave_vp_scale_z") )
+        _profile->wave_vp_scale.z = ParseSuperItemScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "wave_vp_reference_radius") )
+        _profile->wave_vp_reference_radius = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "wave_vp_offset_x") )
+        _profile->wave_vp_offset.x = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "wave_vp_offset_y") )
+        _profile->wave_vp_offset.y = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "wave_vp_offset_z") )
+        _profile->wave_vp_offset.z = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "wave_vp_tint") )
+        ParseTintParam(parser, "wave_vp_tint", p1, p2, _profile->wave_vp_tint);
+    else if ( !StriCmp(p1, "wave_speed") )
+        _profile->wave_speed = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "wave_max_radius") )
+        _profile->wave_max_radius = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "unit_damage") )
+    {
+        int damage = parser.stol(p2, NULL, 0);
+        _profile->unit_damage = damage > 0 ? damage : 0;
+    }
+    else if ( !StriCmp(p1, "building_perfect_destroy_percent") )
+    {
+        int percent = parser.stol(p2, NULL, 0);
+        _profile->building_perfect_destroy_percent = std::max(0, std::min(percent, 100));
+    }
+    else if ( ParseDebuffParam(parser, p1, p2, _profile->debuff) )
+    {}
+    else if ( !StriCmp(p1, "snd_detonate_sample") )
+        _profile->detonate_snd.SetMainSampleVariant(0, p2);
+    else if ( !StriCmp(p1, "snd_detonate_volume") )
+        _profile->detonate_snd.volume = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "snd_detonate_pitch") )
+        _profile->detonate_snd.pitch = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "shk_detonate_slot") )
+        _profile->detonate_snd.sndPrm_shk.slot = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "shk_detonate_time") )
+        _profile->detonate_snd.sndPrm_shk.time = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "shk_detonate_mag0") )
+        _profile->detonate_snd.sndPrm_shk.mag0 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "shk_detonate_mag1") )
+        _profile->detonate_snd.sndPrm_shk.mag1 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "shk_detonate_mute") )
+        _profile->detonate_snd.sndPrm_shk.mute = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "shk_detonate_x") )
+        _profile->detonate_snd.sndPrm_shk.pos.x = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "shk_detonate_y") )
+        _profile->detonate_snd.sndPrm_shk.pos.y = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "shk_detonate_z") )
+        _profile->detonate_snd.sndPrm_shk.pos.z = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "pal_detonate_slot") )
+        _profile->detonate_snd.sndPrm.slot = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "pal_detonate_time") )
+        _profile->detonate_snd.sndPrm.time = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "pal_detonate_mag0") )
+        _profile->detonate_snd.sndPrm.mag0 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "pal_detonate_mag1") )
+        _profile->detonate_snd.sndPrm.mag1 = parser.stof(p2, 0);
+    else
+        return ScriptParser::RESULT_UNKNOWN;
+
+    return ScriptParser::RESULT_OK;
+}
+
 
 Common::Point MapSizesParser::ParseSizes(ScriptParser::Parser &parser)
 {
@@ -5721,6 +5854,10 @@ int LevelSuperItemsParser::Handle(ScriptParser::Parser &parser, const std::strin
     else if ( !StriCmp(p1, "countdown") )
     {
         _s->TimerValue = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "profile") )
+    {
+        _s->ProfileId = p2;
     }
     else
         return ScriptParser::RESULT_UNKNOWN;

@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "saveparsers.h"
 #include "../fmtlib/core.h"
 #include "../fmtlib/printf.h"
@@ -779,7 +781,7 @@ int SaveSuperBombParser::Handle(ScriptParser::Parser &parser, const std::string 
             _o.sub_4D1594(_id);
             break;
         case 3:
-            _o.sub_4D1444(_id);
+            _o.sub_4D1444(_id, true);
             break;
         default:
             break;
@@ -788,6 +790,8 @@ int SaveSuperBombParser::Handle(ScriptParser::Parser &parser, const std::string 
     else if ( !StriCmp(p1, "num") )
     {
         _id = parser.stoi(p2);
+        if ( _id >= 0 && (size_t)_id < _o._levelInfo.SuperItems.size() )
+            _o._levelInfo.SuperItems[_id].CustomHitUnitGids.clear();
     }
     else if ( !StriCmp(p1, "activated_by") )
     {
@@ -820,6 +824,16 @@ int SaveSuperBombParser::Handle(ScriptParser::Parser &parser, const std::string 
     else if ( !StriCmp(p1, "last_radius") )
     {
         _o._levelInfo.SuperItems[_id].LastRadius = parser.stoi(p2);
+    }
+    else if ( !StriCmp(p1, "hit_unit") )
+    {
+        int32_t gid = parser.stoi(p2);
+        if ( gid > 0 && _id >= 0 && (size_t)_id < _o._levelInfo.SuperItems.size() )
+        {
+            std::vector<int32_t> &hits = _o._levelInfo.SuperItems[_id].CustomHitUnitGids;
+            if ( std::find(hits.begin(), hits.end(), gid) == hits.end() )
+                hits.push_back(gid);
+        }
     }
     else
         return ScriptParser::RESULT_UNKNOWN;
