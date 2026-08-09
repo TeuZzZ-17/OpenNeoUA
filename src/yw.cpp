@@ -2808,6 +2808,14 @@ void sub_44FD6C(NC_STACK_ypaworld *yw, const cellArea &cell, int bldX, int bldY)
                 arg78.unsetFlags = 0;
                 boom->SetState(&arg78);
 
+                // Building LEGO explosion objects are spawned directly in the
+                // going-down state, which only starts SND_GODOWN. The dedicated
+                // building sound objects define SND_EXPLODE instead, so trigger
+                // that existing slot at creation time. Objects without an
+                // explode sample remain silent through the normal sound fallback.
+                SFXEngine::SFXe.startSound(&boom->_soundcarrier,
+                                           World::TVhclProto::SND_EXPLODE);
+
                 yw->ypaworld_func134(boom);
 
                 bact_arg83 arg83;
