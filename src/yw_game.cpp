@@ -2,6 +2,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
+#include <algorithm>
 #include <vector>
 #include <functional>
 #include <limits>
@@ -1409,6 +1410,7 @@ void NC_STACK_ypaworld::InitSuperItems()
 {
     ClearSuperItemRuntime();
     _superItemSoundCarriers.resize(_levelInfo.SuperItems.size());
+    _superItemWaveSoundCarriers.resize(_levelInfo.SuperItems.size());
 
     for ( size_t i = 0; i < _levelInfo.SuperItems.size(); i++ )
     {
@@ -1442,6 +1444,8 @@ void NC_STACK_ypaworld::InitSuperItems()
         sitem.LastRadius = 0;
         sitem.CustomProfileIndex = -1;
         sitem.WaveTransientVPId = 0;
+        sitem.WavePalEffectStarted = false;
+        sitem.WaveShakeEffectStarted = false;
         sitem.CustomHitUnitGids.clear();
         sitem.CustomHitBuildingSlots.clear();
 
@@ -1498,6 +1502,7 @@ void NC_STACK_ypaworld::InitSuperItems()
         sitem.CustomProfileIndex = resolvedProfile;
         sitem.CustomHitBuildingSlots.assign(_cells.size() * 9, 0);
         _superItemSoundCarriers[i].reset(new TSndCarrier());
+        _superItemWaveSoundCarriers[i].reset(new TSndCarrier());
     }
 }
 
@@ -1510,12 +1515,21 @@ void NC_STACK_ypaworld::ClearSuperItemRuntime()
     }
     _superItemSoundCarriers.clear();
 
+    for (std::unique_ptr<TSndCarrier> &carrier : _superItemWaveSoundCarriers)
+    {
+        if ( carrier )
+            SFXEngine::SFXe.StopCarrier(carrier.get());
+    }
+    _superItemWaveSoundCarriers.clear();
+
     for (TMapSuperItem &sitem : _levelInfo.SuperItems)
     {
         if ( sitem.WaveTransientVPId > 0 )
             RemoveTransientVP(sitem.WaveTransientVPId);
         sitem.WaveTransientVPId = 0;
         sitem.CustomProfileIndex = -1;
+        sitem.WavePalEffectStarted = false;
+        sitem.WaveShakeEffectStarted = false;
         sitem.CustomHitUnitGids.clear();
         sitem.CustomHitBuildingSlots.clear();
     }
@@ -4716,6 +4730,8 @@ void NC_STACK_ypaworld::sub_4D1444(int id, bool restoring)
         if ( sitem.WaveTransientVPId > 0 )
             RemoveTransientVP(sitem.WaveTransientVPId);
         sitem.WaveTransientVPId = 0;
+        sitem.WavePalEffectStarted = false;
+        sitem.WaveShakeEffectStarted = false;
 
         if ( customSuperItem )
             StartCustomSuperItemDetonation(id);
@@ -4825,6 +4841,9 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemDetonationPush(int id)
     }
 }
 
+static double yw_SuperItemWaveTravelTimeMs(const World::TSuperItemProfile &profile,
+                                            double radius);
+
 void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
 {
     if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() )
@@ -4906,6 +4925,217 @@ void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
 
     SFXEngine::SFXe.startSound(carrier, 0);
     SFXEngine::SFXe.UpdateSoundCarrier(carrier);
+
+    StartCustomSuperItemWaveEffects(id);
+}
+
+void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
+{
+    if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() )
+        return;
+
+    TMapSuperItem &sitem = _levelInfo.SuperItems[id];
+    if ( !IsCustomSuperItem(sitem) )
+        return;
+
+    World::TSuperItemProfile &profile = _superItemProfiles[sitem.CustomProfileIndex];
+    if ( (size_t)id >= _superItemWaveSoundCarriers.size() )
+        _superItemWaveSoundCarriers.resize(_levelInfo.SuperItems.size());
+    if ( !_superItemWaveSoundCarriers[id] )
+        _superItemWaveSoundCarriers[id].reset(new TSndCarrier());
+
+    profile.wave_snd.LoadSamples();
+    TSndCarrier *carrier = _superItemWaveSoundCarriers[id].get();
+    SFXEngine::SFXe.StopCarrier(carrier);
+    carrier->Resize(3);
+    carrier->Vector = vec3d(0.0, 0.0, 0.0);
+
+    TSoundSource &audio = carrier->Sounds[0];
+    audio.PSample = profile.wave_snd.MainSample.Sample
+                  ? profile.wave_snd.MainSample.Sample->GetSampleData()
+                  : NULL;
+    audio.SampleVariants.clear();
+    if ( audio.PSample )
+        audio.SampleVariants.push_back(audio.PSample);
+    for (const World::TVhclSound::TSndSample &variant : profile.wave_snd.MainSampleVariants)
+    {
+        if ( variant.Sample )
+            audio.SampleVariants.push_back(variant.Sample->GetSampleData());
+    }
+    audio.Volume = profile.wave_snd.volume;
+    audio.Pitch = profile.wave_snd.pitch;
+    audio.Radius = profile.wave_snd.radius;
+    audio.FadeIn = 0;
+    audio.FadeOut = 0;
+    audio.PPFx = NULL;
+    audio.PShkFx = NULL;
+    audio.SetPFx(false);
+    audio.SetShk(false);
+    audio.SetLoop(true);
+    audio.SetFragmented(false);
+
+    TSoundSource &palette = carrier->Sounds[1];
+    palette.PSample = NULL;
+    palette.SampleVariants.clear();
+    palette.Volume = 0;
+    palette.Pitch = 0;
+    palette.Radius = 0.0f;
+    palette.FadeIn = 0;
+    palette.FadeOut = 0;
+    palette.PShkFx = NULL;
+    palette.SetShk(false);
+    palette.SetLoop(false);
+    palette.SetFragmented(false);
+
+    if ( profile.wave_snd.sndPrm.slot && profile.wave_snd.sndPrm.time > 0 )
+    {
+        palette.PPFx = &profile.wave_snd.sndPrm;
+        palette.SetPFx(true);
+    }
+    else
+    {
+        palette.PPFx = NULL;
+        palette.SetPFx(false);
+    }
+
+    TSoundSource &shake = carrier->Sounds[2];
+    shake.PSample = NULL;
+    shake.SampleVariants.clear();
+    shake.Volume = 0;
+    shake.Pitch = 0;
+    shake.Radius = 0.0f;
+    shake.FadeIn = 0;
+    shake.FadeOut = 0;
+    shake.PPFx = NULL;
+    shake.SetPFx(false);
+    shake.SetLoop(false);
+    shake.SetFragmented(false);
+
+    if ( profile.wave_snd.sndPrm_shk.slot && profile.wave_snd.sndPrm_shk.time > 0 )
+    {
+        shake.PShkFx = &profile.wave_snd.sndPrm_shk;
+        shake.SetShk(true);
+    }
+    else
+    {
+        shake.PShkFx = NULL;
+        shake.SetShk(false);
+    }
+
+    UpdateCustomSuperItemWaveEffects(id);
+
+    // Wave audio is a managed loop tied to the moving front. On load it resumes
+    // at the current front instead of replaying the initial detonation sound.
+    if ( audio.PSample )
+        SFXEngine::SFXe.startSound(carrier, 0);
+
+    SFXEngine::SFXe.UpdateSoundCarrier(carrier);
+}
+
+void NC_STACK_ypaworld::UpdateCustomSuperItemWaveEffects(int id)
+{
+    if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() ||
+         (size_t)id >= _superItemWaveSoundCarriers.size() ||
+         !_superItemWaveSoundCarriers[id] )
+        return;
+
+    TMapSuperItem &sitem = _levelInfo.SuperItems[id];
+    if ( !IsCustomSuperItem(sitem) )
+        return;
+
+    TSndCarrier *carrier = _superItemWaveSoundCarriers[id].get();
+    if ( carrier->Sounds.empty() )
+        return;
+
+    vec3d center = World::SectorIDToCenterPos3(sitem.CellId);
+    if ( sitem.PCell )
+        center.y = sitem.PCell->height;
+
+    const vec3d listener = SFXEngine::SFXe.stru_547018;
+    const float dx = listener.x - center.x;
+    const float dz = listener.z - center.z;
+    const float distance = sqrtf(dx * dx + dz * dz);
+    const float radius = (float)std::max(sitem.CurrentRadius, 0);
+
+    if ( distance > 0.001f )
+    {
+        carrier->Position.x = center.x + dx * (radius / distance);
+        carrier->Position.z = center.z + dz * (radius / distance);
+    }
+    else
+    {
+        carrier->Position.x = center.x + radius;
+        carrier->Position.z = center.z;
+    }
+
+    // The gameplay wall has no Y limit. Matching the listener height keeps
+    // SND/PAL/SHK attenuation tied only to distance from the XZ wavefront.
+    carrier->Position.y = listener.y;
+    carrier->Vector = vec3d(0.0, 0.0, 0.0);
+
+    const float frontDistance = fabsf(distance - radius);
+    if ( carrier->Sounds.size() >= 3 )
+    {
+        TSoundSource &palette = carrier->Sounds[1];
+        const float paletteRadius = palette.PPFx && palette.PPFx->radius > 0.0f
+                                  ? palette.PPFx->radius
+                                  : 2400.0f;
+        if ( !sitem.WavePalEffectStarted && radius <= distance + 0.001f && palette.IsPFx() &&
+             frontDistance < paletteRadius )
+        {
+            SFXEngine::SFXe.startSound(carrier, 1);
+            sitem.WavePalEffectStarted = true;
+        }
+
+        TSoundSource &shake = carrier->Sounds[2];
+        const float shakeRadius = shake.PShkFx && shake.PShkFx->radius > 0.0f
+                                ? shake.PShkFx->radius
+                                : 2400.0f;
+        if ( !sitem.WaveShakeEffectStarted && radius <= distance + 0.001f && shake.IsShk() &&
+             frontDistance < shakeRadius )
+        {
+            SFXEngine::SFXe.startSound(carrier, 2);
+            sitem.WaveShakeEffectStarted = true;
+        }
+    }
+
+    if ( !carrier->Sounds.empty() )
+    {
+        const World::TSuperItemProfile &profile = _superItemProfiles[sitem.CustomProfileIndex];
+        const double maximumRadius = profile.wave_max_radius > 0.0f
+                                   ? (double)profile.wave_max_radius
+                                   : sqrt((double)_mapLength.x * _mapLength.x +
+                                          (double)_mapLength.y * _mapLength.y);
+        const double propagationEnd = yw_SuperItemWaveTravelTimeMs(profile, maximumRadius);
+        int64_t elapsed = (int64_t)_timeStamp - (int64_t)sitem.TriggerTime;
+        if ( elapsed < 0 )
+            elapsed = 0;
+
+        TSoundSource &audio = carrier->Sounds[0];
+        const float envelope = World::ComputeTemporalEnvelope((double)elapsed,
+                                                               propagationEnd,
+                                                               profile.wave_snd.fade_in,
+                                                               profile.wave_snd.fade_out);
+        audio.Volume = (int16_t)floorf((float)profile.wave_snd.volume * envelope + 0.5f);
+
+        if ( propagationEnd > 0.0 && (double)elapsed >= propagationEnd && audio.IsEnabled() )
+            SFXEngine::SFXe.ForceStopSource(carrier, 0);
+    }
+}
+
+void NC_STACK_ypaworld::StopCustomSuperItemWaveEffects(int id)
+{
+    if ( id < 0 || (size_t)id >= _superItemWaveSoundCarriers.size() ||
+         !_superItemWaveSoundCarriers[id] )
+        return;
+
+    SFXEngine::SFXe.StopCarrier(_superItemWaveSoundCarriers[id].get());
+    _superItemWaveSoundCarriers[id]->Clear();
+    if ( (size_t)id < _levelInfo.SuperItems.size() )
+    {
+        _levelInfo.SuperItems[id].WavePalEffectStarted = false;
+        _levelInfo.SuperItems[id].WaveShakeEffectStarted = false;
+    }
 }
 
 static double yw_SuperItemWaveRadiusAtElapsed(const World::TSuperItemProfile &profile,
@@ -5041,8 +5271,9 @@ void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
     const double mapRadius = sqrt((double)_mapLength.x * _mapLength.x +
                                   (double)_mapLength.y * _mapLength.y);
 
-    for (TMapSuperItem &sitem : _levelInfo.SuperItems)
+    for (size_t id = 0; id < _levelInfo.SuperItems.size(); ++id)
     {
+        TMapSuperItem &sitem = _levelInfo.SuperItems[id];
         if ( sitem.State != TMapSuperItem::STATE_TRIGGED || !IsCustomSuperItem(sitem) )
             continue;
 
@@ -5060,7 +5291,8 @@ void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
             elapsed = 0;
 
         const double propagationEnd = yw_SuperItemWaveTravelTimeMs(*profile, maximumRadius);
-        const bool propagationActive = sitem.CurrentRadius > 0 && sitem.CurrentRadius < maximum;
+        const bool propagationActive = sitem.CurrentRadius < maximum &&
+                                       (double)elapsed < propagationEnd;
         const bool fadeOutActive = sitem.CurrentRadius >= maximum &&
                                    profile->wave_vp_fade_out > 0 &&
                                    (double)elapsed < propagationEnd + profile->wave_vp_fade_out;
@@ -5070,6 +5302,9 @@ void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
             const float alpha = yw_SuperItemWaveAlpha(*profile, (double)elapsed, propagationEnd);
             UpdateCustomSuperItemWaveVP(sitem, *profile, alpha);
         }
+
+        if ( propagationActive )
+            StartCustomSuperItemWaveEffects((int)id);
     }
 }
 
@@ -5381,6 +5616,8 @@ void NC_STACK_ypaworld::sub_4D16C4(int id)
 {
     TMapSuperItem &sitem = _levelInfo.SuperItems[id];
 
+    StopCustomSuperItemWaveEffects(id);
+
     sitem.State = TMapSuperItem::STATE_INACTIVE;
     sitem.ActiveTime = 0;
     sitem.TriggerTime = 0;
@@ -5655,9 +5892,9 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
                     (source->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2))) )
         source = NULL;
 
-    // De-duplicate only within this update. Persistent hit suppression is
-    // intentionally not used: a unit pushed ahead of the wall may be reached
-    // again by later wave fronts, together with damage and debuff.
+    // De-duplicate the sector lists within this update. Damage and debuff may
+    // still be applied again if a displaced unit crosses a later front, but
+    // wave_push_force is persistently limited to one impulse per unit.
     std::set<NC_STACK_ypabact *> processedTargets;
 
     for (cellArea &cell : _cells)
@@ -5682,14 +5919,23 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
                 target->_owner != sitem.ActivateOwner &&
                 !target->IsInvulnerableToDamage();
 
+            const int32_t targetGid = (int32_t)target->_gid;
+            const bool alreadyWavePushed =
+                targetGid <= 0 ||
+                std::find(sitem.CustomHitUnitGids.begin(),
+                          sitem.CustomHitUnitGids.end(),
+                          targetGid) != sitem.CustomHitUnitGids.end();
+
             // The wave push belongs to the gameplay wall itself. It is applied
             // only to enemy targets that also qualify for wave damage/debuff,
             // with no independent radius or falloff because contact with the
             // LastRadius-CurrentRadius front is already the activation test.
+            // A valid GID is required so the one-push protection can be saved.
             float appliedPushForce = 0.0f;
             vec3d pushDir(0.0f, 0.0f, 0.0f);
             if ( canReceiveDamageAndDebuff &&
                  target->_bact_type != BACT_TYPES_MISSLE &&
+                 !alreadyWavePushed &&
                  profile.wave_push_force > 0.0f )
             {
                 appliedPushForce = profile.wave_push_force *
@@ -5720,7 +5966,10 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
             // Keep the weapon push ordering: a valid contact still receives the
             // impulse when the same wave hit is lethal. Allies are excluded.
             if ( appliedPushForce > 0.0f )
+            {
                 target->AddAoePush(pushDir, appliedPushForce);
+                sitem.CustomHitUnitGids.push_back(targetGid);
+            }
 
             if ( canReceiveDamageAndDebuff && profile.debuff.allow &&
                  target->_energy > 0 && target->_status != BACT_STATUS_DEAD &&
@@ -5852,6 +6101,8 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
     if ( sitem.CurrentRadius > sitem.LastRadius )
         ApplyCustomSuperItemFront(id, (float)sitem.LastRadius, (float)sitem.CurrentRadius);
 
+    UpdateCustomSuperItemWaveEffects(id);
+
     const double propagationEnd = yw_SuperItemWaveTravelTimeMs(*profile, maximumRadius);
     const float waveAlpha = yw_SuperItemWaveAlpha(*profile, (double)elapsed, propagationEnd);
 
@@ -5931,6 +6182,12 @@ void NC_STACK_ypaworld::ypaworld_func64__sub19()
     }
 
     for (const std::unique_ptr<TSndCarrier> &carrier : _superItemSoundCarriers)
+    {
+        if ( carrier )
+            SFXEngine::SFXe.UpdateSoundCarrier(carrier.get());
+    }
+
+    for (const std::unique_ptr<TSndCarrier> &carrier : _superItemWaveSoundCarriers)
     {
         if ( carrier )
             SFXEngine::SFXe.UpdateSoundCarrier(carrier.get());
