@@ -319,6 +319,14 @@ Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment",
 // OpenUA custom: exact numeric opt-in for data-driven SuperItem profiles.
 // Missing, malformed, zero or any value other than 1 keeps the legacy path.
 Common::Ini::Key IniConf::GameCustomSuperitems("game.custom_superitems", Common::Ini::KT_DIGIT, (int32_t)0);
+// OpenUA: one temporal envelope per SFX channel. Event-specific fade keys are
+// intentionally unsupported; missing, malformed, negative or zero means no fade.
+Common::Ini::Key IniConf::GameGlobalSndFadeIn("game.global_snd_fade_in", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameGlobalSndFadeOut("game.global_snd_fade_out", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameGlobalShkFadeIn("game.global_shk_fade_in", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameGlobalShkFadeOut("game.global_shk_fade_out", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameGlobalPalFadeIn("game.global_pal_fade_in", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Common::Ini::KT_WORD, std::string("0"));
 
 // OpenUA custom: opt-in regen/drain unit FX. All numeric values use KT_WORD so
 // malformed user input can be validated safely by World::EnergyFX instead of
@@ -609,6 +617,12 @@ void IniConf::Init()
         , &GameMgunRange
         , &GameMgunAiFireAlignment
         , &GameCustomSuperitems
+        , &GameGlobalSndFadeIn
+        , &GameGlobalSndFadeOut
+        , &GameGlobalShkFadeIn
+        , &GameGlobalShkFadeOut
+        , &GameGlobalPalFadeIn
+        , &GameGlobalPalFadeOut
         , &GfxRegenDecorationFXVP
         , &GfxRegenDecorationFXVPScale
         , &GfxRegenDecorationFXVPSpinX

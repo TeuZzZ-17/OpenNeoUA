@@ -3556,8 +3556,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
             smpl_inf->Volume = vhcl.sndFX[i].volume;
             smpl_inf->Pitch = vhcl.sndFX[i].pitch;
             smpl_inf->Radius = vhcl.sndFX[i].radius;
-            smpl_inf->FadeIn = vhcl.sndFX[i].fade_in;
-            smpl_inf->FadeOut = vhcl.sndFX[i].fade_out;
             smpl_inf->PriorityBias = (i == World::TVhclProto::SND_COCKPIT) ? 4096 : 0;
 
             if ( World::TVhclProto::IsLoopingSnd(i) )
@@ -3777,8 +3775,6 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
         v25->Volume = wproto.sndFXes[i].volume;
         v25->Pitch = wproto.sndFXes[i].pitch;
         v25->Radius = wproto.sndFXes[i].radius;
-        v25->FadeIn = wproto.sndFXes[i].fade_in;
-        v25->FadeOut = wproto.sndFXes[i].fade_out;
 
         if ( i == 0 )
             v25->SetLoop(true);

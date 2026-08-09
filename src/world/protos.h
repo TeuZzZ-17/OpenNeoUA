@@ -108,10 +108,10 @@ struct TChainFXConfig
     uint8_t trigger = TRIGGER_NONE;
     vec3d offset;
     float start_size = 1.0;
+    float mid_size = 0.0;
     float end_size = 0.0;
+    bool has_mid_size = false;
     int duration = 0;
-    int fade_in = 0;
-    int fade_out = 0;
     std::vector<TChainFXVPModel> vp_models;
     int physical_vehicle = 0;
 };
@@ -188,8 +188,6 @@ struct TVhclSound
     int16_t volume = 0;
     int16_t pitch = 0;
     float radius = 0.0f;
-    int fade_in = 0;
-    int fade_out = 0;
     TSndFXParam sndPrm;
     TSndFxPosParam sndPrm_shk;
     std::vector<TSampleParams> extS;
