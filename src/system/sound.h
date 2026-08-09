@@ -15,8 +15,6 @@ struct TSndFXParam
     int slot = 0;
     float mag0 = 0.0;
     float mag1 = 0.0;
-    int fade_in = 0;
-    int fade_out = 0;
     float radius = 0.0f;
 };
 
@@ -75,12 +73,12 @@ struct TSoundSource
     TSndFxPosParam *PShkFx = NULL;
     std::vector<TSampleParams> *PFragments = NULL;
     int16_t Volume = 0;
-    // Optional per-event sound attenuation/fade. Zero keeps the exact legacy
-    // audio path. Fade-out is evaluated against the real non-loop sample
-    // duration when the source format exposes it.
+    // Optional per-event sound attenuation. Temporal fade is global per SFX
+    // channel and is applied centrally by SFXEngine.
     float Radius = 0.0f;
-    int FadeIn = 0;
-    int FadeOut = 0;
+    // Optional runtime lifetime for finite looped effects whose sample itself
+    // has no natural end (for example a propagating SuperItem wave).
+    double FadeDuration = 0.0;
     uint16_t Flags = 0;
     int Pitch = 0;
     // Some runtime effects intentionally raise a loop above the legacy 44.1 kHz
@@ -347,6 +345,12 @@ public:
     float timeScale;
     double timeScaleRemainder;
     int dword_546F14;
+    int globalSndFadeIn;
+    int globalSndFadeOut;
+    int globalShkFadeIn;
+    int globalShkFadeOut;
+    int globalPalFadeIn;
+    int globalPalFadeOut;
     float flt_546F18[64];
     vec3d stru_547018;
     vec3d stru_547024;

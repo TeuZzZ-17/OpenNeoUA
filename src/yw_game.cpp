@@ -2767,10 +2767,13 @@ void NC_STACK_ypaworld::SpawnChainFX(const World::TChainFXConfig &config, const 
     fx.chainIndex = 0;
     if ( !fx.chainTints.empty() )
         fx.tint = fx.chainTints.front();
-    fx.startScale = config.start_size >= 0.0 ? config.start_size : 0.0;
-    fx.endScale = config.end_size >= 0.0 ? config.end_size : 0.0;
-    fx.fadeIn = config.fade_in > 0 ? config.fade_in : 0;
-    fx.fadeOut = config.fade_out > 0 ? config.fade_out : 0;
+    fx.startScale = std::isfinite(config.start_size) && config.start_size >= 0.0f
+                  ? config.start_size : 0.0f;
+    fx.midScale = std::isfinite(config.mid_size) && config.mid_size >= 0.0f
+                ? config.mid_size : 0.0f;
+    fx.endScale = std::isfinite(config.end_size) && config.end_size >= 0.0f
+                ? config.end_size : 0.0f;
+    fx.hasMidScale = config.has_mid_size;
 }
 
 static int yw_RandomInRange(int minValue, int maxValue)
@@ -3553,7 +3556,27 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
             else if ( t > 1.0 )
                 t = 1.0;
 
-            scale *= it->startScale + (it->endScale - it->startScale) * t;
+            float chainScale = 0.0f;
+            if ( it->hasMidScale )
+            {
+                if ( t < 0.5f )
+                {
+                    const float firstHalf = t * 2.0f;
+                    chainScale = it->startScale +
+                                 (it->midScale - it->startScale) * firstHalf;
+                }
+                else
+                {
+                    const float secondHalf = (t - 0.5f) * 2.0f;
+                    chainScale = it->midScale +
+                                 (it->endScale - it->midScale) * secondHalf;
+                }
+            }
+            else
+                chainScale = it->startScale +
+                             (it->endScale - it->startScale) * t;
+
+            scale *= chainScale;
 
             if ( !it->chainBases.empty() )
             {
@@ -3583,17 +3606,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         it->vp->Bas->TForm().Pos = it->pos;
         it->vp->Bas->TForm().SclRot = renderRot * mat3x3::Scale(renderScale);
 
-        float temporalAlpha = 1.0f;
-        if ( it->fadeIn > 0 || it->fadeOut > 0 )
-        {
-            temporalAlpha = World::ComputeTemporalEnvelope(it->age,
-                                                            it->lifeTime,
-                                                            it->fadeIn,
-                                                            it->fadeOut);
-        }
-
         World::TVisualTint renderTint = it->tint;
-        renderTint.a *= temporalAlpha;
 
         // OpenUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.
@@ -3605,7 +3618,6 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         if ( it->particleControls.enabled )
         {
             World::TVisualTint particleTint = it->particleControls.tint;
-            particleTint.a *= temporalAlpha;
             arg->particleTint = GFX::TGLColor(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
             arg->particleScale = it->particleControls.scale;
             arg->particleLifetimeScale = it->particleControls.lifetimeScale;
@@ -4896,8 +4908,6 @@ void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
     sound.Volume = profile.detonate_snd.volume;
     sound.Pitch = profile.detonate_snd.pitch;
     sound.Radius = profile.detonate_snd.radius;
-    sound.FadeIn = profile.detonate_snd.fade_in;
-    sound.FadeOut = profile.detonate_snd.fade_out;
     sound.SetLoop(false);
     sound.SetFragmented(false);
 
@@ -4965,8 +4975,11 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
     audio.Volume = profile.wave_snd.volume;
     audio.Pitch = profile.wave_snd.pitch;
     audio.Radius = profile.wave_snd.radius;
-    audio.FadeIn = 0;
-    audio.FadeOut = 0;
+    const double maximumAudioRadius = profile.wave_max_radius > 0.0f
+                                    ? (double)profile.wave_max_radius
+                                    : sqrt((double)_mapLength.x * _mapLength.x +
+                                           (double)_mapLength.y * _mapLength.y);
+    audio.FadeDuration = yw_SuperItemWaveTravelTimeMs(profile, maximumAudioRadius);
     audio.PPFx = NULL;
     audio.PShkFx = NULL;
     audio.SetPFx(false);
@@ -4980,8 +4993,6 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
     palette.Volume = 0;
     palette.Pitch = 0;
     palette.Radius = 0.0f;
-    palette.FadeIn = 0;
-    palette.FadeOut = 0;
     palette.PShkFx = NULL;
     palette.SetShk(false);
     palette.SetLoop(false);
@@ -5004,8 +5015,6 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
     shake.Volume = 0;
     shake.Pitch = 0;
     shake.Radius = 0.0f;
-    shake.FadeIn = 0;
-    shake.FadeOut = 0;
     shake.PPFx = NULL;
     shake.SetPFx(false);
     shake.SetLoop(false);
@@ -5112,11 +5121,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveEffects(int id)
             elapsed = 0;
 
         TSoundSource &audio = carrier->Sounds[0];
-        const float envelope = World::ComputeTemporalEnvelope((double)elapsed,
-                                                               propagationEnd,
-                                                               profile.wave_snd.fade_in,
-                                                               profile.wave_snd.fade_out);
-        audio.Volume = (int16_t)floorf((float)profile.wave_snd.volume * envelope + 0.5f);
+        audio.Volume = profile.wave_snd.volume;
 
         if ( propagationEnd > 0.0 && (double)elapsed >= propagationEnd && audio.IsEnabled() )
             SFXEngine::SFXe.ForceStopSource(carrier, 0);

@@ -3522,8 +3522,6 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     snd.Volume = _active_debuff.snd_volume;
     snd.Pitch = _active_debuff.snd_pitch;
     snd.Radius = debuff.tick_snd.radius;
-    snd.FadeIn = debuff.tick_snd.fade_in;
-    snd.FadeOut = debuff.tick_snd.fade_out;
     snd.PriorityBias = 0;
     const bool loopDebuffSound = !debuff.has_tick_time && snd.PSample;
     snd.SetLoop(loopDebuffSound);
