@@ -1457,6 +1457,8 @@ struct TMapSuperItem
     std::string ProfileId;
     int32_t CustomProfileIndex = -1;
     int32_t WaveTransientVPId = 0;
+    // Legacy save compatibility only: old saves may contain hit_unit lines.
+    // Wave unit contacts are intentionally no longer persistently suppressed.
     std::vector<int32_t> CustomHitUnitGids;
     std::vector<uint8_t> CustomHitBuildingSlots;
 };
@@ -2634,8 +2636,11 @@ public:
     const World::TSuperItemProfile *GetSuperItemProfile(const TMapSuperItem &sitem) const;
     std::string GetSuperItemDisplayName(const TMapSuperItem &sitem) const;
     void StartCustomSuperItemDetonation(int id);
+    void ApplyCustomSuperItemDetonationPush(int id);
     void RestoreCustomSuperItemRuntimeAfterLoad();
-    void UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem, const World::TSuperItemProfile &profile);
+    void UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
+                                     const World::TSuperItemProfile &profile,
+                                     float alphaFactor = 1.0f);
     void ApplyCustomSuperItemFront(int id, float lastRadius, float currentRadius);
     void ApplyBuildingHealthChange(cellArea *cell, int bldX, int bldY, int targetHealth, yw_arg129 *arg);
     bool LoadBlgMap(const std::string &mapName);
@@ -2697,7 +2702,7 @@ public:
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls());
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
     int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false);
-    int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0));
+    int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
     bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, float randomOffsetPercent, vec3d *localPosition);
     bool UpdateRandomFXTimer(int intervalMin, int intervalMax, int32_t &nextTime);
     int32_t SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint = World::TVisualTint(), int32_t lifeTime = 1000, float scale = 1.0, const vec3d &offset = vec3d(0.0, 0.0, 0.0), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls());
@@ -2736,6 +2741,8 @@ public:
     bool IsGemNotificationCaptureActive() const;
     bool HasActiveNewGemNotification() const;
     uint32_t GetNewGemNotificationElapsedTime() const;
+    void DismissNewGemNotification();
+    std::string BuildNewGemNotificationLogText();
     void StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo);
     bool HasActiveRoboDeathTimeScale() const;
     int32_t GetGameplayRenderTimeStamp() const
@@ -2799,6 +2806,8 @@ public:
         int32_t chainIndex = -1;
         float startScale = 1.0;
         float endScale = 1.0;
+        int32_t fadeIn = 0;
+        int32_t fadeOut = 0;
         World::TVisualTint tint; // OpenUA custom: VP tint for this spawned model (e.g. laser beam body)
         TTransientVPParticleControls particleControls;
 
@@ -2865,7 +2874,6 @@ public:
     std::vector<World::TBuildingProto> _buildProtos;
     std::vector<World::TRoboProto> _roboProtos;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
-    int32_t _defaultSuperItemBombProfile = -1;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
 
     std::list<NC_STACK_base *> _overrideModels;

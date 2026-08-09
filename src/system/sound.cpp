@@ -8,6 +8,7 @@
 #include "common/common.h"
 #include "inivals.h"
 #include "../utils.h"
+#include "../world/tools.h"
 #include <algorithm>
 
 
@@ -38,6 +39,36 @@ static int SFX_SampleFrameCount(const TSampleData *sample)
         return 0;
 
     return sample->bufsz / SFX_SampleFrameSize(sample->Format);
+}
+
+// Returns the real duration in the audio engine's legacy 1024-tick time base.
+// Looping and fragmented sources do not have one unambiguous end point here,
+// so their configured fade-out is intentionally not synthesized with a timer.
+static double SFX_SampleDuration(TSoundSource &sound)
+{
+    if ( sound.IsLoop() || sound.IsFragmented() || !sound.PSample )
+        return 0.0;
+
+    const int rate = sound.PSample->SampleRate + sound.Pitch;
+    const int frames = SFX_SampleFrameCount(sound.PSample);
+    if ( rate <= 0 || frames <= 0 )
+        return 0.0;
+
+    return (double)frames * 1024.0 / (double)rate;
+}
+
+static float SFX_SoundTemporalFactor(TSoundSource &sound, size_t now)
+{
+    const double elapsed = now >= sound.StartTime
+                         ? (double)(now - sound.StartTime)
+                         : 0.0;
+    const double duration = SFX_SampleDuration(sound);
+
+    // Fade-in remains meaningful for loops/fragmented sources. Fade-out is
+    // applied only when the sample exposes a real finite end time.
+    return World::ComputeTemporalEnvelope(elapsed, duration,
+                                          sound.FadeIn,
+                                          duration > 0.0 ? sound.FadeOut : 0);
 }
 
 void wrapper_setSampleVRP(void *, walsmpl *hSample, int rate, int volume, int pan)
@@ -466,12 +497,20 @@ int SFXEngine::sub_423B3C(TSoundSource *smpl, int a2, int *a3)
 
 void SFXEngine::SoundCarrierProcessSounds(TSndCarrier *smpls, float distance)
 {
-    float v10 = distance / 200.0;
-
     for (TSoundSource &snd : smpls->Sounds)
     {
         if ( snd.PSample || snd.IsFragmented() )
         {
+            float spatialFactor = 1.0f;
+            if ( snd.Radius > 0.0f )
+            {
+                spatialFactor = World::ComputeSpatialFalloff(distance, snd.Radius);
+                if ( spatialFactor <= 0.0f )
+                    continue;
+            }
+            else if ( distance >= 6000.0f )
+                continue;
+
             size_t fragId = 0;
 
             if ( snd.IsEnabled() )
@@ -512,8 +551,24 @@ void SFXEngine::SoundCarrierProcessSounds(TSndCarrier *smpls, float distance)
                     if ( snd.IsFragmented() )
                         snd.ResultVol += snd.PFragments->at(fragId).Vol;
 
-                    if ( v10 >= 1.0 )
-                        snd.ResultVol /= v10;
+                    if ( snd.Radius > 0.0f )
+                    {
+                        const float temporalFactor = SFX_SoundTemporalFactor(snd, currentTime);
+                        snd.ResultVol = (int16_t)floorf((float)snd.ResultVol *
+                                                       spatialFactor * temporalFactor + 0.5f);
+                    }
+                    else
+                    {
+                        const float legacyDistance = distance / 200.0f;
+                        if ( legacyDistance >= 1.0f )
+                            snd.ResultVol /= legacyDistance;
+
+                        if ( snd.FadeIn > 0 || snd.FadeOut > 0 )
+                        {
+                            const float temporalFactor = SFX_SoundTemporalFactor(snd, currentTime);
+                            snd.ResultVol = (int16_t)floorf((float)snd.ResultVol * temporalFactor + 0.5f);
+                        }
+                    }
 
                     if ( snd.ResultVol > 4 )
                     {
@@ -563,12 +618,18 @@ void SFXEngine::audio_InsertPalFX(TSoundSource *smpl)
 
 void SFXEngine::SoundCarrierProcessPFx(TSndCarrier *smpls, float distance)
 {
-    float v6 = distance / 300.0;
-
     for (TSoundSource &snd : smpls->Sounds)
     {
         if ( snd.IsPFx() )
         {
+            if ( snd.PPFx->radius > 0.0f )
+            {
+                if ( World::ComputeSpatialFalloff(distance, snd.PPFx->radius) <= 0.0f )
+                    continue;
+            }
+            else if ( distance >= 2400.0f )
+                continue;
+
             if ( snd.IsPFxEnabled() )
             {
                 if ( !snd.IsLoop() && (size_t)(snd.StartTime + snd.PPFx->time) < currentTime )
@@ -582,8 +643,25 @@ void SFXEngine::SoundCarrierProcessPFx(TSndCarrier *smpls, float distance)
                 else
                     snd.PFxMag = (snd.PPFx->mag1 - snd.PPFx->mag0) * ((float)(currentTime - snd.StartTime) / (float)snd.PPFx->time) + snd.PPFx->mag0;
 
-                if ( v6 >= 1.0 )
-                    snd.PFxMag /= v6;
+                if ( snd.PPFx->radius > 0.0f )
+                    snd.PFxMag *= World::ComputeSpatialFalloff(distance, snd.PPFx->radius);
+                else
+                {
+                    const float legacyDistance = distance / 300.0f;
+                    if ( legacyDistance >= 1.0f )
+                        snd.PFxMag /= legacyDistance;
+                }
+
+                if ( snd.PPFx->fade_in > 0 || snd.PPFx->fade_out > 0 )
+                {
+                    const double elapsed = currentTime >= snd.StartTime
+                                         ? (double)(currentTime - snd.StartTime)
+                                         : 0.0;
+                    snd.PFxMag *= World::ComputeTemporalEnvelope(elapsed,
+                                                                 snd.PPFx->time,
+                                                                 snd.PPFx->fade_in,
+                                                                 snd.PPFx->fade_out);
+                }
 
                 audio_InsertPalFX(&snd);
             }
@@ -629,6 +707,14 @@ void SFXEngine::SoundCarrierProcessShake(TSndCarrier *smpls, float distance)
     {
         if ( snd.IsShk() )
         {
+            if ( snd.PShkFx->radius > 0.0f )
+            {
+                if ( World::ComputeSpatialFalloff(distance, snd.PShkFx->radius) <= 0.0f )
+                    continue;
+            }
+            else if ( distance >= 2400.0f )
+                continue;
+
             if ( snd.IsShkEnabled() )
             {
                 if ( !snd.IsLoop() && (size_t)(snd.StartTime + snd.PShkFx->time) < currentTime )
@@ -642,10 +728,28 @@ void SFXEngine::SoundCarrierProcessShake(TSndCarrier *smpls, float distance)
                 else
                     snd.ShkMag = (snd.PShkFx->mag1 - snd.PShkFx->mag0) * ((float)(currentTime - snd.StartTime) / (float)snd.PShkFx->time) + snd.PShkFx->mag0;
 
-                float v6 = distance * snd.PShkFx->mute;
+                if ( snd.PShkFx->radius > 0.0f )
+                    snd.ShkMag *= World::ComputeSpatialFalloff(distance, snd.PShkFx->radius);
+                else
+                {
+                    // Legacy mute is the old shake-distance attenuation. It is
+                    // intentionally bypassed when the normalized radius override
+                    // is authored so the two spatial curves never stack.
+                    float legacyDistance = distance * snd.PShkFx->mute;
+                    if ( legacyDistance >= 1.0f )
+                        snd.ShkMag /= legacyDistance;
+                }
 
-                if ( v6 >= 1.0 )
-                    snd.ShkMag /= v6;
+                if ( snd.PShkFx->fade_in > 0 || snd.PShkFx->fade_out > 0 )
+                {
+                    const double elapsed = currentTime >= snd.StartTime
+                                         ? (double)(currentTime - snd.StartTime)
+                                         : 0.0;
+                    snd.ShkMag *= World::ComputeTemporalEnvelope(elapsed,
+                                                                 snd.PShkFx->time,
+                                                                 snd.PShkFx->fade_in,
+                                                                 snd.PShkFx->fade_out);
+                }
 
                 InsertShakeFX(&snd);
             }
@@ -658,19 +762,13 @@ void SFXEngine::UpdateSoundCarrier(TSndCarrier *smpls)
 {
     float distance = (smpls->Position - stru_547018).length();
 
-    if ( distance < 6000.0 )
-    {
-        if ( digDriver->inited() )
-            SoundCarrierProcessSounds(smpls, distance);
+    if ( digDriver->inited() )
+        SoundCarrierProcessSounds(smpls, distance);
 
-        if ( distance < 2400.0 )
-        {
-            if ( audio_num_palfx )
-                SoundCarrierProcessPFx(smpls, distance);
+    if ( audio_num_palfx )
+        SoundCarrierProcessPFx(smpls, distance);
 
-            SoundCarrierProcessShake(smpls, distance);
-        }
-    }
+    SoundCarrierProcessShake(smpls, distance);
 }
 
 void SFXEngine::sb_0x424c74__sub0()

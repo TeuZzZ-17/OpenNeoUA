@@ -1471,12 +1471,8 @@ void NC_STACK_ypaworld::InitSuperItems()
         }
         else
         {
-            resolvedProfile = _defaultSuperItemBombProfile;
-            if ( resolvedProfile < 0 )
-            {
-                ypa_log_out("WARNING: SuperItem #%u has no profile and no unique valid default bomb profile; using vanilla fallback.\n",
-                            (unsigned)i);
-            }
+            ypa_log_out("WARNING: SuperItem #%u has no explicit profile; using vanilla fallback.\n",
+                        (unsigned)i);
         }
 
         if ( resolvedProfile < 0 || (size_t)resolvedProfile >= _superItemProfiles.size() )
@@ -2759,6 +2755,8 @@ void NC_STACK_ypaworld::SpawnChainFX(const World::TChainFXConfig &config, const 
         fx.tint = fx.chainTints.front();
     fx.startScale = config.start_size >= 0.0 ? config.start_size : 0.0;
     fx.endScale = config.end_size >= 0.0 ? config.end_size : 0.0;
+    fx.fadeIn = config.fade_in > 0 ? config.fade_in : 0;
+    fx.fadeOut = config.fade_out > 0 ? config.fade_out : 0;
 }
 
 static int yw_RandomInRange(int minValue, int maxValue)
@@ -2902,10 +2900,11 @@ int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_yp
 int32_t NC_STACK_ypaworld::SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner,
                                                           const vec3d &localOffset, int32_t lifeTime,
                                                           bool trailOnly, bool rotateOffsetWithOwner,
-                                                          const vec3d &axisScale)
+                                                          const vec3d &axisScale,
+                                                          const World::TVisualTint &tint)
 {
     int32_t id = SpawnAttachedTransientVP(modelId, owner, localOffset, lifeTime,
-                                          1.0, false, World::TVisualTint(), axisScale,
+                                          1.0, false, tint, axisScale,
                                           vec3d(0.0, 0.0, 0.0), false,
                                           vec3d(0.0, 0.0, 0.0), false);
     if ( id <= 0 || _transientVPs.empty() )
@@ -3570,6 +3569,18 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         it->vp->Bas->TForm().Pos = it->pos;
         it->vp->Bas->TForm().SclRot = renderRot * mat3x3::Scale(renderScale);
 
+        float temporalAlpha = 1.0f;
+        if ( it->fadeIn > 0 || it->fadeOut > 0 )
+        {
+            temporalAlpha = World::ComputeTemporalEnvelope(it->age,
+                                                            it->lifeTime,
+                                                            it->fadeIn,
+                                                            it->fadeOut);
+        }
+
+        World::TVisualTint renderTint = it->tint;
+        renderTint.a *= temporalAlpha;
+
         // OpenUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.
         GFX::TGLColor oldTint = arg->tint;
@@ -3579,22 +3590,23 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         float oldParticleLifetimeScale = arg->particleLifetimeScale;
         if ( it->particleControls.enabled )
         {
-            const World::TVisualTint &particleTint = it->particleControls.tint;
+            World::TVisualTint particleTint = it->particleControls.tint;
+            particleTint.a *= temporalAlpha;
             arg->particleTint = GFX::TGLColor(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
             arg->particleScale = it->particleControls.scale;
             arg->particleLifetimeScale = it->particleControls.lifetimeScale;
         }
         else
         {
-            arg->particleTint = GFX::TGLColor(it->tint.r, it->tint.g, it->tint.b, it->tint.a);
+            arg->particleTint = GFX::TGLColor(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
             arg->particleScale = renderScale;
             arg->particleLifetimeScale = 1.0f;
         }
         arg->particleSpin = it->spin;
 
-        bool tinted = !it->tint.IsNeutral();
+        bool tinted = !renderTint.IsNeutral();
         if ( tinted )
-            arg->tint = GFX::TGLColor(it->tint.r, it->tint.g, it->tint.b, it->tint.a);
+            arg->tint = GFX::TGLColor(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
         else
             arg->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
 
@@ -4735,6 +4747,84 @@ void NC_STACK_ypaworld::sub_4D1444(int id, bool restoring)
     ypaworld_func159(&arg159);
 }
 
+static bool yw_IsCustomSuperItemPushTarget(const NC_STACK_ypabact *target)
+{
+    return target &&
+           target->_energy > 0 && target->_energy_max > 0 &&
+           target->_bact_type != BACT_TYPES_MISSLE &&
+           target->_bact_type != BACT_TYPES_GUN &&
+           target->_status != BACT_STATUS_DEAD &&
+           target->_status != BACT_STATUS_CREATE &&
+           target->_status != BACT_STATUS_BEAM &&
+           !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 |
+                                    BACT_STFLAG_CLEAN | BACT_STFLAG_NORENDER));
+}
+
+void NC_STACK_ypaworld::ApplyCustomSuperItemDetonationPush(int id)
+{
+    if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() )
+        return;
+
+    TMapSuperItem &sitem = _levelInfo.SuperItems[id];
+    const World::TSuperItemProfile *profile = GetSuperItemProfile(sitem);
+    if ( !profile || !IsCustomSuperItem(sitem) ||
+         profile->push_force <= 0.0f || profile->push_radius <= 0.0f )
+    {
+        return;
+    }
+
+    vec3d center = World::SectorIDToCenterPos3(sitem.CellId);
+    if ( sitem.PCell )
+        center.y = sitem.PCell->height;
+
+    const float radiusSq = profile->push_radius * profile->push_radius;
+    if ( !std::isfinite(radiusSq) )
+        return;
+
+    std::set<NC_STACK_ypabact *> processedTargets;
+    const auto applyPush = [&](NC_STACK_ypabact *target)
+    {
+        if ( !yw_IsCustomSuperItemPushTarget(target) ||
+             target->_owner == World::OWNER_0 ||
+             !processedTargets.insert(target).second )
+        {
+            return;
+        }
+
+        vec3d delta(target->_position.x - center.x,
+                    0.0f,
+                    target->_position.z - center.z);
+        const float distanceSq = delta.dot(delta);
+        if ( !std::isfinite(distanceSq) || distanceSq > radiusSq )
+            return;
+
+        const float distance = sqrtf(std::max(distanceSq, 0.0f));
+        const float falloff = World::AoePushFalloffFactor(
+            distance, profile->push_radius, profile->push_falloff != 0);
+        const float appliedForce = profile->push_force *
+                                   falloff *
+                                   target->GetPushResistanceMultiplier();
+        if ( appliedForce <= 0.0f )
+            return;
+
+        if ( distance <= 0.001f )
+            delta = vec3d(1.0f, 0.0f, 0.0f);
+
+        target->AddAoePush(delta, appliedForce);
+    };
+
+    // Root units and sector occupants are both visited. The set keeps the
+    // detonation impulse one-shot even when the same BACT appears in both lists.
+    for (NC_STACK_ypabact *target : _unitsList)
+        applyPush(target);
+
+    for (cellArea &cell : _cells)
+    {
+        for (NC_STACK_ypabact *target : cell.unitsList.safe_iter())
+            applyPush(target);
+    }
+}
+
 void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
 {
     if ( id < 0 || (size_t)id >= _levelInfo.SuperItems.size() )
@@ -4748,6 +4838,10 @@ void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
     vec3d center = World::SectorIDToCenterPos3(sitem.CellId);
     if ( sitem.PCell )
         center.y = sitem.PCell->height;
+
+    // Countdown reached 0:00. This profile-level blast is independent from
+    // the propagating wave and affects every live allied or enemy unit once.
+    ApplyCustomSuperItemDetonationPush(id);
 
     for (const World::TChainFXConfig &chain : profile.detonate_chain_fx)
     {
@@ -4782,6 +4876,9 @@ void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
     }
     sound.Volume = profile.detonate_snd.volume;
     sound.Pitch = profile.detonate_snd.pitch;
+    sound.Radius = profile.detonate_snd.radius;
+    sound.FadeIn = profile.detonate_snd.fade_in;
+    sound.FadeOut = profile.detonate_snd.fade_out;
     sound.SetLoop(false);
     sound.SetFragmented(false);
 
@@ -4811,8 +4908,96 @@ void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
     SFXEngine::SFXe.UpdateSoundCarrier(carrier);
 }
 
+static double yw_SuperItemWaveRadiusAtElapsed(const World::TSuperItemProfile &profile,
+                                               double elapsedMilliseconds)
+{
+    if ( !std::isfinite(elapsedMilliseconds) || elapsedMilliseconds <= 0.0 )
+        return 0.0;
+
+    const double elapsed = elapsedMilliseconds / 1000.0;
+    const double startSpeed = profile.wave_start_speed;
+    const double endSpeed = profile.wave_end_speed;
+    const double rampTime = (double)profile.wave_speed_ramp_time / 1000.0;
+
+    if ( rampTime <= 0.0 )
+        return elapsed * endSpeed;
+
+    if ( elapsed <= rampTime )
+    {
+        const double acceleration = (endSpeed - startSpeed) / rampTime;
+        return startSpeed * elapsed + 0.5 * acceleration * elapsed * elapsed;
+    }
+
+    const double rampDistance = 0.5 * (startSpeed + endSpeed) * rampTime;
+    return rampDistance + endSpeed * (elapsed - rampTime);
+}
+
+static double yw_SuperItemWaveTravelTimeMs(const World::TSuperItemProfile &profile,
+                                            double radius)
+{
+    if ( !std::isfinite(radius) || radius <= 0.0 )
+        return 0.0;
+
+    const double startSpeed = profile.wave_start_speed;
+    const double endSpeed = profile.wave_end_speed;
+    const double rampTime = (double)profile.wave_speed_ramp_time / 1000.0;
+    if ( rampTime <= 0.0 )
+        return endSpeed > 0.0 ? radius * 1000.0 / endSpeed : 0.0;
+
+    const double rampDistance = 0.5 * (startSpeed + endSpeed) * rampTime;
+    if ( radius >= rampDistance )
+        return (rampTime + (radius - rampDistance) / endSpeed) * 1000.0;
+
+    const double acceleration = (endSpeed - startSpeed) / rampTime;
+    double time = 0.0;
+    if ( fabs(acceleration) < 0.0000001 )
+    {
+        if ( startSpeed <= 0.0 )
+            return 0.0;
+        time = radius / startSpeed;
+    }
+    else
+    {
+        const double discriminant = std::max(0.0,
+            startSpeed * startSpeed + 2.0 * acceleration * radius);
+        const double root = sqrt(discriminant);
+        const double stableDenominator = startSpeed + root;
+
+        if ( stableDenominator > 0.0 )
+            time = 2.0 * radius / stableDenominator;
+        else
+            time = (-startSpeed + root) / acceleration;
+    }
+
+    if ( !std::isfinite(time) || time < 0.0 )
+        return 0.0;
+    if ( time > rampTime )
+        time = rampTime;
+    return time * 1000.0;
+}
+
+static float yw_SuperItemWaveAlpha(const World::TSuperItemProfile &profile,
+                                   double elapsedMilliseconds,
+                                   double propagationEndMilliseconds)
+{
+    if ( elapsedMilliseconds < propagationEndMilliseconds )
+    {
+        return World::ComputeTemporalEnvelope(elapsedMilliseconds, 0.0,
+                                              profile.wave_vp_fade_in, 0.0);
+    }
+
+    if ( profile.wave_vp_fade_out <= 0 )
+        return 1.0f;
+
+    return World::ComputeTemporalEnvelope(elapsedMilliseconds - propagationEndMilliseconds,
+                                          profile.wave_vp_fade_out,
+                                          0.0,
+                                          profile.wave_vp_fade_out);
+}
+
 void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
-                                                     const World::TSuperItemProfile &profile)
+                                                     const World::TSuperItemProfile &profile,
+                                                     float alphaFactor)
 {
     if ( sitem.CurrentRadius <= 0 || profile.wave_vp_reference_radius <= 0.0f )
         return;
@@ -4827,6 +5012,10 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
                        profile.wave_vp_scale.y,
                        profile.wave_vp_scale.z * factor);
 
+    alphaFactor = std::max(0.0f, std::min(alphaFactor, 1.0f));
+    World::TVisualTint runtimeTint = profile.wave_vp_tint;
+    runtimeTint.a *= alphaFactor;
+
     if ( sitem.WaveTransientVPId > 0 )
     {
         for (TTransientVP &effect : _transientVPs)
@@ -4835,7 +5024,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
             {
                 effect.pos = center;
                 effect.axisScale = runtimeScale;
-                effect.tint = profile.wave_vp_tint;
+                effect.tint = runtimeTint;
                 return;
             }
         }
@@ -4844,7 +5033,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
 
     sitem.WaveTransientVPId = SpawnTransientVP(profile.wave_vp, center,
                                                mat3x3::Ident(), 0, 1.0f,
-                                               profile.wave_vp_tint, runtimeScale);
+                                               runtimeTint, runtimeScale);
 }
 
 void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
@@ -4866,8 +5055,21 @@ void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
                                    : mapRadius;
         const int32_t maximum = (int32_t)ceil(std::min(maximumRadius,
                                                        (double)std::numeric_limits<int32_t>::max()));
-        if ( sitem.CurrentRadius > 0 && sitem.CurrentRadius < maximum )
-            UpdateCustomSuperItemWaveVP(sitem, *profile);
+        int64_t elapsed = (int64_t)_timeStamp - (int64_t)sitem.TriggerTime;
+        if ( elapsed < 0 )
+            elapsed = 0;
+
+        const double propagationEnd = yw_SuperItemWaveTravelTimeMs(*profile, maximumRadius);
+        const bool propagationActive = sitem.CurrentRadius > 0 && sitem.CurrentRadius < maximum;
+        const bool fadeOutActive = sitem.CurrentRadius >= maximum &&
+                                   profile->wave_vp_fade_out > 0 &&
+                                   (double)elapsed < propagationEnd + profile->wave_vp_fade_out;
+
+        if ( propagationActive || fadeOutActive )
+        {
+            const float alpha = yw_SuperItemWaveAlpha(*profile, (double)elapsed, propagationEnd);
+            UpdateCustomSuperItemWaveVP(sitem, *profile, alpha);
+        }
     }
 }
 
@@ -5453,11 +5655,16 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
                     (source->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2))) )
         source = NULL;
 
+    // De-duplicate only within this update. Persistent hit suppression is
+    // intentionally not used: a unit pushed ahead of the wall may be reached
+    // again by later wave fronts, together with damage and debuff.
+    std::set<NC_STACK_ypabact *> processedTargets;
+
     for (cellArea &cell : _cells)
     {
         for (NC_STACK_ypabact *target : cell.unitsList.safe_iter())
         {
-            if ( !target )
+            if ( !target || !processedTargets.insert(target).second )
                 continue;
 
             float dx = center.x - target->_position.x;
@@ -5466,32 +5673,57 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
             if ( distanceSq <= lastRadiusSq || distanceSq > currentRadiusSq )
                 continue;
 
-            if ( target->_gid > 0 )
-            {
-                if ( std::find(sitem.CustomHitUnitGids.begin(), sitem.CustomHitUnitGids.end(),
-                               target->_gid) != sitem.CustomHitUnitGids.end() )
-                    continue;
-                sitem.CustomHitUnitGids.push_back(target->_gid);
-            }
-
-            if ( target->_owner == sitem.ActivateOwner ||
-                 target->_energy <= 0 || target->_status == BACT_STATUS_DEAD ||
-                 (target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
-                 target->IsInvulnerableToDamage() )
+            if ( target->_energy <= 0 || target->_status == BACT_STATUS_DEAD ||
+                 (target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
                 continue;
 
-            int damage = target->CalcShieldedCustomDamage(profile.unit_damage);
-            if ( damage > 0 )
+            const bool canReceiveDamageAndDebuff =
+                target->_owner != World::OWNER_0 &&
+                target->_owner != sitem.ActivateOwner &&
+                !target->IsInvulnerableToDamage();
+
+            // The wave push belongs to the gameplay wall itself. It is applied
+            // only to enemy targets that also qualify for wave damage/debuff,
+            // with no independent radius or falloff because contact with the
+            // LastRadius-CurrentRadius front is already the activation test.
+            float appliedPushForce = 0.0f;
+            vec3d pushDir(0.0f, 0.0f, 0.0f);
+            if ( canReceiveDamageAndDebuff &&
+                 target->_bact_type != BACT_TYPES_MISSLE &&
+                 profile.wave_push_force > 0.0f )
             {
-                bact_arg84 damageArg;
-                damageArg.energy = -damage;
-                damageArg.unit = source;
-                damageArg.bypassAttackerDamageModifiers = true;
-                target->ModifyEnergy(&damageArg);
+                appliedPushForce = profile.wave_push_force *
+                                   target->GetPushResistanceMultiplier();
+                if ( appliedPushForce > 0.0f )
+                {
+                    pushDir = vec3d(target->_position.x - center.x,
+                                    0.0f,
+                                    target->_position.z - center.y);
+                    if ( pushDir.length() <= 0.001f )
+                        pushDir = vec3d(1.0f, 0.0f, 0.0f);
+                }
             }
 
-            if ( profile.debuff.allow && target->_energy > 0 &&
-                 target->_status != BACT_STATUS_DEAD &&
+            if ( canReceiveDamageAndDebuff )
+            {
+                int damage = target->CalcShieldedCustomDamage(profile.wave_unit_damage);
+                if ( damage > 0 )
+                {
+                    bact_arg84 damageArg;
+                    damageArg.energy = -damage;
+                    damageArg.unit = source;
+                    damageArg.bypassAttackerDamageModifiers = true;
+                    target->ModifyEnergy(&damageArg);
+                }
+            }
+
+            // Keep the weapon push ordering: a valid contact still receives the
+            // impulse when the same wave hit is lethal. Allies are excluded.
+            if ( appliedPushForce > 0.0f )
+                target->AddAoePush(pushDir, appliedPushForce);
+
+            if ( canReceiveDamageAndDebuff && profile.debuff.allow &&
+                 target->_energy > 0 && target->_status != BACT_STATUS_DEAD &&
                  !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
                 target->ApplyDebuff(profile.debuff, source);
         }
@@ -5548,12 +5780,12 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
 
                 if ( visuallyPerfect )
                 {
-                    bool destroy = profile.building_perfect_destroy_percent >= 100;
-                    if ( profile.building_perfect_destroy_percent > 0 &&
-                         profile.building_perfect_destroy_percent < 100 )
+                    bool destroy = profile.wave_building_total_destruction_percent >= 100;
+                    if ( profile.wave_building_total_destruction_percent > 0 &&
+                         profile.wave_building_total_destruction_percent < 100 )
                     {
                         destroy = (yw_SuperItemBuildingHash(profile, sitem, cell, bldX, bldY) % 100u) <
-                                  (uint32_t)profile.building_perfect_destroy_percent;
+                                  (uint32_t)profile.wave_building_total_destruction_percent;
                     }
 
                     if ( !destroy )
@@ -5599,7 +5831,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
     if ( elapsed < 0 )
         elapsed = 0;
 
-    double calculatedRadius = (double)elapsed * (double)profile->wave_speed / 1000.0;
+    double calculatedRadius = yw_SuperItemWaveRadiusAtElapsed(*profile, (double)elapsed);
     double maximumRadius = profile->wave_max_radius > 0.0f
                          ? (double)profile->wave_max_radius
                          : sqrt((double)_mapLength.x * _mapLength.x +
@@ -5620,14 +5852,24 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
     if ( sitem.CurrentRadius > sitem.LastRadius )
         ApplyCustomSuperItemFront(id, (float)sitem.LastRadius, (float)sitem.CurrentRadius);
 
+    const double propagationEnd = yw_SuperItemWaveTravelTimeMs(*profile, maximumRadius);
+    const float waveAlpha = yw_SuperItemWaveAlpha(*profile, (double)elapsed, propagationEnd);
+
     if ( sitem.CurrentRadius >= maximum )
     {
-        if ( sitem.WaveTransientVPId > 0 )
-            RemoveTransientVP(sitem.WaveTransientVPId);
-        sitem.WaveTransientVPId = 0;
+        const bool fadeOutActive = profile->wave_vp_fade_out > 0 &&
+                                   (double)elapsed < propagationEnd + profile->wave_vp_fade_out;
+        if ( fadeOutActive )
+            UpdateCustomSuperItemWaveVP(sitem, *profile, waveAlpha);
+        else
+        {
+            if ( sitem.WaveTransientVPId > 0 )
+                RemoveTransientVP(sitem.WaveTransientVPId);
+            sitem.WaveTransientVPId = 0;
+        }
     }
     else
-        UpdateCustomSuperItemWaveVP(sitem, *profile);
+        UpdateCustomSuperItemWaveVP(sitem, *profile, waveAlpha);
     sitem.LastRadius = sitem.CurrentRadius;
 }
 

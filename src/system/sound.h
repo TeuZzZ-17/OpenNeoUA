@@ -15,6 +15,9 @@ struct TSndFXParam
     int slot = 0;
     float mag0 = 0.0;
     float mag1 = 0.0;
+    int fade_in = 0;
+    int fade_out = 0;
+    float radius = 0.0f;
 };
 
 struct TSndFxPosParam : TSndFXParam
@@ -72,6 +75,12 @@ struct TSoundSource
     TSndFxPosParam *PShkFx = NULL;
     std::vector<TSampleParams> *PFragments = NULL;
     int16_t Volume = 0;
+    // Optional per-event sound attenuation/fade. Zero keeps the exact legacy
+    // audio path. Fade-out is evaluated against the real non-loop sample
+    // duration when the source format exposes it.
+    float Radius = 0.0f;
+    int FadeIn = 0;
+    int FadeOut = 0;
     uint16_t Flags = 0;
     int Pitch = 0;
     // Some runtime effects intentionally raise a loop above the legacy 44.1 kHz
