@@ -1119,6 +1119,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles()
             continue;
         profile.debuff.tick_snd.LoadSamples();
         profile.detonate_snd.LoadSamples();
+        profile.wave_snd.LoadSamples();
     }
 
     ypa_log_out("Loaded %u SuperItem profile(s) from Data/SuperItemProfiles.ini.\n",
@@ -1308,6 +1309,7 @@ size_t NC_STACK_ypaworld::Deinit()
     {
         profile.debuff.tick_snd.ClearSounds();
         profile.detonate_snd.ClearSounds();
+        profile.wave_snd.ClearSounds();
     }
     _superItemProfiles.clear();
     _debugAoeRings.clear();
@@ -2061,6 +2063,7 @@ bool NC_STACK_ypaworld::IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) c
     const PlayerSprintConfig config = yw_GetPlayerSprintConfig();
     if ( _isNetGame || !config.complete || config.forceUpPercent <= 0.0f ||
          !bact || bact != _userUnit || bact->_isDummy || IsSpectatorBact(bact) ||
+         bact->IsActiveDebuffDisorienting() ||
          !bact->getBACT_inputting() ||
          (bact->_status != BACT_STATUS_NORMAL && bact->_status != BACT_STATUS_IDLE) )
     {

@@ -93,7 +93,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
     if ( ApplySeekAndExplodeRammingGuidance() )
         v108 = _target_vec.length();
 
-    if ( IsActiveDebuffDisorientingAI() )
+    if ( IsActiveDebuffDisorienting() )
     {
         UpdateActiveDebuffDisorientMoveIntent();
         v108 = 1200.0f;
@@ -114,7 +114,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                 || (!v5 && !v8)
                 || !CollisionWithBact(arg->frameTime) )
         {
-            if ( _primTtype || _secndTtype || IsActiveDebuffDisorientingAI() )
+            if ( _primTtype || _secndTtype || IsActiveDebuffDisorienting() )
             {
                 _ufoBoost = _mass * 9.80665;
                 _thraction = _force;

@@ -829,7 +829,8 @@ static bool ParseTintParam(ScriptParser::Parser &parser,
                            const std::string &paramName,
                            const std::string &p1,
                            const std::string &p2,
-                           TVisualTint &tint);
+                           TVisualTint &tint,
+                           bool invalidFallsBackToNeutral = false);
 
 static float ParseVPScaleValue(ScriptParser::Parser &parser, const std::string &value)
 {
@@ -931,6 +932,9 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         float mult = parser.stof(p2, 0);
         debuff.snd_pitch_mult = mult >= 0.0f ? mult : 1.0f;
     }
+    else if ( ParseTintParam(parser, "debuff_target_vp_tint", p1, p2,
+                             debuff.target_vp_tint, true) )
+        return true;
     else if ( (debuffFxSlot = ParseNumberedSlotId(p1, "debuff_fx_vp", World::DAMAGED_FX_SLOT_COUNT)) >= 0 )
     {
         int vp = parser.stol(p2, NULL, 0);
@@ -1166,12 +1170,67 @@ static bool ParseTintParam(ScriptParser::Parser &parser,
                            const std::string &paramName,
                            const std::string &p1,
                            const std::string &p2,
-                           TVisualTint &tint)
+                           TVisualTint &tint,
+                           bool invalidFallsBackToNeutral)
 {
     if ( StriCmp(p1, paramName) )
         return false;
 
     std::vector<std::string> parts = Stok::Split(p2, "_");
+
+    long comp[4] = {255, 255, 255, 255};
+
+    if ( invalidFallsBackToNeutral )
+    {
+        bool valid = parts.size() == 3 || parts.size() == 4;
+        for (size_t i = 0; valid && i < parts.size(); i++)
+        {
+            const std::string &part = parts[i];
+            size_t digit = 0;
+            bool negative = false;
+            if ( !part.empty() && (part[0] == '+' || part[0] == '-') )
+            {
+                negative = part[0] == '-';
+                digit = 1;
+            }
+
+            if ( digit >= part.size() )
+            {
+                valid = false;
+                break;
+            }
+
+            long value = 0;
+            for (; digit < part.size(); digit++)
+            {
+                if ( part[digit] < '0' || part[digit] > '9' )
+                {
+                    valid = false;
+                    break;
+                }
+
+                // Values outside 0..255 are clamped below. Saturating here avoids
+                // integer overflow and parser error popups for absurdly long input.
+                if ( value <= 255 )
+                    value = value * 10 + (part[digit] - '0');
+            }
+
+            comp[i] = negative ? -value : value;
+        }
+
+        if ( !valid )
+        {
+            tint = TVisualTint();
+            ypa_log_out("WARNING: invalid %s '%s', using neutral 255_255_255_255\n",
+                        paramName.c_str(), p2.c_str());
+            return true;
+        }
+    }
+    else
+    {
+        for (size_t i = 0; i < parts.size() && i < 4; i++)
+            comp[i] = parser.stol(parts[i], 0, 10);
+    }
 
     auto clamp255 = [](long v) -> float
     {
@@ -1181,10 +1240,6 @@ static bool ParseTintParam(ScriptParser::Parser &parser,
             v = 255;
         return (float)v / 255.0f;
     };
-
-    long comp[4] = {255, 255, 255, 255};
-    for (size_t i = 0; i < parts.size() && i < 4; i++)
-        comp[i] = parser.stol(parts[i], 0, 10);
 
     tint.r = clamp255(comp[0]);
     tint.g = clamp255(comp[1]);
@@ -4861,6 +4916,70 @@ static float ParseSuperItemScale(ScriptParser::Parser &parser,
     return 1.0f;
 }
 
+static bool ParseSuperItemSoundEventParam(ScriptParser::Parser &parser,
+                                          const std::string &eventName,
+                                          const std::string &p1,
+                                          const std::string &p2,
+                                          TVhclSound &sound)
+{
+    const std::string sndPrefix = "snd_" + eventName + "_";
+    const std::string palPrefix = "pal_" + eventName + "_";
+    const std::string shkPrefix = "shk_" + eventName + "_";
+
+    if ( !StriCmp(p1, sndPrefix + "sample") )
+        sound.SetMainSampleVariant(0, p2);
+    else if ( !StriCmp(p1, sndPrefix + "volume") )
+        sound.volume = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, sndPrefix + "pitch") )
+        sound.pitch = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, sndPrefix + "radius") )
+        sound.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, sndPrefix + "fade_in") )
+        sound.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, sndPrefix + "fade_out") )
+        sound.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, palPrefix + "slot") )
+        sound.sndPrm.slot = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, palPrefix + "time") )
+        sound.sndPrm.time = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, palPrefix + "radius") )
+        sound.sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, palPrefix + "fade_in") )
+        sound.sndPrm.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, palPrefix + "fade_out") )
+        sound.sndPrm.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, palPrefix + "mag0") )
+        sound.sndPrm.mag0 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, palPrefix + "mag1") )
+        sound.sndPrm.mag1 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, shkPrefix + "slot") )
+        sound.sndPrm_shk.slot = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, shkPrefix + "time") )
+        sound.sndPrm_shk.time = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, shkPrefix + "radius") )
+        sound.sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, shkPrefix + "fade_in") )
+        sound.sndPrm_shk.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, shkPrefix + "fade_out") )
+        sound.sndPrm_shk.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, shkPrefix + "mag0") )
+        sound.sndPrm_shk.mag0 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, shkPrefix + "mag1") )
+        sound.sndPrm_shk.mag1 = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, shkPrefix + "mute") )
+        sound.sndPrm_shk.mute = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, shkPrefix + "x") )
+        sound.sndPrm_shk.pos.x = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, shkPrefix + "y") )
+        sound.sndPrm_shk.pos.y = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, shkPrefix + "z") )
+        sound.sndPrm_shk.pos.z = parser.stof(p2, 0);
+    else
+        return false;
+
+    return true;
+}
+
 int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
                                    const std::string &p1,
                                    const std::string &p2)
@@ -4952,54 +5071,12 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
     }
     else if ( ParseDebuffParam(parser, p1, p2, _profile->debuff) )
     {}
-    else if ( !StriCmp(p1, "snd_detonate_sample") )
-        _profile->detonate_snd.SetMainSampleVariant(0, p2);
-    else if ( !StriCmp(p1, "snd_detonate_volume") )
-        _profile->detonate_snd.volume = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "snd_detonate_pitch") )
-        _profile->detonate_snd.pitch = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "snd_detonate_radius") )
-        _profile->detonate_snd.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "snd_detonate_fade_in") )
-        _profile->detonate_snd.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "snd_detonate_fade_out") )
-        _profile->detonate_snd.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "shk_detonate_slot") )
-        _profile->detonate_snd.sndPrm_shk.slot = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "shk_detonate_time") )
-        _profile->detonate_snd.sndPrm_shk.time = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "shk_detonate_radius") )
-        _profile->detonate_snd.sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "shk_detonate_fade_in") )
-        _profile->detonate_snd.sndPrm_shk.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "shk_detonate_fade_out") )
-        _profile->detonate_snd.sndPrm_shk.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "shk_detonate_mag0") )
-        _profile->detonate_snd.sndPrm_shk.mag0 = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "shk_detonate_mag1") )
-        _profile->detonate_snd.sndPrm_shk.mag1 = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "shk_detonate_mute") )
-        _profile->detonate_snd.sndPrm_shk.mute = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "shk_detonate_x") )
-        _profile->detonate_snd.sndPrm_shk.pos.x = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "shk_detonate_y") )
-        _profile->detonate_snd.sndPrm_shk.pos.y = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "shk_detonate_z") )
-        _profile->detonate_snd.sndPrm_shk.pos.z = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "pal_detonate_slot") )
-        _profile->detonate_snd.sndPrm.slot = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "pal_detonate_time") )
-        _profile->detonate_snd.sndPrm.time = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "pal_detonate_radius") )
-        _profile->detonate_snd.sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "pal_detonate_fade_in") )
-        _profile->detonate_snd.sndPrm.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "pal_detonate_fade_out") )
-        _profile->detonate_snd.sndPrm.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "pal_detonate_mag0") )
-        _profile->detonate_snd.sndPrm.mag0 = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "pal_detonate_mag1") )
-        _profile->detonate_snd.sndPrm.mag1 = parser.stof(p2, 0);
+    else if ( ParseSuperItemSoundEventParam(parser, "detonate", p1, p2,
+                                             _profile->detonate_snd) )
+    {}
+    else if ( ParseSuperItemSoundEventParam(parser, "wave", p1, p2,
+                                             _profile->wave_snd) )
+    {}
     else
         return ScriptParser::RESULT_UNKNOWN;
 
