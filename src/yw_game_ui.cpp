@@ -13128,10 +13128,12 @@ static void yw_DrawGemPanelOutline(NC_STACK_ypaworld *yw, int halfWidth, int top
     }
 }
 
-static bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw)
+static void yw_BuildNewGemNotificationLines(NC_STACK_ypaworld *yw,
+                                             std::vector<GemNotificationLine> *lines)
 {
+    lines->clear();
+
     std::vector<GemNotificationView> views;
-    std::vector<GemNotificationLine> lines;
     bool hasRealChange = false;
 
     for (const TGemNotificationEntry &entry : yw->_gemNotificationEntries)
@@ -13174,7 +13176,7 @@ static bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw)
 
     if ( views.empty() )
     {
-        yw_GemBuildFallbackLines(yw, &lines);
+        yw_GemBuildFallbackLines(yw, lines);
     }
     else
     {
@@ -13186,8 +13188,8 @@ static bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw)
             std::string title = views.size() == 1
                               ? Locale::Text::Gem(Locale::GEMSTR_UPGRADE_UNLOCKED)
                               : Locale::Text::Gem(Locale::GEMSTR_UPGRADES_UNLOCKED);
-            lines.emplace_back(title);
-            yw_GemAppendSpacer(&lines);
+            lines->emplace_back(title);
+            yw_GemAppendSpacer(lines);
         }
 
         std::string previousTargetKey;
@@ -13200,28 +13202,35 @@ static bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw)
             if ( targetKey != previousTargetKey )
             {
                 if ( !previousTargetKey.empty() || !showTitle )
-                    yw_GemAppendSpacer(&lines);
+                    yw_GemAppendSpacer(lines);
 
-                lines.emplace_back(view.TargetName, yw_GemTargetNameColor(yw, entry));
-                yw_GemAppendSpacer(&lines);
+                lines->emplace_back(view.TargetName, yw_GemTargetNameColor(yw, entry));
+                yw_GemAppendSpacer(lines);
                 previousTargetKey = targetKey;
             }
 
             if ( entry.AlreadyUnlocked )
             {
-                lines.emplace_back(Locale::Text::Gem(Locale::GEMSTR_ALREADY_UNLOCKED));
+                lines->emplace_back(Locale::Text::Gem(Locale::GEMSTR_ALREADY_UNLOCKED));
                 continue;
             }
 
             if ( entry.ChangeKind == TGemNotificationEntry::CHANGE_ENABLE )
             {
-                lines.emplace_back(Locale::Text::Gem(Locale::GEMSTR_UNLOCKED));
+                lines->emplace_back(Locale::Text::Gem(Locale::GEMSTR_UNLOCKED));
                 continue;
             }
 
-            yw_GemAppendUpgradeLine(&lines, entry);
+            yw_GemAppendUpgradeLine(lines, entry);
         }
     }
+
+}
+
+static bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw)
+{
+    std::vector<GemNotificationLine> lines;
+    yw_BuildNewGemNotificationLines(yw, &lines);
 
     const int lineHeight = std::max(yw->_fontH + 2, 12);
     int contentHeight = (int)lines.size() * lineHeight;
@@ -13295,6 +13304,27 @@ static bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw)
     return true;
 }
 
+}
+
+std::string NC_STACK_ypaworld::BuildNewGemNotificationLogText()
+{
+    std::vector<GemNotificationLine> lines;
+    yw_BuildNewGemNotificationLines(this, &lines);
+
+    // Reuse the exact visible strings selected for the center-screen popup.
+    // Spacer-only rows are layout, not text, so they are not added to the info log.
+    std::string text;
+    for (const GemNotificationLine &line : lines)
+    {
+        if ( line.Text.empty() )
+            continue;
+
+        if ( !text.empty() )
+            text += '\n';
+        text += line.Text;
+    }
+
+    return text;
 }
 
 int sb_0x4d7c08__sub0__sub0__sub0(NC_STACK_ypaworld *yw)
@@ -13653,8 +13683,8 @@ void yw_RenderHUDVectorGFX(NC_STACK_ypaworld *yw, CmdStream *cur)
             StatusIconRenderCockpit(yw, wis, yw->_userUnit,
                                     &yw->_vhclProtos[protoId], hudX, hudY);
 
-            if ( yw->_userUnit->_sessionKillMarks > 0 &&
-                 yw->_userUnit->_bact_type != BACT_TYPES_ROBO )
+            const uint8_t killMarks = yw->_userUnit->GetSessionKillMarks();
+            if ( killMarks > 0 )
             {
                 constexpr int markGap = 2;
                 constexpr int markHeight = 3;
@@ -13673,9 +13703,9 @@ void yw_RenderHUDVectorGFX(NC_STACK_ypaworld *yw, CmdStream *cur)
                     SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
 
                     yw_DrawWorldKillMarks(killMarkCenterX + 1, tipY + 1,
-                                          yw->_userUnit->_sessionKillMarks, shadowColor);
+                                          killMarks, shadowColor);
                     yw_DrawWorldKillMarks(killMarkCenterX, tipY,
-                                          yw->_userUnit->_sessionKillMarks, markerColor);
+                                          killMarks, markerColor);
                 }
             }
         }
@@ -13841,8 +13871,8 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                             }
 
                             uint8_t protoId = bact->_mimic_disguise_vehicleID ? bact->_mimic_disguise_vehicleID : bact->_vehicleID;
-                            const bool showKillMarks = bact->_sessionKillMarks > 0 &&
-                                                       bact->_bact_type != BACT_TYPES_ROBO;
+                            const uint8_t killMarks = bact->GetSessionKillMarks();
+                            const bool showKillMarks = killMarks > 0;
                             constexpr int markGap = 2;
                             constexpr int markHeight = 3;
                             const int killMarkReserve = showKillMarks ? markGap + markHeight + markGap : 0;
@@ -13864,9 +13894,9 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                                     shadowColor.a = worldUiOpacity;
 
                                     yw_DrawWorldKillMarks(killMarkCenterX + 1, tipY + 1,
-                                                          bact->_sessionKillMarks, shadowColor);
+                                                          killMarks, shadowColor);
                                     yw_DrawWorldKillMarks(killMarkCenterX, tipY,
-                                                          bact->_sessionKillMarks, markerColor);
+                                                          killMarks, markerColor);
                                 }
                             }
                             FontUA::set_opacity(cur, 255);

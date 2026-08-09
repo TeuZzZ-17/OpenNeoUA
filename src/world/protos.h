@@ -110,6 +110,8 @@ struct TChainFXConfig
     float start_size = 1.0;
     float end_size = 0.0;
     int duration = 0;
+    int fade_in = 0;
+    int fade_out = 0;
     std::vector<TChainFXVPModel> vp_models;
     int physical_vehicle = 0;
 };
@@ -185,6 +187,9 @@ struct TVhclSound
     std::vector<TSndSample> ExtSamples;
     int16_t volume = 0;
     int16_t pitch = 0;
+    float radius = 0.0f;
+    int fade_in = 0;
+    int fade_out = 0;
     TSndFXParam sndPrm;
     TSndFxPosParam sndPrm_shk;
     std::vector<TSampleParams> extS;
@@ -243,6 +248,7 @@ struct TWeaponDebuffConfig
     float snd_pitch_mult = 1.0;
     std::vector<int16_t> fx_vps;
     float fx_vp_scale = 1.0;
+    TVisualTint fx_vp_tint;
     float fx_random_offset_percent = 0.0;
     bool has_fx_random_offset_percent = false;
     bool fx_trail_only = false;
@@ -272,7 +278,6 @@ struct TSuperItemProfile
 
     std::string id;
     int type = TYPE_INVALID;
-    bool is_default = false;
     bool valid = false;
     bool duplicate = false;
     std::string display_name;
@@ -282,11 +287,22 @@ struct TSuperItemProfile
     float wave_vp_reference_radius = 300.0f;
     vec3d wave_vp_offset;
     TVisualTint wave_vp_tint;
-    float wave_speed = 0.0f;
+    float wave_start_speed = 0.0f;
+    float wave_end_speed = 0.0f;
+    float wave_speed_ramp_time = 0.0f;
+    bool has_wave_start_speed = false;
+    bool has_wave_end_speed = false;
+    bool has_wave_speed_ramp_time = false;
     float wave_max_radius = 0.0f;
+    float push_force = 0.0f;
+    float push_radius = 0.0f;
+    int push_falloff = 0;
+    float wave_push_force = 0.0f;
+    int wave_vp_fade_in = 0;
+    int wave_vp_fade_out = 0;
 
-    int unit_damage = 0;
-    int building_perfect_destroy_percent = 0;
+    int wave_unit_damage = 0;
+    int wave_building_total_destruction_percent = 0;
     TWeaponDebuffConfig debuff;
     TVhclSound detonate_snd;
     std::vector<TChainFXConfig> detonate_chain_fx;

@@ -992,7 +992,6 @@ static std::string yw_SuperItemProfileKey(const std::string &id)
 bool NC_STACK_ypaworld::LoadSuperItemProfiles()
 {
     _superItemProfiles.clear();
-    _defaultSuperItemBombProfile = -1;
 
     if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 )
         return false;
@@ -1044,10 +1043,20 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles()
                         profile.id.empty() ? "<missing>" : profile.id.c_str());
         }
 
-        if ( !std::isfinite(profile.wave_speed) || profile.wave_speed <= 0.0f )
+        const bool hasWaveSpeedTrio =
+            profile.has_wave_start_speed &&
+            profile.has_wave_speed_ramp_time &&
+            profile.has_wave_end_speed;
+        const bool waveSpeedTrioValid =
+            hasWaveSpeedTrio &&
+            std::isfinite(profile.wave_start_speed) && profile.wave_start_speed >= 0.0f &&
+            std::isfinite(profile.wave_speed_ramp_time) && profile.wave_speed_ramp_time >= 0.0f &&
+            std::isfinite(profile.wave_end_speed) && profile.wave_end_speed > 0.0f;
+
+        if ( !waveSpeedTrioValid )
         {
             profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_speed; using vanilla fallback.\n",
+            ypa_log_out("WARNING: SuperItem profile '%s' requires valid wave_start_speed, wave_speed_ramp_time and wave_end_speed; using vanilla fallback.\n",
                         profile.id.empty() ? "<missing>" : profile.id.c_str());
         }
 
@@ -1103,27 +1112,6 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles()
             _superItemProfiles[index].valid = false;
         }
     }
-
-    int declaredBombDefaults = 0;
-    for (size_t i = 0; i < _superItemProfiles.size(); ++i)
-    {
-        World::TSuperItemProfile &profile = _superItemProfiles[i];
-        if ( profile.type == World::TSuperItemProfile::TYPE_BOMB && profile.is_default )
-        {
-            ++declaredBombDefaults;
-            if ( profile.valid )
-                _defaultSuperItemBombProfile = (int32_t)i;
-        }
-    }
-
-    if ( declaredBombDefaults > 1 )
-    {
-        _defaultSuperItemBombProfile = -1;
-        ypa_log_out("WARNING: multiple default bomb SuperItem profiles found; levels without profile use vanilla fallback.\n");
-    }
-    else if ( _defaultSuperItemBombProfile >= 0 &&
-              !_superItemProfiles[_defaultSuperItemBombProfile].valid )
-        _defaultSuperItemBombProfile = -1;
 
     for (World::TSuperItemProfile &profile : _superItemProfiles)
     {
@@ -1450,6 +1438,27 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         if ( !_doNotRender )
         {
             ypaworld_func64__sub1(arg->field_8); //Precompute input (add mouse turn)
+
+            if ( HasActiveNewGemNotification() && _GameShell )
+            {
+                const UserData::TInputConf &fireBind =
+                    _GameShell->InputConfig[World::INPUT_BIND_FIRE];
+                const UserData::TInputConf &menuBind =
+                    _GameShell->InputConfig[World::INPUT_BIND_QUIT];
+
+                const bool primaryFireRequested =
+                    _userUnit && _userUnit->_bact_type != BACT_TYPES_UFO &&
+                    fireBind.Type == World::INPUT_BIND_TYPE_BUTTON &&
+                    fireBind.KeyID >= 0 && fireBind.KeyID < 32 &&
+                    arg->field_8->Buttons.Is(fireBind.KeyID);
+                const bool menuRequested =
+                    menuBind.Type == World::INPUT_BIND_TYPE_HOTKEY &&
+                    arg->field_8->HotKeyID == menuBind.KeyID;
+
+                if ( primaryFireRequested || menuRequested )
+                    DismissNewGemNotification();
+            }
+
             yw_UpdateCockpitCameraToggle(this, arg->field_8);
 
             TClickBoxInf *winp = &arg->field_8->ClickInf;
@@ -1990,6 +1999,14 @@ bool NC_STACK_ypaworld::HasActiveNewGemNotification() const
 uint32_t NC_STACK_ypaworld::GetNewGemNotificationElapsedTime() const
 {
     return SDL_GetTicks() - _upgradeTimeStamp;
+}
+
+void NC_STACK_ypaworld::DismissNewGemNotification()
+{
+    if ( !HasActiveNewGemNotification() )
+        return;
+
+    _upgradeTimeStamp = SDL_GetTicks() - yw_GetGemUnlockDuration();
 }
 
 void NC_STACK_ypaworld::StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo)
@@ -2616,7 +2633,10 @@ void sub_47C29C(NC_STACK_ypaworld *yw, cellArea *cell, int a3)
         yw->FinishGemNotificationCapture(true);
 
     yw_arg159 v14;
-    v14.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
+    if ( newUiCapture )
+        v14.txt = yw->BuildNewGemNotificationLogText();
+    if ( v14.txt.empty() )
+        v14.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
     v14.unit = 0;
     v14.Priority = 48;
 
@@ -2728,7 +2748,10 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
     yw_arg159 arg159;
     arg159.unit = NULL;
     arg159.Priority = 48;
-    arg159.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
+    if ( newUiCapture )
+        arg159.txt = BuildNewGemNotificationLogText();
+    if ( arg159.txt.empty() )
+        arg159.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
 
     if ( gem.Type )
         arg159.MsgID = World::Log::GetUpgradeLogID(gem.Type);
@@ -3528,6 +3551,9 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
             smpl_inf->Volume = vhcl.sndFX[i].volume;
             smpl_inf->Pitch = vhcl.sndFX[i].pitch;
+            smpl_inf->Radius = vhcl.sndFX[i].radius;
+            smpl_inf->FadeIn = vhcl.sndFX[i].fade_in;
+            smpl_inf->FadeOut = vhcl.sndFX[i].fade_out;
             smpl_inf->PriorityBias = (i == World::TVhclProto::SND_COCKPIT) ? 4096 : 0;
 
             if ( World::TVhclProto::IsLoopingSnd(i) )
@@ -3746,6 +3772,9 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
 
         v25->Volume = wproto.sndFXes[i].volume;
         v25->Pitch = wproto.sndFXes[i].pitch;
+        v25->Radius = wproto.sndFXes[i].radius;
+        v25->FadeIn = wproto.sndFXes[i].fade_in;
+        v25->FadeOut = wproto.sndFXes[i].fade_out;
 
         if ( i == 0 )
             v25->SetLoop(true);
