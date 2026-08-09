@@ -83,6 +83,7 @@ struct TActiveDebuffState
     float maxrot_malus = 0.0;
     float shield_malus = 0.0;
     float snd_pitch_mult = 1.0;
+    World::TVisualTint target_vp_tint;
     std::vector<int16_t> fx_vps;
     float fx_vp_scale = 1.0;
     World::TVisualTint fx_vp_tint;
@@ -115,6 +116,7 @@ struct TActiveDebuffState
         maxrot_malus = 0.0;
         shield_malus = 0.0;
         snd_pitch_mult = 1.0;
+        target_vp_tint = World::TVisualTint();
         fx_vps.clear();
         fx_vp_scale = 1.0;
         fx_vp_tint = World::TVisualTint();
@@ -509,7 +511,7 @@ public:
     void ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source);
     void UpdateActiveDebuff(update_msg *arg);
     void ClearActiveDebuff();
-    bool IsActiveDebuffDisorientingAI(bool requireMovementLevel = true) const;
+    bool IsActiveDebuffDisorienting(bool requireMovementLevel = true) const;
     bool IsActiveDebuffDisorientFireBlocked() const;
     float GetActiveDebuffDisorientTraction(float currentTraction, bool supportsReverse) const;
     void RunAIWithActiveDebuffDisorient(update_msg *arg);

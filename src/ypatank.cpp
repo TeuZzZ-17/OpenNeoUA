@@ -230,7 +230,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
     if ( seekAndExplodeRamming )
         v220 = _target_vec.length();
 
-    if ( IsActiveDebuffDisorientingAI() )
+    if ( IsActiveDebuffDisorienting() )
     {
         UpdateActiveDebuffDisorientMoveIntent();
         v220 = 1200.0f;
@@ -252,7 +252,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
             break;
         }
 
-        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorientingAI() )
+        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorienting() )
         {
             _status = BACT_STATUS_IDLE;
             _status_flg &= ~(BACT_STFLAG_FIGHT_P | BACT_STFLAG_FIGHT_S);
@@ -467,7 +467,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                 bool allowRecoilRecoveryMove = !recoilRecovery || seekAndExplodeRamming || _tankCollisionFlag;
 
                 if ( allowRecoilRecoveryMove &&
-                     (IsActiveDebuffDisorientingAI() ||
+                     (IsActiveDebuffDisorienting() ||
                       seekAndExplodeRamming ||
                       !(_status_flg & BACT_STFLAG_ATTACK) ||
                       !_tankExpectTgt ||

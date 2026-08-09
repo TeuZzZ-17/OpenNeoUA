@@ -842,6 +842,11 @@ int yw_write_superbomb(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
         fil->printf("    last_sec          = %d\n", sitem.LastSec);
         fil->printf("    radius            = %d\n", sitem.CurrentRadius);
         fil->printf("    last_radius       = %d\n", sitem.LastRadius);
+        for (int32_t gid : sitem.CustomHitUnitGids)
+        {
+            if ( gid > 0 )
+                fil->printf("    hit_unit          = %d\n", gid);
+        }
         fil->printf("end\n");
 
         i++;

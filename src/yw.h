@@ -1457,8 +1457,10 @@ struct TMapSuperItem
     std::string ProfileId;
     int32_t CustomProfileIndex = -1;
     int32_t WaveTransientVPId = 0;
-    // Legacy save compatibility only: old saves may contain hit_unit lines.
-    // Wave unit contacts are intentionally no longer persistently suppressed.
+    bool WavePalEffectStarted = false;
+    bool WaveShakeEffectStarted = false;
+    // GIDs of units already pushed by the custom propagation wave.
+    // Persisted in saves so wave_push_force is applied at most once per unit.
     std::vector<int32_t> CustomHitUnitGids;
     std::vector<uint8_t> CustomHitBuildingSlots;
 };
@@ -2636,6 +2638,9 @@ public:
     const World::TSuperItemProfile *GetSuperItemProfile(const TMapSuperItem &sitem) const;
     std::string GetSuperItemDisplayName(const TMapSuperItem &sitem) const;
     void StartCustomSuperItemDetonation(int id);
+    void StartCustomSuperItemWaveEffects(int id);
+    void UpdateCustomSuperItemWaveEffects(int id);
+    void StopCustomSuperItemWaveEffects(int id);
     void ApplyCustomSuperItemDetonationPush(int id);
     void RestoreCustomSuperItemRuntimeAfterLoad();
     void UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
@@ -2875,6 +2880,7 @@ public:
     std::vector<World::TRoboProto> _roboProtos;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
+    std::vector<std::unique_ptr<TSndCarrier>> _superItemWaveSoundCarriers;
 
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;

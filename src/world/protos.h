@@ -246,6 +246,7 @@ struct TWeaponDebuffConfig
     float maxrot_malus = 0.0;
     float shield_malus = 0.0;
     float snd_pitch_mult = 1.0;
+    TVisualTint target_vp_tint;
     std::vector<int16_t> fx_vps;
     float fx_vp_scale = 1.0;
     TVisualTint fx_vp_tint;
@@ -305,6 +306,7 @@ struct TSuperItemProfile
     int wave_building_total_destruction_percent = 0;
     TWeaponDebuffConfig debuff;
     TVhclSound detonate_snd;
+    TVhclSound wave_snd;
     std::vector<TChainFXConfig> detonate_chain_fx;
 
     TSuperItemProfile()
@@ -316,6 +318,14 @@ struct TSuperItemProfile
         detonate_snd.sndPrm_shk.time = 1000;
         detonate_snd.sndPrm_shk.mute = 0.02;
         detonate_snd.sndPrm_shk.pos.z = 1.0;
+
+        wave_snd.volume = 120;
+        wave_snd.sndPrm.mag0 = 1.0;
+        wave_snd.sndPrm.time = 1000;
+        wave_snd.sndPrm_shk.mag0 = 1.0;
+        wave_snd.sndPrm_shk.time = 1000;
+        wave_snd.sndPrm_shk.mute = 0.02;
+        wave_snd.sndPrm_shk.pos.z = 1.0;
     }
 };
 

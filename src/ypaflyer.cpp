@@ -285,7 +285,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
     if ( v88 > 0.0 )
         _target_dir = _target_vec / v88;
 
-    if ( IsActiveDebuffDisorientingAI() )
+    if ( IsActiveDebuffDisorienting() )
     {
         UpdateActiveDebuffDisorientMoveIntent();
         v88 = 1200.0f;
@@ -318,7 +318,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             }
         }
 
-        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorientingAI() )
+        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorienting() )
         {
             _status = BACT_STATUS_IDLE;
 

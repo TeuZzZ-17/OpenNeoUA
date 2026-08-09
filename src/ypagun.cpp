@@ -216,7 +216,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
     case BACT_STATUS_NORMAL:
     case BACT_STATUS_IDLE:
     {
-        const bool disorienting = IsActiveDebuffDisorientingAI();
+        const bool disorienting = IsActiveDebuffDisorienting();
         if ( disorienting )
             UpdateActiveDebuffDisorientMoveIntent();
 

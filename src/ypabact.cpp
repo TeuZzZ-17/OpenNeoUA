@@ -3494,6 +3494,7 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     _active_debuff.maxrot_malus = std::max(0.0f, std::min(debuff.maxrot_malus, 1.0f));
     _active_debuff.shield_malus = std::max(0.0f, std::min(debuff.shield_malus, 1.0f));
     _active_debuff.snd_pitch_mult = ypabact_SafeDamageMult(debuff.snd_pitch_mult);
+    _active_debuff.target_vp_tint = debuff.target_vp_tint;
     _active_debuff.fx_vps = debuff.fx_vps;
     _active_debuff.fx_vp_scale = debuff.fx_vp_scale;
     _active_debuff.fx_vp_tint = debuff.fx_vp_tint;
@@ -4250,8 +4251,20 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     // grey clone identity tint. In V1 this deliberately overrides any manual per-prototype
     // vp_tint so the clone is always visually readable. This is render-only: it reads
     // the cached config and never mutates _vp_tint or the shared prototype.
-    const World::TVisualTint effectiveTint =
+    World::TVisualTint effectiveTint =
         World::CloneBalance::IsCloneActor(this) ? World::CloneBalance::Tint() : _vp_tint;
+
+    // OpenUA debuff target tint: compose a temporary RGBA multiplier over the unit's
+    // already-effective instance tint. The prototype and _vp_tint remain untouched, so
+    // expiration, death or replacement of the debuff restores the exact previous look.
+    if ( _active_debuff.active && !_active_debuff.target_vp_tint.IsNeutral() )
+    {
+        effectiveTint.r *= _active_debuff.target_vp_tint.r;
+        effectiveTint.g *= _active_debuff.target_vp_tint.g;
+        effectiveTint.b *= _active_debuff.target_vp_tint.b;
+        effectiveTint.a *= _active_debuff.target_vp_tint.a;
+        effectiveTint.Clamp();
+    }
 
     auto shouldApplyVPScale = [this](NC_STACK_base *base)
     {
@@ -4776,7 +4789,9 @@ static void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
         return;
     }
 
-    const bool blockWeapons = world->IsNewGemNotificationBlockingPlayerWeapons(bact);
+    const bool blockWeapons =
+        world->IsNewGemNotificationBlockingPlayerWeapons(bact) ||
+        bact->IsActiveDebuffDisorientFireBlocked();
     if ( !blockWeapons )
     {
         bact->User_layer(arg);
@@ -4784,8 +4799,7 @@ static void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
     }
 
     TInputState filteredInput = *arg->inpt;
-    if ( blockWeapons )
-        filteredInput.Buttons.UnSet({0, 2, 5});
+    filteredInput.Buttons.UnSet({0, 2, 5});
 
     update_msg filteredArg = *arg;
     filteredArg.inpt = &filteredInput;
@@ -4794,12 +4808,34 @@ static void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
 
 void NC_STACK_ypabact::AI_layer2(update_msg *arg)
 {
-    // The directly controlled unit uses player targeting and input only.
+    // The directly controlled unit normally uses player targeting and input.
     // Bypass opportunistic enemy scans, AI speech/engagement messages and AI
-    // secondary-target assignment that otherwise ran every 500 ms.
+    // secondary-target assignment; only the active single-player disorient
+    // movement controller below temporarily replaces direct driving.
     if ( _oflags & BACT_OFLAG_USERINPT )
     {
-        ypabact_RunPlayerUserLayer(this, arg);
+        // OpenUA debuff disorient: while movement disorientation is active, the
+        // directly controlled unit temporarily runs the same erratic movement
+        // controller already used by AI units. This keeps one shared source of
+        // truth for phases, traction and floor safety instead of duplicating the
+        // behavior inside every vehicle-specific User_layer().
+        const bool playerDisorientEnabled = _world && !_world->_isNetGame;
+        if ( playerDisorientEnabled && IsActiveDebuffDisorienting() )
+        {
+            ReleaseHandBrake();
+            _world->ResetPlayerSprint();
+            RunAIWithActiveDebuffDisorient(arg);
+        }
+        else
+        {
+            // A fire-only disorient (motion level 0) keeps normal steering but
+            // still applies the existing continuous-fire / fire-block policy.
+            // Netgame deliberately keeps the previous player behavior because
+            // this random movement path has not been audited for synchronization.
+            if ( playerDisorientEnabled )
+                UpdateActiveDebuffDisorientFire(arg);
+            ypabact_RunPlayerUserLayer(this, arg);
+        }
         return;
     }
 
@@ -5071,7 +5107,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
     if ( v77 > 0.0 )
         _target_dir = _target_vec / v77;
 
-    if ( IsActiveDebuffDisorientingAI() )
+    if ( IsActiveDebuffDisorienting() )
     {
         UpdateActiveDebuffDisorientMoveIntent();
         v77 = 1200.0f;
@@ -5101,7 +5137,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
             }
         }
 
-        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorientingAI() )
+        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorienting() )
         {
             _status = BACT_STATUS_IDLE;
 
@@ -5648,19 +5684,10 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
         if ( (fabs(_fly_dir.y) > 0.98 || _fly_dir_length == 0.0) && _rotation.m11 > 0.996 && arg->inpt->Sliders[1] == 0.0 &&
              !(_bact_type == BACT_TYPES_BACT && (_status_flg & BACT_STFLAG_LAND)) )
         {
-            vec2d axisX = _rotation.AxisX().XZ();;
-
-            if ( axisX.normalise() == 0.0 )
-                ypa_log_out("Null on div occur %s:%d\n", __FILE__, __LINE__);
-
-            vec2d axisZ = _rotation.AxisZ().XZ();
-
-            if ( axisZ.normalise() == 0.0 )
-                ypa_log_out("Null on div occur %s:%d\n", __FILE__, __LINE__);
-
-            _rotation.SetX( vec3d::X0Z(axisX) );
-            _rotation.SetY( vec3d(0.0, 1.0, 0.0) );
-            _rotation.SetZ( vec3d::X0Z(axisZ) );
+            // Preserve the legacy auto-level trigger, but use the same
+            // frame-rate-independent gradual recovery as Hand Brake and
+            // helicopter touchdown instead of snapping upright in one frame.
+            SmoothStabilizeUpright(arg->frameTime);
         }
 
 //    float v84 = sqrt( POW2(bact->field_651.m20) + POW2(bact->field_651.m22) );
@@ -11808,12 +11835,11 @@ static void ypabact_UpdateDisorientFloorSafety(NC_STACK_ypabact *bact)
     }
 }
 
-bool NC_STACK_ypabact::IsActiveDebuffDisorientingAI(bool requireMovementLevel) const
+bool NC_STACK_ypabact::IsActiveDebuffDisorienting(bool requireMovementLevel) const
 {
     if ( !_active_debuff.active ||
          !_active_debuff.disorient ||
          !_world ||
-         (_oflags & BACT_OFLAG_USERINPT) ||
          _isDummy ||
          _energy <= 0 ||
          _status == BACT_STATUS_DEAD ||
@@ -11842,15 +11868,18 @@ bool NC_STACK_ypabact::IsActiveDebuffDisorientingAI(bool requireMovementLevel) c
 
 bool NC_STACK_ypabact::IsActiveDebuffDisorientFireBlocked() const
 {
+    const bool unauditedNetworkPlayer =
+        (_oflags & BACT_OFLAG_USERINPT) && _world && _world->_isNetGame;
+
     return _active_debuff.active &&
            _active_debuff.disorient &&
            !_active_debuff.disorient_fire &&
-           !(_oflags & BACT_OFLAG_USERINPT);
+           !unauditedNetworkPlayer;
 }
 
 void NC_STACK_ypabact::UpdateActiveDebuffDisorientMoveIntent()
 {
-    if ( !IsActiveDebuffDisorientingAI() )
+    if ( !IsActiveDebuffDisorienting() )
         return;
 
     const bool ufo = _bact_type == BACT_TYPES_UFO;
@@ -11867,7 +11896,7 @@ void NC_STACK_ypabact::UpdateActiveDebuffDisorientMoveIntent()
 float NC_STACK_ypabact::GetActiveDebuffDisorientTraction(float currentTraction,
                                                           bool supportsReverse) const
 {
-    if ( !IsActiveDebuffDisorientingAI() )
+    if ( !IsActiveDebuffDisorienting() )
         return currentTraction;
 
     const int phase = _active_debuff.disorient_move_phase;
@@ -11895,7 +11924,7 @@ void NC_STACK_ypabact::UpdateActiveDebuffDisorientFire(update_msg *arg)
 {
     if ( !arg ||
          IsActiveDebuffDisorientFireBlocked() ||
-         !IsActiveDebuffDisorientingAI(false) )
+         !IsActiveDebuffDisorienting(false) )
         return;
 
     vec3d fireDirection = _rotation.AxisZ();
@@ -11933,7 +11962,7 @@ void NC_STACK_ypabact::UpdateActiveDebuffDisorientFire(update_msg *arg)
 
 void NC_STACK_ypabact::RunAIWithActiveDebuffDisorient(update_msg *arg)
 {
-    if ( IsActiveDebuffDisorientingAI() )
+    if ( IsActiveDebuffDisorienting() )
     {
         if ( _status == BACT_STATUS_IDLE )
         {
