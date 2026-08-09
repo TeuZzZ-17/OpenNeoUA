@@ -1036,13 +1036,6 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles()
                         profile.id.empty() ? "<missing>" : profile.id.c_str());
         }
 
-        if ( !std::isfinite(profile.wave_vp_reference_radius) || profile.wave_vp_reference_radius <= 0.0f )
-        {
-            profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_vp_reference_radius; using vanilla fallback.\n",
-                        profile.id.empty() ? "<missing>" : profile.id.c_str());
-        }
-
         const bool hasWaveSpeedTrio =
             profile.has_wave_start_speed &&
             profile.has_wave_speed_ramp_time &&
