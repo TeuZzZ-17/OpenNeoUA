@@ -256,6 +256,12 @@ public:
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
     static Common::Ini::Key GameCustomSuperitems;
+    static Common::Ini::Key GameGlobalSndFadeIn;
+    static Common::Ini::Key GameGlobalSndFadeOut;
+    static Common::Ini::Key GameGlobalShkFadeIn;
+    static Common::Ini::Key GameGlobalShkFadeOut;
+    static Common::Ini::Key GameGlobalPalFadeIn;
+    static Common::Ini::Key GameGlobalPalFadeOut;
 
     // OpenUA: global opt-in visual profiles for units currently under the same
     // regen/drain conditions used by the automatic Status Icons. A missing or

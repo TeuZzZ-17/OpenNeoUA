@@ -2810,9 +2810,9 @@ public:
         std::vector<World::TVisualTint> chainTints;
         int32_t chainIndex = -1;
         float startScale = 1.0;
+        float midScale = 1.0;
         float endScale = 1.0;
-        int32_t fadeIn = 0;
-        int32_t fadeOut = 0;
+        bool hasMidScale = false;
         World::TVisualTint tint; // OpenUA custom: VP tint for this spawned model (e.g. laser beam body)
         TTransientVPParticleControls particleControls;
 

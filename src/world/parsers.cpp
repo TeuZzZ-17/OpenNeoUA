@@ -745,10 +745,6 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
                 sndfx->pitch = parser.stol(p2, NULL, 0);
             else if ( !StriCmp(val, "radius") )
                 sndfx->radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-            else if ( !StriCmp(val, "fade_in") )
-                sndfx->fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-            else if ( !StriCmp(val, "fade_out") )
-                sndfx->fade_out = NonNegativeFiniteMilliseconds(parser, p2);
             else if ( !StriCmp(val, "ext") )
             {
                 if ( !ParseExtSampleDef(parser, sndfx, p2) )
@@ -771,10 +767,6 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
                 sndfx->sndPrm.time = parser.stol(p2, NULL, 0);
             else if ( !StriCmp(val, "radius") )
                 sndfx->sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-            else if ( !StriCmp(val, "fade_in") )
-                sndfx->sndPrm.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-            else if ( !StriCmp(val, "fade_out") )
-                sndfx->sndPrm.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
             else
                 return ScriptParser::RESULT_UNKNOWN;
         }
@@ -792,10 +784,6 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
                 sndfx->sndPrm_shk.time = parser.stol(p2, NULL, 0);
             else if ( !StriCmp(val, "radius") )
                 sndfx->sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-            else if ( !StriCmp(val, "fade_in") )
-                sndfx->sndPrm_shk.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-            else if ( !StriCmp(val, "fade_out") )
-                sndfx->sndPrm_shk.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
             else if ( !StriCmp(val, "mute") )
                 sndfx->sndPrm_shk.mute = parser.stof(p2, 0);
             else if ( !StriCmp(val, "x") )
@@ -962,10 +950,6 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.tick_snd.volume = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "snd_debuff_radius") )
         debuff.tick_snd.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "snd_debuff_fade_in") )
-        debuff.tick_snd.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "snd_debuff_fade_out") )
-        debuff.tick_snd.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "pal_debuff_slot") )
         debuff.tick_snd.sndPrm.slot = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "pal_debuff_mag0") )
@@ -976,10 +960,6 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.tick_snd.sndPrm.time = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "pal_debuff_radius") )
         debuff.tick_snd.sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "pal_debuff_fade_in") )
-        debuff.tick_snd.sndPrm.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "pal_debuff_fade_out") )
-        debuff.tick_snd.sndPrm.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "shk_debuff_slot") )
         debuff.tick_snd.sndPrm_shk.slot = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "shk_debuff_mag0") )
@@ -990,10 +970,6 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.tick_snd.sndPrm_shk.time = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "shk_debuff_radius") )
         debuff.tick_snd.sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "shk_debuff_fade_in") )
-        debuff.tick_snd.sndPrm_shk.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "shk_debuff_fade_out") )
-        debuff.tick_snd.sndPrm_shk.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "shk_debuff_mute") )
         debuff.tick_snd.sndPrm_shk.mute = parser.stof(p2, 0);
     else
@@ -1317,12 +1293,12 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
 {
     World::TChainFXConfig::Mode mode = World::TChainFXConfig::MODE_VISUAL;
     float startSize = 1.0;
+    float midSize = 0.0;
     float endSize = 0.0;
+    bool hasMidSize = false;
     bool hasEndSize = false;
     vec3d offset;
     int duration = 0;
-    int fadeIn = 0;
-    int fadeOut = 0;
     std::vector<World::TChainFXVPModel> vpModels;
     int physicalVehicle = 0;
     World::TChainFXConfig::Trigger trigger = World::TChainFXConfig::TRIGGER_NONE;
@@ -1374,10 +1350,10 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.trigger = trigger;
                     chain.offset = offset;
                     chain.start_size = startSize;
+                    chain.mid_size = midSize;
                     chain.end_size = endSize;
+                    chain.has_mid_size = hasMidSize;
                     chain.duration = duration;
-                    chain.fade_in = fadeIn;
-                    chain.fade_out = fadeOut;
                     chain.vp_models = vpModels;
                     out->push_back(chain);
                 }
@@ -1434,6 +1410,22 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "start_size") )
             startSize = parser.stof(p2, 0);
+        else if ( !StriCmp(p1, "mid_size") )
+        {
+            size_t parsed = 0;
+            const float value = parser.stof(p2, &parsed);
+            if ( parsed == p2.size() && std::isfinite(value) && value >= 0.0f )
+            {
+                midSize = value;
+                hasMidSize = true;
+            }
+            else
+            {
+                ypa_log_out("WARNING: Invalid begin_chain_fx mid_size '%s'; using linear start_size -> end_size fallback\n",
+                            p2.c_str());
+                hasMidSize = false;
+            }
+        }
         else if ( !StriCmp(p1, "end_size") )
         {
             endSize = parser.stof(p2, 0);
@@ -1441,10 +1433,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "duration") )
             duration = parser.stol(p2, NULL, 0);
-        else if ( !StriCmp(p1, "fade_in") )
-            fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
-        else if ( !StriCmp(p1, "fade_out") )
-            fadeOut = NonNegativeFiniteMilliseconds(parser, p2);
         else if ( !StriCmp(p1, "offset_x") )
             offset.x = parser.stof(p2, 0);
         else if ( !StriCmp(p1, "offset_y") )
@@ -2005,14 +1993,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "shk_damaged_radius") )
     {
         _vhcl->damaged_fx.shake.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "shk_damaged_fade_in") )
-    {
-        _vhcl->damaged_fx.shake.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    }
-    else if ( !StriCmp(p1, "shk_damaged_fade_out") )
-    {
-        _vhcl->damaged_fx.shake.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     }
     else if ( !StriCmp(p1, "shk_damaged_mute") )
     {
@@ -3727,14 +3707,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->cluster.snd.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     }
-    else if ( !StriCmp(p1, "snd_cluster_fade_in") )
-    {
-        _wpn->cluster.snd.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    }
-    else if ( !StriCmp(p1, "snd_cluster_fade_out") )
-    {
-        _wpn->cluster.snd.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
-    }
     else if ( !StriCmp(p1, "pal_cluster_slot") )
     {
         _wpn->cluster.snd.sndPrm.slot = parser.stol(p2, NULL, 0);
@@ -3755,14 +3727,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->cluster.snd.sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     }
-    else if ( !StriCmp(p1, "pal_cluster_fade_in") )
-    {
-        _wpn->cluster.snd.sndPrm.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    }
-    else if ( !StriCmp(p1, "pal_cluster_fade_out") )
-    {
-        _wpn->cluster.snd.sndPrm.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
-    }
     else if ( !StriCmp(p1, "shk_cluster_slot") )
     {
         _wpn->cluster.snd.sndPrm_shk.slot = parser.stol(p2, NULL, 0);
@@ -3782,14 +3746,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "shk_cluster_radius") )
     {
         _wpn->cluster.snd.sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "shk_cluster_fade_in") )
-    {
-        _wpn->cluster.snd.sndPrm_shk.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    }
-    else if ( !StriCmp(p1, "shk_cluster_fade_out") )
-    {
-        _wpn->cluster.snd.sndPrm_shk.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     }
     else if ( !StriCmp(p1, "shk_cluster_mute") )
     {
@@ -4934,20 +4890,12 @@ static bool ParseSuperItemSoundEventParam(ScriptParser::Parser &parser,
         sound.pitch = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, sndPrefix + "radius") )
         sound.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, sndPrefix + "fade_in") )
-        sound.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, sndPrefix + "fade_out") )
-        sound.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, palPrefix + "slot") )
         sound.sndPrm.slot = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, palPrefix + "time") )
         sound.sndPrm.time = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, palPrefix + "radius") )
         sound.sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, palPrefix + "fade_in") )
-        sound.sndPrm.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, palPrefix + "fade_out") )
-        sound.sndPrm.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, palPrefix + "mag0") )
         sound.sndPrm.mag0 = parser.stof(p2, 0);
     else if ( !StriCmp(p1, palPrefix + "mag1") )
@@ -4958,10 +4906,6 @@ static bool ParseSuperItemSoundEventParam(ScriptParser::Parser &parser,
         sound.sndPrm_shk.time = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, shkPrefix + "radius") )
         sound.sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, shkPrefix + "fade_in") )
-        sound.sndPrm_shk.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, shkPrefix + "fade_out") )
-        sound.sndPrm_shk.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, shkPrefix + "mag0") )
         sound.sndPrm_shk.mag0 = parser.stof(p2, 0);
     else if ( !StriCmp(p1, shkPrefix + "mag1") )
