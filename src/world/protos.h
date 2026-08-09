@@ -284,8 +284,7 @@ struct TSuperItemProfile
     std::string display_name;
 
     int wave_vp = 0;
-    vec3d wave_vp_scale = vec3d(1.0, 1.0, 1.0);
-    float wave_vp_reference_radius = 300.0f;
+    vec3d wave_vp_axis_scale = vec3d(1.0, 1.0, 1.0);
     vec3d wave_vp_offset;
     TVisualTint wave_vp_tint;
     float wave_start_speed = 0.0f;

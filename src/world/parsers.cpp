@@ -5004,13 +5004,11 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
     else if ( !StriCmp(p1, "wave_vp") )
         _profile->wave_vp = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "wave_vp_scale_x") )
-        _profile->wave_vp_scale.x = ParseSuperItemScale(parser, p1, p2);
+        _profile->wave_vp_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_vp_scale_y") )
-        _profile->wave_vp_scale.y = ParseSuperItemScale(parser, p1, p2);
+        _profile->wave_vp_axis_scale.y = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_vp_scale_z") )
-        _profile->wave_vp_scale.z = ParseSuperItemScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "wave_vp_reference_radius") )
-        _profile->wave_vp_reference_radius = parser.stof(p2, 0);
+        _profile->wave_vp_axis_scale.z = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_vp_offset_x") )
         _profile->wave_vp_offset.x = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "wave_vp_offset_y") )
