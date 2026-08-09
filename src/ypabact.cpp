@@ -1099,7 +1099,8 @@ static void ypabact_SpawnDebuffFXEvent(NC_STACK_ypabact *bact, int lifetime)
                                                           &localOffset);
         world->SpawnAttachedStatusTransientVP(fxVp, bact, localOffset, lifetime,
                                               bact->_active_debuff.fx_trail_only, rotateOffset,
-                                              ypabact_BuildUniformStatusFXScale(bact->_active_debuff.fx_vp_scale));
+                                              ypabact_BuildUniformStatusFXScale(bact->_active_debuff.fx_vp_scale),
+                                              bact->_active_debuff.fx_vp_tint);
     }
 }
 
@@ -3495,6 +3496,7 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     _active_debuff.snd_pitch_mult = ypabact_SafeDamageMult(debuff.snd_pitch_mult);
     _active_debuff.fx_vps = debuff.fx_vps;
     _active_debuff.fx_vp_scale = debuff.fx_vp_scale;
+    _active_debuff.fx_vp_tint = debuff.fx_vp_tint;
     _active_debuff.fx_random_offset_percent = debuff.fx_random_offset_percent;
     _active_debuff.has_fx_random_offset_percent = debuff.has_fx_random_offset_percent;
     _active_debuff.fx_trail_only = debuff.fx_trail_only;
@@ -3518,6 +3520,9 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
         snd.SampleVariants.push_back(snd.PSample);
     snd.Volume = _active_debuff.snd_volume;
     snd.Pitch = _active_debuff.snd_pitch;
+    snd.Radius = debuff.tick_snd.radius;
+    snd.FadeIn = debuff.tick_snd.fade_in;
+    snd.FadeOut = debuff.tick_snd.fade_out;
     snd.PriorityBias = 0;
     const bool loopDebuffSound = !debuff.has_tick_time && snd.PSample;
     snd.SetLoop(loopDebuffSound);
@@ -6896,7 +6901,7 @@ void NC_STACK_ypabact::Die()
          _owner != creditedOwner && creditedKiller != this &&
          _bact_type != BACT_TYPES_MISSLE && !_isUnitGunChild && !_isDummy &&
          creditedKiller->_bact_type != BACT_TYPES_MISSLE &&
-         creditedKiller->_bact_type != BACT_TYPES_ROBO )
+         creditedKiller->CanUseSessionKillMarks() )
     {
         if ( _bact_type == BACT_TYPES_ROBO )
             creditedKiller->_sessionKillMarks = 4;
@@ -12105,12 +12110,28 @@ void NC_STACK_ypabact::ApplyImpulse(bact_arg83 *arg)
     }
 }
 
+bool NC_STACK_ypabact::CanUseSessionKillMarks() const
+{
+    // UFO and Host Station classes are explicitly outside the unit medal system.
+    // They may never acquire, display or benefit from session kill marks.
+    return _bact_type != BACT_TYPES_UFO &&
+           _bact_type != BACT_TYPES_ROBO;
+}
+
+uint8_t NC_STACK_ypabact::GetSessionKillMarks() const
+{
+    if ( !_world || _world->_isNetGame || !CanUseSessionKillMarks() )
+        return 0;
+
+    return std::min<uint8_t>(_sessionKillMarks, 4);
+}
+
 float NC_STACK_ypabact::GetKillStatBonusPercent() const
 {
-    if ( !_world || _world->_isNetGame || _sessionKillMarks == 0 )
+    const uint8_t marks = GetSessionKillMarks();
+    if ( marks == 0 )
         return 0.0f;
 
-    const int marks = std::min((int)_sessionKillMarks, 4);
     return marks * ypabact_ReadUnitKillStatBonusPerMarkPercent();
 }
 

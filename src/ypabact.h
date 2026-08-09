@@ -85,6 +85,7 @@ struct TActiveDebuffState
     float snd_pitch_mult = 1.0;
     std::vector<int16_t> fx_vps;
     float fx_vp_scale = 1.0;
+    World::TVisualTint fx_vp_tint;
     float fx_random_offset_percent = 0.0;
     bool has_fx_random_offset_percent = false;
     bool fx_trail_only = false;
@@ -116,6 +117,7 @@ struct TActiveDebuffState
         snd_pitch_mult = 1.0;
         fx_vps.clear();
         fx_vp_scale = 1.0;
+        fx_vp_tint = World::TVisualTint();
         fx_random_offset_percent = 0.0;
         has_fx_random_offset_percent = false;
         fx_trail_only = false;
@@ -518,6 +520,8 @@ public:
     bool IsInvulnerableToDamage() const;
     // OpenUA: derived from the existing transient 0..4 kill marks. These helpers
     // are the single gameplay/UI source of truth and never mutate prototypes.
+    bool CanUseSessionKillMarks() const;
+    uint8_t GetSessionKillMarks() const;
     float GetKillStatBonusPercent() const;
     float GetKillStatMultiplier() const;
     int GetEffectiveShotTime(int baseShotTime) const;
