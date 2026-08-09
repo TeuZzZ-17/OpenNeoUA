@@ -5229,7 +5229,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
                                                      const World::TSuperItemProfile &profile,
                                                      float alphaFactor)
 {
-    if ( sitem.CurrentRadius <= 0 || profile.wave_vp_reference_radius <= 0.0f )
+    if ( sitem.CurrentRadius <= 0 )
         return;
 
     vec3d center = World::SectorIDToCenterPos3(sitem.CellId);
@@ -5237,10 +5237,11 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
         center.y = sitem.PCell->height;
     center += profile.wave_vp_offset;
 
-    float factor = (float)sitem.CurrentRadius / profile.wave_vp_reference_radius;
-    vec3d runtimeScale(profile.wave_vp_scale.x * factor,
-                       profile.wave_vp_scale.y,
-                       profile.wave_vp_scale.z * factor);
+    static constexpr float WAVE_VP_BASE_RADIUS = 300.0f;
+    float factor = (float)sitem.CurrentRadius / WAVE_VP_BASE_RADIUS;
+    vec3d runtimeScale(profile.wave_vp_axis_scale.x * factor,
+                       profile.wave_vp_axis_scale.y,
+                       profile.wave_vp_axis_scale.z * factor);
 
     alphaFactor = std::max(0.0f, std::min(alphaFactor, 1.0f));
     World::TVisualTint runtimeTint = profile.wave_vp_tint;
