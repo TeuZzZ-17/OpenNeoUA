@@ -94,6 +94,7 @@ struct TActiveDebuffState
     int snd_volume = 120;
     int snd_pitch = 0;
     int32_t source_gid = 0;
+    int16_t source_owner = 0;
 
     void Clear()
     {
@@ -127,6 +128,7 @@ struct TActiveDebuffState
         snd_volume = 120;
         snd_pitch = 0;
         source_gid = 0;
+        source_owner = 0;
     }
 };
 
@@ -283,6 +285,10 @@ struct bact_arg84
 {
     int energy;
     NC_STACK_ypabact *unit;
+    // Optional persistent owner attribution for delayed damage whose original
+    // source actor may no longer be alive when the damage becomes lethal.
+    // Zero preserves the legacy behavior of deriving the owner from unit.
+    int16_t killerOwner = 0;
     // Fixed contact/environmental damage can opt out of attacker-side damage
     // multipliers while preserving the normal invulnerability/death/net path.
     bool bypassAttackerDamageModifiers = false;
@@ -507,7 +513,7 @@ public:
     void ApplyWeaponRecoil(const vec3d &dir, float recoil);
     void UpdateAoePush(update_msg *arg);
     void UpdateWeaponRecoilPush(update_msg *arg);      // integrate/decay weapon recoil push or visual offset
-    void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source);
+    void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner = 0);
     void ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source);
     void UpdateActiveDebuff(update_msg *arg);
     void ClearActiveDebuff();

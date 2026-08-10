@@ -3441,7 +3441,7 @@ void NC_STACK_ypabact::ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_
     ApplyDebuff(debuff, source);
 }
 
-void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source)
+void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner)
 {
     if ( !debuff.allow || debuff.duration <= 0 )
         return;
@@ -3502,6 +3502,10 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     _active_debuff.has_fx_random_offset_percent = debuff.has_fx_random_offset_percent;
     _active_debuff.fx_trail_only = debuff.fx_trail_only;
     _active_debuff.source_gid = source ? source->_gid : 0;
+    int16_t resolvedSourceOwner = source ? source->_owner : sourceOwner;
+    if ( resolvedSourceOwner < World::OWNER_0 || resolvedSourceOwner > World::OWNER_7 )
+        resolvedSourceOwner = World::OWNER_0;
+    _active_debuff.source_owner = resolvedSourceOwner;
     _active_debuff.snd_sample = NULL;
     _active_debuff.snd_volume = debuff.tick_snd.volume ? debuff.tick_snd.volume : 120;
     _active_debuff.snd_pitch = debuff.tick_snd.pitch;
@@ -3610,6 +3614,7 @@ void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
         bact_arg84 arg84;
         arg84.energy = -tickDamage;
         arg84.unit = source;
+        arg84.killerOwner = _active_debuff.source_owner;
         ModifyEnergy(&arg84);
     }
 
@@ -12315,6 +12320,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
                 bact_arg84 dmgArg;
                 dmgArg.energy = arg->energy;
                 dmgArg.unit   = arg->unit;
+                dmgArg.killerOwner = arg->killerOwner;
                 dmgArg.bypassAttackerDamageModifiers = arg->bypassAttackerDamageModifiers;
                 prot->ModifyEnergy(&dmgArg);
                 return;
@@ -12324,6 +12330,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
             bact_arg84 dmgArg;
             dmgArg.energy = -dummyHP;
             dmgArg.unit   = arg->unit;
+            dmgArg.killerOwner = arg->killerOwner;
             dmgArg.bypassAttackerDamageModifiers = arg->bypassAttackerDamageModifiers;
             prot->ModifyEnergy(&dmgArg);
 
@@ -12367,7 +12374,9 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
 
         if ( _energy <= 0 )
         {
-            if ( arg->unit )
+            if ( arg->killerOwner )
+                _killer_owner = arg->killerOwner;
+            else if ( arg->unit )
                 _killer_owner = arg->unit->_owner;
             else
                 _killer_owner = 0;
