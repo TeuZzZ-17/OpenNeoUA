@@ -112,6 +112,8 @@ struct TChainFXConfig
     float end_size = 0.0;
     bool has_mid_size = false;
     int duration = 0;
+    int fade_in = 0;
+    int fade_out = 0;
     std::vector<TChainFXVPModel> vp_models;
     int physical_vehicle = 0;
 };
@@ -296,8 +298,8 @@ struct TSuperItemProfile
     float push_radius = 0.0f;
     int push_falloff = 0;
     float wave_push_force = 0.0f;
-    int wave_vp_fade_in = 0;
-    int wave_vp_fade_out = 0;
+    int fade_in = 0;
+    int fade_out = 0;
 
     int wave_unit_damage = 0;
     int wave_building_total_destruction_percent = 0;

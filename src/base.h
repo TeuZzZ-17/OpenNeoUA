@@ -73,6 +73,10 @@ struct baseRender_msg
     uint32_t flags = 0;
     // OpenUA custom: per-render main VP tint multiplier. Neutral (1,1,1,1) = no change.
     GFX::TGLColor tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+    // OpenUA custom: transient VP fade factor. The mesh renderer uses this
+    // separately from tint alpha so additive LUMTRACY materials can fade by
+    // RGB intensity while ordinary alpha-blended materials keep using alpha.
+    float vpFadeFactor = 1.0f;
     // OpenUA custom: per-render particle controls inherited by emitted particles.
     GFX::TGLColor particleTint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
     vec3d particleScale = vec3d(1.0, 1.0, 1.0);

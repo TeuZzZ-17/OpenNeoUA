@@ -2705,6 +2705,16 @@ void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
     }
 }
 
+static void yw_ConfigureTransientVPFade(NC_STACK_ypaworld::TTransientVP &effect,
+                                        int fadeIn, int fadeOut,
+                                        double duration, double elapsed = -1.0)
+{
+    effect.fadeIn = fadeIn > 0 ? fadeIn : 0;
+    effect.fadeOut = fadeOut > 0 ? fadeOut : 0;
+    effect.fadeDuration = std::isfinite(duration) && duration > 0.0 ? duration : 0.0;
+    effect.fadeElapsed = std::isfinite(elapsed) && elapsed >= 0.0 ? elapsed : -1.0;
+}
+
 int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls)
 {
     if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() || lifeTime < 0 )
@@ -2774,6 +2784,8 @@ void NC_STACK_ypaworld::SpawnChainFX(const World::TChainFXConfig &config, const 
     fx.endScale = std::isfinite(config.end_size) && config.end_size >= 0.0f
                 ? config.end_size : 0.0f;
     fx.hasMidScale = config.has_mid_size;
+    yw_ConfigureTransientVPFade(fx, config.fade_in, config.fade_out,
+                                (double)config.duration);
 }
 
 static int yw_RandomInRange(int minValue, int maxValue)
@@ -3607,10 +3619,22 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         it->vp->Bas->TForm().SclRot = renderRot * mat3x3::Scale(renderScale);
 
         World::TVisualTint renderTint = it->tint;
+        float fadeFactor = 1.0f;
+        if ( it->fadeIn > 0 || it->fadeOut > 0 )
+        {
+            const double fadeElapsed = it->fadeElapsed >= 0.0
+                                     ? it->fadeElapsed : (double)it->age;
+            const double fadeDuration = it->fadeDuration > 0.0
+                                      ? it->fadeDuration : (double)it->lifeTime;
+            fadeFactor = World::ComputeVPFadeEnvelope(fadeElapsed, fadeDuration,
+                                                       it->fadeIn, it->fadeOut);
+            renderTint.a *= fadeFactor;
+        }
 
         // OpenUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.
         GFX::TGLColor oldTint = arg->tint;
+        float oldVPFadeFactor = arg->vpFadeFactor;
         GFX::TGLColor oldParticleTint = arg->particleTint;
         vec3d oldParticleScale = arg->particleScale;
         vec3d oldParticleSpin = arg->particleSpin;
@@ -3618,6 +3642,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         if ( it->particleControls.enabled )
         {
             World::TVisualTint particleTint = it->particleControls.tint;
+            particleTint.a *= fadeFactor;
             arg->particleTint = GFX::TGLColor(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
             arg->particleScale = it->particleControls.scale;
             arg->particleLifetimeScale = it->particleControls.lifetimeScale;
@@ -3629,6 +3654,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
             arg->particleLifetimeScale = 1.0f;
         }
         arg->particleSpin = it->spin;
+        arg->vpFadeFactor = fadeFactor;
 
         bool tinted = !renderTint.IsNeutral();
         if ( tinted )
@@ -3639,6 +3665,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         it->vp->Bas->Render(arg, it->vp.get());
 
         arg->tint = oldTint;
+        arg->vpFadeFactor = oldVPFadeFactor;
         arg->particleTint = oldParticleTint;
         arg->particleScale = oldParticleScale;
         arg->particleSpin = oldParticleSpin;
@@ -5211,28 +5238,10 @@ static double yw_SuperItemWaveTravelTimeMs(const World::TSuperItemProfile &profi
     return time * 1000.0;
 }
 
-static float yw_SuperItemWaveAlpha(const World::TSuperItemProfile &profile,
-                                   double elapsedMilliseconds,
-                                   double propagationEndMilliseconds)
-{
-    if ( elapsedMilliseconds < propagationEndMilliseconds )
-    {
-        return World::ComputeTemporalEnvelope(elapsedMilliseconds, 0.0,
-                                              profile.wave_vp_fade_in, 0.0);
-    }
-
-    if ( profile.wave_vp_fade_out <= 0 )
-        return 1.0f;
-
-    return World::ComputeTemporalEnvelope(elapsedMilliseconds - propagationEndMilliseconds,
-                                          profile.wave_vp_fade_out,
-                                          0.0,
-                                          profile.wave_vp_fade_out);
-}
-
 void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
                                                      const World::TSuperItemProfile &profile,
-                                                     float alphaFactor)
+                                                     double fadeElapsed,
+                                                     double fadeDuration)
 {
     if ( sitem.CurrentRadius <= 0 )
         return;
@@ -5248,9 +5257,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
                        profile.wave_vp_axis_scale.y,
                        profile.wave_vp_axis_scale.z * factor);
 
-    alphaFactor = std::max(0.0f, std::min(alphaFactor, 1.0f));
     World::TVisualTint runtimeTint = profile.wave_vp_tint;
-    runtimeTint.a *= alphaFactor;
 
     if ( sitem.WaveTransientVPId > 0 )
     {
@@ -5261,6 +5268,11 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
                 effect.pos = center;
                 effect.axisScale = runtimeScale;
                 effect.tint = runtimeTint;
+                yw_ConfigureTransientVPFade(effect,
+                                            profile.fade_in,
+                                            profile.fade_out,
+                                            fadeDuration,
+                                            fadeElapsed);
                 return;
             }
         }
@@ -5270,6 +5282,15 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
     sitem.WaveTransientVPId = SpawnTransientVP(profile.wave_vp, center,
                                                mat3x3::Ident(), 0, 1.0f,
                                                runtimeTint, runtimeScale);
+    if ( sitem.WaveTransientVPId > 0 && !_transientVPs.empty() &&
+         _transientVPs.back().id == sitem.WaveTransientVPId )
+    {
+        yw_ConfigureTransientVPFade(_transientVPs.back(),
+                                    profile.fade_in,
+                                    profile.fade_out,
+                                    fadeDuration,
+                                    fadeElapsed);
+    }
 }
 
 void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
@@ -5297,17 +5318,15 @@ void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
             elapsed = 0;
 
         const double propagationEnd = yw_SuperItemWaveTravelTimeMs(*profile, maximumRadius);
+        const double waveVisualEnd = propagationEnd + profile->fade_out;
         const bool propagationActive = sitem.CurrentRadius < maximum &&
                                        (double)elapsed < propagationEnd;
         const bool fadeOutActive = sitem.CurrentRadius >= maximum &&
-                                   profile->wave_vp_fade_out > 0 &&
-                                   (double)elapsed < propagationEnd + profile->wave_vp_fade_out;
+                                   profile->fade_out > 0 &&
+                                   (double)elapsed < waveVisualEnd;
 
         if ( propagationActive || fadeOutActive )
-        {
-            const float alpha = yw_SuperItemWaveAlpha(*profile, (double)elapsed, propagationEnd);
-            UpdateCustomSuperItemWaveVP(sitem, *profile, alpha);
-        }
+            UpdateCustomSuperItemWaveVP(sitem, *profile, (double)elapsed, waveVisualEnd);
 
         if ( propagationActive )
             StartCustomSuperItemWaveEffects((int)id);
@@ -5980,7 +5999,7 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
             if ( canReceiveDamageAndDebuff && profile.debuff.allow &&
                  target->_energy > 0 && target->_status != BACT_STATUS_DEAD &&
                  !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
-                target->ApplyDebuff(profile.debuff, source);
+                target->ApplyDebuff(profile.debuff, source, (int16_t)sitem.ActivateOwner);
         }
     }
 
@@ -6110,14 +6129,14 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
     UpdateCustomSuperItemWaveEffects(id);
 
     const double propagationEnd = yw_SuperItemWaveTravelTimeMs(*profile, maximumRadius);
-    const float waveAlpha = yw_SuperItemWaveAlpha(*profile, (double)elapsed, propagationEnd);
+    const double waveVisualEnd = propagationEnd + profile->fade_out;
 
     if ( sitem.CurrentRadius >= maximum )
     {
-        const bool fadeOutActive = profile->wave_vp_fade_out > 0 &&
-                                   (double)elapsed < propagationEnd + profile->wave_vp_fade_out;
+        const bool fadeOutActive = profile->fade_out > 0 &&
+                                   (double)elapsed < waveVisualEnd;
         if ( fadeOutActive )
-            UpdateCustomSuperItemWaveVP(sitem, *profile, waveAlpha);
+            UpdateCustomSuperItemWaveVP(sitem, *profile, (double)elapsed, waveVisualEnd);
         else
         {
             if ( sitem.WaveTransientVPId > 0 )
@@ -6126,7 +6145,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
         }
     }
     else
-        UpdateCustomSuperItemWaveVP(sitem, *profile, waveAlpha);
+        UpdateCustomSuperItemWaveVP(sitem, *profile, (double)elapsed, waveVisualEnd);
     sitem.LastRadius = sitem.CurrentRadius;
 }
 

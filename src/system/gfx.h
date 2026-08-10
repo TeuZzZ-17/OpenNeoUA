@@ -283,6 +283,9 @@ struct TRenderNode
     TGLColor Color;
     // OpenUA custom: per-node VP tint multiplier. Neutral (1,1,1,1) = no change.
     TGLColor ColorMul = TGLColor(1.0, 1.0, 1.0, 1.0);
+    // OpenUA custom: transient VP fade kept separate from ColorMul alpha so
+    // GL_ONE/GL_ONE LUMTRACY materials can attenuate their additive RGB output.
+    float VPFadeFactor = 1.0f;
 
     mat4x4 TForm;
     int32_t TimeStamp = 0;
