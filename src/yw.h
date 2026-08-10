@@ -2645,7 +2645,8 @@ public:
     void RestoreCustomSuperItemRuntimeAfterLoad();
     void UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
                                      const World::TSuperItemProfile &profile,
-                                     float alphaFactor = 1.0f);
+                                     double fadeElapsed,
+                                     double fadeDuration);
     void ApplyCustomSuperItemFront(int id, float lastRadius, float currentRadius);
     void ApplyBuildingHealthChange(cellArea *cell, int bldX, int bldY, int targetHealth, yw_arg129 *arg);
     bool LoadBlgMap(const std::string &mapName);
@@ -2813,6 +2814,10 @@ public:
         float midScale = 1.0;
         float endScale = 1.0;
         bool hasMidScale = false;
+        int32_t fadeIn = 0;
+        int32_t fadeOut = 0;
+        double fadeDuration = 0.0;
+        double fadeElapsed = -1.0;
         World::TVisualTint tint; // OpenUA custom: VP tint for this spawned model (e.g. laser beam body)
         TTransientVPParticleControls particleControls;
 

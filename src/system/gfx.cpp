@@ -1431,24 +1431,41 @@ void GFXEngine::RenderingMeshOld(TRenderNode *nod)
         }
     }
 
+    TGLColor effectiveColorMul = nod->ColorMul;
+    float vpFadeFactor = nod->VPFadeFactor;
+    if ( !std::isfinite(vpFadeFactor) )
+        vpFadeFactor = 1.0f;
+    vpFadeFactor = std::max(0.0f, std::min(vpFadeFactor, 1.0f));
+
+    // LUMTRACY uses GL_ONE/GL_ONE when destination blending is available.
+    // Alpha does not attenuate RGB in that additive path, so transient VP
+    // fades must scale RGB intensity instead. Keep this separate from the
+    // ordinary tint alpha path to avoid double-fading alpha-blended meshes.
+    if ( (flags & RFLAGS_LUMTRACY) && can_destblend && vpFadeFactor < 1.0f )
+    {
+        effectiveColorMul.r *= vpFadeFactor;
+        effectiveColorMul.g *= vpFadeFactor;
+        effectiveColorMul.b *= vpFadeFactor;
+    }
+
     // OpenUA custom VP tint: per-node color multiplier (fixed-function path).
     // Computed into the scratch ComputedColor right before the draw, so the shared
     // mesh's base vertex colors are never permanently modified.
-    if ( nod->ColorMul.r != 1.0 || nod->ColorMul.g != 1.0 ||
-         nod->ColorMul.b != 1.0 || nod->ColorMul.a != 1.0 )
+    if ( effectiveColorMul.r != 1.0 || effectiveColorMul.g != 1.0 ||
+         effectiveColorMul.b != 1.0 || effectiveColorMul.a != 1.0 )
     {
         for (TVertex &v : mesh->Vertexes)
         {
             TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
-            v.ComputedColor.r = src.r * nod->ColorMul.r;
-            v.ComputedColor.g = src.g * nod->ColorMul.g;
-            v.ComputedColor.b = src.b * nod->ColorMul.b;
-            v.ComputedColor.a = src.a * nod->ColorMul.a;
+            v.ComputedColor.r = src.r * effectiveColorMul.r;
+            v.ComputedColor.g = src.g * effectiveColorMul.g;
+            v.ComputedColor.b = src.b * effectiveColorMul.b;
+            v.ComputedColor.a = src.a * effectiveColorMul.a;
         }
         useComputedColor = true;
 
         // If the tint lowers alpha, enable a local alpha blend so it is visible.
-        if ( nod->ColorMul.a < 1.0 && !_states.AlphaBlend )
+        if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
         {
             _states.AlphaBlend = true;
             _states.SrcBlend = GL_SRC_ALPHA;
@@ -1616,8 +1633,23 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
         // Do not force transparent sorting/blending for opaque world geometry.
     }
 
+    TGLColor effectiveColorMul = nod->ColorMul;
+    float vpFadeFactor = nod->VPFadeFactor;
+    if ( !std::isfinite(vpFadeFactor) )
+        vpFadeFactor = 1.0f;
+    vpFadeFactor = std::max(0.0f, std::min(vpFadeFactor, 1.0f));
+
+    // See RenderingMeshOld(): additive LUMTRACY ignores source alpha with
+    // GL_ONE/GL_ONE, so only transient VP fades attenuate RGB in that path.
+    if ( (flags & RFLAGS_LUMTRACY) && can_destblend && vpFadeFactor < 1.0f )
+    {
+        effectiveColorMul.r *= vpFadeFactor;
+        effectiveColorMul.g *= vpFadeFactor;
+        effectiveColorMul.b *= vpFadeFactor;
+    }
+
     // OpenUA custom VP tint: enable a local alpha blend when the tint lowers alpha.
-    if ( nod->ColorMul.a < 1.0 && !_states.AlphaBlend )
+    if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
     {
         _states.AlphaBlend = true;
         _states.SrcBlend = GL_SRC_ALPHA;
@@ -1647,15 +1679,15 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
     }
 
     // OpenUA custom VP tint: push the per-node color multiplier to the shader UBO.
-    if ( _vboStatesBlock.ColorMul[0] != nod->ColorMul.r ||
-         _vboStatesBlock.ColorMul[1] != nod->ColorMul.g ||
-         _vboStatesBlock.ColorMul[2] != nod->ColorMul.b ||
-         _vboStatesBlock.ColorMul[3] != nod->ColorMul.a )
+    if ( _vboStatesBlock.ColorMul[0] != effectiveColorMul.r ||
+         _vboStatesBlock.ColorMul[1] != effectiveColorMul.g ||
+         _vboStatesBlock.ColorMul[2] != effectiveColorMul.b ||
+         _vboStatesBlock.ColorMul[3] != effectiveColorMul.a )
     {
-        _vboStatesBlock.ColorMul[0] = nod->ColorMul.r;
-        _vboStatesBlock.ColorMul[1] = nod->ColorMul.g;
-        _vboStatesBlock.ColorMul[2] = nod->ColorMul.b;
-        _vboStatesBlock.ColorMul[3] = nod->ColorMul.a;
+        _vboStatesBlock.ColorMul[0] = effectiveColorMul.r;
+        _vboStatesBlock.ColorMul[1] = effectiveColorMul.g;
+        _vboStatesBlock.ColorMul[2] = effectiveColorMul.b;
+        _vboStatesBlock.ColorMul[3] = effectiveColorMul.a;
         _vboStatesChanged = true;
     }
 

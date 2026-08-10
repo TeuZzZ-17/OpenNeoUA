@@ -1299,6 +1299,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     bool hasEndSize = false;
     vec3d offset;
     int duration = 0;
+    int fadeIn = 0;
+    int fadeOut = 0;
     std::vector<World::TChainFXVPModel> vpModels;
     int physicalVehicle = 0;
     World::TChainFXConfig::Trigger trigger = World::TChainFXConfig::TRIGGER_NONE;
@@ -1354,6 +1356,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.end_size = endSize;
                     chain.has_mid_size = hasMidSize;
                     chain.duration = duration;
+                    chain.fade_in = fadeIn;
+                    chain.fade_out = fadeOut;
                     chain.vp_models = vpModels;
                     out->push_back(chain);
                 }
@@ -1433,6 +1437,10 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "duration") )
             duration = parser.stol(p2, NULL, 0);
+        else if ( !StriCmp(p1, "fade_in") )
+            fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
+        else if ( !StriCmp(p1, "fade_out") )
+            fadeOut = NonNegativeFiniteMilliseconds(parser, p2);
         else if ( !StriCmp(p1, "offset_x") )
             offset.x = parser.stof(p2, 0);
         else if ( !StriCmp(p1, "offset_y") )
@@ -4997,10 +5005,10 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         ypa_log_out("WARNING: SuperItem parameter '%s' is deprecated and ignored; wave_push_force now acts on wave contact.\n",
                     p1.c_str());
     }
-    else if ( !StriCmp(p1, "wave_vp_fade_in") )
-        _profile->wave_vp_fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "wave_vp_fade_out") )
-        _profile->wave_vp_fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "fade_in") )
+        _profile->fade_in = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "fade_out") )
+        _profile->fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "wave_unit_damage") )
     {
         int damage = parser.stol(p2, NULL, 0);

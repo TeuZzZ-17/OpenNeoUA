@@ -551,6 +551,7 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
             rend.ColorMul = arg->tint; // OpenUA custom: per-object VP tint multiplier
+            rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags;
 
             if ((msh.Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) && msh.Mat.TexSource)
@@ -659,6 +660,7 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
             rend.ColorMul = arg->tint; // OpenUA custom: per-object VP tint multiplier
+            rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags | arg->flags;
 
             rend.Mesh = &msh;
