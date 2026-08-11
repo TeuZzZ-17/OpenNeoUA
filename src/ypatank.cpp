@@ -1429,13 +1429,7 @@ void NC_STACK_ypatank::ApplyImpulse(bact_arg83 *arg)
 
 void NC_STACK_ypatank::ypatank_func87__sub0(NC_STACK_ypabact *bact2)
 {
-    int v23 = (float)bact2->_energy_max * 0.7;
-
-    if ( v23 < 10000 )
-        v23 = 10000;
-
-    if ( v23 > 25000 )
-        v23 = 25000;
+    int v23 = bact2->GetPlasmaDurationMs();
 
     float v3 = (float)bact2->_scale_time * 0.2 / (float)v23 * (float)bact2->_energy_max;
 

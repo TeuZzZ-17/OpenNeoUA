@@ -579,6 +579,7 @@ public:
     virtual size_t SetStateInternal(setState_msg *arg);
     virtual void ChangeSectorEnergy(yw_arg129 *arg);
     virtual void DeadTimeUpdate(update_msg *arg);
+    int GetPlasmaDurationMs() const; // OpenUA: vanilla plasma lifetime scaled only in single-player
     virtual void ypabact_func122(update_msg *arg);
     virtual void ypabact_func123(update_msg *arg);
     virtual size_t PathFinder(bact_arg124 *arg);

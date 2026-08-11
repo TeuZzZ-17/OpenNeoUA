@@ -278,6 +278,21 @@ static float ypabact_ReadHandBrakePower()
     return ypabact_ReadNonNegativeFloatIni(System::IniConf::GameHandBrakePower, 1.0f);
 }
 
+static float ypabact_GetDeathPlasmaDurationMultiplier()
+{
+    static const float multiplier = []()
+    {
+        float parsed = ypabact_ReadNonNegativeFloatIni(
+            System::IniConf::GameDeathPlasmaDurationMult, 1.0f);
+        if ( !isfinite(parsed) || parsed <= 0.0f )
+            return 1.0f;
+
+        return parsed;
+    }();
+
+    return multiplier;
+}
+
 static float ypabact_ReadHandBrakeRecoilReduction()
 {
     return std::min(1.0f, ypabact_ReadHandBrakePower());
@@ -12843,15 +12858,30 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 }
 
 
+int NC_STACK_ypabact::GetPlasmaDurationMs() const
+{
+    int vanillaDuration = (int)((float)_energy_max * 0.7f);
+    if ( vanillaDuration < 10000 )
+        vanillaDuration = 10000;
+    if ( vanillaDuration > 25000 )
+        vanillaDuration = 25000;
+
+    if ( !_world || _world->_isNetGame )
+        return vanillaDuration;
+
+    const double scaledDuration =
+        (double)vanillaDuration * (double)ypabact_GetDeathPlasmaDurationMultiplier();
+    if ( !std::isfinite(scaledDuration) || scaledDuration <= 0.0 )
+        return vanillaDuration;
+    if ( scaledDuration >= (double)std::numeric_limits<int>::max() )
+        return std::numeric_limits<int>::max();
+
+    return std::max(1, (int)scaledDuration);
+}
+
 void CollisionWithBact__sub0(NC_STACK_ypabact *bact, NC_STACK_ypabact *a2)
 {
-    int v2 = (int)((float)a2->_energy_max * 0.7);
-
-    if ( v2 < 10000 )
-        v2 = 10000;
-
-    if ( v2 > 25000 )
-        v2 = 25000;
+    int v2 = a2->GetPlasmaDurationMs();
 
     int v3 = (float)a2->_scale_time * 0.2 / (float)v2 * (float)a2->_energy_max;
 
@@ -16688,13 +16718,7 @@ void ypabact_NetUpdate_VPHACKS(NC_STACK_ypabact *bact, update_msg *upd)
 {
     if ( bact->_vp_extra_mode == 1 )
     {
-        int engy = bact->_energy_max * 0.7;
-
-        if ( engy < 10000 )
-            engy = 10000;
-
-        if ( engy > 25000 )
-            engy = 25000;
+        int engy = bact->GetPlasmaDurationMs();
 
         sb_0x4874c4(bact, engy, upd->frameTime, 0.75);
         bact->_scale_time -= upd->frameTime;
@@ -17271,13 +17295,7 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 
         if ( _owner && _bact_type != BACT_TYPES_MISSLE && _vp_genesis )
         {
-            int a2 = _energy_max * 0.7;
-
-            if ( a2 < 10000 )
-                a2 = 10000;
-
-            if ( a2 > 25000 )
-                a2 = 25000;
+            int a2 = GetPlasmaDurationMs();
 
             if ( _vp_extra[0].flags & EVPROTO_FLAG_ACTIVE )
             {
