@@ -251,6 +251,7 @@ public:
     static Common::Ini::Key GameRoboDeathTimeScale;
     static Common::Ini::Key GameRoboDeathTimeScaleDuration;
     static Common::Ini::Key GameRoboDeathTimeScaleMaxDistance;
+    static Common::Ini::Key GameDeathPlasmaDurationMult;
     static Common::Ini::Key GameWorldUiMaxDistance;
     static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;

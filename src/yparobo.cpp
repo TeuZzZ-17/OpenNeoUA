@@ -6192,11 +6192,7 @@ void NC_STACK_yparobo::DeadTimeUpdate(update_msg *arg)
         return;
     }
 
-    int v33 = (float)_energy_max * 0.7;
-    if ( v33 < 10000 )
-        v33 = 10000;
-    if ( v33 > 25000 )
-        v33 = 25000;
+    int v33 = GetPlasmaDurationMs();
 
     if ( _vp_extra[0].flags & EVPROTO_FLAG_ACTIVE )
     {

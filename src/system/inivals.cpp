@@ -309,6 +309,10 @@ Common::Ini::Key IniConf::GameGemUnlockDuration("game.gem_unlock_duration", Comm
 Common::Ini::Key IniConf::GameRoboDeathTimeScale("game.robo_death_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameRoboDeathTimeScaleDuration("game.robo_death_time_scale_duration", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRoboDeathTimeScaleMaxDistance("game.robo_death_time_scale_max_distance", Common::Ini::KT_WORD, std::string("0"));
+// OpenUA: single-player multiplier for the lifetime of recoverable death plasma.
+// 1.0, missing, zero, negative or malformed preserves the vanilla duration.
+// Netgames deliberately remain vanilla to avoid client-side gameplay divergence.
+Common::Ini::Key IniConf::GameDeathPlasmaDurationMult("game.death_plasma_duration_mult", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
 // OpenUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
@@ -612,6 +616,7 @@ void IniConf::Init()
         , &GameRoboDeathTimeScale
         , &GameRoboDeathTimeScaleDuration
         , &GameRoboDeathTimeScaleMaxDistance
+        , &GameDeathPlasmaDurationMult
         , &GameWorldUiMaxDistance
         , &GameAiTargetRange
         , &GameMgunRange
