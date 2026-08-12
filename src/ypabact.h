@@ -957,7 +957,6 @@ public:
     vec3d _cockpit_camera_offset;
     bool _mgun_pov_fx_enable;
     int16_t _mgun_pov_fx_vp;
-    int16_t _mgun_pov_num_mguns_fx;
     float _mgun_pov_fx_scale;
     vec3d _mgun_pov_fx_offset;
     vec3d _mgun_pov_fx_rot;

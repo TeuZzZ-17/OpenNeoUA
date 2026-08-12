@@ -244,10 +244,10 @@ public:
     TMesh() = default;
     ~TMesh();
     TMesh(const TMesh&);
-    TMesh(TMesh&&) = default;
+    TMesh(TMesh&&) noexcept;
 
     TMesh &operator=(const TMesh&);
-    TMesh &operator=(TMesh&&) = default;
+    TMesh &operator=(TMesh&&) noexcept;
 
     void RecalcBoundBox()
     {
@@ -481,7 +481,7 @@ struct ScreenFont
     int height = 0;
     uint8_t r = 0, g = 0, b = 0;
 
-    std::list<ScreenText *> entries;
+    std::vector<ScreenText> entries;
 };
 
 struct GfxMode
@@ -889,10 +889,10 @@ public:
 
 
 
-    std::list<TRenderNode *> _renderSolidList;
-    std::list<TRenderNode *> _renderSkyBoxList;
-    std::list<TRenderNode *> _renderZeroTracyList;
-    std::list<TRenderNode *> _renderLumaTracyList;
+    std::vector<TRenderNode *> _renderSolidList;
+    std::vector<TRenderNode *> _renderSkyBoxList;
+    std::vector<TRenderNode *> _renderZeroTracyList;
+    std::vector<TRenderNode *> _renderLumaTracyList;
 
     Common::CacheStorage<TRenderNode> _renderNodesCache;
 

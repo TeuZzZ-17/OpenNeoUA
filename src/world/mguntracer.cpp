@@ -78,6 +78,27 @@ static void MgunTracerBuildMesh(GFX::TMesh *mesh)
 
 }
 
+void NC_STACK_ypaworld::CleanupExpiredMinigunTracers()
+{
+    if ( _mgunTracerCleanupTimeValid &&
+         _mgunTracerCleanupTime == _timeStamp )
+    {
+        return;
+    }
+
+    _mgunTracerCleanupTime = _timeStamp;
+    _mgunTracerCleanupTimeValid = true;
+
+    _mgunTracers.erase(
+        std::remove_if(_mgunTracers.begin(), _mgunTracers.end(),
+                       [this](const TMgunTracer &tracer)
+                       {
+                           const int32_t age = _timeStamp - tracer.startTime;
+                           return age < 0 || age >= tracer.config.duration;
+                       }),
+        _mgunTracers.end());
+}
+
 bool NC_STACK_ypaworld::SpawnMinigunTracer(
     const vec3d &origin, const mat3x3 &rotation, float availableDistance,
     const World::TMgunTracerConfig &config)
@@ -95,14 +116,7 @@ bool NC_STACK_ypaworld::SpawnMinigunTracer(
     if ( direction.normalise() <= 0.001f || !MgunTracerFinite(direction) )
         return false;
 
-    _mgunTracers.erase(
-        std::remove_if(_mgunTracers.begin(), _mgunTracers.end(),
-                       [this](const TMgunTracer &tracer)
-                       {
-                           const int32_t age = _timeStamp - tracer.startTime;
-                           return age < 0 || age >= tracer.config.duration;
-                       }),
-        _mgunTracers.end());
+    CleanupExpiredMinigunTracers();
 
     if ( _mgunTracers.size() >= MGUN_TRACER_LIMIT )
         _mgunTracers.erase(_mgunTracers.begin());
@@ -123,14 +137,7 @@ void NC_STACK_ypaworld::RenderMinigunTracers(baseRender_msg *arg)
     if ( !arg || _mgunTracers.empty() )
         return;
 
-    _mgunTracers.erase(
-        std::remove_if(_mgunTracers.begin(), _mgunTracers.end(),
-                       [this](const TMgunTracer &tracer)
-                       {
-                           const int32_t age = _timeStamp - tracer.startTime;
-                           return age < 0 || age >= tracer.config.duration;
-                       }),
-        _mgunTracers.end());
+    CleanupExpiredMinigunTracers();
 
     if ( _mgunTracers.empty() )
         return;
@@ -205,4 +212,5 @@ void NC_STACK_ypaworld::RenderMinigunTracers(baseRender_msg *arg)
 void NC_STACK_ypaworld::ClearMinigunTracers()
 {
     _mgunTracers.clear();
+    _mgunTracerCleanupTimeValid = false;
 }
