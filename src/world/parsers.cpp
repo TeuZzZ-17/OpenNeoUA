@@ -2564,7 +2564,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             parser, p2, 100.0f);
     }
     else if ( ParseBoundedIntegerParam("mgun_tracer_duration", p1, p2,
-                                       0, 2000, 0,
+                                       0, 5000, 0,
                                        _vhcl->mgun_tracer.duration) )
     {
     }
