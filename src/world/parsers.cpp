@@ -2738,11 +2738,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int vp = parser.stol(p2, 0);
         _vhcl->mgun_pov_fx_vp = vp > 0 ? vp : -1;
     }
-    else if ( !StriCmp(p1, "mgun_pov_num_mguns_fx") )
-    {
-        int num = parser.stol(p2, 0);
-        _vhcl->mgun_pov_num_mguns_fx = num > 0 ? num : 1;
-    }
     else if ( !StriCmp(p1, "mgun_pov_fx_scale") )
     {
         float scale = parser.stof(p2, 0);
@@ -3475,7 +3470,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
         _vhcl->mgun_pov_fx_enable = false;
         _vhcl->mgun_pov_fx_vp = -1;
-        _vhcl->mgun_pov_num_mguns_fx = 1;
         _vhcl->mgun_pov_fx_scale = 1.0;
         _vhcl->mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
         _vhcl->mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);

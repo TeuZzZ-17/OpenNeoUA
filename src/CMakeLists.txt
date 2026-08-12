@@ -217,14 +217,7 @@ if(CMAKE_BUILD_TYPE MATCHES [dD][eE][bB][uU][gG])
             "-fsanitize=address"
         )
     endif()
-else()
-    target_compile_options(
-        OpenUA
-        PUBLIC
-        "-g"
-        "-O0"
-    )
-
-    # Configurazione Release ottimizzata, attualmente disattivata.
-    # target_compile_options(OpenUA PUBLIC "-O2" "-s")
 endif()
+
+# Non-Debug configurations deliberately keep CMake's native optimization
+# flags; RelWithDebInfo must retain -O2 instead of being overridden by -O0.

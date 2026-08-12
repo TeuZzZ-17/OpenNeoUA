@@ -585,11 +585,21 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
     else
         fil->printf("    primary        = %d_0_%2.2f_%2.2f_%d\n", bct->_primTtype, bct->_primTpos.x, bct->_primTpos.z, bct->_primT_cmdID);
 
-    for (int i = 0; i < bct->_waypoints_count; i++)
+    const int waypointCapacity = sizeof(bct->_waypoints) / sizeof(bct->_waypoints[0]);
+    int waypointCount = bct->_waypoints_count;
+    int currentWaypoint = bct->_current_waypoint;
+    if ( waypointCount < 0 || waypointCount > waypointCapacity || currentWaypoint < 0 ||
+            (waypointCount == 0 ? currentWaypoint != 0 : currentWaypoint >= waypointCount) )
+    {
+        waypointCount = 0;
+        currentWaypoint = 0;
+    }
+
+    for (int i = 0; i < waypointCount; i++)
         fil->printf("    waypoint       = %d_%2.2f_%2.2f\n", i, bct->_waypoints[i].x, bct->_waypoints[i].z);
 
-    fil->printf("    num_wp         = %d\n", bct->_waypoints_count);
-    fil->printf("    count_wp       = %d\n", bct->_current_waypoint);
+    fil->printf("    num_wp         = %d\n", waypointCount);
+    fil->printf("    count_wp       = %d\n", currentWaypoint);
 
     return 1;
 }

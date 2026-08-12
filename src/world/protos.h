@@ -642,7 +642,6 @@ struct TVhclProto
     vec3d cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     bool mgun_pov_fx_enable = false;
     int16_t mgun_pov_fx_vp = -1;
-    int16_t mgun_pov_num_mguns_fx = 1;
     float mgun_pov_fx_scale = 1.0;
     vec3d mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
     vec3d mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);

@@ -2001,7 +2001,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_enable = false;
     _mgun_pov_fx_vp = -1;
-    _mgun_pov_num_mguns_fx = 1;
     _mgun_pov_fx_scale = 1.0;
     _mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
@@ -2227,7 +2226,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_enable = false;
     _mgun_pov_fx_vp = -1;
-    _mgun_pov_num_mguns_fx = 1;
     _mgun_pov_fx_scale = 1.0;
     _mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
@@ -2953,7 +2951,12 @@ void NC_STACK_ypabact::CopyTargetOf(NC_STACK_ypabact *unit)
     int tgType;
     vec2d wTo;
 
-    if ( unit->_status_flg & BACT_STFLAG_WAYPOINT )
+    const int waypointCapacity = sizeof(unit->_waypoints) / sizeof(unit->_waypoints[0]);
+    const bool hasValidWaypoints = (unit->_status_flg & BACT_STFLAG_WAYPOINT) &&
+                                   unit->_waypoints_count > 0 &&
+                                   unit->_waypoints_count <= waypointCapacity;
+
+    if ( hasValidWaypoints )
     {
         if ( !unit->_m_cmdID )
         {
@@ -14012,7 +14015,6 @@ void NC_STACK_ypabact::Renew()
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_enable = false;
     _mgun_pov_fx_vp = -1;
-    _mgun_pov_num_mguns_fx = 1;
     _mgun_pov_fx_scale = 1.0;
     _mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
@@ -14875,9 +14877,7 @@ static void ypabact_SpawnFirstPersonMinigunFX(NC_STACK_ypabact *bact)
     if ( fxVp <= 0 )
         return;
 
-    int lanes = bact->_mgun_pov_num_mguns_fx > 0 ? bact->_mgun_pov_num_mguns_fx : 1;
-    if ( lanes > 3 )
-        lanes = 3;
+    const int lanes = bact->_num_mguns > 0 ? bact->_num_mguns : 1;
 
     float fxScale = bact->_mgun_pov_fx_scale > 0.0 ? bact->_mgun_pov_fx_scale : 1.0;
     float spacing = fabs(bact->_mgun_pov_fx_offset.x);
@@ -14886,11 +14886,14 @@ static void ypabact_SpawnFirstPersonMinigunFX(NC_STACK_ypabact *bact)
         vec3d localOffset = bact->_mgun_pov_fx_offset;
 
         if ( lanes == 1 )
+        {
             localOffset.x = 0.0;
-        else if ( lanes == 2 )
-            localOffset.x = (i == 0) ? -spacing : spacing;
+        }
         else
-            localOffset.x = (i == 0) ? -spacing : (i == 1 ? 0.0 : spacing);
+        {
+            const float fraction = (float)i / (float)(lanes - 1);
+            localOffset.x = -spacing + spacing * 2.0f * fraction;
+        }
 
         bact->getBACT_pWorld()->SpawnAttachedTransientVP(
             fxVp,
@@ -16115,14 +16118,26 @@ void NC_STACK_ypabact::DoTargetWaypoint()
     if ( ( _position.XZ() - _primTpos.XZ() ).length() >= 300.0 )
         return;
 
+    const int waypointCapacity = sizeof(_waypoints) / sizeof(_waypoints[0]);
+    if ( _waypoints_count <= 0 || _waypoints_count > waypointCapacity ||
+            _current_waypoint < 0 || _current_waypoint >= _waypoints_count )
+    {
+        _waypoints_count = 0;
+        _current_waypoint = 0;
+        _m_owner = 0;
+        _m_cmdID = 0;
+        _status_flg &= ~(BACT_STFLAG_WAYPOINT | BACT_STFLAG_WAYPOINTCCL);
+        return;
+    }
+
     if ( !(_status_flg & BACT_STFLAG_WAYPOINTCCL) )
     {
-        _current_waypoint++;
-
         setTarget_msg arg67;
 
-        if ( _waypoints_count > 1 )
+        if ( _current_waypoint < _waypoints_count - 1 )
         {
+            _current_waypoint++;
+
             arg67.tgt_type = BACT_TGT_TYPE_CELL_IND;
             arg67.priority = 0;
             arg67.tgt_pos = _waypoints[ _current_waypoint ];
