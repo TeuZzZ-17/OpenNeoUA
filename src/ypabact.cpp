@@ -2043,6 +2043,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_angle = 0.0;
     _mgun_power_set = false;
     _mgun_angle_set = false;
+    _mgun_tracer = World::TMgunTracerConfig();
     _mgun_sector_damage_accum = 0.0;
     _mgun_vp_fire_end_time = 0;
     _weapon_spread_x = 0.0;
@@ -14001,6 +14002,7 @@ void NC_STACK_ypabact::Renew()
     _mgun_angle = 0.0;
     _mgun_power_set = false;
     _mgun_angle_set = false;
+    _mgun_tracer = World::TMgunTracerConfig();
     _mgun_sector_damage_accum = 0.0;
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
@@ -14666,11 +14668,10 @@ static vec3d ypabact_ApplyWeaponDirectionPattern(const mat3x3 &rotation, const v
     return direction;
 }
 
-static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY)
+static vec3d ypabact_ApplyDirectionalOffset(const mat3x3 &rotation,
+                                            const vec3d &direction,
+                                            float offsetX, float offsetY)
 {
-    if ( spreadX <= 0.0 && spreadY <= 0.0 )
-        return direction;
-
     vec3d aimDir = direction;
 
     if ( aimDir.normalise() <= 0.001 )
@@ -14693,6 +14694,19 @@ static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d 
     if ( up.normalise() <= 0.001 )
         return aimDir;
 
+    aimDir += right * offsetX + up * offsetY;
+
+    if ( aimDir.normalise() > 0.001 )
+        return aimDir;
+
+    return direction;
+}
+
+static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY)
+{
+    if ( spreadX <= 0.0 && spreadY <= 0.0 )
+        return direction;
+
     float randX = 0.0;
     float randY = 0.0;
 
@@ -14702,12 +14716,7 @@ static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d 
     if ( spreadY > 0.0 )
         randY = (((float)rand() / (float)RAND_MAX) * 2.0 - 1.0) * tan(spreadY * C_PI_180);
 
-    aimDir += right * randX + up * randY;
-
-    if ( aimDir.normalise() > 0.001 )
-        return aimDir;
-
-    return direction;
+    return ypabact_ApplyDirectionalOffset(rotation, direction, randX, randY);
 }
 
 static vec3d ypabact_GetCockpitViewDirection(NC_STACK_ypabact *bact, const vec3d &viewDir)
@@ -14896,6 +14905,33 @@ static void ypabact_SpawnFirstPersonMinigunFX(NC_STACK_ypabact *bact)
             true,
             bact->_mgun_pov_fx_rot);
     }
+}
+
+static vec3d ypabact_GetMinigunTracerOrigin(NC_STACK_ypabact *bact,
+                                            int shotIndex, int shotCount)
+{
+    const float vehicleRadius = std::isfinite(bact->_radius) && bact->_radius > 0.0f
+        ? bact->_radius : 20.0f;
+    vec3d localOffset(0.0, -vehicleRadius * 0.25f, vehicleRadius);
+
+    if ( bact->_mgun_tracer.offset_x_set )
+        localOffset.x = bact->_mgun_tracer.offset.x;
+    else if ( shotCount > 1 )
+        localOffset.x = vehicleRadius * 0.25f;
+
+    if ( bact->_mgun_tracer.offset_y_set )
+        localOffset.y = bact->_mgun_tracer.offset.y;
+    if ( bact->_mgun_tracer.offset_z_set )
+        localOffset.z = bact->_mgun_tracer.offset.z;
+
+    if ( shotCount > 1 )
+    {
+        const float spacing = fabs(localOffset.x);
+        const float fraction = (float)shotIndex / (float)(shotCount - 1);
+        localOffset.x = -spacing + spacing * 2.0f * fraction;
+    }
+
+    return bact->_position + bact->_rotation.Transpose().Transform(localOffset);
 }
 
 static int ypabact_GetMinigunSectorDamageStep(NC_STACK_ypabact *bact, const vec3d &pos)
@@ -15124,6 +15160,8 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
     if ( spawnVisual )
         ypabact_SpawnFirstPersonMinigunFX(this);
+
+    const bool spawnTracers = spawnVisual && _mgun_tracer.enabled;
 
     for (int shotId = 0; shotId < mgunShots; shotId++)
     {
@@ -15380,6 +15418,31 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             else if ( minigunWorldHit )
             {
                 v55 = 1;
+            }
+
+            if ( spawnTracers )
+            {
+                float tracerDistance = minigunTraceRange;
+                if ( v55 )
+                {
+                    const float impactDistance = (v80 - shotPos).length();
+                    if ( std::isfinite(impactDistance) )
+                        tracerDistance = std::min(tracerDistance,
+                                                  impactDistance);
+                }
+
+                const vec3d tracerOrigin = ypabact_GetMinigunTracerOrigin(
+                    this, shotId, mgunShots);
+                const float sourceAdvance = (float)(tracerOrigin - shotPos).dot(shotDir);
+                if ( std::isfinite(sourceAdvance) )
+                    tracerDistance = std::max(0.0f,
+                                              tracerDistance - sourceAdvance);
+
+                _world->SpawnMinigunTracer(
+                    tracerOrigin,
+                    ypabact_LaserRotationFromDir(shotDir, _rotation),
+                    tracerDistance,
+                    _mgun_tracer);
             }
 
             bool spawnedVehicleImpact = false;
@@ -16538,15 +16601,35 @@ void NC_STACK_ypabact::StartDestFXByType(uint8_t type)
     }
 }
 
-bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger)
+bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg136 *worldHit)
 {
-    if ( !_world || !_world->ypaworld_func145(this) || _chainFX.empty() )
+    if ( !_world || _chainFX.empty() )
+        return false;
+
+    // Persistent terrain decals consume every real local world collision.
+    // Existing visual/physical Chain FX keep their historical visibility gate.
+    if ( !worldHit && !_world->ypaworld_func145(this) )
         return false;
 
     bool spawned = false;
     for (const World::TChainFXConfig &fx : _chainFX)
     {
         if ( fx.trigger != trigger )
+            continue;
+
+        if ( fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
+        {
+            if ( worldHit && trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
+                 _world->SpawnGroundDecal(fx, *worldHit) )
+                spawned = true;
+
+            continue;
+        }
+
+        // A real world collision is supplied in an immediate first pass so the
+        // temporary collision skeleton can be copied safely. Existing visual
+        // and physical Chain FX remain on their normal SetState pass.
+        if ( worldHit )
             continue;
 
         if ( fx.mode == World::TChainFXConfig::MODE_VISUAL )

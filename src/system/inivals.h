@@ -319,6 +319,7 @@ public:
     static Common::Ini::Key NetKickoff;
 
     static Common::Ini::Key GfxParticlesLimit;
+    static Common::Ini::Key GfxGroundDecalLimit;
     static Common::Ini::Key MenuWindowed;
 
     static Common::Ini::Key GfxVBO;

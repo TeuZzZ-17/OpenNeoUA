@@ -117,6 +117,31 @@ static float NonNegativeFiniteOrZero(float value)
     return std::isfinite(value) && value > 0.0f ? value : 0.0f;
 }
 
+static float ParseBoundedPositiveFiniteOrZero(ScriptParser::Parser &parser,
+                                               const std::string &value,
+                                               float maximum)
+{
+    size_t parsed = 0;
+    const float result = parser.stof(value, &parsed);
+    if ( parsed != value.size() || !std::isfinite(result) || result <= 0.0f )
+        return 0.0f;
+
+    return result > maximum ? maximum : result;
+}
+
+static bool ParseBoundedFinite(ScriptParser::Parser &parser,
+                               const std::string &value, double maximum,
+                               double *result)
+{
+    size_t parsed = 0;
+    const double parsedValue = parser.stod(value, &parsed);
+    if ( !result || parsed != value.size() || !std::isfinite(parsedValue) )
+        return false;
+
+    *result = std::max(-maximum, std::min(maximum, parsedValue));
+    return true;
+}
+
 static int NonNegativeFiniteMilliseconds(ScriptParser::Parser &parser,
                                          const std::string &value)
 {
@@ -1224,6 +1249,53 @@ static bool ParseTintParam(ScriptParser::Parser &parser,
     return true;
 }
 
+static bool ParseBoundedIntegerParam(const std::string &paramName,
+                                     const std::string &p1,
+                                     const std::string &p2,
+                                     int minValue,
+                                     int maxValue,
+                                     int fallback,
+                                     int &value)
+{
+    if ( StriCmp(p1, paramName) )
+        return false;
+
+    size_t digit = 0;
+    bool negative = false;
+    if ( !p2.empty() && (p2[0] == '+' || p2[0] == '-') )
+    {
+        negative = p2[0] == '-';
+        digit = 1;
+    }
+
+    bool valid = digit < p2.size();
+    long parsed = 0;
+    for (; valid && digit < p2.size(); digit++)
+    {
+        if ( p2[digit] < '0' || p2[digit] > '9' )
+        {
+            valid = false;
+            break;
+        }
+
+        if ( parsed <= (long)maxValue + 1 )
+            parsed = parsed * 10 + (p2[digit] - '0');
+    }
+
+    if ( !valid )
+    {
+        value = fallback;
+        ypa_log_out("WARNING: invalid %s '%s', using %d\n",
+                    paramName.c_str(), p2.c_str(), fallback);
+        return true;
+    }
+
+    if ( negative )
+        parsed = -parsed;
+    value = (int)std::max((long)minValue, std::min(parsed, (long)maxValue));
+    return true;
+}
+
 static bool ParseWireframeTintParam(ScriptParser::Parser &parser,
                                     const std::string &p1,
                                     const std::string &p2,
@@ -1284,6 +1356,9 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
     if ( !StriCmp(name, "physical") )
         return World::TChainFXConfig::MODE_PHYSICAL;
 
+    if ( !StriCmp(name, "ground_decal") )
+        return World::TChainFXConfig::MODE_GROUND_DECAL;
+
     return World::TChainFXConfig::MODE_VISUAL;
 }
 
@@ -1299,10 +1374,18 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     bool hasEndSize = false;
     vec3d offset;
     int duration = 0;
+    bool groundDecalDurationValid = false;
     int fadeIn = 0;
     int fadeOut = 0;
     std::vector<World::TChainFXVPModel> vpModels;
     int physicalVehicle = 0;
+    std::string groundDecalTexture;
+    int groundDecalPoints = 12;
+    int groundDecalJaggedness = 35;
+    int groundDecalEdgeSoftness = 25;
+    float groundDecalSize = 0.0f;
+    TVisualTint groundDecalTint;
+    bool groundDecalRandomRotation = false;
     World::TChainFXConfig::Trigger trigger = World::TChainFXConfig::TRIGGER_NONE;
     bool hasTrigger = false;
     bool badTrigger = false;
@@ -1378,6 +1461,38 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     ypa_log_out("WARNING: begin_chain_fx physical mode without physical_vehicle ignored\n");
                 }
             }
+            else if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL )
+            {
+                if ( context != CHAIN_FX_WEAPON ||
+                     trigger != World::TChainFXConfig::TRIGGER_IMPACT_WORLD )
+                {
+                    ypa_log_out("WARNING: begin_chain_fx ground_decal requires weapon trigger impact_world; block ignored\n");
+                }
+                else if ( groundDecalPoints < 3 || groundDecalPoints > 32 ||
+                          !std::isfinite(groundDecalSize) || groundDecalSize <= 0.0f ||
+                          !groundDecalDurationValid || duration <= 0 ||
+                          groundDecalTint.a <= 0.0f )
+                {
+                    ypa_log_out("WARNING: incomplete or disabled begin_chain_fx ground_decal block ignored\n");
+                }
+                else
+                {
+                    World::TChainFXConfig chain;
+                    chain.mode = mode;
+                    chain.trigger = trigger;
+                    chain.duration = duration;
+                    chain.fade_out = std::min(fadeOut, duration);
+                    chain.fade_in = std::min(fadeIn, duration - chain.fade_out);
+                    chain.ground_decal_texture = groundDecalTexture;
+                    chain.ground_decal_points = groundDecalPoints;
+                    chain.ground_decal_jaggedness = (float)groundDecalJaggedness / 100.0f;
+                    chain.ground_decal_edge_softness = (float)groundDecalEdgeSoftness / 100.0f;
+                    chain.ground_decal_size = groundDecalSize;
+                    chain.ground_decal_tint = groundDecalTint;
+                    chain.ground_decal_random_rotation = groundDecalRandomRotation;
+                    out->push_back(chain);
+                }
+            }
 
             return ScriptParser::RESULT_OK;
         }
@@ -1387,12 +1502,19 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
 
         if ( !StriCmp(p1, "mode") )
         {
-            if ( !StriCmp(p2, "visual") || !StriCmp(p2, "physical") )
+            if ( !StriCmp(p2, "visual") || !StriCmp(p2, "physical") ||
+                 !StriCmp(p2, "ground_decal") )
             {
                 mode = ParseChainFXMode(p2);
                 if ( context == CHAIN_FX_SUPERITEM && mode != World::TChainFXConfig::MODE_VISUAL )
                 {
                     ypa_log_out("WARNING: SuperItem begin_chain_fx supports only visual mode; block ignored\n");
+                    badMode = true;
+                }
+                else if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL &&
+                          context != CHAIN_FX_WEAPON )
+                {
+                    ypa_log_out("WARNING: begin_chain_fx ground_decal is weapon-only; block ignored\n");
                     badMode = true;
                 }
             }
@@ -1436,7 +1558,11 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             hasEndSize = true;
         }
         else if ( !StriCmp(p1, "duration") )
-            duration = parser.stol(p2, NULL, 0);
+        {
+            size_t parsed = 0;
+            duration = parser.stol(p2, &parsed, 0);
+            groundDecalDurationValid = parsed == p2.size() && duration > 0;
+        }
         else if ( !StriCmp(p1, "fade_in") )
             fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
         else if ( !StriCmp(p1, "fade_out") )
@@ -1474,6 +1600,33 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             else
                 physicalVehicle = parser.stol(p2, NULL, 0);
         }
+        else if ( !StriCmp(p1, "ground_decal_texture") )
+            groundDecalTexture = p2;
+        else if ( ParseBoundedIntegerParam("ground_decal_points", p1, p2,
+                                           3, 32, 12, groundDecalPoints) )
+        {
+        }
+        else if ( ParseBoundedIntegerParam("ground_decal_jaggedness", p1, p2,
+                                           0, 100, 35, groundDecalJaggedness) )
+        {
+        }
+        else if ( ParseBoundedIntegerParam("ground_decal_edge_softness", p1, p2,
+                                           0, 100, 25, groundDecalEdgeSoftness) )
+        {
+        }
+        else if ( !StriCmp(p1, "ground_decal_size") )
+        {
+            size_t parsed = 0;
+            const float value = parser.stof(p2, &parsed);
+            groundDecalSize = parsed == p2.size() && std::isfinite(value) && value > 0.0f
+                            ? value : 0.0f;
+        }
+        else if ( ParseTintParam(parser, "ground_decal_tint", p1, p2,
+                                 groundDecalTint, true) )
+        {
+        }
+        else if ( !StriCmp(p1, "ground_decal_random_rotation") )
+            groundDecalRandomRotation = p2 == "1";
         else
         {
             if ( context == CHAIN_FX_SUPERITEM )
@@ -2392,6 +2545,49 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun_shot_time_user = parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "mgun_tracer_enable") )
+    {
+        _vhcl->mgun_tracer.enabled = p2 == "1";
+    }
+    else if ( ParseTintParam(parser, "mgun_tracer_tint", p1, p2,
+                             _vhcl->mgun_tracer.tint, true) )
+    {
+    }
+    else if ( !StriCmp(p1, "mgun_tracer_length") )
+    {
+        _vhcl->mgun_tracer.length = ParseBoundedPositiveFiniteOrZero(
+            parser, p2, 6000.0f);
+    }
+    else if ( !StriCmp(p1, "mgun_tracer_width") )
+    {
+        _vhcl->mgun_tracer.width = ParseBoundedPositiveFiniteOrZero(
+            parser, p2, 100.0f);
+    }
+    else if ( ParseBoundedIntegerParam("mgun_tracer_duration", p1, p2,
+                                       0, 2000, 0,
+                                       _vhcl->mgun_tracer.duration) )
+    {
+    }
+    else if ( !StriCmp(p1, "mgun_tracer_speed") )
+    {
+        _vhcl->mgun_tracer.speed = ParseBoundedPositiveFiniteOrZero(
+            parser, p2, 60000.0f);
+    }
+    else if ( !StriCmp(p1, "mgun_tracer_offset_x") )
+    {
+        _vhcl->mgun_tracer.offset_x_set = ParseBoundedFinite(
+            parser, p2, 6000.0f, &_vhcl->mgun_tracer.offset.x);
+    }
+    else if ( !StriCmp(p1, "mgun_tracer_offset_y") )
+    {
+        _vhcl->mgun_tracer.offset_y_set = ParseBoundedFinite(
+            parser, p2, 6000.0f, &_vhcl->mgun_tracer.offset.y);
+    }
+    else if ( !StriCmp(p1, "mgun_tracer_offset_z") )
+    {
+        _vhcl->mgun_tracer.offset_z_set = ParseBoundedFinite(
+            parser, p2, 6000.0f, &_vhcl->mgun_tracer.offset.z);
+    }
     else if ( !StriCmp(p1, "mgun_recoil_visual_intensity") )
     {
         float intensity = parser.stof(p2, 0);
@@ -3190,6 +3386,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_angle = 0.0;
         _vhcl->mgun_power_set = false;
         _vhcl->mgun_angle_set = false;
+        _vhcl->mgun_tracer = TMgunTracerConfig();
         _vhcl->weapon_spread_x = 0.0;
         _vhcl->weapon_spread_y = 0.0;
         _vhcl->weapon_arc_x = 0.0;

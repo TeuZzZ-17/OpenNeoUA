@@ -123,6 +123,7 @@ enum RFLAGS
     RFLAGS_COMPUTED_COLOR = (1 << 9),
     RFLAGS_DISABLE_ZWRITE = (1 << 10),
     RFLAGS_ALPHA_FOG =      (1 << 11),
+    RFLAGS_ALPHABLEND =     (1 << 12),
 };
 
 // OpenUA extended projection limits.
