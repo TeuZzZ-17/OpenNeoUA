@@ -397,6 +397,9 @@ Common::Ini::Key IniConf::NetKickoff("net.kickoff", Common::Ini::KT_DIGIT, (int3
 
 // Graphics particles
 Common::Ini::Key IniConf::GfxParticlesLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)5000);
+// OpenUA custom: bounded world-side terrain decals. Zero disables the system;
+// the generated mesh uses a fixed internal triangle cap.
+Common::Ini::Key IniConf::GfxGroundDecalLimit("gfx.ground_decal_limit", Common::Ini::KT_DIGIT, (int32_t)256);
 
 Common::Ini::Key IniConf::MenuWindowed("menu.windowed", Common::Ini::KT_BOOL, false);
 
@@ -690,6 +693,7 @@ void IniConf::Init()
         , &GfxColorEffPower16
 
         , &GfxParticlesLimit
+        , &GfxGroundDecalLimit
 
         , &MenuWindowed
 

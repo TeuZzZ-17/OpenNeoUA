@@ -44,6 +44,28 @@ struct TVisualTint
     }
 };
 
+struct TMgunTracerConfig
+{
+    bool enabled = false;
+    TVisualTint tint;
+    float length = 300.0f;
+    float width = 3.0f;
+    int duration = 80;
+    float speed = 6000.0f;
+    vec3d offset = vec3d(0.0, 0.0, 0.0);
+    bool offset_x_set = false;
+    bool offset_y_set = false;
+    bool offset_z_set = false;
+
+    TMgunTracerConfig()
+    {
+        tint.r = 1.0f;
+        tint.g = 210.0f / 255.0f;
+        tint.b = 80.0f / 255.0f;
+        tint.a = 180.0f / 255.0f;
+    }
+};
+
 struct TDecorationFXConfig
 {
     uint8_t mode = DECORATION_FX_PERIODIC;
@@ -92,7 +114,8 @@ struct TChainFXConfig
     enum Mode
     {
         MODE_VISUAL = 0,
-        MODE_PHYSICAL
+        MODE_PHYSICAL,
+        MODE_GROUND_DECAL
     };
 
     enum Trigger
@@ -116,6 +139,13 @@ struct TChainFXConfig
     int fade_out = 0;
     std::vector<TChainFXVPModel> vp_models;
     int physical_vehicle = 0;
+    std::string ground_decal_texture;
+    int ground_decal_points = 12;
+    float ground_decal_jaggedness = 0.35f;
+    float ground_decal_edge_softness = 0.25f;
+    float ground_decal_size = 0.0f;
+    TVisualTint ground_decal_tint;
+    bool ground_decal_random_rotation = false;
 };
 
 struct TRoboColl
@@ -506,6 +536,7 @@ struct TVhclProto
     float mgun_angle = 0.0;
     bool mgun_power_set = false;
     bool mgun_angle_set = false;
+    TMgunTracerConfig mgun_tracer;
     float weapon_spread_x = 0.0;
     float weapon_spread_y = 0.0;
     float weapon_arc_x = 0.0;
