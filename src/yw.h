@@ -4,6 +4,7 @@
 #include <string.h>
 #include <array>
 #include <list>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -2029,6 +2030,9 @@ struct ypaworld_arg136
     int polyID;
     UAskeleton::Data *skel;
     int flags;
+    Common::Point hitCell;
+    int16_t hitCollisionType;
+    vec3d hitSkelPos;
 
     ypaworld_arg136()
     {
@@ -2037,6 +2041,9 @@ struct ypaworld_arg136
         polyID = 0;
         skel = NULL;
         flags = 0;
+        hitCell = Common::Point(-1, -1);
+        hitCollisionType = 0;
+        hitSkelPos = vec3d(0.0, 0.0, 0.0);
     }
 };
 
@@ -2707,6 +2714,14 @@ public:
 
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls());
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
+    bool SpawnMinigunTracer(const vec3d &origin, const mat3x3 &rotation,
+                            float availableDistance,
+                            const World::TMgunTracerConfig &config);
+    void RenderMinigunTracers(baseRender_msg *arg);
+    void ClearMinigunTracers();
+    bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
+    void RenderGroundDecals(baseRender_msg *arg);
+    void ClearGroundDecals();
     int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false);
     int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
     bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, float randomOffsetPercent, vec3d *localPosition);
@@ -2850,6 +2865,31 @@ public:
         int32_t until = 0;
     };
 
+    struct TGroundDecal
+    {
+        vec3d pos;
+        float radius = 0.0f;
+        int32_t startTime = 0;
+        int32_t duration = 0;
+        int32_t fadeIn = 0;
+        int32_t fadeOut = 0;
+        World::TVisualTint tint;
+        GFX::TMesh mesh;
+
+        TGroundDecal() = default;
+        TGroundDecal(const TGroundDecal &) = delete;
+        TGroundDecal &operator=(const TGroundDecal &) = delete;
+    };
+
+    struct TMgunTracer
+    {
+        vec3d origin;
+        mat3x3 rotation;
+        float availableDistance = 0.0f;
+        int32_t startTime = 0;
+        World::TMgunTracerConfig config;
+    };
+
     UserData *_GameShell = NULL;
 
     Common::Point _mapSize;
@@ -2890,6 +2930,10 @@ public:
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;
     int32_t _nextTransientVPId = 1;
+    std::vector<TMgunTracer> _mgunTracers;
+    GFX::TMesh _mgunTracerMesh;
+    std::list<TGroundDecal> _groundDecals;
+    std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;
     std::vector<TDamageHoverTarget> _damageHoverTargets;
     std::map<int32_t, TConstructInfo> _inBuildProcess; // Buildings in creation process

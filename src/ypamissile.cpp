@@ -2254,6 +2254,11 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             if ( arg136.isect )
             {
                 vec3d impactNormal = arg136.skel->polygons[ arg136.polyID ].Normal();
+
+                // Ground decals consume the actual collision data before a
+                // later trace can mutate a shared filler/slurp skeleton.
+                StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD, &arg136);
+
                 AlignMissileByNormal( impactNormal );
 
                 _position = arg136.isectPos;
@@ -2453,6 +2458,34 @@ void NC_STACK_ypamissile::UpdateMortarBallistic(update_msg *arg)
 
     if ( !impactNow )
         return;
+
+    // Ground-burst mortars land on a point previously snapped to world
+    // collision geometry. Reacquire that same real surface at impact time so
+    // ground decals receive valid, short-lived skeleton/poly data; airbursts
+    // intentionally have no world-hit context.
+    bool hasGroundDecalChainFX = false;
+    for (const World::TChainFXConfig &fx : _chainFX)
+    {
+        if ( fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL &&
+             fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD )
+        {
+            hasGroundDecalChainFX = true;
+            break;
+        }
+    }
+
+    if ( _mortarImpactOnSurface && !_world->_isNetGame && hasGroundDecalChainFX )
+    {
+        ypaworld_arg136 groundHit;
+        groundHit.stPos = vec3d(_position.x, -30000.0, _position.z);
+        groundHit.vect = vec3d(0.0, 50000.0, 0.0);
+        groundHit.flags = 0;
+        _world->ypaworld_func136(&groundHit);
+
+        if ( groundHit.isect && std::fabs(groundHit.isectPos.y - _position.y) <= 5.0 )
+            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
+                                  &groundHit);
+    }
 
     // Timed impact: reuse the same path a normal bomb uses on contact for AoE
     // damage/push, building/sector damage, VP dead/megadeth and chain FX. Mortar

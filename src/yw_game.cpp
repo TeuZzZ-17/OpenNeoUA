@@ -2109,6 +2109,9 @@ void NC_STACK_ypaworld::sub_44D8B8(ypaworld_arg136 *arg, const TSectorCollision 
                     arg->isectPos = loc.pos + px;
                     arg->polyID = i;
                     arg->skel = loc.sklt->GetSkelet();
+                    arg->hitCell = loc.Cell;
+                    arg->hitCollisionType = loc.CollisionType;
+                    arg->hitSkelPos = loc.pos;
                 }
             }
         }
@@ -3751,6 +3754,10 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     RenderSuperItems(&rndrs);
 
     RenderFillers(&rndrs);
+
+    RenderMinigunTracers(&rndrs);
+
+    RenderGroundDecals(&rndrs);
 
     yw_RenderTransientVPs(this, &_transientVPs, &rndrs);
 

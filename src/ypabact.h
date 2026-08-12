@@ -18,6 +18,7 @@ class NC_STACK_ypamissile;
 class NC_STACK_ypaworld;
 
 struct yw_arg129;
+struct ypaworld_arg136;
 
 struct cellArea;
 
@@ -742,7 +743,7 @@ public:
     void sub_4843BC(NC_STACK_ypabact *bact2, int a3);
     void sub_493480(NC_STACK_ypabact *bact2, int mode);
     void StartDestFX(const World::DestFX &fx);
-    bool StartChainFXByTrigger(uint8_t trigger);
+    bool StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg136 *worldHit = NULL);
 
     void DoTargetWaypoint();
     void FixSectorFall();
@@ -1009,6 +1010,7 @@ public:
     float _mgun_angle;
     bool _mgun_power_set;
     bool _mgun_angle_set;
+    World::TMgunTracerConfig _mgun_tracer;
     float _mgun_sector_damage_accum;
     float _weapon_spread_x;
     float _weapon_spread_y;
