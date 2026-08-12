@@ -3412,7 +3412,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_cockpit_camera_offset = vhcl.cockpit_camera_offset;
         bacto->_mgun_pov_fx_enable = vhcl.mgun_pov_fx_enable;
         bacto->_mgun_pov_fx_vp = vhcl.mgun_pov_fx_vp;
-        bacto->_mgun_pov_num_mguns_fx = vhcl.mgun_pov_num_mguns_fx;
         bacto->_mgun_pov_fx_scale = vhcl.mgun_pov_fx_scale;
         bacto->_mgun_pov_fx_offset = vhcl.mgun_pov_fx_offset;
         bacto->_mgun_pov_fx_rot = vhcl.mgun_pov_fx_rot;
@@ -3665,7 +3664,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
 NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
 {
-    if ( arg->vehicle_id > _weaponProtos.size() )
+    if ( !arg || arg->vehicle_id >= _weaponProtos.size() )
         return NULL;
 
     World::TWeapProto &wproto = _weaponProtos.at(arg->vehicle_id);
@@ -4153,7 +4152,7 @@ void NC_STACK_ypaworld::DeleteLevel()
 
             if ( fil )
             {
-                fil->printf(_GameShell->UserName);
+                fil->printf("%s", _GameShell->UserName.c_str());
                 delete fil;
             }
         }
@@ -9499,11 +9498,18 @@ void NC_STACK_ypaworld::LoadingUnitsRefresh()
     if ( _extraViewEnable )
     {
         NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(_userRobo);
-
-        if ( robo->_roboGuns.at(_extraViewNumber).gun_obj )
+        if ( robo && _extraViewNumber >= 0 &&
+                (size_t)_extraViewNumber < robo->_roboGuns.size() &&
+                robo->_roboGuns[_extraViewNumber].gun_obj )
         {
-            robo->_roboGuns.at(_extraViewNumber).gun_obj->setBACT_viewer(true);
-            robo->_roboGuns.at(_extraViewNumber).gun_obj->setBACT_inputting(true);
+            NC_STACK_ypabact *gun = robo->_roboGuns[_extraViewNumber].gun_obj;
+            gun->setBACT_viewer(true);
+            gun->setBACT_inputting(true);
+        }
+        else
+        {
+            _extraViewEnable = false;
+            _extraViewNumber = -1;
         }
     }
 }
@@ -9513,22 +9519,24 @@ size_t NC_STACK_ypaworld::LoadGame(const std::string &saveFile)
     bool loadOK = false;
 
     if ( !uaFileExist(saveFile) )
-        return 1;
+        return 0;
 
-    if ( saveFile.find(".sgm") != std::string::npos || saveFile.find(".SGM") != std::string::npos )
-    {
-        _maxReloadConst = 0;
-        _maxRoboEnergy = 0;
-    }
-
-    int lvlnum;
+    int lvlnum = -1;
 
     ScriptParser::HandlersList parsers
     {
         new World::Parsers::SaveLevelNumParser(this, &lvlnum),
     };
 
-    ScriptParser::ParseFile(saveFile, parsers, 0);
+    if ( !ScriptParser::ParseFile(saveFile, parsers, 0) ||
+            lvlnum < 0 || (size_t)lvlnum >= _globalMapRegions.MapRegions.size() )
+        return 0;
+
+    if ( saveFile.find(".sgm") != std::string::npos || saveFile.find(".SGM") != std::string::npos )
+    {
+        _maxReloadConst = 0;
+        _maxRoboEnergy = 0;
+    }
 
     _extraViewNumber = -1;
     _extraViewEnable = false;
@@ -9570,13 +9578,16 @@ size_t NC_STACK_ypaworld::LoadGame(const std::string &saveFile)
     _lvlPrimevalOwnMap = _lvlOwnMap;
 
     if ( !LoadingParseSaveFile(saveFile) )
+    {
+        DeleteLevel();
         return 0;
+    }
 
     dword_5A7A80++;
     bact_id++;
 
-    if ( _userRobo )
-        dynamic_cast<NC_STACK_yparobo *>(_userRobo) ->setROBO_commCount(dword_5A7A80);
+    if ( NC_STACK_yparobo *userRobo = dynamic_cast<NC_STACK_yparobo *>(_userRobo) )
+        userRobo->setROBO_commCount(dword_5A7A80);
 
     LoadingUnitsRefresh();
 
@@ -10202,6 +10213,10 @@ int ypaworld_func183__sub0(int lvlID, const char *userName)
 // Advanced Create Level
 size_t NC_STACK_ypaworld::ypaworld_func183(yw_arg161 *arg)
 {
+    if ( !arg || arg->lvlID < 0 ||
+            (size_t)arg->lvlID >= _globalMapRegions.MapRegions.size() )
+        return 0;
+
     int v6;
 
     if ( _globalMapRegions.MapRegions[ arg->lvlID ].Status == TMapRegionInfo::STATUS_COMPLETED && ypaworld_func183__sub0(arg->lvlID, _GameShell->UserName.c_str()) )
@@ -10210,9 +10225,13 @@ size_t NC_STACK_ypaworld::ypaworld_func183(yw_arg161 *arg)
         v6 = LoadGame(savename);
 
         if ( !v6 )
+        {
             ypa_log_out("Warning: in YWM_ADVANCEDCREATELEVEL: YWM_LOADGAME of %s failed!\n", savename.c_str());
+            return 0;
+        }
 
-        _userRobo->_energy = _userRobo->_energy_max;
+        if ( _userRobo )
+            _userRobo->_energy = _userRobo->_energy_max;
     }
     else
     {

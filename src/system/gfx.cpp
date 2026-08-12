@@ -21,7 +21,9 @@
 #include "inivals.h"
 #include "glfuncs.h"
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace GFX
 {
@@ -498,51 +500,59 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                 if (_solidFont)
                 {
                     tmp = TTF_RenderUTF8_Solid(_font.ttfFont, txt->string.c_str(), clr);
-                    SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_NONE);
                 }
                 else
                 {
                     tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
+                }
+
+                if (!tmp)
+                {
+                    SDL_SetClipRect(Screen(), NULL);
+                    return;
+                }
+
+                SDL_SetSurfaceBlendMode(tmp, _solidFont ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+
+                SDL_Rect want;
+                want.w = tmp->w;
+                want.h = tmp->h;
+                want.x = p1 + 2;
+                want.y = v10 + 1;
+
+                SDL_BlitSurface(tmp, NULL, Screen(), &want);
+
+                clr.a = 255;
+                clr.r = _font.r;
+                clr.g = _font.g;
+                clr.b = _font.b;
+
+                if (_solidFont)
+                {
+                    SDL_SetPaletteColors(tmp->format->palette, &clr, 1, 1);
+                }
+                else
+                {
+                    SDL_FreeSurface(tmp);
+                    tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
+                    if (!tmp)
+                    {
+                        SDL_SetClipRect(Screen(), NULL);
+                        return;
+                    }
+
                     SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND);
                 }
 
-                if (tmp)
-                {
-                    SDL_Rect want;
-                    want.w = tmp->w;
-                    want.h = tmp->h;
-                    want.x = p1 + 2;
-                    want.y = v10 + 1;
+                want.w = tmp->w;
+                want.h = tmp->h;
+                want.x = p1 + 1;
+                want.y = v10;
 
-                    SDL_BlitSurface(tmp, NULL, Screen(), &want);
+                SDL_BlitSurface(tmp, NULL, Screen(), &want);
+                SDL_FreeSurface(tmp);
 
-                    clr.a = 255;
-                    clr.r = _font.r;
-                    clr.g = _font.g;
-                    clr.b = _font.b;
-
-                    if (_solidFont)
-                    {
-                        SDL_SetPaletteColors(tmp->format->palette, &clr, 1, 1);
-                    }
-                    else
-                    {
-                        SDL_FreeSurface(tmp);
-                        tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
-                        SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND);
-                    }
-
-                    want.w = tmp->w;
-                    want.h = tmp->h;
-                    want.x = p1 + 1;
-                    want.y = v10;
-
-                    SDL_BlitSurface(tmp, NULL, Screen(), &want);
-                    SDL_FreeSurface(tmp);
-
-
-                    SDL_SetClipRect(Screen(), NULL);
-                }
+                SDL_SetClipRect(Screen(), NULL);
             }
         }
     }
@@ -550,15 +560,15 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
 
 void GFXEngine::AddScreenText(const std::string &string, int p1, int p2, int p3, int p4, int flag)
 {
-    ScreenText *v8 = new ScreenText;
-    v8->string = string;
-    v8->p1 = p1;
-    v8->p2 = p2;
-    v8->p3 = p3;
-    v8->p4 = p4;
-    v8->flag = flag;
+    ScreenText entry;
+    entry.string = string;
+    entry.p1 = p1;
+    entry.p2 = p2;
+    entry.p3 = p3;
+    entry.p4 = p4;
+    entry.flag = flag;
 
-    _font.entries.push_back(v8);
+    _font.entries.push_back(std::move(entry));
 }
 
 void GFXEngine::DrawScreenText()
@@ -567,11 +577,8 @@ void GFXEngine::DrawScreenText()
     _font.g = 255;
     _font.b = 0;
 
-    for ( std::list<ScreenText *>::iterator it = _font.entries.begin(); it != _font.entries.end(); it++ )
-    {
-        DrawTextEntry(*it);
-        delete (*it);
-    }
+    for (const ScreenText &entry : _font.entries)
+        DrawTextEntry(&entry);
 
     _font.entries.clear();
 }
@@ -1770,13 +1777,12 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
         skyFrustum.m11 *= _viewZoom;
         SetProjectionMatrix(skyFrustum);
 
-        _renderSkyBoxList.sort(TRenderNode::CompareSolid);
+        std::stable_sort(_renderSkyBoxList.begin(), _renderSkyBoxList.end(),
+                         TRenderNode::CompareSolid);
 
-        while(!_renderSkyBoxList.empty())
-        {
-            RenderNode( _renderSkyBoxList.front() );
-            _renderSkyBoxList.pop_front();
-        }
+        for (size_t nodeIndex = 0; nodeIndex < _renderSkyBoxList.size(); nodeIndex++)
+            RenderNode(_renderSkyBoxList[nodeIndex]);
+        _renderSkyBoxList.clear();
 
         // Every non-sky queue must continue with the normal world projection.
         SetProjectionMatrix(_frustum);
@@ -1784,35 +1790,32 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
 
     if (RasterEtapes & RASTER_SOLID)
     {
-        _renderSolidList.sort(TRenderNode::CompareSolid);
+        std::stable_sort(_renderSolidList.begin(), _renderSolidList.end(),
+                         TRenderNode::CompareSolid);
 
-        while(!_renderSolidList.empty())
-        {
-            RenderNode( _renderSolidList.front() );
-            _renderSolidList.pop_front();
-        }
+        for (size_t nodeIndex = 0; nodeIndex < _renderSolidList.size(); nodeIndex++)
+            RenderNode(_renderSolidList[nodeIndex]);
+        _renderSolidList.clear();
     }
 
     if (RasterEtapes & RASTER_ZEROTR)
     {
-        _renderZeroTracyList.sort(TRenderNode::CompareSolid);
+        std::stable_sort(_renderZeroTracyList.begin(), _renderZeroTracyList.end(),
+                         TRenderNode::CompareSolid);
 
-        while(!_renderZeroTracyList.empty())
-        {
-            RenderNode( _renderZeroTracyList.front() );
-            _renderZeroTracyList.pop_front();
-        }
+        for (size_t nodeIndex = 0; nodeIndex < _renderZeroTracyList.size(); nodeIndex++)
+            RenderNode(_renderZeroTracyList[nodeIndex]);
+        _renderZeroTracyList.clear();
     }
 
     if (RasterEtapes & RASTER_LUMATR)
     {
-        _renderLumaTracyList.sort(TRenderNode::CompareTransparent);
+        std::stable_sort(_renderLumaTracyList.begin(), _renderLumaTracyList.end(),
+                         TRenderNode::CompareTransparent);
 
-        while(!_renderLumaTracyList.empty())
-        {
-            RenderNode( _renderLumaTracyList.front() );
-            _renderLumaTracyList.pop_front();
-        }
+        for (size_t nodeIndex = 0; nodeIndex < _renderLumaTracyList.size(); nodeIndex++)
+            RenderNode(_renderLumaTracyList[nodeIndex]);
+        _renderLumaTracyList.clear();
     }
 }
 
@@ -6006,8 +6009,27 @@ TMesh::TMesh(const TMesh &b)
     glIndexBuf = 0;
 }
 
+TMesh::TMesh(TMesh &&b) noexcept
+{
+    Mat = std::move(b.Mat);
+    Vertexes = std::move(b.Vertexes);
+    Indixes = std::move(b.Indixes);
+    CoordsCache = std::move(b.CoordsCache);
+    BoundBox = std::move(b.BoundBox);
+
+    glDataBuf = b.glDataBuf;
+    glIndexBuf = b.glIndexBuf;
+    b.glDataBuf = 0;
+    b.glIndexBuf = 0;
+}
+
 TMesh &TMesh::operator=(const TMesh& b)
 {
+    if (this == &b)
+        return *this;
+
+    GFX::Engine.MeshFreeVBO(this);
+
     Mat = b.Mat;
     Vertexes = b.Vertexes;
     Indixes = b.Indixes;
@@ -6016,6 +6038,27 @@ TMesh &TMesh::operator=(const TMesh& b)
 
     glDataBuf = 0;
     glIndexBuf = 0;
+
+    return *this;
+}
+
+TMesh &TMesh::operator=(TMesh &&b) noexcept
+{
+    if (this == &b)
+        return *this;
+
+    GFX::Engine.MeshFreeVBO(this);
+
+    Mat = std::move(b.Mat);
+    Vertexes = std::move(b.Vertexes);
+    Indixes = std::move(b.Indixes);
+    CoordsCache = std::move(b.CoordsCache);
+    BoundBox = std::move(b.BoundBox);
+
+    glDataBuf = b.glDataBuf;
+    glIndexBuf = b.glIndexBuf;
+    b.glDataBuf = 0;
+    b.glIndexBuf = 0;
 
     return *this;
 }

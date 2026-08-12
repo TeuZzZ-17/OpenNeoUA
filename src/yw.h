@@ -2717,6 +2717,7 @@ public:
     bool SpawnMinigunTracer(const vec3d &origin, const mat3x3 &rotation,
                             float availableDistance,
                             const World::TMgunTracerConfig &config);
+    void CleanupExpiredMinigunTracers();
     void RenderMinigunTracers(baseRender_msg *arg);
     void ClearMinigunTracers();
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
@@ -2931,6 +2932,8 @@ public:
     std::list<TTransientVP> _transientVPs;
     int32_t _nextTransientVPId = 1;
     std::vector<TMgunTracer> _mgunTracers;
+    int32_t _mgunTracerCleanupTime = 0;
+    bool _mgunTracerCleanupTimeValid = false;
     GFX::TMesh _mgunTracerMesh;
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;

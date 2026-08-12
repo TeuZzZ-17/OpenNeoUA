@@ -30,9 +30,9 @@ float maxSpeed = 0.0;
 
 const int netDebug_NUM = 4000;
 int netDebug_CREATE_CNT = 0;
-uint32_t netDebug_CREATED[7][netDebug_NUM];
+uint32_t netDebug_CREATED[World::CVFractionsCount][netDebug_NUM];
 int netDebug_DESTROY_CNT = 0;
-uint32_t netDebug_DESTROYED[7][netDebug_NUM];
+uint32_t netDebug_DESTROYED[World::CVFractionsCount][netDebug_NUM];
 
 void netDebug_AddCreated(uint8_t owner, uint32_t id)
 {
@@ -1040,8 +1040,225 @@ static bool yw_netHasPushResistance(NC_STACK_ypaworld *yw, NC_STACK_ypabact *uni
     return protos.at(protoId).has_push_resistance;
 }
 
-size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, std::string *err)
+static bool yw_netValidateNormMsg(NC_STACK_ypaworld *yw, const void *data, size_t remaining,
+                                  size_t *messageSize, const char **validationError)
 {
+    auto fail = [validationError](const char *reason)
+    {
+        if ( validationError )
+            *validationError = reason;
+        return false;
+    };
+
+    if ( !yw || !yw->_GameShell || !data || remaining < sizeof(uamessage_base) )
+        return fail("truncated base header");
+
+    uamessage_base baseMsg;
+    memcpy(&baseMsg, data, sizeof(baseMsg));
+
+    if ( baseMsg.owner >= yw->_GameShell->netPlayers.size() )
+        return fail("invalid owner");
+
+    const uint8_t *bytes = static_cast<const uint8_t *>(data);
+    size_t required = 0;
+
+    switch ( baseMsg.msgID )
+    {
+    case UAMSG_LOAD:          required = sizeof(uamessage_load); break;
+    case UAMSG_NEWVHCL:       required = sizeof(uamessage_newVhcl); break;
+    case UAMSG_DESTROYVHCL:   required = sizeof(uamessage_destroyVhcl); break;
+    case UAMSG_NEWLEADER:     required = sizeof(uamessage_newLeader); break;
+    case UAMSG_NEWWEAPON:     required = sizeof(uamessage_newWeapon); break;
+    case UAMSG_SETSTATE:      required = sizeof(uamessage_setState); break;
+    case UAMSG_DEAD:          required = sizeof(uamessage_dead); break;
+    case UAMSG_VHCLENERGY:    required = sizeof(uamessage_vhclEnergy); break;
+    case UAMSG_SECTORENERGY:  required = sizeof(uamessage_sectorEnergy); break;
+    case UAMSG_STARTBUILD:    required = sizeof(uamessage_startBuild); break;
+    case UAMSG_BUILDINGVHCL:  required = sizeof(uamessage_bldVhcl); break;
+    case UAMSG_VIEWER:        required = sizeof(uamessage_viewer); break;
+    case UAMSG_SYNCGM:        required = sizeof(uamessage_syncgame); break;
+    case UAMSG_HOSTDIE:       required = sizeof(uamessage_hostDie); break;
+    case UAMSG_MESSAGE:       required = sizeof(uamessage_message); break;
+    case UAMSG_KICK:          required = sizeof(uamessage_kick); break;
+    case UAMSG_UPGRADE:       required = sizeof(uamessage_upgrade); break;
+    case UAMSG_FRACTION:      required = sizeof(uamessage_fraction); break;
+    case UAMSG_WELCOME:       required = sizeof(uamessage_welcome); break;
+    case UAMSG_READY:         required = sizeof(uamessage_ready); break;
+    case UAMSG_REQUPDATE:     required = sizeof(uamessage_requpdate); break;
+    case UAMSG_IMPULSE:       required = sizeof(uamessage_impulse); break;
+    case UAMSG_LOGMSG:        required = sizeof(uamessage_logmsg); break;
+    case UAMSG_LOBBYINIT:     required = sizeof(uamessage_lobbyInit); break;
+    case UAMSG_STARTPLASMA:   required = sizeof(uamessage_startPlasma); break;
+    case UAMSG_ENDPLASMA:     required = sizeof(uamessage_endPlasma); break;
+    case UAMSG_STARTBEAM:     required = sizeof(uamessage_startBeam); break;
+    case UAMSG_ENDBEAM:       required = sizeof(uamessage_endBeam); break;
+    case UAMSG_EXIT:          required = sizeof(uamessage_exit); break;
+    case UAMSG_SETLEVEL:      required = sizeof(uamessage_setLevel); break;
+    case UAMSG_CRC:           required = sizeof(uamessage_crc); break;
+    case UAMSG_REQPING:
+    case UAMSG_PONG:          required = sizeof(uamessage_ping); break;
+    case UAMSG_STARTPROBLEM:  required = sizeof(uamessage_startproblem); break;
+    case UAMSG_ENDPROBLEM:    required = sizeof(uamessage_endproblem); break;
+    case UAMSG_SCORE:         required = sizeof(uamessage_score); break;
+
+    case UAMSG_VHCLDATA_I:
+    case UAMSG_VHCLDATA_E:
+    {
+        const size_t headerSize = sizeof(uamessage_vhclData);
+        if ( remaining < headerSize )
+            return fail("truncated vehicle-data header");
+
+        vhcldatahdr header;
+        memcpy(&header, bytes + sizeof(uamessage_base), sizeof(header));
+
+        const size_t capacity = baseMsg.msgID == UAMSG_VHCLDATA_I
+                                ? sizeof(((uamessage_vhclDataI *)nullptr)->data) / sizeof(vhcldata)
+                                : sizeof(((uamessage_vhclDataE *)nullptr)->data) / sizeof(vhcldataE);
+        if ( header.number > capacity )
+            return fail("vehicle-data count exceeds capacity");
+
+        const size_t elementSize = baseMsg.msgID == UAMSG_VHCLDATA_I ? sizeof(vhcldata) : sizeof(vhcldataE);
+        required = headerSize + static_cast<size_t>(header.number) * elementSize;
+
+        if ( header.size != required )
+            return fail("vehicle-data size mismatch");
+        break;
+    }
+
+    case UAMSG_UPDATE:
+    {
+        const size_t capacity = sizeof(((uamessage_update *)nullptr)->data) / sizeof(vhclUpdData);
+        const size_t headerSize = sizeof(uamessage_update) - capacity * sizeof(vhclUpdData);
+        if ( remaining < headerSize )
+            return fail("truncated update header");
+
+        uint32_t declaredSize = 0;
+        uint32_t count = 0;
+        memcpy(&declaredSize, bytes + sizeof(uamessage_base), sizeof(declaredSize));
+        memcpy(&count, bytes + sizeof(uamessage_base) + sizeof(declaredSize), sizeof(count));
+
+        if ( count == 0 || count > capacity )
+            return fail("invalid update count");
+
+        required = headerSize + static_cast<size_t>(count) * sizeof(vhclUpdData);
+        if ( declaredSize != required )
+            return fail("update size mismatch");
+        if ( required > remaining )
+            return fail("truncated update payload");
+
+        const uint8_t *records = bytes + headerSize;
+        for (uint32_t i = 0; i + 1 < count; i++)
+        {
+            if ( records[static_cast<size_t>(i) * sizeof(vhclUpdData)] == 0 )
+                return fail("early update terminator");
+        }
+
+        if ( records[static_cast<size_t>(count - 1) * sizeof(vhclUpdData)] != 0 )
+            return fail("missing update terminator");
+        break;
+    }
+
+    case UAMSG_REORDER:
+    {
+        const size_t capacity = sizeof(((uamessage_reorder *)nullptr)->units) / sizeof(uint32_t);
+        const size_t headerSize = sizeof(uamessage_reorder) - capacity * sizeof(uint32_t);
+        if ( remaining < headerSize )
+            return fail("truncated reorder header");
+
+        uint32_t count = 0;
+        uint32_t declaredSize = 0;
+        memcpy(&count, bytes + sizeof(uamessage_base) + 3 * sizeof(uint32_t), sizeof(count));
+        memcpy(&declaredSize, bytes + sizeof(uamessage_base) + 4 * sizeof(uint32_t), sizeof(declaredSize));
+
+        if ( count > capacity )
+            return fail("reorder count exceeds capacity");
+
+        required = headerSize + static_cast<size_t>(count) * sizeof(uint32_t);
+        if ( declaredSize != required )
+            return fail("reorder size mismatch");
+        break;
+    }
+
+    default:
+        return fail("unknown message id");
+    }
+
+    if ( required > remaining )
+        return fail("truncated message payload");
+
+    switch ( baseMsg.msgID )
+    {
+    case UAMSG_STARTBUILD:
+    {
+        const uamessage_startBuild *buildMsg = static_cast<const uamessage_startBuild *>(data);
+        if ( buildMsg->bproto >= yw->GetBuildProtos().size() )
+            return fail("invalid building prototype");
+
+        if ( !yw->IsSector(Common::Point(buildMsg->sec_x, buildMsg->sec_y)) )
+            return fail("invalid building sector");
+        break;
+    }
+
+    case UAMSG_UPGRADE:
+    {
+        const uamessage_upgrade *upgradeMsg = static_cast<const uamessage_upgrade *>(data);
+        if ( upgradeMsg->upgradeID < 0 ||
+                (size_t)upgradeMsg->upgradeID >= yw->_techUpgrades.size() )
+            return fail("invalid upgrade id");
+        break;
+    }
+
+    case UAMSG_MESSAGE:
+        if ( !memchr(static_cast<const uamessage_message *>(data)->message, 0,
+                     sizeof(static_cast<const uamessage_message *>(data)->message)) )
+            return fail("unterminated chat message");
+        break;
+
+    case UAMSG_KICK:
+        if ( !memchr(static_cast<const uamessage_kick *>(data)->text, 0,
+                     sizeof(static_cast<const uamessage_kick *>(data)->text)) )
+            return fail("unterminated kick name");
+        break;
+
+    case UAMSG_LOAD:
+        if ( static_cast<const uamessage_load *>(data)->level >= yw->_globalMapRegions.MapRegions.size() )
+            return fail("invalid load level");
+        break;
+
+    case UAMSG_LOBBYINIT:
+    case UAMSG_SETLEVEL:
+    {
+        const uamessage_setLevel *levelMsg = static_cast<const uamessage_setLevel *>(data);
+        if ( !memchr(levelMsg->hostName, 0, sizeof(levelMsg->hostName)) )
+            return fail("unterminated host name");
+        if ( levelMsg->lvlID >= yw->_globalMapRegions.MapRegions.size() )
+            return fail("invalid network level");
+        break;
+    }
+
+    default:
+        break;
+    }
+
+    if ( messageSize )
+        *messageSize = required;
+    if ( validationError )
+        *validationError = nullptr;
+    return true;
+}
+
+size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remaining, std::string *err)
+{
+    size_t validatedSize = 0;
+    const char *validationError = nullptr;
+    if ( !yw_netValidateNormMsg(yw, msg ? msg->data : nullptr, remaining, &validatedSize, &validationError) )
+    {
+        log_netlog("Rejected malformed network message from %s: %s (remaining %zu)\n",
+                   msg ? msg->senderName.c_str() : "<unknown>",
+                   validationError ? validationError : "invalid data", remaining);
+        return 0;
+    }
+
     uamessage_base *bMsg = (uamessage_base *)msg->data;
     uint32_t msgID = bMsg->msgID;
     uint8_t owner = bMsg->owner;
@@ -1120,7 +1337,7 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, std::string *
         }
     }
 
-    size_t szmsg = 0;
+    size_t szmsg = validatedSize;
 
     switch (msgID)
     {
@@ -1487,7 +1704,6 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, std::string *
     case UAMSG_VHCLDATA_I:
     {
         uamessage_vhclData *vdMsg = (uamessage_vhclData *)msg->data;
-        szmsg = msg->_data.size();
 
         if ( yw->_GameShell->netPlayers[owner].DestroyFlags || (plr && plr->UpdateCountDown) || tv481 )
             break;
@@ -1511,7 +1727,6 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, std::string *
     case UAMSG_VHCLDATA_E:
     {
         uamessage_vhclData *vdMsg = (uamessage_vhclData *)msg->data;
-        szmsg = msg->_data.size();
 
         if ( yw->_GameShell->netPlayers[owner].DestroyFlags || (plr && plr->UpdateCountDown) || tv481 )
             break;
@@ -2426,7 +2641,8 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, std::string *
         if ( yw->_GameShell->netPlayers[owner].DestroyFlags )
         {
             log_netlog("\n+++UPD: got update from DEAD %s (%d)", msg->senderName.c_str(), yw->_timeStamp / 1000);
-            plr->UpdateCountDown = 0;
+            if ( plr )
+                plr->UpdateCountDown = 0;
         }
         else
         {
@@ -3342,15 +3558,31 @@ void yw_HandleNetMsg(NC_STACK_ypaworld *yw)
                             break;
                         }
 
-                        uint32_t msgID = ((uamessage_base *)recvMsg.data)->msgID;
+                        if ( msgSizes > recvMsg._data.size() )
+                        {
+                            log_netlog("    invalid message offset %zu beyond packet size %zu\n",
+                                       msgSizes, recvMsg._data.size());
+                            break;
+                        }
+
+                        const size_t remaining = recvMsg._data.size() - msgSizes;
+                        if ( remaining < sizeof(uamessage_base) )
+                        {
+                            log_netlog("    truncated network message header: %zu byte(s) remain\n", remaining);
+                            break;
+                        }
+
+                        uamessage_base baseHeader;
+                        memcpy(&baseHeader, recvMsg.data, sizeof(baseHeader));
+                        const uint32_t msgID = baseHeader.msgID;
                         HNDL_MSG[ msgcnt ] = msgID;
 
-                        size_t msg_size = yw_handleNormMsg(yw, &recvMsg, &err_sender);
+                        size_t msg_size = yw_handleNormMsg(yw, &recvMsg, remaining, &err_sender);
 
                         if ( !msg_size )
                         {
-                            log_netlog("    unknown message was number %d and message before was type %d\n", msgcnt, HNDL_MSG[ msgcnt - 1 ]);
-                            log_netlog("    current offset is %d, size is %d\n", msgSizes, recvMsg._data.size());
+                            log_netlog("    rejected message was number %d and message before was type %d\n", msgcnt, HNDL_MSG[ msgcnt - 1 ]);
+                            log_netlog("    current offset is %zu, size is %zu\n", msgSizes, recvMsg._data.size());
                             break;
                         }
 

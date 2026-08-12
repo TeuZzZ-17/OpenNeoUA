@@ -19,6 +19,24 @@ namespace Parsers
 NC_STACK_yparobo *SaveBact::_lastRobo = NULL;
 NC_STACK_ypabact *SaveBact::_lastCommander = NULL;
 
+static bool IsSaveWaypointField(const std::string &field)
+{
+    return !StriCmp(field, "waypoint") ||
+           !StriCmp(field, "num_wp") ||
+           !StriCmp(field, "count_wp");
+}
+
+static bool IsValidSaveWaypointState(int count, int current, int capacity)
+{
+    if ( count < 0 || count > capacity || current < 0 )
+        return false;
+
+    if ( count == 0 )
+        return current == 0;
+
+    return current < count;
+}
+
 
 bool SaveRoboParser::RoboParser(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
@@ -371,25 +389,53 @@ bool SaveBact::SaveBactParser(ScriptParser::Parser &parser, NC_STACK_ypabact *b,
     else if ( !StriCmp(p1, "waypoint") )
     {
         Stok stok(p2, " \t_\n");
-        std::string tmp;
-        if ( stok.GetNext(&tmp) )
-        {
-            int id = parser.stoi(tmp);
-            if ( stok.GetNext(&tmp) )
-            {
-                b->_waypoints[id].x = parser.stod(tmp, 0);
-                if ( stok.GetNext(&tmp) )
-                    b->_waypoints[id].z = parser.stod(tmp, 0);
-            }
-        }
+        std::string idToken;
+        std::string xToken;
+        std::string zToken;
+
+        if ( !stok.GetNext(&idToken) || !stok.GetNext(&xToken) || !stok.GetNext(&zToken) )
+            return false;
+
+        size_t parsedChars = 0;
+        int id = parser.stoi(idToken, &parsedChars);
+        const int waypointCapacity = sizeof(b->_waypoints) / sizeof(b->_waypoints[0]);
+        if ( parsedChars != idToken.size() || id < 0 || id >= waypointCapacity )
+            return false;
+
+        parsedChars = 0;
+        double x = parser.stod(xToken, &parsedChars);
+        if ( parsedChars != xToken.size() )
+            return false;
+
+        parsedChars = 0;
+        double z = parser.stod(zToken, &parsedChars);
+        if ( parsedChars != zToken.size() )
+            return false;
+
+        b->_waypoints[id].x = x;
+        b->_waypoints[id].z = z;
     }
     else if ( !StriCmp(p1, "num_wp") )
     {
-        b->_waypoints_count = parser.stoi(p2);
+        size_t parsedChars = 0;
+        int count = parser.stoi(p2, &parsedChars);
+        const int waypointCapacity = sizeof(b->_waypoints) / sizeof(b->_waypoints[0]);
+        if ( parsedChars != p2.size() ||
+                !IsValidSaveWaypointState(count, b->_current_waypoint, waypointCapacity) )
+            return false;
+
+        b->_waypoints_count = count;
     }
     else if ( !StriCmp(p1, "count_wp") )
     {
-        b->_current_waypoint = parser.stoi(p2);
+        size_t parsedChars = 0;
+        int current = parser.stoi(p2, &parsedChars);
+        const int waypointCapacity = sizeof(b->_waypoints) / sizeof(b->_waypoints[0]);
+        if ( parsedChars != p2.size() ||
+                !IsValidSaveWaypointState(b->_waypoints_count, current, waypointCapacity) )
+            return false;
+
+        b->_current_waypoint = current;
     }
     else
         return false;
@@ -432,7 +478,13 @@ int SaveRoboParser::Handle(ScriptParser::Parser &parser, const std::string &p1, 
         return ScriptParser::RESULT_SCOPE_END;
     }
 
-    if ( SaveBactParser(parser, _r, p1, p2) || RoboParser(parser, p1, p2) )
+    if ( SaveBactParser(parser, _r, p1, p2) )
+        return ScriptParser::RESULT_OK;
+
+    if ( IsSaveWaypointField(p1) )
+        return ScriptParser::RESULT_BAD_DATA;
+
+    if ( RoboParser(parser, p1, p2) )
         return ScriptParser::RESULT_OK;
 
     return ScriptParser::RESULT_UNKNOWN;
@@ -484,6 +536,9 @@ int SaveSquadParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
     if ( SaveBactParser(parser, _c, p1, p2) )
         return ScriptParser::RESULT_OK;
+
+    if ( IsSaveWaypointField(p1) )
+        return ScriptParser::RESULT_BAD_DATA;
 
     return ScriptParser::RESULT_UNKNOWN;
 }

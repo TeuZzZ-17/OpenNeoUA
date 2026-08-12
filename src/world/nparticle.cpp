@@ -8,6 +8,7 @@
 #include "spin.h"
 
 #include <cmath>
+#include <utility>
 
 namespace World
 {
@@ -44,23 +45,18 @@ void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
 
     float fsec = (float)delta * 0.001;
 
-    for(auto it = _particles.begin(); it != _particles.end();)
+    size_t survivorCount = 0;
+    for (size_t particleIndex = 0; particleIndex < _particles.size(); particleIndex++)
     {
-        Frak &f = *it;
+        Frak &f = _particles[particleIndex];
         if (!f.pParticleGen)
-        {
-            it = _particles.erase(it);
             continue;
-        }
 
         f.Age += delta;
         float scaledLifeTime = (float)f.pParticleGen->_lifeTime * f.LifetimeScale;
 
         if ((float)f.Age >= scaledLifeTime)
-        {
-            it = _particles.erase(it);
             continue;
-        }
 
         int32_t visualAge = (int32_t)((float)f.Age / f.LifetimeScale);
 
@@ -79,8 +75,12 @@ void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
 
         Render(&f, scl, rndrParams, visualAge);
 
-        it++;
+        if (survivorCount != particleIndex)
+            _particles[survivorCount] = std::move(f);
+        survivorCount++;
     }
+
+    _particles.erase(_particles.begin() + survivorCount, _particles.end());
 
     _disableAdd = false;
 }
