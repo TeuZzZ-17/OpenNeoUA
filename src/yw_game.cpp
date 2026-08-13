@@ -165,6 +165,10 @@ void sb_0x44ca90__sub2(NC_STACK_ypaworld *yw, TLevelDescription *mapp)
 
 int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, int a5)
 {
+    if ( !mapp || levelID < 0 ||
+            (size_t)levelID >= _globalMapRegions.MapRegions.size() )
+        return 0;
+
     int ok = 0;
 
     *mapp = TLevelDescription();
@@ -1644,6 +1648,15 @@ void NC_STACK_ypaworld::CellSetNewOwner(cellArea *cell, NC_STACK_ypabact *a5, in
 
             energon[nod->_owner] += nod->_energy;
         }
+
+        // Vanilla projectiles carried the attacker's faction into the hit
+        // sector.  Projectiles are now excluded from the occupant totals, so
+        // retain a minimal ownership vote from the authoritative damage source.
+        if ( a5 &&
+             a5->_owner > World::OWNER_0 &&
+             a5->_owner < World::FRACTION_MAXCOUNT &&
+             energon[a5->_owner] == 0 )
+            energon[a5->_owner] = 1;
 
         energon[0] = 0;
 

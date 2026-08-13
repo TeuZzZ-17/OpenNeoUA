@@ -267,8 +267,36 @@ Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_abo
 Common::Ini::Key IniConf::GameSprintForceUpPercent("game.sprint_force_up_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintPitchUpPercent("game.sprint_pitch_up_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
+// OpenUA custom: percentage of the unit's maximum energy spent by one normal
+// projectile firing action. Missing or invalid keeps the existing cost.
+Common::Ini::Key IniConf::GameShootingEnergyCostPercent("game.shooting_energy_cost_percent", Common::Ini::KT_WORD, std::string());
+// OpenUA custom: percentage of the unit's maximum energy spent per second while
+// a MGUN is firing. Missing or invalid keeps the existing continuous cost.
+Common::Ini::Key IniConf::GameMgunEnergyCostPercent("game.mgun_energy_cost_percent", Common::Ini::KT_WORD, std::string());
+// OpenUA custom: percentage of the unit's maximum energy consumed per second
+// while player Sprint is active. Zero keeps Sprint free.
+Common::Ini::Key IniConf::GameSprintEnergyCostPercent("game.sprint_energy_cost_percent", Common::Ini::KT_WORD, std::string("0"));
+// OpenUA custom: percentage of the unit's maximum energy spent per second while
+// a continuous laser or vertical laser is firing. Missing or invalid keeps the
+// current laser behavior, which has no shooter-side energy cost.
+Common::Ini::Key IniConf::GameLaserEnergyCostPercent("game.laser_energy_cost_percent", Common::Ini::KT_WORD, std::string());
+// OpenUA custom: application interval for continuous MGUN energy drain.
+// Zero applies the accumulated drain as soon as a whole energy unit is ready.
+Common::Ini::Key IniConf::GameMgunEnergyDrainIntervalMs("game.mgun_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
+// OpenUA custom: application interval for continuous Sprint energy drain.
+// Zero applies the accumulated drain as soon as a whole energy unit is ready.
+Common::Ini::Key IniConf::GameSprintEnergyDrainIntervalMs("game.sprint_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
+// OpenUA custom: application interval for continuous laser energy drain.
+// Zero applies the accumulated drain as soon as a whole energy unit is ready.
+Common::Ini::Key IniConf::GameLaserEnergyDrainIntervalMs("game.laser_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameTimeLine("game.timeline", Common::Ini::KT_DIGIT, (int32_t)600000);
 Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior", Common::Ini::KT_BOOL, false);
+// OpenUA custom: independent multipliers for the three Host Station resources
+// consumed by physical player relocation. These defaults preserve the current
+// hardcoded balance when the Nucleus keys are absent.
+Common::Ini::Key IniConf::GameRoboMobileMoveEnergyCostMultiplier("game.robo_mobile_move_energy_cost_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GameRoboMobileMainEnergyCostMultiplier("game.robo_mobile_main_energy_cost_multiplier", Common::Ini::KT_WORD, std::string("0.33"));
+Common::Ini::Key IniConf::GameRoboMobileBuildEnergyCostMultiplier("game.robo_mobile_build_energy_cost_multiplier", Common::Ini::KT_WORD, std::string("0.33"));
 Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::KT_BOOL, false);
 // OpenUA custom: exposes the briefing Play As selector. Disabled by default so
 // the Resistance campaign keeps its original presentation and start faction.
@@ -313,6 +341,10 @@ Common::Ini::Key IniConf::GameRoboDeathTimeScaleMaxDistance("game.robo_death_tim
 // 1.0, missing, zero, negative or malformed preserves the vanilla duration.
 // Netgames deliberately remain vanilla to avoid client-side gameplay divergence.
 Common::Ini::Key IniConf::GameDeathPlasmaDurationMult("game.death_plasma_duration_mult", Common::Ini::KT_WORD, std::string("1.0"));
+// OpenUA: single-player-only automatic attraction of recoverable death plasma
+// toward the directly controlled player. Zero or invalid values disable it.
+Common::Ini::Key IniConf::GameDeathPlasmaMagnetRadius("game.death_plasma_magnet_radius", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameDeathPlasmaMagnetSpeed("game.death_plasma_magnet_speed", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
 // OpenUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
@@ -599,8 +631,18 @@ void IniConf::Init()
         , &GameSprintForceUpPercent
         , &GameSprintPitchUpPercent
         , &GameSprintRampTime
+        , &GameShootingEnergyCostPercent
+        , &GameMgunEnergyCostPercent
+        , &GameSprintEnergyCostPercent
+        , &GameLaserEnergyCostPercent
+        , &GameMgunEnergyDrainIntervalMs
+        , &GameSprintEnergyDrainIntervalMs
+        , &GameLaserEnergyDrainIntervalMs
         , &GameTimeLine
         , &GameRoboPlayerAIBehavior
+        , &GameRoboMobileMoveEnergyCostMultiplier
+        , &GameRoboMobileMainEnergyCostMultiplier
+        , &GameRoboMobileBuildEnergyCostMultiplier
         , &GameSpectatorMode
         , &GamePlayAsOtherFactions
         , &GameWeaponWeaponCollision
@@ -620,6 +662,8 @@ void IniConf::Init()
         , &GameRoboDeathTimeScaleDuration
         , &GameRoboDeathTimeScaleMaxDistance
         , &GameDeathPlasmaDurationMult
+        , &GameDeathPlasmaMagnetRadius
+        , &GameDeathPlasmaMagnetSpeed
         , &GameWorldUiMaxDistance
         , &GameAiTargetRange
         , &GameMgunRange

@@ -19,7 +19,7 @@ constexpr int GROUND_DECAL_MAX_TRIANGLES = 128;
 constexpr int GROUND_DECAL_HARD_LIMIT = 1024;
 constexpr float GROUND_DECAL_SURFACE_BIAS = 1.5f;
 constexpr float GROUND_DECAL_MIN_NORMAL_Y = 0.05f;
-constexpr float GROUND_DECAL_TERRAIN_HEIGHT_TOLERANCE = 320.0f;
+constexpr float GROUND_DECAL_FLAT_TERRAIN_EPSILON = 2.0f;
 constexpr float GROUND_DECAL_PI2 = 6.28318530717958647692f;
 
 struct TGroundDecalClipVertex
@@ -82,6 +82,24 @@ static bool GroundDecalTerrainLocation(NC_STACK_ypaworld *world,
     return false;
 }
 
+static bool GroundDecalFlatLegoTerrain(NC_STACK_ypaworld *world,
+                                       const Common::Point &cellId,
+                                       const std::vector<vec3d> &points)
+{
+    if ( points.size() < 3 )
+        return false;
+
+    const float terrainY = world->_cells(cellId).height;
+    for (const vec3d &point : points)
+    {
+        if ( !GroundDecalFinitePoint(point) ||
+             std::fabs(point.y - terrainY) > GROUND_DECAL_FLAT_TERRAIN_EPSILON )
+            return false;
+    }
+
+    return true;
+}
+
 static bool GroundDecalCentralHitIsTerrain(NC_STACK_ypaworld *world,
                                            const ypaworld_arg136 &hit,
                                            const std::vector<vec3d> &points,
@@ -92,17 +110,13 @@ static bool GroundDecalCentralHitIsTerrain(NC_STACK_ypaworld *world,
          std::fabs(normal.y) < GROUND_DECAL_MIN_NORMAL_Y )
         return false;
 
-    if ( hit.hitCollisionType == 1 )
-    {
-        float averageY = 0.0f;
-        for (const vec3d &point : points)
-            averageY += point.y;
-        averageY /= (float)points.size();
-
-        const cellArea &cell = world->_cells(hit.hitCell);
-        if ( std::fabs(averageY - cell.height) > GROUND_DECAL_TERRAIN_HEIGHT_TOLERANCE )
-            return false;
-    }
+    // Type 1 LEGO collision skeletons contain both the sector ground and the
+    // geometry built on top of it. Only the flat base at cell.height is a
+    // valid decal surface. Terrain fillers (types 2/3/4) remain accepted so
+    // normal sector height transitions/depressions keep working.
+    if ( hit.hitCollisionType == 1 &&
+         !GroundDecalFlatLegoTerrain(world, hit.hitCell, points) )
+        return false;
 
     return true;
 }
@@ -117,17 +131,9 @@ static bool GroundDecalPolygonIsTerrain(NC_STACK_ypaworld *world,
          normal.y * centralNormal.y <= 0.0f )
         return false;
 
-    if ( location.CollisionType == 1 )
-    {
-        float averageY = 0.0f;
-        for (const vec3d &point : points)
-            averageY += point.y;
-        averageY /= (float)points.size();
-
-        const cellArea &cell = world->_cells(location.Cell);
-        if ( std::fabs(averageY - cell.height) > GROUND_DECAL_TERRAIN_HEIGHT_TOLERANCE )
-            return false;
-    }
+    if ( location.CollisionType == 1 &&
+         !GroundDecalFlatLegoTerrain(world, location.Cell, points) )
+        return false;
 
     return true;
 }

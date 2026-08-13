@@ -13,6 +13,7 @@
 
 #include <math.h>
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -32,13 +33,6 @@ static const int PLAYER_ROBO_RESOURCE_TREND_WINDOW_TIME = 500;
 static const int PLAYER_ROBO_RESOURCE_TREND_HOLD_TIME = 600;
 static const int PLAYER_ROBO_RESOURCE_TREND_THRESHOLD = 2;
 
-// Player Host Station physical relocation still pays the full vanilla beam
-// relocation cost, but the extra physical-move penalty on normal energy and
-// creation/life should be lighter. Enemy Host Stations do not use the same
-// player resource bars, so these are player-only gameplay balance multipliers.
-static const float PLAYER_ROBO_MOBILE_MAIN_ENERGY_COST_MULT = 0.33f;
-static const float PLAYER_ROBO_MOBILE_BUILD_ENERGY_COST_MULT = 0.33f;
-
 static int ScalePlayerMobileMoveSecondaryCost(int cost, float mult)
 {
     if ( cost <= 0 || mult <= 0.0f )
@@ -49,6 +43,37 @@ static int ScalePlayerMobileMoveSecondaryCost(int cost, float mult)
         scaledCost = 1;
 
     return scaledCost;
+}
+
+static float yparobo_ReadMobileEnergyCostMultiplier(Common::Ini::Key &key, float fallback)
+{
+    const std::string value = key.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return fallback;
+
+    try
+    {
+        size_t pos = 0;
+        const float parsed = std::stof(value, &pos);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             !std::isfinite(parsed) || parsed < 0.0f )
+            return fallback;
+
+        return parsed;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+int NC_STACK_yparobo::ScalePlayerMobileMoveEnergyCost(int cost)
+{
+    return ScalePlayerMobileMoveSecondaryCost(
+        cost,
+        yparobo_ReadMobileEnergyCostMultiplier(
+            System::IniConf::GameRoboMobileMoveEnergyCostMultiplier,
+            1.0f));
 }
 
 static float ScalePlayerMobileMovePitchEffect(float speedPitchScale)
@@ -520,6 +545,7 @@ void NC_STACK_yparobo::InitForce(NC_STACK_ypabact *unit)
     newUnit->_owner = _owner;
     newUnit->_commandID = unit->_commandID;
     newUnit->_host_station = this;
+    newUnit->InheritActiveDebuffFromHostStation(this);
 
     int v20 = getBACT_bactCollisions();
     newUnit->setBACT_bactCollisions(v20);
@@ -1452,11 +1478,11 @@ bool NC_STACK_yparobo::TryStartPlayerMobileMove(update_msg *arg)
     if ( !_world->IsGamePlaySector(arg->target_Sect->CellId) )
         return false;
 
-    // Use the exact same cost carried by the vanilla teleport command. The
-    // strategic UI computes this value in ypaworld_func64__sub21__sub3(), and
-    // vanilla DOACTION_10 subtracts arg->energy from _roboEnergyMove. Mobile
-    // relocation must differ only in timing, not in charged resource or cost.
-    int mobileEnergyCost = CalcPlayerMobileMoveEnergyCost(arg);
+    // Start from the exact raw cost carried by the vanilla teleport command.
+    // The strategic UI computes this value in ypaworld_func64__sub21__sub3(),
+    // while the physical move applies the configurable multiplier at runtime.
+    const int vanillaMobileEnergyCost = CalcPlayerMobileMoveEnergyCost(arg);
+    const int mobileEnergyCost = ScalePlayerMobileMoveEnergyCost(vanillaMobileEnergyCost);
 
     // The UI should already reject unaffordable Host relocation commands, but
     // keep a runtime guard here so mobile mode cannot silently fall through to
@@ -1494,13 +1520,20 @@ bool NC_STACK_yparobo::TryStartPlayerMobileMove(update_msg *arg)
     // restored.
     //
     // To make the physical relocation feel continuous and punitive instead of
-    // "free until arrival", also drain a lighter distance-scaled penalty from
-    // the main energy and creation/life batteries.  The beam battery remains
-    // the canonical vanilla relocation price and stays at 100% of the teleport
-    // cost; the two extra player-only costs are intentionally lower so moving
-    // the Host Station is strategic, not economic suicide.
-    _playerRoboAIBehaviorMainEnergyTotal = ScalePlayerMobileMoveSecondaryCost(mobileEnergyCost, PLAYER_ROBO_MOBILE_MAIN_ENERGY_COST_MULT);
-    _playerRoboAIBehaviorBuildEnergyTotal = ScalePlayerMobileMoveSecondaryCost(mobileEnergyCost, PLAYER_ROBO_MOBILE_BUILD_ENERGY_COST_MULT);
+    // "free until arrival", also drain a distance-scaled penalty from the main
+    // energy and creation/life batteries. Each resource uses its own multiplier
+    // against the same raw vanilla relocation cost. The current defaults keep
+    // the beam at 100% and the two extra player-only costs at 33%.
+    _playerRoboAIBehaviorMainEnergyTotal = ScalePlayerMobileMoveSecondaryCost(
+        vanillaMobileEnergyCost,
+        yparobo_ReadMobileEnergyCostMultiplier(
+            System::IniConf::GameRoboMobileMainEnergyCostMultiplier,
+            0.33f));
+    _playerRoboAIBehaviorBuildEnergyTotal = ScalePlayerMobileMoveSecondaryCost(
+        vanillaMobileEnergyCost,
+        yparobo_ReadMobileEnergyCostMultiplier(
+            System::IniConf::GameRoboMobileBuildEnergyCostMultiplier,
+            0.33f));
     _playerRoboAIBehaviorMoveEnergyTotal = mobileEnergyCost;
 
     _playerRoboAIBehaviorMainEnergyRemaining = (float)_playerRoboAIBehaviorMainEnergyTotal;
@@ -2101,6 +2134,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
                 newbact->setBACT_bactCollisions(v67);
 
                 newbact->_host_station = this;
+                newbact->InheritActiveDebuffFromHostStation(this);
                 _roboEnergyLife -= arg->energy;
 
                 _world->SetCmdrIdToSelect(newbact->_commandID); // Select it for add next units
@@ -2153,6 +2187,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
                 newbact2->setBACT_bactCollisions(v67);
 
                 newbact2->_host_station = this;
+                newbact2->InheritActiveDebuffFromHostStation(this);
                 _roboEnergyLife -= arg->energy;
 
                 _world->HistoryAktCreate(newbact2);
@@ -3250,6 +3285,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
 
         newUnit->_owner = _owner;
         newUnit->_host_station = this;
+        newUnit->InheritActiveDebuffFromHostStation(this);
 
         int v69 = getBACT_bactCollisions();
         newUnit->setBACT_bactCollisions(v69);
@@ -5728,7 +5764,11 @@ void NC_STACK_yparobo::Die()
 
             unit->Die();
 
-            unit->_status_flg &= ~BACT_STFLAG_LAND;
+            // The cascade reuses the genesis VP before the normal dead-time
+            // phase. Landed vehicles may already have entered DEATH2 in Die();
+            // clear that phase together with LAND so DeadTimeUpdate can enter
+            // DEATH2 once, stop the godown loop and replace the genesis VP.
+            unit->_status_flg &= ~(BACT_STFLAG_LAND | BACT_STFLAG_DEATH2);
 
             setState_msg arg119;
             arg119.unsetFlags = 0;
@@ -5855,8 +5895,9 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
         _world->ypaworld_func176(&arg176);
 
         float v64 = _pSector->energy_power;
+        const float powerStationEnergyMultiplier = ReadPowerStationEnergyMultiplier();
 
-        float v70 = v65 * v63 * v64 * arg176.field_4;
+        float v70 = powerStationEnergyMultiplier * v65 * v63 * v64 * arg176.field_4;
 
         if ( IsPlayerRobo() )
         {
@@ -5900,7 +5941,7 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
             if ( playerFillMode & 8 )
                 v67++;
 
-            _roboEnergyReloadPS = v65 * v64 / 6000.0;
+            _roboEnergyReloadPS = powerStationEnergyMultiplier * v65 * v64 / 6000.0;
 
             if ( v67 > 0 )
             {
@@ -6015,7 +6056,7 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
         }
         else
         {
-            _roboEnergyReloadPS = v65 * v64 / 7000.0;
+            _roboEnergyReloadPS = powerStationEnergyMultiplier * v65 * v64 / 7000.0;
             float v71 = v70 / 7000.0;
             if ( _owner == _pSector->owner )
             {
@@ -6196,6 +6237,7 @@ void NC_STACK_yparobo::DeadTimeUpdate(update_msg *arg)
 
     if ( _vp_extra[0].flags & EVPROTO_FLAG_ACTIVE )
     {
+        UpdateDeathPlasmaMagnet(arg->frameTime);
         _scale_time -= arg->frameTime;
 
         if ( _scale_time <= 0 )
@@ -6461,6 +6503,7 @@ bool NC_STACK_yparobo::MakeSquad(const std::vector<int> &VhclIDS, vec3d pos, boo
     squad_commander->_owner = _owner;
     squad_commander->_commandID = dword_5B1128;
     squad_commander->_host_station = this;
+    squad_commander->InheritActiveDebuffFromHostStation(this);
     squad_commander->_aggr = 60;
 
     setState_msg arg78;
@@ -6503,6 +6546,7 @@ bool NC_STACK_yparobo::MakeSquad(const std::vector<int> &VhclIDS, vec3d pos, boo
         next_bact->_owner = _owner;
         next_bact->_commandID = dword_5B1128;
         next_bact->_host_station = this;
+        next_bact->InheritActiveDebuffFromHostStation(this);
         next_bact->_aggr = 60;
 
         next_bact->SetState(&arg78);

@@ -231,8 +231,18 @@ public:
     static Common::Ini::Key GameSprintForceUpPercent;
     static Common::Ini::Key GameSprintPitchUpPercent;
     static Common::Ini::Key GameSprintRampTime;
+    static Common::Ini::Key GameShootingEnergyCostPercent;
+    static Common::Ini::Key GameMgunEnergyCostPercent;
+    static Common::Ini::Key GameSprintEnergyCostPercent;
+    static Common::Ini::Key GameLaserEnergyCostPercent;
+    static Common::Ini::Key GameMgunEnergyDrainIntervalMs;
+    static Common::Ini::Key GameSprintEnergyDrainIntervalMs;
+    static Common::Ini::Key GameLaserEnergyDrainIntervalMs;
     static Common::Ini::Key GameTimeLine;
     static Common::Ini::Key GameRoboPlayerAIBehavior;
+    static Common::Ini::Key GameRoboMobileMoveEnergyCostMultiplier;
+    static Common::Ini::Key GameRoboMobileMainEnergyCostMultiplier;
+    static Common::Ini::Key GameRoboMobileBuildEnergyCostMultiplier;
     static Common::Ini::Key GameSpectatorMode;
     static Common::Ini::Key GamePlayAsOtherFactions;
     static Common::Ini::Key GameWeaponWeaponCollision;
@@ -252,6 +262,8 @@ public:
     static Common::Ini::Key GameRoboDeathTimeScaleDuration;
     static Common::Ini::Key GameRoboDeathTimeScaleMaxDistance;
     static Common::Ini::Key GameDeathPlasmaDurationMult;
+    static Common::Ini::Key GameDeathPlasmaMagnetRadius;
+    static Common::Ini::Key GameDeathPlasmaMagnetSpeed;
     static Common::Ini::Key GameWorldUiMaxDistance;
     static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;

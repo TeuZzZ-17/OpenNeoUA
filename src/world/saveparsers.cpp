@@ -19,11 +19,18 @@ namespace Parsers
 NC_STACK_yparobo *SaveBact::_lastRobo = NULL;
 NC_STACK_ypabact *SaveBact::_lastCommander = NULL;
 
-static bool IsSaveWaypointField(const std::string &field)
+void SaveBact::ResetHierarchyState()
+{
+    _lastRobo = NULL;
+    _lastCommander = NULL;
+}
+
+static bool IsStrictSaveBactField(const std::string &field)
 {
     return !StriCmp(field, "waypoint") ||
            !StriCmp(field, "num_wp") ||
-           !StriCmp(field, "count_wp");
+           !StriCmp(field, "count_wp") ||
+           !StriCmp(field, "gunbasis");
 }
 
 static bool IsValidSaveWaypointState(int count, int current, int capacity)
@@ -372,6 +379,8 @@ bool SaveBact::SaveBactParser(ScriptParser::Parser &parser, NC_STACK_ypabact *b,
     else if ( !StriCmp(p1, "gunbasis") )
     {
         NC_STACK_ypagun *guno = dynamic_cast<NC_STACK_ypagun *>(b);
+        if ( !guno )
+            return false;
 
         Stok stok(p2, " \t_\n");
         std::string tmp;
@@ -449,6 +458,10 @@ bool SaveRoboParser::IsScope(ScriptParser::Parser &parser, const std::string &wo
     if ( StriCmp(word, "begin_robo") )
         return false;
 
+    _r = NULL;
+    _lastRobo = NULL;
+    _lastCommander = NULL;
+
     ypaworld_arg146 v5;
     v5.pos.x = 600;
     v5.pos.z = -600.0;
@@ -461,6 +474,7 @@ bool SaveRoboParser::IsScope(ScriptParser::Parser &parser, const std::string &wo
         return false;
 
     _lastRobo = _r;
+    _lastCommander = NULL;
 
     _o.ypaworld_func134(_r);
 
@@ -481,7 +495,7 @@ int SaveRoboParser::Handle(ScriptParser::Parser &parser, const std::string &p1, 
     if ( SaveBactParser(parser, _r, p1, p2) )
         return ScriptParser::RESULT_OK;
 
-    if ( IsSaveWaypointField(p1) )
+    if ( IsStrictSaveBactField(p1) )
         return ScriptParser::RESULT_BAD_DATA;
 
     if ( RoboParser(parser, p1, p2) )
@@ -494,6 +508,15 @@ bool SaveSquadParser::IsScope(ScriptParser::Parser &parser, const std::string &w
 {
     if ( !StriCmp(word, "begin_commander") )
     {
+        _c = NULL;
+        _lastCommander = NULL;
+
+        if ( !_lastRobo )
+        {
+            _invalidHierarchy = true;
+            return true;
+        }
+
         ypaworld_arg146 v5;
         v5.pos.x = 600.0;
         v5.pos.z = -600.0;
@@ -510,6 +533,14 @@ bool SaveSquadParser::IsScope(ScriptParser::Parser &parser, const std::string &w
     }
     else if ( !StriCmp(word, "begin_slave") )
     {
+        _c = NULL;
+
+        if ( !_lastCommander )
+        {
+            _invalidHierarchy = true;
+            return true;
+        }
+
         ypaworld_arg146 v5;
         v5.pos.x = 600.0;
         v5.pos.z = -600.0;
@@ -531,13 +562,16 @@ bool SaveSquadParser::IsScope(ScriptParser::Parser &parser, const std::string &w
 
 int SaveSquadParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( _invalidHierarchy || !_c )
+        return ScriptParser::RESULT_BAD_DATA;
+
     if ( !StriCmp(p1, "end") )
         return ScriptParser::RESULT_SCOPE_END;
 
     if ( SaveBactParser(parser, _c, p1, p2) )
         return ScriptParser::RESULT_OK;
 
-    if ( IsSaveWaypointField(p1) )
+    if ( IsStrictSaveBactField(p1) )
         return ScriptParser::RESULT_BAD_DATA;
 
     return ScriptParser::RESULT_UNKNOWN;

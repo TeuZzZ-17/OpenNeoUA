@@ -44,6 +44,27 @@ struct TVisualTint
     }
 };
 
+// OpenUA custom: visual-only ribbon trail attached to a real weapon projectile.
+// The runtime samples the projectile's actual path, so homing, gravity and
+// ballistic curves remain authoritative and the normal weapon VP stays visible.
+struct TWeaponTracerConfig
+{
+    bool enabled = false;
+    TVisualTint tint;
+    float length = 300.0f;
+    float width = 3.0f;
+    int duration = 80;
+    vec3d offset = vec3d(0.0, 0.0, 0.0);
+
+    TWeaponTracerConfig()
+    {
+        tint.r = 1.0f;
+        tint.g = 210.0f / 255.0f;
+        tint.b = 80.0f / 255.0f;
+        tint.a = 180.0f / 255.0f;
+    }
+};
+
 struct TDecorationFXConfig
 {
     uint8_t mode = DECORATION_FX_PERIODIC;
@@ -238,6 +259,7 @@ struct TWeaponDebuffConfig
 {
     bool allow = false;
     bool allow_host_station = false;
+    bool inherit_to_children = false;
     std::string name;
     std::string icon;
     int damage = 0;
@@ -465,8 +487,9 @@ struct TVhclProto
         SND_BUILD   = 11,
         SND_AIREXPLODE = 12,
         SND_HANDBRAKE = 13,
+        SND_PICKUP = 14,
 
-        SND_MAX     = 14
+        SND_MAX     = 15
     };
 
     inline static bool IsLoopingSnd(int i)
@@ -616,13 +639,8 @@ struct TVhclProto
     float overeof = 0.0;
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
-    bool cockpit_camera_enable = false;    // OpenUA custom: optional per-vehicle cockpit/player camera offset
+    // OpenUA modern cockpit camera: per-vehicle offset only. Missing axes remain 0.
     vec3d cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
-    bool mgun_pov_fx_enable = false;
-    int16_t mgun_pov_fx_vp = -1;
-    float mgun_pov_fx_scale = 1.0;
-    vec3d mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
-    vec3d mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
     float gun_angle = 0.0;
     float fire_x = 0.0;
     float fire_y = 0.0;
@@ -763,6 +781,12 @@ struct TWeapProto
                !IsLaser() && !IsVerticalLaser();
     }
 
+    bool SupportsProjectileTracer() const
+    {
+        return (_weaponFlags & WEAPON_FLAG_PROJECTILE) != 0 &&
+               !IsLaser() && !IsVerticalLaser();
+    }
+
     bool IsBombLike() const
     {
         return _weaponFlags == WEAPON_FLAGS_BOMB || IsHomingBomb() || IsVerticalLaser();
@@ -800,6 +824,7 @@ struct TWeapProto
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint vp_trail_tint; // OpenUA custom: weapon embedded particle/trail tint
     TVisualTint wireframe_tint; // OpenUA custom: UI wireframe-only RGBA tint multiplier
+    TWeaponTracerConfig tracer; // OpenUA custom: additional procedural projectile tracer
     std::vector<DestFX> dfx;
     std::vector<DestFX> ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFXes;
