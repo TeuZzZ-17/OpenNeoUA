@@ -528,7 +528,8 @@ struct TVhclProto
     int16_t num_mguns = 1;
     int mgun_shot_time = 0;
     int mgun_shot_time_user = 0;
-    float mgun_recoil_visual_intensity = 0.0f;
+    float mgun_recoil = 0.0f;
+    TWeaponTracerConfig mgun_tracer; // OpenUA: tracer_* for model = gun + gun_type = mg only
     bool mgun_decal_enable = false;
     TChainFXConfig mgun_decal;
     int16_t mgun_vp_dead = 0;

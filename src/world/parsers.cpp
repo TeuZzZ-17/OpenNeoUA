@@ -2541,14 +2541,50 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun_shot_time_user = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "mgun_recoil_visual_intensity") )
+    else if ( !StriCmp(p1, "mgun_recoil") )
     {
         float intensity = parser.stof(p2, 0);
         if ( !std::isfinite(intensity) || intensity < 0.0f )
             intensity = 0.0f;
         else if ( intensity > 10.0f )
             intensity = 10.0f;
-        _vhcl->mgun_recoil_visual_intensity = intensity;
+        _vhcl->mgun_recoil = intensity;
+    }
+    else if ( !StriCmp(p1, "tracer_enable") )
+    {
+        // Vehicle-side tracer parameters are consumed only by gun_type = mg.
+        _vhcl->mgun_tracer.enabled = p2 == "1";
+    }
+    else if ( ParseTintParam(parser, "tracer_tint", p1, p2,
+                             _vhcl->mgun_tracer.tint, true) )
+    {
+    }
+    else if ( !StriCmp(p1, "tracer_length") )
+    {
+        _vhcl->mgun_tracer.length = ParseBoundedPositiveFiniteOrZero(
+            parser, p2, 6000.0f);
+    }
+    else if ( !StriCmp(p1, "tracer_width") )
+    {
+        _vhcl->mgun_tracer.width = ParseBoundedPositiveFiniteOrZero(
+            parser, p2, 100.0f);
+    }
+    else if ( ParseBoundedIntegerParam("tracer_duration", p1, p2,
+                                       0, 5000, 0,
+                                       _vhcl->mgun_tracer.duration) )
+    {
+    }
+    else if ( !StriCmp(p1, "tracer_offset_x") )
+    {
+        _vhcl->mgun_tracer.offset.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+    }
+    else if ( !StriCmp(p1, "tracer_offset_y") )
+    {
+        _vhcl->mgun_tracer.offset.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+    }
+    else if ( !StriCmp(p1, "tracer_offset_z") )
+    {
+        _vhcl->mgun_tracer.offset.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
     }
     else if ( !StriCmp(p1, "mgun_decal_enable") )
     {
@@ -3315,7 +3351,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->num_mguns = 1;
         _vhcl->mgun_shot_time = 0;
         _vhcl->mgun_shot_time_user = 0;
-        _vhcl->mgun_recoil_visual_intensity = 0.0f;
+        _vhcl->mgun_recoil = 0.0f;
+        _vhcl->mgun_tracer = TWeaponTracerConfig();
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
         _vhcl->mgun_decal.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
