@@ -6,6 +6,8 @@
 namespace
 {
 
+const size_t MGUN_TRACER_LIMIT = 512;
+
 static bool WeaponTracerFinite(const vec3d &value)
 {
     return std::isfinite(value.x) && std::isfinite(value.y) &&
@@ -97,6 +99,74 @@ static mat3x3 WeaponTracerRotationFromDir(const vec3d &direction)
     return rotation;
 }
 
+}
+
+bool NC_STACK_ypaworld::SpawnMinigunTracer(
+    const vec3d &origin, const vec3d &direction, float availableDistance,
+    const World::TWeaponTracerConfig &config)
+{
+    if ( _isNetGame || !config.enabled || !WeaponTracerFinite(origin) ||
+         !WeaponTracerFinite(direction) ||
+         !std::isfinite(availableDistance) || availableDistance <= 0.01f ||
+         !std::isfinite(config.length) || config.length <= 0.01f ||
+         !std::isfinite(config.width) || config.width <= 0.01f ||
+         config.duration <= 0 || !WeaponTracerFinite(config.tint) ||
+         config.tint.a <= 0.0f )
+        return false;
+
+    vec3d rayDirection = direction;
+    if ( rayDirection.normalise() <= 0.001f )
+        return false;
+
+    CleanupExpiredMinigunTracers();
+
+    if ( _mgunTracers.size() >= MGUN_TRACER_LIMIT )
+        _mgunTracers.erase(_mgunTracers.begin());
+
+    TMinigunTracer tracer;
+    tracer.start = origin;
+    tracer.end = origin + rayDirection *
+                 std::min(config.length, availableDistance);
+    tracer.startTime = _timeStamp;
+    tracer.config = config;
+    tracer.config.tint.Clamp();
+    _mgunTracers.push_back(tracer);
+    return true;
+}
+
+void NC_STACK_ypaworld::CleanupExpiredMinigunTracers()
+{
+    _mgunTracers.erase(
+        std::remove_if(_mgunTracers.begin(), _mgunTracers.end(),
+                       [this](const TMinigunTracer &tracer)
+                       {
+                           const int32_t age = _timeStamp - tracer.startTime;
+                           return age < 0 || age >= tracer.config.duration;
+                       }),
+        _mgunTracers.end());
+}
+
+void NC_STACK_ypaworld::RenderMinigunTracers(baseRender_msg *arg)
+{
+    if ( !arg || _isNetGame || _mgunTracers.empty() )
+        return;
+
+    CleanupExpiredMinigunTracers();
+
+    for (const TMinigunTracer &tracer : _mgunTracers)
+    {
+        const int32_t age = std::max(0, _timeStamp - tracer.startTime);
+        const float fade = 1.0f -
+            (float)age / (float)tracer.config.duration;
+        RenderWeaponTracerSegment(arg, tracer.start, tracer.end,
+                                  tracer.config.width,
+                                  tracer.config.tint, fade);
+    }
+}
+
+void NC_STACK_ypaworld::ClearMinigunTracers()
+{
+    _mgunTracers.clear();
 }
 
 void NC_STACK_ypaworld::RenderWeaponTracerSegment(
