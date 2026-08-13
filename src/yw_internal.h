@@ -120,9 +120,10 @@ class squadMan: public GuiList
 {
 public:
     std::array<NC_STACK_ypabact *, 24> squads;
-    // Display-only mapping back to _cmdrsRemap. -1 is the Host Station and
-    // -2 is an empty row. The Host Station stays first while the controlled
-    // vehicle's squad is promoted to the first squad row immediately below it.
+    // Display-only mapping back to _cmdrsRemap. -1 is the Host Station, -2 an
+    // empty row and -3 a display-only controlled unit that is not represented
+    // in _cmdrsRemap (notably a directly controlled gun/flak). The Host Station
+    // stays first; the priority unit/squad is shown immediately below it.
     std::array<int, 24> squadRemapIndices;
     uint32_t prioritizedCommandID = 0;
     int field_2A8;

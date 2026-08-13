@@ -3743,7 +3743,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
         bacto->_mgun_shot_time_user = vhcl.mgun_shot_time_user;
         bacto->_mgun_recoil_visual_intensity = vhcl.mgun_recoil_visual_intensity;
-        bacto->_mgun_recoil_visual_frequency = vhcl.mgun_recoil_visual_frequency;
         bacto->_mgun_decal_enable = vhcl.mgun_decal_enable;
         bacto->_mgun_decal = vhcl.mgun_decal;
         bacto->_mgun_vp_dead = vhcl.mgun_vp_dead;
