@@ -56,7 +56,49 @@ static bool GroundDecalTerrainCell(NC_STACK_ypaworld *world,
         return false;
 
     const cellArea &cell = world->_cells(cellId);
-    return cell.PurposeType == cellArea::PT_NONE;
+
+    // Static building/special sectors still render their terrain through the
+    // normal LEGO surface. Ground decals may therefore cross or start inside
+    // them. Construction is intentionally excluded because its visible model
+    // is vertically animated and can diverge from the collision surface while
+    // the building is being raised.
+    switch ( cell.PurposeType )
+    {
+        case cellArea::PT_NONE:
+        case cellArea::PT_POWERSTATION:
+        case cellArea::PT_BUILDINGS:
+        case cellArea::PT_TECHUPGRADE:
+        case cellArea::PT_GATECLOSED:
+        case cellArea::PT_GATEOPENED:
+        case cellArea::PT_TECHDEACTIVE:
+        case cellArea::PT_STOUDSON:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static bool GroundDecalSpecialTerrainCell(NC_STACK_ypaworld *world,
+                                          const Common::Point &cellId)
+{
+    if ( !world->IsGamePlaySector(cellId) )
+        return false;
+
+    switch ( world->_cells(cellId).PurposeType )
+    {
+        case cellArea::PT_POWERSTATION:
+        case cellArea::PT_BUILDINGS:
+        case cellArea::PT_TECHUPGRADE:
+        case cellArea::PT_GATECLOSED:
+        case cellArea::PT_GATEOPENED:
+        case cellArea::PT_TECHDEACTIVE:
+        case cellArea::PT_STOUDSON:
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 static bool GroundDecalTerrainLocation(NC_STACK_ypaworld *world,
@@ -574,6 +616,108 @@ static bool GroundDecalAppendPolygon(const std::vector<vec3d> &points,
     return appended;
 }
 
+static bool GroundDecalTerrainLocationTouchesSpecial(
+    NC_STACK_ypaworld *world,
+    const Common::Point &cellId,
+    int collisionType)
+{
+    if ( GroundDecalSpecialTerrainCell(world, cellId) )
+        return true;
+
+    if ( collisionType == 2 )
+        return GroundDecalSpecialTerrainCell(world, cellId + Common::Point(-1, 0));
+    if ( collisionType == 3 )
+        return GroundDecalSpecialTerrainCell(world, cellId + Common::Point(0, -1));
+    if ( collisionType == 4 )
+    {
+        return GroundDecalSpecialTerrainCell(world, cellId + Common::Point(-1, 0)) ||
+               GroundDecalSpecialTerrainCell(world, cellId + Common::Point(0, -1)) ||
+               GroundDecalSpecialTerrainCell(world, cellId + Common::Point(-1, -1));
+    }
+
+    return false;
+}
+
+static float GroundDecalTriangleSide(float px, float py,
+                                     const tUtV &a, const tUtV &b)
+{
+    return (px - b.tu) * (a.tv - b.tv) -
+           (a.tu - b.tu) * (py - b.tv);
+}
+
+static bool GroundDecalPointInTriangle(float u, float v,
+                                       const tUtV &a,
+                                       const tUtV &b,
+                                       const tUtV &c)
+{
+    constexpr float epsilon = 0.00001f;
+    const float side0 = GroundDecalTriangleSide(u, v, a, b);
+    const float side1 = GroundDecalTriangleSide(u, v, b, c);
+    const float side2 = GroundDecalTriangleSide(u, v, c, a);
+    const bool hasNegative = side0 < -epsilon || side1 < -epsilon || side2 < -epsilon;
+    const bool hasPositive = side0 > epsilon || side1 > epsilon || side2 > epsilon;
+    return !(hasNegative && hasPositive);
+}
+
+static bool GroundDecalHasSufficientCoverage(
+    const std::vector<TGroundDecalShapePoint> &shape,
+    float edgeSoftness,
+    const std::vector<GFX::TVertex> &vertices,
+    const std::vector<GFX::IndexType> &indices)
+{
+    // This guard is used only when the footprint touches a static building or
+    // special sector. The collision mesh contains small legitimate seams, so
+    // requiring literal 100% sample coverage rejects otherwise valid decals.
+    // Accept tiny gaps but reject a genuinely chopped footprint.
+    constexpr int samples = 24;
+    constexpr float minimumAlpha = 0.15f;
+    constexpr float minimumCoverage = 0.90f;
+    int tested = 0;
+    int coveredSamples = 0;
+
+    if ( vertices.empty() || indices.size() < 3 || indices.size() % 3 != 0 )
+        return false;
+
+    for (int y = 0; y < samples; ++y)
+    {
+        const float v = ((float)y + 0.5f) / (float)samples;
+        for (int x = 0; x < samples; ++x)
+        {
+            const float u = ((float)x + 0.5f) / (float)samples;
+            if ( GroundDecalProceduralAlpha(shape, u, v, edgeSoftness) < minimumAlpha )
+                continue;
+
+            ++tested;
+            bool covered = false;
+            for (size_t i = 0; i + 2 < indices.size(); i += 3)
+            {
+                const GFX::IndexType ia = indices[i];
+                const GFX::IndexType ib = indices[i + 1];
+                const GFX::IndexType ic = indices[i + 2];
+                if ( ia >= vertices.size() || ib >= vertices.size() || ic >= vertices.size() )
+                    return false;
+
+                if ( GroundDecalPointInTriangle(u, v,
+                                                vertices[ia].TexCoord,
+                                                vertices[ib].TexCoord,
+                                                vertices[ic].TexCoord) )
+                {
+                    covered = true;
+                    break;
+                }
+            }
+
+            if ( covered )
+                ++coveredSamples;
+        }
+    }
+
+    if ( tested <= 0 )
+        return false;
+
+    return (float)coveredSamples / (float)tested >= minimumCoverage;
+}
+
 static int GroundDecalMicroX(float worldX)
 {
     return (int)((worldX + 150.0f) / 300.0f);
@@ -639,6 +783,7 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
     const float cosine = std::cos(angle);
     const float sine = std::sin(angle);
     bool limitExceeded = false;
+    bool needsCoverageGuard = GroundDecalSpecialTerrainCell(world, hit.hitCell);
 
     GroundDecalAppendPolygon(centralPoints, centralNormal, hit.isectPos, size,
                              cosine, sine, shape, edgeSoftness, maxTriangles,
@@ -687,6 +832,10 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
             if ( !location.CollisionType || !location.sklt ||
                  !GroundDecalTerrainLocation(world, location.Cell, location.CollisionType) )
                 continue;
+
+            if ( GroundDecalTerrainLocationTouchesSpecial(world, location.Cell,
+                                                          location.CollisionType) )
+                needsCoverageGuard = true;
 
             TLocationKey key(location.CollisionType,
                              (int)std::lround(location.pos.x),
@@ -760,7 +909,14 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
         }
     }
 
-    return !indices->empty();
+    if ( indices->empty() )
+        return false;
+
+    if ( !needsCoverageGuard )
+        return true;
+
+    return GroundDecalHasSufficientCoverage(shape, edgeSoftness,
+                                            *vertices, *indices);
 }
 
 static NC_STACK_bitmap *GroundDecalTexture(NC_STACK_ypaworld *world,
