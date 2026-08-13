@@ -120,7 +120,6 @@ struct TChainFXConfig
     std::string ground_decal_texture;
     int ground_decal_points = 12;
     float ground_decal_jaggedness = 0.35f;
-    float ground_decal_edge_softness = 0.25f;
     float ground_decal_size = 0.0f;
     TVisualTint ground_decal_tint;
     bool ground_decal_random_rotation = false;
@@ -508,6 +507,8 @@ struct TVhclProto
     int mgun_shot_time_user = 0;
     float mgun_recoil_visual_intensity = 0.0f;
     int mgun_recoil_visual_frequency = 0;
+    bool mgun_decal_enable = false;
+    TChainFXConfig mgun_decal;
     int16_t mgun_vp_dead = 0;
     int16_t mgun_vp_megadeth = 0;
     float mgun_power = 0.0;

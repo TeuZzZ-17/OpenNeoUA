@@ -1357,7 +1357,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     std::string groundDecalTexture;
     int groundDecalPoints = 12;
     int groundDecalJaggedness = 35;
-    int groundDecalEdgeSoftness = 25;
     float groundDecalSize = 0.0f;
     TVisualTint groundDecalTint;
     bool groundDecalRandomRotation = false;
@@ -1461,7 +1460,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.ground_decal_texture = groundDecalTexture;
                     chain.ground_decal_points = groundDecalPoints;
                     chain.ground_decal_jaggedness = (float)groundDecalJaggedness / 100.0f;
-                    chain.ground_decal_edge_softness = (float)groundDecalEdgeSoftness / 100.0f;
                     chain.ground_decal_size = groundDecalSize;
                     chain.ground_decal_tint = groundDecalTint;
                     chain.ground_decal_random_rotation = groundDecalRandomRotation;
@@ -1583,10 +1581,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( ParseBoundedIntegerParam("ground_decal_jaggedness", p1, p2,
                                            0, 100, 35, groundDecalJaggedness) )
-        {
-        }
-        else if ( ParseBoundedIntegerParam("ground_decal_edge_softness", p1, p2,
-                                           0, 100, 25, groundDecalEdgeSoftness) )
         {
         }
         else if ( !StriCmp(p1, "ground_decal_size") )
@@ -2538,6 +2532,46 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             frequency = 10000;
         _vhcl->mgun_recoil_visual_frequency = frequency > 0 ? frequency : 0;
     }
+    else if ( !StriCmp(p1, "mgun_decal_enable") )
+    {
+        size_t parsed = 0;
+        const long enabled = parser.stol(p2, &parsed, 0);
+        _vhcl->mgun_decal_enable = parsed == p2.size() && enabled == 1;
+        _vhcl->mgun_decal.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
+        _vhcl->mgun_decal.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
+    }
+    else if ( !StriCmp(p1, "mgun_decal_texture") )
+        _vhcl->mgun_decal.ground_decal_texture = p2;
+    else if ( ParseBoundedIntegerParam("mgun_decal_points", p1, p2,
+                                       3, 32, 12, _vhcl->mgun_decal.ground_decal_points) )
+    {
+    }
+    else if ( !StriCmp(p1, "mgun_decal_jaggedness") )
+    {
+        int jaggedness = 35;
+        ParseBoundedIntegerParam("mgun_decal_jaggedness", p1, p2,
+                                 0, 100, 35, jaggedness);
+        _vhcl->mgun_decal.ground_decal_jaggedness = (float)jaggedness / 100.0f;
+    }
+    else if ( !StriCmp(p1, "mgun_decal_size") )
+    {
+        size_t parsed = 0;
+        const float size = parser.stof(p2, &parsed);
+        _vhcl->mgun_decal.ground_decal_size =
+            parsed == p2.size() && std::isfinite(size) && size > 0.0f ? size : 0.0f;
+    }
+    else if ( ParseTintParam(parser, "mgun_decal_tint", p1, p2,
+                             _vhcl->mgun_decal.ground_decal_tint, true) )
+    {
+    }
+    else if ( !StriCmp(p1, "mgun_decal_random_rotation") )
+        _vhcl->mgun_decal.ground_decal_random_rotation = p2 == "1";
+    else if ( !StriCmp(p1, "mgun_decal_duration") )
+        _vhcl->mgun_decal.duration = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "mgun_decal_fade_in") )
+        _vhcl->mgun_decal.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "mgun_decal_fade_out") )
+        _vhcl->mgun_decal.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "mgun_vp_dead") )
     {
         _vhcl->mgun_vp_dead = parser.stol(p2, NULL, 0);
@@ -3307,6 +3341,10 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_shot_time_user = 0;
         _vhcl->mgun_recoil_visual_intensity = 0.0f;
         _vhcl->mgun_recoil_visual_frequency = 0;
+        _vhcl->mgun_decal_enable = false;
+        _vhcl->mgun_decal = World::TChainFXConfig();
+        _vhcl->mgun_decal.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
+        _vhcl->mgun_decal.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
         _vhcl->mgun_vp_dead = 0;
         _vhcl->mgun_vp_megadeth = 0;
         _vhcl->mgun_power = 0.0;
