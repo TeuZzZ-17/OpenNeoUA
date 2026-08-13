@@ -8269,6 +8269,21 @@ void ypaworld_func64__sub7__sub3__sub0(NC_STACK_ypaworld *yw, TInputState *inpt)
     FontUA::set_end(&squadron_manager.itemBlock);
 }
 
+static int yw_FindActiveSquadRemapIndex(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || yw->_activeCmdrID == 0 )
+        return -1;
+
+    for ( size_t i = 0; i < yw->_cmdrsRemap.size(); i++ )
+    {
+        NC_STACK_ypabact *commander = yw->_cmdrsRemap[i];
+        if ( commander && commander->_commandID == yw->_activeCmdrID )
+            return (int)i;
+    }
+
+    return -1;
+}
+
 static int yw_FindControlledSquadRemapIndex(NC_STACK_ypaworld *yw)
 {
     if ( !yw || !yw->_userUnit || !yw->_userRobo
@@ -8298,15 +8313,41 @@ static int yw_FindControlledSquadRemapIndex(NC_STACK_ypaworld *yw)
     return -1;
 }
 
+static bool yw_ShouldShowControlledUnitAsPriorityRow(NC_STACK_ypaworld *yw,
+                                                      int controlledRemapIndex)
+{
+    if ( !yw || !yw->_userUnit || !yw->_userRobo
+            || yw->_userUnit == yw->_userRobo
+            || controlledRemapIndex >= 0 )
+        return false;
+
+    NC_STACK_ypabact *unit = yw->_userUnit;
+    return unit->IsParentMyRobo()
+        && unit->_status != BACT_STATUS_DEAD
+        && unit->_status != BACT_STATUS_CREATE
+        && unit->_status != BACT_STATUS_BEAM
+        && !unit->ShouldHideFromStrategicUI();
+}
+
 void sub_4C707C(NC_STACK_ypaworld *yw)
 {
     squadron_manager.squads.fill(NULL);
     squadron_manager.squadRemapIndices.fill(-2);
 
-    const int prioritizedRemapIndex = yw_FindControlledSquadRemapIndex(yw);
-    const uint32_t prioritizedCommandID = prioritizedRemapIndex >= 0
-        ? yw->_cmdrsRemap[prioritizedRemapIndex]->_commandID
-        : 0;
+    const int controlledRemapIndex = yw_FindControlledSquadRemapIndex(yw);
+    const int activeRemapIndex = yw_FindActiveSquadRemapIndex(yw);
+    NC_STACK_ypabact *priorityStandaloneUnit =
+        yw_ShouldShowControlledUnitAsPriorityRow(yw, controlledRemapIndex)
+            ? yw->_userUnit
+            : NULL;
+    const int prioritizedRemapIndex = priorityStandaloneUnit
+        ? -1
+        : (activeRemapIndex >= 0 ? activeRemapIndex : controlledRemapIndex);
+    const uint32_t prioritizedCommandID = priorityStandaloneUnit
+        ? (uint32_t)priorityStandaloneUnit->_gid
+        : (prioritizedRemapIndex >= 0
+            ? yw->_cmdrsRemap[prioritizedRemapIndex]->_commandID
+            : 0);
 
     if ( squadron_manager.prioritizedCommandID != prioritizedCommandID )
     {
@@ -8321,14 +8362,18 @@ void sub_4C707C(NC_STACK_ypaworld *yw)
     };
 
     std::vector<SquadronDisplayEntry> displayOrder;
-    displayOrder.reserve(yw->_cmdrsRemap.size() + 1);
+    displayOrder.reserve(yw->_cmdrsRemap.size() + 2);
 
-    // The Host Station always owns the first row. The directly controlled
-    // vehicle's squad, when present, is promoted immediately below it; all
-    // remaining squads keep their existing command-ID order.
+    // The Host Station always owns the first row. A directly controlled unit
+    // that is not represented in _cmdrsRemap (notably model = gun/flak) gets a
+    // display-only priority row immediately below it. Otherwise the actively
+    // selected squad is promoted there; if no squad is selected, the controlled
+    // vehicle's squad keeps the previous priority behavior.
     displayOrder.push_back({yw->_userRobo, -1});
 
-    if ( prioritizedRemapIndex >= 0 )
+    if ( priorityStandaloneUnit )
+        displayOrder.push_back({priorityStandaloneUnit, -3});
+    else if ( prioritizedRemapIndex >= 0 )
         displayOrder.push_back({yw->_cmdrsRemap[prioritizedRemapIndex],
                                 prioritizedRemapIndex});
 

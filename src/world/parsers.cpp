@@ -2550,15 +2550,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             intensity = 10.0f;
         _vhcl->mgun_recoil_visual_intensity = intensity;
     }
-    else if ( !StriCmp(p1, "mgun_recoil_visual_frequency") )
-    {
-        int frequency = parser.stol(p2, NULL, 0);
-        if ( frequency > 0 && frequency < 100 )
-            frequency = 100;
-        else if ( frequency > 10000 )
-            frequency = 10000;
-        _vhcl->mgun_recoil_visual_frequency = frequency > 0 ? frequency : 0;
-    }
     else if ( !StriCmp(p1, "mgun_decal_enable") )
     {
         size_t parsed = 0;
@@ -3325,7 +3316,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_shot_time = 0;
         _vhcl->mgun_shot_time_user = 0;
         _vhcl->mgun_recoil_visual_intensity = 0.0f;
-        _vhcl->mgun_recoil_visual_frequency = 0;
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
         _vhcl->mgun_decal.mode = World::TChainFXConfig::MODE_GROUND_DECAL;

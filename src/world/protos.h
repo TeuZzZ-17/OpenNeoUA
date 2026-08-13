@@ -529,7 +529,6 @@ struct TVhclProto
     int mgun_shot_time = 0;
     int mgun_shot_time_user = 0;
     float mgun_recoil_visual_intensity = 0.0f;
-    int mgun_recoil_visual_frequency = 0;
     bool mgun_decal_enable = false;
     TChainFXConfig mgun_decal;
     int16_t mgun_vp_dead = 0;

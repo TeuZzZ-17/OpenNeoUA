@@ -110,6 +110,29 @@ static bool ypabact_IsGenesisSeparationVehicle(const NC_STACK_ypabact *unit)
     }
 }
 
+static bool ypabact_IsMgunRecoilVisualVehicleClass(const NC_STACK_ypabact *unit)
+{
+    if ( !unit )
+        return false;
+
+    switch ( unit->_bact_type )
+    {
+    case BACT_TYPES_BACT:
+    case BACT_TYPES_TANK:
+    case BACT_TYPES_ROBO:
+    case BACT_TYPES_ZEPP:
+    case BACT_TYPES_FLYER:
+    case BACT_TYPES_UFO:
+    case BACT_TYPES_CAR:
+    case BACT_TYPES_GUN:
+    case BACT_TYPES_HOVER:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 static bool ypabact_IsSeekAndExplodeArmed(NC_STACK_ypabact *unit);
 static void ypabact_FireProximityDefenseAtDeath(NC_STACK_ypabact *unit);
 
@@ -746,9 +769,9 @@ static void ypabact_StartTankWeaponRecoilVisual(NC_STACK_ypabact *bact, float re
     bact->_weaponRecoilVisualPitch = degrees * C_PI_180;
 }
 
-static float ypabact_GetGunMinigunRecoilVisualPitch(const NC_STACK_ypabact *bact)
+static float ypabact_GetMgunRecoilVisualPitch(const NC_STACK_ypabact *bact)
 {
-    if ( bact->_bact_type != BACT_TYPES_GUN ||
+    if ( !ypabact_IsMgunRecoilVisualVehicleClass(bact) ||
          bact->_mgunRecoilVisualDuration <= 0 ||
          bact->_mgunRecoilVisualPitch == 0.0f ||
          bact->_clock >= bact->_mgunRecoilVisualEndTime )
@@ -764,9 +787,10 @@ static float ypabact_GetGunMinigunRecoilVisualPitch(const NC_STACK_ypabact *bact
     return bact->_mgunRecoilVisualPitch * remain * remain;
 }
 
-static void ypabact_StartGunMinigunRecoilVisual(NC_STACK_ypabact *bact)
+static void ypabact_StartMgunRecoilVisual(NC_STACK_ypabact *bact)
 {
-    if ( bact->_bact_type != BACT_TYPES_GUN || bact->_mgun_recoil_visual_intensity <= 0.0f )
+    if ( !ypabact_IsMgunRecoilVisualVehicleClass(bact) ||
+         bact->_mgun_recoil_visual_intensity <= 0.0f )
         return;
 
     float degrees = std::min(
@@ -2024,8 +2048,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgunRecoilVisualEndTime = 0;
     _mgunRecoilVisualDuration = 0;
     _mgunRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualNextKickTime = 0;
-    _mgunRecoilVisualLastFireTime = -1;
     _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _weaponRecoilAiRecoveryEndTime = 0;
     _weaponRecoilPlayerRecoveryEndTime = 0;
@@ -2098,7 +2120,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgunEnergyDrainElapsedMs = 0;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil_visual_intensity = 0.0f;
-    _mgun_recoil_visual_frequency = 0;
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
     _mgun_power = 0.0;
@@ -2256,8 +2277,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mgunRecoilVisualEndTime = 0;
     _mgunRecoilVisualDuration = 0;
     _mgunRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualNextKickTime = 0;
-    _mgunRecoilVisualLastFireTime = -1;
     _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _weaponRecoilAiRecoveryEndTime = 0;
     _weaponRecoilPlayerRecoveryEndTime = 0;
@@ -4501,7 +4520,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                     _current_vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_orientation);
 
                 float visualRecoilPitch = ypabact_GetTankWeaponRecoilVisualPitch(this) +
-                                          ypabact_GetGunMinigunRecoilVisualPitch(this);
+                                          ypabact_GetMgunRecoilVisualPitch(this);
                 visualRecoilPitch = std::min(
                     visualRecoilPitch,
                     (float)(WEAPON_RECOIL_VISUAL_MAX_DEGREES * C_PI_180));
@@ -14327,7 +14346,6 @@ void NC_STACK_ypabact::Renew()
     _mgunEnergyDrainElapsedMs = 0;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil_visual_intensity = 0.0f;
-    _mgun_recoil_visual_frequency = 0;
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
     _mgun_power = 0.0;
@@ -14413,8 +14431,6 @@ void NC_STACK_ypabact::Renew()
     _mgunRecoilVisualEndTime = 0;
     _mgunRecoilVisualDuration = 0;
     _mgunRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualNextKickTime = 0;
-    _mgunRecoilVisualLastFireTime = -1;
     _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _heliLandingVisualOffsetY = 0.0f;
     _weaponRecoilAiRecoveryEndTime = 0;
@@ -15312,34 +15328,6 @@ static bool ypabact_GetRaySphereEntryDistance(const vec3d &origin, const vec3d &
     return true;
 }
 
-static void ypabact_UpdateGunMinigunRecoilVisual(NC_STACK_ypabact *bact, const bact_arg105 *arg)
-{
-    if ( bact->_bact_type != BACT_TYPES_GUN ||
-         bact->_mgun_recoil_visual_intensity <= 0.0f ||
-         bact->_mgun_recoil_visual_frequency <= 0 )
-    {
-        bact->_mgunRecoilVisualLastFireTime = -1;
-        bact->_mgunRecoilVisualNextKickTime = 0;
-        return;
-    }
-
-    int frameDeltaMs = std::max(1, (int)(arg->field_C * 1000.0f + 0.5f));
-    bool continuousFire = bact->_mgunRecoilVisualLastFireTime >= 0 &&
-                          arg->field_10 >= bact->_mgunRecoilVisualLastFireTime &&
-                          arg->field_10 - bact->_mgunRecoilVisualLastFireTime <= frameDeltaMs + 1;
-
-    if ( !continuousFire )
-        bact->_mgunRecoilVisualNextKickTime = arg->field_10;
-
-    bact->_mgunRecoilVisualLastFireTime = arg->field_10;
-
-    if ( arg->field_10 >= bact->_mgunRecoilVisualNextKickTime )
-    {
-        ypabact_StartGunMinigunRecoilVisual(bact);
-        bact->_mgunRecoilVisualNextKickTime = arg->field_10 + bact->_mgun_recoil_visual_frequency;
-    }
-}
-
 size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 {
     if ( IsActiveDebuffDisorientFireBlocked() )
@@ -15358,8 +15346,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
     if ( !HasMinigun() )
         return 0;
-
-    ypabact_UpdateGunMinigunRecoilVisual(this, arg);
 
     World::TWeapProto *mgunProto = _mgun != -1 ? &_world->GetWeaponsProtos().at(_mgun) : NULL;
     bool vehicleTimedMgun = UsesVehicleMinigunTiming();
@@ -15458,6 +15444,11 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         {
             _mgun_time = arg->field_10;
             spawnVisual = true;
+
+            // mgun_recoil_visual_intensity is MGUN-specific but vehicle-class agnostic:
+            // every supported unit that actually emits an MGUN pulse gets the same
+            // render-only kick. Normal weapons do not trigger it; 0/absent disables it.
+            ypabact_StartMgunRecoilVisual(this);
 
             if ( vehicleTimedMgun )
                 ypabact_PlayVehicleMinigunPulse(this);
