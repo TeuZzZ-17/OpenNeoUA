@@ -66,6 +66,7 @@ struct extra_vproto
 struct TActiveDebuffState
 {
     bool active = false;
+    bool inherit_to_children = false;
     std::string name;
     std::string icon;
     int damage = 0;
@@ -100,6 +101,7 @@ struct TActiveDebuffState
     void Clear()
     {
         active = false;
+        inherit_to_children = false;
         name.clear();
         icon.clear();
         damage = 0;
@@ -506,6 +508,7 @@ public:
     void UpdateVerticalLaser(update_msg *arg); // OpenUA custom: model = vertical_laser downward beam
     void RequestVerticalLaserFire(int weaponId, bact_arg79 *arg);
     void StopVerticalLaser();
+    void ApplyLaserEnergyDrain(int32_t frameTime, float &remainder, int32_t &elapsedMs);
     void UpdateDamageFX(update_msg *arg);
     void UpdateDecorationFX(update_msg *arg);
     void UpdateEnergyStatusFX(update_msg *arg);
@@ -516,6 +519,7 @@ public:
     void UpdateWeaponRecoilPush(update_msg *arg);      // integrate/decay weapon recoil push or visual offset
     void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner = 0);
     void ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source);
+    void InheritActiveDebuffFromHostStation(NC_STACK_ypabact *hostStation);
     void UpdateActiveDebuff(update_msg *arg);
     void ClearActiveDebuff();
     bool IsActiveDebuffDisorienting(bool requireMovementLevel = true) const;
@@ -537,10 +541,15 @@ public:
     int GetEffectiveOutgoingDamage(int baseDamage) const;
     float GetEffectiveShield() const;
     float GetEffectiveShieldWithAdditionalMalus(float additionalMalus) const;
+    float CalcShieldedActionEnergyCost(float rawCost) const;
+    static float ReadPowerStationEnergyMultiplier();
+    static int32_t GetEnergyDrainIntervalMs(Common::Ini::Key &key);
     int CalcShieldedCustomDamage(int rawDamage) const;
     virtual bool ypabact_func85(vec3d *arg);
     virtual size_t CrashOrLand(bact_arg86 *arg);
     virtual size_t CollisionWithBact(int arg);
+    bool CanCollectPlasmaFrom(const NC_STACK_ypabact *source) const;
+    bool CollectPlasmaFrom(NC_STACK_ypabact *source);
     void HandleUnitCollisionContact(NC_STACK_ypabact *other, int frameTime);
     virtual void Recoil(bact_arg88 *arg);
     virtual void ypabact_func89(IDVPair *arg);
@@ -581,6 +590,7 @@ public:
     virtual void ChangeSectorEnergy(yw_arg129 *arg);
     virtual void DeadTimeUpdate(update_msg *arg);
     int GetPlasmaDurationMs() const; // OpenUA: vanilla plasma lifetime scaled only in single-player
+    void UpdateDeathPlasmaMagnet(int frameTime); // OpenUA: player-only death-plasma attraction
     virtual void ypabact_func122(update_msg *arg);
     virtual void ypabact_func123(update_msg *arg);
     virtual size_t PathFinder(bact_arg124 *arg);
@@ -953,13 +963,7 @@ public:
     float _viewer_radius;
     float _overeof;
     float _viewer_overeof;
-    bool _cockpit_camera_enable;
     vec3d _cockpit_camera_offset;
-    bool _mgun_pov_fx_enable;
-    int16_t _mgun_pov_fx_vp;
-    float _mgun_pov_fx_scale;
-    vec3d _mgun_pov_fx_offset;
-    vec3d _mgun_pov_fx_rot;
 //    float pos_x_cntr;
 //
 //    float pos_y_cntr;
@@ -1001,6 +1005,9 @@ public:
     int _num_mguns;
     int _mgun_shot_time;
     int _mgun_shot_time_user;
+    float _mgunEnergyDrainRemainder;
+    int32_t _mgunEnergyDrainElapsedMs;
+    int32_t _mgunEnergyDrainLastFireTime;
     float _mgun_recoil_visual_intensity;
     int _mgun_recoil_visual_frequency;
     bool _mgun_decal_enable;
@@ -1135,6 +1142,8 @@ public:
     int _laser_next_damage_time = 0;       // next _clock at which static tick damage may apply
     int _laser_next_fx_time = 0;           // next _clock at which a throttled impact VP may spawn
     int _laser_next_beam_vp_time = 0;      // next _clock at which the VP beam body may be refreshed
+    float _laserEnergyDrainRemainder = 0.0f;
+    int32_t _laserEnergyDrainElapsedMs = 0;
     std::vector<TLaserBeamRequest> _laser_requests;
     std::vector<TLaserBeamRuntime> _laser_beams;
     // OpenUA custom: separate downward beam runtime for model = vertical_laser.
@@ -1144,6 +1153,8 @@ public:
     NC_STACK_ypabact *_vertical_laser_request_target = NULL;
     vec3d _vertical_laser_request_start;
     int _vertical_laser_next_beam_vp_time = 0;
+    float _verticalLaserEnergyDrainRemainder = 0.0f;
+    int32_t _verticalLaserEnergyDrainElapsedMs = 0;
     TLaserBeamRuntime _vertical_laser_beam;
     std::vector<TLaserBeamRuntime> _vertical_laser_beams;
     int _seek_and_explode;

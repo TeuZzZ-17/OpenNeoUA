@@ -15374,7 +15374,11 @@ int NC_STACK_ypaworld::ypaworld_func64__sub21__sub3()
 
     _updateMessage.energy = v18;
 
-    if ( v18 > a4 )
+    int mobileEnergyCost = v18;
+    if ( playerRoboAIBehavior )
+        mobileEnergyCost = NC_STACK_yparobo::ScalePlayerMobileMoveEnergyCost(v18);
+
+    if ( mobileEnergyCost > a4 )
         return 1;
 
     for ( NC_STACK_ypabact* &v11 : _cellOnMouse->unitsList )
@@ -16233,7 +16237,9 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
                     {
                         // leave mousePointer at its neutral value: no control prompt
                     }
-                    else if ( arg->KbdLastDown == Input::KC_F7 && (arg->ClickInf.flag & TClickBoxInf::FLAG_RM_HOLD) )
+                    else if ( !System::IniConf::IsGameNewDebugEnabled() &&
+                              arg->KbdLastDown == Input::KC_F7 &&
+                              (arg->ClickInf.flag & TClickBoxInf::FLAG_RM_HOLD) )
                     {
                         doAction = World::DOACTION_19;
                         mousePointer = 8;

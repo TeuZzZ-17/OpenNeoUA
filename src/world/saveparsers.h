@@ -11,6 +11,9 @@ namespace Parsers
 
 class SaveBact
 {
+public:
+    static void ResetHierarchyState();
+
 protected:
     bool SaveBactParser(ScriptParser::Parser &parser, NC_STACK_ypabact *b, const std::string &p1, const std::string &p2);
 
@@ -40,6 +43,7 @@ public:
 protected:
     NC_STACK_ypaworld &_o;
     NC_STACK_ypabact *_c;
+    bool _invalidHierarchy = false;
 };
 
 class SaveGemParser : public ScriptParser::DataHandler

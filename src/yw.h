@@ -2397,6 +2397,7 @@ public:
 //protected:
     void sub_4491A0(const std::string &movie_fname);
     bool LoadProtosScript(const std::string &filename);
+    bool DebugReloadLiveData(std::string *details);
     bool LoadSpectatorVehicleProto();
     bool sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const std::string &fname);
     void ypaworld_func158__sub4__sub1();
@@ -2639,7 +2640,7 @@ public:
     void CellCheckHealth(cellArea *cell, int a5, NC_STACK_ypabact *a6);
     void InitBuddies();
     void InitSuperItems();
-    bool LoadSuperItemProfiles();
+    bool LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles = NULL);
     void ClearSuperItemRuntime();
     bool IsCustomSuperItem(const TMapSuperItem &sitem) const;
     const World::TSuperItemProfile *GetSuperItemProfile(const TMapSuperItem &sitem) const;
@@ -2717,6 +2718,10 @@ public:
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
+    void RenderWeaponTracerSegment(baseRender_msg *arg, const vec3d &start,
+                                   const vec3d &end, float width,
+                                   const World::TVisualTint &tint, float fade);
+    void ClearWeaponTracerMesh();
     int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false);
     int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
     bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, float randomOffsetPercent, vec3d *localPosition);
@@ -2731,6 +2736,10 @@ public:
     void SetCmdrIdToSelect(int32_t id) { _cmdrIdToSelect = id; };
 
     World::ParticleSystem &ParticleSystem() { return _particles; };
+    World::RefBactList::SnapshotWorkspace::View SnapshotBacts(const World::RefBactList &bacts)
+    {
+        return _bactSnapshotWorkspace.Capture(bacts);
+    }
 
     int32_t GetLegoBld(const cellArea *cell, int bldX, int bldY);
     int32_t GetLegoBld(const Common::Point &cell, int bldX, int bldY);
@@ -2900,6 +2909,7 @@ public:
     NC_STACK_base *_setData = NULL;
     World::RefBactList _unitsList;
     World::RefBactList _deadCacheList;
+    World::RefBactList::SnapshotWorkspace _bactSnapshotWorkspace;
     std::vector<NC_STACK_base *> _vhclModels;
     std::array<TLego, 256> _legoArray;
     std::array<TSubSectorDesc, 256> _subSectorArray;
@@ -2908,6 +2918,12 @@ public:
     std::vector<World::TVhclProto> _vhclProtos;
     std::vector<World::TWeapProto> _weaponProtos;
     std::vector<World::TBuildingProto> _buildProtos;
+    // New Debug F7 keeps replaced prototype generations alive because active
+    // units/sound carriers can retain pointers into prototype-owned FX data.
+    std::vector<std::vector<World::TVhclProto>> _debugReloadRetiredVhclProtos;
+    std::vector<std::vector<World::TWeapProto>> _debugReloadRetiredWeaponProtos;
+    std::vector<std::vector<World::TBuildingProto>> _debugReloadRetiredBuildProtos;
+    std::vector<std::vector<World::TSuperItemProfile>> _debugReloadRetiredSuperItemProfiles;
     std::vector<World::TRoboProto> _roboProtos;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
@@ -2918,6 +2934,7 @@ public:
     int32_t _nextTransientVPId = 1;
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
+    GFX::TMesh _weaponTracerMesh;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;
     std::vector<TDamageHoverTarget> _damageHoverTargets;
     std::map<int32_t, TConstructInfo> _inBuildProcess; // Buildings in creation process
@@ -3122,6 +3139,8 @@ public:
     NC_STACK_ypabact *_playerSprintUnit = NULL;
     int32_t _playerSprintPhaseElapsed = 0;
     float _playerSprintFactor = 0.0f;
+    float _playerSprintEnergyRemainder = 0.0f;
+    int32_t _playerSprintEnergyDrainElapsedMs = 0;
 
     std::array<uint32_t, 8> _countSectorsPerOwner = Common::ArrayInit<uint32_t, 8>(0);
     std::array<uint32_t, 8>  _countUnitsPerOwner = Common::ArrayInit<uint32_t, 8>(0);
