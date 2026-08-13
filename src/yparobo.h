@@ -227,6 +227,7 @@ public:
     bool IsPlayerRoboAIBehaviorMoveActive() const;
     bool GetPlayerRoboAIBehaviorMoveTarget(vec3d *target) const;
     bool GetPlayerRoboRelocationTarget(vec3d *target, bool *isTeleport) const;
+    static int ScalePlayerMobileMoveEnergyCost(int cost);
 
 public:
     void HandleUserCommands(update_msg *arg);

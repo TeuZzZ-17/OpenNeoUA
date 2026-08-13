@@ -158,6 +158,7 @@ struct PlayerSprintConfig
     float forceUpPercent = 0.0f;
     float pitchUpPercent = 0.0f;
     int32_t rampTime = 0;
+    float energyCostPercent = 0.0f;
 };
 
 static float yw_ParseSprintPercent(Common::Ini::Key &key, float maximum)
@@ -217,6 +218,8 @@ static PlayerSprintConfig yw_GetPlayerSprintConfig()
     config.pitchUpPercent = yw_ParseSprintPercent(
         System::IniConf::GameSprintPitchUpPercent, 100.0f);
     config.rampTime = yw_ParseSprintTime(System::IniConf::GameSprintRampTime);
+    config.energyCostPercent = yw_ParseSprintPercent(
+        System::IniConf::GameSprintEnergyCostPercent, 100.0f);
     return config;
 }
 
@@ -950,6 +953,280 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
     return true;
 }
 
+bool NC_STACK_ypaworld::DebugReloadLiveData(std::string *details)
+{
+    if ( details )
+        details->clear();
+
+    if ( _isNetGame )
+    {
+        if ( details )
+            *details = "network game: live reload disabled";
+        return false;
+    }
+
+    // Nucleus.ini is already data-driven through IniConf. Re-read it first so
+    // prototype defaults that depend on current OpenUA settings use the new values.
+    // Missing files keep the previous IniConf values because ParseIniFile does not
+    // reset the key catalogue when the file cannot be opened.
+    if ( !System::IniConf::ReadFromNucleusIni() )
+    {
+        if ( details )
+            *details = "Nucleus.ini could not be reopened";
+        return false;
+    }
+    ApplyNucleusViewDistanceOverrides();
+
+    // Rebuild prototypes in an isolated temporary world. The normal prototype
+    // parsers own resources (wireframes/samples), so parsing directly over the
+    // live vectors would make a malformed script capable of leaving half-written
+    // data behind. Only a fully parsed staging set is swapped into the live world.
+    NC_STACK_ypaworld staged;
+    staged._initScriptFilePath = _initScriptFilePath;
+    staged._defaultUnitLimit = _defaultUnitLimit;
+    staged._defaultUnitLimitArg = _defaultUnitLimitArg;
+    staged._defaultUnitLimitType = _defaultUnitLimitType;
+    staged._allowMultiBuildWorld = _allowMultiBuildWorld;
+
+    if ( !staged.ProtosInit() )
+    {
+        if ( details )
+            *details = "startup prototype scripts failed; previous prototypes kept";
+        return false;
+    }
+
+    const int levelId = _levelInfo.LevelID;
+    std::string levelScript;
+    TLevelDescription stagedLevel;
+
+    if ( levelId >= 0 && levelId < (int)_globalMapRegions.MapRegions.size() )
+        levelScript = _globalMapRegions.MapRegions[levelId].MapDirectory;
+
+    if ( !levelScript.empty() )
+    {
+        // Parse the complete current LDF against staging state. This validates the
+        // LDF and applies its prototype/script/enable sections without touching the
+        // running mission topology (terrain, squads, gates, buildings or cells).
+        if ( !staged.sub_4DA41C(&stagedLevel, levelScript) || !stagedLevel.IsOk() )
+        {
+            if ( details )
+                *details = "current LDF failed; previous live prototypes kept";
+            return false;
+        }
+    }
+
+    // Keep already collected GEM upgrades after rebuilding the prototype catalogue.
+    // If the reloaded LDF keeps the same GEM topology, use its refreshed action/script
+    // data; structural GEM changes stay deferred until the next real level load.
+    bool gemTopologyCompatible = staged._techUpgrades.size() == _techUpgrades.size();
+    if ( gemTopologyCompatible )
+    {
+        for (size_t i = 0; i < _techUpgrades.size(); ++i)
+        {
+            const TMapGem &oldGem = _techUpgrades[i];
+            const TMapGem &newGem = staged._techUpgrades[i];
+            if ( oldGem.CellId.x != newGem.CellId.x ||
+                 oldGem.CellId.y != newGem.CellId.y ||
+                 oldGem.BuildingID != newGem.BuildingID )
+            {
+                gemTopologyCompatible = false;
+                break;
+            }
+        }
+    }
+
+    auto applyGemToStaging = [&staged](const TMapGem &gem) -> bool
+    {
+        if ( !gem.ScriptFile.empty() )
+            return staged.LoadProtosScript(gem.ScriptFile);
+
+        std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+        ScriptParser::HandlersList parsers {
+            new World::Parsers::VhclProtoParser(&staged),
+            new World::Parsers::WeaponProtoParser(&staged),
+            new World::Parsers::BuildProtoParser(&staged)
+        };
+        bool parsed = ScriptParser::ParseStringList(gem.ActionsList, parsers,
+                                                     ScriptParser::FLAG_NO_SCOPE_SKIP);
+        Common::Env.SetPrefix("rsrc", oldRsrc);
+        return parsed;
+    };
+
+    for (size_t i = 0; i < _techUpgrades.size(); ++i)
+    {
+        const TMapGem &oldGem = _techUpgrades[i];
+        if ( !IsGamePlaySector(oldGem.CellId) )
+            continue;
+
+        const cellArea &cell = _cells(oldGem.CellId);
+        if ( cell.PurposeType != cellArea::PT_TECHDEACTIVE ||
+             cell.PurposeIndex != (int)i )
+            continue;
+
+        const TMapGem &reloadGem = gemTopologyCompatible ? staged._techUpgrades[i] : oldGem;
+        if ( !applyGemToStaging(reloadGem) )
+        {
+            if ( details )
+                *details = "active GEM prototype script failed; previous prototypes kept";
+            return false;
+        }
+    }
+
+    if ( _spectatorVehicleProtoID > 0 )
+    {
+        staged._spectatorVehicleProtoID = _spectatorVehicleProtoID;
+        if ( !staged.LoadSpectatorVehicleProto() )
+        {
+            if ( details )
+                *details = "spectator prototype reload failed; previous prototypes kept";
+            return false;
+        }
+    }
+
+    // No simulation runs while this function executes. Swap complete vectors in one
+    // step. Existing units and sound carriers can retain pointers into prototype-owned
+    // sound/FX parameters, so the replaced generations must stay alive until this world
+    // is destroyed. This is debug-only memory retention and avoids dangling pointers.
+    SFXEngine::SFXe.StopPlayingSounds();
+    _vhclProtos.swap(staged._vhclProtos);
+    _weaponProtos.swap(staged._weaponProtos);
+    _buildProtos.swap(staged._buildProtos);
+
+    _debugReloadRetiredVhclProtos.emplace_back();
+    _debugReloadRetiredVhclProtos.back().swap(staged._vhclProtos);
+    _debugReloadRetiredWeaponProtos.emplace_back();
+    _debugReloadRetiredWeaponProtos.back().swap(staged._weaponProtos);
+    _debugReloadRetiredBuildProtos.emplace_back();
+    _debugReloadRetiredBuildProtos.back().swap(staged._buildProtos);
+
+    // The modern cockpit offset is safe to refresh on already existing units: it is
+    // pure camera state and does not reset gameplay energy, physics or AI state.
+    auto refreshUnitCockpitOffset = [this](NC_STACK_ypabact *unit)
+    {
+        if ( !unit )
+            return;
+
+        int protoId = unit->_mimic_disguise_vehicleID > 0 ?
+                      unit->_mimic_disguise_vehicleID : unit->_vehicleID;
+        if ( protoId > 0 && (size_t)protoId < _vhclProtos.size() )
+            unit->_cockpit_camera_offset = _vhclProtos[protoId].cockpit_camera_offset;
+    };
+
+    for (NC_STACK_ypabact *station : _unitsList)
+    {
+        refreshUnitCockpitOffset(station);
+        for (NC_STACK_ypabact *commander : station->_kidList)
+        {
+            refreshUnitCockpitOffset(commander);
+            for (NC_STACK_ypabact *slave : commander->_kidList)
+                refreshUnitCockpitOffset(slave);
+        }
+    }
+
+    // GEM descriptors contain no live pointers. Refresh them only when their level
+    // topology is unchanged, because cells keep PurposeIndex values into this vector.
+    if ( gemTopologyCompatible )
+        _techUpgrades = staged._techUpgrades;
+
+    bool profilesReloaded = true;
+    if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 )
+    {
+        _debugReloadRetiredSuperItemProfiles.emplace_back();
+        profilesReloaded = LoadSuperItemProfiles(&_debugReloadRetiredSuperItemProfiles.back());
+        if ( !profilesReloaded )
+            _debugReloadRetiredSuperItemProfiles.pop_back();
+    }
+    else
+    {
+        if ( !_superItemProfiles.empty() )
+        {
+            _debugReloadRetiredSuperItemProfiles.emplace_back();
+            _debugReloadRetiredSuperItemProfiles.back().swap(_superItemProfiles);
+        }
+    }
+
+    // LDF begin_item is part of the running SuperItem state. Only ProfileId can be
+    // changed safely without rebuilding cells/buildings/timers. Keep all runtime
+    // state and accept the new profile link only for the same item topology.
+    bool superItemTopologyCompatible =
+        staged._levelInfo.SuperItems.size() == _levelInfo.SuperItems.size();
+    if ( superItemTopologyCompatible )
+    {
+        for (size_t i = 0; i < _levelInfo.SuperItems.size(); ++i)
+        {
+            const TMapSuperItem &oldItem = _levelInfo.SuperItems[i];
+            const TMapSuperItem &newItem = staged._levelInfo.SuperItems[i];
+            if ( oldItem.CellId.x != newItem.CellId.x ||
+                 oldItem.CellId.y != newItem.CellId.y ||
+                 oldItem.Type != newItem.Type )
+            {
+                superItemTopologyCompatible = false;
+                break;
+            }
+        }
+    }
+
+    if ( superItemTopologyCompatible &&
+         (profilesReloaded || System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1) )
+    {
+        for (size_t i = 0; i < _levelInfo.SuperItems.size(); ++i)
+            _levelInfo.SuperItems[i].ProfileId = staged._levelInfo.SuperItems[i].ProfileId;
+    }
+
+    // Re-resolve profile indices by stable profile id without resetting active
+    // SuperItem timers, hit tracking, buildings or wave state.
+    if ( profilesReloaded || System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 )
+    {
+        for (TMapSuperItem &item : _levelInfo.SuperItems)
+        {
+            item.CustomProfileIndex = -1;
+            if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 ||
+                 item.Type != TMapSuperItem::TYPE_BOMB || item.ProfileId.empty() )
+                continue;
+
+            int resolved = -1;
+            int matches = 0;
+            for (size_t profileIndex = 0; profileIndex < _superItemProfiles.size(); ++profileIndex)
+            {
+                const World::TSuperItemProfile &profile = _superItemProfiles[profileIndex];
+                if ( !StriCmp(profile.id, item.ProfileId) )
+                {
+                    resolved = (int)profileIndex;
+                    ++matches;
+                }
+            }
+
+            if ( matches != 1 )
+                continue;
+
+            const World::TSuperItemProfile &profile = _superItemProfiles[resolved];
+            if ( !profile.valid || profile.duplicate ||
+                 profile.type != World::TSuperItemProfile::TYPE_BOMB ||
+                 profile.wave_vp <= 0 || (size_t)profile.wave_vp >= _vhclModels.size() ||
+                 !_vhclModels[profile.wave_vp] )
+                continue;
+
+            item.CustomProfileIndex = resolved;
+        }
+    }
+
+    if ( details )
+    {
+        *details = "Nucleus.ini + prototypes";
+        if ( !levelScript.empty() )
+            *details += " + current LDF runtime-safe data";
+        if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 )
+            *details += profilesReloaded ? " + SuperItemProfiles.ini" :
+                                           " + previous SuperItemProfiles kept";
+        if ( !gemTopologyCompatible )
+            *details += "; structural GEM LDF changes deferred";
+        if ( !superItemTopologyCompatible )
+            *details += "; structural SuperItem LDF changes deferred";
+    }
+
+    return true;
+}
+
 bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
 {
     std::string buf = Common::Env.SetPrefix("rsrc", "data:");
@@ -989,29 +1266,31 @@ static std::string yw_SuperItemProfileKey(const std::string &id)
     return key;
 }
 
-bool NC_STACK_ypaworld::LoadSuperItemProfiles()
+bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles)
 {
-    _superItemProfiles.clear();
-
     if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 )
+    {
+        _superItemProfiles.clear();
         return false;
+    }
+
+    std::vector<World::TSuperItemProfile> parsedProfiles;
 
     ScriptParser::HandlersList parsers {
-        new World::Parsers::SuperItemProfileParser(&_superItemProfiles)
+        new World::Parsers::SuperItemProfileParser(&parsedProfiles)
     };
 
     if ( !ScriptParser::ParseFile("data:SuperItemProfiles.ini", parsers,
                                   ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
     {
-        ypa_log_out("WARNING: custom SuperItems enabled but Data/SuperItemProfiles.ini is missing or invalid; using vanilla SuperItems.\n");
-        _superItemProfiles.clear();
+        ypa_log_out("WARNING: custom SuperItems enabled but Data/SuperItemProfiles.ini is missing or invalid; keeping the previously loaded profile set.\n");
         return false;
     }
 
     std::map<std::string, std::vector<size_t>> profilesById;
-    for (size_t i = 0; i < _superItemProfiles.size(); ++i)
+    for (size_t i = 0; i < parsedProfiles.size(); ++i)
     {
-        World::TSuperItemProfile &profile = _superItemProfiles[i];
+        World::TSuperItemProfile &profile = parsedProfiles[i];
         profile.valid = true;
 
         if ( profile.id.empty() )
@@ -1101,12 +1380,12 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles()
                     entry.first.c_str());
         for (size_t index : entry.second)
         {
-            _superItemProfiles[index].duplicate = true;
-            _superItemProfiles[index].valid = false;
+            parsedProfiles[index].duplicate = true;
+            parsedProfiles[index].valid = false;
         }
     }
 
-    for (World::TSuperItemProfile &profile : _superItemProfiles)
+    for (World::TSuperItemProfile &profile : parsedProfiles)
     {
         if ( !profile.valid )
             continue;
@@ -1115,9 +1394,18 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles()
         profile.wave_snd.LoadSamples();
     }
 
+    if ( retiredProfiles )
+    {
+        retiredProfiles->swap(_superItemProfiles);
+        _superItemProfiles.swap(parsedProfiles);
+    }
+    else
+    {
+        _superItemProfiles.swap(parsedProfiles);
+    }
     ypa_log_out("Loaded %u SuperItem profile(s) from Data/SuperItemProfiles.ini.\n",
                 (unsigned)_superItemProfiles.size());
-    return !_superItemProfiles.empty();
+    return true;
 }
 
 int yw_InitSceneRecorder(NC_STACK_ypaworld *yw)
@@ -1308,6 +1596,7 @@ size_t NC_STACK_ypaworld::Deinit()
     _superItemProfiles.clear();
     _debugAoeRings.clear();
     ClearGroundDecals();
+    ClearWeaponTracerMesh();
     FreeGameDataCursors();
     dprintf("MAKE ME %s\n","ypaworld_func1");
     return NC_STACK_nucleus::Deinit();
@@ -1436,24 +1725,24 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         {
             ypaworld_func64__sub1(arg->field_8); //Precompute input (add mouse turn)
 
-            if ( HasActiveNewGemNotification() && _GameShell )
+            if ( HasActiveNewGemNotification() )
             {
-                const UserData::TInputConf &fireBind =
-                    _GameShell->InputConfig[World::INPUT_BIND_FIRE];
-                const UserData::TInputConf &menuBind =
-                    _GameShell->InputConfig[World::INPUT_BIND_QUIT];
+                const bool escRequested =
+                    _kbdLastKeyHit == Input::KC_ESCAPE ||
+                    arg->field_8->KbdLastHit == Input::KC_ESCAPE;
 
-                const bool primaryFireRequested =
-                    _userUnit && _userUnit->_bact_type != BACT_TYPES_UFO &&
-                    fireBind.Type == World::INPUT_BIND_TYPE_BUTTON &&
-                    fireBind.KeyID >= 0 && fireBind.KeyID < 32 &&
-                    arg->field_8->Buttons.Is(fireBind.KeyID);
-                const bool menuRequested =
-                    menuBind.Type == World::INPUT_BIND_TYPE_HOTKEY &&
-                    arg->field_8->HotKeyID == menuBind.KeyID;
-
-                if ( primaryFireRequested || menuRequested )
+                if ( escRequested )
+                {
                     DismissNewGemNotification();
+
+                    // ESC belongs exclusively to the GEM popup while it is
+                    // active. Do not let the original menu/window handlers
+                    // observe the same key in this frame.
+                    _kbdLastKeyHit = Input::KC_NONE;
+                    arg->field_8->KbdLastHit = Input::KC_NONE;
+                    arg->field_8->KbdLastDown = Input::KC_NONE;
+                    arg->field_8->HotKeyID = -1;
+                }
             }
 
             yw_UpdateCockpitCameraToggle(this, arg->field_8);
@@ -1490,6 +1779,28 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
         else if ( arg->field_8 )
         {
+            // F7: OpenUA live data reload. F7 is also the vanilla next-commander
+            // hotkey, so consume that binding only while New Debug owns the key.
+            if ( arg->field_8->KbdLastHit == Input::KC_F7 )
+            {
+                arg->field_8->HotKeyID = -1;
+
+                std::string reloadDetails;
+                bool reloadOK = DebugReloadLiveData(&reloadDetails);
+
+                yw_arg159 infoMsg;
+                infoMsg.txt = reloadOK ?
+                              "Live Data Reload OK" :
+                              "Live Data Reload FAILED";
+                infoMsg.unit = NULL;
+                infoMsg.Priority = 100;
+                infoMsg.MsgID = 0;
+                ypaworld_func159(&infoMsg);
+
+                if ( !reloadDetails.empty() )
+                    ypa_log_out("OpenUA New Debug F7: %s.\n", reloadDetails.c_str());
+            }
+
             // F9: runtime-only global unit invulnerability. Handle it before
             // simulation so the toggle applies to damage in the same frame.
             if ( arg->field_8->KbdLastHit == Input::KC_F9 )
@@ -1530,6 +1841,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     case BACT_TYPES_UFO:
                     case BACT_TYPES_CAR:
                     case BACT_TYPES_HOVER:
+                    case BACT_TYPES_ROBO:
                         return true;
 
                     default:
@@ -1761,7 +2073,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
             else
             {
-                for ( NC_STACK_ypabact *unit : _unitsList.safe_iter() )
+                for ( NC_STACK_ypabact *unit : SnapshotBacts(_unitsList) )
                 {
                     CrashDiag::SetActiveBact(unit, unit->_gid, unit->_bact_type,
                                                 unit->_owner, unit->_status,
@@ -2060,6 +2372,7 @@ bool NC_STACK_ypaworld::IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) c
          !bact || bact != _userUnit || bact->_isDummy || IsSpectatorBact(bact) ||
          bact->IsActiveDebuffDisorienting() ||
          !bact->getBACT_inputting() ||
+         (config.energyCostPercent > 0.0f && bact->_energy <= 0) ||
          (bact->_status != BACT_STATUS_NORMAL && bact->_status != BACT_STATUS_IDLE) )
     {
         return false;
@@ -2208,6 +2521,8 @@ void NC_STACK_ypaworld::ResetPlayerSprint()
     _playerSprintUnit = NULL;
     _playerSprintPhaseElapsed = 0;
     _playerSprintFactor = 0.0f;
+    _playerSprintEnergyRemainder = 0.0f;
+    _playerSprintEnergyDrainElapsedMs = 0;
 }
 
 void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
@@ -2234,6 +2549,53 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
     {
         ResetPlayerSprint();
         return;
+    }
+
+    const bool sprintWasActive = _playerSprintUnit &&
+                                 _playerSprintFactor > 0.0f &&
+                                 (_playerSprintState == PLAYER_SPRINT_RAMP_UP ||
+                                  _playerSprintState == PLAYER_SPRINT_ACTIVE ||
+                                  _playerSprintState == PLAYER_SPRINT_RAMP_DOWN);
+    if ( sprintWasActive && sprintConfig.energyCostPercent > 0.0f && frameTime > 0 )
+    {
+        if ( !_playerSprintUnit->IsInvulnerableToDamage() )
+        {
+            const float sprintFactor = std::max(0.0f, std::min(_playerSprintFactor, 1.0f));
+            const float rawEnergyCost = (float)std::max(_playerSprintUnit->_energy_max, 0) *
+                                        sprintConfig.energyCostPercent * 0.01f *
+                                        ((float)frameTime / 1000.0f) * sprintFactor;
+            _playerSprintEnergyRemainder +=
+                _playerSprintUnit->CalcShieldedActionEnergyCost(rawEnergyCost);
+            _playerSprintEnergyDrainElapsedMs += frameTime;
+
+            const int32_t drainIntervalMs = NC_STACK_ypabact::GetEnergyDrainIntervalMs(
+                System::IniConf::GameSprintEnergyDrainIntervalMs);
+            if ( drainIntervalMs <= 0 ||
+                 _playerSprintEnergyDrainElapsedMs >= drainIntervalMs )
+            {
+                const int energyCost = (int)_playerSprintEnergyRemainder;
+                if ( energyCost > 0 )
+                {
+                    _playerSprintEnergyRemainder -= energyCost;
+                    _playerSprintUnit->_energy -= energyCost;
+                    if ( _playerSprintUnit->_energy <= 0 )
+                    {
+                        _playerSprintUnit->_energy = 0;
+                        ResetPlayerSprint();
+                        return;
+                    }
+                }
+
+                _playerSprintEnergyDrainElapsedMs = drainIntervalMs > 0
+                    ? _playerSprintEnergyDrainElapsedMs % drainIntervalMs
+                    : 0;
+            }
+        }
+        else
+        {
+            _playerSprintEnergyRemainder = 0.0f;
+            _playerSprintEnergyDrainElapsedMs = 0;
+        }
     }
 
     const bool sprintRequested = IsPlayerSprintInputHeld() &&
@@ -3406,13 +3768,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_fire_x_step = vhcl.fire_x_step;
         bacto->_fire_x_slots = vhcl.fire_x_slots;
         bacto->_fire_x_advanced = vhcl.fire_x_advanced;
-        bacto->_cockpit_camera_enable = vhcl.cockpit_camera_enable;
         bacto->_cockpit_camera_offset = vhcl.cockpit_camera_offset;
-        bacto->_mgun_pov_fx_enable = vhcl.mgun_pov_fx_enable;
-        bacto->_mgun_pov_fx_vp = vhcl.mgun_pov_fx_vp;
-        bacto->_mgun_pov_fx_scale = vhcl.mgun_pov_fx_scale;
-        bacto->_mgun_pov_fx_offset = vhcl.mgun_pov_fx_offset;
-        bacto->_mgun_pov_fx_rot = vhcl.mgun_pov_fx_rot;
         bacto->_gun_angle = vhcl.gun_angle;
         bacto->_gun_angle_user = vhcl.gun_angle;
         bacto->_num_weapons = vhcl.num_weapons;
@@ -3613,6 +3969,20 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
             }
         }
 
+        // Vehicle pickup sounds are positional like the other vehicle events.
+        // Existing data without snd_pickup_sample keeps using the global
+        // World.ini plasma sample, while volume and pitch use vehicle defaults.
+        TSoundSource &pickup = bacto->_soundcarrier.Sounds[World::TVhclProto::SND_PICKUP];
+        if ( !pickup.PSample && pickup.SampleVariants.empty() && _GameShell &&
+             World::SOUND_ID_PLASMA < _GameShell->samples1_info.Sounds.size() )
+        {
+            TSoundSource &legacyPickup =
+                _GameShell->samples1_info.Sounds[World::SOUND_ID_PLASMA];
+            pickup.PSample = legacyPickup.PSample;
+            if ( pickup.PSample )
+                pickup.SampleVariants.push_back(pickup.PSample);
+        }
+
         bacto->_pitch = bacto->_soundcarrier.Sounds[0].Pitch;
         bacto->_volume = bacto->_soundcarrier.Sounds[0].Volume;
         bacto->_base_snd_normal_pitch = bacto->_soundcarrier.Sounds[World::TVhclProto::SND_NORMAL].Pitch;
@@ -3713,6 +4083,8 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_vp_trail_scale = wproto.vp_trail_scale;
     wobj->_vp_trail_tint = wproto.vp_trail_tint;
     wobj->_vp_trail_spin_strength = wproto.vp_trail_spin;
+    wobj->ConfigureWeaponTracer(wproto.tracer,
+                                wproto.SupportsProjectileTracer());
 
     wobj->_destroyFX = wproto.dfx;
     wobj->_extDestroyFX = wproto.ExtDestroyFX;
@@ -6975,7 +7347,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         return false;
 
     btn.xpos = buttonWidth + buttonsSpace;
-    btn.caption = Locale::Text::OpenUA(Locale::OUA_RESET);
+    btn.caption = Locale::Text::Common(Locale::CMN_RESETDEF);
     btn.upCode = 1451;
     btn.button_id = 1451;
     if (!_GameShell->atmosphere_button->Add(&btn))
@@ -9446,6 +9818,8 @@ size_t NC_STACK_ypaworld::ypaworld_func168(NC_STACK_ypabact *bact)
 
 int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
 {
+    World::Parsers::SaveBact::ResetHierarchyState();
+
     int lvlnum;
     ScriptParser::HandlersList parsers
     {
@@ -9472,6 +9846,8 @@ int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
     parsers.push_back( new World::Parsers::SaveLuaScriptParser(this) );
 
     bool parsed = ScriptParser::ParseFile(filename, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    World::Parsers::SaveBact::ResetHierarchyState();
+
     if ( parsed )
         RestoreCustomSuperItemRuntimeAfterLoad();
     return parsed;
@@ -9605,7 +9981,10 @@ size_t NC_STACK_ypaworld::LoadGame(const std::string &saveFile)
     PrepareAllFillers();
 
     if ( !sb_0x451034(this) )
+    {
+        DeleteLevel();
         return 0;
+    }
 
     return 1;
 }
@@ -10085,7 +10464,14 @@ void NC_STACK_ypaworld::ypaworld_func177(yw_arg177 *arg)
 
     for ( NC_STACK_ypabact* &unit : _unitsList )
     {
-        if ( unit->_bact_type == BACT_TYPES_ROBO && unit != arg->bact && arg->bact->_owner == unit->_owner )
+        if ( unit &&
+             unit->_bact_type == BACT_TYPES_ROBO &&
+             unit != arg->bact &&
+             arg->bact->_owner == unit->_owner &&
+             unit->_energy > 0 &&
+             unit->_status != BACT_STATUS_DEAD &&
+             !(unit->_status_flg &
+               (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) )
             return;
     }
 

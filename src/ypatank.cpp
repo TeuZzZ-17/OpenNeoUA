@@ -1427,54 +1427,6 @@ void NC_STACK_ypatank::ApplyImpulse(bact_arg83 *arg)
         _position = v24;
 }
 
-void NC_STACK_ypatank::ypatank_func87__sub0(NC_STACK_ypabact *bact2)
-{
-    int v23 = bact2->GetPlasmaDurationMs();
-
-    float v3 = (float)bact2->_scale_time * 0.2 / (float)v23 * (float)bact2->_energy_max;
-
-    if ( v3 + _energy > _energy_max )
-    {
-        NC_STACK_yparobo *robo = _host_station;
-
-        _energy = _energy_max;
-
-        int v10 = (int)v3 - (_energy_max - _energy);
-
-        if ( v10 + robo->_energy > robo->_energy_max )
-        {
-            int v13 = robo->_energy;
-
-            robo->_energy = robo->_energy_max;
-            int v14 = v10 - (robo->_energy_max - v13);
-            int v16 = v14 + robo->_roboEnergyLife;
-
-            if ( v16 >= robo->_energy_max )
-            {
-                int v17 = robo->_roboEnergyLife;
-                robo->_roboEnergyLife = robo->_energy_max;
-
-                robo->_roboEnergyMove += v14 - (robo->_energy_max - v17);
-
-                if ( robo->_roboEnergyMove > robo->_energy_max )
-                    robo->_roboEnergyMove = robo->_energy_max;
-            }
-            else
-            {
-                robo->_roboEnergyLife = v16;
-            }
-        }
-        else
-        {
-            robo->_energy = v10 + robo->_energy;
-        }
-    }
-    else
-    {
-        _energy = v3 + _energy;
-    }
-}
-
 size_t NC_STACK_ypatank::CollisionWithBact(int arg)
 {
     int v105 = 0;
@@ -1516,7 +1468,7 @@ size_t NC_STACK_ypatank::CollisionWithBact(int arg)
 
         for ( NC_STACK_ypabact* &v12 : arg130.pcell->unitsList )
         {
-            int v114 = v12->_status == BACT_STATUS_DEAD   &&   v12->_vp_extra[0].flags & EVPROTO_FLAG_ACTIVE   &&  a4 &&   v12->_scale_time > 0;
+            const bool v114 = CanCollectPlasmaFrom(v12);
 
             if ( v12->_bact_type != BACT_TYPES_MISSLE
                     && (!v12->IsDestroyed() || v114)
@@ -1644,28 +1596,7 @@ size_t NC_STACK_ypatank::CollisionWithBact(int arg)
 
                             if ( v114 && v126 < v115 )
                             {
-                                ypatank_func87__sub0(v12);
-
-                                v12->_scale_time = -1;
-
-                                if ( _world->_GameShell )
-                                    SFXEngine::SFXe.startSound(&_world->_GameShell->samples1_info, World::SOUND_ID_PLASMA);
-
-                                if ( _world->_isNetGame )
-                                {
-                                    uamessage_endPlasma eplMsg;
-                                    eplMsg.msgID = UAMSG_ENDPLASMA;
-                                    eplMsg.owner = v12->_owner;
-                                    eplMsg.id = v12->_gid;
-
-                                    _world->NetBroadcastMessage(&eplMsg, sizeof(eplMsg), true);
-
-                                    if ( _owner != v12->_owner )
-                                    {
-                                        v12->_vp_extra[0].flags = 0;
-                                        v12->_vp_extra[0].SetVP((NC_STACK_base::Instance *)NULL);
-                                    }
-                                }
+                                CollectPlasmaFrom(v12);
                                 break;
                             }
                             else

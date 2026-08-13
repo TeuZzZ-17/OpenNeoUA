@@ -79,6 +79,7 @@ set(SOURCES
     world/clonebalance.cpp
     world/energyfx.cpp
     world/grounddecal.cpp
+    world/weapontracer.cpp
     world/luaevents.cpp
     world/parsers.cpp
     world/nparticle.cpp

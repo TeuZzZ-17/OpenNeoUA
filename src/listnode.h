@@ -1,6 +1,8 @@
 #ifndef LISTNODE_H_INCLUDED
 #define LISTNODE_H_INCLUDED
 
+#include <cstddef>
+#include <deque>
 #include <list>
 #include <vector>
 
@@ -9,6 +11,77 @@ template <typename T> class RefList: protected std::list<T>
 public:
     class Node;
     typedef std::vector<T> SafeCopy;
+
+    // Reuses snapshot storage while keeping one independent buffer per nested
+    // traversal. This preserves safe_iter() semantics when Update() recurses
+    // through a BACT hierarchy, without allocating a fresh vector every time.
+    class SnapshotWorkspace
+    {
+    public:
+        class View
+        {
+        public:
+            typedef typename SafeCopy::const_iterator const_iterator;
+
+            View(View &&other) noexcept
+            : _owner(other._owner), _depth(other._depth), _copy(other._copy)
+            {
+                other._owner = NULL;
+                other._copy = NULL;
+            }
+
+            ~View()
+            {
+                if (_owner)
+                    _owner->Release(_depth, _copy);
+            }
+
+            const_iterator begin() const { return _copy->begin(); }
+            const_iterator end() const { return _copy->end(); }
+
+            View(const View &) = delete;
+            View &operator=(const View &) = delete;
+            View &operator=(View &&) = delete;
+
+        private:
+            friend class SnapshotWorkspace;
+
+            View(SnapshotWorkspace *owner, size_t depth, SafeCopy *copy)
+            : _owner(owner), _depth(depth), _copy(copy)
+            {}
+
+            SnapshotWorkspace *_owner;
+            size_t _depth;
+            SafeCopy *_copy;
+        };
+
+        View Capture(const RefList &source)
+        {
+            const size_t depth = _depth;
+            if (depth == _buffers.size())
+                _buffers.emplace_back();
+
+            SafeCopy &copy = _buffers[depth];
+            copy.assign(source.begin(), source.end());
+            ++_depth;
+            return View(this, depth, &copy);
+        }
+
+    private:
+        void Release(size_t depth, SafeCopy *copy)
+        {
+            // Views are scoped and therefore released in reverse capture order.
+            // clear() keeps the high-water capacity for the next frame.
+            if (_depth == depth + 1)
+            {
+                copy->clear();
+                --_depth;
+            }
+        }
+
+        std::deque<SafeCopy> _buffers;
+        size_t _depth = 0;
+    };
 
     typedef std::list<T> _T_Base;
     typedef RefList<T> _T_List;

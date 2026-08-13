@@ -668,6 +668,7 @@ TVhclSound *VhclProtoParser::GetSndFxByName(const std::string &sndname)
         {"beamout",    10},
         {"build",      11},
         {"airexplode", 12},
+        {"pickup",     TVhclProto::SND_PICKUP},
     };
 
     for (const SoundType &t : CmpVals)
@@ -864,6 +865,8 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.allow = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_allow_host_station") )
         debuff.allow_host_station = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_inherit_to_children") )
+        debuff.inherit_to_children = p2 == "1";
     else if ( !StriCmp(p1, "debuff_name") )
         debuff.name = p2;
     else if ( !StriCmp(p1, "debuff_damage") )
@@ -1269,6 +1272,30 @@ static bool ParseBoundedIntegerParam(const std::string &paramName,
         parsed = -parsed;
     value = (int)std::max((long)minValue, std::min(parsed, (long)maxValue));
     return true;
+}
+
+static float ParseBoundedPositiveFiniteOrZero(ScriptParser::Parser &parser,
+                                               const std::string &value,
+                                               float maximum)
+{
+    size_t parsed = 0;
+    const float result = parser.stof(value, &parsed);
+    if ( parsed != value.size() || !std::isfinite(result) || result <= 0.0f )
+        return 0.0f;
+
+    return result > maximum ? maximum : result;
+}
+
+static double ParseBoundedFiniteOrZero(ScriptParser::Parser &parser,
+                                       const std::string &value,
+                                       double maximum)
+{
+    size_t parsed = 0;
+    const double result = parser.stod(value, &parsed);
+    if ( parsed != value.size() || !std::isfinite(result) )
+        return 0.0;
+
+    return std::max(-maximum, std::min(maximum, result));
 }
 
 static bool ParseWireframeTintParam(ScriptParser::Parser &parser,
@@ -2679,10 +2706,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                               : 0;
         _vhcl->fire_x_slots_defined = true;
     }
-    else if ( !StriCmp(p1, "cockpit_camera_enable") )
-    {
-        _vhcl->cockpit_camera_enable = StrGetBool(p2);
-    }
     else if ( !StriCmp(p1, "cockpit_camera_offset_x") )
     {
         _vhcl->cockpit_camera_offset.x = parser.stof(p2, 0);
@@ -2694,44 +2717,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "cockpit_camera_offset_z") )
     {
         _vhcl->cockpit_camera_offset.z = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_enable") )
-    {
-        _vhcl->mgun_pov_fx_enable = StrGetBool(p2);
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_vp") )
-    {
-        int vp = parser.stol(p2, 0);
-        _vhcl->mgun_pov_fx_vp = vp > 0 ? vp : -1;
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_scale") )
-    {
-        float scale = parser.stof(p2, 0);
-        _vhcl->mgun_pov_fx_scale = scale > 0.0 ? scale : 1.0;
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_offset_x") )
-    {
-        _vhcl->mgun_pov_fx_offset.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_offset_y") )
-    {
-        _vhcl->mgun_pov_fx_offset.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_offset_z") )
-    {
-        _vhcl->mgun_pov_fx_offset.z = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_rot_x") )
-    {
-        _vhcl->mgun_pov_fx_rot.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_rot_y") )
-    {
-        _vhcl->mgun_pov_fx_rot.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "mgun_pov_fx_rot_z") )
-    {
-        _vhcl->mgun_pov_fx_rot.z = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "gun_radius") )
     {
@@ -3435,13 +3420,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->overeof = 25.0;
         _vhcl->vwr_radius = 30.0;
         _vhcl->vwr_overeof = 30.0;
-        _vhcl->cockpit_camera_enable = false;
         _vhcl->cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
-        _vhcl->mgun_pov_fx_enable = false;
-        _vhcl->mgun_pov_fx_vp = -1;
-        _vhcl->mgun_pov_fx_scale = 1.0;
-        _vhcl->mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
-        _vhcl->mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
         _vhcl->gun_power = 4000.0;
         _vhcl->gun_radius = 5.0;
         _vhcl->max_pitch = -1.0;
@@ -3464,6 +3443,9 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
             x.sndPrm.time = 1000;
             x.sndPrm_shk.time = 1000;
         }
+
+        _vhcl->sndFX[TVhclProto::SND_PICKUP].volume = 90;
+        _vhcl->sndFX[TVhclProto::SND_PICKUP].pitch = 0;
 
         _vhcl->sndFX[TVhclProto::SND_HANDBRAKE].MainSample.Name =
             System::IniConf::GameHandBrakeSound.Get<std::string>();
@@ -3597,6 +3579,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_trail_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->vp_trail_tint = TVisualTint();
         _wpn->wireframe_tint = TVisualTint();
+        _wpn->tracer = TWeaponTracerConfig();
         _wpn->type_icon = 65;
         _wpn->debuff = TWeaponDebuffConfig();
         _wpn->cluster = TWeaponClusterConfig();
@@ -4228,6 +4211,42 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( ParseTintParam(parser, "vp_trail_tint", p1, p2, _wpn->vp_trail_tint) )
     {
+    }
+    else if ( !StriCmp(p1, "tracer_enable") )
+    {
+        // Only the exact value 1 enables the OpenUA visual extension.
+        _wpn->tracer.enabled = p2 == "1";
+    }
+    else if ( ParseTintParam(parser, "tracer_tint", p1, p2,
+                             _wpn->tracer.tint, true) )
+    {
+    }
+    else if ( !StriCmp(p1, "tracer_length") )
+    {
+        _wpn->tracer.length = ParseBoundedPositiveFiniteOrZero(
+            parser, p2, 6000.0f);
+    }
+    else if ( !StriCmp(p1, "tracer_width") )
+    {
+        _wpn->tracer.width = ParseBoundedPositiveFiniteOrZero(
+            parser, p2, 100.0f);
+    }
+    else if ( ParseBoundedIntegerParam("tracer_duration", p1, p2,
+                                        0, 5000, 0,
+                                        _wpn->tracer.duration) )
+    {
+    }
+    else if ( !StriCmp(p1, "tracer_offset_x") )
+    {
+        _wpn->tracer.offset.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+    }
+    else if ( !StriCmp(p1, "tracer_offset_y") )
+    {
+        _wpn->tracer.offset.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+    }
+    else if ( !StriCmp(p1, "tracer_offset_z") )
+    {
+        _wpn->tracer.offset.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
     }
     else if ( ParseDecorationFXParam(parser, p1, p2, _wpn->decoration_fx) )
     {

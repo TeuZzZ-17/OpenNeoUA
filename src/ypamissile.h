@@ -1,6 +1,7 @@
 #ifndef YMISSILE_H_INCLUDED
 #define YMISSILE_H_INCLUDED
 
+#include <deque>
 #include <vector>
 
 #include "nucleas.h"
@@ -40,6 +41,7 @@ public:
     virtual void AI_layer3(update_msg *arg) override;
     virtual void User_layer(update_msg *arg) override;
     virtual void Move(move_msg *arg) override;
+    virtual void Render(baseRender_msg *arg) override;
     virtual void SetState(setState_msg *arg) override;
     virtual void Renew() override;
     virtual size_t SetStateInternal(setState_msg *arg) override;
@@ -106,6 +108,9 @@ public:
     virtual void SetArmorPenetrationTargets(int targets);
     virtual void SetStartHeight(float);
     virtual void SetClusterSpawnedChild(bool child);
+    void ConfigureWeaponTracer(const World::TWeaponTracerConfig &config,
+                               bool supported);
+    void StartWeaponTracer();
 
     virtual NC_STACK_ypabact *GetLauncherBact();
     virtual int GetMissileType();
@@ -167,6 +172,14 @@ protected:
     void RememberChainHit(NC_STACK_ypabact *target);
     bool IsChainHit(NC_STACK_ypabact *target) const;
     void UpdateMortarBallistic(update_msg *arg); // OpenUA custom: ballistic shell flight + timed impact
+    void UpdateWeaponTracer();
+    void RenderWeaponTracer(baseRender_msg *arg);
+
+    struct TWeaponTracerPoint
+    {
+        vec3d pos;
+        int32_t time = 0;
+    };
 
     struct TBuildingHitRef
     {
@@ -239,6 +252,9 @@ protected:
     int   _mortarFlightTime = 0;
     float _mortarArcHeight  = 0.0;
     bool  _mortarImpactOnSurface = false;
+    World::TWeaponTracerConfig _weaponTracer;
+    bool _weaponTracerStarted = false;
+    std::deque<TWeaponTracerPoint> _weaponTracerPoints;
 };
 
 #endif // YMISSILE_H_INCLUDED

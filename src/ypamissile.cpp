@@ -24,6 +24,18 @@ static float ypamissile_Clamp01(float value)
     return value;
 }
 
+static bool ypamissile_WeaponTracerFinite(const vec3d &value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y) &&
+           std::isfinite(value.z);
+}
+
+static bool ypamissile_WeaponTracerFinite(const World::TVisualTint &tint)
+{
+    return std::isfinite(tint.r) && std::isfinite(tint.g) &&
+           std::isfinite(tint.b) && std::isfinite(tint.a);
+}
+
 static bool ypamissile_IsAliveForDeathPush(NC_STACK_ypabact *target)
 {
     return target &&
@@ -299,6 +311,9 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislAttachOffset = vec3d(0.0, 0.0, 0.0);
     _mislLastAttachedPosition = vec3d(0.0, 0.0, 0.0);
     _mislClusterSoundCarrier.Clear();
+    _weaponTracer = World::TWeaponTracerConfig();
+    _weaponTracerStarted = false;
+    _weaponTracerPoints.clear();
 
     for( auto& it : stak )
     {
@@ -463,6 +478,161 @@ void NC_STACK_ypamissile::AI_layer1(update_msg *arg)
 void NC_STACK_ypamissile::AI_layer2(update_msg *arg)
 {
     AI_layer3(arg);
+    UpdateWeaponTracer();
+}
+
+void NC_STACK_ypamissile::ConfigureWeaponTracer(
+    const World::TWeaponTracerConfig &config, bool supported)
+{
+    _weaponTracer = config;
+    _weaponTracer.tint.Clamp();
+    _weaponTracer.enabled = supported && config.enabled &&
+                            std::isfinite(config.length) && config.length > 0.01f &&
+                            std::isfinite(config.width) && config.width > 0.01f &&
+                            config.duration > 0 &&
+                            ypamissile_WeaponTracerFinite(config.offset) &&
+                            ypamissile_WeaponTracerFinite(config.tint) &&
+                            config.tint.a > 0.0f;
+    _weaponTracerStarted = false;
+    _weaponTracerPoints.clear();
+}
+
+void NC_STACK_ypamissile::StartWeaponTracer()
+{
+    _weaponTracerStarted = _weaponTracer.enabled && _world &&
+                           !_world->_isNetGame &&
+                           _mislType != MISL_INTERNAL;
+    _weaponTracerPoints.clear();
+
+    if ( !_weaponTracerStarted )
+        return;
+
+    // The authored offset selects only the visual muzzle/origin at launch.
+    // Every later point is the real projectile centre, so the tracer converges
+    // onto and then follows the physical path instead of remaining displaced.
+    const vec3d point = _position +
+        _rotation.Transpose().Transform(_weaponTracer.offset);
+    if ( !ypamissile_WeaponTracerFinite(point) )
+    {
+        _weaponTracerStarted = false;
+        return;
+    }
+
+    TWeaponTracerPoint sample;
+    sample.pos = point;
+    sample.time = _clock;
+    _weaponTracerPoints.push_back(sample);
+}
+
+void NC_STACK_ypamissile::UpdateWeaponTracer()
+{
+    // Loaded projectiles and other legitimate factory paths may not pass
+    // through a launch-specific finalization call. Start from their current
+    // authoritative transform on the first update without serializing history.
+    if ( !_weaponTracerStarted && _weaponTracer.enabled && _world &&
+         !_world->_isNetGame && _status == BACT_STATUS_NORMAL &&
+         _mislType != MISL_INTERNAL )
+    {
+        StartWeaponTracer();
+    }
+
+    if ( !_weaponTracerStarted || !_world || _world->_isNetGame )
+        return;
+
+    if ( !_weaponTracerPoints.empty() &&
+         _clock - _weaponTracerPoints.back().time >= _weaponTracer.duration )
+    {
+        _weaponTracerPoints.clear();
+    }
+
+    const vec3d point = _position;
+
+    if ( ypamissile_WeaponTracerFinite(point) )
+    {
+        if ( _weaponTracerPoints.empty() )
+        {
+            if ( _status != BACT_STATUS_NORMAL )
+                return;
+
+            TWeaponTracerPoint sample;
+            sample.pos = point;
+            sample.time = _clock;
+            _weaponTracerPoints.push_back(sample);
+        }
+        else
+        {
+            const float moved = (point - _weaponTracerPoints.back().pos).length();
+            const bool finalPoint = _status != BACT_STATUS_NORMAL;
+            const bool sampleDue =
+                _clock - _weaponTracerPoints.back().time >= 16;
+
+            if ( std::isfinite(moved) && moved > 0.01f &&
+                 (sampleDue || finalPoint) )
+            {
+                TWeaponTracerPoint sample;
+                sample.pos = point;
+                sample.time = _clock;
+                _weaponTracerPoints.push_back(sample);
+            }
+        }
+    }
+
+    // 320 samples cover five seconds at about 60 Hz while imposing a strict
+    // per-projectile memory/render bound. Sampling is capped to about 60 Hz,
+    // independently from a higher render framerate. Keep one point immediately
+    // before the duration window so the oldest visible segment stays continuous.
+    while ( _weaponTracerPoints.size() > 2 &&
+            _clock - _weaponTracerPoints[1].time > _weaponTracer.duration )
+    {
+        _weaponTracerPoints.pop_front();
+    }
+
+    while ( _weaponTracerPoints.size() > 320 )
+        _weaponTracerPoints.pop_front();
+}
+
+void NC_STACK_ypamissile::RenderWeaponTracer(baseRender_msg *arg)
+{
+    if ( !arg || !_weaponTracerStarted || !_world || _world->_isNetGame ||
+         _weaponTracerPoints.size() < 2 )
+        return;
+
+    float remainingLength = _weaponTracer.length;
+
+    for (size_t index = _weaponTracerPoints.size() - 1;
+         index > 0 && remainingLength > 0.01f; index--)
+    {
+        const TWeaponTracerPoint &older = _weaponTracerPoints[index - 1];
+        const TWeaponTracerPoint &newer = _weaponTracerPoints[index];
+
+        const int32_t age = std::max(0, _clock - newer.time);
+        if ( age >= _weaponTracer.duration )
+            continue;
+
+        vec3d segment = newer.pos - older.pos;
+        const float segmentLength = segment.length();
+        if ( !std::isfinite(segmentLength) || segmentLength <= 0.01f )
+            continue;
+
+        vec3d start = older.pos;
+        if ( segmentLength > remainingLength )
+            start = newer.pos - segment * (remainingLength / segmentLength);
+
+        const float fade = 1.0f - (float)age / (float)_weaponTracer.duration;
+        _world->RenderWeaponTracerSegment(arg, start, newer.pos,
+                                           _weaponTracer.width,
+                                           _weaponTracer.tint, fade);
+
+        remainingLength -= std::min(segmentLength, remainingLength);
+    }
+}
+
+void NC_STACK_ypamissile::Render(baseRender_msg *arg)
+{
+    // Preserve the complete existing projectile VP path, including particles,
+    // tint, scale and corkscrew. The procedural tracer is queued in addition.
+    NC_STACK_ypabact::Render(arg);
+    RenderWeaponTracer(arg);
 }
 
 bool NC_STACK_ypamissile::TryClusterSplit()
@@ -563,6 +733,7 @@ bool NC_STACK_ypamissile::TryClusterSplit()
         child->_rotation.SetZ(child->_fly_dir);
         child->_rotation.SetX(_rotation.AxisX());
         child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
+        child->StartWeaponTracer();
 
         if ( childProto.vp_launch > 0 )
             _world->SpawnTransientVP(childProto.vp_launch, child->_position, child->_rotation, 1000,
@@ -836,6 +1007,7 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     child->_rotation.SetZ(child->_fly_dir);
     child->_rotation.SetX(_rotation.AxisX());
     child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
+    child->StartWeaponTracer();
 
     if ( wproto.vp_launch > 0 )
         _world->SpawnTransientVP(wproto.vp_launch, child->_position, child->_rotation, 1000,
@@ -2604,6 +2776,9 @@ void NC_STACK_ypamissile::Renew()
     _mislLastAttachedPosition = vec3d(0.0, 0.0, 0.0);
     SFXEngine::SFXe.StopCarrier(&_mislClusterSoundCarrier);
     _mislClusterSoundCarrier.Clear();
+    _weaponTracer = World::TWeaponTracerConfig();
+    _weaponTracerStarted = false;
+    _weaponTracerPoints.clear();
 
     // OpenUA custom: clear mortar shell state on recycle.
     _isMortarProjectile = false;
