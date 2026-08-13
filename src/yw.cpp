@@ -1215,8 +1215,6 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
     _deadCacheList.clear();
     _transientVPs.clear();
     _nextTransientVPId = 1;
-    ClearMinigunTracers();
-    _mgunTracers.reserve(512);
     ClearGroundDecals();
     _damageHoverTargets.clear();
     _fxLimit = 16;
@@ -1309,7 +1307,6 @@ size_t NC_STACK_ypaworld::Deinit()
     }
     _superItemProfiles.clear();
     _debugAoeRings.clear();
-    ClearMinigunTracers();
     ClearGroundDecals();
     FreeGameDataCursors();
     dprintf("MAKE ME %s\n","ypaworld_func1");
@@ -3391,7 +3388,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_angle = vhcl.mgun_angle;
         bacto->_mgun_power_set = vhcl.mgun_power_set;
         bacto->_mgun_angle_set = vhcl.mgun_angle_set;
-        bacto->_mgun_tracer = vhcl.mgun_tracer;
         bacto->_mgun_sector_damage_accum = 0.0;
         bacto->_weapon_spread_x = vhcl.weapon_spread_x;
         bacto->_weapon_spread_y = vhcl.weapon_spread_y;
@@ -4282,7 +4278,6 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     Common::DeleteAndNull(&_script);
     _transientVPs.clear();
     _nextTransientVPId = 1;
-    ClearMinigunTracers();
     ClearGroundDecals();
     _damageHoverTargets.clear();
     _inBuildProcess.clear();

@@ -2042,7 +2042,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_angle = 0.0;
     _mgun_power_set = false;
     _mgun_angle_set = false;
-    _mgun_tracer = World::TMgunTracerConfig();
     _mgun_sector_damage_accum = 0.0;
     _mgun_vp_fire_end_time = 0;
     _weapon_spread_x = 0.0;
@@ -14005,7 +14004,6 @@ void NC_STACK_ypabact::Renew()
     _mgun_angle = 0.0;
     _mgun_power_set = false;
     _mgun_angle_set = false;
-    _mgun_tracer = World::TMgunTracerConfig();
     _mgun_sector_damage_accum = 0.0;
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
@@ -14910,33 +14908,6 @@ static void ypabact_SpawnFirstPersonMinigunFX(NC_STACK_ypabact *bact)
     }
 }
 
-static vec3d ypabact_GetMinigunTracerOrigin(NC_STACK_ypabact *bact,
-                                            int shotIndex, int shotCount)
-{
-    const float vehicleRadius = std::isfinite(bact->_radius) && bact->_radius > 0.0f
-        ? bact->_radius : 20.0f;
-    vec3d localOffset(0.0, -vehicleRadius * 0.25f, vehicleRadius);
-
-    if ( bact->_mgun_tracer.offset_x_set )
-        localOffset.x = bact->_mgun_tracer.offset.x;
-    else if ( shotCount > 1 )
-        localOffset.x = vehicleRadius * 0.25f;
-
-    if ( bact->_mgun_tracer.offset_y_set )
-        localOffset.y = bact->_mgun_tracer.offset.y;
-    if ( bact->_mgun_tracer.offset_z_set )
-        localOffset.z = bact->_mgun_tracer.offset.z;
-
-    if ( shotCount > 1 )
-    {
-        const float spacing = fabs(localOffset.x);
-        const float fraction = (float)shotIndex / (float)(shotCount - 1);
-        localOffset.x = -spacing + spacing * 2.0f * fraction;
-    }
-
-    return bact->_position + bact->_rotation.Transpose().Transform(localOffset);
-}
-
 static int ypabact_GetMinigunSectorDamageStep(NC_STACK_ypabact *bact, const vec3d &pos)
 {
     if ( !bact || !bact->getBACT_pWorld() )
@@ -15163,8 +15134,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
     if ( spawnVisual )
         ypabact_SpawnFirstPersonMinigunFX(this);
-
-    const bool spawnTracers = spawnVisual && _mgun_tracer.enabled;
 
     for (int shotId = 0; shotId < mgunShots; shotId++)
     {
@@ -15421,31 +15390,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             else if ( minigunWorldHit )
             {
                 v55 = 1;
-            }
-
-            if ( spawnTracers )
-            {
-                float tracerDistance = minigunTraceRange;
-                if ( v55 )
-                {
-                    const float impactDistance = (v80 - shotPos).length();
-                    if ( std::isfinite(impactDistance) )
-                        tracerDistance = std::min(tracerDistance,
-                                                  impactDistance);
-                }
-
-                const vec3d tracerOrigin = ypabact_GetMinigunTracerOrigin(
-                    this, shotId, mgunShots);
-                const float sourceAdvance = (float)(tracerOrigin - shotPos).dot(shotDir);
-                if ( std::isfinite(sourceAdvance) )
-                    tracerDistance = std::max(0.0f,
-                                              tracerDistance - sourceAdvance);
-
-                _world->SpawnMinigunTracer(
-                    tracerOrigin,
-                    ypabact_LaserRotationFromDir(shotDir, _rotation),
-                    tracerDistance,
-                    _mgun_tracer);
             }
 
             bool spawnedVehicleImpact = false;

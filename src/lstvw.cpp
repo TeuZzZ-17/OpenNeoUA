@@ -672,12 +672,19 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                             && struc->ClickInf.move.ScreenPos.y >= y
                             && struc->ClickInf.move.ScreenPos.y < y + h;
 
-    if ( wheelScroll && pointerInside
-            && struc->ClickInf.wheel != 0 && numEntries > shownEntries )
+    if ( wheelScroll && pointerInside && struc->ClickInf.wheel != 0 )
     {
-        const int maxFirstShown = std::max(0, (int)numEntries - (int)shownEntries);
-        const int nextFirstShown = (int)firstShownEntries - struc->ClickInf.wheel;
-        firstShownEntries = (int16_t)std::max(0, std::min(nextFirstShown, maxFirstShown));
+        if ( numEntries > shownEntries )
+        {
+            const int maxFirstShown = std::max(0, (int)numEntries - (int)shownEntries);
+            const int nextFirstShown = (int)firstShownEntries - struc->ClickInf.wheel;
+            firstShownEntries = (int16_t)std::max(0, std::min(nextFirstShown, maxFirstShown));
+        }
+
+        // A visible wheel-enabled list owns the wheel while the pointer is
+        // inside it, even when already at a scroll limit.  This prevents UI
+        // behind the list (notably the Tactical Map) from reacting too.
+        struc->ClickInf.wheel = 0;
     }
 
 
