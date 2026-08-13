@@ -1626,7 +1626,24 @@ void NC_STACK_ypaworld::CellSetNewOwner(cellArea *cell, NC_STACK_ypabact *a5, in
             e = 0;
 
         for ( NC_STACK_ypabact* &nod : cell->unitsList )
+        {
+            // Sector ownership is decided by living occupants.  Dead BACTs
+            // remain in the cell while their recoverable plasma is visible;
+            // SetStateInternal(DEAD) also gives them the legacy -10000 energy
+            // sentinel.  A long death-plasma lifetime must therefore not let
+            // corpses/plasma subtract energy from their faction and recapture
+            // a sector long after the actual fight ended.
+            if ( !nod ||
+                 nod->_owner <= World::OWNER_0 ||
+                 nod->_owner >= World::FRACTION_MAXCOUNT ||
+                 nod->_bact_type == BACT_TYPES_MISSLE ||
+                 nod->_status == BACT_STATUS_DEAD ||
+                 (nod->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
+                 nod->_energy <= 0 )
+                continue;
+
             energon[nod->_owner] += nod->_energy;
+        }
 
         energon[0] = 0;
 
@@ -3754,8 +3771,6 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     RenderSuperItems(&rndrs);
 
     RenderFillers(&rndrs);
-
-    RenderMinigunTracers(&rndrs);
 
     RenderGroundDecals(&rndrs);
 

@@ -44,28 +44,6 @@ struct TVisualTint
     }
 };
 
-struct TMgunTracerConfig
-{
-    bool enabled = false;
-    TVisualTint tint;
-    float length = 300.0f;
-    float width = 3.0f;
-    int duration = 80;
-    float speed = 6000.0f;
-    vec3d offset = vec3d(0.0, 0.0, 0.0);
-    bool offset_x_set = false;
-    bool offset_y_set = false;
-    bool offset_z_set = false;
-
-    TMgunTracerConfig()
-    {
-        tint.r = 1.0f;
-        tint.g = 210.0f / 255.0f;
-        tint.b = 80.0f / 255.0f;
-        tint.a = 180.0f / 255.0f;
-    }
-};
-
 struct TDecorationFXConfig
 {
     uint8_t mode = DECORATION_FX_PERIODIC;
@@ -536,7 +514,6 @@ struct TVhclProto
     float mgun_angle = 0.0;
     bool mgun_power_set = false;
     bool mgun_angle_set = false;
-    TMgunTracerConfig mgun_tracer;
     float weapon_spread_x = 0.0;
     float weapon_spread_y = 0.0;
     float weapon_arc_x = 0.0;

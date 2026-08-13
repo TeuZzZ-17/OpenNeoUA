@@ -117,31 +117,6 @@ static float NonNegativeFiniteOrZero(float value)
     return std::isfinite(value) && value > 0.0f ? value : 0.0f;
 }
 
-static float ParseBoundedPositiveFiniteOrZero(ScriptParser::Parser &parser,
-                                               const std::string &value,
-                                               float maximum)
-{
-    size_t parsed = 0;
-    const float result = parser.stof(value, &parsed);
-    if ( parsed != value.size() || !std::isfinite(result) || result <= 0.0f )
-        return 0.0f;
-
-    return result > maximum ? maximum : result;
-}
-
-static bool ParseBoundedFinite(ScriptParser::Parser &parser,
-                               const std::string &value, double maximum,
-                               double *result)
-{
-    size_t parsed = 0;
-    const double parsedValue = parser.stod(value, &parsed);
-    if ( !result || parsed != value.size() || !std::isfinite(parsedValue) )
-        return false;
-
-    *result = std::max(-maximum, std::min(maximum, parsedValue));
-    return true;
-}
-
 static int NonNegativeFiniteMilliseconds(ScriptParser::Parser &parser,
                                          const std::string &value)
 {
@@ -2545,49 +2520,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun_shot_time_user = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "mgun_tracer_enable") )
-    {
-        _vhcl->mgun_tracer.enabled = p2 == "1";
-    }
-    else if ( ParseTintParam(parser, "mgun_tracer_tint", p1, p2,
-                             _vhcl->mgun_tracer.tint, true) )
-    {
-    }
-    else if ( !StriCmp(p1, "mgun_tracer_length") )
-    {
-        _vhcl->mgun_tracer.length = ParseBoundedPositiveFiniteOrZero(
-            parser, p2, 6000.0f);
-    }
-    else if ( !StriCmp(p1, "mgun_tracer_width") )
-    {
-        _vhcl->mgun_tracer.width = ParseBoundedPositiveFiniteOrZero(
-            parser, p2, 100.0f);
-    }
-    else if ( ParseBoundedIntegerParam("mgun_tracer_duration", p1, p2,
-                                       0, 5000, 0,
-                                       _vhcl->mgun_tracer.duration) )
-    {
-    }
-    else if ( !StriCmp(p1, "mgun_tracer_speed") )
-    {
-        _vhcl->mgun_tracer.speed = ParseBoundedPositiveFiniteOrZero(
-            parser, p2, 60000.0f);
-    }
-    else if ( !StriCmp(p1, "mgun_tracer_offset_x") )
-    {
-        _vhcl->mgun_tracer.offset_x_set = ParseBoundedFinite(
-            parser, p2, 6000.0f, &_vhcl->mgun_tracer.offset.x);
-    }
-    else if ( !StriCmp(p1, "mgun_tracer_offset_y") )
-    {
-        _vhcl->mgun_tracer.offset_y_set = ParseBoundedFinite(
-            parser, p2, 6000.0f, &_vhcl->mgun_tracer.offset.y);
-    }
-    else if ( !StriCmp(p1, "mgun_tracer_offset_z") )
-    {
-        _vhcl->mgun_tracer.offset_z_set = ParseBoundedFinite(
-            parser, p2, 6000.0f, &_vhcl->mgun_tracer.offset.z);
-    }
     else if ( !StriCmp(p1, "mgun_recoil_visual_intensity") )
     {
         float intensity = parser.stof(p2, 0);
@@ -3381,7 +3313,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_angle = 0.0;
         _vhcl->mgun_power_set = false;
         _vhcl->mgun_angle_set = false;
-        _vhcl->mgun_tracer = TMgunTracerConfig();
         _vhcl->weapon_spread_x = 0.0;
         _vhcl->weapon_spread_y = 0.0;
         _vhcl->weapon_arc_x = 0.0;
