@@ -1009,7 +1009,6 @@ public:
     float _mgun_angle;
     bool _mgun_power_set;
     bool _mgun_angle_set;
-    World::TMgunTracerConfig _mgun_tracer;
     float _mgun_sector_damage_accum;
     float _weapon_spread_x;
     float _weapon_spread_y;

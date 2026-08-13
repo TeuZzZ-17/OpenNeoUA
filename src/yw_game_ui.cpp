@@ -10012,6 +10012,19 @@ bool NC_STACK_ypaworld::IsRoboMapOpen() const
     return robo_map.IsOpen();
 }
 
+static bool yw_GuiListOwnsWheelAtPointer(const GuiList &list,
+                                         const TClickBoxInf &click)
+{
+    if ( !list.wheelScroll || list.IsClosed() ||
+         (list.flags & GuiBase::FLAG_ICONIFED) )
+        return false;
+
+    return click.move.ScreenPos.x >= list.x &&
+           click.move.ScreenPos.x < list.x + list.w &&
+           click.move.ScreenPos.y >= list.y &&
+           click.move.ScreenPos.y < list.y + list.h;
+}
+
 void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 {
     if ( robo_map.IsClosed() )
@@ -10034,12 +10047,15 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         if ( yw->_showDebugMode )
             robo_map.MapViewMask = -1;
 
-        // While the tactical map is open, it owns mouse-wheel input globally.
-        // This is intentionally independent of the pointer position and of the
-        // currently controlled unit. Consuming the wheel here also prevents
-        // vehicle-specific zoom paths (for example UFO optical zoom) from
-        // reacting to the same input while the map is visible.
-        const int mapWheel = winpt->wheel;
+        // The Tactical Map normally owns the wheel globally while open, but a
+        // foreground wheel-enabled list under the pointer has higher UI
+        // priority.  Both the unit/operations list and Squadron Manager are
+        // processed later in the same input pass, so leave the wheel untouched
+        // here and let that list consume it.
+        const bool listOwnsWheel =
+            yw_GuiListOwnsWheelAtPointer(gui_lstvw, *winpt) ||
+            yw_GuiListOwnsWheelAtPointer(squadron_manager, *winpt);
+        const int mapWheel = listOwnsWheel ? 0 : winpt->wheel;
         if ( mapWheel > 0 )
         {
             for ( int i = 0; i < mapWheel; i++ )

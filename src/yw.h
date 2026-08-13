@@ -2714,12 +2714,6 @@ public:
 
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls());
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
-    bool SpawnMinigunTracer(const vec3d &origin, const mat3x3 &rotation,
-                            float availableDistance,
-                            const World::TMgunTracerConfig &config);
-    void CleanupExpiredMinigunTracers();
-    void RenderMinigunTracers(baseRender_msg *arg);
-    void ClearMinigunTracers();
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
@@ -2882,15 +2876,6 @@ public:
         TGroundDecal &operator=(const TGroundDecal &) = delete;
     };
 
-    struct TMgunTracer
-    {
-        vec3d origin;
-        mat3x3 rotation;
-        float availableDistance = 0.0f;
-        int32_t startTime = 0;
-        World::TMgunTracerConfig config;
-    };
-
     UserData *_GameShell = NULL;
 
     Common::Point _mapSize;
@@ -2931,10 +2916,6 @@ public:
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;
     int32_t _nextTransientVPId = 1;
-    std::vector<TMgunTracer> _mgunTracers;
-    int32_t _mgunTracerCleanupTime = 0;
-    bool _mgunTracerCleanupTimeValid = false;
-    GFX::TMesh _mgunTracerMesh;
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;
