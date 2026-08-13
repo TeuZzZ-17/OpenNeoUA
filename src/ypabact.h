@@ -1006,7 +1006,8 @@ public:
     float _mgunEnergyDrainRemainder;
     int32_t _mgunEnergyDrainElapsedMs;
     int32_t _mgunEnergyDrainLastFireTime;
-    float _mgun_recoil_visual_intensity;
+    float _mgun_recoil;
+    World::TWeaponTracerConfig _mgun_tracer;
     bool _mgun_decal_enable;
     World::TChainFXConfig _mgun_decal;
     int _mgun_vp_dead;

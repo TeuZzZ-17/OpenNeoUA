@@ -2718,6 +2718,12 @@ public:
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
+    bool SpawnMinigunTracer(const vec3d &origin, const vec3d &direction,
+                            float availableDistance,
+                            const World::TWeaponTracerConfig &config);
+    void CleanupExpiredMinigunTracers();
+    void RenderMinigunTracers(baseRender_msg *arg);
+    void ClearMinigunTracers();
     void RenderWeaponTracerSegment(baseRender_msg *arg, const vec3d &start,
                                    const vec3d &end, float width,
                                    const World::TVisualTint &tint, float fade);
@@ -2885,6 +2891,14 @@ public:
         TGroundDecal &operator=(const TGroundDecal &) = delete;
     };
 
+    struct TMinigunTracer
+    {
+        vec3d start;
+        vec3d end;
+        int32_t startTime = 0;
+        World::TWeaponTracerConfig config;
+    };
+
     UserData *_GameShell = NULL;
 
     Common::Point _mapSize;
@@ -2934,6 +2948,7 @@ public:
     int32_t _nextTransientVPId = 1;
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
+    std::vector<TMinigunTracer> _mgunTracers;
     GFX::TMesh _weaponTracerMesh;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;
     std::vector<TDamageHoverTarget> _damageHoverTargets;

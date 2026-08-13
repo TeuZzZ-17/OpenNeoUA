@@ -1503,6 +1503,8 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
     _deadCacheList.clear();
     _transientVPs.clear();
     _nextTransientVPId = 1;
+    ClearMinigunTracers();
+    _mgunTracers.reserve(512);
     ClearGroundDecals();
     _damageHoverTargets.clear();
     _fxLimit = 16;
@@ -1595,6 +1597,7 @@ size_t NC_STACK_ypaworld::Deinit()
     }
     _superItemProfiles.clear();
     _debugAoeRings.clear();
+    ClearMinigunTracers();
     ClearGroundDecals();
     ClearWeaponTracerMesh();
     FreeGameDataCursors();
@@ -3742,7 +3745,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_num_mguns = vhcl.num_mguns > 0 ? vhcl.num_mguns : 1;
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
         bacto->_mgun_shot_time_user = vhcl.mgun_shot_time_user;
-        bacto->_mgun_recoil_visual_intensity = vhcl.mgun_recoil_visual_intensity;
+        bacto->_mgun_recoil = vhcl.mgun_recoil;
+        bacto->_mgun_tracer = vhcl.mgun_tracer;
         bacto->_mgun_decal_enable = vhcl.mgun_decal_enable;
         bacto->_mgun_decal = vhcl.mgun_decal;
         bacto->_mgun_vp_dead = vhcl.mgun_vp_dead;
@@ -4651,6 +4655,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     Common::DeleteAndNull(&_script);
     _transientVPs.clear();
     _nextTransientVPId = 1;
+    ClearMinigunTracers();
     ClearGroundDecals();
     _damageHoverTargets.clear();
     _inBuildProcess.clear();
