@@ -2004,6 +2004,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_pov_fx_scale = 1.0;
     _mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
+    _mgun_decal_enable = false;
+    _mgun_decal = World::TChainFXConfig();
     _clock = 0;
     _AI_time1 = 0;
     _AI_time2 = 0;
@@ -2228,6 +2230,8 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mgun_pov_fx_scale = 1.0;
     _mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
+    _mgun_decal_enable = false;
+    _mgun_decal = World::TChainFXConfig();
     _energy = 10000;
     _shield = 0;
     _base_snd_normal_pitch = 0;
@@ -14016,6 +14020,8 @@ void NC_STACK_ypabact::Renew()
     _mgun_pov_fx_scale = 1.0;
     _mgun_pov_fx_offset = vec3d(0.0, 0.0, 0.0);
     _mgun_pov_fx_rot = vec3d(0.0, 0.0, 0.0);
+    _mgun_decal_enable = false;
+    _mgun_decal = World::TChainFXConfig();
     _spawn_units = 0;
     _spawn_vehicle = 0;
     _spawn_interval = 5000;
@@ -15390,6 +15396,8 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             else if ( minigunWorldHit )
             {
                 v55 = 1;
+                if ( _mgun_decal_enable )
+                    _world->SpawnGroundDecal(_mgun_decal, v59);
             }
 
             bool spawnedVehicleImpact = false;

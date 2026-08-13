@@ -1003,6 +1003,8 @@ public:
     int _mgun_shot_time_user;
     float _mgun_recoil_visual_intensity;
     int _mgun_recoil_visual_frequency;
+    bool _mgun_decal_enable;
+    World::TChainFXConfig _mgun_decal;
     int _mgun_vp_dead;
     int _mgun_vp_megadeth;
     float _mgun_power;
