@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <map>
 #include <vector>
-#include <unordered_set>
 #include "env.h"
 #include "includes.h"
 #include "yw_internal.h"
@@ -1163,6 +1162,7 @@ static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw);
 static void yw_PreDrawSquadronManager(NC_STACK_ypaworld *yw);
 static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw);
 static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw);
+static constexpr uint8_t kSquadronManagerDragOpacity = 128;
 
 
 ///////// up panel ///////////
@@ -8012,7 +8012,9 @@ void sub_4C7950(NC_STACK_ypaworld *yw, CmdStream *cur, int a4, int a3)
                 FontUA::set_center_xpos(cur, a4 - (yw->_screenSize.x / 2));
                 FontUA::set_center_ypos(cur, a3 - (yw->_screenSize.y / 2));
 
+                FontUA::set_opacity(cur, kSquadronManagerDragOpacity);
                 FontUA::store_u8(cur, sub_4C7134(yw, squadron_manager.field_2BC));
+                FontUA::set_opacity(cur, 255);
             }
         }
     }
@@ -8076,6 +8078,112 @@ void sub_4514F0(TileMap *tyle, CmdStream *cur, const std::string &st, int a3, ch
     }
 }
 
+static void yw_RenderSquadronManagerSquadContent(NC_STACK_ypaworld *yw,
+                                                  NC_STACK_ypabact *bact,
+                                                  CmdStream *cur,
+                                                  uint8_t opacity)
+{
+    const std::vector<NC_STACK_ypabact *> displayUnits =
+        yw_GetSquadronDisplayUnits(bact);
+    const int blink = (yw->_timeStamp / 300) & 1;
+    const int iconCellWidth = squadron_manager.field_2CC;
+    const int spacerWidth = yw->_guiTiles[28]->map[64].w;
+    const int statusCellWidth = yw->_guiTiles[28]->map[97].w + spacerWidth;
+    const int leaderCellWidth = iconCellWidth + spacerWidth;
+    const int unitSlotCount = yw_GetSquadronManagerUnitSlotCount(yw);
+    const int unitCellsWidth = leaderCellWidth
+                             + std::max(0, unitSlotCount - 1) * iconCellWidth;
+    const int countWidth = std::max(0,
+        squadron_manager.entryWidth - 2 * yw->_fontBorderW
+        - statusCellWidth - unitCellsWidth);
+
+    if ( opacity != 255 )
+        FontUA::set_opacity(cur, opacity);
+
+    FontUA::select_tileset(cur, 28);
+    sub_4514F0(yw->_guiTiles[28], cur,
+               std::string(1, yw_GetSquadronManagerStatusIcon(bact)),
+               statusCellWidth, 64);
+
+    for ( int slot = 0; slot < unitSlotCount; slot++ )
+    {
+        const int cellWidth = slot == 0 ? leaderCellWidth : iconCellWidth;
+        NC_STACK_ypabact *unit = slot < (int)displayUnits.size()
+            ? displayUnits[slot]
+            : NULL;
+
+        std::string iconText;
+        if ( unit )
+            iconText += yw_GetSquadronManagerUnitIcon(yw, unit, blink);
+
+        sub_4514F0(yw->_guiTiles[28], cur, iconText, cellWidth, 64);
+
+        if ( unit )
+        {
+            const uint8_t healthGlyph = yw_GetSquadronManagerHealthGlyph(unit);
+            const int healthWidth = yw->_guiTiles[28]->map[healthGlyph].w;
+            FontUA::add_xpos(cur, -cellWidth);
+            FontUA::store_u8(cur, healthGlyph);
+            FontUA::add_xpos(cur, cellWidth - healthWidth);
+        }
+    }
+
+    if ( !displayUnits.empty() )
+    {
+        FontUA::select_tileset(cur, 0);
+        FontUA::copy_position(cur);
+        FontUA::add_txt(cur, countWidth, 1,
+                       fmt::sprintf(" x%d", (int)displayUnits.size()));
+    }
+
+    if ( opacity != 255 )
+        FontUA::set_opacity(cur, 255);
+}
+
+static void yw_RenderSquadronManagerWholeSquadDragGhost(
+    NC_STACK_ypaworld *yw, CmdStream *cur, int firstIconX, int rowY)
+{
+    NC_STACK_ypabact *leader = squadron_manager.field_2BC;
+    if ( !yw || !cur || !leader || !leader->IsParentMyRobo() )
+        return;
+
+    const std::vector<NC_STACK_ypabact *> displayUnits =
+        yw_GetSquadronDisplayUnits(leader);
+    if ( displayUnits.empty() )
+        return;
+
+    const int iconCellWidth = std::max(1, squadron_manager.field_2CC);
+    const int totalWidth = (int)displayUnits.size() * iconCellWidth;
+    if ( firstIconX + totalWidth <= 0
+            || firstIconX >= yw->_screenSize.x
+            || rowY + yw->_fontH <= 0
+            || rowY >= yw->_screenSize.y )
+    {
+        return;
+    }
+
+    // Whole-squad drag intentionally shows only the unit glyphs.  Keep their
+    // relative row position under the mouse, but do not drag the row
+    // background, status glyph, health bars or the xN counter.
+    FontUA::set_center_xpos(cur, firstIconX - (yw->_screenSize.x / 2));
+    FontUA::set_center_ypos(cur, rowY - (yw->_screenSize.y / 2));
+    FontUA::select_tileset(cur, 28);
+    FontUA::set_opacity(cur, kSquadronManagerDragOpacity);
+
+    const int blink = (yw->_timeStamp / 300) & 1;
+    for ( NC_STACK_ypabact *unit : displayUnits )
+    {
+        if ( !unit )
+            continue;
+
+        sub_4514F0(yw->_guiTiles[28], cur,
+                   std::string(1, yw_GetSquadronManagerUnitIcon(yw, unit, blink)),
+                   iconCellWidth, 64);
+    }
+
+    FontUA::set_opacity(cur, 255);
+}
+
 void ypaworld_func64__sub7__sub3__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, CmdStream *cur)
 {
     const int blink = (yw->_timeStamp / 300) & 1;
@@ -8114,23 +8222,10 @@ void ypaworld_func64__sub7__sub3__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypa
 
 void ypaworld_func64__sub7__sub3__sub0__sub0(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, CmdStream *cur)
 {
-    const std::vector<NC_STACK_ypabact *> displayUnits =
-        yw_GetSquadronDisplayUnits(bact);
-    const int blink = (yw->_timeStamp / 300) & 1;
     const bool selected = yw_IsSquadronManagerRowSelected(yw, bact);
     const bool hovered = yw_IsSquadronManagerRowHovered(bact);
     const int rowTileset = hovered && !selected ? 9 : 0;
     const int rowOpacity = selected ? 0 : (hovered ? 208 : -1);
-    const int iconCellWidth = squadron_manager.field_2CC;
-    const int spacerWidth = yw->_guiTiles[28]->map[64].w;
-    const int statusCellWidth = yw->_guiTiles[28]->map[97].w + spacerWidth;
-    const int leaderCellWidth = iconCellWidth + spacerWidth;
-    const int unitSlotCount = yw_GetSquadronManagerUnitSlotCount(yw);
-    const int unitCellsWidth = leaderCellWidth
-                             + std::max(0, unitSlotCount - 1) * iconCellWidth;
-    const int countWidth = std::max(0,
-        squadron_manager.entryWidth - 2 * yw->_fontBorderW
-        - statusCellWidth - unitCellsWidth);
     const int rowFillWidth = yw_GetSquadronManagerBackgroundFillWidth(yw);
     const int rowRewind = squadron_manager.entryWidth
                         - 2 * yw->_fontBorderW + 1
@@ -8140,43 +8235,7 @@ void ypaworld_func64__sub7__sub3__sub0__sub0(NC_STACK_ypaworld *yw, NC_STACK_ypa
                                  rowFillWidth, rowOpacity);
 
     FontUA::add_xpos(cur, -rowRewind);
-
-    FontUA::select_tileset(cur, 28);
-    sub_4514F0(yw->_guiTiles[28], cur,
-               std::string(1, yw_GetSquadronManagerStatusIcon(bact)),
-               statusCellWidth, 64);
-
-    for ( int slot = 0; slot < unitSlotCount; slot++ )
-    {
-        const int cellWidth = slot == 0 ? leaderCellWidth : iconCellWidth;
-        NC_STACK_ypabact *unit = slot < (int)displayUnits.size()
-            ? displayUnits[slot]
-            : NULL;
-
-        std::string iconText;
-        if ( unit )
-            iconText += yw_GetSquadronManagerUnitIcon(yw, unit, blink);
-
-        sub_4514F0(yw->_guiTiles[28], cur, iconText, cellWidth, 64);
-
-        if ( unit )
-        {
-            const uint8_t healthGlyph = yw_GetSquadronManagerHealthGlyph(unit);
-            const int healthWidth = yw->_guiTiles[28]->map[healthGlyph].w;
-            FontUA::add_xpos(cur, -cellWidth);
-            FontUA::store_u8(cur, healthGlyph);
-            FontUA::add_xpos(cur, cellWidth - healthWidth);
-        }
-    }
-
-    if ( !displayUnits.empty() )
-    {
-        // Vehicle/status glyphs belong to tileset 28; the squad total is text.
-        FontUA::select_tileset(cur, 0);
-        FontUA::copy_position(cur);
-        FontUA::add_txt(cur, countWidth, 1,
-                       fmt::sprintf(" x%d", (int)displayUnits.size()));
-    }
+    yw_RenderSquadronManagerSquadContent(yw, bact, cur, 255);
 
     FontUA::next_line(cur);
 }
@@ -8259,74 +8318,31 @@ void ypaworld_func64__sub7__sub3__sub0(NC_STACK_ypaworld *yw, TInputState *inpt)
     {
         if ( squadron_manager.field_2C8 != winpt->move.ScreenPos.x || squadron_manager.field_2CA != winpt->move.ScreenPos.y )
         {
-            sub_4C7950(yw, &squadron_manager.itemBlock, squadron_manager.field_2C4, squadron_manager.field_2C6);
+            if ( squadron_manager.draggingWholeSquad )
+            {
+                yw_RenderSquadronManagerWholeSquadDragGhost(
+                    yw, &squadron_manager.itemBlock,
+                    squadron_manager.field_2C4, squadron_manager.field_2C6);
+            }
+            else
+            {
+                sub_4C7950(yw, &squadron_manager.itemBlock,
+                           squadron_manager.field_2C4,
+                           squadron_manager.field_2C6);
 
-            if ( squadron_manager.field_2A8 & 2 )
-                sub_4C7950(yw, &squadron_manager.itemBlock, squadron_manager.field_2C4 + squadron_manager.field_2CC / 4, squadron_manager.field_2C6 + (yw->_fontH / 4) );
+                if ( squadron_manager.field_2A8 & 2 )
+                {
+                    sub_4C7950(yw, &squadron_manager.itemBlock,
+                               squadron_manager.field_2C4
+                                   + squadron_manager.field_2CC / 4,
+                               squadron_manager.field_2C6
+                                   + (yw->_fontH / 4));
+                }
+            }
         }
     }
 
     FontUA::set_end(&squadron_manager.itemBlock);
-}
-
-static int yw_FindActiveSquadRemapIndex(NC_STACK_ypaworld *yw)
-{
-    if ( !yw || yw->_activeCmdrID == 0 )
-        return -1;
-
-    for ( size_t i = 0; i < yw->_cmdrsRemap.size(); i++ )
-    {
-        NC_STACK_ypabact *commander = yw->_cmdrsRemap[i];
-        if ( commander && commander->_commandID == yw->_activeCmdrID )
-            return (int)i;
-    }
-
-    return -1;
-}
-
-static int yw_FindControlledSquadRemapIndex(NC_STACK_ypaworld *yw)
-{
-    if ( !yw || !yw->_userUnit || !yw->_userRobo
-            || yw->_userUnit == yw->_userRobo )
-        return -1;
-
-    NC_STACK_ypabact *commander = yw->_userUnit;
-    std::unordered_set<NC_STACK_ypabact *> visited;
-    while ( commander && commander != yw->_userRobo
-            && visited.insert(commander).second )
-    {
-        if ( commander->_parent == yw->_userRobo )
-            break;
-        commander = commander->_parent;
-    }
-
-    if ( !commander || commander == yw->_userRobo
-            || commander->_parent != yw->_userRobo )
-        return -1;
-
-    for ( size_t i = 0; i < yw->_cmdrsRemap.size(); i++ )
-    {
-        if ( yw->_cmdrsRemap[i] == commander )
-            return (int)i;
-    }
-
-    return -1;
-}
-
-static bool yw_ShouldShowControlledUnitAsPriorityRow(NC_STACK_ypaworld *yw,
-                                                      int controlledRemapIndex)
-{
-    if ( !yw || !yw->_userUnit || !yw->_userRobo
-            || yw->_userUnit == yw->_userRobo
-            || controlledRemapIndex >= 0 )
-        return false;
-
-    NC_STACK_ypabact *unit = yw->_userUnit;
-    return unit->IsParentMyRobo()
-        && unit->_status != BACT_STATUS_DEAD
-        && unit->_status != BACT_STATUS_CREATE
-        && unit->_status != BACT_STATUS_BEAM
-        && !unit->ShouldHideFromStrategicUI();
 }
 
 void sub_4C707C(NC_STACK_ypaworld *yw)
@@ -8334,77 +8350,29 @@ void sub_4C707C(NC_STACK_ypaworld *yw)
     squadron_manager.squads.fill(NULL);
     squadron_manager.squadRemapIndices.fill(-2);
 
-    const int controlledRemapIndex = yw_FindControlledSquadRemapIndex(yw);
-    const int activeRemapIndex = yw_FindActiveSquadRemapIndex(yw);
-    NC_STACK_ypabact *priorityStandaloneUnit =
-        yw_ShouldShowControlledUnitAsPriorityRow(yw, controlledRemapIndex)
-            ? yw->_userUnit
-            : NULL;
-    const int prioritizedRemapIndex = priorityStandaloneUnit
-        ? -1
-        : (activeRemapIndex >= 0 ? activeRemapIndex : controlledRemapIndex);
-    const uint32_t prioritizedCommandID = priorityStandaloneUnit
-        ? (uint32_t)priorityStandaloneUnit->_gid
-        : (prioritizedRemapIndex >= 0
-            ? yw->_cmdrsRemap[prioritizedRemapIndex]->_commandID
-            : 0);
-
-    if ( squadron_manager.prioritizedCommandID != prioritizedCommandID )
-    {
-        squadron_manager.prioritizedCommandID = prioritizedCommandID;
-        squadron_manager.firstShownEntries = 0;
-    }
-
-    struct SquadronDisplayEntry
-    {
-        NC_STACK_ypabact *unit;
-        int remapIndex;
-    };
-
-    std::vector<SquadronDisplayEntry> displayOrder;
-    displayOrder.reserve(yw->_cmdrsRemap.size() + 2);
-
-    // The Host Station always owns the first row. A directly controlled unit
-    // that is not represented in _cmdrsRemap (notably model = gun/flak) gets a
-    // display-only priority row immediately below it. Otherwise the actively
-    // selected squad is promoted there; if no squad is selected, the controlled
-    // vehicle's squad keeps the previous priority behavior.
-    displayOrder.push_back({yw->_userRobo, -1});
-
-    if ( priorityStandaloneUnit )
-        displayOrder.push_back({priorityStandaloneUnit, -3});
-    else if ( prioritizedRemapIndex >= 0 )
-        displayOrder.push_back({yw->_cmdrsRemap[prioritizedRemapIndex],
-                                prioritizedRemapIndex});
-
-    for ( size_t i = 0; i < yw->_cmdrsRemap.size(); i++ )
-    {
-        if ( (int)i != prioritizedRemapIndex )
-            displayOrder.push_back({yw->_cmdrsRemap[i], (int)i});
-    }
-
+    const int entryCount = (int)yw->_cmdrsRemap.size() + 1;
     if ( (size_t)(squadron_manager.firstShownEntries
-                   + squadron_manager.shownEntries) >= displayOrder.size() )
+                   + squadron_manager.shownEntries) >= (size_t)entryCount )
     {
-        squadron_manager.firstShownEntries = (int)displayOrder.size()
+        squadron_manager.firstShownEntries = entryCount
                                              - squadron_manager.shownEntries;
         if ( squadron_manager.firstShownEntries < 0 )
             squadron_manager.firstShownEntries = 0;
     }
 
     const int first = squadron_manager.firstShownEntries;
-    for ( int i = 0; i < (int)displayOrder.size(); i++ )
+    for ( int i = 0; i < entryCount; i++ )
     {
         const int visibleIndex = i - first;
         if ( visibleIndex >= 0 && visibleIndex < squadron_manager.shownEntries )
         {
-            squadron_manager.squads[visibleIndex] = displayOrder[i].unit;
-            squadron_manager.squadRemapIndices[visibleIndex]
-                = displayOrder[i].remapIndex;
+            squadron_manager.squads[visibleIndex] =
+                i == 0 ? yw->_userRobo : yw->_cmdrsRemap[i - 1];
+            squadron_manager.squadRemapIndices[visibleIndex] = i - 1;
         }
     }
 
-    squadron_manager.numEntries = (int)displayOrder.size();
+    squadron_manager.numEntries = entryCount;
 }
 
 
@@ -8626,8 +8594,34 @@ NC_STACK_ypabact * NC_STACK_ypaworld::sub_4C7B0C(int sqid, int a3)
     return NULL;
 }
 
+static bool yw_IsSquadronManagerWholeSquadDragArea(
+    NC_STACK_ypaworld *yw, int squadIndex, int mouseX)
+{
+    if ( !yw || squadIndex < 0
+            || squadIndex >= squadron_manager.shownEntries )
+        return false;
+
+    NC_STACK_ypabact *leader = squadron_manager.squads[squadIndex];
+    if ( !leader || leader == yw->_userRobo || !leader->IsParentMyRobo() )
+        return false;
+
+    const std::vector<NC_STACK_ypabact *> displayUnits =
+        yw_GetSquadronDisplayUnits(leader);
+    const int unitSlotCount = yw_GetSquadronManagerUnitSlotCount(yw);
+    const int countStart = squadron_manager.field_2D4
+                         + std::max(0, unitSlotCount - 1)
+                           * squadron_manager.field_2CC;
+    const int countTextEnd = countStart + yw->_guiTiles[0]->GetWidth(
+        fmt::sprintf(" x%d", (int)displayUnits.size()));
+    const int contentEnd = squadron_manager.entryWidth - yw->_fontBorderW;
+
+    return mouseX >= countTextEnd && mouseX < contentEnd;
+}
+
 int NC_STACK_ypaworld::ypaworld_func64__sub7__sub3__sub1(TClickBoxInf *winpt)
 {
+    squadron_manager.draggingWholeSquad = false;
+
     if ( winpt->selected_btnID < 8 )
         return 0;
     if ( bzda.field_1D0 & 8 )
@@ -8635,7 +8629,24 @@ int NC_STACK_ypaworld::ypaworld_func64__sub7__sub3__sub1(TClickBoxInf *winpt)
     if ( (int32_t)(winpt->selected_btnID - 8 + squadron_manager.firstShownEntries) >= squadron_manager.numEntries )
         return 0;
 
-    NC_STACK_ypabact *v5 = sub_4C7B0C(winpt->selected_btnID - 8, winpt->move.BtnPos.x);
+    const int squadIndex = winpt->selected_btnID - 8;
+    NC_STACK_ypabact *v5 = sub_4C7B0C(squadIndex, winpt->move.BtnPos.x);
+
+    // The blank part after "xN" is the drag handle for the complete squad.
+    // A normal LMB click still goes through the GuiList selection path; holding
+    // LMB and moving starts the existing drag/drop flow.  The whole-group flag
+    // makes the drop reuse ORG_NEWCHIEF so leader and members are absorbed by
+    // the destination squad together.
+    if ( !v5 && (winpt->flag & TClickBoxInf::FLAG_LM_DOWN)
+            && yw_IsSquadronManagerWholeSquadDragArea(
+                   this, squadIndex, winpt->move.BtnPos.x) )
+    {
+        v5 = squadron_manager.squads[squadIndex];
+        squadron_manager.draggingWholeSquad = true;
+        squadron_manager.field_2AC =
+            squadron_manager.squadRemapIndices[squadIndex];
+        squadron_manager.field_2B0 = -1;
+    }
 
     if ( !v5 )
         return 0;
@@ -8660,16 +8671,33 @@ int NC_STACK_ypaworld::ypaworld_func64__sub7__sub3__sub1(TClickBoxInf *winpt)
     squadron_manager.field_2C8 = winpt->move.ScreenPos.x;
     squadron_manager.field_2BC = v5;
 
-    if ( v5->IsParentMyRobo() )
+    if ( squadron_manager.draggingWholeSquad )
     {
-        squadron_manager.field_2C0 = -(winpt->move.BtnPos.x - squadron_manager.field_2D0);
+        // The whole-squad ghost follows the pointer, not the row's original
+        // icon column.  This keeps the dragged icons centered under the mouse
+        // regardless of whether the Squadron Manager is compact or widened.
+        const std::vector<NC_STACK_ypabact *> displayUnits =
+            yw_GetSquadronDisplayUnits(v5);
+        const int ghostWidth = std::max(1, (int)displayUnits.size())
+                             * std::max(1, squadron_manager.field_2CC);
+        squadron_manager.field_2C0 = -(ghostWidth / 2);
+        squadron_manager.field_2C2 = -(std::max(1, _fontH) / 2);
     }
     else
     {
-        squadron_manager.field_2C0 = -(winpt->move.BtnPos.x - squadron_manager.field_2D4);
-    }
+        if ( v5->IsParentMyRobo() )
+        {
+            squadron_manager.field_2C0 = -(winpt->move.BtnPos.x - squadron_manager.field_2D0);
+        }
+        else
+        {
+            const int relativeX = winpt->move.BtnPos.x - squadron_manager.field_2D4;
+            squadron_manager.field_2C0 = -(relativeX
+                                          % std::max(1, squadron_manager.field_2CC));
+        }
 
-    squadron_manager.field_2C2 = -winpt->move.BtnPos.y;
+        squadron_manager.field_2C2 = -winpt->move.BtnPos.y;
+    }
     squadron_manager.field_2CA = winpt->move.ScreenPos.y;
     return 1;
 }
@@ -8679,6 +8707,7 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
     if ( squadron_manager.flags & (GuiBase::FLAG_CLOSED | GuiBase::FLAG_ICONIFED) )
     {
         squadron_manager.field_2A8 &= 0xFFFFFFFE;
+        squadron_manager.draggingWholeSquad = false;
         squadron_manager.InputHandle(this, inpt);
     }
     else
@@ -8702,11 +8731,13 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
                 {
                     ypaworld_func64__sub7__sub3__sub3(this, winpt);
                     squadron_manager.field_2A8 &= 0xFFFFFFFC;
+                    squadron_manager.draggingWholeSquad = false;
                 }
             }
             else
             {
                 squadron_manager.field_2A8 &= 0xFFFFFFFC;
+                squadron_manager.draggingWholeSquad = false;
             }
         }
         else if ( inpt->ClickInf.selected_btn == &squadron_manager )
@@ -8789,7 +8820,8 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
                     squadron_manager.field_2A8 &= 0xFFFFFFFC;
                     squadron_manager.field_2A8 |= 1;
 
-                    if ( winpt->flag & TClickBoxInf::FLAG_RM_DOWN )
+                    if ( squadron_manager.draggingWholeSquad
+                            || (winpt->flag & TClickBoxInf::FLAG_RM_DOWN) )
                         squadron_manager.field_2A8 |= 3;
 
                     squadron_manager.field_2C4 = winpt->move.ScreenPos.x + squadron_manager.field_2C0;
@@ -16466,6 +16498,20 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
                 mousePointer = 0;
                 doAction = World::DOACTION_0;
                 tooltip = 0;
+            }
+
+            const bool squadMemberIcon =
+                (_guiActFlags & 0x40) && squadron_manager.field_2B0 >= 0;
+            if ( squadMemberIcon && doAction == World::DOACTION_8 )
+            {
+                // Match the requested vanilla-style split: the commander/row
+                // selects its squad, while one click on a member icon is inert.
+                // Keep the same small "+" selection cursor on every member;
+                // the generic double-click path below still promotes that exact
+                // member to DOACTION_5 (Jump into Vehicle).
+                doAction = World::DOACTION_0;
+                mousePointer = 2;
+                tooltip = Locale::TIP_DO_CONTROL;
             }
 
             _doAction = ypaworld_func64__sub21__sub4(arg, doAction);

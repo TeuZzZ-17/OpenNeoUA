@@ -7,6 +7,12 @@ namespace
 {
 
 const size_t MGUN_TRACER_LIMIT = 512;
+const float MGUN_TRACER_VISUAL_SPEED = 6000.0f;
+
+static float MinigunTracerTravelTimeMs(float distance)
+{
+    return distance * 1000.0f / MGUN_TRACER_VISUAL_SPEED;
+}
 
 static bool WeaponTracerFinite(const vec3d &value)
 {
@@ -124,9 +130,9 @@ bool NC_STACK_ypaworld::SpawnMinigunTracer(
         _mgunTracers.erase(_mgunTracers.begin());
 
     TMinigunTracer tracer;
-    tracer.start = origin;
-    tracer.end = origin + rayDirection *
-                 std::min(config.length, availableDistance);
+    tracer.origin = origin;
+    tracer.direction = rayDirection;
+    tracer.availableDistance = availableDistance;
     tracer.startTime = _timeStamp;
     tracer.config = config;
     tracer.config.tint.Clamp();
@@ -141,7 +147,10 @@ void NC_STACK_ypaworld::CleanupExpiredMinigunTracers()
                        [this](const TMinigunTracer &tracer)
                        {
                            const int32_t age = _timeStamp - tracer.startTime;
-                           return age < 0 || age >= tracer.config.duration;
+                           const float travelTime =
+                               MinigunTracerTravelTimeMs(tracer.availableDistance);
+                           return age < 0 ||
+                                  (float)age >= travelTime + tracer.config.duration;
                        }),
         _mgunTracers.end());
 }
@@ -156,9 +165,33 @@ void NC_STACK_ypaworld::RenderMinigunTracers(baseRender_msg *arg)
     for (const TMinigunTracer &tracer : _mgunTracers)
     {
         const int32_t age = std::max(0, _timeStamp - tracer.startTime);
+        const float ageSeconds = (float)age * 0.001f;
+        const float headDistance = std::min(
+            tracer.availableDistance, MGUN_TRACER_VISUAL_SPEED * ageSeconds);
+        if ( headDistance <= 0.01f )
+            continue;
+
+        // The MGUN hit remains immediate. Only its visual head travels along
+        // the already resolved hitscan ray, using a fixed internal speed. The
+        // time window mirrors Weapon tracer samples: it limits the oldest
+        // visible point and fades the final sample after it reaches the impact.
+        const float oldestVisibleDistance = std::min(
+            tracer.availableDistance,
+            MGUN_TRACER_VISUAL_SPEED *
+                std::max(0.0f, ageSeconds - tracer.config.duration * 0.001f));
+        const float tailDistance = std::max(
+            oldestVisibleDistance,
+            std::max(0.0f, headDistance - tracer.config.length));
+
+        const float travelTime =
+            MinigunTracerTravelTimeMs(tracer.availableDistance);
+        const float impactAge = std::max(0.0f, (float)age - travelTime);
         const float fade = 1.0f -
-            (float)age / (float)tracer.config.duration;
-        RenderWeaponTracerSegment(arg, tracer.start, tracer.end,
+            impactAge / (float)tracer.config.duration;
+
+        const vec3d start = tracer.origin + tracer.direction * tailDistance;
+        const vec3d end = tracer.origin + tracer.direction * headDistance;
+        RenderWeaponTracerSegment(arg, start, end,
                                   tracer.config.width,
                                   tracer.config.tint, fade);
     }
