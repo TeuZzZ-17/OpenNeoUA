@@ -894,8 +894,6 @@ public:
     int _mgunRecoilVisualEndTime = 0;
     int _mgunRecoilVisualDuration = 0;
     float _mgunRecoilVisualPitch = 0.0f;
-    int _mgunRecoilVisualNextKickTime = 0;
-    int _mgunRecoilVisualLastFireTime = -1;
     vec3d _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0); // OpenUA: render-only AI tank recoil translation
     int _weaponRecoilAiRecoveryEndTime = 0; // OpenUA: short AI tank forward-thrust pause after fake recoil
     int _weaponRecoilPlayerRecoveryEndTime = 0; // OpenUA: short player tank forward-input damping after fake recoil
@@ -1009,7 +1007,6 @@ public:
     int32_t _mgunEnergyDrainElapsedMs;
     int32_t _mgunEnergyDrainLastFireTime;
     float _mgun_recoil_visual_intensity;
-    int _mgun_recoil_visual_frequency;
     bool _mgun_decal_enable;
     World::TChainFXConfig _mgun_decal;
     int _mgun_vp_dead;
