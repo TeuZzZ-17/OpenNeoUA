@@ -2893,8 +2893,9 @@ public:
 
     struct TMinigunTracer
     {
-        vec3d start;
-        vec3d end;
+        vec3d origin;
+        vec3d direction;
+        float availableDistance = 0.0f;
         int32_t startTime = 0;
         World::TWeaponTracerConfig config;
     };
