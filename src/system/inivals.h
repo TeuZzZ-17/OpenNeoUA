@@ -257,6 +257,8 @@ public:
     static Common::Ini::Key GameHandBrakeSound;
     static Common::Ini::Key GameGemUnlockNewUI;
     static Common::Ini::Key GameGemUnlockSound;
+    static Common::Ini::Key GameAmbientSound;
+    static Common::Ini::Key GameAmbientSoundVolume;
     static Common::Ini::Key GameGemUnlockDuration;
     static Common::Ini::Key GameRoboDeathTimeScale;
     static Common::Ini::Key GameRoboDeathTimeScaleDuration;

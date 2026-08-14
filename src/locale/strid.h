@@ -215,6 +215,9 @@ enum OPENUA_STRING
     // Briefing Play As visibility toggle. Appended to preserve existing IDs.
     OUA_ENABLE_PLAY_AS,
 
+    // Global ambient loop volume exposed in the main Options page.
+    OUA_AMBIENT_VOLUME,
+
     OUA_STRING_MAX
 };
 

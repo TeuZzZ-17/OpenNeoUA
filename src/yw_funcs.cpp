@@ -3595,6 +3595,8 @@ void UserData::clear()
     confSoundVolume = 0;
     musicVolume = 0;
     confMusicVolume = 0;
+    ambientSoundVolume = 0;
+    confAmbientSoundVolume = 0;
     enemyIndicator = false;
     confEnemyIndicator = false;
     _settingsChangeOptions = 0;
