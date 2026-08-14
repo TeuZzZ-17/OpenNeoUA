@@ -641,6 +641,8 @@ struct TVhclProto
     float vwr_overeof = 0.0;
     // OpenUA modern cockpit camera: per-vehicle offset only. Missing axes remain 0.
     vec3d cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
+    // Player-only gun cockpit recoil multiplier. 0/absent keeps the current cockpit camera stable.
+    float cockpit_camera_recoil = 0.0f;
     float gun_angle = 0.0;
     float fire_x = 0.0;
     float fire_y = 0.0;

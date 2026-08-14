@@ -606,7 +606,14 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
 
     vTgt /= dist;
 
-    if ( dist <= 2400.0 && vTgt.dot( _rotation.AxisZ() ) >= 0.95 )
+    // OpenUA: projectile flak guns keep the original 2400 engagement envelope.
+    // gun_type = mg (GUN_TYPE_PROTO) instead uses the exact same effective
+    // global MGUN range as FireMinigun(), so AI never opens fire beyond the
+    // distance its hitscan can actually reach. Missing/invalid config resolves
+    // through the existing MGUN fallback (1000).
+    const float engagementRange = (_gunType == GUN_TYPE_PROTO) ? GetMinigunRange() : 2400.0f;
+
+    if ( dist <= engagementRange && vTgt.dot( _rotation.AxisZ() ) >= 0.95 )
     {
         if ( _gunType == GUN_TYPE_REAL )
         {

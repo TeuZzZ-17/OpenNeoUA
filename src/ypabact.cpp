@@ -874,6 +874,21 @@ vec3d NC_STACK_ypabact::GetCockpitCameraPosition() const
     return _position + _rotation.Transpose().Transform(_cockpit_camera_offset);
 }
 
+vec3d NC_STACK_ypabact::GetCockpitCameraViewPosition() const
+{
+    vec3d position = GetCockpitCameraPosition();
+
+    if ( !IsCockpitCameraActive() ||
+         _bact_type != BACT_TYPES_GUN ||
+         _cockpit_camera_recoil <= 0.0f )
+        return position;
+
+    // Reuse the original gun first-person recoil displacement without feeding it
+    // back into aiming, projectile origins, physics or the generic recoil system.
+    return position + _rotation.Transpose().Transform(
+        _viewer_position * _cockpit_camera_recoil);
+}
+
 void NC_STACK_ypabact::ToggleCockpitCameraMode()
 {
     if ( !_world || !_world->_GameShell )
@@ -2084,6 +2099,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _overeof = 0.0;
     _viewer_overeof = 0.0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
+    _cockpit_camera_recoil = 0.0f;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _clock = 0;
@@ -2305,6 +2321,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _overeof = 10.0;
     _viewer_overeof = 40.0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
+    _cockpit_camera_recoil = 0.0f;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _energy = 10000;
@@ -3274,6 +3291,11 @@ bool NC_STACK_ypabact::HasMinigun() const
     return _mgun_shot_time > 0;
 }
 
+float NC_STACK_ypabact::GetMinigunRange() const
+{
+    return ypabact_GetMinigunRange();
+}
+
 int NC_STACK_ypabact::GetMinigunShotTime(bool userControlled, int frameDeltaMs) const
 {
     int shotTime = _mgun_shot_time;
@@ -3416,7 +3438,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     if ( _oflags & BACT_OFLAG_VIEWER )
     {
         if ( IsCockpitCameraActive() )
-            bact_cam.Pos = GetCockpitCameraPosition();
+            bact_cam.Pos = GetCockpitCameraViewPosition();
         else if ( _oflags & BACT_OFLAG_EXTRAVIEW )
             bact_cam.Pos = _position + _rotation.Transpose().Transform(_viewer_position);
         else
@@ -14360,6 +14382,7 @@ void NC_STACK_ypabact::Renew()
     _mgun_sound_index = 0;
     _mgun_vp_fire_end_time = 0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
+    _cockpit_camera_recoil = 0.0f;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _spawn_units = 0;
