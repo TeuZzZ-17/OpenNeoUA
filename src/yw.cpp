@@ -1099,9 +1099,9 @@ bool NC_STACK_ypaworld::DebugReloadLiveData(std::string *details)
     _debugReloadRetiredBuildProtos.emplace_back();
     _debugReloadRetiredBuildProtos.back().swap(staged._buildProtos);
 
-    // The modern cockpit offset is safe to refresh on already existing units: it is
-    // pure camera state and does not reset gameplay energy, physics or AI state.
-    auto refreshUnitCockpitOffset = [this](NC_STACK_ypabact *unit)
+    // Modern cockpit camera values are safe to refresh on already existing units:
+    // they are view-only state and do not reset gameplay energy, physics or AI state.
+    auto refreshUnitCockpitCamera = [this](NC_STACK_ypabact *unit)
     {
         if ( !unit )
             return;
@@ -1109,17 +1109,20 @@ bool NC_STACK_ypaworld::DebugReloadLiveData(std::string *details)
         int protoId = unit->_mimic_disguise_vehicleID > 0 ?
                       unit->_mimic_disguise_vehicleID : unit->_vehicleID;
         if ( protoId > 0 && (size_t)protoId < _vhclProtos.size() )
+        {
             unit->_cockpit_camera_offset = _vhclProtos[protoId].cockpit_camera_offset;
+            unit->_cockpit_camera_recoil = _vhclProtos[protoId].cockpit_camera_recoil;
+        }
     };
 
     for (NC_STACK_ypabact *station : _unitsList)
     {
-        refreshUnitCockpitOffset(station);
+        refreshUnitCockpitCamera(station);
         for (NC_STACK_ypabact *commander : station->_kidList)
         {
-            refreshUnitCockpitOffset(commander);
+            refreshUnitCockpitCamera(commander);
             for (NC_STACK_ypabact *slave : commander->_kidList)
-                refreshUnitCockpitOffset(slave);
+                refreshUnitCockpitCamera(slave);
         }
     }
 
@@ -1618,7 +1621,7 @@ void sub_445230(NC_STACK_ypaworld *yw)
         NC_STACK_ypabact *v4 = yw->_viewerBact;
 
         if ( v4->IsCockpitCameraActive() )
-            yw->_viewerPosition = v4->GetCockpitCameraPosition();
+            yw->_viewerPosition = v4->GetCockpitCameraViewPosition();
         else
             yw->_viewerPosition = v4->_position + v4->_rotation.Transpose().Transform(v4->_viewer_position);
 
@@ -1627,7 +1630,7 @@ void sub_445230(NC_STACK_ypaworld *yw)
     else
     {
         if ( yw->_viewerBact->IsCockpitCameraActive() )
-            yw->_viewerPosition = yw->_viewerBact->GetCockpitCameraPosition();
+            yw->_viewerPosition = yw->_viewerBact->GetCockpitCameraViewPosition();
         else
             yw->_viewerPosition = yw->_viewerBact->_position;
 
@@ -3983,6 +3986,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_fire_x_slots = vhcl.fire_x_slots;
         bacto->_fire_x_advanced = vhcl.fire_x_advanced;
         bacto->_cockpit_camera_offset = vhcl.cockpit_camera_offset;
+        bacto->_cockpit_camera_recoil = vhcl.cockpit_camera_recoil;
         bacto->_gun_angle = vhcl.gun_angle;
         bacto->_gun_angle_user = vhcl.gun_angle;
         bacto->_num_weapons = vhcl.num_weapons;

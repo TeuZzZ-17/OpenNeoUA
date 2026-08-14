@@ -615,9 +615,11 @@ public:
     bool IsPlayerFirstPersonCameraActive() const;
     bool ShouldRenderCockpitCameraBody() const;
     vec3d GetCockpitCameraPosition() const;
+    vec3d GetCockpitCameraViewPosition() const;
     virtual float GetPlayerViewZoom() const { return 1.0f; }
     void ToggleCockpitCameraMode();
     bool HasMinigun() const;
+    float GetMinigunRange() const;
     bool UsesVehicleMinigunTiming() const { return !_mgun_set && _mgun_shot_time > 0; }
     int GetMinigunShotTime(bool userControlled, int frameDeltaMs) const;
     float GetMinigunPower() const { return _mgun_power_set ? _mgun_power : _gun_power; }
@@ -962,6 +964,7 @@ public:
     float _overeof;
     float _viewer_overeof;
     vec3d _cockpit_camera_offset;
+    float _cockpit_camera_recoil;
 //    float pos_x_cntr;
 //
 //    float pos_y_cntr;
