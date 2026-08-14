@@ -5408,6 +5408,10 @@ int LevelDataParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                 _o._levelInfo.MusicTrackMaxDelay = parser.stol(tmp, NULL, 0);
         }
     }
+    else if ( !StriCmp(p1, "ambient_sound") )
+    {
+        _m.AmbientSoundStr = p2;
+    }
     else if ( !StriCmp(p1, "movie") )
     {
         _o._levelInfo.MovieStr = p2;

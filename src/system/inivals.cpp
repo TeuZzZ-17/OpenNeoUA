@@ -328,6 +328,11 @@ Common::Ini::Key IniConf::GameUnitKillStatBonusPercent("game.unit_kill_stat_bonu
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
+// OpenUA: optional global mission ambience. A level may override both the
+// sample/folder and its volume through begin_level. A directory selects one
+// supported audio file randomly at each level start. Empty disables ambience.
+Common::Ini::Key IniConf::GameAmbientSound("game.ambient_sound", Common::Ini::KT_STRING, std::string());
+Common::Ini::Key IniConf::GameAmbientSoundVolume("game.ambient_sound_volume", Common::Ini::KT_WORD, std::string("100"));
 // OpenUA: display lifetime of the new GEM-unlock popup only. GEM unlocks no
 // longer alter gameplay time. Missing/invalid values preserve 8000 ms.
 Common::Ini::Key IniConf::GameGemUnlockDuration("game.gem_unlock_duration", Common::Ini::KT_WORD, std::string("8000"));
@@ -657,6 +662,8 @@ void IniConf::Init()
         , &GameHandBrakeSound
         , &GameGemUnlockNewUI
         , &GameGemUnlockSound
+        , &GameAmbientSound
+        , &GameAmbientSoundVolume
         , &GameGemUnlockDuration
         , &GameRoboDeathTimeScale
         , &GameRoboDeathTimeScaleDuration
