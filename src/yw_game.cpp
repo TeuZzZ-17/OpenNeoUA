@@ -169,6 +169,8 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
             (size_t)levelID >= _globalMapRegions.MapRegions.size() )
         return 0;
 
+    StopAmbientLevelSound();
+
     int ok = 0;
 
     *mapp = TLevelDescription();
@@ -340,6 +342,9 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     }
 
     FFeedback_Init();
+
+    if ( ok )
+        StartAmbientLevelSound(*mapp);
 
     return ok;
 }

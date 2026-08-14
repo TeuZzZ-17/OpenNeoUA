@@ -1588,6 +1588,7 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
 
 size_t NC_STACK_ypaworld::Deinit()
 {
+    StopAmbientLevelSound();
     ClearSuperItemRuntime();
     for (World::TSuperItemProfile &profile : _superItemProfiles)
     {
@@ -2144,6 +2145,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     SFXEngine::SFXe.UpdateSoundCarrier(&_GameShell->samples1_info);
                 }
             }
+
+            UpdateAmbientLevelSound();
 
             //ypaworld_func64__sub22(this); // scene events
 
@@ -2917,6 +2920,214 @@ void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
     source.Pitch = 0;
     source.IgnoreTimeScale = false;
     SFXEngine::SFXe.startSound(&_GameShell->samples1_info, soundId);
+}
+
+int32_t NC_STACK_ypaworld::GetAmbientSoundGlobalVolume() const
+{
+    const std::string value = System::IniConf::GameAmbientSoundVolume.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return 100;
+
+    try
+    {
+        size_t pos = 0;
+        const long parsed = std::stol(value, &pos, 0);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos || parsed < 0 )
+            return 100;
+
+        return (int32_t)std::min<long>(parsed, 127);
+    }
+    catch (...)
+    {
+        return 100;
+    }
+}
+
+static bool yw_IsAmbientAudioFile(const std::string &name)
+{
+    const size_t dot = name.find_last_of('.');
+    if ( dot == std::string::npos )
+        return false;
+
+    const std::string ext = name.substr(dot);
+    return !StriCmp(ext, ".wav") || !StriCmp(ext, ".ogg") ||
+           !StriCmp(ext, ".mp3") || !StriCmp(ext, ".flac") ||
+           !StriCmp(ext, ".opus") || !StriCmp(ext, ".m4a") ||
+           !StriCmp(ext, ".aac") || !StriCmp(ext, ".wma");
+}
+
+static std::string yw_NormalizeAmbientPath(const std::string &path)
+{
+    std::string normalized = path;
+    while ( !normalized.empty() &&
+            (normalized.back() == '/' || normalized.back() == '\\') )
+    {
+        normalized.pop_back();
+    }
+
+    return normalized;
+}
+
+static std::vector<std::string> yw_GetAmbientSoundCandidates(const std::string &configuredPath)
+{
+    std::vector<std::string> candidates;
+    const std::string path = yw_NormalizeAmbientPath(configuredPath);
+    if ( path.empty() )
+        return candidates;
+
+    FSMgr::DirIter dir = uaOpenDir("data:" + path);
+    if ( !dir )
+    {
+        candidates.push_back(path);
+        return candidates;
+    }
+
+    FSMgr::iNode *node = NULL;
+    while ( dir.getNext(&node) )
+    {
+        if ( !node || node->getType() != FSMgr::iNode::NTYPE_FILE )
+            continue;
+
+        const std::string name = node->getName();
+        if ( !yw_IsAmbientAudioFile(name) )
+            continue;
+
+        candidates.push_back(path + "/" + name);
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+        [](const std::string &a, const std::string &b) { return StriCmp(a, b) < 0; });
+
+    return candidates;
+}
+
+void NC_STACK_ypaworld::StopAmbientLevelSound()
+{
+    SFXEngine::SFXe.StopCarrier(&_ambientSoundCarrier);
+    _ambientSoundCarrier.Clear();
+
+    if ( _ambientSoundSample )
+    {
+        _ambientSoundSample->Delete();
+        _ambientSoundSample = NULL;
+    }
+
+}
+
+void NC_STACK_ypaworld::StartAmbientLevelSound(const TLevelDescription &mapp)
+{
+    StopAmbientLevelSound();
+
+    const std::string globalPath = System::IniConf::GameAmbientSound.Get<std::string>();
+    const int32_t globalVolume = GetAmbientSoundGlobalVolume();
+
+    auto tryStartFile = [this](const std::string &path, int32_t volume) -> bool
+    {
+        if ( path.empty() )
+            return false;
+
+        // Volume 0 is an explicit mute. Treat it as a valid configuration so
+        // a muted level override does not unexpectedly fall back to Nucleus.
+        if ( volume <= 0 )
+            return true;
+
+        const std::string previousRsrc = Common::Env.SetPrefix("rsrc", "data:");
+        NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, path}});
+        Common::Env.SetPrefix("rsrc", previousRsrc);
+
+        if ( !wav || !wav->GetSampleData() )
+        {
+            if ( wav )
+                wav->Delete();
+            return false;
+        }
+
+        _ambientSoundSample = wav;
+        _ambientSoundCarrier.Resize(1);
+        _ambientSoundCarrier.Position = _viewerPosition;
+        _ambientSoundCarrier.Vector = vec3d(0.0, 0.0, 0.0);
+
+        TSoundSource &sound = _ambientSoundCarrier.Sounds[0];
+        sound.PSample = wav->GetSampleData();
+        sound.SampleVariants.clear();
+        sound.Volume = (int16_t)volume;
+        sound.Pitch = 0;
+        sound.Radius = 0.0f;
+        sound.FadeDuration = 0.0;
+        sound.PPFx = NULL;
+        sound.PShkFx = NULL;
+        sound.SetPFx(false);
+        sound.SetShk(false);
+        sound.SetLoop(true);
+        sound.SetFragmented(false);
+
+        SFXEngine::SFXe.startSound(&_ambientSoundCarrier, 0);
+        return true;
+    };
+
+    auto tryStart = [&tryStartFile](const std::string &configuredPath, int32_t volume) -> bool
+    {
+        if ( configuredPath.empty() )
+            return false;
+
+        // Volume 0 is an explicit mute. Do not require a file/folder to exist
+        // just to preserve the configured priority semantics.
+        if ( volume <= 0 )
+            return true;
+
+        const std::vector<std::string> candidates = yw_GetAmbientSoundCandidates(configuredPath);
+        if ( candidates.empty() )
+            return false;
+
+        if ( candidates.size() == 1 )
+            return tryStartFile(candidates.front(), volume);
+
+        // A directory chooses a different random starting candidate for every
+        // level start. If that file is invalid, try the remaining candidates
+        // before falling back from LDF to Nucleus.
+        const size_t first = (size_t)(rand() % (int)candidates.size());
+        for ( size_t i = 0; i < candidates.size(); ++i )
+        {
+            const std::string &candidate = candidates[(first + i) % candidates.size()];
+            if ( tryStartFile(candidate, volume) )
+            {
+                ypa_log_out("OpenUA: ambient sound selected '%s' from '%s'.\n",
+                            candidate.c_str(), configuredPath.c_str());
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    if ( !mapp.AmbientSoundStr.empty() )
+    {
+        // LDF controls only which ambience is used. Volume is always the
+        // global game.ambient_sound_volume value, including the Options slider.
+        if ( tryStart(mapp.AmbientSoundStr, globalVolume) )
+            return;
+
+        ypa_log_out("Warning: could not load level ambient sound '%s'; trying Nucleus fallback.\n",
+                    mapp.AmbientSoundStr.c_str());
+    }
+
+    if ( !globalPath.empty() && !tryStart(globalPath, globalVolume) )
+    {
+        ypa_log_out("Warning: could not load Nucleus ambient sound '%s'; ambience disabled for this level.\n",
+                    globalPath.c_str());
+    }
+}
+
+void NC_STACK_ypaworld::UpdateAmbientLevelSound()
+{
+    if ( !_ambientSoundSample || _ambientSoundCarrier.Sounds.empty() )
+        return;
+
+    // Keep the carrier on the active listener so ambience is non-positional
+    // and remains at the configured volume anywhere in the level.
+    _ambientSoundCarrier.Position = _viewerPosition;
+    _ambientSoundCarrier.Vector = vec3d(0.0, 0.0, 0.0);
+    SFXEngine::SFXe.UpdateSoundCarrier(&_ambientSoundCarrier);
 }
 
 void sub_47C1EC(NC_STACK_ypaworld *yw, TMapGem *gemProt, int *a3, int *a4)
@@ -4646,6 +4857,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
 {
     _levelTeardownInProgress = true;
     _debugGlobalInvulnerability = false;
+    StopAmbientLevelSound();
     ClearSuperItemRuntime();
 
     // NC_STACK_ypaworld is reused by restart/load/menu transitions. Invalidate
@@ -6795,6 +7007,84 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     {
         ypa_log_out("Unable to add video-button\n");
         return false;
+    }
+
+    // OpenUA: global mission ambience volume. This is intentionally placed
+    // directly under the existing Music Volume row and persists to
+    // game.ambient_sound_volume in Nucleus.ini.
+    {
+        NC_STACK_button::Slider ambientSlider;
+        ambientSlider.min = 0;
+        ambientSlider.max = 127;
+        ambientSlider.value = 100;
+
+        btn_64arg.tileset_down = 16;
+        btn_64arg.tileset_up = 16;
+        btn_64arg.field_3A = 16;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+        btn_64arg.xpos = 0;
+        btn_64arg.ypos = 15 * (vertMenuSpace + _fontH);
+        btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_AMBIENT_VOLUME);
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 0;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 2;
+        btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
+        btn_64arg.txt_r = _iniColors[60].r;
+        btn_64arg.txt_g = _iniColors[60].g;
+        btn_64arg.txt_b = _iniColors[60].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Ambient Volume label\n");
+            return false;
+        }
+
+        btn_64arg.tileset_down = 18;
+        btn_64arg.tileset_up = 18;
+        btn_64arg.field_3A = 30;
+        btn_64arg.button_type = NC_STACK_button::TYPE_SLIDER;
+        btn_64arg.xpos = buttonsSpace + (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
+        btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.55;
+        btn_64arg.caption = " ";
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 1141;
+        btn_64arg.pressedCode = 1142;
+        btn_64arg.upCode = 1143;
+        btn_64arg.button_id = 1191;
+        btn_64arg.flags = 0;
+        btn_64arg.field_34 = &ambientSlider;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Ambient Volume slider\n");
+            return false;
+        }
+
+        btn_64arg.tileset_down = 16;
+        btn_64arg.tileset_up = 16;
+        btn_64arg.field_3A = 16;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+        btn_64arg.xpos = (2 * buttonsSpace) + (dword_5A50B2 - 5 * buttonsSpace) * 0.85;
+        btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.15;
+        btn_64arg.caption = "100";
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 0;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 1192;
+        btn_64arg.flags = NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
+        btn_64arg.txt_r = _iniColors[60].r;
+        btn_64arg.txt_g = _iniColors[60].g;
+        btn_64arg.txt_b = _iniColors[60].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Ambient Volume value\n");
+            return false;
+        }
     }
 
     btn_64arg.tileset_down = 19;
@@ -9398,6 +9688,7 @@ void NC_STACK_ypaworld::ypaworld_func163(base_64arg *arg)
 
     SFXEngine::SFXe.SetTimeScale(1.0f);
     SFXEngine::SFXe.sub_423EFC(arg->DTime, _userUnit->_position, a3a, _userUnit->_rotation);
+    UpdateAmbientLevelSound();
 
     for ( NC_STACK_ypabact* &bct : _userUnit->_kidList )
     {

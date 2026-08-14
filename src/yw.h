@@ -689,6 +689,8 @@ public:
 
     int16_t musicVolume;
     int16_t confMusicVolume;
+    int16_t ambientSoundVolume;
+    int16_t confAmbientSoundVolume;
 
     bool enemyIndicator;
     bool confEnemyIndicator;
@@ -1400,6 +1402,7 @@ struct TLevelDescription
     std::string OwnStr;
     std::string HgtStr;
     std::string BlgStr;
+    std::string AmbientSoundStr;
     std::vector<MapRobo> Robos;
     std::vector<MapSquad> Squads;
     std::array<std::string, 8> Palettes;
@@ -2796,6 +2799,10 @@ public:
                                      int32_t newRawValue, bool newlyEnabled = false);
     void PlayConfiguredGemUnlockSound();
     void PlayConfiguredMapMarkerSound();
+    void StartAmbientLevelSound(const TLevelDescription &mapp);
+    void UpdateAmbientLevelSound();
+    void StopAmbientLevelSound();
+    int32_t GetAmbientSoundGlobalVolume() const;
 
     std::string GetLevelName(uint32_t id) const;
     std::string GetLevelName(const TLevelInfo &lvl) const;
@@ -2943,6 +2950,8 @@ public:
     std::vector<World::TSuperItemProfile> _superItemProfiles;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemWaveSoundCarriers;
+    NC_STACK_sample *_ambientSoundSample = NULL;
+    TSndCarrier _ambientSoundCarrier;
 
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;

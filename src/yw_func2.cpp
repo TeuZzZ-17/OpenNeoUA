@@ -42,6 +42,7 @@ static constexpr int SETTINGS_CHANGE_PALETTE_THEME = 0x2000;
 static constexpr int SETTINGS_CHANGE_PLAYER_ROBO_AI_BEHAVIOR = 0x4000;
 static constexpr int SETTINGS_CHANGE_SPECTATOR_MODE = 0x8000;
 static constexpr int SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS = 0x10000;
+static constexpr int SETTINGS_CHANGE_AMBIENT_VOLUME = 0x20000;
 // OpenUA: modern graphics options
 static constexpr int SETTINGS_CHANGE_MAXFPS                 = 0x40000;
 static constexpr int SETTINGS_CHANGE_BLENDING              = 0x80000;
@@ -1401,6 +1402,16 @@ void UserData::sb_0x46aa8c()
         SFXEngine::SFXe.SetMusicVolume(confMusicVolume);
     }
 
+    if ( _settingsChangeOptions & SETTINGS_CHANGE_AMBIENT_VOLUME )
+    {
+        confAmbientSoundVolume = std::max<int16_t>(0, std::min<int16_t>(127, confAmbientSoundVolume));
+        ambientSoundVolume = confAmbientSoundVolume;
+        System::IniConf::GameAmbientSoundVolume.Value = std::to_string(ambientSoundVolume);
+
+        if ( !SaveKeyToNucleusIni("game.ambient_sound_volume", std::to_string(ambientSoundVolume)) )
+            ypa_log_out("WARNING: Could not save game.ambient_sound_volume to nucleus.ini\n");
+    }
+
     if ( _settingsChangeOptions & 0x80 )
     {
         soundVolume = confSoundVolume;
@@ -1987,6 +1998,8 @@ void UserData::ShowOptionsMenu()
     confDefaultCockpitCamera = defaultCockpitCamera;
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
+    ambientSoundVolume = p_YW->GetAmbientSoundGlobalVolume();
+    confAmbientSoundVolume = ambientSoundVolume;
     UpdatePaletteThemeText();
     UpdateMenuFontText();
     UpdateGfxOptionTexts();
@@ -2007,6 +2020,13 @@ void UserData::ShowOptionsMenu()
     state.butID = 1189;
     state.field_4 = (confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
     video_button->SetState(&state);
+
+    if ( NC_STACK_button::Slider *ambientSlider = video_button->GetSliderData(1191) )
+    {
+        ambientSlider->value = confAmbientSoundVolume;
+        video_button->Refresh(1191);
+        video_button->SetText(1192, std::to_string(confAmbientSoundVolume));
+    }
 
 
     video_button->ShowScreen();
@@ -2648,6 +2668,7 @@ void UserData::sub_46A3C0()
     confDefaultCockpitCamera = defaultCockpitCamera;
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
+    confAmbientSoundVolume = ambientSoundVolume;
 
     int gfxId = GFX::GFXEngine::Instance.GetGfxModeIndex(p_YW->_gfxMode);
 
@@ -2736,6 +2757,14 @@ void UserData::sub_46A3C0()
     tmp = video_button->GetSliderData(1154);
     tmp->value = musicVolume;
     video_button->Refresh(1154);
+
+    tmp = video_button->GetSliderData(1191);
+    if ( tmp )
+    {
+        tmp->value = ambientSoundVolume;
+        video_button->Refresh(1191);
+        video_button->SetText(1192, std::to_string(ambientSoundVolume));
+    }
 
 
     video_button->HideScreen();
@@ -5363,6 +5392,10 @@ void UserData::GameShellUiHandleInput()
         {
             _settingsChangeOptions |= 0x100;
         }
+        else if ( r.code == 1141 )
+        {
+            _settingsChangeOptions |= SETTINGS_CHANGE_AMBIENT_VOLUME;
+        }
         // OpenUA: modern graphics options
         else if ( r.code == 1320 ) // Atmosphere & Visibility page
         {
@@ -5587,6 +5620,15 @@ void UserData::GameShellUiHandleInput()
     confMusicVolume = v67->value;
 
     SFXEngine::SFXe.SetMusicVolume(confMusicVolume);
+
+    v67 = video_button->GetSliderData(1191);
+    if ( v67 )
+    {
+        video_button->SetText(1192, fmt::sprintf("%d", v67->value));
+        if ( confAmbientSoundVolume != v67->value )
+            _settingsChangeOptions |= SETTINGS_CHANGE_AMBIENT_VOLUME;
+        confAmbientSoundVolume = v67->value;
+    }
 
 
     if ( EnvMode == ENVMODE_SELPLAYER ) //Load/Save

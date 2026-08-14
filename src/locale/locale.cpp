@@ -407,6 +407,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_ZOOM_IN:              fallback = "Zoom In"; break;
         case OUA_ZOOM_OUT:             fallback = "Zoom Out"; break;
         case OUA_ENABLE_PLAY_AS:        fallback = "Enable Play As"; break;
+        case OUA_AMBIENT_VOLUME:        fallback = "Ambient Volume:"; break;
         default: break;
     }
 
