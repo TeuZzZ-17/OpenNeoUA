@@ -951,7 +951,10 @@ bool NC_STACK_ypaworld::UpdateSpectatorFollowCamera(TInputState *inpt)
 
         if ( !IsRoboMapOpen() )
         {
-            int zoomSteps = inpt->ClickInf.wheel;
+            const int wheelDelta = inpt->ClickInf.wheel;
+            int zoomSteps =
+                World::GetFixedInputShortcutWheelCount(World::INPUT_BIND_ZOOMIN, wheelDelta) -
+                World::GetFixedInputShortcutWheelCount(World::INPUT_BIND_ZOOMOUT, wheelDelta);
 
             // Tactical map, UFO optical view and Spectator Follow are mutually
             // exclusive contexts, so all three reuse the same Zoom In/Out pair.

@@ -55,6 +55,40 @@ static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
 static constexpr int MENU_MSGBOX_INPUT_KEY_CONFLICT = 2;
 
+static std::string InputKeyDisplayTitle(int16_t keyCode)
+{
+    // Mouse buttons can be described in the menu without making them newly
+    // remappable: key-capture support still depends on the legacy KeyTitle
+    // table, while this helper is presentation-only.
+    if ( keyCode == Input::KC_LMB )
+        return "LMB";
+    if ( keyCode == Input::KC_RMB )
+        return "RMB";
+
+    if ( keyCode > Input::KC_NONE && keyCode < Input::KC_MAX )
+        return Input::Engine.KeyTitle.at(keyCode);
+
+    return std::string();
+}
+
+static std::string InputFixedShortcutTitle(int binding)
+{
+    const World::TInputFixedShortcut shortcut = World::GetInputFixedShortcut(binding);
+
+    if ( shortcut.Kind == World::INPUT_FIXED_SHORTCUT_KEY )
+        return InputKeyDisplayTitle(shortcut.KeyCode);
+
+    if ( shortcut.Kind == World::INPUT_FIXED_SHORTCUT_WHEEL )
+    {
+        if ( shortcut.WheelDirection > 0 )
+            return "MWU";
+        if ( shortcut.WheelDirection < 0 )
+            return "MWD";
+    }
+
+    return std::string();
+}
+
 static bool InputKeyUsesOtherSlot(const UserData *usr, int target, bool positiveSlot, int16_t keyCode)
 {
     if ( !usr || keyCode == Input::KC_NONE )
@@ -628,12 +662,12 @@ void yw_draw_input_list(NC_STACK_ypaworld *yw, UserData *usr)
             {
                 std::string negKeyName, posKeyName;
                 if ( usr->InputConfig[ v24 ].NKeyCode )
-                    negKeyName = Input::Engine.KeyTitle.at( usr->InputConfig[ v24 ].NKeyCode );
+                    negKeyName = InputKeyDisplayTitle(usr->InputConfig[v24].NKeyCode);
                 else
                     negKeyName = "-";
 
                 if ( usr->InputConfig[ v24 ].PKeyCode )
-                    posKeyName = Input::Engine.KeyTitle.at( usr->InputConfig[ v24 ].PKeyCode );
+                    posKeyName = InputKeyDisplayTitle(usr->InputConfig[v24].PKeyCode);
                 else
                     posKeyName = "-";
 
@@ -648,12 +682,21 @@ void yw_draw_input_list(NC_STACK_ypaworld *yw, UserData *usr)
             else
             {
                 if ( usr->InputConfig[ v24 ].PKeyCode )
-                    v19 = Input::Engine.KeyTitle.at( usr->InputConfig[ v24 ].PKeyCode );
+                    v19 = InputKeyDisplayTitle(usr->InputConfig[v24].PKeyCode);
                 else
                     v19 = "-";
 
                 if ( usr->InputConfig[ v24 ].SetFlags & UserData::TInputConf::IF_FIRST )
                     v19 = Locale::Text::Dialogs(Locale::DLG_I_UNK);
+
+                const World::TInputFixedShortcut fixedShortcut = World::GetInputFixedShortcut(v24);
+                const std::string fixedShortcutTitle = InputFixedShortcutTitle(v24);
+                const bool duplicatesPrimary =
+                    fixedShortcut.Kind == World::INPUT_FIXED_SHORTCUT_KEY &&
+                    usr->InputConfig[v24].PKeyCode == fixedShortcut.KeyCode;
+
+                if ( !fixedShortcutTitle.empty() && !duplicatesPrimary )
+                    v19 += ", " + fixedShortcutTitle;
             }
 
             a1a[0].txt = usr->InputConfigTitle[v24];
@@ -822,6 +865,72 @@ void NC_STACK_ypaworld::LoadKeyNames()
     Input::Engine.KeyTitle[Input::KC_JOYB6]      = Locale::Text::KeyName(Locale::KEYNAME_JOYB6);
     Input::Engine.KeyTitle[Input::KC_JOYB7]      = Locale::Text::KeyName(Locale::KEYNAME_JOYB7);
     Input::Engine.KeyTitle[Input::KC_LSHIFT]     = Locale::Text::KeyName(Locale::KEYNAME_LSHIFT);
+
+    // OpenUA: compact key labels for narrow Input Settings columns and all
+    // other UI consumers of KeyTitle. These are display-only aliases: key
+    // codes, remapping, serialization and runtime behavior are unchanged.
+    Input::Engine.KeyTitle[Input::KC_ESCAPE]     = "Esc";
+    Input::Engine.KeyTitle[Input::KC_BACKSPACE]  = "Bksp";
+    Input::Engine.KeyTitle[Input::KC_CLEAR]      = "Clr";
+    Input::Engine.KeyTitle[Input::KC_RETURN]     = "Enter";
+    Input::Engine.KeyTitle[Input::KC_CTRL]       = "Ctrl";
+    Input::Engine.KeyTitle[Input::KC_SHIFT]      = "Shift";
+    Input::Engine.KeyTitle[Input::KC_ALT]        = "Alt";
+    Input::Engine.KeyTitle[Input::KC_PGUP]       = "PgUp";
+    Input::Engine.KeyTitle[Input::KC_PGDOWN]     = "PgDn";
+    Input::Engine.KeyTitle[Input::KC_SELECT]     = "Sel";
+    Input::Engine.KeyTitle[Input::KC_EXECUTE]    = "Exec";
+    Input::Engine.KeyTitle[Input::KC_SNAPSHOT]   = "PrtSc";
+    Input::Engine.KeyTitle[Input::KC_INSERT]     = "Ins";
+    Input::Engine.KeyTitle[Input::KC_DELETE]     = "Del";
+
+    Input::Engine.KeyTitle[Input::KC_NUM0]       = "Num0";
+    Input::Engine.KeyTitle[Input::KC_NUM1]       = "Num1";
+    Input::Engine.KeyTitle[Input::KC_NUM2]       = "Num2";
+    Input::Engine.KeyTitle[Input::KC_NUM3]       = "Num3";
+    Input::Engine.KeyTitle[Input::KC_NUM4]       = "Num4";
+    Input::Engine.KeyTitle[Input::KC_NUM5]       = "Num5";
+    Input::Engine.KeyTitle[Input::KC_NUM6]       = "Num6";
+    Input::Engine.KeyTitle[Input::KC_NUM7]       = "Num7";
+    Input::Engine.KeyTitle[Input::KC_NUM8]       = "Num8";
+    Input::Engine.KeyTitle[Input::KC_NUM9]       = "Num9";
+    Input::Engine.KeyTitle[Input::KC_NUMMUL]     = "Num*";
+    Input::Engine.KeyTitle[Input::KC_NUMPLUS]    = "Num+";
+    Input::Engine.KeyTitle[Input::KC_NUMDOT]     = "Num.";
+    Input::Engine.KeyTitle[Input::KC_NUMMINUS]   = "Num-";
+    Input::Engine.KeyTitle[Input::KC_NUMENTER]   = "NumEnt";
+    Input::Engine.KeyTitle[Input::KC_NUMDIV]     = "Num/";
+
+    // Punctuation/scancode aliases use the actual key glyph where practical.
+    Input::Engine.KeyTitle[Input::KC_EXTRA1]     = ",";
+    Input::Engine.KeyTitle[Input::KC_EXTRA2]     = ".";
+    Input::Engine.KeyTitle[Input::KC_EXTRA3]     = "-";
+    Input::Engine.KeyTitle[Input::KC_EXTRA4]     = "\\";
+    Input::Engine.KeyTitle[Input::KC_EXTRA5]     = ";";
+    Input::Engine.KeyTitle[Input::KC_EXTRA6]     = "=";
+    Input::Engine.KeyTitle[Input::KC_EXTRA7]     = "`";
+    Input::Engine.KeyTitle[Input::KC_EXTRA8]     = "'";
+    Input::Engine.KeyTitle[Input::KC_EXTRA9]     = "/";
+    Input::Engine.KeyTitle[Input::KC_EXTRA10]    = "]";
+    Input::Engine.KeyTitle[Input::KC_EXTRA11]    = "\\";
+    Input::Engine.KeyTitle[Input::KC_EXTRA12]    = "[";
+    Input::Engine.KeyTitle[Input::KC_EXTRA13]    = "OEM8";
+    Input::Engine.KeyTitle[Input::KC_EXTRA14]    = "ScrLk";
+    Input::Engine.KeyTitle[Input::KC_EXTRA15]    = "NumLk";
+    Input::Engine.KeyTitle[Input::KC_EXTRA16]    = "F13";
+    Input::Engine.KeyTitle[Input::KC_EXTRA17]    = "F14";
+    Input::Engine.KeyTitle[Input::KC_EXTRA18]    = "F15";
+
+    Input::Engine.KeyTitle[Input::KC_MMB]        = "MMB";
+    Input::Engine.KeyTitle[Input::KC_JOYB0]      = "JoyB0";
+    Input::Engine.KeyTitle[Input::KC_JOYB1]      = "JoyB1";
+    Input::Engine.KeyTitle[Input::KC_JOYB2]      = "JoyB2";
+    Input::Engine.KeyTitle[Input::KC_JOYB3]      = "JoyB3";
+    Input::Engine.KeyTitle[Input::KC_JOYB4]      = "JoyB4";
+    Input::Engine.KeyTitle[Input::KC_JOYB5]      = "JoyB5";
+    Input::Engine.KeyTitle[Input::KC_JOYB6]      = "JoyB6";
+    Input::Engine.KeyTitle[Input::KC_JOYB7]      = "JoyB7";
+    Input::Engine.KeyTitle[Input::KC_LSHIFT]     = "LShift";
 }
 
 

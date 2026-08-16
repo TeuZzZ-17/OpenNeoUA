@@ -36,6 +36,28 @@ static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Colo
 static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
                                                const vec3d &renderPosition, uint8_t visibilityOpacity);
 
+static bool yw_IsFixedInputShortcutPressed(const TInputState *inpt, int binding)
+{
+    if ( !inpt )
+        return false;
+
+    const World::TInputFixedShortcut shortcut = World::GetInputFixedShortcut(binding);
+    if ( shortcut.Kind != World::INPUT_FIXED_SHORTCUT_KEY )
+        return false;
+
+    switch ( shortcut.KeyCode )
+    {
+    case Input::KC_LMB:
+        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_LM_DOWN) != 0;
+    case Input::KC_RMB:
+        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_RM_DOWN) != 0;
+    case Input::KC_MMB:
+        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_MM_DOWN) != 0;
+    default:
+        return inpt->KbdLastHit == shortcut.KeyCode;
+    }
+}
+
 ////////////////////////////////////////
 
 int dword_5BAF9C;
@@ -10133,18 +10155,17 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             yw_GuiListOwnsWheelAtPointer(gui_lstvw, *winpt) ||
             yw_GuiListOwnsWheelAtPointer(squadron_manager, *winpt);
         const int mapWheel = listOwnsWheel ? 0 : winpt->wheel;
-        if ( mapWheel > 0 )
-        {
-            for ( int i = 0; i < mapWheel; i++ )
-                sub_4C1970(yw, 1);
-        }
-        else if ( mapWheel < 0 )
-        {
-            for ( int i = 0; i > mapWheel; i-- )
-                sub_4C1970(yw, 2);
-        }
+        const int mapZoomInSteps =
+            World::GetFixedInputShortcutWheelCount(World::INPUT_BIND_ZOOMIN, mapWheel);
+        const int mapZoomOutSteps =
+            World::GetFixedInputShortcutWheelCount(World::INPUT_BIND_ZOOMOUT, mapWheel);
 
-        if ( mapWheel != 0 )
+        for ( int i = 0; i < mapZoomInSteps; ++i )
+            sub_4C1970(yw, 1);
+        for ( int i = 0; i < mapZoomOutSteps; ++i )
+            sub_4C1970(yw, 2);
+
+        if ( mapZoomInSteps != 0 || mapZoomOutSteps != 0 )
             winpt->wheel = 0;
 
         switch ( inpt->HotKeyID )
@@ -10343,14 +10364,24 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         }
         else if ( winpt->selected_btn == &robo_map )
         {
-            if ( winpt->flag & TClickBoxInf::FLAG_MM_DOWN )
+            if ( yw_IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
             {
                 if ( winpt->selected_btnID == 17 )
                 {
-                    // Middle click is always available as the fast map-marker
-                    // shortcut, independently of the optional remappable key.
+                    // The fixed secondary marker shortcut comes from the same
+                    // shared definition used by Input Settings, so changing it
+                    // cannot leave a stale menu label behind.
                     yw_PlaceRoboMapMarker(yw, winpt->move.BtnPos);
-                    winpt->flag &= ~TClickBoxInf::FLAG_MM_DOWN;
+
+                    const World::TInputFixedShortcut markerShortcut =
+                        World::GetInputFixedShortcut(World::INPUT_BIND_PLACE_MAP_MARKER);
+                    if ( markerShortcut.KeyCode == Input::KC_LMB )
+                        winpt->flag &= ~TClickBoxInf::FLAG_LM_DOWN;
+                    else if ( markerShortcut.KeyCode == Input::KC_RMB )
+                        winpt->flag &= ~TClickBoxInf::FLAG_RM_DOWN;
+                    else if ( markerShortcut.KeyCode == Input::KC_MMB )
+                        winpt->flag &= ~TClickBoxInf::FLAG_MM_DOWN;
+
                     yw->_guiDragDefaultMouse = false;
                 }
             }
@@ -16753,10 +16784,8 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
         _userUnit->SetAlternativeViewActive(alternativeViewPressed);
 
     // Switch Weapon is a remappable player action, so the configured physical
-    // key is authoritative here. In particular, modifier-only bindings such as
-    // ALT must not depend on another movement/input event making the legacy
-    // Button[1] expression visible in this frame. Keep the old button channel
-    // only as a boot-time fallback when the user binding is not available yet.
+    // key is authoritative here. Keep the legacy Button[1] channel only as a
+    // boot-time fallback when the user binding is not available yet.
     bool weaponSwitchPressed = false;
     if ( _GameShell &&
          World::INPUT_BIND_SWITCH_WEAPON < (int)_GameShell->InputConfig.size() )
@@ -16774,10 +16803,10 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
         weaponSwitchPressed = inpt->Buttons.Is(1);
     }
 
-    // Middle mouse is the fixed secondary shortcut for Switch Weapon while
-    // directly controlling a unit. Keep it contextual so tactical-map middle
-    // click remains reserved for map markers when the mouse is not grabbed.
-    if ( _mouseGrabbed && (winp->flag & TClickBoxInf::FLAG_MM_HOLD) )
+    // The fixed secondary shortcut comes from the shared input definition.
+    // Keep it contextual so the same physical button can retain a different
+    // action on the Tactical Map without creating a parallel binding system.
+    if ( _mouseGrabbed && World::IsFixedInputShortcutHeld(World::INPUT_BIND_SWITCH_WEAPON) )
         weaponSwitchPressed = true;
 
     if ( !weaponSwitchPressed )
@@ -16864,7 +16893,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
         inpt->Sliders[3] += inpt->Sliders[10];
         inpt->Sliders[5] -= inpt->Sliders[11] * 1.5;
 
-        if ( winp->flag & TClickBoxInf::FLAG_LM_HOLD )
+        if ( World::IsFixedInputShortcutHeld(World::INPUT_BIND_FIRE) )
             inpt->Buttons.Set(0);
 
     }
