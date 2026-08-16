@@ -422,11 +422,18 @@ struct TRoboGun
 
 struct TVhclProto
 {
-    enum WeaponSwitchMode
+    enum WeaponPlayerSwitchMode
     {
-        WEAPON_SWITCH_MODE_SEQUENCE = 0,
-        WEAPON_SWITCH_MODE_RANDOM = 1,
-        WEAPON_SWITCH_MODE_CONTROLLED = 2
+        WEAPON_PLAYER_SWITCH_MODE_SEQUENCE = 0,
+        WEAPON_PLAYER_SWITCH_MODE_RANDOM = 1,
+        WEAPON_PLAYER_SWITCH_MODE_MANUAL = 2
+    };
+
+    enum WeaponAISwitchMode
+    {
+        WEAPON_AI_SWITCH_MODE_SEQUENCE = 0,
+        WEAPON_AI_SWITCH_MODE_RANDOM = 1,
+        WEAPON_AI_SWITCH_MODE_SMART = 2
     };
 
     enum FireXMode
@@ -487,7 +494,8 @@ struct TVhclProto
     // OpenUA custom: optional projectile-count overrides for weapon_2/_3/_4.
     // A zero value inherits the primary num_weapons count.
     std::array<int16_t, 3> extra_num_weapons = {0, 0, 0};
-    int weapon_switch_mode = WEAPON_SWITCH_MODE_SEQUENCE;
+    int weapon_player_switch_mode = WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
+    int weapon_ai_switch_mode = WEAPON_AI_SWITCH_MODE_SEQUENCE;
     int lowhp_weapon_enable = 0;
     float lowhp_threshold = 0.30;
     int16_t lowhp_weapon = 0;
