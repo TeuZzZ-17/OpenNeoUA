@@ -281,6 +281,7 @@ public:
     // OpenUA: global opt-in visual profiles for units currently under the same
     // regen/drain conditions used by the automatic Status Icons. A missing or
     // incomplete profile is disabled and never changes energy gameplay.
+    static Common::Ini::Key GfxRegenDecorationFXMode;
     static Common::Ini::Key GfxRegenDecorationFXVP;
     static Common::Ini::Key GfxRegenDecorationFXVPScale;
     static Common::Ini::Key GfxRegenDecorationFXVPSpinX;
@@ -293,7 +294,13 @@ public:
     static Common::Ini::Key GfxRegenDecorationFXCountMin;
     static Common::Ini::Key GfxRegenDecorationFXCountMax;
     static Common::Ini::Key GfxRegenDecorationFXRandomOffsetPercent;
+    static Common::Ini::Key GfxRegenDecorationFXProceduralSize;
+    static Common::Ini::Key GfxRegenDecorationFXProceduralThickness;
+    static Common::Ini::Key GfxRegenDecorationFXProceduralRiseSpeed;
+    static Common::Ini::Key GfxRegenDecorationFXProceduralFadeIn;
+    static Common::Ini::Key GfxRegenDecorationFXProceduralFadeOut;
 
+    static Common::Ini::Key GfxDrainDecorationFXMode;
     static Common::Ini::Key GfxDrainDecorationFXVP;
     static Common::Ini::Key GfxDrainDecorationFXVPScale;
     static Common::Ini::Key GfxDrainDecorationFXVPSpinX;
@@ -306,6 +313,11 @@ public:
     static Common::Ini::Key GfxDrainDecorationFXCountMin;
     static Common::Ini::Key GfxDrainDecorationFXCountMax;
     static Common::Ini::Key GfxDrainDecorationFXRandomOffsetPercent;
+    static Common::Ini::Key GfxDrainDecorationFXProceduralSize;
+    static Common::Ini::Key GfxDrainDecorationFXProceduralThickness;
+    static Common::Ini::Key GfxDrainDecorationFXProceduralRiseSpeed;
+    static Common::Ini::Key GfxDrainDecorationFXProceduralFadeIn;
+    static Common::Ini::Key GfxDrainDecorationFXProceduralFadeOut;
 
     // OpenUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only

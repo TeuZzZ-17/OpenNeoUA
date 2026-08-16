@@ -3799,6 +3799,8 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 
     RenderMinigunTracers(&rndrs);
 
+    RenderProceduralEnergyFX(&rndrs);
+
     RenderGroundDecals(&rndrs);
 
     yw_RenderTransientVPs(this, &_transientVPs, &rndrs);

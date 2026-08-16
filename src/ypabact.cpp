@@ -3915,7 +3915,8 @@ void NC_STACK_ypabact::UpdateDamageFX(update_msg *)
 
 
 static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
-                                             const World::EnergyFX::Config &config)
+                                             const World::EnergyFX::Config &config,
+                                             bool plusSymbol)
 {
     if ( !bact || !config.IsEnabled() )
         return;
@@ -3929,18 +3930,34 @@ static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
 
     for (int i = 0; i < spawnCount; i++)
     {
-        // Use the same shared sampler/fallback path as damaged and debuff FX.
-        // The previous direct call left the offset at (0, 0, 0) whenever the
-        // sampler could not produce a point, making the percentage appear to
-        // be ignored for Regen/Drain effects.
+        // Reuse the same geometry-aware sampler/fallback path as damaged and
+        // debuff FX so both VP and procedural Energy FX originate from the unit.
         vec3d localOffset;
         ypabact_BuildAttachedFXOffset(bact, true,
                                       config.random_offset_percent,
                                       &localOffset);
 
-        // Reuse the attached transient-VP path used by vehicle Decoration FX.
-        // The effect follows the unit and its visual transform but never affects
-        // collision, energy, AI or the Status Icon renderer itself.
+        if ( config.IsProcedural() )
+        {
+            // Procedural symbols become independent world-space particles once
+            // spawned: they originate on the moving unit, then rise vertically
+            // instead of being dragged around by later unit rotations/movement.
+            const vec3d spawnPos = bact->_position +
+                                   bact->_rotation.Transpose().Transform(localOffset);
+            world->SpawnProceduralEnergyFX(spawnPos,
+                                            plusSymbol,
+                                            config.duration,
+                                            config.procedural_size,
+                                            config.procedural_thickness,
+                                            config.procedural_rise_speed,
+                                            config.procedural_fade_in,
+                                            config.procedural_fade_out,
+                                            config.vp_tint);
+            continue;
+        }
+
+        // VP mode is the existing OpenUA path and remains the default when the
+        // new mode key is absent. It follows the unit exactly as before.
         world->SpawnAttachedTransientVP(config.vp,
                                         bact,
                                         localOffset,
@@ -3961,6 +3978,7 @@ static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
 static void ypabact_UpdateEnergyStatusFXProfile(NC_STACK_ypabact *bact,
                                                 bool active,
                                                 const World::EnergyFX::Config &config,
+                                                bool plusSymbol,
                                                 int32_t &nextTime)
 {
     if ( !active || !config.IsEnabled() || !ypabact_CanSpawnDecorationFX(bact) )
@@ -3973,7 +3991,7 @@ static void ypabact_UpdateEnergyStatusFXProfile(NC_STACK_ypabact *bact,
     if ( !world || !world->UpdateRandomFXTimer(config.interval_min, config.interval_max, nextTime) )
         return;
 
-    ypabact_SpawnEnergyStatusFXEvent(bact, config);
+    ypabact_SpawnEnergyStatusFXEvent(bact, config, plusSymbol);
 }
 
 void NC_STACK_ypabact::UpdateEnergyStatusFX(update_msg *)
@@ -3995,10 +4013,12 @@ void NC_STACK_ypabact::UpdateEnergyStatusFX(update_msg *)
     ypabact_UpdateEnergyStatusFXProfile(this,
                                         (state & UNIT_ENERGY_VISUAL_REGEN) != 0,
                                         regenConfig,
+                                        true,
                                         _regen_fx_next_time);
     ypabact_UpdateEnergyStatusFXProfile(this,
                                         (state & UNIT_ENERGY_VISUAL_DRAIN) != 0,
                                         drainConfig,
+                                        false,
                                         _drain_fx_next_time);
 }
 
