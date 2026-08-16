@@ -4465,9 +4465,19 @@ static bool yw_IsValidMobilePowerGenerator(NC_STACK_ypaworld *yw, NC_STACK_ypaba
          (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
          unit->_bact_type == BACT_TYPES_MISSLE ||
          unit->_bact_type == BACT_TYPES_ROBO ||
-         unit->_bact_type == BACT_TYPES_GUN ||
          (size_t)(unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID) >= yw->_vhclProtos.size() )
         return false;
+
+    // OpenUA: normal guns/flaks/radars never become power generators merely
+    // because a prototype happens to contain power fields. Only the explicit
+    // passive gun_type=power module is allowed through the existing mobile-
+    // power path. Non-gun vehicles retain the previous behaviour unchanged.
+    if ( unit->_bact_type == BACT_TYPES_GUN )
+    {
+        NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>(unit);
+        if ( !gun || gun->getGUN_fireType() != NC_STACK_ypagun::GUN_TYPE_POWER )
+            return false;
+    }
 
     uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
     const World::TVhclProto &proto = yw->_vhclProtos[protoId];

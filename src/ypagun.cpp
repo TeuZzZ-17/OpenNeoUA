@@ -177,12 +177,12 @@ bool NC_STACK_ypagun::CheckPedestal()
 
 void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 {
-    if ( _isDummy )
+    if ( IsPassiveModule() )
     {
-        // OpenUA: dummy attachment is fully inert. Only advance the create
+        // OpenUA: passive modules are fully inert. Only advance the create
         // (genesis scale-in) and death timelines; never aim, fire, acquire
         // targets, or run the pedestal check (that would kill an airborne
-        // module). Position/orientation are driven by the parent each frame.
+        // attachment). Position/orientation are driven by the parent each frame.
         switch ( _status )
         {
         case BACT_STATUS_DEAD:
@@ -439,9 +439,9 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 
 void NC_STACK_ypagun::User_layer(update_msg *arg)
 {
-    if ( _isDummy )
+    if ( IsPassiveModule() )
     {
-        // OpenUA: a dummy is never player-controlled; stay inert.
+        // OpenUA: passive modules are never player-controlled; stay inert.
         if ( _status == BACT_STATUS_DEAD )
             DeadTimeUpdate(arg);
         return;
@@ -693,8 +693,6 @@ void NC_STACK_ypagun::Die()
         if ( (_gunFlags & GUN_FLAGS_ROBO) && _parent )
             _parent->ClearUnitGunPointer(this);
 
-        if ( _isDummy && _parent )
-            _parent->ClearUnitDummyPointer(this);
     }
 }
 
@@ -896,6 +894,10 @@ void NC_STACK_ypagun::setGUN_downAngle(int angl)
 void NC_STACK_ypagun::setGUN_fireType(int tp)
 {
     _gunType = tp;
+    // _isDummy is an attachment-runtime semantic, not a global gun_type side
+    // effect. UpdateUnitGuns() sets it only for attached dummy modules so
+    // existing standalone/Host-Station gun prototypes keep normal visibility
+    // and targetability semantics.
 }
 
 void NC_STACK_ypagun::setGUN_fireTime(int time)

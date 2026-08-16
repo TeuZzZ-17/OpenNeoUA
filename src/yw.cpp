@@ -3938,7 +3938,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_pitch_max = vhcl.max_pitch;
         bacto->_vehicleID = vhcl_id->vehicle_id;
         bacto->_mimic_disguise_vehicleID = mimicDisguiseVehicleId > 0 ? mimicDisguiseVehicleId : 0;
-        bacto->_isDummy = vhcl.is_dummy != 0; // OpenUA: model = dummy -> inert module
+        bacto->_isDummy = false; // set by gun_type for BACT_TYPES_GUN
         bacto->_weapon = vhcl.weapon;
         bacto->_extra_weapons = vhcl.extra_weapons;
         bacto->_weapon_switch_mode = vhcl.weapon_switch_mode;
@@ -4094,7 +4094,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_seek_and_explode_trigger_radius = vhcl.seek_and_explode_trigger_radius > 0.0 ? vhcl.seek_and_explode_trigger_radius : 0.0;
         bacto->_seek_and_explode_triggered = false;
         bacto->SetUnitGuns(vhcl_id->skip_unit_guns ? std::vector<World::TRoboGun>() : vhcl.unit_guns);
-        bacto->SetUnitDummies(vhcl_id->skip_unit_guns ? std::vector<World::TUnitDummy>() : vhcl.unit_dummies);
 
         bacto->_destroyFX = vhcl.dest_fx;
         bacto->_extDestroyFX = vhcl.ExtDestroyFX;
@@ -5009,6 +5008,106 @@ void NC_STACK_ypaworld::ClearUserDamageHoverTarget(NC_STACK_ypabact *target)
     }
 }
 
+bool UserData::IsInputBindingRetired(int binding)
+{
+    switch ( binding )
+    {
+        case World::INPUT_BIND_GUN_HEIGHT:
+        case World::INPUT_BIND_WAPOINT:
+        case World::INPUT_BIND_LANDLAYER:
+        case World::INPUT_BIND_OWNER:
+        case World::INPUT_BIND_HEIGHT:
+        case World::INPUT_BIND_MINIMAP:
+        case World::INPUT_BIND_LOCKVIEW:
+        case World::INPUT_BIND_HELP:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+void UserData::RetireInputBindings(bool clearDefaults)
+{
+    for ( int binding = 1; binding < World::INPUT_BIND_MAX; ++binding )
+    {
+        if ( !IsInputBindingRetired(binding) )
+            continue;
+
+        TInputConf &cfg = InputConfig[binding];
+        cfg.PKeyCode = Input::KC_NONE;
+        cfg.NKeyCode = Input::KC_NONE;
+        cfg.PKeyCodeBkp = Input::KC_NONE;
+        cfg.NKeyCodeBkp = Input::KC_NONE;
+        cfg.SetFlags = 0;
+
+        if ( clearDefaults )
+        {
+            cfg.PKeyCodeDef = Input::KC_NONE;
+            cfg.NKeyCodeDef = Input::KC_NONE;
+        }
+
+        if ( p_YW )
+            p_YW->ReloadInput(binding);
+    }
+}
+
+void UserData::RebuildInputDisplayOrder()
+{
+    inputDisplayOrder.clear();
+    inputDisplayOrder.reserve(World::INPUT_BIND_MAX - 1);
+
+    for ( int binding = 1; binding < World::INPUT_BIND_MAX; ++binding )
+    {
+        if ( IsInputBindingRetired(binding) || InputConfigTitle[binding].empty() )
+            continue;
+
+        inputDisplayOrder.push_back(binding);
+    }
+
+    auto sortKey = [this](int binding)
+    {
+        std::string key = InputConfigTitle[binding];
+        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char ch)
+        {
+            return (char)std::tolower(ch);
+        });
+        return key;
+    };
+
+    std::stable_sort(inputDisplayOrder.begin(), inputDisplayOrder.end(),
+                     [&sortKey](int lhs, int rhs)
+    {
+        const std::string lhsKey = sortKey(lhs);
+        const std::string rhsKey = sortKey(rhs);
+        if ( lhsKey == rhsKey )
+            return lhs < rhs;
+        return lhsKey < rhsKey;
+    });
+}
+
+int UserData::InputBindingFromDisplayIndex(int displayIndex) const
+{
+    if ( displayIndex < 0 || displayIndex >= (int)inputDisplayOrder.size() )
+        return 0;
+
+    return inputDisplayOrder[displayIndex];
+}
+
+int UserData::InputDisplayIndexFromBinding(int binding) const
+{
+    const auto it = std::find(inputDisplayOrder.begin(), inputDisplayOrder.end(), binding);
+    if ( it == inputDisplayOrder.end() )
+        return -1;
+
+    return (int)std::distance(inputDisplayOrder.begin(), it);
+}
+
+int UserData::InputDisplayCount() const
+{
+    return (int)inputDisplayOrder.size();
+}
+
 void UserData::sub_46D2B4()
 {
     int v10 = inpListActiveElement;
@@ -5096,7 +5195,8 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_FLY_SPEED]   = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 2,  Input::KC_Q, Input::KC_Z);
     usr->InputConfig[World::INPUT_BIND_GUN_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 5,  Input::KC_2, Input::KC_1);
     usr->InputConfig[World::INPUT_BIND_FIRE]          = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 0, Input::KC_RETURN);
-    usr->InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_TAB);
+    usr->InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_V);
+    usr->InputConfig[World::INPUT_BIND_CYCLE_TARGET]  = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 6, Input::KC_TAB);
     usr->InputConfig[World::INPUT_BIND_GUN]           = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 2, Input::KC_X);
     usr->InputConfig[World::INPUT_BIND_BRAKE]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3, Input::KC_SPACE);
     usr->InputConfig[World::INPUT_BIND_CAMFIRE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_CTRL);
@@ -5139,6 +5239,9 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_SPRINT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
     usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
 
+    // OpenUA: keep the legacy IDs/type slots reserved for compatibility, but
+    // these retired controls are no longer bindable or active.
+    usr->RetireInputBindings(true);
     usr->sub_46D2B4();
 
     windp_arg87 v67;
@@ -5857,10 +5960,12 @@ bool NC_STACK_ypaworld::CreateInputControls()
 {
     int menuWidth = _screenSize.x * 0.7;
     int posLeftPaddingX = (_screenSize.x - menuWidth) / 2;
+    const int inputActionButtonWidth = (menuWidth - 3 * buttonsSpace) / 4;
+    const int inputActionButtonStep = inputActionButtonWidth + buttonsSpace;
 
     GuiList::tInit args;
     args.resizeable = false;
-    args.numEntries = World::INPUT_BIND_MAX - 1;
+    args.numEntries = _GameShell->InputDisplayCount();
     args.shownEntries = 8;
     args.firstShownEntry = 0;
     args.selectedEntry = 0;
@@ -5872,6 +5977,7 @@ bool NC_STACK_ypaworld::CreateInputControls()
     args.vborder = _fontBorderH;
     args.instantInput = false;
     args.keyboardInput = true;
+    args.wheelScroll = true;
 
     if ( !_GameShell->input_listview.Init(this, args) )
     {
@@ -6054,9 +6160,9 @@ bool NC_STACK_ypaworld::CreateInputControls()
                                             btn_64arg.tileset_up = 18;
                                             btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
                                             btn_64arg.field_3A = 30;
-                                            btn_64arg.xpos = menuWidth / 6;
-                                            btn_64arg.ypos = 5 * vertMenuSpace + 13 * _fontH;
-                                            btn_64arg.width = (menuWidth / 3 - buttonsSpace);
+                                            btn_64arg.ypos = bottomButtonsY;
+                                            btn_64arg.width = inputActionButtonWidth;
+                                            btn_64arg.xpos = 2 * inputActionButtonStep;
                                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_I_DELETE);
                                             btn_64arg.downCode = 1251;
                                             btn_64arg.flags = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
@@ -6070,7 +6176,11 @@ bool NC_STACK_ypaworld::CreateInputControls()
 
                                             if ( _GameShell->button_input_button->Add(&btn_64arg) )
                                             {
-                                                btn_64arg.xpos = buttonsSpace + menuWidth / 2;
+                                                // OpenUA: keep all Input Settings actions aligned in one
+                                                // compact bottom row: OK / Back / Delete / Reset Defaults.
+                                                btn_64arg.xpos = 3 * inputActionButtonStep;
+                                                btn_64arg.ypos = bottomButtonsY;
+                                                btn_64arg.width = inputActionButtonWidth;
                                                 btn_64arg.caption = Locale::Text::Common(Locale::CMN_RESETDEF);
                                                 btn_64arg.caption2.clear();
                                                 btn_64arg.pressedCode = 0;
@@ -6079,9 +6189,9 @@ bool NC_STACK_ypaworld::CreateInputControls()
 
                                                 if ( _GameShell->button_input_button->Add(&btn_64arg) )
                                                 {
-                                                    btn_64arg.xpos = bottomCenteredFirstBtnPosX;
+                                                    btn_64arg.xpos = 0;
                                                     btn_64arg.ypos = bottomButtonsY;
-                                                    btn_64arg.width = button1LineWidth;
+                                                    btn_64arg.width = inputActionButtonWidth;
                                                     btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
                                                     btn_64arg.caption = Locale::Text::Common(Locale::CMN_OK);
                                                     btn_64arg.caption2.clear();
@@ -6103,9 +6213,9 @@ bool NC_STACK_ypaworld::CreateInputControls()
 
                                                         if ( _GameShell->button_input_button->Add(&btn_64arg) )
                                                         {
-                                                            btn_64arg.xpos = bottomCenteredSecondBtnPosX;
+                                                            btn_64arg.xpos = inputActionButtonStep;
                                                             btn_64arg.ypos = bottomButtonsY;
-                                                            btn_64arg.width = button1LineWidth;
+                                                            btn_64arg.width = inputActionButtonWidth;
                                                             btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
                                                             btn_64arg.upCode = 1054;
                                                             btn_64arg.button_id = 1054;
@@ -6188,6 +6298,8 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     args.instantInput = true;
     args.keyboardInput = true;
 
+    args.wheelScroll = true;
+
     if ( !_GameShell->video_listvw.Init(this, args) )
     {
         ypa_log_out("Unable to create Game-Video-Menu\n");
@@ -6208,6 +6320,8 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     args.vborder = _fontBorderH;
     args.instantInput = true;
     args.keyboardInput = true;
+
+    args.wheelScroll = true;
 
     if ( !_GameShell->d3d_listvw.Init(this, args) )
     {
@@ -7687,6 +7801,8 @@ bool NC_STACK_ypaworld::CreateDiskControls()
     args.instantInput = false;
     args.keyboardInput = true;
 
+    args.wheelScroll = true;
+
     if ( !_GameShell->disk_listvw.Init(this, args) )
     {
         ypa_log_out("Unable to create disk-listview\n");
@@ -7912,6 +8028,8 @@ bool NC_STACK_ypaworld::CreateLocaleControls()
     args.instantInput = false;
     args.keyboardInput = true;
 
+
+    args.wheelScroll = true;
 
     if ( !_GameShell->local_listvw.Init(this, args) )
     {
@@ -8390,6 +8508,8 @@ bool NC_STACK_ypaworld::CreateNetworkControls()
     args.vborder = _fontBorderH;
     args.instantInput = false;
     args.keyboardInput = true;
+
+    args.wheelScroll = true;
 
     if ( !_GameShell->network_listvw.Init(this, args) )
     {
@@ -8923,6 +9043,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_BRAKE]       = Locale::Text::Inputs(Locale::INPUTS_STOP);
     _GameShell->InputConfigTitle[World::INPUT_BIND_FIRE]          = Locale::Text::Inputs(Locale::INPUTS_FIRE);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SWITCH_WEAPON] = Locale::Text::OpenUA(Locale::OUA_SWITCH_WEAPON);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_CYCLE_TARGET]  = Locale::Text::OpenUA(Locale::OUA_CYCLE_TARGET);
     _GameShell->InputConfigTitle[World::INPUT_BIND_GUN]           = Locale::Text::Inputs(Locale::INPUTS_FIREGUN);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SET_COMM]    = Locale::Text::Inputs(Locale::INPUTS_MAKECOMM);
     _GameShell->InputConfigTitle[World::INPUT_BIND_HUD]         = Locale::Text::Inputs(Locale::INPUTS_HEADUPDISP);
@@ -8962,7 +9083,9 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_CAMFIRE]     = Locale::Text::Inputs(Locale::INPUTS_FIREVW);
     _GameShell->InputConfigTitle[World::INPUT_BIND_PLACE_MAP_MARKER] = Locale::Text::OpenUA(Locale::OUA_PLACE_MAP_MARKER);
 
-
+    // Display only active bindings and sort them by their localized title.
+    // Runtime IDs remain unchanged for profile compatibility.
+    _GameShell->RebuildInputDisplayOrder();
 
     if ( _screenSize.x < 512 )
     {
@@ -10064,7 +10187,10 @@ void NC_STACK_ypaworld::UpdateGameShell()
 
     if ( _GameShell->inpListActiveElement )
     {
-        int v7 = _GameShell->inpListActiveElement - 1;
+        int v7 = _GameShell->InputDisplayIndexFromBinding(_GameShell->inpListActiveElement);
+        if ( v7 < 0 )
+            v7 = 0;
+
         int v8 = _GameShell->input_listview.maxShownEntries + _GameShell->input_listview.firstShownEntries;
 
         if ( v7 >= _GameShell->input_listview.firstShownEntries && v7 < v8 )
@@ -10588,6 +10714,24 @@ bool NC_STACK_ypaworld::ReloadInput(size_t id)
         return false;
 
     UserData::TInputConf &kconf = _GameShell->InputConfig.at(id);
+
+    if ( UserData::IsInputBindingRetired((int)id) )
+    {
+        kconf.PKeyCode = Input::KC_NONE;
+        kconf.NKeyCode = Input::KC_NONE;
+        kconf.PKeyCodeBkp = Input::KC_NONE;
+        kconf.NKeyCodeBkp = Input::KC_NONE;
+        kconf.SetFlags = 0;
+
+        if ( kconf.Type == World::INPUT_BIND_TYPE_HOTKEY )
+            Input::Engine.SetHotKey(kconf.KeyID, "nop");
+        else if ( kconf.Type == World::INPUT_BIND_TYPE_BUTTON )
+            Input::Engine.SetInputExpression(false, kconf.KeyID, "nop");
+        else if ( kconf.Type == World::INPUT_BIND_TYPE_SLIDER )
+            Input::Engine.SetInputExpression(true, kconf.KeyID, "nop");
+
+        return true;
+    }
 
     if ( Input::Engine.KeyNamesTable.at(kconf.PKeyCode).Name.empty() )
         return false;

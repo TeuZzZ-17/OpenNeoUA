@@ -673,6 +673,7 @@ public:
 
     int GetCurrentWeaponId();
     int GetCurrentWeaponProjectileCount();
+    bool RequestHomingTargetCycle();
     bool CycleControlledWeapon();
 
     virtual TF::TForm3D *getBACT_pTransform()
@@ -765,13 +766,7 @@ public:
     void UpdateUnitGuns(update_msg *arg);
     void CleanupUnitGuns(bool releaseGuns, bool parentDying = false);
     void ClearUnitGunPointer(NC_STACK_ypabact *gun);
-
-    // OpenUA custom: modular dummy attachments (mirrors the unit-gun machinery)
-    void SetUnitDummies(const std::vector<World::TUnitDummy> &dummies);
-    void UpdateUnitDummies(update_msg *arg);
-    void CleanupUnitDummies(bool releaseDummies, bool parentDying = false);
-    void ClearUnitDummyPointer(NC_STACK_ypabact *dummy);
-    NC_STACK_ypabact *SelectProtectiveDummy(NC_STACK_ypabact *attacker);
+    NC_STACK_ypabact *SelectProtectiveUnitGun(NC_STACK_ypabact *attacker);
 
     void DeleteAttacker(NC_STACK_ypabact *bact, int tgtType);
     void AddAttacker(NC_STACK_ypabact *bact, int tgtType);
@@ -997,6 +992,8 @@ public:
     int _weapon_slot_index;
     int _current_weapon_id;
     int _current_weapon_source_slot;
+    int32_t _userHomingPrimaryTargetGid;
+    bool _userHomingTargetCycleRequested;
     int _lowhp_weapon_enable;
     float _lowhp_threshold;
     int _lowhp_weapon;
@@ -1168,11 +1165,8 @@ public:
     bool _unitGunsSpawned;
     bool _unitGunsHaveParentRotation;
     bool _isUnitGunChild;
-    // OpenUA custom: dummy modular attachments
-    std::vector<World::TUnitDummy> _unitDummies;
-    mat3x3 _unitDummiesParentRotation;
-    bool _unitDummiesSpawned;
-    bool _unitDummiesHaveParentRotation;
+    // Runtime semantic for gun_type=dummy. This is intentionally not a second
+    // attachment system; it only feeds existing AI/visibility filters.
     bool _isDummy;
     // OpenUA custom: universal compound collision spheres for non-robo vehicles
     World::rbcolls _collNodes;

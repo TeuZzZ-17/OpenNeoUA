@@ -358,7 +358,8 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
             // Preserve defaults for bindings introduced after older user.txt files.
             // Explicit entries, including nop, still override these defaults below.
             if ( i == World::INPUT_BIND_COCKPIT_CAMERA ||
-                 i == World::INPUT_BIND_SPRINT )
+                 i == World::INPUT_BIND_SPRINT ||
+                 i == World::INPUT_BIND_CYCLE_TARGET )
                 continue;
 
             UserData::TInputConf &k = _o._GameShell->InputConfig[i];
@@ -416,6 +417,63 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
             // only by an old Camera Zoom entry could still produce HotKeyID 50/51.
             Input::Engine.SetHotKey(50, "nop");
             Input::Engine.SetHotKey(51, "nop");
+
+            // OpenUA migration: the first Cycle Target build intentionally used TAB
+            // for both Cycle Target and Switch Weapon.  The new canonical defaults
+            // are Cycle Target = TAB and Switch Weapon = V.  Migrate only that
+            // known TAB/TAB pair and only when V is not already a custom binding;
+            // never overwrite an unrelated user assignment.
+            UserData::TInputConf &switchWeapon =
+                _o._GameShell->InputConfig[World::INPUT_BIND_SWITCH_WEAPON];
+            UserData::TInputConf &cycleTarget =
+                _o._GameShell->InputConfig[World::INPUT_BIND_CYCLE_TARGET];
+
+            if ( switchWeapon.PKeyCode == Input::KC_TAB &&
+                 cycleTarget.PKeyCode == Input::KC_TAB )
+            {
+                bool vAlreadyUsed = false;
+                for ( size_t i = 1; i < _o._GameShell->InputConfig.size(); ++i )
+                {
+                    if ( i == World::INPUT_BIND_SWITCH_WEAPON ||
+                         i == World::INPUT_BIND_CYCLE_TARGET ||
+                         UserData::IsInputBindingRetired((int)i) )
+                        continue;
+
+                    const UserData::TInputConf &cfg = _o._GameShell->InputConfig[i];
+                    if ( cfg.PKeyCode == Input::KC_V || cfg.NKeyCode == Input::KC_V )
+                    {
+                        vAlreadyUsed = true;
+                        break;
+                    }
+                }
+
+                if ( !vAlreadyUsed )
+                {
+                    switchWeapon.PKeyCode = Input::KC_V;
+                    _o.ReloadInput(World::INPUT_BIND_SWITCH_WEAPON);
+                    migrated = true;
+                }
+            }
+
+            bool retiredBindingFound = false;
+            for ( int binding = 1; binding < World::INPUT_BIND_MAX; ++binding )
+            {
+                if ( !UserData::IsInputBindingRetired(binding) )
+                    continue;
+
+                const UserData::TInputConf &cfg = _o._GameShell->InputConfig[binding];
+                if ( cfg.PKeyCode != Input::KC_NONE || cfg.NKeyCode != Input::KC_NONE )
+                {
+                    retiredBindingFound = true;
+                    break;
+                }
+            }
+
+            if ( retiredBindingFound )
+            {
+                _o._GameShell->RetireInputBindings(false);
+                migrated = true;
+            }
 
             if ( migrated )
                 _o._GameShell->inputDefaultsMigrated = true;
@@ -1700,14 +1758,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         return &_vhcl->unit_guns.at(_unitGunID);
     };
 
-    auto getUnitDummy = [this]() -> TUnitDummy *
-    {
-        if ( _unitDummyID < 0 || (size_t)_unitDummyID >= _vhcl->unit_dummies.size() )
-            return NULL;
-
-        return &_vhcl->unit_dummies.at(_unitDummyID);
-    };
-
     auto getColl = [this]() -> TRoboColl *
     {
         if ( _collID < 0 || (size_t)_collID >= _vhcl->coll.roboColls.size() )
@@ -1821,7 +1871,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
     if ( !StriCmp(p1, "model") )
     {
-        _vhcl->is_dummy = 0;
         _vhcl->is_mimic = 0;
 
         if ( !StriCmp(p2, "heli") )
@@ -1847,8 +1896,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         {
             _vhcl->model_id = BACT_TYPES_CAR;
         }
-        else if ( !StriCmp(p2, "gun") )
+        else if ( !StriCmp(p2, "gun") || !StriCmp(p2, "module") )
         {
+            // OpenUA: model = module is a semantic alias of the existing gun
+            // runtime. Behaviour is selected by gun_type; no parallel actor
+            // class or attachment system is introduced.
             _vhcl->model_id = BACT_TYPES_GUN;
         }
         else if ( !StriCmp(p2, "hover") )
@@ -1870,14 +1922,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         {
             _vhcl->model_id = BACT_TYPES_FLYER;
             _vhcl->initParams.Add(NC_STACK_ypaflyer::FLY_ATT_TYPE, (int32_t)0);
-        }
-        else if ( !StriCmp(p2, "dummy") )
-        {
-            // OpenUA custom: dummy modular attachment prototype.
-            // Reuse the (immobile, attachable) gun runtime class as the visual
-            // carrier; the is_dummy flag makes the runtime object fully inert.
-            _vhcl->model_id = BACT_TYPES_GUN;
-            _vhcl->is_dummy = 1;
         }
         else if ( !StriCmp(p2, "mimic") )
         {
@@ -2838,21 +2882,34 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "gun_type") )
     {
-        int gun_type = 0;
+        int gun_type = NC_STACK_ypagun::GUN_TYPE_REAL;
+        bool recognized = true;
         if ( !StriCmp(p2, "flak") )
         {
-            gun_type = 1;
+            gun_type = NC_STACK_ypagun::GUN_TYPE_REAL;
         }
         else if ( !StriCmp(p2, "mg") )
         {
-            gun_type = 2;
+            gun_type = NC_STACK_ypagun::GUN_TYPE_PROTO;
+        }
+        else if ( !StriCmp(p2, "dummy") )
+        {
+            gun_type = NC_STACK_ypagun::GUN_TYPE_DUMMY;
+        }
+        else if ( !StriCmp(p2, "radar") )
+        {
+            gun_type = NC_STACK_ypagun::GUN_TYPE_RADAR;
+        }
+        else if ( !StriCmp(p2, "power") )
+        {
+            gun_type = NC_STACK_ypagun::GUN_TYPE_POWER;
         }
         else
         {
-            //StriCmp(p2, "dummy");
+            recognized = false;
         }
 
-        if ( gun_type )
+        if ( recognized )
             _vhcl->initParams.Add(NC_STACK_ypagun::GUN_ATT_FIRETYPE, (int32_t)gun_type);
     }
     else if ( !StriCmp(p1, "gun_does_not_fall") )
@@ -3062,83 +3119,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         if (TRoboGun *gun = getUnitGun())
             gun->robo_gun_name = p2;
     }
-    // ---- OpenUA custom: modular dummy attachments (parent side) ----
-    else if ( !StriCmp(p1, "unit_num_dummies") )
+    else if ( !StriCmp(p1, "unit_gun_protect") )
     {
-        int cnt = parser.stol(p2, NULL, 0);
-
-        if ( cnt < 0 )
-            cnt = 0;
-        else if ( cnt > (int)UNIT_DUMMY_MAX_COUNT )
-            cnt = UNIT_DUMMY_MAX_COUNT;
-
-        _vhcl->unit_dummies.resize(cnt);
-
-        if ( _unitDummyID >= cnt )
-            _unitDummyID = cnt - 1;
-    }
-    else if ( !StriCmp(p1, "unit_act_dummy") )
-    {
-        _unitDummyID = parser.stol(p2, NULL, 0);
-
-        if ( _unitDummyID < 0 )
-            _unitDummyID = 0;
-
-        if ( _unitDummyID >= (int)UNIT_DUMMY_MAX_COUNT )
-            _unitDummyID = UNIT_DUMMY_MAX_COUNT - 1;
-
-        if ( (size_t)_unitDummyID >= _vhcl->unit_dummies.size() )
-            _vhcl->unit_dummies.resize(_unitDummyID + 1);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_vehicle") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->vehicle_id = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_pos_x") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->pos.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_pos_y") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->pos.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_pos_z") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->pos.z = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_dir_x") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->dir.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_dir_y") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->dir.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_dir_z") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->dir.z = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_dummy_protect") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->protect = parser.stol(p2, NULL, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "unit_dummy_destroy_with_parent") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->destroy_with_parent = parser.stol(p2, NULL, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "unit_dummy_hide_when_destroyed") )
-    {
-        if (TUnitDummy *dmy = getUnitDummy())
-            dmy->hide_when_destroyed = parser.stol(p2, NULL, 0) ? 1 : 0;
+        if (TRoboGun *gun = getUnitGun())
+            gun->protect = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "robo_dock_x") )
     {
@@ -3334,7 +3318,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _roboTmp = TRoboProto();
         _gunID = -1;
         _unitGunID = -1;
-        _unitDummyID = -1;
         _collID = -1;
         _vhclID = _forcedVhclID >= 0 ? _forcedVhclID : parser.stol(opt, NULL, 0);
         _vhcl = &_o._vhclProtos.at(_vhclID);
@@ -3495,7 +3478,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
     {
         _gunID = -1;
         _unitGunID = -1;
-        _unitDummyID = -1;
         _collID = -1;
         _vhclID = parser.stol(opt, NULL, 0);
 
@@ -3579,8 +3561,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->shot_time_user = 1000;
         _wpn->salve_delay = 0;
         _wpn->salve_shots = 0;
-        _wpn->missile_multi_target = 0;
-        _wpn->homing_bomb_multi_target = 0;
+        _wpn->multi_target = 0;
         // OpenUA custom: model = laser defaults (vanilla-safe / disabled by default)
         _wpn->laser_energy_tick_time = 250;
         _wpn->laser_energy_tick_time_user = 150;
@@ -4023,15 +4004,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->salve_delay = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "missile_multi_target") )
+    else if ( !StriCmp(p1, "multi_target") )
     {
         int maxTargets = parser.stol(p2, NULL, 0);
-        _wpn->missile_multi_target = maxTargets > 0 ? maxTargets : 0;
-    }
-    else if ( !StriCmp(p1, "homing_bomb_multi_target") )
-    {
-        int maxTargets = parser.stol(p2, NULL, 0);
-        _wpn->homing_bomb_multi_target = maxTargets > 0 ? maxTargets : 0;
+        _wpn->multi_target = maxTargets > 0 ? maxTargets : 0;
     }
     // ---- OpenUA custom: model = laser parameters ----
     else if ( !StriCmp(p1, "laser_energy_tick_time") )

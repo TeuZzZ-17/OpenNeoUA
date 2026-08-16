@@ -356,8 +356,10 @@ enum INPUT_BIND
     INPUT_BIND_SPRINT     = 47,
     INPUT_BIND_CAMFIRE    = 48,
     INPUT_BIND_PLACE_MAP_MARKER = 49,
+    // OpenUA: remappable homing-primary-target cycle. Appended to preserve every existing input ID.
+    INPUT_BIND_CYCLE_TARGET = 50,
 
-    INPUT_BIND_MAX        = 50,
+    INPUT_BIND_MAX        = 51,
 };
 
 enum SOUND_ID
@@ -874,6 +876,7 @@ public:
 
     std::array<TInputConf, World::INPUT_BIND_MAX>  InputConfig;
     std::array<std::string, World::INPUT_BIND_MAX> InputConfigTitle;
+    std::vector<int> inputDisplayOrder;
     bool inputDefaultsMigrated = false;
 
     /* SGM save exist
@@ -966,6 +969,12 @@ public:
     void ShowConfirmDialog(int a2, const std::string &txt1, const std::string &txt2, int a5);
     void ShowMenuMsgBox(int code, const std::string &txt1, const std::string &txt2, bool OkOnly);
     void sub_46D2B4();
+    static bool IsInputBindingRetired(int binding);
+    void RetireInputBindings(bool clearDefaults);
+    void RebuildInputDisplayOrder();
+    int InputBindingFromDisplayIndex(int displayIndex) const;
+    int InputDisplayIndexFromBinding(int binding) const;
+    int InputDisplayCount() const;
     void InputConfCopyToBackup();
     void InputConfigRestoreDefault();
     void sub_46C5F0();
@@ -3027,6 +3036,7 @@ public:
     bool _fireBtnIsDown = false; // true - fire btn is down, contigues
     bool _fireBtnDownHappen = false; // true happen on down, single
     bool _weaponSwitchBtnIsDown = false; // edge-triggered manual weapon selection
+    bool _cycleTargetBtnIsDown = false;   // edge-triggered homing target cycle
     bool _guiLoaded = false;
 
     std::array<TileMap *, 92> _guiTiles = Common::ArrayInit<TileMap *, 92>(NULL);
