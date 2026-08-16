@@ -36,28 +36,6 @@ static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Colo
 static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
                                                const vec3d &renderPosition, uint8_t visibilityOpacity);
 
-static bool yw_IsFixedInputShortcutPressed(const TInputState *inpt, int binding)
-{
-    if ( !inpt )
-        return false;
-
-    const World::TInputFixedShortcut shortcut = World::GetInputFixedShortcut(binding);
-    if ( shortcut.Kind != World::INPUT_FIXED_SHORTCUT_KEY )
-        return false;
-
-    switch ( shortcut.KeyCode )
-    {
-    case Input::KC_LMB:
-        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_LM_DOWN) != 0;
-    case Input::KC_RMB:
-        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_RM_DOWN) != 0;
-    case Input::KC_MMB:
-        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_MM_DOWN) != 0;
-    default:
-        return inpt->KbdLastHit == shortcut.KeyCode;
-    }
-}
-
 ////////////////////////////////////////
 
 int dword_5BAF9C;
@@ -10364,7 +10342,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         }
         else if ( winpt->selected_btn == &robo_map )
         {
-            if ( yw_IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
+            if ( World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
             {
                 if ( winpt->selected_btnID == 17 )
                 {
@@ -13907,22 +13885,15 @@ void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, 
 static bool yw_IsUfoSpyHudActive(NC_STACK_ypaworld *yw)
 {
     return yw &&
-           yw->_userRobo &&
-           yw->_userUnit &&
-           yw->_viewerBact == yw->_userUnit &&
-           !yw->IsSpectatorControlled() &&
-           !yw->IsRoboMapOpen() &&
-           yw->_userUnit->_bact_type == BACT_TYPES_UFO &&
-           yw->_userUnit->getBACT_inputting() &&
-           yw->IsUfoSpyUiEnabled() &&
-           yw->GetUfoSpyUiRadius() > 0.0f;
+           yw->IsUfoSpyUiControlContext() &&
+           yw->IsUfoSpyUiEnabled();
 }
 
-static bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
-                                              NC_STACK_ypabact *bact)
+static uint8_t yw_GetUfoSpyWorldOpacity(NC_STACK_ypaworld *yw,
+                                        NC_STACK_ypabact *bact)
 {
-    if ( !yw_IsUfoSpyHudActive(yw) || !bact )
-        return false;
+    if ( !yw || !yw->IsUfoSpyUiControlContext() || !bact )
+        return 0;
 
     const uint8_t playerOwner = yw->_userRobo->_owner;
     if ( bact == yw->_userUnit ||
@@ -13939,33 +13910,54 @@ static bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
          bact->IsInvisibleUnrevealed() ||
          bact->IsHiddenFor(playerOwner) )
     {
-        return false;
+        return 0;
     }
 
     const float spyRadius = yw->GetUfoSpyUiRadius();
     if ( spyRadius <= 0.0f )
-        return false;
+        return 0;
 
-    // Keep the information overlay inside the same real 3D world window used
-    // by the renderer. This stays separate from the authored Spy radius because
-    // the latter is intentionally horizontal/sector-like.
+    // Keep Spy markers inside the same real 3D world window used by the
+    // renderer. The authored Spy radius remains an independent horizontal
+    // sensor distance and is never modified by optical zoom.
     const float renderDistance = (float)yw->getYW_normVisLimit();
     if ( renderDistance > 0.0f )
     {
         const vec3d renderDelta = bact->_position - yw->_viewerPosition;
         if ( renderDelta.dot(renderDelta) >= renderDistance * renderDistance )
-            return false;
+            return 0;
     }
 
-    // Treat the Spy HUD as a fixed horizontal sensor radius, matching Urban
-    // Assault's sector/radar gameplay scale. UFO altitude must not consume part
-    // of the authored range, and optical zoom intentionally does not modify it.
     const float dx = bact->_position.x - yw->_userUnit->_position.x;
     const float dz = bact->_position.z - yw->_userUnit->_position.z;
-    if ( dx * dx + dz * dz >= spyRadius * spyRadius )
-        return false;
+    const float horizontalDistance = sqrt(dx * dx + dz * dz);
+    if ( horizontalDistance >= spyRadius )
+        return 0;
 
-    return true;
+    // Reuse the exact world-UI smoothstep curve for the UFO sensor boundary.
+    // This gives Resistance and enemy arrows the same fade-in/fade-out instead
+    // of allowing enemy markers to pop at the edge of the scanned area.
+    const float fadeStart = yw_GetWorldUiFadeStart(spyRadius);
+    if ( horizontalDistance <= fadeStart )
+        return 255;
+
+    float ratio = (spyRadius - horizontalDistance) / (spyRadius - fadeStart);
+    ratio = std::max(0.0f, std::min(1.0f, ratio));
+    ratio = ratio * ratio * (3.0f - 2.0f * ratio);
+    return (uint8_t)dround(ratio * 255.0f);
+}
+
+static bool yw_ShouldRenderUfoSpyWorldArrow(NC_STACK_ypaworld *yw,
+                                             NC_STACK_ypabact *bact)
+{
+    return yw_GetUfoSpyWorldOpacity(yw, bact) > 0;
+}
+
+static bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
+                                              NC_STACK_ypabact *bact)
+{
+    return yw_IsUfoSpyHudActive(yw) &&
+           yw_GetUfoSpyWorldOpacity(yw, bact) > 0;
 }
 
 void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact)
@@ -13977,8 +13969,11 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
-    const bool ufoSpyHud = yw_ShouldRenderUfoSpyWorldStatus(yw, bact);
-    uint8_t worldUiOpacity = ufoSpyHud ? 255 : yw_GetWorldUiOpacity(yw, bact->_position);
+    const uint8_t normalWorldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    const uint8_t ufoSpyOpacity = yw_IsUfoSpyHudActive(yw)
+                                    ? yw_GetUfoSpyWorldOpacity(yw, bact)
+                                    : 0;
+    const uint8_t worldUiOpacity = std::max(normalWorldUiOpacity, ufoSpyOpacity);
     if (worldUiOpacity == 0)
         return;
 
@@ -14155,6 +14150,20 @@ static bool yw_IsExplicitWorldStatusTarget(NC_STACK_ypaworld *yw,
            damageHoverTargets.end();
 }
 
+static bool yw_IsExplicitWorldCursorTarget(
+    NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+    const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
+{
+    if ( !yw || !bact )
+        return false;
+
+    if ( (yw->_guiActFlags & 0x20) && yw->_bactOnMouse == bact )
+        return true;
+
+    return std::find(damageHoverTargets.begin(), damageHoverTargets.end(), bact) !=
+           damageHoverTargets.end();
+}
+
 static void yw_RenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw, CmdStream *cur,
                                         NC_STACK_ypabact *bact,
                                         const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
@@ -14162,16 +14171,38 @@ static void yw_RenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw, CmdStream *cur,
     if ( !bact )
         return;
 
-    // Hover/target/damage paths already call the same renderer. Let those calls
-    // own their actor so the Spy pass never double-blends an existing overlay.
     if ( yw_ShouldRenderUfoSpyWorldStatus(yw, bact) &&
          !yw_IsExplicitWorldStatusTarget(yw, bact, damageHoverTargets) )
     {
+        // HP/shield/status is the optional detailed Spy layer toggled by U/MMB.
+        // Normal hover/target/damage paths remain authoritative and are never
+        // duplicated by this pass.
         yw_RenderUnitLifeBar(yw, cur, bact);
     }
 
     for ( NC_STACK_ypabact *kid : bact->_kidList )
         yw_RenderUfoSpyWorldStatus(yw, cur, kid, damageHoverTargets);
+}
+
+static void yw_RenderUfoSpyWorldArrows(
+    NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+    const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
+{
+    if ( !bact )
+        return;
+
+    // The lightweight faction arrow is always part of the UFO sensor view,
+    // even when the detailed HP/status overlay is toggled off. Reuse the exact
+    // existing cursor renderer and let yw_GetUfoSpyWorldOpacity() provide the
+    // same smooth fade curve for friendly and enemy units.
+    if ( yw_ShouldRenderUfoSpyWorldArrow(yw, bact) &&
+         !yw_IsExplicitWorldCursorTarget(yw, bact, damageHoverTargets) )
+    {
+        yw_RenderCursorOverUnitWithOpacity(yw, bact, bact->_position, 255);
+    }
+
+    for ( NC_STACK_ypabact *kid : bact->_kidList )
+        yw_RenderUfoSpyWorldArrows(yw, kid, damageHoverTargets);
 }
 
 static void yw_DrawWorldSelectionCornerLines(int centerX, int centerY, int halfWidth,
@@ -14311,7 +14342,8 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
              activeCommander->_status != BACT_STATUS_DEAD &&
              !activeCommander->ShouldHideFromStrategicUI() )
         {
-            yw_RenderCursorOverUnit(yw, activeCommander);
+            if ( !yw_ShouldRenderUfoSpyWorldArrow(yw, activeCommander) )
+                yw_RenderCursorOverUnit(yw, activeCommander);
             yw_RenderWorldSelectionUnitMarker(yw, activeCommander);
         }
 
@@ -14322,7 +14354,8 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
                  unit->_status != BACT_STATUS_DEAD &&
                  !unit->ShouldHideFromStrategicUI() )
             {
-                yw_RenderCursorOverUnit(yw, unit);
+                if ( !yw_ShouldRenderUfoSpyWorldArrow(yw, unit) )
+                    yw_RenderCursorOverUnit(yw, unit);
                 yw_RenderWorldSelectionUnitMarker(yw, unit);
             }
         }
@@ -14388,7 +14421,8 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
                     const uint8_t visibilityOpacity =
                         yw_GetEnemyIndicatorVisibilityOpacity(yw, bct, cellVisible,
                                                               &renderPosition);
-                    if ( visibilityOpacity > 0 )
+                    if ( visibilityOpacity > 0 &&
+                         !yw_ShouldRenderUfoSpyWorldArrow(yw, bct) )
                     {
                         yw_RenderCursorOverUnitWithOpacity(yw, bct, renderPosition,
                                                            visibilityOpacity);
@@ -14493,6 +14527,14 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
 
     if ( !yw->IsSpectatorControlled() && yw->_guiVisor.field_18 && !yw->_guiVisor.field_18->ShouldHideFromStrategicUI() )
         yw_RenderUnitLifeBar(yw, &buf, yw->_guiVisor.field_18);
+
+    if ( yw->IsUfoSpyUiControlContext() )
+    {
+        // Arrows are the lightweight default UFO sensor layer and stay visible
+        // independently from the optional detailed HP/status toggle.
+        for ( NC_STACK_ypabact *unit : yw->_unitsList )
+            yw_RenderUfoSpyWorldArrows(yw, unit, damageHoverTargets);
+    }
 
     if ( yw_IsUfoSpyHudActive(yw) )
     {
@@ -14847,9 +14889,10 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
+    const uint8_t ufoSpyOpacity = yw_GetUfoSpyWorldOpacity(yw, bact);
     uint8_t worldUiOpacity = activeSquadronSelection
         ? 255
-        : yw_GetWorldUiOpacity(yw, renderPosition);
+        : std::max(yw_GetWorldUiOpacity(yw, renderPosition), ufoSpyOpacity);
     worldUiOpacity = (uint8_t)(((uint32_t)worldUiOpacity * visibilityOpacity + 127U) / 255U);
     if (worldUiOpacity == 0)
         return;
@@ -16789,10 +16832,17 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
     }
 
     // The fixed secondary shortcut comes from the shared input definition.
-    // Keep it contextual so the same physical button can retain a different
-    // action on the Tactical Map without creating a parallel binding system.
-    if ( _mouseGrabbed && World::IsFixedInputShortcutHeld(World::INPUT_BIND_SWITCH_WEAPON) )
+    // On an eligible UFO the same MMB edge belongs to Toggle UFO Spy UI, so do
+    // not also route the held button into Switch Weapon. Everywhere else the
+    // existing MMB weapon shortcut remains unchanged.
+    const bool ufoSpyOwnsFixedShortcut =
+        _mouseGrabbed && IsUfoSpyUiControlContext() &&
+        World::IsFixedInputShortcutHeld(World::INPUT_BIND_TOGGLE_UFO_SPY_UI);
+    if ( _mouseGrabbed && !ufoSpyOwnsFixedShortcut &&
+         World::IsFixedInputShortcutHeld(World::INPUT_BIND_SWITCH_WEAPON) )
+    {
         weaponSwitchPressed = true;
+    }
 
     if ( !weaponSwitchPressed )
     {

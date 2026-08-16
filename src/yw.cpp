@@ -1673,22 +1673,48 @@ float NC_STACK_ypaworld::GetUfoSpyUiRadius() const
     return proto.spy_ui_radius;
 }
 
+bool NC_STACK_ypaworld::IsUfoSpyUiControlContext() const
+{
+    return _GameShell &&
+           _userRobo &&
+           _userUnit &&
+           _viewerBact == _userUnit &&
+           !IsSpectatorControlled() &&
+           !IsRoboMapOpen() &&
+           _userUnit->_bact_type == BACT_TYPES_UFO &&
+           _userUnit->getBACT_inputting() &&
+           GetUfoSpyUiRadius() > 0.0f;
+}
+
 static void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
 {
-    if ( !yw || !inpt || !yw->_GameShell || !yw->_userUnit ||
-         !yw->_userRobo || yw->IsSpectatorControlled() ||
-         yw->_viewerBact != yw->_userUnit || yw->IsRoboMapOpen() ||
-         yw->_userUnit->_bact_type != BACT_TYPES_UFO ||
-         !yw->_userUnit->getBACT_inputting() || yw->GetUfoSpyUiRadius() <= 0.0f )
+    if ( !yw || !inpt || !yw->IsUfoSpyUiControlContext() )
         return;
 
     const UserData::TInputConf &bind =
         yw->_GameShell->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI];
-    if ( bind.Type != World::INPUT_BIND_TYPE_HOTKEY || inpt->HotKeyID != bind.KeyID )
+    const bool primaryPressed =
+        bind.Type == World::INPUT_BIND_TYPE_HOTKEY && inpt->HotKeyID == bind.KeyID;
+    const bool fixedShortcutPressed =
+        yw->_mouseGrabbed &&
+        World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_TOGGLE_UFO_SPY_UI);
+
+    if ( !primaryPressed && !fixedShortcutPressed )
         return;
 
     yw->_ufoSpyUiEnabled = !yw->_ufoSpyUiEnabled;
-    inpt->HotKeyID = -1;
+
+    if ( primaryPressed )
+        inpt->HotKeyID = -1;
+
+    if ( fixedShortcutPressed )
+    {
+        // The UFO owns MMB while its Spy UI control is available. Consume the
+        // physical edge so map/UI handlers later in the frame cannot observe
+        // the same click. The toggle controls only the detailed HP/status layer;
+        // lightweight faction arrows remain part of the default UFO sensor view.
+        inpt->ClickInf.flag &= ~TClickBoxInf::FLAG_MM_DOWN;
+    }
 }
 
 static void yw_UpdateCockpitCameraToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
