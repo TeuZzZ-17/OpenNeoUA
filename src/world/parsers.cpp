@@ -2175,6 +2175,25 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         float radius = parser.stof(p2, 0);
         _vhcl->power_radius = radius > 0.0 ? radius : 0.0;
     }
+    else if ( !StriCmp(p1, "spy_ui_radius") )
+    {
+        // Vehicle-side and intentionally runtime-active only for model = ufo.
+        // Parse independently of declaration order so scripts may place model
+        // before or after this key without changing the result.
+        float radius = parser.stof(p2, 0);
+        _vhcl->spy_ui_radius =
+            std::isfinite(radius) && radius > 0.0f ? radius : 0.0f;
+    }
+    else if ( !StriCmp(p1, "zoom_steps") )
+    {
+        // -1 means the parameter is absent/invalid and preserves the current
+        // OpenUA UFO zoom range. Zero intentionally disables optical zoom.
+        size_t parsed = 0;
+        const long steps = parser.stol(p2, &parsed, 0);
+        _vhcl->zoom_steps = parsed == p2.size() && steps >= 0
+            ? (int)std::min<long>(steps, 10)
+            : -1;
+    }
     else if ( !StriCmp(p1, "shk_damaged_slot") )
     {
         _vhcl->damaged_fx.shake.slot = parser.stol(p2, NULL, 0);
@@ -3374,6 +3393,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->unit_gun_icon.clear();
         _vhcl->power = 0;
         _vhcl->power_radius = 0.0;
+        _vhcl->spy_ui_radius = 0.0f;
+        _vhcl->zoom_steps = -1;
         _vhcl->damaged_force_malus = 0.0;
         _vhcl->damaged_maxrot_malus = 0.0;
         _vhcl->damaged_snd_pitch_mult = 1.0;

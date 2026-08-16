@@ -531,6 +531,28 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
         }
 
         const float zoomStep = 1.25f;
+        float maxPlayerViewZoom = GFX::VIEW_ZOOM_MAX;
+
+        // Vehicle-side zoom_steps limits how many existing 1.25x zoom-in
+        // increments this UFO may use. Missing/invalid (-1) preserves the
+        // current OpenUA 8x cap; zero intentionally locks the vehicle at 1x.
+        if (_vehicleID < _world->_vhclProtos.size())
+        {
+            const World::TVhclProto &proto = _world->_vhclProtos[_vehicleID];
+            if (proto.model_id == BACT_TYPES_UFO && proto.zoom_steps >= 0)
+            {
+                maxPlayerViewZoom = GFX::VIEW_ZOOM_MIN;
+                for (int i = 0; i < proto.zoom_steps &&
+                                maxPlayerViewZoom < GFX::VIEW_ZOOM_MAX; i++)
+                {
+                    maxPlayerViewZoom *= zoomStep;
+                }
+
+                if (maxPlayerViewZoom > GFX::VIEW_ZOOM_MAX)
+                    maxPlayerViewZoom = GFX::VIEW_ZOOM_MAX;
+            }
+        }
+
         if (zoomSteps > 0)
         {
             for (int i = 0; i < zoomSteps; i++)
@@ -544,8 +566,8 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
 
         if (_playerViewZoom < GFX::VIEW_ZOOM_MIN)
             _playerViewZoom = GFX::VIEW_ZOOM_MIN;
-        else if (_playerViewZoom > GFX::VIEW_ZOOM_MAX)
-            _playerViewZoom = GFX::VIEW_ZOOM_MAX;
+        else if (_playerViewZoom > maxPlayerViewZoom)
+            _playerViewZoom = maxPlayerViewZoom;
     }
 
     _old_pos = _position;
