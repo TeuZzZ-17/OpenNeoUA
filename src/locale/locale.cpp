@@ -410,6 +410,10 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_ZOOM_OUT:             fallback = "Zoom Out"; break;
         case OUA_ENABLE_PLAY_AS:        fallback = "Enable Play As"; break;
         case OUA_AMBIENT_VOLUME:        fallback = "Ambient Volume:"; break;
+        case OUA_LEFT_MOUSE:            fallback = "Left Mouse"; break;
+        case OUA_RIGHT_MOUSE:           fallback = "Right Mouse"; break;
+        case OUA_MOUSE_WHEEL_UP:        fallback = "Mouse Wheel Up"; break;
+        case OUA_MOUSE_WHEEL_DOWN:      fallback = "Mouse Wheel Down"; break;
         default: break;
     }
 
