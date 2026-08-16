@@ -42,6 +42,8 @@ struct area_arg_65
     vec3d particleSpin = vec3d(0.0, 0.0, 0.0);
     // OpenUA custom: per-emitter particle lifetime multiplier. Neutral 1.0 preserves vanilla.
     float particleLifetimeScale = 1.0f;
+    // OpenUA custom: when enabled, particle tint alpha also attenuates additive RGB.
+    bool particleTintAlphaAffectsAdditive = false;
 
     area_arg_65()
     {
@@ -82,6 +84,8 @@ struct baseRender_msg
     vec3d particleScale = vec3d(1.0, 1.0, 1.0);
     vec3d particleSpin = vec3d(0.0, 0.0, 0.0);
     float particleLifetimeScale = 1.0f;
+    // OpenUA custom: decoration particle alpha must also fade additive RGB.
+    bool particleTintAlphaAffectsAdditive = false;
 };
 
 

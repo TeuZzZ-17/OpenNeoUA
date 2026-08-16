@@ -29,13 +29,14 @@ static float ParticleSystem_MaxScaleAxis(const vec3d &scale)
     return maxScale > 0.0f ? maxScale : 1.0f;
 }
 
-void ParticleSystem::AddParticle(NC_STACK_particle *base, const vec3d& pos, const vec3d& vec, int32_t age, const GFX::TGLColor &tint, const vec3d &scale, const vec3d &spin, float lifetimeScale)
+void ParticleSystem::AddParticle(NC_STACK_particle *base, const vec3d& pos, const vec3d& vec, int32_t age, const GFX::TGLColor &tint, const vec3d &scale, const vec3d &spin, float lifetimeScale, bool tintAlphaAffectsAdditive)
 {
     if ( !std::isfinite(lifetimeScale) || lifetimeScale <= 0.0f )
         lifetimeScale = 1.0f;
 
     if (!_disableAdd && (int32_t)_particles.size() < System::IniConf::GfxParticlesLimit.Get<int32_t>())
-        _particles.emplace_back( base, pos, vec, age, tint, scale, spin, lifetimeScale );
+        _particles.emplace_back( base, pos, vec, age, tint, scale, spin, lifetimeScale,
+                                 tintAlphaAffectsAdditive );
 }
 
 void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
@@ -132,6 +133,7 @@ void ParticleSystem::Render(Frak *p, const vec3d &scale, area_arg_65 *rndrParams
             rend.Flags = mesh.Mat.Flags | rndrParams->flags;
             rend.Color = mesh.Mat.Color;
             rend.ColorMul = p->Tint;
+            rend.VPFadeFactor = p->TintAlphaAffectsAdditive ? p->Tint.a : 1.0f;
 
             if ((mesh.Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) && mesh.Mat.TexSource)
             {
