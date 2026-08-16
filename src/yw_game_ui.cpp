@@ -14734,13 +14734,18 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
             wis->field_7E = NULL;
         }
 
-        if ( !hideWireframes && hud_wure )
+        // Alternative View keeps only the vehicle info wireframe rendered by
+        // yw_RenderInfoVehicleWire(). Hide the authored visor/weapon overlays.
+        const bool hideAlternativeViewHudWireframes =
+            yw->_userUnit && yw->_userUnit->IsAlternativeViewActive();
+
+        if ( !hideWireframes && !hideAlternativeViewHudWireframes && hud_wure )
         {
             SDL_Color v14 = yw->GetColor(34);
             yw_RenderVector2D(yw, hud_wure, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.99, 0.99, v14, NULL, NULL, true);
         }
 
-        if ( !hideWireframes && yw->_guiVisor.field_0 )
+        if ( !hideWireframes && !hideAlternativeViewHudWireframes && yw->_guiVisor.field_0 )
         {
             if ( mg_wure )
             {
@@ -14772,7 +14777,7 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
             }
         }
 
-        if ( !hideWireframes && yw->_guiVisor.field_4 )
+        if ( !hideWireframes && !hideAlternativeViewHudWireframes && yw->_guiVisor.field_4 )
         {
             bool locked = yw->_guiVisor.field_18 != NULL;
             yw_RenderHUDWeaponLockMarker(yw, wis, wpn_wure, wpn_wure2, locked,
@@ -16743,10 +16748,48 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
         _userUnit->RequestHomingTargetCycle();
     _cycleTargetBtnIsDown = cycleTargetPressed;
 
-    const bool weaponSwitchPressed = inpt->Buttons.Is(1);
-    if ( weaponSwitchPressed && !_weaponSwitchBtnIsDown && _userUnit )
-        _userUnit->CycleControlledWeapon();
-    _weaponSwitchBtnIsDown = weaponSwitchPressed;
+    const bool alternativeViewPressed = inpt->Buttons.Is(7);
+    if ( _userUnit )
+        _userUnit->SetAlternativeViewActive(alternativeViewPressed);
+
+    // Switch Weapon is a remappable player action, so the configured physical
+    // key is authoritative here. In particular, modifier-only bindings such as
+    // ALT must not depend on another movement/input event making the legacy
+    // Button[1] expression visible in this frame. Keep the old button channel
+    // only as a boot-time fallback when the user binding is not available yet.
+    bool weaponSwitchPressed = false;
+    if ( _GameShell &&
+         World::INPUT_BIND_SWITCH_WEAPON < (int)_GameShell->InputConfig.size() )
+    {
+        const UserData::TInputConf &switchBind =
+            _GameShell->InputConfig[World::INPUT_BIND_SWITCH_WEAPON];
+
+        if ( switchBind.Type == World::INPUT_BIND_TYPE_BUTTON &&
+             switchBind.PKeyCode > Input::KC_NONE &&
+             switchBind.PKeyCode < Input::KC_MAX )
+            weaponSwitchPressed = Input::Engine.GetKeyState(switchBind.PKeyCode);
+    }
+    else
+    {
+        weaponSwitchPressed = inpt->Buttons.Is(1);
+    }
+
+    // Middle mouse is the fixed secondary shortcut for Switch Weapon while
+    // directly controlling a unit. Keep it contextual so tactical-map middle
+    // click remains reserved for map markers when the mouse is not grabbed.
+    if ( _mouseGrabbed && (winp->flag & TClickBoxInf::FLAG_MM_HOLD) )
+        weaponSwitchPressed = true;
+
+    if ( !weaponSwitchPressed )
+    {
+        _weaponSwitchBtnIsDown = false;
+    }
+    else if ( !_weaponSwitchBtnIsDown && _userUnit && _userUnit->CycleControlledWeapon() )
+    {
+        // Consume the press only after a real switch. A temporarily unavailable
+        // switch can therefore succeed later without requiring an unrelated key.
+        _weaponSwitchBtnIsDown = true;
+    }
 
     int v38 = 0;
 
@@ -16824,11 +16867,6 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
         if ( winp->flag & TClickBoxInf::FLAG_LM_HOLD )
             inpt->Buttons.Set(0);
 
-        if ( winp->flag & TClickBoxInf::FLAG_MM_HOLD )
-        {
-            inpt->Buttons.Set(3);
-            inpt->HandBrakePressed = true;
-        }
     }
 
     if ( !v38 )

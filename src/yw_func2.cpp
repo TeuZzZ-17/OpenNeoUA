@@ -1067,9 +1067,10 @@ void  UserData::sb_0x46ca74()
         ProfilesNode &profile = profiles.back();
 
         profile.name = userNameDir;
-        InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_V);
+        InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_CTRL);
         InputConfig[World::INPUT_BIND_CYCLE_TARGET] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 6, Input::KC_TAB);
-        InputConfig[World::INPUT_BIND_CAMFIRE] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_CTRL);
+        InputConfig[World::INPUT_BIND_ALTERNATIVE_VIEW] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 7, Input::KC_F);
+        InputConfig[World::INPUT_BIND_CAMFIRE] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_EXTRA7);
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
         InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
@@ -7394,12 +7395,12 @@ bool UserData::ShellSoundsLoad()
 
 int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
 {
-    static const std::array<int, 7> BUTTON
+    static const std::array<int, 8> BUTTON
     {
         World::INPUT_BIND_FIRE,       World::INPUT_BIND_SWITCH_WEAPON,
         World::INPUT_BIND_GUN,        World::INPUT_BIND_BRAKE,
         World::INPUT_BIND_WAPOINT,    World::INPUT_BIND_CAMFIRE,
-        World::INPUT_BIND_CYCLE_TARGET
+        World::INPUT_BIND_CYCLE_TARGET, World::INPUT_BIND_ALTERNATIVE_VIEW
     };
 
     static const std::array<int, 6> SLIDER

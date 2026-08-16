@@ -484,7 +484,7 @@ struct TVhclProto
     uint8_t disable_enable_bitmask = 0;
     int8_t weapon = 0;
     std::array<int16_t, 3> extra_weapons = {0, 0, 0};
-    // OpenUA custom: optional projectile-count overrides for weapon2/3/4.
+    // OpenUA custom: optional projectile-count overrides for weapon_2/_3/_4.
     // A zero value inherits the primary num_weapons count.
     std::array<int16_t, 3> extra_num_weapons = {0, 0, 0};
     int weapon_switch_mode = WEAPON_SWITCH_MODE_SEQUENCE;

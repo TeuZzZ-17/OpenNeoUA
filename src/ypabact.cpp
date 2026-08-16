@@ -852,7 +852,11 @@ bool NC_STACK_ypabact::IsCockpitCameraAvailable() const
 
 bool NC_STACK_ypabact::IsCockpitCameraActive() const
 {
-    return IsCockpitCameraAvailable() &&
+    // Alternative View temporarily supersedes the normal cockpit camera without
+    // changing the user's saved/default cockpit preference. Turning Alternative View
+    // off therefore returns to the exact camera mode that was active before.
+    return !_alternativeViewActive &&
+           IsCockpitCameraAvailable() &&
            _world &&
            _world->_GameShell &&
            _world->_GameShell->cockpitCameraRuntimeMode;
@@ -898,7 +902,106 @@ void NC_STACK_ypabact::ToggleCockpitCameraMode()
     if ( !_world || !_world->_GameShell )
         return;
 
+    // The two views are intentionally mutually exclusive. Do not leave an
+    // Alternative View camera state latched behind a manual cockpit-camera change.
+    ResetAlternativeView();
     _world->_GameShell->cockpitCameraRuntimeMode = !_world->_GameShell->cockpitCameraRuntimeMode;
+}
+
+bool NC_STACK_ypabact::IsAlternativeViewAvailable()
+{
+    if ( !_world || _world->_isNetGame ||
+         _world->_userUnit != this || _world->_viewerBact != this ||
+         !(_oflags & BACT_OFLAG_VIEWER) || !(_oflags & BACT_OFLAG_USERINPT) ||
+         _status == BACT_STATUS_DEAD || (_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
+        return false;
+
+    // Host Stations keep their existing camera behavior. Missile actors are not
+    // normal directly controlled vehicles and must never latch this player view.
+    return _bact_type != BACT_TYPES_ROBO && _bact_type != BACT_TYPES_MISSLE;
+}
+
+bool NC_STACK_ypabact::UsesDownwardAlternativeView()
+{
+    if ( !_world )
+        return false;
+
+    int weaponId = GetCurrentWeaponId();
+    if ( weaponId < 0 || weaponId >= (int)_world->GetWeaponsProtos().size() )
+        return false;
+
+    const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
+    return wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_BOMB ||
+           wproto.IsHomingBomb();
+}
+
+vec3d NC_STACK_ypabact::GetAlternativeViewAimDirection() const
+{
+    // In Urban Assault world space +Y points toward the ground (gravity).
+    return vec3d::OY(1.0);
+}
+
+mat3x3 NC_STACK_ypabact::GetAlternativeViewRotation()
+{
+    if ( !UsesDownwardAlternativeView() )
+    {
+        // Exact 180-degree local look-back: reverse right/forward while keeping
+        // the vehicle's up axis. Physical orientation and weapon aim are untouched.
+        mat3x3 rear = _rotation;
+        rear.SetX(-_rotation.AxisX());
+        rear.SetY(_rotation.AxisY());
+        rear.SetZ(-_rotation.AxisZ());
+        return rear;
+    }
+
+    const vec3d down = GetAlternativeViewAimDirection();
+
+    // Bomb-capable current weapons keep the existing straight-down bomber view.
+    // Keep the vehicle's local right axis horizontal so its nose remains at the
+    // top of the screen. The physical _rotation is never touched.
+    vec3d right = _rotation.AxisX().X0Z();
+    if ( right.normalise() <= 0.001 )
+    {
+        vec3d forward = _rotation.AxisZ().X0Z();
+        if ( forward.normalise() > 0.001 )
+            right = down * forward;
+    }
+
+    if ( right.normalise() <= 0.001 )
+        right = vec3d::OX(1.0);
+
+    vec3d screenDown = down * right;
+    if ( screenDown.normalise() <= 0.001 )
+        screenDown = vec3d::OZ(-1.0);
+
+    mat3x3 view = mat3x3::Ident();
+    view.SetX(right);
+    view.SetY(screenDown);
+    view.SetZ(down);
+    return view;
+}
+
+bool NC_STACK_ypabact::SetAlternativeViewActive(bool active)
+{
+    if ( !active )
+    {
+        ResetAlternativeView();
+        return true;
+    }
+
+    if ( !IsAlternativeViewAvailable() )
+    {
+        ResetAlternativeView();
+        return false;
+    }
+
+    _alternativeViewActive = true;
+    return true;
+}
+
+void NC_STACK_ypabact::ResetAlternativeView()
+{
+    _alternativeViewActive = false;
 }
 
 static float ypabact_GetDamagedThreshold(const NC_STACK_ypabact *bact)
@@ -2129,6 +2232,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _current_weapon_source_slot = 0;
     _userHomingPrimaryTargetGid = 0;
     _userHomingTargetCycleRequested = false;
+    _alternativeViewActive = false;
     _lowhp_weapon_enable = 0;
     _lowhp_threshold = 0.30;
     _lowhp_weapon = 0;
@@ -3148,6 +3252,11 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     if ( _kidRef.IsListType(World::BLIST_CACHE) ) // Do not update units in dead list
         return;
 
+    // Alternative View is transient player state. Any loss of its real runtime
+    // prerequisites clears it immediately rather than leaving a dangling view.
+    if ( _alternativeViewActive && !IsAlternativeViewAvailable() )
+        ResetAlternativeView();
+
     // DEATH1 is permanent for this instance. A lethal event can occur while a
     // class-specific NORMAL/IDLE update is already on the stack; never let the
     // remainder of that old branch keep the logical corpse in a live status.
@@ -3276,7 +3385,9 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         if ( _bact_type == BACT_TYPES_BACT )
             bact_cam.Pos.y += _heliLandingVisualOffsetY;
 
-        if ( _oflags & BACT_OFLAG_EXTRAVIEW )
+        if ( IsAlternativeViewActive() )
+            bact_cam.SclRot = GetAlternativeViewRotation();
+        else if ( _oflags & BACT_OFLAG_EXTRAVIEW )
             bact_cam.SclRot = _viewer_rotation;
         else
             bact_cam.SclRot = _rotation;
@@ -6939,6 +7050,8 @@ void NC_STACK_ypabact::Die()
     if ( _status_flg & BACT_STFLAG_DEATH1 )
         return;
 
+    ResetAlternativeView();
+
     CrashDiag::Breadcrumb("BACT_DEATH",
                           "begin ptr=%p gid=%d type=%d owner=%d status=%d flags=0x%x energy=%d killer_gid=%d killer_owner=%d parent_gid=%d host_gid=%d kids=%zu",
                           this, _gid, _bact_type, _owner, _status, _status_flg,
@@ -7988,9 +8101,9 @@ static void ypabact_UpdateHUDWeaponMultiLockTargets(NC_STACK_ypabact *launcher, 
     std::vector<NC_STACK_ypabact *> targets;
     if ( wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
         targets = ypabact_CollectMissileMultiTargets(launcher, arg, wproto, maxTargets);
-    else if ( ypabact_IsHomingBombWeapon(wproto) )
-        targets = ypabact_CollectHomingBombTargets(launcher, arg, wproto, maxTargets);
 
+    // Homing bombs intentionally keep automatic targeting with no multi-lock HUD.
+    // This preview path is reserved for manually cycled missile targets.
     ypabact_StoreHUDMissileMultiLockTargets(launcher, targets);
 }
 
@@ -7999,35 +8112,48 @@ constexpr int YPA_HOMING_TARGET_CYCLE_MAX = 64;
 static bool ypabact_IsHomingCycleTargetLockable(NC_STACK_ypabact *launcher, NC_STACK_ypabact *target,
                                                  const World::TWeapProto &wproto, const vec3d &requestedAimDir)
 {
-    if ( !launcher || !target || !ypabact_IsCompatibleMultiTargetWeapon(wproto) )
+    // Manual Cycle Target is deliberately missile-only. Homing bombs select
+    // their targets automatically at launch and never enter this path.
+    if ( !launcher || !target || wproto._weaponFlags != YPA_WEAPON_FLAGS_MISSILE )
         return false;
 
-    if ( wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
+    vec3d aimDir = requestedAimDir;
+    float aimLen = aimDir.length();
+    if ( aimLen <= 0.001 )
     {
-        vec3d aimDir = requestedAimDir;
-        float aimLen = aimDir.length();
-        if ( aimLen <= 0.001 )
-        {
-            aimDir = launcher->_rotation.AxisZ();
-            aimLen = aimDir.length();
-        }
-
-        if ( aimLen <= 0.001 )
-            return false;
-
-        aimDir = aimDir / aimLen;
-        return ypabact_GetMissileMultiTargetScore(launcher, target, aimDir, wproto.radius, NULL);
+        aimDir = launcher->_rotation.AxisZ();
+        aimLen = aimDir.length();
     }
 
-    if ( ypabact_IsHomingBombWeapon(wproto) )
-    {
-        if ( !ypabact_IsValidMissileMultiTarget(launcher, target) )
-            return false;
+    if ( aimLen <= 0.001 )
+        return false;
 
-        return (target->_position - launcher->_position).XZ().length() < YPA_MISSILE_MULTI_TARGET_RANGE;
+    aimDir = aimDir / aimLen;
+    return ypabact_GetMissileMultiTargetScore(launcher, target, aimDir, wproto.radius, NULL);
+}
+
+static NC_STACK_ypabact *ypabact_GetHomingCycleLogicalTarget(NC_STACK_ypabact *target)
+{
+    if ( !target )
+        return NULL;
+
+    // Attached Unit Guns/modules belong to their carrying vehicle for manual
+    // target cycling. They remain independent damageable actors everywhere else.
+    if ( (target->_isUnitGunChild || target->_isDummy) &&
+         target->_parent && target->_parent != target )
+        return target->_parent;
+
+    // Host Station Robo-Guns have their own GIDs, but presenting those children
+    // as separate TAB targets makes one Host Station look like several targets.
+    if ( target->_bact_type == BACT_TYPES_GUN )
+    {
+        NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>(target);
+        if ( gun && gun->IsRoboGun() && target->_host_station &&
+             target->_host_station != target )
+            return target->_host_station;
     }
 
-    return false;
+    return target;
 }
 
 static NC_STACK_ypabact *ypabact_SelectNextHomingCycleTarget(NC_STACK_ypabact *launcher,
@@ -8035,7 +8161,7 @@ static NC_STACK_ypabact *ypabact_SelectNextHomingCycleTarget(NC_STACK_ypabact *l
                                                               const World::TWeapProto &wproto,
                                                               NC_STACK_ypabact *currentTarget)
 {
-    if ( !launcher || !targetingArg || !ypabact_IsCompatibleMultiTargetWeapon(wproto) )
+    if ( !launcher || !targetingArg || wproto._weaponFlags != YPA_WEAPON_FLAGS_MISSILE )
         return NULL;
 
     bact_arg79 collectArg = {};
@@ -8043,33 +8169,76 @@ static NC_STACK_ypabact *ypabact_SelectNextHomingCycleTarget(NC_STACK_ypabact *l
     collectArg.tgType = BACT_TGT_TYPE_DRCT;
     collectArg.tgt_pos = launcher->_position + targetingArg->field_4 * YPA_MISSILE_MULTI_TARGET_RANGE;
 
-    // Cycle Target must traverse the weapon's full natural lockable candidate
-    // list. Do not inject the current target as a forced primary here: the
-    // multi-target collectors intentionally give arg->target score -1 so a
-    // volley keeps its primary first, but doing that while cycling reorders the
-    // list on every key press and causes A -> B -> A ping-pong behaviour.
-    // Likewise, multi_target controls volley fan-out only; it must never limit
-    // how many valid targets the player can cycle through manually.
+    // Cycle Target traverses the full natural candidate list. multi_target is
+    // volley fan-out only and does not limit manual cycling.
+    std::vector<NC_STACK_ypabact *> rawTargets = ypabact_CollectMissileMultiTargets(
+        launcher, &collectArg, wproto, YPA_HOMING_TARGET_CYCLE_MAX);
+
+    if ( rawTargets.empty() )
+        return NULL;
+
+    // Collapse attached components to one player-facing logical target. This is
+    // especially important for a Host Station and its independently damageable
+    // Robo-Guns, which otherwise have different GIDs but represent one vehicle
+    // for TAB cycling. Keep this normalization local to manual cycling so normal
+    // missile targeting and multi-target fan-out retain their existing semantics.
     std::vector<NC_STACK_ypabact *> targets;
-    if ( wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
-        targets = ypabact_CollectMissileMultiTargets(
-            launcher, &collectArg, wproto, YPA_HOMING_TARGET_CYCLE_MAX);
-    else if ( ypabact_IsHomingBombWeapon(wproto) )
-        targets = ypabact_CollectHomingBombTargets(
-            launcher, &collectArg, wproto, YPA_HOMING_TARGET_CYCLE_MAX);
+    std::vector<int32_t> targetGids;
+    targets.reserve(rawTargets.size());
+    targetGids.reserve(rawTargets.size());
+
+    for (NC_STACK_ypabact *rawTarget : rawTargets)
+    {
+        NC_STACK_ypabact *logicalTarget = ypabact_GetHomingCycleLogicalTarget(rawTarget);
+        if ( !logicalTarget )
+            continue;
+
+        const int32_t logicalGid = logicalTarget->_gid;
+        if ( std::find(targetGids.begin(), targetGids.end(), logicalGid) != targetGids.end() )
+            continue;
+
+        targets.push_back(logicalTarget);
+        targetGids.push_back(logicalGid);
+    }
 
     if ( targets.empty() )
         return NULL;
 
-    auto currentIt = std::find(targets.begin(), targets.end(), currentTarget);
-    if ( currentIt == targets.end() )
-        return targets.front();
+    NC_STACK_ypabact *logicalCurrent = ypabact_GetHomingCycleLogicalTarget(currentTarget);
+    const int32_t currentGid = logicalCurrent ? logicalCurrent->_gid : 0;
 
-    ++currentIt;
-    if ( currentIt == targets.end() )
-        currentIt = targets.begin();
+    // One logical target cannot be cycled when it is already the current lock.
+    // This covers one Host Station with any number of Robo-Guns or one vehicle
+    // with attached Unit Guns. If the old lock has left the candidate set, a
+    // single different valid target may still replace it.
+    if ( targets.size() == 1 )
+    {
+        if ( currentGid <= 0 || targets[0]->_gid == currentGid )
+            return NULL;
 
-    return *currentIt;
+        return targets[0];
+    }
+
+    size_t startIndex = 0;
+    for (size_t i = 0; i < targets.size(); ++i)
+    {
+        if ( targets[i] && currentGid > 0 && targets[i]->_gid == currentGid )
+        {
+            startIndex = (i + 1) % targets.size();
+            break;
+        }
+    }
+
+    // Never return the currently locked logical unit. If another distinct unit
+    // exists it must be selected; otherwise TAB is disabled for this press.
+    for (size_t offset = 0; offset < targets.size(); ++offset)
+    {
+        NC_STACK_ypabact *candidate = targets[(startIndex + offset) % targets.size()];
+        if ( candidate && (currentGid <= 0 || candidate->_gid != currentGid) )
+            return candidate;
+    }
+
+    return NULL;
 }
 
 static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact, int requestedWeapon, int *outSourceSlot)
@@ -8157,7 +8326,7 @@ bool NC_STACK_ypabact::RequestHomingTargetCycle()
         return false;
 
     const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
-    if ( !ypabact_IsCompatibleMultiTargetWeapon(wproto) )
+    if ( wproto._weaponFlags != YPA_WEAPON_FLAGS_MISSILE )
         return false;
 
     _userHomingTargetCycleRequested = true;
@@ -8166,8 +8335,10 @@ bool NC_STACK_ypabact::RequestHomingTargetCycle()
 
 bool NC_STACK_ypabact::CycleControlledWeapon()
 {
+    // Manual player selection is independent from weapon_switch_mode. Sequence
+    // and random continue to govern automatic firing behaviour, but they must
+    // not block an explicit Switch Weapon input from the directly controlled unit.
     if ( !(_oflags & BACT_OFLAG_USERINPT) ||
-         _weapon_switch_mode != World::TVhclProto::WEAPON_SWITCH_MODE_CONTROLLED ||
          _status == BACT_STATUS_DEAD || ypabact_IsLowHPWeaponActive(this) )
         return false;
 
@@ -8186,6 +8357,8 @@ bool NC_STACK_ypabact::CycleControlledWeapon()
     _current_weapon_source_slot = sourceSlots[_weapon_slot_index];
     _userHomingPrimaryTargetGid = 0;
     _userHomingTargetCycleRequested = false;
+    if ( _alternativeViewActive && !IsAlternativeViewAvailable() )
+        ResetAlternativeView();
     if ( _world )
         _world->_hudMissileMultiLockTargets.clear();
     return true;
@@ -11558,8 +11731,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             weaponTargets = ypabact_CollectHomingBombTargets(this, arg, wproto, 1);
     }
 
+    // Multi-lock HUD and manual target cycling are missile-only. Homing bombs
+    // still use weaponTargets below for automatic single/multi-target fan-out.
     ypabact_StoreHUDMissileMultiLockTargets(
-        this, (missileMultiTarget || bombMultiTarget) ? weaponTargets : std::vector<NC_STACK_ypabact *>());
+        this, missileMultiTarget ? weaponTargets : std::vector<NC_STACK_ypabact *>());
 
     vec3d recoilDirSum(0.0, 0.0, 0.0);
     int recoilShotCount = 0;
@@ -14272,6 +14447,7 @@ void NC_STACK_ypabact::Renew()
     _current_weapon_source_slot = 0;
     _userHomingPrimaryTargetGid = 0;
     _userHomingTargetCycleRequested = false;
+    _alternativeViewActive = false;
     _lowhp_weapon_enable = 0;
     _lowhp_threshold = 0.30;
     _lowhp_weapon = 0;
@@ -15819,10 +15995,8 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
 
     float v55 = targetingProto ? targetingProto->radius : 0.0;
     int targetingWeaponFlags = targetingProto ? targetingProto->_weaponFlags : _weapon_flags;
-    bool homingBomb = targetingProto && targetingProto->IsHomingBomb();
-    const bool showHomingBombMultiLock = homingBomb && targetingProto->multi_target > 1;
-    int a3a = !(targetingWeaponFlags & 2) && !(targetingWeaponFlags & 0x10) && !showHomingBombMultiLock;
-    bool searchWeaponTarget = !a3a || homingBomb;
+    int a3a = !(targetingWeaponFlags & 2) && !(targetingWeaponFlags & 0x10);
+    bool searchWeaponTarget = !a3a;
 
     if ( targetingProto && searchWeaponTarget )
     {
@@ -15923,9 +16097,9 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     }
 
     // A remappable Cycle Target press is consumed here, where the exact user
-    // aim vector is available. This keeps target cycling on the normal homing
-    // acquisition path instead of introducing a second targeting system.
-    if ( targetingProto && ypabact_IsCompatibleMultiTargetWeapon(*targetingProto) )
+    // aim vector is available. This is deliberately missile-only: homing bombs
+    // keep their automatic launch-time target selection.
+    if ( targetingProto && targetingProto->_weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
     {
         NC_STACK_ypabact *manualTarget =
             _userHomingPrimaryTargetGid > 0
@@ -18164,6 +18338,9 @@ void NC_STACK_ypabact::setBACT_viewer(bool vwr)
 {
     uamessage_viewer viewMsg;
 
+    if ( !vwr )
+        ResetAlternativeView();
+
     if ( vwr )
     {
         if ( _world && !_world->CanControlUnitInSpectatorMode(this) )
@@ -18238,6 +18415,9 @@ void NC_STACK_ypabact::setBACT_viewer(bool vwr)
 
 void NC_STACK_ypabact::setBACT_inputting(bool inpt)
 {
+    if ( !inpt )
+        ResetAlternativeView();
+
     if ( inpt )
     {
         if ( _world && !_world->CanControlUnitInSpectatorMode(this) )
