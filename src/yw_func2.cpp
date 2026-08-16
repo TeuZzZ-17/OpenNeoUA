@@ -1183,6 +1183,7 @@ void  UserData::sb_0x46ca74()
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
         InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
+        InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
         InputConfig[World::INPUT_BIND_ZOOMIN] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 16, Input::KC_NUMPLUS);
         InputConfig[World::INPUT_BIND_ZOOMOUT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 17, Input::KC_NUMMINUS);
 
@@ -7519,7 +7520,7 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_DRIVE_SPEED,World::INPUT_BIND_GUN_HEIGHT,
     };
 
-    static const std::array<int, 50> HOTKEY
+    static const std::array<int, 53> HOTKEY
     {
         World::INPUT_BIND_ORDER,      World::INPUT_BIND_ATTACK,
         World::INPUT_BIND_NEW,        World::INPUT_BIND_ADD,
@@ -7553,7 +7554,12 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_AGGR_5,     World::INPUT_BIND_HELP,
         World::INPUT_BIND_LAST_SEAT,  World::INPUT_BIND_SET_COMM,
         World::INPUT_BIND_ANALYZER,   World::INPUT_BIND_COCKPIT_CAMERA,
-        World::INPUT_BIND_SPRINT,     World::INPUT_BIND_PLACE_MAP_MARKER
+        World::INPUT_BIND_SPRINT,     World::INPUT_BIND_PLACE_MAP_MARKER,
+
+        // 50/51 are intentionally reserved for the retired split Camera Zoom
+        // profile slots. New remappable hotkeys continue at 52.
+        -1,                           -1,
+        World::INPUT_BIND_TOGGLE_UFO_SPY_UI
     };
 
     if ( type == World::INPUT_BIND_TYPE_BUTTON && index < BUTTON.size())

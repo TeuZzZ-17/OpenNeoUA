@@ -230,6 +230,9 @@ enum OPENUA_STRING
     OUA_MOUSE_WHEEL_UP,
     OUA_MOUSE_WHEEL_DOWN,
 
+    // Remappable player-only toggle for the UFO Spy UI. Appended to preserve existing IDs.
+    OUA_TOGGLE_UFO_SPY_UI,
+
     OUA_STRING_MAX
 };
 

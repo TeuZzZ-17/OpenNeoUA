@@ -350,6 +350,7 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
         _isNewInputScope = true;
         _legacyCameraZoomInSeen = false;
         _legacyCameraZoomOutSeen = false;
+        _ufoSpyUiToggleSeen = false;
         _legacyCameraZoomInKey = Input::KC_NONE;
         _legacyCameraZoomOutKey = Input::KC_NONE;
 
@@ -360,7 +361,8 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
             if ( i == World::INPUT_BIND_COCKPIT_CAMERA ||
                  i == World::INPUT_BIND_SPRINT ||
                  i == World::INPUT_BIND_CYCLE_TARGET ||
-                 i == World::INPUT_BIND_ALTERNATIVE_VIEW )
+                 i == World::INPUT_BIND_ALTERNATIVE_VIEW ||
+                 i == World::INPUT_BIND_TOGGLE_UFO_SPY_UI )
                 continue;
 
             UserData::TInputConf &k = _o._GameShell->InputConfig[i];
@@ -464,6 +466,38 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
                     missileCam.PKeyCode = Input::KC_EXTRA7;
                     _o.ReloadInput(World::INPUT_BIND_SWITCH_WEAPON);
                     _o.ReloadInput(World::INPUT_BIND_CAMFIRE);
+                    migrated = true;
+                }
+            }
+
+            // UFO Spy UI Toggle is newer than older user.txt profiles. Preserve
+            // the new U default only when that key is not already owned by a
+            // custom binding in an older profile. Explicit slot 52 entries,
+            // including nop, always remain authoritative.
+            if ( !_ufoSpyUiToggleSeen )
+            {
+                UserData::TInputConf &ufoSpyToggle =
+                    _o._GameShell->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI];
+                bool uAlreadyUsed = false;
+
+                for ( size_t i = 1; i < _o._GameShell->InputConfig.size(); ++i )
+                {
+                    if ( i == World::INPUT_BIND_TOGGLE_UFO_SPY_UI ||
+                         UserData::IsInputBindingRetired((int)i) )
+                        continue;
+
+                    const UserData::TInputConf &cfg = _o._GameShell->InputConfig[i];
+                    if ( cfg.PKeyCode == Input::KC_U || cfg.NKeyCode == Input::KC_U )
+                    {
+                        uAlreadyUsed = true;
+                        break;
+                    }
+                }
+
+                if ( uAlreadyUsed && ufoSpyToggle.PKeyCode == Input::KC_U )
+                {
+                    ufoSpyToggle.PKeyCode = Input::KC_NONE;
+                    Input::Engine.SetHotKey(ufoSpyToggle.KeyID, "nop");
                     migrated = true;
                 }
             }
@@ -719,6 +753,9 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
                 Input::Engine.SetHotKey(cfgIdex, "nop");
                 return ScriptParser::RESULT_OK;
             }
+
+            if ( cfgIdex == 52 )
+                _ufoSpyUiToggleSeen = true;
 
             int gsIndex = UserData::InputIndexFromConfig(World::INPUT_BIND_TYPE_HOTKEY, cfgIdex);
             if ( gsIndex == -1 )
