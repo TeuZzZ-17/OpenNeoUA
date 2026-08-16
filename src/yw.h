@@ -399,12 +399,36 @@ inline TInputFixedShortcut GetInputFixedShortcut(int32_t binding)
         return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
     case INPUT_BIND_PLACE_MAP_MARKER:
         return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
+    case INPUT_BIND_TOGGLE_UFO_SPY_UI:
+        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
     case INPUT_BIND_ZOOMIN:
         return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_WHEEL, Input::KC_NONE, 1);
     case INPUT_BIND_ZOOMOUT:
         return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_WHEEL, Input::KC_NONE, -1);
     default:
         return TInputFixedShortcut();
+    }
+}
+
+inline bool IsFixedInputShortcutPressed(const TInputState *inpt, int32_t binding)
+{
+    if ( !inpt )
+        return false;
+
+    const TInputFixedShortcut shortcut = GetInputFixedShortcut(binding);
+    if ( shortcut.Kind != INPUT_FIXED_SHORTCUT_KEY )
+        return false;
+
+    switch ( shortcut.KeyCode )
+    {
+    case Input::KC_LMB:
+        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_LM_DOWN) != 0;
+    case Input::KC_RMB:
+        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_RM_DOWN) != 0;
+    case Input::KC_MMB:
+        return (inpt->ClickInf.flag & TClickBoxInf::FLAG_MM_DOWN) != 0;
+    default:
+        return inpt->KbdLastHit == shortcut.KeyCode;
     }
 }
 
@@ -2434,6 +2458,7 @@ public:
     virtual int getYW_invulnerable();
     bool IsDebugGlobalInvulnerabilityEnabled() const { return _debugGlobalInvulnerability; }
     float GetUfoSpyUiRadius() const;
+    bool IsUfoSpyUiControlContext() const;
     bool IsUfoSpyUiEnabled() const { return _ufoSpyUiEnabled; }
 
 protected:
@@ -3116,7 +3141,10 @@ public:
     uint32_t _gamePausedTimeStamp = 0;
     bool _debugGameplayFrozen = false;
     bool _debugGlobalInvulnerability = false;
-    bool _ufoSpyUiEnabled = true;
+    // Detailed UFO Spy UI (HP/shield/status bars) is opt-in at runtime.
+    // The lightweight faction arrows inside spy_ui_radius stay available even
+    // while this detail overlay is disabled.
+    bool _ufoSpyUiEnabled = false;
     bool _levelTeardownInProgress = false;
 
     int32_t _timeStamp = 0;
