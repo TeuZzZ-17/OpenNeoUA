@@ -32,6 +32,8 @@
 int ypabact_id = 1;
 extern int dword_5B1128;
 
+static int ypabact_SelectAIPrimaryWeaponSlot(NC_STACK_ypabact *bact, NC_STACK_ypabact *target, int *outSourceSlot);
+
 struct TUnitCollisionPairKey
 {
     const NC_STACK_ypaworld *world;
@@ -2226,7 +2228,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _energy_time = 0;
     _weapon = 0;
     _extra_weapons = {0, 0, 0};
-    _weapon_switch_mode = World::TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
+    _weapon_player_switch_mode = World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
+    _weapon_ai_switch_mode = World::TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
     _weapon_slot_index = 0;
     _current_weapon_id = -1;
     _current_weapon_source_slot = 0;
@@ -6401,6 +6404,8 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             arg101.pos = arg->target.pbact->_position;
             arg101.unkn = 2;
             arg101.radius = arg->target.pbact->GetCollisionBroadRadius();
+            int aiWeaponSourceSlot = -1;
+            arg101.weapon = ypabact_SelectAIPrimaryWeaponSlot(this, arg->target.pbact, &aiWeaponSourceSlot);
 
             if ( CheckFireAI(&arg101) )
             {
@@ -6418,6 +6423,7 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
                 arg79.target.pbact = arg->target.pbact;
                 arg79.tgt_pos = arg->pos;
                 arg79.weapon = _weapon;
+                arg79.weapon_source_slot = aiWeaponSourceSlot;
                 arg79.g_time = _clock;
 
                 if ( arg->g_time & 1 )
@@ -6783,6 +6789,10 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
             bact_arg101 arg101;
             arg101.unkn = 1;
             arg101.pos = arg->pos;
+            int aiWeaponSourceSlot = -1;
+            // Sector/building attacks have no class-specific unit target. Smart
+            // therefore follows its documented Random fallback for this shot.
+            arg101.weapon = ypabact_SelectAIPrimaryWeaponSlot(this, NULL, &aiWeaponSourceSlot);
 
             if ( CheckFireAI(&arg101) )
             {
@@ -6805,6 +6815,7 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                 arg79.target.pbact = arg->target.pbact;
                 arg79.tgt_pos = arg->pos;
                 arg79.weapon = _weapon;
+                arg79.weapon_source_slot = aiWeaponSourceSlot;
                 arg79.g_time = _clock;
 
                 if ( arg->g_time & 1 )
@@ -7773,6 +7784,169 @@ static int ypabact_GetWeaponIdForSourceSlot(NC_STACK_ypabact *bact, int sourceSl
     return -1;
 }
 
+static bool ypabact_GetWeaponEnergyForTarget(const World::TWeapProto &wproto,
+                                              NC_STACK_ypabact *target,
+                                              float *outEnergy,
+                                              bool *outDefined)
+{
+    if ( outEnergy )
+        *outEnergy = 0.0f;
+    if ( outDefined )
+        *outDefined = false;
+
+    if ( !target )
+        return false;
+
+    float energy = 0.0f;
+    bool defined = false;
+
+    switch ( target->_bact_type )
+    {
+    case BACT_TYPES_BACT: // model = heli
+        energy = wproto.energy_heli;
+        defined = wproto.energy_heli_defined;
+        break;
+
+    case BACT_TYPES_TANK:
+    case BACT_TYPES_CAR:
+        energy = wproto.energy_tank;
+        defined = wproto.energy_tank_defined;
+        break;
+
+    case BACT_TYPES_FLYER:
+    case BACT_TYPES_UFO:
+        energy = wproto.energy_flyer;
+        defined = wproto.energy_flyer_defined;
+        break;
+
+    case BACT_TYPES_ROBO:
+        energy = wproto.energy_robo;
+        defined = wproto.energy_robo_defined;
+        break;
+
+    default:
+        // These classes use generic weapon energy in the existing damage path,
+        // so Smart has no class-specific energy_* value to compare.
+        return false;
+    }
+
+    if ( outEnergy )
+        *outEnergy = energy;
+    if ( outDefined )
+        *outDefined = defined;
+    return true;
+}
+
+static int ypabact_SelectRandomPrimaryWeaponSlot(NC_STACK_ypabact *bact, int *outSourceSlot)
+{
+    if ( outSourceSlot )
+        *outSourceSlot = -1;
+
+    int slots[4];
+    int sourceSlots[4];
+    int count = ypabact_GetPrimaryWeaponSlots(bact, slots, sourceSlots);
+    if ( count <= 0 )
+        return -1;
+
+    int index = count > 1 ? rand() % count : 0;
+    if ( outSourceSlot )
+        *outSourceSlot = sourceSlots[index];
+    return slots[index];
+}
+
+static int ypabact_SelectSmartAIPrimaryWeaponSlot(NC_STACK_ypabact *bact,
+                                                   NC_STACK_ypabact *target,
+                                                   int *outSourceSlot)
+{
+    if ( outSourceSlot )
+        *outSourceSlot = -1;
+
+    int slots[4];
+    int sourceSlots[4];
+    int count = ypabact_GetPrimaryWeaponSlots(bact, slots, sourceSlots);
+    if ( count <= 0 )
+        return -1;
+    if ( count == 1 )
+    {
+        if ( outSourceSlot )
+            *outSourceSlot = sourceSlots[0];
+        return slots[0];
+    }
+
+    float bestEnergy = -std::numeric_limits<float>::infinity();
+    int bestIndices[4];
+    int bestCount = 0;
+
+    for (int i = 0; i < count; ++i)
+    {
+        const World::TWeapProto &wproto = bact->getBACT_pWorld()->GetWeaponsProtos().at(slots[i]);
+        float energy = 0.0f;
+        bool defined = false;
+
+        // Smart rule A: every candidate must explicitly define the energy_*
+        // relevant to the current target. Any missing/invalid comparison data,
+        // or a target class without a class-specific energy_*, falls back to
+        // Random across all valid weapon slots.
+        if ( !ypabact_GetWeaponEnergyForTarget(wproto, target, &energy, &defined) ||
+             !defined || !isfinite(energy) )
+            return ypabact_SelectRandomPrimaryWeaponSlot(bact, outSourceSlot);
+
+        if ( bestCount == 0 || energy > bestEnergy )
+        {
+            bestEnergy = energy;
+            bestIndices[0] = i;
+            bestCount = 1;
+        }
+        else if ( energy == bestEnergy )
+        {
+            bestIndices[bestCount++] = i;
+        }
+    }
+
+    int bestIndex = bestIndices[bestCount > 1 ? rand() % bestCount : 0];
+    if ( outSourceSlot )
+        *outSourceSlot = sourceSlots[bestIndex];
+    return slots[bestIndex];
+}
+
+static int ypabact_SelectAIPrimaryWeaponSlot(NC_STACK_ypabact *bact,
+                                              NC_STACK_ypabact *target,
+                                              int *outSourceSlot)
+{
+    if ( outSourceSlot )
+        *outSourceSlot = -1;
+
+    if ( !bact )
+        return -1;
+
+    switch ( bact->_weapon_ai_switch_mode )
+    {
+    case World::TVhclProto::WEAPON_AI_SWITCH_MODE_RANDOM:
+        return ypabact_SelectRandomPrimaryWeaponSlot(bact, outSourceSlot);
+
+    case World::TVhclProto::WEAPON_AI_SWITCH_MODE_SMART:
+        return ypabact_SelectSmartAIPrimaryWeaponSlot(bact, target, outSourceSlot);
+
+    case World::TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE:
+    default:
+        break;
+    }
+
+    int slots[4];
+    int sourceSlots[4];
+    int count = ypabact_GetPrimaryWeaponSlots(bact, slots, sourceSlots);
+    if ( count <= 0 )
+        return -1;
+
+    int index = bact->_weapon_slot_index % count;
+    if ( index < 0 )
+        index = 0;
+
+    if ( outSourceSlot )
+        *outSourceSlot = sourceSlots[index];
+    return slots[index];
+}
+
 static int ypabact_GetCurrentPrimaryWeaponSourceSlot(NC_STACK_ypabact *bact)
 {
     int slots[4];
@@ -7785,7 +7959,13 @@ static int ypabact_GetCurrentPrimaryWeaponSourceSlot(NC_STACK_ypabact *bact)
     if ( count == 1 )
         return sourceSlots[0];
 
-    if ( bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM )
+    const bool keepResolvedSlot =
+        (bact->_oflags & BACT_OFLAG_USERINPT)
+            ? bact->_weapon_player_switch_mode == World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_RANDOM
+            : (bact->_weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_RANDOM ||
+               bact->_weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_SMART);
+
+    if ( keepResolvedSlot )
     {
         int sourceSlot = bact->_current_weapon_source_slot;
         int weaponId = ypabact_GetWeaponIdForSourceSlot(bact, sourceSlot);
@@ -8241,7 +8421,11 @@ static NC_STACK_ypabact *ypabact_SelectNextHomingCycleTarget(NC_STACK_ypabact *l
     return NULL;
 }
 
-static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact, int requestedWeapon, int *outSourceSlot)
+static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact,
+                                             int requestedWeapon,
+                                             int requestedSourceSlot,
+                                             NC_STACK_ypabact *target,
+                                             int *outSourceSlot)
 {
     if ( outSourceSlot )
         *outSourceSlot = 0;
@@ -8249,41 +8433,50 @@ static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact, int requested
     if ( requestedWeapon != bact->_weapon )
         return requestedWeapon;
 
+    if ( requestedSourceSlot >= 0 )
+    {
+        int exactWeapon = ypabact_GetWeaponIdForSourceSlot(bact, requestedSourceSlot);
+        if ( ypabact_IsValidWeaponId(bact, exactWeapon) )
+        {
+            if ( outSourceSlot )
+                *outSourceSlot = requestedSourceSlot;
+            return exactWeapon;
+        }
+        return -1;
+    }
+
+    if ( !(bact->_oflags & BACT_OFLAG_USERINPT) )
+        return ypabact_SelectAIPrimaryWeaponSlot(bact, target, outSourceSlot);
+
+    if ( bact->_weapon_player_switch_mode == World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_RANDOM )
+        return ypabact_SelectRandomPrimaryWeaponSlot(bact, outSourceSlot);
+
     int slots[4];
     int sourceSlots[4];
     int count = ypabact_GetPrimaryWeaponSlots(bact, slots, sourceSlots);
-
     if ( count <= 0 )
         return -1;
 
-    int index = 0;
-    if ( count > 1 )
-    {
-        if ( bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM )
-            index = rand() % count;
-        else
-        {
-            index = bact->_weapon_slot_index % count;
-            if ( index < 0 )
-                index = 0;
-        }
-    }
+    int index = bact->_weapon_slot_index % count;
+    if ( index < 0 )
+        index = 0;
 
     if ( outSourceSlot )
         *outSourceSlot = sourceSlots[index];
-
     return slots[index];
 }
 
 static void ypabact_AdvancePrimaryWeaponSlot(NC_STACK_ypabact *bact, int requestedWeapon)
 {
-    const bool playerControlledMode =
-        bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_CONTROLLED &&
-        (bact->_oflags & BACT_OFLAG_USERINPT);
+    if ( requestedWeapon != bact->_weapon )
+        return;
 
-    if ( requestedWeapon != bact->_weapon ||
-         bact->_weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM ||
-         playerControlledMode )
+    const bool sequenceMode =
+        (bact->_oflags & BACT_OFLAG_USERINPT)
+            ? bact->_weapon_player_switch_mode == World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE
+            : bact->_weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
+
+    if ( !sequenceMode )
         return;
 
     int slots[4];
@@ -8335,10 +8528,10 @@ bool NC_STACK_ypabact::RequestHomingTargetCycle()
 
 bool NC_STACK_ypabact::CycleControlledWeapon()
 {
-    // Manual player selection is independent from weapon_switch_mode. Sequence
-    // and random continue to govern automatic firing behaviour, but they must
-    // not block an explicit Switch Weapon input from the directly controlled unit.
+    // Manual switching is intentionally available only in the explicit player
+    // manual mode. Sequence/random remain automatic player modes.
     if ( !(_oflags & BACT_OFLAG_USERINPT) ||
+         _weapon_player_switch_mode != World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_MANUAL ||
          _status == BACT_STATUS_DEAD || ypabact_IsLowHPWeaponActive(this) )
         return false;
 
@@ -9695,28 +9888,11 @@ static int ypabact_LaserDamageInterval(const World::TWeapProto &wproto, bool pla
 
 static float ypabact_LaserEnergyScale(const World::TWeapProto &wproto, NC_STACK_ypabact *target)
 {
-    if ( !target )
-        return 1.0f;
+    float energy = 1.0f;
+    if ( ypabact_GetWeaponEnergyForTarget(wproto, target, &energy, NULL) )
+        return energy;
 
-    switch ( target->_bact_type )
-    {
-    case BACT_TYPES_BACT:
-        return wproto.energy_heli;
-
-    case BACT_TYPES_TANK:
-    case BACT_TYPES_CAR:
-        return wproto.energy_tank;
-
-    case BACT_TYPES_FLYER:
-    case BACT_TYPES_UFO:
-        return wproto.energy_flyer;
-
-    case BACT_TYPES_ROBO:
-        return wproto.energy_robo;
-
-    default:
-        return 1.0f;
-    }
+    return 1.0f;
 }
 
 static int ypabact_LaserTickDamage(const World::TWeapProto &wproto, NC_STACK_ypabact *target,
@@ -11583,13 +11759,19 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     int slots[4];
     int sourceSlots[4];
     int slotCount = ypabact_GetPrimaryWeaponSlots(this, slots, sourceSlots);
-    bool useRandomSlots = !useLowHPWeapon && arg->weapon == _weapon &&
-                          _weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM &&
-                          slotCount > 1;
+    const bool usePlayerRandomSlots =
+        !useLowHPWeapon &&
+        arg->weapon == _weapon &&
+        arg->weapon_source_slot < 0 &&
+        (_oflags & BACT_OFLAG_USERINPT) &&
+        _weapon_player_switch_mode == World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_RANDOM &&
+        slotCount > 1;
 
     int selectedWeapon = -1;
     int selectedWeaponSourceSlot = 0;
     int cooldownWeapon = -1;
+    NC_STACK_ypabact *weaponTarget =
+        arg->tgType == BACT_TGT_TYPE_UNIT ? arg->target.pbact : NULL;
 
     if ( useLowHPWeapon )
     {
@@ -11597,8 +11779,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         selectedWeaponSourceSlot = 0;
         cooldownWeapon = selectedWeapon;
     }
-    else if ( useRandomSlots )
+    else if ( usePlayerRandomSlots )
     {
+        // Preserve the existing player Random timing semantics: the current
+        // slot supplies the cooldown gate, then the shot chooses a random slot.
         int currentWeapon = ypabact_GetWeaponIdForSourceSlot(this, _current_weapon_source_slot);
         cooldownWeapon = currentWeapon == _current_weapon_id &&
                          ypabact_IsValidWeaponId(this, currentWeapon)
@@ -11607,8 +11791,8 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     }
     else
     {
-        selectedWeapon = ypabact_SelectPrimaryWeaponSlot(this, arg->weapon, &selectedWeaponSourceSlot);
-
+        selectedWeapon = ypabact_SelectPrimaryWeaponSlot(
+            this, arg->weapon, arg->weapon_source_slot, weaponTarget, &selectedWeaponSourceSlot);
         cooldownWeapon = selectedWeapon;
     }
 
@@ -11667,7 +11851,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             return 0;
     }
 
-    if ( useRandomSlots )
+    if ( usePlayerRandomSlots )
     {
         int randomSlot = rand() % slotCount;
         selectedWeapon = slots[randomSlot];
@@ -12015,7 +12199,13 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     {
         ypabact_AdvancePrimaryWeaponSlot(this, arg->weapon);
 
-        if ( _weapon_switch_mode == World::TVhclProto::WEAPON_SWITCH_MODE_RANDOM )
+        const bool keepResolvedSlot =
+            (_oflags & BACT_OFLAG_USERINPT)
+                ? _weapon_player_switch_mode == World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_RANDOM
+                : (_weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_RANDOM ||
+                   _weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_SMART);
+
+        if ( keepResolvedSlot )
         {
             _current_weapon_id = selectedWeapon;
             _current_weapon_source_slot = selectedWeaponSourceSlot;
@@ -14441,7 +14631,8 @@ void NC_STACK_ypabact::Renew()
     _mgun_time = 0;
     _weapon_time = 0;
     _extra_weapons = {0, 0, 0};
-    _weapon_switch_mode = World::TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
+    _weapon_player_switch_mode = World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
+    _weapon_ai_switch_mode = World::TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
     _weapon_slot_index = 0;
     _current_weapon_id = -1;
     _current_weapon_source_slot = 0;
@@ -14758,11 +14949,11 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
     World::TWeapProto *v8 = NULL;
 
     int v36;
+    int fireWeapon = arg->weapon >= 0 ? arg->weapon : _weapon;
 
-    if ( _weapon != -1 )
+    if ( fireWeapon != -1 && ypabact_IsValidWeaponId(this, fireWeapon) )
     {
-        v8 = &_world->GetWeaponsProtos().at( _weapon );
-
+        v8 = &_world->GetWeaponsProtos().at( fireWeapon );
 
         if ( v8->_weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE )
             v36 = v8->GetFireControlFlags();

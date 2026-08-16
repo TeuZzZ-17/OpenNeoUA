@@ -382,6 +382,9 @@ struct bact_arg79
     int weapon;
     int g_time;
     int flags;
+    // Optional exact multi-weapon source slot selected before LaunchMissile().
+    // -1 keeps the normal runtime resolver; 0..3 pins weapon/weapon_2/_3/_4.
+    int weapon_source_slot = -1;
 };
 
 // OpenUA custom: internal LaunchMissile() flag.  When the player is in
@@ -416,6 +419,9 @@ struct bact_arg101
     vec3d pos;
     int unkn;
     float radius;
+    // Optional weapon selected by the AI before CheckFireAI(). -1 preserves
+    // the legacy primary-weapon fallback for call sites that do not set it.
+    int weapon = -1;
 };
 
 struct bact_arg83
@@ -995,7 +1001,8 @@ public:
     vec3d _mpos;
     int _weapon;
     std::array<int16_t, 3> _extra_weapons;
-    int _weapon_switch_mode;
+    int _weapon_player_switch_mode;
+    int _weapon_ai_switch_mode;
     int _weapon_slot_index;
     int _current_weapon_id;
     int _current_weapon_source_slot;

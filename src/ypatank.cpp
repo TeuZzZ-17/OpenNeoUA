@@ -1938,14 +1938,12 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
 
     World::TWeapProto *v22 = NULL;
     int v43 = 0;
+    int fireWeapon = arg->weapon >= 0 ? arg->weapon : _weapon;
 
-    if ( _weapon == -1 )
+    if ( fireWeapon != -1 &&
+         fireWeapon < (int)_world->GetWeaponsProtos().size() )
     {
-        v22 = NULL;
-    }
-    else
-    {
-        v22 = &_world->GetWeaponsProtos().at( _weapon );
+        v22 = &_world->GetWeaponsProtos().at( fireWeapon );
 
         if ( v22->_weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE )
             v43 = v22->GetFireControlFlags();

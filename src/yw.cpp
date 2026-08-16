@@ -3947,7 +3947,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_isDummy = false; // set by gun_type for BACT_TYPES_GUN
         bacto->_weapon = vhcl.weapon;
         bacto->_extra_weapons = vhcl.extra_weapons;
-        bacto->_weapon_switch_mode = vhcl.weapon_switch_mode;
+        bacto->_weapon_player_switch_mode = vhcl.weapon_player_switch_mode;
+        bacto->_weapon_ai_switch_mode = vhcl.weapon_ai_switch_mode;
         bacto->_weapon_slot_index = 0;
         bacto->_current_weapon_id = vhcl.weapon;
         bacto->_current_weapon_source_slot = 0;
