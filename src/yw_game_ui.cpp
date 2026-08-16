@@ -13873,6 +13873,85 @@ void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, 
     }
 }
 
+static float yw_GetUfoSpyUiRadius(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->_userUnit || yw->_userUnit->_bact_type != BACT_TYPES_UFO )
+        return 0.0f;
+
+    const size_t vehicleId = yw->_userUnit->_vehicleID;
+    if ( vehicleId >= yw->_vhclProtos.size() )
+        return 0.0f;
+
+    const World::TVhclProto &proto = yw->_vhclProtos[vehicleId];
+    if ( proto.model_id != BACT_TYPES_UFO || proto.spy_ui_radius <= 0.0f )
+        return 0.0f;
+
+    return proto.spy_ui_radius;
+}
+
+static bool yw_IsUfoSpyHudActive(NC_STACK_ypaworld *yw)
+{
+    return yw &&
+           yw->_userRobo &&
+           yw->_userUnit &&
+           yw->_viewerBact == yw->_userUnit &&
+           !yw->IsSpectatorControlled() &&
+           !yw->IsRoboMapOpen() &&
+           yw->_userUnit->_bact_type == BACT_TYPES_UFO &&
+           yw->_userUnit->getBACT_inputting() &&
+           yw_GetUfoSpyUiRadius(yw) > 0.0f;
+}
+
+static bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
+                                              NC_STACK_ypabact *bact)
+{
+    if ( !yw_IsUfoSpyHudActive(yw) || !bact )
+        return false;
+
+    const uint8_t playerOwner = yw->_userRobo->_owner;
+    if ( bact == yw->_userUnit ||
+         bact->_owner == World::OWNER_0 ||
+         bact->_energy <= 0 ||
+         bact->_energy_max <= 0 ||
+         bact->_bact_type == BACT_TYPES_MISSLE ||
+         bact->_status == BACT_STATUS_CREATE ||
+         bact->_status == BACT_STATUS_BEAM ||
+         bact->_status == BACT_STATUS_DEAD ||
+         (bact->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 |
+                              BACT_STFLAG_CLEAN | BACT_STFLAG_NORENDER)) ||
+         bact->ShouldHideFromStrategicUI() ||
+         bact->IsInvisibleUnrevealed() ||
+         bact->IsHiddenFor(playerOwner) )
+    {
+        return false;
+    }
+
+    const float spyRadius = yw_GetUfoSpyUiRadius(yw);
+    if ( spyRadius <= 0.0f )
+        return false;
+
+    // Keep the information overlay inside the same real 3D world window used
+    // by the renderer. This stays separate from the authored Spy radius because
+    // the latter is intentionally horizontal/sector-like.
+    const float renderDistance = (float)yw->getYW_normVisLimit();
+    if ( renderDistance > 0.0f )
+    {
+        const vec3d renderDelta = bact->_position - yw->_viewerPosition;
+        if ( renderDelta.dot(renderDelta) >= renderDistance * renderDistance )
+            return false;
+    }
+
+    // Treat the Spy HUD as a fixed horizontal sensor radius, matching Urban
+    // Assault's sector/radar gameplay scale. UFO altitude must not consume part
+    // of the authored range, and optical zoom intentionally does not modify it.
+    const float dx = bact->_position.x - yw->_userUnit->_position.x;
+    const float dz = bact->_position.z - yw->_userUnit->_position.z;
+    if ( dx * dx + dz * dz >= spyRadius * spyRadius )
+        return false;
+
+    return true;
+}
+
 void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact)
 {
     if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
@@ -13882,7 +13961,8 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
-    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    const bool ufoSpyHud = yw_ShouldRenderUfoSpyWorldStatus(yw, bact);
+    uint8_t worldUiOpacity = ufoSpyHud ? 255 : yw_GetWorldUiOpacity(yw, bact->_position);
     if (worldUiOpacity == 0)
         return;
 
@@ -14040,6 +14120,42 @@ static void yw_RenderSpectatorWorldStatus(NC_STACK_ypaworld *yw, CmdStream *cur,
 
     for ( NC_STACK_ypabact *kid : bact->_kidList )
         yw_RenderSpectatorWorldStatus(yw, cur, kid);
+}
+
+static bool yw_IsExplicitWorldStatusTarget(NC_STACK_ypaworld *yw,
+                                            NC_STACK_ypabact *bact,
+                                            const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
+{
+    if ( !yw || !bact )
+        return false;
+
+    if ( (yw->_guiActFlags & 0x20) && yw->_bactOnMouse == bact )
+        return true;
+
+    if ( yw->_guiVisor.field_18 == bact )
+        return true;
+
+    return std::find(damageHoverTargets.begin(), damageHoverTargets.end(), bact) !=
+           damageHoverTargets.end();
+}
+
+static void yw_RenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw, CmdStream *cur,
+                                        NC_STACK_ypabact *bact,
+                                        const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
+{
+    if ( !bact )
+        return;
+
+    // Hover/target/damage paths already call the same renderer. Let those calls
+    // own their actor so the Spy pass never double-blends an existing overlay.
+    if ( yw_ShouldRenderUfoSpyWorldStatus(yw, bact) &&
+         !yw_IsExplicitWorldStatusTarget(yw, bact, damageHoverTargets) )
+    {
+        yw_RenderUnitLifeBar(yw, cur, bact);
+    }
+
+    for ( NC_STACK_ypabact *kid : bact->_kidList )
+        yw_RenderUfoSpyWorldStatus(yw, cur, kid, damageHoverTargets);
 }
 
 static void yw_DrawWorldSelectionCornerLines(int centerX, int centerY, int halfWidth,
@@ -14361,6 +14477,12 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
 
     if ( !yw->IsSpectatorControlled() && yw->_guiVisor.field_18 && !yw->_guiVisor.field_18->ShouldHideFromStrategicUI() )
         yw_RenderUnitLifeBar(yw, &buf, yw->_guiVisor.field_18);
+
+    if ( yw_IsUfoSpyHudActive(yw) )
+    {
+        for ( NC_STACK_ypabact *unit : yw->_unitsList )
+            yw_RenderUfoSpyWorldStatus(yw, &buf, unit, damageHoverTargets);
+    }
 
     yw_RenderOverlayCursors(yw, &buf);
 
