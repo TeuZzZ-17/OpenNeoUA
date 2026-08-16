@@ -726,6 +726,10 @@ static mat3x3 ypabact_BuildVPRotationMatrix(const vec3d &degrees)
 static constexpr int WEAPON_RECOIL_VISUAL_DURATION_MS = 220;
 static constexpr float WEAPON_RECOIL_VISUAL_DEGREES_PER_UNIT = 0.75f;
 static constexpr float WEAPON_RECOIL_VISUAL_MAX_DEGREES = 5.0f;
+static constexpr float MGUN_RECOIL_VISUAL_DEGREES_PER_UNIT = 1.2f;
+static constexpr float MGUN_RECOIL_VISUAL_MAX_DEGREES = 12.0f;
+static constexpr float RECOIL_VISUAL_COMBINED_MAX_DEGREES =
+    WEAPON_RECOIL_VISUAL_MAX_DEGREES + MGUN_RECOIL_VISUAL_MAX_DEGREES;
 
 static float ypabact_GetTankWeaponRecoilVisualPitch(const NC_STACK_ypabact *bact)
 {
@@ -794,8 +798,8 @@ static void ypabact_StartMgunRecoilVisual(NC_STACK_ypabact *bact)
         return;
 
     float degrees = std::min(
-        bact->_mgun_recoil * WEAPON_RECOIL_VISUAL_DEGREES_PER_UNIT,
-        WEAPON_RECOIL_VISUAL_MAX_DEGREES);
+        bact->_mgun_recoil * MGUN_RECOIL_VISUAL_DEGREES_PER_UNIT,
+        MGUN_RECOIL_VISUAL_MAX_DEGREES);
 
     bact->_mgunRecoilVisualDuration = WEAPON_RECOIL_VISUAL_DURATION_MS;
     bact->_mgunRecoilVisualEndTime = bact->_clock + WEAPON_RECOIL_VISUAL_DURATION_MS;
@@ -2123,6 +2127,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _weapon_slot_index = 0;
     _current_weapon_id = -1;
     _current_weapon_source_slot = 0;
+    _userHomingPrimaryTargetGid = 0;
+    _userHomingTargetCycleRequested = false;
     _lowhp_weapon_enable = 0;
     _lowhp_threshold = 0.30;
     _lowhp_weapon = 0;
@@ -2236,9 +2242,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _unitGunsSpawned = false;
     _unitGunsHaveParentRotation = false;
     _isUnitGunChild = false;
-    _unitDummiesParentRotation = mat3x3::Ident();
-    _unitDummiesSpawned = false;
-    _unitDummiesHaveParentRotation = false;
     _isDummy = false;
     _collNodes = World::rbcolls();
     _heading_speed = 0.0;
@@ -2433,10 +2436,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _unitGunsSpawned = false;
     _unitGunsHaveParentRotation = false;
     _isUnitGunChild = false;
-    _unitDummies.clear();
-    _unitDummiesParentRotation = mat3x3::Ident();
-    _unitDummiesSpawned = false;
-    _unitDummiesHaveParentRotation = false;
     _isDummy = false;
     _collNodes = World::rbcolls();
     _adist_sector = 800.0;
@@ -2612,7 +2611,6 @@ size_t NC_STACK_ypabact::Deinit()
     _kidRef.Detach();
 
     CleanupUnitGuns(true);
-    CleanupUnitDummies(true);
 
     while (!_kidList.empty())
         _kidList.front()->Delete();
@@ -2724,17 +2722,35 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
 
             if ( gunObj )
             {
+                // Establish attachment identity before evaluating semantic gun_type
+                // behavior (notably legacy dummy, which is fully passive only when
+                // mounted as a Unit Gun/Module).
+                gunObj->_isUnitGunChild = true;
+
                 if ( NC_STACK_ypagun *attachedGun = dynamic_cast<NC_STACK_ypagun *>(gunObj) )
                 {
                     attachedGun->ypagun_func128(_rotation.Transpose().Transform(gun.dir), false);
                     attachedGun->setGUN_roboGun(1);
+
+                    // gun_type comes from the referenced vehicle prototype.
+                    // Dummy stays excluded from voluntary AI targeting; radar
+                    // and power are passive but remain normal damageable targets.
+                    gunObj->_isDummy = attachedGun->getGUN_fireType() == NC_STACK_ypagun::GUN_TYPE_DUMMY;
+
+                    if ( attachedGun->IsPassiveModule() )
+                    {
+                        gunObj->_aggr = 0;
+                        gunObj->setBACT_bactCollisions(false);
+                    }
                 }
 
                 gunObj->_owner = _owner;
                 gunObj->_commandID = dword_5B1128++;
                 gunObj->_host_station = NULL;
-                gunObj->_aggr = 60;
-                gunObj->_isUnitGunChild = true;
+                if ( !gunObj->_isDummy &&
+                     (!dynamic_cast<NC_STACK_ypagun *>(gunObj) ||
+                      !dynamic_cast<NC_STACK_ypagun *>(gunObj)->IsPassiveModule()) )
+                    gunObj->_aggr = 60;
                 gunObj->_gunDisplayName = gun.robo_gun_name;
                 // OpenUA invisible: attached guns inherit the carrier's current stealth
                 // state so the whole unit cloaks/reveals as one.
@@ -2793,207 +2809,21 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
                 attachedGun->_gunRott = parentRotationDelta.Transform(attachedGun->_gunRott);
             }
         }
-    }
-}
 
-
-// ================= OpenUA custom: modular dummy attachments =================
-// Mirrors the unit-gun child machinery (SetUnitGuns/UpdateUnitGuns/...), but
-// each slot references a full model = dummy prototype, the child is marked
-// _isDummy (fully inert) and never aims/fires, and a per-slot visual scale and
-// protect flag are supported. Reusing the unit-gun child path gives us spawn,
-// transform-following, UI/minimap/squad hiding and parent cleanup for free.
-
-void NC_STACK_ypabact::SetUnitDummies(const std::vector<World::TUnitDummy> &dummies)
-{
-    CleanupUnitDummies(true);
-
-    _unitDummies = dummies;
-
-    for (World::TUnitDummy &dmy : _unitDummies)
-        dmy.dummy_obj = NULL;
-
-    _unitDummiesParentRotation = mat3x3::Ident();
-    _unitDummiesSpawned = _unitDummies.empty();
-    _unitDummiesHaveParentRotation = false;
-}
-
-void NC_STACK_ypabact::CleanupUnitDummies(bool releaseDummies, bool parentDying)
-{
-    for (World::TUnitDummy &dmy : _unitDummies)
-    {
-        NC_STACK_ypabact *dummyObj = dmy.dummy_obj;
-        dmy.dummy_obj = NULL;
-
-        if ( !dummyObj )
-            continue;
-
-        NC_STACK_ypabact *fallback = parentDying ? _world->_userRobo : this;
-        ypabact_SafeDetachControlFrom(dummyObj, fallback);
-
-        if ( (!_world || !_world->IsLevelTeardownInProgress()) &&
-             !dummyObj->IsDestroyed() && !(dummyObj->_status_flg & BACT_STFLAG_DEATH1) )
+        // Passive modules skip ypagun::User_layer(), so preserve the old dummy
+        // attachment camera behavior by keeping their extra-view orientation in sync.
+        if ( NC_STACK_ypagun *attachedGun = dynamic_cast<NC_STACK_ypagun *>(gunObj) )
         {
-            dummyObj->_killer = _killer;
-            dummyObj->Die();
-        }
-
-        if ( releaseDummies )
-            dummyObj->Release();
-    }
-
-    _unitDummiesSpawned = false;
-    _unitDummiesHaveParentRotation = false;
-}
-
-void NC_STACK_ypabact::ClearUnitDummyPointer(NC_STACK_ypabact *dummyObj)
-{
-    for (World::TUnitDummy &dmy : _unitDummies)
-    {
-        if ( dmy.dummy_obj == dummyObj )
-            dmy.dummy_obj = NULL;
-    }
-}
-
-void NC_STACK_ypabact::UpdateUnitDummies(update_msg *)
-{
-    if ( _unitDummies.empty() || _isUnitGunChild || _isDummy || !_world )
-        return;
-
-    if ( _status == BACT_STATUS_DEAD || (_status_flg & BACT_STFLAG_DEATH1) )
-    {
-        CleanupUnitDummies(true);
-        return;
-    }
-
-    mat3x3 parentRotation = _rotation.Transpose();
-    mat3x3 parentRotationDelta = mat3x3::Ident();
-    bool applyParentRotationDelta = false;
-
-    if ( !_unitDummiesHaveParentRotation )
-    {
-        _unitDummiesParentRotation = parentRotation;
-        _unitDummiesHaveParentRotation = true;
-    }
-    else
-    {
-        parentRotationDelta = parentRotation * _unitDummiesParentRotation.Transpose();
-        applyParentRotationDelta = true;
-        _unitDummiesParentRotation = parentRotation;
-    }
-
-    if ( !_unitDummiesSpawned )
-    {
-        _unitDummiesSpawned = true;
-
-        const std::vector<World::TVhclProto> &protos = _world->GetVhclProtos();
-
-        for (World::TUnitDummy &dmy : _unitDummies)
-        {
-            if ( dmy.vehicle_id <= 0 || (size_t)dmy.vehicle_id >= protos.size() )
-            {
-                if ( dmy.vehicle_id != 0 )
-                    ypa_log_out("Dummy attachment: invalid unit_dummy_vehicle %d, slot skipped\n", dmy.vehicle_id);
-                continue;
-            }
-
-            if ( !protos[dmy.vehicle_id].is_dummy )
-            {
-                ypa_log_out("Dummy attachment: prototype %d is not model = dummy, slot skipped\n", dmy.vehicle_id);
-                continue;
-            }
-
-            ypaworld_arg146 dmyReq;
-            dmyReq.vehicle_id = dmy.vehicle_id;
-            dmyReq.pos = _position + _rotation.Transpose().Transform(dmy.pos);
-            dmyReq.skip_unit_guns = true;
-
-            NC_STACK_ypabact *dummyObj = _world->ypaworld_func146(&dmyReq);
-            dmy.dummy_obj = dummyObj;
-
-            if ( dummyObj )
-            {
-                dummyObj->_isDummy = true;
-
-                if ( NC_STACK_ypagun *attachedDummy = dynamic_cast<NC_STACK_ypagun *>(dummyObj) )
-                {
-                    attachedDummy->ypagun_func128(_rotation.Transpose().Transform(dmy.dir), false);
-                    attachedDummy->setGUN_fireType(NC_STACK_ypagun::GUN_TYPE_DUMMY);
-                }
-
-                dummyObj->_owner = _owner;
-                dummyObj->_commandID = dword_5B1128++;
-                dummyObj->_host_station = NULL;
-                dummyObj->_aggr = 0;
-                dummyObj->_isUnitGunChild = true; // hide from strategic UI/minimap/squad
-                // OpenUA invisible: dummy modules inherit the carrier's stealth state.
-                dummyObj->_invisibleUnrevealed = _invisibleUnrevealed;
-                dummyObj->setBACT_bactCollisions(false); // decorative module: no unit-vs-unit shove
-
-                if ( _world->_isNetGame )
-                {
-                    dummyObj->_gid |= dummyObj->_owner << 24;
-                    dummyObj->_commandID |= dummyObj->_owner << 24;
-                }
-
-                AddSubject(dummyObj);
-
-                setState_msg createState;
-                createState.setFlags = 0;
-                createState.unsetFlags = 0;
-                createState.newStatus = BACT_STATUS_CREATE;
-                dummyObj->SetState(&createState);
-                dummyObj->_scale_time = dummyObj->_energy_max * 0.2;
-            }
-            else
-            {
-                ypa_log_out("Unable to create Unit-Dummy\n");
-            }
+            if ( attachedGun->IsPassiveModule() )
+                gunObj->_viewer_rotation = gunObj->_rotation;
         }
     }
-
-    for (World::TUnitDummy &dmy : _unitDummies)
-    {
-        NC_STACK_ypabact *dummyObj = dmy.dummy_obj;
-
-        if ( !dummyObj )
-            continue;
-
-        if ( dummyObj->IsDestroyed() || (dummyObj->_status_flg & BACT_STFLAG_DEATH1) )
-        {
-            dmy.dummy_obj = NULL;
-            continue;
-        }
-
-        bact_arg80 posArg;
-        posArg.pos = _position + _rotation.Transpose().Transform(dmy.pos);
-        posArg.field_C = 4;
-
-        dummyObj->_owner = _owner;
-        dummyObj->SetPosition(&posArg);
-
-        if ( applyParentRotationDelta )
-        {
-            if ( NC_STACK_ypagun *attachedDummy = dynamic_cast<NC_STACK_ypagun *>(dummyObj) )
-            {
-                attachedDummy->_rotation.SetX(parentRotationDelta.Transform(attachedDummy->_rotation.AxisX()));
-                attachedDummy->_rotation.SetY(parentRotationDelta.Transform(attachedDummy->_rotation.AxisY()));
-                attachedDummy->_rotation.SetZ(parentRotationDelta.Transform(attachedDummy->_rotation.AxisZ()));
-                attachedDummy->_gunBasis = parentRotationDelta.Transform(attachedDummy->_gunBasis);
-                attachedDummy->_gunRott = parentRotationDelta.Transform(attachedDummy->_gunRott);
-            }
-        }
-
-        // Keep the first-person/extra-view camera aligned with the dummy's real
-        // facing (unit_dummy_dir_* + parent following). The gun class normally
-        // does this in User_layer, which is disabled for dummies, so sync here.
-        dummyObj->_viewer_rotation = dummyObj->_rotation;
-    }
 }
 
-// Pick the active protective dummy to absorb an incoming hit. Prefer the one
-// closest to the attacker; fall back to the first active protective dummy.
-NC_STACK_ypabact *NC_STACK_ypabact::SelectProtectiveDummy(NC_STACK_ypabact *attacker)
+
+// Pick the active protective attachment to absorb an incoming hit. Prefer the one
+// closest to the attacker; fall back to the first active protective attachment.
+NC_STACK_ypabact *NC_STACK_ypabact::SelectProtectiveUnitGun(NC_STACK_ypabact *attacker)
 {
     NC_STACK_ypabact *best = NULL;
     NC_STACK_ypabact *firstActive = NULL;
@@ -3004,28 +2834,28 @@ NC_STACK_ypabact *NC_STACK_ypabact::SelectProtectiveDummy(NC_STACK_ypabact *atta
     if ( haveAttacker )
         srcPos = attacker->_position;
 
-    for (World::TUnitDummy &dmy : _unitDummies)
+    for (World::TRoboGun &gun : _unitGuns)
     {
-        if ( !dmy.protect )
+        if ( !gun.protect )
             continue;
 
-        NC_STACK_ypabact *dummyObj = dmy.dummy_obj;
-        if ( !dummyObj ||
-             dummyObj->IsDestroyed() ||
-             (dummyObj->_status_flg & BACT_STFLAG_DEATH1) ||
-             dummyObj->_status == BACT_STATUS_DEAD ||
-             dummyObj->_energy <= 0 )
+        NC_STACK_ypabact *gunObj = gun.gun_obj;
+        if ( !gunObj ||
+             gunObj->IsDestroyed() ||
+             (gunObj->_status_flg & BACT_STFLAG_DEATH1) ||
+             gunObj->_status == BACT_STATUS_DEAD ||
+             gunObj->_energy <= 0 )
             continue;
 
         if ( !firstActive )
-            firstActive = dummyObj;
+            firstActive = gunObj;
 
         if ( haveAttacker )
         {
-            float d = (dummyObj->_position - srcPos).length();
+            float d = (gunObj->_position - srcPos).length();
             if ( !best || d < bestDist )
             {
-                best = dummyObj;
+                best = gunObj;
                 bestDist = d;
             }
         }
@@ -3428,7 +3258,6 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateWeaponRecoilPush(arg);
     UpdateSeekAndExplode(arg);
     UpdateUnitGuns(arg);
-    UpdateUnitDummies(arg);
 
     for( NC_STACK_ypamissile *misl : Utils::IterateListCopy<NC_STACK_ypamissile *>(_missiles_list))
         misl->Update(arg);
@@ -4546,7 +4375,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                                           ypabact_GetMgunRecoilVisualPitch(this);
                 visualRecoilPitch = std::min(
                     visualRecoilPitch,
-                    (float)(WEAPON_RECOIL_VISUAL_MAX_DEGREES * C_PI_180));
+                    (float)(RECOIL_VISUAL_COMBINED_MAX_DEGREES * C_PI_180));
                 if ( visualRecoilPitch != 0.0f && ypabact_IsMainVPBase(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= mat3x3::RotateX(visualRecoilPitch);
 
@@ -7143,7 +6972,6 @@ void NC_STACK_ypabact::Die()
     ClearActiveDebuff();
     _carrier_spawned_gids.clear();
     CleanupUnitGuns(true, true);
-    CleanupUnitDummies(true, true);
 
     int maxy = _world->getYW_mapSizeY();
     int maxx = _world->getYW_mapSizeX();
@@ -7871,39 +7699,22 @@ constexpr int YPA_WEAPON_FLAG_PROJECTILE = World::TWeapProto::WEAPON_FLAG_PROJEC
 constexpr int YPA_WEAPON_FLAGS_MISSILE = World::TWeapProto::WEAPON_FLAGS_MISSILE;
 constexpr float YPA_MISSILE_MULTI_TARGET_RANGE = 2000.0;
 
-static bool ypabact_IsMissileMultiTargetWeapon(const World::TWeapProto &wproto)
-{
-    return wproto.missile_multi_target > 0 && wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE;
-}
-
 static bool ypabact_IsHomingBombWeapon(const World::TWeapProto &wproto)
 {
     return wproto.IsHomingBomb();
 }
 
-static bool ypabact_IsBombMultiTargetWeapon(const World::TWeapProto &wproto)
+static bool ypabact_IsCompatibleMultiTargetWeapon(const World::TWeapProto &wproto)
 {
-    return ypabact_IsHomingBombWeapon(wproto) && wproto.homing_bomb_multi_target > 0;
+    return wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE || ypabact_IsHomingBombWeapon(wproto);
 }
 
-static int ypabact_GetMissileMultiTargetLimit(const World::TWeapProto &wproto, int weaponCount)
+static int ypabact_GetMultiTargetLimit(const World::TWeapProto &wproto, int weaponCount)
 {
-    if ( !ypabact_IsMissileMultiTargetWeapon(wproto) || weaponCount <= 1 )
+    if ( !ypabact_IsCompatibleMultiTargetWeapon(wproto) || wproto.multi_target <= 1 || weaponCount <= 1 )
         return 0;
 
-    int maxTargets = wproto.missile_multi_target;
-    if ( maxTargets > weaponCount )
-        maxTargets = weaponCount;
-
-    return maxTargets;
-}
-
-static int ypabact_GetBombMultiTargetLimit(const World::TWeapProto &wproto, int weaponCount)
-{
-    if ( !ypabact_IsBombMultiTargetWeapon(wproto) || weaponCount <= 1 )
-        return 0;
-
-    int maxTargets = wproto.homing_bomb_multi_target;
+    int maxTargets = wproto.multi_target;
     if ( maxTargets > weaponCount )
         maxTargets = weaponCount;
 
@@ -8162,20 +7973,103 @@ static void ypabact_StoreHUDMissileMultiLockTargets(NC_STACK_ypabact *launcher, 
         launcher->getBACT_pWorld()->_hudMissileMultiLockTargets.clear();
 }
 
-static void ypabact_UpdateHUDMissileMultiLockTargets(NC_STACK_ypabact *launcher, const bact_arg79 *arg, const World::TWeapProto &wproto, int weaponCount)
+static void ypabact_UpdateHUDWeaponMultiLockTargets(NC_STACK_ypabact *launcher, const bact_arg79 *arg, const World::TWeapProto &wproto, int weaponCount)
 {
     if ( !launcher || !launcher->getBACT_pWorld() || !(launcher->_oflags & BACT_OFLAG_USERINPT) )
         return;
 
-    int maxTargets = ypabact_GetMissileMultiTargetLimit(wproto, weaponCount);
+    int maxTargets = ypabact_GetMultiTargetLimit(wproto, weaponCount);
     if ( maxTargets <= 1 )
     {
         launcher->getBACT_pWorld()->_hudMissileMultiLockTargets.clear();
         return;
     }
 
-    std::vector<NC_STACK_ypabact *> missileTargets = ypabact_CollectMissileMultiTargets(launcher, arg, wproto, maxTargets);
-    ypabact_StoreHUDMissileMultiLockTargets(launcher, missileTargets);
+    std::vector<NC_STACK_ypabact *> targets;
+    if ( wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
+        targets = ypabact_CollectMissileMultiTargets(launcher, arg, wproto, maxTargets);
+    else if ( ypabact_IsHomingBombWeapon(wproto) )
+        targets = ypabact_CollectHomingBombTargets(launcher, arg, wproto, maxTargets);
+
+    ypabact_StoreHUDMissileMultiLockTargets(launcher, targets);
+}
+
+constexpr int YPA_HOMING_TARGET_CYCLE_MAX = 64;
+
+static bool ypabact_IsHomingCycleTargetLockable(NC_STACK_ypabact *launcher, NC_STACK_ypabact *target,
+                                                 const World::TWeapProto &wproto, const vec3d &requestedAimDir)
+{
+    if ( !launcher || !target || !ypabact_IsCompatibleMultiTargetWeapon(wproto) )
+        return false;
+
+    if ( wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
+    {
+        vec3d aimDir = requestedAimDir;
+        float aimLen = aimDir.length();
+        if ( aimLen <= 0.001 )
+        {
+            aimDir = launcher->_rotation.AxisZ();
+            aimLen = aimDir.length();
+        }
+
+        if ( aimLen <= 0.001 )
+            return false;
+
+        aimDir = aimDir / aimLen;
+        return ypabact_GetMissileMultiTargetScore(launcher, target, aimDir, wproto.radius, NULL);
+    }
+
+    if ( ypabact_IsHomingBombWeapon(wproto) )
+    {
+        if ( !ypabact_IsValidMissileMultiTarget(launcher, target) )
+            return false;
+
+        return (target->_position - launcher->_position).XZ().length() < YPA_MISSILE_MULTI_TARGET_RANGE;
+    }
+
+    return false;
+}
+
+static NC_STACK_ypabact *ypabact_SelectNextHomingCycleTarget(NC_STACK_ypabact *launcher,
+                                                              const bact_arg106 *targetingArg,
+                                                              const World::TWeapProto &wproto,
+                                                              NC_STACK_ypabact *currentTarget)
+{
+    if ( !launcher || !targetingArg || !ypabact_IsCompatibleMultiTargetWeapon(wproto) )
+        return NULL;
+
+    bact_arg79 collectArg = {};
+    collectArg.direction = targetingArg->field_4;
+    collectArg.tgType = BACT_TGT_TYPE_DRCT;
+    collectArg.tgt_pos = launcher->_position + targetingArg->field_4 * YPA_MISSILE_MULTI_TARGET_RANGE;
+
+    // Cycle Target must traverse the weapon's full natural lockable candidate
+    // list. Do not inject the current target as a forced primary here: the
+    // multi-target collectors intentionally give arg->target score -1 so a
+    // volley keeps its primary first, but doing that while cycling reorders the
+    // list on every key press and causes A -> B -> A ping-pong behaviour.
+    // Likewise, multi_target controls volley fan-out only; it must never limit
+    // how many valid targets the player can cycle through manually.
+    std::vector<NC_STACK_ypabact *> targets;
+    if ( wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
+        targets = ypabact_CollectMissileMultiTargets(
+            launcher, &collectArg, wproto, YPA_HOMING_TARGET_CYCLE_MAX);
+    else if ( ypabact_IsHomingBombWeapon(wproto) )
+        targets = ypabact_CollectHomingBombTargets(
+            launcher, &collectArg, wproto, YPA_HOMING_TARGET_CYCLE_MAX);
+
+    if ( targets.empty() )
+        return NULL;
+
+    auto currentIt = std::find(targets.begin(), targets.end(), currentTarget);
+    if ( currentIt == targets.end() )
+        return targets.front();
+
+    ++currentIt;
+    if ( currentIt == targets.end() )
+        currentIt = targets.begin();
+
+    return *currentIt;
 }
 
 static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact, int requestedWeapon, int *outSourceSlot)
@@ -8253,6 +8147,23 @@ int NC_STACK_ypabact::GetCurrentWeaponProjectileCount()
         this, ypabact_GetCurrentPrimaryWeaponSourceSlot(this));
 }
 
+bool NC_STACK_ypabact::RequestHomingTargetCycle()
+{
+    if ( !(_oflags & BACT_OFLAG_USERINPT) || !_world || _status == BACT_STATUS_DEAD )
+        return false;
+
+    int weaponId = GetCurrentWeaponId();
+    if ( !ypabact_IsValidWeaponId(this, weaponId) )
+        return false;
+
+    const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
+    if ( !ypabact_IsCompatibleMultiTargetWeapon(wproto) )
+        return false;
+
+    _userHomingTargetCycleRequested = true;
+    return true;
+}
+
 bool NC_STACK_ypabact::CycleControlledWeapon()
 {
     if ( !(_oflags & BACT_OFLAG_USERINPT) ||
@@ -8273,6 +8184,10 @@ bool NC_STACK_ypabact::CycleControlledWeapon()
     _weapon_slot_index = (index + 1) % count;
     _current_weapon_id = slots[_weapon_slot_index];
     _current_weapon_source_slot = sourceSlots[_weapon_slot_index];
+    _userHomingPrimaryTargetGid = 0;
+    _userHomingTargetCycleRequested = false;
+    if ( _world )
+        _world->_hudMissileMultiLockTargets.clear();
     return true;
 }
 
@@ -11627,27 +11542,24 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     int v13 = ypabact_GetWeaponProjectileCountForSourceSlot(this, selectedWeaponSourceSlot);
 
-    std::vector<NC_STACK_ypabact *> weaponTargets;
-    int maxTargets = ypabact_GetMissileMultiTargetLimit(wproto, v13);
-    bool missileMultiTarget = maxTargets > 1;
     bool homingBomb = ypabact_IsHomingBombWeapon(wproto);
-    if ( missileMultiTarget && !(arg->flags & BACT_ARG79_FLAG_NO_AUTO_TARGETS) )
-    {
-        weaponTargets = ypabact_CollectMissileMultiTargets(this, arg, wproto, maxTargets);
-    }
+    int maxTargets = ypabact_GetMultiTargetLimit(wproto, v13);
+    bool missileMultiTarget = maxTargets > 1 && wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE;
+    bool bombMultiTarget = maxTargets > 1 && homingBomb;
+    std::vector<NC_STACK_ypabact *> weaponTargets;
 
-    bool bombMultiTarget = false;
-    if ( !missileMultiTarget )
+    if ( !(arg->flags & BACT_ARG79_FLAG_NO_AUTO_TARGETS) )
     {
-        maxTargets = ypabact_GetBombMultiTargetLimit(wproto, v13);
-        bombMultiTarget = maxTargets > 1;
-        if ( bombMultiTarget && !(arg->flags & BACT_ARG79_FLAG_NO_AUTO_TARGETS) )
+        if ( missileMultiTarget )
+            weaponTargets = ypabact_CollectMissileMultiTargets(this, arg, wproto, maxTargets);
+        else if ( bombMultiTarget )
             weaponTargets = ypabact_CollectHomingBombTargets(this, arg, wproto, maxTargets);
-        else if ( homingBomb && !(arg->flags & BACT_ARG79_FLAG_NO_AUTO_TARGETS) )
+        else if ( homingBomb )
             weaponTargets = ypabact_CollectHomingBombTargets(this, arg, wproto, 1);
     }
 
-    ypabact_StoreHUDMissileMultiLockTargets(this, missileMultiTarget ? weaponTargets : std::vector<NC_STACK_ypabact *>());
+    ypabact_StoreHUDMissileMultiLockTargets(
+        this, (missileMultiTarget || bombMultiTarget) ? weaponTargets : std::vector<NC_STACK_ypabact *>());
 
     vec3d recoilDirSum(0.0, 0.0, 0.0);
     int recoilShotCount = 0;
@@ -12621,22 +12533,22 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
     if (_world && _world->_isNetGame)
         isNetGame = true;
 
-    // ---- OpenUA: protective dummy damage absorption (single-player only) ----
-    // Route incoming damage to an active protective dummy module before it
-    // reaches the parent. If the dummy survives, the parent takes nothing; if
-    // the hit destroys the dummy, only the leftover passes through. Net games
+    // ---- OpenUA: protective Unit Gun/module damage absorption (single-player only) ----
+    // Route incoming damage to an active protective attachment before it
+    // reaches the parent. If the module survives, the parent takes nothing; if
+    // the hit destroys the module, only the leftover passes through. Net games
     // keep vanilla routing to avoid desync.
-    if ( arg->energy < 0 && !_isDummy && !isNetGame && !_unitDummies.empty() )
+    if ( arg->energy < 0 && !_isDummy && !isNetGame && !_unitGuns.empty() )
     {
-        NC_STACK_ypabact *prot = SelectProtectiveDummy(arg->unit);
+        NC_STACK_ypabact *prot = SelectProtectiveUnitGun(arg->unit);
         if ( prot && prot != this )
         {
             int incoming = -arg->energy;   // positive damage amount
-            int dummyHP  = prot->_energy;  // remaining dummy health
+            int moduleHP = prot->_energy; // remaining module health
 
-            if ( incoming <= dummyHP )
+            if ( incoming <= moduleHP )
             {
-                // Dummy absorbs the whole hit; parent untouched.
+                // Module absorbs the whole hit; parent untouched.
                 bact_arg84 dmgArg;
                 dmgArg.energy = arg->energy;
                 dmgArg.unit   = arg->unit;
@@ -12646,15 +12558,15 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
                 return;
             }
 
-            // Dummy is destroyed; only the leftover damage passes to the parent.
+            // Module is destroyed; only the leftover damage passes to the parent.
             bact_arg84 dmgArg;
-            dmgArg.energy = -dummyHP;
+            dmgArg.energy = -moduleHP;
             dmgArg.unit   = arg->unit;
             dmgArg.killerOwner = arg->killerOwner;
             dmgArg.bypassAttackerDamageModifiers = arg->bypassAttackerDamageModifiers;
             prot->ModifyEnergy(&dmgArg);
 
-            arg->energy += dummyHP;        // reduce parent damage by absorbed part
+            arg->energy += moduleHP;       // reduce parent damage by absorbed part
             if ( arg->energy >= 0 )
                 return;
         }
@@ -14358,6 +14270,8 @@ void NC_STACK_ypabact::Renew()
     _weapon_slot_index = 0;
     _current_weapon_id = -1;
     _current_weapon_source_slot = 0;
+    _userHomingPrimaryTargetGid = 0;
+    _userHomingTargetCycleRequested = false;
     _lowhp_weapon_enable = 0;
     _lowhp_threshold = 0.30;
     _lowhp_weapon = 0;
@@ -15858,13 +15772,18 @@ void NC_STACK_ypabact::sub_4843BC(NC_STACK_ypabact *bact2, int a3)
         hudi.field_C = -_gun_angle_user;
     }
 
-    if ( _weapon == -1 || a3 )
+    int hudWeaponId = GetCurrentWeaponId();
+    const bool hasHudWeapon = ypabact_IsValidWeaponId(this, hudWeaponId);
+    const int hudWeaponFlags = hasHudWeapon
+        ? _world->GetWeaponsProtos().at(hudWeaponId)._weaponFlags : _weapon_flags;
+
+    if ( !hasHudWeapon || a3 )
     {
         hudi.field_4 = 0;
     }
     else
     {
-        if ( _weapon_flags & 4 )
+        if ( hudWeaponFlags & 4 )
         {
             hudi.field_4 = 4;
             hudi.field_10 = v23;
@@ -15872,7 +15791,7 @@ void NC_STACK_ypabact::sub_4843BC(NC_STACK_ypabact *bact2, int a3)
         }
         else
         {
-            if ( (_weapon_flags & 4) || !(_weapon_flags & 2) )
+            if ( (hudWeaponFlags & 4) || !(hudWeaponFlags & 2) )
                 hudi.field_4 = 2;
             else
                 hudi.field_4 = 3;
@@ -15890,18 +15809,22 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     NC_STACK_ypabact *targeto = 0;
     float v56 = 0.0;
 
-    float v55;
+    int targetingWeaponId = GetCurrentWeaponId();
+    if ( !ypabact_IsValidWeaponId(this, targetingWeaponId) )
+        targetingWeaponId = _weapon;
 
-    if ( _weapon == -1 )
-        v55 = 0.0;
-    else
-        v55 = _world->GetWeaponsProtos().at(_weapon).radius;
+    const World::TWeapProto *targetingProto =
+        ypabact_IsValidWeaponId(this, targetingWeaponId)
+            ? &_world->GetWeaponsProtos().at(targetingWeaponId) : NULL;
 
-    bool homingBomb = _weapon != -1 && _world->GetWeaponsProtos().at(_weapon).IsHomingBomb();
-    int a3a = !(_weapon_flags & 2) && !(_weapon_flags & 0x10);
+    float v55 = targetingProto ? targetingProto->radius : 0.0;
+    int targetingWeaponFlags = targetingProto ? targetingProto->_weaponFlags : _weapon_flags;
+    bool homingBomb = targetingProto && targetingProto->IsHomingBomb();
+    const bool showHomingBombMultiLock = homingBomb && targetingProto->multi_target > 1;
+    int a3a = !(targetingWeaponFlags & 2) && !(targetingWeaponFlags & 0x10) && !showHomingBombMultiLock;
     bool searchWeaponTarget = !a3a || homingBomb;
 
-    if ( _weapon != -1 && searchWeaponTarget )
+    if ( targetingProto && searchWeaponTarget )
     {
         yw_130arg arg130;
         arg130.pos_x = _position.x;
@@ -15978,7 +15901,7 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
                                                     float v59 = mv_len * 1000.0 * 0.0005 + 20.0;
                                                     float mvd_len = mvd.length();
 
-                                                    if ( ((mvd_len < v59 && (_weapon_flags & 4)) || (bct->_radius + v55 > mvd_len && !(_weapon_flags & 4)) )
+                                                    if ( ((mvd_len < v59 && (targetingWeaponFlags & 4)) || (bct->_radius + v55 > mvd_len && !(targetingWeaponFlags & 4)) )
                                                             && mv_len < 2000.0
                                                             && (v56 > mvd_len || !targeto) )
                                                     {
@@ -15997,6 +15920,50 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
                 }
             }
         }
+    }
+
+    // A remappable Cycle Target press is consumed here, where the exact user
+    // aim vector is available. This keeps target cycling on the normal homing
+    // acquisition path instead of introducing a second targeting system.
+    if ( targetingProto && ypabact_IsCompatibleMultiTargetWeapon(*targetingProto) )
+    {
+        NC_STACK_ypabact *manualTarget =
+            _userHomingPrimaryTargetGid > 0
+                ? _world->FindLiveBactByGid(_userHomingPrimaryTargetGid) : NULL;
+
+        if ( _userHomingTargetCycleRequested )
+        {
+            NC_STACK_ypabact *currentTarget = manualTarget;
+            if ( !currentTarget && _secndTtype == BACT_TGT_TYPE_UNIT )
+                currentTarget = _secndT.pbact;
+            if ( !currentTarget )
+                currentTarget = targeto;
+
+            NC_STACK_ypabact *nextTarget = ypabact_SelectNextHomingCycleTarget(
+                this, arg, *targetingProto, currentTarget);
+
+            _userHomingTargetCycleRequested = false;
+            if ( nextTarget )
+            {
+                _userHomingPrimaryTargetGid = nextTarget->_gid;
+                manualTarget = nextTarget;
+            }
+        }
+
+        if ( manualTarget &&
+             ypabact_IsHomingCycleTargetLockable(this, manualTarget, *targetingProto, arg->field_4) )
+        {
+            targeto = manualTarget;
+        }
+        else if ( _userHomingPrimaryTargetGid > 0 )
+        {
+            _userHomingPrimaryTargetGid = 0;
+        }
+    }
+    else
+    {
+        _userHomingPrimaryTargetGid = 0;
+        _userHomingTargetCycleRequested = false;
     }
 
     if ( targeto )
@@ -16020,7 +15987,7 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
             }
             else
             {
-                ypabact_UpdateHUDMissileMultiLockTargets(
+                ypabact_UpdateHUDWeaponMultiLockTargets(
                     this, &previewArg, previewProto, GetCurrentWeaponProjectileCount());
             }
         }
@@ -16041,6 +16008,8 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     }
 
     sub_4843BC(NULL, a3a);
+    if ( (_oflags & BACT_OFLAG_USERINPT) && _world )
+        _world->_hudMissileMultiLockTargets.clear();
     arg->ret_bact = NULL;
 
     return 0;
@@ -18508,12 +18477,12 @@ bool NC_STACK_ypabact::IsHiddenFor(uint8_t owner) const
 }
 
 // OpenUA custom: permanently reveal an "invisible" stealth unit the moment it makes a
-// real attack. Attached unit-gun / dummy children fire on behalf of their carrier, so a
+// real attack. Attached unit-gun children fire on behalf of their carrier, so a
 // child attack reveals the carrier (which in turn reveals all its attached children).
 // No-op for units that were never invisible or are already revealed.
 void NC_STACK_ypabact::RevealInvisibleOnAttack()
 {
-    // Attached guns/dummies: redirect the reveal to the carrying unit.
+    // Attached unit-guns/modules: redirect the reveal to the carrying unit.
     if ( (_isUnitGunChild || _isDummy) && _parent && _parent != this )
     {
         _parent->RevealInvisibleOnAttack();
@@ -18532,7 +18501,7 @@ void NC_STACK_ypabact::RevealInvisibleOnAttack()
             world->SpawnTransientVP(_invisible_reveal_vp, _position, _rotation, 1000);
     }
 
-    // Reveal attached guns/dummies together with their carrier so the whole unit
+    // Reveal attached unit-guns/modules together with their carrier so the whole unit
     // becomes visible/targettable in the same frame.
     for ( World::TRoboGun &gun : _unitGuns )
     {
@@ -18540,9 +18509,4 @@ void NC_STACK_ypabact::RevealInvisibleOnAttack()
             gun.gun_obj->_invisibleUnrevealed = false;
     }
 
-    for ( World::TUnitDummy &dmy : _unitDummies )
-    {
-        if ( dmy.dummy_obj )
-            dmy.dummy_obj->_invisibleUnrevealed = false;
-    }
 }

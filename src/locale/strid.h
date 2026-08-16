@@ -118,7 +118,7 @@ enum OPENUA_STRING
     OUA_DB_CHAIN_WEAPON,
     OUA_DB_ARMOR_PENETRATION,
     OUA_DB_DEBUFF,
-    OUA_DB_MULTI_TARGET_MISSILE,
+    OUA_DB_MULTI_TARGET,
     OUA_DB_SPAWNER,
     OUA_DB_SPAWN_ON_DEATH,
     OUA_DB_MOBILE_POWER_GENERATOR,
@@ -217,6 +217,9 @@ enum OPENUA_STRING
 
     // Global ambient loop volume exposed in the main Options page.
     OUA_AMBIENT_VOLUME,
+
+    // Remappable homing primary-target cycling. Appended to preserve existing IDs.
+    OUA_CYCLE_TARGET,
 
     OUA_STRING_MAX
 };
