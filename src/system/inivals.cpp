@@ -373,6 +373,7 @@ Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Commo
 // malformed user input can be validated safely by World::EnergyFX instead of
 // throwing while Nucleus.ini is parsed. VP/interval/count default to zero, so
 // an absent or incomplete profile is fully disabled.
+Common::Ini::Key IniConf::GfxRegenDecorationFXMode("gfx.regen_decoration_fx_mode", Common::Ini::KT_WORD, std::string("vp"));
 Common::Ini::Key IniConf::GfxRegenDecorationFXVP("gfx.regen_decoration_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenDecorationFXVPScale("gfx.regen_decoration_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GfxRegenDecorationFXVPSpinX("gfx.regen_decoration_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
@@ -385,7 +386,13 @@ Common::Ini::Key IniConf::GfxRegenDecorationFXIntervalMax("gfx.regen_decoration_
 Common::Ini::Key IniConf::GfxRegenDecorationFXCountMin("gfx.regen_decoration_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenDecorationFXCountMax("gfx.regen_decoration_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenDecorationFXRandomOffsetPercent("gfx.regen_decoration_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXProceduralSize("gfx.regen_decoration_fx_procedural_size", Common::Ini::KT_WORD, std::string("30"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXProceduralThickness("gfx.regen_decoration_fx_procedural_thickness", Common::Ini::KT_WORD, std::string("5"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXProceduralRiseSpeed("gfx.regen_decoration_fx_procedural_rise_speed", Common::Ini::KT_WORD, std::string("100"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXProceduralFadeIn("gfx.regen_decoration_fx_procedural_fade_in", Common::Ini::KT_WORD, std::string("150"));
+Common::Ini::Key IniConf::GfxRegenDecorationFXProceduralFadeOut("gfx.regen_decoration_fx_procedural_fade_out", Common::Ini::KT_WORD, std::string("300"));
 
+Common::Ini::Key IniConf::GfxDrainDecorationFXMode("gfx.drain_decoration_fx_mode", Common::Ini::KT_WORD, std::string("vp"));
 Common::Ini::Key IniConf::GfxDrainDecorationFXVP("gfx.drain_decoration_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainDecorationFXVPScale("gfx.drain_decoration_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GfxDrainDecorationFXVPSpinX("gfx.drain_decoration_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
@@ -398,6 +405,11 @@ Common::Ini::Key IniConf::GfxDrainDecorationFXIntervalMax("gfx.drain_decoration_
 Common::Ini::Key IniConf::GfxDrainDecorationFXCountMin("gfx.drain_decoration_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainDecorationFXCountMax("gfx.drain_decoration_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainDecorationFXRandomOffsetPercent("gfx.drain_decoration_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXProceduralSize("gfx.drain_decoration_fx_procedural_size", Common::Ini::KT_WORD, std::string("30"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXProceduralThickness("gfx.drain_decoration_fx_procedural_thickness", Common::Ini::KT_WORD, std::string("5"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXProceduralRiseSpeed("gfx.drain_decoration_fx_procedural_rise_speed", Common::Ini::KT_WORD, std::string("100"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXProceduralFadeIn("gfx.drain_decoration_fx_procedural_fade_in", Common::Ini::KT_WORD, std::string("150"));
+Common::Ini::Key IniConf::GfxDrainDecorationFXProceduralFadeOut("gfx.drain_decoration_fx_procedural_fade_out", Common::Ini::KT_WORD, std::string("300"));
 
 // OpenUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -682,6 +694,7 @@ void IniConf::Init()
         , &GameGlobalShkFadeOut
         , &GameGlobalPalFadeIn
         , &GameGlobalPalFadeOut
+        , &GfxRegenDecorationFXMode
         , &GfxRegenDecorationFXVP
         , &GfxRegenDecorationFXVPScale
         , &GfxRegenDecorationFXVPSpinX
@@ -694,6 +707,12 @@ void IniConf::Init()
         , &GfxRegenDecorationFXCountMin
         , &GfxRegenDecorationFXCountMax
         , &GfxRegenDecorationFXRandomOffsetPercent
+        , &GfxRegenDecorationFXProceduralSize
+        , &GfxRegenDecorationFXProceduralThickness
+        , &GfxRegenDecorationFXProceduralRiseSpeed
+        , &GfxRegenDecorationFXProceduralFadeIn
+        , &GfxRegenDecorationFXProceduralFadeOut
+        , &GfxDrainDecorationFXMode
         , &GfxDrainDecorationFXVP
         , &GfxDrainDecorationFXVPScale
         , &GfxDrainDecorationFXVPSpinX
@@ -706,6 +725,11 @@ void IniConf::Init()
         , &GfxDrainDecorationFXCountMin
         , &GfxDrainDecorationFXCountMax
         , &GfxDrainDecorationFXRandomOffsetPercent
+        , &GfxDrainDecorationFXProceduralSize
+        , &GfxDrainDecorationFXProceduralThickness
+        , &GfxDrainDecorationFXProceduralRiseSpeed
+        , &GfxDrainDecorationFXProceduralFadeIn
+        , &GfxDrainDecorationFXProceduralFadeOut
         , &UiStatusIconRegen
         , &UiStatusIconDrain
         , &UiStatusIconDamaged

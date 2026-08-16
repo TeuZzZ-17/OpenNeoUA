@@ -29,6 +29,7 @@
 #include "locale/locale.h"
 #include "utils.h"
 #include "crashdiag.h"
+#include "world/energyfx.h"
 
 extern yw_infolog info_log;
 
@@ -976,6 +977,9 @@ bool NC_STACK_ypaworld::DebugReloadLiveData(std::string *details)
         return false;
     }
     ApplyNucleusViewDistanceOverrides();
+    // EnergyFX caches validated Nucleus.ini values; refresh it on the same F7
+    // path so procedural/VP profile changes do not require a process restart.
+    World::EnergyFX::Init();
 
     // Rebuild prototypes in an isolated temporary world. The normal prototype
     // parsers own resources (wireframes/samples), so parsing directly over the
@@ -1508,6 +1512,7 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
     _nextTransientVPId = 1;
     ClearMinigunTracers();
     _mgunTracers.reserve(512);
+    _proceduralEnergyFX.reserve(512);
     ClearGroundDecals();
     _damageHoverTargets.clear();
     _fxLimit = 16;
@@ -1602,6 +1607,7 @@ size_t NC_STACK_ypaworld::Deinit()
     _superItemProfiles.clear();
     _debugAoeRings.clear();
     ClearMinigunTracers();
+    ClearProceduralEnergyFX();
     ClearGroundDecals();
     ClearWeaponTracerMesh();
     FreeGameDataCursors();
@@ -4878,6 +4884,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _transientVPs.clear();
     _nextTransientVPId = 1;
     ClearMinigunTracers();
+    ClearProceduralEnergyFX();
     ClearGroundDecals();
     _damageHoverTargets.clear();
     _inBuildProcess.clear();
