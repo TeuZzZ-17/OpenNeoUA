@@ -224,6 +224,12 @@ enum OPENUA_STRING
     // Remappable contextual Alternative View. Appended to preserve existing IDs.
     OUA_ALTERNATIVE_VIEW,
 
+    // Fixed secondary-input labels shown dynamically in Input Settings.
+    OUA_LEFT_MOUSE,
+    OUA_RIGHT_MOUSE,
+    OUA_MOUSE_WHEEL_UP,
+    OUA_MOUSE_WHEEL_DOWN,
+
     OUA_STRING_MAX
 };
 

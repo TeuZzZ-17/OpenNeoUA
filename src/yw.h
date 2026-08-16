@@ -364,6 +364,69 @@ enum INPUT_BIND
     INPUT_BIND_MAX        = 52,
 };
 
+// OpenUA: fixed secondary shortcuts that intentionally coexist with the
+// remappable primary binding shown in Input Settings. This is the single
+// source of truth for both runtime handling and UI presentation: changing a
+// fixed shortcut here changes both behavior and the text displayed in the
+// menu. These are not serialized and do not add a second remappable slot.
+enum INPUT_FIXED_SHORTCUT_KIND
+{
+    INPUT_FIXED_SHORTCUT_NONE = 0,
+    INPUT_FIXED_SHORTCUT_KEY,
+    INPUT_FIXED_SHORTCUT_WHEEL
+};
+
+struct TInputFixedShortcut
+{
+    INPUT_FIXED_SHORTCUT_KIND Kind = INPUT_FIXED_SHORTCUT_NONE;
+    int16_t KeyCode = Input::KC_NONE;
+    int8_t WheelDirection = 0;
+
+    constexpr TInputFixedShortcut() = default;
+    constexpr TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KIND kind, int16_t keyCode, int8_t wheelDirection = 0)
+        : Kind(kind), KeyCode(keyCode), WheelDirection(wheelDirection) {}
+};
+
+inline TInputFixedShortcut GetInputFixedShortcut(int32_t binding)
+{
+    switch ( binding )
+    {
+    case INPUT_BIND_FIRE:
+        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_LMB);
+    case INPUT_BIND_SWITCH_WEAPON:
+        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
+    case INPUT_BIND_PLACE_MAP_MARKER:
+        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
+    case INPUT_BIND_ZOOMIN:
+        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_WHEEL, Input::KC_NONE, 1);
+    case INPUT_BIND_ZOOMOUT:
+        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_WHEEL, Input::KC_NONE, -1);
+    default:
+        return TInputFixedShortcut();
+    }
+}
+
+inline bool IsFixedInputShortcutHeld(int32_t binding)
+{
+    const TInputFixedShortcut shortcut = GetInputFixedShortcut(binding);
+    return shortcut.Kind == INPUT_FIXED_SHORTCUT_KEY &&
+           shortcut.KeyCode > Input::KC_NONE &&
+           shortcut.KeyCode < Input::KC_MAX &&
+           Input::Engine.GetKeyState(shortcut.KeyCode);
+}
+
+inline int32_t GetFixedInputShortcutWheelCount(int32_t binding, int32_t wheelDelta)
+{
+    const TInputFixedShortcut shortcut = GetInputFixedShortcut(binding);
+    if ( shortcut.Kind != INPUT_FIXED_SHORTCUT_WHEEL || shortcut.WheelDirection == 0 )
+        return 0;
+
+    if ( wheelDelta * shortcut.WheelDirection <= 0 )
+        return 0;
+
+    return wheelDelta > 0 ? wheelDelta : -wheelDelta;
+}
+
 enum SOUND_ID
 {
     SOUND_ID_VOLUME = 0,
