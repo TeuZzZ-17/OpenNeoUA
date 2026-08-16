@@ -2776,15 +2776,17 @@ public:
     struct TTransientVPParticleControls
     {
         bool enabled;
+        bool tintAlphaAffectsAdditive;
         World::TVisualTint tint;
         vec3d scale;
         float lifetimeScale;
 
         TTransientVPParticleControls()
-        : enabled(false), tint(), scale(1.0, 1.0, 1.0), lifetimeScale(1.0f)
+        : enabled(false), tintAlphaAffectsAdditive(false), tint(),
+          scale(1.0, 1.0, 1.0), lifetimeScale(1.0f)
         {}
         explicit TTransientVPParticleControls(const World::TDecorationFXConfig &config)
-        : enabled(true), tint(config.vp_trail_tint),
+        : enabled(true), tintAlphaAffectsAdditive(true), tint(config.vp_trail_tint),
           scale(config.vp_trail_scale.x, config.vp_trail_scale.y, 1.0f),
           lifetimeScale(config.vp_trail_scale.z)
         {}

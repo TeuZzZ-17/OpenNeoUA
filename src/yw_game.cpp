@@ -3680,6 +3680,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         vec3d oldParticleScale = arg->particleScale;
         vec3d oldParticleSpin = arg->particleSpin;
         float oldParticleLifetimeScale = arg->particleLifetimeScale;
+        bool oldParticleTintAlphaAffectsAdditive = arg->particleTintAlphaAffectsAdditive;
         if ( it->particleControls.enabled )
         {
             World::TVisualTint particleTint = it->particleControls.tint;
@@ -3687,12 +3688,14 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
             arg->particleTint = GFX::TGLColor(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
             arg->particleScale = it->particleControls.scale;
             arg->particleLifetimeScale = it->particleControls.lifetimeScale;
+            arg->particleTintAlphaAffectsAdditive = it->particleControls.tintAlphaAffectsAdditive;
         }
         else
         {
             arg->particleTint = GFX::TGLColor(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
             arg->particleScale = renderScale;
             arg->particleLifetimeScale = 1.0f;
+            arg->particleTintAlphaAffectsAdditive = false;
         }
         arg->particleSpin = it->spin;
         arg->vpFadeFactor = fadeFactor;
@@ -3711,6 +3714,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         arg->particleScale = oldParticleScale;
         arg->particleSpin = oldParticleSpin;
         arg->particleLifetimeScale = oldParticleLifetimeScale;
+        arg->particleTintAlphaAffectsAdditive = oldParticleTintAlphaAffectsAdditive;
 
         it->age += arg->frameTime;
         ++it;
