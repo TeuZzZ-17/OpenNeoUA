@@ -2625,18 +2625,33 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int weapon = parser.stol(p2, NULL, 0);
         _vhcl->lowhp_weapon = weapon > 0 ? weapon : 0;
     }
-    else if ( !StriCmp(p1, "weapon_switch_mode") )
+    else if ( !StriCmp(p1, "weapon_player_switch_mode") )
     {
         if ( !StriCmp(p2, "random") )
-            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_RANDOM;
-        else if ( !StriCmp(p2, "controlled") )
-            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_CONTROLLED;
+            _vhcl->weapon_player_switch_mode = TVhclProto::WEAPON_PLAYER_SWITCH_MODE_RANDOM;
+        else if ( !StriCmp(p2, "manual") )
+            _vhcl->weapon_player_switch_mode = TVhclProto::WEAPON_PLAYER_SWITCH_MODE_MANUAL;
         else if ( !StriCmp(p2, "sequence") )
-            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
+            _vhcl->weapon_player_switch_mode = TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
         else
         {
-            _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
-            ypa_log_out("WARNING: vehicle %d unknown weapon_switch_mode '%s'; sequence used.\n",
+            _vhcl->weapon_player_switch_mode = TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
+            ypa_log_out("WARNING: vehicle %d unknown weapon_player_switch_mode '%s'; sequence used.\n",
+                        _vhclID, p2.c_str());
+        }
+    }
+    else if ( !StriCmp(p1, "weapon_ai_switch_mode") )
+    {
+        if ( !StriCmp(p2, "random") )
+            _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_RANDOM;
+        else if ( !StriCmp(p2, "smart") )
+            _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_SMART;
+        else if ( !StriCmp(p2, "sequence") )
+            _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
+        else
+        {
+            _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
+            ypa_log_out("WARNING: vehicle %d unknown weapon_ai_switch_mode '%s'; sequence used.\n",
                         _vhclID, p2.c_str());
         }
     }
@@ -3403,7 +3418,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->weapon = -1;
         _vhcl->extra_weapons = {0, 0, 0};
         _vhcl->extra_num_weapons = {0, 0, 0};
-        _vhcl->weapon_switch_mode = TVhclProto::WEAPON_SWITCH_MODE_SEQUENCE;
+        _vhcl->weapon_player_switch_mode = TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
+        _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
         _vhcl->lowhp_weapon_enable = 0;
         _vhcl->lowhp_threshold = 0.30;
         _vhcl->lowhp_weapon = 0;
