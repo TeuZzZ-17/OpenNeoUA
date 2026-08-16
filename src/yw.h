@@ -358,8 +358,10 @@ enum INPUT_BIND
     INPUT_BIND_PLACE_MAP_MARKER = 49,
     // OpenUA: remappable homing-primary-target cycle. Appended to preserve every existing input ID.
     INPUT_BIND_CYCLE_TARGET = 50,
+    // OpenUA: contextual player Alternative View. Appended; existing input IDs stay stable.
+    INPUT_BIND_ALTERNATIVE_VIEW = 51,
 
-    INPUT_BIND_MAX        = 51,
+    INPUT_BIND_MAX        = 52,
 };
 
 enum SOUND_ID

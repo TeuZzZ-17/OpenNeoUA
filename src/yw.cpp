@@ -1637,6 +1637,12 @@ void sub_445230(NC_STACK_ypaworld *yw)
         yw->_viewerRotation = yw->_viewerBact->_rotation;
     }
 
+    if ( yw->_viewerBact == yw->_userUnit && yw->_userUnit &&
+         yw->_userUnit->IsAlternativeViewActive() )
+    {
+        yw->_viewerRotation = yw->_userUnit->GetAlternativeViewRotation();
+    }
+
     if (yw->_viewerBact == yw->_userUnit && yw->_userUnit
             && yw->_userUnit->_bact_type == BACT_TYPES_UFO
             && yw->_userUnit->getBACT_inputting())
@@ -5195,11 +5201,12 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_FLY_SPEED]   = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 2,  Input::KC_Q, Input::KC_Z);
     usr->InputConfig[World::INPUT_BIND_GUN_HEIGHT]  = UserData::TInputConf(World::INPUT_BIND_TYPE_SLIDER, 5,  Input::KC_2, Input::KC_1);
     usr->InputConfig[World::INPUT_BIND_FIRE]          = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 0, Input::KC_RETURN);
-    usr->InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_V);
+    usr->InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_CTRL);
     usr->InputConfig[World::INPUT_BIND_CYCLE_TARGET]  = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 6, Input::KC_TAB);
+    usr->InputConfig[World::INPUT_BIND_ALTERNATIVE_VIEW]    = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 7, Input::KC_F);
     usr->InputConfig[World::INPUT_BIND_GUN]           = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 2, Input::KC_X);
     usr->InputConfig[World::INPUT_BIND_BRAKE]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3, Input::KC_SPACE);
-    usr->InputConfig[World::INPUT_BIND_CAMFIRE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_CTRL);
+    usr->InputConfig[World::INPUT_BIND_CAMFIRE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_EXTRA7);
     usr->InputConfig[World::INPUT_BIND_HUD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 25, Input::KC_H);
     usr->InputConfig[World::INPUT_BIND_NEW]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 2,  Input::KC_C);
     usr->InputConfig[World::INPUT_BIND_ADD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 3,  Input::KC_Q);
@@ -7759,16 +7766,16 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         return false;
 
     btn.xpos = buttonWidth + buttonsSpace;
-    btn.caption = Locale::Text::Common(Locale::CMN_RESETDEF);
-    btn.upCode = 1451;
-    btn.button_id = 1451;
+    btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
+    btn.upCode = 1452;
+    btn.button_id = 1452;
     if (!_GameShell->atmosphere_button->Add(&btn))
         return false;
 
     btn.xpos = 2 * (buttonWidth + buttonsSpace);
-    btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
-    btn.upCode = 1452;
-    btn.button_id = 1452;
+    btn.caption = Locale::Text::Common(Locale::CMN_RESETDEF);
+    btn.upCode = 1451;
+    btn.button_id = 1451;
     if (!_GameShell->atmosphere_button->Add(&btn))
         return false;
 
@@ -9044,6 +9051,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_FIRE]          = Locale::Text::Inputs(Locale::INPUTS_FIRE);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SWITCH_WEAPON] = Locale::Text::OpenUA(Locale::OUA_SWITCH_WEAPON);
     _GameShell->InputConfigTitle[World::INPUT_BIND_CYCLE_TARGET]  = Locale::Text::OpenUA(Locale::OUA_CYCLE_TARGET);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_ALTERNATIVE_VIEW]    = Locale::Text::OpenUA(Locale::OUA_ALTERNATIVE_VIEW);
     _GameShell->InputConfigTitle[World::INPUT_BIND_GUN]           = Locale::Text::Inputs(Locale::INPUTS_FIREGUN);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SET_COMM]    = Locale::Text::Inputs(Locale::INPUTS_MAKECOMM);
     _GameShell->InputConfigTitle[World::INPUT_BIND_HUD]         = Locale::Text::Inputs(Locale::INPUTS_HEADUPDISP);

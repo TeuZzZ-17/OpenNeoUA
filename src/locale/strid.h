@@ -221,6 +221,9 @@ enum OPENUA_STRING
     // Remappable homing primary-target cycling. Appended to preserve existing IDs.
     OUA_CYCLE_TARGET,
 
+    // Remappable contextual Alternative View. Appended to preserve existing IDs.
+    OUA_ALTERNATIVE_VIEW,
+
     OUA_STRING_MAX
 };
 

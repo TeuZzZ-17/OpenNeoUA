@@ -359,7 +359,8 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
             // Explicit entries, including nop, still override these defaults below.
             if ( i == World::INPUT_BIND_COCKPIT_CAMERA ||
                  i == World::INPUT_BIND_SPRINT ||
-                 i == World::INPUT_BIND_CYCLE_TARGET )
+                 i == World::INPUT_BIND_CYCLE_TARGET ||
+                 i == World::INPUT_BIND_ALTERNATIVE_VIEW )
                 continue;
 
             UserData::TInputConf &k = _o._GameShell->InputConfig[i];
@@ -418,41 +419,94 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
             Input::Engine.SetHotKey(50, "nop");
             Input::Engine.SetHotKey(51, "nop");
 
-            // OpenUA migration: the first Cycle Target build intentionally used TAB
-            // for both Cycle Target and Switch Weapon.  The new canonical defaults
-            // are Cycle Target = TAB and Switch Weapon = V.  Migrate only that
-            // known TAB/TAB pair and only when V is not already a custom binding;
-            // never overwrite an unrelated user assignment.
+            // OpenUA input-default migration. Older builds used ALT for Switch
+            // Weapon (or the earlier TAB/TAB pair) and CTRL for Launch Missile
+            // Cam. Move only those known default combinations to the current
+            // defaults: Switch Weapon = CTRL, Launch Missile Cam = Grave Accent.
+            // Custom bindings remain authoritative and are never stolen.
             UserData::TInputConf &switchWeapon =
                 _o._GameShell->InputConfig[World::INPUT_BIND_SWITCH_WEAPON];
             UserData::TInputConf &cycleTarget =
                 _o._GameShell->InputConfig[World::INPUT_BIND_CYCLE_TARGET];
+            UserData::TInputConf &missileCam =
+                _o._GameShell->InputConfig[World::INPUT_BIND_CAMFIRE];
 
-            if ( switchWeapon.PKeyCode == Input::KC_TAB &&
-                 cycleTarget.PKeyCode == Input::KC_TAB )
+            const bool knownOldSwitchDefault =
+                switchWeapon.PKeyCode == Input::KC_ALT ||
+                (switchWeapon.PKeyCode == Input::KC_TAB &&
+                 cycleTarget.PKeyCode == Input::KC_TAB);
+            const bool knownOldMissileCamDefault =
+                missileCam.PKeyCode == Input::KC_CTRL;
+
+            if ( knownOldSwitchDefault && knownOldMissileCamDefault )
             {
-                bool vAlreadyUsed = false;
+                bool ctrlUsedElsewhere = false;
+                bool graveUsedElsewhere = false;
+
                 for ( size_t i = 1; i < _o._GameShell->InputConfig.size(); ++i )
                 {
                     if ( i == World::INPUT_BIND_SWITCH_WEAPON ||
                          i == World::INPUT_BIND_CYCLE_TARGET ||
+                         i == World::INPUT_BIND_CAMFIRE ||
                          UserData::IsInputBindingRetired((int)i) )
                         continue;
 
                     const UserData::TInputConf &cfg = _o._GameShell->InputConfig[i];
-                    if ( cfg.PKeyCode == Input::KC_V || cfg.NKeyCode == Input::KC_V )
-                    {
-                        vAlreadyUsed = true;
-                        break;
-                    }
+                    ctrlUsedElsewhere |=
+                        cfg.PKeyCode == Input::KC_CTRL || cfg.NKeyCode == Input::KC_CTRL;
+                    graveUsedElsewhere |=
+                        cfg.PKeyCode == Input::KC_EXTRA7 || cfg.NKeyCode == Input::KC_EXTRA7;
                 }
 
-                if ( !vAlreadyUsed )
+                if ( !ctrlUsedElsewhere && !graveUsedElsewhere )
                 {
-                    switchWeapon.PKeyCode = Input::KC_V;
+                    switchWeapon.PKeyCode = Input::KC_CTRL;
+                    missileCam.PKeyCode = Input::KC_EXTRA7;
                     _o.ReloadInput(World::INPUT_BIND_SWITCH_WEAPON);
+                    _o.ReloadInput(World::INPUT_BIND_CAMFIRE);
                     migrated = true;
                 }
+            }
+
+            // Alternative View replaces the provisional Bomb Sight binding. New
+            // profiles default to F. Profiles that still contain the old T default
+            // are migrated to F only when F is free; custom bindings are preserved.
+            // If an older profile has no entry for this newer action, its preserved
+            // F default is cleared rather than stealing an already-used F key.
+            UserData::TInputConf &alternativeView =
+                _o._GameShell->InputConfig[World::INPUT_BIND_ALTERNATIVE_VIEW];
+
+            bool fAlreadyUsed = false;
+            bool currentAlternativeKeyAlreadyUsed = false;
+            for ( size_t i = 1; i < _o._GameShell->InputConfig.size(); ++i )
+            {
+                if ( i == World::INPUT_BIND_ALTERNATIVE_VIEW ||
+                     UserData::IsInputBindingRetired((int)i) )
+                    continue;
+
+                const UserData::TInputConf &cfg = _o._GameShell->InputConfig[i];
+                if ( cfg.PKeyCode == Input::KC_F || cfg.NKeyCode == Input::KC_F )
+                    fAlreadyUsed = true;
+
+                if ( alternativeView.PKeyCode != Input::KC_NONE &&
+                     (cfg.PKeyCode == alternativeView.PKeyCode ||
+                      cfg.NKeyCode == alternativeView.PKeyCode) )
+                    currentAlternativeKeyAlreadyUsed = true;
+            }
+
+            if ( alternativeView.PKeyCode == Input::KC_T && !fAlreadyUsed )
+            {
+                alternativeView.PKeyCode = Input::KC_F;
+                _o.ReloadInput(World::INPUT_BIND_ALTERNATIVE_VIEW);
+                migrated = true;
+            }
+            else if ( (alternativeView.PKeyCode == Input::KC_F && fAlreadyUsed) ||
+                      (alternativeView.PKeyCode == Input::KC_T && currentAlternativeKeyAlreadyUsed) )
+            {
+                alternativeView.PKeyCode = Input::KC_NONE;
+                // ReloadInput() rejects KC_NONE before updating the expression.
+                Input::Engine.SetInputExpression(false, alternativeView.KeyID, "nop");
+                migrated = true;
             }
 
             bool retiredBindingFound = false;
@@ -2542,17 +2596,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->weapon = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "weapon2") )
+    else if ( !StriCmp(p1, "weapon_2") )
     {
         int weapon = parser.stol(p2, NULL, 0);
         _vhcl->extra_weapons[0] = weapon > 0 ? weapon : 0;
     }
-    else if ( !StriCmp(p1, "weapon3") )
+    else if ( !StriCmp(p1, "weapon_3") )
     {
         int weapon = parser.stol(p2, NULL, 0);
         _vhcl->extra_weapons[1] = weapon > 0 ? weapon : 0;
     }
-    else if ( !StriCmp(p1, "weapon4") )
+    else if ( !StriCmp(p1, "weapon_4") )
     {
         int weapon = parser.stol(p2, NULL, 0);
         _vhcl->extra_weapons[2] = weapon > 0 ? weapon : 0;
@@ -2835,9 +2889,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                                            TGemNotificationEntry::CHANGE_NUM_WEAPONS,
                                            previousValue, _vhcl->num_weapons);
     }
-    else if ( !StriCmp(p1, "num_weapons2") ||
-              !StriCmp(p1, "num_weapons3") ||
-              !StriCmp(p1, "num_weapons4") )
+    else if ( !StriCmp(p1, "num_weapons_2") ||
+              !StriCmp(p1, "num_weapons_3") ||
+              !StriCmp(p1, "num_weapons_4") )
     {
         int sourceSlot = p1.back() - '2';
         int count = parser.stol(p2, NULL, 0);

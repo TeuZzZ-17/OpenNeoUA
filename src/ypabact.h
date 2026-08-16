@@ -618,6 +618,13 @@ public:
     vec3d GetCockpitCameraViewPosition() const;
     virtual float GetPlayerViewZoom() const { return 1.0f; }
     void ToggleCockpitCameraMode();
+    bool IsAlternativeViewAvailable();
+    bool IsAlternativeViewActive() const { return _alternativeViewActive; }
+    bool UsesDownwardAlternativeView();
+    bool SetAlternativeViewActive(bool active);
+    void ResetAlternativeView();
+    vec3d GetAlternativeViewAimDirection() const;
+    mat3x3 GetAlternativeViewRotation();
     bool HasMinigun() const;
     float GetMinigunRange() const;
     bool UsesVehicleMinigunTiming() const { return !_mgun_set && _mgun_shot_time > 0; }
@@ -994,6 +1001,7 @@ public:
     int _current_weapon_source_slot;
     int32_t _userHomingPrimaryTargetGid;
     bool _userHomingTargetCycleRequested;
+    bool _alternativeViewActive;
     int _lowhp_weapon_enable;
     float _lowhp_threshold;
     int _lowhp_weapon;

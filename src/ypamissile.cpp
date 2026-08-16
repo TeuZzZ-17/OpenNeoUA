@@ -2234,7 +2234,10 @@ void NC_STACK_ypamissile::SteerHomingBombDirection(float dtime)
         return;
     }
 
-    vec3d axis = current * desired;
+    // mat3x3::AxisAngle() uses the engine's inverted-sine convention.
+    // With Transform(), desired x current is the axis that rotates the current
+    // flight direction toward the target instead of away from it.
+    vec3d axis = desired * current;
     if ( axis.normalise() <= 0.001 )
         return;
 
