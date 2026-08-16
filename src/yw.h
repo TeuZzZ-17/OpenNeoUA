@@ -2807,6 +2807,12 @@ public:
                                    const vec3d &end, float width,
                                    const World::TVisualTint &tint, float fade);
     void ClearWeaponTracerMesh();
+    bool SpawnProceduralEnergyFX(const vec3d &pos, bool plusSymbol,
+                                 int32_t duration, float size, float thickness,
+                                 float riseSpeed, int32_t fadeIn, int32_t fadeOut,
+                                 const World::TVisualTint &tint);
+    void RenderProceduralEnergyFX(baseRender_msg *arg);
+    void ClearProceduralEnergyFX();
     int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false);
     int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
     bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, float randomOffsetPercent, vec3d *localPosition);
@@ -2983,6 +2989,20 @@ public:
         World::TWeaponTracerConfig config;
     };
 
+    struct TProceduralEnergyFX
+    {
+        vec3d pos;
+        bool plusSymbol = false;
+        int32_t startTime = 0;
+        int32_t duration = 1000;
+        float size = 30.0f;
+        float thickness = 5.0f;
+        float riseSpeed = 100.0f;
+        int32_t fadeIn = 150;
+        int32_t fadeOut = 300;
+        World::TVisualTint tint;
+    };
+
     UserData *_GameShell = NULL;
 
     Common::Point _mapSize;
@@ -3036,6 +3056,8 @@ public:
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<TMinigunTracer> _mgunTracers;
     GFX::TMesh _weaponTracerMesh;
+    std::vector<TProceduralEnergyFX> _proceduralEnergyFX;
+    GFX::TMesh _proceduralEnergyFXQuadMesh;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;
     std::vector<TDamageHoverTarget> _damageHoverTargets;
     std::map<int32_t, TConstructInfo> _inBuildProcess; // Buildings in creation process
