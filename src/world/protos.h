@@ -532,6 +532,12 @@ struct TVhclProto
     std::string unit_gun_icon;
     int power = 0;
     float power_radius = 0.0;
+    // OpenUA custom: fixed horizontal radius for automatic world-UI inspection
+    // while directly controlling model = ufo. Independent from optical zoom.
+    float spy_ui_radius = 0.0f;
+    // OpenUA custom: maximum number of 1.25x optical zoom-in steps for model = ufo.
+    // -1 keeps the legacy OpenUA zoom cap; 0 disables zoom for this vehicle.
+    int zoom_steps = -1;
     float damaged_force_malus = 0.0;
     float damaged_maxrot_malus = 0.0;
     float damaged_snd_pitch_mult = 1.0;
