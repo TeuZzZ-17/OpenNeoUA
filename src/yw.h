@@ -360,8 +360,10 @@ enum INPUT_BIND
     INPUT_BIND_CYCLE_TARGET = 50,
     // OpenUA: contextual player Alternative View. Appended; existing input IDs stay stable.
     INPUT_BIND_ALTERNATIVE_VIEW = 51,
+    // OpenUA: remappable runtime toggle for the player-only UFO Spy UI.
+    INPUT_BIND_TOGGLE_UFO_SPY_UI = 52,
 
-    INPUT_BIND_MAX        = 52,
+    INPUT_BIND_MAX        = 53,
 };
 
 // OpenUA: fixed secondary shortcuts that intentionally coexist with the
@@ -2431,6 +2433,8 @@ public:
     virtual NC_STACK_windp *getYW_pNET();
     virtual int getYW_invulnerable();
     bool IsDebugGlobalInvulnerabilityEnabled() const { return _debugGlobalInvulnerability; }
+    float GetUfoSpyUiRadius() const;
+    bool IsUfoSpyUiEnabled() const { return _ufoSpyUiEnabled; }
 
 protected:
     int LevelCommonLoader(TLevelDescription *mapp, int levelID, int a5);
@@ -3112,6 +3116,7 @@ public:
     uint32_t _gamePausedTimeStamp = 0;
     bool _debugGameplayFrozen = false;
     bool _debugGlobalInvulnerability = false;
+    bool _ufoSpyUiEnabled = true;
     bool _levelTeardownInProgress = false;
 
     int32_t _timeStamp = 0;
