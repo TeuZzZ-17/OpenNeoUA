@@ -16616,6 +16616,11 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
     inpt->Buttons.UnSet(31);
     inpt->HandBrakePressed = inpt->Buttons.Is(3);
 
+    const bool cycleTargetPressed = inpt->Buttons.Is(6);
+    if ( cycleTargetPressed && !_cycleTargetBtnIsDown && _userUnit )
+        _userUnit->RequestHomingTargetCycle();
+    _cycleTargetBtnIsDown = cycleTargetPressed;
+
     const bool weaponSwitchPressed = inpt->Buttons.Is(1);
     if ( weaponSwitchPressed && !_weaponSwitchBtnIsDown && _userUnit )
         _userUnit->CycleControlledWeapon();

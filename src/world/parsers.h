@@ -193,7 +193,7 @@ class VhclProtoParser : public ScriptParser::DataHandler, public FxParser
 {
 friend FxParser;
 public:
-    VhclProtoParser(NC_STACK_ypaworld *o, int32_t forcedVhclID = -1) : _o(*o), _vhcl(NULL), _vhclID(-1), _isModify(false), _gunID(-1), _unitGunID(-1), _unitDummyID(-1), _collID(-1), _forcedVhclID(forcedVhclID) {} ;
+    VhclProtoParser(NC_STACK_ypaworld *o, int32_t forcedVhclID = -1) : _o(*o), _vhcl(NULL), _vhclID(-1), _isModify(false), _gunID(-1), _unitGunID(-1), _collID(-1), _forcedVhclID(forcedVhclID) {} ;
     virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
 protected:
@@ -205,7 +205,6 @@ protected:
     bool _isModify;
     int32_t _gunID;
     int32_t _unitGunID;
-    int32_t _unitDummyID;
     int32_t _collID;
     int32_t _forcedVhclID;
     TRoboProto _roboTmp;

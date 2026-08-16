@@ -54,9 +54,11 @@ public:
 
     enum GUN_TYPE
     {
-        GUN_TYPE_DUMMY  = 0, // For radar
-        GUN_TYPE_REAL   = 1,
-        GUN_TYPE_PROTO  = 2
+        GUN_TYPE_DUMMY  = 0, // passive/non-targetable legacy-style module
+        GUN_TYPE_REAL   = 1, // flak
+        GUN_TYPE_PROTO  = 2, // mg
+        GUN_TYPE_RADAR  = 3, // passive, damageable/targetable radar module
+        GUN_TYPE_POWER  = 4  // passive, damageable/targetable power module
     };
 
     enum GUN_FLAGS
@@ -84,6 +86,11 @@ public:
     virtual int getGUN_fireTime();
     virtual bool getGUN_setGround();
     virtual bool IsRoboGun();
+    bool IsPassiveModule() const
+    {
+        return _gunType == GUN_TYPE_RADAR || _gunType == GUN_TYPE_POWER ||
+               (_gunType == GUN_TYPE_DUMMY && _isUnitGunChild);
+    }
 
 
     bool CheckPedestal();

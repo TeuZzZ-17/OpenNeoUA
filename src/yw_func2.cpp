@@ -62,6 +62,9 @@ static bool InputKeyUsesOtherSlot(const UserData *usr, int target, bool positive
 
     for ( int i = 1; i < World::INPUT_BIND_MAX; ++i )
     {
+        if ( UserData::IsInputBindingRetired(i) )
+            continue;
+
         const UserData::TInputConf &cfg = usr->InputConfig[i];
         if ( cfg.PKeyCode == keyCode && !(i == target && positiveSlot) )
             return true;
@@ -78,6 +81,9 @@ static std::string InputKeyConflictNames(const UserData *usr, int target, bool p
 
     for ( int i = 1; i < World::INPUT_BIND_MAX; ++i )
     {
+        if ( UserData::IsInputBindingRetired(i) )
+            continue;
+
         const UserData::TInputConf &cfg = usr->InputConfig[i];
         const bool conflict =
             (cfg.PKeyCode == keyCode && !(i == target && positiveSlot)) ||
@@ -110,6 +116,9 @@ static void ClearInputKeyConflicts(UserData *usr, int target, bool positiveSlot,
 {
     for ( int i = 1; i < World::INPUT_BIND_MAX; ++i )
     {
+        if ( UserData::IsInputBindingRetired(i) )
+            continue;
+
         UserData::TInputConf &cfg = usr->InputConfig[i];
 
         if ( cfg.PKeyCode == keyCode && !(i == target && positiveSlot) )
@@ -585,8 +594,9 @@ void yw_draw_input_list(NC_STACK_ypaworld *yw, UserData *usr)
 
     for (int i = 1; i <= usr->input_listview.shownEntries; i++ )
     {
-        int v24 = i + usr->input_listview.firstShownEntries;
-        if ( !usr->InputConfigTitle[v24].empty() )
+        const int displayIndex = (i - 1) + usr->input_listview.firstShownEntries;
+        int v24 = usr->InputBindingFromDisplayIndex(displayIndex);
+        if ( v24 > 0 && !usr->InputConfigTitle[v24].empty() )
         {
             FontUA::ColumnItem a1a[2];
 
@@ -1057,7 +1067,8 @@ void  UserData::sb_0x46ca74()
         ProfilesNode &profile = profiles.back();
 
         profile.name = userNameDir;
-        InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_TAB);
+        InputConfig[World::INPUT_BIND_SWITCH_WEAPON] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 1, Input::KC_V);
+        InputConfig[World::INPUT_BIND_CYCLE_TARGET] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 6, Input::KC_TAB);
         InputConfig[World::INPUT_BIND_CAMFIRE] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_CTRL);
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
@@ -3459,9 +3470,6 @@ static std::string db_vehicle_model_display_name(const World::TVhclProto &p)
     if ( p.is_mimic )
         return "mimic";
 
-    if ( p.is_dummy )
-        return "dummy";
-
     switch ( p.model_id )
     {
         case BACT_TYPES_BACT:
@@ -3709,8 +3717,9 @@ static std::vector<std::string> db_weapon_specialties(const World::TWeapProto &p
          p.debuff.shield_malus != 0.0 || p.debuff.snd_pitch_mult != 1.0 ||
          !p.debuff.fx_vps.empty()) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_DEBUFF));
-    if ( p.missile_multi_target > 0 )
-        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MULTI_TARGET_MISSILE));
+    if ( p.multi_target > 1 &&
+         (p._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || p.IsHomingBomb()) )
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MULTI_TARGET));
     return items;
 }
 
@@ -5232,7 +5241,9 @@ void UserData::GameShellUiHandleInput()
     {
         input_listview.InputHandle(p_YW, Input);
 
-        inpListActiveElement = input_listview.selectedEntry + 1;
+        inpListActiveElement = InputBindingFromDisplayIndex(input_listview.selectedEntry);
+        if ( inpListActiveElement <= 0 )
+            inpListActiveElement = World::INPUT_BIND_PAUSE;
 
         if ( input_listview.listFlags & GuiList::GLIST_FLAG_IN_SELECT )
         {
@@ -7383,11 +7394,12 @@ bool UserData::ShellSoundsLoad()
 
 int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
 {
-    static const std::array<int, 6> BUTTON
+    static const std::array<int, 7> BUTTON
     {
         World::INPUT_BIND_FIRE,       World::INPUT_BIND_SWITCH_WEAPON,
         World::INPUT_BIND_GUN,        World::INPUT_BIND_BRAKE,
-        World::INPUT_BIND_WAPOINT,    World::INPUT_BIND_CAMFIRE
+        World::INPUT_BIND_WAPOINT,    World::INPUT_BIND_CAMFIRE,
+        World::INPUT_BIND_CYCLE_TARGET
     };
 
     static const std::array<int, 6> SLIDER
