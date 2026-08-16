@@ -1657,6 +1657,40 @@ void sub_445230(NC_STACK_ypaworld *yw)
     }
 }
 
+float NC_STACK_ypaworld::GetUfoSpyUiRadius() const
+{
+    if ( !_userUnit || _userUnit->_bact_type != BACT_TYPES_UFO )
+        return 0.0f;
+
+    const size_t vehicleId = _userUnit->_vehicleID;
+    if ( vehicleId >= _vhclProtos.size() )
+        return 0.0f;
+
+    const World::TVhclProto &proto = _vhclProtos[vehicleId];
+    if ( proto.model_id != BACT_TYPES_UFO || proto.spy_ui_radius <= 0.0f )
+        return 0.0f;
+
+    return proto.spy_ui_radius;
+}
+
+static void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
+{
+    if ( !yw || !inpt || !yw->_GameShell || !yw->_userUnit ||
+         !yw->_userRobo || yw->IsSpectatorControlled() ||
+         yw->_viewerBact != yw->_userUnit || yw->IsRoboMapOpen() ||
+         yw->_userUnit->_bact_type != BACT_TYPES_UFO ||
+         !yw->_userUnit->getBACT_inputting() || yw->GetUfoSpyUiRadius() <= 0.0f )
+        return;
+
+    const UserData::TInputConf &bind =
+        yw->_GameShell->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI];
+    if ( bind.Type != World::INPUT_BIND_TYPE_HOTKEY || inpt->HotKeyID != bind.KeyID )
+        return;
+
+    yw->_ufoSpyUiEnabled = !yw->_ufoSpyUiEnabled;
+    inpt->HotKeyID = -1;
+}
+
 static void yw_UpdateCockpitCameraToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
 {
     if ( !yw || !inpt || !yw->_GameShell || !yw->_userUnit )
@@ -1764,6 +1798,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 }
             }
 
+            yw_UpdateUfoSpyUiToggle(this, arg->field_8);
             yw_UpdateCockpitCameraToggle(this, arg->field_8);
 
             TClickBoxInf *winp = &arg->field_8->ClickInf;
@@ -5253,6 +5288,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
     usr->InputConfig[World::INPUT_BIND_SPRINT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
     usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
+    usr->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
 
     // OpenUA: keep the legacy IDs/type slots reserved for compatibility, but
     // these retired controls are no longer bindable or active.
@@ -9098,6 +9134,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_SPRINT]      = Locale::Text::OpenUA(Locale::OUA_SPRINT);
     _GameShell->InputConfigTitle[World::INPUT_BIND_CAMFIRE]     = Locale::Text::Inputs(Locale::INPUTS_FIREVW);
     _GameShell->InputConfigTitle[World::INPUT_BIND_PLACE_MAP_MARKER] = Locale::Text::OpenUA(Locale::OUA_PLACE_MAP_MARKER);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = Locale::Text::OpenUA(Locale::OUA_TOGGLE_UFO_SPY_UI);
 
     // Display only active bindings and sort them by their localized title.
     // Runtime IDs remain unchanged for profile compatibility.

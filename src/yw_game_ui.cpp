@@ -13904,22 +13904,6 @@ void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, 
     }
 }
 
-static float yw_GetUfoSpyUiRadius(NC_STACK_ypaworld *yw)
-{
-    if ( !yw || !yw->_userUnit || yw->_userUnit->_bact_type != BACT_TYPES_UFO )
-        return 0.0f;
-
-    const size_t vehicleId = yw->_userUnit->_vehicleID;
-    if ( vehicleId >= yw->_vhclProtos.size() )
-        return 0.0f;
-
-    const World::TVhclProto &proto = yw->_vhclProtos[vehicleId];
-    if ( proto.model_id != BACT_TYPES_UFO || proto.spy_ui_radius <= 0.0f )
-        return 0.0f;
-
-    return proto.spy_ui_radius;
-}
-
 static bool yw_IsUfoSpyHudActive(NC_STACK_ypaworld *yw)
 {
     return yw &&
@@ -13930,7 +13914,8 @@ static bool yw_IsUfoSpyHudActive(NC_STACK_ypaworld *yw)
            !yw->IsRoboMapOpen() &&
            yw->_userUnit->_bact_type == BACT_TYPES_UFO &&
            yw->_userUnit->getBACT_inputting() &&
-           yw_GetUfoSpyUiRadius(yw) > 0.0f;
+           yw->IsUfoSpyUiEnabled() &&
+           yw->GetUfoSpyUiRadius() > 0.0f;
 }
 
 static bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
@@ -13957,7 +13942,7 @@ static bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
         return false;
     }
 
-    const float spyRadius = yw_GetUfoSpyUiRadius(yw);
+    const float spyRadius = yw->GetUfoSpyUiRadius();
     if ( spyRadius <= 0.0f )
         return false;
 
