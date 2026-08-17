@@ -3947,17 +3947,17 @@ static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
             world->SpawnProceduralEnergyFX(spawnPos,
                                             plusSymbol,
                                             config.duration,
-                                            config.procedural_size,
-                                            config.procedural_thickness,
-                                            config.procedural_rise_speed,
-                                            config.procedural_fade_in,
-                                            config.procedural_fade_out,
+                                            config.size,
+                                            config.thickness,
+                                            config.rise_speed,
+                                            config.fade_in,
+                                            config.fade_out,
                                             config.vp_tint);
             continue;
         }
 
-        // VP mode is the existing OpenUA path and remains the default when the
-        // new mode key is absent. It follows the unit exactly as before.
+        // A positive *_decoration_fx_vp selects the existing VP path.
+        // With vp = 0 the profile uses the procedural +/- mesh path instead.
         world->SpawnAttachedTransientVP(config.vp,
                                         bact,
                                         localOffset,
@@ -16036,7 +16036,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                     tracerDistance = std::min(tracerDistance, minigunWorldHitDistance);
 
                 const vec3d tracerOrigin = shotPos +
-                    _rotation.Transpose().Transform(_mgun_tracer.offset);
+                    _rotation.Transpose().Transform(_mgun_tracer.pos);
                 const float sourceAdvance = (float)(tracerOrigin - shotPos).dot(shotDir);
                 if ( std::isfinite(sourceAdvance) )
                     tracerDistance = std::max(0.0f, tracerDistance - sourceAdvance);

@@ -51,35 +51,60 @@ struct TWeaponTracerConfig
 {
     bool enabled = false;
     TVisualTint tint;
-    float length = 300.0f;
-    float width = 3.0f;
-    int duration = 80;
-    vec3d offset = vec3d(0.0, 0.0, 0.0);
+    float size_z = 300.0f;
+    float size_x = 3.0f;
+    int life = 80;
+    vec3d pos = vec3d(0.0, 0.0, 0.0);
 
-    // Advanced tracer controls are opt-in. If no advanced key is authored,
-    // the renderer keeps the exact legacy OpenUA crossed-ribbon path.
-    bool advanced = false;
     bool has_tint_head = false;
     bool has_tint_tail = false;
     TVisualTint tint_head;
     TVisualTint tint_tail;
-    float head_width = 1.0f;
-    float tail_width = 1.0f;
-    float glow = 0.0f;
-    int sparks = 0;
-    int smoke = 0;
-    float noise = 0.0f;
-    float wave = 0.0f;
-    int wave_count = 1;
-    bool custom_fade = false;
-    int fade_in = 0;
-    int fade_out = 0;
-    bool core_enabled = true;
-    float core_width = 0.32f;
-    bool has_core_tint = false;
-    TVisualTint core_tint;
-    float pulse = 0.0f;
+
+    bool has_headsize_x = false;
+    bool has_tailsize_x = false;
+    float headsize_x = 0.0f;
+    float tailsize_x = 0.0f;
+
+    float glow_rate = 0.0f;
+    float noise_rate = 0.0f;
+    float fade_out = 0.0f;
+    float pulse_rate = 0.0f;
     float pulse_speed = 0.0f;
+
+    float ResolveHeadSizeX() const
+    {
+        return has_headsize_x ? headsize_x : size_x;
+    }
+
+    float ResolveTailSizeX() const
+    {
+        return has_tailsize_x ? tailsize_x : size_x;
+    }
+
+    // tracer_fade_out is a 0..10 fraction of tracer_life:
+    // 0 = no fade; 10 = fade during the whole lifetime.
+    float FadeForAge(int32_t age) const
+    {
+        if ( life <= 0 || age < 0 || age >= life )
+            return 0.0f;
+        if ( fade_out <= 0.0f )
+            return 1.0f;
+
+        const float fraction = fade_out >= 10.0f ? 1.0f : fade_out * 0.1f;
+        const float fadeDuration = (float)life * fraction;
+        if ( fadeDuration <= 0.0f )
+            return 1.0f;
+
+        const float fadeStart = (float)life - fadeDuration;
+        if ( (float)age <= fadeStart )
+            return 1.0f;
+
+        const float fade = ((float)life - (float)age) / fadeDuration;
+        if ( fade <= 0.0f )
+            return 0.0f;
+        return fade >= 1.0f ? 1.0f : fade;
+    }
 
     TWeaponTracerConfig()
     {
