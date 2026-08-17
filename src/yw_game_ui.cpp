@@ -1503,7 +1503,39 @@ static const char *yw_MapToolbarIconName(int buttonId)
 
 static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw);
 
-static bool yw_RenderFactionToolbarPng(NC_STACK_ypaworld *yw,
+static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, bool active)
+{
+    if ( owner <= World::OWNER_0 || !iconName || !*iconName )
+        return NULL;
+
+    // Prefer the requested visual state first. Within each state, SVG is the
+    // modern path and PNG remains a transparent compatibility fallback.
+    const bool variants[] = {active, false};
+    const int variantCount = active ? 2 : 1;
+    const char *extensions[] = {".svg", ".png"};
+
+    for ( int variant = 0; variant < variantCount; variant++ )
+    {
+        for ( const char *extension : extensions )
+        {
+            std::string path = "TacticalMap/Icons/Map/owner_";
+            path += std::to_string(owner);
+            path += "/";
+            path += iconName;
+            if ( variants[variant] )
+                path += "_active";
+            path += extension;
+
+            NC_STACK_bitmap *bitmap = StatusIconLoad(path);
+            if ( bitmap && bitmap->GetBitmap() )
+                return bitmap;
+        }
+    }
+
+    return NULL;
+}
+
+static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
                                         int windowX, int windowY,
                                         int buttonId, bool active,
                                         const ButtonBox &box)
@@ -1512,33 +1544,12 @@ static bool yw_RenderFactionToolbarPng(NC_STACK_ypaworld *yw,
     if ( !yw || !iconName )
         return false;
 
-    NC_STACK_bitmap *bitmap = NULL;
     const int owner = yw_RoboMapMarkerOwner(yw);
 
-    // Prefer the standalone faction-specific toolbar set. Each faction owns
-    // actual PNG assets rather than receiving a coloured frame at runtime.
-    // This keeps the title bar clean and makes the art fully replaceable.
-    if ( owner > World::OWNER_0 )
-    {
-        std::string path = "TacticalMap/Icons/Map/owner_";
-        path += std::to_string(owner);
-        path += "/";
-        path += iconName;
-        if ( active )
-            path += "_active";
-        path += ".png";
-        bitmap = StatusIconLoad(path);
-
-        if ( (!bitmap || !bitmap->GetBitmap()) && active )
-        {
-            path = "TacticalMap/Icons/Map/owner_";
-            path += std::to_string(owner);
-            path += "/";
-            path += iconName;
-            path += ".png";
-            bitmap = StatusIconLoad(path);
-        }
-    }
+    // Faction artwork is asset-driven. SVG is preferred for crisp scaling;
+    // the existing PNG files remain valid and are used automatically when an
+    // SVG is missing or fails to load.
+    NC_STACK_bitmap *bitmap = yw_LoadFactionMapIcon(owner, iconName, active);
 
     // Missing custom assets are always safe: use the neutral shared set,
     // then finally fall back to the small vector glyph below.
@@ -1563,7 +1574,7 @@ static bool yw_RenderFactionToolbarPng(NC_STACK_ypaworld *yw,
     if ( !bitmap || !bitmap->GetBitmap() )
         return false;
 
-    const int iconSize = std::max(8, std::min(box.w, box.h) - 4);
+    const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
     const int screenLeft = windowX + box.x + (box.w - iconSize) / 2;
     const int screenTop = windowY + box.y + (box.h - iconSize) / 2;
 
@@ -1620,9 +1631,9 @@ static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool act
     const int y1 = bottom - pad;
 
     // The old coloured corner frame was too visually aggressive and could
-    // dominate the actual controls. Faction identity now lives inside the PNG
+    // dominate the actual controls. Faction identity now lives inside the external
     // artwork itself; no extra lines are drawn around toolbar icons.
-    if ( yw_RenderFactionToolbarPng(yw, robo_map.x, robo_map.y,
+    if ( yw_RenderFactionToolbarIcon(yw, robo_map.x, robo_map.y,
                                     buttonId, active, box) )
         return;
 
@@ -1853,7 +1864,7 @@ static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw)
     if ( lockBox )
     {
         const bool locked = squadron_manager.horizontalResizeLocked;
-        if ( !yw_RenderFactionToolbarPng(yw, squadron_manager.x,
+        if ( !yw_RenderFactionToolbarIcon(yw, squadron_manager.x,
                                          squadron_manager.y, 6, locked,
                                          lockBox) )
         {
@@ -1869,17 +1880,17 @@ static int yw_RoboMapMarkerSizePx()
     switch ( robo_map.field_1EE )
     {
     case 4:
-        return 20; // maximum zoom: slightly larger and more readable
+        return 17; // maximum zoom: keep custom markers compact at close range
 
     case 3:
-        return 15; // first zoom-out
+        return 13; // first zoom-out
 
     case 2:
-        return 10; // penultimate zoom-out: compact beside Host Stations
+        return 9;  // penultimate zoom-out: compact beside Host Stations
 
     case 1:
     default:
-        return 7;  // maximum zoom-out
+        return 6;  // maximum zoom-out
     }
 }
 
@@ -1899,25 +1910,11 @@ static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw)
     const int owner = yw_RoboMapMarkerOwner(yw);
     if ( owner > World::OWNER_0 )
     {
-        // Keep the marker artwork in the same replaceable faction folder as
-        // the toolbar.  This is the asset layout used by UA Rising:
-        //   TacticalMap/Icons/Map/owner_<id>/marker_active.png
-        // Prefer the active variant because a marker placed on the map is an
-        // active annotation, not the inactive toolbar button.
-        std::string factionPath = "TacticalMap/Icons/Map/owner_";
-        factionPath += std::to_string(owner);
-        factionPath += "/marker_active.png";
-        NC_STACK_bitmap *ownerBitmap = StatusIconLoad(factionPath);
+        // Reuse the same SVG-first faction loader as the title toolbar. A map
+        // marker is an active annotation, so the active asset is requested.
+        NC_STACK_bitmap *ownerBitmap = yw_LoadFactionMapIcon(owner, "marker", true);
         if ( ownerBitmap && ownerBitmap->GetBitmap() )
             return ownerBitmap;
-
-        factionPath = "TacticalMap/Icons/Map/owner_";
-        factionPath += std::to_string(owner);
-        factionPath += "/marker.png";
-        ownerBitmap = StatusIconLoad(factionPath);
-        if ( ownerBitmap && ownerBitmap->GetBitmap() )
-            return ownerBitmap;
-
     }
 
     NC_STACK_bitmap *neutral = StatusIconLoad("TacticalMap/Icons/UI/marker_active.png");
