@@ -2833,8 +2833,10 @@ public:
     void RenderMinigunTracers(baseRender_msg *arg);
     void ClearMinigunTracers();
     void RenderWeaponTracerSegment(baseRender_msg *arg, const vec3d &start,
-                                   const vec3d &end, float width,
-                                   const World::TVisualTint &tint, float fade);
+                                   const vec3d &end,
+                                   const World::TWeaponTracerConfig &config,
+                                   float tailFactor, float headFactor,
+                                   float fade, uint32_t visualSeed);
     void ClearWeaponTracerMesh();
     bool SpawnProceduralEnergyFX(const vec3d &pos, bool plusSymbol,
                                  int32_t duration, float size, float thickness,
@@ -3015,6 +3017,7 @@ public:
         vec3d direction;
         float availableDistance = 0.0f;
         int32_t startTime = 0;
+        uint32_t visualSeed = 0;
         World::TWeaponTracerConfig config;
     };
 
@@ -3085,6 +3088,9 @@ public:
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<TMinigunTracer> _mgunTracers;
     GFX::TMesh _weaponTracerMesh;
+    GFX::TMesh _weaponTracerAdvancedMesh;
+    GFX::TMesh _weaponTracerGlowMesh;
+    GFX::TMesh _weaponTracerSmokeMesh;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;
     GFX::TMesh _proceduralEnergyFXQuadMesh;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;

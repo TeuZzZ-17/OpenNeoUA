@@ -15699,7 +15699,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
     int v107 = 0;
     bool gunUsesMinigunEnergy = _bact_type != BACT_TYPES_GUN;
-    bool gunUsesSpecialTracer = false;
     if ( _bact_type == BACT_TYPES_GUN )
     {
         NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( this );
@@ -15707,7 +15706,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         {
             v107 = gun->IsRoboGun() ? 1 : 0;
             gunUsesMinigunEnergy = gun->getGUN_fireType() == NC_STACK_ypagun::GUN_TYPE_PROTO;
-            gunUsesSpecialTracer = gun->getGUN_fireType() == NC_STACK_ypagun::GUN_TYPE_PROTO;
         }
     }
 
@@ -15783,8 +15781,11 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         }
     }
 
-    const bool spawnGunTracer = spawnVisual && gunUsesSpecialTracer &&
-                                _mgun_tracer.enabled && !_world->_isNetGame;
+    // Every FireMinigun() path uses the same dedicated mgun_tracer_* config.
+    // This includes normal Vehicle MGUNs and model = gun/module + gun_type = mg.
+    // Rendering still reuses the shared tracer path; only authoring is separate.
+    const bool spawnMgunTracer = spawnVisual && _mgun_tracer.enabled &&
+                                 !_world->_isNetGame;
 
     for (int shotId = 0; shotId < mgunShots; shotId++)
     {
@@ -16026,7 +16027,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
         if ( spawnVisual )
         {
-            if ( spawnGunTracer )
+            if ( spawnMgunTracer )
             {
                 float tracerDistance = minigunTraceRange;
                 if ( v108 && std::isfinite(v123) )
