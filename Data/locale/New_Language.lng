@@ -71,7 +71,7 @@
 3066 = Chain Weapon
 3067 = Armor Penetration
 3068 = Debuff
-3069 = Multi-Target
+3069 = Multi-Target Missile
 3070 = Spawner
 3071 = Spawn On Death
 3072 = Mobile Power Generator
@@ -139,4 +139,3 @@
 3137 = World UI Max Distance
 3138 = More Options
 3139 = Switch Weapon
-3147 = Cycle Target

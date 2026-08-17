@@ -1223,8 +1223,8 @@ bool NC_STACK_ypaworld::DebugReloadLiveData(std::string *details)
         if ( !levelScript.empty() )
             *details += " + current LDF runtime-safe data";
         if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 )
-            *details += profilesReloaded ? " + SuperItemProfiles.ini" :
-                                           " + previous SuperItemProfiles kept";
+            *details += profilesReloaded ? " + super_item_profiles.txt" :
+                                           " + previous SuperItem profiles kept";
         if ( !gemTopologyCompatible )
             *details += "; structural GEM LDF changes deferred";
         if ( !superItemTopologyCompatible )
@@ -1287,10 +1287,10 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
         new World::Parsers::SuperItemProfileParser(&parsedProfiles)
     };
 
-    if ( !ScriptParser::ParseFile("data:SuperItemProfiles.ini", parsers,
+    if ( !ScriptParser::ParseFile("data:scripts/super_item_profiles.txt", parsers,
                                   ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
     {
-        ypa_log_out("WARNING: custom SuperItems enabled but Data/SuperItemProfiles.ini is missing or invalid; keeping the previously loaded profile set.\n");
+        ypa_log_out("WARNING: custom SuperItems enabled but Data/Scripts/super_item_profiles.txt is missing or invalid; keeping the previously loaded profile set.\n");
         return false;
     }
 
@@ -1410,7 +1410,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     {
         _superItemProfiles.swap(parsedProfiles);
     }
-    ypa_log_out("Loaded %u SuperItem profile(s) from Data/SuperItemProfiles.ini.\n",
+    ypa_log_out("Loaded %u SuperItem profile(s) from Data/Scripts/super_item_profiles.txt.\n",
                 (unsigned)_superItemProfiles.size());
     return true;
 }

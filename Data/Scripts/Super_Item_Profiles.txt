@@ -2,7 +2,7 @@
 ; Loaded only when game.custom_superitems = 1 in Nucleus.ini.
 
 begin_superitem_profile
-    id = stoudson_nuclearrr
+    id = stoudson_nuclear
     type = superitem
     display_name = stoudson_nuclear
 
@@ -53,11 +53,11 @@ shk_wave_radius = 2000
     debuff_damage = 2500
     debuff_tick_time = 2000
     debuff_duration = 900000
-    debuff_force_malus = 0.50
-    debuff_maxrot_malus = 0.50
-    debuff_shield_malus = 0.50
-    debuff_snd_pitch_mult = 0.50
-    debuff_fx_vp = 191
+    debuff_force_malus = 0.20
+    debuff_maxrot_malus = 0.20
+    debuff_shield_malus = 0.20
+    debuff_snd_pitch_mult = 0.30
+    debuff_fx_vp  = 191
     debuff_fx_vp2 = 191
     debuff_fx_vp3 = 191
     debuff_fx_vp4 = 191
