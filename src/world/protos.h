@@ -44,7 +44,7 @@ struct TVisualTint
     }
 };
 
-// OpenUA custom: visual-only ribbon trail attached to a real weapon projectile.
+// OpenUA custom: visual-only tracer attached to a real weapon projectile.
 // The runtime samples the projectile's actual path, so homing, gravity and
 // ballistic curves remain authoritative and the normal weapon VP stays visible.
 struct TWeaponTracerConfig
@@ -55,6 +55,31 @@ struct TWeaponTracerConfig
     float width = 3.0f;
     int duration = 80;
     vec3d offset = vec3d(0.0, 0.0, 0.0);
+
+    // Advanced tracer controls are opt-in. If no advanced key is authored,
+    // the renderer keeps the exact legacy OpenUA crossed-ribbon path.
+    bool advanced = false;
+    bool has_tint_head = false;
+    bool has_tint_tail = false;
+    TVisualTint tint_head;
+    TVisualTint tint_tail;
+    float head_width = 1.0f;
+    float tail_width = 1.0f;
+    float glow = 0.0f;
+    int sparks = 0;
+    int smoke = 0;
+    float noise = 0.0f;
+    float wave = 0.0f;
+    int wave_count = 1;
+    bool custom_fade = false;
+    int fade_in = 0;
+    int fade_out = 0;
+    bool core_enabled = true;
+    float core_width = 0.32f;
+    bool has_core_tint = false;
+    TVisualTint core_tint;
+    float pulse = 0.0f;
+    float pulse_speed = 0.0f;
 
     TWeaponTracerConfig()
     {
@@ -506,7 +531,9 @@ struct TVhclProto
     int mgun_shot_time = 0;
     int mgun_shot_time_user = 0;
     float mgun_recoil = 0.0f;
-    TWeaponTracerConfig mgun_tracer; // OpenUA: tracer_* for model = gun + gun_type = mg only
+    // OpenUA: dedicated mgun_tracer_* config shared by normal Vehicle MGUNs
+    // and model = gun/module + gun_type = mg.
+    TWeaponTracerConfig mgun_tracer;
     bool mgun_decal_enable = false;
     TChainFXConfig mgun_decal;
     int16_t mgun_vp_dead = 0;

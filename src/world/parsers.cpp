@@ -1447,6 +1447,219 @@ static double ParseBoundedFiniteOrZero(ScriptParser::Parser &parser,
     return std::max(-maximum, std::min(maximum, result));
 }
 
+static float ParseBoundedNonNegativeFiniteOrFallback(
+    ScriptParser::Parser &parser, const std::string &value,
+    float maximum, float fallback)
+{
+    size_t parsed = 0;
+    const float result = parser.stof(value, &parsed);
+    if ( parsed != value.size() || !std::isfinite(result) || result < 0.0f )
+        return fallback;
+
+    return result > maximum ? maximum : result;
+}
+
+static bool ParseWeaponTracerParam(ScriptParser::Parser &parser,
+                                   const std::string &p1,
+                                   const std::string &p2,
+                                   World::TWeaponTracerConfig &config)
+{
+    if ( !StriCmp(p1, "tracer_enable") )
+    {
+        // Only the exact value 1 enables the visual extension.
+        config.enabled = p2 == "1";
+        return true;
+    }
+
+    if ( ParseTintParam(parser, "tracer_tint", p1, p2, config.tint, true) )
+        return true;
+
+    if ( !StriCmp(p1, "tracer_length") )
+    {
+        config.length = ParseBoundedPositiveFiniteOrZero(parser, p2, 6000.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_width") )
+    {
+        config.width = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
+        return true;
+    }
+
+    if ( ParseBoundedIntegerParam("tracer_duration", p1, p2,
+                                  0, 5000, 0, config.duration) )
+        return true;
+
+    if ( !StriCmp(p1, "tracer_offset_x") )
+    {
+        config.offset.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_offset_y") )
+    {
+        config.offset.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_offset_z") )
+    {
+        config.offset.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_tint_head") )
+    {
+        ParseTintParam(parser, "tracer_tint_head", p1, p2, config.tint_head, true);
+        config.has_tint_head = true;
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_tint_tail") )
+    {
+        ParseTintParam(parser, "tracer_tint_tail", p1, p2, config.tint_tail, true);
+        config.has_tint_tail = true;
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_head_width") )
+    {
+        config.head_width = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 1.0f);
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_tail_width") )
+    {
+        config.tail_width = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 1.0f);
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_glow") )
+    {
+        config.glow = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
+        config.advanced = true;
+        return true;
+    }
+
+    if ( ParseBoundedIntegerParam("tracer_sparks", p1, p2,
+                                  0, 16, 0, config.sparks) )
+    {
+        config.advanced = true;
+        return true;
+    }
+
+    if ( ParseBoundedIntegerParam("tracer_smoke", p1, p2,
+                                  0, 16, 0, config.smoke) )
+    {
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_noise") )
+    {
+        config.noise = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 1000.0f, 0.0f);
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_wave") )
+    {
+        config.wave = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 1000.0f, 0.0f);
+        config.advanced = true;
+        return true;
+    }
+
+    if ( ParseBoundedIntegerParam("tracer_wave_count", p1, p2,
+                                  1, 32, 1, config.wave_count) )
+    {
+        config.advanced = true;
+        return true;
+    }
+
+    if ( ParseBoundedIntegerParam("tracer_fade_in", p1, p2,
+                                  0, 5000, 0, config.fade_in) )
+    {
+        config.custom_fade = true;
+        config.advanced = true;
+        return true;
+    }
+
+    if ( ParseBoundedIntegerParam("tracer_fade_out", p1, p2,
+                                  0, 5000, 0, config.fade_out) )
+    {
+        config.custom_fade = true;
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_core") )
+    {
+        config.core_enabled = p2 == "1";
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_core_width") )
+    {
+        config.core_width = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 1.0f, 0.32f);
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_core_tint") )
+    {
+        ParseTintParam(parser, "tracer_core_tint", p1, p2, config.core_tint, true);
+        config.has_core_tint = true;
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_pulse") )
+    {
+        config.pulse = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
+        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_pulse_speed") )
+    {
+        config.pulse_speed = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 20.0f, 0.0f);
+        config.advanced = true;
+        return true;
+    }
+
+    return false;
+}
+
+// OpenUA: every MGUN renderer path mirrors tracer_* semantics but uses the
+// dedicated mgun_ prefix. Strip only that prefix and reuse the single tracer
+// parser so Weapon and MGUN authoring keep identical validation and limits
+// without duplicating renderer/config logic.
+static bool ParseMgunTracerParam(ScriptParser::Parser &parser,
+                                 const std::string &p1,
+                                 const std::string &p2,
+                                 World::TWeaponTracerConfig &config)
+{
+    static const std::string prefix = "mgun_";
+    if ( p1.size() <= prefix.size() ||
+         StriCmp(p1.substr(0, prefix.size()), prefix) )
+        return false;
+
+    return ParseWeaponTracerParam(parser, p1.substr(prefix.size()), p2, config);
+}
+
 static bool ParseWireframeTintParam(ScriptParser::Parser &parser,
                                     const std::string &p1,
                                     const std::string &p2,
@@ -2719,41 +2932,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             intensity = 10.0f;
         _vhcl->mgun_recoil = intensity;
     }
-    else if ( !StriCmp(p1, "tracer_enable") )
+    else if ( ParseMgunTracerParam(parser, p1, p2, _vhcl->mgun_tracer) )
     {
-        // Vehicle-side tracer parameters are consumed only by gun_type = mg.
-        _vhcl->mgun_tracer.enabled = p2 == "1";
-    }
-    else if ( ParseTintParam(parser, "tracer_tint", p1, p2,
-                             _vhcl->mgun_tracer.tint, true) )
-    {
-    }
-    else if ( !StriCmp(p1, "tracer_length") )
-    {
-        _vhcl->mgun_tracer.length = ParseBoundedPositiveFiniteOrZero(
-            parser, p2, 6000.0f);
-    }
-    else if ( !StriCmp(p1, "tracer_width") )
-    {
-        _vhcl->mgun_tracer.width = ParseBoundedPositiveFiniteOrZero(
-            parser, p2, 100.0f);
-    }
-    else if ( ParseBoundedIntegerParam("tracer_duration", p1, p2,
-                                       0, 5000, 0,
-                                       _vhcl->mgun_tracer.duration) )
-    {
-    }
-    else if ( !StriCmp(p1, "tracer_offset_x") )
-    {
-        _vhcl->mgun_tracer.offset.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
-    }
-    else if ( !StriCmp(p1, "tracer_offset_y") )
-    {
-        _vhcl->mgun_tracer.offset.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
-    }
-    else if ( !StriCmp(p1, "tracer_offset_z") )
-    {
-        _vhcl->mgun_tracer.offset.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        // Every MGUN path, including model = gun/module + gun_type = mg,
+        // uses the dedicated mgun_tracer_* authoring family.
     }
     else if ( !StriCmp(p1, "mgun_decal_enable") )
     {
@@ -4349,41 +4531,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( ParseTintParam(parser, "vp_trail_tint", p1, p2, _wpn->vp_trail_tint) )
     {
     }
-    else if ( !StriCmp(p1, "tracer_enable") )
+    else if ( ParseWeaponTracerParam(parser, p1, p2, _wpn->tracer) )
     {
-        // Only the exact value 1 enables the OpenUA visual extension.
-        _wpn->tracer.enabled = p2 == "1";
-    }
-    else if ( ParseTintParam(parser, "tracer_tint", p1, p2,
-                             _wpn->tracer.tint, true) )
-    {
-    }
-    else if ( !StriCmp(p1, "tracer_length") )
-    {
-        _wpn->tracer.length = ParseBoundedPositiveFiniteOrZero(
-            parser, p2, 6000.0f);
-    }
-    else if ( !StriCmp(p1, "tracer_width") )
-    {
-        _wpn->tracer.width = ParseBoundedPositiveFiniteOrZero(
-            parser, p2, 100.0f);
-    }
-    else if ( ParseBoundedIntegerParam("tracer_duration", p1, p2,
-                                        0, 5000, 0,
-                                        _wpn->tracer.duration) )
-    {
-    }
-    else if ( !StriCmp(p1, "tracer_offset_x") )
-    {
-        _wpn->tracer.offset.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
-    }
-    else if ( !StriCmp(p1, "tracer_offset_y") )
-    {
-        _wpn->tracer.offset.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
-    }
-    else if ( !StriCmp(p1, "tracer_offset_z") )
-    {
-        _wpn->tracer.offset.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
     }
     else if ( ParseDecorationFXParam(parser, p1, p2, _wpn->decoration_fx) )
     {
