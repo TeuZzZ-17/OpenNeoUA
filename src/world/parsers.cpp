@@ -1466,7 +1466,6 @@ static bool ParseWeaponTracerParam(ScriptParser::Parser &parser,
 {
     if ( !StriCmp(p1, "tracer_enable") )
     {
-        // Only the exact value 1 enables the visual extension.
         config.enabled = p2 == "1";
         return true;
     }
@@ -1474,37 +1473,37 @@ static bool ParseWeaponTracerParam(ScriptParser::Parser &parser,
     if ( ParseTintParam(parser, "tracer_tint", p1, p2, config.tint, true) )
         return true;
 
-    if ( !StriCmp(p1, "tracer_length") )
+    if ( !StriCmp(p1, "tracer_size_z") )
     {
-        config.length = ParseBoundedPositiveFiniteOrZero(parser, p2, 6000.0f);
+        config.size_z = ParseBoundedPositiveFiniteOrZero(parser, p2, 6000.0f);
         return true;
     }
 
-    if ( !StriCmp(p1, "tracer_width") )
+    if ( !StriCmp(p1, "tracer_size_x") )
     {
-        config.width = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
+        config.size_x = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
         return true;
     }
 
-    if ( ParseBoundedIntegerParam("tracer_duration", p1, p2,
-                                  0, 5000, 0, config.duration) )
+    if ( ParseBoundedIntegerParam("tracer_life", p1, p2,
+                                  0, 5000, 0, config.life) )
         return true;
 
-    if ( !StriCmp(p1, "tracer_offset_x") )
+    if ( !StriCmp(p1, "tracer_pos_x") )
     {
-        config.offset.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "tracer_offset_y") )
-    {
-        config.offset.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        config.pos.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
         return true;
     }
 
-    if ( !StriCmp(p1, "tracer_offset_z") )
+    if ( !StriCmp(p1, "tracer_pos_y") )
     {
-        config.offset.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        config.pos.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_pos_z") )
+    {
+        config.pos.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
         return true;
     }
 
@@ -1512,7 +1511,6 @@ static bool ParseWeaponTracerParam(ScriptParser::Parser &parser,
     {
         ParseTintParam(parser, "tracer_tint_head", p1, p2, config.tint_head, true);
         config.has_tint_head = true;
-        config.advanced = true;
         return true;
     }
 
@@ -1520,123 +1518,59 @@ static bool ParseWeaponTracerParam(ScriptParser::Parser &parser,
     {
         ParseTintParam(parser, "tracer_tint_tail", p1, p2, config.tint_tail, true);
         config.has_tint_tail = true;
-        config.advanced = true;
         return true;
     }
 
-    if ( !StriCmp(p1, "tracer_head_width") )
+    if ( !StriCmp(p1, "tracer_headsize_x") )
     {
-        config.head_width = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 10.0f, 1.0f);
-        config.advanced = true;
+        const float value = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 100.0f, -1.0f);
+        config.has_headsize_x = value >= 0.0f;
+        config.headsize_x = config.has_headsize_x ? value : 0.0f;
         return true;
     }
 
-    if ( !StriCmp(p1, "tracer_tail_width") )
+    if ( !StriCmp(p1, "tracer_tailsize_x") )
     {
-        config.tail_width = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 10.0f, 1.0f);
-        config.advanced = true;
+        const float value = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 100.0f, -1.0f);
+        config.has_tailsize_x = value >= 0.0f;
+        config.tailsize_x = config.has_tailsize_x ? value : 0.0f;
         return true;
     }
 
-    if ( !StriCmp(p1, "tracer_glow") )
+    if ( !StriCmp(p1, "tracer_glow_rate") )
     {
-        config.glow = ParseBoundedNonNegativeFiniteOrFallback(
+        config.glow_rate = ParseBoundedNonNegativeFiniteOrFallback(
             parser, p2, 10.0f, 0.0f);
-        config.advanced = true;
         return true;
     }
 
-    if ( ParseBoundedIntegerParam("tracer_sparks", p1, p2,
-                                  0, 16, 0, config.sparks) )
+    if ( !StriCmp(p1, "tracer_noise_rate") )
     {
-        config.advanced = true;
-        return true;
-    }
-
-    if ( ParseBoundedIntegerParam("tracer_smoke", p1, p2,
-                                  0, 16, 0, config.smoke) )
-    {
-        config.advanced = true;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "tracer_noise") )
-    {
-        config.noise = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 1000.0f, 0.0f);
-        config.advanced = true;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "tracer_wave") )
-    {
-        config.wave = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 1000.0f, 0.0f);
-        config.advanced = true;
-        return true;
-    }
-
-    if ( ParseBoundedIntegerParam("tracer_wave_count", p1, p2,
-                                  1, 32, 1, config.wave_count) )
-    {
-        config.advanced = true;
-        return true;
-    }
-
-    if ( ParseBoundedIntegerParam("tracer_fade_in", p1, p2,
-                                  0, 5000, 0, config.fade_in) )
-    {
-        config.custom_fade = true;
-        config.advanced = true;
-        return true;
-    }
-
-    if ( ParseBoundedIntegerParam("tracer_fade_out", p1, p2,
-                                  0, 5000, 0, config.fade_out) )
-    {
-        config.custom_fade = true;
-        config.advanced = true;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "tracer_core") )
-    {
-        config.core_enabled = p2 == "1";
-        config.advanced = true;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "tracer_core_width") )
-    {
-        config.core_width = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 1.0f, 0.32f);
-        config.advanced = true;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "tracer_core_tint") )
-    {
-        ParseTintParam(parser, "tracer_core_tint", p1, p2, config.core_tint, true);
-        config.has_core_tint = true;
-        config.advanced = true;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "tracer_pulse") )
-    {
-        config.pulse = ParseBoundedNonNegativeFiniteOrFallback(
+        config.noise_rate = ParseBoundedNonNegativeFiniteOrFallback(
             parser, p2, 10.0f, 0.0f);
-        config.advanced = true;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_fade_out") )
+    {
+        config.fade_out = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "tracer_pulse_rate") )
+    {
+        config.pulse_rate = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
         return true;
     }
 
     if ( !StriCmp(p1, "tracer_pulse_speed") )
     {
         config.pulse_speed = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 20.0f, 0.0f);
-        config.advanced = true;
+            parser, p2, 10.0f, 0.0f);
         return true;
     }
 

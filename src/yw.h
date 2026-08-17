@@ -3088,9 +3088,7 @@ public:
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<TMinigunTracer> _mgunTracers;
     GFX::TMesh _weaponTracerMesh;
-    GFX::TMesh _weaponTracerAdvancedMesh;
     GFX::TMesh _weaponTracerGlowMesh;
-    GFX::TMesh _weaponTracerSmokeMesh;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;
     GFX::TMesh _proceduralEnergyFXQuadMesh;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;

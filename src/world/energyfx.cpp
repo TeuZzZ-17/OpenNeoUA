@@ -101,32 +101,6 @@ static float ReadFloat(Common::Ini::Key &key, float fallback)
     return parsed;
 }
 
-static uint8_t ReadMode(Common::Ini::Key &key)
-{
-    std::string value = key.Get<std::string>();
-    value.erase(value.begin(), std::find_if(value.begin(), value.end(), [](char c)
-    {
-        return !std::isspace((unsigned char)c);
-    }));
-    value.erase(std::find_if(value.rbegin(), value.rend(), [](char c)
-    {
-        return !std::isspace((unsigned char)c);
-    }).base(), value.end());
-
-    std::transform(value.begin(), value.end(), value.begin(), [](char c)
-    {
-        return (char)std::tolower((unsigned char)c);
-    });
-
-    if ( value.empty() || value == "vp" )
-        return MODE_VP;
-    if ( value == "procedural" )
-        return MODE_PROCEDURAL;
-
-    if ( key.WasSet )
-        ypa_log_out("Warning: invalid %s '%s', using vp\n", key.Name.c_str(), value.c_str());
-    return MODE_VP;
-}
 
 static bool ParseTintComponent(const char *&pos, int *out)
 {
@@ -207,8 +181,7 @@ static TVisualTint ReadTint(Common::Ini::Key &key, const TVisualTint &fallback)
     return MakeTint(component[0], component[1], component[2], component[3]);
 }
 
-static Config BuildConfig(Common::Ini::Key &mode,
-                          Common::Ini::Key &vp,
+static Config BuildConfig(Common::Ini::Key &vp,
                           Common::Ini::Key &scale,
                           Common::Ini::Key &spinX,
                           Common::Ini::Key &spinY,
@@ -220,15 +193,14 @@ static Config BuildConfig(Common::Ini::Key &mode,
                           Common::Ini::Key &countMin,
                           Common::Ini::Key &countMax,
                           Common::Ini::Key &randomOffsetPercent,
-                          Common::Ini::Key &proceduralSize,
-                          Common::Ini::Key &proceduralThickness,
-                          Common::Ini::Key &proceduralRiseSpeed,
-                          Common::Ini::Key &proceduralFadeIn,
-                          Common::Ini::Key &proceduralFadeOut,
+                          Common::Ini::Key &size,
+                          Common::Ini::Key &thickness,
+                          Common::Ini::Key &riseSpeed,
+                          Common::Ini::Key &fadeIn,
+                          Common::Ini::Key &fadeOut,
                           bool regenProfile)
 {
     Config config;
-    config.mode = ReadMode(mode);
     config.vp = (int16_t)ReadInt(vp, 0, 0, std::numeric_limits<int16_t>::max());
 
     config.vp_scale = ReadFloat(scale, 1.0f);
@@ -260,26 +232,26 @@ static Config BuildConfig(Common::Ini::Key &mode,
     else if ( config.random_offset_percent > 100.0f )
         config.random_offset_percent = 100.0f;
 
-    config.procedural_size = ReadFloat(proceduralSize, 30.0f);
-    if ( config.procedural_size <= 0.0f )
-        config.procedural_size = 30.0f;
-    else if ( config.procedural_size > 500.0f )
-        config.procedural_size = 500.0f;
+    config.size = ReadFloat(size, 30.0f);
+    if ( config.size <= 0.0f )
+        config.size = 30.0f;
+    else if ( config.size > 500.0f )
+        config.size = 500.0f;
 
-    config.procedural_thickness = ReadFloat(proceduralThickness, 5.0f);
-    if ( config.procedural_thickness <= 0.0f )
-        config.procedural_thickness = 5.0f;
-    if ( config.procedural_thickness > config.procedural_size )
-        config.procedural_thickness = config.procedural_size;
+    config.thickness = ReadFloat(thickness, 5.0f);
+    if ( config.thickness <= 0.0f )
+        config.thickness = 5.0f;
+    if ( config.thickness > config.size )
+        config.thickness = config.size;
 
-    config.procedural_rise_speed = ReadFloat(proceduralRiseSpeed, 100.0f);
-    if ( config.procedural_rise_speed < 0.0f )
-        config.procedural_rise_speed = 0.0f;
-    else if ( config.procedural_rise_speed > 5000.0f )
-        config.procedural_rise_speed = 5000.0f;
+    config.rise_speed = ReadFloat(riseSpeed, 100.0f);
+    if ( config.rise_speed < 0.0f )
+        config.rise_speed = 0.0f;
+    else if ( config.rise_speed > 5000.0f )
+        config.rise_speed = 5000.0f;
 
-    config.procedural_fade_in = ReadInt(proceduralFadeIn, 150, 0, config.duration);
-    config.procedural_fade_out = ReadInt(proceduralFadeOut, 300, 0, config.duration);
+    config.fade_in = ReadInt(fadeIn, 150, 0, config.duration);
+    config.fade_out = ReadInt(fadeOut, 300, 0, config.duration);
 
     if ( config.interval_max < config.interval_min )
         std::swap(config.interval_min, config.interval_max);
@@ -291,8 +263,7 @@ static Config BuildConfig(Common::Ini::Key &mode,
 
 void Init()
 {
-    s_regen = BuildConfig(System::IniConf::GfxRegenDecorationFXMode,
-                          System::IniConf::GfxRegenDecorationFXVP,
+    s_regen = BuildConfig(System::IniConf::GfxRegenDecorationFXVP,
                           System::IniConf::GfxRegenDecorationFXVPScale,
                           System::IniConf::GfxRegenDecorationFXVPSpinX,
                           System::IniConf::GfxRegenDecorationFXVPSpinY,
@@ -304,15 +275,14 @@ void Init()
                           System::IniConf::GfxRegenDecorationFXCountMin,
                           System::IniConf::GfxRegenDecorationFXCountMax,
                           System::IniConf::GfxRegenDecorationFXRandomOffsetPercent,
-                          System::IniConf::GfxRegenDecorationFXProceduralSize,
-                          System::IniConf::GfxRegenDecorationFXProceduralThickness,
-                          System::IniConf::GfxRegenDecorationFXProceduralRiseSpeed,
-                          System::IniConf::GfxRegenDecorationFXProceduralFadeIn,
-                          System::IniConf::GfxRegenDecorationFXProceduralFadeOut,
+                          System::IniConf::GfxRegenDecorationFXSize,
+                          System::IniConf::GfxRegenDecorationFXThickness,
+                          System::IniConf::GfxRegenDecorationFXRiseSpeed,
+                          System::IniConf::GfxRegenDecorationFXFadeIn,
+                          System::IniConf::GfxRegenDecorationFXFadeOut,
                           true);
 
-    s_drain = BuildConfig(System::IniConf::GfxDrainDecorationFXMode,
-                          System::IniConf::GfxDrainDecorationFXVP,
+    s_drain = BuildConfig(System::IniConf::GfxDrainDecorationFXVP,
                           System::IniConf::GfxDrainDecorationFXVPScale,
                           System::IniConf::GfxDrainDecorationFXVPSpinX,
                           System::IniConf::GfxDrainDecorationFXVPSpinY,
@@ -324,11 +294,11 @@ void Init()
                           System::IniConf::GfxDrainDecorationFXCountMin,
                           System::IniConf::GfxDrainDecorationFXCountMax,
                           System::IniConf::GfxDrainDecorationFXRandomOffsetPercent,
-                          System::IniConf::GfxDrainDecorationFXProceduralSize,
-                          System::IniConf::GfxDrainDecorationFXProceduralThickness,
-                          System::IniConf::GfxDrainDecorationFXProceduralRiseSpeed,
-                          System::IniConf::GfxDrainDecorationFXProceduralFadeIn,
-                          System::IniConf::GfxDrainDecorationFXProceduralFadeOut,
+                          System::IniConf::GfxDrainDecorationFXSize,
+                          System::IniConf::GfxDrainDecorationFXThickness,
+                          System::IniConf::GfxDrainDecorationFXRiseSpeed,
+                          System::IniConf::GfxDrainDecorationFXFadeIn,
+                          System::IniConf::GfxDrainDecorationFXFadeOut,
                           false);
 }
 

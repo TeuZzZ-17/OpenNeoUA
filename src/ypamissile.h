@@ -254,7 +254,6 @@ protected:
     bool  _mortarImpactOnSurface = false;
     World::TWeaponTracerConfig _weaponTracer;
     bool _weaponTracerStarted = false;
-    int32_t _weaponTracerStartTime = 0;
     uint32_t _weaponTracerVisualSeed = 0;
     std::deque<TWeaponTracerPoint> _weaponTracerPoints;
 };

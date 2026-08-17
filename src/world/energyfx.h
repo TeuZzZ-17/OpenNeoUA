@@ -8,18 +8,13 @@ namespace World
 namespace EnergyFX
 {
 
-enum Mode
-{
-    MODE_VP = 0,
-    MODE_PROCEDURAL = 1
-};
-
-// Global, opt-in visual profile used while a unit is in the same regen/drain
-// state that drives the corresponding automatic Status Icon.
+// Global visual profile used while a unit is in the same regen/drain state
+// that drives the corresponding automatic Status Icon.
+//
+// No public mode selector is needed: vp > 0 uses the existing VP path;
+// vp <= 0 uses the procedural +/- mesh path.
 struct Config
 {
-    uint8_t mode = MODE_VP;
-
     int16_t vp = 0;
     float vp_scale = 1.0f;
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
@@ -32,17 +27,15 @@ struct Config
     int count_max = 0;
     float random_offset_percent = 25.0f;
 
-    // Procedural alternative to the VP representation. It deliberately reuses
-    // duration, interval/count, random offset and vp_tint from the same profile.
-    float procedural_size = 30.0f;
-    float procedural_thickness = 5.0f;
-    float procedural_rise_speed = 100.0f;
-    int procedural_fade_in = 150;
-    int procedural_fade_out = 300;
+    float size = 30.0f;
+    float thickness = 5.0f;
+    float rise_speed = 100.0f;
+    int fade_in = 150;
+    int fade_out = 300;
 
     bool IsProcedural() const
     {
-        return mode == MODE_PROCEDURAL;
+        return vp <= 0;
     }
 
     bool IsEnabled() const
@@ -52,7 +45,7 @@ struct Config
             return false;
 
         if ( IsProcedural() )
-            return procedural_size > 0.0f && procedural_thickness > 0.0f;
+            return size > 0.0f && thickness > 0.0f;
 
         return vp > 0;
     }
