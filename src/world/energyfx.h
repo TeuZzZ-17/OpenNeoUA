@@ -18,7 +18,7 @@ struct Config
     int16_t vp = 0;
     float vp_scale = 1.0f;
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
-    TVisualTint vp_tint;
+    TVisualTint tint;
 
     int duration = 1000;
     int interval_min = 0;
@@ -51,8 +51,8 @@ struct Config
     }
 };
 
-// Read and validate the global gfx.regen_decoration_fx_* and
-// gfx.drain_decoration_fx_* profiles after Nucleus.ini has been parsed.
+// Read and validate the global gfx.regen_fx_*/gfx.regen_mesh_* and
+// gfx.drain_fx_*/gfx.drain_mesh_* profiles after Nucleus.ini has been parsed.
 // Idempotent and safe to call again after a configuration reload.
 void Init();
 
