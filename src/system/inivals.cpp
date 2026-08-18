@@ -369,45 +369,47 @@ Common::Ini::Key IniConf::GameGlobalShkFadeOut("game.global_shk_fade_out", Commo
 Common::Ini::Key IniConf::GameGlobalPalFadeIn("game.global_pal_fade_in", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Common::Ini::KT_WORD, std::string("0"));
 
-// OpenUA custom: opt-in regen/drain unit FX. All numeric values use KT_WORD so
+// OpenUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
+// gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
+// All numeric values use KT_WORD so
 // malformed user input can be validated safely by World::EnergyFX instead of
 // throwing while Nucleus.ini is parsed. VP/interval/count default to zero, so
 // an absent or incomplete profile is fully disabled.
-Common::Ini::Key IniConf::GfxRegenDecorationFXVP("gfx.regen_decoration_fx_vp", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXVPScale("gfx.regen_decoration_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXVPSpinX("gfx.regen_decoration_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXVPSpinY("gfx.regen_decoration_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXVPSpinZ("gfx.regen_decoration_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXVPTint("gfx.regen_decoration_fx_vp_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXDuration("gfx.regen_decoration_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXIntervalMin("gfx.regen_decoration_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXIntervalMax("gfx.regen_decoration_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXCountMin("gfx.regen_decoration_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXCountMax("gfx.regen_decoration_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXRandomOffsetPercent("gfx.regen_decoration_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXSize("gfx.regen_decoration_fx_size", Common::Ini::KT_WORD, std::string("30"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXThickness("gfx.regen_decoration_fx_thickness", Common::Ini::KT_WORD, std::string("5"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXRiseSpeed("gfx.regen_decoration_fx_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXFadeIn("gfx.regen_decoration_fx_fade_in", Common::Ini::KT_WORD, std::string("150"));
-Common::Ini::Key IniConf::GfxRegenDecorationFXFadeOut("gfx.regen_decoration_fx_fade_out", Common::Ini::KT_WORD, std::string("300"));
+Common::Ini::Key IniConf::GfxRegenFXVP("gfx.regen_fx_vp", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXVPScale("gfx.regen_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxRegenFXVPSpinX("gfx.regen_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXVPSpinY("gfx.regen_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXVPSpinZ("gfx.regen_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXTint("gfx.regen_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GfxRegenFXDuration("gfx.regen_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
+Common::Ini::Key IniConf::GfxRegenFXIntervalMin("gfx.regen_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXIntervalMax("gfx.regen_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXCountMin("gfx.regen_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXCountMax("gfx.regen_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXRandomOffsetPercent("gfx.regen_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
+Common::Ini::Key IniConf::GfxRegenMeshSize("gfx.regen_mesh_size", Common::Ini::KT_WORD, std::string("30"));
+Common::Ini::Key IniConf::GfxRegenMeshThickness("gfx.regen_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
+Common::Ini::Key IniConf::GfxRegenMeshRiseSpeed("gfx.regen_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
+Common::Ini::Key IniConf::GfxRegenMeshFadeIn("gfx.regen_mesh_fade_in", Common::Ini::KT_WORD, std::string("150"));
+Common::Ini::Key IniConf::GfxRegenMeshFadeOut("gfx.regen_mesh_fade_out", Common::Ini::KT_WORD, std::string("300"));
 
-Common::Ini::Key IniConf::GfxDrainDecorationFXVP("gfx.drain_decoration_fx_vp", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXVPScale("gfx.drain_decoration_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXVPSpinX("gfx.drain_decoration_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXVPSpinY("gfx.drain_decoration_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXVPSpinZ("gfx.drain_decoration_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXVPTint("gfx.drain_decoration_fx_vp_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXDuration("gfx.drain_decoration_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXIntervalMin("gfx.drain_decoration_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXIntervalMax("gfx.drain_decoration_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXCountMin("gfx.drain_decoration_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXCountMax("gfx.drain_decoration_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXRandomOffsetPercent("gfx.drain_decoration_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXSize("gfx.drain_decoration_fx_size", Common::Ini::KT_WORD, std::string("30"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXThickness("gfx.drain_decoration_fx_thickness", Common::Ini::KT_WORD, std::string("5"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXRiseSpeed("gfx.drain_decoration_fx_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXFadeIn("gfx.drain_decoration_fx_fade_in", Common::Ini::KT_WORD, std::string("150"));
-Common::Ini::Key IniConf::GfxDrainDecorationFXFadeOut("gfx.drain_decoration_fx_fade_out", Common::Ini::KT_WORD, std::string("300"));
+Common::Ini::Key IniConf::GfxDrainFXVP("gfx.drain_fx_vp", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXVPScale("gfx.drain_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxDrainFXVPSpinX("gfx.drain_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXVPSpinY("gfx.drain_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXVPSpinZ("gfx.drain_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXTint("gfx.drain_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GfxDrainFXDuration("gfx.drain_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
+Common::Ini::Key IniConf::GfxDrainFXIntervalMin("gfx.drain_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXIntervalMax("gfx.drain_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXCountMin("gfx.drain_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXCountMax("gfx.drain_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXRandomOffsetPercent("gfx.drain_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
+Common::Ini::Key IniConf::GfxDrainMeshSize("gfx.drain_mesh_size", Common::Ini::KT_WORD, std::string("30"));
+Common::Ini::Key IniConf::GfxDrainMeshThickness("gfx.drain_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
+Common::Ini::Key IniConf::GfxDrainMeshRiseSpeed("gfx.drain_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
+Common::Ini::Key IniConf::GfxDrainMeshFadeIn("gfx.drain_mesh_fade_in", Common::Ini::KT_WORD, std::string("150"));
+Common::Ini::Key IniConf::GfxDrainMeshFadeOut("gfx.drain_mesh_fade_out", Common::Ini::KT_WORD, std::string("300"));
 
 // OpenUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -692,40 +694,40 @@ void IniConf::Init()
         , &GameGlobalShkFadeOut
         , &GameGlobalPalFadeIn
         , &GameGlobalPalFadeOut
-        , &GfxRegenDecorationFXVP
-        , &GfxRegenDecorationFXVPScale
-        , &GfxRegenDecorationFXVPSpinX
-        , &GfxRegenDecorationFXVPSpinY
-        , &GfxRegenDecorationFXVPSpinZ
-        , &GfxRegenDecorationFXVPTint
-        , &GfxRegenDecorationFXDuration
-        , &GfxRegenDecorationFXIntervalMin
-        , &GfxRegenDecorationFXIntervalMax
-        , &GfxRegenDecorationFXCountMin
-        , &GfxRegenDecorationFXCountMax
-        , &GfxRegenDecorationFXRandomOffsetPercent
-        , &GfxRegenDecorationFXSize
-        , &GfxRegenDecorationFXThickness
-        , &GfxRegenDecorationFXRiseSpeed
-        , &GfxRegenDecorationFXFadeIn
-        , &GfxRegenDecorationFXFadeOut
-        , &GfxDrainDecorationFXVP
-        , &GfxDrainDecorationFXVPScale
-        , &GfxDrainDecorationFXVPSpinX
-        , &GfxDrainDecorationFXVPSpinY
-        , &GfxDrainDecorationFXVPSpinZ
-        , &GfxDrainDecorationFXVPTint
-        , &GfxDrainDecorationFXDuration
-        , &GfxDrainDecorationFXIntervalMin
-        , &GfxDrainDecorationFXIntervalMax
-        , &GfxDrainDecorationFXCountMin
-        , &GfxDrainDecorationFXCountMax
-        , &GfxDrainDecorationFXRandomOffsetPercent
-        , &GfxDrainDecorationFXSize
-        , &GfxDrainDecorationFXThickness
-        , &GfxDrainDecorationFXRiseSpeed
-        , &GfxDrainDecorationFXFadeIn
-        , &GfxDrainDecorationFXFadeOut
+        , &GfxRegenFXVP
+        , &GfxRegenFXVPScale
+        , &GfxRegenFXVPSpinX
+        , &GfxRegenFXVPSpinY
+        , &GfxRegenFXVPSpinZ
+        , &GfxRegenFXTint
+        , &GfxRegenFXDuration
+        , &GfxRegenFXIntervalMin
+        , &GfxRegenFXIntervalMax
+        , &GfxRegenFXCountMin
+        , &GfxRegenFXCountMax
+        , &GfxRegenFXRandomOffsetPercent
+        , &GfxRegenMeshSize
+        , &GfxRegenMeshThickness
+        , &GfxRegenMeshRiseSpeed
+        , &GfxRegenMeshFadeIn
+        , &GfxRegenMeshFadeOut
+        , &GfxDrainFXVP
+        , &GfxDrainFXVPScale
+        , &GfxDrainFXVPSpinX
+        , &GfxDrainFXVPSpinY
+        , &GfxDrainFXVPSpinZ
+        , &GfxDrainFXTint
+        , &GfxDrainFXDuration
+        , &GfxDrainFXIntervalMin
+        , &GfxDrainFXIntervalMax
+        , &GfxDrainFXCountMin
+        , &GfxDrainFXCountMax
+        , &GfxDrainFXRandomOffsetPercent
+        , &GfxDrainMeshSize
+        , &GfxDrainMeshThickness
+        , &GfxDrainMeshRiseSpeed
+        , &GfxDrainMeshFadeIn
+        , &GfxDrainMeshFadeOut
         , &UiStatusIconRegen
         , &UiStatusIconDrain
         , &UiStatusIconDamaged
