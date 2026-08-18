@@ -492,7 +492,6 @@ void NC_STACK_ypamissile::ConfigureWeaponTracer(
     _weaponTracer.enabled = supported && config.enabled &&
                             std::isfinite(config.size_z) && config.size_z > 0.01f &&
                             std::isfinite(config.size_x) && config.size_x > 0.01f &&
-                            config.life > 0 &&
                             ypamissile_WeaponTracerFinite(config.pos) &&
                             ypamissile_WeaponTracerFinite(config.tint) &&
                             config.tint.a > 0.0f;
@@ -511,9 +510,9 @@ void NC_STACK_ypamissile::StartWeaponTracer()
     if ( !_weaponTracerStarted )
         return;
 
-    // The authored tracer_pos_* selects only the visual muzzle/origin at launch.
-    // Every later point is the real projectile centre, so the tracer converges
-    // onto and then follows the physical path instead of remaining displaced.
+    // mesh_tracer_pos_* is a projectile-local visual offset. Apply it to every
+    // sampled tracer point, starting here at launch, so the complete trail stays
+    // attached to the authored position relative to the projectile transform.
     const vec3d point = _position +
         _rotation.Transpose().Transform(_weaponTracer.pos);
     if ( !ypamissile_WeaponTracerFinite(point) )
@@ -547,15 +546,24 @@ void NC_STACK_ypamissile::UpdateWeaponTracer()
     if ( !_weaponTracerStarted || !_world || _world->_isNetGame )
         return;
 
-    const vec3d point = _position;
+    // The tracer has no independent lifetime: it exists only while the physical
+    // projectile itself is alive. Do not leave a visual tail after impact/death.
+    if ( _status != BACT_STATUS_NORMAL )
+    {
+        _weaponTracerStarted = false;
+        _weaponTracerPoints.clear();
+        return;
+    }
+
+    // Keep the same projectile-local offset for the whole sampled path. With a
+    // zero offset this is exactly the previous/vanilla-safe projectile centre.
+    const vec3d point = _position +
+        _rotation.Transpose().Transform(_weaponTracer.pos);
 
     if ( ypamissile_WeaponTracerFinite(point) )
     {
         if ( _weaponTracerPoints.empty() )
         {
-            if ( _status != BACT_STATUS_NORMAL )
-                return;
-
             TWeaponTracerPoint sample;
             sample.pos = point;
             sample.time = _clock;
@@ -564,12 +572,10 @@ void NC_STACK_ypamissile::UpdateWeaponTracer()
         else
         {
             const float moved = (point - _weaponTracerPoints.back().pos).length();
-            const bool finalPoint = _status != BACT_STATUS_NORMAL;
             const bool sampleDue =
                 _clock - _weaponTracerPoints.back().time >= 16;
 
-            if ( std::isfinite(moved) && moved > 0.01f &&
-                 (sampleDue || finalPoint) )
+            if ( std::isfinite(moved) && moved > 0.01f && sampleDue )
             {
                 TWeaponTracerPoint sample;
                 sample.pos = point;
@@ -579,17 +585,8 @@ void NC_STACK_ypamissile::UpdateWeaponTracer()
         }
     }
 
-    // tracer_life is the lifetime of each sampled trail section. Keep one
-    // sample immediately before the active window so the oldest visible
-    // segment remains continuous instead of clearing the whole tracer.
-    while ( _weaponTracerPoints.size() > 2 &&
-            _clock - _weaponTracerPoints[1].time >= _weaponTracer.life )
-    {
-        _weaponTracerPoints.pop_front();
-    }
-
-    // 320 samples cover five seconds at about 60 Hz and remain a strict
-    // per-projectile memory/render bound independent of render framerate.
+    // Keep a strict recent-path memory/render bound per projectile. The tracer
+    // lifetime itself is still owned exclusively by the physical projectile.
     while ( _weaponTracerPoints.size() > 320 )
         _weaponTracerPoints.pop_front();
 }
@@ -597,7 +594,7 @@ void NC_STACK_ypamissile::UpdateWeaponTracer()
 void NC_STACK_ypamissile::RenderWeaponTracer(baseRender_msg *arg)
 {
     if ( !arg || !_weaponTracerStarted || !_world || _world->_isNetGame ||
-         _weaponTracerPoints.size() < 2 )
+         _status != BACT_STATUS_NORMAL || _weaponTracerPoints.size() < 2 )
         return;
 
     struct TVisibleTracerSegment
@@ -605,7 +602,6 @@ void NC_STACK_ypamissile::RenderWeaponTracer(baseRender_msg *arg)
         vec3d start;
         vec3d end;
         float length = 0.0f;
-        int32_t age = 0;
     };
 
     std::vector<TVisibleTracerSegment> visible;
@@ -618,10 +614,6 @@ void NC_STACK_ypamissile::RenderWeaponTracer(baseRender_msg *arg)
         const TWeaponTracerPoint &older = _weaponTracerPoints[index - 1];
         const TWeaponTracerPoint &newer = _weaponTracerPoints[index];
 
-        const int32_t age = std::max(0, _clock - newer.time);
-        if ( age >= _weaponTracer.life )
-            continue;
-
         vec3d segment = newer.pos - older.pos;
         const float segmentLength = segment.length();
         if ( !std::isfinite(segmentLength) || segmentLength <= 0.01f )
@@ -631,7 +623,6 @@ void NC_STACK_ypamissile::RenderWeaponTracer(baseRender_msg *arg)
         item.start = older.pos;
         item.end = newer.pos;
         item.length = std::min(segmentLength, remainingLength);
-        item.age = age;
 
         if ( segmentLength > remainingLength )
             item.start = newer.pos - segment * (remainingLength / segmentLength);
@@ -650,18 +641,10 @@ void NC_STACK_ypamissile::RenderWeaponTracer(baseRender_msg *arg)
         const float headFactor = 1.0f - renderedFromHead / visibleLength;
         const float tailFactor = 1.0f -
             (renderedFromHead + item.length) / visibleLength;
-        const float fade = _weaponTracer.FadeForAge(item.age);
-        if ( fade <= 0.0f )
-        {
-            renderedFromHead += item.length;
-            continue;
-        }
-
         _world->RenderWeaponTracerSegment(arg, item.start, item.end,
                                            _weaponTracer,
                                            std::max(0.0f, tailFactor),
                                            std::min(1.0f, headFactor),
-                                           fade,
                                            _weaponTracerVisualSeed);
 
         renderedFromHead += item.length;

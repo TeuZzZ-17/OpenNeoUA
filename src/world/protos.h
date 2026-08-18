@@ -44,16 +44,15 @@ struct TVisualTint
     }
 };
 
-// OpenUA custom: visual-only tracer attached to a real weapon projectile.
-// The runtime samples the projectile's actual path, so homing, gravity and
-// ballistic curves remain authoritative and the normal weapon VP stays visible.
+// OpenUA custom: shared visual-only mesh tracer configuration.
+// Physical Weapon tracers sample the authoritative projectile path; MGUN tracers
+// reuse the same renderer while travelling along the already resolved hitscan ray.
 struct TWeaponTracerConfig
 {
     bool enabled = false;
     TVisualTint tint;
     float size_z = 300.0f;
     float size_x = 3.0f;
-    int life = 80;
     vec3d pos = vec3d(0.0, 0.0, 0.0);
 
     bool has_tint_head = false;
@@ -61,49 +60,24 @@ struct TWeaponTracerConfig
     TVisualTint tint_head;
     TVisualTint tint_tail;
 
-    bool has_headsize_x = false;
-    bool has_tailsize_x = false;
-    float headsize_x = 0.0f;
-    float tailsize_x = 0.0f;
+    bool has_size_x_head = false;
+    bool has_size_x_tail = false;
+    float size_x_head = 0.0f;
+    float size_x_tail = 0.0f;
 
     float glow_rate = 0.0f;
     float noise_rate = 0.0f;
-    float fade_out = 0.0f;
     float pulse_rate = 0.0f;
     float pulse_speed = 0.0f;
 
     float ResolveHeadSizeX() const
     {
-        return has_headsize_x ? headsize_x : size_x;
+        return has_size_x_head ? size_x_head : size_x;
     }
 
     float ResolveTailSizeX() const
     {
-        return has_tailsize_x ? tailsize_x : size_x;
-    }
-
-    // tracer_fade_out is a 0..10 fraction of tracer_life:
-    // 0 = no fade; 10 = fade during the whole lifetime.
-    float FadeForAge(int32_t age) const
-    {
-        if ( life <= 0 || age < 0 || age >= life )
-            return 0.0f;
-        if ( fade_out <= 0.0f )
-            return 1.0f;
-
-        const float fraction = fade_out >= 10.0f ? 1.0f : fade_out * 0.1f;
-        const float fadeDuration = (float)life * fraction;
-        if ( fadeDuration <= 0.0f )
-            return 1.0f;
-
-        const float fadeStart = (float)life - fadeDuration;
-        if ( (float)age <= fadeStart )
-            return 1.0f;
-
-        const float fade = ((float)life - (float)age) / fadeDuration;
-        if ( fade <= 0.0f )
-            return 0.0f;
-        return fade >= 1.0f ? 1.0f : fade;
+        return has_size_x_tail ? size_x_tail : size_x;
     }
 
     TWeaponTracerConfig()
@@ -556,8 +530,8 @@ struct TVhclProto
     int mgun_shot_time = 0;
     int mgun_shot_time_user = 0;
     float mgun_recoil = 0.0f;
-    // OpenUA: dedicated mgun_tracer_* config shared by normal Vehicle MGUNs
-    // and model = gun/module + gun_type = mg.
+    // OpenUA: shared tracer config used by normal Vehicle MGUNs and
+    // model = gun/module + gun_type = mg; authoring uses mgun_mesh_tracer_*.
     TWeaponTracerConfig mgun_tracer;
     bool mgun_decal_enable = false;
     TChainFXConfig mgun_decal;

@@ -2836,7 +2836,7 @@ public:
                                    const vec3d &end,
                                    const World::TWeaponTracerConfig &config,
                                    float tailFactor, float headFactor,
-                                   float fade, uint32_t visualSeed);
+                                   uint32_t visualSeed);
     void ClearWeaponTracerMesh();
     bool SpawnProceduralEnergyFX(const vec3d &pos, bool plusSymbol,
                                  int32_t duration, float size, float thickness,
@@ -3017,6 +3017,7 @@ public:
         vec3d direction;
         float availableDistance = 0.0f;
         int32_t startTime = 0;
+        int32_t duration = 0;
         uint32_t visualSeed = 0;
         World::TWeaponTracerConfig config;
     };

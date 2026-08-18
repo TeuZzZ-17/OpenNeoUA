@@ -308,7 +308,7 @@ bool NC_STACK_ypaworld::SpawnMinigunTracer(
          !std::isfinite(availableDistance) || availableDistance <= 0.01f ||
          !std::isfinite(config.size_z) || config.size_z <= 0.01f ||
          !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
-         config.life <= 0 || !WeaponTracerFinite(config.tint) ||
+         !WeaponTracerFinite(config.tint) ||
          config.tint.a <= 0.0f )
         return false;
 
@@ -326,6 +326,12 @@ bool NC_STACK_ypaworld::SpawnMinigunTracer(
     tracer.direction = rayDirection;
     tracer.availableDistance = availableDistance;
     tracer.startTime = _timeStamp;
+    // MGUN is hitscan and has no physical projectile lifetime. Derive the
+    // visual duration internally from the resolved ray plus authored size_z,
+    // so the head reaches the endpoint and the tail can follow it out.
+    tracer.duration = std::max(1, (int32_t)std::ceil(
+        ((double)availableDistance + (double)config.size_z) * 1000.0 /
+        (double)MGUN_TRACER_VISUAL_SPEED));
     tracer.visualSeed = WeaponTracerHash((uint32_t)_timeStamp ^
                                          (uint32_t)(_mgunTracers.size() + 1));
     tracer.config = config;
@@ -343,7 +349,7 @@ void NC_STACK_ypaworld::CleanupExpiredMinigunTracers()
                        [this](const TMinigunTracer &tracer)
                        {
                            const int32_t age = _timeStamp - tracer.startTime;
-                           return age < 0 || age >= tracer.config.life;
+                           return age < 0 || age >= tracer.duration;
                        }),
         _mgunTracers.end());
 }
@@ -358,28 +364,27 @@ void NC_STACK_ypaworld::RenderMinigunTracers(baseRender_msg *arg)
     for (const TMinigunTracer &tracer : _mgunTracers)
     {
         const int32_t age = std::max(0, _timeStamp - tracer.startTime);
-        if ( age >= tracer.config.life )
+        if ( age >= tracer.duration )
             continue;
 
         const float ageSeconds = (float)age * 0.001f;
-        const float headDistance = std::min(
-            tracer.availableDistance, MGUN_TRACER_VISUAL_SPEED * ageSeconds);
+        const float travelled = MGUN_TRACER_VISUAL_SPEED * ageSeconds;
+        const float headDistance = std::min(tracer.availableDistance, travelled);
         if ( headDistance <= 0.01f )
             continue;
 
-        // MGUN damage stays hitscan/immediate. Only this visual segment travels
-        // along the already resolved ray. size_z limits its authored length;
-        // life is the total lifetime of this visual shot.
-        const float tailDistance = std::max(
-            0.0f, headDistance - tracer.config.size_z);
-        const float fade = tracer.config.FadeForAge(age);
-        if ( fade <= 0.0f )
+        // MGUN damage stays hitscan/immediate. The visual head travels along the
+        // already resolved ray, then the tail follows it out at the impact/end
+        // point. Its lifetime is therefore derived internally from ray distance
+        // plus size_z, with no public life/fade control.
+        const float tailDistance = std::max(0.0f, std::min(
+            tracer.availableDistance, travelled - tracer.config.size_z));
+        if ( headDistance - tailDistance <= 0.01f )
             continue;
-
         const vec3d start = tracer.origin + tracer.direction * tailDistance;
         const vec3d end = tracer.origin + tracer.direction * headDistance;
         RenderWeaponTracerSegment(arg, start, end, tracer.config,
-                                  0.0f, 1.0f, fade, tracer.visualSeed);
+                                  0.0f, 1.0f, tracer.visualSeed);
     }
 }
 
@@ -391,12 +396,12 @@ void NC_STACK_ypaworld::ClearMinigunTracers()
 void NC_STACK_ypaworld::RenderWeaponTracerSegment(
     baseRender_msg *arg, const vec3d &start, const vec3d &end,
     const World::TWeaponTracerConfig &config,
-    float tailFactor, float headFactor, float fade, uint32_t visualSeed)
+    float tailFactor, float headFactor, uint32_t visualSeed)
 {
     if ( !arg || _isNetGame || !WeaponTracerFinite(start) ||
          !WeaponTracerFinite(end) || !WeaponTracerFinite(config.tint) ||
          !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
-         !std::isfinite(fade) || fade <= 0.0f || config.tint.a <= 0.0f )
+         config.tint.a <= 0.0f )
         return;
 
     vec3d direction = end - start;
@@ -458,9 +463,9 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
 
         const World::TVisualTint tint = WeaponTracerTintAt(config, middle);
 
-        // Base body: tint alpha and life fade are the only opacity controls.
+        // Base body opacity comes only from the authored tint alpha.
         WeaponTracerQueueSegment(arg, &_weaponTracerMesh, view,
-                                 partStart, partEnd, width, tint, fade,
+                                 partStart, partEnd, width, tint, 1.0f,
                                  (float)_normalVizLimit,
                                  (float)_normalFadeLength);
 
@@ -470,7 +475,7 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
             // Glow deliberately reuses the exact body width. The 0..10 rate
             // changes additive intensity only, never authored dimensions.
             const float glowAlpha =
-                fade * std::min(1.0f, config.glow_rate * 0.1f);
+                std::min(1.0f, config.glow_rate * 0.1f);
             WeaponTracerQueueSegment(arg, &_weaponTracerGlowMesh, view,
                                      partStart, partEnd, width, tint, glowAlpha,
                                      (float)_normalVizLimit,

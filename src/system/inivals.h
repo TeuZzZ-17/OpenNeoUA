@@ -281,41 +281,41 @@ public:
     // OpenUA: global opt-in visual profiles for units currently under the same
     // regen/drain conditions used by the automatic Status Icons. A missing or
     // incomplete profile is disabled and never changes energy gameplay.
-    static Common::Ini::Key GfxRegenDecorationFXVP;
-    static Common::Ini::Key GfxRegenDecorationFXVPScale;
-    static Common::Ini::Key GfxRegenDecorationFXVPSpinX;
-    static Common::Ini::Key GfxRegenDecorationFXVPSpinY;
-    static Common::Ini::Key GfxRegenDecorationFXVPSpinZ;
-    static Common::Ini::Key GfxRegenDecorationFXVPTint;
-    static Common::Ini::Key GfxRegenDecorationFXDuration;
-    static Common::Ini::Key GfxRegenDecorationFXIntervalMin;
-    static Common::Ini::Key GfxRegenDecorationFXIntervalMax;
-    static Common::Ini::Key GfxRegenDecorationFXCountMin;
-    static Common::Ini::Key GfxRegenDecorationFXCountMax;
-    static Common::Ini::Key GfxRegenDecorationFXRandomOffsetPercent;
-    static Common::Ini::Key GfxRegenDecorationFXSize;
-    static Common::Ini::Key GfxRegenDecorationFXThickness;
-    static Common::Ini::Key GfxRegenDecorationFXRiseSpeed;
-    static Common::Ini::Key GfxRegenDecorationFXFadeIn;
-    static Common::Ini::Key GfxRegenDecorationFXFadeOut;
+    static Common::Ini::Key GfxRegenFXVP;
+    static Common::Ini::Key GfxRegenFXVPScale;
+    static Common::Ini::Key GfxRegenFXVPSpinX;
+    static Common::Ini::Key GfxRegenFXVPSpinY;
+    static Common::Ini::Key GfxRegenFXVPSpinZ;
+    static Common::Ini::Key GfxRegenFXTint;
+    static Common::Ini::Key GfxRegenFXDuration;
+    static Common::Ini::Key GfxRegenFXIntervalMin;
+    static Common::Ini::Key GfxRegenFXIntervalMax;
+    static Common::Ini::Key GfxRegenFXCountMin;
+    static Common::Ini::Key GfxRegenFXCountMax;
+    static Common::Ini::Key GfxRegenFXRandomOffsetPercent;
+    static Common::Ini::Key GfxRegenMeshSize;
+    static Common::Ini::Key GfxRegenMeshThickness;
+    static Common::Ini::Key GfxRegenMeshRiseSpeed;
+    static Common::Ini::Key GfxRegenMeshFadeIn;
+    static Common::Ini::Key GfxRegenMeshFadeOut;
 
-    static Common::Ini::Key GfxDrainDecorationFXVP;
-    static Common::Ini::Key GfxDrainDecorationFXVPScale;
-    static Common::Ini::Key GfxDrainDecorationFXVPSpinX;
-    static Common::Ini::Key GfxDrainDecorationFXVPSpinY;
-    static Common::Ini::Key GfxDrainDecorationFXVPSpinZ;
-    static Common::Ini::Key GfxDrainDecorationFXVPTint;
-    static Common::Ini::Key GfxDrainDecorationFXDuration;
-    static Common::Ini::Key GfxDrainDecorationFXIntervalMin;
-    static Common::Ini::Key GfxDrainDecorationFXIntervalMax;
-    static Common::Ini::Key GfxDrainDecorationFXCountMin;
-    static Common::Ini::Key GfxDrainDecorationFXCountMax;
-    static Common::Ini::Key GfxDrainDecorationFXRandomOffsetPercent;
-    static Common::Ini::Key GfxDrainDecorationFXSize;
-    static Common::Ini::Key GfxDrainDecorationFXThickness;
-    static Common::Ini::Key GfxDrainDecorationFXRiseSpeed;
-    static Common::Ini::Key GfxDrainDecorationFXFadeIn;
-    static Common::Ini::Key GfxDrainDecorationFXFadeOut;
+    static Common::Ini::Key GfxDrainFXVP;
+    static Common::Ini::Key GfxDrainFXVPScale;
+    static Common::Ini::Key GfxDrainFXVPSpinX;
+    static Common::Ini::Key GfxDrainFXVPSpinY;
+    static Common::Ini::Key GfxDrainFXVPSpinZ;
+    static Common::Ini::Key GfxDrainFXTint;
+    static Common::Ini::Key GfxDrainFXDuration;
+    static Common::Ini::Key GfxDrainFXIntervalMin;
+    static Common::Ini::Key GfxDrainFXIntervalMax;
+    static Common::Ini::Key GfxDrainFXCountMin;
+    static Common::Ini::Key GfxDrainFXCountMax;
+    static Common::Ini::Key GfxDrainFXRandomOffsetPercent;
+    static Common::Ini::Key GfxDrainMeshSize;
+    static Common::Ini::Key GfxDrainMeshThickness;
+    static Common::Ini::Key GfxDrainMeshRiseSpeed;
+    static Common::Ini::Key GfxDrainMeshFadeIn;
+    static Common::Ini::Key GfxDrainMeshFadeOut;
 
     // OpenUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only
