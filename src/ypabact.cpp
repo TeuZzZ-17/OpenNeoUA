@@ -728,6 +728,9 @@ static constexpr float WEAPON_RECOIL_VISUAL_DEGREES_PER_UNIT = 0.75f;
 static constexpr float WEAPON_RECOIL_VISUAL_MAX_DEGREES = 5.0f;
 static constexpr float MGUN_RECOIL_VISUAL_DEGREES_PER_UNIT = 1.2f;
 static constexpr float MGUN_RECOIL_VISUAL_MAX_DEGREES = 12.0f;
+static constexpr float MGUN_RECOIL_SHAKE_AXIS_X = 0.35f;
+static constexpr float MGUN_RECOIL_SHAKE_AXIS_Y = 0.20f;
+static constexpr float MGUN_RECOIL_SHAKE_AXIS_Z = 0.35f;
 static constexpr float RECOIL_VISUAL_COMBINED_MAX_DEGREES =
     WEAPON_RECOIL_VISUAL_MAX_DEGREES + MGUN_RECOIL_VISUAL_MAX_DEGREES;
 
@@ -791,19 +794,37 @@ static float ypabact_GetMgunRecoilVisualPitch(const NC_STACK_ypabact *bact)
     return bact->_mgunRecoilVisualPitch * remain * remain;
 }
 
-static void ypabact_StartMgunRecoilVisual(NC_STACK_ypabact *bact)
+static float ypabact_GetMgunRecoilVisualDegrees(const NC_STACK_ypabact *bact)
 {
     if ( !ypabact_IsMgunRecoilVisualVehicleClass(bact) ||
          bact->_mgun_recoil <= 0.0f )
-        return;
+        return 0.0f;
 
-    float degrees = std::min(
+    return std::min(
         bact->_mgun_recoil * MGUN_RECOIL_VISUAL_DEGREES_PER_UNIT,
         MGUN_RECOIL_VISUAL_MAX_DEGREES);
+}
+
+static void ypabact_StartMgunRecoilVisual(NC_STACK_ypabact *bact)
+{
+    const float degrees = ypabact_GetMgunRecoilVisualDegrees(bact);
+    if ( degrees <= 0.0f )
+        return;
 
     bact->_mgunRecoilVisualDuration = WEAPON_RECOIL_VISUAL_DURATION_MS;
     bact->_mgunRecoilVisualEndTime = bact->_clock + WEAPON_RECOIL_VISUAL_DURATION_MS;
     bact->_mgunRecoilVisualPitch = degrees * C_PI_180;
+}
+
+static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->IsAlternativeViewActive() )
+        return false;
+
+    // Only the locally possessed first-person vehicle receives this feedback.
+    // AI, remote units, spectator/missile cameras and external views keep the
+    // existing render-only MGUN recoil without adding a world/camera shake.
+    return bact->IsPlayerFirstPersonCameraActive() || bact->IsCockpitCameraActive();
 }
 
 static bool ypabact_IsAiTankWeaponRecoilUnit(const NC_STACK_ypabact *unit)
@@ -1491,21 +1512,22 @@ static bool ypabact_ShouldUsePlayerLaunchShake(NC_STACK_ypabact *bact,
            wproto.player_shk_launch.time > 0;
 }
 
-static void ypabact_TriggerPlayerLaunchShake(NC_STACK_ypabact *bact,
-                                              World::TWeapProto &wproto)
+static void ypabact_TriggerLocalShakeCarrier(NC_STACK_ypabact *bact,
+                                              TSndCarrier *carrier,
+                                              TSndFxPosParam *shake)
 {
-    if ( !ypabact_ShouldUsePlayerLaunchShake(bact, wproto) )
+    if ( !bact || !carrier || !shake || shake->time <= 0 )
         return;
 
-    if ( bact->_player_launch_shake_carrier.Sounds.empty() )
-        bact->_player_launch_shake_carrier.Resize(1);
+    if ( carrier->Sounds.empty() )
+        carrier->Resize(1);
 
-    TSoundSource &snd = bact->_player_launch_shake_carrier.Sounds[0];
+    TSoundSource &snd = carrier->Sounds[0];
     snd.PSample = NULL;
     snd.SampleVariants.clear();
     snd.PFragments = NULL;
     snd.PPFx = NULL;
-    snd.PShkFx = &wproto.player_shk_launch;
+    snd.PShkFx = shake;
     snd.Volume = 0;
     snd.Pitch = 0;
     snd.PriorityBias = 0;
@@ -1515,13 +1537,55 @@ static void ypabact_TriggerPlayerLaunchShake(NC_STACK_ypabact *bact,
     snd.SetPFxEnable(false);
     snd.SetShk(true);
 
-    bact->_player_launch_shake_carrier.Position = bact->_position;
-    bact->_player_launch_shake_carrier.Vector = bact->_fly_dir * bact->_fly_dir_length;
+    carrier->Position = bact->_position;
+    carrier->Vector = bact->_fly_dir * bact->_fly_dir_length;
+
+    SFXEngine::SFXe.startSound(carrier, 0);
+    SFXEngine::SFXe.UpdateSoundCarrier(carrier);
+}
+
+static void ypabact_TriggerPlayerLaunchShake(NC_STACK_ypabact *bact,
+                                              World::TWeapProto &wproto)
+{
+    if ( !ypabact_ShouldUsePlayerLaunchShake(bact, wproto) )
+        return;
 
     // Reuse one local carrier so a multi-projectile shot produces one clean
     // event instead of stacking one shake for every spawned projectile.
-    SFXEngine::SFXe.startSound(&bact->_player_launch_shake_carrier, 0);
-    SFXEngine::SFXe.UpdateSoundCarrier(&bact->_player_launch_shake_carrier);
+    ypabact_TriggerLocalShakeCarrier(
+        bact,
+        &bact->_player_launch_shake_carrier,
+        &wproto.player_shk_launch);
+}
+
+static void ypabact_TriggerPlayerMgunRecoilShake(NC_STACK_ypabact *bact)
+{
+    if ( !ypabact_ShouldUsePlayerMgunRecoilShake(bact) )
+        return;
+
+    const float recoilDegrees = ypabact_GetMgunRecoilVisualDegrees(bact);
+    if ( recoilDegrees <= 0.0f )
+        return;
+
+    // Reuse the existing SHK engine. The magnitude is derived directly from
+    // the same capped visual recoil angle, so mgun_recoil remains the single
+    // point of truth. Axis multipliers keep the world vibration noticeable but
+    // weaker than the vehicle's own visual kick.
+    bact->_mgun_recoil_shake.slot = 1;
+    bact->_mgun_recoil_shake.mag0 = recoilDegrees * C_PI_180;
+    bact->_mgun_recoil_shake.mag1 = 0.0f;
+    bact->_mgun_recoil_shake.time = WEAPON_RECOIL_VISUAL_DURATION_MS;
+    bact->_mgun_recoil_shake.radius = 0.0f;
+    bact->_mgun_recoil_shake.mute = 0.0f;
+    bact->_mgun_recoil_shake.pos = vec3d(
+        MGUN_RECOIL_SHAKE_AXIS_X,
+        MGUN_RECOIL_SHAKE_AXIS_Y,
+        MGUN_RECOIL_SHAKE_AXIS_Z);
+
+    ypabact_TriggerLocalShakeCarrier(
+        bact,
+        &bact->_mgun_recoil_shake_carrier,
+        &bact->_mgun_recoil_shake);
 }
 
 static void ypabact_UpdateMimicSoundCarrier(NC_STACK_ypabact *bact)
@@ -2193,6 +2257,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _debuff_soundcarrier.Clear();
     _damaged_shake_carrier.Clear();
     _player_launch_shake_carrier.Clear();
+    _mgun_recoil_shake = TSndFxPosParam();
+    _mgun_recoil_shake_carrier.Clear();
     _mimic_soundcarrier.Clear();
 
     _vp_active = 0;
@@ -2462,6 +2528,8 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _debuff_soundcarrier.Clear();
     _damaged_shake_carrier.Clear();
     _player_launch_shake_carrier.Clear();
+    _mgun_recoil_shake = TSndFxPosParam();
+    _mgun_recoil_shake_carrier.Clear();
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;
@@ -2676,6 +2744,7 @@ size_t NC_STACK_ypabact::Deinit()
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_damaged_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_player_launch_shake_carrier);
+    SFXEngine::SFXe.StopCarrier(&_mgun_recoil_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mgun_soundcarrier);
@@ -3495,6 +3564,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
         ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
+        ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
     }
 
     ypabact_UpdateMimicSoundCarrier(this);
@@ -15852,6 +15922,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             // every supported unit that actually emits an MGUN pulse gets the same
             // render-only kick. Normal weapons do not trigger it; 0/absent disables it.
             ypabact_StartMgunRecoilVisual(this);
+            ypabact_TriggerPlayerMgunRecoilShake(this);
 
             if ( vehicleTimedMgun )
                 ypabact_PlayVehicleMinigunPulse(this);
@@ -17710,6 +17781,7 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
     ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
+    ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
 }
 
 void NC_STACK_ypabact::ypabact_func117(update_msg *upd)
