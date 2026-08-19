@@ -4405,6 +4405,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->vp_fire = parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "weapon_use_vehicle_vp_fire") )
+    {
+        _wpn->weapon_use_vehicle_vp_fire = parser.stol(p2, NULL, 0) == 1;
+    }
     else if ( !StriCmp(p1, "vp_megadeth") )
     {
         _wpn->vp_megadeth = parser.stol(p2, NULL, 0);
