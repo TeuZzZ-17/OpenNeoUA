@@ -278,6 +278,14 @@ public:
     static Common::Ini::Key GameGlobalPalFadeIn;
     static Common::Ini::Key GameGlobalPalFadeOut;
 
+    // OpenUA: optional procedural HP bar shared by world/HUD. When enabled,
+    // world-space Shield is omitted while the personal cockpit Shield keeps the
+    // vanilla MAPMISC path. Missing/disabled HP keys keep vanilla HP/Shield.
+    static Common::Ini::Key GfxMeshHpBarEnable;
+    static Common::Ini::Key GfxMeshHpBarTint;
+    static Common::Ini::Key GfxMeshHpBarTargetTint;
+    static Common::Ini::Key GfxMeshHpBarEmptyTint;
+
     // OpenUA: global opt-in visual profiles for units currently under the same
     // regen/drain conditions used by the automatic Status Icons. A missing or
     // incomplete profile is disabled and never changes energy gameplay.

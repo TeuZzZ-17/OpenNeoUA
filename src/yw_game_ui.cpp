@@ -867,7 +867,135 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
     StatusIconRenderBlinkList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE, opacity);
 }
 
-static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile)
+struct YWProceduralStatusBarConfig
+{
+    bool hpEnabled = false;
+    GFX::TGLColor hpTint = GFX::TGLColor(0.0f, 217.0f / 255.0f, 81.0f / 255.0f, 1.0f);
+    GFX::TGLColor hpTargetTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 1.0f);
+    GFX::TGLColor hpEmptyTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 0.0f);
+};
+
+static GFX::TGLColor yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TGLColor &fallback)
+{
+    const std::vector<std::string> parts = Stok::Split(key.Get<std::string>(), "_, \t");
+    if ( parts.size() != 4 )
+        return fallback;
+
+    int component[4] = {0, 0, 0, 0};
+    try
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            size_t used = 0;
+            component[i] = std::stoi(parts[i], &used, 10);
+            if ( used != parts[i].size() || component[i] < 0 || component[i] > 255 )
+                return fallback;
+        }
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+
+    return GFX::TGLColor(component[0] / 255.0f, component[1] / 255.0f,
+                         component[2] / 255.0f, component[3] / 255.0f);
+}
+
+static const YWProceduralStatusBarConfig &yw_GetProceduralStatusBarConfig()
+{
+    static const YWProceduralStatusBarConfig config = []()
+    {
+        YWProceduralStatusBarConfig out;
+        out.hpEnabled = System::IniConf::GfxMeshHpBarEnable.Get<bool>();
+        out.hpTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarTint, out.hpTint);
+        out.hpTargetTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarTargetTint, out.hpTargetTint);
+        out.hpEmptyTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarEmptyTint, out.hpEmptyTint);
+        return out;
+    }();
+    return config;
+}
+
+static GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &targetTint,
+                                           const GFX::TGLColor &fullTint,
+                                           float ratio, uint8_t opacity)
+{
+    ratio = std::max(0.0f, std::min(1.0f, ratio));
+    const float opacityMul = opacity / 255.0f;
+    return GFX::TGLColor(targetTint.r + (fullTint.r - targetTint.r) * ratio,
+                         targetTint.g + (fullTint.g - targetTint.g) * ratio,
+                         targetTint.b + (fullTint.b - targetTint.b) * ratio,
+                         (targetTint.a + (fullTint.a - targetTint.a) * ratio) * opacityMul);
+}
+
+static void yw_QueueStatusBarRectClipped(float left, float top, float right, float bottom,
+                                         const GFX::TGLColor &color,
+                                         int excludeLeft = 0, int excludeTop = 0,
+                                         int excludeRight = 0, int excludeBottom = 0)
+{
+    if ( right <= left || bottom <= top || color.a <= 0.0f )
+        return;
+
+    const bool hasExcludeRect = excludeRight > excludeLeft && excludeBottom > excludeTop;
+    if ( !hasExcludeRect || bottom <= excludeTop || top >= excludeBottom ||
+         right <= excludeLeft || left >= excludeRight )
+    {
+        GFX::Engine.QueueVirtualUISolidRect(left, top, right, bottom, color);
+        return;
+    }
+
+    // Keep the same Tactical Map exclusion semantics without returning to a
+    // segmented bar: only the overlapping horizontal portion is omitted.
+    if ( left < excludeLeft )
+        GFX::Engine.QueueVirtualUISolidRect(left, top, std::min(right, (float)excludeLeft), bottom, color);
+    if ( right > excludeRight )
+        GFX::Engine.QueueVirtualUISolidRect(std::max(left, (float)excludeRight), top, right, bottom, color);
+}
+
+static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int value,
+                                      int maxValue, int cellWidth, int cellHeight,
+                                      uint8_t opacity,
+                                          bool hideFilled = false, bool hideEmpty = false,
+                                          int excludeLeft = 0, int excludeTop = 0,
+                                          int excludeRight = 0, int excludeBottom = 0)
+{
+    const YWProceduralStatusBarConfig &config = yw_GetProceduralStatusBarConfig();
+    if ( !config.hpEnabled || squareCount <= 0 || maxValue <= 0 ||
+         cellWidth <= 0 || cellHeight <= 0 )
+        return false;
+
+    value = std::max(0, std::min(value, maxValue));
+    const float ratio = (float)value / (float)maxValue;
+
+    const GFX::TGLColor &fullTint = config.hpTint;
+    const GFX::TGLColor &targetTint = config.hpTargetTint;
+    const GFX::TGLColor &emptyTint = config.hpEmptyTint;
+    const GFX::TGLColor activeTint = yw_StatusBarTintLerp(targetTint, fullTint, ratio, opacity);
+    GFX::TGLColor inactiveTint = emptyTint;
+    inactiveTint.a *= opacity / 255.0f;
+
+    // Keep the V2 50% vertical thickness, but render the bar as one continuous
+    // filled strip instead of reproducing the old MAPMISC segmented glyphs.
+    const int meshHeight = std::max(1, cellHeight / 2);
+    const int meshTop = top + (cellHeight - meshHeight) / 2;
+    const float barLeft = (float)left;
+    const float barRight = (float)(left + squareCount * cellWidth);
+    const float barBottom = (float)(meshTop + meshHeight);
+    const float activeRight = barLeft + (barRight - barLeft) * ratio;
+
+    if ( !hideEmpty )
+        yw_QueueStatusBarRectClipped(barLeft, (float)meshTop, barRight, barBottom,
+                                     inactiveTint, excludeLeft, excludeTop,
+                                     excludeRight, excludeBottom);
+
+    if ( !hideFilled && activeRight > barLeft )
+        yw_QueueStatusBarRectClipped(barLeft, (float)meshTop, activeRight, barBottom,
+                                     activeTint, excludeLeft, excludeTop,
+                                     excludeRight, excludeBottom);
+
+    return true;
+}
+
+static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile, uint8_t opacity = 255)
 {
     if ( !yw || !cur || squareCount <= 0 || maxValue <= 0 )
         return;
@@ -876,6 +1004,18 @@ static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int le
         value = 0;
     else if ( value > maxValue )
         value = maxValue;
+
+    const bool isHpBar = filledTile == 2 && emptyTile == 6;
+    // The procedural path covers HP only. With HP mesh enabled, the world-space
+    // Shield row is intentionally omitted; the personal cockpit Shield remains
+    // on the classic MAPMISC squares through sub_4E4F80().
+    if ( isHpBar &&
+         yw_RenderProceduralHpBar(left, top, squareCount, value, maxValue,
+                                   yw->_guiTiles[50]->map[0].w, yw->_guiTiles[50]->h,
+                                   opacity) )
+    {
+        return;
+    }
 
     FontUA::select_tileset(cur, 50);
     FontUA::set_center_xpos(cur, left - (yw->_screenSize.x / 2) );
@@ -12601,11 +12741,28 @@ void sub_4E4F80(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float x, f
     int v29 = v51 + (yw->_guiTiles[51]->map[1].w / 2);
     int v30 = v50 + (yw->_guiTiles[51]->h >> 1);
 
+    const bool isHpBar = valCH == 2 && valBG == 6;
+    bool useProceduralStatusBar = false;
+    if ( isHpBar )
+    {
+        const int barLeft = (yw->_screenSize.x / 2) + v51;
+        const int barTop = (yw->_screenSize.y / 2) + v50 - (yw->_guiTiles[51]->h / 2);
+        useProceduralStatusBar = yw_RenderProceduralHpBar(
+                                     barLeft, barTop, wis->field_9E, value, maxval,
+                                     yw->_guiTiles[51]->map[1].w, yw->_guiTiles[51]->h,
+                                     255,
+                                     (flag & 1) != 0, (flag & 2) != 0,
+                                     wnd_vis ? robo_map.x : 0, wnd_vis ? robo_map.y : 0,
+                                     wnd_vis ? robo_map.x + robo_map.w : 0,
+                                     wnd_vis ? robo_map.y + robo_map.h : 0);
+    }
+
     for (int i = 1; i <= wis->field_9E; i++)
     {
         int v35 = i * (maxval / wis->field_9E) - (maxval / wis->field_9E) / 2;
 
-        if ( !wnd_vis || v29 <= wnd_xpos || v29 >= wnd_xpos2 || v30 <= wnd_ypos || v30 >= wnd_ypos2 )
+        if ( (!wnd_vis || v29 <= wnd_xpos || v29 >= wnd_xpos2 || v30 <= wnd_ypos || v30 >= wnd_ypos2) &&
+             !useProceduralStatusBar )
         {
             if ( v35 > value )
             {
@@ -12674,7 +12831,8 @@ void yw_RenderInfoShieldbar(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
     else
         v10 = vhcl->shield;
 
-    sub_4E4F80(yw, wis, cur, xpos, ypos, v10, 100, 1, 5, Locale::Text::HUD(Locale::HUDSTR_AMR), fmt::sprintf("%d%%", v10), 2);
+    sub_4E4F80(yw, wis, cur, xpos, ypos, v10, 100, 1, 5,
+               Locale::Text::HUD(Locale::HUDSTR_AMR), fmt::sprintf("%d%%", v10), 2);
 }
 
 
@@ -13767,6 +13925,9 @@ void yw_RenderHUDVectorGFX(NC_STACK_ypaworld *yw, CmdStream *cur)
 
     GFX::Engine.raster_func221(v7);
 
+    // Keep the complete left cockpit information cluster continuously visible.
+    // The procedural HP bar changes tint with health but never adds a custom
+    // pulse/blink; reticle, targeting and the vanilla HUD cadence stay untouched.
     yw_RenderHUDInfo(yw, wis, cur, -0.7, 0.3, yw->_userUnit, -1, 0x10);
 
     if ( robo_map.IsOpen() )
@@ -14030,8 +14191,9 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                 v41 -= (yw->_guiTiles[50]->h / 2) + (yw->_screenSize.y / 16);
 
                 int barHeight = yw->_guiTiles[50]->h;
+                const bool hideWorldShield = yw_GetProceduralStatusBarConfig().hpEnabled;
                 int shieldTop = v41;
-                int lifeTop = shieldTop - barHeight - 1;
+                int lifeTop = hideWorldShield ? shieldTop : shieldTop - barHeight - 1;
 
                 if ( v42 >= 0 )
                 {
@@ -14040,8 +14202,9 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                         if ( barHeight + shieldTop < yw->_screenSize.y )
                         {
                             FontUA::set_opacity(cur, worldUiOpacity);
-                            yw_RenderUnitSquareBar(yw, cur, v42, lifeTop, v13, bact->_energy, bact->_energy_max, 2, 6);
-                            yw_RenderUnitSquareBar(yw, cur, v42, shieldTop, v13, (int)bact->GetEffectiveShield(), 100, 1, 5);
+                            yw_RenderUnitSquareBar(yw, cur, v42, lifeTop, v13, bact->_energy, bact->_energy_max, 2, 6, worldUiOpacity);
+                            if ( !hideWorldShield )
+                                yw_RenderUnitSquareBar(yw, cur, v42, shieldTop, v13, (int)bact->GetEffectiveShield(), 100, 1, 5, worldUiOpacity);
 
                             int statusAnchorTop = lifeTop;
                             int mortarCooldownTop = lifeTop - barHeight - 1;
@@ -14477,6 +14640,8 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
         }
         else
         {
+            // Keep the original health-driven cockpit colour cycle unchanged.
+            // The procedural HP bar itself does not pulse or blink.
             yw->_hud.field_82 = 3000 * yw->_userUnit->_energy / yw->_userUnit->_energy_max;
 
             if ( yw->_hud.field_82 < 200 )
