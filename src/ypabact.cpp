@@ -6670,7 +6670,11 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
         _status_flg &= ~(BACT_STFLAG_APPROACH | BACT_STFLAG_ATTACK);
     }
 
-    if ( _status_flg & BACT_STFLAG_FIRE )
+    // The vanilla sector path always stopped FIRE here because MGUNs could not
+    // attack sectors. OpenUA can now keep a legacy vehicle MGUN firing at a
+    // sector, so only stop the loop immediately when the AI is no longer in
+    // the fight state. TA_FIGHT handles its own MGUN stop below.
+    if ( _atk_ret != TA_FIGHT && (_status_flg & BACT_STFLAG_FIRE) )
     {
         setState_msg arg78;
         arg78.unsetFlags = BACT_STFLAG_FIRE;
@@ -6883,6 +6887,15 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                 arg105.field_10 = _clock;
                 arg105.field_0 = minigunDir;
                 FireMinigun(&arg105);
+            }
+            else if ( !UsesVehicleMinigunTiming() && (_status_flg & BACT_STFLAG_FIRE) )
+            {
+                setState_msg arg78;
+                arg78.setFlags = 0;
+                arg78.newStatus = BACT_STATUS_NOPE;
+                arg78.unsetFlags = BACT_STFLAG_FIRE;
+
+                SetState(&arg78);
             }
         }
         break;

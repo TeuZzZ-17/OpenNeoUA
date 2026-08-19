@@ -53,6 +53,10 @@ struct TWeaponTracerConfig
     TVisualTint tint;
     float size_z = 300.0f;
     float size_x = 3.0f;
+    // Tracer geometry always uses crossed ribbons. Topology is intentionally
+    // fixed so data only controls dimensions/effects, not parallel render paths.
+    bool has_size_y = false;
+    float size_y = 0.0f;
     vec3d pos = vec3d(0.0, 0.0, 0.0);
 
     bool has_tint_head = false;
@@ -60,24 +64,43 @@ struct TWeaponTracerConfig
     TVisualTint tint_head;
     TVisualTint tint_tail;
 
-    bool has_size_x_head = false;
-    bool has_size_x_tail = false;
-    float size_x_head = 0.0f;
-    float size_x_tail = 0.0f;
+    // Endpoint size overrides are uniform across the transverse X/Y section.
+    // Longitudinal extent remains owned exclusively by size_z. This preserves
+    // continuous tracer geometry and avoids the gaps caused by scaling each
+    // sampled segment's Z length independently.
+    bool has_head_size = false;
+    bool has_tail_size = false;
+    float head_size = 0.0f;
+    float tail_size = 0.0f;
 
     float glow_rate = 0.0f;
     float noise_rate = 0.0f;
     float pulse_rate = 0.0f;
     float pulse_speed = 0.0f;
 
+    float ResolveSizeY() const
+    {
+        return has_size_y ? size_y : size_x;
+    }
+
     float ResolveHeadSizeX() const
     {
-        return has_size_x_head ? size_x_head : size_x;
+        return has_head_size ? head_size : size_x;
     }
 
     float ResolveTailSizeX() const
     {
-        return has_size_x_tail ? size_x_tail : size_x;
+        return has_tail_size ? tail_size : size_x;
+    }
+
+    float ResolveHeadSizeY() const
+    {
+        return has_head_size ? head_size : ResolveSizeY();
+    }
+
+    float ResolveTailSizeY() const
+    {
+        return has_tail_size ? tail_size : ResolveSizeY();
     }
 
     TWeaponTracerConfig()
