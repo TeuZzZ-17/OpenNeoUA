@@ -492,6 +492,8 @@ void NC_STACK_ypamissile::ConfigureWeaponTracer(
     _weaponTracer.enabled = supported && config.enabled &&
                             std::isfinite(config.size_z) && config.size_z > 0.01f &&
                             std::isfinite(config.size_x) && config.size_x > 0.01f &&
+                            std::isfinite(config.ResolveSizeY()) &&
+                            config.ResolveSizeY() >= 0.0f &&
                             ypamissile_WeaponTracerFinite(config.pos) &&
                             ypamissile_WeaponTracerFinite(config.tint) &&
                             config.tint.a > 0.0f;
