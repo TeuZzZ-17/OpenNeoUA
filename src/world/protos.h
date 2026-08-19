@@ -832,6 +832,9 @@ struct TWeapProto
     std::string name;
     int16_t vp_normal = 0;
     int16_t vp_fire = 0;
+    // OpenUA custom, Weapon-side: when this Weapon is fired, the carrier
+    // temporarily uses its own Vehicle vp_fire. Missing/0 keeps vanilla behavior.
+    bool weapon_use_vehicle_vp_fire = false;
     int16_t vp_dead = 0;
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
