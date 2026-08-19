@@ -231,13 +231,9 @@ public:
     static Common::Ini::Key GameSprintForceUpPercent;
     static Common::Ini::Key GameSprintPitchUpPercent;
     static Common::Ini::Key GameSprintRampTime;
-    static Common::Ini::Key GameShootingEnergyCostPercent;
-    static Common::Ini::Key GameMgunEnergyCostPercent;
+    static Common::Ini::Key GameWeaponEnergyCostPercent;
     static Common::Ini::Key GameSprintEnergyCostPercent;
-    static Common::Ini::Key GameLaserEnergyCostPercent;
-    static Common::Ini::Key GameMgunEnergyDrainIntervalMs;
     static Common::Ini::Key GameSprintEnergyDrainIntervalMs;
-    static Common::Ini::Key GameLaserEnergyDrainIntervalMs;
     static Common::Ini::Key GameTimeLine;
     static Common::Ini::Key GameRoboPlayerAIBehavior;
     static Common::Ini::Key GameRoboMobileMoveEnergyCostMultiplier;
