@@ -1464,7 +1464,8 @@ struct TGemNotificationEntry
         CHANGE_ENERGY_ZEPPELIN,
         CHANGE_ENERGY_UFO,
         CHANGE_ENERGY_CAR,
-        CHANGE_ENERGY_GUN
+        CHANGE_ENERGY_GUN,
+        CHANGE_ENERGY_CRUISER
     };
 
     uint8_t TargetKind = TARGET_VEHICLE;

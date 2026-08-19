@@ -3593,12 +3593,13 @@ static std::string db_vehicle_model_display_name(const World::TVhclProto &p)
             return "missile";
         case BACT_TYPES_FLYER:
         {
-            // Several original script models share the same runtime class.
+            // Several script-facing models share the same runtime class.
             // Show the script-facing model name, not the internal class name
             // "flyer", because "flyer" is not a real SCR model keyword.
             switch ( db_vehicle_flyer_type(p) )
             {
                 case 0: return "zeppelin";
+                case 1: return "cruiser";
                 case 2: return "glider";
                 case 3: return "plane";
                 default:return "plane";
@@ -3685,7 +3686,8 @@ static bool db_vehicle_has_job_stats(const World::TVhclProto &p)
 {
     return p.job_fightrobo_defined || p.job_fighttank_defined ||
            p.job_fightflyer_defined || p.job_fighthelicopter_defined ||
-           p.job_fightplane_defined || p.job_fightglider_defined ||
+           p.job_fightplane_defined || p.job_fightcruiser_defined ||
+           p.job_fightglider_defined ||
            p.job_fightzeppelin_defined || p.job_fightufo_defined ||
            p.job_fightcar_defined || p.job_fightgun_defined ||
            p.job_conquer_defined || p.job_reconnoitre_defined;
@@ -3733,24 +3735,26 @@ static void db_add_vehicle_job_lines(std::vector<std::string> *lines,
             Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_vehicle_job_stars(planeJob), planeDefined,
             Locale::Text::OpenUA(Locale::OUA_DB_HELIS), db_vehicle_job_stars(p.job_fighthelicopter), p.job_fighthelicopter_defined));
     }
-    if ( (p.job_fightglider_defined || p.job_fightzeppelin_defined) &&
+    if ( (p.job_fightcruiser_defined || p.job_fightglider_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), db_vehicle_job_stars(p.job_fightglider), p.job_fightglider_defined,
-            Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), db_vehicle_job_stars(p.job_fightzeppelin), p.job_fightzeppelin_defined));
+            Locale::Text::OpenUA(Locale::OUA_VS_CRUISER), db_vehicle_job_stars(p.job_fightcruiser), p.job_fightcruiser_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), db_vehicle_job_stars(p.job_fightglider), p.job_fightglider_defined));
     }
-    if ( (p.job_fightufo_defined || p.job_fightcar_defined) &&
+    if ( (p.job_fightzeppelin_defined || p.job_fightufo_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            Locale::Text::OpenUA(Locale::OUA_VS_UFO), db_vehicle_job_stars(p.job_fightufo), p.job_fightufo_defined,
-            Locale::Text::OpenUA(Locale::OUA_VS_CAR), db_vehicle_job_stars(p.job_fightcar), p.job_fightcar_defined));
+            Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), db_vehicle_job_stars(p.job_fightzeppelin), p.job_fightzeppelin_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_UFO), db_vehicle_job_stars(p.job_fightufo), p.job_fightufo_defined));
     }
-    if ( p.job_fightgun_defined && (int)lines->size() < maxLines )
+    if ( (p.job_fightcar_defined || p.job_fightgun_defined) &&
+         (int)lines->size() < maxLines )
     {
-        lines->push_back(Locale::Text::OpenUA(Locale::OUA_VS_GUN) + ": " +
-                         db_vehicle_job_stars(p.job_fightgun));
+        lines->push_back(db_compact_pair_line(
+            Locale::Text::OpenUA(Locale::OUA_VS_CAR), db_vehicle_job_stars(p.job_fightcar), p.job_fightcar_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_GUN), db_vehicle_job_stars(p.job_fightgun), p.job_fightgun_defined));
     }
     if ( (p.job_conquer_defined || p.job_reconnoitre_defined) &&
          (int)lines->size() < maxLines )
@@ -3765,7 +3769,8 @@ static bool db_weapon_has_energy_multipliers(const World::TWeapProto &p)
 {
     return p.energy_robo_defined || p.energy_tank_defined ||
            p.energy_flyer_defined || p.energy_heli_defined ||
-           p.energy_plane_defined || p.energy_glider_defined ||
+           p.energy_plane_defined || p.energy_cruiser_defined ||
+           p.energy_glider_defined ||
            p.energy_zeppelin_defined || p.energy_ufo_defined ||
            p.energy_car_defined || p.energy_gun_defined;
 }
@@ -3807,24 +3812,26 @@ static void db_add_weapon_energy_lines(std::vector<std::string> *lines,
             Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_weapon_energy_stars(planeEnergy), planeDefined,
             Locale::Text::OpenUA(Locale::OUA_DB_HELIS), db_weapon_energy_stars(p.energy_heli), p.energy_heli_defined));
     }
-    if ( (p.energy_glider_defined || p.energy_zeppelin_defined) &&
+    if ( (p.energy_cruiser_defined || p.energy_glider_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), db_weapon_energy_stars(p.energy_glider), p.energy_glider_defined,
-            Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), db_weapon_energy_stars(p.energy_zeppelin), p.energy_zeppelin_defined));
+            Locale::Text::OpenUA(Locale::OUA_VS_CRUISER), db_weapon_energy_stars(p.energy_cruiser), p.energy_cruiser_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), db_weapon_energy_stars(p.energy_glider), p.energy_glider_defined));
     }
-    if ( (p.energy_ufo_defined || p.energy_car_defined) &&
+    if ( (p.energy_zeppelin_defined || p.energy_ufo_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            Locale::Text::OpenUA(Locale::OUA_VS_UFO), db_weapon_energy_stars(p.energy_ufo), p.energy_ufo_defined,
-            Locale::Text::OpenUA(Locale::OUA_VS_CAR), db_weapon_energy_stars(p.energy_car), p.energy_car_defined));
+            Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), db_weapon_energy_stars(p.energy_zeppelin), p.energy_zeppelin_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_UFO), db_weapon_energy_stars(p.energy_ufo), p.energy_ufo_defined));
     }
-    if ( p.energy_gun_defined && (int)lines->size() < maxLines )
+    if ( (p.energy_car_defined || p.energy_gun_defined) &&
+         (int)lines->size() < maxLines )
     {
-        lines->push_back(Locale::Text::OpenUA(Locale::OUA_VS_GUN) + ": " +
-                         db_weapon_energy_stars(p.energy_gun));
+        lines->push_back(db_compact_pair_line(
+            Locale::Text::OpenUA(Locale::OUA_VS_CAR), db_weapon_energy_stars(p.energy_car), p.energy_car_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_GUN), db_weapon_energy_stars(p.energy_gun), p.energy_gun_defined));
     }
 }
 

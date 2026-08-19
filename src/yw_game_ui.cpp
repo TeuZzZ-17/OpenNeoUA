@@ -6327,6 +6327,7 @@ void ypaworld_func64__sub7__sub2__sub1__sub0(NC_STACK_ypaworld *yw, CmdStream *c
             const int vsTank = jobMarkers(v4->job_fighttank);
             const int vsPlane = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_PLANE, v4->job_fightflyer));
             const int vsHeli = jobMarkers(v4->job_fighthelicopter);
+            const int vsCruiser = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_CRUISER, v4->job_fightflyer));
             const int vsGlider = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_GLIDER, v4->job_fightflyer));
             const int vsZeppelin = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_ZEPPELIN, v4->job_fightflyer));
             const int vsUfo = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_UFO, v4->job_fightflyer));
@@ -6338,7 +6339,8 @@ void ypaworld_func64__sub7__sub2__sub1__sub0(NC_STACK_ypaworld *yw, CmdStream *c
             const int capture = jobMarkers(v4->job_conquer);
             const int recon = jobMarkers(v4->job_reconnoitre);
             const bool hasFineJobs =
-                v4->job_fightplane_defined || v4->job_fightglider_defined ||
+                v4->job_fightplane_defined || v4->job_fightcruiser_defined ||
+                v4->job_fightglider_defined ||
                 v4->job_fightzeppelin_defined || v4->job_fightufo_defined ||
                 v4->job_fightcar_defined || v4->job_fightgun_defined;
 
@@ -6347,8 +6349,8 @@ void ypaworld_func64__sub7__sub2__sub1__sub0(NC_STACK_ypaworld *yw, CmdStream *c
 
             // Legacy-only Vehicle data keeps the original six-row layout
             // exactly. As soon as any fine job is authored, expose the extended
-            // eleven-row class view (five additional specific combat classes).
-            int v30 = -(yw->_downScreenBorder + (hasFineJobs ? 12 : 7) * yw->_fontH);
+            // twelve-row class view (six additional specific combat classes).
+            int v30 = -(yw->_downScreenBorder + (hasFineJobs ? 13 : 7) * yw->_fontH);
 
             const SDL_Color factionTextColor = yw_GetFactionUiTextColor(yw);
             FontUA::set_txtColor(cur, factionTextColor.r,
@@ -6365,6 +6367,8 @@ void ypaworld_func64__sub7__sub2__sub1__sub0(NC_STACK_ypaworld *yw, CmdStream *c
 
             if ( hasFineJobs )
             {
+                sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_CRUISER), vsCruiser, v6);
+                v30 += yw->_fontH;
                 sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), vsGlider, v6);
                 v30 += yw->_fontH;
                 sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), vsZeppelin, v6);
@@ -13326,6 +13330,9 @@ static std::string yw_GemCategoryLabel(const TGemNotificationEntry &entry)
 
     case TGemNotificationEntry::CHANGE_ENERGY_GUN:
         return Locale::Text::OpenUA(Locale::OUA_GEM_GUN_DAMAGE_UPGRADE);
+
+    case TGemNotificationEntry::CHANGE_ENERGY_CRUISER:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_CRUISER_DAMAGE_UPGRADE);
 
     default:
         return std::string();
