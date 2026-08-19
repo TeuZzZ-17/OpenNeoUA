@@ -2692,7 +2692,6 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
                     curUnit->_bact_type != BACT_TYPES_TANK &&
                     curUnit->_bact_type != BACT_TYPES_CAR &&
                     curUnit->_bact_type != BACT_TYPES_GUN &&
-                    curUnit->_bact_type != BACT_TYPES_HOVER &&
                     !(curUnit->_status_flg & BACT_STFLAG_DEATH2) &&
                     curUnit->_owner == yw->_userRobo->_owner &&
                     !(impMsg->p[0] && yw_netHasPushResistance(yw, curUnit)))

@@ -3610,8 +3610,6 @@ static std::string db_vehicle_model_display_name(const World::TVhclProto &p)
             return "car";
         case BACT_TYPES_GUN:
             return "gun";
-        case BACT_TYPES_HOVER:
-            return "hover";
         default:
             return "unknown";
     }
@@ -3687,6 +3685,9 @@ static bool db_vehicle_has_job_stats(const World::TVhclProto &p)
 {
     return p.job_fightrobo_defined || p.job_fighttank_defined ||
            p.job_fightflyer_defined || p.job_fighthelicopter_defined ||
+           p.job_fightplane_defined || p.job_fightglider_defined ||
+           p.job_fightzeppelin_defined || p.job_fightufo_defined ||
+           p.job_fightcar_defined || p.job_fightgun_defined ||
            p.job_conquer_defined || p.job_reconnoitre_defined;
 }
 
@@ -3723,12 +3724,33 @@ static void db_add_vehicle_job_lines(std::vector<std::string> *lines,
             Locale::Text::OpenUA(Locale::OUA_DB_VS_HOST), db_vehicle_job_stars(p.job_fightrobo), p.job_fightrobo_defined,
             Locale::Text::OpenUA(Locale::OUA_DB_TANKS), db_vehicle_job_stars(p.job_fighttank), p.job_fighttank_defined));
     }
-    if ( (p.job_fightflyer_defined || p.job_fighthelicopter_defined) &&
+    const bool planeDefined = p.job_fightplane_defined || p.job_fightflyer_defined;
+    const int planeJob = p.job_fightplane_defined ? p.job_fightplane : p.job_fightflyer;
+    if ( (planeDefined || p.job_fighthelicopter_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_vehicle_job_stars(p.job_fightflyer), p.job_fightflyer_defined,
+            Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_vehicle_job_stars(planeJob), planeDefined,
             Locale::Text::OpenUA(Locale::OUA_DB_HELIS), db_vehicle_job_stars(p.job_fighthelicopter), p.job_fighthelicopter_defined));
+    }
+    if ( (p.job_fightglider_defined || p.job_fightzeppelin_defined) &&
+         (int)lines->size() < maxLines )
+    {
+        lines->push_back(db_compact_pair_line(
+            Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), db_vehicle_job_stars(p.job_fightglider), p.job_fightglider_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), db_vehicle_job_stars(p.job_fightzeppelin), p.job_fightzeppelin_defined));
+    }
+    if ( (p.job_fightufo_defined || p.job_fightcar_defined) &&
+         (int)lines->size() < maxLines )
+    {
+        lines->push_back(db_compact_pair_line(
+            Locale::Text::OpenUA(Locale::OUA_VS_UFO), db_vehicle_job_stars(p.job_fightufo), p.job_fightufo_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_CAR), db_vehicle_job_stars(p.job_fightcar), p.job_fightcar_defined));
+    }
+    if ( p.job_fightgun_defined && (int)lines->size() < maxLines )
+    {
+        lines->push_back(Locale::Text::OpenUA(Locale::OUA_VS_GUN) + ": " +
+                         db_vehicle_job_stars(p.job_fightgun));
     }
     if ( (p.job_conquer_defined || p.job_reconnoitre_defined) &&
          (int)lines->size() < maxLines )
@@ -3742,7 +3764,10 @@ static void db_add_vehicle_job_lines(std::vector<std::string> *lines,
 static bool db_weapon_has_energy_multipliers(const World::TWeapProto &p)
 {
     return p.energy_robo_defined || p.energy_tank_defined ||
-           p.energy_flyer_defined || p.energy_heli_defined;
+           p.energy_flyer_defined || p.energy_heli_defined ||
+           p.energy_plane_defined || p.energy_glider_defined ||
+           p.energy_zeppelin_defined || p.energy_ufo_defined ||
+           p.energy_car_defined || p.energy_gun_defined;
 }
 
 static std::string db_weapon_energy_stars(float value)
@@ -3773,12 +3798,33 @@ static void db_add_weapon_energy_lines(std::vector<std::string> *lines,
             Locale::Text::OpenUA(Locale::OUA_DB_VS_HOST), db_weapon_energy_stars(p.energy_robo), p.energy_robo_defined,
             Locale::Text::OpenUA(Locale::OUA_DB_TANKS), db_weapon_energy_stars(p.energy_tank), p.energy_tank_defined));
     }
-    if ( (p.energy_flyer_defined || p.energy_heli_defined) &&
+    const bool planeDefined = p.energy_plane_defined || p.energy_flyer_defined;
+    const float planeEnergy = p.energy_plane_defined ? p.energy_plane : p.energy_flyer;
+    if ( (planeDefined || p.energy_heli_defined) &&
          (int)lines->size() < maxLines )
     {
         lines->push_back(db_compact_pair_line(
-            Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_weapon_energy_stars(p.energy_flyer), p.energy_flyer_defined,
+            Locale::Text::OpenUA(Locale::OUA_DB_VS_PLANES), db_weapon_energy_stars(planeEnergy), planeDefined,
             Locale::Text::OpenUA(Locale::OUA_DB_HELIS), db_weapon_energy_stars(p.energy_heli), p.energy_heli_defined));
+    }
+    if ( (p.energy_glider_defined || p.energy_zeppelin_defined) &&
+         (int)lines->size() < maxLines )
+    {
+        lines->push_back(db_compact_pair_line(
+            Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), db_weapon_energy_stars(p.energy_glider), p.energy_glider_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), db_weapon_energy_stars(p.energy_zeppelin), p.energy_zeppelin_defined));
+    }
+    if ( (p.energy_ufo_defined || p.energy_car_defined) &&
+         (int)lines->size() < maxLines )
+    {
+        lines->push_back(db_compact_pair_line(
+            Locale::Text::OpenUA(Locale::OUA_VS_UFO), db_weapon_energy_stars(p.energy_ufo), p.energy_ufo_defined,
+            Locale::Text::OpenUA(Locale::OUA_VS_CAR), db_weapon_energy_stars(p.energy_car), p.energy_car_defined));
+    }
+    if ( p.energy_gun_defined && (int)lines->size() < maxLines )
+    {
+        lines->push_back(Locale::Text::OpenUA(Locale::OUA_VS_GUN) + ": " +
+                         db_weapon_energy_stars(p.energy_gun));
     }
 }
 

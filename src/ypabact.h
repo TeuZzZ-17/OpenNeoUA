@@ -222,8 +222,7 @@ enum BACT_TYPES
     BACT_TYPES_FLYER = 6,
     BACT_TYPES_UFO = 7,
     BACT_TYPES_CAR = 8,
-    BACT_TYPES_GUN = 9,
-    BACT_TYPES_HOVER = 10 //No real class
+    BACT_TYPES_GUN = 9
 };
 
 struct newMaster_msg

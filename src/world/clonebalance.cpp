@@ -123,7 +123,6 @@ bool IsCloneActor(const NC_STACK_ypabact *bact)
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
     case BACT_TYPES_GUN:
-    case BACT_TYPES_HOVER:
         return true;
 
     default:

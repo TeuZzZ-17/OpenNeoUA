@@ -2274,7 +2274,7 @@ void NC_STACK_ypaworld::FFeedback_VehicleChanged()
 
 NC_STACK_ypabact *NC_STACK_ypaworld::yw_createUnit( int model_id)
 {
-    std::array<const std::string, 11> unit_classes_names
+    std::array<const std::string, 10> unit_classes_names
     {
         "dummy.class",      // 0
         "ypabact.class",    // 1
@@ -2285,9 +2285,11 @@ NC_STACK_ypabact *NC_STACK_ypaworld::yw_createUnit( int model_id)
         "ypaflyer.class",   // 6
         "ypaufo.class",     // 7
         "ypacar.class",     // 8
-        "ypagun.class",     // 9
-        "ypahovercraft.class" //10
+        "ypagun.class"      // 9
     };
+
+    if ( model_id < 0 || (size_t)model_id >= unit_classes_names.size() )
+        return NULL;
 
     NC_STACK_ypabact *bacto = NULL;
 

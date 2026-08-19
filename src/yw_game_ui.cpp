@@ -6304,61 +6304,82 @@ void ypaworld_func64__sub7__sub2__sub1__sub0(NC_STACK_ypaworld *yw, CmdStream *c
         if ( bzda.field_8EC != -1 && !yw->_playerInHSGun )
         {
             World::TVhclProto *v4 = &yw->_vhclProtos[ bzda.field_2DC[ bzda.field_8EC ] ];
-            int a6 = v4->job_fighttank / 2;
-            int v26 = v4->job_fightflyer / 2;
-            int v25 = v4->job_fighthelicopter / 2;
-            int v28 = v4->job_conquer / 2;
-            int v5 = v4->job_fightrobo / 2;
-            int v29 = v4->job_reconnoitre / 2;
 
-            if ( !a6 )
-                a6 = 1;
+            auto resolvedJob = [v4](World::VehicleCombatClass targetClass, int legacyFallback)
+            {
+                int value = 0;
+                if ( World::TryGetSpecificFightJob(*v4, targetClass, &value) )
+                    return value;
+                return legacyFallback;
+            };
 
-            if ( !v5 )
-                v5 = 1;
+            auto jobMarkers = [](int value)
+            {
+                int markers = value / 2;
+                // Match the original UI exactly: only a literal zero becomes
+                // one visible marker; negative authored values remain non-drawing.
+                if ( !markers )
+                    markers = 1;
+                return markers;
+            };
 
-            if ( !v26 )
-                v26 = 1;
-
-            if ( !v25 )
-                v25 = 1;
-
-            if ( !v28 )
-                v28 = 1;
-
-            if ( !v29 )
-                v29 = 1;
+            const int vsRobo = jobMarkers(v4->job_fightrobo);
+            const int vsTank = jobMarkers(v4->job_fighttank);
+            const int vsPlane = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_PLANE, v4->job_fightflyer));
+            const int vsHeli = jobMarkers(v4->job_fighthelicopter);
+            const int vsGlider = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_GLIDER, v4->job_fightflyer));
+            const int vsZeppelin = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_ZEPPELIN, v4->job_fightflyer));
+            const int vsUfo = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_UFO, v4->job_fightflyer));
+            const int vsCar = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_CAR, v4->job_fighttank));
+            // Legacy Host Station deployment treated unrecognized Gun targets as
+            // the helicopter combat job; preserve that fallback until job_fightgun
+            // is explicitly authored.
+            const int vsGun = jobMarkers(resolvedJob(World::VEHICLE_COMBAT_CLASS_GUN, v4->job_fighthelicopter));
+            const int capture = jobMarkers(v4->job_conquer);
+            const int recon = jobMarkers(v4->job_reconnoitre);
+            const bool hasFineJobs =
+                v4->job_fightplane_defined || v4->job_fightglider_defined ||
+                v4->job_fightzeppelin_defined || v4->job_fightufo_defined ||
+                v4->job_fightcar_defined || v4->job_fightgun_defined;
 
             int v29_4 = 4 * yw->_screenSize.x / 7;
             int v6 = yw->_screenSize.x - v29_4;
 
-            int v30 = -(yw->_downScreenBorder + 7 * yw->_fontH);
+            // Legacy-only Vehicle data keeps the original six-row layout
+            // exactly. As soon as any fine job is authored, expose the extended
+            // eleven-row class view (five additional specific combat classes).
+            int v30 = -(yw->_downScreenBorder + (hasFineJobs ? 12 : 7) * yw->_fontH);
 
             const SDL_Color factionTextColor = yw_GetFactionUiTextColor(yw);
             FontUA::set_txtColor(cur, factionTextColor.r,
                                  factionTextColor.g, factionTextColor.b);
 
-            sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_VSROBO), v5, v6);
-
+            sub_449970(yw, cur, v29_4, v30, Locale::Text::Advanced(Locale::ADV_VSROBO), vsRobo, v6);
+            v30 += yw->_fontH;
+            sub_449970(yw, cur, v29_4, v30, Locale::Text::Advanced(Locale::ADV_VSTANK), vsTank, v6);
+            v30 += yw->_fontH;
+            sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_PLANE), vsPlane, v6);
+            v30 += yw->_fontH;
+            sub_449970(yw, cur, v29_4, v30, Locale::Text::Advanced(Locale::ADV_VSHELI), vsHeli, v6);
             v30 += yw->_fontH;
 
-            sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_VSTANK), a6, v6);
+            if ( hasFineJobs )
+            {
+                sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_GLIDER), vsGlider, v6);
+                v30 += yw->_fontH;
+                sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_ZEPPELIN), vsZeppelin, v6);
+                v30 += yw->_fontH;
+                sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_UFO), vsUfo, v6);
+                v30 += yw->_fontH;
+                sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_CAR), vsCar, v6);
+                v30 += yw->_fontH;
+                sub_449970(yw, cur, v29_4, v30, Locale::Text::OpenUA(Locale::OUA_VS_GUN), vsGun, v6);
+                v30 += yw->_fontH;
+            }
 
+            sub_449970(yw, cur, v29_4, v30, Locale::Text::Advanced(Locale::ADV_CAPTURE), capture, v6);
             v30 += yw->_fontH;
-
-            sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_VSPLANE), v26, v6);
-
-            v30 += yw->_fontH;
-
-            sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_VSHELI), v25, v6);
-
-            v30 += yw->_fontH;
-
-            sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_CAPTURE), v28, v6);
-
-            v30 += yw->_fontH;
-
-            sub_449970(yw, cur, v29_4, v30,  Locale::Text::Advanced(Locale::ADV_RECON), v29, v6);
+            sub_449970(yw, cur, v29_4, v30, Locale::Text::Advanced(Locale::ADV_RECON), recon, v6);
         }
     }
 }
@@ -13287,6 +13308,24 @@ static std::string yw_GemCategoryLabel(const TGemNotificationEntry &entry)
 
     case TGemNotificationEntry::CHANGE_ENERGY_ROBO:
         return Locale::Text::Gem(Locale::GEMSTR_ROBO_DAMAGE_UPGRADE);
+
+    case TGemNotificationEntry::CHANGE_ENERGY_PLANE:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_PLANE_DAMAGE_UPGRADE);
+
+    case TGemNotificationEntry::CHANGE_ENERGY_GLIDER:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_GLIDER_DAMAGE_UPGRADE);
+
+    case TGemNotificationEntry::CHANGE_ENERGY_ZEPPELIN:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_ZEPPELIN_DAMAGE_UPGRADE);
+
+    case TGemNotificationEntry::CHANGE_ENERGY_UFO:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_UFO_DAMAGE_UPGRADE);
+
+    case TGemNotificationEntry::CHANGE_ENERGY_CAR:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_CAR_DAMAGE_UPGRADE);
+
+    case TGemNotificationEntry::CHANGE_ENERGY_GUN:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_GUN_DAMAGE_UPGRADE);
 
     default:
         return std::string();

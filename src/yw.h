@@ -1457,7 +1457,14 @@ struct TGemNotificationEntry
         CHANGE_ENERGY_TANK,
         CHANGE_ENERGY_FLYER,
         CHANGE_ENERGY_ROBO,
-        CHANGE_UNHIDE_RADAR
+        // Keep every pre-existing numeric kind stable; new kinds are appended.
+        CHANGE_UNHIDE_RADAR,
+        CHANGE_ENERGY_PLANE,
+        CHANGE_ENERGY_GLIDER,
+        CHANGE_ENERGY_ZEPPELIN,
+        CHANGE_ENERGY_UFO,
+        CHANGE_ENERGY_CAR,
+        CHANGE_ENERGY_GUN
     };
 
     uint8_t TargetKind = TARGET_VEHICLE;
@@ -2497,7 +2504,7 @@ public:
     void SetFarView(bool farvw);
     void ApplyNucleusViewDistanceOverrides();
 
-    int TestVehicle(int protoID, int job);
+    int TestVehicle(int protoID, int job, NC_STACK_ypabact *target = NULL);
 
 
 //protected:

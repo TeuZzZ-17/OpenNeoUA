@@ -4,9 +4,138 @@
 #include "../log.h"
 #include "../wav.h"
 #include "../ypabact.h"
+#include "../yw.h"
 
 namespace World
 {
+VehicleCombatClass ResolveVehicleCombatClass(const NC_STACK_ypabact *unit)
+{
+    if ( !unit )
+        return VEHICLE_COMBAT_CLASS_UNKNOWN;
+
+    NC_STACK_ypabact *mutableUnit = const_cast<NC_STACK_ypabact *>(unit);
+    NC_STACK_ypaworld *world = mutableUnit->getBACT_pWorld();
+    if ( world )
+    {
+        const std::vector<TVhclProto> &protos = world->GetVhclProtos();
+        const uint8_t protoId = unit->_mimic_disguise_vehicleID
+                              ? unit->_mimic_disguise_vehicleID
+                              : unit->_vehicleID;
+        if ( protoId < protos.size() )
+        {
+            const VehicleCombatClass authored = protos.at(protoId).combat_class;
+            if ( authored != VEHICLE_COMBAT_CLASS_UNKNOWN )
+                return authored;
+        }
+    }
+
+    switch ( unit->_bact_type )
+    {
+    case BACT_TYPES_BACT: return VEHICLE_COMBAT_CLASS_HELI;
+    case BACT_TYPES_TANK: return VEHICLE_COMBAT_CLASS_TANK;
+    case BACT_TYPES_UFO:  return VEHICLE_COMBAT_CLASS_UFO;
+    case BACT_TYPES_CAR:  return VEHICLE_COMBAT_CLASS_CAR;
+    case BACT_TYPES_ROBO: return VEHICLE_COMBAT_CLASS_ROBO;
+    case BACT_TYPES_GUN:  return VEHICLE_COMBAT_CLASS_GUN;
+
+    // BACT_TYPES_FLYER cannot distinguish plane/glider/zeppelin, while the
+    // the legacy ZEPP value is explicitly marked as having no real class.
+    // Real scripted vehicles are resolved from their authored prototype above;
+    // untyped/helper actors stay UNKNOWN instead of receiving a false matchup.
+    default:              return VEHICLE_COMBAT_CLASS_UNKNOWN;
+    }
+}
+
+bool TryGetSpecificFightJob(const TVhclProto &proto,
+                            VehicleCombatClass targetClass,
+                            int *outValue)
+{
+    int value = 0;
+    bool defined = false;
+
+    switch ( targetClass )
+    {
+    case VEHICLE_COMBAT_CLASS_PLANE:
+        value = proto.job_fightplane;
+        defined = proto.job_fightplane_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_GLIDER:
+        value = proto.job_fightglider;
+        defined = proto.job_fightglider_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_ZEPPELIN:
+        value = proto.job_fightzeppelin;
+        defined = proto.job_fightzeppelin_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_UFO:
+        value = proto.job_fightufo;
+        defined = proto.job_fightufo_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_CAR:
+        value = proto.job_fightcar;
+        defined = proto.job_fightcar_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_GUN:
+        value = proto.job_fightgun;
+        defined = proto.job_fightgun_defined;
+        break;
+    default:
+        break;
+    }
+
+    if ( !defined )
+        return false;
+
+    if ( outValue )
+        *outValue = value;
+    return true;
+}
+
+bool TryGetSpecificWeaponEnergy(const TWeapProto &proto,
+                                VehicleCombatClass targetClass,
+                                float *outValue)
+{
+    float value = 1.0f;
+    bool defined = false;
+
+    switch ( targetClass )
+    {
+    case VEHICLE_COMBAT_CLASS_PLANE:
+        value = proto.energy_plane;
+        defined = proto.energy_plane_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_GLIDER:
+        value = proto.energy_glider;
+        defined = proto.energy_glider_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_ZEPPELIN:
+        value = proto.energy_zeppelin;
+        defined = proto.energy_zeppelin_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_UFO:
+        value = proto.energy_ufo;
+        defined = proto.energy_ufo_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_CAR:
+        value = proto.energy_car;
+        defined = proto.energy_car_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_GUN:
+        value = proto.energy_gun;
+        defined = proto.energy_gun_defined;
+        break;
+    default:
+        break;
+    }
+
+    if ( !defined )
+        return false;
+
+    if ( outValue )
+        *outValue = value;
+    return true;
+}
+
 static int SampleFrameSize(ALenum format)
 {
     switch (format)
