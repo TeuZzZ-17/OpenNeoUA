@@ -267,28 +267,17 @@ Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_abo
 Common::Ini::Key IniConf::GameSprintForceUpPercent("game.sprint_force_up_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintPitchUpPercent("game.sprint_pitch_up_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
-// OpenUA custom: percentage of the unit's maximum energy spent by one normal
-// projectile firing action. Missing or invalid keeps the existing cost.
-Common::Ini::Key IniConf::GameShootingEnergyCostPercent("game.shooting_energy_cost_percent", Common::Ini::KT_WORD, std::string());
-// OpenUA custom: percentage of the unit's maximum energy spent per second while
-// a MGUN is firing. Missing or invalid keeps the existing continuous cost.
-Common::Ini::Key IniConf::GameMgunEnergyCostPercent("game.mgun_energy_cost_percent", Common::Ini::KT_WORD, std::string());
+// OpenUA custom: one shared percentage of nominal weapon damage converted into
+// shooter-side energy cost for normal projectiles, MGUNs, laser and vertical_laser.
+// 0 disables the configured drain; missing or invalid preserves each weapon type's
+// previous fallback. The shooter's effective shield attenuates the final cost.
+Common::Ini::Key IniConf::GameWeaponEnergyCostPercent("game.weapon_energy_cost_percent", Common::Ini::KT_WORD, std::string());
 // OpenUA custom: percentage of the unit's maximum energy consumed per second
 // while player Sprint is active. Zero keeps Sprint free.
 Common::Ini::Key IniConf::GameSprintEnergyCostPercent("game.sprint_energy_cost_percent", Common::Ini::KT_WORD, std::string("0"));
-// OpenUA custom: percentage of the unit's maximum energy spent per second while
-// a continuous laser or vertical laser is firing. Missing or invalid keeps the
-// current laser behavior, which has no shooter-side energy cost.
-Common::Ini::Key IniConf::GameLaserEnergyCostPercent("game.laser_energy_cost_percent", Common::Ini::KT_WORD, std::string());
-// OpenUA custom: application interval for continuous MGUN energy drain.
-// Zero applies the accumulated drain as soon as a whole energy unit is ready.
-Common::Ini::Key IniConf::GameMgunEnergyDrainIntervalMs("game.mgun_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
 // OpenUA custom: application interval for continuous Sprint energy drain.
 // Zero applies the accumulated drain as soon as a whole energy unit is ready.
 Common::Ini::Key IniConf::GameSprintEnergyDrainIntervalMs("game.sprint_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
-// OpenUA custom: application interval for continuous laser energy drain.
-// Zero applies the accumulated drain as soon as a whole energy unit is ready.
-Common::Ini::Key IniConf::GameLaserEnergyDrainIntervalMs("game.laser_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameTimeLine("game.timeline", Common::Ini::KT_DIGIT, (int32_t)600000);
 Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior", Common::Ini::KT_BOOL, false);
 // OpenUA custom: independent multipliers for the three Host Station resources
@@ -657,13 +646,9 @@ void IniConf::Init()
         , &GameSprintForceUpPercent
         , &GameSprintPitchUpPercent
         , &GameSprintRampTime
-        , &GameShootingEnergyCostPercent
-        , &GameMgunEnergyCostPercent
+        , &GameWeaponEnergyCostPercent
         , &GameSprintEnergyCostPercent
-        , &GameLaserEnergyCostPercent
-        , &GameMgunEnergyDrainIntervalMs
         , &GameSprintEnergyDrainIntervalMs
-        , &GameLaserEnergyDrainIntervalMs
         , &GameTimeLine
         , &GameRoboPlayerAIBehavior
         , &GameRoboMobileMoveEnergyCostMultiplier

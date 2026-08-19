@@ -514,7 +514,7 @@ public:
     void UpdateVerticalLaser(update_msg *arg); // OpenUA custom: model = vertical_laser downward beam
     void RequestVerticalLaserFire(int weaponId, bact_arg79 *arg);
     void StopVerticalLaser();
-    void ApplyLaserEnergyDrain(int32_t frameTime, float &remainder, int32_t &elapsedMs);
+    void ApplyLaserEnergyDrain(float nominalDamage, float &remainder);
     void UpdateDamageFX(update_msg *arg);
     void UpdateDecorationFX(update_msg *arg);
     void UpdateEnergyStatusFX(update_msg *arg);
@@ -1019,7 +1019,6 @@ public:
     int _mgun_shot_time;
     int _mgun_shot_time_user;
     float _mgunEnergyDrainRemainder;
-    int32_t _mgunEnergyDrainElapsedMs;
     int32_t _mgunEnergyDrainLastFireTime;
     float _mgun_recoil;
     World::TWeaponTracerConfig _mgun_tracer;
@@ -1156,7 +1155,6 @@ public:
     int _laser_next_fx_time = 0;           // next _clock at which a throttled impact VP may spawn
     int _laser_next_beam_vp_time = 0;      // next _clock at which the VP beam body may be refreshed
     float _laserEnergyDrainRemainder = 0.0f;
-    int32_t _laserEnergyDrainElapsedMs = 0;
     std::vector<TLaserBeamRequest> _laser_requests;
     std::vector<TLaserBeamRuntime> _laser_beams;
     // OpenUA custom: separate downward beam runtime for model = vertical_laser.
@@ -1167,7 +1165,6 @@ public:
     vec3d _vertical_laser_request_start;
     int _vertical_laser_next_beam_vp_time = 0;
     float _verticalLaserEnergyDrainRemainder = 0.0f;
-    int32_t _verticalLaserEnergyDrainElapsedMs = 0;
     TLaserBeamRuntime _vertical_laser_beam;
     std::vector<TLaserBeamRuntime> _vertical_laser_beams;
     int _seek_and_explode;
