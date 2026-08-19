@@ -3099,7 +3099,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
         {
             v2++;
 
-            int v8 = _world->TestVehicle(node->_vehicleID, arg->job);
+            int v8 = _world->TestVehicle(node->_vehicleID, arg->job, arg->tgt_bact);
 
             Common::Point tmp = _cellId.AbsDistance( node->_cellId );
             if ( tmp.x < 2 && tmp.y < 2 )
@@ -3182,7 +3182,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
                         if ( v67 > ((float)protoCost * v73) &&
                              !yparobo_IsAiActiveVehicleCapReached(this, i, proto) )
                         {
-                            int v80 = _world->TestVehicle(i, arg->job);
+                            int v80 = _world->TestVehicle(i, arg->job, arg->tgt_bact);
 
                             int v27 = 0;
                             if ( v2 < (_wrldSectors.x + _wrldSectors.y) / 5 )
@@ -3573,7 +3573,7 @@ void NC_STACK_yparobo::buildDefense()
             loct.command_id = _roboVehicleCommandID;
             loct.aggr = 60;
 
-            if ( arg132.tgt.pbact->_bact_type != BACT_TYPES_TANK && arg132.tgt.pbact->_bact_type != BACT_TYPES_CAR && arg132.tgt.pbact->_bact_type != BACT_TYPES_HOVER )
+            if ( arg132.tgt.pbact->_bact_type != BACT_TYPES_TANK && arg132.tgt.pbact->_bact_type != BACT_TYPES_CAR )
             {
                 loct.bad = 2;
                 loct.want = 32;
@@ -3592,7 +3592,6 @@ void NC_STACK_yparobo::buildDefense()
             {
             case BACT_TYPES_TANK:
             case BACT_TYPES_CAR:
-            case BACT_TYPES_HOVER:
                 loct.job = 2;
                 break;
 
@@ -5726,8 +5725,7 @@ void NC_STACK_yparobo::Die()
                 || unit->_bact_type == BACT_TYPES_FLYER
                 || unit->_bact_type == BACT_TYPES_UFO
                 || unit->_bact_type == BACT_TYPES_CAR
-                || unit->_bact_type == BACT_TYPES_GUN
-                || unit->_bact_type == BACT_TYPES_HOVER;
+                || unit->_bact_type == BACT_TYPES_GUN;
 
             if ( !gameplayVehicle || unit->_status == BACT_STATUS_DEAD
                     || (unit->_status_flg & (BACT_STFLAG_DEATH1

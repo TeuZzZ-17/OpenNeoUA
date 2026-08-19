@@ -47,7 +47,7 @@ namespace CloneBalance
 
     // The single gate every runtime malus funnels through. True only when:
     //   * the actor is a Black Sect (owner 5) actor, AND
-    //   * the actor is an actual combat UNIT (bact/tank/flyer/ufo/car/gun/hover).
+    //   * the actor is an actual combat UNIT (bact/tank/flyer/ufo/car/gun).
     // Exempt actors (return false even for owner 5):
     //   * the Host Station (BACT_TYPES_ROBO) - the faction command base, not a clone;
     //   * projectiles (BACT_TYPES_MISSLE) - they keep vanilla flight/pitch/visuals.

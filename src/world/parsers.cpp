@@ -1970,6 +1970,12 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "job_fightflyer") ||
            !StriCmp(p1, "job_fighthelicopter") ||
            !StriCmp(p1, "job_fighttank") ||
+           !StriCmp(p1, "job_fightplane") ||
+           !StriCmp(p1, "job_fightglider") ||
+           !StriCmp(p1, "job_fightzeppelin") ||
+           !StriCmp(p1, "job_fightufo") ||
+           !StriCmp(p1, "job_fightcar") ||
+           !StriCmp(p1, "job_fightgun") ||
            !StriCmp(p1, "job_conquer") ||
            !StriCmp(p1, "job_reconnoitre") ||
            !StriCmp(p1, "spawn_at_death_units") ||
@@ -2114,14 +2120,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         if ( !StriCmp(p2, "heli") )
         {
             _vhcl->model_id = BACT_TYPES_BACT;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_HELI;
         }
         else if ( !StriCmp(p2, "tank") )
         {
             _vhcl->model_id = BACT_TYPES_TANK;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_TANK;
         }
         else if ( !StriCmp(p2, "robo") )
         {
             _vhcl->model_id = BACT_TYPES_ROBO;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_ROBO;
 
             *robo = TRoboProto();
             robo->matrix = mat3x3::Ident();
@@ -2129,10 +2138,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         else if ( !StriCmp(p2, "ufo") )
         {
             _vhcl->model_id = BACT_TYPES_UFO;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_UFO;
         }
         else if ( !StriCmp(p2, "car") )
         {
             _vhcl->model_id = BACT_TYPES_CAR;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_CAR;
         }
         else if ( !StriCmp(p2, "gun") || !StriCmp(p2, "module") )
         {
@@ -2140,25 +2151,25 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             // runtime. Behaviour is selected by gun_type; no parallel actor
             // class or attachment system is introduced.
             _vhcl->model_id = BACT_TYPES_GUN;
-        }
-        else if ( !StriCmp(p2, "hover") )
-        {
-            _vhcl->model_id = BACT_TYPES_HOVER;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_GUN;
         }
         else if ( !StriCmp(p2, "plane") )
         {
             _vhcl->model_id = BACT_TYPES_FLYER;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_PLANE;
 
             _vhcl->initParams.Add(NC_STACK_ypaflyer::FLY_ATT_TYPE, (int32_t)3);
         }
         else if ( !StriCmp(p2, "glider") )
         {
             _vhcl->model_id = BACT_TYPES_FLYER;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_GLIDER;
             _vhcl->initParams.Add(NC_STACK_ypaflyer::FLY_ATT_TYPE, (int32_t)2);
         }
         else if ( !StriCmp(p2, "zeppelin") )
         {
             _vhcl->model_id = BACT_TYPES_FLYER;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_ZEPPELIN;
             _vhcl->initParams.Add(NC_STACK_ypaflyer::FLY_ATT_TYPE, (int32_t)0);
         }
         else if ( !StriCmp(p2, "mimic") )
@@ -2166,6 +2177,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             // OpenUA custom: runtime shell that copies one listed vehicle proto
             // when spawned, then keeps this proto's spawn_at_death_* reveal data.
             _vhcl->model_id = BACT_TYPES_TANK;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_UNKNOWN;
             _vhcl->is_mimic = 1;
             _vhcl->mimic_vehicle_list.clear();
             _vhcl->job_fightrobo = 6;
@@ -3100,6 +3112,36 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->job_fightrobo = parser.stoi(p2);
         _vhcl->job_fightrobo_defined = true;
     }
+    else if ( !StriCmp(p1, "job_fightplane") )
+    {
+        _vhcl->job_fightplane = parser.stoi(p2);
+        _vhcl->job_fightplane_defined = true;
+    }
+    else if ( !StriCmp(p1, "job_fightglider") )
+    {
+        _vhcl->job_fightglider = parser.stoi(p2);
+        _vhcl->job_fightglider_defined = true;
+    }
+    else if ( !StriCmp(p1, "job_fightzeppelin") )
+    {
+        _vhcl->job_fightzeppelin = parser.stoi(p2);
+        _vhcl->job_fightzeppelin_defined = true;
+    }
+    else if ( !StriCmp(p1, "job_fightufo") )
+    {
+        _vhcl->job_fightufo = parser.stoi(p2);
+        _vhcl->job_fightufo_defined = true;
+    }
+    else if ( !StriCmp(p1, "job_fightcar") )
+    {
+        _vhcl->job_fightcar = parser.stoi(p2);
+        _vhcl->job_fightcar_defined = true;
+    }
+    else if ( !StriCmp(p1, "job_fightgun") )
+    {
+        _vhcl->job_fightgun = parser.stoi(p2);
+        _vhcl->job_fightgun_defined = true;
+    }
     else if ( !StriCmp(p1, "job_reconnoitre") )
     {
         _vhcl->job_reconnoitre = parser.stoi(p2);
@@ -3794,6 +3836,12 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->energy_tank = 1.0;
         _wpn->energy_flyer = 1.0;
         _wpn->energy_robo = 1.0;
+        _wpn->energy_plane = 1.0;
+        _wpn->energy_glider = 1.0;
+        _wpn->energy_zeppelin = 1.0;
+        _wpn->energy_ufo = 1.0;
+        _wpn->energy_car = 1.0;
+        _wpn->energy_gun = 1.0;
         _wpn->radius_heli = 0;
         _wpn->radius_tank = 0;
         _wpn->radius_flyer = 0;
@@ -3997,6 +4045,36 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->energy_robo = parser.stof(p2, 0);
         _wpn->energy_robo_defined = true;
+    }
+    else if ( !StriCmp(p1, "energy_plane") )
+    {
+        _wpn->energy_plane = parser.stof(p2, 0);
+        _wpn->energy_plane_defined = true;
+    }
+    else if ( !StriCmp(p1, "energy_glider") )
+    {
+        _wpn->energy_glider = parser.stof(p2, 0);
+        _wpn->energy_glider_defined = true;
+    }
+    else if ( !StriCmp(p1, "energy_zeppelin") )
+    {
+        _wpn->energy_zeppelin = parser.stof(p2, 0);
+        _wpn->energy_zeppelin_defined = true;
+    }
+    else if ( !StriCmp(p1, "energy_ufo") )
+    {
+        _wpn->energy_ufo = parser.stof(p2, 0);
+        _wpn->energy_ufo_defined = true;
+    }
+    else if ( !StriCmp(p1, "energy_car") )
+    {
+        _wpn->energy_car = parser.stof(p2, 0);
+        _wpn->energy_car_defined = true;
+    }
+    else if ( !StriCmp(p1, "energy_gun") )
+    {
+        _wpn->energy_gun = parser.stof(p2, 0);
+        _wpn->energy_gun_defined = true;
     }
     else if ( !StriCmp(p1, "mass") )
     {
@@ -4376,6 +4454,84 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
                                            TGemNotificationEntry::CHANGE_ENERGY_ROBO,
                                            previousValue, GemFloatHundredths(_wpn->energy_robo));
+    }
+    else if ( !StriCmp(p1, "add_energy_plane") )
+    {
+        if ( !_wpn->energy_plane_defined )
+            _wpn->energy_plane = _wpn->energy_flyer;
+        int previousValue = GemFloatHundredths(_wpn->energy_plane);
+        _wpn->energy_plane += parser.stol(p2, NULL, 0);
+        _wpn->energy_plane_defined = true;
+
+        if ( _isModify && _o.IsGemNotificationCaptureActive() )
+            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
+                                           TGemNotificationEntry::CHANGE_ENERGY_PLANE,
+                                           previousValue, GemFloatHundredths(_wpn->energy_plane));
+    }
+    else if ( !StriCmp(p1, "add_energy_glider") )
+    {
+        if ( !_wpn->energy_glider_defined )
+            _wpn->energy_glider = _wpn->energy_flyer;
+        int previousValue = GemFloatHundredths(_wpn->energy_glider);
+        _wpn->energy_glider += parser.stol(p2, NULL, 0);
+        _wpn->energy_glider_defined = true;
+
+        if ( _isModify && _o.IsGemNotificationCaptureActive() )
+            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
+                                           TGemNotificationEntry::CHANGE_ENERGY_GLIDER,
+                                           previousValue, GemFloatHundredths(_wpn->energy_glider));
+    }
+    else if ( !StriCmp(p1, "add_energy_zeppelin") )
+    {
+        if ( !_wpn->energy_zeppelin_defined )
+            _wpn->energy_zeppelin = _wpn->energy_flyer;
+        int previousValue = GemFloatHundredths(_wpn->energy_zeppelin);
+        _wpn->energy_zeppelin += parser.stol(p2, NULL, 0);
+        _wpn->energy_zeppelin_defined = true;
+
+        if ( _isModify && _o.IsGemNotificationCaptureActive() )
+            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
+                                           TGemNotificationEntry::CHANGE_ENERGY_ZEPPELIN,
+                                           previousValue, GemFloatHundredths(_wpn->energy_zeppelin));
+    }
+    else if ( !StriCmp(p1, "add_energy_ufo") )
+    {
+        if ( !_wpn->energy_ufo_defined )
+            _wpn->energy_ufo = _wpn->energy_flyer;
+        int previousValue = GemFloatHundredths(_wpn->energy_ufo);
+        _wpn->energy_ufo += parser.stol(p2, NULL, 0);
+        _wpn->energy_ufo_defined = true;
+
+        if ( _isModify && _o.IsGemNotificationCaptureActive() )
+            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
+                                           TGemNotificationEntry::CHANGE_ENERGY_UFO,
+                                           previousValue, GemFloatHundredths(_wpn->energy_ufo));
+    }
+    else if ( !StriCmp(p1, "add_energy_car") )
+    {
+        if ( !_wpn->energy_car_defined )
+            _wpn->energy_car = _wpn->energy_tank;
+        int previousValue = GemFloatHundredths(_wpn->energy_car);
+        _wpn->energy_car += parser.stol(p2, NULL, 0);
+        _wpn->energy_car_defined = true;
+
+        if ( _isModify && _o.IsGemNotificationCaptureActive() )
+            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
+                                           TGemNotificationEntry::CHANGE_ENERGY_CAR,
+                                           previousValue, GemFloatHundredths(_wpn->energy_car));
+    }
+    else if ( !StriCmp(p1, "add_energy_gun") )
+    {
+        if ( !_wpn->energy_gun_defined )
+            _wpn->energy_gun = 1.0f;
+        int previousValue = GemFloatHundredths(_wpn->energy_gun);
+        _wpn->energy_gun += parser.stol(p2, NULL, 0);
+        _wpn->energy_gun_defined = true;
+
+        if ( _isModify && _o.IsGemNotificationCaptureActive() )
+            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
+                                           TGemNotificationEntry::CHANGE_ENERGY_GUN,
+                                           previousValue, GemFloatHundredths(_wpn->energy_gun));
     }
     else if ( !StriCmp(p1, "add_shot_time") )
     {
