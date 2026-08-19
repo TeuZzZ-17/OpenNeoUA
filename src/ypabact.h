@@ -954,6 +954,8 @@ public:
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _damaged_shake_carrier;
     TSndCarrier _player_launch_shake_carrier; // OpenUA custom: one local-player shake per successful weapon launch
+    TSndFxPosParam _mgun_recoil_shake; // OpenUA custom: hardcoded first-person world/camera shake scaled from mgun_recoil
+    TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenUA custom: managed loop sound for model = laser
     TSndCarrier _vertical_laser_soundcarrier; // OpenUA custom: managed loop sound for model = vertical_laser
     TSndCarrier _mgun_soundcarrier; // OpenUA custom: one-shot pulse sound for vehicle-controlled MG
