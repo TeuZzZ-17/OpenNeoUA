@@ -249,6 +249,10 @@ enum OPENUA_STRING
     OUA_GEM_CAR_DAMAGE_UPGRADE,
     OUA_GEM_GUN_DAMAGE_UPGRADE,
 
+    // Cruiser extension. Appended to preserve every existing OpenUA string ID.
+    OUA_VS_CRUISER,
+    OUA_GEM_CRUISER_DAMAGE_UPGRADE,
+
     OUA_STRING_MAX
 };
 

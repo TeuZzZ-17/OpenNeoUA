@@ -38,7 +38,7 @@ VehicleCombatClass ResolveVehicleCombatClass(const NC_STACK_ypabact *unit)
     case BACT_TYPES_ROBO: return VEHICLE_COMBAT_CLASS_ROBO;
     case BACT_TYPES_GUN:  return VEHICLE_COMBAT_CLASS_GUN;
 
-    // BACT_TYPES_FLYER cannot distinguish plane/glider/zeppelin, while the
+    // BACT_TYPES_FLYER cannot distinguish plane/cruiser/glider/zeppelin, while the
     // the legacy ZEPP value is explicitly marked as having no real class.
     // Real scripted vehicles are resolved from their authored prototype above;
     // untyped/helper actors stay UNKNOWN instead of receiving a false matchup.
@@ -58,6 +58,10 @@ bool TryGetSpecificFightJob(const TVhclProto &proto,
     case VEHICLE_COMBAT_CLASS_PLANE:
         value = proto.job_fightplane;
         defined = proto.job_fightplane_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_CRUISER:
+        value = proto.job_fightcruiser;
+        defined = proto.job_fightcruiser_defined;
         break;
     case VEHICLE_COMBAT_CLASS_GLIDER:
         value = proto.job_fightglider;
@@ -103,6 +107,10 @@ bool TryGetSpecificWeaponEnergy(const TWeapProto &proto,
     case VEHICLE_COMBAT_CLASS_PLANE:
         value = proto.energy_plane;
         defined = proto.energy_plane_defined;
+        break;
+    case VEHICLE_COMBAT_CLASS_CRUISER:
+        value = proto.energy_cruiser;
+        defined = proto.energy_cruiser_defined;
         break;
     case VEHICLE_COMBAT_CLASS_GLIDER:
         value = proto.energy_glider;

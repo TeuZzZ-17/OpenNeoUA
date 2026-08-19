@@ -29,6 +29,8 @@ enum VehicleCombatClass : uint8_t
     VEHICLE_COMBAT_CLASS_CAR,
     VEHICLE_COMBAT_CLASS_ROBO,
     VEHICLE_COMBAT_CLASS_GUN,
+    // Appended to preserve every existing combat-class numeric value.
+    VEHICLE_COMBAT_CLASS_CRUISER,
     VEHICLE_COMBAT_CLASS_COUNT
 };
 
@@ -721,6 +723,7 @@ struct TVhclProto
     int8_t job_fightflyer = 0;
     int8_t job_fightrobo = 0;
     int8_t job_fightplane = 0;
+    int8_t job_fightcruiser = 0;
     int8_t job_fightglider = 0;
     int8_t job_fightzeppelin = 0;
     int8_t job_fightufo = 0;
@@ -733,6 +736,7 @@ struct TVhclProto
     bool job_fightflyer_defined = false;
     bool job_fightrobo_defined = false;
     bool job_fightplane_defined = false;
+    bool job_fightcruiser_defined = false;
     bool job_fightglider_defined = false;
     bool job_fightzeppelin_defined = false;
     bool job_fightufo_defined = false;
@@ -948,6 +952,7 @@ struct TWeapProto
     float energy_flyer = 0.0;
     float energy_robo = 0.0;
     float energy_plane = 0.0;
+    float energy_cruiser = 0.0;
     float energy_glider = 0.0;
     float energy_zeppelin = 0.0;
     float energy_ufo = 0.0;
@@ -958,6 +963,7 @@ struct TWeapProto
     bool energy_flyer_defined = false;
     bool energy_robo_defined = false;
     bool energy_plane_defined = false;
+    bool energy_cruiser_defined = false;
     bool energy_glider_defined = false;
     bool energy_zeppelin_defined = false;
     bool energy_ufo_defined = false;

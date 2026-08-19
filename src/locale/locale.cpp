@@ -416,6 +416,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_MOUSE_WHEEL_UP:        fallback = "Mouse Wheel Up"; break;
         case OUA_MOUSE_WHEEL_DOWN:      fallback = "Mouse Wheel Down"; break;
         case OUA_VS_PLANE:              fallback = "Vs. Planes"; break;
+        case OUA_VS_CRUISER:            fallback = "Vs. Cruisers"; break;
         case OUA_VS_GLIDER:             fallback = "Vs. Gliders"; break;
         case OUA_VS_ZEPPELIN:           fallback = "Vs. Zeppelins"; break;
         case OUA_VS_UFO:                fallback = "Vs. UFOs"; break;
@@ -427,6 +428,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_GEM_UFO_DAMAGE_UPGRADE:      fallback = "UFO Damage Upgrade"; break;
         case OUA_GEM_CAR_DAMAGE_UPGRADE:      fallback = "Car Damage Upgrade"; break;
         case OUA_GEM_GUN_DAMAGE_UPGRADE:      fallback = "Gun Damage Upgrade"; break;
+        case OUA_GEM_CRUISER_DAMAGE_UPGRADE:  fallback = "Cruiser Damage Upgrade"; break;
         default: break;
     }
 
