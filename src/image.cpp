@@ -99,6 +99,18 @@ static SDL_RWops * MyCustomRWop(FSMgr::FileHandle *fil)
     return c;
 }
 
+#if defined(SDL_IMAGE_VERSION_ATLEAST)
+#if SDL_IMAGE_VERSION_ATLEAST(2, 6, 0)
+static bool IsSvgResourceName(const std::string &resName)
+{
+    const size_t extPos = resName.find_last_of('.');
+    if ( extPos == std::string::npos || extPos + 1 >= resName.size() )
+        return false;
+
+    return !StriCmp(resName.substr(extPos + 1), "svg");
+}
+#endif
+#endif
 
 
 
@@ -124,7 +136,49 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
         return NULL;
     }
 
-    SDL_Surface *loaded = IMG_Load_RW(rwops, 1);
+    SDL_Surface *loaded = NULL;
+
+#if defined(SDL_IMAGE_VERSION_ATLEAST)
+#if SDL_IMAGE_VERSION_ATLEAST(2, 6, 0)
+    const int requestedWidth = stak.Get<int32_t>(BMD_ATT_WIDTH, 0);
+    const int requestedHeight = stak.Get<int32_t>(BMD_ATT_HEIGHT, 0);
+    const bool hasSizedSvgRequest = IsSvgResourceName(resName) &&
+                                    requestedWidth >= 0 && requestedHeight >= 0 &&
+                                    (requestedWidth > 0 || requestedHeight > 0);
+
+    if ( hasSizedSvgRequest )
+    {
+        loaded = IMG_LoadSizedSVG_RW(rwops, requestedWidth, requestedHeight);
+        if ( loaded )
+        {
+            SDL_RWclose(rwops);
+            rwops = NULL;
+        }
+        else if ( SDL_RWseek(rwops, 0, RW_SEEK_SET) < 0 )
+        {
+            // The custom stream is normally seekable. If a backend refuses
+            // the rewind, reopen it so the legacy loader still gets a full
+            // fallback attempt instead of turning a sized SVG failure into a
+            // new hard failure.
+            SDL_RWclose(rwops);
+            rwops = NULL;
+
+            fil = uaOpenFileAlloc(tmpBuf, "rb");
+            if ( fil )
+            {
+                rwops = MyCustomRWop(fil);
+                if ( !rwops )
+                    delete fil;
+            }
+        }
+    }
+#endif
+#endif
+
+    // Keep the existing loader as the universal fallback. This is also the
+    // only path compiled when SDL_image is older than 2.6.0.
+    if ( !loaded && rwops )
+        loaded = IMG_Load_RW(rwops, 1);
 
     if (!loaded)
     {
