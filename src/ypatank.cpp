@@ -23,6 +23,27 @@ NC_STACK_ypatank::NC_STACK_ypatank()
     _tankExpectTgt = false;
 }
 
+void NC_STACK_ypatank::setBACT_inputting(bool inpt)
+{
+    const bool wasInputting = getBACT_inputting();
+
+    NC_STACK_ypabact::setBACT_inputting(inpt);
+
+    // A player-controlled ground vehicle is positioned with viewer_overeof.
+    // During a normal vehicle switch the viewer flag is cleared first and the
+    // input flag second; without an immediate AI-ground alignment, the old
+    // tank becomes visible for a frame at the viewer height and only snaps to
+    // overeof when its next AI update runs. Reuse the normal AI grounding once
+    // at the completed player->AI transition so the first visible frame already
+    // has the same pose the AI would calculate.
+    if ( !inpt && wasInputting && !getBACT_viewer() && _world && !_world->_isNetGame &&
+         (_status_flg & BACT_STFLAG_LAND) && _status != BACT_STATUS_DEAD )
+    {
+        if ( AlignVehicleAI(0.0f, NULL) == ALIGN_DONE )
+            _old_pos = _position;
+    }
+}
+
 static bool ypatank_IsAiRecoilRecoveryActive(const NC_STACK_ypatank *tank)
 {
     return tank &&

@@ -369,6 +369,15 @@ Common::Ini::Key IniConf::GameGlobalShkFadeOut("game.global_shk_fade_out", Commo
 Common::Ini::Key IniConf::GameGlobalPalFadeIn("game.global_pal_fade_in", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Common::Ini::KT_WORD, std::string("0"));
 
+// OpenUA custom: procedural HP bar shared by world/HUD. When enabled, the
+// world-space Shield bar is omitted while the personal cockpit Shield keeps
+// the classic MAPMISC squares. Missing/disabled HP mesh keys preserve the
+// full vanilla HP/Shield paths. Active HP tint converges toward target_tint.
+Common::Ini::Key IniConf::GfxMeshHpBarEnable("gfx.mesh_hp_bar_enable", Common::Ini::KT_BOOL, false);
+Common::Ini::Key IniConf::GfxMeshHpBarTint("gfx.mesh_hp_bar_tint", Common::Ini::KT_WORD, std::string("0_217_81_255"));
+Common::Ini::Key IniConf::GfxMeshHpBarTargetTint("gfx.mesh_hp_bar_target_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
+Common::Ini::Key IniConf::GfxMeshHpBarEmptyTint("gfx.mesh_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255_0_0_0"));
+
 // OpenUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
 // gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
 // All numeric values use KT_WORD so
@@ -694,6 +703,10 @@ void IniConf::Init()
         , &GameGlobalShkFadeOut
         , &GameGlobalPalFadeIn
         , &GameGlobalPalFadeOut
+        , &GfxMeshHpBarEnable
+        , &GfxMeshHpBarTint
+        , &GfxMeshHpBarTargetTint
+        , &GfxMeshHpBarEmptyTint
         , &GfxRegenFXVP
         , &GfxRegenFXVPScale
         , &GfxRegenFXVPSpinX
