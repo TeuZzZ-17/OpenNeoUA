@@ -1920,7 +1920,6 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     case BACT_TYPES_FLYER:
                     case BACT_TYPES_UFO:
                     case BACT_TYPES_CAR:
-                    case BACT_TYPES_HOVER:
                     case BACT_TYPES_ROBO:
                         return true;
 
@@ -2468,7 +2467,6 @@ bool NC_STACK_ypaworld::IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) c
     case BACT_TYPES_FLYER:
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
-    case BACT_TYPES_HOVER:
         return true;
     default:
         return false;
@@ -2525,7 +2523,7 @@ static bool yw_PlayerSprintAcceleratorPressed(const NC_STACK_ypabact *bact, cons
     if ( !bact || !inpt )
         return false;
 
-    // Ground units use Drive Speed, while all supported air/hover classes use
+    // Ground units use Drive Speed, while supported air classes use
     // Fly Speed.  Positive input is the forward/increase-thrust accelerator;
     // reverse or decrease-thrust input must not arm Sprint.
     switch ( bact->_bact_type )
@@ -2538,7 +2536,6 @@ static bool yw_PlayerSprintAcceleratorPressed(const NC_STACK_ypabact *bact, cons
     case BACT_TYPES_ZEPP:
     case BACT_TYPES_FLYER:
     case BACT_TYPES_UFO:
-    case BACT_TYPES_HOVER:
         return inpt->Sliders[2] > 0.001f;
 
     default:
@@ -4417,6 +4414,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetPowerTank(wproto.energy_tank * 1000.0);
     wobj->SetPowerFlyer(wproto.energy_flyer * 1000.0);
     wobj->SetPowerRobo(wproto.energy_robo * 1000.0);
+    wobj->ConfigureSpecificEnergyMultipliers(wproto);
     wobj->SetRadiusHeli(wproto.radius_heli);
     wobj->SetRadiusTank(wproto.radius_tank);
     wobj->SetRadiusFlyer(wproto.radius_flyer);
@@ -11394,30 +11392,54 @@ int NC_STACK_ypaworld::getYW_invulnerable()
 
 
 
-int NC_STACK_ypaworld::TestVehicle(int protoID, int job)
+int NC_STACK_ypaworld::TestVehicle(int protoID, int job, NC_STACK_ypabact *target)
 {
     const World::TVhclProto &proto = _vhclProtos[ protoID ];
+
+    int legacyValue = -1;
 
     if ( proto.is_mimic )
     {
         switch ( job )
         {
+        case 1: legacyValue = proto.job_fightrobo; break;
+        case 2: legacyValue = proto.job_fighttank; break;
+        case 4: legacyValue = proto.job_fighthelicopter; break;
+        case 3: legacyValue = proto.job_fightflyer; break;
+        case 5: return proto.job_reconnoitre;
+        case 6: return proto.job_conquer;
+        default:return -1;
+        }
+    }
+    else
+    {
+        World::TWeapProto *wpn = proto.weapon == -1
+                               ? NULL
+                               : &_weaponProtos.at(proto.weapon);
+
+        switch ( job )
+        {
         case 1:
-            return proto.job_fightrobo;
-
         case 2:
-            return proto.job_fighttank;
-
-        case 4:
-            return proto.job_fighthelicopter;
-
         case 3:
-            return proto.job_fightflyer;
+        case 4:
+            if ( (((proto.mgun_set && proto.mgun == -1) ||
+                   (!proto.mgun_set && proto.mgun_shot_time <= 0)) && !wpn) ||
+                 proto.model_id == BACT_TYPES_UFO )
+                return -1;
+
+            if ( job == 1 ) legacyValue = proto.job_fightrobo;
+            if ( job == 2 ) legacyValue = proto.job_fighttank;
+            if ( job == 3 ) legacyValue = proto.job_fightflyer;
+            if ( job == 4 ) legacyValue = proto.job_fighthelicopter;
+            break;
 
         case 5:
             return proto.job_reconnoitre;
 
         case 6:
+            if ( !wpn || proto.model_id == BACT_TYPES_UFO )
+                return -1;
             return proto.job_conquer;
 
         default:
@@ -11425,58 +11447,18 @@ int NC_STACK_ypaworld::TestVehicle(int protoID, int job)
         }
     }
 
-    World::TWeapProto *wpn;
-
-    if ( proto.weapon == -1 )
-        wpn = NULL;
-    else
-        wpn = &_weaponProtos.at( proto.weapon );
-
-    switch ( job )
+    // OpenUA: when AllocForce knows the concrete enemy, allow a new
+    // fine-grained job_fight* to override the old coarse strategic group.
+    // If the specific value is absent, legacyValue is returned unchanged.
+    if ( target )
     {
-    case 1:
-        if ( (((proto.mgun_set && proto.mgun == -1) || (!proto.mgun_set && proto.mgun_shot_time <= 0)) && !wpn) || proto.model_id == BACT_TYPES_UFO )
-            return -1;
-
-        return proto.job_fightrobo;
-        break;
-
-    case 2:
-        if ( (((proto.mgun_set && proto.mgun == -1) || (!proto.mgun_set && proto.mgun_shot_time <= 0)) && !wpn) || proto.model_id == BACT_TYPES_UFO )
-            return -1;
-
-        return proto.job_fighttank;
-        break;
-
-    case 4:
-        if ( (((proto.mgun_set && proto.mgun == -1) || (!proto.mgun_set && proto.mgun_shot_time <= 0)) && !wpn) || proto.model_id == BACT_TYPES_UFO )
-            return -1;
-
-        return proto.job_fighthelicopter;
-        break;
-
-    case 3:
-        if ( (((proto.mgun_set && proto.mgun == -1) || (!proto.mgun_set && proto.mgun_shot_time <= 0)) && !wpn) || proto.model_id == BACT_TYPES_UFO )
-            return -1;
-
-        return proto.job_fightflyer;
-        break;
-
-    case 5:
-        return proto.job_reconnoitre;
-        break;
-
-    case 6:
-        if ( !wpn || proto.model_id == BACT_TYPES_UFO )
-            return -1;
-
-        return proto.job_conquer;
-        break;
-
-    default:
-        break;
+        int specificValue = 0;
+        if ( World::TryGetSpecificFightJob(
+                 proto, World::ResolveVehicleCombatClass(target), &specificValue) )
+            return specificValue;
     }
-    return -1;
+
+    return legacyValue;
 }
 
 

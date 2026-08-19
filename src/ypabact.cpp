@@ -105,7 +105,6 @@ static bool ypabact_IsGenesisSeparationVehicle(const NC_STACK_ypabact *unit)
     case BACT_TYPES_FLYER:
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
-    case BACT_TYPES_HOVER:
         return true;
     default:
         return false;
@@ -127,7 +126,6 @@ static bool ypabact_IsMgunRecoilVisualVehicleClass(const NC_STACK_ypabact *unit)
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
     case BACT_TYPES_GUN:
-    case BACT_TYPES_HOVER:
         return true;
 
     default:
@@ -828,7 +826,6 @@ static bool ypabact_IsCockpitCameraSupportedType(const NC_STACK_ypabact *unit)
         case BACT_TYPES_FLYER:
         case BACT_TYPES_UFO:
         case BACT_TYPES_CAR:
-        case BACT_TYPES_HOVER:
             return true;
 
         case BACT_TYPES_GUN:
@@ -1095,7 +1092,6 @@ static bool ypabact_IsMindcontrolUnitType(NC_STACK_ypabact *bact)
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
     case BACT_TYPES_GUN:
-    case BACT_TYPES_HOVER:
         return true;
 
     default:
@@ -4087,8 +4083,7 @@ static bool ypabact_IsAoePushGroundAlignedUnit(NC_STACK_ypabact *unit)
         return false;
 
     return unit->_bact_type == BACT_TYPES_TANK ||
-           unit->_bact_type == BACT_TYPES_CAR ||
-           unit->_bact_type == BACT_TYPES_HOVER;
+           unit->_bact_type == BACT_TYPES_CAR;
 }
 
 static bool ypabact_ShouldFlattenAirKnockback(const NC_STACK_ypabact *unit)
@@ -7599,7 +7594,6 @@ static bool ypabact_IsValidSeekAndExplodeTarget(NC_STACK_ypabact *unit, NC_STACK
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
     case BACT_TYPES_GUN:
-    case BACT_TYPES_HOVER:
         break;
 
     default:
@@ -7831,6 +7825,7 @@ static bool ypabact_GetWeaponEnergyForTarget(const World::TWeapProto &wproto,
 
     float energy = 0.0f;
     bool defined = false;
+    bool supported = true;
 
     switch ( target->_bact_type )
     {
@@ -7857,10 +7852,25 @@ static bool ypabact_GetWeaponEnergyForTarget(const World::TWeapProto &wproto,
         break;
 
     default:
-        // These classes use generic weapon energy in the existing damage path,
-        // so Smart has no class-specific energy_* value to compare.
-        return false;
+        // Vanilla uses generic weapon energy for these classes. A newly-authored
+        // fine-grained energy_* may opt them into Smart comparisons.
+        energy = 1.0f;
+        defined = false;
+        supported = false;
+        break;
     }
+
+    float specificEnergy = 1.0f;
+    if ( World::TryGetSpecificWeaponEnergy(
+             wproto, World::ResolveVehicleCombatClass(target), &specificEnergy) )
+    {
+        energy = specificEnergy;
+        defined = true;
+        supported = true;
+    }
+
+    if ( !supported )
+        return false;
 
     if ( outEnergy )
         *outEnergy = energy;
@@ -8057,7 +8067,6 @@ static bool ypabact_IsMissileMultiTargetUnitType(NC_STACK_ypabact *target)
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
     case BACT_TYPES_GUN:
-    case BACT_TYPES_HOVER:
         return true;
 
     default:
@@ -9975,7 +9984,9 @@ static float ypabact_LaserNominalFrameDamage(
     return (float)std::min(nominalFrameDamage, (double)std::numeric_limits<float>::max());
 }
 
-static int ypabact_LaserTickDamage(const World::TWeapProto &wproto, NC_STACK_ypabact *target,
+static int ypabact_LaserTickDamage(NC_STACK_ypabact *shooter,
+                                   const World::TWeapProto &wproto,
+                                   NC_STACK_ypabact *target,
                                    int connectedTicks, float damageMult = 1.0f)
 {
     if ( !target )
@@ -10019,7 +10030,7 @@ static void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapPr
     if ( beam.next_damage_time > 0 && shooter->_clock < beam.next_damage_time )
         return;
 
-    int applyNow = ypabact_LaserTickDamage(wproto, target, beam.energy_ticks, damageMult);
+    int applyNow = ypabact_LaserTickDamage(shooter, wproto, target, beam.energy_ticks, damageMult);
 
     if ( applyNow > 0 && ypabact_CanApplyLaserDamage(shooter) )
     {
@@ -12501,7 +12512,6 @@ bool NC_STACK_ypabact::IsActiveDebuffDisorienting(bool requireMovementLevel) con
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
     case BACT_TYPES_GUN:
-    case BACT_TYPES_HOVER:
         return true;
 
     default:
@@ -14236,6 +14246,11 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &c
             jobLevel = 5;
             break;
         }
+
+        int specificJob = 0;
+        if ( World::TryGetSpecificFightJob(
+                 proto, World::ResolveVehicleCombatClass(cel_unit), &specificJob) )
+            jobLevel = specificJob;
 
         // do not target if job for this unit is less of previous
         if ( jobLevel < *job )
@@ -16017,7 +16032,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                                     if ( !v22 )
                                                     {
                                                         int energ;
-
                                                         if ( cellUnit->getBACT_inputting() || cellUnit->getBACT_viewer() )
                                                         {
                                                             float v39 = (mgunPower * arg->field_C) * (100.0 - cellUnit->GetEffectiveShield());
