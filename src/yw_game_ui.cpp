@@ -638,9 +638,31 @@ static int ResolveUnitDisplayVehicleProtoId(NC_STACK_ypaworld *yw, const NC_STAC
     return protoId;
 }
 
-NC_STACK_bitmap *StatusIconLoad(const std::string &path)
+static bool StatusIconIsSvgPath(const std::string &path)
 {
-    auto it = g_statusIconCache.find(path);
+    const size_t extPos = path.find_last_of('.');
+    if ( extPos == std::string::npos || extPos + 1 >= path.size() )
+        return false;
+
+    return !StriCmp(path.substr(extPos + 1), "svg");
+}
+
+NC_STACK_bitmap *StatusIconLoad(const std::string &path, int width = 0, int height = 0)
+{
+    const bool sizedSvg = StatusIconIsSvgPath(path) &&
+                          width >= 0 && height >= 0 &&
+                          (width > 0 || height > 0);
+
+    std::string cacheKey = path;
+    if ( sizedSvg )
+    {
+        cacheKey += "|svg@";
+        cacheKey += std::to_string(width);
+        cacheKey += "x";
+        cacheKey += std::to_string(height);
+    }
+
+    auto it = g_statusIconCache.find(cacheKey);
     if ( it != g_statusIconCache.end() )
         return it->second.bitmap;
 
@@ -650,14 +672,26 @@ NC_STACK_bitmap *StatusIconLoad(const std::string &path)
     // resource context immediately after loading.
     std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
 
+    IDVList attrs;
+    attrs.Add(NC_STACK_rsrc::RSRC_ATT_NAME, path);
+    attrs.Add(NC_STACK_bitmap::BMD_ATT_CONVCOLOR, (int32_t)1);
+
+    if ( sizedSvg )
+    {
+        attrs.Add(NC_STACK_bitmap::BMD_ATT_WIDTH, (int32_t)width);
+        attrs.Add(NC_STACK_bitmap::BMD_ATT_HEIGHT, (int32_t)height);
+
+        // NC_STACK_rsrc shares resources by path only. Sized SVG variants must
+        // remain private here; the UI cache above provides path+size reuse.
+        attrs.Add(NC_STACK_rsrc::RSRC_ATT_TRYSHARED, (int32_t)0);
+    }
+
     StatusIconCacheEntry entry;
-    entry.bitmap = Utils::ProxyLoadImage({
-        {NC_STACK_rsrc::RSRC_ATT_NAME, path},
-        {NC_STACK_bitmap::BMD_ATT_CONVCOLOR, (int32_t)1}});
+    entry.bitmap = Utils::ProxyLoadImage(attrs);
 
     Common::Env.SetPrefix("rsrc", oldRsrc);
 
-    auto inserted = g_statusIconCache.emplace(path, entry);
+    auto inserted = g_statusIconCache.emplace(cacheKey, entry);
     return inserted.first->second.bitmap;
 }
 
@@ -1643,7 +1677,7 @@ static const char *yw_MapToolbarIconName(int buttonId)
 
 static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw);
 
-static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, bool active)
+static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, bool active, int iconSize)
 {
     if ( owner <= World::OWNER_0 || !iconName || !*iconName )
         return NULL;
@@ -1666,7 +1700,7 @@ static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, b
                 path += "_active";
             path += extension;
 
-            NC_STACK_bitmap *bitmap = StatusIconLoad(path);
+            NC_STACK_bitmap *bitmap = StatusIconLoad(path, iconSize, iconSize);
             if ( bitmap && bitmap->GetBitmap() )
                 return bitmap;
         }
@@ -1685,11 +1719,12 @@ static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
         return false;
 
     const int owner = yw_RoboMapMarkerOwner(yw);
+    const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
 
     // Faction artwork is asset-driven. SVG is preferred for crisp scaling;
     // the existing PNG files remain valid and are used automatically when an
     // SVG is missing or fails to load.
-    NC_STACK_bitmap *bitmap = yw_LoadFactionMapIcon(owner, iconName, active);
+    NC_STACK_bitmap *bitmap = yw_LoadFactionMapIcon(owner, iconName, active, iconSize);
 
     // Missing custom assets are always safe: use the neutral shared set,
     // then finally fall back to the small vector glyph below.
@@ -1700,21 +1735,20 @@ static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
         if ( active )
             path += "_active";
         path += ".png";
-        bitmap = StatusIconLoad(path);
+        bitmap = StatusIconLoad(path, iconSize, iconSize);
 
         if ( (!bitmap || !bitmap->GetBitmap()) && active )
         {
             path = "TacticalMap/Icons/UI/";
             path += iconName;
             path += ".png";
-            bitmap = StatusIconLoad(path);
+            bitmap = StatusIconLoad(path, iconSize, iconSize);
         }
     }
 
     if ( !bitmap || !bitmap->GetBitmap() )
         return false;
 
-    const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
     const int screenLeft = windowX + box.x + (box.w - iconSize) / 2;
     const int screenTop = windowY + box.y + (box.h - iconSize) / 2;
 
@@ -2045,27 +2079,27 @@ static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw)
     return 0;
 }
 
-static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw)
+static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw, int markerSize)
 {
     const int owner = yw_RoboMapMarkerOwner(yw);
     if ( owner > World::OWNER_0 )
     {
         // Reuse the same SVG-first faction loader as the title toolbar. A map
         // marker is an active annotation, so the active asset is requested.
-        NC_STACK_bitmap *ownerBitmap = yw_LoadFactionMapIcon(owner, "marker", true);
+        NC_STACK_bitmap *ownerBitmap = yw_LoadFactionMapIcon(owner, "marker", true, markerSize);
         if ( ownerBitmap && ownerBitmap->GetBitmap() )
             return ownerBitmap;
     }
 
-    NC_STACK_bitmap *neutral = StatusIconLoad("TacticalMap/Icons/UI/marker_active.png");
+    NC_STACK_bitmap *neutral = StatusIconLoad("TacticalMap/Icons/UI/marker_active.png", markerSize, markerSize);
     if ( neutral && neutral->GetBitmap() )
         return neutral;
 
-    neutral = StatusIconLoad("TacticalMap/Icons/UI/marker.png");
+    neutral = StatusIconLoad("TacticalMap/Icons/UI/marker.png", markerSize, markerSize);
     if ( neutral && neutral->GetBitmap() )
         return neutral;
 
-    return StatusIconLoad("TacticalMap/Icons/UI/map_marker.png");
+    return StatusIconLoad("TacticalMap/Icons/UI/map_marker.png", markerSize, markerSize);
 }
 
 static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
@@ -2084,7 +2118,8 @@ static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
     const int clipRight = robo_map.field_200 + robo_map.field_1F8 - 1;
     const int clipBottom = robo_map.field_204 + robo_map.field_1FC - 1;
 
-    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw);
+    const int markerSize = yw_RoboMapMarkerSizePx();
+    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw, markerSize);
 
     for ( const vec2d &marker : robo_map.customMarkers )
     {
@@ -2094,17 +2129,16 @@ static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
 
         if ( markerBitmap && markerBitmap->GetBitmap() )
         {
-            const int size = yw_RoboMapMarkerSizePx();
             const int screenX = p.x + yw->_screenSize.x / 2;
             const int screenY = p.y + yw->_screenSize.y / 2;
             StatusIconRenderBitmap(yw, markerBitmap,
-                                   screenX - size / 2, screenY - size / 2,
-                                   size, 255);
+                                   screenX - markerSize / 2, screenY - markerSize / 2,
+                                   markerSize, 255);
             continue;
         }
 
         // Asset-free fallback.
-        const int r = std::max(3, yw_RoboMapMarkerSizePx() / 3);
+        const int r = std::max(3, markerSize / 3);
         yw_DrawMapToolbarLine(p.x - r, p.y - r, p.x + r, p.y + r);
         yw_DrawMapToolbarLine(p.x - r, p.y + r, p.x + r, p.y - r);
         yw_DrawMapToolbarLine(p.x - r - 2, p.y, p.x - r + 1, p.y);
@@ -2128,8 +2162,8 @@ static void yw_RenderCustomHudRadarMarkers(NC_STACK_ypaworld *yw)
     clipRect.bottom = robo_map.field_204 + robo_map.field_1FC - 1;
     GFX::Engine.raster_func211(clipRect);
 
-    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw);
     constexpr int markerSize = 12;
+    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw, markerSize);
 
     for ( const vec2d &marker : robo_map.customMarkers )
     {
