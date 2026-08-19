@@ -1971,6 +1971,7 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "job_fighthelicopter") ||
            !StriCmp(p1, "job_fighttank") ||
            !StriCmp(p1, "job_fightplane") ||
+           !StriCmp(p1, "job_fightcruiser") ||
            !StriCmp(p1, "job_fightglider") ||
            !StriCmp(p1, "job_fightzeppelin") ||
            !StriCmp(p1, "job_fightufo") ||
@@ -2159,6 +2160,14 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             _vhcl->combat_class = VEHICLE_COMBAT_CLASS_PLANE;
 
             _vhcl->initParams.Add(NC_STACK_ypaflyer::FLY_ATT_TYPE, (int32_t)3);
+        }
+        else if ( !StriCmp(p2, "cruiser") )
+        {
+            // OpenUA: expose the unused Flyer bit-combination already handled
+            // by ypaflyer: pitch follows vertical motion, lateral banking stays rigid.
+            _vhcl->model_id = BACT_TYPES_FLYER;
+            _vhcl->combat_class = VEHICLE_COMBAT_CLASS_CRUISER;
+            _vhcl->initParams.Add(NC_STACK_ypaflyer::FLY_ATT_TYPE, (int32_t)1);
         }
         else if ( !StriCmp(p2, "glider") )
         {
@@ -3117,6 +3126,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->job_fightplane = parser.stoi(p2);
         _vhcl->job_fightplane_defined = true;
     }
+    else if ( !StriCmp(p1, "job_fightcruiser") )
+    {
+        _vhcl->job_fightcruiser = parser.stoi(p2);
+        _vhcl->job_fightcruiser_defined = true;
+    }
     else if ( !StriCmp(p1, "job_fightglider") )
     {
         _vhcl->job_fightglider = parser.stoi(p2);
@@ -3837,6 +3851,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->energy_flyer = 1.0;
         _wpn->energy_robo = 1.0;
         _wpn->energy_plane = 1.0;
+        _wpn->energy_cruiser = 1.0;
         _wpn->energy_glider = 1.0;
         _wpn->energy_zeppelin = 1.0;
         _wpn->energy_ufo = 1.0;
@@ -4050,6 +4065,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->energy_plane = parser.stof(p2, 0);
         _wpn->energy_plane_defined = true;
+    }
+    else if ( !StriCmp(p1, "energy_cruiser") )
+    {
+        _wpn->energy_cruiser = parser.stof(p2, 0);
+        _wpn->energy_cruiser_defined = true;
     }
     else if ( !StriCmp(p1, "energy_glider") )
     {
@@ -4467,6 +4487,19 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
                                            TGemNotificationEntry::CHANGE_ENERGY_PLANE,
                                            previousValue, GemFloatHundredths(_wpn->energy_plane));
+    }
+    else if ( !StriCmp(p1, "add_energy_cruiser") )
+    {
+        if ( !_wpn->energy_cruiser_defined )
+            _wpn->energy_cruiser = _wpn->energy_flyer;
+        int previousValue = GemFloatHundredths(_wpn->energy_cruiser);
+        _wpn->energy_cruiser += parser.stol(p2, NULL, 0);
+        _wpn->energy_cruiser_defined = true;
+
+        if ( _isModify && _o.IsGemNotificationCaptureActive() )
+            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
+                                           TGemNotificationEntry::CHANGE_ENERGY_CRUISER,
+                                           previousValue, GemFloatHundredths(_wpn->energy_cruiser));
     }
     else if ( !StriCmp(p1, "add_energy_glider") )
     {
