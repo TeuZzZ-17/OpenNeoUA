@@ -960,7 +960,7 @@ public:
     TSndCarrier _mgun_soundcarrier; // OpenUA custom: one-shot pulse sound for vehicle-controlled MG
     TSndCarrier _mimic_soundcarrier; // OpenUA custom: persistent loop for model = mimic shell
     int _mgun_sound_index;
-    int _mgun_vp_fire_end_time;
+    int _vehicle_fire_vp_end_time;
     int _vp_active;
     extra_vproto _vp_extra[3];
     int _vp_extra_mode;

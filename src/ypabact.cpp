@@ -2257,7 +2257,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_power_set = false;
     _mgun_angle_set = false;
     _mgun_sector_damage_accum = 0.0;
-    _mgun_vp_fire_end_time = 0;
+    _vehicle_fire_vp_end_time = 0;
     _weapon_spread_x = 0.0;
     _weapon_spread_y = 0.0;
     _weapon_arc_x = 0.0;
@@ -2471,7 +2471,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;
     _mgun_sector_damage_accum = 0.0;
-    _mgun_vp_fire_end_time = 0;
+    _vehicle_fire_vp_end_time = 0;
 //    ypabact.field_3CE = 0;
     // The player limit is altitude above the current sector terrain and keeps
     // the vanilla 1600 default. The optional AI ceiling is read globally.
@@ -3479,12 +3479,12 @@ void NC_STACK_ypabact::Update(update_msg *arg)
             _mgun_soundcarrier.Vector = _soundcarrier.Vector;
             SFXEngine::SFXe.UpdateSoundCarrier(&_mgun_soundcarrier);
         }
-        if ( _mgun_vp_fire_end_time > 0 && _clock >= _mgun_vp_fire_end_time &&
+        if ( _vehicle_fire_vp_end_time > 0 && _clock >= _vehicle_fire_vp_end_time &&
              !(_status_flg & BACT_STFLAG_FIRE) && _vp_active == 7 &&
              (_status == BACT_STATUS_NORMAL || _status == BACT_STATUS_IDLE) )
         {
             // IDLE starts the landing procedure before an air vehicle is
-            // physically on the ground.  When a timed MGUN fire VP expires in
+            // physically on the ground.  When a timed Vehicle fire VP expires in
             // that window, keep the animated NORMAL pose until LAND is real;
             // otherwise helicopters can descend with their WAIT rotor stopped.
             const bool useWaitVP =
@@ -3495,7 +3495,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
 
             SetVP(useWaitVP ? _vp_wait : _vp_normal);
             _vp_active = useWaitVP ? 6 : 1;
-            _mgun_vp_fire_end_time = 0;
+            _vehicle_fire_vp_end_time = 0;
         }
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
@@ -10678,6 +10678,34 @@ static void ypabact_SpawnLaserBeamVPs(NC_STACK_ypabact *bact, const World::TWeap
     }
 }
 
+static void ypabact_StartVehicleFireVP(NC_STACK_ypabact *bact, int now)
+{
+    if ( !bact || (bact->_status != BACT_STATUS_NORMAL && bact->_status != BACT_STATUS_IDLE) )
+        return;
+
+    bact->_vehicle_fire_vp_end_time = now + 180;
+
+    if ( bact->_vp_active != 7 )
+    {
+        bact->_vp_active = 7;
+        bact->SetVP(bact->_vp_fire);
+    }
+}
+
+static void ypabact_StartVehicleFireVPForWeapon(NC_STACK_ypabact *bact, int weaponId, int now)
+{
+    if ( !bact || weaponId < 0 )
+        return;
+
+    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
+    if ( !world || (size_t)weaponId >= world->GetWeaponsProtos().size() )
+        return;
+
+    const World::TWeapProto &wproto = world->GetWeaponsProtos().at(weaponId);
+    if ( wproto.weapon_use_vehicle_vp_fire )
+        ypabact_StartVehicleFireVP(bact, now);
+}
+
 void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg)
 {
     // OpenUA invisible: firing the continuous laser is a real attack -> reveal now,
@@ -10686,6 +10714,8 @@ void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg)
 
     _laser_weapon = weaponId;
     _laser_fire_request = true;
+
+    ypabact_StartVehicleFireVPForWeapon(this, weaponId, _clock);
 
     TLaserBeamRequest request;
     request.target = (arg->tgType == BACT_TGT_TYPE_UNIT) ? arg->target.pbact : NULL;
@@ -11320,6 +11350,8 @@ void NC_STACK_ypabact::RequestVerticalLaserFire(int weaponId, bact_arg79 *arg)
 
     _vertical_laser_weapon = weaponId;
     _vertical_laser_fire_request = true;
+
+    ypabact_StartVehicleFireVPForWeapon(this, weaponId, _clock);
     _vertical_laser_request_target = (arg && arg->tgType == BACT_TGT_TYPE_UNIT) ? arg->target.pbact : NULL;
     _vertical_laser_request_start = ypabact_VerticalLaserSourceOrigin(this, arg);
 }
@@ -11982,6 +12014,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
         if ( !wobj )
             return 0;
+
+        if ( i == 0 )
+            ypabact_StartVehicleFireVPForWeapon(this, selectedWeapon, arg->g_time);
 
         ypabact_ConsumeProjectileFireX(this);
 
@@ -14694,7 +14729,7 @@ void NC_STACK_ypabact::Renew()
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;
-    _mgun_vp_fire_end_time = 0;
+    _vehicle_fire_vp_end_time = 0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     _cockpit_camera_recoil = 0.0f;
     _mgun_decal_enable = false;
@@ -15501,20 +15536,6 @@ static void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact)
     bact->_mgun_sound_index = (int)((soundIndex + 1) % soundCount);
 }
 
-static void ypabact_StartVehicleMinigunFireVP(NC_STACK_ypabact *bact, int now)
-{
-    if ( !bact || (bact->_status != BACT_STATUS_NORMAL && bact->_status != BACT_STATUS_IDLE) )
-        return;
-
-    bact->_mgun_vp_fire_end_time = now + 180;
-
-    if ( bact->_vp_active != 7 )
-    {
-        bact->_vp_active = 7;
-        bact->SetVP(bact->_vp_fire);
-    }
-}
-
 static vec3d ypabact_GetMinigunFireDir(NC_STACK_ypabact *bact, const vec3d &requestedDir)
 {
     if ( !bact || !bact->_mgun_angle_set )
@@ -15698,7 +15719,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
     RevealInvisibleOnAttack();
 
     if ( vehicleTimedMgun )
-        ypabact_StartVehicleMinigunFireVP(this, arg->field_10);
+        ypabact_StartVehicleFireVP(this, arg->field_10);
 
     const int32_t frameDeltaMs = std::max(0, (int32_t)(arg->field_C * 1000.0f + 0.5f));
     if ( _mgunEnergyDrainLastFireTime < 0 ||
@@ -17693,11 +17714,12 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
     if ( arg->unsetFlags )
         _status_flg &= ~arg->unsetFlags;
 
-    // Timed vehicle MGUNs do not set BACT_STFLAG_FIRE. Preserve their cockpit
-    // vp_fire while ground movement and handbraking alternate NORMAL/IDLE.
-    const bool keepTimedMgunFireVP =
-        UsesVehicleMinigunTiming() && _vp_active == 7 &&
-        _mgun_vp_fire_end_time > _clock &&
+    // Timed Vehicle vp_fire visuals (MGUN pulses and Weapon-side requested
+    // fire poses) do not rely on BACT_STFLAG_FIRE. Preserve them while ground
+    // movement and handbraking alternate NORMAL/IDLE.
+    const bool keepTimedVehicleFireVP =
+        _vp_active == 7 &&
+        _vehicle_fire_vp_end_time > _clock &&
         (arg->newStatus == BACT_STATUS_NORMAL || arg->newStatus == BACT_STATUS_IDLE);
     if ( arg->newStatus == BACT_STATUS_DEAD && (_vp_active != 2 && _vp_active != 3) )
     {
@@ -17755,7 +17777,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
         result = 1;
     }
 
-    if ( arg->newStatus == BACT_STATUS_NORMAL && 1 != _vp_active && !keepTimedMgunFireVP )
+    if ( arg->newStatus == BACT_STATUS_NORMAL && 1 != _vp_active && !keepTimedVehicleFireVP )
     {
         SetVP(_vp_normal);
 
@@ -17822,7 +17844,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
         result = 1;
     }
 
-    if ( arg->newStatus == BACT_STATUS_IDLE && _vp_active != 6 && !keepTimedMgunFireVP )
+    if ( arg->newStatus == BACT_STATUS_IDLE && _vp_active != 6 && !keepTimedVehicleFireVP )
     {
         SetVP(_vp_wait);
         _vp_active = 6;
