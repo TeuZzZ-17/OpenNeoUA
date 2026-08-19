@@ -108,12 +108,14 @@ static void WeaponTracerBuildMesh(GFX::TMesh *mesh, bool additive)
     if ( !mesh || !mesh->Vertexes.empty() )
         return;
 
-    // One crossed-ribbon body is the single source of tracer geometry.
-    // Glow reuses the exact same dimensions with additive blending, so glow
-    // changes brightness only and never expands the authored mesh.
+    // Fixed crossed-ribbon topology: both transverse planes are always present.
+    // X/Y dimensions remain data-driven, while topology itself has no public
+    // switch and therefore no parallel flat/segmented render path.
     WeaponTracerAppendRibbon(mesh, false, 0.5f, 1.0f);
-    WeaponTracerAppendRibbon(mesh, true,  0.5f, 1.0f);
+    WeaponTracerAppendRibbon(mesh, true, 0.5f, 1.0f);
 
+    // Glow reuses the exact same topology and dimensions, so it changes
+    // brightness only and never expands the authored mesh.
     uint32_t flags = GFX::RFLAGS_FOG | GFX::RFLAGS_DISABLE_ZWRITE;
     flags |= additive ? GFX::RFLAGS_LUMTRACY : GFX::RFLAGS_ALPHABLEND;
     mesh->Mat = GFX::TRenderParams(flags);
@@ -242,16 +244,17 @@ static bool WeaponTracerHasTintGradient(
 static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
                                      TF::TForm3D *view,
                                      const vec3d &start, const vec3d &end,
-                                     float width,
+                                     float sizeX, float sizeY,
                                      const World::TVisualTint &tint,
                                      float alpha, float vizLimit,
                                      float fadeLength)
 {
     if ( !arg || !mesh || !view || mesh->Vertexes.empty() ||
          !WeaponTracerFinite(start) || !WeaponTracerFinite(end) ||
-         !WeaponTracerFinite(tint) || !std::isfinite(width) ||
-         width <= 0.01f || !std::isfinite(alpha) || alpha <= 0.0f ||
-         tint.a <= 0.0f )
+         !WeaponTracerFinite(tint) || !std::isfinite(sizeX) ||
+         !std::isfinite(sizeY) ||
+         (sizeX <= 0.01f && sizeY <= 0.01f) ||
+         !std::isfinite(alpha) || alpha <= 0.0f || tint.a <= 0.0f )
         return;
 
     vec3d direction = end - start;
@@ -264,8 +267,12 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
         return;
 
     const vec3d center = start + direction * 0.5f;
+
+    // Always span the full sampled interval. Endpoint taper changes only the
+    // transverse X/Y section; shrinking Z per subdivision creates visible gaps.
     mat4x4 worldForm(rotation.Transpose() * mat3x3::Scale(
-        vec3d(width, width, segmentLength)));
+        vec3d(std::max(0.0f, sizeX), std::max(0.0f, sizeY),
+              segmentLength)));
     worldForm.m03 = center.x;
     worldForm.m13 = center.y;
     worldForm.m23 = center.z;
@@ -308,6 +315,7 @@ bool NC_STACK_ypaworld::SpawnMinigunTracer(
          !std::isfinite(availableDistance) || availableDistance <= 0.01f ||
          !std::isfinite(config.size_z) || config.size_z <= 0.01f ||
          !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
+         !std::isfinite(config.ResolveSizeY()) || config.ResolveSizeY() < 0.0f ||
          !WeaponTracerFinite(config.tint) ||
          config.tint.a <= 0.0f )
         return false;
@@ -400,7 +408,9 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
 {
     if ( !arg || _isNetGame || !WeaponTracerFinite(start) ||
          !WeaponTracerFinite(end) || !WeaponTracerFinite(config.tint) ||
+         !std::isfinite(config.size_z) || config.size_z <= 0.01f ||
          !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
+         !std::isfinite(config.ResolveSizeY()) || config.ResolveSizeY() < 0.0f ||
          config.tint.a <= 0.0f )
         return;
 
@@ -413,22 +423,28 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
     if ( !view )
         return;
 
-    WeaponTracerBuildMesh(&_weaponTracerMesh, false);
-    if ( _weaponTracerMesh.Vertexes.empty() )
+    GFX::TMesh *bodyMesh = &_weaponTracerMesh;
+    GFX::TMesh *glowMesh = &_weaponTracerGlowMesh;
+
+    WeaponTracerBuildMesh(bodyMesh, false);
+    if ( bodyMesh->Vertexes.empty() )
         return;
 
     if ( config.glow_rate > 0.0f )
-        WeaponTracerBuildMesh(&_weaponTracerGlowMesh, true);
+        WeaponTracerBuildMesh(glowMesh, true);
 
     const float u0 = WeaponTracerClamp01(std::min(tailFactor, headFactor));
     const float u1 = WeaponTracerClamp01(std::max(tailFactor, headFactor));
     const float uSpan = std::max(0.0001f, u1 - u0);
     const float pulseFactor = WeaponTracerPulseFactor(config, _timeStamp);
-    const float headSize = config.ResolveHeadSizeX();
-    const float tailSize = config.ResolveTailSizeX();
+    const float headSizeX = config.ResolveHeadSizeX();
+    const float tailSizeX = config.ResolveTailSizeX();
+    const float headSizeY = config.ResolveHeadSizeY();
+    const float tailSizeY = config.ResolveTailSizeY();
 
     int desiredSamples = 1;
-    if ( std::fabs(headSize - tailSize) > 0.0001f ||
+    if ( std::fabs(headSizeX - tailSizeX) > 0.0001f ||
+         std::fabs(headSizeY - tailSizeY) > 0.0001f ||
          WeaponTracerHasTintGradient(config) )
     {
         desiredSamples = std::max(desiredSamples,
@@ -456,28 +472,34 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
                                            partU1, visualSeed);
 
         const float middle = (partU0 + partU1) * 0.5f;
-        const float width = WeaponTracerLerp(tailSize, headSize, middle) *
+        const float sizeX = WeaponTracerLerp(tailSizeX, headSizeX, middle) *
                             pulseFactor;
-        if ( width <= 0.01f )
+        const float sizeY = WeaponTracerLerp(tailSizeY, headSizeY, middle) *
+                            pulseFactor;
+        if ( sizeX <= 0.01f && sizeY <= 0.01f )
             continue;
 
         const World::TVisualTint tint = WeaponTracerTintAt(config, middle);
 
-        // Base body opacity comes only from the authored tint alpha.
-        WeaponTracerQueueSegment(arg, &_weaponTracerMesh, view,
-                                 partStart, partEnd, width, tint, 1.0f,
+        // Base body opacity comes only from the authored tint alpha. Each
+        // subdivision spans its complete interval, so adjacent taper samples
+        // remain contiguous instead of turning into a ladder of separated bars.
+        WeaponTracerQueueSegment(arg, bodyMesh, view,
+                                 partStart, partEnd, sizeX, sizeY,
+                                 tint, 1.0f,
                                  (float)_normalVizLimit,
                                  (float)_normalFadeLength);
 
         if ( config.glow_rate > 0.0f &&
-             !_weaponTracerGlowMesh.Vertexes.empty() )
+             !glowMesh->Vertexes.empty() )
         {
-            // Glow deliberately reuses the exact body width. The 0..10 rate
+            // Glow deliberately reuses the exact body dimensions. The 0..10 rate
             // changes additive intensity only, never authored dimensions.
             const float glowAlpha =
                 std::min(1.0f, config.glow_rate * 0.1f);
-            WeaponTracerQueueSegment(arg, &_weaponTracerGlowMesh, view,
-                                     partStart, partEnd, width, tint, glowAlpha,
+            WeaponTracerQueueSegment(arg, glowMesh, view,
+                                     partStart, partEnd, sizeX, sizeY,
+                                     tint, glowAlpha,
                                      (float)_normalVizLimit,
                                      (float)_normalFadeLength);
         }

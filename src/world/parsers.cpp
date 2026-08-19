@@ -1459,6 +1459,22 @@ static float ParseBoundedNonNegativeFiniteOrFallback(
     return result > maximum ? maximum : result;
 }
 
+static bool ParseMeshTracerUniformSize(ScriptParser::Parser &parser,
+                                       const std::string &value,
+                                       float &result)
+{
+    // head_size / tail_size are single scalar endpoint overrides. They control
+    // the transverse X/Y section uniformly; size_z remains the sole owner of
+    // longitudinal tracer length so tapering cannot introduce gaps.
+    const float size = ParseBoundedNonNegativeFiniteOrFallback(
+        parser, value, 100.0f, -1.0f);
+    if ( size < 0.0f )
+        return false;
+
+    result = size;
+    return true;
+}
+
 static bool ParseMeshTracerParam(ScriptParser::Parser &parser,
                                    const std::string &p1,
                                    const std::string &p2,
@@ -1488,6 +1504,15 @@ static bool ParseMeshTracerParam(ScriptParser::Parser &parser,
     if ( !StriCmp(p1, key("size_x")) )
     {
         config.size_x = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, key("size_y")) )
+    {
+        const float value = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 100.0f, -1.0f);
+        config.has_size_y = value >= 0.0f;
+        config.size_y = config.has_size_y ? value : 0.0f;
         return true;
     }
 
@@ -1521,21 +1546,19 @@ static bool ParseMeshTracerParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( !StriCmp(p1, key("head_size_x")) )
+    if ( !StriCmp(p1, key("head_size")) )
     {
-        const float value = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 100.0f, -1.0f);
-        config.has_size_x_head = value >= 0.0f;
-        config.size_x_head = config.has_size_x_head ? value : 0.0f;
+        float size = 0.0f;
+        config.has_head_size = ParseMeshTracerUniformSize(parser, p2, size);
+        config.head_size = config.has_head_size ? size : 0.0f;
         return true;
     }
 
-    if ( !StriCmp(p1, key("tail_size_x")) )
+    if ( !StriCmp(p1, key("tail_size")) )
     {
-        const float value = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 100.0f, -1.0f);
-        config.has_size_x_tail = value >= 0.0f;
-        config.size_x_tail = config.has_size_x_tail ? value : 0.0f;
+        float size = 0.0f;
+        config.has_tail_size = ParseMeshTracerUniformSize(parser, p2, size);
+        config.tail_size = config.has_tail_size ? size : 0.0f;
         return true;
     }
 
