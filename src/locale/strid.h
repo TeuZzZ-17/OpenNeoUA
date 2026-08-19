@@ -233,6 +233,22 @@ enum OPENUA_STRING
     // Remappable player-only toggle for the UFO Spy UI. Appended to preserve existing IDs.
     OUA_TOGGLE_UFO_SPY_UI,
 
+    // Extended vanilla combat-class labels. Appended to preserve existing IDs.
+    OUA_VS_PLANE,
+    OUA_VS_GLIDER,
+    OUA_VS_ZEPPELIN,
+    OUA_VS_UFO,
+    OUA_VS_CAR,
+    OUA_VS_GUN,
+
+    // GEM notifications for fine-grained Weapon energy upgrades.
+    OUA_GEM_PLANE_DAMAGE_UPGRADE,
+    OUA_GEM_GLIDER_DAMAGE_UPGRADE,
+    OUA_GEM_ZEPPELIN_DAMAGE_UPGRADE,
+    OUA_GEM_UFO_DAMAGE_UPGRADE,
+    OUA_GEM_CAR_DAMAGE_UPGRADE,
+    OUA_GEM_GUN_DAMAGE_UPGRADE,
+
     OUA_STRING_MAX
 };
 

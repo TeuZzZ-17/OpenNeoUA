@@ -284,6 +284,8 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _bact_type = BACT_TYPES_MISSLE;
 
     _mislEmitter = NULL;
+    _mislSpecificEnergy.fill(1.0f);
+    _mislSpecificEnergyDefined.fill(false);
     _mislLifeTime = 5000;
     _mislDelayTime = 0;
     _mislType = MISL_BOMB;
@@ -910,7 +912,6 @@ bool NC_STACK_ypamissile::CanChainToTarget(NC_STACK_ypabact *target, NC_STACK_yp
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
     case BACT_TYPES_GUN:
-    case BACT_TYPES_HOVER:
         break;
 
     default:
@@ -1433,6 +1434,13 @@ int NC_STACK_ypamissile::CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy
         damage = baseEnergy;
         break;
     }
+
+    // OpenUA: fine-grained energy_* overrides preserve the exact vanilla
+    // heli/tank/flyer/robo result above when absent. Like the legacy values,
+    // these were snapshotted when the projectile was created.
+    float specificEnergy = 1.0f;
+    if ( TryGetSpecificEnergyForTarget(bct, &specificEnergy) )
+        damage = (int)((float)baseEnergy * specificEnergy);
 
     float shieldedDamage = damage * (100.0f - bct->GetEffectiveShield());
     float divisor = ( bct->getBACT_inputting() || bct->getBACT_viewer() ) ? 250.0 : 100.0;
@@ -2776,6 +2784,12 @@ void NC_STACK_ypamissile::Renew()
 {
     NC_STACK_ypabact::Renew();
 
+    // Missiles are recycled from the world's dead cache. Never let the
+    // previous shot's fine energy snapshot leak into a new projectile before
+    // ypaworld_func147() reconfigures it.
+    _mislSpecificEnergy.fill(1.0f);
+    _mislSpecificEnergyDefined.fill(false);
+
     _mislFlags  = 0;
     _mislDelayTime = 0;
     _mislAoeFalloff = 0;
@@ -2932,7 +2946,7 @@ void NC_STACK_ypamissile::Impact()
 
     for( NC_STACK_ypabact* &bct : _pSector->unitsList )
     {
-        if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_bact_type != BACT_TYPES_ROBO && bct->_bact_type != BACT_TYPES_TANK && bct->_bact_type != BACT_TYPES_CAR && bct->_bact_type != BACT_TYPES_GUN && bct->_bact_type != BACT_TYPES_HOVER && !(bct->_status_flg & BACT_STFLAG_DEATH2) )
+        if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_bact_type != BACT_TYPES_ROBO && bct->_bact_type != BACT_TYPES_TANK && bct->_bact_type != BACT_TYPES_CAR && bct->_bact_type != BACT_TYPES_GUN && !(bct->_status_flg & BACT_STFLAG_DEATH2) )
         {
             int v10 = 1;
 
@@ -3118,6 +3132,48 @@ void NC_STACK_ypamissile::setBACT_viewer(bool vwr)
 void NC_STACK_ypamissile::SetLauncherBact(NC_STACK_ypabact *bact)
 {
     _mislEmitter = bact;
+
+}
+
+void NC_STACK_ypamissile::ConfigureSpecificEnergyMultipliers(const World::TWeapProto &proto)
+{
+    _mislSpecificEnergy.fill(1.0f);
+    _mislSpecificEnergyDefined.fill(false);
+
+    for (int i = (int)World::VEHICLE_COMBAT_CLASS_UNKNOWN + 1;
+         i < (int)World::VEHICLE_COMBAT_CLASS_COUNT; ++i)
+    {
+        float energy = 1.0f;
+        const World::VehicleCombatClass targetClass =
+            static_cast<World::VehicleCombatClass>(i);
+        if ( World::TryGetSpecificWeaponEnergy(proto, targetClass, &energy) )
+        {
+            // Match the existing projectile snapshot path exactly: legacy
+            // energy_* values are converted to integer thousandths before
+            // SetPower*() stores them back as floats. Keep the new fine-class
+            // overrides on the same precision so enabling a more specific key
+            // cannot subtly change projectile damage rounding.
+            const int energyThousandths = (int)(energy * 1000.0f);
+            _mislSpecificEnergy[(size_t)i] = energyThousandths * 0.001f;
+            _mislSpecificEnergyDefined[(size_t)i] = true;
+        }
+    }
+}
+
+bool NC_STACK_ypamissile::TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const
+{
+    if ( !bct )
+        return false;
+
+    const int targetClass = (int)World::ResolveVehicleCombatClass(bct);
+    if ( targetClass <= (int)World::VEHICLE_COMBAT_CLASS_UNKNOWN ||
+         targetClass >= (int)World::VEHICLE_COMBAT_CLASS_COUNT ||
+         !_mislSpecificEnergyDefined[(size_t)targetClass] )
+        return false;
+
+    if ( outEnergy )
+        *outEnergy = _mislSpecificEnergy[(size_t)targetClass];
+    return true;
 }
 
 void NC_STACK_ypamissile::SetMissileType(int tp)

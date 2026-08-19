@@ -190,9 +190,6 @@ void LuaEvents::RegisterBact()
     lua_pushinteger(_lua, BACT_TYPES_GUN);
     lua_setfield(_lua, -2, "TYPE_GUN");
 
-    lua_pushinteger(_lua, BACT_TYPES_HOVER);
-    lua_setfield(_lua, -2, "TYPE_HOVER");
-
     lua_pop(_lua, 1);
 }
 

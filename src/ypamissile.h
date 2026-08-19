@@ -1,6 +1,7 @@
 #ifndef YMISSILE_H_INCLUDED
 #define YMISSILE_H_INCLUDED
 
+#include <array>
 #include <deque>
 #include <vector>
 
@@ -88,6 +89,7 @@ public:
     virtual void setBACT_viewer(bool) override;
 
     virtual void SetLauncherBact(NC_STACK_ypabact *);
+    void ConfigureSpecificEnergyMultipliers(const World::TWeapProto &proto);
     virtual void SetMissileType(int);
     virtual void SetLifeTime(int);
     virtual void SetDelay(int);
@@ -132,6 +134,7 @@ public:
     bool TubeCollisionTest(bool applyDirectDamage = true, NC_STACK_ypabact **hitTarget = NULL);
 
 protected:
+    bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
     int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
     int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy);
     void ApplyDirectHitToBact(NC_STACK_ypabact *bct);
@@ -204,6 +207,13 @@ protected:
     float _mislEnergyTank   = 0.0;
     float _mislEnergyFlyer  = 0.0;
     float _mislEnergyRobo   = 0.0;
+    // Fine-grained target multipliers are snapshotted at projectile creation,
+    // matching the legacy energy_* copy semantics even if a GEM modifies the
+    // Weapon prototype while this projectile is already in flight. Enum-indexed
+    // storage reuses the shared class resolver instead of maintaining a second
+    // class-to-field switch inside the missile runtime.
+    std::array<float, World::VEHICLE_COMBAT_CLASS_COUNT> _mislSpecificEnergy = {};
+    std::array<bool, World::VEHICLE_COMBAT_CLASS_COUNT> _mislSpecificEnergyDefined = {};
     float _mislRadiusHeli   = 0.0;
     float _mislRadiusTank   = 0.0;
     float _mislRadiusFlyer  = 0.0;

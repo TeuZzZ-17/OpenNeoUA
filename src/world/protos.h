@@ -14,6 +14,24 @@ namespace World
 {
 struct TRoboProto;
 
+// OpenUA custom: gameplay-facing Vehicle class used only by the extended
+// energy/job systems. This deliberately does not add or alter BACT_TYPES, so
+// physics, movement and legacy actor dispatch remain untouched.
+enum VehicleCombatClass : uint8_t
+{
+    VEHICLE_COMBAT_CLASS_UNKNOWN = 0,
+    VEHICLE_COMBAT_CLASS_HELI,
+    VEHICLE_COMBAT_CLASS_TANK,
+    VEHICLE_COMBAT_CLASS_PLANE,
+    VEHICLE_COMBAT_CLASS_GLIDER,
+    VEHICLE_COMBAT_CLASS_ZEPPELIN,
+    VEHICLE_COMBAT_CLASS_UFO,
+    VEHICLE_COMBAT_CLASS_CAR,
+    VEHICLE_COMBAT_CLASS_ROBO,
+    VEHICLE_COMBAT_CLASS_GUN,
+    VEHICLE_COMBAT_CLASS_COUNT
+};
+
 enum DecorationFXMode
 {
     DECORATION_FX_PERIODIC = 0,
@@ -535,6 +553,7 @@ struct TVhclProto
 
     int32_t Index = -1;
     int model_id = 0;
+    VehicleCombatClass combat_class = VEHICLE_COMBAT_CLASS_UNKNOWN;
     uint8_t disable_enable_bitmask = 0;
     int8_t weapon = 0;
     std::array<int16_t, 3> extra_weapons = {0, 0, 0};
@@ -701,12 +720,24 @@ struct TVhclProto
     int8_t job_fighthelicopter = 0;
     int8_t job_fightflyer = 0;
     int8_t job_fightrobo = 0;
+    int8_t job_fightplane = 0;
+    int8_t job_fightglider = 0;
+    int8_t job_fightzeppelin = 0;
+    int8_t job_fightufo = 0;
+    int8_t job_fightcar = 0;
+    int8_t job_fightgun = 0;
     int8_t job_conquer = 0;
     int8_t job_reconnoitre = 0;
     bool job_fighttank_defined = false;
     bool job_fighthelicopter_defined = false;
     bool job_fightflyer_defined = false;
     bool job_fightrobo_defined = false;
+    bool job_fightplane_defined = false;
+    bool job_fightglider_defined = false;
+    bool job_fightzeppelin_defined = false;
+    bool job_fightufo_defined = false;
+    bool job_fightcar_defined = false;
+    bool job_fightgun_defined = false;
     bool job_conquer_defined = false;
     bool job_reconnoitre_defined = false;
     NC_STACK_skeleton *wireframe = NULL;
@@ -916,10 +947,22 @@ struct TWeapProto
     float energy_tank = 0.0;
     float energy_flyer = 0.0;
     float energy_robo = 0.0;
+    float energy_plane = 0.0;
+    float energy_glider = 0.0;
+    float energy_zeppelin = 0.0;
+    float energy_ufo = 0.0;
+    float energy_car = 0.0;
+    float energy_gun = 0.0;
     bool energy_heli_defined = false;
     bool energy_tank_defined = false;
     bool energy_flyer_defined = false;
     bool energy_robo_defined = false;
+    bool energy_plane_defined = false;
+    bool energy_glider_defined = false;
+    bool energy_zeppelin_defined = false;
+    bool energy_ufo_defined = false;
+    bool energy_car_defined = false;
+    bool energy_gun_defined = false;
     // Vanilla class-specific direct-hit radii. A zero value falls back to the
     // generic weapon radius, matching the original Urban Assault behaviour.
     float radius_heli = 0.0;
@@ -968,6 +1011,24 @@ struct TWeapProto
 
     ~TWeapProto();
 };
+
+// Resolve the authored gameplay class of a runtime unit. Mimics use their
+// current disguise prototype; invalid/untyped actors fall back to the legacy
+// runtime BACT type where that mapping is unambiguous.
+VehicleCombatClass ResolveVehicleCombatClass(const NC_STACK_ypabact *unit);
+
+// Return only a newly-authored fine-grained job value. Callers provide their
+// own legacy fallback so every old AI path keeps its exact historical grouping
+// when the new parameter is absent.
+bool TryGetSpecificFightJob(const TVhclProto &proto,
+                            VehicleCombatClass targetClass,
+                            int *outValue);
+
+// Return only a newly-authored fine-grained energy value. Legacy callers first
+// resolve heli/tank/flyer/robo exactly as before, then use this as an override.
+bool TryGetSpecificWeaponEnergy(const TWeapProto &proto,
+                                VehicleCombatClass targetClass,
+                                float *outValue);
 
 
 

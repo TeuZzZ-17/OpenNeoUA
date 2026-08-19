@@ -95,7 +95,6 @@ static bool ypatank_IsVehicleCollisionTarget(const NC_STACK_ypabact *target)
     case BACT_TYPES_FLYER:
     case BACT_TYPES_UFO:
     case BACT_TYPES_CAR:
-    case BACT_TYPES_HOVER:
         return true;
     default:
         return false;
