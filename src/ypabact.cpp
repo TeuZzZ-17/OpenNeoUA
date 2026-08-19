@@ -200,7 +200,7 @@ static bool ypabact_TryReadActionEnergyCostPercent(Common::Ini::Key &key,
             return false;
 
         // Keep the value within a literal percentage range. 100 means the
-        // whole maximum-energy pool, while 0 disables the configured drain.
+        // full nominal weapon damage, while 0 disables the configured drain.
         *outPercent = std::min(parsed, 100.0f);
         return true;
     }
@@ -2246,7 +2246,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
     _mgunEnergyDrainRemainder = 0.0f;
-    _mgunEnergyDrainElapsedMs = 0;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
@@ -9928,23 +9927,63 @@ static float ypabact_LaserEnergyScale(const World::TWeapProto &wproto, NC_STACK_
     return 1.0f;
 }
 
-static int ypabact_LaserTickDamage(const World::TWeapProto &wproto, NC_STACK_ypabact *target,
-                                   int connectedTicks, float damageMult = 1.0f)
+static float ypabact_LaserNominalTickEnergy(const World::TWeapProto &wproto,
+                                             int connectedTicks,
+                                             float damageMult = 1.0f)
 {
-    if ( !target )
-        return 0;
-
     float baseEnergy = (float)wproto.energy;
     if ( wproto.laser_energy_increment_rate > 0.0f && connectedTicks > 0 )
         baseEnergy += (float)connectedTicks * wproto.laser_energy_increment_rate;
     if ( wproto.laser_max_energy > 0.0f && baseEnergy > wproto.laser_max_energy )
         baseEnergy = wproto.laser_max_energy;
     if ( baseEnergy <= 0.0f )
-        return 0;
+        return 0.0f;
 
     if ( damageMult <= 0.0f )
         damageMult = 1.0f;
-    baseEnergy *= damageMult;
+
+    return baseEnergy * damageMult;
+}
+
+static float ypabact_LaserNominalFrameDamage(
+    const World::TWeapProto &wproto,
+    const std::vector<NC_STACK_ypabact::TLaserBeamRuntime> &beams,
+    const std::vector<float> &damageMultipliers,
+    int32_t frameTime,
+    bool playerControlled)
+{
+    if ( frameTime <= 0 || beams.empty() )
+        return 0.0f;
+
+    const int damageIntervalMs = ypabact_LaserDamageInterval(wproto, playerControlled);
+    if ( damageIntervalMs <= 0 )
+        return 0.0f;
+
+    double nominalTickEnergy = 0.0;
+    for (size_t i = 0; i < beams.size(); i++)
+    {
+        const float damageMult = i < damageMultipliers.size() ? damageMultipliers[i] : 1.0f;
+        nominalTickEnergy += ypabact_LaserNominalTickEnergy(
+            wproto, std::max(beams[i].energy_ticks, 0), damageMult);
+    }
+
+    const double nominalFrameDamage = nominalTickEnergy *
+                                      (double)frameTime / (double)damageIntervalMs;
+    if ( !isfinite(nominalFrameDamage) || nominalFrameDamage <= 0.0 )
+        return 0.0f;
+
+    return (float)std::min(nominalFrameDamage, (double)std::numeric_limits<float>::max());
+}
+
+static int ypabact_LaserTickDamage(const World::TWeapProto &wproto, NC_STACK_ypabact *target,
+                                   int connectedTicks, float damageMult = 1.0f)
+{
+    if ( !target )
+        return 0;
+
+    const float baseEnergy = ypabact_LaserNominalTickEnergy(wproto, connectedTicks, damageMult);
+    if ( baseEnergy <= 0.0f )
+        return 0;
 
     float damage = baseEnergy * ypabact_LaserEnergyScale(wproto, target);
     if ( damage <= 0.0f )
@@ -10061,11 +10100,7 @@ static int32_t ypabact_LaserSectorTargetId(const TLaserWorldHit &hit)
 
 static int ypabact_LaserTickSectorEnergy(const World::TWeapProto &wproto, int connectedTicks)
 {
-    float baseEnergy = (float)wproto.energy;
-    if ( wproto.laser_energy_increment_rate > 0.0f && connectedTicks > 0 )
-        baseEnergy += (float)connectedTicks * wproto.laser_energy_increment_rate;
-    if ( wproto.laser_max_energy > 0.0f && baseEnergy > wproto.laser_max_energy )
-        baseEnergy = wproto.laser_max_energy;
+    const float baseEnergy = ypabact_LaserNominalTickEnergy(wproto, connectedTicks);
 
     // Keep the same public/internal energy scale as normal weapons and laser unit
     // damage: energy = 1000 means "10" in script/HUD terms. The sector/building
@@ -10767,7 +10802,6 @@ void NC_STACK_ypabact::StopLaser()
     _laser_next_fx_time = 0;
     _laser_next_beam_vp_time = 0;
     _laserEnergyDrainRemainder = 0.0f;
-    _laserEnergyDrainElapsedMs = 0;
     _laser_requests.clear();
     _laser_beams.clear();
 }
@@ -10800,10 +10834,6 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         StopLaser();
         return;
     }
-
-    ApplyLaserEnergyDrain(arg ? arg->frameTime : 0,
-                          _laserEnergyDrainRemainder,
-                          _laserEnergyDrainElapsedMs);
 
     float range = ypabact_LaserRange(wproto);
     bool playerControlled = getBACT_inputting() || getBACT_viewer();
@@ -11012,6 +11042,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
     }
 
     activeBeamCount = requests.size();
+    std::vector<float> laserDamageMultipliers(activeBeamCount, 1.0f);
 
     if ( wproto.laser_chain_allow && wproto.laser_chain_max_jumps > 0 &&
          wproto.laser_chain_radius > 0.0f && primaryHitTarget &&
@@ -11065,6 +11096,9 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
                 beam.target_gid = target->_gid;
 
                 chainDamageMult *= perJumpMult;
+                if ( laserDamageMultipliers.size() <= beamIndex )
+                    laserDamageMultipliers.resize(beamIndex + 1, 1.0f);
+                laserDamageMultipliers[beamIndex] = chainDamageMult;
 
                 if ( spawnBeamVPs )
                     ypabact_SpawnLaserBeamVPs(this, wproto, beam.start, beam.end);
@@ -11103,6 +11137,12 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         _laser_next_damage_time = _laser_beams[0].next_damage_time;
         _laser_next_fx_time = _laser_beams[0].next_fx_time;
     }
+
+    const int32_t laserFrameTime = arg ? arg->frameTime : 0;
+    const float laserNominalDamage =
+        ypabact_LaserNominalFrameDamage(wproto, _laser_beams, laserDamageMultipliers,
+                                        laserFrameTime, playerControlled);
+    ApplyLaserEnergyDrain(laserNominalDamage, _laserEnergyDrainRemainder);
 
     // ---- Loop sound: laser loops by default while the trigger is held ----
     wproto.snd_loop.LoadSamples(); // idempotent: real load happens only once
@@ -11371,7 +11411,6 @@ void NC_STACK_ypabact::StopVerticalLaser()
     _vertical_laser_request_start = vec3d(0.0, 0.0, 0.0);
     _vertical_laser_next_beam_vp_time = 0;
     _verticalLaserEnergyDrainRemainder = 0.0f;
-    _verticalLaserEnergyDrainElapsedMs = 0;
     _vertical_laser_beam = TLaserBeamRuntime();
     _vertical_laser_beams.clear();
 }
@@ -11400,10 +11439,6 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
         StopVerticalLaser();
         return;
     }
-
-    ApplyLaserEnergyDrain(arg ? arg->frameTime : 0,
-                          _verticalLaserEnergyDrainRemainder,
-                          _verticalLaserEnergyDrainElapsedMs);
 
     // UA world coordinates use +Y as "down" toward terrain/buildings.
     const vec3d down(0.0, 1.0, 0.0);
@@ -11485,6 +11520,8 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
         }
     }
 
+    std::vector<float> laserDamageMultipliers(activeBeamCount, 1.0f);
+
     if ( wproto.laser_chain_allow && wproto.laser_chain_max_jumps > 0 &&
          wproto.laser_chain_radius > 0.0f && primaryHitTarget &&
          primaryHitTarget->_owner != World::OWNER_0 &&
@@ -11535,6 +11572,9 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
                 chainBeam.target_gid = chainTarget->_gid;
 
                 chainDamageMult *= perJumpMult;
+                if ( laserDamageMultipliers.size() <= activeBeamCount )
+                    laserDamageMultipliers.resize(activeBeamCount + 1, 1.0f);
+                laserDamageMultipliers[activeBeamCount] = chainDamageMult;
 
                 if ( spawnBeamVPs )
                     ypabact_SpawnLaserBeamVPs(this, wproto, chainBeam.start, chainBeam.end);
@@ -11566,6 +11606,12 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
 
     if ( spawnBeamVPs )
         _vertical_laser_next_beam_vp_time = _clock + 1;
+
+    const int32_t laserFrameTime = arg ? arg->frameTime : 0;
+    const float laserNominalDamage =
+        ypabact_LaserNominalFrameDamage(wproto, _vertical_laser_beams, laserDamageMultipliers,
+                                        laserFrameTime, playerControlled);
+    ApplyLaserEnergyDrain(laserNominalDamage, _verticalLaserEnergyDrainRemainder);
 
     wproto.snd_loop.LoadSamples();
 
@@ -11928,11 +11974,11 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(selectedWeapon);
     const bool usePlayerLaunchShake = ypabact_ShouldUsePlayerLaunchShake(this, wproto);
-    float shootingEnergyCostPercent = 0.0f;
-    const bool hasConfiguredShootingEnergyCost =
+    float weaponEnergyCostPercent = 0.0f;
+    const bool hasConfiguredWeaponEnergyCost =
         ypabact_TryReadActionEnergyCostPercent(
-            System::IniConf::GameShootingEnergyCostPercent,
-            &shootingEnergyCostPercent);
+            System::IniConf::GameWeaponEnergyCostPercent,
+            &weaponEnergyCostPercent);
 
     // OpenUA custom: mortar weapons are driven exclusively by UpdateMortar()'s
     // barrage AI. Never fire them through the normal direct/missile path.
@@ -11987,7 +12033,6 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     vec3d recoilDirSum(0.0, 0.0, 0.0);
     int recoilShotCount = 0;
-    bool shootingEnergyCostCharged = false;
 
     for (int i = 0; i < v13; i++)
     {
@@ -12048,18 +12093,19 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         // Separate gun units use this path only when the new percentage is
         // explicitly configured; otherwise preserve their legacy no-cost path.
         if ( !IsInvulnerableToDamage() &&
-             (_bact_type != BACT_TYPES_GUN || hasConfiguredShootingEnergyCost) )
+             (_bact_type != BACT_TYPES_GUN || hasConfiguredWeaponEnergyCost) )
         {
-            if ( hasConfiguredShootingEnergyCost )
+            if ( hasConfiguredWeaponEnergyCost )
             {
-                if ( !shootingEnergyCostCharged )
-                {
-                    const float shootingEnergyCost =
-                        (float)std::max(_energy_max, 0) *
-                        shootingEnergyCostPercent * 0.01f;
-                    _energy -= CalcShieldedActionEnergyCost(shootingEnergyCost);
-                    shootingEnergyCostCharged = true;
-                }
+                // Charge each successfully generated projectile by its nominal damage.
+                // Summed over v13 this is the total damage of the firing action, so
+                // fast low-damage weapons and slow high-damage weapons pay for output,
+                // not merely for how often they fire. Shield is applied after this raw
+                // damage-based cost is calculated.
+                const float shootingEnergyCost =
+                    (float)std::max(wobj->_energy, 0) *
+                    weaponEnergyCostPercent * 0.01f;
+                _energy -= CalcShieldedActionEnergyCost(shootingEnergyCost);
             }
             else
             {
@@ -12879,39 +12925,31 @@ int32_t NC_STACK_ypabact::GetEnergyDrainIntervalMs(Common::Ini::Key &key)
     }
 }
 
-void NC_STACK_ypabact::ApplyLaserEnergyDrain(int32_t frameTime, float &remainder,
-                                              int32_t &elapsedMs)
+void NC_STACK_ypabact::ApplyLaserEnergyDrain(float nominalDamage, float &remainder)
 {
-    float laserEnergyCostPercent = 0.0f;
-    if ( frameTime <= 0 ||
-         !ypabact_TryReadActionEnergyCostPercent(
-             System::IniConf::GameLaserEnergyCostPercent,
-             &laserEnergyCostPercent) ||
-         laserEnergyCostPercent <= 0.0f || IsInvulnerableToDamage() )
+    float weaponEnergyCostPercent = 0.0f;
+    if ( !ypabact_TryReadActionEnergyCostPercent(
+             System::IniConf::GameWeaponEnergyCostPercent,
+             &weaponEnergyCostPercent) ||
+         weaponEnergyCostPercent <= 0.0f || IsInvulnerableToDamage() )
     {
         remainder = 0.0f;
-        elapsedMs = 0;
         return;
     }
 
-    const float rawEnergyCost = (float)std::max(_energy_max, 0) *
-                                laserEnergyCostPercent * 0.01f *
-                                ((float)frameTime / 1000.0f);
+    if ( !isfinite(nominalDamage) || nominalDamage < 0.0f )
+        nominalDamage = 0.0f;
+
+    const float rawEnergyCost = nominalDamage * weaponEnergyCostPercent * 0.01f;
     remainder += CalcShieldedActionEnergyCost(rawEnergyCost);
-    elapsedMs += frameTime;
 
-    const int32_t drainIntervalMs =
-        GetEnergyDrainIntervalMs(System::IniConf::GameLaserEnergyDrainIntervalMs);
-    if ( drainIntervalMs <= 0 || elapsedMs >= drainIntervalMs )
+    // No weapon-side drain interval: apply every whole accumulated energy unit
+    // immediately. The fractional remainder only preserves sub-unit precision.
+    const int energyCost = (int)remainder;
+    if ( energyCost > 0 )
     {
-        const int energyCost = (int)remainder;
-        if ( energyCost > 0 )
-        {
-            remainder -= energyCost;
-            _energy -= energyCost;
-        }
-
-        elapsedMs = drainIntervalMs > 0 ? elapsedMs % drainIntervalMs : 0;
+        remainder -= energyCost;
+        _energy -= energyCost;
     }
 }
 
@@ -14715,7 +14753,6 @@ void NC_STACK_ypabact::Renew()
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
     _mgunEnergyDrainRemainder = 0.0f;
-    _mgunEnergyDrainElapsedMs = 0;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
@@ -15711,11 +15748,11 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
     bool vehicleTimedMgun = UsesVehicleMinigunTiming();
     int mgunShots = _num_mguns > 0 ? _num_mguns : 1;
     float mgunPower = GetMinigunPower();
-    float mgunEnergyCostPercent = 0.0f;
-    const bool hasConfiguredMgunEnergyCost =
+    float weaponEnergyCostPercent = 0.0f;
+    const bool hasConfiguredWeaponEnergyCost =
         ypabact_TryReadActionEnergyCostPercent(
-            System::IniConf::GameMgunEnergyCostPercent,
-            &mgunEnergyCostPercent);
+            System::IniConf::GameWeaponEnergyCostPercent,
+            &weaponEnergyCostPercent);
     RevealInvisibleOnAttack();
 
     if ( vehicleTimedMgun )
@@ -15727,7 +15764,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
          arg->field_10 - _mgunEnergyDrainLastFireTime > frameDeltaMs + 1 )
     {
         _mgunEnergyDrainRemainder = 0.0f;
-        _mgunEnergyDrainElapsedMs = 0;
     }
     _mgunEnergyDrainLastFireTime = arg->field_10;
 
@@ -15747,35 +15783,27 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
     // old branch had no energy drain, so the new parameter opts them in while
     // an absent/invalid parameter keeps that legacy fallback.
     if ( !IsInvulnerableToDamage() &&
-         (_bact_type != BACT_TYPES_GUN || (gunUsesMinigunEnergy && hasConfiguredMgunEnergyCost)) )
+         (_bact_type != BACT_TYPES_GUN || (gunUsesMinigunEnergy && hasConfiguredWeaponEnergyCost)) )
     {
-        const float mgunEnergyCost = hasConfiguredMgunEnergyCost
-            ? (float)std::max(_energy_max, 0) * mgunEnergyCostPercent * 0.01f *
-              std::max(arg->field_C, 0.0f)
-            : mgunPower * std::max(arg->field_C, 0.0f) / 300.0f;
+        const float mgunFrameTime = std::max(arg->field_C, 0.0f);
+        const float mgunEnergyCost = hasConfiguredWeaponEnergyCost
+            ? mgunPower * mgunFrameTime * (float)mgunShots *
+              weaponEnergyCostPercent * 0.01f
+            : mgunPower * mgunFrameTime / 300.0f;
         _mgunEnergyDrainRemainder += CalcShieldedActionEnergyCost(mgunEnergyCost);
-        _mgunEnergyDrainElapsedMs += frameDeltaMs;
 
-        const int32_t drainIntervalMs =
-            GetEnergyDrainIntervalMs(System::IniConf::GameMgunEnergyDrainIntervalMs);
-        if ( drainIntervalMs <= 0 || _mgunEnergyDrainElapsedMs >= drainIntervalMs )
+        // No MGUN drain interval: apply every whole accumulated energy unit
+        // immediately. The fractional remainder only preserves sub-unit precision.
+        const int energyCost = (int)_mgunEnergyDrainRemainder;
+        if ( energyCost > 0 )
         {
-            const int energyCost = (int)_mgunEnergyDrainRemainder;
-            if ( energyCost > 0 )
-            {
-                _mgunEnergyDrainRemainder -= energyCost;
-                _energy -= energyCost;
-            }
-
-            _mgunEnergyDrainElapsedMs = drainIntervalMs > 0
-                ? _mgunEnergyDrainElapsedMs % drainIntervalMs
-                : 0;
+            _mgunEnergyDrainRemainder -= energyCost;
+            _energy -= energyCost;
         }
     }
     else
     {
         _mgunEnergyDrainRemainder = 0.0f;
-        _mgunEnergyDrainElapsedMs = 0;
     }
 
     int v88 = getBACT_inputting();
