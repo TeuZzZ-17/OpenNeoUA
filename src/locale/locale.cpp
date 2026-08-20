@@ -15,9 +15,9 @@
 namespace Locale {
 
 static_assert(OPENUA_STRING_LIMIT <= static_cast<int>(World::CVLocaleStringsNumber),
-              "OpenUA locale range exceeds the runtime catalogue capacity");
+              "OpenNeoUA locale range exceeds the runtime catalogue capacity");
 static_assert(OUA_STRING_MAX <= OPENUA_STRING_LIMIT,
-              "OpenUA string IDs exceed their reserved range");
+              "OpenNeoUA string IDs exceed their reserved range");
 
 namespace {
 
@@ -390,9 +390,9 @@ std::string Text::Get(int32_t id, const std::string &def)
 std::string Text::OpenUA(uint32_t id)
 {
     if (id < OPENUA_STRING_BASE || id >= OPENUA_STRING_LIMIT)
-        return "[OpenUA text]";
+        return "[OpenNeoUA text]";
 
-    std::string fallback = std::string("[OpenUA ") + std::to_string(id) + "]";
+    std::string fallback = std::string("[OpenNeoUA ") + std::to_string(id) + "]";
     switch (id)
     {
         case OUA_INTERFACE_STYLE: fallback = "Interface Style"; break;

@@ -16,7 +16,7 @@ public:
     static void SetLangDefault();
     static std::string Get(int32_t id, const std::string &def);
 
-    // OpenUA overlay loader. Only IDs in OPENUA_STRING_BASE..LIMIT are accepted.
+    // OpenNeoUA overlay loader. Only IDs in OPENUA_STRING_BASE..LIMIT are accepted.
     static bool OpenUALngFileLoad(const std::string &filename);
     // Reads RT_STRING resources directly from an original Urban Assault DLL.
     static bool DllFileLoad(const std::string &filename);

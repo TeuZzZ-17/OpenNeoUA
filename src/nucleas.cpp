@@ -76,7 +76,7 @@ NC_STACK_base *TryLoadSetLooseBaseObject(const std::string &objectName)
     if ( !looseHandle.OK() )
     {
         IFFile::ReportSetLooseOverrideFailed(overrideInfo, "loose BASE object existed but failed to open; embedded SET.BAS object retained.");
-        ypa_log_out("WARNING: OpenUA SET loose BASE override failed to open for %s (%s); embedded object retained.\n",
+        ypa_log_out("WARNING: OpenNeoUA SET loose BASE override failed to open for %s (%s); embedded object retained.\n",
                     objectName.c_str(), overrideInfo.resolvedPath.c_str());
         return NULL;
     }
@@ -88,7 +88,7 @@ NC_STACK_base *TryLoadSetLooseBaseObject(const std::string &objectName)
     if ( !overrideObject )
     {
         IFFile::ReportSetLooseOverrideFailed(overrideInfo, "loose BASE object failed to parse; embedded SET.BAS object retained.");
-        ypa_log_out("WARNING: OpenUA SET loose BASE override failed to parse for %s (%s); embedded object retained.\n",
+        ypa_log_out("WARNING: OpenNeoUA SET loose BASE override failed to parse for %s (%s); embedded object retained.\n",
                     objectName.c_str(), overrideInfo.resolvedPath.c_str());
         return NULL;
     }
@@ -98,13 +98,13 @@ NC_STACK_base *TryLoadSetLooseBaseObject(const std::string &objectName)
         const std::string loadedName = overrideObject->getName();
         overrideObject->Delete();
         IFFile::ReportSetLooseOverrideFailed(overrideInfo, "loose BASE object NAME does not match the embedded object; embedded SET.BAS object retained.");
-        ypa_log_out("WARNING: OpenUA SET loose BASE override name mismatch: expected %s, loaded %s (%s); embedded object retained.\n",
+        ypa_log_out("WARNING: OpenNeoUA SET loose BASE override name mismatch: expected %s, loaded %s (%s); embedded object retained.\n",
                     objectName.c_str(), loadedName.c_str(), overrideInfo.resolvedPath.c_str());
         return NULL;
     }
 
     IFFile::ReportSetLooseOverrideUsed(overrideInfo);
-    ypa_log_out("OpenUA SET loose BASE override used: %s -> %s\n",
+    ypa_log_out("OpenNeoUA SET loose BASE override used: %s -> %s\n",
                 objectName.c_str(), overrideInfo.resolvedPath.c_str());
     return overrideObject;
 }

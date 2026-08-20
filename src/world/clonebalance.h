@@ -10,7 +10,7 @@ class NC_STACK_ypabact;
 namespace World
 {
 
-// OpenUA custom: "Black Sect imperfect grey clone" runtime balance.
+// OpenNeoUA custom: "Black Sect imperfect grey clone" runtime balance.
 //
 // Black Sect units (owner/faction 5) play like slightly degraded grey clones of
 // the prototype they share with the other factions. Every malus below is applied

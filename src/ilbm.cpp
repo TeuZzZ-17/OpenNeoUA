@@ -869,7 +869,7 @@ static rsrc *ILBM_ReadSet46RootPngOverride(NC_STACK_ilbm *obj, IDVList &stak, co
     rsrc *pngRes = ILBM_ReadPngOverride(obj, pngStak, overrideInfo.resolvedPath, 0, true);
     if ( !pngRes )
     {
-        ypa_log_out("WARNING: OpenUA Set46 PNG override failed for %s; falling back to legacy asset %s.\n",
+        ypa_log_out("WARNING: OpenNeoUA Set46 PNG override failed for %s; falling back to legacy asset %s.\n",
                     overrideInfo.resolvedPath.c_str(), name.c_str());
         return NULL;
     }
@@ -880,14 +880,14 @@ static rsrc *ILBM_ReadSet46RootPngOverride(NC_STACK_ilbm *obj, IDVList &stak, co
     if ( pngBitmap && ILBM_ReadLegacyDimensions(name, &legacyWidth, &legacyHeight) &&
          (pngBitmap->width != legacyWidth || pngBitmap->height != legacyHeight) )
     {
-        ypa_log_out("WARNING: OpenUA Set46 PNG override %s size %dx%d differs from legacy %s size %dx%d; falling back to legacy asset.\n",
+        ypa_log_out("WARNING: OpenNeoUA Set46 PNG override %s size %dx%d differs from legacy %s size %dx%d; falling back to legacy asset.\n",
                     overrideInfo.resolvedPath.c_str(), pngBitmap->width, pngBitmap->height,
                     name.c_str(), legacyWidth, legacyHeight);
         obj->NC_STACK_rsrc::rsrc_func65(pngRes);
         return NULL;
     }
 
-    ypa_log_out("OpenUA Set46 PNG override used: %s -> %s\n", name.c_str(), overrideInfo.resolvedPath.c_str());
+    ypa_log_out("OpenNeoUA Set46 PNG override used: %s -> %s\n", name.c_str(), overrideInfo.resolvedPath.c_str());
 
     if ( embeddedFile )
         ILBM_SkipEmbeddedChunk(embeddedFile);

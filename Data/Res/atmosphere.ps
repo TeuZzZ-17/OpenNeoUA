@@ -26,7 +26,7 @@ void main()
     vec3 base = source.rgb * normclr + (1.0 - source.rgb) * invclr;
     float lum = clamp(uaLuma(base), 0.0, 1.0);
 
-    // Keep OpenUA's existing luminance LUT/palette path intact.
+    // Keep OpenNeoUA's existing luminance LUT/palette path intact.
     vec3 lutColor = texture2D(filterLut, vec2(lum, 0.5)).rgb;
     vec3 color = mix(base, lutColor, clamp(filterStrength, 0.0, 1.0));
 

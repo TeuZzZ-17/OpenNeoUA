@@ -453,7 +453,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                 {
                     _old_pos = _position;
 
-                    // OpenUA recoil: AI tanks use a render-only recoil offset.
+                    // OpenNeoUA recoil: AI tanks use a render-only recoil offset.
                     // Briefly suppress forward recovery so the controller does
                     // not visually cancel the kick on the next frame.
                     if ( _thraction > 0.0f )
@@ -1057,7 +1057,7 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         bool playerRecoilRecovery = ypatank_IsPlayerRecoilRecoveryActive(this);
         if ( playerRecoilRecovery && v88 > 0.0f )
         {
-            // OpenUA mechanical recoil: when the player fires a tank while
+            // OpenNeoUA mechanical recoil: when the player fires a tank while
             // holding forward, the simulated backward recoil is immediately
             // contradicted by full forward traction, creating a slingshot.
             // Briefly damp only forward recovery; steering, braking, reverse,

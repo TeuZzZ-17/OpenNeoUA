@@ -1435,7 +1435,7 @@ int NC_STACK_ypamissile::CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy
         break;
     }
 
-    // OpenUA: fine-grained energy_* overrides preserve the exact vanilla
+    // OpenNeoUA: fine-grained energy_* overrides preserve the exact vanilla
     // heli/tank/flyer/robo result above when absent. Like the legacy values,
     // these were snapshotted when the projectile was created.
     float specificEnergy = 1.0f;
@@ -1655,7 +1655,7 @@ const char *NC_STACK_ypamissile::GetAreaPushSkipReason(NC_STACK_ypabact *bct, bo
     if ( bct->_bact_type == BACT_TYPES_MISSLE )
         return "missile";
 
-    // OpenUA custom: all flak/turret actors use model = gun / BACT_TYPES_GUN.
+    // OpenNeoUA custom: all flak/turret actors use model = gun / BACT_TYPES_GUN.
     // They are static defenses and should never be knocked away by weapon push.
     if ( bct->_bact_type == BACT_TYPES_GUN )
         return "gun";
@@ -2289,7 +2289,7 @@ void NC_STACK_ypamissile::SteerHomingBombDirection(float dtime)
 
 void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 {
-    // OpenUA custom: mortar shells use a fully isolated ballistic path so normal
+    // OpenNeoUA custom: mortar shells use a fully isolated ballistic path so normal
     // missile/bomb behavior is left completely unchanged.
     if ( _isMortarProjectile )
     {
@@ -2824,7 +2824,7 @@ void NC_STACK_ypamissile::Renew()
     _weaponTracerVisualSeed = 0;
     _weaponTracerPoints.clear();
 
-    // OpenUA custom: clear mortar shell state on recycle.
+    // OpenNeoUA custom: clear mortar shell state on recycle.
     _isMortarProjectile = false;
     _mortarStartPos  = vec3d(0.0, 0.0, 0.0);
     _mortarTargetPos = vec3d(0.0, 0.0, 0.0);

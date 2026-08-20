@@ -81,7 +81,7 @@ public:
     static PFNGLUNIFORMBLOCKBINDINGPROC GLUniformBlockBinding;
     static PFNGLBINDBUFFERBASEPROC GLBindBufferBase;
 
-    // OpenUA custom: needed by the fullscreen visual filter (multi-texture unit for the LUT)
+    // OpenNeoUA custom: needed by the fullscreen visual filter (multi-texture unit for the LUT)
     static PFNGLACTIVETEXTUREPROC GLActiveTexture;
 };
 

@@ -67,7 +67,7 @@ PFNGLGETUNIFORMBLOCKINDEXPROC Glext::GLGetUniformBlockIndex = NULL;
 PFNGLUNIFORMBLOCKBINDINGPROC Glext::GLUniformBlockBinding = NULL;
 PFNGLBINDBUFFERBASEPROC Glext::GLBindBufferBase = NULL;
 
-// OpenUA custom: fullscreen visual filter LUT
+// OpenNeoUA custom: fullscreen visual filter LUT
 PFNGLACTIVETEXTUREPROC Glext::GLActiveTexture = NULL;
 
 template<typename T>
