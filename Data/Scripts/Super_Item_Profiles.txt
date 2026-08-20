@@ -1,4 +1,4 @@
-; OpenUA data-driven SuperItem profiles.
+; OpenNeoUA data-driven SuperItem profiles.
 ; Loaded only when game.custom_superitems = 1 in Nucleus.ini.
 
 begin_superitem_profile

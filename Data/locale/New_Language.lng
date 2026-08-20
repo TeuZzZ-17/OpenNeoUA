@@ -1,5 +1,5 @@
-# OpenUA-owned interface strings.
-# IDs 3000-3999 are reserved for OpenUA and must not contain vanilla Urban Assault text.
+# OpenNeoUA-owned interface strings.
+# IDs 3000-3999 are reserved for OpenNeoUA and must not contain vanilla Urban Assault text.
 # Vanilla strings are read at runtime from the user's original LOCALE/LANGUAGE.DLL.
 
 3000 = Quit Game

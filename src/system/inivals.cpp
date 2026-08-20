@@ -32,7 +32,7 @@ Common::Ini::Key IniConf::GfxHorizonFogEnable("gfx.horizon_fog_enable", Common::
 Common::Ini::Key IniConf::GfxHorizonFogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string("4000"));
 Common::Ini::Key IniConf::GfxHorizonFogLength("gfx.horizon_fog_length", Common::Ini::KT_WORD, std::string("2000"));
 Common::Ini::Key IniConf::GfxHorizonFogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string("0.80"));
-// OpenUA Horizon Atmosphere V2: RGB colour used to blend opaque world geometry
+// OpenNeoUA Horizon Atmosphere V2: RGB colour used to blend opaque world geometry
 // into the distant atmosphere. The effect preserves depth and object alpha.
 Common::Ini::Key IniConf::GfxHorizonFogColor("gfx.horizon_fog_color", Common::Ini::KT_WORD, std::string("150_155_160"));
 Common::Ini::Key IniConf::GfxHorizonDarkEnable("gfx.horizon_dark_enable", Common::Ini::KT_BOOL, true);
@@ -50,7 +50,7 @@ Common::Ini::Key IniConf::GfxMode("gfx.mode", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxXRes("gfx.xres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxYRes("gfx.yres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxPalette("gfx.palette", Common::Ini::KT_WORD);
-// OpenUA custom: modern fullscreen visual filter (replaces the legacy palette-theme remap).
+// OpenNeoUA custom: modern fullscreen visual filter (replaces the legacy palette-theme remap).
 Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
 Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.25"));
 Common::Ini::Key IniConf::GfxAtmosphereFx("gfx.atmosphere_fx", Common::Ini::KT_BOOL, true);
@@ -86,12 +86,12 @@ Common::Ini::Key IniConf::GfxColorEffPower16("gfx.color_eff_pwr[16]", Common::In
 
 Common::Ini::Key IniConf::GfxVBO("gfx.vbo", Common::Ini::KT_BOOL, true);
 
-// OpenUA custom: hide the legacy passive menu hover/help description texts by default.
+// OpenNeoUA custom: hide the legacy passive menu hover/help description texts by default.
 Common::Ini::Key IniConf::UiHideMenuHints("ui.hide_menu_hints", Common::Ini::KT_BOOL, true);
 // Stored as a single token when saved by Options, e.g. Liberation_Mono_Regular.
 // KT_STRING is intentionally kept so older test builds with spaces still parse.
 Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std::string("Default"));
-// OpenUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
+// OpenNeoUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::UiMapMarkerSound("ui.map_marker_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::UiMoveOrderTemplate(
@@ -242,114 +242,114 @@ Common::Ini::Key IniConf::NetVersionCheck("net.versioncheck", Common::Ini::KT_BO
 Common::Ini::Key IniConf::GameDebug("game.debug", Common::Ini::KT_BOOL);
 Common::Ini::Key IniConf::GameNewDebug("game.new.debug", Common::Ini::KT_WORD, std::string("no"));
 Common::Ini::Key IniConf::GameCrashDiagnostics("game.crash_diagnostics", Common::Ini::KT_BOOL, false);
-// OpenUA custom: choose the original VP model preview or the text-only briefing preview.
+// OpenNeoUA custom: choose the original VP model preview or the text-only briefing preview.
 // The default keeps the current text mode for vanilla-safe behavior.
 Common::Ini::Key IniConf::GameBriefingVPRender("game.briefing_vp_render", Common::Ini::KT_BOOL, false);
 
 // Yparobo keys
 Common::Ini::Key IniConf::GameNewAI("game.newai",    Common::Ini::KT_BOOL, true);
-// OpenUA: frame-rate independent gameplay timing is always enabled.
+// OpenNeoUA: frame-rate independent gameplay timing is always enabled.
 // This multiplier remains configurable for tank ground-pose response.
 // 2.0 is near vanilla alignment; 5.5 is the balanced default; 10.0 is very reactive.
 Common::Ini::Key IniConf::GameFixedTickTankGroundPoseMult("game.fixed_tick_tank_ground_pose_mult", Common::Ini::KT_WORD, std::string("5.5"));
-// OpenUA custom: player-only tank coast braking after releasing forward/reverse.
+// OpenNeoUA custom: player-only tank coast braking after releasing forward/reverse.
 // Value is the approximate stop time from canonical top speed, in milliseconds.
 // Missing, zero or negative keeps the vanilla endless-coast behavior.
 Common::Ini::Key IniConf::GamePlayerTankBrakeTime("game.player_tank_brake_time", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenUA custom: maximum altitude above the current sector terrain for
+// OpenNeoUA custom: maximum altitude above the current sector terrain for
 // player-controlled aerial units. 1600.0 preserves the vanilla limiter.
 Common::Ini::Key IniConf::GamePlayerMaxAltitudeAboveGround("game.player_max_altitude_above_ground", Common::Ini::KT_WORD, std::string("1600.0"));
-// OpenUA custom: optional absolute AI aerial ceiling above the current sector
+// OpenNeoUA custom: optional absolute AI aerial ceiling above the current sector
 // terrain. Missing, zero, negative or invalid preserves vanilla AI behavior.
 Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_above_ground", Common::Ini::KT_WORD, std::string("0.0"));
-// OpenUA custom: the player Sprint exists only when all three Sprint values are
+// OpenNeoUA custom: the player Sprint exists only when all three Sprint values are
 // explicitly present in Nucleus.ini. Missing any one of them disables Sprint.
 Common::Ini::Key IniConf::GameSprintForceUpPercent("game.sprint_force_up_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintPitchUpPercent("game.sprint_pitch_up_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
-// OpenUA custom: one shared percentage of nominal weapon damage converted into
+// OpenNeoUA custom: one shared percentage of nominal weapon damage converted into
 // shooter-side energy cost for normal projectiles, MGUNs, laser and vertical_laser.
 // 0 disables the configured drain; missing or invalid preserves each weapon type's
 // previous fallback. The shooter's effective shield attenuates the final cost.
 Common::Ini::Key IniConf::GameWeaponEnergyCostPercent("game.weapon_energy_cost_percent", Common::Ini::KT_WORD, std::string());
-// OpenUA custom: percentage of the unit's maximum energy consumed per second
+// OpenNeoUA custom: percentage of the unit's maximum energy consumed per second
 // while player Sprint is active. Zero keeps Sprint free.
 Common::Ini::Key IniConf::GameSprintEnergyCostPercent("game.sprint_energy_cost_percent", Common::Ini::KT_WORD, std::string("0"));
-// OpenUA custom: application interval for continuous Sprint energy drain.
+// OpenNeoUA custom: application interval for continuous Sprint energy drain.
 // Zero applies the accumulated drain as soon as a whole energy unit is ready.
 Common::Ini::Key IniConf::GameSprintEnergyDrainIntervalMs("game.sprint_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameTimeLine("game.timeline", Common::Ini::KT_DIGIT, (int32_t)600000);
 Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior", Common::Ini::KT_BOOL, false);
-// OpenUA custom: independent multipliers for the three Host Station resources
+// OpenNeoUA custom: independent multipliers for the three Host Station resources
 // consumed by physical player relocation. These defaults preserve the current
 // hardcoded balance when the Nucleus keys are absent.
 Common::Ini::Key IniConf::GameRoboMobileMoveEnergyCostMultiplier("game.robo_mobile_move_energy_cost_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameRoboMobileMainEnergyCostMultiplier("game.robo_mobile_main_energy_cost_multiplier", Common::Ini::KT_WORD, std::string("0.33"));
 Common::Ini::Key IniConf::GameRoboMobileBuildEnergyCostMultiplier("game.robo_mobile_build_energy_cost_multiplier", Common::Ini::KT_WORD, std::string("0.33"));
 Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::KT_BOOL, false);
-// OpenUA custom: exposes the briefing Play As selector. Disabled by default so
+// OpenNeoUA custom: exposes the briefing Play As selector. Disabled by default so
 // the Resistance campaign keeps its original presentation and start faction.
 Common::Ini::Key IniConf::GamePlayAsOtherFactions("game.play_as_other_factions", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameWeaponWeaponCollision("game.weapon_weapon_collision", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameRoboBuildingCollisionDamagePercent("game.robo_building_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenUA custom: raw max-energy percentage exchanged once when two enemy
+// OpenNeoUA custom: raw max-energy percentage exchanged once when two enemy
 // non-neutral units begin a physical collision. The target's effective shield
 // reduces the final damage. Zero preserves current behavior.
 Common::Ini::Key IniConf::GameUnitEnemyCollisionDamagePercent("game.unit_enemy_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenUA custom: same shield-aware collision damage for allied non-neutral units.
+// OpenNeoUA custom: same shield-aware collision damage for allied non-neutral units.
 // Zero preserves current behavior.
 Common::Ini::Key IniConf::GameUnitFriendlyCollisionDamagePercent("game.unit_friendly_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenUA custom: multiplier for the vanilla power-station sector energy effect.
+// OpenNeoUA custom: multiplier for the vanilla power-station sector energy effect.
 // game.powerstation_energy_multiplier = 1.0 keeps vanilla; 3.0 triples recharge/drain.
 Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_energy_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenUA custom: when explicitly present, replaces vanilla fall damage with a
+// OpenNeoUA custom: when explicitly present, replaces vanilla fall damage with a
 // shield-aware percentage of the unit's maximum energy. Missing/invalid keeps
 // the vanilla fall-damage calculation.
 Common::Ini::Key IniConf::GameFallDamagePercent("game.fall_damage_percent", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenUA: single Hand Brake intensity for braking strength and the normalized
+// OpenNeoUA: single Hand Brake intensity for braking strength and the normalized
 // recoil/random-spread reduction. Zero disables all three effects; values above
 // one may strengthen braking while weapon modifiers remain capped at 100%.
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenUA: linear per-session unit stat bonus derived from the existing 0..4 kill marks.
+// OpenNeoUA: linear per-session unit stat bonus derived from the existing 0..4 kill marks.
 // The runtime clamps the configured per-mark value and never mutates shared prototypes.
 Common::Ini::Key IniConf::GameUnitKillStatBonusPercent("game.unit_kill_stat_bonus_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
-// OpenUA: optional global mission ambience. A level may override both the
+// OpenNeoUA: optional global mission ambience. A level may override both the
 // sample/folder and its volume through begin_level. A directory selects one
 // supported audio file randomly at each level start. Empty disables ambience.
 Common::Ini::Key IniConf::GameAmbientSound("game.ambient_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameAmbientSoundVolume("game.ambient_sound_volume", Common::Ini::KT_WORD, std::string("100"));
-// OpenUA: display lifetime of the new GEM-unlock popup only. GEM unlocks no
+// OpenNeoUA: display lifetime of the new GEM-unlock popup only. GEM unlocks no
 // longer alter gameplay time. Missing/invalid values preserve 8000 ms.
 Common::Ini::Key IniConf::GameGemUnlockDuration("game.gem_unlock_duration", Common::Ini::KT_WORD, std::string("8000"));
-// OpenUA: Host Station destruction slowdown. Defaults disable the feature and
+// OpenNeoUA: Host Station destruction slowdown. Defaults disable the feature and
 // preserve existing gameplay when scale/duration are absent. A zero maximum
 // distance keeps the previous unlimited-range behavior.
 Common::Ini::Key IniConf::GameRoboDeathTimeScale("game.robo_death_time_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GameRoboDeathTimeScaleDuration("game.robo_death_time_scale_duration", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRoboDeathTimeScaleMaxDistance("game.robo_death_time_scale_max_distance", Common::Ini::KT_WORD, std::string("0"));
-// OpenUA: single-player multiplier for the lifetime of recoverable death plasma.
+// OpenNeoUA: single-player multiplier for the lifetime of recoverable death plasma.
 // 1.0, missing, zero, negative or malformed preserves the vanilla duration.
 // Netgames deliberately remain vanilla to avoid client-side gameplay divergence.
 Common::Ini::Key IniConf::GameDeathPlasmaDurationMult("game.death_plasma_duration_mult", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenUA: single-player-only automatic attraction of recoverable death plasma
+// OpenNeoUA: single-player-only automatic attraction of recoverable death plasma
 // toward the directly controlled player. Zero or invalid values disable it.
 Common::Ini::Key IniConf::GameDeathPlasmaMagnetRadius("game.death_plasma_magnet_radius", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameDeathPlasmaMagnetSpeed("game.death_plasma_magnet_speed", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
-// OpenUA custom: optional global distance for automatic AI target acquisition.
+// OpenNeoUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
 Common::Ini::Key IniConf::GameAiTargetRange("game.ai_target_range", Common::Ini::KT_WORD, std::string("0"));
-// OpenUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
+// OpenNeoUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
 Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
-// OpenUA custom: exact numeric opt-in for data-driven SuperItem profiles.
+// OpenNeoUA custom: exact numeric opt-in for data-driven SuperItem profiles.
 // Missing, malformed, zero or any value other than 1 keeps the legacy path.
 Common::Ini::Key IniConf::GameCustomSuperitems("game.custom_superitems", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenUA: one temporal envelope per SFX channel. Event-specific fade keys are
+// OpenNeoUA: one temporal envelope per SFX channel. Event-specific fade keys are
 // intentionally unsupported; missing, malformed, negative or zero means no fade.
 Common::Ini::Key IniConf::GameGlobalSndFadeIn("game.global_snd_fade_in", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameGlobalSndFadeOut("game.global_snd_fade_out", Common::Ini::KT_WORD, std::string("0"));
@@ -358,7 +358,7 @@ Common::Ini::Key IniConf::GameGlobalShkFadeOut("game.global_shk_fade_out", Commo
 Common::Ini::Key IniConf::GameGlobalPalFadeIn("game.global_pal_fade_in", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Common::Ini::KT_WORD, std::string("0"));
 
-// OpenUA custom: procedural HP bar shared by world/HUD. When enabled, the
+// OpenNeoUA custom: procedural HP bar shared by world/HUD. When enabled, the
 // world-space Shield bar is omitted while the personal cockpit Shield keeps
 // the classic MAPMISC squares. Missing/disabled HP mesh keys preserve the
 // full vanilla HP/Shield paths. Active HP tint converges toward target_tint.
@@ -367,7 +367,7 @@ Common::Ini::Key IniConf::GfxMeshHpBarTint("gfx.mesh_hp_bar_tint", Common::Ini::
 Common::Ini::Key IniConf::GfxMeshHpBarTargetTint("gfx.mesh_hp_bar_target_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
 Common::Ini::Key IniConf::GfxMeshHpBarEmptyTint("gfx.mesh_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255_0_0_0"));
 
-// OpenUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
+// OpenNeoUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
 // gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
 // All numeric values use KT_WORD so
 // malformed user input can be validated safely by World::EnergyFX instead of
@@ -409,7 +409,7 @@ Common::Ini::Key IniConf::GfxDrainMeshRiseSpeed("gfx.drain_mesh_rise_speed", Com
 Common::Ini::Key IniConf::GfxDrainMeshFadeIn("gfx.drain_mesh_fade_in", Common::Ini::KT_WORD, std::string("150"));
 Common::Ini::Key IniConf::GfxDrainMeshFadeOut("gfx.drain_mesh_fade_out", Common::Ini::KT_WORD, std::string("300"));
 
-// OpenUA custom: opt-in Data/-relative paths used by the automatic status-icon
+// OpenNeoUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
 Common::Ini::Key IniConf::UiStatusIconRegen("ui.status_icon_regen", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconDrain("ui.status_icon_drain", Common::Ini::KT_STRING);
@@ -427,7 +427,7 @@ Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Comm
 // immediate behavior; runtime clamps the value to 0..10.
 Common::Ini::Key IniConf::UiStatusIconBlinkCount("ui.status_icon_blink_count", Common::Ini::KT_DIGIT, (int32_t)0);
 
-// OpenUA custom: Black Sect "imperfect grey clone" runtime balance (owner/faction 5).
+// OpenNeoUA custom: Black Sect "imperfect grey clone" runtime balance (owner/faction 5).
 // When enabled, live Black Sect actors get a small malus (default 5%) to
 // effective shield, outgoing damage, force, maxrot and the selected weapon/MGUN
 // cooldown fields, plus an automatic grey identity tint. These are RUNTIME-only adjustments:
@@ -444,7 +444,7 @@ Common::Ini::Key IniConf::NetKickoff("net.kickoff", Common::Ini::KT_DIGIT, (int3
 
 // Graphics particles
 Common::Ini::Key IniConf::GfxParticlesLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)5000);
-// OpenUA custom: bounded world-side terrain decals. Zero disables the system;
+// OpenNeoUA custom: bounded world-side terrain decals. Zero disables the system;
 // the generated mesh uses a fixed internal triangle cap.
 Common::Ini::Key IniConf::GfxGroundDecalLimit("gfx.ground_decal_limit", Common::Ini::KT_DIGIT, (int32_t)256);
 

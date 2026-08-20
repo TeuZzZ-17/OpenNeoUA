@@ -175,7 +175,7 @@ void UAWindow::Update()
     else if (_closeBtn->IsEnabled())
         _closeBtn->SetEnable(false);
 
-    // OpenUA: deprecated online-help titlebar button removed globally.
+    // OpenNeoUA: deprecated online-help titlebar button removed globally.
     // Leave FLAG_WND_HELP defined for ABI/source compatibility, but never show it.
     if (_helpBtn->IsEnabled())
         _helpBtn->SetEnable(false);
@@ -230,7 +230,7 @@ void UAWindow::OnCloseClick(Widget *w, void *d)
 
 void UAWindow::OnHelpClick(Widget *w, void *d)
 {
-    // OpenUA: legacy online help is intentionally disabled.
+    // OpenNeoUA: legacy online help is intentionally disabled.
     (void)w;
     (void)d;
 }

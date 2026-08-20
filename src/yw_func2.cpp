@@ -43,7 +43,7 @@ static constexpr int SETTINGS_CHANGE_PLAYER_ROBO_AI_BEHAVIOR = 0x4000;
 static constexpr int SETTINGS_CHANGE_SPECTATOR_MODE = 0x8000;
 static constexpr int SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS = 0x10000;
 static constexpr int SETTINGS_CHANGE_AMBIENT_VOLUME = 0x20000;
-// OpenUA: modern graphics options
+// OpenNeoUA: modern graphics options
 static constexpr int SETTINGS_CHANGE_MAXFPS                 = 0x40000;
 static constexpr int SETTINGS_CHANGE_BLENDING              = 0x80000;
 static constexpr int SETTINGS_CHANGE_MOVIE_PLAYER          = 0x100000;
@@ -265,7 +265,7 @@ static int CycleFrameRateLimit(int value)
     return 60;
 }
 
-// OpenUA: the "Atmosphere" dropdown now selects a modern fullscreen visual filter from
+// OpenNeoUA: the "Atmosphere" dropdown now selects a modern fullscreen visual filter from
 // Data/Filters/*.pal (see GFXEngine::SetVisualFilter), NOT the legacy SET palette-theme.
 // The existing paletteTheme* members/functions are reused as the filter selector to keep
 // the menu infrastructure unchanged. An empty selection means "Standard" (no filter).
@@ -866,7 +866,7 @@ void NC_STACK_ypaworld::LoadKeyNames()
     Input::Engine.KeyTitle[Input::KC_JOYB7]      = Locale::Text::KeyName(Locale::KEYNAME_JOYB7);
     Input::Engine.KeyTitle[Input::KC_LSHIFT]     = Locale::Text::KeyName(Locale::KEYNAME_LSHIFT);
 
-    // OpenUA: compact key labels for narrow Input Settings columns and all
+    // OpenNeoUA: compact key labels for narrow Input Settings columns and all
     // other UI consumers of KeyTitle. These are display-only aliases: key
     // codes, remapping, serialization and runtime behavior are unchanged.
     Input::Engine.KeyTitle[Input::KC_ESCAPE]     = "Esc";
@@ -1026,7 +1026,7 @@ void listLocaleDir(UserData *usr, const char *dirname)
     if (!usr)
         return;
 
-    // OpenUA supports only the English vanilla catalogue. Retail layouts may
+    // OpenNeoUA supports only the English vanilla catalogue. Retail layouts may
     // call it LANGUAGE.DLL or ENGLISH.DLL, but both map to one ENGLISH entry.
     usr->default_lang_dll = nullptr;
 
@@ -1591,7 +1591,7 @@ void UserData::sb_0x46aa8c()
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_PALETTE_THEME )
     {
-        // OpenUA: apply & persist the selected fullscreen visual filter (Data/Filters/*.pal).
+        // OpenNeoUA: apply & persist the selected fullscreen visual filter (Data/Filters/*.pal).
         paletteTheme = confPaletteTheme;
         System::IniConf::GfxVisualFilter.Value = PaletteThemeStorageValue(paletteTheme);
         SavePaletteThemeCache(paletteTheme);
@@ -1652,7 +1652,7 @@ void UserData::sb_0x46aa8c()
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_MENU_FONT )
     {
-        // OpenUA: persist menu font with the same nucleus.ini writer used by
+        // OpenNeoUA: persist menu font with the same nucleus.ini writer used by
         // gfx.blending, but store it as a safe single token because font display
         // names contain spaces. Example on disk:
         //   ui.menu_font = Liberation_Mono_Regular
@@ -1664,7 +1664,7 @@ void UserData::sb_0x46aa8c()
         if ( !SaveKeyToNucleusIni("ui.menu_font", storedMenuFont) )
             ypa_log_out("WARNING: Could not save ui.menu_font to nucleus.ini\n");
         else
-            ypa_log_out("OpenUA: saved ui.menu_font = %s (%s)\n", menuFont.c_str(), storedMenuFont.c_str());
+            ypa_log_out("OpenNeoUA: saved ui.menu_font = %s (%s)\n", menuFont.c_str(), storedMenuFont.c_str());
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_DEFAULT_CAMERA_VIEW )
@@ -1769,7 +1769,7 @@ int UserData::ypaworld_func158__sub0__sub7()
 
 void UserData::ShowToolTip(int id)
 {
-    // OpenUA: ui.hide_menu_hints (default yes) suppresses the legacy passive menu
+    // OpenNeoUA: ui.hide_menu_hints (default yes) suppresses the legacy passive menu
     // hover/help description texts (e.g. "Turn Sky On/Off...", "Go to Save/Load Screen").
     // This is the single central place where menu buttons assign their hover hint, so the
     // gate is fully centralized; no language.lng strings are touched. Set the key to "no"
@@ -2855,7 +2855,7 @@ void UserData::sub_46A3C0()
     v10.butID = 1190;
     video_button->SetState(&v10);
 
-    // OpenUA: reset modern graphics options to the saved/config values
+    // OpenNeoUA: reset modern graphics options to the saved/config values
     confBlending = System::IniConf::GfxBlending.Get<int32_t>();
     confMoviePlayer = System::IniConf::GfxMoviePlayer.Get<bool>();
     confMenuFont = menuFont;
@@ -2936,7 +2936,7 @@ void UserData::RefreshPaletteThemes()
     paletteThemes.clear();
     paletteThemes.push_back(std::string());
 
-    // OpenUA: enumerate modern fullscreen filters from Data/Filters/*.pal.
+    // OpenNeoUA: enumerate modern fullscreen filters from Data/Filters/*.pal.
     // Missing folder simply yields the single "Standard" (none) entry -> identical rendering.
     FSMgr::DirIter dir = uaOpenDir("data:Filters");
     FSMgr::iNode *node = NULL;
@@ -3069,7 +3069,7 @@ void UserData::CycleMenuFont()
 
 bool UserData::SavePaletteThemeToNucleusIni()
 {
-    // OpenUA: the Atmosphere selector persists the modern visual filter name.
+    // OpenNeoUA: the Atmosphere selector persists the modern visual filter name.
     const std::string key = "gfx.visual_filter";
     const std::string newLine = key + " = " + PaletteThemeStorageValue(paletteTheme);
 
@@ -3121,7 +3121,7 @@ bool UserData::SavePaletteThemeToNucleusIni()
     return true;
 }
 
-// OpenUA: generic "key = value" writer for nucleus.ini. Replaces the line for `key`
+// OpenNeoUA: generic "key = value" writer for nucleus.ini. Replaces the line for `key`
 // if present, otherwise appends it. ALL other lines (including hidden/legacy settings)
 // are preserved verbatim, so saving Options never erases unrelated settings.
 bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &value)
@@ -3220,7 +3220,7 @@ bool UserData::RemoveKeyFromNucleusIni(const std::string &key)
     return true;
 }
 
-// OpenUA: refresh the captions of the modern graphics cycle-buttons.
+// OpenNeoUA: refresh the captions of the modern graphics cycle-buttons.
 void UserData::UpdateGfxOptionTexts()
 {
     video_button->SetText(1183, BlendingLabel(confBlending));
@@ -5060,7 +5060,7 @@ void UserData::GameShellUiHandleInput()
         }
     }
 
-    // OpenUA: Database screen event processing
+    // OpenNeoUA: Database screen event processing
     if ( EnvMode == ENVMODE_DATABASE && database_button )
     {
         NC_STACK_button::ResCode dbr = database_button->ProcessWidgetsEvents(Input);
@@ -5571,7 +5571,7 @@ void UserData::GameShellUiHandleInput()
         {
             _settingsChangeOptions |= SETTINGS_CHANGE_AMBIENT_VOLUME;
         }
-        // OpenUA: modern graphics options
+        // OpenNeoUA: modern graphics options
         else if ( r.code == 1320 ) // Atmosphere & Visibility page
         {
             ShowAtmosphereOptionsMenu();

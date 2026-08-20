@@ -968,7 +968,7 @@ static SetLooseVisprotoCandidate LoadSetLooseVisprotoCandidate()
         IFFile::ReportSetLooseOverrideFailed(candidate.overrideInfo, reason);
         ypa_log_out("VP table: loose override invalid at slot %zu, falling back to embedded visproto.base.\n",
                     result.errorSlot);
-        ypa_log_out("WARNING: OpenUA SET loose VISPROTO rejected for Set %d (%s): %s; standard VISPROTO fallback retained.\n",
+        ypa_log_out("WARNING: OpenNeoUA SET loose VISPROTO rejected for Set %d (%s): %s; standard VISPROTO fallback retained.\n",
                     candidate.overrideInfo.setId,
                     candidate.overrideInfo.resolvedPath.c_str(),
                     reason.c_str());
@@ -985,7 +985,7 @@ static void ReportSetLooseVisprotoUsed(const SetLooseVisprotoCandidate &candidat
     IFFile::ReportSetLooseOverrideUsed(candidate.overrideInfo);
     ypa_log_out("VP table: using loose VISPROTO.LST for Set%d.\n",
                 candidate.overrideInfo.setId);
-    ypa_log_out("OpenUA SET loose VISPROTO used for Set %d: %s (%zu BASE entries).\n",
+    ypa_log_out("OpenNeoUA SET loose VISPROTO used for Set %d: %s (%zu BASE entries).\n",
                 candidate.overrideInfo.setId,
                 candidate.overrideInfo.resolvedPath.c_str(),
                 candidate.entryCount);
@@ -1032,7 +1032,7 @@ NC_STACK_base *load_set_base()
                 looseVisproto.base = NULL;
                 const std::string reason = "loaded SET has no embedded VISPROTO child to replace";
                 IFFile::ReportSetLooseOverrideFailed(looseVisproto.overrideInfo, reason);
-                ypa_log_out("WARNING: OpenUA SET loose VISPROTO rejected for Set %d (%s): %s; loaded SET retained.\n",
+                ypa_log_out("WARNING: OpenNeoUA SET loose VISPROTO rejected for Set %d (%s): %s; loaded SET retained.\n",
                             looseVisproto.overrideInfo.setId,
                             looseVisproto.overrideInfo.resolvedPath.c_str(),
                             reason.c_str());

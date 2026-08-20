@@ -37,7 +37,7 @@ enum LOCALE_BLOCK
 
 
 
-// OpenUA-owned strings live in a separate range and are loaded from
+// OpenNeoUA-owned strings live in a separate range and are loaded from
 // Locale/New_Language.lng. IDs below this range belong to the original
 // Urban Assault LANGUAGE.DLL catalogue.
 constexpr int OPENUA_STRING_BASE = 3000;
@@ -166,13 +166,13 @@ enum OPENUA_STRING
     OUA_REPLAY_RECORDING_STARTED,
     OUA_WAITING_FOR_HOST,
 
-    // OpenUA virtual UI style. Appended to preserve all existing string IDs.
+    // OpenNeoUA virtual UI style. Appended to preserve all existing string IDs.
     OUA_INTERFACE_STYLE,
     OUA_RETRO,
     OUA_SMOOTH,
     OUA_RETRO_INTERFACE,
 
-    // Appended to preserve all existing OpenUA string IDs.
+    // Appended to preserve all existing OpenNeoUA string IDs.
     OUA_RENDER_DISTANCE,
 
     // Atmosphere & Visibility controls. Appended to preserve existing IDs.
@@ -208,7 +208,7 @@ enum OPENUA_STRING
     OUA_KEY_CONFLICT_REASSIGN,
 
     // Contextual zoom labels shared by the tactical map, UFO Spy Camera and
-    // Spectator Follow. Appended to preserve every existing OpenUA string ID.
+    // Spectator Follow. Appended to preserve every existing OpenNeoUA string ID.
     OUA_ZOOM_IN,
     OUA_ZOOM_OUT,
 
@@ -249,7 +249,7 @@ enum OPENUA_STRING
     OUA_GEM_CAR_DAMAGE_UPGRADE,
     OUA_GEM_GUN_DAMAGE_UPGRADE,
 
-    // Cruiser extension. Appended to preserve every existing OpenUA string ID.
+    // Cruiser extension. Appended to preserve every existing OpenNeoUA string ID.
     OUA_VS_CRUISER,
     OUA_GEM_CRUISER_DAMAGE_UPGRADE,
 

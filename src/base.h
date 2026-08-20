@@ -35,14 +35,14 @@ struct area_arg_65
     float fadeLength;
     int ambientLight;
     uint32_t flags;
-    // OpenUA custom: per-emitter tint copied to particles spawned during this render.
+    // OpenNeoUA custom: per-emitter tint copied to particles spawned during this render.
     GFX::TGLColor tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
-    // OpenUA custom: per-emitter visual scale/spin copied to particles spawned during this render.
+    // OpenNeoUA custom: per-emitter visual scale/spin copied to particles spawned during this render.
     vec3d particleScale = vec3d(1.0, 1.0, 1.0);
     vec3d particleSpin = vec3d(0.0, 0.0, 0.0);
-    // OpenUA custom: per-emitter particle lifetime multiplier. Neutral 1.0 preserves vanilla.
+    // OpenNeoUA custom: per-emitter particle lifetime multiplier. Neutral 1.0 preserves vanilla.
     float particleLifetimeScale = 1.0f;
-    // OpenUA custom: when enabled, particle tint alpha also attenuates additive RGB.
+    // OpenNeoUA custom: when enabled, particle tint alpha also attenuates additive RGB.
     bool particleTintAlphaAffectsAdditive = false;
 
     area_arg_65()
@@ -73,18 +73,18 @@ struct baseRender_msg
     float minZ = 0.;
     float maxZ = 0.;
     uint32_t flags = 0;
-    // OpenUA custom: per-render main VP tint multiplier. Neutral (1,1,1,1) = no change.
+    // OpenNeoUA custom: per-render main VP tint multiplier. Neutral (1,1,1,1) = no change.
     GFX::TGLColor tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
-    // OpenUA custom: transient VP fade factor. The mesh renderer uses this
+    // OpenNeoUA custom: transient VP fade factor. The mesh renderer uses this
     // separately from tint alpha so additive LUMTRACY materials can fade by
     // RGB intensity while ordinary alpha-blended materials keep using alpha.
     float vpFadeFactor = 1.0f;
-    // OpenUA custom: per-render particle controls inherited by emitted particles.
+    // OpenNeoUA custom: per-render particle controls inherited by emitted particles.
     GFX::TGLColor particleTint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
     vec3d particleScale = vec3d(1.0, 1.0, 1.0);
     vec3d particleSpin = vec3d(0.0, 0.0, 0.0);
     float particleLifetimeScale = 1.0f;
-    // OpenUA custom: decoration particle alpha must also fade additive RGB.
+    // OpenNeoUA custom: decoration particle alpha must also fade additive RGB.
     bool particleTintAlphaAffectsAdditive = false;
 };
 

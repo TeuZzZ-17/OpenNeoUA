@@ -421,7 +421,7 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
             Input::Engine.SetHotKey(50, "nop");
             Input::Engine.SetHotKey(51, "nop");
 
-            // OpenUA input-default migration. Older builds used ALT for Switch
+            // OpenNeoUA input-default migration. Older builds used ALT for Switch
             // Weapon (or the earlier TAB/TAB pair) and CTRL for Launch Missile
             // Cam. Move only those known default combinations to the current
             // defaults: Switch Weapon = CTRL, Launch Missile Cam = Grave Accent.
@@ -1291,7 +1291,7 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
     return false;
 }
 
-// OpenUA custom: parse "*_tint = R_G_B_A" (each component 0..255).
+// OpenNeoUA custom: parse "*_tint = R_G_B_A" (each component 0..255).
 // Alpha is optional and defaults to 255. Out-of-range values are clamped.
 // Stored as normalized 0..1 float multipliers. Neutral default = no change.
 static bool ParseTintParam(ScriptParser::Parser &parser,
@@ -2148,7 +2148,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         }
         else if ( !StriCmp(p2, "gun") || !StriCmp(p2, "module") )
         {
-            // OpenUA: model = module is a semantic alias of the existing gun
+            // OpenNeoUA: model = module is a semantic alias of the existing gun
             // runtime. Behaviour is selected by gun_type; no parallel actor
             // class or attachment system is introduced.
             _vhcl->model_id = BACT_TYPES_GUN;
@@ -2163,7 +2163,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         }
         else if ( !StriCmp(p2, "cruiser") )
         {
-            // OpenUA: expose the unused Flyer bit-combination already handled
+            // OpenNeoUA: expose the unused Flyer bit-combination already handled
             // by ypaflyer: pitch follows vertical motion, lateral banking stays rigid.
             _vhcl->model_id = BACT_TYPES_FLYER;
             _vhcl->combat_class = VEHICLE_COMBAT_CLASS_CRUISER;
@@ -2183,7 +2183,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         }
         else if ( !StriCmp(p2, "mimic") )
         {
-            // OpenUA custom: runtime shell that copies one listed vehicle proto
+            // OpenNeoUA custom: runtime shell that copies one listed vehicle proto
             // when spawned, then keeps this proto's spawn_at_death_* reveal data.
             _vhcl->model_id = BACT_TYPES_TANK;
             _vhcl->combat_class = VEHICLE_COMBAT_CLASS_UNKNOWN;
@@ -2416,7 +2416,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
               !StriCmp(p1, "seek_and_explode_icon") )
     {
         // Legacy no-op: vehicle capability icons are assigned automatically.
-        // Keep accepting old script keys so vanilla/OpenUA scripts still load.
+        // Keep accepting old script keys so vanilla/OpenNeoUA scripts still load.
     }
     else if ( !StriCmp(p1, "unit_gun_icon") )
     {
@@ -2446,7 +2446,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "zoom_steps") )
     {
         // -1 means the parameter is absent/invalid and preserves the current
-        // OpenUA UFO zoom range. Zero intentionally disables optical zoom.
+        // OpenNeoUA UFO zoom range. Zero intentionally disables optical zoom.
         size_t parsed = 0;
         const long steps = parser.stol(p2, &parsed, 0);
         _vhcl->zoom_steps = parsed == p2.size() && steps >= 0
@@ -3434,7 +3434,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         robo->dock.z = parser.stof(p2, 0);
     }
-    // ---- OpenUA custom: universal compound collision spheres (any vehicle) ----
+    // ---- OpenNeoUA custom: universal compound collision spheres (any vehicle) ----
     // robo_coll_* below stays untouched for Robo/Host Station; coll_* writes into
     // the vehicle prototype's own compound-sphere set (bounds-checked).
     else if ( !StriCmp(p1, "coll_num") )
@@ -3569,7 +3569,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "invisible") )
     {
-        // OpenUA custom: vehicle-only total-stealth-until-first-attack flag.
+        // OpenNeoUA custom: vehicle-only total-stealth-until-first-attack flag.
         // Deliberately separate from the legacy "hidden"/"unhide_radar" system.
         _vhcl->invisible = StrGetBool(p2);
     }
@@ -3870,7 +3870,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->salve_delay = 0;
         _wpn->salve_shots = 0;
         _wpn->multi_target = 0;
-        // OpenUA custom: model = laser defaults (vanilla-safe / disabled by default)
+        // OpenNeoUA custom: model = laser defaults (vanilla-safe / disabled by default)
         _wpn->laser_energy_tick_time = 250;
         _wpn->laser_energy_tick_time_user = 150;
         _wpn->laser_energy_increment_rate = 0.0;
@@ -3929,7 +3929,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
             fx.sndPrm_shk.time = 1000;
         }
 
-        // OpenUA custom: player-only launch shake defaults. Slot 0 keeps the
+        // OpenNeoUA custom: player-only launch shake defaults. Slot 0 keeps the
         // feature disabled; mute 0 makes the local feedback independent from
         // third-person camera distance.
         _wpn->player_shk_launch.mag0 = 1.0;
@@ -4352,7 +4352,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int maxTargets = parser.stol(p2, NULL, 0);
         _wpn->multi_target = maxTargets > 0 ? maxTargets : 0;
     }
-    // ---- OpenUA custom: model = laser parameters ----
+    // ---- OpenNeoUA custom: model = laser parameters ----
     else if ( !StriCmp(p1, "laser_energy_tick_time") )
     {
         int tickTime = parser.stol(p2, NULL, 0);

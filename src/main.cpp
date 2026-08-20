@@ -458,7 +458,7 @@ int ProcessMenuFrame()
 }
 
 
-// OpenUA frame-rate independent simulation timing is always active in gameplay.
+// OpenNeoUA frame-rate independent simulation timing is always active in gameplay.
 //
 // The game clock runs at 1024 units per second and the engine does exactly one
 // simulation step per rendered frame with DTime = measured frame delta + 1
@@ -849,10 +849,10 @@ int main(int argc, char *argv[])
     System::IniConf::ReadFromNucleusIni();
 
     CrashDiag::Init(System::IniConf::GameCrashDiagnostics.Get<bool>(),
-                    std::string("OpenUA ") + __DATE__ + " " + __TIME__);
+                    std::string("OpenNeoUA ") + __DATE__ + " " + __TIME__);
     CrashDiag::Breadcrumb("STARTUP", "runtime initialized");
 
-    // OpenUA: cache global runtime configuration after Nucleus.ini is parsed.
+    // OpenNeoUA: cache global runtime configuration after Nucleus.ini is parsed.
     World::CloneBalance::Init();
     World::EnergyFX::Init();
 

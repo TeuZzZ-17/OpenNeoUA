@@ -273,7 +273,7 @@ public:
     float field_260;
     float field_264;
 
-    // OpenUA vanilla-map modernization: title-bar controls, fullscreen toggle
+    // OpenNeoUA vanilla-map modernization: title-bar controls, fullscreen toggle
     // and session-local tactical markers.
     bool markerMode = true;
     bool maximized = false;

@@ -736,7 +736,7 @@ static constexpr float RECOIL_VISUAL_COMBINED_MAX_DEGREES =
 
 static float ypabact_GetTankWeaponRecoilVisualPitch(const NC_STACK_ypabact *bact)
 {
-    // OpenUA tank recoil: keep the physical recoil stable/horizontal, but add
+    // OpenNeoUA tank recoil: keep the physical recoil stable/horizontal, but add
     // a small render-only pitch kick for third-person tanks.  This restores the
     // visible firing tilt without feeding vertical velocity back into tank AI,
     // collision or pathing.
@@ -1071,7 +1071,7 @@ static bool ypabact_CanUseGameplayStatusMechanics(NC_STACK_ypabact *bact, bool a
 
 static bool ypabact_CanSpawnDecorationFX(NC_STACK_ypabact *bact)
 {
-    // OpenUA invisible: cloaked stealth units spawn no visible/audible decoration FX.
+    // OpenNeoUA invisible: cloaked stealth units spawn no visible/audible decoration FX.
     return bact &&
            !bact->IsInvisibleUnrevealed() &&
            bact->getBACT_pWorld() &&
@@ -1088,7 +1088,7 @@ static bool ypabact_IsUsableControlFallback(NC_STACK_ypabact *bact, NC_STACK_ypa
            bact != dying &&
            bact->_status != BACT_STATUS_DEAD &&
            !(bact->_status_flg & BACT_STFLAG_DEATH1) &&
-           !bact->IsMortarPlatform(); // OpenUA: mortars are never a control fallback
+           !bact->IsMortarPlatform(); // OpenNeoUA: mortars are never a control fallback
 }
 
 static void ypabact_SafeDetachControlFrom(NC_STACK_ypabact *dying, NC_STACK_ypabact *preferredFallback);
@@ -1358,7 +1358,7 @@ static void ypabact_ApplyDamagedRuntime(NC_STACK_ypabact *bact, bool active)
         maxrotMult *= ypabact_DebuffMalusToMult(bact->_active_debuff.maxrot_malus);
     }
 
-    // OpenUA Black Sect clone balance: imperfect grey clones (owner 5) get slightly
+    // OpenNeoUA Black Sect clone balance: imperfect grey clones (owner 5) get slightly
     // weaker thrust and turn rate. This runs every frame and always recomputes the
     // effective _force/_maxrot from the unmodified _base_force/_base_maxrot, so the
     // clone malus is folded into the same multiplier chain as the debuff/damaged
@@ -1731,7 +1731,7 @@ static bool ypabact_IsCarrierSpawnEnemy(NC_STACK_ypabact *carrier, NC_STACK_ypab
     if ( unit->_owner == World::OWNER_0 || unit->_owner == carrier->_owner )
         return false;
 
-    // OpenUA invisible: cloaked stealth units are ignored by carrier spawn-trigger and
+    // OpenNeoUA invisible: cloaked stealth units are ignored by carrier spawn-trigger and
     // proximity-defense scans (both go through this predicate).
     if ( !unit->CanBeSeenByAIOrRadar() )
         return false;
@@ -1770,7 +1770,7 @@ static bool ypabact_IsLaserAimTarget(NC_STACK_ypabact *shooter, NC_STACK_ypabact
     if ( unit->_owner == World::OWNER_0 || unit->_owner == shooter->_owner )
         return false;
 
-    // OpenUA invisible: AI laser auto-lock never picks a cloaked stealth unit as its aim
+    // OpenNeoUA invisible: AI laser auto-lock never picks a cloaked stealth unit as its aim
     // target (the damage predicate above stays unfiltered so a beam still burns one if it
     // happens to physically cross it).
     if ( !unit->CanBeSeenByAIOrRadar() )
@@ -2923,7 +2923,7 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
                       !dynamic_cast<NC_STACK_ypagun *>(gunObj)->IsPassiveModule()) )
                     gunObj->_aggr = 60;
                 gunObj->_gunDisplayName = gun.robo_gun_name;
-                // OpenUA invisible: attached guns inherit the carrier's current stealth
+                // OpenNeoUA invisible: attached guns inherit the carrier's current stealth
                 // state so the whole unit cloaks/reveals as one.
                 gunObj->_invisibleUnrevealed = _invisibleUnrevealed;
 
@@ -3428,7 +3428,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         _status = BACT_STATUS_DEAD;
 
     UpdateEnergyStatusFX(arg);
-    UpdateLaser(arg); // OpenUA custom: process this frame's laser fire request (must run after AI_layer1 firing)
+    UpdateLaser(arg); // OpenNeoUA custom: process this frame's laser fire request (must run after AI_layer1 firing)
     UpdateVerticalLaser(arg);
     UpdateAoePush(arg);
     UpdateWeaponRecoilPush(arg);
@@ -3526,7 +3526,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     }
     BeforeSoundCarrierUpdate();
 
-    // OpenUA invisible: a still-cloaked stealth unit emits no loop/idle/engine/ambient
+    // OpenNeoUA invisible: a still-cloaked stealth unit emits no loop/idle/engine/ambient
     // or status sounds. Keep the carrier hard-stopped instead of updating it; once the
     // unit reveals (after its first attack) the normal sound update resumes.
     if ( IsInvisibleUnrevealed() )
@@ -4158,7 +4158,7 @@ static bool ypabact_IsAoePushGroundAlignedUnit(NC_STACK_ypabact *unit)
 
 static bool ypabact_ShouldFlattenAirKnockback(const NC_STACK_ypabact *unit)
 {
-    // OpenUA recoil/push stability: airborne vehicle controllers fight hard to
+    // OpenNeoUA recoil/push stability: airborne vehicle controllers fight hard to
     // maintain altitude.  Feeding them vertical recoil / aoe push creates the
     // observed up/down bouncing after attacks.  Keep knockback horizontal while
     // the unit is flying; landed air vehicles still use their normal ground state.
@@ -4470,19 +4470,19 @@ void NC_STACK_ypabact::UpdateWeaponRecoilPush(update_msg *arg)
 
 void NC_STACK_ypabact::Render(baseRender_msg *arg)
 {
-    // OpenUA invisible: a still-cloaked stealth unit is never drawn in the 3D world.
+    // OpenNeoUA invisible: a still-cloaked stealth unit is never drawn in the 3D world.
     // Physics/control/collision keep running elsewhere; only the visual body is skipped.
     if ( IsInvisibleUnrevealed() )
         return;
 
-    // OpenUA Black Sect clone balance: imperfect grey clones (owner 5) always wear the
+    // OpenNeoUA Black Sect clone balance: imperfect grey clones (owner 5) always wear the
     // grey clone identity tint. In V1 this deliberately overrides any manual per-prototype
     // vp_tint so the clone is always visually readable. This is render-only: it reads
     // the cached config and never mutates _vp_tint or the shared prototype.
     World::TVisualTint effectiveTint =
         World::CloneBalance::IsCloneActor(this) ? World::CloneBalance::Tint() : _vp_tint;
 
-    // OpenUA debuff target tint: compose a temporary RGBA multiplier over the unit's
+    // OpenNeoUA debuff target tint: compose a temporary RGBA multiplier over the unit's
     // already-effective instance tint. The prototype and _vp_tint remain untouched, so
     // expiration, death or replacement of the debuff restores the exact previous look.
     if ( _active_debuff.active && !_active_debuff.target_vp_tint.IsNeutral() )
@@ -4502,7 +4502,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         return ypabact_IsMainVPBase(this, base);
     };
 
-    // OpenUA custom vp_tint: same eligible visual prototypes as vp_scale.
+    // OpenNeoUA custom vp_tint: same eligible visual prototypes as vp_scale.
     // Tint is a visual-only per-instance RGBA multiplier; never affects gameplay.
     // effectiveTint already folds in the Black Sect grey clone override (see above).
     auto shouldApplyVPTint = [this, &effectiveTint](NC_STACK_base *base)
@@ -5042,7 +5042,7 @@ void NC_STACK_ypabact::AI_layer2(update_msg *arg)
     // movement controller below temporarily replaces direct driving.
     if ( _oflags & BACT_OFLAG_USERINPT )
     {
-        // OpenUA debuff disorient: while movement disorientation is active, the
+        // OpenNeoUA debuff disorient: while movement disorientation is active, the
         // directly controlled unit temporarily runs the same erratic movement
         // controller already used by AI units. This keeps one shared source of
         // truth for phases, traction and floor safety instead of duplicating the
@@ -6735,7 +6735,7 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
     }
 
     // The vanilla sector path always stopped FIRE here because MGUNs could not
-    // attack sectors. OpenUA can now keep a legacy vehicle MGUN firing at a
+    // attack sectors. OpenNeoUA can now keep a legacy vehicle MGUN firing at a
     // sector, so only stop the loop immediately when the AI is no longer in
     // the fight state. TA_FIGHT handles its own MGUN stop below.
     if ( _atk_ret != TA_FIGHT && (_status_flg & BACT_STFLAG_FIRE) )
@@ -7168,7 +7168,7 @@ void NC_STACK_ypabact::Die()
                           _host_station ? _host_station->_gid : 0,
                           _kidList.size());
 
-    // OpenUA custom: lightweight single-player kill marks. Each victim death is
+    // OpenNeoUA custom: lightweight single-player kill marks. Each victim death is
     // credited independently, including simultaneous chain kills, while attached
     // guns/dummies are normalized to their carrying unit. Friendly/self kills,
     // components and missiles never award marks.
@@ -8801,7 +8801,7 @@ static bool ypabact_FireProximityDefenseShot(NC_STACK_ypabact *unit, int shotInd
 
     shotDir = shotDir / shotDirLen;
 
-    // OpenUA invisible: a proximity-defense shot is a real attack -> reveal the unit.
+    // OpenNeoUA invisible: a proximity-defense shot is a real attack -> reveal the unit.
     unit->RevealInvisibleOnAttack();
 
     ypaworld_arg146 arg147;
@@ -9059,7 +9059,7 @@ void NC_STACK_ypabact::UpdateProximityDefense(update_msg *)
     _proximity_defense_next_activation_time = _clock + interval;
 }
 
-// ===== OpenUA custom: radar-guided mortar barrage =========================
+// ===== OpenNeoUA custom: radar-guided mortar barrage =========================
 
 // Resolve a mortar weapon id from one unit's own main/extra weapon slots.
 // Mounted unit-guns are handled separately so their child BACT owns the barrage
@@ -9228,7 +9228,7 @@ static NC_STACK_ypabact *ypabact_GetManualMortarActor(NC_STACK_ypabact *unit, in
     return ypabact_GetMountedMortarActor(unit, outWeaponId);
 }
 
-// OpenUA custom: true if this unit carries a "model = mortar" weapon in any own
+// OpenNeoUA custom: true if this unit carries a "model = mortar" weapon in any own
 // slot, or if one of its mounted unit-gun / robo-gun children carries one. Used
 // to keep mortar platforms map-only (no first-person possession).
 bool NC_STACK_ypabact::IsMortarPlatform()
@@ -9236,14 +9236,14 @@ bool NC_STACK_ypabact::IsMortarPlatform()
     return ypabact_GetMortarWeaponId(this) > 0 || ypabact_GetMountedMortarWeaponId(this) > 0;
 }
 
-// OpenUA custom: true if this is a mortar platform usable via manual map-click.
+// OpenNeoUA custom: true if this is a mortar platform usable via manual map-click.
 // Manual map-click control is always enabled for mortars (there is no opt-in flag).
 bool NC_STACK_ypabact::IsManualMortarPlatform()
 {
     return IsMortarPlatform();
 }
 
-// OpenUA custom: bombardment zone radius of this unit's mortar weapon (0 if none).
+// OpenNeoUA custom: bombardment zone radius of this unit's mortar weapon (0 if none).
 // Used to draw the white aiming preview ring on the 2D map.
 float NC_STACK_ypabact::GetMortarBarrageRadius()
 {
@@ -9322,7 +9322,7 @@ static bool ypabact_CanUseMortar(NC_STACK_ypabact *unit)
     return true;
 }
 
-// OpenUA custom: the actual ballistic launch direction of a shell aimed at
+// OpenNeoUA custom: the actual ballistic launch direction of a shell aimed at
 // targetCenter. Matches NC_STACK_ypamissile::UpdateMortarBallistic(): the shell
 // follows pos(t)=lerp(start,target) horizontally with a parabolic vertical arc
 // pos.y = baseY - arcHeight*4*t*(1-t). Differentiating at t=0 gives the initial
@@ -9426,7 +9426,7 @@ static void ypabact_AimMortarLauncherVisual(NC_STACK_ypabact *unit, const World:
     float yAngle = clp_asin( invRed.dot(unit->_rotation.AxisZ()) );
     float yWant = clp_asin( invRed.dot(vTgt) );
 
-    // OpenUA custom: mortars are high-angle artillery. Guarantee a generous upward
+    // OpenNeoUA custom: mortars are high-angle artillery. Guarantee a generous upward
     // elevation envelope even if the gun model's gun_up_angle is small, so the
     // barrel convincingly points up into the ballistic arc.
     const float MORTAR_MIN_MAX_UP = 1.30f; // ~74 degrees
@@ -9501,7 +9501,7 @@ static bool ypabact_IsMortarEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand
     if ( cand->_isDummy ) // dummy attachments must never be preferred targets
         return false;
 
-    // OpenUA invisible: cloaked stealth units are not valid mortar barrage targets.
+    // OpenNeoUA invisible: cloaked stealth units are not valid mortar barrage targets.
     if ( !cand->CanBeSeenByAIOrRadar() )
         return false;
 
@@ -9629,7 +9629,7 @@ static bool ypabact_FireMortarShell(NC_STACK_ypabact *unit, int weaponId, const 
             landing.y = gnd.isectPos.y;
     }
 
-    // OpenUA invisible: launching a mortar shell is a real attack -> reveal the firing
+    // OpenNeoUA invisible: launching a mortar shell is a real attack -> reveal the firing
     // unit (covers manual, auto-AI and barrage-followup shells, which all land here).
     unit->RevealInvisibleOnAttack();
 
@@ -9683,7 +9683,7 @@ static bool ypabact_FireMortarShell(NC_STACK_ypabact *unit, int weaponId, const 
     if ( shell->GetLifeTime() < flight + 1000 )
         shell->SetLifeTime(flight + 1000);
 
-    // OpenUA custom: register/refresh the bombardment marker for this barrage zone.
+    // OpenNeoUA custom: register/refresh the bombardment marker for this barrage zone.
     // Each shell refreshes it so the ring stays up until the last shell has landed.
     if ( wproto.mortar_minimap_marker && wproto.mortar_barrage_radius > 0.0 )
         world->AddMortarMarker(targetCenter, wproto.mortar_barrage_radius, unit->_owner, flight + 2000);
@@ -9962,7 +9962,7 @@ static NC_STACK_ypabact *ypabact_GetSeekAndExplodePayloadListOwner(NC_STACK_ypab
     return unit;
 }
 
-// ============================ OpenUA custom: model = laser ============================
+// ============================ OpenNeoUA custom: model = laser ============================
 // A laser is a targeted-class weapon that, instead of spawning a projectile, fires a
 // continuous aimed hitscan beam. The beam is always visible while firing (even into
 // empty space); when it crosses a valid target it applies static tick damage using
@@ -10788,7 +10788,7 @@ static void ypabact_SpawnLaserBeamVPs(NC_STACK_ypabact *bact, const World::TWeap
     {
         float t = ((float)i + 0.5f) / (float)count;
         vec3d pos = visualStart + span * t;
-        // OpenUA custom: the laser beam body uses vp_normal, so honour the weapon's
+        // OpenNeoUA custom: the laser beam body uses vp_normal, so honour the weapon's
         // main VP controls here. Impact/launch FX below deliberately stay neutral.
         world->SpawnTransientVP(wproto.vp_normal, pos, rot, 45, 1.0, wproto.vp_tint, axisScale, wproto.vp_spin);
     }
@@ -10824,7 +10824,7 @@ static void ypabact_StartVehicleFireVPForWeapon(NC_STACK_ypabact *bact, int weap
 
 void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg)
 {
-    // OpenUA invisible: firing the continuous laser is a real attack -> reveal now,
+    // OpenNeoUA invisible: firing the continuous laser is a real attack -> reveal now,
     // in the same frame the beam is requested.
     RevealInvisibleOnAttack();
 
@@ -11466,7 +11466,7 @@ static NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shoot
 
 void NC_STACK_ypabact::RequestVerticalLaserFire(int weaponId, bact_arg79 *arg)
 {
-    // OpenUA invisible: firing the vertical laser is a real attack -> reveal now.
+    // OpenNeoUA invisible: firing the vertical laser is a real attack -> reveal now.
     RevealInvisibleOnAttack();
 
     _vertical_laser_weapon = weaponId;
@@ -12002,7 +12002,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         arg = &cockpitAimArg;
     }
 
-    // OpenUA custom: a laser weapon does not spawn projectiles and is not rate-limited
+    // OpenNeoUA custom: a laser weapon does not spawn projectiles and is not rate-limited
     // by shot_time. It registers a per-frame fire request that UpdateLaser() turns into
     // a continuous beam (static tick damage + VP beam visual + loop sound). Bail out here,
     // before the cooldown gate and the normal missile-spawn path.
@@ -12061,12 +12061,12 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             System::IniConf::GameWeaponEnergyCostPercent,
             &weaponEnergyCostPercent);
 
-    // OpenUA custom: mortar weapons are driven exclusively by UpdateMortar()'s
+    // OpenNeoUA custom: mortar weapons are driven exclusively by UpdateMortar()'s
     // barrage AI. Never fire them through the normal direct/missile path.
     if ( wproto.IsMortar() )
         return 0;
 
-    // OpenUA invisible: committed to firing the primary weapon this frame -> reveal now
+    // OpenNeoUA invisible: committed to firing the primary weapon this frame -> reveal now
     // (before the projectile spawns) so a cloaked unit never launches an invisible shot.
     RevealInvisibleOnAttack();
 
@@ -12362,7 +12362,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     {
         float recoilAmount = wproto.recoil * (float)recoilShotCount;
 
-        // OpenUA custom: game.handbrake_power controls both braking strength
+        // OpenNeoUA custom: game.handbrake_power controls both braking strength
         // and recoil reduction.  The recoil part is applied only when the
         // input path explicitly marks the shot, so AI/third-person behavior
         // stays unchanged and remains independent from push_resistance.
@@ -12941,7 +12941,7 @@ float NC_STACK_ypabact::GetEffectiveShieldWithAdditionalMalus(float additionalMa
 
     mult *= ypabact_DebuffMalusToMult(additionalMalus);
 
-    // OpenUA Black Sect clone balance: imperfect grey clones (owner 5) have a
+    // OpenNeoUA Black Sect clone balance: imperfect grey clones (owner 5) have a
     // slightly lower effective defense. This scales the *effective* shield only;
     // the stored _shield (and the shared prototype) are never modified, so the
     // malus is recomputed each call and never compounds on save/load/respawn.
@@ -13064,7 +13064,7 @@ bool NC_STACK_ypabact::IsInvulnerableToDamage() const
 
 void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
 {
-    // OpenUA attacker modifiers share this single final-damage choke point.
+    // OpenNeoUA attacker modifiers share this single final-damage choke point.
     // Clone malus and the per-instance kill-mark bonus are folded into one value,
     // applied exactly once to direct weapons, missiles, lasers, MGUN and AoE.
     // Healing, environmental bypasses and shared weapon prototypes stay untouched.
@@ -13084,7 +13084,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
     if (_world && _world->_isNetGame)
         isNetGame = true;
 
-    // ---- OpenUA: protective Unit Gun/module damage absorption (single-player only) ----
+    // ---- OpenNeoUA: protective Unit Gun/module damage absorption (single-player only) ----
     // Route incoming damage to an active protective attachment before it
     // reaches the parent. If the module survives, the parent takes nothing; if
     // the hit destroys the module, only the leftover passes through. Net games
@@ -14277,11 +14277,11 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &c
              cel_unit->_status == BACT_STATUS_DEAD )
             continue;
 
-        // OpenUA: dummy modules are armor/decoration, never independent AI targets
+        // OpenNeoUA: dummy modules are armor/decoration, never independent AI targets
         if ( cel_unit->_isDummy )
             continue;
 
-        // OpenUA invisible: a still-cloaked stealth unit is never a voluntary AI target.
+        // OpenNeoUA invisible: a still-cloaked stealth unit is never a voluntary AI target.
         // (It can still be caught by AoE/crossfire damage, which uses separate predicates.)
         if ( !cel_unit->CanBeSeenByAIOrRadar() )
             continue;
@@ -18717,7 +18717,7 @@ void NC_STACK_ypabact::setBACT_viewer(bool vwr)
         if ( _world && !_world->CanControlUnitInSpectatorMode(this) )
             return;
 
-        // OpenUA custom: mortar platforms are map-only artillery; never let the
+        // OpenNeoUA custom: mortar platforms are map-only artillery; never let the
         // camera/viewer enter one (that is what made it look possessed in 1st person).
         if ( _world && IsMortarPlatform() )
             return;
@@ -18794,7 +18794,7 @@ void NC_STACK_ypabact::setBACT_inputting(bool inpt)
         if ( _world && !_world->CanControlUnitInSpectatorMode(this) )
             return;
 
-        // OpenUA custom: mortar platforms are artillery used only from the 2D
+        // OpenNeoUA custom: mortar platforms are artillery used only from the 2D
         // strategic map. Never let the player take first-person control of them.
         if ( _world && IsMortarPlatform() )
             return;
@@ -19027,7 +19027,7 @@ bool NC_STACK_ypabact::IsHiddenFor(uint8_t owner) const
     return false;
 }
 
-// OpenUA custom: permanently reveal an "invisible" stealth unit the moment it makes a
+// OpenNeoUA custom: permanently reveal an "invisible" stealth unit the moment it makes a
 // real attack. Attached unit-gun children fire on behalf of their carrier, so a
 // child attack reveals the carrier (which in turn reveals all its attached children).
 // No-op for units that were never invisible or are already revealed.
