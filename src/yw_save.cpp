@@ -183,7 +183,7 @@ int yw_write_video(FSMgr::FileHandle *fil, UserData *usr)
     fil->printf("new_video\n");
     fil->printf("    videomode = %d\n", ((usr->p_YW->_gameDefaultRes.x << 12) | usr->p_YW->_gameDefaultRes.y) );
 
-    // OpenUA modern default: the old Horizon Depth checkbox is hidden and far view
+    // OpenNeoUA modern default: the old Horizon Depth checkbox is hidden and far view
     // is forced high, so keep saved profiles normalized to farview=yes.
     fil->printf("    farview = yes\n");
 

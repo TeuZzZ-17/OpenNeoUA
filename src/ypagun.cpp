@@ -7,7 +7,7 @@
 #include "ypagun.h"
 #include "yparobo.h"
 
-// OpenUA custom: mortar guns are artillery pieces. They must be aimed only by
+// OpenNeoUA custom: mortar guns are artillery pieces. They must be aimed only by
 // UpdateMortar()/ypabact_AimMortarLauncherVisual() at the current barrage zone,
 // not by the vanilla gun AI that tracks nearby visible enemies.
 static bool ypagun_UsesMortarWeapon(NC_STACK_ypagun *gun)
@@ -179,7 +179,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 {
     if ( IsPassiveModule() )
     {
-        // OpenUA: passive modules are fully inert. Only advance the create
+        // OpenNeoUA: passive modules are fully inert. Only advance the create
         // (genesis scale-in) and death timelines; never aim, fire, acquire
         // targets, or run the pedestal check (that would kill an airborne
         // attachment). Position/orientation are driven by the parent each frame.
@@ -252,7 +252,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
             }
         }
 
-        // OpenUA custom: if this gun uses a mortar weapon, do not let the
+        // OpenNeoUA custom: if this gun uses a mortar weapon, do not let the
         // vanilla flak/gun AI visually track or fire at nearby enemies. Mortar
         // aiming is handled exclusively by UpdateMortar() while a barrage is
         // active/pending, so idle mortar turrets keep their artillery posture
@@ -441,7 +441,7 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
 {
     if ( IsPassiveModule() )
     {
-        // OpenUA: passive modules are never player-controlled; stay inert.
+        // OpenNeoUA: passive modules are never player-controlled; stay inert.
         if ( _status == BACT_STATUS_DEAD )
             DeadTimeUpdate(arg);
         return;
@@ -591,7 +591,7 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
 
 void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
 {
-    // OpenUA custom: mortar guns fire only through the mortar barrage system.
+    // OpenNeoUA custom: mortar guns fire only through the mortar barrage system.
     // The vanilla close-range gun combat path would make them snap/chase nearby
     // enemies and can launch direct shots, which looks wrong for artillery.
     if ( ypagun_UsesMortarWeapon(this) )
@@ -606,7 +606,7 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
 
     vTgt /= dist;
 
-    // OpenUA: projectile flak guns keep the original 2400 engagement envelope.
+    // OpenNeoUA: projectile flak guns keep the original 2400 engagement envelope.
     // gun_type = mg (GUN_TYPE_PROTO) instead uses the exact same effective
     // global MGUN range as FireMinigun(), so AI never opens fire beyond the
     // distance its hitscan can actually reach. Missing/invalid config resolves

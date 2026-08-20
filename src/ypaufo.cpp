@@ -535,7 +535,7 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
 
         // Vehicle-side zoom_steps limits how many existing 1.25x zoom-in
         // increments this UFO may use. Missing/invalid (-1) preserves the
-        // current OpenUA 8x cap; zero intentionally locks the vehicle at 1x.
+        // current OpenNeoUA 8x cap; zero intentionally locks the vehicle at 1x.
         if (_vehicleID < _world->_vhclProtos.size())
         {
             const World::TVhclProto &proto = _world->_vhclProtos[_vehicleID];

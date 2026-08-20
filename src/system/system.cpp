@@ -298,7 +298,7 @@ bool IsFontAvailable(const std::string &fontname)
 
 std::string GetConfiguredMenuFontName()
 {
-    // OpenUA: ui.menu_font is stored in nucleus.ini as a single safe token,
+    // OpenNeoUA: ui.menu_font is stored in nucleus.ini as a single safe token,
     // e.g. Liberation_Mono_Regular. Decode it back to the display name used by
     // the dynamic Fonts/ scanner. This avoids whitespace/parser edge cases while
     // keeping the menu label human-readable.
@@ -414,7 +414,7 @@ void Init(bool oldGL)
 
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
-    window = SDL_CreateWindow("OpenUA (Urban Assault)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winRes.W, winRes.H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+    window = SDL_CreateWindow("OpenNeoUA (Urban Assault)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winRes.W, winRes.H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
 
     if (!window)
     {

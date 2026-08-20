@@ -126,7 +126,7 @@ enum RFLAGS
     RFLAGS_ALPHABLEND =     (1 << 12),
 };
 
-// OpenUA extended projection limits.
+// OpenNeoUA extended projection limits.
 //
 // The world far plane is unlocked natively instead of exposing another
 // low-level INI knob. 65536 safely covers gfx.render_sectors up to 99
@@ -282,9 +282,9 @@ struct TRenderNode
 
     uint32_t Flags = 0;
     TGLColor Color;
-    // OpenUA custom: per-node VP tint multiplier. Neutral (1,1,1,1) = no change.
+    // OpenNeoUA custom: per-node VP tint multiplier. Neutral (1,1,1,1) = no change.
     TGLColor ColorMul = TGLColor(1.0, 1.0, 1.0, 1.0);
-    // OpenUA custom: transient VP fade kept separate from ColorMul alpha so
+    // OpenNeoUA custom: transient VP fade kept separate from ColorMul alpha so
     // GL_ONE/GL_ONE LUMTRACY materials can attenuate their additive RGB output.
     float VPFadeFactor = 1.0f;
 
@@ -337,7 +337,7 @@ struct TColorEffectsProg : TShaderProg
     int32_t RandLoc = -1;
     int32_t ScrSizeLoc = -1;
     int32_t MillisecsLoc = -1;
-    // OpenUA custom: fullscreen visual filter (LUT indexed by luminance)
+    // OpenNeoUA custom: fullscreen visual filter (LUT indexed by luminance)
     int32_t FilterLutLoc = -1;
     int32_t FilterStrengthLoc = -1;
 
@@ -586,7 +586,7 @@ public:
     void RecreateScreenSurface();
     void DrawScreenSurface();
     void DrawVirtualUISurface();
-    // OpenUA: batched solid-color overlay in virtual-UI pixel coordinates.
+    // OpenNeoUA: batched solid-color overlay in virtual-UI pixel coordinates.
     // Rectangles queued during BeginVirtualUI()/EndVirtualUI() are emitted in
     // one dynamic mesh draw after the virtual-UI surface, matching the visual
     // priority of vanilla world/HUD status bars without per-segment draw calls.
@@ -635,7 +635,7 @@ public:
     bool LoadPalette(const std::string &palette_ilbm);
     SDL_Cursor *LoadCursor(const std::string &name);
 
-    // OpenUA custom: modern fullscreen visual filter (Data/Filters/*.pal used as a
+    // OpenNeoUA custom: modern fullscreen visual filter (Data/Filters/*.pal used as a
     // luminance-indexed LUT applied on the final post-process pass). Vanilla-safe:
     // "Standard"/empty/strength 0 produce no change at all.
     void SetVisualFilter(const std::string &filterName);
@@ -961,7 +961,7 @@ protected:
     static constexpr int32_t _vboTextured = 160; // 4
     static constexpr int32_t _vboFlat     = 164; // 4
     static constexpr int32_t _vboATest    = 168; // 4
-    // OpenUA custom: VP tint multiplier (std140 vec4 -> 16-byte aligned at 176)
+    // OpenNeoUA custom: VP tint multiplier (std140 vec4 -> 16-byte aligned at 176)
     static constexpr int32_t _vboColorMul = 176; // 4 * 4 = 16
     static constexpr int32_t _vboFogColor = 192; // 4 * 4 = 16
     static constexpr int32_t _vboAtmosphereColor = 208; // 4 * 4 = 16
@@ -1030,7 +1030,7 @@ protected:
     uint32_t _vsShader = 0;
     TColorEffectsProg _colorEffectsShaderProg;
 
-    // OpenUA custom: optional world-only atmospheric color pass. It reuses the
+    // OpenNeoUA custom: optional world-only atmospheric color pass. It reuses the
     // existing scene FBO and fullscreen quad; no extra framebuffer is created.
     uint32_t _atmospherePsShader = 0;
     TAtmosphereProg _atmosphereShaderProg;
@@ -1042,13 +1042,13 @@ protected:
     float _atmosphereSaturation = 1.0f;
     float _atmosphereVignette = 0.0f;
 
-    // OpenUA custom: fullscreen visual filter state
+    // OpenNeoUA custom: fullscreen visual filter state
     uint32_t _visualFilterLut = 0;        // GL texture, 256x1 RGB LUT
     float _visualFilterStrength = 0.0f;   // effective blend strength (0 => off)
     bool _visualFilterActive = false;     // true only when a real filter LUT is loaded
     std::string _visualFilterName;        // selected filter file name ("Standard" when none)
 
-    // OpenUA experimental: optional VHS post-process stacked after the visual filter.
+    // OpenNeoUA experimental: optional VHS post-process stacked after the visual filter.
     uint32_t _vhsPsShader = 0;
     uint32_t _vhsVsShader = 0;
     uint32_t _vhsBlendPsShader = 0;

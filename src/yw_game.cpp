@@ -845,7 +845,7 @@ bool NC_STACK_ypaworld::UpdateSpectatorFollowCamera(TInputState *inpt)
         return false;
     }
 
-    // OpenUA custom: Spectator Follow camera uses one tank-style framing rule
+    // OpenNeoUA custom: Spectator Follow camera uses one tank-style framing rule
     // for every vehicle class.  The old code treated non-ground units with a
     // higher/stranger focus, which made planes, helicopters and Host Stations
     // look inconsistent or clip the camera into large models.  Use the same
@@ -3674,7 +3674,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
             renderTint.a *= fadeFactor;
         }
 
-        // OpenUA custom VP controls: affect only this transient model and
+        // OpenNeoUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.
         GFX::TGLColor oldTint = arg->tint;
         float oldVPFadeFactor = arg->vpFadeFactor;
@@ -4479,7 +4479,7 @@ static bool yw_IsValidMobilePowerGenerator(NC_STACK_ypaworld *yw, NC_STACK_ypaba
          (size_t)(unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID) >= yw->_vhclProtos.size() )
         return false;
 
-    // OpenUA: normal guns/flaks/radars never become power generators merely
+    // OpenNeoUA: normal guns/flaks/radars never become power generators merely
     // because a prototype happens to contain power fields. Only the explicit
     // passive gun_type=power module is allowed through the existing mobile-
     // power path. Non-gun vehicles retain the previous behaviour unchanged.
@@ -8192,7 +8192,7 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
     if ( _showCollDebug )
         debug_draw_coll_spheres();
 
-    // OpenUA custom: keep strategic-map mortar markers from lingering after expiry.
+    // OpenNeoUA custom: keep strategic-map mortar markers from lingering after expiry.
     // Manual mortar control is handled entirely by 2D-map clicks (no key trigger);
     // see NC_STACK_ypaworld::HandleMortarMapClick().
     ExpireMortarMarkers();
@@ -8448,7 +8448,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             return;
         if (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN))
             return;
-        // OpenUA invisible: cloaked stealth units are excluded from the F10 collision/
+        // OpenNeoUA invisible: cloaked stealth units are excluded from the F10 collision/
         // radius debug overlay (radius rings + labels) just like any other UI.
         if (unit->IsInvisibleUnrevealed())
             return;
@@ -8643,7 +8643,7 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
         _debugAoeRings.erase(_debugAoeRings.begin());
 }
 
-// OpenUA custom: register/refresh a mortar bombardment marker. Multiple shells of
+// OpenNeoUA custom: register/refresh a mortar bombardment marker. Multiple shells of
 // the same barrage merge into a single steady ring (refreshing its expiry).
 void NC_STACK_ypaworld::AddMortarMarker(const vec3d &pos, float radius, int owner, int lingerMs)
 {
@@ -8680,7 +8680,7 @@ void NC_STACK_ypaworld::AddMortarMarker(const vec3d &pos, float radius, int owne
         _mortarMarkers.erase(_mortarMarkers.begin());
 }
 
-// OpenUA custom: expire old bombardment markers without drawing them in the 3D world.
+// OpenNeoUA custom: expire old bombardment markers without drawing them in the 3D world.
 void NC_STACK_ypaworld::ExpireMortarMarkers()
 {
     for (size_t i = 0; i < _mortarMarkers.size(); )

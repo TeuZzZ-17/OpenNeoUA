@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title OPENUA MOTORE - GIT GC SICURO
+title OPENNEOUA MOTORE - GIT GC SICURO
 
 rem Lavora automaticamente nella cartella in cui si trova questo file BAT
 pushd "%~dp0" >nul 2>&1
 
 echo ============================================================
-echo        OPENUA MOTORE - MANUTENZIONE GIT SICURA
+echo      OPENNEOUA MOTORE - MANUTENZIONE GIT SICURA
 echo ============================================================
 echo.
 echo Cartella:
@@ -28,7 +28,7 @@ rem Verifica che la cartella sia un repository Git
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
     echo ERRORE: questa cartella non contiene un repository Git valido.
-    echo Metti questo file BAT nella cartella principale di OpenUA,
+    echo Metti questo file BAT nella cartella principale di OpenNeoUA,
     echo cioe' quella che contiene la cartella nascosta .git
     echo.
     pause
@@ -92,7 +92,7 @@ git status --short
 echo.
 
 echo ============================================================
-echo Manutenzione OpenUA completata con successo.
+echo Manutenzione OpenNeoUA completata con successo.
 echo ============================================================
 echo.
 pause

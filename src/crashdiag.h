@@ -7,7 +7,7 @@
 namespace CrashDiag
 {
 
-// Permanent OpenUA diagnostics. The service is inert until
+// Permanent OpenNeoUA diagnostics. The service is inert until
 // game.crash_diagnostics is enabled in Nucleus.ini.
 void Init(bool enabled, const std::string &buildTag);
 void Shutdown();
