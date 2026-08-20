@@ -463,7 +463,7 @@ bool setLooseWriteReport(SetLooseReport &report)
     if (!fil)
         return false;
 
-    fil->puts("OpenUA SET Loose Override Report\n");
+    fil->puts("OpenNeoUA SET Loose Override Report\n");
     fil->printf("Set: %d\n", report.setId);
     fil->printf("Loose root: %s\n\n", report.root.c_str());
 
@@ -554,7 +554,7 @@ bool setLooseEnsureReport(int32_t setId)
         report.initialized = true;
         report.setId = setId;
         report.root = "Data/Set" + std::to_string(setId) + "/Loose/";
-        report.reportPath = report.root + "_openua_set_override_report.txt";
+        report.reportPath = report.root + "_openneoua_set_override_report.txt";
 
         FSMgr::iNode *rootNode = FSMgr::iDir::findNode(report.root);
         report.available = rootNode && rootNode->getType() == FSMgr::iNode::NTYPE_DIR;
@@ -578,7 +578,7 @@ void setLooseAddUsed(const IFFile::SetLooseOverride &overrideInfo)
 
     if (overrideInfo.setId == 0 && overrideInfo.extensionForm.find("sky loose archive") != std::string::npos)
     {
-        ypa_log_out("OpenUA sky loose archive override used: %s -> %s\n", overrideInfo.requested.c_str(), overrideInfo.resolvedPath.c_str());
+        ypa_log_out("OpenNeoUA sky loose archive override used: %s -> %s\n", overrideInfo.requested.c_str(), overrideInfo.resolvedPath.c_str());
         return;
     }
 
@@ -615,7 +615,7 @@ void setLooseAddFailed(const IFFile::SetLooseOverride &overrideInfo, const std::
 
     if (overrideInfo.setId == 0 && overrideInfo.extensionForm.find("sky loose archive") != std::string::npos)
     {
-        ypa_log_out("WARNING: OpenUA sky loose archive override failed for %s (%s); %s\n",
+        ypa_log_out("WARNING: OpenNeoUA sky loose archive override failed for %s (%s); %s\n",
                     overrideInfo.requested.c_str(),
                     overrideInfo.resolvedPath.c_str(),
                     reason.c_str());
@@ -1397,7 +1397,7 @@ bool IFFile::FindSetLooseBaseObjectOverride(const std::string &objectName, const
 
     const CandidateGroup groups[] = {
         {"Base", "BASE object override (Base folder)"},
-        // OpenUAStudio currently exports the companion BASE beside the SKLT.
+        // OpenNeoUAStudio currently exports the companion BASE beside the SKLT.
         {"Skeleton", "BASE object override (Skeleton folder compatibility)"}
     };
 
@@ -1752,7 +1752,7 @@ FSMgr::FileHandle IFFile::UAOpenFileWithSetLooseOverride(const std::string &file
             return fil;
         }
 
-        ypa_log_out("WARNING: OpenUA sky loose archive override failed to open: %s; vanilla Data/Objects fallback used.\n", skyArchiveOverridePath.c_str());
+        ypa_log_out("WARNING: OpenNeoUA sky loose archive override failed to open: %s; vanilla Data/Objects fallback used.\n", skyArchiveOverridePath.c_str());
     }
 
     if ( FindSetLooseOverride(filename, mode, &overrideInfo, sourceFunction) )

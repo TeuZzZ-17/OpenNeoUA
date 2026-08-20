@@ -102,7 +102,7 @@ namespace UIWidgets {
         TXTBOX = 1200
     };
 
-    // OpenUA: Database screen widget and event IDs (range 2000-2079)
+    // OpenNeoUA: Database screen widget and event IDs (range 2000-2079)
     enum DATABASE_WIDGET_IDS {
         DB_BTN_UNITS      = 2001,
         DB_BTN_WEAPONS    = 2002,
@@ -356,17 +356,17 @@ enum INPUT_BIND
     INPUT_BIND_SPRINT     = 47,
     INPUT_BIND_CAMFIRE    = 48,
     INPUT_BIND_PLACE_MAP_MARKER = 49,
-    // OpenUA: remappable homing-primary-target cycle. Appended to preserve every existing input ID.
+    // OpenNeoUA: remappable homing-primary-target cycle. Appended to preserve every existing input ID.
     INPUT_BIND_CYCLE_TARGET = 50,
-    // OpenUA: contextual player Alternative View. Appended; existing input IDs stay stable.
+    // OpenNeoUA: contextual player Alternative View. Appended; existing input IDs stay stable.
     INPUT_BIND_ALTERNATIVE_VIEW = 51,
-    // OpenUA: remappable runtime toggle for the player-only UFO Spy UI.
+    // OpenNeoUA: remappable runtime toggle for the player-only UFO Spy UI.
     INPUT_BIND_TOGGLE_UFO_SPY_UI = 52,
 
     INPUT_BIND_MAX        = 53,
 };
 
-// OpenUA: fixed secondary shortcuts that intentionally coexist with the
+// OpenNeoUA: fixed secondary shortcuts that intentionally coexist with the
 // remappable primary binding shown in Input Settings. This is the single
 // source of truth for both runtime handling and UI presentation: changing a
 // fixed shortcut here changes both behavior and the text displayed in the
@@ -800,19 +800,19 @@ public:
     bool confPlayerRoboAIBehavior;
     bool confSpectatorMode;
     bool confPlayAsOtherFactions;
-    // OpenUA: saved menu default and current in-game camera preference are intentionally separate.
+    // OpenNeoUA: saved menu default and current in-game camera preference are intentionally separate.
     // The runtime value is changed by the cockpit-camera hotkey and must survive vehicle/missile-camera
     // transitions until the player toggles it again or applies a new setting from the Options menu.
     bool defaultCockpitCamera = true;
     bool cockpitCameraRuntimeMode = true;
     bool confDefaultCockpitCamera = true;
 
-    // OpenUA: modern graphics options shown in the Options menu.
+    // OpenNeoUA: modern graphics options shown in the Options menu.
     int confBlending;             // gfx.blending  0=Default 1=Additive 2=Sharp
     int confMaxFps;               // gfx.maxfps, validated against the Options FPS list
     bool confMoviePlayer;         // gfx.movie_player
 
-    // OpenUA: profile-saved virtual UI magnification style. Nucleus.ini
+    // OpenNeoUA: profile-saved virtual UI magnification style. Nucleus.ini
     // supplies the fallback for new/legacy profiles; a saved profile overrides it.
     GFX::VirtualUIStyle interfaceStyle = GFX::VirtualUIStyle::RETRO;
     GFX::VirtualUIStyle confInterfaceStyle = GFX::VirtualUIStyle::RETRO;
@@ -844,7 +844,7 @@ public:
     uint32_t aboutDlgLastKeyTime;
     int8_t aboutDlgKeyCount;
 
-    // OpenUA: Database/Encyclopedia screen
+    // OpenNeoUA: Database/Encyclopedia screen
     NC_STACK_button *database_button = nullptr;
     int db_tab      = 0;   // 0=Units 1=Weapons 2=Buildings
     int db_page     = 0;
@@ -1077,7 +1077,7 @@ public:
     void CycleMenuFont();
     void UpdateMenuFontText();
     bool SavePaletteThemeToNucleusIni();
-    // OpenUA: modern graphics options helpers
+    // OpenNeoUA: modern graphics options helpers
     void UpdateGfxOptionTexts();   // refresh Blending/Atmosphere-Strength captions
     bool SaveKeyToNucleusIni(const std::string &key, const std::string &value);
     bool RemoveKeyFromNucleusIni(const std::string &key);
@@ -2620,7 +2620,7 @@ public:
     void ExpireDebugAoeRings();
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
 
-    // OpenUA custom: mortar bombardment markers + manual map-click control.
+    // OpenNeoUA custom: mortar bombardment markers + manual map-click control.
     void AddMortarMarker(const vec3d &pos, float radius, int owner, int lingerMs);
     void ExpireMortarMarkers();
     void ClearMortarMarkers();
@@ -2971,7 +2971,7 @@ public:
         int32_t fadeOut = 0;
         double fadeDuration = 0.0;
         double fadeElapsed = -1.0;
-        World::TVisualTint tint; // OpenUA custom: VP tint for this spawned model (e.g. laser beam body)
+        World::TVisualTint tint; // OpenNeoUA custom: VP tint for this spawned model (e.g. laser beam body)
         TTransientVPParticleControls particleControls;
 
         TTransientVP(NC_STACK_base *base, const vec3d &p, const mat3x3 &r, int32_t life)
@@ -3269,7 +3269,7 @@ public:
     };
     std::vector<DebugAoeRing> _debugAoeRings;
 
-    // OpenUA custom: active mortar bombardment markers for the opened strategic map.
+    // OpenNeoUA custom: active mortar bombardment markers for the opened strategic map.
     // Independent of the F10 overlay; shown while a barrage is active and a short
     // time after the last shell lands, then auto-expire.
     struct MortarMarker
@@ -3281,7 +3281,7 @@ public:
     };
     std::vector<MortarMarker> _mortarMarkers;
 
-    // OpenUA custom: gid of the mortar the player selected on the 2D map for a
+    // OpenNeoUA custom: gid of the mortar the player selected on the 2D map for a
     // manual strike (0 = none). Stored by gid, not pointer, so a unit dying
     // between the select-click and the target-click can never dangle.
     uint32_t _mortarManualGid = 0;

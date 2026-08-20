@@ -89,7 +89,7 @@ struct TInputState
 
     std::array<float, 32> Sliders = Common::ArrayInit<float, 32>(0.0);
     Common::BitMan<32> Buttons;
-    bool HandBrakePressed = false; // OpenUA: explicit brake input before synthetic joystick auto-brake
+    bool HandBrakePressed = false; // OpenNeoUA: explicit brake input before synthetic joystick auto-brake
     TClickBoxInf ClickInf;
 };
 
@@ -245,7 +245,7 @@ namespace Input
         KC_JOYHATY,
         KC_JOYRUDDER,
 
-        // OpenUA: distinct left Shift binding. Appended to preserve all
+        // OpenNeoUA: distinct left Shift binding. Appended to preserve all
         // existing serialized key-code values.
         KC_LSHIFT,
 

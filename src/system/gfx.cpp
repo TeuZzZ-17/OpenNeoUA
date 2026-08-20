@@ -235,7 +235,7 @@ bool TRenderNode::CompareDistance(TRenderNode* a, TRenderNode* b)
 
 static float HorizonDefaultAlphaFogStart(float fogStart, float fogLength)
 {
-    // OpenUA: push the transparent horizon mist farther away from the player.
+    // OpenNeoUA: push the transparent horizon mist farther away from the player.
     // This keeps the atmosphere visible only in the far band instead of in mid-range.
     return fogStart + fogLength * 0.46f;
 }
@@ -1463,7 +1463,7 @@ void GFXEngine::RenderingMeshOld(TRenderNode *nod)
         effectiveColorMul.b *= vpFadeFactor;
     }
 
-    // OpenUA custom VP tint: per-node color multiplier (fixed-function path).
+    // OpenNeoUA custom VP tint: per-node color multiplier (fixed-function path).
     // Computed into the scratch ComputedColor right before the draw, so the shared
     // mesh's base vertex colors are never permanently modified.
     if ( effectiveColorMul.r != 1.0 || effectiveColorMul.g != 1.0 ||
@@ -1669,7 +1669,7 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
         effectiveColorMul.b *= vpFadeFactor;
     }
 
-    // OpenUA custom VP tint: enable a local alpha blend when the tint lowers alpha.
+    // OpenNeoUA custom VP tint: enable a local alpha blend when the tint lowers alpha.
     if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
     {
         _states.AlphaBlend = true;
@@ -1699,7 +1699,7 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
             Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, TexCoord));
     }
 
-    // OpenUA custom VP tint: push the per-node color multiplier to the shader UBO.
+    // OpenNeoUA custom VP tint: push the per-node color multiplier to the shader UBO.
     if ( _vboStatesBlock.ColorMul[0] != effectiveColorMul.r ||
          _vboStatesBlock.ColorMul[1] != effectiveColorMul.g ||
          _vboStatesBlock.ColorMul[2] != effectiveColorMul.b ||
@@ -1771,7 +1771,7 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
 {
     if (RasterEtapes & RASTER_SKY)
     {
-        // OpenUA: render the camera-following sky with its own extended
+        // OpenNeoUA: render the camera-following sky with its own extended
         // projection, then restore the unlocked world projection immediately.
         mat4x4f skyFrustum = mat4x4f::UAFrustum(_frustumNear, SKY_FAR_CLIP);
         skyFrustum.m00 *= _viewZoom;
@@ -3529,16 +3529,16 @@ void GFXEngine::Init()
             BindVBOParameters(_colorEffectsShaderProg);
     }
 
-    // OpenUA custom: load the fullscreen visual filter selected in nucleus.ini.
+    // OpenNeoUA custom: load the fullscreen visual filter selected in nucleus.ini.
     // Safe no-op when "Standard"/empty or when the file is missing.
     ApplyVisualFilterFromConfig();
 
-    // OpenUA custom: world-only atmospheric color pass. When enabled, it uses
+    // OpenNeoUA custom: world-only atmospheric color pass. When enabled, it uses
     // the dedicated shader; if that shader is absent or cannot be linked, the
     // renderer falls back to the existing DrawFBO path without changing vanilla.
     ApplyAtmosphereFromConfig();
 
-    // OpenUA: VHS pass enabled by default, loaded from its own INI shader path.
+    // OpenNeoUA: VHS pass enabled by default, loaded from its own INI shader path.
     ApplyVhsFilterFromConfig();
 }
 
@@ -3624,7 +3624,7 @@ void GFXEngine::Deinit()
     _vsShader = 0;
     _psShader = 0;
 
-    // OpenUA custom: free the visual filter LUT texture
+    // OpenNeoUA custom: free the visual filter LUT texture
     if (_visualFilterLut)
         glDeleteTextures(1, &_visualFilterLut);
     _visualFilterLut = 0;
@@ -3890,7 +3890,7 @@ bool GFXEngine::LoadPalette(const std::string &palette_ilbm)
     return true;
 }
 
-// OpenUA custom: read gfx.visual_filter_strength ("0.0".."1.0") with a safe default.
+// OpenNeoUA custom: read gfx.visual_filter_strength ("0.0".."1.0") with a safe default.
 // NUCLEUS.INI is the single source of truth; missing/empty/invalid values only fall
 // back in memory and are not rewritten unless the user saves Options.
 static float ParseVisualFilterStrength(std::string s, float fallback)
@@ -3926,7 +3926,7 @@ static float ReadVisualFilterStrength()
     return ParseVisualFilterStrength(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), defaultStrength);
 }
 
-// OpenUA custom: select the fullscreen visual filter.
+// OpenNeoUA custom: select the fullscreen visual filter.
 // filterName == "Standard"/"None"/"Original"/empty disables the filter (no visual change).
 // Otherwise loads Data/Filters/<name>.pal as a 256-entry RGB LUT (read with the normal
 // ILBM/CMAP loader) and uploads it to a 256x1 GL texture used by the post-process shader.
@@ -3998,7 +3998,7 @@ void GFXEngine::SetVisualFilter(const std::string &filterName)
         return;
     }
 
-    // OpenUA: build a SMOOTH luminance grade from the palette.
+    // OpenNeoUA: build a SMOOTH luminance grade from the palette.
     // A UA .pal CMAP is an arbitrary indexed game palette. Even sorted by luminance it has
     // harsh chroma jumps (colors of similar luminance but very different hue) which show up
     // as red/blue speckle. So we:
@@ -4126,7 +4126,7 @@ void GFXEngine::SetVisualFilterStrength(float strength)
     _visualFilterStrength = strength;
 }
 
-// OpenUA custom: apply the visual filter selected in nucleus.ini (gfx.visual_filter).
+// OpenNeoUA custom: apply the visual filter selected in nucleus.ini (gfx.visual_filter).
 void GFXEngine::ApplyVisualFilterFromConfig()
 {
     SetVisualFilter(System::IniConf::GfxVisualFilter.Get<std::string>());
@@ -5423,7 +5423,7 @@ void GFXEngine::DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx)
         if (_lastStates.Prog.UVLoc != -1)
             Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, TexCoord));
 
-        // OpenUA custom VP tint: screen/HUD/UI quads must never inherit a mesh tint.
+        // OpenNeoUA custom VP tint: screen/HUD/UI quads must never inherit a mesh tint.
         if ( _vboStatesBlock.ColorMul[0] != 1.0 || _vboStatesBlock.ColorMul[1] != 1.0 ||
              _vboStatesBlock.ColorMul[2] != 1.0 || _vboStatesBlock.ColorMul[3] != 1.0 )
         {
@@ -5801,7 +5801,7 @@ void GFXEngine::DrawFBO()
             Glext::GLUniform1f(_atmosphereShaderProg.VignetteLoc, _atmosphereVignette);
     }
 
-    // OpenUA custom: fullscreen visual filter LUT.
+    // OpenNeoUA custom: fullscreen visual filter LUT.
     // Strength 0 => shader passthrough (identical to vanilla post-process output).
     if (postProg->FilterStrengthLoc >= 0)
     {
@@ -6346,7 +6346,7 @@ TColorEffectsProg::TColorEffectsProg(uint32_t id)
     RandLoc = Glext::GLGetUniformLocation(ID, "randval");
     ScrSizeLoc = Glext::GLGetUniformLocation(ID, "screenSize");
     MillisecsLoc = Glext::GLGetUniformLocation(ID, "millisecs");
-    // OpenUA custom: fullscreen visual filter
+    // OpenNeoUA custom: fullscreen visual filter
     FilterLutLoc = Glext::GLGetUniformLocation(ID, "filterLut");
     FilterStrengthLoc = Glext::GLGetUniformLocation(ID, "filterStrength");
 }

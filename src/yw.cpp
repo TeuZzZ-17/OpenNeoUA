@@ -950,7 +950,7 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
 
     _vhclProtos[targetID].disable_enable_bitmask = 0;
     _spectatorVehicleProtoID = targetID;
-    ypa_log_out("Loaded OpenUA spectator vehicle from %s into runtime prototype slot %d.\n", spectatorScript.c_str(), targetID);
+    ypa_log_out("Loaded OpenNeoUA spectator vehicle from %s into runtime prototype slot %d.\n", spectatorScript.c_str(), targetID);
     return true;
 }
 
@@ -967,7 +967,7 @@ bool NC_STACK_ypaworld::DebugReloadLiveData(std::string *details)
     }
 
     // Nucleus.ini is already data-driven through IniConf. Re-read it first so
-    // prototype defaults that depend on current OpenUA settings use the new values.
+    // prototype defaults that depend on current OpenNeoUA settings use the new values.
     // Missing files keep the previous IniConf values because ParseIniFile does not
     // reset the key catalogue when the file cannot be opened.
     if ( !System::IniConf::ReadFromNucleusIni() )
@@ -1859,7 +1859,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
         else if ( arg->field_8 )
         {
-            // F7: OpenUA live data reload. F7 is also the vanilla next-commander
+            // F7: OpenNeoUA live data reload. F7 is also the vanilla next-commander
             // hotkey, so consume that binding only while New Debug owns the key.
             if ( arg->field_8->KbdLastHit == Input::KC_F7 )
             {
@@ -1878,7 +1878,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
 
                 if ( !reloadDetails.empty() )
-                    ypa_log_out("OpenUA New Debug F7: %s.\n", reloadDetails.c_str());
+                    ypa_log_out("OpenNeoUA New Debug F7: %s.\n", reloadDetails.c_str());
             }
 
             // F9: runtime-only global unit invulnerability. Handle it before
@@ -1899,7 +1899,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
             // F8: one-shot destruction of the selected vehicle. F8 is also
             // the vanilla last-message hotkey, so consume that binding only
-            // while the OpenUA debug mode is active.
+            // while the OpenNeoUA debug mode is active.
             if ( arg->field_8->KbdLastHit == Input::KC_F8 )
             {
                 arg->field_8->HotKeyID = -1;
@@ -2323,7 +2323,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 }
             }
 
-            // OpenUA: legacy online help pages are obsolete/dead.
+            // OpenNeoUA: legacy online help pages are obsolete/dead.
             // Clear pending help URLs instead of launching an external browser.
             if ( !_helpURL.empty() )
                 _helpURL.clear();
@@ -3164,7 +3164,7 @@ void NC_STACK_ypaworld::StartAmbientLevelSound(const TLevelDescription &mapp)
             const std::string &candidate = candidates[(first + i) % candidates.size()];
             if ( tryStartFile(candidate, volume) )
             {
-                ypa_log_out("OpenUA: ambient sound selected '%s' from '%s'.\n",
+                ypa_log_out("OpenNeoUA: ambient sound selected '%s' from '%s'.\n",
                             candidate.c_str(), configuredPath.c_str());
                 return true;
             }
@@ -3982,7 +3982,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_radius = vhcl.radius;
         bacto->_viewer_radius = vhcl.vwr_radius;
 
-        // OpenUA: universal compound collision spheres. If the prototype defines
+        // OpenNeoUA: universal compound collision spheres. If the prototype defines
         // coll_* spheres, copy them so getBACT_collNodes() exposes them to the
         // existing narrow-phase collision/hit tests (same path Robo uses).
         //
@@ -4182,7 +4182,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_hidden = vhcl.hidden;
         bacto->_unhideRadar = vhcl.unhideRadar;
 
-        // OpenUA custom: seed the per-instance invisible/stealth state from the proto.
+        // OpenNeoUA custom: seed the per-instance invisible/stealth state from the proto.
         // A unit with `invisible = 1` spawns cloaked and stays so until its first attack.
         bacto->_invisibleUnrevealed = vhcl.invisible;
         bacto->_invisible_reveal_vp = vhcl.invisible_reveal_vp;
@@ -4338,7 +4338,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_shield = 0;
     wobj->_mass = wproto.mass;
     wobj->_force = wproto.force;
-    wobj->_base_force = wproto.force;    // OpenUA fix: ypabact_ApplyDamagedRuntime() recomputes
+    wobj->_base_force = wproto.force;    // OpenNeoUA fix: ypabact_ApplyDamagedRuntime() recomputes
     wobj->_maxrot = wproto.maxrot;       // _force = _base_force * mult every frame, so missiles must seed
     wobj->_base_maxrot = wproto.maxrot;  // _base_force/_base_maxrot too, or they crawl at the 5000/0.5 defaults.
     wobj->_height = wproto.heightStd;
@@ -5208,7 +5208,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
 
     System::IniConf::ReadFromNucleusIni();
 
-    // OpenUA: Nucleus.ini supplies the default Retro Interface state for new
+    // OpenNeoUA: Nucleus.ini supplies the default Retro Interface state for new
     // users and profiles that predate the profile-side interface_style key.
     // A saved profile may still override this value when its video block loads.
     const GFX::VirtualUIStyle nucleusInterfaceStyle =
@@ -5314,7 +5314,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
     usr->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
 
-    // OpenUA: keep the legacy IDs/type slots reserved for compatibility, but
+    // OpenNeoUA: keep the legacy IDs/type slots reserved for compatibility, but
     // these retired controls are no longer bindable or active.
     usr->RetireInputBindings(true);
     usr->sub_46D2B4();
@@ -6251,7 +6251,7 @@ bool NC_STACK_ypaworld::CreateInputControls()
 
                                             if ( _GameShell->button_input_button->Add(&btn_64arg) )
                                             {
-                                                // OpenUA: keep all Input Settings actions aligned in one
+                                                // OpenNeoUA: keep all Input Settings actions aligned in one
                                                 // compact bottom row: OK / Back / Delete / Reset Defaults.
                                                 btn_64arg.xpos = 3 * inputActionButtonStep;
                                                 btn_64arg.ypos = bottomButtonsY;
@@ -6321,7 +6321,7 @@ bool NC_STACK_ypaworld::CreateInputControls()
         return false;
     }
 
-        // OpenUA: remove deprecated online-help button from Input Settings.
+        // OpenNeoUA: remove deprecated online-help button from Input Settings.
     _GameShell->button_input_button->Remove(1052);
 
 _GameShell->button_input_button->HideScreen();
@@ -6420,7 +6420,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     int v99 = posLeftPaddingX + buttonsSpace + v98;
 
     _GameShell->video_listvw.x = v99;
-    _GameShell->video_listvw.y = 4 * vertMenuSpace + 4 * _fontH + scaledFontHeight; // OpenUA: opens just below Display Resolution (row 3)
+    _GameShell->video_listvw.y = 4 * vertMenuSpace + 4 * _fontH + scaledFontHeight; // OpenNeoUA: opens just below Display Resolution (row 3)
 
     _GameShell->d3d_listvw.x = v99;
     _GameShell->d3d_listvw.y = 7 * vertMenuSpace + 7 * _fontH + scaledFontHeight;
@@ -6448,7 +6448,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     btn_64arg.txt_g = _iniColors[68].g;
     btn_64arg.txt_b = _iniColors[68].b;
 
-    if ( true ) // OpenUA: legacy Options title hidden; the screen content is self-explanatory.
+    if ( true ) // OpenNeoUA: legacy Options title hidden; the screen content is self-explanatory.
     {
         btn_64arg.xpos = 0;
         btn_64arg.ypos = vertMenuSpace + _fontH;
@@ -6460,7 +6460,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.txt_g = _iniColors[60].g;
         btn_64arg.txt_b = _iniColors[60].b;
 
-        if ( true ) // OpenUA: legacy Options helper line hidden; Help button is removed.
+        if ( true ) // OpenNeoUA: legacy Options helper line hidden; Help button is removed.
         {
             btn_64arg.xpos = 0;
             btn_64arg.ypos = 2 * (_fontH + vertMenuSpace);
@@ -6469,7 +6469,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
             btn_64arg.button_id = 1170;
             btn_64arg.caption2.clear();
 
-            if ( true ) // OpenUA: legacy instruction line 2 hidden (mentioned the removed Direct3D selector)
+            if ( true ) // OpenNeoUA: legacy instruction line 2 hidden (mentioned the removed Direct3D selector)
             {
                 btn_64arg.xpos = 0;
                 btn_64arg.width = menuWidth;
@@ -6478,14 +6478,14 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                 btn_64arg.caption2.clear();
                 btn_64arg.button_id = 1171;
 
-                if ( true ) // OpenUA: legacy instruction line 3 hidden
+                if ( true ) // OpenNeoUA: legacy instruction line 3 hidden
                 {
                     btn_64arg.tileset_down = 16;
                     btn_64arg.tileset_up = 16;
                     btn_64arg.field_3A = 16;
                     btn_64arg.xpos = 0;
                     btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-                    btn_64arg.ypos = 3 * (_fontH + vertMenuSpace); // OpenUA: Display Resolution moved above Atmosphere
+                    btn_64arg.ypos = 3 * (_fontH + vertMenuSpace); // OpenNeoUA: Display Resolution moved above Atmosphere
                     btn_64arg.width = v98;
                     btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_RES);
                     btn_64arg.caption2.clear();
@@ -6537,7 +6537,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                             btn_64arg.txt_g = _iniColors[60].g;
                             btn_64arg.txt_b = _iniColors[60].b;
 
-                            if ( true ) // OpenUA: 3D device label hidden from Options UI (device still chosen from NUCLEUS.INI / auto)
+                            if ( true ) // OpenNeoUA: 3D device label hidden from Options UI (device still chosen from NUCLEUS.INI / auto)
                             {
                                 btn_64arg.width = v294 * 0.6;
                                 btn_64arg.tileset_down = 19;
@@ -6556,7 +6556,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                 btn_64arg.txt_g = _iniColors[68].g;
                                 btn_64arg.txt_b = _iniColors[68].b;
 
-                                if ( true ) // OpenUA: 3D device selector hidden from Options UI (renderer = current OpenUA/OpenGL device)
+                                if ( true ) // OpenNeoUA: 3D device selector hidden from Options UI (renderer = current OpenNeoUA/OpenGL device)
                                 {
                                     int v117 = dword_5A50B2 - 6 * buttonsSpace - 2 * checkBoxWidth;
 
@@ -6575,7 +6575,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                     btn_64arg.flags = 0;
                                     btn_64arg.button_id = 1157;
 
-                                    if ( true ) // OpenUA: Horizon Depth checkbox hidden (gfx FARVIEW still read from NUCLEUS.INI)
+                                    if ( true ) // OpenNeoUA: Horizon Depth checkbox hidden (gfx FARVIEW still read from NUCLEUS.INI)
                                     {
                                         int v120 = v117 / 2;
 
@@ -6596,7 +6596,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                         btn_64arg.txt_g = _iniColors[60].g;
                                         btn_64arg.txt_b = _iniColors[60].b;
 
-                                        if ( true ) // OpenUA: Horizon Depth label hidden
+                                        if ( true ) // OpenNeoUA: Horizon Depth label hidden
                                         {
                                             btn_64arg.tileset_down = 19;
                                             btn_64arg.tileset_up = 18;
@@ -6607,7 +6607,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                             btn_64arg.upCode = 1107;
                                             btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                             btn_64arg.downCode = 1106;
-                                            btn_64arg.xpos = 0; // OpenUA repack: Sky -> left column, row 9
+                                            btn_64arg.xpos = 0; // OpenNeoUA repack: Sky -> left column, row 9
                                             btn_64arg.ypos = 9 * (vertMenuSpace + _fontH);
                                             btn_64arg.pressedCode = 0;
                                             btn_64arg.flags = 0;
@@ -6619,7 +6619,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                 btn_64arg.tileset_up = 16;
                                                 btn_64arg.field_3A = 16;
                                                 btn_64arg.width = v120;
-                                                btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenUA repack: Sky label -> left column
+                                                btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenNeoUA repack: Sky label -> left column
                                                 btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                 btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_SKY);
                                                 btn_64arg.caption2.clear();
@@ -6646,7 +6646,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                     btn_64arg.button_id = 1165;
                                                     btn_64arg.flags = 0;
 
-                                                    if ( true ) // OpenUA: Software Cursor checkbox hidden (gfx SOFTMOUSE still read from NUCLEUS.INI)
+                                                    if ( true ) // OpenNeoUA: Software Cursor checkbox hidden (gfx SOFTMOUSE still read from NUCLEUS.INI)
                                                     {
                                                         btn_64arg.tileset_down = 16;
                                                         btn_64arg.tileset_up = 16;
@@ -6662,7 +6662,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                         btn_64arg.button_id = 2;
                                                         btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
 
-                                                        if ( true ) // OpenUA: Software Cursor label hidden
+                                                        if ( true ) // OpenNeoUA: Software Cursor label hidden
                                                         {
                                                             btn_64arg.width = checkBoxWidth;
                                                             btn_64arg.tileset_down = 19;
@@ -6676,7 +6676,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                             btn_64arg.caption2 = "g";
                                                             btn_64arg.upCode = 1131;
                                                             btn_64arg.button_id = 1166;
-                                                            btn_64arg.xpos = 0; // OpenUA repack: Windowed -> former VHS Filter position
+                                                            btn_64arg.xpos = 0; // OpenNeoUA repack: Windowed -> former VHS Filter position
                                                             btn_64arg.ypos = 8 * (vertMenuSpace + _fontH);
 
                                                             if ( _GameShell->video_button->Add(&btn_64arg) )
@@ -6710,7 +6710,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                     btn_64arg.pressedCode = 0;
                                                                     btn_64arg.button_id = 0;
 
-                                                                    if ( true ) // OpenUA: 16-Bit Textures label hidden (gfx 16BITTEXTURE still read from NUCLEUS.INI)
+                                                                    if ( true ) // OpenNeoUA: 16-Bit Textures label hidden (gfx 16BITTEXTURE still read from NUCLEUS.INI)
                                                                     {
                                                                         btn_64arg.width = checkBoxWidth;
                                                                         btn_64arg.tileset_down = 19;
@@ -6726,13 +6726,13 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                         btn_64arg.downCode = 1113;
                                                                         btn_64arg.upCode = 1114;
 
-                                                                        if ( true ) // OpenUA: 16-Bit Textures checkbox hidden
+                                                                        if ( true ) // OpenNeoUA: 16-Bit Textures checkbox hidden
                                                                         {
                                                                             btn_64arg.tileset_down = 16;
                                                                             btn_64arg.tileset_up = 16;
                                                                             btn_64arg.field_3A = 16;
                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-                                                                            btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenUA repack: Music label -> left column, row 10
+                                                                            btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenNeoUA repack: Music label -> left column, row 10
                                                                             btn_64arg.ypos = 10 * (vertMenuSpace + _fontH);
                                                                             btn_64arg.width = v120;
                                                                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_ENCDAUD);
@@ -6757,7 +6757,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                 btn_64arg.caption2 = "g";
                                                                                 btn_64arg.upCode = 1129;
                                                                                 btn_64arg.button_id = 1164;
-                                                                                btn_64arg.xpos = 0; // OpenUA repack: Music checkbox -> left column, row 10
+                                                                                btn_64arg.xpos = 0; // OpenNeoUA repack: Music checkbox -> left column, row 10
 
                                                                                 if ( _GameShell->video_button->Add(&btn_64arg) )
                                                                                 {
@@ -6776,7 +6776,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                     btn_64arg.upCode = 1127;
                                                                                     btn_64arg.flags = 0;
 
-                                                                                    if ( true ) // OpenUA: Enemy Indicators checkbox hidden (enemyIndicator still read from NUCLEUS.INI)
+                                                                                    if ( true ) // OpenNeoUA: Enemy Indicators checkbox hidden (enemyIndicator still read from NUCLEUS.INI)
                                                                                     {
                                                                                         btn_64arg.tileset_down = 16;
                                                                                         btn_64arg.tileset_up = 16;
@@ -6792,13 +6792,13 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                         btn_64arg.button_id = 0;
                                                                                         btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
 
-                                                                                        if ( true ) // OpenUA: Enemy Indicators label hidden
+                                                                                        if ( true ) // OpenNeoUA: Enemy Indicators label hidden
                                                                                         {
                                                                                             btn_64arg.width = checkBoxWidth;
                                                                                             btn_64arg.tileset_down = 19;
                                                                                             btn_64arg.tileset_up = 18;
                                                                                             btn_64arg.field_3A = 30;
-                                                                                            btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + v120; // OpenUA repack: Host Station AI -> right column, row 10
+                                                                                            btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + v120; // OpenNeoUA repack: Host Station AI -> right column, row 10
                                                                                             btn_64arg.ypos = 10 * (vertMenuSpace + _fontH);
                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                                                                             btn_64arg.pressedCode = 0;
@@ -6819,7 +6819,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                             btn_64arg.tileset_up = 16;
                                                                                             btn_64arg.field_3A = 16;
                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-                                                                                            btn_64arg.xpos = 4 * buttonsSpace + v120 + 2 * checkBoxWidth; // OpenUA repack: Host Station AI label -> right column
+                                                                                            btn_64arg.xpos = 4 * buttonsSpace + v120 + 2 * checkBoxWidth; // OpenNeoUA repack: Host Station AI label -> right column
                                                                                             btn_64arg.width = v120;
                                                                                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_HOSTSTATIONAI);
                                                                                             btn_64arg.caption2.clear();
@@ -6839,7 +6839,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                             btn_64arg.tileset_down = 19;
                                                                                             btn_64arg.tileset_up = 18;
                                                                                             btn_64arg.field_3A = 30;
-                                                                                            btn_64arg.xpos = 0; // OpenUA repack: Spectator Mode -> left column, row 11
+                                                                                            btn_64arg.xpos = 0; // OpenNeoUA repack: Spectator Mode -> left column, row 11
                                                                                             btn_64arg.ypos = 11 * (vertMenuSpace + _fontH);
                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                                                                             btn_64arg.pressedCode = 0;
@@ -6860,7 +6860,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                             btn_64arg.tileset_up = 16;
                                                                                             btn_64arg.field_3A = 16;
                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-                                                                                            btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenUA repack: Spectator Mode label -> left column
+                                                                                            btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenNeoUA repack: Spectator Mode label -> left column
                                                                                             btn_64arg.width = v120;
                                                                                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_SPECTATORMODE);
                                                                                             btn_64arg.caption2.clear();
@@ -6876,7 +6876,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                 return false;
                                                                                             }
 
-                                                                                            // OpenUA: profile-saved Retro Interface checkbox.
+                                                                                            // OpenNeoUA: profile-saved Retro Interface checkbox.
                                                                                             // Checked = Retro/nearest; unchecked = Smooth/linear.
                                                                                             // It shares row 12 with Spectator Mode and uses the free right column.
                                                                                             btn_64arg.width = checkBoxWidth;
@@ -6938,7 +6938,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                             btn_64arg.button_id = 0;
                                                                                             btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
 
-                                                                                            if ( true ) // OpenUA: Stereo Reverse label hidden (SF_INVERTLR still read from NUCLEUS.INI)
+                                                                                            if ( true ) // OpenNeoUA: Stereo Reverse label hidden (SF_INVERTLR still read from NUCLEUS.INI)
                                                                                             {
                                                                                                 btn_64arg.width = checkBoxWidth;
                                                                                                 btn_64arg.tileset_down = 19;
@@ -6954,14 +6954,14 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                 btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                                                                                 btn_64arg.upCode = 1111;
 
-                                                                                                if ( true ) // OpenUA: Stereo Reverse checkbox hidden
+                                                                                                if ( true ) // OpenNeoUA: Stereo Reverse checkbox hidden
                                                                                                 {
                                                                                                     btn_64arg.tileset_down = 16;
                                                                                                     btn_64arg.tileset_up = 16;
                                                                                                     btn_64arg.field_3A = 16;
                                                                                                     btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                                                                     btn_64arg.xpos = 0;
-                                                                                                btn_64arg.ypos = 12 * (vertMenuSpace + _fontH); // OpenUA repack: Explosion Effects row 12
+                                                                                                btn_64arg.ypos = 12 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Explosion Effects row 12
                                                                                                     btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
                                                                                                     btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_DESTRFX);
                                                                                                     btn_64arg.caption2.clear();
@@ -7014,7 +7014,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                             {
                                                                                                                 btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                                                                                 btn_64arg.xpos = 0;
-                                                                                                                btn_64arg.ypos = 13 * (vertMenuSpace + _fontH); // OpenUA repack: Sound Volume row 13
+                                                                                                                btn_64arg.ypos = 13 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Sound Volume row 13
                                                                                                                 btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
                                                                                                                 btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_FXVOL);
                                                                                                                 btn_64arg.caption2.clear();
@@ -7067,7 +7067,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                                                                                             btn_64arg.xpos = 0;
                                                                                                                             btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
-                                                                                                                            btn_64arg.ypos = 14 * (vertMenuSpace + _fontH); // OpenUA repack: Music Volume row 14
+                                                                                                                            btn_64arg.ypos = 14 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Music Volume row 14
                                                                                                                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_CDVOL);
                                                                                                                             btn_64arg.caption2.clear();
                                                                                                                             btn_64arg.downCode = 0;
@@ -7202,7 +7202,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         return false;
     }
 
-    // OpenUA: global mission ambience volume. This is intentionally placed
+    // OpenNeoUA: global mission ambience volume. This is intentionally placed
     // directly under the existing Music Volume row and persists to
     // game.ambient_sound_volume in Nucleus.ini.
     {
@@ -7358,7 +7358,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         }
     }
 
-    // ===== OpenUA: modern graphics options =====================================
+    // ===== OpenNeoUA: modern graphics options =====================================
     // Blending, menu font, frame limit and the remaining main-page controls.
     {
         // --- Blending label + cycle-button (row 4, left column) ---
@@ -7609,7 +7609,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         }
     }
 
-    // ===== end OpenUA modern graphics options ==================================
+    // ===== end OpenNeoUA modern graphics options ==================================
 
     _GameShell->UpdatePaletteThemeText();
     _GameShell->UpdateGfxOptionTexts();
@@ -7622,7 +7622,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     _GameShell->video_button->SetState(&v229);
 
 
-        // OpenUA: remove deprecated online-help button from Options.
+        // OpenNeoUA: remove deprecated online-help button from Options.
     _GameShell->video_button->Remove(1167);
 
 _GameShell->video_button->HideScreen();
@@ -7855,7 +7855,7 @@ bool NC_STACK_ypaworld::CreateDiskControls()
 {
     int menuWidth = _screenSize.x * 0.7;
     int posLeftPaddingX = (_screenSize.x - menuWidth) / 2;
-    // OpenUA: keep all Save/Load actions on one row. Back sits immediately
+    // OpenNeoUA: keep all Save/Load actions on one row. Back sits immediately
     // to the right of Save; Delete keeps its own final slot when enabled.
     const int diskActionButtonWidth = (menuWidth - 4 * buttonsSpace) / 5;
     const int diskActionButtonY = 7 * buttonsSpace + 15 * _fontH;
@@ -8072,7 +8072,7 @@ bool NC_STACK_ypaworld::CreateDiskControls()
     }
 
 
-        // OpenUA: remove deprecated online-help button from Save/Load.
+        // OpenNeoUA: remove deprecated online-help button from Save/Load.
     _GameShell->disk_button->Remove(1107);
 
 _GameShell->disk_button->HideScreen();
@@ -8234,7 +8234,7 @@ bool NC_STACK_ypaworld::CreateLocaleControls()
         return false;
     }
 
-        // OpenUA: remove deprecated online-help button from Language.
+        // OpenNeoUA: remove deprecated online-help button from Language.
     _GameShell->locale_button->Remove(1252);
 
 _GameShell->locale_button->HideScreen();
@@ -8381,7 +8381,7 @@ bool NC_STACK_ypaworld::CreateDatabaseControls()
 {
     _GameShell->database_button = Nucleus::CInit<NC_STACK_button>( {
         {NC_STACK_button::BTN_ATT_X, (int32_t)0},
-        // OpenUA Database: use the full shell height. The previous panel started at
+        // OpenNeoUA Database: use the full shell height. The previous panel started at
         // scaledFontHeight, leaving a large empty strip above the tabs and wasting
         // vertical space.
         {NC_STACK_button::BTN_ATT_Y, (int32_t)0},
@@ -8403,7 +8403,7 @@ bool NC_STACK_ypaworld::CreateDatabaseControls()
     const int DB_VISIBLE_LINES = 22;                // fill the vertical space above the bottom buttons without overlapping navigation
     const int DB_DETAIL_LINES = 14;
     const int panelH = _screenSize.y;
-    // OpenUA Database: anchor navigation buttons to the lowest safe row of the
+    // OpenNeoUA Database: anchor navigation buttons to the lowest safe row of the
     // full-screen database panel. The previous formula subtracted an extra
     // vertMenuSpace, leaving a visible gap under Prev/Back/Next.
     // Button height is roughly _fontH; subtracting the full line height (lh)
@@ -9039,7 +9039,7 @@ bool NC_STACK_ypaworld::CreateNetworkControls()
     v228.butID = 1217;
     _GameShell->network_button->Disable(&v228);
 
-        // OpenUA: remove deprecated online-help button from Network.
+        // OpenNeoUA: remove deprecated online-help button from Network.
     _GameShell->network_button->Remove(1218);
 
 _GameShell->network_button->HideScreen();
@@ -9576,7 +9576,7 @@ void NC_STACK_ypaworld::ProcessGameShell()
 
     _GameShell->GameIsOver = false;
 
-    // OpenUA: legacy online help pages are obsolete/dead.
+    // OpenNeoUA: legacy online help pages are obsolete/dead.
     // Clear pending help URLs instead of launching an external browser.
     if ( !_helpURL.empty() )
         _helpURL.clear();
@@ -10001,7 +10001,7 @@ size_t NC_STACK_ypaworld::ypaworld_func166(const std::string &langname)
 {
     Locale::Text::SetLangDefault();
 
-    // OpenUA currently supports the English vanilla catalogue only. Depending
+    // OpenNeoUA currently supports the English vanilla catalogue only. Depending
     // on the retail layout it may be named LANGUAGE.DLL or ENGLISH.DLL. Other
     // locale catalogues are intentionally ignored instead of being selected as
     // an automatic fallback.
@@ -10090,7 +10090,7 @@ size_t NC_STACK_ypaworld::ypaworld_func166(const std::string &langname)
 
     if (StriCmp(langname, "language") && StriCmp(langname, "english"))
     {
-        ypa_log_out("Locale: '%s' is unsupported; OpenUA uses English only.\n",
+        ypa_log_out("Locale: '%s' is unsupported; OpenNeoUA uses English only.\n",
                     langname.c_str());
     }
 
@@ -10103,14 +10103,14 @@ size_t NC_STACK_ypaworld::ypaworld_func166(const std::string &langname)
         Locale::Text::SetLocaleName("language");
     }
 
-    // OpenUA-owned strings are always a separate overlay and cannot overwrite
+    // OpenNeoUA-owned strings are always a separate overlay and cannot overwrite
     // IDs belonging to the original game catalogue.
     const bool openUALoaded =
         Locale::Text::OpenUALngFileLoad("locale:New_Language.lng") ||
         Locale::Text::OpenUALngFileLoad("locale:new_language.lng");
 
     if (!openUALoaded)
-        ypa_log_out("Warning: Locale/New_Language.lng not found or contains no valid OpenUA strings.\n");
+        ypa_log_out("Warning: Locale/New_Language.lng not found or contains no valid OpenNeoUA strings.\n");
 
     if (!baseLoaded)
     {
@@ -10219,7 +10219,7 @@ void NC_STACK_ypaworld::UpdateGameShell()
     v16.field_4 = (!_GameShell->IsWindowedFlag()) + 1;
     _GameShell->video_button->SetState(&v16);
 
-    // OpenUA: modern graphics options initial state (read from config)
+    // OpenNeoUA: modern graphics options initial state (read from config)
     _GameShell->confBlending = System::IniConf::GfxBlending.Get<int32_t>();
     _GameShell->confMaxFps = System::IniConf::GfxMaxFps.Get<int32_t>();
     _GameShell->confMoviePlayer = System::IniConf::GfxMoviePlayer.Get<bool>();
@@ -11249,7 +11249,7 @@ void NC_STACK_ypaworld::setYW_userVehicle(NC_STACK_ypabact *bact)
     if ( !CanControlUnitInSpectatorMode(bact) )
         return;
 
-    // OpenUA custom: never make a mortar platform the player-controlled vehicle;
+    // OpenNeoUA custom: never make a mortar platform the player-controlled vehicle;
     // mortars are commanded only from the 2D strategic map.
     if ( bact && bact->IsMortarPlatform() )
         return;
@@ -11447,7 +11447,7 @@ int NC_STACK_ypaworld::TestVehicle(int protoID, int job, NC_STACK_ypabact *targe
         }
     }
 
-    // OpenUA: when AllocForce knows the concrete enemy, allow a new
+    // OpenNeoUA: when AllocForce knows the concrete enemy, allow a new
     // fine-grained job_fight* to override the old coarse strategic group.
     // If the specific value is absent, legacyValue is returned unchanged.
     if ( target )

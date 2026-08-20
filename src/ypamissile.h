@@ -50,7 +50,7 @@ public:
     virtual void ResetViewing(); // Detach camera
     virtual void Impact(); // Apply impulse to all in sector
 
-    // OpenUA custom mortar shell: arm this projectile as a ballistic barrage shell.
+    // OpenNeoUA custom mortar shell: arm this projectile as a ballistic barrage shell.
     // Once armed it follows a parametric arc (start->target) and force-impacts when
     // its flight timer expires, reusing the normal Impact()/AoE/FX path.
     void SetupMortarShell(const vec3d &startPos, const vec3d &targetPos,
@@ -174,7 +174,7 @@ protected:
     void UpdatePendingChainJump(update_msg *arg);
     void RememberChainHit(NC_STACK_ypabact *target);
     bool IsChainHit(NC_STACK_ypabact *target) const;
-    void UpdateMortarBallistic(update_msg *arg); // OpenUA custom: ballistic shell flight + timed impact
+    void UpdateMortarBallistic(update_msg *arg); // OpenNeoUA custom: ballistic shell flight + timed impact
     void UpdateWeaponTracer();
     void RenderWeaponTracer(baseRender_msg *arg);
 
@@ -253,7 +253,7 @@ protected:
     std::vector<NC_STACK_ypabact *> _mislDirectHitUnits;
     std::vector<TBuildingHitRef> _mislDirectHitBuildings;
     std::vector<TBuildingHitRef> _mislDirectHitSectors;
-    // OpenUA custom mortar shell state (only meaningful when _isMortarProjectile).
+    // OpenNeoUA custom mortar shell state (only meaningful when _isMortarProjectile).
     bool  _isMortarProjectile = false;
     vec3d _mortarStartPos;
     vec3d _mortarTargetPos;

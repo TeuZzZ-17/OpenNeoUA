@@ -14,7 +14,7 @@ namespace World
 {
 struct TRoboProto;
 
-// OpenUA custom: gameplay-facing Vehicle class used only by the extended
+// OpenNeoUA custom: gameplay-facing Vehicle class used only by the extended
 // energy/job systems. This deliberately does not add or alter BACT_TYPES, so
 // physics, movement and legacy actor dispatch remain untouched.
 enum VehicleCombatClass : uint8_t
@@ -40,7 +40,7 @@ enum DecorationFXMode
     DECORATION_FX_PERSISTENT = 1
 };
 
-// OpenUA custom: RGBA tint multiplier (see vp_tint / wireframe_tint script params).
+// OpenNeoUA custom: RGBA tint multiplier (see vp_tint / wireframe_tint script params).
 // Stored as normalized 0..1 float multipliers. Neutral default = no change.
 struct TVisualTint
 {
@@ -64,7 +64,7 @@ struct TVisualTint
     }
 };
 
-// OpenUA custom: shared visual-only mesh tracer configuration.
+// OpenNeoUA custom: shared visual-only mesh tracer configuration.
 // Physical Weapon tracers sample the authoritative projectile path; MGUN tracers
 // reuse the same renderer while travelling along the already resolved hitscan ray.
 struct TWeaponTracerConfig
@@ -296,7 +296,7 @@ struct TVhclSound
 
 constexpr int DAMAGED_FX_SLOT_COUNT = 8;
 constexpr size_t ROBO_GUN_MAX_COUNT = 20;
-constexpr size_t UNIT_COLL_MAX_COUNT = 32;  // OpenUA: max compound collision spheres per vehicle
+constexpr size_t UNIT_COLL_MAX_COUNT = 32;  // OpenNeoUA: max compound collision spheres per vehicle
 
 struct TDamagedFXConfig
 {
@@ -453,7 +453,7 @@ struct TRoboGun
     std::string robo_gun_name;
     std::string icon;
     uint8_t robo_gun_type = 0;
-    int protect = 0; // OpenUA: optional damage-sponge attachment, unified attachment protection
+    int protect = 0; // OpenNeoUA: optional damage-sponge attachment, unified attachment protection
 
     TRoboGun()
     {}
@@ -559,7 +559,7 @@ struct TVhclProto
     uint8_t disable_enable_bitmask = 0;
     int8_t weapon = 0;
     std::array<int16_t, 3> extra_weapons = {0, 0, 0};
-    // OpenUA custom: optional projectile-count overrides for weapon_2/_3/_4.
+    // OpenNeoUA custom: optional projectile-count overrides for weapon_2/_3/_4.
     // A zero value inherits the primary num_weapons count.
     std::array<int16_t, 3> extra_num_weapons = {0, 0, 0};
     int weapon_player_switch_mode = WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
@@ -574,7 +574,7 @@ struct TVhclProto
     int mgun_shot_time = 0;
     int mgun_shot_time_user = 0;
     float mgun_recoil = 0.0f;
-    // OpenUA: shared tracer config used by normal Vehicle MGUNs and
+    // OpenNeoUA: shared tracer config used by normal Vehicle MGUNs and
     // model = gun/module + gun_type = mg; authoring uses mgun_mesh_tracer_*.
     TWeaponTracerConfig mgun_tracer;
     bool mgun_decal_enable = false;
@@ -603,18 +603,18 @@ struct TVhclProto
     vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_orientation = vec3d(0.0, 0.0, 0.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
-    TVisualTint vp_tint; // OpenUA custom: main VP visual-only RGBA tint multiplier
-    TVisualTint wireframe_tint; // OpenUA custom: UI wireframe-only RGBA tint multiplier
+    TVisualTint vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
+    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA tint multiplier
     TDamagedFXConfig damaged_fx;
     TDecorationFXConfig decoration_fx;
     std::string unit_gun_icon;
     int power = 0;
     float power_radius = 0.0;
-    // OpenUA custom: fixed horizontal radius for automatic world-UI inspection
+    // OpenNeoUA custom: fixed horizontal radius for automatic world-UI inspection
     // while directly controlling model = ufo. Independent from optical zoom.
     float spy_ui_radius = 0.0f;
-    // OpenUA custom: maximum number of 1.25x optical zoom-in steps for model = ufo.
-    // -1 keeps the legacy OpenUA zoom cap; 0 disables zoom for this vehicle.
+    // OpenNeoUA custom: maximum number of 1.25x optical zoom-in steps for model = ufo.
+    // -1 keeps the legacy OpenNeoUA zoom cap; 0 disables zoom for this vehicle.
     int zoom_steps = -1;
     float damaged_force_malus = 0.0;
     float damaged_maxrot_malus = 0.0;
@@ -657,7 +657,7 @@ struct TVhclProto
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFX;
     int vo_type = 0;
-    // OpenUA custom: sparse per-vehicle speech event path stems.
+    // OpenNeoUA custom: sparse per-vehicle speech event path stems.
     // Missing or invalid entries fall back to the vanilla vo_type voice.
     std::map<std::string, std::string> speech_events;
     float max_pitch = 0.0;
@@ -665,7 +665,7 @@ struct TVhclProto
     int16_t field_1D6F = 0;
     int shield = 0;
     int energy = 0;
-    int mimic_energy_cost = 0; // OpenUA custom: mimic shell production cost override; 0 keeps vanilla energy-as-cost
+    int mimic_energy_cost = 0; // OpenNeoUA custom: mimic shell production cost override; 0 keeps vanilla energy-as-cost
     int GetProductionCost() const { return mimic_energy_cost > 0 ? mimic_energy_cost : energy; }
     bool invulnerable = false;
     int field_1D79 = 0;
@@ -674,9 +674,9 @@ struct TVhclProto
     float sdist_sector = 0.0;
     float sdist_bact = 0.0;
     int8_t radar = 0;
-    float push_resistance = 0.0; // OpenUA custom: target-side resistance to push / aoe_unit_push
+    float push_resistance = 0.0; // OpenNeoUA custom: target-side resistance to push / aoe_unit_push
     bool has_push_resistance = false; // true only when push_resistance is explicitly authored
-    float push_at_death_force = 0.0f; // OpenUA custom: radial push strength emitted on actual vehicle death
+    float push_at_death_force = 0.0f; // OpenNeoUA custom: radial push strength emitted on actual vehicle death
     float push_at_death_radius = 0.0f;
     int push_at_death_falloff = 0;
     float mass = 0.0;
@@ -692,7 +692,7 @@ struct TVhclProto
     float overeof = 0.0;
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
-    // OpenUA modern cockpit camera: per-vehicle offset only. Missing axes remain 0.
+    // OpenNeoUA modern cockpit camera: per-vehicle offset only. Missing axes remain 0.
     vec3d cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     // Player-only gun cockpit recoil multiplier. 0/absent keeps the current cockpit camera stable.
     float cockpit_camera_recoil = 0.0f;
@@ -754,7 +754,7 @@ struct TVhclProto
     bool hidden = false;
     int8_t unhideRadar = 0;
 
-    // OpenUA custom: vehicle-only "invisible" stealth. When true every new instance
+    // OpenNeoUA custom: vehicle-only "invisible" stealth. When true every new instance
     // spawns fully cloaked (no render/radar/UI/sound/AI-target) until its first real
     // attack, after which it is permanently revealed. Independent from the legacy
     // owner-based `hidden`/`unhide_radar` system above. Default off.
@@ -764,12 +764,12 @@ struct TVhclProto
     TRoboProto *RoboProto = NULL;
     std::vector<TRoboGun> unit_guns;
 
-    int is_mimic = 0;                       // OpenUA: model = mimic shell/disguise proto
+    int is_mimic = 0;                       // OpenNeoUA: model = mimic shell/disguise proto
     std::vector<int16_t> mimic_vehicle_list;
-    TVisualTint mimic_vp_tint;              // OpenUA: model = mimic shell tint applied to copied VP
-    TVhclSound snd_mimic;                   // OpenUA: model = mimic persistent shell loop
+    TVisualTint mimic_vp_tint;              // OpenNeoUA: model = mimic shell tint applied to copied VP
+    TVhclSound snd_mimic;                   // OpenNeoUA: model = mimic persistent shell loop
 
-    rbcolls coll;                           // OpenUA: universal compound collision spheres (coll_*)
+    rbcolls coll;                           // OpenNeoUA: universal compound collision spheres (coll_*)
 
     ~TVhclProto();
 };
@@ -793,9 +793,9 @@ struct TWeapProto
         WEAPON_FLAG_OBSAVOID = 8,
         WEAPON_FLAG_GRENADE = 16,
         WEAPON_FLAG_HOMING_BOMB = 32,
-        WEAPON_FLAG_MORTAR = 64, // OpenUA custom: radar-guided ballistic barrage
-        WEAPON_FLAG_LASER = 128, // OpenUA custom: continuous targeted beam weapon
-        WEAPON_FLAG_VERTICAL_LASER = 256, // OpenUA custom: downward continuous beam weapon
+        WEAPON_FLAG_MORTAR = 64, // OpenNeoUA custom: radar-guided ballistic barrage
+        WEAPON_FLAG_LASER = 128, // OpenNeoUA custom: continuous targeted beam weapon
+        WEAPON_FLAG_VERTICAL_LASER = 256, // OpenNeoUA custom: downward continuous beam weapon
 
         WEAPON_FLAGS_BOMB = WEAPON_FLAG_PROJECTILE,
         WEAPON_FLAGS_ROCKET = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT,
@@ -820,25 +820,25 @@ struct TWeapProto
         return _weaponFlags == WEAPON_FLAGS_HOMING_BOMB;
     }
 
-    // OpenUA custom: true only for weapons declared as "model = mortar".
+    // OpenNeoUA custom: true only for weapons declared as "model = mortar".
     bool IsMortar() const
     {
         return (_weaponFlags & WEAPON_FLAG_MORTAR) != 0;
     }
 
-    // OpenUA custom: true only for weapons declared as "model = laser".
+    // OpenNeoUA custom: true only for weapons declared as "model = laser".
     bool IsLaser() const
     {
         return (_weaponFlags & WEAPON_FLAG_LASER) != 0;
     }
 
-    // OpenUA custom: true only for weapons declared as "model = vertical_laser".
+    // OpenNeoUA custom: true only for weapons declared as "model = vertical_laser".
     bool IsVerticalLaser() const
     {
         return (_weaponFlags & WEAPON_FLAG_VERTICAL_LASER) != 0;
     }
 
-    // OpenUA custom: the render-only projectile corkscrew is available to every
+    // OpenNeoUA custom: the render-only projectile corkscrew is available to every
     // physical projectile class. Continuous laser classes deliberately remain
     // excluded because they render beams instead of a travelling projectile VP.
     bool SupportsProjectileCorkspin() const
@@ -867,7 +867,7 @@ struct TWeapProto
     std::string name;
     int16_t vp_normal = 0;
     int16_t vp_fire = 0;
-    // OpenUA custom, Weapon-side: when this Weapon is fired, the carrier
+    // OpenNeoUA custom, Weapon-side: when this Weapon is fired, the carrier
     // temporarily uses its own Vehicle vp_fire. Missing/0 keeps vanilla behavior.
     bool weapon_use_vehicle_vp_fire = false;
     int16_t vp_dead = 0;
@@ -879,7 +879,7 @@ struct TWeapProto
     vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_orientation = vec3d(0.0, 0.0, 0.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
-    // OpenUA custom: render-only corkscrew orbit for every physical projectile
+    // OpenNeoUA custom: render-only corkscrew orbit for every physical projectile
     // class except model = laser and model = vertical_laser.
     // Speed uses the shared 0..10 revolutions-per-second scale. Radius is the
     // radial orbit distance in model/world units (0..1000). Forward is the maximum
@@ -888,16 +888,16 @@ struct TWeapProto
     float projectile_corkspin_speed = 0.0f;
     float projectile_corkspin_radius = 0.0f;
     float projectile_corkspin_forward = 0.0f;
-    TVisualTint vp_tint; // OpenUA custom: main VP visual-only RGBA tint multiplier
+    TVisualTint vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
-    TVisualTint vp_trail_tint; // OpenUA custom: weapon embedded particle/trail tint
-    TVisualTint wireframe_tint; // OpenUA custom: UI wireframe-only RGBA tint multiplier
-    TWeaponTracerConfig tracer; // OpenUA custom: additional procedural projectile tracer
+    TVisualTint vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
+    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA tint multiplier
+    TWeaponTracerConfig tracer; // OpenNeoUA custom: additional procedural projectile tracer
     std::vector<DestFX> dfx;
     std::vector<DestFX> ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFXes;
-    // OpenUA custom: local-player-only launch shake. When configured it replaces
+    // OpenNeoUA custom: local-player-only launch shake. When configured it replaces
     // the generic shk_launch shake for the directly controlled player weapon and
     // is fired once per successful LaunchMissile() call, regardless of num_weapons.
     TSndFxPosParam player_shk_launch;
@@ -913,12 +913,12 @@ struct TWeapProto
     int aoe_sector_energy = 0;
     int aoe_falloff = 0;
     int aoe_unit_push = 0;
-    // OpenUA custom: direct-hit single-target knockback. Same movement model as aoe_unit_push,
+    // OpenNeoUA custom: direct-hit single-target knockback. Same movement model as aoe_unit_push,
     // but only for the primary/direct-hit unit. If both push and aoe_unit_push are set,
     // the direct-hit unit receives only push; nearby units receive aoe_unit_push.
     int push = 0;
-    int armor_penetration_targets = 0; // OpenUA custom: direct-hit unit penetrations before final impact
-    float recoil = 0.0; // OpenUA custom: shooter-side knockback multiplier, 0..10
+    int armor_penetration_targets = 0; // OpenNeoUA custom: direct-hit unit penetrations before final impact
+    float recoil = 0.0; // OpenNeoUA custom: shooter-side knockback multiplier, 0..10
 //    int field_87C = 0;
     int life_time = 0;
     int life_time_nt = 0;
@@ -930,10 +930,10 @@ struct TWeapProto
     int shot_time_user = 0;
     int salve_shots = 0;
     int salve_delay = 0;
-    // OpenUA: generic multi-target count for compatible weapon models.
+    // OpenNeoUA: generic multi-target count for compatible weapon models.
     // Currently consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
     int multi_target = 0;
-    // OpenUA custom: shared continuous beam parameters for model = laser and
+    // OpenNeoUA custom: shared continuous beam parameters for model = laser and
     // model = vertical_laser. "energy" is static base damage per tick; the class
     // multipliers below (energy_heli/tank/flyer/robo) are applied like normal weapons.
     int   laser_energy_tick_time = 250;        // ms between damage ticks for AI/non-player fire
@@ -990,7 +990,7 @@ struct TWeapProto
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
     float start_speed = 0.0;
-    // OpenUA custom: dedicated mortar barrage weapon ("model = mortar").
+    // OpenNeoUA custom: dedicated mortar barrage weapon ("model = mortar").
     // All defaults are vanilla-safe: with mortar_barrage_shots <= 0 / no max range,
     // a mortar weapon simply never fires.
     float mortar_min_range = 0.0;          // min distance from mortar to target zone
@@ -1008,7 +1008,7 @@ struct TWeapProto
     float mortar_inflight_drift = 0.0;     // optional small horizontal drift during flight
     int   mortar_airburst = 1;             // 1 = explode at the timed arc apex/target height (airburst); 0 = land on the real terrain height at the shell's own impact point
     int   mortar_minimap_marker = 0;       // 1 = show bombardment zone on the 2D strategic map
-    // OpenUA custom: looped beam sound for model = laser (snd_loop_sample/volume/pitch).
+    // OpenNeoUA custom: looped beam sound for model = laser (snd_loop_sample/volume/pitch).
     // Loaded lazily on first laser activation; vanilla weapons never touch it.
     TVhclSound snd_loop;
     NC_STACK_skeleton *wireframe = NULL;

@@ -131,17 +131,17 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
                             {
                                 if ( SkipCurrentOrNextPayload(mfile, payloadParse) )
                                 {
-                                    ypa_log_out("OpenUA sky loose PNG override used: %s -> %s\n", resname.c_str(), skyPngOverrideInfo.resolvedPath.c_str());
+                                    ypa_log_out("OpenNeoUA sky loose PNG override used: %s -> %s\n", resname.c_str(), skyPngOverrideInfo.resolvedPath.c_str());
                                     _resources.push_back(png_class);
                                     continue;
                                 }
 
                                 png_class->Delete();
-                                ypa_log_out("WARNING: OpenUA sky loose PNG override failed for %s (%s); falling back to embedded BAS payload.\n", resname.c_str(), skyPngOverrideInfo.resolvedPath.c_str());
+                                ypa_log_out("WARNING: OpenNeoUA sky loose PNG override failed for %s (%s); falling back to embedded BAS payload.\n", resname.c_str(), skyPngOverrideInfo.resolvedPath.c_str());
                             }
                             else
                             {
-                                ypa_log_out("WARNING: OpenUA sky loose PNG override failed for %s (%s); falling back to embedded BAS payload.\n", resname.c_str(), skyPngOverrideInfo.resolvedPath.c_str());
+                                ypa_log_out("WARNING: OpenNeoUA sky loose PNG override failed for %s (%s); falling back to embedded BAS payload.\n", resname.c_str(), skyPngOverrideInfo.resolvedPath.c_str());
                             }
                         }
                     }
@@ -171,22 +171,22 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
 
                                 if ( payloadSkipped )
                                 {
-                                    ypa_log_out("OpenUA sky loose embedded override used: %s -> %s\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
+                                    ypa_log_out("OpenNeoUA sky loose embedded override used: %s -> %s\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
                                     _resources.push_back(override_class);
                                     continue;
                                 }
 
                                 override_class->Delete();
-                                ypa_log_out("WARNING: OpenUA sky loose embedded override failed for %s (%s); embedded payload skip failed, falling back.\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
+                                ypa_log_out("WARNING: OpenNeoUA sky loose embedded override failed for %s (%s); embedded payload skip failed, falling back.\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
                             }
                             else
                             {
-                                ypa_log_out("WARNING: OpenUA sky loose embedded override failed for %s (%s); falling back to embedded BAS payload.\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
+                                ypa_log_out("WARNING: OpenNeoUA sky loose embedded override failed for %s (%s); falling back to embedded BAS payload.\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
                             }
                         }
                         else
                         {
-                            ypa_log_out("WARNING: OpenUA sky loose embedded override failed for %s (%s); failed to open, falling back.\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
+                            ypa_log_out("WARNING: OpenNeoUA sky loose embedded override failed for %s (%s); failed to open, falling back.\n", resname.c_str(), skyOverrideInfo.resolvedPath.c_str());
                         }
                     }
                 }
@@ -213,19 +213,19 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
                             if ( SkipCurrentOrNextPayload(mfile, payloadParse) )
                             {
                                 IFFile::ReportSetLooseOverrideUsed(pngOverrideInfo);
-                                ypa_log_out("OpenUA SET loose PNG override used: %s -> %s\n", resname.c_str(), pngOverrideInfo.resolvedPath.c_str());
+                                ypa_log_out("OpenNeoUA SET loose PNG override used: %s -> %s\n", resname.c_str(), pngOverrideInfo.resolvedPath.c_str());
                                 _resources.push_back(png_class);
                                 continue;
                             }
 
                             png_class->Delete();
                             IFFile::ReportSetLooseOverrideFailed(pngOverrideInfo, "PNG override loaded but embedded payload skip failed; embedded payload fallback used.");
-                            ypa_log_out("WARNING: OpenUA SET loose PNG override failed for %s (%s); falling back to ILBM/embedded payload.\n", resname.c_str(), pngOverrideInfo.resolvedPath.c_str());
+                            ypa_log_out("WARNING: OpenNeoUA SET loose PNG override failed for %s (%s); falling back to ILBM/embedded payload.\n", resname.c_str(), pngOverrideInfo.resolvedPath.c_str());
                         }
                         else
                         {
                             IFFile::ReportSetLooseOverrideFailed(pngOverrideInfo, "PNG override existed but failed to load; ILBM/embedded payload fallback used.");
-                            ypa_log_out("WARNING: OpenUA SET loose PNG override failed for %s (%s); falling back to ILBM/embedded payload.\n", resname.c_str(), pngOverrideInfo.resolvedPath.c_str());
+                            ypa_log_out("WARNING: OpenNeoUA SET loose PNG override failed for %s (%s); falling back to ILBM/embedded payload.\n", resname.c_str(), pngOverrideInfo.resolvedPath.c_str());
                         }
                     }
                 }

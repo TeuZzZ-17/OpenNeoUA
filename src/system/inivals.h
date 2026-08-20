@@ -53,9 +53,9 @@ public:
     static Common::Ini::Key GfxXRes;
     static Common::Ini::Key GfxYRes;
     static Common::Ini::Key GfxPalette;
-    static Common::Ini::Key GfxVisualFilter;       // OpenUA: fullscreen visual filter name (Data/Filters/*.pal), "Standard" = none
-    static Common::Ini::Key GfxVisualFilterStrength; // OpenUA: visual filter blend strength 0.0..1.0 (default 0.25)
-    static Common::Ini::Key GfxAtmosphereFx;       // OpenUA: optional world-only atmospheric post-process
+    static Common::Ini::Key GfxVisualFilter;       // OpenNeoUA: fullscreen visual filter name (Data/Filters/*.pal), "Standard" = none
+    static Common::Ini::Key GfxVisualFilterStrength; // OpenNeoUA: visual filter blend strength 0.0..1.0 (default 0.25)
+    static Common::Ini::Key GfxAtmosphereFx;       // OpenNeoUA: optional world-only atmospheric post-process
     static Common::Ini::Key GfxAtmosphereStrength;
     static Common::Ini::Key GfxAtmosphereExposure;
     static Common::Ini::Key GfxAtmosphereContrast;
@@ -274,7 +274,7 @@ public:
     static Common::Ini::Key GameGlobalPalFadeIn;
     static Common::Ini::Key GameGlobalPalFadeOut;
 
-    // OpenUA: optional procedural HP bar shared by world/HUD. When enabled,
+    // OpenNeoUA: optional procedural HP bar shared by world/HUD. When enabled,
     // world-space Shield is omitted while the personal cockpit Shield keeps the
     // vanilla MAPMISC path. Missing/disabled HP keys keep vanilla HP/Shield.
     static Common::Ini::Key GfxMeshHpBarEnable;
@@ -282,7 +282,7 @@ public:
     static Common::Ini::Key GfxMeshHpBarTargetTint;
     static Common::Ini::Key GfxMeshHpBarEmptyTint;
 
-    // OpenUA: global opt-in visual profiles for units currently under the same
+    // OpenNeoUA: global opt-in visual profiles for units currently under the same
     // regen/drain conditions used by the automatic Status Icons. A missing or
     // incomplete profile is disabled and never changes energy gameplay.
     static Common::Ini::Key GfxRegenFXVP;
@@ -321,7 +321,7 @@ public:
     static Common::Ini::Key GfxDrainMeshFadeIn;
     static Common::Ini::Key GfxDrainMeshFadeOut;
 
-    // OpenUA: opt-in global asset paths for automatically rendered status icons.
+    // OpenNeoUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only
     // that icon category. Blink count zero preserves immediate rendering.
     static Common::Ini::Key UiStatusIconRegen;
@@ -337,7 +337,7 @@ public:
     static Common::Ini::Key UiStatusIconHandbrake;
     static Common::Ini::Key UiStatusIconBlinkCount;
 
-    // OpenUA: Black Sect "imperfect grey clone" runtime balance (owner/faction 5 only).
+    // OpenNeoUA: Black Sect "imperfect grey clone" runtime balance (owner/faction 5 only).
     // Pure runtime maluses applied to live actors; never mutate shared prototypes.
     static Common::Ini::Key GameBlackSectCloneMalusPercent; // game.black_sect_clone_malus_percent (default 5)
     static Common::Ini::Key GameBlackSectCloneTint;         // game.black_sect_clone_tint (default 140_140_140_255)
@@ -352,13 +352,13 @@ public:
 
     static Common::Ini::Key GfxVBO;
 
-    static Common::Ini::Key UiHideMenuHints; // OpenUA: ui.hide_menu_hints (default yes) — suppress passive menu hover/help hints
-    static Common::Ini::Key UiMenuFont; // OpenUA: ui.menu_font (default Default) - menu/interface TTF face selector
-    static Common::Ini::Key UiRetroInterface; // OpenUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
-    static Common::Ini::Key UiMapMarkerSound; // OpenUA: optional sound played once after successful map marker deployment
-    static Common::Ini::Key UiMoveOrderTemplate; // OpenUA: direct resource path for squad move-order feedback
-    static Common::Ini::Key UiAttackOrderTemplate; // OpenUA: direct resource path for attack-order feedback
-    static Common::Ini::Key UiRoboMoveOrderTemplate; // OpenUA: direct resource path for Host Station relocation feedback
+    static Common::Ini::Key UiHideMenuHints; // OpenNeoUA: ui.hide_menu_hints (default yes) — suppress passive menu hover/help hints
+    static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
+    static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
+    static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional sound played once after successful map marker deployment
+    static Common::Ini::Key UiMoveOrderTemplate; // OpenNeoUA: direct resource path for squad move-order feedback
+    static Common::Ini::Key UiAttackOrderTemplate; // OpenNeoUA: direct resource path for attack-order feedback
+    static Common::Ini::Key UiRoboMoveOrderTemplate; // OpenNeoUA: direct resource path for Host Station relocation feedback
 
 private:
     static Common::Ini::PKeyList _varList;

@@ -666,7 +666,7 @@ NC_STACK_bitmap *StatusIconLoad(const std::string &path, int width = 0, int heig
     if ( it != g_statusIconCache.end() )
         return it->second.bitmap;
 
-    // OpenUA UI assets live below Data and must not inherit the temporary
+    // OpenNeoUA UI assets live below Data and must not inherit the temporary
     // rsrc prefix of the currently loaded SET. Use the same shared resolver
     // already used by StatusIconResourceExists(), then restore the caller's
     // resource context immediately after loading.
@@ -1369,7 +1369,7 @@ void NC_STACK_ypaworld::sb_0x4c87fc(const std::string &a2, GuiBase *lstvw)
 
 void NC_STACK_ypaworld::sub_449DE8(const std::string &a2)
 {
-    // OpenUA: legacy online help pages are obsolete/dead.
+    // OpenNeoUA: legacy online help pages are obsolete/dead.
     // Keep this as a harmless compatibility stub for old callers/hotkeys.
     (void)a2;
     _helpURL.clear();
@@ -2266,7 +2266,7 @@ static void yw_RenderMortarCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0, 
                 if ( !bact || bact->ShouldHideFromStrategicUI() || bact->_bact_type == BACT_TYPES_MISSLE )
                     continue;
 
-                // OpenUA invisible: no mortar-cooldown radar bar for a cloaked unit.
+                // OpenNeoUA invisible: no mortar-cooldown radar bar for a cloaked unit.
                 if ( bact->IsInvisibleUnrevealed() )
                     continue;
 
@@ -2285,7 +2285,7 @@ static void yw_RenderMortarCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0, 
     }
 }
 
-// OpenUA custom: draw active mortar bombardment zones on the 2D strategic map and
+// OpenNeoUA custom: draw active mortar bombardment zones on the 2D strategic map and
 // the small gameplay radar. Own strike markers stay visible as player orders;
 // enemy markers require the target sector to be currently visible/discovered.
 // Colour follows the owner's faction colour.
@@ -2399,7 +2399,7 @@ static bool yw_ReadSurfacePixel(SDL_Surface *surface, int x, int y, Uint32 *out)
     return false;
 }
 
-// OpenUA custom: laser map/radar beams should visually match the normal
+// OpenNeoUA custom: laser map/radar beams should visually match the normal
 // missile dots. Missile dots are not drawn with GetColor(owner); they use the
 // owner-specific missile tile (owner + 1) from the active map/radar tileset.
 // This samples the same tile and picks a bright/saturated non-transparent pixel.
@@ -2508,7 +2508,7 @@ void NC_STACK_ypaworld::RenderLaserMapBeams(int mapTilesetId)
                     continue;
                 if ( bact->_status == BACT_STATUS_DEAD || bact->ShouldHideFromStrategicUI() )
                     continue;
-                // OpenUA invisible: a cloaked unit projects no laser beam onto the map.
+                // OpenNeoUA invisible: a cloaked unit projects no laser beam onto the map.
                 if ( bact->IsInvisibleUnrevealed() )
                     continue;
                 if ( bact->IsHiddenFor(GetPlayerOwner()) )
@@ -2534,7 +2534,7 @@ void NC_STACK_ypaworld::RenderLaserMapBeams(int mapTilesetId)
     }
 }
 
-// OpenUA custom: ultra-simple manual mortar control on the 2D strategic map.
+// OpenNeoUA custom: ultra-simple manual mortar control on the 2D strategic map.
 // Flow (no extra key, no energy cost):
 //   1. Player clicks one of their own manual-capable mortar platforms -> selected.
 //   2. Player clicks a target area (empty cell or a visible enemy) -> that single
@@ -2748,7 +2748,7 @@ void sub_4F72E8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
     if ( !bact || bact->ShouldHideFromStrategicUI() )
         return;
 
-    // OpenUA invisible: do not draw strategic target/command lines for a cloaked unit.
+    // OpenNeoUA invisible: do not draw strategic target/command lines for a cloaked unit.
     if ( bact->IsInvisibleUnrevealed() )
         return;
 
@@ -3340,7 +3340,7 @@ static int yw_RoboMapVehicleTileset()
 
 void sub_4F6DFC(NC_STACK_ypaworld *yw, CmdStream *cur, int height, int width, NC_STACK_ypabact *bact, int a6)
 {
-    // OpenUA invisible: cloaked stealth units never appear on the strategic map / radar
+    // OpenNeoUA invisible: cloaked stealth units never appear on the strategic map / radar
     // (icon, view triangle and health bar are all drawn from here).
     if ( bact->_status != BACT_STATUS_DEAD && !bact->IsInvisibleUnrevealed() && !bact->IsHiddenFor( yw->GetPlayerOwner() ) )
     {
@@ -3608,7 +3608,7 @@ void sub_4F7BE8(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact, i
         if ( bact->ShouldHideFromStrategicUI() )
             return;
 
-        // OpenUA invisible: no strategic-map marker dots for a cloaked unit/squad member.
+        // OpenNeoUA invisible: no strategic-map marker dots for a cloaked unit/squad member.
         if ( bact->IsInvisibleUnrevealed() )
             return;
 
@@ -3921,7 +3921,7 @@ void sb_0x4f8f64__sub3(NC_STACK_ypaworld *yw, CmdStream *cur)
 
 void sb_0x4f8f64__sub0(NC_STACK_ypaworld *yw, CmdStream *cur)
 {
-    // OpenUA: the strategic-map controls are now drawn in the title bar.
+    // OpenNeoUA: the strategic-map controls are now drawn in the title bar.
     // Keep this legacy hook as a no-op so the map render order stays intact.
     (void)yw;
     (void)cur;
@@ -4073,7 +4073,7 @@ static void yw_RenderLegacyStrategicMap(NC_STACK_ypaworld *yw)
     GFX::Engine.ProcessDrawSeq(robo_map.t1_cmdbuf_3, NULL,
                               yw_GetFactionUiAccent(yw, &uiAccentColor));
 
-    // OpenUA custom: draw the mortar cooldown/readiness bar on top of the
+    // OpenNeoUA custom: draw the mortar cooldown/readiness bar on top of the
     // strategic-map unit icons/HP bars, using the same parent/child mortar
     // platform rules as the 3D world overlay and the small radar.
     GFX::Engine.raster_func211(rect);
@@ -4703,7 +4703,7 @@ int sub_4F5CEC(NC_STACK_ypaworld *yw, int x, int y)
     }
     else
     {
-        // OpenUA: hide only the strategic-map grid/elevation-boundary layer.
+        // OpenNeoUA: hide only the strategic-map grid/elevation-boundary layer.
         // LEGO terrain and building glyphs are returned by the branch above.
         return 0;
     }
@@ -6241,7 +6241,7 @@ void gui_update_tools(NC_STACK_ypaworld *yw, CmdStream *cur)
         FontUA::store_u8(cur, 63);
     }
 
-    // OpenUA: remove the deprecated online-help button from the gameplay toolbar.
+    // OpenNeoUA: remove the deprecated online-help button from the gameplay toolbar.
     bzda.buttons[9] = ButtonBox(); // help_btn removed
 
     bzda.buttons[10] = ButtonBox(yw->_iconOrderW + bzda.field_910,  bzda.field_918,  yw->_iconOrderW,  yw->_iconOrderH); // menu_btn
@@ -7098,7 +7098,7 @@ void sb_0x4c66f8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, NC_STACK_ypabac
     if ( !yw->CanControlUnitInSpectatorMode(bact1) )
         return;
 
-    // OpenUA custom: never take control of a mortar platform. Bail out before the
+    // OpenNeoUA custom: never take control of a mortar platform. Bail out before the
     // current unit's viewer/input is dropped, so the player is not left viewer-less.
     if ( bact1 && bact1->IsMortarPlatform() )
         return;
@@ -9310,7 +9310,7 @@ static float yw_GetWorldUiFadeStart(float maxDistance)
     // Keep the configured value as the hard cutoff, but reserve a visible
     // transition band before it. A proportional band works at normal ranges,
     // while the clamps avoid an imperceptibly short fade at low values or an
-    // excessively long translucent zone at very large OpenUA distances.
+    // excessively long translucent zone at very large OpenNeoUA distances.
     const float fadeLength = std::min(maxDistance,
                                       std::max(400.0f,
                                                std::min(maxDistance * 0.35f, 2500.0f)));
@@ -14203,7 +14203,7 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
     if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
         return;
 
-    // OpenUA invisible: no HP/shield/status bar or fraction triangle over a cloaked unit.
+    // OpenNeoUA invisible: no HP/shield/status bar or fraction triangle over a cloaked unit.
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
@@ -15127,7 +15127,7 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
          !activeSquadronSelection )
         return;
 
-    // OpenUA invisible: never draw the targeting cursor/box over a cloaked stealth unit.
+    // OpenNeoUA invisible: never draw the targeting cursor/box over a cloaked stealth unit.
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
@@ -15324,7 +15324,7 @@ void sb_0x4d7c08__sub0__sub4__sub2__sub0(NC_STACK_ypaworld *yw)
 
     GFX::Engine.ProcessDrawSeq(buf);
 
-    // OpenUA custom: the 3D world already shows the mortar cooldown/readiness bar
+    // OpenNeoUA custom: the 3D world already shows the mortar cooldown/readiness bar
     // above the HP bar. Mirror that feedback on the small gameplay radar too,
     // drawing it after unit icons so it stays visible.
     GFX::Engine.raster_func211(drect);
@@ -16359,7 +16359,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
                 _updateMessage.target_Sect = 0;
                 _updateMessage.target_Bact = _bactOnMouse;
 
-                // OpenUA custom: show a short animated feedback only for an
+                // OpenNeoUA custom: show a short animated feedback only for an
                 // explicit attack order on an enemy unit. Sector attacks and
                 // friendly-unit clicks do not use this marker.
                 if ( _bactOnMouse &&
@@ -16453,7 +16453,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
         break;
 
     case World::DOACTION_19:
-        // OpenUA custom: refuse to cycle the viewer into a mortar platform.
+        // OpenNeoUA custom: refuse to cycle the viewer into a mortar platform.
         if ( _bactOnMouse && _bactOnMouse->IsMortarPlatform() )
             break;
         _viewerBact->setBACT_viewer(false);
@@ -16502,7 +16502,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
             return;
         }
 
-        // OpenUA custom: manual mortar control on the opened 2D strategic map in
+        // OpenNeoUA custom: manual mortar control on the opened 2D strategic map in
         // normal command mode (field_1D0 == 1). Build (16) / teleport (32) modes
         // are left untouched. Consumes the click so no first-person entry or RTS
         // order is produced for a mortar interaction.
@@ -16735,7 +16735,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
             {
                 if ( _guiActFlags & 0x20 )
                 {
-                    // OpenUA custom: mortar platforms cannot be possessed, so show no
+                    // OpenNeoUA custom: mortar platforms cannot be possessed, so show no
                     // "take control" cursor/tooltip when hovering one (it would wrongly
                     // suggest the player can enter it).
                     if ( _bactOnMouse->IsMortarPlatform() )
@@ -16885,7 +16885,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
                 }
             }
 
-            // OpenUA custom: mortar cursor feedback.
+            // OpenNeoUA custom: mortar cursor feedback.
             //  - In the 3D world, hovering one of our mortars shows the "can't enter"
             //    cursor (it can't be possessed).
             //  - On the strategic map it must instead read as USABLE: a "target here"
@@ -16947,7 +16947,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
 
             if ( !IsSpectatorControlled() && ypaworld_func64__sub21__sub6(&arg->ClickInf) )
             {
-                // OpenUA custom: a double-click must never possess a mortar platform.
+                // OpenNeoUA custom: a double-click must never possess a mortar platform.
                 if ( !_bactOnMouse || !_bactOnMouse->IsMortarPlatform() )
                 {
                     v18 = World::DOACTION_5;

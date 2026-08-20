@@ -88,7 +88,7 @@ void NC_STACK_ypaflyer::sb_0x4b255c(float a2, vec3d v, int a4)
         if ( _flyerType & 1 && _fly_dir_length >= 0.1 )
             v49 = clp_asin( _fly_dir.y ) * _fly_dir_length / v38;
 
-        // OpenUA Cruiser (Flyer type 1): the AI changes altitude mainly through
+        // OpenNeoUA Cruiser (Flyer type 1): the AI changes altitude mainly through
         // _target_dir/_flyerBoost, while its physical vertical velocity often
         // stays too small for the legacy velocity-derived pitch to be visible.
         // Let the already-resolved AI vertical steering intent strengthen the

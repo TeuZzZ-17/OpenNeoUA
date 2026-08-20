@@ -386,7 +386,7 @@ struct bact_arg79
     int weapon_source_slot = -1;
 };
 
-// OpenUA custom: internal LaunchMissile() flag.  When the player is in
+// OpenNeoUA custom: internal LaunchMissile() flag.  When the player is in
 // first-person/viewer control and holds the handbrake while firing, weapon
 // recoil is reduced without touching push_resistance, push or ApplyImpulse().
 static const int BACT_ARG79_FLAG_RECOIL_BRAKE_HELD = 0x100;
@@ -491,26 +491,26 @@ public:
     void UpdateProximityDefense(update_msg *arg);
     bool CanUseProximityDefense();
     bool CanUseProximityDefenseAtDeath();
-    void UpdateMortar(update_msg *arg); // OpenUA custom: radar-guided mortar barrage AI
-    bool StartMortarBarrage(const vec3d &targetCenter); // OpenUA custom: begin a barrage at a point
-    bool CanManualMortar(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow = nullptr); // OpenUA custom: manual-call validity (+ ready-now flag)
-    void QueueManualMortar(const vec3d &targetPos); // OpenUA custom: queue a manual strike during cooldown
-    bool IsMortarPlatform(); // OpenUA custom: true if any weapon slot is a mortar (blocks first-person entry)
-    bool IsManualMortarPlatform(); // OpenUA custom: mortar platform that opted into manual map-click control
-    float GetMortarBarrageRadius(); // OpenUA custom: bombardment zone radius of this unit's mortar (0 if none)
-    float GetMortarReadinessRatio(); // OpenUA custom: 0..1 cooldown readiness for UI bars
+    void UpdateMortar(update_msg *arg); // OpenNeoUA custom: radar-guided mortar barrage AI
+    bool StartMortarBarrage(const vec3d &targetCenter); // OpenNeoUA custom: begin a barrage at a point
+    bool CanManualMortar(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow = nullptr); // OpenNeoUA custom: manual-call validity (+ ready-now flag)
+    void QueueManualMortar(const vec3d &targetPos); // OpenNeoUA custom: queue a manual strike during cooldown
+    bool IsMortarPlatform(); // OpenNeoUA custom: true if any weapon slot is a mortar (blocks first-person entry)
+    bool IsManualMortarPlatform(); // OpenNeoUA custom: mortar platform that opted into manual map-click control
+    float GetMortarBarrageRadius(); // OpenNeoUA custom: bombardment zone radius of this unit's mortar (0 if none)
+    float GetMortarReadinessRatio(); // OpenNeoUA custom: 0..1 cooldown readiness for UI bars
     void UpdateSeekAndExplode(update_msg *arg);
     bool IsSeekAndExplodeArmed();
     bool ApplySeekAndExplodeRammingGuidance();
     bool ApplyAiMaxAltitudeAboveGround();
     bool HasLocalPlayerForceVerticalPursuitTarget() const;
-    // OpenUA custom: continuous laser beam ("model = laser"). UpdateLaser drives the
+    // OpenNeoUA custom: continuous laser beam ("model = laser"). UpdateLaser drives the
     // static tick damage, beam state and loop sound each frame; the firing paths only
     // register a per-frame request via RequestLaserFire().
     void UpdateLaser(update_msg *arg);
     void RequestLaserFire(int weaponId, bact_arg79 *arg);
     void StopLaser(); // disconnect: reset tick state, stop loop sound, hide beam
-    void UpdateVerticalLaser(update_msg *arg); // OpenUA custom: model = vertical_laser downward beam
+    void UpdateVerticalLaser(update_msg *arg); // OpenNeoUA custom: model = vertical_laser downward beam
     void RequestVerticalLaserFire(int weaponId, bact_arg79 *arg);
     void StopVerticalLaser();
     void ApplyLaserEnergyDrain(float nominalDamage, float &remainder);
@@ -536,7 +536,7 @@ public:
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual void ModifyEnergy(bact_arg84 *arg);
     bool IsInvulnerableToDamage() const;
-    // OpenUA: derived from the existing transient 0..4 kill marks. These helpers
+    // OpenNeoUA: derived from the existing transient 0..4 kill marks. These helpers
     // are the single gameplay/UI source of truth and never mutate prototypes.
     bool CanUseSessionKillMarks() const;
     uint8_t GetSessionKillMarks() const;
@@ -594,8 +594,8 @@ public:
     virtual size_t SetStateInternal(setState_msg *arg);
     virtual void ChangeSectorEnergy(yw_arg129 *arg);
     virtual void DeadTimeUpdate(update_msg *arg);
-    int GetPlasmaDurationMs() const; // OpenUA: vanilla plasma lifetime scaled only in single-player
-    void UpdateDeathPlasmaMagnet(int frameTime); // OpenUA: player-only death-plasma attraction
+    int GetPlasmaDurationMs() const; // OpenNeoUA: vanilla plasma lifetime scaled only in single-player
+    void UpdateDeathPlasmaMagnet(int frameTime); // OpenNeoUA: player-only death-plasma attraction
     virtual void ypabact_func122(update_msg *arg);
     virtual void ypabact_func123(update_msg *arg);
     virtual size_t PathFinder(bact_arg124 *arg);
@@ -605,7 +605,7 @@ public:
     virtual bool IsHiddenFor(uint8_t owner) const;
     bool ShouldHideFromStrategicUI() const;
 
-    // OpenUA custom: vehicle-only "invisible" stealth-until-first-attack.
+    // OpenNeoUA custom: vehicle-only "invisible" stealth-until-first-attack.
     // IsInvisibleUnrevealed()  -> true while the unit is still cloaked (no render,
     //                             radar/map/UI, sound, decoration FX, AI targeting).
     // CanBeSeenByAIOrRadar()   -> convenience inverse used by AI/radar candidate filters.
@@ -717,7 +717,7 @@ public:
         return NULL;
     }
 
-    // OpenUA custom: returns the render-only corkscrew offset and local
+    // OpenNeoUA custom: returns the render-only corkscrew offset and local
     // rotation delta used by supported physical projectiles. Attached visual
     // effects can reuse this exact transform without touching gameplay position
     // or collision.
@@ -729,7 +729,7 @@ public:
     { return _aggr; }
 
     virtual World::rbcolls *getBACT_collNodes()
-    { return _collNodes.roboColls.empty() ? NULL : &_collNodes; } // OpenUA: universal compound spheres
+    { return _collNodes.roboColls.empty() ? NULL : &_collNodes; } // OpenNeoUA: universal compound spheres
 
     bool HasManualCompoundCollision() const
     {
@@ -822,7 +822,7 @@ public:
     int _bact_type;
     uint32_t _gid = 0; // global bact id
     uint8_t _vehicleID; // vehicle id, from scr files
-    uint8_t _mimic_disguise_vehicleID; // OpenUA: copied proto for model = mimic runtime behavior
+    uint8_t _mimic_disguise_vehicleID; // OpenNeoUA: copied proto for model = mimic runtime behavior
     uint8_t _bflags;
     uint32_t _commandID = 0;
     NC_STACK_yparobo *_host_station; // parent robo?
@@ -891,21 +891,21 @@ public:
     float _thraction;
     vec3d _fly_dir;
     float _fly_dir_length;
-    // OpenUA: custom percentage fall damage is armed only after a real
+    // OpenNeoUA: custom percentage fall damage is armed only after a real
     // airborne interval, and consumed once before stable ground contact.
     bool _fallDamageAirborne = false;
     bool _fallDamageConsumed = false;
     bool _handbrakeHeld = false;
-    float _heliLandingVisualOffsetY = 0.0f; // OpenUA: render/camera-only smoothing of the vanilla heli ground snap
-    int _weaponRecoilVisualEndTime = 0; // OpenUA: render-only tank firing tilt, does not affect physics
+    float _heliLandingVisualOffsetY = 0.0f; // OpenNeoUA: render/camera-only smoothing of the vanilla heli ground snap
+    int _weaponRecoilVisualEndTime = 0; // OpenNeoUA: render-only tank firing tilt, does not affect physics
     int _weaponRecoilVisualDuration = 0;
     float _weaponRecoilVisualPitch = 0.0f;
     int _mgunRecoilVisualEndTime = 0;
     int _mgunRecoilVisualDuration = 0;
     float _mgunRecoilVisualPitch = 0.0f;
-    vec3d _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0); // OpenUA: render-only AI tank recoil translation
-    int _weaponRecoilAiRecoveryEndTime = 0; // OpenUA: short AI tank forward-thrust pause after fake recoil
-    int _weaponRecoilPlayerRecoveryEndTime = 0; // OpenUA: short player tank forward-input damping after fake recoil
+    vec3d _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0); // OpenNeoUA: render-only AI tank recoil translation
+    int _weaponRecoilAiRecoveryEndTime = 0; // OpenNeoUA: short AI tank forward-thrust pause after fake recoil
+    int _weaponRecoilPlayerRecoveryEndTime = 0; // OpenNeoUA: short player tank forward-input damping after fake recoil
     vec3d _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
     vec3d _aoePushVel = vec3d(0.0, 0.0, 0.0);
 
@@ -919,17 +919,17 @@ public:
     float _player_max_altitude_above_ground;
     vec3d _scale;
     vec3d _vp_scale = vec3d(1.0, 1.0, 1.0);
-    World::TVisualTint _vp_tint; // OpenUA custom: main VP visual-only RGBA tint multiplier
+    World::TVisualTint _vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
     vec3d _vp_orientation = vec3d(0.0, 0.0, 0.0);
     vec3d _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
-    float _projectile_corkspin_speed = 0.0f;   // OpenUA: render-only corkscrew revolutions/s
-    float _projectile_corkspin_radius = 0.0f;  // OpenUA: visual orbit radius in model/world units
-    float _projectile_corkspin_forward = 0.0f; // OpenUA: bounded longitudinal visual excursion per turn
+    float _projectile_corkspin_speed = 0.0f;   // OpenNeoUA: render-only corkscrew revolutions/s
+    float _projectile_corkspin_radius = 0.0f;  // OpenNeoUA: visual orbit radius in model/world units
+    float _projectile_corkspin_forward = 0.0f; // OpenNeoUA: bounded longitudinal visual excursion per turn
     bool _projectile_corkspin_visual_frozen = false;
     vec3d _projectile_corkspin_frozen_offset = vec3d(0.0, 0.0, 0.0);
     mat3x3 _projectile_corkspin_frozen_rotation = mat3x3::Ident();
     vec3d _vp_trail_scale = vec3d(1.0, 1.0, 1.0);
-    World::TVisualTint _vp_trail_tint; // OpenUA custom: weapon embedded particle/trail tint
+    World::TVisualTint _vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
     vec3d _vp_trail_spin_strength = vec3d(0.0, 0.0, 0.0);
     NC_STACK_base *_vp_normal;
     NC_STACK_base *_vp_fire;
@@ -953,13 +953,13 @@ public:
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _damaged_shake_carrier;
-    TSndCarrier _player_launch_shake_carrier; // OpenUA custom: one local-player shake per successful weapon launch
-    TSndFxPosParam _mgun_recoil_shake; // OpenUA custom: hardcoded first-person world/camera shake scaled from mgun_recoil
+    TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
+    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA custom: hardcoded first-person world/camera shake scaled from mgun_recoil
     TSndCarrier _mgun_recoil_shake_carrier;
-    TSndCarrier _laser_soundcarrier; // OpenUA custom: managed loop sound for model = laser
-    TSndCarrier _vertical_laser_soundcarrier; // OpenUA custom: managed loop sound for model = vertical_laser
-    TSndCarrier _mgun_soundcarrier; // OpenUA custom: one-shot pulse sound for vehicle-controlled MG
-    TSndCarrier _mimic_soundcarrier; // OpenUA custom: persistent loop for model = mimic shell
+    TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: managed loop sound for model = laser
+    TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: managed loop sound for model = vertical_laser
+    TSndCarrier _mgun_soundcarrier; // OpenNeoUA custom: one-shot pulse sound for vehicle-controlled MG
+    TSndCarrier _mimic_soundcarrier; // OpenNeoUA custom: persistent loop for model = mimic shell
     int _mgun_sound_index;
     int _vehicle_fire_vp_end_time;
     int _vp_active;
@@ -1107,7 +1107,7 @@ public:
     int _proximity_defense_next_shot_time;
     int _proximity_defense_next_activation_time;
     bool _proximity_defense_at_death_done;
-    // OpenUA custom: mortar barrage runtime state (transient, not saved per instance)
+    // OpenNeoUA custom: mortar barrage runtime state (transient, not saved per instance)
     bool _mortar_barrage_active = false;
     // Shots left in the CURRENT firing cycle. A cycle's shots are a shared budget:
     // redirecting the barrage (manual or auto) spends from it and never refills it.
@@ -1139,7 +1139,7 @@ public:
         int next_fx_time = 0;
     };
 
-    // OpenUA custom: laser beam runtime state (transient, per shooter/weapon/target;
+    // OpenNeoUA custom: laser beam runtime state (transient, per shooter/weapon/target;
     // never saved per instance). Supports direct laser_multi_target beams and chain
     // segments, while keeping the first beam in the legacy fields for older debug/UI paths.
     bool _laser_active = false;            // beam currently firing/visible
@@ -1158,7 +1158,7 @@ public:
     float _laserEnergyDrainRemainder = 0.0f;
     std::vector<TLaserBeamRequest> _laser_requests;
     std::vector<TLaserBeamRuntime> _laser_beams;
-    // OpenUA custom: separate downward beam runtime for model = vertical_laser.
+    // OpenNeoUA custom: separate downward beam runtime for model = vertical_laser.
     bool _vertical_laser_active = false;
     bool _vertical_laser_fire_request = false;
     int _vertical_laser_weapon = -1;
@@ -1181,14 +1181,14 @@ public:
     // Runtime semantic for gun_type=dummy. This is intentionally not a second
     // attachment system; it only feeds existing AI/visibility filters.
     bool _isDummy;
-    // OpenUA custom: universal compound collision spheres for non-robo vehicles
+    // OpenNeoUA custom: universal compound collision spheres for non-robo vehicles
     World::rbcolls _collNodes;
     bool _manualCompoundCollision = false;
     bool _legacyRadiusDefined = false;
     float _heading_speed;
     NC_STACK_ypabact *_killer;
     int16_t _killer_owner;
-    // OpenUA custom: transient single-player kill marks (0..4).
+    // OpenNeoUA custom: transient single-player kill marks (0..4).
     // Intentionally not serialized or synchronized over the network.
     uint8_t _sessionKillMarks = 0;
     int16_t _reb_count;
@@ -1214,7 +1214,7 @@ public:
     bool _hidden = false;
     int8_t _unhideRadar = 0;
 
-    // OpenUA custom: per-instance "invisible" stealth state. Seeded from the vehicle
+    // OpenNeoUA custom: per-instance "invisible" stealth state. Seeded from the vehicle
     // prototype's `invisible` flag at spawn; cleared permanently by the first real
     // attack via RevealInvisibleOnAttack(). Gameplay/physics/control stay active while set.
     bool _invisibleUnrevealed = false;

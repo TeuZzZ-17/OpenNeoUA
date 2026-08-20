@@ -208,7 +208,7 @@ bool WriteSnapshotFile(const std::string &fileName,
     if ( !file )
         return false;
 
-    std::fprintf(file, "OpenUA Diagnostics\n");
+    std::fprintf(file, "OpenNeoUA Diagnostics\n");
     std::fprintf(file, "report_type=%s\n", reportType ? reportType : "snapshot");
     std::fprintf(file, "reason=%s\n", reason ? reason : "none");
     std::fprintf(file, "session=%s\n", g_sessionId.c_str());
@@ -230,7 +230,7 @@ void WriteSessionInfo()
     if ( !file )
         return;
 
-    std::fprintf(file, "OpenUA crash diagnostics session\n");
+    std::fprintf(file, "OpenNeoUA crash diagnostics session\n");
     std::fprintf(file, "session=%s\n", g_sessionId.c_str());
     std::fprintf(file, "build=%s\n", g_buildTag.c_str());
     std::fprintf(file, "nucleus_ini=%s\n", uaDataFirstNucleusIniPath().c_str());
@@ -488,7 +488,7 @@ LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS *exceptionInfo)
                 GetModuleFileNameA(module, modulePath, MAX_PATH);
         }
 
-        WriteHandleText(report, "OpenUA Diagnostics\r\n");
+        WriteHandleText(report, "OpenNeoUA Diagnostics\r\n");
         WriteHandleText(report, "report_type=unhandled_exception\r\n");
         WriteHandleFormat(report, "session=%s\r\n", g_sessionId.c_str());
         WriteHandleFormat(report, "build=%s\r\n", g_buildTag.c_str());

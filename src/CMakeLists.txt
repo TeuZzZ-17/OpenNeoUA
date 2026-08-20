@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(OpenUA)
+project(OpenNeoUA)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -150,20 +150,20 @@ endif()
 
 if(WIN32)
     add_executable(
-        OpenUA
+        OpenNeoUA
         WIN32
         ${SOURCES}
         ${WIN32_RESOURCES}
     )
 else()
     add_executable(
-        OpenUA
+        OpenNeoUA
         ${SOURCES}
     )
 endif()
 
 target_link_libraries(
-    OpenUA
+    OpenNeoUA
 
     ${SDL2_LIBRARIES}
     ${SDL2_IMAGE_LIBRARIES}
@@ -179,11 +179,11 @@ target_link_libraries(
 )
 
 if(WIN32)
-    target_link_libraries(OpenUA dbghelp)
+    target_link_libraries(OpenNeoUA dbghelp)
 endif()
 
 target_include_directories(
-    OpenUA
+    OpenNeoUA
     PUBLIC
 
     ${PROJECT_SOURCE_DIR}
@@ -199,7 +199,7 @@ target_include_directories(
 
 if(CMAKE_BUILD_TYPE MATCHES [dD][eE][bB][uU][gG])
     target_compile_options(
-        OpenUA
+        OpenNeoUA
         PUBLIC
         "-g"
         "-O0"
@@ -207,13 +207,13 @@ if(CMAKE_BUILD_TYPE MATCHES [dD][eE][bB][uU][gG])
 
     if(NOT WIN32)
         target_compile_options(
-            OpenUA
+            OpenNeoUA
             PUBLIC
             "-fsanitize=address"
         )
 
         target_link_libraries(
-            OpenUA
+            OpenNeoUA
             "-fsanitize=address"
         )
     endif()
