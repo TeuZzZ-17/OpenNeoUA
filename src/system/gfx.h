@@ -284,6 +284,8 @@ struct TRenderNode
     TGLColor Color;
     // OpenNeoUA custom: per-node VP tint multiplier. Neutral (1,1,1,1) = no change.
     TGLColor ColorMul = TGLColor(1.0, 1.0, 1.0, 1.0);
+    // Treat ColorMul.rgb as a replacement hue instead of a channel multiplier.
+    bool Colorize = false;
     // OpenNeoUA custom: transient VP fade kept separate from ColorMul alpha so
     // GL_ONE/GL_ONE LUMTRACY materials can attenuate their additive RGB output.
     float VPFadeFactor = 1.0f;
@@ -983,7 +985,7 @@ protected:
         int32_t Textured = 0;
         int32_t Flat = 0;
         int32_t ATest = 0;
-        int32_t _pad2 = 0;
+        int32_t Colorize = 0; // std140 bool at offset 172; reuses the previous padding slot
         float   ColorMul[4] = {1.0, 1.0, 1.0, 1.0}; // std140 vec4 at offset 176
         float   FogColor[4] = {0.0, 0.0, 0.0, 1.0}; // std140 vec4 at offset 192
         float   AtmosphereColor[4] = {0.588235f, 0.607843f, 0.627451f, 1.0f}; // offset 208

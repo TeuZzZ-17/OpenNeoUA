@@ -528,6 +528,7 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
         _renderMsg.OwnerTForm = &_transform;
         _renderMsg.flags = arg->flags;
         _renderMsg.tint = arg->particleTint;
+        _renderMsg.colorizeTint = arg->particleColorizeTint;
         _renderMsg.particleScale = arg->particleScale;
         _renderMsg.particleSpin = arg->particleSpin;
         _renderMsg.particleLifetimeScale = arg->particleLifetimeScale;
@@ -551,7 +552,8 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
 
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
-            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object VP tint multiplier
+            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object VP tint multiplier/target hue
+            rend.Colorize = arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags;
 
@@ -646,6 +648,7 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
         _renderMsg.OwnerTForm = &_transform;
         _renderMsg.flags = arg->flags;
         _renderMsg.tint = arg->particleTint;
+        _renderMsg.colorizeTint = arg->particleColorizeTint;
         _renderMsg.particleScale = arg->particleScale;
         _renderMsg.particleSpin = arg->particleSpin;
         _renderMsg.particleLifetimeScale = arg->particleLifetimeScale;
@@ -661,7 +664,8 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             GFX::TRenderNode rend( GFX::TRenderNode::TYPE_MESH );
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
-            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object VP tint multiplier
+            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object VP tint multiplier/target hue
+            rend.Colorize = arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags | arg->flags;
 
