@@ -4583,6 +4583,32 @@ void NC_STACK_ypabact::UpdateWeaponRecoilPush(update_msg *arg)
     ypabact_UpdateFakePushVel(this, &_weaponRecoilPushVel, arg, WEAPON_RECOIL_TAU, true);
 }
 
+static bool ypabact_GetPlasmaFactionTint(NC_STACK_ypabact *bact,
+                                            GFX::TGLColor *outTint)
+{
+    if ( !bact || !outTint ||
+         bact->_owner < World::OWNER_SULG || bact->_owner > World::OWNER_GHOR )
+    {
+        return false;
+    }
+
+    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
+    if ( !world )
+        return false;
+
+    // Use the owner palette already loaded from WORLD.INI. The renderer
+    // colorizes the cyan source VP by luminance instead of multiplying RGB,
+    // so red/yellow/white factions retain their actual hue. Resistance never
+    // enters this helper and keeps the original cyan plasma unchanged.
+    const SDL_Color factionColor = world->GetColor(bact->_owner);
+    constexpr float inv255 = 1.0f / 255.0f;
+    *outTint = GFX::TGLColor((float)factionColor.r * inv255,
+                             (float)factionColor.g * inv255,
+                             (float)factionColor.b * inv255,
+                             1.0f);
+    return true;
+}
+
 void NC_STACK_ypabact::Render(baseRender_msg *arg)
 {
     // OpenNeoUA invisible: a still-cloaked stealth unit is never drawn in the 3D world.
@@ -4702,13 +4728,33 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
 
                 GFX::TGLColor oldTint = arg->tint;
                 GFX::TGLColor oldParticleTint = arg->particleTint;
+                bool oldColorizeTint = arg->colorizeTint;
+                bool oldParticleColorizeTint = arg->particleColorizeTint;
                 vec3d oldParticleScale = arg->particleScale;
                 vec3d oldParticleSpin = arg->particleSpin;
                 float oldParticleLifetimeScale = arg->particleLifetimeScale;
                 applyRenderControls(_current_vp->Bas);
+
+                // The genesis VP is the faction plasma visual wherever the
+                // existing runtime uses it (creation, death or other genesis FX).
+                // Tint only this render call; shared VP prototypes stay untouched.
+                if ( _current_vp->Bas == _vp_genesis )
+                {
+                    GFX::TGLColor plasmaTint;
+                    if ( ypabact_GetPlasmaFactionTint(this, &plasmaTint) )
+                    {
+                        arg->tint = plasmaTint;
+                        arg->particleTint = plasmaTint;
+                        arg->colorizeTint = true;
+                        arg->particleColorizeTint = true;
+                    }
+                }
+
                 _current_vp->Bas->Render(arg, _current_vp);
                 arg->tint = oldTint;
                 arg->particleTint = oldParticleTint;
+                arg->colorizeTint = oldColorizeTint;
+                arg->particleColorizeTint = oldParticleColorizeTint;
                 arg->particleScale = oldParticleScale;
                 arg->particleSpin = oldParticleSpin;
                 arg->particleLifetimeScale = oldParticleLifetimeScale;
@@ -4747,13 +4793,33 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
 
                 GFX::TGLColor oldTint = arg->tint;
                 GFX::TGLColor oldParticleTint = arg->particleTint;
+                bool oldColorizeTint = arg->colorizeTint;
+                bool oldParticleColorizeTint = arg->particleColorizeTint;
                 vec3d oldParticleScale = arg->particleScale;
                 vec3d oldParticleSpin = arg->particleSpin;
                 float oldParticleLifetimeScale = arg->particleLifetimeScale;
                 applyRenderControls(bd->vp->Bas);
+
+                // Apply the same faction tint to every extra instance that
+                // reuses the genesis VP. No status/slot-specific plasma path is
+                // needed because the VP identity itself is the single condition.
+                if ( bd->vp->Bas == _vp_genesis )
+                {
+                    GFX::TGLColor plasmaTint;
+                    if ( ypabact_GetPlasmaFactionTint(this, &plasmaTint) )
+                    {
+                        arg->tint = plasmaTint;
+                        arg->particleTint = plasmaTint;
+                        arg->colorizeTint = true;
+                        arg->particleColorizeTint = true;
+                    }
+                }
+
                 bd->vp->Bas->Render(arg, bd->vp);
                 arg->tint = oldTint;
                 arg->particleTint = oldParticleTint;
+                arg->colorizeTint = oldColorizeTint;
+                arg->particleColorizeTint = oldParticleColorizeTint;
                 arg->particleScale = oldParticleScale;
                 arg->particleSpin = oldParticleSpin;
                 arg->particleLifetimeScale = oldParticleLifetimeScale;
@@ -7311,6 +7377,21 @@ void NC_STACK_ypabact::Die()
     // components and missiles never award marks.
     NC_STACK_ypabact *creditedKiller = ypabact_ResolveSessionKillCreditedUnit(this);
     const uint8_t creditedOwner = creditedKiller ? creditedKiller->_owner : World::OWNER_0;
+
+    // Plasma Currency uses the same normalized single-player kill attribution as
+    // session kill marks.  Store the resolved hostile owner while the killer
+    // chain is still alive so a later plasma pickup does not lose credit for
+    // indirect/chain kills (for example an enemy destroyed by another dying
+    // enemy that was originally killed by the player's faction).  Direct kills
+    // keep the same owner; third-party enemy/environment deaths still do not
+    // become player credit.
+    if ( _world && !_world->_isNetGame && creditedKiller &&
+         creditedKiller != this && creditedOwner > World::OWNER_0 &&
+         creditedOwner != _owner )
+    {
+        _killer_owner = creditedOwner;
+    }
+
     if ( _world && !_world->_isNetGame && creditedKiller &&
          _owner != World::OWNER_0 && creditedOwner != World::OWNER_0 &&
          _owner != creditedOwner && creditedKiller != this &&
