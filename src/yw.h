@@ -2845,6 +2845,11 @@ public:
                                    const World::TWeaponTracerConfig &config,
                                    float tailFactor, float headFactor,
                                    uint32_t visualSeed);
+    void RenderLaserMeshSegment(baseRender_msg *arg, const vec3d &start,
+                                const vec3d &end,
+                                const World::TWeapProto::TLaserMeshConfig &config,
+                                bool impactContact, const mat3x3 &orientationHint,
+                                uint32_t visualSeed);
     void ClearWeaponTracerMesh();
     bool SpawnProceduralEnergyFX(const vec3d &pos, bool plusSymbol,
                                  int32_t duration, float size, float thickness,

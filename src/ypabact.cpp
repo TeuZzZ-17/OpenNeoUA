@@ -33,6 +33,118 @@ int ypabact_id = 1;
 extern int dword_5B1128;
 
 static int ypabact_SelectAIPrimaryWeaponSlot(NC_STACK_ypabact *bact, NC_STACK_ypabact *target, int *outSourceSlot);
+static int ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(NC_STACK_ypabact *bact, NC_STACK_ypabact *target, int *outSourceSlot);
+static bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId, const bact_arg101 *arg, NC_STACK_ypabact *unitTarget);
+static bool ypabact_HasActiveAILaserSectorFocus(const NC_STACK_ypabact *bact);
+static float ypabact_LaserClampVPSpacing(float spacing);
+
+static vec3d ypabact_LaserViewerVisualStart(
+    const NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
+    const vec3d &beamStart, const vec3d &beamEnd)
+{
+    if ( !bact || (!bact->getBACT_viewer() && !bact->getBACT_inputting()) )
+        return beamStart;
+
+    vec3d span = beamEnd - beamStart;
+    float len = span.length();
+    if ( !std::isfinite(len) || len < 1.0f )
+        return beamStart;
+
+    vec3d dir = span / len;
+    float lead = ypabact_LaserClampVPSpacing(wproto.laser_vp_spacing) * 0.5f;
+    if ( lead < 16.0f )
+        lead = 16.0f;
+    if ( lead > len * 0.25f )
+        lead = len * 0.25f;
+
+    return beamStart + dir * lead;
+}
+
+static bool ypabact_IsLaserMeshUsable(
+    NC_STACK_ypabact *bact, const World::TWeapProto &wproto)
+{
+    NC_STACK_ypaworld *world = bact ? bact->getBACT_pWorld() : NULL;
+    if ( !world || world->_isNetGame ||
+         (!wproto.IsLaser() && !wproto.IsVerticalLaser()) ||
+         !wproto.laser_mesh.enabled )
+        return false;
+
+    const World::TWeapProto::TLaserMeshConfig &config = wproto.laser_mesh;
+    const float sizeY = config.ResolveSizeY();
+    return std::isfinite(config.size_x) && config.size_x > 0.01f &&
+           std::isfinite(sizeY) && sizeY > 0.01f &&
+           std::isfinite(config.tint.r) && std::isfinite(config.tint.g) &&
+           std::isfinite(config.tint.b) && std::isfinite(config.tint.a) &&
+           config.tint.a > 0.0f;
+}
+
+static uint32_t ypabact_LaserMeshSeed(const NC_STACK_ypabact *bact,
+                                      size_t beamIndex, uint32_t domain)
+{
+    const uint32_t actor = bact ? bact->_gid : 0u;
+    return actor ^ domain ^
+           ((uint32_t)(beamIndex + 1u) * 0x9e3779b9u);
+}
+
+static void ypabact_RenderLaserMeshes(NC_STACK_ypabact *bact,
+                                      baseRender_msg *arg)
+{
+    if ( !bact || !arg )
+        return;
+
+    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
+    if ( !world )
+        return;
+
+    if ( bact->_laser_active && bact->_laser_weapon >= 0 &&
+         (size_t)bact->_laser_weapon < world->GetWeaponsProtos().size() )
+    {
+        const World::TWeapProto &wproto =
+            world->GetWeaponsProtos().at(bact->_laser_weapon);
+        if ( ypabact_IsLaserMeshUsable(bact, wproto) )
+        {
+            for (size_t i = 0; i < bact->_laser_beams.size(); i++)
+            {
+                const NC_STACK_ypabact::TLaserBeamRuntime &beam =
+                    bact->_laser_beams[i];
+                // Match the legacy VP viewer lead. A crossed-ribbon beam that
+                // starts almost inside the first-person camera can project its two
+                // planes as a temporally unstable/doubled primary laser. Advancing
+                // only the rendered tail keeps gameplay start/end untouched while
+                // avoiding that near-view artifact.
+                const vec3d renderStart = (i == 0)
+                    ? ypabact_LaserViewerVisualStart(bact, wproto, beam.start, beam.end)
+                    : beam.start;
+                world->RenderLaserMeshSegment(
+                    arg, renderStart, beam.end, wproto.laser_mesh,
+                    beam.has_contact, bact->_rotation,
+                    ypabact_LaserMeshSeed(bact, i, 0x4c415352u));
+            }
+        }
+    }
+
+    if ( bact->_vertical_laser_active && bact->_vertical_laser_weapon >= 0 &&
+         (size_t)bact->_vertical_laser_weapon < world->GetWeaponsProtos().size() )
+    {
+        const World::TWeapProto &wproto =
+            world->GetWeaponsProtos().at(bact->_vertical_laser_weapon);
+        if ( ypabact_IsLaserMeshUsable(bact, wproto) )
+        {
+            for (size_t i = 0; i < bact->_vertical_laser_beams.size(); i++)
+            {
+                const NC_STACK_ypabact::TLaserBeamRuntime &beam =
+                    bact->_vertical_laser_beams[i];
+                const vec3d renderStart = (i == 0)
+                    ? ypabact_LaserViewerVisualStart(bact, wproto, beam.start, beam.end)
+                    : beam.start;
+                world->RenderLaserMeshSegment(
+                    arg, renderStart, beam.end, wproto.laser_mesh,
+                    beam.has_contact, bact->_rotation,
+                    ypabact_LaserMeshSeed(bact, i, 0x5652544cu));
+            }
+        }
+    }
+}
 
 struct TUnitCollisionPairKey
 {
@@ -1770,9 +1882,9 @@ static bool ypabact_IsLaserAimTarget(NC_STACK_ypabact *shooter, NC_STACK_ypabact
     if ( unit->_owner == World::OWNER_0 || unit->_owner == shooter->_owner )
         return false;
 
-    // OpenNeoUA invisible: AI laser auto-lock never picks a cloaked stealth unit as its aim
-    // target (the damage predicate above stays unfiltered so a beam still burns one if it
-    // happens to physically cross it).
+    // OpenNeoUA invisible: automatic Laser/Vertical Laser aiming never picks a cloaked
+    // stealth unit as its aim target (the damage predicate above stays unfiltered so a
+    // beam still burns one if it happens to physically cross it).
     if ( !unit->CanBeSeenByAIOrRadar() )
         return false;
 
@@ -2747,6 +2859,8 @@ size_t NC_STACK_ypabact::Deinit()
     SFXEngine::SFXe.StopCarrier(&_mgun_recoil_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
+    SFXEngine::SFXe.StopCarrier(&_laser_hit_soundcarrier);
+    SFXEngine::SFXe.StopCarrier(&_vertical_laser_hit_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mgun_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mimic_soundcarrier);
     _active_debuff.Clear();
@@ -4646,6 +4760,9 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         }
     }
 
+    // Continuous laser bodies are queued from the authoritative runtime beam
+    // endpoints. The helper keeps the legacy VP path available as fallback.
+    ypabact_RenderLaserMeshes(this, arg);
 }
 
 void NC_STACK_ypabact::SetTarget(setTarget_msg *arg)
@@ -6489,9 +6606,13 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             arg101.unkn = 2;
             arg101.radius = arg->target.pbact->GetCollisionBroadRadius();
             int aiWeaponSourceSlot = -1;
-            arg101.weapon = ypabact_SelectAIPrimaryWeaponSlot(this, arg->target.pbact, &aiWeaponSourceSlot);
+            arg101.weapon = ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(
+                this, arg->target.pbact, &aiWeaponSourceSlot);
 
-            if ( CheckFireAI(&arg101) )
+            const bool keepContinuousLaser =
+                ypabact_ShouldPersistAILaserFire(this, arg101.weapon, &arg101, arg->target.pbact);
+
+            if ( CheckFireAI(&arg101) || keepContinuousLaser )
             {
                 if ( isSecTarget )
                     _status_flg |= BACT_STFLAG_FIGHT_S;
@@ -6818,6 +6939,13 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
 
         case TA_FIGHT:
         {
+            // A continuous AI laser should behave like a held trigger, not like a
+            // sequence of unrelated shots.  Once its primary beam is actually
+            // contacting a sector, keep that exact sector aim point until the beam
+            // breaks.  Non-laser weapons retain the vanilla per-frame best-part
+            // selection below.
+            const bool keepLaserSectorFocus = ypabact_HasActiveAILaserSectorFocus(this);
+
             if ( v68 )
             {
                 if ( v62 < World::CVSectorLength )
@@ -6841,7 +6969,8 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                     _status_flg |= BACT_STFLAG_FIGHT_P;
                 }
 
-                GetBestSectorPart(&_primTpos);
+                if ( !keepLaserSectorFocus )
+                    GetBestSectorPart(&_primTpos);
 
                 arg->pos = _primTpos;
             }
@@ -6869,7 +6998,8 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                     _status_flg |= BACT_STFLAG_FIGHT_S;
                 }
 
-                GetBestSectorPart(&_sencdTpos);
+                if ( !keepLaserSectorFocus )
+                    GetBestSectorPart(&_sencdTpos);
 
                 arg->pos = _sencdTpos;
             }
@@ -6879,10 +7009,16 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
             arg101.pos = arg->pos;
             int aiWeaponSourceSlot = -1;
             // Sector/building attacks have no class-specific unit target. Smart
-            // therefore follows its documented Random fallback for this shot.
-            arg101.weapon = ypabact_SelectAIPrimaryWeaponSlot(this, NULL, &aiWeaponSourceSlot);
+            // therefore follows its documented Random fallback when no continuous
+            // laser is already held.  An active laser keeps the same weapon slot
+            // until its beam genuinely breaks.
+            arg101.weapon = ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(
+                this, NULL, &aiWeaponSourceSlot);
 
-            if ( CheckFireAI(&arg101) )
+            const bool keepContinuousLaser =
+                ypabact_ShouldPersistAILaserFire(this, arg101.weapon, &arg101, NULL);
+
+            if ( CheckFireAI(&arg101) || keepContinuousLaser )
             {
                 vec3d tmp = _position + _fire_pos - arg->pos;
 
@@ -8057,6 +8193,77 @@ static int ypabact_SelectAIPrimaryWeaponSlot(NC_STACK_ypabact *bact,
     if ( outSourceSlot )
         *outSourceSlot = sourceSlots[index];
     return slots[index];
+}
+
+static int ypabact_GetActiveAILaserWeaponSlot(NC_STACK_ypabact *bact, int *outSourceSlot)
+{
+    if ( outSourceSlot )
+        *outSourceSlot = -1;
+
+    if ( !bact || !bact->getBACT_pWorld() || (bact->_oflags & BACT_OFLAG_USERINPT) )
+        return -1;
+
+    const int candidates[2] = {
+        bact->_laser_active ? bact->_laser_weapon : -1,
+        bact->_vertical_laser_active ? bact->_vertical_laser_weapon : -1
+    };
+
+    for (int weaponId : candidates)
+    {
+        if ( !ypabact_IsValidWeaponId(bact, weaponId) )
+            continue;
+
+        const World::TWeapProto &wproto =
+            bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId);
+        if ( !wproto.IsLaser() && !wproto.IsVerticalLaser() )
+            continue;
+
+        if ( bact->_weapon == weaponId )
+        {
+            if ( outSourceSlot )
+                *outSourceSlot = 0;
+            return weaponId;
+        }
+
+        for (size_t i = 0; i < bact->_extra_weapons.size(); ++i)
+        {
+            if ( bact->_extra_weapons[i] == weaponId )
+            {
+                if ( outSourceSlot )
+                    *outSourceSlot = (int)i + 1;
+                return weaponId;
+            }
+        }
+    }
+
+    return -1;
+}
+
+static int ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(NC_STACK_ypabact *bact,
+                                                           NC_STACK_ypabact *target,
+                                                           int *outSourceSlot)
+{
+    // Random/Smart normally resolve a slot independently for every shot.  That
+    // is correct for discrete weapons, but a laser is one held attack: once the
+    // beam is alive, keep the same source slot until the beam actually stops.
+    const int activeLaser = ypabact_GetActiveAILaserWeaponSlot(bact, outSourceSlot);
+    if ( activeLaser >= 0 )
+        return activeLaser;
+
+    return ypabact_SelectAIPrimaryWeaponSlot(bact, target, outSourceSlot);
+}
+
+static bool ypabact_HasActiveAILaserSectorFocus(const NC_STACK_ypabact *bact)
+{
+    if ( !bact || (bact->_oflags & BACT_OFLAG_USERINPT) )
+        return false;
+
+    if ( bact->_laser_active && !bact->_laser_beams.empty() &&
+         bact->_laser_beams[0].target_gid < 0 )
+        return true;
+
+    return bact->_vertical_laser_active && !bact->_vertical_laser_beams.empty() &&
+           bact->_vertical_laser_beams[0].target_gid < 0;
 }
 
 static int ypabact_GetCurrentPrimaryWeaponSourceSlot(NC_STACK_ypabact *bact)
@@ -10298,12 +10505,10 @@ static bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapPr
     return true;
 }
 
-// AI auto-lock: nearest enemy in a generous forward arc within range. Used for AI-driven
-// lasers so they reliably connect even if the body is not perfectly aligned; the beam is
-// then bent toward the returned target. Player fire keeps the requested firing path and
-// falls back to forward hitscan when no explicit target was provided.
+// Shared automatic Laser target acquisition. Callers provide their own alignment
+// threshold so player aim-assist can stay narrow without changing the proven AI cone.
 static NC_STACK_ypabact *ypabact_LaserAutoTarget(NC_STACK_ypabact *shooter, const vec3d &origin,
-                                                 const vec3d &dir, float range)
+                                                 const vec3d &dir, float range, float minAlignment)
 {
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
     if ( !world )
@@ -10334,7 +10539,7 @@ static NC_STACK_ypabact *ypabact_LaserAutoTarget(NC_STACK_ypabact *shooter, cons
                 float dist = to.length();
                 if ( dist < 0.001f || dist > range )
                     continue;
-                if ( to.dot(dir) / dist < 0.4f )   // ~66 deg forward arc
+                if ( to.dot(dir) / dist < minAlignment )
                     continue;
 
                 if ( dist < bestDist )
@@ -10347,6 +10552,40 @@ static NC_STACK_ypabact *ypabact_LaserAutoTarget(NC_STACK_ypabact *shooter, cons
     }
 
     return best;
+}
+
+// Player laser aim assist: acquire only close to the crosshair (~15 deg), then
+// retain through a slightly wider cone (~22 deg) so the lock is stable without
+// following targets that are clearly outside the player's focus. This is transient
+// runtime state already carried by TLaserBeamRuntime::target_gid; no new save or
+// prototype state is needed.
+static constexpr float PLAYER_LASER_ACQUIRE_ALIGNMENT = 0.9659258f; // cos(15 deg)
+static constexpr float PLAYER_LASER_HOLD_ALIGNMENT = 0.9271839f;    // cos(22 deg)
+static NC_STACK_ypabact *ypabact_RetainPlayerLaserTarget(NC_STACK_ypabact *shooter,
+                                                         const vec3d &origin,
+                                                         const vec3d &aimDir,
+                                                         float range, int32_t targetGid)
+{
+    if ( !shooter || !shooter->getBACT_pWorld() || targetGid <= 0 || range <= 0.0f )
+        return NULL;
+
+    NC_STACK_ypabact *target = shooter->getBACT_pWorld()->FindLiveBactByGid(targetGid);
+    if ( !ypabact_IsLaserAimTarget(shooter, target) )
+        return NULL;
+
+    vec3d toTarget = target->_position - origin;
+    const float distance = toTarget.length();
+    if ( distance < 0.001f || distance > range )
+        return NULL;
+
+    vec3d forward = aimDir;
+    if ( forward.normalise() < 0.001f )
+        return NULL;
+
+    if ( toTarget.dot(forward) / distance < PLAYER_LASER_HOLD_ALIGNMENT )
+        return NULL;
+
+    return target;
 }
 
 static bool ypabact_LaserTargetInList(NC_STACK_ypabact *target, const std::vector<NC_STACK_ypabact *> &targets)
@@ -10491,17 +10730,17 @@ static void ypabact_AddLaserMultiTargetRequests(NC_STACK_ypabact *shooter, const
                                                 std::vector<NC_STACK_ypabact::TLaserBeamRequest> *requests,
                                                 float range, bool friendlyTargets, bool playerControlled)
 {
-    if ( !shooter || !requests || requests->empty() || wproto.laser_multi_target <= 1 )
+    if ( !shooter || !requests || requests->empty() || wproto.laser_beam_count <= 1 )
         return;
     if ( friendlyTargets && !playerControlled )
         return;
 
     size_t originalRequestCount = requests->size();
-    if ( originalRequestCount >= (size_t)wproto.laser_multi_target )
+    if ( originalRequestCount >= (size_t)wproto.laser_beam_count )
         return;
 
     std::vector<NC_STACK_ypabact *> selectedTargets;
-    selectedTargets.reserve((size_t)wproto.laser_multi_target);
+    selectedTargets.reserve((size_t)wproto.laser_beam_count);
 
     for (const NC_STACK_ypabact::TLaserBeamRequest &request : *requests)
     {
@@ -10510,7 +10749,7 @@ static void ypabact_AddLaserMultiTargetRequests(NC_STACK_ypabact *shooter, const
             selectedTargets.push_back(request.target);
     }
 
-    while ( requests->size() < (size_t)wproto.laser_multi_target )
+    while ( requests->size() < (size_t)wproto.laser_beam_count )
     {
         size_t sourceIndex = (requests->size() - originalRequestCount) % originalRequestCount;
         const NC_STACK_ypabact::TLaserBeamRequest &source = requests->at(sourceIndex);
@@ -10564,6 +10803,73 @@ static void ypabact_ApplyLaserLoopNormalFX(TSoundSource &snd, World::TWeapProto 
     }
 }
 
+static void ypabact_UpdateLaserHitSound(
+    NC_STACK_ypabact *bact, World::TWeapProto &wproto, TSndCarrier *carrier,
+    const std::vector<NC_STACK_ypabact::TLaserBeamRuntime> &beams)
+{
+    if ( !bact || !carrier )
+        return;
+
+    const NC_STACK_ypabact::TLaserBeamRuntime *contactBeam = NULL;
+    for (const NC_STACK_ypabact::TLaserBeamRuntime &beam : beams)
+    {
+        if ( beam.has_contact )
+        {
+            contactBeam = &beam;
+            break;
+        }
+    }
+
+    World::TVhclSound &hitFx = wproto.sndFXes[World::TWeapProto::SND_HIT];
+    hitFx.LoadSamples();
+    TSampleData *sample = hitFx.MainSample.Sample
+                        ? hitFx.MainSample.Sample->GetSampleData()
+                        : NULL;
+
+    if ( !contactBeam || !sample )
+    {
+        if ( !carrier->Sounds.empty() && carrier->Sounds[0].IsEnabled() )
+            SFXEngine::SFXe.StopCarrier(carrier);
+        return;
+    }
+
+    if ( carrier->Sounds.empty() )
+        carrier->Resize(1);
+
+    TSoundSource &snd = carrier->Sounds[0];
+    snd.PSample = sample;
+    snd.SampleVariants.clear();
+    snd.SampleVariants.push_back(sample);
+    for (const World::TVhclSound::TSndSample &variant : hitFx.MainSampleVariants)
+    {
+        if ( variant.Sample )
+            snd.SampleVariants.push_back(variant.Sample->GetSampleData());
+    }
+    snd.Volume = hitFx.volume;
+    snd.Pitch = hitFx.pitch;
+    snd.Radius = hitFx.radius;
+    snd.PriorityBias = 0;
+    snd.SetLoop(false);
+    snd.SetFragmented(false);
+    snd.PFragments = NULL;
+    snd.PPFx = NULL;
+    snd.SetPFx(false);
+    snd.PShkFx = NULL;
+    snd.SetShk(false);
+
+    // One shared carrier per continuous weapon: with multiple direct/chain
+    // beams there is still only one ordered hit sound. The source naturally
+    // becomes disabled at the end of the one-shot; if contact persists the
+    // next update starts exactly one new play, never overlapping the previous.
+    carrier->Position = contactBeam->end;
+    carrier->Vector = bact->_fly_dir * bact->_fly_dir_length;
+
+    if ( !snd.IsEnabled() )
+        SFXEngine::SFXe.startSound(carrier, 0);
+
+    SFXEngine::SFXe.UpdateSoundCarrier(carrier);
+}
+
 static void ypabact_StoreHUDLaserMultiLockTargets(NC_STACK_ypabact *shooter,
                                                   const std::vector<NC_STACK_ypabact::TLaserBeamRequest> &requests)
 {
@@ -10591,7 +10897,7 @@ static void ypabact_UpdateHUDLaserMultiLockTargets(NC_STACK_ypabact *shooter, co
     if ( !shooter || !arg || !shooter->getBACT_pWorld() || !(shooter->_oflags & BACT_OFLAG_USERINPT) )
         return;
 
-    if ( !wproto.IsLaser() || wproto.laser_multi_target <= 1 )
+    if ( !wproto.IsLaser() || wproto.laser_beam_count <= 1 )
     {
         shooter->getBACT_pWorld()->_hudMissileMultiLockTargets.clear();
         return;
@@ -10743,7 +11049,12 @@ static vec3d ypabact_LaserVPScale(const World::TWeapProto &wproto)
 static void ypabact_SpawnLaserBeamVPs(NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
                                       const vec3d &beamStart, const vec3d &beamEnd)
 {
-    if ( !bact || wproto.vp_normal <= 0 )
+    if ( !bact )
+        return;
+
+    // Only the continuous body VP is replaced, and only after the single
+    // shared predicate proves that a usable procedural mesh is active.
+    if ( ypabact_IsLaserMeshUsable(bact, wproto) || wproto.vp_normal <= 0 )
         return;
 
     NC_STACK_ypaworld *world = bact->getBACT_pWorld();
@@ -10868,6 +11179,9 @@ void NC_STACK_ypabact::StopLaser()
     // Disconnect: stop the loop sound (only if running), drop the beam and reset tick state.
     if ( !_laser_soundcarrier.Sounds.empty() && _laser_soundcarrier.Sounds[0].IsEnabled() )
         SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
+    if ( !_laser_hit_soundcarrier.Sounds.empty() &&
+         _laser_hit_soundcarrier.Sounds[0].IsEnabled() )
+        SFXEngine::SFXe.StopCarrier(&_laser_hit_soundcarrier);
 
     _laser_active = false;
     _laser_fire_request = false;
@@ -10946,27 +11260,45 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             dir = _rotation.AxisZ();
 
         // Aiming model:
-        //   * Explicit vanilla target -> use it only to choose the beam direction.
-        //   * Player free fire        -> keep requested/manual direction.
-        //   * AI free fire            -> auto-pick an enemy and bend the beam toward it.
+        //   * Explicit target -> always aim at that target while it remains valid.
+        //   * Player free fire -> aggressively acquire a visible enemy in the current
+        //                         aim cone, then retain that unit with mild hysteresis.
+        //   * AI free fire     -> keep the existing auto-target behaviour unchanged.
         // The final damage trace below is always run along the final direction and can
-        // hit allies/friendly units if they physically stand in front of the aimed target.
+        // still hit allies/friendly units if they physically stand in front of the lock.
+        NC_STACK_ypabact *aimTarget = NULL;
+
         if ( request.target && ypabact_IsLaserDamageTarget(this, request.target) )
         {
-            vec3d toT = request.target->_position - request.start;
+            // Preserve explicit-target compatibility, including deliberate friendly
+            // fire paths. Only automatic acquisition below is enemy-only.
+            aimTarget = request.target;
+        }
+        else if ( playerControlled )
+        {
+            if ( beamWasActive && beam.target_gid > 0 )
+            {
+                aimTarget = ypabact_RetainPlayerLaserTarget(this, request.start, dir,
+                                                            range, beam.target_gid);
+            }
+
+            if ( !aimTarget )
+                aimTarget = ypabact_LaserAutoTarget(this, request.start, dir, range,
+                                                     PLAYER_LASER_ACQUIRE_ALIGNMENT);
+        }
+        else
+        {
+            aimTarget = ypabact_LaserAutoTarget(this, request.start, dir, range, 0.4f);
+        }
+
+        if ( aimTarget )
+        {
+            vec3d toT = aimTarget->_position - request.start;
             float l = toT.length();
             if ( l > 0.001f && l <= range )
-                dir = toT / l;
-        }
-        else if ( !playerControlled )
-        {
-            NC_STACK_ypabact *aimTarget = ypabact_LaserAutoTarget(this, request.start, dir, range);
-            if ( aimTarget )
             {
-                vec3d toT = aimTarget->_position - request.start;
-                float l = toT.length();
-                if ( l > 0.001f )
-                    dir = toT / l;
+                dir = toT / l;
+                request.target = aimTarget;
             }
         }
 
@@ -10997,6 +11329,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             beam.end = worldHitPoint;
         else
             beam.end = request.start + dir * range;
+        beam.has_contact = target != NULL || useWorldHit;
 
         if ( i == 0 )
         {
@@ -11163,6 +11496,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
                 beam.start = from->_position;
                 beam.end = target->_position;
+                beam.has_contact = true;
 
                 vec3d dir = beam.end - beam.start;
                 if ( dir.normalise() < 0.001f )
@@ -11224,6 +11558,8 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         ypabact_LaserNominalFrameDamage(wproto, _laser_beams, laserDamageMultipliers,
                                         laserFrameTime, playerControlled);
     ApplyLaserEnergyDrain(laserNominalDamage, _laserEnergyDrainRemainder);
+
+    ypabact_UpdateLaserHitSound(this, wproto, &_laser_hit_soundcarrier, _laser_beams);
 
     // ---- Loop sound: laser loops by default while the trigger is held ----
     wproto.snd_loop.LoadSamples(); // idempotent: real load happens only once
@@ -11369,6 +11705,7 @@ static NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shoot
         beam.end = worldHitPoint;
     else
         beam.end = start + down * range;
+    beam.has_contact = target != NULL || useWorldHit;
 
     if ( !beamWasActive && wproto.vp_launch > 0 )
         world->SpawnTransientVP(wproto.vp_launch, beam.start,
@@ -11484,6 +11821,11 @@ void NC_STACK_ypabact::StopVerticalLaser()
     {
         SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
     }
+    if ( !_vertical_laser_hit_soundcarrier.Sounds.empty() &&
+         _vertical_laser_hit_soundcarrier.Sounds[0].IsEnabled() )
+    {
+        SFXEngine::SFXe.StopCarrier(&_vertical_laser_hit_soundcarrier);
+    }
 
     _vertical_laser_active = false;
     _vertical_laser_fire_request = false;
@@ -11538,20 +11880,70 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
 
     size_t activeBeamCount = 0;
     std::vector<NC_STACK_ypabact *> directHitTargets;
-    directHitTargets.reserve((size_t)wproto.laser_multi_target + 1);
+    directHitTargets.reserve((size_t)wproto.laser_beam_count + 1);
+
+    // Vertical Laser shares the same aggressive player targeting as the normal
+    // Laser. vertical_laser_fire_radius remains AI-only: player acquisition uses
+    // the common laser range and a downward aim cone, not the AI fire cylinder.
+    NC_STACK_ypabact *primaryAimTarget = NULL;
+    vec3d primaryDir = down;
+
+    if ( playerControlled )
+    {
+        if ( _vertical_laser_request_target &&
+             ypabact_IsLaserDamageTarget(this, _vertical_laser_request_target) )
+        {
+            primaryAimTarget = _vertical_laser_request_target;
+        }
+        else
+        {
+            if ( wasActive && !_vertical_laser_beams.empty() &&
+                 _vertical_laser_beams[0].target_gid > 0 )
+            {
+                primaryAimTarget = ypabact_RetainPlayerLaserTarget(
+                    this, _vertical_laser_request_start, down, range,
+                    _vertical_laser_beams[0].target_gid);
+            }
+
+            if ( !primaryAimTarget )
+                primaryAimTarget = ypabact_LaserAutoTarget(
+                    this, _vertical_laser_request_start, down, range,
+                    PLAYER_LASER_ACQUIRE_ALIGNMENT);
+        }
+    }
+
+    if ( primaryAimTarget )
+    {
+        vec3d toTarget = primaryAimTarget->_position - _vertical_laser_request_start;
+        const float targetDistance = toTarget.length();
+        if ( targetDistance > 0.001f && targetDistance <= range )
+            primaryDir = toTarget / targetDistance;
+        else
+            primaryAimTarget = NULL;
+    }
 
     NC_STACK_ypabact *primaryHitTarget =
         ypabact_UpdateVerticalLaserBeam(this, wproto, _vertical_laser_beams[0],
-                                        _vertical_laser_request_start, down, range,
+                                        _vertical_laser_request_start, primaryDir, range,
                                         wasActive && oldBeamCount > 0,
                                         spawnBeamVPs, playerControlled, 1.0f);
     activeBeamCount = 1;
 
-    NC_STACK_ypabact *primaryChainGroupTarget =
-        (_vertical_laser_request_target && _vertical_laser_request_target->_owner != World::OWNER_0 &&
-         ypabact_IsLaserDamageTarget(this, _vertical_laser_request_target))
-            ? _vertical_laser_request_target
-            : primaryHitTarget;
+    NC_STACK_ypabact *primaryChainGroupTarget = NULL;
+    if ( playerControlled )
+    {
+        primaryChainGroupTarget = primaryAimTarget ? primaryAimTarget : primaryHitTarget;
+    }
+    else
+    {
+        // Preserve the proven AI Vertical Laser path exactly: its requested target
+        // remains only the grouping reference while the primary beam stays vertical.
+        primaryChainGroupTarget =
+            (_vertical_laser_request_target && _vertical_laser_request_target->_owner != World::OWNER_0 &&
+             ypabact_IsLaserDamageTarget(this, _vertical_laser_request_target))
+                ? _vertical_laser_request_target
+                : primaryHitTarget;
+    }
 
     if ( primaryHitTarget && primaryHitTarget->_owner != World::OWNER_0 &&
          ypabact_IsLaserDamageTarget(this, primaryHitTarget) )
@@ -11563,16 +11955,30 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
     bool allowFriendlyExtraTargets = !friendlyMultiTargets || playerControlled;
 
     if ( primaryChainGroupTarget && primaryChainGroupTarget->_owner != World::OWNER_0 &&
-         wproto.laser_multi_target > 1 && allowFriendlyExtraTargets )
+         wproto.laser_beam_count > 1 && allowFriendlyExtraTargets )
     {
         std::vector<NC_STACK_ypabact *> selectedTargets = directHitTargets;
 
-        while ( activeBeamCount < (size_t)wproto.laser_multi_target )
+        while ( activeBeamCount < (size_t)wproto.laser_beam_count )
         {
-            NC_STACK_ypabact *extraTarget =
-                ypabact_FindNearestVerticalLaserTarget(this, _vertical_laser_request_start,
-                                                       range, fireRadius, friendlyMultiTargets,
-                                                       selectedTargets);
+            NC_STACK_ypabact *extraTarget = NULL;
+
+            if ( playerControlled )
+            {
+                // Player Vertical Laser uses the same common multi-beam acquisition
+                // as model=laser. The vertical fire radius is deliberately not used
+                // here; it remains only an AI decision threshold.
+                extraTarget = ypabact_FindNearestLaserMultiTarget(
+                    this, _vertical_laser_request_start, primaryDir, range,
+                    friendlyMultiTargets, selectedTargets);
+            }
+            else
+            {
+                extraTarget = ypabact_FindNearestVerticalLaserTarget(
+                    this, _vertical_laser_request_start, range, fireRadius,
+                    friendlyMultiTargets, selectedTargets);
+            }
+
             if ( !extraTarget )
                 break;
 
@@ -11639,6 +12045,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
 
                 chainBeam.start = from->_position;
                 chainBeam.end = chainTarget->_position;
+                chainBeam.has_contact = true;
 
                 vec3d chainDir = chainBeam.end - chainBeam.start;
                 if ( chainDir.normalise() < 0.001f )
@@ -11693,6 +12100,9 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
         ypabact_LaserNominalFrameDamage(wproto, _vertical_laser_beams, laserDamageMultipliers,
                                         laserFrameTime, playerControlled);
     ApplyLaserEnergyDrain(laserNominalDamage, _verticalLaserEnergyDrainRemainder);
+
+    ypabact_UpdateLaserHitSound(this, wproto, &_vertical_laser_hit_soundcarrier,
+                                _vertical_laser_beams);
 
     wproto.snd_loop.LoadSamples();
 
@@ -15120,6 +15530,69 @@ void NC_STACK_ypabact::CreationTimeUpdate(update_msg *arg)
 size_t NC_STACK_ypabact::IsDestroyed()
 {
     return (GetVP() == _vp_dead || GetVP() == _vp_genesis || GetVP() == _vp_megadeth) && _status == BACT_STATUS_DEAD;
+}
+
+static bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
+                                                const bact_arg101 *arg,
+                                                NC_STACK_ypabact *unitTarget)
+{
+    if ( !bact || !arg || !bact->getBACT_pWorld() ||
+         (bact->_oflags & BACT_OFLAG_USERINPT) ||
+         !ypabact_IsValidWeaponId(bact, weaponId) )
+        return false;
+
+    const World::TWeapProto &wproto =
+        bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId);
+
+    const bool activeNormal =
+        wproto.IsLaser() && bact->_laser_active && bact->_laser_weapon == weaponId;
+    const bool activeVertical =
+        wproto.IsVerticalLaser() && bact->_vertical_laser_active &&
+        bact->_vertical_laser_weapon == weaponId;
+
+    if ( !activeNormal && !activeVertical )
+        return false;
+
+    // A dead/invalid unit is never retained merely because the trigger was held.
+    // TargetAssess remains authoritative for ownership/radar/order decisions; this
+    // check only prevents one-frame fire-control jitter from breaking a valid beam.
+    if ( unitTarget && !ypabact_IsLaserAimTarget(bact, unitTarget) )
+        return false;
+
+    if ( activeVertical )
+    {
+        const vec3d fireOrigin =
+            bact->_position + bact->_rotation.Transpose().Transform(bact->_fire_pos);
+
+        // Preserve the existing vertical-laser semantics: the target must remain
+        // below the emitter and inside the horizontal fire cylinder.  Also stop
+        // when it has moved beyond the beam's real life_time-derived reach.
+        if ( arg->pos.y < fireOrigin.y )
+            return false;
+
+        if ( (arg->pos.XZ() - fireOrigin.XZ()).length() >
+             ypabact_VerticalLaserFireRadius(wproto) )
+            return false;
+
+        return (arg->pos - fireOrigin).length() <= ypabact_LaserRange(wproto);
+    }
+
+    const vec3d fireOrigin = ypabact_LaserSourceOrigin(bact);
+    vec3d toAim = arg->pos - fireOrigin;
+    const float distance = toAim.normalise();
+    if ( distance <= 0.001f || distance > ypabact_LaserRange(wproto) )
+        return false;
+
+    vec3d forward = bact->_rotation.AxisZ();
+    if ( forward.normalise() <= 0.001f )
+        return false;
+
+    // Hysteresis: CheckFireAI() remains the strict acquisition gate.  Once a
+    // laser is already connected, allow the AI to track within a broader forward
+    // cone instead of releasing the trigger on tiny steering/target movements.
+    // The beam still cannot persist behind the vehicle or beyond its real range.
+    constexpr float HoldAlignment = 0.50f;
+    return toAim.dot(forward) >= HoldAlignment;
 }
 
 size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)

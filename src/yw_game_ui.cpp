@@ -13070,8 +13070,8 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
             if ( weap->laser_energy_increment_rate > 0.0f )
                 txt2 += " +";
 
-            if ( weap->laser_multi_target > 1 )
-                txt2 += fmt::sprintf(" x%d", weap->laser_multi_target);
+            if ( weap->laser_beam_count > 1 )
+                txt2 += fmt::sprintf(" x%d", weap->laser_beam_count);
         }
         else
         {
