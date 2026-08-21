@@ -96,12 +96,12 @@ Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT
 Common::Ini::Key IniConf::UiMapMarkerSound("ui.map_marker_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::UiMoveOrderTemplate(
     "ui.move_order_template", Common::Ini::KT_STRING,
-    std::string("TacticalMap/Icons/MoveOrder/owner_{owner}/move_order_01.svg"));
+    std::string("Interface/Actions/MoveOrder/owner_{owner}/move_order_01.svg"));
 Common::Ini::Key IniConf::UiAttackOrderTemplate(
     "ui.attack_order_template", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::UiRoboMoveOrderTemplate(
     "ui.robo.move_order_template", Common::Ini::KT_STRING,
-    std::string("TacticalMap/Icons/MoveOrder/owner_{owner}/move_order_01.svg"));
+    std::string("Interface/Actions/MoveOrder/owner_{owner}/move_order_01.svg"));
 
 
 // Input Engine
@@ -334,11 +334,17 @@ Common::Ini::Key IniConf::GameRoboDeathTimeScaleMaxDistance("game.robo_death_tim
 // OpenNeoUA: single-player multiplier for the lifetime of recoverable death plasma.
 // 1.0, missing, zero, negative or malformed preserves the vanilla duration.
 // Netgames deliberately remain vanilla to avoid client-side gameplay divergence.
-Common::Ini::Key IniConf::GameDeathPlasmaDurationMult("game.death_plasma_duration_mult", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GamePlasmaDeathDurationMult("game.plasma_death_duration_mult", Common::Ini::KT_WORD, std::string("1.0"));
 // OpenNeoUA: single-player-only automatic attraction of recoverable death plasma
 // toward the directly controlled player. Zero or invalid values disable it.
-Common::Ini::Key IniConf::GameDeathPlasmaMagnetRadius("game.death_plasma_magnet_radius", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GameDeathPlasmaMagnetSpeed("game.death_plasma_magnet_speed", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GamePlasmaDeathMagnetRadius("game.plasma_death_magnet_radius", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GamePlasmaDeathMagnetSpeed("game.plasma_death_magnet_speed", Common::Ini::KT_WORD, std::string("0"));
+// OpenNeoUA: single-player-only Plasma currency accounting. Missing, zero or
+// invalid values keep the feature disabled and preserve the vanilla pickup.
+Common::Ini::Key IniConf::GamePlasmaCurrencyEnable("game.plasma_currency_enable", Common::Ini::KT_BOOL, false);
+// Percentage of each valid residual-plasma reward that is actually credited to
+// the global currency reserve. 100 preserves the existing currency scale.
+Common::Ini::Key IniConf::GamePlasmaCurrencyGainPercent("game.plasma_currency_gain_percent", Common::Ini::KT_WORD, std::string("100"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
 // OpenNeoUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
@@ -422,6 +428,7 @@ Common::Ini::Key IniConf::UiStatusIconInvisible("ui.status_icon_invisible", Comm
 Common::Ini::Key IniConf::UiStatusIconProximityDefense("ui.status_icon_proximity_defense", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconSprint("ui.status_icon_sprint", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconPlasma("ui.status_icon_plasma", Common::Ini::KT_STRING);
 // Number of complete 200 ms on/off blink cycles used both when a dynamic
 // status icon appears and when it disappears. Zero keeps the previous
 // immediate behavior; runtime clamps the value to 0..10.
@@ -674,9 +681,11 @@ void IniConf::Init()
         , &GameRoboDeathTimeScale
         , &GameRoboDeathTimeScaleDuration
         , &GameRoboDeathTimeScaleMaxDistance
-        , &GameDeathPlasmaDurationMult
-        , &GameDeathPlasmaMagnetRadius
-        , &GameDeathPlasmaMagnetSpeed
+        , &GamePlasmaDeathDurationMult
+        , &GamePlasmaDeathMagnetRadius
+        , &GamePlasmaDeathMagnetSpeed
+        , &GamePlasmaCurrencyEnable
+        , &GamePlasmaCurrencyGainPercent
         , &GameWorldUiMaxDistance
         , &GameAiTargetRange
         , &GameMgunRange
@@ -737,6 +746,7 @@ void IniConf::Init()
         , &UiStatusIconProximityDefense
         , &UiStatusIconSprint
         , &UiStatusIconHandbrake
+        , &UiStatusIconPlasma
         , &UiStatusIconBlinkCount
         , &GameBlackSectCloneMalusPercent
         , &GameBlackSectCloneTint

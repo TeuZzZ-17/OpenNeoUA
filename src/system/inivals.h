@@ -259,9 +259,11 @@ public:
     static Common::Ini::Key GameRoboDeathTimeScale;
     static Common::Ini::Key GameRoboDeathTimeScaleDuration;
     static Common::Ini::Key GameRoboDeathTimeScaleMaxDistance;
-    static Common::Ini::Key GameDeathPlasmaDurationMult;
-    static Common::Ini::Key GameDeathPlasmaMagnetRadius;
-    static Common::Ini::Key GameDeathPlasmaMagnetSpeed;
+    static Common::Ini::Key GamePlasmaDeathDurationMult;
+    static Common::Ini::Key GamePlasmaDeathMagnetRadius;
+    static Common::Ini::Key GamePlasmaDeathMagnetSpeed;
+    static Common::Ini::Key GamePlasmaCurrencyEnable;
+    static Common::Ini::Key GamePlasmaCurrencyGainPercent;
     static Common::Ini::Key GameWorldUiMaxDistance;
     static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;
@@ -335,6 +337,7 @@ public:
     static Common::Ini::Key UiStatusIconProximityDefense;
     static Common::Ini::Key UiStatusIconSprint;
     static Common::Ini::Key UiStatusIconHandbrake;
+    static Common::Ini::Key UiStatusIconPlasma;
     static Common::Ini::Key UiStatusIconBlinkCount;
 
     // OpenNeoUA: Black Sect "imperfect grey clone" runtime balance (owner/faction 5 only).
