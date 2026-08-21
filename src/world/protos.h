@@ -6,6 +6,7 @@
 #include "../sample.h"
 #include "../skeleton.h"
 
+#include <cmath>
 #include <map>
 
 class NC_STACK_ypabact;
@@ -776,6 +777,33 @@ struct TVhclProto
 
 struct TWeapProto
 {
+    // OpenNeoUA custom: optional procedural body for continuous laser beams.
+    // The configuration is nested in the weapon prototype so normal and vertical
+    // lasers share one data-driven visual path without changing gameplay state.
+    struct TLaserMeshConfig
+    {
+        bool enabled = false;
+        TVisualTint tint;
+        float size_x = 5.0f;
+        bool has_size_y = false;
+        float size_y = 0.0f;
+        float glow_rate = 1.0f;
+        float pulse_rate = 0.0f;
+        float pulse_speed = 0.0f;
+        float noise_rate = 0.0f;
+        // Visual-only fade distance before a real unit/world contact. Zero keeps
+        // the current constant-alpha beam; the endpoint itself becomes nearly
+        // transparent without changing the gameplay hit point.
+        float impact_fade_length = 0.0f;
+
+        float ResolveSizeY() const
+        {
+            return has_size_y && std::isfinite(size_y) && size_y > 0.0f
+                       ? size_y
+                       : size_x;
+        }
+    };
+
     enum
     {
         SND_NORMAL = 0,
@@ -945,8 +973,9 @@ struct TWeapProto
     int   laser_chain_max_jumps = 0;           // max unit-to-unit chain segments after the primary hit
     float laser_chain_radius = 0.0;            // search radius around the last chained unit
     float laser_chain_damage_mult = 1.0;       // cumulative damage multiplier per chain jump
-    int   laser_multi_target = 1;              // total direct shooter-to-target laser beams (<=1 = off)
+    int   laser_beam_count = 1;                // total direct shooter-to-target laser beams (<=1 = off)
     float vertical_laser_fire_radius = 300.0;  // X/Z distance required before AI fires downward
+    TLaserMeshConfig laser_mesh;                // visual-only mesh body for laser/vertical_laser
     float energy_heli = 0.0;
     float energy_tank = 0.0;
     float energy_flyer = 0.0;

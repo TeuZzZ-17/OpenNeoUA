@@ -1593,6 +1593,79 @@ static bool ParseMeshTracerParam(ScriptParser::Parser &parser,
     return false;
 }
 
+static bool ParseLaserMeshParam(
+    ScriptParser::Parser &parser, const std::string &p1,
+    const std::string &p2, World::TWeapProto::TLaserMeshConfig &config)
+{
+    if ( !StriCmp(p1, "laser_mesh_enable") )
+    {
+        // Only the exact value 1 enables the optional renderer.
+        config.enabled = p2 == "1";
+        return true;
+    }
+
+    if ( ParseTintParam(parser, "laser_mesh_tint", p1, p2, config.tint, true) )
+        return true;
+
+    if ( !StriCmp(p1, "laser_mesh_size_x") )
+    {
+        // A non-positive or malformed primary size leaves the mesh unusable;
+        // the runtime predicate then keeps the legacy VP body visible.
+        config.size_x = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "laser_mesh_size_y") )
+    {
+        // The secondary axis is optional. Zero, negative and malformed values
+        // deliberately clear the override so it inherits size_x.
+        const float value = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 100.0f, -1.0f);
+        config.has_size_y = value > 0.0f;
+        config.size_y = config.has_size_y ? value : 0.0f;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "laser_mesh_glow_rate") )
+    {
+        config.glow_rate = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "laser_mesh_pulse_rate") )
+    {
+        config.pulse_rate = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "laser_mesh_pulse_speed") )
+    {
+        config.pulse_speed = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "laser_mesh_noise_rate") )
+    {
+        config.noise_rate = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 10.0f, 0.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "laser_mesh_impact_fade_length") )
+    {
+        // World-space distance over which the laser body fades only when the
+        // beam has a real unit/terrain/building contact. Zero/invalid disables.
+        config.impact_fade_length = ParseBoundedNonNegativeFiniteOrFallback(
+            parser, p2, 12000.0f, 0.0f);
+        return true;
+    }
+
+    return false;
+}
+
 
 static bool ParseWireframeTintParam(ScriptParser::Parser &parser,
                                     const std::string &p1,
@@ -3880,7 +3953,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_chain_max_jumps = 0;
         _wpn->laser_chain_radius = 0.0;
         _wpn->laser_chain_damage_mult = 1.0;
-        _wpn->laser_multi_target = 1;
+        _wpn->laser_beam_count = 1;
         _wpn->vertical_laser_fire_radius = 300.0;
         _wpn->vp_normal = 0;
         _wpn->vp_fire = 1;
@@ -3902,6 +3975,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_trail_tint = TVisualTint();
         _wpn->wireframe_tint = TVisualTint();
         _wpn->tracer = TWeaponTracerConfig();
+        _wpn->laser_mesh = TWeapProto::TLaserMeshConfig();
         _wpn->type_icon = 65;
         _wpn->debuff = TWeaponDebuffConfig();
         _wpn->cluster = TWeaponClusterConfig();
@@ -4403,10 +4477,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float mult = parser.stof(p2, 0);
         _wpn->laser_chain_damage_mult = mult > 0.0 ? mult : 1.0;
     }
-    else if ( !StriCmp(p1, "laser_multi_target") )
+    else if ( !StriCmp(p1, "laser_beam_count") )
     {
         int maxTargets = parser.stol(p2, NULL, 0);
-        _wpn->laser_multi_target = maxTargets > 1 ? maxTargets : 1;
+        _wpn->laser_beam_count = maxTargets > 1 ? maxTargets : 1;
     }
     else if ( !StriCmp(p1, "vertical_laser_fire_radius") )
     {
@@ -4660,6 +4734,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
     }
     else if ( ParseMeshTracerParam(parser, p1, p2, _wpn->tracer, "mesh_tracer_") )
+    {
+    }
+    else if ( ParseLaserMeshParam(parser, p1, p2, _wpn->laser_mesh) )
     {
     }
     else if ( ParseDecorationFXParam(parser, p1, p2, _wpn->decoration_fx) )
