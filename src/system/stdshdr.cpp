@@ -16,6 +16,7 @@ layout(std140) uniform Parameters\
     bool Textured;\
     bool Flat;\
     bool ATest;\
+    bool Colorize;\
     vec4 ColorMul;\
     vec4 FogColor;\
     vec4 AtmosphereColor;\
@@ -35,11 +36,18 @@ void main()\
 {\
     vec4 clr;\
     if (Flat) clr = flatColor; else clr = smoothColor;\
+    vec4 sourceColor;\
     if (Textured)\
-        gl_FragColor = texture2D(texture, texCoords) * clr;\
+        sourceColor = texture2D(texture, texCoords) * clr;\
     else\
-        gl_FragColor = clr;\
-    gl_FragColor *= ColorMul;\
+        sourceColor = clr;\
+    if (Colorize)\
+    {\
+        float intensity = max(sourceColor.r, max(sourceColor.g, sourceColor.b));\
+        gl_FragColor = vec4(ColorMul.rgb * intensity, sourceColor.a * ColorMul.a);\
+    }\
+    else\
+        gl_FragColor = sourceColor * ColorMul;\
     if (ATest && gl_FragColor.w <= 0.0)\
         discard;\
 \
@@ -77,6 +85,7 @@ layout(std140) uniform Parameters\
     bool Textured;\
     bool Flat;\
     bool ATest;\
+    bool Colorize;\
     vec4 ColorMul;\
     vec4 FogColor;\
     vec4 AtmosphereColor;\

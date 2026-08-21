@@ -583,7 +583,8 @@ size_t NC_STACK_particle::Emit(area_arg_65 *arg, InstanceOpts * uopts)
             ypaworld->ParticleSystem().AddParticle(this, pos, v12, opts->Time, arg->tint,
                                                    arg->particleScale, arg->particleSpin,
                                                    arg->particleLifetimeScale,
-                                                   arg->particleTintAlphaAffectsAdditive);
+                                                   arg->particleTintAlphaAffectsAdditive,
+                                                   arg->colorizeTint);
 
             timeDelta += delta;
             opts->Time -= _genPause;

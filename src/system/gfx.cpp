@@ -1255,10 +1255,31 @@ void GFXEngine::SetRenderStates(int setAll)
         {
             glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
             glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_RGB, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
             glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
         }
         else if (newStates->TexBlend == 2)
             glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        else if (newStates->TexBlend == 3)
+        {
+            // Colorized fixed-function fallback: vertex RGB already carries
+            // target hue/intensity. Ignore source texture RGB but retain its
+            // alpha mask, so cyan plasma does not suppress red/yellow channels.
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
+        }
     }
 
     if (setAll || (newStates->AlphaBlend != _lastStates.AlphaBlend))
@@ -1463,11 +1484,35 @@ void GFXEngine::RenderingMeshOld(TRenderNode *nod)
         effectiveColorMul.b *= vpFadeFactor;
     }
 
-    // OpenNeoUA custom VP tint: per-node color multiplier (fixed-function path).
-    // Computed into the scratch ComputedColor right before the draw, so the shared
-    // mesh's base vertex colors are never permanently modified.
-    if ( effectiveColorMul.r != 1.0 || effectiveColorMul.g != 1.0 ||
-         effectiveColorMul.b != 1.0 || effectiveColorMul.a != 1.0 )
+    if ( nod->Colorize )
+    {
+        // True hue replacement for the legacy fixed-function renderer. Preserve
+        // source vertex intensity/alpha and use the texture only as an alpha
+        // mask when present. This avoids cyan-channel multiplication artefacts.
+        for (TVertex &v : mesh->Vertexes)
+        {
+            const TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
+            const float intensity = std::max(src.r, std::max(src.g, src.b));
+            v.ComputedColor.r = effectiveColorMul.r * intensity;
+            v.ComputedColor.g = effectiveColorMul.g * intensity;
+            v.ComputedColor.b = effectiveColorMul.b * intensity;
+            v.ComputedColor.a = src.a * effectiveColorMul.a;
+        }
+        useComputedColor = true;
+
+        if ( flags & RFLAGS_TEXTURED )
+            _states.TexBlend = 3;
+
+        if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
+        {
+            _states.AlphaBlend = true;
+            _states.SrcBlend = GL_SRC_ALPHA;
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        }
+    }
+    // OpenNeoUA custom VP tint: ordinary per-node color multiplier.
+    else if ( effectiveColorMul.r != 1.0 || effectiveColorMul.g != 1.0 ||
+              effectiveColorMul.b != 1.0 || effectiveColorMul.a != 1.0 )
     {
         for (TVertex &v : mesh->Vertexes)
         {
@@ -1479,7 +1524,6 @@ void GFXEngine::RenderingMeshOld(TRenderNode *nod)
         }
         useComputedColor = true;
 
-        // If the tint lowers alpha, enable a local alpha blend so it is visible.
         if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
         {
             _states.AlphaBlend = true;
@@ -1700,6 +1744,13 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
     }
 
     // OpenNeoUA custom VP tint: push the per-node color multiplier to the shader UBO.
+    const int32_t colorize = nod->Colorize ? 1 : 0;
+    if ( _vboStatesBlock.Colorize != colorize )
+    {
+        _vboStatesBlock.Colorize = colorize;
+        _vboStatesChanged = true;
+    }
+
     if ( _vboStatesBlock.ColorMul[0] != effectiveColorMul.r ||
          _vboStatesBlock.ColorMul[1] != effectiveColorMul.g ||
          _vboStatesBlock.ColorMul[2] != effectiveColorMul.b ||
@@ -5424,13 +5475,15 @@ void GFXEngine::DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx)
             Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, TexCoord));
 
         // OpenNeoUA custom VP tint: screen/HUD/UI quads must never inherit a mesh tint.
-        if ( _vboStatesBlock.ColorMul[0] != 1.0 || _vboStatesBlock.ColorMul[1] != 1.0 ||
+        if ( _vboStatesBlock.Colorize != 0 ||
+             _vboStatesBlock.ColorMul[0] != 1.0 || _vboStatesBlock.ColorMul[1] != 1.0 ||
              _vboStatesBlock.ColorMul[2] != 1.0 || _vboStatesBlock.ColorMul[3] != 1.0 )
         {
             _vboStatesBlock.ColorMul[0] = 1.0;
             _vboStatesBlock.ColorMul[1] = 1.0;
             _vboStatesBlock.ColorMul[2] = 1.0;
             _vboStatesBlock.ColorMul[3] = 1.0;
+            _vboStatesBlock.Colorize = 0;
             _vboStatesChanged = true;
         }
 
@@ -5598,6 +5651,7 @@ void GFXEngine::DrawVirtualUISolidRects()
         _vboStatesBlock.ColorMul[1] = 1.0f;
         _vboStatesBlock.ColorMul[2] = 1.0f;
         _vboStatesBlock.ColorMul[3] = 1.0f;
+        _vboStatesBlock.Colorize = 0;
         _vboStatesChanged = true;
         CommitUBOParameters();
 
