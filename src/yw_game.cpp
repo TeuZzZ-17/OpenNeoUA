@@ -178,6 +178,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     _gameplayStats.fill( World::TPlayerStatus() );
 
     _debugAoeRings.clear();
+    ResetPlasmaCurrencyRuntime();
     _timeStamp = 0;
     _gameplayRenderTimeBase = 0;
     _gameplayRenderTimeBaseSet = false;

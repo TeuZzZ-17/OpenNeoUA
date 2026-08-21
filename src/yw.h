@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include <array>
+#include <cstdint>
 #include <list>
 #include <map>
 #include <memory>
@@ -2940,6 +2941,13 @@ public:
 
     int8_t GetPlayerOwner() const { return _playerOwner; }
 
+    bool IsPlasmaCurrencyEnabled() const;
+    uint64_t GetPlasmaCurrency() const { return _plasmaCurrency; }
+    uint64_t GetPlasmaCurrencyHudValue() const;
+    uint8_t GetPlasmaCurrencyHudOpacity() const;
+    uint64_t AddPlasmaCurrency(uint64_t amount, const vec3d &worldPos);
+    void ResetPlasmaCurrencyRuntime();
+
 public:
     //Data
     static constexpr const char * __ClassName = "ypaworld.class";
@@ -3049,6 +3057,13 @@ public:
         World::TVisualTint tint;
     };
 
+    struct TPlasmaCurrencyPopup
+    {
+        vec3d worldPos;
+        uint64_t amount = 0;
+        int32_t startTime = 0;
+    };
+
     UserData *_GameShell = NULL;
 
     Common::Point _mapSize;
@@ -3105,6 +3120,7 @@ public:
     GFX::TMesh _weaponTracerGlowMesh;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;
     GFX::TMesh _proceduralEnergyFXQuadMesh;
+    std::vector<TPlasmaCurrencyPopup> _plasmaCurrencyPopups;
     std::vector<TAttachedFXGeometryCache> _attachedFXGeometryCache;
     std::vector<TDamageHoverTarget> _damageHoverTargets;
     std::map<int32_t, TConstructInfo> _inBuildProcess; // Buildings in creation process
@@ -3516,6 +3532,11 @@ public:
     bool _easyCheatKeys = false;
 
     int8_t _playerOwner = 0;
+
+    uint64_t _plasmaCurrency = 0;
+    uint64_t _plasmaCurrencyHudStartValue = 0;
+    uint64_t _plasmaCurrencyHudTargetValue = 0;
+    int32_t _plasmaCurrencyHudPulseStartTime = 0;
 
     std::string _initScriptFilePath;
 

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
@@ -62,6 +63,7 @@ static constexpr uint32_t GEM_NEW_UI_DEFAULT_DURATION_MS = 8000;
 static constexpr uint32_t GAMEPLAY_TIME_SCALE_MAX_DURATION_MS = 600000;
 static constexpr float GAMEPLAY_MIN_TIME_SCALE = 0.05f;
 static constexpr float ROBO_DEATH_TIME_SCALE_MAX_DISTANCE_LIMIT = 1000000.0f;
+static constexpr uint32_t PLASMA_CURRENCY_HUD_PULSE_MS = 350;
 
 struct TimedGameplayScaleProfile
 {
@@ -738,6 +740,78 @@ NC_STACK_ypaworld::NC_STACK_ypaworld()
 , _deadCacheList(this, NC_STACK_ypabact::GetKidRefNode, World::BLIST_CACHE)
 , _history(4096)
 {
+}
+
+bool NC_STACK_ypaworld::IsPlasmaCurrencyEnabled() const
+{
+    return !_isNetGame && System::IniConf::GamePlasmaCurrencyEnable.Get<bool>();
+}
+
+uint64_t NC_STACK_ypaworld::GetPlasmaCurrencyHudValue() const
+{
+    if ( _plasmaCurrencyHudTargetValue <= _plasmaCurrencyHudStartValue )
+        return _plasmaCurrencyHudTargetValue;
+
+    const uint32_t elapsed = (uint32_t)(_timeStamp - _plasmaCurrencyHudPulseStartTime);
+    if ( elapsed >= PLASMA_CURRENCY_HUD_PULSE_MS )
+        return _plasmaCurrencyHudTargetValue;
+
+    double progress = (double)elapsed / (double)PLASMA_CURRENCY_HUD_PULSE_MS;
+    progress = progress * progress * (3.0 - 2.0 * progress);
+
+    const uint64_t delta = _plasmaCurrencyHudTargetValue - _plasmaCurrencyHudStartValue;
+    const long double interpolated = (long double)delta * (long double)progress;
+    return _plasmaCurrencyHudStartValue + (uint64_t)std::floor(interpolated);
+}
+
+uint8_t NC_STACK_ypaworld::GetPlasmaCurrencyHudOpacity() const
+{
+    if ( _plasmaCurrencyHudTargetValue <= _plasmaCurrencyHudStartValue )
+        return 255;
+
+    const uint32_t elapsed = (uint32_t)(_timeStamp - _plasmaCurrencyHudPulseStartTime);
+    if ( elapsed >= PLASMA_CURRENCY_HUD_PULSE_MS )
+        return 255;
+
+    const double progress = (double)elapsed / (double)PLASMA_CURRENCY_HUD_PULSE_MS;
+    return (uint8_t)(180 + (int)std::floor(75.0 * progress));
+}
+
+uint64_t NC_STACK_ypaworld::AddPlasmaCurrency(uint64_t amount, const vec3d &worldPos)
+{
+    if ( amount == 0 || !IsPlasmaCurrencyEnabled() )
+        return 0;
+
+    const uint64_t displayedBeforeCredit = GetPlasmaCurrencyHudValue();
+    const uint64_t previous = _plasmaCurrency;
+    const uint64_t available = std::numeric_limits<uint64_t>::max() - previous;
+    const uint64_t delta = std::min(amount, available);
+    if ( delta == 0 )
+        return 0;
+
+    _plasmaCurrency += delta;
+    _plasmaCurrencyHudStartValue = std::min(displayedBeforeCredit, _plasmaCurrency);
+    _plasmaCurrencyHudTargetValue = _plasmaCurrency;
+    _plasmaCurrencyHudPulseStartTime = _timeStamp;
+
+    if ( _plasmaCurrencyPopups.size() >= 32 )
+        _plasmaCurrencyPopups.erase(_plasmaCurrencyPopups.begin());
+
+    TPlasmaCurrencyPopup popup;
+    popup.worldPos = worldPos;
+    popup.amount = delta;
+    popup.startTime = _timeStamp;
+    _plasmaCurrencyPopups.push_back(popup);
+    return delta;
+}
+
+void NC_STACK_ypaworld::ResetPlasmaCurrencyRuntime()
+{
+    _plasmaCurrency = 0;
+    _plasmaCurrencyHudStartValue = 0;
+    _plasmaCurrencyHudTargetValue = 0;
+    _plasmaCurrencyHudPulseStartTime = 0;
+    _plasmaCurrencyPopups.clear();
 }
 
 static bool yw_IsUsableGameplayName(const std::string &name)
@@ -4932,6 +5006,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
 {
     _levelTeardownInProgress = true;
     _debugGlobalInvulnerability = false;
+    ResetPlasmaCurrencyRuntime();
     StopAmbientLevelSound();
     ClearSuperItemRuntime();
 

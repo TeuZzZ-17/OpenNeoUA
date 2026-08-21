@@ -233,6 +233,13 @@ const std::string &StatusIconHandbrakePath()
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconHandbrake);
 }
 
+const std::string &StatusIconPlasmaPath()
+{
+    static const std::string fallbackPath = "Interface/Plasma/plasma.svg";
+    return StatusIconOverridePath(StatusIconConfiguredPath(System::IniConf::UiStatusIconPlasma),
+                                  fallbackPath);
+}
+
 const char *SpeechEventKeyFromMsgID(int msgID)
 {
     switch ( msgID )
@@ -1682,8 +1689,8 @@ static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, b
     if ( owner <= World::OWNER_0 || !iconName || !*iconName )
         return NULL;
 
-    // Prefer the requested visual state first. Within each state, SVG is the
-    // modern path and PNG remains a transparent compatibility fallback.
+    // Prefer the requested visual state first inside the canonical Interface/Map tree.
+    // SVG is preferred for crisp scaling; PNG remains supported in the same tree.
     const bool variants[] = {active, false};
     const int variantCount = active ? 2 : 1;
     const char *extensions[] = {".svg", ".png"};
@@ -1692,7 +1699,7 @@ static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, b
     {
         for ( const char *extension : extensions )
         {
-            std::string path = "TacticalMap/Icons/Map/owner_";
+            std::string path = "Interface/Map/owner_";
             path += std::to_string(owner);
             path += "/";
             path += iconName;
@@ -1721,31 +1728,9 @@ static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
     const int owner = yw_RoboMapMarkerOwner(yw);
     const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
 
-    // Faction artwork is asset-driven. SVG is preferred for crisp scaling;
-    // the existing PNG files remain valid and are used automatically when an
-    // SVG is missing or fails to load.
+    // Faction artwork is asset-driven from the canonical Interface/Map tree.
+    // Missing custom assets are safe: the caller falls back to its vector glyph.
     NC_STACK_bitmap *bitmap = yw_LoadFactionMapIcon(owner, iconName, active, iconSize);
-
-    // Missing custom assets are always safe: use the neutral shared set,
-    // then finally fall back to the small vector glyph below.
-    if ( !bitmap || !bitmap->GetBitmap() )
-    {
-        std::string path = "TacticalMap/Icons/UI/";
-        path += iconName;
-        if ( active )
-            path += "_active";
-        path += ".png";
-        bitmap = StatusIconLoad(path, iconSize, iconSize);
-
-        if ( (!bitmap || !bitmap->GetBitmap()) && active )
-        {
-            path = "TacticalMap/Icons/UI/";
-            path += iconName;
-            path += ".png";
-            bitmap = StatusIconLoad(path, iconSize, iconSize);
-        }
-    }
-
     if ( !bitmap || !bitmap->GetBitmap() )
         return false;
 
@@ -2091,15 +2076,7 @@ static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw, int ma
             return ownerBitmap;
     }
 
-    NC_STACK_bitmap *neutral = StatusIconLoad("TacticalMap/Icons/UI/marker_active.png", markerSize, markerSize);
-    if ( neutral && neutral->GetBitmap() )
-        return neutral;
-
-    neutral = StatusIconLoad("TacticalMap/Icons/UI/marker.png", markerSize, markerSize);
-    if ( neutral && neutral->GetBitmap() )
-        return neutral;
-
-    return StatusIconLoad("TacticalMap/Icons/UI/map_marker.png", markerSize, markerSize);
+    return NULL;
 }
 
 static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
@@ -5632,6 +5609,8 @@ static void yw_CloseGameplayWindowsForGemNotification(NC_STACK_ypaworld *yw)
     yw->_attackOrderFeedbacks.clear();
 }
 
+static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw);
+
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 {
     yw->UpdateFactionGameplayUiAtlases();
@@ -5685,6 +5664,7 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
         }
         draw_tooltip(yw, uiAccent);
         GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude, uiAccent);
+        yw_RenderPlasmaCurrencyHudIcon(yw);
         sb_0x4d7c08__sub0__sub1(uiAccent);
     }
 }
@@ -7776,6 +7756,114 @@ void ypaworld_func64__sub7__sub7__sub0__sub3(NC_STACK_ypaworld *yw, CmdStream *c
     sub_4E1D6C(yw, cur, x, y, v18, 56, v9, a6a, a7a,  fmt::sprintf("%d", a6 / 100) );
 }
 
+static constexpr int PLASMA_CURRENCY_HUD_FONT = 31;
+
+struct TPlasmaCurrencyHudLayout
+{
+    std::string suffix;
+    int suffixX = 0;
+    int textY = 0;
+    int iconLeft = 0;
+    int iconTop = 0;
+    int iconSize = 0;
+    bool showIcon = false;
+};
+
+static bool yw_GetPlasmaCurrencyHudLayout(NC_STACK_ypaworld *yw,
+                                           uint64_t value,
+                                           TPlasmaCurrencyHudLayout *layout)
+{
+    if ( !yw || !layout || !yw->_guiTiles[PLASMA_CURRENCY_HUD_FONT] ||
+         up_panel.field_1D8 <= 4 || up_panel.field_1CC <= 2 )
+        return false;
+
+    TileMap *font = yw->_guiTiles[PLASMA_CURRENCY_HUD_FONT];
+    constexpr int itemGap = 2;
+    const int gapWidth = up_panel.field_1D8;
+    const int availableWidth = gapWidth - 4;
+    const int iconSize = std::max(8, std::min(14, up_panel.field_1CC - 2));
+    const std::string fullSuffix = std::to_string(value);
+
+    int suffixWidth = font->GetWidth(fullSuffix);
+    int contentWidth = iconSize + itemGap + suffixWidth;
+
+    layout->suffix = fullSuffix;
+    layout->showIcon = true;
+
+    if ( contentWidth > availableWidth )
+    {
+        layout->suffix = std::to_string(value);
+        suffixWidth = font->GetWidth(layout->suffix);
+        layout->showIcon = false;
+        contentWidth = suffixWidth;
+    }
+
+    const int step = up_panel.field_1D0 + up_panel.field_1D8;
+    const int mainEnergyLeft = up_panel.x +
+                               (up_panel.field_1D4 & 0xFFFF) + step;
+    const int gapLeft = mainEnergyLeft + up_panel.field_1D0;
+    const int contentLeft = gapLeft + (gapWidth - contentWidth) / 2;
+
+    const int iconTop = up_panel.y + (up_panel.field_1CC - iconSize) / 2;
+    const int iconCenterY = iconTop + iconSize / 2;
+    layout->textY = iconCenterY - font->h / 2 - yw->_screenSize.y / 2;
+
+    int nextLeft = contentLeft;
+
+    if ( layout->showIcon )
+    {
+        layout->iconLeft = nextLeft;
+        layout->iconTop = iconTop;
+        layout->iconSize = iconSize;
+        nextLeft += iconSize + itemGap;
+    }
+
+    layout->suffixX = nextLeft - yw->_screenSize.x / 2;
+    return true;
+}
+
+static void yw_RenderPlasmaCurrencyHud(NC_STACK_ypaworld *yw, CmdStream *cur)
+{
+    if ( !yw || !cur || !yw->IsPlasmaCurrencyEnabled() )
+        return;
+
+    TPlasmaCurrencyHudLayout layout;
+    if ( !yw_GetPlasmaCurrencyHudLayout(yw, yw->GetPlasmaCurrencyHudValue(), &layout) )
+        return;
+
+    SDL_Color color = yw_GetFactionUiTextColor(yw);
+    FontUA::select_tileset(cur, PLASMA_CURRENCY_HUD_FONT);
+    FontUA::set_opacity(cur, yw->GetPlasmaCurrencyHudOpacity());
+    FontUA::set_txtColor(cur, color.r, color.g, color.b);
+    FontUA::set_center_ypos(cur, layout.textY);
+
+    FontUA::set_center_xpos(cur, layout.suffixX);
+    cur->insert(cur->end(), layout.suffix.begin(), layout.suffix.end());
+
+    FontUA::set_txtColor(cur, 255, 255, 255);
+    FontUA::set_opacity(cur, 255);
+}
+
+static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->IsPlasmaCurrencyEnabled() || !yw->_userRobo ||
+         yw->_userRobo->_status == BACT_STATUS_DEAD || yw->IsSpectatorControlled() )
+        return;
+
+    TPlasmaCurrencyHudLayout layout;
+    if ( !yw_GetPlasmaCurrencyHudLayout(yw, yw->GetPlasmaCurrencyHudValue(), &layout) ||
+         !layout.showIcon )
+        return;
+
+    NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(),
+                                           layout.iconSize, layout.iconSize);
+    if ( icon && icon->GetBitmap() )
+    {
+        StatusIconRenderBitmap(yw, icon, layout.iconLeft, layout.iconTop,
+                               layout.iconSize, yw->GetPlasmaCurrencyHudOpacity());
+    }
+}
+
 void ypaworld_func64__sub7__sub7__sub0(NC_STACK_ypaworld *yw)
 {
     up_panel.cmdCommands.clear();
@@ -7855,6 +7943,8 @@ void ypaworld_func64__sub7__sub7__sub0(NC_STACK_ypaworld *yw)
 
         int v18 = v41 + x;
         ypaworld_func64__sub7__sub7__sub0__sub1(yw, &up_panel.cmdCommands, v18, y, a4, v34, yw->_userRobo->_energy, v36);
+
+        yw_RenderPlasmaCurrencyHud(yw, &up_panel.cmdCommands);
 
         int v20 = v41 + v18;
         ypaworld_func64__sub7__sub7__sub0__sub2(yw, &up_panel.cmdCommands, v20, y, a4, v37, v29, v36);
@@ -9487,6 +9577,87 @@ static bool yw_ProjectWorldSelectionPoint(NC_STACK_ypaworld *yw, const vec3d &wo
     screenPos->x = (int)((yw->_screenSize.x / 2) * (x + 1.0));
     screenPos->y = (int)((yw->_screenSize.y / 2) * (y + 1.0));
     return true;
+}
+
+static void yw_RenderPlasmaCurrencyPopups(NC_STACK_ypaworld *yw, CmdStream *cur)
+{
+    if ( !yw || !cur || !yw->IsPlasmaCurrencyEnabled() ||
+         yw->_plasmaCurrencyPopups.empty() || !yw->_guiTiles[15] )
+        return;
+
+    constexpr uint32_t popupLifetimeMs = 1200;
+    constexpr int popupItemGap = 2;
+    const int iconSize = std::max(8, std::min(14, yw->_guiTiles[15]->h));
+    NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(),
+                                           iconSize, iconSize);
+    const bool hasIcon = icon && icon->GetBitmap();
+
+    for ( auto it = yw->_plasmaCurrencyPopups.begin();
+          it != yw->_plasmaCurrencyPopups.end(); )
+    {
+        const uint32_t age = (uint32_t)(yw->_timeStamp - it->startTime);
+        if ( age >= popupLifetimeMs )
+        {
+            it = yw->_plasmaCurrencyPopups.erase(it);
+            continue;
+        }
+
+        Common::Point point;
+        if ( !yw_ProjectWorldSelectionPoint(yw, it->worldPos, &point) )
+        {
+            ++it;
+            continue;
+        }
+
+        const uint8_t distanceOpacity = yw_GetWorldUiOpacity(yw, it->worldPos);
+        if ( distanceOpacity == 0 )
+        {
+            ++it;
+            continue;
+        }
+
+        float ageOpacity = 1.0f;
+        if ( age < 100 )
+            ageOpacity = (float)age / 100.0f;
+        else if ( age > 800 )
+            ageOpacity = (float)(popupLifetimeMs - age) / 400.0f;
+
+        const uint8_t opacity = (uint8_t)std::max(0, std::min(255,
+            (int)std::floor((float)distanceOpacity * ageOpacity)));
+        if ( opacity == 0 )
+        {
+            ++it;
+            continue;
+        }
+
+        const std::string text = "+" + std::to_string(it->amount);
+        const int textWidth = yw->_guiTiles[15]->GetWidth(text);
+        const int contentWidth = textWidth +
+                                 (hasIcon ? popupItemGap + iconSize : 0);
+        const int contentLeft = point.x - contentWidth / 2;
+        const int contentTop = point.y - yw->_guiTiles[15]->h -
+                               (int)(age * 20 / popupLifetimeMs);
+
+        SDL_Color color = yw_GetFactionUiTextColor(yw);
+        color.a = opacity;
+        FontUA::select_tileset(cur, 15);
+        FontUA::set_opacity(cur, opacity);
+        FontUA::set_txtColor(cur, color.r, color.g, color.b);
+        FontUA::set_center_xpos(cur, contentLeft - yw->_screenSize.x / 2);
+        FontUA::set_center_ypos(cur, contentTop - yw->_screenSize.y / 2);
+        cur->insert(cur->end(), text.begin(), text.end());
+
+        if ( hasIcon )
+        {
+            const int iconLeft = contentLeft + textWidth + popupItemGap;
+            const int iconTop = contentTop + (yw->_guiTiles[15]->h - iconSize) / 2;
+            StatusIconRenderBitmap(yw, icon, iconLeft, iconTop, iconSize, opacity);
+        }
+
+        FontUA::set_txtColor(cur, 255, 255, 255);
+        FontUA::set_opacity(cur, 255);
+        ++it;
+    }
 }
 
 static bool yw_IsWorldSelectionUnitValid(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
@@ -14785,6 +14956,7 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
     }
 
     yw_RenderOverlayCursors(yw, &buf);
+    yw_RenderPlasmaCurrencyPopups(yw, &buf);
 
     FontUA::set_end(&buf);
 
