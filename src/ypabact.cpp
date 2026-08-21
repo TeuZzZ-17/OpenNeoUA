@@ -12,6 +12,7 @@
 #include <vector>
 #include <unordered_set>
 #include <cmath>
+#include <cctype>
 #include "yw.h"
 #include "ypabact.h"
 #include "yparobo.h"
@@ -443,12 +444,12 @@ static float ypabact_ReadHandBrakePower()
     return ypabact_ReadNonNegativeFloatIni(System::IniConf::GameHandBrakePower, 1.0f);
 }
 
-static float ypabact_GetDeathPlasmaDurationMultiplier()
+static float ypabact_GetPlasmaDeathDurationMultiplier()
 {
     static const float multiplier = []()
     {
         float parsed = ypabact_ReadNonNegativeFloatIni(
-            System::IniConf::GameDeathPlasmaDurationMult, 1.0f);
+            System::IniConf::GamePlasmaDeathDurationMult, 1.0f);
         if ( !isfinite(parsed) || parsed <= 0.0f )
             return 1.0f;
 
@@ -458,12 +459,12 @@ static float ypabact_GetDeathPlasmaDurationMultiplier()
     return multiplier;
 }
 
-static float ypabact_GetDeathPlasmaMagnetRadius()
+static float ypabact_GetPlasmaDeathMagnetRadius()
 {
     static const float radius = []()
     {
         const float parsed = ypabact_ReadNonNegativeFloatIni(
-            System::IniConf::GameDeathPlasmaMagnetRadius, 0.0f);
+            System::IniConf::GamePlasmaDeathMagnetRadius, 0.0f);
         if ( !isfinite(parsed) || parsed <= 0.0f )
             return 0.0f;
 
@@ -473,12 +474,12 @@ static float ypabact_GetDeathPlasmaMagnetRadius()
     return radius;
 }
 
-static float ypabact_GetDeathPlasmaMagnetSpeed()
+static float ypabact_GetPlasmaDeathMagnetSpeed()
 {
     static const float speed = []()
     {
         const float parsed = ypabact_ReadNonNegativeFloatIni(
-            System::IniConf::GameDeathPlasmaMagnetSpeed, 0.0f);
+            System::IniConf::GamePlasmaDeathMagnetSpeed, 0.0f);
         if ( !isfinite(parsed) || parsed <= 0.0f )
             return 0.0f;
 
@@ -14055,7 +14056,7 @@ int NC_STACK_ypabact::GetPlasmaDurationMs() const
         return vanillaDuration;
 
     const double scaledDuration =
-        (double)vanillaDuration * (double)ypabact_GetDeathPlasmaDurationMultiplier();
+        (double)vanillaDuration * (double)ypabact_GetPlasmaDeathDurationMultiplier();
     if ( !std::isfinite(scaledDuration) || scaledDuration <= 0.0 )
         return vanillaDuration;
     if ( scaledDuration >= (double)std::numeric_limits<int>::max() )
@@ -14074,8 +14075,8 @@ void NC_STACK_ypabact::UpdateDeathPlasmaMagnet(int frameTime)
     if ( !player || player == this || !player->getBACT_inputting() )
         return;
 
-    const float radius = ypabact_GetDeathPlasmaMagnetRadius();
-    const float speed = ypabact_GetDeathPlasmaMagnetSpeed();
+    const float radius = ypabact_GetPlasmaDeathMagnetRadius();
+    const float speed = ypabact_GetPlasmaDeathMagnetSpeed();
     if ( radius <= 0.0f || speed <= 0.0f ||
          !player->CanCollectPlasmaFrom(this) )
         return;
@@ -14153,7 +14154,76 @@ void CollisionWithBact__sub0(NC_STACK_ypabact *bact, NC_STACK_ypabact *a2)
     }
 }
 
-bool NC_STACK_ypabact::CanCollectPlasmaFrom(const NC_STACK_ypabact *source) const
+static float ypabact_GetPlasmaCurrencyGainPercent()
+{
+    constexpr float DefaultPercent = 100.0f;
+    const std::string value = System::IniConf::GamePlasmaCurrencyGainPercent.Get<std::string>();
+    if ( value.empty() || value.find(',') != std::string::npos )
+        return DefaultPercent;
+
+    try
+    {
+        size_t pos = 0;
+        const float parsed = std::stof(value, &pos);
+
+        while ( pos < value.size() && std::isspace((unsigned char)value[pos]) )
+            ++pos;
+
+        // Accept both "5" and the user-friendly "5%" form.  The percent sign
+        // is syntactic only; it never changes the numerical meaning.
+        if ( pos < value.size() && value[pos] == '%' )
+        {
+            ++pos;
+            while ( pos < value.size() && std::isspace((unsigned char)value[pos]) )
+                ++pos;
+        }
+
+        if ( pos != value.size() || !std::isfinite(parsed) || parsed < 0.0f )
+            return DefaultPercent;
+
+        return std::min(parsed, 100.0f);
+    }
+    catch (...)
+    {
+        return DefaultPercent;
+    }
+}
+
+static uint64_t ypabact_CalculatePlasmaCurrencyValue(const NC_STACK_ypabact *source)
+{
+    if ( !source )
+        return 0;
+
+    const int energyMax = source->_energy_max;
+    const int remainingTime = source->_scale_time;
+    const int duration = source->GetPlasmaDurationMs();
+    if ( energyMax <= 0 || remainingTime <= 0 || duration <= 0 )
+        return 0;
+
+    const double remainingFraction = (double)remainingTime / (double)duration;
+    const double rawValue = (double)energyMax * remainingFraction;
+    if ( !std::isfinite(remainingFraction) || !std::isfinite(rawValue) || rawValue <= 0.0 )
+        return 0;
+
+    const double clampedValue = std::min(rawValue, (double)energyMax);
+    if ( clampedValue <= 0.0 )
+        return 0;
+
+    const double gainPercent = (double)ypabact_GetPlasmaCurrencyGainPercent();
+    if ( gainPercent <= 0.0 )
+        return 0;
+
+    const double creditedValue = clampedValue * gainPercent / 100.0;
+    if ( !std::isfinite(creditedValue) || creditedValue <= 0.0 )
+        return 0;
+
+    // Any still-valid residue with a positive gain percentage is worth at
+    // least one currency point.  This prevents low percentages from rounding
+    // a legitimate late pickup down to zero.
+    return std::max<uint64_t>(1, (uint64_t)std::floor(creditedValue));
+}
+
+bool NC_STACK_ypabact::CanRecoverPlasmaEnergyFrom(const NC_STACK_ypabact *source) const
 {
     if ( !source || source == this || !_world ||
          _status == BACT_STATUS_DEAD ||
@@ -14174,12 +14244,53 @@ bool NC_STACK_ypabact::CanCollectPlasmaFrom(const NC_STACK_ypabact *source) cons
     return userHost && _owner > World::OWNER_0 && _owner == userHost->_owner;
 }
 
-bool NC_STACK_ypabact::CollectPlasmaFrom(NC_STACK_ypabact *source)
+bool NC_STACK_ypabact::CanCreditPlasmaCurrencyFrom(const NC_STACK_ypabact *source) const
 {
-    if ( !CanCollectPlasmaFrom(source) )
+    if ( !source || source == this || !_world || !_world->IsPlasmaCurrencyEnabled() ||
+         _status == BACT_STATUS_DEAD ||
+         (_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) ||
+         source->_status != BACT_STATUS_DEAD ||
+         !(source->_vp_extra[0].flags & EVPROTO_FLAG_ACTIVE) ||
+         source->_scale_time <= 0 ||
+         ypabact_GetPlasmaCurrencyGainPercent() <= 0.0f )
         return false;
 
-    CollisionWithBact__sub0(this, source);
+    const int playerOwner = _world->GetPlayerOwner();
+    if ( playerOwner <= World::OWNER_0 || _owner != playerOwner )
+        return false;
+
+    // Currency is awarded only for enemy units actually credited to the
+    // player's faction.  Friendly casualties can still use the old energy
+    // pickup path, but never generate Plasma currency.
+    if ( source->_owner <= World::OWNER_0 || source->_owner == playerOwner )
+        return false;
+
+    return source->_killer_owner == playerOwner;
+}
+
+bool NC_STACK_ypabact::CanCollectPlasmaFrom(const NC_STACK_ypabact *source) const
+{
+    // Keep vanilla energy eligibility and Plasma-currency eligibility separate.
+    // A full-energy allied unit may still collect a player-faction enemy kill
+    // for the global currency, without gaining/overflowing vanilla energy.
+    return CanRecoverPlasmaEnergyFrom(source) || CanCreditPlasmaCurrencyFrom(source);
+}
+
+bool NC_STACK_ypabact::CollectPlasmaFrom(NC_STACK_ypabact *source)
+{
+    const bool recoverEnergy = CanRecoverPlasmaEnergyFrom(source);
+    const bool creditCurrency = CanCreditPlasmaCurrencyFrom(source);
+    if ( !recoverEnergy && !creditCurrency )
+        return false;
+
+    const uint64_t plasmaCurrencyValue =
+        creditCurrency ? ypabact_CalculatePlasmaCurrencyValue(source) : 0;
+    const vec3d plasmaPosition = source->_vp_extra[0].pos;
+
+    if ( recoverEnergy )
+        CollisionWithBact__sub0(this, source);
+    if ( plasmaCurrencyValue > 0 )
+        _world->AddPlasmaCurrency(plasmaCurrencyValue, plasmaPosition);
     source->_scale_time = -1;
 
     if ( _soundcarrier.Sounds.size() > World::TVhclProto::SND_PICKUP )

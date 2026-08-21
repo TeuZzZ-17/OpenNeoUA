@@ -153,53 +153,44 @@ struct FactionUiAtlasSpec
 static void FontPageReplaceFactionAtlas(TileMap *tileset, const char *baseName,
                                         const char *suffix)
 {
-    if (!tileset || !baseName)
+    if (!tileset || !baseName || !suffix)
         return;
 
-    NC_STACK_bitmap *replacement = NULL;
+    const std::string factionPng = std::string(baseName) + "_" + suffix + ".PNG";
+    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:interface/bars");
 
-    if (suffix)
+    if (!uaFileExist("rsrc:" + factionPng))
     {
-        const std::string factionPng = std::string(baseName) + "_" + suffix + ".PNG";
-        if (uaFileExist("rsrc:" + factionPng))
-        {
-            replacement = FontPageLoadImage(factionPng, true);
-            if (!replacement || !replacement->GetBitmap() || !replacement->GetSwTex())
-            {
-                if (replacement)
-                {
-                    replacement->Delete();
-                    replacement = NULL;
-                }
-                ypa_log_out("FontPageReplaceFactionAtlas(): faction PNG %s failed, using generic %s.\n",
-                            factionPng.c_str(), baseName);
-            }
-            else if (tileset->img && tileset->img->GetBitmap())
-            {
-                const ResBitmap *current = tileset->img->GetBitmap();
-                const ResBitmap *candidate = replacement->GetBitmap();
-                if (candidate->width != current->width || candidate->height != current->height)
-                {
-                    ypa_log_out("FontPageReplaceFactionAtlas(): faction PNG %s size %dx%d differs from %s size %dx%d; using generic atlas.\n",
-                                factionPng.c_str(), candidate->width, candidate->height,
-                                baseName, current->width, current->height);
-                    replacement->Delete();
-                    replacement = NULL;
-                }
-            }
-        }
+        Common::Env.SetPrefix("rsrc", oldRsrc);
+        ypa_log_out("FontPageReplaceFactionAtlas(): required faction PNG %s is missing in Interface/Bars.\n",
+                    factionPng.c_str());
+        return;
     }
 
-    if (!replacement)
-        replacement = FontPageLoadImage(std::string(baseName) + ".ilbm", true);
+    NC_STACK_bitmap *replacement = FontPageLoadImage(factionPng, true);
+    Common::Env.SetPrefix("rsrc", oldRsrc);
 
-    if (!replacement || !replacement->GetSwTex())
+    if (!replacement || !replacement->GetBitmap() || !replacement->GetSwTex())
     {
         if (replacement)
             replacement->Delete();
-        ypa_log_out("FontPageReplaceFactionAtlas(): could not load faction or generic %s atlas.\n",
-                    baseName);
+        ypa_log_out("FontPageReplaceFactionAtlas(): required faction PNG %s failed to load.\n",
+                    factionPng.c_str());
         return;
+    }
+
+    if (tileset->img && tileset->img->GetBitmap())
+    {
+        const ResBitmap *current = tileset->img->GetBitmap();
+        const ResBitmap *candidate = replacement->GetBitmap();
+        if (candidate->width != current->width || candidate->height != current->height)
+        {
+            ypa_log_out("FontPageReplaceFactionAtlas(): required faction PNG %s size %dx%d differs from current atlas size %dx%d.\n",
+                        factionPng.c_str(), candidate->width, candidate->height,
+                        current->width, current->height);
+            replacement->Delete();
+            return;
+        }
     }
 
     FontPageNormalizeSurface(replacement->GetSwTex());
@@ -215,7 +206,8 @@ static void FontPageReplaceFactionAtlas(TileMap *tileset, const char *baseName,
 
 // The upper energy strip uses H_E_P. The lower action bar uses three atlases:
 // H_IBN (normal), H_IBP (pressed) and H_IBD (disabled). Their .FON geometry
-// remains untouched; only a matching faction-authored PNG is selected.
+// remains untouched. Owner-specific authored PNGs are loaded exclusively from
+// Interface/Bars; there is no faction-atlas fallback to the generic Fonts assets.
 void NC_STACK_ypaworld::UpdateFactionGameplayUiAtlases()
 {
     int owner = 0;
@@ -234,13 +226,10 @@ void NC_STACK_ypaworld::UpdateFactionGameplayUiAtlases()
         {23, "H_IBD"}
     }};
 
-    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:fonts");
     const char *suffix = FontPageFactionSuffix(owner);
 
     for (const FactionUiAtlasSpec &spec : atlasSpecs)
         FontPageReplaceFactionAtlas(_guiTiles[spec.tilesetId], spec.baseName, suffix);
-
-    Common::Env.SetPrefix("rsrc", oldRsrc);
 }
 
 
