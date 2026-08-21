@@ -3,7 +3,9 @@
 .agents/
 .codex/
 .vscode/
-Pulizia_Git.bat
+OpenNeoUA_Git_GC-(.Git Resize)
 desktop.ini
 Thumbs.db
 AGENTS.md
+tmp
+build

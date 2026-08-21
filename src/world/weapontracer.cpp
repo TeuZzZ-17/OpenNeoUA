@@ -124,16 +124,44 @@ static void WeaponTracerBuildMesh(GFX::TMesh *mesh, bool additive)
     GFX::Engine.MeshMakeVBO(mesh);
 }
 
-static mat3x3 WeaponTracerRotationFromDir(const vec3d &direction)
+static mat3x3 WeaponTracerRotationFromDir(const vec3d &direction,
+                                             const mat3x3 *orientationHint = NULL)
 {
     vec3d z = direction;
     if ( z.normalise() <= 0.001f )
         return mat3x3();
 
-    vec3d x = fabs(z.y) < 0.9 ? vec3d::OY(1.0) : vec3d::OX(1.0);
-    x = x * z;
+    vec3d x;
+
+    if ( orientationHint )
+    {
+        // Continuous laser beams are redrawn every frame. Anchor their ribbon
+        // basis to the firing actor instead of switching abruptly between world
+        // X/Y at |dir.y| = 0.9, which can look like lateral wobble even when
+        // laser_mesh_noise_rate is exactly zero. Tracers pass no hint and keep
+        // their existing orientation path unchanged.
+        x = orientationHint->AxisX();
+        x -= z * x.dot(z);
+
+        if ( x.normalise() <= 0.001f )
+        {
+            x = orientationHint->AxisY();
+            x -= z * x.dot(z);
+        }
+    }
+    else
+    {
+        x = fabs(z.y) < 0.9 ? vec3d::OY(1.0) : vec3d::OX(1.0);
+        x = x * z;
+    }
+
     if ( x.normalise() <= 0.001f )
-        return mat3x3();
+    {
+        x = fabs(z.y) < 0.9 ? vec3d::OY(1.0) : vec3d::OX(1.0);
+        x = x * z;
+        if ( x.normalise() <= 0.001f )
+            return mat3x3();
+    }
 
     vec3d y = z * x;
     if ( y.normalise() <= 0.001f )
@@ -171,10 +199,10 @@ static vec3d WeaponTracerStableSide(const vec3d &direction, uint32_t seed)
 
 static vec3d WeaponTracerNoiseOffset(const vec3d &direction,
                                      const vec3d &basePosition,
-                                     const World::TWeaponTracerConfig &config,
+                                     float noiseRate,
                                      float factor, uint32_t seed)
 {
-    if ( config.noise_rate <= 0.0f )
+    if ( !std::isfinite(noiseRate) || noiseRate <= 0.0f )
         return vec3d(0.0, 0.0, 0.0);
 
     vec3d dir = direction;
@@ -202,43 +230,56 @@ static vec3d WeaponTracerNoiseOffset(const vec3d &direction,
     const float n1 = WeaponTracerHashSigned(seed, key * 2u + 1u);
     const float n2 = WeaponTracerHashSigned(seed, key * 2u + 2u);
     return (side * n1 + up * n2) *
-           (config.noise_rate * 0.70710678f * envelope);
+           (noiseRate * 0.70710678f * envelope);
 }
 
-static float WeaponTracerPulseFactor(const World::TWeaponTracerConfig &config,
+static float WeaponTracerPulseFactor(float pulseRate, float pulseSpeed,
                                      int32_t timeStamp)
 {
-    if ( config.pulse_rate <= 0.0f || config.pulse_speed <= 0.0f )
+    if ( !std::isfinite(pulseRate) || !std::isfinite(pulseSpeed) ||
+         pulseRate <= 0.0f || pulseSpeed <= 0.0f )
         return 1.0f;
 
-    const float amplitude = std::min(0.9f, config.pulse_rate * 0.1f);
-    const float phase = (float)timeStamp * 0.001f * config.pulse_speed *
+    const float amplitude = std::min(0.9f, pulseRate * 0.1f);
+    const float phase = (float)timeStamp * 0.001f * pulseSpeed *
                         2.0f * WEAPON_TRACER_PI;
     return std::max(0.1f, 1.0f + std::sin(phase) * amplitude);
 }
 
-static World::TVisualTint WeaponTracerTintAt(
-    const World::TWeaponTracerConfig &config, float factor)
+struct TMeshBeamRenderConfig
 {
-    const World::TVisualTint &tail = config.has_tint_tail ?
-        config.tint_tail : config.tint;
-    const World::TVisualTint &head = config.has_tint_head ?
-        config.tint_head : config.tint;
-    return WeaponTracerLerpTint(tail, head, factor);
+    float tailSizeX = 0.0f;
+    float headSizeX = 0.0f;
+    float tailSizeY = 0.0f;
+    float headSizeY = 0.0f;
+    World::TVisualTint tailTint;
+    World::TVisualTint headTint;
+    float glowRate = 0.0f;
+    float noiseRate = 0.0f;
+    float pulseRate = 0.0f;
+    float pulseSpeed = 0.0f;
+    // Laser-only terminal alpha envelope. The generic tracer path leaves these
+    // at their neutral defaults. Factors use the full original beam 0..1 span.
+    float impactFadeStartFactor = 1.0f;
+    float impactFadeEndAlpha = 1.0f;
+    int minSubdivisions = 1;
+    bool pulseGeometry = false;
+    bool pulseBrightness = false;
+};
+
+static World::TVisualTint MeshBeamTintAt(const TMeshBeamRenderConfig &config,
+                                         float factor)
+{
+    return WeaponTracerLerpTint(config.tailTint, config.headTint, factor);
 }
 
-static bool WeaponTracerHasTintGradient(
-    const World::TWeaponTracerConfig &config)
+static bool MeshBeamHasTintGradient(const TMeshBeamRenderConfig &config)
 {
-    const World::TVisualTint &tail = config.has_tint_tail ?
-        config.tint_tail : config.tint;
-    const World::TVisualTint &head = config.has_tint_head ?
-        config.tint_head : config.tint;
     const float epsilon = 0.0001f;
-    return std::fabs(tail.r - head.r) > epsilon ||
-           std::fabs(tail.g - head.g) > epsilon ||
-           std::fabs(tail.b - head.b) > epsilon ||
-           std::fabs(tail.a - head.a) > epsilon;
+    return std::fabs(config.tailTint.r - config.headTint.r) > epsilon ||
+           std::fabs(config.tailTint.g - config.headTint.g) > epsilon ||
+           std::fabs(config.tailTint.b - config.headTint.b) > epsilon ||
+           std::fabs(config.tailTint.a - config.headTint.a) > epsilon;
 }
 
 static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
@@ -247,7 +288,8 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
                                      float sizeX, float sizeY,
                                      const World::TVisualTint &tint,
                                      float alpha, float vizLimit,
-                                     float fadeLength)
+                                     float fadeLength,
+                                     const mat3x3 *orientationHint)
 {
     if ( !arg || !mesh || !view || mesh->Vertexes.empty() ||
          !WeaponTracerFinite(start) || !WeaponTracerFinite(end) ||
@@ -262,7 +304,7 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
     if ( !std::isfinite(segmentLength) || segmentLength <= 0.01f )
         return;
 
-    const mat3x3 rotation = WeaponTracerRotationFromDir(direction);
+    const mat3x3 rotation = WeaponTracerRotationFromDir(direction, orientationHint);
     if ( rotation.AxisZ().length() <= 0.001f )
         return;
 
@@ -302,6 +344,142 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
 
     arg->adeCount += mesh->Indixes.size() / 3;
     GFX::Engine.QueueRenderMesh(&render);
+}
+
+static void RenderMeshBeamSegment(
+    baseRender_msg *arg, GFX::TMesh *bodyMesh, GFX::TMesh *glowMesh,
+    const vec3d &start, const vec3d &end,
+    const TMeshBeamRenderConfig &config, int32_t timeStamp,
+    float vizLimit, float fadeLength, float tailFactor, float headFactor,
+    uint32_t visualSeed, const mat3x3 *orientationHint)
+{
+    if ( !arg || !bodyMesh || !glowMesh || !WeaponTracerFinite(start) ||
+         !WeaponTracerFinite(end) || !WeaponTracerFinite(config.tailTint) ||
+         !WeaponTracerFinite(config.headTint) ||
+         !std::isfinite(config.tailSizeX) ||
+         !std::isfinite(config.headSizeX) ||
+         !std::isfinite(config.tailSizeY) ||
+         !std::isfinite(config.headSizeY) )
+        return;
+
+    vec3d direction = end - start;
+    const float segmentLength = direction.length();
+    if ( !std::isfinite(segmentLength) || segmentLength <= 0.01f )
+        return;
+
+    TF::TForm3D *view = TF::Engine.GetViewPoint();
+    if ( !view )
+        return;
+
+    WeaponTracerBuildMesh(bodyMesh, false);
+    if ( bodyMesh->Vertexes.empty() )
+        return;
+
+    const float glowRate = std::isfinite(config.glowRate) &&
+                           config.glowRate > 0.0f
+                               ? config.glowRate
+                               : 0.0f;
+    const float noiseRate = std::isfinite(config.noiseRate) &&
+                            config.noiseRate > 0.0f
+                                ? config.noiseRate
+                                : 0.0f;
+    const float pulseRate = std::isfinite(config.pulseRate) &&
+                            config.pulseRate > 0.0f
+                                ? config.pulseRate
+                                : 0.0f;
+    const float pulseSpeed = std::isfinite(config.pulseSpeed) &&
+                             config.pulseSpeed > 0.0f
+                                 ? config.pulseSpeed
+                                 : 0.0f;
+
+    if ( glowRate > 0.0f )
+        WeaponTracerBuildMesh(glowMesh, true);
+
+    const float u0 = WeaponTracerClamp01(std::min(tailFactor, headFactor));
+    const float u1 = WeaponTracerClamp01(std::max(tailFactor, headFactor));
+    const float uSpan = std::max(0.0001f, u1 - u0);
+    const float pulseValue =
+        WeaponTracerPulseFactor(pulseRate, pulseSpeed, timeStamp);
+    const float geometryPulse = config.pulseGeometry ? pulseValue : 1.0f;
+
+    int desiredSamples = std::max(1, config.minSubdivisions);
+    if ( std::fabs(config.headSizeX - config.tailSizeX) > 0.0001f ||
+         std::fabs(config.headSizeY - config.tailSizeY) > 0.0001f ||
+         MeshBeamHasTintGradient(config) )
+    {
+        desiredSamples = std::max(desiredSamples,
+            (int)std::ceil(12.0f * uSpan));
+    }
+    if ( noiseRate > 0.0f )
+    {
+        desiredSamples = std::max(desiredSamples,
+            (int)std::ceil(24.0f * uSpan));
+    }
+    const int subdivisions = std::max(1, std::min(desiredSamples, 8));
+
+    for (int part = 0; part < subdivisions; part++)
+    {
+        const float local0 = (float)part / (float)subdivisions;
+        const float local1 = (float)(part + 1) / (float)subdivisions;
+        const float partU0 = WeaponTracerLerp(u0, u1, local0);
+        const float partU1 = WeaponTracerLerp(u0, u1, local1);
+
+        vec3d partStart = start + direction * local0;
+        vec3d partEnd = start + direction * local1;
+        partStart += WeaponTracerNoiseOffset(direction, partStart,
+                                             noiseRate, partU0, visualSeed);
+        partEnd += WeaponTracerNoiseOffset(direction, partEnd,
+                                           noiseRate, partU1, visualSeed);
+
+        const float middle = (partU0 + partU1) * 0.5f;
+        const float sizeX = WeaponTracerLerp(config.tailSizeX,
+                                             config.headSizeX, middle) *
+                            geometryPulse;
+        const float sizeY = WeaponTracerLerp(config.tailSizeY,
+                                             config.headSizeY, middle) *
+                            geometryPulse;
+        if ( sizeX <= 0.01f && sizeY <= 0.01f )
+            continue;
+
+        World::TVisualTint tint = MeshBeamTintAt(config, middle);
+
+        if ( config.impactFadeStartFactor < 1.0f &&
+             middle > config.impactFadeStartFactor )
+        {
+            const float denom = std::max(0.0001f,
+                                         1.0f - config.impactFadeStartFactor);
+            const float fadeU = WeaponTracerClamp01(
+                (middle - config.impactFadeStartFactor) / denom);
+            const float endAlpha = WeaponTracerClamp01(config.impactFadeEndAlpha);
+            tint.a *= WeaponTracerLerp(1.0f, endAlpha, fadeU);
+        }
+
+        if ( config.pulseBrightness )
+        {
+            // Laser pulse is intentionally a luminance multiplier only. The
+            // segment dimensions stay on the authored size_x/size_y values.
+            tint.r *= pulseValue;
+            tint.g *= pulseValue;
+            tint.b *= pulseValue;
+        }
+
+        WeaponTracerQueueSegment(arg, bodyMesh, view,
+                                 partStart, partEnd, sizeX, sizeY,
+                                 tint, 1.0f, vizLimit, fadeLength,
+                                 orientationHint);
+
+        if ( glowRate > 0.0f && !glowMesh->Vertexes.empty() )
+        {
+            float glowAlpha = std::min(1.0f, glowRate * 0.1f);
+            if ( config.pulseBrightness )
+                glowAlpha *= pulseValue;
+
+            WeaponTracerQueueSegment(arg, glowMesh, view,
+                                     partStart, partEnd, sizeX, sizeY,
+                                     tint, glowAlpha, vizLimit, fadeLength,
+                                     orientationHint);
+        }
+    }
 }
 
 } // namespace
@@ -414,96 +592,95 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
          config.tint.a <= 0.0f )
         return;
 
-    vec3d direction = end - start;
-    const float segmentLength = direction.length();
-    if ( !std::isfinite(segmentLength) || segmentLength <= 0.01f )
+    TMeshBeamRenderConfig renderConfig;
+    renderConfig.tailSizeX = config.ResolveTailSizeX();
+    renderConfig.headSizeX = config.ResolveHeadSizeX();
+    renderConfig.tailSizeY = config.ResolveTailSizeY();
+    renderConfig.headSizeY = config.ResolveHeadSizeY();
+    renderConfig.tailTint = config.has_tint_tail ? config.tint_tail : config.tint;
+    renderConfig.headTint = config.has_tint_head ? config.tint_head : config.tint;
+    renderConfig.glowRate = config.glow_rate;
+    renderConfig.noiseRate = config.noise_rate;
+    renderConfig.pulseRate = config.pulse_rate;
+    renderConfig.pulseSpeed = config.pulse_speed;
+    renderConfig.pulseGeometry = true;
+
+    RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
+                          start, end, renderConfig, _timeStamp,
+                          (float)_normalVizLimit, (float)_normalFadeLength,
+                          tailFactor, headFactor, visualSeed, NULL);
+}
+
+void NC_STACK_ypaworld::RenderLaserMeshSegment(
+    baseRender_msg *arg, const vec3d &start, const vec3d &end,
+    const World::TWeapProto::TLaserMeshConfig &config, bool impactContact,
+    const mat3x3 &orientationHint, uint32_t visualSeed)
+{
+    const float sizeY = config.ResolveSizeY();
+    if ( !arg || _isNetGame || !config.enabled ||
+         !WeaponTracerFinite(start) || !WeaponTracerFinite(end) ||
+         !WeaponTracerFinite(config.tint) || config.tint.a <= 0.0f ||
+         !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
+         !std::isfinite(sizeY) || sizeY <= 0.01f )
         return;
 
-    TF::TForm3D *view = TF::Engine.GetViewPoint();
-    if ( !view )
+    vec3d beamDirection = end - start;
+    const float beamLength = beamDirection.length();
+    if ( !std::isfinite(beamLength) || beamLength <= 0.01f )
         return;
 
-    GFX::TMesh *bodyMesh = &_weaponTracerMesh;
-    GFX::TMesh *glowMesh = &_weaponTracerGlowMesh;
+    TMeshBeamRenderConfig renderConfig;
+    renderConfig.tailSizeX = config.size_x;
+    renderConfig.headSizeX = config.size_x;
+    renderConfig.tailSizeY = sizeY;
+    renderConfig.headSizeY = sizeY;
+    renderConfig.tailTint = config.tint;
+    renderConfig.headTint = config.tint;
+    renderConfig.glowRate = config.glow_rate;
+    renderConfig.noiseRate = config.noise_rate;
+    renderConfig.pulseRate = config.pulse_rate;
+    renderConfig.pulseSpeed = config.pulse_speed;
+    // Laser pulse changes only the body/glow luminance; geometry remains fixed.
+    renderConfig.pulseBrightness = true;
 
-    WeaponTracerBuildMesh(bodyMesh, false);
-    if ( bodyMesh->Vertexes.empty() )
+    const bool useImpactFade = impactContact &&
+                               std::isfinite(config.impact_fade_length) &&
+                               config.impact_fade_length > 0.01f;
+
+    if ( !useImpactFade )
+    {
+        RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
+                              start, end, renderConfig, _timeStamp,
+                              (float)_normalVizLimit, (float)_normalFadeLength,
+                              0.0f, 1.0f, visualSeed, &orientationHint);
         return;
-
-    if ( config.glow_rate > 0.0f )
-        WeaponTracerBuildMesh(glowMesh, true);
-
-    const float u0 = WeaponTracerClamp01(std::min(tailFactor, headFactor));
-    const float u1 = WeaponTracerClamp01(std::max(tailFactor, headFactor));
-    const float uSpan = std::max(0.0001f, u1 - u0);
-    const float pulseFactor = WeaponTracerPulseFactor(config, _timeStamp);
-    const float headSizeX = config.ResolveHeadSizeX();
-    const float tailSizeX = config.ResolveTailSizeX();
-    const float headSizeY = config.ResolveHeadSizeY();
-    const float tailSizeY = config.ResolveTailSizeY();
-
-    int desiredSamples = 1;
-    if ( std::fabs(headSizeX - tailSizeX) > 0.0001f ||
-         std::fabs(headSizeY - tailSizeY) > 0.0001f ||
-         WeaponTracerHasTintGradient(config) )
-    {
-        desiredSamples = std::max(desiredSamples,
-            (int)std::ceil(12.0f * uSpan));
     }
-    if ( config.noise_rate > 0.0f )
+
+    const float terminalLength = std::min(config.impact_fade_length, beamLength);
+    const float fadeStartFactor = WeaponTracerClamp01(
+        1.0f - terminalLength / beamLength);
+    const vec3d fadeStart = start + beamDirection * fadeStartFactor;
+
+    if ( fadeStartFactor > 0.0001f )
     {
-        desiredSamples = std::max(desiredSamples,
-            (int)std::ceil(24.0f * uSpan));
+        RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
+                              start, fadeStart, renderConfig, _timeStamp,
+                              (float)_normalVizLimit, (float)_normalFadeLength,
+                              0.0f, fadeStartFactor, visualSeed, &orientationHint);
     }
-    const int subdivisions = std::max(1, std::min(desiredSamples, 8));
 
-    for (int part = 0; part < subdivisions; part++)
-    {
-        const float local0 = (float)part / (float)subdivisions;
-        const float local1 = (float)(part + 1) / (float)subdivisions;
-        const float partU0 = WeaponTracerLerp(u0, u1, local0);
-        const float partU1 = WeaponTracerLerp(u0, u1, local1);
+    TMeshBeamRenderConfig fadeConfig = renderConfig;
+    fadeConfig.impactFadeStartFactor = fadeStartFactor;
+    fadeConfig.impactFadeEndAlpha = 0.02f;
+    // Keep the terminal envelope visually smooth even when it occupies only a
+    // tiny fraction of a long beam. This affects laser only; tracer sampling is
+    // unchanged.
+    fadeConfig.minSubdivisions = 8;
 
-        vec3d partStart = start + direction * local0;
-        vec3d partEnd = start + direction * local1;
-        partStart += WeaponTracerNoiseOffset(direction, partStart, config,
-                                             partU0, visualSeed);
-        partEnd += WeaponTracerNoiseOffset(direction, partEnd, config,
-                                           partU1, visualSeed);
-
-        const float middle = (partU0 + partU1) * 0.5f;
-        const float sizeX = WeaponTracerLerp(tailSizeX, headSizeX, middle) *
-                            pulseFactor;
-        const float sizeY = WeaponTracerLerp(tailSizeY, headSizeY, middle) *
-                            pulseFactor;
-        if ( sizeX <= 0.01f && sizeY <= 0.01f )
-            continue;
-
-        const World::TVisualTint tint = WeaponTracerTintAt(config, middle);
-
-        // Base body opacity comes only from the authored tint alpha. Each
-        // subdivision spans its complete interval, so adjacent taper samples
-        // remain contiguous instead of turning into a ladder of separated bars.
-        WeaponTracerQueueSegment(arg, bodyMesh, view,
-                                 partStart, partEnd, sizeX, sizeY,
-                                 tint, 1.0f,
-                                 (float)_normalVizLimit,
-                                 (float)_normalFadeLength);
-
-        if ( config.glow_rate > 0.0f &&
-             !glowMesh->Vertexes.empty() )
-        {
-            // Glow deliberately reuses the exact body dimensions. The 0..10 rate
-            // changes additive intensity only, never authored dimensions.
-            const float glowAlpha =
-                std::min(1.0f, config.glow_rate * 0.1f);
-            WeaponTracerQueueSegment(arg, glowMesh, view,
-                                     partStart, partEnd, sizeX, sizeY,
-                                     tint, glowAlpha,
-                                     (float)_normalVizLimit,
-                                     (float)_normalFadeLength);
-        }
-    }
+    RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
+                          fadeStart, end, fadeConfig, _timeStamp,
+                          (float)_normalVizLimit, (float)_normalFadeLength,
+                          fadeStartFactor, 1.0f, visualSeed, &orientationHint);
 }
 
 void NC_STACK_ypaworld::ClearWeaponTracerMesh()
