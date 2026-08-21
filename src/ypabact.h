@@ -958,6 +958,8 @@ public:
     TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: managed loop sound for model = laser
     TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: managed loop sound for model = vertical_laser
+    TSndCarrier _laser_hit_soundcarrier; // OpenNeoUA custom: serialized one-shot snd_hit while any laser beam is in contact
+    TSndCarrier _vertical_laser_hit_soundcarrier; // OpenNeoUA custom: same snd_hit path for vertical_laser
     TSndCarrier _mgun_soundcarrier; // OpenNeoUA custom: one-shot pulse sound for vehicle-controlled MG
     TSndCarrier _mimic_soundcarrier; // OpenNeoUA custom: persistent loop for model = mimic shell
     int _mgun_sound_index;
@@ -1134,13 +1136,16 @@ public:
         vec3d start;
         vec3d end;
         int32_t target_gid = 0;
+        // True only when this frame's endpoint is a real unit/world contact.
+        // Used by laser-only impact fade/audio; max-range endpoints remain false.
+        bool has_contact = false;
         int energy_ticks = 0;
         int next_damage_time = 0;
         int next_fx_time = 0;
     };
 
     // OpenNeoUA custom: laser beam runtime state (transient, per shooter/weapon/target;
-    // never saved per instance). Supports direct laser_multi_target beams and chain
+    // never saved per instance). Supports direct laser_beam_count beams and chain
     // segments, while keeping the first beam in the legacy fields for older debug/UI paths.
     bool _laser_active = false;            // beam currently firing/visible
     bool _laser_fire_request = false;      // set by RequestLaserFire() each firing frame, consumed by UpdateLaser()
