@@ -7378,20 +7378,6 @@ void NC_STACK_ypabact::Die()
     NC_STACK_ypabact *creditedKiller = ypabact_ResolveSessionKillCreditedUnit(this);
     const uint8_t creditedOwner = creditedKiller ? creditedKiller->_owner : World::OWNER_0;
 
-    // Plasma Currency uses the same normalized single-player kill attribution as
-    // session kill marks.  Store the resolved hostile owner while the killer
-    // chain is still alive so a later plasma pickup does not lose credit for
-    // indirect/chain kills (for example an enemy destroyed by another dying
-    // enemy that was originally killed by the player's faction).  Direct kills
-    // keep the same owner; third-party enemy/environment deaths still do not
-    // become player credit.
-    if ( _world && !_world->_isNetGame && creditedKiller &&
-         creditedKiller != this && creditedOwner > World::OWNER_0 &&
-         creditedOwner != _owner )
-    {
-        _killer_owner = creditedOwner;
-    }
-
     if ( _world && !_world->_isNetGame && creditedKiller &&
          _owner != World::OWNER_0 && creditedOwner != World::OWNER_0 &&
          _owner != creditedOwner && creditedKiller != this &&
@@ -14340,20 +14326,18 @@ bool NC_STACK_ypabact::CanCreditPlasmaCurrencyFrom(const NC_STACK_ypabact *sourc
     if ( playerOwner <= World::OWNER_0 || _owner != playerOwner )
         return false;
 
-    // Currency is awarded only for enemy units actually credited to the
-    // player's faction.  Friendly casualties can still use the old energy
-    // pickup path, but never generate Plasma currency.
-    if ( source->_owner <= World::OWNER_0 || source->_owner == playerOwner )
-        return false;
-
-    return source->_killer_owner == playerOwner;
+    // Currency is a property of collecting a valid enemy Plasma residue, not
+    // of who delivered the killing blow.  Friendly/player-faction casualties
+    // never generate Currency, but third-party and environment deaths remain
+    // collectible when the residue belongs to an enemy faction.
+    return source->_owner > World::OWNER_0 && source->_owner != playerOwner;
 }
 
 bool NC_STACK_ypabact::CanCollectPlasmaFrom(const NC_STACK_ypabact *source) const
 {
     // Keep vanilla energy eligibility and Plasma-currency eligibility separate.
-    // A full-energy allied unit may still collect a player-faction enemy kill
-    // for the global currency, without gaining/overflowing vanilla energy.
+    // A full-energy allied unit may still collect any valid enemy residue for
+    // the global currency, without gaining/overflowing vanilla energy.
     return CanRecoverPlasmaEnergyFrom(source) || CanCreditPlasmaCurrencyFrom(source);
 }
 
