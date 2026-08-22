@@ -117,6 +117,22 @@ static float NonNegativeFiniteOrZero(float value)
     return std::isfinite(value) && value > 0.0f ? value : 0.0f;
 }
 
+static float ClampPushIntensity(float value)
+{
+    if ( !std::isfinite(value) || value <= 0.0f )
+        return 0.0f;
+
+    return std::min(value, 10.0f);
+}
+
+static int ClampPushIntensity(long value)
+{
+    if ( value <= 0 )
+        return 0;
+
+    return (int)std::min(value, 10L);
+}
+
 static int NonNegativeFiniteMilliseconds(ScriptParser::Parser &parser,
                                          const std::string &value)
 {
@@ -2375,7 +2391,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "push_at_death_force") )
     {
-        _vhcl->push_at_death_force = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _vhcl->push_at_death_force = ClampPushIntensity(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "push_at_death_radius") )
     {
@@ -4099,11 +4115,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "aoe_unit_push") )
     {
-        _wpn->aoe_unit_push = parser.stol(p2, NULL, 0);
+        _wpn->aoe_unit_push = ClampPushIntensity(parser.stol(p2, NULL, 0));
     }
     else if ( !StriCmp(p1, "push") )
     {
-        _wpn->push = parser.stol(p2, NULL, 0);
+        _wpn->push = ClampPushIntensity(parser.stol(p2, NULL, 0));
     }
     else if ( !StriCmp(p1, "armor_penetration_targets") )
     {
@@ -5657,7 +5673,7 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
     else if ( !StriCmp(p1, "wave_max_radius") )
         _profile->wave_max_radius = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "push_force") )
-        _profile->push_force = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile->push_force = ClampPushIntensity(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "push_radius") )
         _profile->push_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "push_falloff") )
@@ -5666,7 +5682,7 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->push_falloff = std::max(0, std::min(falloff, 1));
     }
     else if ( !StriCmp(p1, "wave_push_force") )
-        _profile->wave_push_force = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile->wave_push_force = ClampPushIntensity(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "wave_push_radius") ||
               !StriCmp(p1, "wave_push_falloff") )
     {
