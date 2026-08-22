@@ -337,6 +337,8 @@ public:
     static Common::Ini::Key UiStatusIconProximityDefense;
     static Common::Ini::Key UiStatusIconSprint;
     static Common::Ini::Key UiStatusIconHandbrake;
+    // Owner-aware Plasma Currency icon template. `{owner}` resolves to the
+    // current player faction (1..6); default: Interface/Plasma/owner_{owner}/plasma.png.
     static Common::Ini::Key UiStatusIconPlasma;
     static Common::Ini::Key UiStatusIconBlinkCount;
 
