@@ -1,6 +1,16 @@
 # OpenNeoUA — Istruzioni operative per Codex
 
-## Workflow multi-agent Codex — obbligatorio per default
+## Workflow multi-agent Codex — LEAD/ROOT ONLY
+
+Questa orchestrazione è **LEAD/ROOT ONLY**: si applica esclusivamente al
+thread Lead/root che avvia e coordina la pipeline.
+
+Il Lead è l'unico responsabile dell'avvio e dei gate. Il Lead non deve chiedere
+né accettare verdetti estranei a quelli ammessi dal TOML del ruolo destinatario.
+Un custom agent già avviato valida soltanto il proprio handoff e non riavvia né
+coordina la pipeline.
+
+Il workflow completo è obbligatorio per il Lead/root salvo opt-out esplicito.
 
 Il root agent è il **coordinatore leggero**. Il modello root/input viene scelto dall'utente per il task corrente e **non deve essere fissato** nei custom agent. Può essere un modello economico: il root deve preservare la richiesta originale, avviare i ruoli previsti, trasferire gli handoff senza reinterpretarli e produrre il report finale.
 
