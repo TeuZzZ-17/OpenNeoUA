@@ -105,8 +105,8 @@ public:
     virtual void SetRadiusRobo(float);
     virtual void SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
                                float sectorRadius, int sectorEnergy, int falloff);
-    virtual void SetAoeUnitPush(int push);
-    virtual void SetDirectPush(int push);
+    virtual void SetAoeUnitPush(int push); // public intensity 0..10
+    virtual void SetDirectPush(int push);  // public intensity 0..10
     virtual void SetArmorPenetrationTargets(int targets);
     virtual void SetStartHeight(float);
     virtual void SetClusterSpawnedChild(bool child);
@@ -137,10 +137,10 @@ protected:
     bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
     int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
     int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy);
-    void ApplyDirectHitToBact(NC_STACK_ypabact *bct);
+    void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true);
     bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = NULL, float *appliedStrength = NULL, bool enqueue = true);
     const char *GetAreaDamageSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const;
-    const char *GetAreaPushSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const;
+    const char *GetAreaPushSkipReason(NC_STACK_ypabact *bct) const;
     bool CanCollideWithWeapon(NC_STACK_ypamissile *other) const;
     void DetonateWeaponCollision(NC_STACK_ypamissile *other);
     bool IsDirectHitUnit(NC_STACK_ypabact *bct) const;
@@ -225,8 +225,8 @@ protected:
     float _mislAoeSectorRadius   = 0.0;
     int _mislAoeSectorEnergy     = 0;
     int _mislAoeFalloff          = 0;
-    int _mislAoeUnitPush         = 0;
-    int _mislDirectPush          = 0;
+    int _mislAoeUnitPush         = 0; // configured intensity 0..10
+    int _mislDirectPush          = 0; // configured intensity 0..10
     int _mislArmorPenetrationRemaining = 0;
     int _mislClusterAge          = 0;
     int _mislClusterGeneration   = 0;

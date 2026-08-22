@@ -4870,8 +4870,7 @@ static bool yw_IsCustomSuperItemPushTarget(const NC_STACK_ypabact *target)
 {
     return target &&
            target->_energy > 0 && target->_energy_max > 0 &&
-           target->_bact_type != BACT_TYPES_MISSLE &&
-           target->_bact_type != BACT_TYPES_GUN &&
+           target->CanReceiveConfiguredPush() &&
            target->_status != BACT_STATUS_DEAD &&
            target->_status != BACT_STATUS_CREATE &&
            target->_status != BACT_STATUS_BEAM &&
@@ -4929,7 +4928,7 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemDetonationPush(int id)
         if ( distance <= 0.001f )
             delta = vec3d(1.0f, 0.0f, 0.0f);
 
-        target->AddAoePush(delta, appliedForce);
+        target->ApplyConfiguredPush(delta, appliedForce);
     };
 
     // Root units and sector occupants are both visited. The set keeps the
@@ -6015,17 +6014,17 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
                           sitem.CustomHitUnitGids.end(),
                           targetGid) != sitem.CustomHitUnitGids.end();
 
-            // The wave push belongs to the gameplay wall itself. It is applied
-            // only to enemy targets that also qualify for wave damage/debuff,
-            // with no independent radius or falloff because contact with the
-            // LastRadius-CurrentRadius front is already the activation test.
+            // Push eligibility is owner-agnostic and separate from damage and
+            // debuff eligibility. Allies and invulnerable units receive the
+            // same configured mechanical push; only GUN actors are excluded by
+            // type. Contact with this front is already the activation test.
             // A valid GID is required so the one-push protection can be saved.
             float appliedPushForce = 0.0f;
             vec3d pushDir(0.0f, 0.0f, 0.0f);
-            if ( canReceiveDamageAndDebuff &&
-                 target->_bact_type != BACT_TYPES_MISSLE &&
-                 !alreadyWavePushed &&
-                 profile.wave_push_force > 0.0f )
+            if ( target->_owner != World::OWNER_0 &&
+                  target->CanReceiveConfiguredPush() &&
+                  !alreadyWavePushed &&
+                  profile.wave_push_force > 0.0f )
             {
                 appliedPushForce = profile.wave_push_force *
                                    target->GetPushResistanceMultiplier();
@@ -6053,10 +6052,11 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
             }
 
             // Keep the weapon push ordering: a valid contact still receives the
-            // impulse when the same wave hit is lethal. Allies are excluded.
+            // impulse when the same wave hit is lethal. Friendly damage remains
+            // disabled independently from this owner-agnostic push.
             if ( appliedPushForce > 0.0f )
             {
-                target->AddAoePush(pushDir, appliedPushForce);
+                target->ApplyConfiguredPush(pushDir, appliedPushForce);
                 sitem.CustomHitUnitGids.push_back(targetGid);
             }
 

@@ -17,7 +17,7 @@ begin_superitem_profile
     wave_start_speed = 0
     wave_speed_ramp_time = 10000
     wave_end_speed = 2000
-    wave_push_force = 1500
+    wave_push_force = 6
     wave_max_radius = 0
     wave_unit_damage = 50000
     wave_building_total_destruction_percent = 15
@@ -41,7 +41,7 @@ shk_wave_mute = 0.02
 shk_wave_radius = 2000
 
 
-    push_force = 7500
+    push_force = 10
     push_radius = 2000
     push_falloff = 1
 
