@@ -428,7 +428,9 @@ Common::Ini::Key IniConf::UiStatusIconInvisible("ui.status_icon_invisible", Comm
 Common::Ini::Key IniConf::UiStatusIconProximityDefense("ui.status_icon_proximity_defense", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconSprint("ui.status_icon_sprint", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Common::Ini::KT_STRING);
-Common::Ini::Key IniConf::UiStatusIconPlasma("ui.status_icon_plasma", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconPlasma(
+    "ui.status_icon_plasma", Common::Ini::KT_STRING,
+    std::string("Interface/Plasma/owner_{owner}/plasma.png"));
 // Number of complete 200 ms on/off blink cycles used both when a dynamic
 // status icon appears and when it disappears. Zero keeps the previous
 // immediate behavior; runtime clamps the value to 0..10.
