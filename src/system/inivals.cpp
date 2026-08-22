@@ -306,6 +306,7 @@ Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_en
 // shield-aware percentage of the unit's maximum energy. Missing/invalid keeps
 // the vanilla fall-damage calculation.
 Common::Ini::Key IniConf::GameFallDamagePercent("game.fall_damage_percent", Common::Ini::KT_WORD, std::string());
+// OpenNeoUA custom: lethal-hit push multiplier, parsed and clamped to 0..10.
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
 // OpenNeoUA: single Hand Brake intensity for braking strength and the normalized
 // recoil/random-spread reduction. Zero disables all three effects; values above

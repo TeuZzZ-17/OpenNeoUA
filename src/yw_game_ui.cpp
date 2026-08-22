@@ -33,6 +33,17 @@ std::string dword_5BAF98;
 static const SDL_Color *yw_GetFactionUiAccent(NC_STACK_ypaworld *yw, SDL_Color *accent);
 static SDL_Color yw_GetFactionUiTextColor(NC_STACK_ypaworld *yw);
 static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Color color);
+static bool yw_GetWorldSelectionXAnchor(NC_STACK_ypaworld *yw,
+                                         NC_STACK_ypabact *bact,
+                                         const Common::Point &point,
+                                         int *centerXOut,
+                                         int *centerYOut);
+static bool yw_IsWorldBossMarkerUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact);
+static int yw_GetWorldSelectionXHalfArm(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact);
+static constexpr int kWorldSelectionXHalfArm = 2;
+static constexpr int kWorldSelectionXBossHalfArm = 5;
+static constexpr int kWorldSelectionXShadowOffset = 1;
+static constexpr int kWorldSelectionXUiGap = 2;
 static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
                                                const vec3d &renderPosition, uint8_t visibilityOpacity);
 
@@ -7141,6 +7152,13 @@ void sb_0x4c66f8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, NC_STACK_ypabac
         if ( bact1->_status != BACT_STATUS_CREATE && bact1->_status != BACT_STATUS_DEAD && bact1->_status != BACT_STATUS_BEAM )
         {
             yw->_hud.field_76 = yw->_timeStamp;
+
+            // The HUD visor target belongs to the previously controlled unit.
+            // Invalidate it immediately on a control/squad switch so a target
+            // that is not refreshed by the new unit in this frame cannot flash
+            // its world-space HP bar for a single frame. UserTargeting() will
+            // repopulate field_18 later in the same update when appropriate.
+            yw->_guiVisor.field_18 = NULL;
 
             bact2->setBACT_viewer(false);
             bact2->setBACT_inputting(false);
@@ -14499,6 +14517,34 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                 int shieldTop = v41;
                 int lifeTop = hideWorldShield ? shieldTop : shieldTop - barHeight - 1;
 
+                // Selection owns the small strip immediately above the vanilla
+                // faction arrow. Keep the X fixed there and, only if needed,
+                // lift the detailed HP/status stack so it can never overlap it.
+                if ( yw_IsActiveSquadronSelectionUnit(yw, bact) )
+                {
+                    Common::Point selectionPoint(
+                        v42 + v43 / 2,
+                        shieldTop + barHeight / 2 + yw->_screenSize.y / 16);
+                    int selectionCenterY = 0;
+                    if ( yw_GetWorldSelectionXAnchor(yw, bact, selectionPoint,
+                                                     NULL, &selectionCenterY) )
+                    {
+                        const int selectionHalfArm =
+                            yw_GetWorldSelectionXHalfArm(yw, bact);
+                        const int selectionTop = selectionCenterY -
+                                                 selectionHalfArm;
+                        const int maxDetailedUiBottom = selectionTop -
+                                                        kWorldSelectionXUiGap;
+                        const int detailedUiBottom = shieldTop + barHeight;
+                        if ( detailedUiBottom > maxDetailedUiBottom )
+                        {
+                            const int lift = detailedUiBottom - maxDetailedUiBottom;
+                            shieldTop -= lift;
+                            lifeTop -= lift;
+                        }
+                    }
+                }
+
                 if ( v42 >= 0 )
                 {
                     if ( v42 + v43 < yw->_screenSize.x && lifeTop >= 0 )
@@ -14669,27 +14715,47 @@ static void yw_RenderUfoSpyWorldArrows(
         yw_RenderUfoSpyWorldArrows(yw, kid, damageHoverTargets);
 }
 
-static void yw_DrawWorldSelectionCornerLines(int centerX, int centerY, int halfWidth,
-                                             int halfHeight, int cornerLength, SDL_Color color)
+static void yw_DrawWorldSelectionX(int centerX, int centerY, int halfArm, SDL_Color color)
 {
     GFX::Engine.raster_func217(color);
+    GFX::Engine.raster_func201(Common::Line(centerX - halfArm,
+                                            centerY - halfArm,
+                                            centerX + halfArm,
+                                            centerY + halfArm));
+    GFX::Engine.raster_func201(Common::Line(centerX - halfArm,
+                                            centerY + halfArm,
+                                            centerX + halfArm,
+                                            centerY - halfArm));
+}
 
-    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY - halfHeight,
-                                            centerX - halfWidth + cornerLength, centerY - halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY - halfHeight,
-                                            centerX - halfWidth, centerY - halfHeight + cornerLength));
-    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY - halfHeight,
-                                            centerX + halfWidth - cornerLength, centerY - halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY - halfHeight,
-                                            centerX + halfWidth, centerY - halfHeight + cornerLength));
-    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY + halfHeight,
-                                            centerX - halfWidth + cornerLength, centerY + halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX - halfWidth, centerY + halfHeight,
-                                            centerX - halfWidth, centerY + halfHeight - cornerLength));
-    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY + halfHeight,
-                                            centerX + halfWidth - cornerLength, centerY + halfHeight));
-    GFX::Engine.raster_func201(Common::Line(centerX + halfWidth, centerY + halfHeight,
-                                            centerX + halfWidth, centerY + halfHeight - cornerLength));
+static bool yw_GetWorldSelectionXAnchor(NC_STACK_ypaworld *yw,
+                                         NC_STACK_ypabact *bact,
+                                         const Common::Point &point,
+                                         int *centerXOut,
+                                         int *centerYOut)
+{
+    if ( !yw || !bact || (!centerXOut && !centerYOut) )
+        return false;
+
+    // Selection replaces the vanilla faction arrow instead of stacking another
+    // symbol above it. Keep the same one-pixel optical X correction already used
+    // by the selection marker and the exact vanilla vertical arrow offset.
+    const int markerCenterX = point.x - 1;
+    const int markerCenterY = point.y - yw->_screenSize.y * 4 / 100;
+
+    const int selectionHalfArm = yw_GetWorldSelectionXHalfArm(yw, bact);
+
+    if ( markerCenterY - selectionHalfArm -
+         kWorldSelectionXShadowOffset < 2 )
+    {
+        return false;
+    }
+
+    if ( centerXOut )
+        *centerXOut = markerCenterX;
+    if ( centerYOut )
+        *centerYOut = markerCenterY;
+    return true;
 }
 
 static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Color color)
@@ -14731,69 +14797,17 @@ static bool yw_IsWorldBossMarkerUnit(NC_STACK_ypaworld *yw, NC_STACK_ypabact *ba
             bact->_owner == yw->_userRobo->_owner);
 }
 
-static void yw_RenderWorldSelectionUnitMarker(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+static int yw_GetWorldSelectionXHalfArm(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
-    const bool activeSquadronSelection =
-        yw_IsActiveSquadronSelectionUnit(yw, bact);
-    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) &&
-         !activeSquadronSelection )
-        return;
-
-    // The selected squad is an explicit player selection, not ambient world
-    // UI. Keep its quadrants visible at any configured world-UI distance.
-    uint8_t worldUiOpacity = activeSquadronSelection
-        ? 255
-        : yw_GetWorldUiOpacity(yw, bact->_position);
-    if (worldUiOpacity == 0)
-        return;
-
-    Common::Point point;
-    if ( !yw_ProjectWorldSelectionPoint(yw, bact->_position, &point) )
-        return;
-
-    int centerX = point.x - yw->_screenSize.x / 2;
-    int centerY = point.y - yw->_screenSize.y / 2 - yw->_screenSize.y * 4 / 100;
-    const bool isBossMarker = yw_IsWorldBossMarkerUnit(yw, bact);
-    // Keep the boss frame inside the same footprint as an ordinary unit so it
-    // cannot reach the HP bar. The double wireframe cursor remains the boss cue.
-    constexpr float scaleX = 0.0075f;
-    constexpr float scaleY = 0.01f;
-    float correctionX = 1.0f;
-    float correctionY = 1.0f;
-    double maxWireX = 1.0;
-    double maxWireY = 1.0;
-    UAskeleton::Data *cursorWire = yw->_hud.sklts_intern[13];
-
-    GFX::Engine.getAspectCorrection(correctionX, correctionY, false);
-    if ( cursorWire )
-    {
-        for ( const vec3d &vertex : cursorWire->POO )
-        {
-            maxWireX = std::max(maxWireX, std::abs(vertex.x) * 0.001);
-            maxWireY = std::max(maxWireY, std::abs(vertex.z) * 0.001);
-        }
-    }
-
-    // Two pixels of empty space keep the selection corners outside the original
-    // faction-colored cursor, while two-pixel arms stay visually compact.
-    int halfWidth = std::max(6, (int)ceil(maxWireX * scaleX * correctionX *
-                                          (yw->_screenSize.x / 2)) + 2);
-    int halfHeight = std::max(6, (int)ceil(maxWireY * scaleY * correctionY *
-                                           (yw->_screenSize.y / 2)) + 2);
-    const int cornerLength = isBossMarker ? 4 : 2;
-
-    SDL_Color markerColor = yw_GetFactionSelectionColor(yw);
-    markerColor.a = worldUiOpacity;
-    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
-    shadowColor.a = worldUiOpacity;
-
-    yw_DrawWorldSelectionCornerLines(centerX + 1, centerY + 1, halfWidth, halfHeight,
-                                     cornerLength, shadowColor);
-    yw_DrawWorldSelectionCornerLines(centerX, centerY, halfWidth, halfHeight,
-                                     cornerLength, markerColor);
+    return yw_IsWorldBossMarkerUnit(yw, bact) ?
+           kWorldSelectionXBossHalfArm :
+           kWorldSelectionXHalfArm;
 }
 
-void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
+
+void yw_RenderOverlayCursors(
+    NC_STACK_ypaworld *yw, CmdStream *cur,
+    const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
 {
     NC_STACK_ypabact *activeCommander = NULL;
 
@@ -14806,9 +14820,10 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
              activeCommander->_status != BACT_STATUS_DEAD &&
              !activeCommander->ShouldHideFromStrategicUI() )
         {
+            // For the active selection the cursor renderer replaces the normal
+            // faction arrow with the X in the exact same marker position.
             if ( !yw_ShouldRenderUfoSpyWorldArrow(yw, activeCommander) )
                 yw_RenderCursorOverUnit(yw, activeCommander);
-            yw_RenderWorldSelectionUnitMarker(yw, activeCommander);
         }
 
         for ( NC_STACK_ypabact *unit : activeCommander->_kidList )
@@ -14820,7 +14835,6 @@ void yw_RenderOverlayCursors(NC_STACK_ypaworld *yw, CmdStream *cur)
             {
                 if ( !yw_ShouldRenderUfoSpyWorldArrow(yw, unit) )
                     yw_RenderCursorOverUnit(yw, unit);
-                yw_RenderWorldSelectionUnitMarker(yw, unit);
             }
         }
     }
@@ -15008,7 +15022,7 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
             yw_RenderUfoSpyWorldStatus(yw, &buf, unit, damageHoverTargets);
     }
 
-    yw_RenderOverlayCursors(yw, &buf);
+    yw_RenderOverlayCursors(yw, &buf, damageHoverTargets);
     yw_RenderPlasmaCurrencyPopups(yw, &buf);
 
     FontUA::set_end(&buf);
@@ -15389,20 +15403,48 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
             if ( a3a < -1.0f || a3a > 1.0f || v34 < -1.0f || v34 > 1.0f )
                 return;
 
+            if ( activeSquadronSelection )
+            {
+                Common::Point point;
+                if ( yw_ProjectWorldSelectionPoint(yw, renderPosition, &point) )
+                {
+                    int markerCenterX = 0;
+                    int markerCenterY = 0;
+                    if ( yw_GetWorldSelectionXAnchor(yw, bact, point,
+                                                     &markerCenterX, &markerCenterY) )
+                    {
+                        const int centerX = markerCenterX - yw->_screenSize.x / 2;
+                        const int centerY = markerCenterY - yw->_screenSize.y / 2;
+
+                        SDL_Color markerColor = yw_GetFactionSelectionColor(yw);
+                        markerColor.a = worldUiOpacity;
+                        SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+                        shadowColor.a = worldUiOpacity;
+
+                        const int selectionHalfArm =
+                            yw_GetWorldSelectionXHalfArm(yw, bact);
+                        yw_DrawWorldSelectionX(centerX + kWorldSelectionXShadowOffset,
+                                               centerY + kWorldSelectionXShadowOffset,
+                                               selectionHalfArm, shadowColor);
+                        yw_DrawWorldSelectionX(centerX, centerY,
+                                               selectionHalfArm, markerColor);
+                    }
+                }
+                return;
+            }
+
             if ( v12 )
             {
                 float a4 = v34 - 0.08;
-                // Render coordinates are normalized to [-1, 1], so this is
-                // exactly one physical pixel to the right of the quadrant.
-                const float arrowX = a3a + 2.0f / (float)yw->_screenSize.x;
-                // Keep boss markers compact enough to stay clear of the HP bar.
+                // Keep the vanilla arrow centered on the projected unit.
+                const float arrowX = a3a;
+                // Squad leaders (their parent is the player's Host Station) and
+                // Host Stations keep the larger vanilla arrow treatment.
                 const bool isBossMarker = yw_IsWorldBossMarkerUnit(yw, bact);
 
                 if ( isBossMarker )
                 {
-                    // Restore the large commander arrow. The compact corner
-                    // marker remains its surrounding frame, while the inner
-                    // pass keeps the boss identity visible.
+                    // Large commander arrow plus its smaller inner pass.
                     yw_RenderVector2D(yw, v12, arrowX, a4, 1.0, 0.0, 0.0, 1.0, 0.0125, 0.0165, v11, NULL, NULL, true);
                     yw_RenderVector2D(yw, v12, arrowX, a4, 1.0, 0.0, 0.0, 1.0, 0.005, 0.00666, v11, NULL, NULL, true);
                 }

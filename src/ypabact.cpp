@@ -4248,12 +4248,18 @@ void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
     ypabact_SpawnDecorationFXEvent(this);
 }
 
-// Smooth, class-independent weapon push used before the physical-push rewrite.
-// The requested value is a world-space travel distance integrated over this
-// time constant, so tanks, aircraft and Host Stations use the same response.
+// Smooth, class-independent weapon push restored from the established
+// OpenNeoUA mechanical system. The requested value is a world-space travel
+// distance integrated over this time constant, so aircraft, ground vehicles
+// and Host Stations use the same response.
 static const float AOE_PUSH_TAU = 0.30f;
 static const float AOE_PUSH_MAX_DT = 0.05f;
 static const float AOE_PUSH_MAX_STEP = 80.0f;
+// Public push values remain 0..10. One level starts at 100 world units and the
+// squared curve fills the requested broad range proportionally:
+// 1=100, 4=1600, 6=3600, 10=10000.
+static const float CONFIGURED_PUSH_MAX_INTENSITY = 10.0f;
+static const float CONFIGURED_PUSH_DISTANCE_PER_SQUARED_LEVEL = 100.0f;
 static const float WEAPON_RECOIL_TAU = 0.14f;
 static const float WEAPON_RECOIL_DISTANCE_PER_UNIT = 35.0f;
 static const int WEAPON_RECOIL_AI_TANK_RECOVERY_MS = 220;
@@ -4496,6 +4502,25 @@ float NC_STACK_ypabact::GetPushResistanceMultiplier() const
         return 0.0f;
     resistance = std::max(0.0f, std::min(resistance, 1.0f));
     return 1.0f - resistance;
+}
+
+bool NC_STACK_ypabact::CanReceiveConfiguredPush() const
+{
+    return _bact_type != BACT_TYPES_GUN;
+}
+
+void NC_STACK_ypabact::ApplyConfiguredPush(const vec3d &dir, float intensity)
+{
+    if ( !CanReceiveConfiguredPush() || !isfinite(intensity) || intensity <= 0.0f )
+        return;
+
+    const float pushIntensity =
+        std::min(intensity, CONFIGURED_PUSH_MAX_INTENSITY);
+    const float mechanicalDistance =
+        pushIntensity * pushIntensity *
+        CONFIGURED_PUSH_DISTANCE_PER_SQUARED_LEVEL;
+
+    AddAoePush(dir, mechanicalDistance);
 }
 
 void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
@@ -7251,8 +7276,7 @@ static bool ypabact_IsDeathPushTarget(const NC_STACK_ypabact *source,
 {
     return source && target && source != target &&
            target->_energy > 0 && target->_energy_max > 0 &&
-           target->_bact_type != BACT_TYPES_MISSLE &&
-           target->_bact_type != BACT_TYPES_GUN &&
+           target->CanReceiveConfiguredPush() &&
            target->_status != BACT_STATUS_DEAD &&
            target->_status != BACT_STATUS_CREATE &&
            target->_status != BACT_STATUS_BEAM &&
@@ -7313,7 +7337,7 @@ static void ypabact_ApplyConfiguredDeathPush(NC_STACK_ypabact *source)
                     target->GetPushResistanceMultiplier();
 
                 if ( appliedForce > 0.0f )
-                    target->AddAoePush(delta / distance, appliedForce);
+                    target->ApplyConfiguredPush(delta / distance, appliedForce);
             }
         }
     }

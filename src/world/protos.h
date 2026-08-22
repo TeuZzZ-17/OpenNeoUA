@@ -390,10 +390,10 @@ struct TSuperItemProfile
     bool has_wave_end_speed = false;
     bool has_wave_speed_ramp_time = false;
     float wave_max_radius = 0.0f;
-    float push_force = 0.0f;
+    float push_force = 0.0f; // shared configured push intensity, 0..10
     float push_radius = 0.0f;
     int push_falloff = 0;
-    float wave_push_force = 0.0f;
+    float wave_push_force = 0.0f; // shared configured push intensity, 0..10
     int fade_in = 0;
     int fade_out = 0;
 
@@ -677,7 +677,7 @@ struct TVhclProto
     int8_t radar = 0;
     float push_resistance = 0.0; // OpenNeoUA custom: target-side resistance to push / aoe_unit_push
     bool has_push_resistance = false; // true only when push_resistance is explicitly authored
-    float push_at_death_force = 0.0f; // OpenNeoUA custom: radial push strength emitted on actual vehicle death
+    float push_at_death_force = 0.0f; // OpenNeoUA custom: 0..10 radial push intensity emitted on actual vehicle death
     float push_at_death_radius = 0.0f;
     int push_at_death_falloff = 0;
     float mass = 0.0;
@@ -940,8 +940,8 @@ struct TWeapProto
     int aoe_building_energy = 0;
     int aoe_sector_energy = 0;
     int aoe_falloff = 0;
-    int aoe_unit_push = 0;
-    // OpenNeoUA custom: direct-hit single-target knockback. Same movement model as aoe_unit_push,
+    int aoe_unit_push = 0; // OpenNeoUA custom: radial push intensity, clamped to 0..10
+    // OpenNeoUA custom: 0..10 direct-hit single-target knockback. Same dispatcher as aoe_unit_push,
     // but only for the primary/direct-hit unit. If both push and aoe_unit_push are set,
     // the direct-hit unit receives only push; nearby units receive aoe_unit_push.
     int push = 0;
