@@ -233,11 +233,64 @@ const std::string &StatusIconHandbrakePath()
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconHandbrake);
 }
 
-const std::string &StatusIconPlasmaPath()
+static int yw_GetUiOwner(const NC_STACK_ypaworld *yw)
 {
-    static const std::string fallbackPath = "Interface/Plasma/plasma.svg";
-    return StatusIconOverridePath(StatusIconConfiguredPath(System::IniConf::UiStatusIconPlasma),
-                                  fallbackPath);
+    if ( yw && yw->_userRobo && yw->_userRobo->_owner >= 1 &&
+         yw->_userRobo->_owner <= 6 )
+        return yw->_userRobo->_owner;
+
+    return World::OWNER_RESIST;
+}
+
+static const std::string &StatusIconPlasmaPath(const NC_STACK_ypaworld *yw)
+{
+    static const std::string fallbackTemplate =
+        "Interface/Plasma/owner_{owner}/plasma.png";
+
+    std::string pathTemplate =
+        StatusIconTrimPath(System::IniConf::UiStatusIconPlasma.Get<std::string>());
+
+    // Plasma icons are faction-specific. A custom path is therefore accepted
+    // only as an owner-aware template; stale single-icon configurations fall
+    // back to the canonical owner_N hierarchy instead of forcing one faction's
+    // icon on every playable side.
+    const std::string token = "{owner}";
+    if ( pathTemplate.empty() || pathTemplate.find(token) == std::string::npos )
+        pathTemplate = fallbackTemplate;
+
+    const std::string ownerText = std::to_string(yw_GetUiOwner(yw));
+    const std::string cacheKey = "plasma:" + pathTemplate + ":" + ownerText;
+    auto cached = g_statusIconConfiguredPathCache.find(cacheKey);
+    if ( cached != g_statusIconConfiguredPathCache.end() )
+        return cached->second;
+
+    std::string path = pathTemplate;
+    size_t tokenPos = 0;
+    while ( (tokenPos = path.find(token, tokenPos)) != std::string::npos )
+    {
+        path.replace(tokenPos, token.size(), ownerText);
+        tokenPos += ownerText.size();
+    }
+
+    if ( path.compare(0, 5, "rsrc:") == 0 )
+        path.erase(0, 5);
+
+    std::string resolved;
+    if ( StatusIconResourceExists(path) )
+    {
+        resolved = path;
+    }
+    else if ( pathTemplate != fallbackTemplate )
+    {
+        std::string fallback = fallbackTemplate;
+        const size_t pos = fallback.find(token);
+        if ( pos != std::string::npos )
+            fallback.replace(pos, token.size(), ownerText);
+        if ( StatusIconResourceExists(fallback) )
+            resolved = fallback;
+    }
+
+    return g_statusIconConfiguredPathCache.emplace(cacheKey, resolved).first->second;
 }
 
 const char *SpeechEventKeyFromMsgID(int msgID)
@@ -7855,7 +7908,7 @@ static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw)
          !layout.showIcon )
         return;
 
-    NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(),
+    NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(yw),
                                            layout.iconSize, layout.iconSize);
     if ( icon && icon->GetBitmap() )
     {
@@ -9588,7 +9641,7 @@ static void yw_RenderPlasmaCurrencyPopups(NC_STACK_ypaworld *yw, CmdStream *cur)
     constexpr uint32_t popupLifetimeMs = 1200;
     constexpr int popupItemGap = 2;
     const int iconSize = std::max(8, std::min(14, yw->_guiTiles[15]->h));
-    NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(),
+    NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(yw),
                                            iconSize, iconSize);
     const bool hasIcon = icon && icon->GetBitmap();
 
