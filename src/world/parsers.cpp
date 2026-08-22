@@ -2084,8 +2084,19 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     if (!robo)
         robo = &_roboTmp;
 
-    auto getUnitGun = [this]() -> TRoboGun *
+    auto getUnitGun = [this, robo]() -> TRoboGun *
     {
+        // On Host Stations the unit_* family is a parser alias of the native
+        // Robo gun list. This keeps one runtime attachment system (_roboGuns)
+        // while allowing the richer Unit Gun fields (icon/protect) to be used.
+        if ( _vhcl->model_id == BACT_TYPES_ROBO )
+        {
+            if ( _unitGunID < 0 || (size_t)_unitGunID >= robo->guns.size() )
+                return NULL;
+
+            return &robo->guns.at(_unitGunID);
+        }
+
         if ( _unitGunID < 0 || (size_t)_unitGunID >= _vhcl->unit_guns.size() )
             return NULL;
 
@@ -2224,6 +2235,16 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
             *robo = TRoboProto();
             robo->matrix = mat3x3::Ident();
+
+            // If unit_* gun fields appeared before model = robo, fold them into
+            // the native Robo list now. Script order must not create a second
+            // attachment runtime on Host Stations.
+            if ( !_vhcl->unit_guns.empty() )
+            {
+                robo->guns = _vhcl->unit_guns;
+                _vhcl->unit_guns.clear();
+                _gunID = _unitGunID;
+            }
         }
         else if ( !StriCmp(p2, "ufo") )
         {
@@ -3402,10 +3423,19 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             cnt = ROBO_GUN_MAX_COUNT;
 
         robo->guns.resize(cnt);
+
+        if ( _vhcl->model_id == BACT_TYPES_ROBO && _unitGunID >= cnt )
+            _unitGunID = cnt - 1;
     }
     else if ( !StriCmp(p1, "robo_act_gun") )
     {
         _gunID = parser.stol(p2, NULL, 0);
+
+        // robo_* and unit_* select the same native Robo gun slot when parsing
+        // a Host Station, so mixed syntax remains deterministic: later fields
+        // overwrite the same TRoboGun entry instead of creating duplicates.
+        if ( _vhcl->model_id == BACT_TYPES_ROBO )
+            _unitGunID = _gunID;
     }
     else if ( !StriCmp(p1, "robo_gun_pos_x") )
     {
@@ -3448,7 +3478,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         else if ( cnt > (int)ROBO_GUN_MAX_COUNT )
             cnt = ROBO_GUN_MAX_COUNT;
 
-        _vhcl->unit_guns.resize(cnt);
+        if ( _vhcl->model_id == BACT_TYPES_ROBO )
+        {
+            robo->guns.resize(cnt);
+
+            if ( _gunID >= cnt )
+                _gunID = cnt - 1;
+        }
+        else
+        {
+            _vhcl->unit_guns.resize(cnt);
+        }
 
         if ( _unitGunID >= cnt )
             _unitGunID = cnt - 1;
@@ -3463,8 +3503,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         if ( _unitGunID >= (int)ROBO_GUN_MAX_COUNT )
             _unitGunID = ROBO_GUN_MAX_COUNT - 1;
 
-        if ( (size_t)_unitGunID >= _vhcl->unit_guns.size() )
+        if ( _vhcl->model_id == BACT_TYPES_ROBO )
+        {
+            _gunID = _unitGunID;
+
+            if ( (size_t)_unitGunID >= robo->guns.size() )
+                robo->guns.resize(_unitGunID + 1);
+        }
+        else if ( (size_t)_unitGunID >= _vhcl->unit_guns.size() )
+        {
             _vhcl->unit_guns.resize(_unitGunID + 1);
+        }
     }
     else if ( !StriCmp(p1, "unit_gun_pos_x") )
     {
