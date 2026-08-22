@@ -3107,8 +3107,11 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
 }
 
 
-// Pick the active protective attachment to absorb an incoming hit. Prefer the one
-// closest to the attacker; fall back to the first active protective attachment.
+// Pick the active protective mounted Gun/module to absorb an incoming hit.
+// Prefer the one closest to the attacker; fall back to the first active one.
+// Host Stations use their native _roboGuns list; ordinary carriers use
+// _unitGuns. The parser aliases unit_* to the Robo list for model = robo, so
+// no second attachment runtime is created on Host Stations.
 NC_STACK_ypabact *NC_STACK_ypabact::SelectProtectiveUnitGun(NC_STACK_ypabact *attacker)
 {
     NC_STACK_ypabact *best = NULL;
@@ -3120,31 +3123,45 @@ NC_STACK_ypabact *NC_STACK_ypabact::SelectProtectiveUnitGun(NC_STACK_ypabact *at
     if ( haveAttacker )
         srcPos = attacker->_position;
 
-    for (World::TRoboGun &gun : _unitGuns)
+    auto considerGuns = [&](std::vector<World::TRoboGun> &guns)
     {
-        if ( !gun.protect )
-            continue;
-
-        NC_STACK_ypabact *gunObj = gun.gun_obj;
-        if ( !gunObj ||
-             gunObj->IsDestroyed() ||
-             (gunObj->_status_flg & BACT_STFLAG_DEATH1) ||
-             gunObj->_status == BACT_STATUS_DEAD ||
-             gunObj->_energy <= 0 )
-            continue;
-
-        if ( !firstActive )
-            firstActive = gunObj;
-
-        if ( haveAttacker )
+        for (World::TRoboGun &gun : guns)
         {
-            float d = (gunObj->_position - srcPos).length();
-            if ( !best || d < bestDist )
+            if ( !gun.protect )
+                continue;
+
+            NC_STACK_ypabact *gunObj = gun.gun_obj;
+            if ( !gunObj ||
+                 gunObj->IsDestroyed() ||
+                 (gunObj->_status_flg & BACT_STFLAG_DEATH1) ||
+                 gunObj->_status == BACT_STATUS_DEAD ||
+                 gunObj->_energy <= 0 )
+                continue;
+
+            if ( !firstActive )
+                firstActive = gunObj;
+
+            if ( haveAttacker )
             {
-                best = gunObj;
-                bestDist = d;
+                float d = (gunObj->_position - srcPos).length();
+                if ( !best || d < bestDist )
+                {
+                    best = gunObj;
+                    bestDist = d;
+                }
             }
         }
+    };
+
+    if ( _bact_type == BACT_TYPES_ROBO )
+    {
+        NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(this);
+        if ( robo )
+            considerGuns(robo->GetGuns());
+    }
+    else
+    {
+        considerGuns(_unitGuns);
     }
 
     return (haveAttacker && best) ? best : firstActive;
@@ -13591,7 +13608,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
     // reaches the parent. If the module survives, the parent takes nothing; if
     // the hit destroys the module, only the leftover passes through. Net games
     // keep vanilla routing to avoid desync.
-    if ( arg->energy < 0 && !_isDummy && !isNetGame && !_unitGuns.empty() )
+    if ( arg->energy < 0 && !_isDummy && !isNetGame )
     {
         NC_STACK_ypabact *prot = SelectProtectiveUnitGun(arg->unit);
         if ( prot && prot != this )

@@ -138,13 +138,17 @@ protected:
     int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
     int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy);
     void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true);
-    bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = NULL, float *appliedStrength = NULL, bool enqueue = true);
+    bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = NULL,
+                               float *appliedStrength = NULL, bool enqueue = true,
+                               NC_STACK_ypabact *directionTarget = NULL);
     const char *GetAreaDamageSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const;
     const char *GetAreaPushSkipReason(NC_STACK_ypabact *bct) const;
     bool CanCollideWithWeapon(NC_STACK_ypamissile *other) const;
     void DetonateWeaponCollision(NC_STACK_ypamissile *other);
     bool IsDirectHitUnit(NC_STACK_ypabact *bct) const;
     void RememberDirectHitUnit(NC_STACK_ypabact *bct);
+    bool IsDirectPushRecipient(NC_STACK_ypabact *bct) const;
+    void RememberDirectPushRecipient(NC_STACK_ypabact *bct);
     bool IsArmorPenetratedTarget(NC_STACK_ypabact *bct) const;
     bool ShouldArmorPenetrateTarget(NC_STACK_ypabact *bct) const;
     void RememberArmorPenetratedTarget(NC_STACK_ypabact *bct);
@@ -250,6 +254,7 @@ protected:
     TSndCarrier _mislClusterSoundCarrier;
     std::vector<int32_t> _mislChainHitGids;
     std::vector<int32_t> _mislArmorPenetratedGids;
+    std::vector<int32_t> _mislDirectPushRecipientGids;
     std::vector<NC_STACK_ypabact *> _mislDirectHitUnits;
     std::vector<TBuildingHitRef> _mislDirectHitBuildings;
     std::vector<TBuildingHitRef> _mislDirectHitSectors;
