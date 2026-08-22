@@ -518,7 +518,9 @@ public:
     void UpdateDecorationFX(update_msg *arg);
     void UpdateEnergyStatusFX(update_msg *arg);
     float GetPushResistanceMultiplier() const;
+    bool CanReceiveConfiguredPush() const;
     void AddAoePush(const vec3d &dir, float distance); // queue smooth weapon knockback
+    void ApplyConfiguredPush(const vec3d &dir, float intensity); // shared 0..10 adapter to the mechanical AddAoePush path
     void ApplyWeaponRecoil(const vec3d &dir, float recoil);
     void UpdateAoePush(update_msg *arg);
     void UpdateWeaponRecoilPush(update_msg *arg);      // integrate/decay weapon recoil push or visual offset
