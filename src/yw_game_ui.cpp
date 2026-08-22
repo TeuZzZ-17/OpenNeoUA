@@ -7153,13 +7153,6 @@ void sb_0x4c66f8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, NC_STACK_ypabac
         {
             yw->_hud.field_76 = yw->_timeStamp;
 
-            // The HUD visor target belongs to the previously controlled unit.
-            // Invalidate it immediately on a control/squad switch so a target
-            // that is not refreshed by the new unit in this frame cannot flash
-            // its world-space HP bar for a single frame. UserTargeting() will
-            // repopulate field_18 later in the same update when appropriate.
-            yw->_guiVisor.field_18 = NULL;
-
             bact2->setBACT_viewer(false);
             bact2->setBACT_inputting(false);
 
@@ -16580,9 +16573,14 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
     case World::DOACTION_8:
         if ( _bactOnMouse->_bact_type != BACT_TYPES_GUN && _bactOnMouse != _userRobo )
         {
-            if ( sub_4D3C80(this) )
+            // Resolve the clicked unit's squad commander without replacing the
+            // actual world-space hover target. sub_4D3C80() mutates _bactOnMouse
+            // to the commander, which makes the HP bar flash on the leader for
+            // this frame before the next mouse raycast restores the clicked member.
+            NC_STACK_ypabact *squadCommander = sub_4D3C3C(_bactOnMouse);
+            if ( squadCommander )
             {
-                _activeCmdrID = _bactOnMouse->_commandID;
+                _activeCmdrID = squadCommander->_commandID;
                 sub_4C40AC();
             }
         }
