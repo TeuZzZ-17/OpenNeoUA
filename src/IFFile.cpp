@@ -352,7 +352,7 @@ bool setLooseCanOpenDiskFile(const std::string &path)
     return fil.OK();
 }
 
-bool setLooseResolveReadableFile(const std::string &virtualPath, std::string *openPath)
+bool setLooseResolveReadableFileAtPath(const std::string &virtualPath, std::string *openPath)
 {
     if ( FSMgr::iDir::fileExist(virtualPath) )
     {
@@ -381,6 +381,16 @@ bool setLooseResolveReadableFile(const std::string &virtualPath, std::string *op
     if (openPath)
         *openPath = diskPath;
     return true;
+}
+
+bool setLooseResolveReadableFile(const std::string &virtualPath, std::string *openPath)
+{
+    const std::string organizedPath = uaSetDirectoryOrganizedPath(virtualPath);
+    if ( organizedPath != setLooseNormalizeSlashes(virtualPath) &&
+         setLooseResolveReadableFileAtPath(organizedPath, openPath) )
+        return true;
+
+    return setLooseResolveReadableFileAtPath(virtualPath, openPath);
 }
 
 bool setLooseSupportedExtension(const std::string &assetPath)
@@ -553,8 +563,12 @@ bool setLooseEnsureReport(int32_t setId)
     {
         report.initialized = true;
         report.setId = setId;
-        report.root = "Data/Set" + std::to_string(setId) + "/Loose/";
-        report.reportPath = report.root + "_openneoua_set_override_report.txt";
+        const std::string legacyRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
+        report.root = uaSetDirectoryResolvedReadPath(legacyRoot, true);
+        report.reportPath = report.root;
+        if ( !report.reportPath.empty() && report.reportPath.back() != '/' && report.reportPath.back() != '\\' )
+            report.reportPath += "/";
+        report.reportPath += "_openneoua_set_override_report.txt";
 
         FSMgr::iNode *rootNode = FSMgr::iDir::findNode(report.root);
         report.available = rootNode && rootNode->getType() == FSMgr::iNode::NTYPE_DIR;
@@ -739,13 +753,17 @@ std::string setLooseSetBasSourceKind(const std::string &resolvedSource, FSMgr::i
         return "unknown (resolved virtual path is not a file)";
 
     std::string source = setLooseLower(setLooseNormalizeSlashes(resolvedSource));
-    std::string objectsPrefix = "data/set" + std::to_string(setId) + "/objects/";
+    const std::string legacyObjectsPrefix = "data/set" + std::to_string(setId) + "/objects/";
+    const std::string organizedObjectsPrefix = "data/sets/set" + std::to_string(setId) + "/objects/";
 
     if (source.find("/loose/") != std::string::npos)
         return "SET loose override path";
 
-    if (source.compare(0, objectsPrefix.size(), objectsPrefix) == 0)
-        return "normal loose Data/SetN/Objects SET.BAS style file";
+    if (source.compare(0, organizedObjectsPrefix.size(), organizedObjectsPrefix) == 0)
+        return "organized Data/Sets/SetN/Objects SET.BAS style file";
+
+    if (source.compare(0, legacyObjectsPrefix.size(), legacyObjectsPrefix) == 0)
+        return "legacy Data/SetN/Objects SET.BAS style file";
 
     return "virtual FS path (filesystem file)";
 }
@@ -1162,7 +1180,7 @@ IFFile *IFFile::RsrcOpenIFFileVanilla(const std::string &filename, const std::st
 
 FSMgr::FileHandle IFFile::UAOpenFileVanilla(const std::string &filename, const std::string &mode)
 {
-    std::string tmpBuf = correctSeparatorAndExt( Common::Env.ApplyPrefix( filename ) );
+    std::string tmpBuf = uaSetDirectoryResolvedReadPath(filename);
 
     if ( !FSMgr::iDir::fileExist(tmpBuf) )
         return FSMgr::FileHandle();
@@ -1205,8 +1223,10 @@ bool IFFile::FindSetLooseOverride(const std::string &filename, const std::string
     std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
     std::string originalPath = looseRoot + assetPath;
     std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
-    bool originalExists = FSMgr::iDir::fileExist(originalPath);
-    bool legacyExists = FSMgr::iDir::fileExist(legacyPath);
+    std::string originalOpenPath;
+    std::string legacyOpenPath;
+    bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
+    bool legacyExists = setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     setLooseAddLookup(setId,
                       assetPath,
@@ -1225,10 +1245,14 @@ bool IFFile::FindSetLooseOverride(const std::string &filename, const std::string
     };
 
     std::vector<Candidate> candidates;
-    candidates.push_back({originalPath, "original requested extension form", originalExists});
+    candidates.push_back({originalExists ? originalOpenPath : originalPath,
+                          "original requested extension form",
+                          originalExists});
 
     if ( legacyPath != setLooseNormalizeSlashes(originalPath) )
-        candidates.push_back({legacyPath, "legacy 3-letter extension form", legacyExists});
+        candidates.push_back({legacyExists ? legacyOpenPath : legacyPath,
+                              "legacy 3-letter extension form",
+                              legacyExists});
 
     for (const Candidate &candidate : candidates)
     {
@@ -1241,7 +1265,7 @@ bool IFFile::FindSetLooseOverride(const std::string &filename, const std::string
                 out->requested = assetPath;
                 out->resolvedPath = candidate.path;
                 out->extensionForm = candidate.extensionForm;
-                out->vanillaPath = setLooseNormalizeSlashes(correctSeparatorAndExt(Common::Env.ApplyPrefix(filename)));
+                out->vanillaPath = setLooseNormalizeSlashes(uaSetDirectoryResolvedReadPath(filename));
                 out->embedded = false;
                 out->sourceFunction = sourceFunction ? sourceFunction : "IFFile::UAOpenFileWithSetLooseOverride";
             }
@@ -1278,8 +1302,10 @@ bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std
     std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
     std::string originalPath = looseRoot + assetPath;
     std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
-    bool originalExists = FSMgr::iDir::fileExist(originalPath);
-    bool legacyExists = FSMgr::iDir::fileExist(legacyPath);
+    std::string originalOpenPath;
+    std::string legacyOpenPath;
+    bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
+    bool legacyExists = setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     setLooseAddLookup(setId,
                       assetPath,
@@ -1298,10 +1324,14 @@ bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std
     };
 
     std::vector<Candidate> candidates;
-    candidates.push_back({originalPath, "original requested extension form", originalExists});
+    candidates.push_back({originalExists ? originalOpenPath : originalPath,
+                          "original requested extension form",
+                          originalExists});
 
     if ( legacyPath != setLooseNormalizeSlashes(originalPath) )
-        candidates.push_back({legacyPath, "legacy 3-letter extension form", legacyExists});
+        candidates.push_back({legacyExists ? legacyOpenPath : legacyPath,
+                              "legacy 3-letter extension form",
+                              legacyExists});
 
     for (const Candidate &candidate : candidates)
     {
@@ -1360,7 +1390,7 @@ bool IFFile::FindSetLooseVisprotoListOverride(const std::string &mode, SetLooseO
         out->requested = requested;
         out->resolvedPath = resolvedPath;
         out->extensionForm = "per-set VISPROTO list override";
-        out->vanillaPath = "Data/Set" + std::to_string(setId) + "/Scripts/VISPROTO.LST";
+        out->vanillaPath = uaSetDirectoryResolvedReadPath("Data/Set" + std::to_string(setId) + "/Scripts/VISPROTO.LST");
         out->sourceFunction = sourceFunction ? sourceFunction : "load_set_base";
     }
 
@@ -1492,8 +1522,10 @@ bool IFFile::FindSetLooseEmrsOverride(const std::string &filename, const std::st
 
         const std::string originalPath = looseRoot + prefix + assetPath;
         const std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
-        const bool originalExists = FSMgr::iDir::fileExist(originalPath);
-        const bool legacyExists = FSMgr::iDir::fileExist(legacyPath);
+        std::string originalOpenPath;
+        std::string legacyOpenPath;
+        const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
+        const bool legacyExists = setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
         const std::string locationLabel = prefix.empty() ? "legacy Loose root" : "Texture folder";
 
         setLooseAddLookup(setId,
@@ -1505,12 +1537,12 @@ bool IFFile::FindSetLooseEmrsOverride(const std::string &filename, const std::st
                           sourceFunction,
                           true);
 
-        candidates.push_back({originalPath,
+        candidates.push_back({originalExists ? originalOpenPath : originalPath,
                               locationLabel + ", original requested extension form",
                               originalExists});
 
         if ( legacyPath != setLooseNormalizeSlashes(originalPath) )
-            candidates.push_back({legacyPath,
+            candidates.push_back({legacyExists ? legacyOpenPath : legacyPath,
                                   locationLabel + ", legacy 3-letter extension form",
                                   legacyExists});
     }
@@ -1674,7 +1706,7 @@ bool IFFile::FindSetHiEffectPngOverride(const std::string &filename, const std::
                 out->requested = assetPath;
                 out->resolvedPath = openPath;
                 out->extensionForm = "HI PNG effect override";
-                out->vanillaPath = setLooseNormalizeSlashes(correctSeparatorAndExt(Common::Env.ApplyPrefix("rsrc:" + assetPath)));
+                out->vanillaPath = setLooseNormalizeSlashes(uaSetDirectoryResolvedReadPath("rsrc:" + assetPath));
                 out->embedded = false;
                 out->sourceFunction = sourceFunction ? sourceFunction : "NC_STACK_ilbm::rsrc_func64";
             }
@@ -1716,8 +1748,8 @@ bool IFFile::FindSet46RootPngOverride(const std::string &filename, const std::st
                 out->setId = 46;
                 out->requested = assetPath;
                 out->resolvedPath = openPath;
-                out->extensionForm = "Data/Set46 PNG GUI override";
-                out->vanillaPath = setLooseNormalizeSlashes(correctSeparatorAndExt(Common::Env.ApplyPrefix("rsrc:" + assetPath)));
+                out->extensionForm = "SET46 PNG GUI override";
+                out->vanillaPath = setLooseNormalizeSlashes(uaSetDirectoryResolvedReadPath("rsrc:" + assetPath));
                 out->embedded = false;
                 out->sourceFunction = sourceFunction ? sourceFunction : "NC_STACK_ilbm::rsrc_func64";
             }
