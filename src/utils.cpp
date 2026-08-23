@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cctype>
 
 #include "includes.h"
 #include "utils.h"
@@ -171,6 +172,61 @@ static bool uaStandaloneRootDir(const std::string &first, std::string *canonical
     return false;
 }
 
+static bool uaSplitSetDirectoryPath(std::string path, std::string *setDir, std::string *rest)
+{
+    std::replace(path.begin(), path.end(), '\\', '/');
+
+    while (!path.empty() && path.front() == '/')
+        path.erase(path.begin());
+
+    const size_t firstSlash = path.find('/');
+    if (firstSlash == std::string::npos || StriCmp(path.substr(0, firstSlash), "Data"))
+        return false;
+
+    const size_t secondSlash = path.find('/', firstSlash + 1);
+    const std::string component = secondSlash == std::string::npos
+                                      ? path.substr(firstSlash + 1)
+                                      : path.substr(firstSlash + 1, secondSlash - firstSlash - 1);
+
+    if (component.size() <= 3 || strnicmp(component.c_str(), "Set", 3))
+        return false;
+
+    for (size_t i = 3; i < component.size(); ++i)
+    {
+        if (!std::isdigit((unsigned char)component[i]))
+            return false;
+    }
+
+    if (setDir)
+        *setDir = component;
+    if (rest)
+        *rest = secondSlash == std::string::npos ? std::string() : path.substr(secondSlash + 1);
+
+    return true;
+}
+
+static std::string uaOrganizedSetDirectoryPath(std::string path)
+{
+    std::string setDir;
+    std::string rest;
+
+    if (!uaSplitSetDirectoryPath(path, &setDir, &rest))
+        return path;
+
+    return uaJoinPath("Data/Sets/" + setDir, rest);
+}
+
+static std::string uaResolveSetDirectoryContainer(std::string path, bool directory)
+{
+    const std::string organizedPath = uaOrganizedSetDirectoryPath(path);
+    if (organizedPath == path)
+        return path;
+
+    const bool organizedExists = directory ? uaDirExistsDirect(organizedPath)
+                                           : uaFileExistsDirect(organizedPath);
+    return organizedExists ? organizedPath : path;
+}
+
 static std::string uaResolveStandaloneDataFirst(std::string path, bool directory, bool forWrite)
 {
     std::replace(path.begin(), path.end(), '\\', '/');
@@ -225,7 +281,22 @@ static std::string uaResolveStandaloneDataFirst(std::string path, bool directory
 static std::string uaResolvePath(const std::string &path, bool directory, bool forWrite)
 {
     std::string resolved = correctSeparatorAndExt(Common::Env.ApplyPrefix(path));
+    if (!forWrite)
+        resolved = uaResolveSetDirectoryContainer(resolved, directory);
     return correctSeparatorAndExt(uaResolveStandaloneDataFirst(resolved, directory, forWrite));
+}
+
+std::string uaSetDirectoryOrganizedPath(const std::string &path)
+{
+    std::string resolved = Common::Env.ApplyPrefix(path);
+    std::replace(resolved.begin(), resolved.end(), '\\', '/');
+    return uaOrganizedSetDirectoryPath(resolved);
+}
+
+std::string uaSetDirectoryResolvedReadPath(const std::string &path, bool directory)
+{
+    std::string resolved = correctSeparatorAndExt(Common::Env.ApplyPrefix(path));
+    return correctSeparatorAndExt(uaResolveSetDirectoryContainer(resolved, directory));
 }
 
 std::string uaDataFirstNucleusIniPath()

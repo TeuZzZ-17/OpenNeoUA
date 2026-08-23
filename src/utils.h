@@ -131,6 +131,9 @@ bool uaDeleteDir(const std::string &path);
 bool uaCreateDir(const std::string &path);
 bool uaFileExist(const std::string &path);
 std::string uaDataFirstNucleusIniPath();
+// Organized SET reads prefer Data/Sets/SetN and fall back to legacy Data/SetN per resource.
+std::string uaSetDirectoryOrganizedPath(const std::string &path);
+std::string uaSetDirectoryResolvedReadPath(const std::string &path, bool directory = false);
 std::string uaDataFirstResolvedReadPath(const std::string &path);
 std::string uaDataFirstResolvedWritePath(const std::string &path);
 std::vector<std::string> uaDataFirstRootDirCandidates(const std::string &dirname);
