@@ -1466,7 +1466,8 @@ struct TGemNotificationEntry
         CHANGE_ENERGY_UFO,
         CHANGE_ENERGY_CAR,
         CHANGE_ENERGY_GUN,
-        CHANGE_ENERGY_CRUISER
+        CHANGE_ENERGY_CRUISER,
+        CHANGE_MAX_ACTIVE_AT_ONCE
     };
 
     uint8_t TargetKind = TARGET_VEHICLE;
@@ -2318,6 +2319,8 @@ public:
     virtual void ypaworld_func144(NC_STACK_ypabact *bacto);
     virtual size_t ypaworld_func145(NC_STACK_ypabact *bact);
     virtual NC_STACK_ypabact * ypaworld_func146(ypaworld_arg146 *vhcl_id);
+    int GetVehicleProductionLimitRemaining(int owner, int vehicleId);
+    bool IsVehicleProductionLimitReached(int owner, int vehicleId);
     virtual NC_STACK_ypamissile * ypaworld_func147(ypaworld_arg146 *arg);
     virtual size_t ypaworld_func148(ypaworld_arg148 *arg);
     virtual void ypaworld_func149(ypaworld_arg136 *arg);

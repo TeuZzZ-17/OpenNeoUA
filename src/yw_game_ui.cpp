@@ -5822,7 +5822,49 @@ static void yw_StoreGuiListRowBackground(const GuiList *lstvw, CmdStream *cur,
         FontUA::set_opacity(cur, 255);
 }
 
-void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStream *cur, char a5, const std::string &a6, int a7)
+static std::string yw_FormatGenesisVehicleName(NC_STACK_ypaworld *yw, int fontId,
+                                                int textWidth, const std::string &name,
+                                                int remaining)
+{
+    if ( !yw || remaining < 0 || fontId < 0 ||
+         (size_t)fontId >= yw->_guiTiles.size() || !yw->_guiTiles[fontId] )
+        return name;
+
+    TileMap *font = yw->_guiTiles[fontId];
+    const std::string count = fmt::sprintf("[%d]", remaining);
+    const int gapWidth = font->GetWidth(" ");
+    int nameWidth = textWidth - font->GetWidth(count) - gapWidth;
+
+    if ( nameWidth <= 0 )
+        return count;
+
+    if ( font->GetWidth(name) <= nameWidth )
+        return name + " " + count;
+
+    std::string clipped;
+    std::string ellipsis = "...";
+    const int ellipsisWidth = font->GetWidth(ellipsis);
+    if ( ellipsisWidth < nameWidth )
+        nameWidth -= ellipsisWidth;
+    else
+        ellipsis.clear();
+
+    int usedWidth = 0;
+    for (unsigned char ch : name)
+    {
+        const int charWidth = font->GetWidth(ch);
+        if ( usedWidth + charWidth > nameWidth )
+            break;
+
+        clipped.push_back((char)ch);
+        usedWidth += charWidth;
+    }
+
+    return clipped + ellipsis + " " + count;
+}
+
+void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStream *cur,
+                         char a5, const std::string &a6, int a7, int remaining)
 {
     const int scrollbarGap = yw_GetGuiListScrollbarGapFillWidth(lstvw, yw);
     int v33 = lstvw->entryWidth - 2 * yw->_fontBorderW + scrollbarGap;
@@ -5836,8 +5878,6 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
 
     if ( a2 )
     {
-        FontUA::set_txtColor(cur, yw->_iniColors[62].r, yw->_iniColors[62].g, yw->_iniColors[62].b);
-
         v14 = 9;
         v15 = 98;
         v16 = 99;
@@ -5845,13 +5885,21 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
     }
     else
     {
-        FontUA::set_txtColor(cur, yw->_iniColors[61].r, yw->_iniColors[61].g, yw->_iniColors[61].b);
-
         v14 = 0;
         v16 = 102;
         v15 = 102;
         v17 = 102;
     }
+
+    // A capped Genesis entry at zero remains selectable, but its text uses a
+    // fixed neutral disabled gray for every faction. Keep it bright enough to
+    // remain readable over both the normal and selected row backgrounds.
+    if ( remaining == 0 )
+        FontUA::set_txtColor(cur, 160, 160, 160);
+    else if ( a2 )
+        FontUA::set_txtColor(cur, yw->_iniColors[62].r, yw->_iniColors[62].g, yw->_iniColors[62].b);
+    else
+        FontUA::set_txtColor(cur, yw->_iniColors[61].r, yw->_iniColors[61].g, yw->_iniColors[61].b);
 
     int v19 = yw->_guiTiles[v14]->map[48].w;
 
@@ -5866,10 +5914,11 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
     v24[1].fontID = v14;
     v24[1].spaceChar = v16;
     v24[1].prefixChar = v15;
-    v24[1].txt = a6;
     v24[1].flags = 37;
     v24[1].width = v33 - squadron_manager.field_2CC - 5 * v19;
     v24[1].postfixChar = 0;
+    const int nameTextWidth = v24[1].width - yw->_guiTiles[v14]->map[v15].w;
+    v24[1].txt = yw_FormatGenesisVehicleName(yw, v14, nameTextWidth, a6, remaining);
 
     v24[2].txt = fmt::sprintf("%d", a7);
     v24[2].fontID = v14;
@@ -5972,11 +6021,15 @@ void gui_update_create_btn__sub0(NC_STACK_ypaworld *yw)
             int v17 = dround(yw->sub_4498F4() * 2 * proto.GetProductionCost() / 100.0);
 
             const std::string v8 = yw->ResolveGameplayVehicleName(proto);
+            const int remaining = yw->_userRobo
+                ? yw->GetVehicleProductionLimitRemaining(yw->_userRobo->_owner, v5)
+                : -1;
 
             if ( v3 == gui_lstvw.selectedEntry )
                 v21 = 1;
 
-            buy_list_update_sub(yw, v21, &gui_lstvw, &gui_lstvw.itemBlock, proto.type_icon, v8, v17);
+            buy_list_update_sub(yw, v21, &gui_lstvw, &gui_lstvw.itemBlock,
+                                proto.type_icon, v8, v17, remaining);
         }
         else if ( bzda.field_4DC[ v3 ].i == 2 )
         {
@@ -5990,7 +6043,8 @@ void gui_update_create_btn__sub0(NC_STACK_ypaworld *yw)
             if ( v3 == gui_lstvw.selectedEntry )
                 v21 = 1;
 
-            buy_list_update_sub(yw, v21, &gui_lstvw, &gui_lstvw.itemBlock, v10.TypeIcon, v13, v18);
+            buy_list_update_sub(yw, v21, &gui_lstvw, &gui_lstvw.itemBlock,
+                                v10.TypeIcon, v13, v18, -1);
         }
     }
 
@@ -13614,6 +13668,9 @@ static std::string yw_GemCategoryLabel(const TGemNotificationEntry &entry)
     case TGemNotificationEntry::CHANGE_ENERGY_CRUISER:
         return Locale::Text::OpenUA(Locale::OUA_GEM_CRUISER_DAMAGE_UPGRADE);
 
+    case TGemNotificationEntry::CHANGE_MAX_ACTIVE_AT_ONCE:
+        return Locale::Text::OpenUA(Locale::OUA_GEM_MAX_UNITS_UPGRADE);
+
     default:
         return std::string();
     }
@@ -16100,6 +16157,9 @@ int NC_STACK_ypaworld::sb_0x4d3d44(TClickBoxInf *winp)
     if ( _updateMessage.energy > a4 )
         return 2;
 
+    const int vehicleId = bzda.field_2DC[bzda.field_8EC];
+    if ( _userRobo && IsVehicleProductionLimitReached(_userRobo->_owner, vehicleId) )
+        return 3;
 
     if ( !yw_MouseFindCreationPoint(winp) )
         return 1;

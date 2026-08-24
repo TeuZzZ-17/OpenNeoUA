@@ -25,6 +25,24 @@ static int GemFloatHundredths(float value)
     return (int)std::lround((double)value * 100.0);
 }
 
+static int ParsePositiveIntOrZero(const std::string &value)
+{
+    try
+    {
+        size_t parsed = 0;
+        long long result = std::stoll(value, &parsed, 0);
+        if ( parsed != value.size() || result <= 0 ||
+             result > std::numeric_limits<int>::max() )
+            return 0;
+
+        return (int)result;
+    }
+    catch (...)
+    {
+        return 0;
+    }
+}
+
 static int ParseSampleVariantId(const std::string &token)
 {
     if ( token.size() < 6 || StriCmp(token.substr(0, 6), "sample") )
@@ -2452,6 +2470,24 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                                            TGemNotificationEntry::CHANGE_RADAR,
                                            previousValue, _vhcl->radar);
     }
+    else if ( !StriCmp(p1, "add_max_active_at_once") )
+    {
+        const int increment = ParsePositiveIntOrZero(p2);
+        if ( increment > 0 && _vhcl->max_active_at_once > 0 )
+        {
+            const int previousValue = _vhcl->max_active_at_once;
+            if ( previousValue > std::numeric_limits<int>::max() - increment )
+                _vhcl->max_active_at_once = std::numeric_limits<int>::max();
+            else
+                _vhcl->max_active_at_once += increment;
+
+            if ( _vhcl->max_active_at_once != previousValue &&
+                 _isModify && _o.IsGemNotificationCaptureActive() )
+                _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
+                                               TGemNotificationEntry::CHANGE_MAX_ACTIVE_AT_ONCE,
+                                               previousValue, _vhcl->max_active_at_once);
+        }
+    }
     else if ( !StriCmp(p1, "vp_normal") )
     {
         _vhcl->vp_normal = parser.stol(p2, NULL, 0);
@@ -2795,10 +2831,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->proximity_defense_random_pitch_set = true;
         _vhcl->proximity_defense_random_pitch_max = parser.stof(p2, 0);
     }
-    else if ( !StriCmp(p1, "ai_max_active_at_once") )
+    else if ( !StriCmp(p1, "max_active_at_once") )
     {
-        int maxActive = parser.stol(p2, NULL, 0);
-        _vhcl->ai_max_active_at_once = maxActive > 0 ? maxActive : 0;
+        _vhcl->max_active_at_once = ParsePositiveIntOrZero(p2);
     }
     else if ( ParseVPScaleParam(parser, "vp", p1, p2, _vhcl->vp_scale) )
     {
@@ -3831,7 +3866,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->proximity_defense_random_pitch_set = false;
         _vhcl->proximity_defense_random_pitch_min = -10.0;
         _vhcl->proximity_defense_random_pitch_max = 45.0;
-        _vhcl->ai_max_active_at_once = 0;
+        _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
