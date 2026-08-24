@@ -198,9 +198,9 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     _bactOnMouse = NULL;
     _damageHoverTargets.clear();
     _bactPrevClicked = 0;
-    ClearMortarMarkers();
-    _mortarManualGid = 0;
-    _mortarManualRadius = 0.0f;
+    ClearArtilleryShellMarkers();
+    _artilleryShellManualGid = 0;
+    _artilleryShellManualRadius = 0.0f;
     _viewerBact = NULL;
     _userRobo = NULL;
     _userUnit = NULL;
@@ -8193,10 +8193,10 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
     if ( _showCollDebug )
         debug_draw_coll_spheres();
 
-    // OpenNeoUA custom: keep strategic-map mortar markers from lingering after expiry.
-    // Manual mortar control is handled entirely by 2D-map clicks (no key trigger);
-    // see NC_STACK_ypaworld::HandleMortarMapClick().
-    ExpireMortarMarkers();
+    // OpenNeoUA custom: keep strategic-map artillery shell markers from lingering after expiry.
+    // Manual artillery shell control is handled entirely by 2D-map clicks (no key trigger);
+    // see NC_STACK_ypaworld::HandleArtilleryShellMapClick().
+    ExpireArtilleryShellMarkers();
 }
 
 static bool yw_DebugIsLiveBact(NC_STACK_ypabact *unit)
@@ -8562,9 +8562,15 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         if ( unit->_proximity_defense_trigger_radius > 0.01f )
             drawFlatRing(pos, unit->_proximity_defense_trigger_radius, 230, 60, 200);
 
-        // Cyan = seek-and-explode trigger radius.
-        if ( unit->_seek_and_explode_trigger_radius > 0.01f )
-            drawFlatRing(pos, unit->_seek_and_explode_trigger_radius, 60, 220, 220);
+        // Cyan = model=kamikaze XYZ trigger sphere. Contact mode uses the
+        // effective carrier collision bound; no flat/XZ-only fuse is implied.
+        float kamikazeDebugRadius = 0.0f;
+        if ( unit->GetKamikazeDebugSphere(&kamikazeDebugRadius) )
+        {
+            drawRing(pos, kamikazeDebugRadius, 0, 60, 220, 220);
+            drawRing(pos, kamikazeDebugRadius, 1, 60, 220, 220);
+            drawRing(pos, kamikazeDebugRadius, 2, 60, 220, 220);
+        }
 
         // Red tube = active model=laser beam thickness, using the weapon radius.
         if ( unit->_laser_active &&
@@ -8644,21 +8650,21 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
         _debugAoeRings.erase(_debugAoeRings.begin());
 }
 
-// OpenNeoUA custom: register/refresh a mortar bombardment marker. Multiple shells of
+// OpenNeoUA custom: register/refresh an artillery shell bombardment marker. Multiple shells of
 // the same barrage merge into a single steady ring (refreshing its expiry).
-void NC_STACK_ypaworld::AddMortarMarker(const vec3d &pos, float radius, int owner, int lingerMs)
+void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, int lingerMs)
 {
     if ( radius < 0.01f )
         return;
 
-    ExpireMortarMarkers();
+    ExpireArtilleryShellMarkers();
 
     if ( lingerMs < 0 )
         lingerMs = 0;
 
     int32_t expire = _timeStamp + (int32_t)((int64_t)lingerMs * 1024 / 1000); // 1024 ticks = 1s
 
-    for (MortarMarker &m : _mortarMarkers)
+    for (ArtilleryShellMarker &m : _artilleryShellMarkers)
     {
         if ( m.owner == (uint8_t)owner && (m.pos.XZ() - pos.XZ()).length() <= radius )
         {
@@ -8670,35 +8676,35 @@ void NC_STACK_ypaworld::AddMortarMarker(const vec3d &pos, float radius, int owne
         }
     }
 
-    MortarMarker marker;
+    ArtilleryShellMarker marker;
     marker.pos = pos;
     marker.radius = radius;
     marker.owner = (uint8_t)owner;
     marker.expireStamp = expire;
-    _mortarMarkers.push_back(marker);
+    _artilleryShellMarkers.push_back(marker);
 
-    if ( _mortarMarkers.size() > 64 )
-        _mortarMarkers.erase(_mortarMarkers.begin());
+    if ( _artilleryShellMarkers.size() > 64 )
+        _artilleryShellMarkers.erase(_artilleryShellMarkers.begin());
 }
 
 // OpenNeoUA custom: expire old bombardment markers without drawing them in the 3D world.
-void NC_STACK_ypaworld::ExpireMortarMarkers()
+void NC_STACK_ypaworld::ExpireArtilleryShellMarkers()
 {
-    for (size_t i = 0; i < _mortarMarkers.size(); )
+    for (size_t i = 0; i < _artilleryShellMarkers.size(); )
     {
-        if ( _timeStamp >= _mortarMarkers[i].expireStamp )
+        if ( _timeStamp >= _artilleryShellMarkers[i].expireStamp )
         {
-            _mortarMarkers[i] = _mortarMarkers.back();
-            _mortarMarkers.pop_back();
+            _artilleryShellMarkers[i] = _artilleryShellMarkers.back();
+            _artilleryShellMarkers.pop_back();
         }
         else
             i++;
     }
 }
 
-void NC_STACK_ypaworld::ClearMortarMarkers()
+void NC_STACK_ypaworld::ClearArtilleryShellMarkers()
 {
-    _mortarMarkers.clear();
+    _artilleryShellMarkers.clear();
 }
 
 void NC_STACK_ypaworld::HistoryAktCreate(NC_STACK_ypabact *bact)

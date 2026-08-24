@@ -226,15 +226,91 @@ static PlayerSprintConfig yw_GetPlayerSprintConfig()
     return config;
 }
 
-static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw)
+static bool yw_GetActiveKamikazeFireTimeScale(NC_STACK_ypaworld *yw,
+                                                   TInputState *inpt,
+                                                   float *outScale,
+                                                   float *outHpDrainPercent)
+{
+    if ( outScale )
+        *outScale = 1.0f;
+    if ( outHpDrainPercent )
+        *outHpDrainPercent = 0.0f;
+
+    if ( !yw || yw->_isNetGame || !inpt || !yw->_userUnit ||
+         !yw->_userUnit->getBACT_inputting() )
+        return false;
+
+    const bool fireHeld =
+        inpt->Buttons.Is(0) ||
+        (yw->_mouseGrabbed && World::IsFixedInputShortcutHeld(World::INPUT_BIND_FIRE));
+    if ( !fireHeld )
+        return false;
+
+    return yw->_userUnit->GetExclusiveKamikazeFireTimeScale(outScale,
+                                                             outHpDrainPercent);
+}
+
+static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw, TInputState *inpt)
 {
     if ( !yw || yw->_isNetGame )
         return 1.0f;
 
+    float scale = 1.0f;
     if ( yw->HasActiveRoboDeathTimeScale() )
-        return yw_GetRoboDeathScaleProfile().scale;
+        scale = std::min(scale, yw_GetRoboDeathScaleProfile().scale);
 
-    return 1.0f;
+    float fireScale = 1.0f;
+    if ( yw_GetActiveKamikazeFireTimeScale(yw, inpt, &fireScale, NULL) )
+        scale = std::min(scale, fireScale);
+
+    return scale;
+}
+
+static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
+                                                   TInputState *inpt,
+                                                   int32_t unscaledFrameTime)
+{
+    if ( !yw )
+        return;
+
+    float scale = 1.0f;
+    float drainPercent = 0.0f;
+    const bool active = unscaledFrameTime > 0 &&
+                        yw_GetActiveKamikazeFireTimeScale(yw, inpt, &scale,
+                                                          &drainPercent);
+    if ( !active || drainPercent <= 0.0f || !yw->_userUnit )
+    {
+        yw->_kamikazeFireTimeScaleDrainUnit = NULL;
+        yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+        return;
+    }
+
+    NC_STACK_ypabact *unit = yw->_userUnit;
+    if ( yw->_kamikazeFireTimeScaleDrainUnit != unit )
+    {
+        yw->_kamikazeFireTimeScaleDrainUnit = unit;
+        yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+    }
+
+    if ( unit->IsInvulnerableToDamage() || unit->_energy <= 0 || unit->_energy_max <= 0 )
+    {
+        yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+        return;
+    }
+
+    const double rawDrain = (double)unit->_energy_max *
+                            (double)drainPercent * 0.01 *
+                            ((double)unscaledFrameTime / 1000.0);
+    yw->_kamikazeFireTimeScaleHpDrainRemainder += rawDrain;
+
+    const int energyDrain = (int)yw->_kamikazeFireTimeScaleHpDrainRemainder;
+    if ( energyDrain <= 0 )
+        return;
+
+    yw->_kamikazeFireTimeScaleHpDrainRemainder -= energyDrain;
+    unit->_energy -= energyDrain;
+    if ( unit->_energy < 0 )
+        unit->_energy = 0;
 }
 
 static int32_t yw_GetScaledGameplayFrameTime(NC_STACK_ypaworld *yw,
@@ -1028,286 +1104,6 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
     return true;
 }
 
-bool NC_STACK_ypaworld::DebugReloadLiveData(std::string *details)
-{
-    if ( details )
-        details->clear();
-
-    if ( _isNetGame )
-    {
-        if ( details )
-            *details = "network game: live reload disabled";
-        return false;
-    }
-
-    // Nucleus.ini is already data-driven through IniConf. Re-read it first so
-    // prototype defaults that depend on current OpenNeoUA settings use the new values.
-    // Missing files keep the previous IniConf values because ParseIniFile does not
-    // reset the key catalogue when the file cannot be opened.
-    if ( !System::IniConf::ReadFromNucleusIni() )
-    {
-        if ( details )
-            *details = "Nucleus.ini could not be reopened";
-        return false;
-    }
-    ApplyNucleusViewDistanceOverrides();
-    // EnergyFX caches validated Nucleus.ini values; refresh it on the same F7
-    // path so procedural/VP profile changes do not require a process restart.
-    World::EnergyFX::Init();
-
-    // Rebuild prototypes in an isolated temporary world. The normal prototype
-    // parsers own resources (wireframes/samples), so parsing directly over the
-    // live vectors would make a malformed script capable of leaving half-written
-    // data behind. Only a fully parsed staging set is swapped into the live world.
-    NC_STACK_ypaworld staged;
-    staged._initScriptFilePath = _initScriptFilePath;
-    staged._defaultUnitLimit = _defaultUnitLimit;
-    staged._defaultUnitLimitArg = _defaultUnitLimitArg;
-    staged._defaultUnitLimitType = _defaultUnitLimitType;
-    staged._allowMultiBuildWorld = _allowMultiBuildWorld;
-
-    if ( !staged.ProtosInit() )
-    {
-        if ( details )
-            *details = "startup prototype scripts failed; previous prototypes kept";
-        return false;
-    }
-
-    const int levelId = _levelInfo.LevelID;
-    std::string levelScript;
-    TLevelDescription stagedLevel;
-
-    if ( levelId >= 0 && levelId < (int)_globalMapRegions.MapRegions.size() )
-        levelScript = _globalMapRegions.MapRegions[levelId].MapDirectory;
-
-    if ( !levelScript.empty() )
-    {
-        // Parse the complete current LDF against staging state. This validates the
-        // LDF and applies its prototype/script/enable sections without touching the
-        // running mission topology (terrain, squads, gates, buildings or cells).
-        if ( !staged.sub_4DA41C(&stagedLevel, levelScript) || !stagedLevel.IsOk() )
-        {
-            if ( details )
-                *details = "current LDF failed; previous live prototypes kept";
-            return false;
-        }
-    }
-
-    // Keep already collected GEM upgrades after rebuilding the prototype catalogue.
-    // If the reloaded LDF keeps the same GEM topology, use its refreshed action/script
-    // data; structural GEM changes stay deferred until the next real level load.
-    bool gemTopologyCompatible = staged._techUpgrades.size() == _techUpgrades.size();
-    if ( gemTopologyCompatible )
-    {
-        for (size_t i = 0; i < _techUpgrades.size(); ++i)
-        {
-            const TMapGem &oldGem = _techUpgrades[i];
-            const TMapGem &newGem = staged._techUpgrades[i];
-            if ( oldGem.CellId.x != newGem.CellId.x ||
-                 oldGem.CellId.y != newGem.CellId.y ||
-                 oldGem.BuildingID != newGem.BuildingID )
-            {
-                gemTopologyCompatible = false;
-                break;
-            }
-        }
-    }
-
-    auto applyGemToStaging = [&staged](const TMapGem &gem) -> bool
-    {
-        if ( !gem.ScriptFile.empty() )
-            return staged.LoadProtosScript(gem.ScriptFile);
-
-        std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
-        ScriptParser::HandlersList parsers {
-            new World::Parsers::VhclProtoParser(&staged),
-            new World::Parsers::WeaponProtoParser(&staged),
-            new World::Parsers::BuildProtoParser(&staged)
-        };
-        bool parsed = ScriptParser::ParseStringList(gem.ActionsList, parsers,
-                                                     ScriptParser::FLAG_NO_SCOPE_SKIP);
-        Common::Env.SetPrefix("rsrc", oldRsrc);
-        return parsed;
-    };
-
-    for (size_t i = 0; i < _techUpgrades.size(); ++i)
-    {
-        const TMapGem &oldGem = _techUpgrades[i];
-        if ( !IsGamePlaySector(oldGem.CellId) )
-            continue;
-
-        const cellArea &cell = _cells(oldGem.CellId);
-        if ( cell.PurposeType != cellArea::PT_TECHDEACTIVE ||
-             cell.PurposeIndex != (int)i )
-            continue;
-
-        const TMapGem &reloadGem = gemTopologyCompatible ? staged._techUpgrades[i] : oldGem;
-        if ( !applyGemToStaging(reloadGem) )
-        {
-            if ( details )
-                *details = "active GEM prototype script failed; previous prototypes kept";
-            return false;
-        }
-    }
-
-    if ( _spectatorVehicleProtoID > 0 )
-    {
-        staged._spectatorVehicleProtoID = _spectatorVehicleProtoID;
-        if ( !staged.LoadSpectatorVehicleProto() )
-        {
-            if ( details )
-                *details = "spectator prototype reload failed; previous prototypes kept";
-            return false;
-        }
-    }
-
-    // No simulation runs while this function executes. Swap complete vectors in one
-    // step. Existing units and sound carriers can retain pointers into prototype-owned
-    // sound/FX parameters, so the replaced generations must stay alive until this world
-    // is destroyed. This is debug-only memory retention and avoids dangling pointers.
-    SFXEngine::SFXe.StopPlayingSounds();
-    _vhclProtos.swap(staged._vhclProtos);
-    _weaponProtos.swap(staged._weaponProtos);
-    _buildProtos.swap(staged._buildProtos);
-
-    _debugReloadRetiredVhclProtos.emplace_back();
-    _debugReloadRetiredVhclProtos.back().swap(staged._vhclProtos);
-    _debugReloadRetiredWeaponProtos.emplace_back();
-    _debugReloadRetiredWeaponProtos.back().swap(staged._weaponProtos);
-    _debugReloadRetiredBuildProtos.emplace_back();
-    _debugReloadRetiredBuildProtos.back().swap(staged._buildProtos);
-
-    // Modern cockpit camera values are safe to refresh on already existing units:
-    // they are view-only state and do not reset gameplay energy, physics or AI state.
-    auto refreshUnitCockpitCamera = [this](NC_STACK_ypabact *unit)
-    {
-        if ( !unit )
-            return;
-
-        int protoId = unit->_mimic_disguise_vehicleID > 0 ?
-                      unit->_mimic_disguise_vehicleID : unit->_vehicleID;
-        if ( protoId > 0 && (size_t)protoId < _vhclProtos.size() )
-        {
-            unit->_cockpit_camera_offset = _vhclProtos[protoId].cockpit_camera_offset;
-            unit->_cockpit_camera_recoil = _vhclProtos[protoId].cockpit_camera_recoil;
-        }
-    };
-
-    for (NC_STACK_ypabact *station : _unitsList)
-    {
-        refreshUnitCockpitCamera(station);
-        for (NC_STACK_ypabact *commander : station->_kidList)
-        {
-            refreshUnitCockpitCamera(commander);
-            for (NC_STACK_ypabact *slave : commander->_kidList)
-                refreshUnitCockpitCamera(slave);
-        }
-    }
-
-    // GEM descriptors contain no live pointers. Refresh them only when their level
-    // topology is unchanged, because cells keep PurposeIndex values into this vector.
-    if ( gemTopologyCompatible )
-        _techUpgrades = staged._techUpgrades;
-
-    bool profilesReloaded = true;
-    if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 )
-    {
-        _debugReloadRetiredSuperItemProfiles.emplace_back();
-        profilesReloaded = LoadSuperItemProfiles(&_debugReloadRetiredSuperItemProfiles.back());
-        if ( !profilesReloaded )
-            _debugReloadRetiredSuperItemProfiles.pop_back();
-    }
-    else
-    {
-        if ( !_superItemProfiles.empty() )
-        {
-            _debugReloadRetiredSuperItemProfiles.emplace_back();
-            _debugReloadRetiredSuperItemProfiles.back().swap(_superItemProfiles);
-        }
-    }
-
-    // LDF begin_item is part of the running SuperItem state. Only ProfileId can be
-    // changed safely without rebuilding cells/buildings/timers. Keep all runtime
-    // state and accept the new profile link only for the same item topology.
-    bool superItemTopologyCompatible =
-        staged._levelInfo.SuperItems.size() == _levelInfo.SuperItems.size();
-    if ( superItemTopologyCompatible )
-    {
-        for (size_t i = 0; i < _levelInfo.SuperItems.size(); ++i)
-        {
-            const TMapSuperItem &oldItem = _levelInfo.SuperItems[i];
-            const TMapSuperItem &newItem = staged._levelInfo.SuperItems[i];
-            if ( oldItem.CellId.x != newItem.CellId.x ||
-                 oldItem.CellId.y != newItem.CellId.y ||
-                 oldItem.Type != newItem.Type )
-            {
-                superItemTopologyCompatible = false;
-                break;
-            }
-        }
-    }
-
-    if ( superItemTopologyCompatible &&
-         (profilesReloaded || System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1) )
-    {
-        for (size_t i = 0; i < _levelInfo.SuperItems.size(); ++i)
-            _levelInfo.SuperItems[i].ProfileId = staged._levelInfo.SuperItems[i].ProfileId;
-    }
-
-    // Re-resolve profile indices by stable profile id without resetting active
-    // SuperItem timers, hit tracking, buildings or wave state.
-    if ( profilesReloaded || System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 )
-    {
-        for (TMapSuperItem &item : _levelInfo.SuperItems)
-        {
-            item.CustomProfileIndex = -1;
-            if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 ||
-                 item.Type != TMapSuperItem::TYPE_BOMB || item.ProfileId.empty() )
-                continue;
-
-            int resolved = -1;
-            int matches = 0;
-            for (size_t profileIndex = 0; profileIndex < _superItemProfiles.size(); ++profileIndex)
-            {
-                const World::TSuperItemProfile &profile = _superItemProfiles[profileIndex];
-                if ( !StriCmp(profile.id, item.ProfileId) )
-                {
-                    resolved = (int)profileIndex;
-                    ++matches;
-                }
-            }
-
-            if ( matches != 1 )
-                continue;
-
-            const World::TSuperItemProfile &profile = _superItemProfiles[resolved];
-            if ( !profile.valid || profile.duplicate ||
-                 profile.type != World::TSuperItemProfile::TYPE_BOMB ||
-                 profile.wave_vp <= 0 || (size_t)profile.wave_vp >= _vhclModels.size() ||
-                 !_vhclModels[profile.wave_vp] )
-                continue;
-
-            item.CustomProfileIndex = resolved;
-        }
-    }
-
-    if ( details )
-    {
-        *details = "Nucleus.ini + prototypes";
-        if ( !levelScript.empty() )
-            *details += " + current LDF runtime-safe data";
-        if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 )
-            *details += profilesReloaded ? " + super_item_profiles.txt" :
-                                           " + previous SuperItem profiles kept";
-        if ( !gemTopologyCompatible )
-            *details += "; structural GEM LDF changes deferred";
-        if ( !superItemTopologyCompatible )
-            *details += "; structural SuperItem LDF changes deferred";
-    }
-
-    return true;
-}
-
 bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
 {
     std::string buf = Common::Env.SetPrefix("rsrc", "data:");
@@ -1842,9 +1638,9 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
 
         const int32_t unscaledFrameTime = arg->DTime;
-        const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this);
+        const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this, arg->field_8);
 
-        // Host Station deaths use the single global gameplay-time scale.
+        // Host Station death and Kamikaze FIRE share the single global gameplay-time scale.
         // GEM unlock notifications remain entirely on real/UI time.
         SFXEngine::SFXe.SetTimeScale(gameplayTimeScale);
 
@@ -1933,26 +1729,66 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
         else if ( arg->field_8 )
         {
-            // F7: OpenNeoUA live data reload. F7 is also the vanilla next-commander
-            // hotkey, so consume that binding only while New Debug owns the key.
+            // F7 and F8 intentionally share the same selected-vehicle resolver.
+            // Attached non-vehicle objects resolve to their carrier, matching the
+            // existing F8 debug behavior without introducing a second selection path.
+            auto isDebugVehicleTarget = [](const NC_STACK_ypabact *unit)
+            {
+                if ( !unit ||
+                     (unit->_status != BACT_STATUS_NORMAL && unit->_status != BACT_STATUS_IDLE) ||
+                     unit->_energy <= 0 ||
+                     (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) )
+                    return false;
+
+                switch ( unit->_bact_type )
+                {
+                case BACT_TYPES_BACT:
+                case BACT_TYPES_TANK:
+                case BACT_TYPES_ZEPP:
+                case BACT_TYPES_FLYER:
+                case BACT_TYPES_UFO:
+                case BACT_TYPES_CAR:
+                case BACT_TYPES_ROBO:
+                    return true;
+
+                default:
+                    return false;
+                }
+            };
+
+            auto resolveDebugSelectedVehicle = [&]() -> NC_STACK_ypabact *
+            {
+                NC_STACK_ypabact *selectedVehicle = _bactOnMouse;
+                if ( selectedVehicle && !isDebugVehicleTarget(selectedVehicle) &&
+                     selectedVehicle->_parent && selectedVehicle->_parent != selectedVehicle->_host_station )
+                    selectedVehicle = selectedVehicle->_parent;
+
+                return isDebugVehicleTarget(selectedVehicle) ? selectedVehicle : NULL;
+            };
+
+            // F7: toggle runtime invulnerability on the selected allied vehicle.
+            // F7 is also the vanilla next-commander hotkey, so consume that
+            // binding only while New Debug owns the key.
             if ( arg->field_8->KbdLastHit == Input::KC_F7 )
             {
                 arg->field_8->HotKeyID = -1;
 
-                std::string reloadDetails;
-                bool reloadOK = DebugReloadLiveData(&reloadDetails);
+                NC_STACK_ypabact *selectedVehicle = resolveDebugSelectedVehicle();
+                const bool validAlliedVehicle = selectedVehicle && _userRobo &&
+                                                selectedVehicle->_owner == _userRobo->_owner;
+                if ( validAlliedVehicle )
+                    selectedVehicle->_invulnerable = !selectedVehicle->_invulnerable;
 
                 yw_arg159 infoMsg;
-                infoMsg.txt = reloadOK ?
-                              "Live Data Reload OK" :
-                              "Live Data Reload FAILED";
+                infoMsg.txt = validAlliedVehicle ?
+                              (selectedVehicle->_invulnerable ?
+                               "Vehicle Invulnerable" :
+                               "Vehicle Vulnerable") :
+                              "No Allied Vehicle Selected";
                 infoMsg.unit = NULL;
                 infoMsg.Priority = 100;
                 infoMsg.MsgID = 0;
                 ypaworld_func159(&infoMsg);
-
-                if ( !reloadDetails.empty() )
-                    ypa_log_out("OpenNeoUA New Debug F7: %s.\n", reloadDetails.c_str());
             }
 
             // F9: runtime-only global unit invulnerability. Handle it before
@@ -1978,36 +1814,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             {
                 arg->field_8->HotKeyID = -1;
 
-                auto isDebugDestroyableVehicle = [](const NC_STACK_ypabact *unit)
-                {
-                    if ( !unit ||
-                         (unit->_status != BACT_STATUS_NORMAL && unit->_status != BACT_STATUS_IDLE) ||
-                         unit->_energy <= 0 ||
-                         (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) )
-                        return false;
-
-                    switch ( unit->_bact_type )
-                    {
-                    case BACT_TYPES_BACT:
-                    case BACT_TYPES_TANK:
-                    case BACT_TYPES_ZEPP:
-                    case BACT_TYPES_FLYER:
-                    case BACT_TYPES_UFO:
-                    case BACT_TYPES_CAR:
-                    case BACT_TYPES_ROBO:
-                        return true;
-
-                    default:
-                        return false;
-                    }
-                };
-
-                NC_STACK_ypabact *selectedVehicle = _bactOnMouse;
-                if ( selectedVehicle && !isDebugDestroyableVehicle(selectedVehicle) &&
-                     selectedVehicle->_parent && selectedVehicle->_parent != selectedVehicle->_host_station )
-                    selectedVehicle = selectedVehicle->_parent;
-
-                const bool destroyed = isDebugDestroyableVehicle(selectedVehicle);
+                NC_STACK_ypabact *selectedVehicle = resolveDebugSelectedVehicle();
+                const bool destroyed = selectedVehicle != NULL;
                 if ( destroyed )
                 {
                     selectedVehicle->_killer = NULL;
@@ -2065,6 +1873,9 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
 
         bool gameplayFrozen = openUADebug && _debugGameplayFrozen;
+
+        yw_UpdateKamikazeFireTimeScaleHpDrain(this, arg->field_8,
+                                               gameplayFrozen ? 0 : unscaledFrameTime);
 
         if ( !gameplayFrozen )
             arg->DTime = yw_GetScaledGameplayFrameTime(this, arg->DTime,
@@ -2424,9 +2235,6 @@ static bool yw_VehicleReferencesWeapon(const World::TVhclProto &vehicle, int32_t
         return true;
 
     if ( vehicle.mgun_set && vehicle.mgun == weaponId )
-        return true;
-
-    if ( vehicle.seek_and_explode && vehicle.seek_and_explode_weapon == weaponId )
         return true;
 
     return vehicle.proximity_defense_enable && vehicle.proximity_defense_weapon == weaponId;
@@ -4234,10 +4042,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_proximity_defense_next_shot_time = 0;
         bacto->_proximity_defense_next_activation_time = 0;
         bacto->_proximity_defense_at_death_done = false;
-        bacto->_seek_and_explode = vhcl.seek_and_explode ? 1 : 0;
-        bacto->_seek_and_explode_weapon = vhcl.seek_and_explode_weapon > 0 ? vhcl.seek_and_explode_weapon : 0;
-        bacto->_seek_and_explode_trigger_radius = vhcl.seek_and_explode_trigger_radius > 0.0 ? vhcl.seek_and_explode_trigger_radius : 0.0;
-        bacto->_seek_and_explode_triggered = false;
+        bacto->_kamikaze_triggered = false;
         bacto->SetUnitGuns(vhcl_id->skip_unit_guns ? std::vector<World::TRoboGun>() : vhcl.unit_guns);
 
         bacto->_destroyFX = vhcl.dest_fx;
@@ -5023,9 +4828,9 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _damageHoverTargets.clear();
     _inBuildProcess.clear();
     _debugAoeRings.clear();
-    ClearMortarMarkers();
-    _mortarManualGid = 0;
-    _mortarManualRadius = 0.0f;
+    ClearArtilleryShellMarkers();
+    _artilleryShellManualGid = 0;
+    _artilleryShellManualRadius = 0.0f;
 
     _hudMissileMultiLockTargets.clear();
     _cmdrsRemap.clear();
@@ -5060,6 +4865,8 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _upgradeTimeStamp = 0;
     _gameplayTimeScaleRemainder = 0.0;
     _roboDeathTimeScaleEndTick = 0;
+    _kamikazeFireTimeScaleDrainUnit = NULL;
+    _kamikazeFireTimeScaleHpDrainRemainder = 0.0;
     _gameplayRenderTimeBase = 0;
     _gameplayRenderTimeBaseSet = false;
     _upgradeVehicleId = 0;
@@ -11324,9 +11131,9 @@ void NC_STACK_ypaworld::setYW_userVehicle(NC_STACK_ypabact *bact)
     if ( !CanControlUnitInSpectatorMode(bact) )
         return;
 
-    // OpenNeoUA custom: never make a mortar platform the player-controlled vehicle;
-    // mortars are commanded only from the 2D strategic map.
-    if ( bact && bact->IsMortarPlatform() )
+    // OpenNeoUA custom: never make an artillery shell platform the player-controlled vehicle;
+    // artillery shells are commanded only from the 2D strategic map.
+    if ( bact && bact->IsArtilleryShellPlatform() )
         return;
 
     if ( bact != _userUnit )

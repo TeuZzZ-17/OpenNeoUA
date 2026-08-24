@@ -332,7 +332,7 @@ public:
     static Common::Ini::Key UiStatusIconSpawn;
     static Common::Ini::Key UiStatusIconRadar;
     static Common::Ini::Key UiStatusIconPower;
-    static Common::Ini::Key UiStatusIconSeekAndExplode;
+    static Common::Ini::Key UiStatusIconKamikaze;
     static Common::Ini::Key UiStatusIconInvisible;
     static Common::Ini::Key UiStatusIconProximityDefense;
     static Common::Ini::Key UiStatusIconSprint;

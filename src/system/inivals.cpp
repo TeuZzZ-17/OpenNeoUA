@@ -268,7 +268,7 @@ Common::Ini::Key IniConf::GameSprintForceUpPercent("game.sprint_force_up_percent
 Common::Ini::Key IniConf::GameSprintPitchUpPercent("game.sprint_pitch_up_percent", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
 // OpenNeoUA custom: one shared percentage of nominal weapon damage converted into
-// shooter-side energy cost for normal projectiles, MGUNs, laser and vertical_laser.
+// shooter-side energy cost for normal projectiles, MGUNs and laser (including vertical mode).
 // 0 disables the configured drain; missing or invalid preserves each weapon type's
 // previous fallback. The shooter's effective shield attenuates the final cost.
 Common::Ini::Key IniConf::GameWeaponEnergyCostPercent("game.weapon_energy_cost_percent", Common::Ini::KT_WORD, std::string());
@@ -424,7 +424,7 @@ Common::Ini::Key IniConf::UiStatusIconDamaged("ui.status_icon_damaged", Common::
 Common::Ini::Key IniConf::UiStatusIconSpawn("ui.status_icon_spawn", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconRadar("ui.status_icon_radar", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconPower("ui.status_icon_power", Common::Ini::KT_STRING);
-Common::Ini::Key IniConf::UiStatusIconSeekAndExplode("ui.status_icon_seek_and_explode", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconKamikaze("ui.status_icon_kamikaze", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconInvisible("ui.status_icon_invisible", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconProximityDefense("ui.status_icon_proximity_defense", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconSprint("ui.status_icon_sprint", Common::Ini::KT_STRING);
@@ -744,7 +744,7 @@ void IniConf::Init()
         , &UiStatusIconSpawn
         , &UiStatusIconRadar
         , &UiStatusIconPower
-        , &UiStatusIconSeekAndExplode
+        , &UiStatusIconKamikaze
         , &UiStatusIconInvisible
         , &UiStatusIconProximityDefense
         , &UiStatusIconSprint

@@ -241,14 +241,12 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
 
     int v212 = _world->ypaworld_func145(this);
 
+    bool kamikazeRamming = ApplyKamikazeRammingGuidance();
+
     float v220 = _target_vec.length();
 
     if ( v220 > 0.0 )
         _target_dir = _target_vec / v220;
-
-    bool seekAndExplodeRamming = ApplySeekAndExplodeRammingGuidance();
-    if ( seekAndExplodeRamming )
-        v220 = _target_vec.length();
 
     if ( IsActiveDebuffDisorienting() )
     {
@@ -484,11 +482,11 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                        (COLL_WALL_L | COLL_WALL_R | COLL_HILL_L | COLL_HILL_R)) )
                     _thraction = GetActiveDebuffDisorientTraction(_thraction, true);
 
-                bool allowRecoilRecoveryMove = !recoilRecovery || seekAndExplodeRamming || _tankCollisionFlag;
+                bool allowRecoilRecoveryMove = !recoilRecovery || kamikazeRamming || _tankCollisionFlag;
 
                 if ( allowRecoilRecoveryMove &&
                      (IsActiveDebuffDisorienting() ||
-                      seekAndExplodeRamming ||
+                      kamikazeRamming ||
                       !(_status_flg & BACT_STFLAG_ATTACK) ||
                       !_tankExpectTgt ||
                       _tankCollisionFlag) )
@@ -1958,14 +1956,15 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
 
     World::TWeapProto *v22 = NULL;
     int v43 = 0;
-    int fireWeapon = arg->weapon >= 0 ? arg->weapon : _weapon;
+    int fireWeapon = arg->weapon >= 0 ? arg->weapon : GetCurrentWeaponId();
 
-    if ( fireWeapon != -1 &&
+    if ( fireWeapon >= 0 &&
          fireWeapon < (int)_world->GetWeaponsProtos().size() )
     {
         v22 = &_world->GetWeaponsProtos().at( fireWeapon );
 
-        if ( v22->_weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE )
+        if ( (v22->_weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE) &&
+             !v22->IsKamikaze() )
             v43 = v22->GetFireControlFlags();
         else
             v22 = NULL;
@@ -1985,7 +1984,7 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
             return 0;
 
         return (arg->pos.XZ() - fireOrigin.XZ()).length() <=
-               (v22->vertical_laser_fire_radius > 0.0f ? v22->vertical_laser_fire_radius : 300.0f);
+               (v22->ai_vertical_laser_trigger_radius > 0.0f ? v22->ai_vertical_laser_trigger_radius : 300.0f);
     }
 
     float v38 = 0.0;

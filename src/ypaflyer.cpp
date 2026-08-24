@@ -294,6 +294,8 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
 {
     float a2a = arg->frameTime / 1000.0;
 
+    const bool kamikazeRamming = ApplyKamikazeRammingGuidance();
+
     float v88 = _target_vec.length();
 
     if ( v88 > 0.0 )
@@ -511,7 +513,8 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
         }
         else
         {
-            if ( !HasLocalPlayerForceVerticalPursuitTarget() || _target_dir.y >= -0.01 )
+            if ( (!kamikazeRamming && !HasLocalPlayerForceVerticalPursuitTarget()) ||
+                 _target_dir.y >= -0.01 )
             {
                 if ( _target_dir.y < 0.15 )
                     _target_dir.y = 0.15;
@@ -558,7 +561,6 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             }
         }
 
-        ApplySeekAndExplodeRammingGuidance();
         bool altitudeLimited = ApplyAiMaxAltitudeAboveGround();
 
         ypaflyer_func70__sub0(a2a);

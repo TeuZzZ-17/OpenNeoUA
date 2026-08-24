@@ -7,10 +7,10 @@
 #include "ypagun.h"
 #include "yparobo.h"
 
-// OpenNeoUA custom: mortar guns are artillery pieces. They must be aimed only by
-// UpdateMortar()/ypabact_AimMortarLauncherVisual() at the current barrage zone,
+// OpenNeoUA custom: artillery shell guns are artillery pieces. They must be aimed only by
+// UpdateArtilleryShell()/ypabact_AimArtilleryShellLauncherVisual() at the current barrage zone,
 // not by the vanilla gun AI that tracks nearby visible enemies.
-static bool ypagun_UsesMortarWeapon(NC_STACK_ypagun *gun)
+static bool ypagun_UsesArtilleryShellWeapon(NC_STACK_ypagun *gun)
 {
     if ( !gun || !gun->getBACT_pWorld() )
         return false;
@@ -21,14 +21,14 @@ static bool ypagun_UsesMortarWeapon(NC_STACK_ypagun *gun)
     for (int i = 0; i < 4; i++)
     {
         int id = candidates[i];
-        if ( id > 0 && (size_t)id < weapons.size() && weapons.at(id).IsMortar() )
+        if ( id > 0 && (size_t)id < weapons.size() && weapons.at(id).IsArtilleryShell() )
             return true;
     }
 
     return false;
 }
 
-static void ypagun_ClearVanillaMortarTrackingTarget(NC_STACK_ypagun *gun)
+static void ypagun_ClearVanillaArtilleryShellTrackingTarget(NC_STACK_ypagun *gun)
 {
     if ( !gun || gun->_secndTtype == BACT_TGT_TYPE_NONE )
         return;
@@ -252,14 +252,14 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
             }
         }
 
-        // OpenNeoUA custom: if this gun uses a mortar weapon, do not let the
-        // vanilla flak/gun AI visually track or fire at nearby enemies. Mortar
-        // aiming is handled exclusively by UpdateMortar() while a barrage is
-        // active/pending, so idle mortar turrets keep their artillery posture
+        // OpenNeoUA custom: if this gun uses an artillery shell weapon, do not let the
+        // vanilla flak/gun AI visually track or fire at nearby enemies. Artillery-shell
+        // aiming is handled exclusively by UpdateArtilleryShell() while a barrage is
+        // active/pending, so idle artillery shell turrets keep their artillery posture
         // instead of "following" units they cannot directly shoot.
-        if ( ypagun_UsesMortarWeapon(this) && !disorienting )
+        if ( ypagun_UsesArtilleryShellWeapon(this) && !disorienting )
         {
-            ypagun_ClearVanillaMortarTrackingTarget(this);
+            ypagun_ClearVanillaArtilleryShellTrackingTarget(this);
             break;
         }
 
@@ -591,10 +591,10 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
 
 void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
 {
-    // OpenNeoUA custom: mortar guns fire only through the mortar barrage system.
+    // OpenNeoUA custom: artillery shell guns fire only through the artillery shell barrage system.
     // The vanilla close-range gun combat path would make them snap/chase nearby
     // enemies and can launch direct shots, which looks wrong for artillery.
-    if ( ypagun_UsesMortarWeapon(this) )
+    if ( ypagun_UsesArtilleryShellWeapon(this) )
         return;
 
     vec3d vTgt = arg->target.pbact->_position - _position;
