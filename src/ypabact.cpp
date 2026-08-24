@@ -66,7 +66,7 @@ static bool ypabact_IsLaserMeshUsable(
 {
     NC_STACK_ypaworld *world = bact ? bact->getBACT_pWorld() : NULL;
     if ( !world || world->_isNetGame ||
-         (!wproto.IsLaser() && !wproto.IsVerticalLaser()) ||
+         !wproto.IsLaser() ||
          !wproto.laser_mesh.enabled )
         return false;
 
@@ -246,7 +246,7 @@ static bool ypabact_IsMgunRecoilVisualVehicleClass(const NC_STACK_ypabact *unit)
     }
 }
 
-static bool ypabact_IsSeekAndExplodeArmed(NC_STACK_ypabact *unit);
+static bool ypabact_IsKamikazeArmed(NC_STACK_ypabact *unit);
 static void ypabact_FireProximityDefenseAtDeath(NC_STACK_ypabact *unit);
 
 float NC_STACK_ypabact::ReadPowerStationEnergyMultiplier()
@@ -1064,8 +1064,7 @@ bool NC_STACK_ypabact::UsesDownwardAlternativeView()
         return false;
 
     const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
-    return wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_BOMB ||
-           wproto.IsHomingBomb();
+    return wproto.IsBombLike();
 }
 
 vec3d NC_STACK_ypabact::GetAlternativeViewAimDirection() const
@@ -1089,7 +1088,7 @@ mat3x3 NC_STACK_ypabact::GetAlternativeViewRotation()
 
     const vec3d down = GetAlternativeViewAimDirection();
 
-    // Bomb-capable current weapons keep the existing straight-down bomber view.
+    // Bomb-like current weapons (incl. Vertical Laser) keep the straight-down bomber view.
     // Keep the vehicle's local right axis horizontal so its nose remains at the
     // top of the screen. The physical _rotation is never touched.
     vec3d right = _rotation.AxisX().X0Z();
@@ -1201,7 +1200,7 @@ static bool ypabact_IsUsableControlFallback(NC_STACK_ypabact *bact, NC_STACK_ypa
            bact != dying &&
            bact->_status != BACT_STATUS_DEAD &&
            !(bact->_status_flg & BACT_STFLAG_DEATH1) &&
-           !bact->IsMortarPlatform(); // OpenNeoUA: mortars are never a control fallback
+           !bact->IsArtilleryShellPlatform(); // OpenNeoUA: artillery shells are never a control fallback
 }
 
 static void ypabact_SafeDetachControlFrom(NC_STACK_ypabact *dying, NC_STACK_ypabact *preferredFallback);
@@ -2370,6 +2369,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _debuff_soundcarrier.Clear();
     _damaged_shake_carrier.Clear();
     _player_launch_shake_carrier.Clear();
+    _laser_launch_soundcarrier.Clear();
     _mgun_recoil_shake = TSndFxPosParam();
     _mgun_recoil_shake_carrier.Clear();
     _mimic_soundcarrier.Clear();
@@ -2504,20 +2504,17 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _proximity_defense_next_shot_time = 0;
     _proximity_defense_next_activation_time = 0;
     _proximity_defense_at_death_done = false;
-    _mortar_barrage_active = false;
-    _mortar_shots_remaining = 0;
-    _mortar_next_shot_time = 0;
-    _mortar_next_activation_time = 0;
-    _mortar_next_scan_time = 0;
-    _mortar_target_center = vec3d(0.0, 0.0, 0.0);
-    _mortar_has_pending = false;
-    _mortar_pending_target = vec3d(0.0, 0.0, 0.0);
+    _artillery_shell_barrage_active = false;
+    _artillery_shell_shots_remaining = 0;
+    _artillery_shell_next_shot_time = 0;
+    _artillery_shell_next_activation_time = 0;
+    _artillery_shell_next_scan_time = 0;
+    _artillery_shell_target_center = vec3d(0.0, 0.0, 0.0);
+    _artillery_shell_has_pending = false;
+    _artillery_shell_pending_target = vec3d(0.0, 0.0, 0.0);
     StopLaser();
     StopVerticalLaser();
-    _seek_and_explode = 0;
-    _seek_and_explode_weapon = 0;
-    _seek_and_explode_trigger_radius = 0.0;
-    _seek_and_explode_triggered = false;
+    _kamikaze_triggered = false;
     _gunDisplayName.clear();
     _unitGunsParentRotation = mat3x3::Ident();
     _unitGunsSpawned = false;
@@ -2641,6 +2638,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _debuff_soundcarrier.Clear();
     _damaged_shake_carrier.Clear();
     _player_launch_shake_carrier.Clear();
+    _laser_launch_soundcarrier.Clear();
     _mgun_recoil_shake = TSndFxPosParam();
     _mgun_recoil_shake_carrier.Clear();
     _mgun_soundcarrier.Clear();
@@ -2699,20 +2697,17 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _proximity_defense_next_shot_time = 0;
     _proximity_defense_next_activation_time = 0;
     _proximity_defense_at_death_done = false;
-    _mortar_barrage_active = false;
-    _mortar_shots_remaining = 0;
-    _mortar_next_shot_time = 0;
-    _mortar_next_activation_time = 0;
-    _mortar_next_scan_time = 0;
-    _mortar_target_center = vec3d(0.0, 0.0, 0.0);
-    _mortar_has_pending = false;
-    _mortar_pending_target = vec3d(0.0, 0.0, 0.0);
+    _artillery_shell_barrage_active = false;
+    _artillery_shell_shots_remaining = 0;
+    _artillery_shell_next_shot_time = 0;
+    _artillery_shell_next_activation_time = 0;
+    _artillery_shell_next_scan_time = 0;
+    _artillery_shell_target_center = vec3d(0.0, 0.0, 0.0);
+    _artillery_shell_has_pending = false;
+    _artillery_shell_pending_target = vec3d(0.0, 0.0, 0.0);
     StopLaser();
     StopVerticalLaser();
-    _seek_and_explode = 0;
-    _seek_and_explode_weapon = 0;
-    _seek_and_explode_trigger_radius = 0.0;
-    _seek_and_explode_triggered = false;
+    _kamikaze_triggered = false;
     _unitGuns.clear();
     _gunDisplayName.clear();
     _unitGunsParentRotation = mat3x3::Ident();
@@ -2857,6 +2852,7 @@ size_t NC_STACK_ypabact::Deinit()
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_damaged_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_player_launch_shake_carrier);
+    SFXEngine::SFXe.StopCarrier(&_laser_launch_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mgun_recoil_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
@@ -3549,7 +3545,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateDecorationFX(arg);
     UpdateCarrierSpawn(arg);
     UpdateProximityDefense(arg);
-    UpdateMortar(arg);
+    UpdateArtilleryShell(arg);
     ResolveGenesisCompoundOverlap(arg->frameTime);
     AI_layer1(arg);
 
@@ -3564,7 +3560,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateVerticalLaser(arg);
     UpdateAoePush(arg);
     UpdateWeaponRecoilPush(arg);
-    UpdateSeekAndExplode(arg);
+    UpdateKamikaze(arg);
     UpdateUnitGuns(arg);
 
     for( NC_STACK_ypamissile *misl : Utils::IterateListCopy<NC_STACK_ypamissile *>(_missiles_list))
@@ -3696,6 +3692,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
         ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
+        ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
     }
 
@@ -5556,6 +5553,8 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
 {
     float v75 = arg->frameTime / 1000.0;
 
+    const bool kamikazeRamming = ApplyKamikazeRammingGuidance();
+
     float v77 = _target_vec.length();
 
     if ( v77 > 0.0 )
@@ -5758,7 +5757,8 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
         }
         else
         {
-            if ( !HasLocalPlayerForceVerticalPursuitTarget() || _target_dir.y >= -0.01 )
+            if ( (!kamikazeRamming && !HasLocalPlayerForceVerticalPursuitTarget()) ||
+                 _target_dir.y >= -0.01 )
             {
                 if ( _target_dir.y < 0.15 )
                     _target_dir.y = 0.15;
@@ -5817,7 +5817,6 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
             }
         }
 
-        ApplySeekAndExplodeRammingGuidance();
         ApplyAiMaxAltitudeAboveGround();
 
         AI_layer3__sub1(this, arg);
@@ -6596,9 +6595,9 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
     if ( _atk_ret == TA_FIGHT )
     {
         float foeDistance = ( foePos->XZ() - _position.XZ() ).length();
-        bool seekAndExplodeArmed = ypabact_IsSeekAndExplodeArmed(this);
+        bool kamikazeArmed = ypabact_IsKamikazeArmed(this);
 
-        if ( seekAndExplodeArmed )
+        if ( kamikazeArmed )
         {
             _status_flg &= ~BACT_STFLAG_APPROACH;
             _status_flg |= BACT_STFLAG_ATTACK;
@@ -6753,7 +6752,7 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             }
             else
             {
-                if ( ypabact_IsSeekAndExplodeArmed(this) )
+                if ( ypabact_IsKamikazeArmed(this) )
                     _status_flg |= BACT_STFLAG_ATTACK;
                 else
                     _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -7780,7 +7779,10 @@ static bool ypabact_IsValidFireWeaponId(NC_STACK_ypabact *bact, int weaponId)
     if ( !ypabact_IsValidWeaponId(bact, weaponId) )
         return false;
 
-    return (bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId)._weaponFlags & 1) != 0;
+    const World::TWeapProto &weapon =
+        bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId);
+    return (weapon._weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE) != 0 &&
+           !weapon.IsKamikaze();
 }
 
 static bool ypabact_IsLowHPWeaponActive(NC_STACK_ypabact *bact)
@@ -7794,38 +7796,333 @@ static bool ypabact_IsLowHPWeaponActive(NC_STACK_ypabact *bact)
     return ypabact_IsValidFireWeaponId(bact, bact->_lowhp_weapon);
 }
 
-static bool ypabact_IsSeekAndExplodeArmed(NC_STACK_ypabact *unit)
+struct TKamikazeMount
 {
-    if ( !unit ||
-         !unit->_seek_and_explode ||
-         unit->_seek_and_explode_triggered ||
-         !unit->getBACT_pWorld() ||
-         unit->_status == BACT_STATUS_DEAD ||
-         unit->_status == BACT_STATUS_CREATE ||
-         unit->_status == BACT_STATUS_BEAM ||
-         (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
+    NC_STACK_ypabact *carrier = NULL;
+    NC_STACK_ypabact *payloadSource = NULL;
+    int weaponId = -1;
+    const World::TWeapProto *weapon = NULL;
+};
+
+static bool ypabact_IsKamikazeActorUsable(NC_STACK_ypabact *unit)
+{
+    return unit &&
+           unit->getBACT_pWorld() &&
+           unit->_energy > 0 &&
+           unit->_energy_max > 0 &&
+           unit->_bact_type != BACT_TYPES_MISSLE &&
+           unit->_status != BACT_STATUS_DEAD &&
+           unit->_status != BACT_STATUS_CREATE &&
+           unit->_status != BACT_STATUS_BEAM &&
+           !(unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
+}
+
+static bool ypabact_IsMobileKamikazeCarrier(const NC_STACK_ypabact *unit)
+{
+    if ( !unit )
+        return false;
+
+    switch ( unit->_bact_type )
+    {
+    case BACT_TYPES_BACT:
+    case BACT_TYPES_TANK:
+    case BACT_TYPES_ROBO:
+    case BACT_TYPES_FLYER:
+    case BACT_TYPES_UFO:
+    case BACT_TYPES_CAR:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+static NC_STACK_ypabact *ypabact_GetEffectiveKamikazeCarrier(NC_STACK_ypabact *unit)
+{
+    if ( !unit || unit->_bact_type != BACT_TYPES_GUN )
+        return unit;
+
+    NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>(unit);
+    if ( !gun )
+        return unit;
+
+    if ( unit->_isUnitGunChild &&
+         ypabact_IsMobileKamikazeCarrier(unit->_parent) &&
+         ypabact_IsKamikazeActorUsable(unit->_parent) &&
+         unit->_parent->getBACT_pWorld() == unit->getBACT_pWorld() )
+    {
+        return unit->_parent;
+    }
+
+    if ( gun->IsRoboGun() &&
+         ypabact_IsMobileKamikazeCarrier(unit->_host_station) &&
+         ypabact_IsKamikazeActorUsable(unit->_host_station) &&
+         unit->_host_station->getBACT_pWorld() == unit->getBACT_pWorld() )
+    {
+        return unit->_host_station;
+    }
+
+    return unit;
+}
+
+static bool ypabact_ResolveMountedKamikazeWeapon(NC_STACK_ypabact *source,
+                                                 int *outWeaponId,
+                                                 const World::TWeapProto **outWeapon)
+{
+    if ( outWeaponId )
+        *outWeaponId = -1;
+    if ( outWeapon )
+        *outWeapon = NULL;
+
+    if ( !ypabact_IsKamikazeActorUsable(source) )
+        return false;
+
+    NC_STACK_ypaworld *world = source->getBACT_pWorld();
+    const std::vector<World::TWeapProto> &weapons = world->GetWeaponsProtos();
+    const int weaponIds[4] = {
+        source->_weapon,
+        source->_extra_weapons[0],
+        source->_extra_weapons[1],
+        source->_extra_weapons[2]
+    };
+
+    for (int slot = 0; slot < 4; slot++)
+    {
+        const int weaponId = weaponIds[slot];
+        if ( (slot == 0 && weaponId < 0) ||
+             (slot > 0 && weaponId <= 0) ||
+             (size_t)weaponId >= weapons.size() )
+            continue;
+
+        const World::TWeapProto &weapon = weapons[weaponId];
+        if ( !weapon.IsKamikaze() )
+            continue;
+
+        if ( outWeaponId )
+            *outWeaponId = weaponId;
+        if ( outWeapon )
+            *outWeapon = &weapon;
+        return true;
+    }
+
+    return false;
+}
+
+static bool ypabact_ResolveKamikazeFromGunList(
+    NC_STACK_ypabact *carrier,
+    const std::vector<World::TRoboGun> &guns,
+    TKamikazeMount *outMount)
+{
+    if ( !carrier || !outMount )
+        return false;
+
+    for (const World::TRoboGun &gun : guns)
+    {
+        NC_STACK_ypabact *source = gun.gun_obj;
+        if ( !source || source->getBACT_pWorld() != carrier->getBACT_pWorld() )
+            continue;
+
+        int weaponId = -1;
+        const World::TWeapProto *weapon = NULL;
+        if ( !ypabact_ResolveMountedKamikazeWeapon(source, &weaponId, &weapon) )
+            continue;
+
+        outMount->carrier = carrier;
+        outMount->payloadSource = source;
+        outMount->weaponId = weaponId;
+        outMount->weapon = weapon;
+        return true;
+    }
+
+    return false;
+}
+
+static bool ypabact_ResolveKamikazeMount(NC_STACK_ypabact *unit,
+                                         TKamikazeMount *outMount)
+{
+    if ( !unit || !outMount )
+        return false;
+
+    *outMount = TKamikazeMount();
+
+    NC_STACK_ypabact *carrier = ypabact_GetEffectiveKamikazeCarrier(unit);
+    if ( !ypabact_IsKamikazeActorUsable(carrier) )
+        return false;
+
+    int weaponId = -1;
+    const World::TWeapProto *weapon = NULL;
+
+    // The physical carrier's own canonical primary slots always win.
+    if ( ypabact_ResolveMountedKamikazeWeapon(carrier, &weaponId, &weapon) )
+    {
+        outMount->carrier = carrier;
+        outMount->payloadSource = carrier;
+        outMount->weaponId = weaponId;
+        outMount->weapon = weapon;
+        return true;
+    }
+
+    if ( !ypabact_IsMobileKamikazeCarrier(carrier) )
+        return false;
+
+    // UnitGun/Module and native RoboGun lists are already stable attachment
+    // orderings. The first live mounted Kamikaze Weapon supplies the payload.
+    if ( ypabact_ResolveKamikazeFromGunList(carrier, carrier->_unitGuns, outMount) )
+        return true;
+
+    NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(carrier);
+    return robo && ypabact_ResolveKamikazeFromGunList(carrier, robo->GetGuns(), outMount);
+}
+
+static bool ypabact_IsKamikazeMountArmed(const TKamikazeMount &mount)
+{
+    if ( !mount.carrier || !mount.payloadSource || !mount.weapon ||
+         !mount.weapon->IsKamikaze() ||
+         mount.carrier->_kamikaze_triggered ||
+         !ypabact_IsKamikazeActorUsable(mount.carrier) ||
+         !ypabact_IsKamikazeActorUsable(mount.payloadSource) )
     {
         return false;
     }
 
-    if ( unit->getBACT_pWorld()->IsSpectatorBact(unit) )
-        return false;
-
-    if ( unit->_seek_and_explode_weapon <= 0 )
-        return true;
-
-    const std::vector<World::TWeapProto> &weapons =
-        unit->getBACT_pWorld()->GetWeaponsProtos();
-    const int weaponId = unit->_seek_and_explode_weapon;
-    if ( weaponId < 0 || (size_t)weaponId >= weapons.size() )
-        return false;
-
-    return (weapons[weaponId]._weaponFlags & 1) != 0;
+    NC_STACK_ypaworld *world = mount.carrier->getBACT_pWorld();
+    return world && !world->IsSpectatorBact(mount.carrier);
 }
 
-bool NC_STACK_ypabact::IsSeekAndExplodeArmed()
+static bool ypabact_IsKamikazeArmed(NC_STACK_ypabact *unit)
 {
-    return ypabact_IsSeekAndExplodeArmed(this);
+    TKamikazeMount mount;
+    return ypabact_ResolveKamikazeMount(unit, &mount) &&
+           ypabact_IsKamikazeMountArmed(mount);
+}
+
+bool NC_STACK_ypabact::IsKamikazeArmed()
+{
+    return ypabact_IsKamikazeArmed(this);
+}
+
+static bool ypabact_SourceHasOtherWeaponForKamikazeTimeScale(
+    NC_STACK_ypabact *source,
+    const TKamikazeMount &mount,
+    bool *matchedPayloadSlot)
+{
+    if ( !source || !source->getBACT_pWorld() || !matchedPayloadSlot )
+        return false;
+
+    if ( ypabact_IsLowHPWeaponActive(source) || source->HasMinigun() )
+        return true;
+
+    const std::vector<World::TWeapProto> &weapons = source->getBACT_pWorld()->GetWeaponsProtos();
+    const int weaponIds[4] = {
+        source->_weapon,
+        source->_extra_weapons[0],
+        source->_extra_weapons[1],
+        source->_extra_weapons[2]
+    };
+
+    for (int slot = 0; slot < 4; ++slot)
+    {
+        const int weaponId = weaponIds[slot];
+        if ( (slot == 0 && weaponId < 0) ||
+             (slot > 0 && weaponId <= 0) ||
+             (size_t)weaponId >= weapons.size() )
+            continue;
+
+        if ( source == mount.payloadSource && weaponId == mount.weaponId &&
+             !*matchedPayloadSlot )
+        {
+            *matchedPayloadSlot = true;
+            continue;
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+bool NC_STACK_ypabact::GetExclusiveKamikazeFireTimeScale(float *outScale,
+                                                          float *outHpDrainPercent)
+{
+    if ( outScale )
+        *outScale = 1.0f;
+    if ( outHpDrainPercent )
+        *outHpDrainPercent = 0.0f;
+
+    TKamikazeMount mount;
+    if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
+         !ypabact_IsKamikazeMountArmed(mount) ||
+         mount.carrier != this || !mount.weapon )
+        return false;
+
+    bool matchedPayloadSlot = false;
+    std::vector<NC_STACK_ypabact *> sources;
+    sources.push_back(mount.carrier);
+
+    for (const World::TRoboGun &gun : mount.carrier->_unitGuns)
+    {
+        if ( ypabact_IsKamikazeActorUsable(gun.gun_obj) &&
+             std::find(sources.begin(), sources.end(), gun.gun_obj) == sources.end() )
+            sources.push_back(gun.gun_obj);
+    }
+
+    if ( NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(mount.carrier) )
+    {
+        for (const World::TRoboGun &gun : robo->GetGuns())
+        {
+            if ( ypabact_IsKamikazeActorUsable(gun.gun_obj) &&
+                 std::find(sources.begin(), sources.end(), gun.gun_obj) == sources.end() )
+                sources.push_back(gun.gun_obj);
+        }
+    }
+
+    for (NC_STACK_ypabact *source : sources)
+    {
+        if ( ypabact_SourceHasOtherWeaponForKamikazeTimeScale(source, mount,
+                                                              &matchedPayloadSlot) )
+            return false;
+    }
+
+    if ( !matchedPayloadSlot )
+        return false;
+
+    const float scale = mount.weapon->fire_time_scale;
+    const float drain = mount.weapon->fire_time_scale_hp_drain_percent;
+    if ( !std::isfinite(scale) || scale >= 1.0f || scale < 0.05f )
+        return false;
+
+    if ( outScale )
+        *outScale = scale;
+    if ( outHpDrainPercent )
+        *outHpDrainPercent = std::isfinite(drain) && drain > 0.0f
+                                 ? std::min(drain, 100.0f)
+                                 : 0.0f;
+    return true;
+}
+
+bool NC_STACK_ypabact::GetKamikazeDebugSphere(float *outRadius)
+{
+    if ( outRadius )
+        *outRadius = 0.0f;
+
+    TKamikazeMount mount;
+    if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
+         !ypabact_IsKamikazeMountArmed(mount) ||
+         mount.carrier != this )
+    {
+        return false;
+    }
+
+    float radius = mount.weapon->trigger_radius;
+    if ( !std::isfinite(radius) || radius <= 0.0f )
+        radius = GetCollisionBroadRadius();
+
+    if ( !std::isfinite(radius) || radius <= 0.01f )
+        return false;
+
+    if ( outRadius )
+        *outRadius = radius;
+    return true;
 }
 
 bool NC_STACK_ypabact::ApplyAiMaxAltitudeAboveGround()
@@ -7877,7 +8174,7 @@ bool NC_STACK_ypabact::HasLocalPlayerForceVerticalPursuitTarget() const
     return _primTtype == BACT_TGT_TYPE_UNIT && isEligible(_primT.pbact);
 }
 
-static bool ypabact_IsValidSeekAndExplodeTarget(NC_STACK_ypabact *unit, NC_STACK_ypabact *target)
+static bool ypabact_IsValidKamikazeTarget(NC_STACK_ypabact *unit, NC_STACK_ypabact *target)
 {
     if ( !unit ||
          !target ||
@@ -7925,56 +8222,47 @@ static bool ypabact_IsValidSeekAndExplodeTarget(NC_STACK_ypabact *unit, NC_STACK
     return true;
 }
 
-static bool ypabact_IsSeekAndExplodeVerticalFlightUnit(NC_STACK_ypabact *unit)
+static bool ypabact_IsKamikazeContact(const TKamikazeMount &mount,
+                                      NC_STACK_ypabact *target)
 {
-    if ( !unit )
+    NC_STACK_ypabact *carrier = mount.carrier;
+    if ( !carrier || !mount.weapon ||
+         !ypabact_IsValidKamikazeTarget(carrier, target) )
         return false;
 
-    // Script parser maps model=heli to BACT_TYPES_BACT; plane/glider/zeppelin
-    // use BACT_TYPES_FLYER, while model=ufo has its own runtime class.
-    return unit->_bact_type == BACT_TYPES_BACT ||
-           unit->_bact_type == BACT_TYPES_FLYER ||
-           unit->_bact_type == BACT_TYPES_UFO;
-}
+    float detonationDistance = mount.weapon->trigger_radius;
+    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
+    {
+        detonationDistance = carrier->GetCollisionBroadRadius() +
+                             std::max(0.0f, target->_radius);
+    }
 
-static bool ypabact_ShouldSeekAndExplodeUseHorizontalAirRamming(NC_STACK_ypabact *unit, NC_STACK_ypabact *target)
-{
-    bool unitIsAir = ypabact_IsSeekAndExplodeVerticalFlightUnit(unit);
-    bool targetIsAir = ypabact_IsSeekAndExplodeVerticalFlightUnit(target);
-
-    return unitIsAir && !targetIsAir;
-}
-
-static bool ypabact_IsSeekAndExplodeContact(NC_STACK_ypabact *unit, NC_STACK_ypabact *target)
-{
-    if ( !ypabact_IsValidSeekAndExplodeTarget(unit, target) )
+    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
         return false;
 
-    float detonationDistance = unit->_seek_and_explode_trigger_radius > 0.0 ? unit->_seek_and_explode_trigger_radius : unit->_radius + target->_radius;
-    if ( detonationDistance <= 0.0 )
-        return false;
-
-    vec3d delta = target->_position - unit->_position;
-    if ( ypabact_ShouldSeekAndExplodeUseHorizontalAirRamming(unit, target) )
-        return delta.XZ().length() <= detonationDistance;
-
-    return delta.length() <= detonationDistance;
+    // The fuse is always a real XYZ sphere. Air-to-ground has no XZ exception.
+    return (target->_position - carrier->_position).length() <= detonationDistance;
 }
 
-static NC_STACK_ypabact *ypabact_FindSeekAndExplodeContactTarget(NC_STACK_ypabact *unit)
+static NC_STACK_ypabact *ypabact_FindKamikazeContactTarget(const TKamikazeMount &mount)
 {
-    if ( !ypabact_IsSeekAndExplodeArmed(unit) )
+    NC_STACK_ypabact *carrier = mount.carrier;
+    if ( !carrier || !ypabact_IsKamikazeMountArmed(mount) )
         return NULL;
 
-    if ( unit->_secndTtype == BACT_TGT_TYPE_UNIT && ypabact_IsSeekAndExplodeContact(unit, unit->_secndT.pbact) )
-        return unit->_secndT.pbact;
+    if ( carrier->_secndTtype == BACT_TGT_TYPE_UNIT &&
+         ypabact_IsKamikazeContact(mount, carrier->_secndT.pbact) )
+        return carrier->_secndT.pbact;
 
-    if ( unit->_primTtype == BACT_TGT_TYPE_UNIT && ypabact_IsSeekAndExplodeContact(unit, unit->_primT.pbact) )
-        return unit->_primT.pbact;
+    if ( carrier->_primTtype == BACT_TGT_TYPE_UNIT &&
+         ypabact_IsKamikazeContact(mount, carrier->_primT.pbact) )
+        return carrier->_primT.pbact;
 
-    float fuseRadius = unit->_seek_and_explode_trigger_radius > 0.0 ? unit->_seek_and_explode_trigger_radius : unit->_radius;
-    if ( fuseRadius < unit->_radius )
-        fuseRadius = unit->_radius;
+    float fuseRadius = mount.weapon->trigger_radius;
+    if ( !std::isfinite(fuseRadius) || fuseRadius <= 0.0f )
+        fuseRadius = carrier->GetCollisionBroadRadius();
+    if ( fuseRadius < carrier->GetCollisionBroadRadius() )
+        fuseRadius = carrier->GetCollisionBroadRadius();
 
     int sectorRadius = (int)ceil(fuseRadius / World::CVSectorLength) + 2;
     if ( sectorRadius < 2 )
@@ -7984,15 +8272,15 @@ static NC_STACK_ypabact *ypabact_FindSeekAndExplodeContactTarget(NC_STACK_ypabac
     {
         for (int x = -sectorRadius; x <= sectorRadius; x++)
         {
-            Common::Point cellId(unit->_cellId.x + x, unit->_cellId.y + y);
+            Common::Point cellId(carrier->_cellId.x + x, carrier->_cellId.y + y);
 
-            if ( !unit->getBACT_pWorld()->IsGamePlaySector(cellId) )
+            if ( !carrier->getBACT_pWorld()->IsGamePlaySector(cellId) )
                 continue;
 
-            cellArea &cell = unit->getBACT_pWorld()->SectorAt(cellId);
+            cellArea &cell = carrier->getBACT_pWorld()->SectorAt(cellId);
             for ( NC_STACK_ypabact *target : cell.unitsList )
             {
-                if ( ypabact_IsSeekAndExplodeContact(unit, target) )
+                if ( ypabact_IsKamikazeContact(mount, target) )
                     return target;
             }
         }
@@ -8001,15 +8289,22 @@ static NC_STACK_ypabact *ypabact_FindSeekAndExplodeContactTarget(NC_STACK_ypabac
     return NULL;
 }
 
-static NC_STACK_ypabact *ypabact_GetSeekAndExplodeRammingTarget(NC_STACK_ypabact *unit)
+static NC_STACK_ypabact *ypabact_GetKamikazeRammingTarget(NC_STACK_ypabact *unit)
 {
-    if ( !ypabact_IsSeekAndExplodeArmed(unit) ||
-         unit->_atk_ret != NC_STACK_ypabact::TA_FIGHT ||
-         !(unit->_status_flg & BACT_STFLAG_ATTACK) )
+    TKamikazeMount mount;
+    if ( !ypabact_ResolveKamikazeMount(unit, &mount) ||
+         mount.carrier != unit ||
+         !ypabact_IsKamikazeMountArmed(mount) )
+        return NULL;
+
+    const bool roboCarrier = unit->_bact_type == BACT_TYPES_ROBO;
+    if ( !roboCarrier &&
+         (unit->_atk_ret != NC_STACK_ypabact::TA_FIGHT ||
+          !(unit->_status_flg & BACT_STFLAG_ATTACK)) )
         return NULL;
 
     // AI_layer3 always gives the secondary target precedence, including when
-    // it is a cell. Mirror that choice here so seek-and-explode guidance can
+    // it is a cell. Mirror that choice here so Kamikaze guidance can
     // never chase a lower-priority unit while the AI is executing another
     // order.
     if ( unit->_secndTtype != BACT_TGT_TYPE_NONE )
@@ -8017,7 +8312,7 @@ static NC_STACK_ypabact *ypabact_GetSeekAndExplodeRammingTarget(NC_STACK_ypabact
         if ( unit->_secndTtype != BACT_TGT_TYPE_UNIT )
             return NULL;
 
-        if ( ypabact_IsValidSeekAndExplodeTarget(unit, unit->_secndT.pbact) &&
+        if ( ypabact_IsValidKamikazeTarget(unit, unit->_secndT.pbact) &&
              unit->_secndT.pbact->_pSector &&
              unit->_secndT.pbact->_pSector->IsCanSee(unit->_owner) )
             return unit->_secndT.pbact;
@@ -8031,7 +8326,7 @@ static NC_STACK_ypabact *ypabact_GetSeekAndExplodeRammingTarget(NC_STACK_ypabact
 
     if ( unit->_primTtype == BACT_TGT_TYPE_UNIT )
     {
-        if ( ypabact_IsValidSeekAndExplodeTarget(unit, unit->_primT.pbact) &&
+        if ( ypabact_IsValidKamikazeTarget(unit, unit->_primT.pbact) &&
              unit->_primT.pbact->_pSector &&
              unit->_primT.pbact->_pSector->IsCanSee(unit->_owner) )
             return unit->_primT.pbact;
@@ -8046,12 +8341,12 @@ static NC_STACK_ypabact *ypabact_GetSeekAndExplodeRammingTarget(NC_STACK_ypabact
     return NULL;
 }
 
-bool NC_STACK_ypabact::ApplySeekAndExplodeRammingGuidance()
+bool NC_STACK_ypabact::ApplyKamikazeRammingGuidance()
 {
     if ( _oflags & BACT_OFLAG_USERINPT )
         return false;
 
-    NC_STACK_ypabact *target = ypabact_GetSeekAndExplodeRammingTarget(this);
+    NC_STACK_ypabact *target = ypabact_GetKamikazeRammingTarget(this);
     if ( !target )
         return false;
 
@@ -8075,7 +8370,10 @@ static int ypabact_GetPrimaryWeaponSlots(NC_STACK_ypabact *bact, int *outSlots, 
 {
     int count = 0;
 
-    if ( ypabact_IsValidWeaponId(bact, bact->_weapon) )
+    // This list is intentionally fireable/selectable, not merely mounted.
+    // model=kamikaze remains in the raw Vehicle slots for arming resolution,
+    // but never enters player/AI selection, cycling, Random or Sequence.
+    if ( ypabact_IsValidFireWeaponId(bact, bact->_weapon) )
     {
         outSlots[count] = bact->_weapon;
         if ( outSourceSlots )
@@ -8086,7 +8384,7 @@ static int ypabact_GetPrimaryWeaponSlots(NC_STACK_ypabact *bact, int *outSlots, 
     for (size_t extraSlot = 0; extraSlot < bact->_extra_weapons.size(); extraSlot++)
     {
         int weaponId = bact->_extra_weapons[extraSlot];
-        if ( weaponId > 0 && ypabact_IsValidWeaponId(bact, weaponId) )
+        if ( weaponId > 0 && ypabact_IsValidFireWeaponId(bact, weaponId) )
         {
             outSlots[count] = weaponId;
             if ( outSourceSlots )
@@ -8324,7 +8622,7 @@ static int ypabact_GetActiveAILaserWeaponSlot(NC_STACK_ypabact *bact, int *outSo
 
         const World::TWeapProto &wproto =
             bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId);
-        if ( !wproto.IsLaser() && !wproto.IsVerticalLaser() )
+        if ( !wproto.IsLaser() )
             continue;
 
         if ( bact->_weapon == weaponId )
@@ -8397,7 +8695,7 @@ static int ypabact_GetCurrentPrimaryWeaponSourceSlot(NC_STACK_ypabact *bact)
     {
         int sourceSlot = bact->_current_weapon_source_slot;
         int weaponId = ypabact_GetWeaponIdForSourceSlot(bact, sourceSlot);
-        if ( weaponId == bact->_current_weapon_id && ypabact_IsValidWeaponId(bact, weaponId) )
+        if ( weaponId == bact->_current_weapon_id && ypabact_IsValidFireWeaponId(bact, weaponId) )
             return sourceSlot;
 
         return sourceSlots[0];
@@ -8863,7 +9161,7 @@ static int ypabact_SelectPrimaryWeaponSlot(NC_STACK_ypabact *bact,
     if ( requestedSourceSlot >= 0 )
     {
         int exactWeapon = ypabact_GetWeaponIdForSourceSlot(bact, requestedSourceSlot);
-        if ( ypabact_IsValidWeaponId(bact, exactWeapon) )
+        if ( ypabact_IsValidFireWeaponId(bact, exactWeapon) )
         {
             if ( outSourceSlot )
                 *outSourceSlot = requestedSourceSlot;
@@ -8922,7 +9220,7 @@ int NC_STACK_ypabact::GetCurrentWeaponId()
 
     int sourceSlot = ypabact_GetCurrentPrimaryWeaponSourceSlot(this);
     int weaponId = ypabact_GetWeaponIdForSourceSlot(this, sourceSlot);
-    return ypabact_IsValidWeaponId(this, weaponId) ? weaponId : -1;
+    return ypabact_IsValidFireWeaponId(this, weaponId) ? weaponId : -1;
 }
 
 int NC_STACK_ypabact::GetCurrentWeaponProjectileCount()
@@ -9375,12 +9673,12 @@ void NC_STACK_ypabact::UpdateProximityDefense(update_msg *)
     _proximity_defense_next_activation_time = _clock + interval;
 }
 
-// ===== OpenNeoUA custom: radar-guided mortar barrage =========================
+// ===== OpenNeoUA custom: radar-guided artillery shell barrage =========================
 
-// Resolve a mortar weapon id from one unit's own main/extra weapon slots.
+// Resolve an artillery shell weapon id from one unit's own main/extra weapon slots.
 // Mounted unit-guns are handled separately so their child BACT owns the barrage
 // runtime state and the shell launch position.
-static int ypabact_GetMortarWeaponId(NC_STACK_ypabact *unit)
+static int ypabact_GetArtilleryShellWeaponId(NC_STACK_ypabact *unit)
 {
     if ( !unit || !unit->getBACT_pWorld() )
         return 0;
@@ -9392,14 +9690,14 @@ static int ypabact_GetMortarWeaponId(NC_STACK_ypabact *unit)
     for (int i = 0; i < 4; i++)
     {
         int id = candidates[i];
-        if ( id > 0 && (size_t)id < weapons.size() && weapons.at(id).IsMortar() )
+        if ( id > 0 && (size_t)id < weapons.size() && weapons.at(id).IsArtilleryShell() )
             return id;
     }
 
     return 0;
 }
 
-static int ypabact_GetVehicleProtoMortarWeaponId(NC_STACK_ypaworld *world, int vehicleId)
+static int ypabact_GetVehicleProtoArtilleryShellWeaponId(NC_STACK_ypaworld *world, int vehicleId)
 {
     if ( !world || vehicleId <= 0 || (size_t)vehicleId >= world->GetVhclProtos().size() )
         return 0;
@@ -9412,14 +9710,14 @@ static int ypabact_GetVehicleProtoMortarWeaponId(NC_STACK_ypaworld *world, int v
     for (int i = 0; i < 4; i++)
     {
         int id = candidates[i];
-        if ( id > 0 && (size_t)id < weapons.size() && weapons.at(id).IsMortar() )
+        if ( id > 0 && (size_t)id < weapons.size() && weapons.at(id).IsArtilleryShell() )
             return id;
     }
 
     return 0;
 }
 
-static bool ypabact_IsLiveMortarGunActor(NC_STACK_ypabact *gunObj, int *outWeaponId = NULL)
+static bool ypabact_IsLiveArtilleryShellGunActor(NC_STACK_ypabact *gunObj, int *outWeaponId = NULL)
 {
     if ( outWeaponId )
         *outWeaponId = 0;
@@ -9433,7 +9731,7 @@ static bool ypabact_IsLiveMortarGunActor(NC_STACK_ypabact *gunObj, int *outWeapo
          (gunObj->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER)) )
         return false;
 
-    int weaponId = ypabact_GetMortarWeaponId(gunObj);
+    int weaponId = ypabact_GetArtilleryShellWeaponId(gunObj);
     if ( weaponId <= 0 )
         return false;
 
@@ -9443,7 +9741,7 @@ static bool ypabact_IsLiveMortarGunActor(NC_STACK_ypabact *gunObj, int *outWeapo
     return true;
 }
 
-static NC_STACK_ypabact *ypabact_GetMortarActorFromGunList(std::vector<World::TRoboGun> &guns, int *outWeaponId = NULL)
+static NC_STACK_ypabact *ypabact_GetArtilleryShellActorFromGunList(std::vector<World::TRoboGun> &guns, int *outWeaponId = NULL)
 {
     if ( outWeaponId )
         *outWeaponId = 0;
@@ -9451,7 +9749,7 @@ static NC_STACK_ypabact *ypabact_GetMortarActorFromGunList(std::vector<World::TR
     for (World::TRoboGun &gun : guns)
     {
         int weaponId = 0;
-        if ( ypabact_IsLiveMortarGunActor(gun.gun_obj, &weaponId) )
+        if ( ypabact_IsLiveArtilleryShellGunActor(gun.gun_obj, &weaponId) )
         {
             if ( outWeaponId )
                 *outWeaponId = weaponId;
@@ -9462,14 +9760,14 @@ static NC_STACK_ypabact *ypabact_GetMortarActorFromGunList(std::vector<World::TR
     return NULL;
 }
 
-static int ypabact_GetProtoMortarWeaponIdFromGunList(NC_STACK_ypaworld *world, const std::vector<World::TRoboGun> &guns)
+static int ypabact_GetProtoArtilleryShellWeaponIdFromGunList(NC_STACK_ypaworld *world, const std::vector<World::TRoboGun> &guns)
 {
     if ( !world )
         return 0;
 
     for (const World::TRoboGun &gun : guns)
     {
-        int weaponId = ypabact_GetVehicleProtoMortarWeaponId(world, gun.robo_gun_type);
+        int weaponId = ypabact_GetVehicleProtoArtilleryShellWeaponId(world, gun.robo_gun_type);
         if ( weaponId > 0 )
             return weaponId;
     }
@@ -9477,7 +9775,7 @@ static int ypabact_GetProtoMortarWeaponIdFromGunList(NC_STACK_ypaworld *world, c
     return 0;
 }
 
-static NC_STACK_ypabact *ypabact_GetMountedMortarActor(NC_STACK_ypabact *unit, int *outWeaponId = NULL)
+static NC_STACK_ypabact *ypabact_GetMountedArtilleryShellActor(NC_STACK_ypabact *unit, int *outWeaponId = NULL)
 {
     if ( outWeaponId )
         *outWeaponId = 0;
@@ -9487,40 +9785,40 @@ static NC_STACK_ypabact *ypabact_GetMountedMortarActor(NC_STACK_ypabact *unit, i
 
     // Vehicle-mounted unit guns. The parent is selected/rendered in UI, while
     // the child gun owns barrage cooldown/state and launch position.
-    if ( NC_STACK_ypabact *actor = ypabact_GetMortarActorFromGunList(unit->_unitGuns, outWeaponId) )
+    if ( NC_STACK_ypabact *actor = ypabact_GetArtilleryShellActorFromGunList(unit->_unitGuns, outWeaponId) )
         return actor;
 
     // Host Station / Robo guns use a separate gun list. Treat them like mounted
-    // unit guns for mortar purposes: click/draw on the robo parent, fire from the
+    // unit guns for artillery shell purposes: click/draw on the robo parent, fire from the
     // real gun child.
     if ( NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(unit) )
     {
-        if ( NC_STACK_ypabact *actor = ypabact_GetMortarActorFromGunList(robo->_roboGuns, outWeaponId) )
+        if ( NC_STACK_ypabact *actor = ypabact_GetArtilleryShellActorFromGunList(robo->_roboGuns, outWeaponId) )
             return actor;
     }
 
     return NULL;
 }
 
-static int ypabact_GetMountedMortarWeaponId(NC_STACK_ypabact *unit)
+static int ypabact_GetMountedArtilleryShellWeaponId(NC_STACK_ypabact *unit)
 {
     if ( !unit || !unit->getBACT_pWorld() )
         return 0;
 
     int liveWeaponId = 0;
-    if ( ypabact_GetMountedMortarActor(unit, &liveWeaponId) )
+    if ( ypabact_GetMountedArtilleryShellActor(unit, &liveWeaponId) )
         return liveWeaponId;
 
-    // Prototype fallback: this lets the parent be recognized as a mortar platform
+    // Prototype fallback: this lets the parent be recognized as an artillery shell platform
     // even before the mounted gun child has finished its create cycle. The live
     // child still owns actual firing once manual/AI orders are executed.
-    int weaponId = ypabact_GetProtoMortarWeaponIdFromGunList(unit->getBACT_pWorld(), unit->_unitGuns);
+    int weaponId = ypabact_GetProtoArtilleryShellWeaponIdFromGunList(unit->getBACT_pWorld(), unit->_unitGuns);
     if ( weaponId > 0 )
         return weaponId;
 
     if ( NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(unit) )
     {
-        weaponId = ypabact_GetProtoMortarWeaponIdFromGunList(unit->getBACT_pWorld(), robo->_roboGuns);
+        weaponId = ypabact_GetProtoArtilleryShellWeaponIdFromGunList(unit->getBACT_pWorld(), robo->_roboGuns);
         if ( weaponId > 0 )
             return weaponId;
     }
@@ -9528,12 +9826,12 @@ static int ypabact_GetMountedMortarWeaponId(NC_STACK_ypabact *unit)
     return 0;
 }
 
-static NC_STACK_ypabact *ypabact_GetManualMortarActor(NC_STACK_ypabact *unit, int *outWeaponId = NULL)
+static NC_STACK_ypabact *ypabact_GetManualArtilleryShellActor(NC_STACK_ypabact *unit, int *outWeaponId = NULL)
 {
     if ( outWeaponId )
         *outWeaponId = 0;
 
-    int ownWeaponId = ypabact_GetMortarWeaponId(unit);
+    int ownWeaponId = ypabact_GetArtilleryShellWeaponId(unit);
     if ( ownWeaponId > 0 )
     {
         if ( outWeaponId )
@@ -9541,65 +9839,65 @@ static NC_STACK_ypabact *ypabact_GetManualMortarActor(NC_STACK_ypabact *unit, in
         return unit;
     }
 
-    return ypabact_GetMountedMortarActor(unit, outWeaponId);
+    return ypabact_GetMountedArtilleryShellActor(unit, outWeaponId);
 }
 
-// OpenNeoUA custom: true if this unit carries a "model = mortar" weapon in any own
+// OpenNeoUA custom: true if this unit carries a "model = artillery_shell" weapon in any own
 // slot, or if one of its mounted unit-gun / robo-gun children carries one. Used
-// to keep mortar platforms map-only (no first-person possession).
-bool NC_STACK_ypabact::IsMortarPlatform()
+// to keep artillery shell platforms map-only (no first-person possession).
+bool NC_STACK_ypabact::IsArtilleryShellPlatform()
 {
-    return ypabact_GetMortarWeaponId(this) > 0 || ypabact_GetMountedMortarWeaponId(this) > 0;
+    return ypabact_GetArtilleryShellWeaponId(this) > 0 || ypabact_GetMountedArtilleryShellWeaponId(this) > 0;
 }
 
-// OpenNeoUA custom: true if this is a mortar platform usable via manual map-click.
-// Manual map-click control is always enabled for mortars (there is no opt-in flag).
-bool NC_STACK_ypabact::IsManualMortarPlatform()
+// OpenNeoUA custom: true if this is an artillery shell platform usable via manual map-click.
+// Manual map-click control is always enabled for artillery shells (there is no opt-in flag).
+bool NC_STACK_ypabact::IsManualArtilleryShellPlatform()
 {
-    return IsMortarPlatform();
+    return IsArtilleryShellPlatform();
 }
 
-// OpenNeoUA custom: bombardment zone radius of this unit's mortar weapon (0 if none).
+// OpenNeoUA custom: bombardment zone radius of this unit's artillery shell weapon (0 if none).
 // Used to draw the white aiming preview ring on the 2D map.
-float NC_STACK_ypabact::GetMortarBarrageRadius()
+float NC_STACK_ypabact::GetArtilleryShellBarrageRadius()
 {
     if ( !_world )
         return 0.0f;
 
     int weaponId = 0;
-    if ( NC_STACK_ypabact *actor = ypabact_GetManualMortarActor(this, &weaponId) )
+    if ( NC_STACK_ypabact *actor = ypabact_GetManualArtilleryShellActor(this, &weaponId) )
     {
         (void)actor;
         if ( weaponId > 0 )
-            return _world->GetWeaponsProtos().at(weaponId).mortar_barrage_radius;
+            return _world->GetWeaponsProtos().at(weaponId).artillery_shell_barrage_radius;
     }
 
-    weaponId = ypabact_GetMountedMortarWeaponId(this);
+    weaponId = ypabact_GetMountedArtilleryShellWeaponId(this);
     if ( weaponId > 0 )
-        return _world->GetWeaponsProtos().at(weaponId).mortar_barrage_radius;
+        return _world->GetWeaponsProtos().at(weaponId).artillery_shell_barrage_radius;
 
     return 0.0f;
 }
 
-float NC_STACK_ypabact::GetMortarReadinessRatio()
+float NC_STACK_ypabact::GetArtilleryShellReadinessRatio()
 {
     if ( !_world )
         return 0.0f;
 
     int weaponId = 0;
-    NC_STACK_ypabact *actor = ypabact_GetManualMortarActor(this, &weaponId);
+    NC_STACK_ypabact *actor = ypabact_GetManualArtilleryShellActor(this, &weaponId);
     if ( !actor || weaponId <= 0 || (size_t)weaponId >= _world->GetWeaponsProtos().size() )
-        return IsMortarPlatform() ? 1.0f : 0.0f;
+        return IsArtilleryShellPlatform() ? 1.0f : 0.0f;
 
-    if ( actor->_mortar_barrage_active && actor->_mortar_shots_remaining > 0 )
+    if ( actor->_artillery_shell_barrage_active && actor->_artillery_shell_shots_remaining > 0 )
         return 1.0f;
 
     const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
-    int cooldown = wproto.mortar_barrage_cooldown > 0 ? wproto.mortar_barrage_cooldown : 10000;
-    if ( cooldown <= 0 || actor->_clock >= actor->_mortar_next_activation_time )
+    int cooldown = wproto.artillery_shell_barrage_cooldown > 0 ? wproto.artillery_shell_barrage_cooldown : 10000;
+    if ( cooldown <= 0 || actor->_clock >= actor->_artillery_shell_next_activation_time )
         return 1.0f;
 
-    int remaining = actor->_mortar_next_activation_time - actor->_clock;
+    int remaining = actor->_artillery_shell_next_activation_time - actor->_clock;
     float ready = 1.0f - ((float)remaining / (float)cooldown);
     if ( ready < 0.0f )
         ready = 0.0f;
@@ -9609,7 +9907,7 @@ float NC_STACK_ypabact::GetMortarReadinessRatio()
     return ready;
 }
 
-static bool ypabact_CanUseMortar(NC_STACK_ypabact *unit)
+static bool ypabact_CanUseArtilleryShell(NC_STACK_ypabact *unit)
 {
     if ( !unit || !unit->getBACT_pWorld() )
         return false;
@@ -9628,7 +9926,7 @@ static bool ypabact_CanUseMortar(NC_STACK_ypabact *unit)
     if ( unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER) )
         return false;
 
-    // Dummy attachments and spectator helpers never auto-fire mortars.
+    // Dummy attachments and spectator helpers never auto-fire artillery shells.
     if ( unit->_isDummy )
         return false;
 
@@ -9639,24 +9937,24 @@ static bool ypabact_CanUseMortar(NC_STACK_ypabact *unit)
 }
 
 // OpenNeoUA custom: the actual ballistic launch direction of a shell aimed at
-// targetCenter. Matches NC_STACK_ypamissile::UpdateMortarBallistic(): the shell
+// targetCenter. Matches NC_STACK_ypamissile::UpdateArtilleryShellBallistic(): the shell
 // follows pos(t)=lerp(start,target) horizontally with a parabolic vertical arc
 // pos.y = baseY - arcHeight*4*t*(1-t). Differentiating at t=0 gives the initial
 // velocity below (engine convention: +Y is DOWN, so -4*arcHeight points upward).
 // The barrel is aimed along this vector so it visibly points up into the arc.
-static vec3d ypabact_GetMortarLaunchDir(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, const vec3d &targetCenter)
+static vec3d ypabact_GetArtilleryShellLaunchDir(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, const vec3d &targetCenter)
 {
     vec3d delta = targetCenter - unit->_position;
 
     vec3d dir;
     dir.x = delta.x;
     dir.z = delta.z;
-    dir.y = delta.y - 4.0f * wproto.mortar_arc_height;
+    dir.y = delta.y - 4.0f * wproto.artillery_shell_arc_height;
 
     return dir; // caller normalises
 }
 
-static float ypabact_ClampMortarAimDelta(float delta, float maxRot)
+static float ypabact_ClampArtilleryShellAimDelta(float delta, float maxRot)
 {
     if ( maxRot <= 0.0f )
         return delta;
@@ -9670,7 +9968,7 @@ static float ypabact_ClampMortarAimDelta(float delta, float maxRot)
     return delta;
 }
 
-static void ypabact_AimMortarLauncherVisual(NC_STACK_ypabact *unit, const World::TWeapProto &wproto,
+static void ypabact_AimArtilleryShellLauncherVisual(NC_STACK_ypabact *unit, const World::TWeapProto &wproto,
                                             const vec3d &targetCenter, int frameTime, bool instant)
 {
     NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>(unit);
@@ -9680,7 +9978,7 @@ static void ypabact_AimMortarLauncherVisual(NC_STACK_ypabact *unit, const World:
     if ( gun->_gunBasis.length() <= 0.001f || gun->_gunRott.length() <= 0.001f )
         return;
 
-    vec3d vTgt = ypabact_GetMortarLaunchDir(unit, wproto, targetCenter);
+    vec3d vTgt = ypabact_GetArtilleryShellLaunchDir(unit, wproto, targetCenter);
     float dist = vTgt.length();
     if ( dist <= 0.001f )
         return;
@@ -9733,7 +10031,7 @@ static void ypabact_AimMortarLauncherVisual(NC_STACK_ypabact *unit, const World:
         }
     }
 
-    xzDelta = ypabact_ClampMortarAimDelta(xzDelta, maxRot);
+    xzDelta = ypabact_ClampArtilleryShellAimDelta(xzDelta, maxRot);
 
     if ( fabs(xzDelta) > 0.001f )
         unit->_rotation *= mat3x3(gun->_gunRott, xzDelta);
@@ -9742,11 +10040,11 @@ static void ypabact_AimMortarLauncherVisual(NC_STACK_ypabact *unit, const World:
     float yAngle = clp_asin( invRed.dot(unit->_rotation.AxisZ()) );
     float yWant = clp_asin( invRed.dot(vTgt) );
 
-    // OpenNeoUA custom: mortars are high-angle artillery. Guarantee a generous upward
+    // OpenNeoUA custom: artillery shells are high-angle artillery. Guarantee a generous upward
     // elevation envelope even if the gun model's gun_up_angle is small, so the
     // barrel convincingly points up into the ballistic arc.
-    const float MORTAR_MIN_MAX_UP = 1.30f; // ~74 degrees
-    float gunMaxUp = gun->_gunMaxUp > MORTAR_MIN_MAX_UP ? gun->_gunMaxUp : MORTAR_MIN_MAX_UP;
+    const float ARTILLERY_SHELL_MIN_MAX_UP = 1.30f; // ~74 degrees
+    float gunMaxUp = gun->_gunMaxUp > ARTILLERY_SHELL_MIN_MAX_UP ? gun->_gunMaxUp : ARTILLERY_SHELL_MIN_MAX_UP;
 
     if ( yWant > gunMaxUp )
         yWant = gunMaxUp;
@@ -9755,7 +10053,7 @@ static void ypabact_AimMortarLauncherVisual(NC_STACK_ypabact *unit, const World:
         yWant = -gun->_gunMaxDown;
 
     float yDelta = yWant - yAngle;
-    yDelta = ypabact_ClampMortarAimDelta(yDelta, maxRot);
+    yDelta = ypabact_ClampArtilleryShellAimDelta(yDelta, maxRot);
 
     // No extra damping: yDelta is already speed-limited by maxRot when not instant,
     // so the barrel reaches the wanted elevation instead of stalling short of it.
@@ -9765,7 +10063,7 @@ static void ypabact_AimMortarLauncherVisual(NC_STACK_ypabact *unit, const World:
     unit->_viewer_rotation = unit->_rotation;
 }
 
-static vec3d ypabact_GetMortarLaunchPosition(NC_STACK_ypabact *unit)
+static vec3d ypabact_GetArtilleryShellLaunchPosition(NC_STACK_ypabact *unit)
 {
     if ( !unit )
         return vec3d(0.0, 0.0, 0.0);
@@ -9773,7 +10071,7 @@ static vec3d ypabact_GetMortarLaunchPosition(NC_STACK_ypabact *unit)
     return unit->_position + unit->_rotation.Transpose().Transform(unit->_fire_pos);
 }
 
-static void ypabact_TriggerMortarFireVisual(NC_STACK_ypabact *unit)
+static void ypabact_TriggerArtilleryShellFireVisual(NC_STACK_ypabact *unit)
 {
     NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>(unit);
     if ( !gun || gun->_isDummy )
@@ -9794,8 +10092,8 @@ static void ypabact_TriggerMortarFireVisual(NC_STACK_ypabact *unit)
     }
 }
 
-// A candidate is a valid mortar target only if it is a real, living enemy actor.
-static bool ypabact_IsMortarEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand)
+// A candidate is a valid artillery shell target only if it is a real, living enemy actor.
+static bool ypabact_IsArtilleryShellEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand)
 {
     if ( !cand || cand == unit )
         return false;
@@ -9817,7 +10115,7 @@ static bool ypabact_IsMortarEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand
     if ( cand->_isDummy ) // dummy attachments must never be preferred targets
         return false;
 
-    // OpenNeoUA invisible: cloaked stealth units are not valid mortar barrage targets.
+    // OpenNeoUA invisible: cloaked stealth units are not valid artillery shell barrage targets.
     if ( !cand->CanBeSeenByAIOrRadar() )
         return false;
 
@@ -9828,24 +10126,24 @@ static bool ypabact_IsMortarEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand
     return true;
 }
 
-// V1 target selection: pick the nearest valid enemy within [mortar_min_range,
-// mortar_max_range] and use its position as the barrage center.
+// V1 target selection: pick the nearest valid enemy within [artillery_shell_min_range,
+// artillery_shell_max_range] and use its position as the barrage center.
 //
 // onlyHostStation: when true, only enemy Host Stations (robo) are considered (used for
-// the mortar_prefer_host_station priority pass). The radar requirement is always
+// the artillery_shell_prefer_host_station priority pass). The radar requirement is always
 // honoured in both passes: priority only chooses among radar-visible enemies.
-static bool ypabact_ScanMortarTarget(NC_STACK_ypabact *unit, const World::TWeapProto &wproto,
+static bool ypabact_ScanArtilleryShellTarget(NC_STACK_ypabact *unit, const World::TWeapProto &wproto,
                                      bool onlyHostStation, vec3d *out)
 {
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
     if ( !world )
         return false;
 
-    float maxRange = wproto.mortar_max_range;
+    float maxRange = wproto.artillery_shell_max_range;
     if ( maxRange <= 0.0 )
-        return false; // no max range: mortar cannot auto-fire
+        return false; // no max range: artillery shell cannot auto-fire
 
-    float minRange = wproto.mortar_min_range > 0.0 ? wproto.mortar_min_range : 0.0;
+    float minRange = wproto.artillery_shell_min_range > 0.0 ? wproto.artillery_shell_min_range : 0.0;
     float effRangeSq = maxRange * maxRange;
     float minRangeSq = minRange * minRange;
 
@@ -9867,12 +10165,12 @@ static bool ypabact_ScanMortarTarget(NC_STACK_ypabact *unit, const World::TWeapP
 
             // Radar requirement: the target sector must be visible to our faction.
             // Always enforced, including the Host-Station priority pass.
-            if ( wproto.mortar_requires_radar && !cell.IsCanSee(unit->_owner) )
+            if ( wproto.artillery_shell_requires_radar && !cell.IsCanSee(unit->_owner) )
                 continue;
 
             for (NC_STACK_ypabact *cand : cell.unitsList)
             {
-                if ( !ypabact_IsMortarEnemy(unit, cand) )
+                if ( !ypabact_IsArtilleryShellEnemy(unit, cand) )
                     continue;
 
                 if ( onlyHostStation && cand->_bact_type != BACT_TYPES_ROBO )
@@ -9898,22 +10196,22 @@ static bool ypabact_ScanMortarTarget(NC_STACK_ypabact *unit, const World::TWeapP
     return true;
 }
 
-static bool ypabact_FindMortarTargetZone(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, vec3d *out)
+static bool ypabact_FindArtilleryShellTargetZone(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, vec3d *out)
 {
     // Priority pass: among radar-visible enemies, prefer an enemy Host Station (robo)
-    // (mortar_prefer_host_station). Still honours mortar_requires_radar.
-    if ( wproto.mortar_prefer_host_station && ypabact_ScanMortarTarget(unit, wproto, true, out) )
+    // (artillery_shell_prefer_host_station). Still honours artillery_shell_requires_radar.
+    if ( wproto.artillery_shell_prefer_host_station && ypabact_ScanArtilleryShellTarget(unit, wproto, true, out) )
         return true;
 
     // Normal pass: nearest valid enemy, honouring the radar requirement.
-    return ypabact_ScanMortarTarget(unit, wproto, false, out);
+    return ypabact_ScanArtilleryShellTarget(unit, wproto, false, out);
 }
 
-// Fire a single ballistic mortar shell at the target zone (with per-shell spread).
+// Fire a single ballistic artillery shell at the target zone (with per-shell spread).
 // The shell is tracked in the firing unit's own missile list with the unit as
 // emitter, exactly like a normal fired missile, so Die()'s reparent/cleanup keeps
 // pointers valid.
-static bool ypabact_FireMortarShell(NC_STACK_ypabact *unit, int weaponId, const World::TWeapProto &wproto, const vec3d &targetCenter)
+static bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, const World::TWeapProto &wproto, const vec3d &targetCenter)
 {
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
     if ( !world || weaponId <= 0 || (size_t)weaponId >= world->GetWeaponsProtos().size() )
@@ -9921,18 +10219,18 @@ static bool ypabact_FireMortarShell(NC_STACK_ypabact *unit, int weaponId, const 
 
     // Per-shell landing point: uniform random scatter inside spread radius.
     vec3d landing = targetCenter;
-    if ( wproto.mortar_spread_radius > 0.0 )
+    if ( wproto.artillery_shell_spread_radius > 0.0 )
     {
         float ang = ((float)rand() / (float)RAND_MAX) * 2.0 * C_PI;
-        float r   = sqrt((float)rand() / (float)RAND_MAX) * wproto.mortar_spread_radius;
+        float r   = sqrt((float)rand() / (float)RAND_MAX) * wproto.artillery_shell_spread_radius;
         landing.x += cos(ang) * r;
         landing.z += sin(ang) * r;
     }
 
-    // Ground-burst mode (mortar_airburst = 0): snap the impact height to the real
+    // Ground-burst mode (artillery_shell_airburst = 0): snap the impact height to the real
     // terrain at THIS shell's own landing point (spread included), so it explodes on
     // contact with the ground instead of at the nominal target/arc height (airburst).
-    if ( !wproto.mortar_airburst )
+    if ( !wproto.artillery_shell_airburst )
     {
         ypaworld_arg136 gnd;
         gnd.stPos = vec3d(landing.x, -30000.0, landing.z);
@@ -9945,14 +10243,14 @@ static bool ypabact_FireMortarShell(NC_STACK_ypabact *unit, int weaponId, const 
             landing.y = gnd.isectPos.y;
     }
 
-    // OpenNeoUA invisible: launching a mortar shell is a real attack -> reveal the firing
+    // OpenNeoUA invisible: launching an artillery shell is a real attack -> reveal the firing
     // unit (covers manual, auto-AI and barrage-followup shells, which all land here).
     unit->RevealInvisibleOnAttack();
 
-    ypabact_AimMortarLauncherVisual(unit, wproto, targetCenter, 0, true);
-    ypabact_TriggerMortarFireVisual(unit);
+    ypabact_AimArtilleryShellLauncherVisual(unit, wproto, targetCenter, 0, true);
+    ypabact_TriggerArtilleryShellFireVisual(unit);
 
-    vec3d launchPos = ypabact_GetMortarLaunchPosition(unit);
+    vec3d launchPos = ypabact_GetArtilleryShellLaunchPosition(unit);
 
     ypaworld_arg146 arg147;
     arg147.vehicle_id = weaponId;
@@ -9972,17 +10270,17 @@ static bool ypabact_FireMortarShell(NC_STACK_ypabact *unit, int weaponId, const 
 
     // Optional per-shell in-flight drift direction (fades to zero at landing).
     vec3d driftVec(0.0, 0.0, 0.0);
-    if ( wproto.mortar_inflight_drift > 0.0 )
+    if ( wproto.artillery_shell_inflight_drift > 0.0 )
     {
         float ang = ((float)rand() / (float)RAND_MAX) * 2.0 * C_PI;
-        driftVec.x = cos(ang) * wproto.mortar_inflight_drift;
-        driftVec.z = sin(ang) * wproto.mortar_inflight_drift;
+        driftVec.x = cos(ang) * wproto.artillery_shell_inflight_drift;
+        driftVec.z = sin(ang) * wproto.artillery_shell_inflight_drift;
     }
 
     // Use the same guarded flight time the shell clamps to internally, so the
-    // trajectory and the lifetime/marker below agree even if mortar_flight_time <= 0.
-    int flight = wproto.mortar_flight_time > 0 ? wproto.mortar_flight_time : 2500;
-    shell->SetupMortarShell(launchPos, landing, flight, wproto.mortar_arc_height, driftVec, !wproto.mortar_airburst);
+    // trajectory and the lifetime/marker below agree even if artillery_shell_flight_time <= 0.
+    int flight = wproto.artillery_shell_flight_time > 0 ? wproto.artillery_shell_flight_time : 2500;
+    shell->SetupArtilleryShell(launchPos, landing, flight, wproto.artillery_shell_arc_height, driftVec, !wproto.artillery_shell_airburst);
     shell->StartWeaponTracer();
 
     shell->_kidRef.Detach();
@@ -10001,44 +10299,44 @@ static bool ypabact_FireMortarShell(NC_STACK_ypabact *unit, int weaponId, const 
 
     // OpenNeoUA custom: register/refresh the bombardment marker for this barrage zone.
     // Each shell refreshes it so the ring stays up until the last shell has landed.
-    if ( wproto.mortar_minimap_marker && wproto.mortar_barrage_radius > 0.0 )
-        world->AddMortarMarker(targetCenter, wproto.mortar_barrage_radius, unit->_owner, flight + 2000);
+    if ( wproto.artillery_shell_minimap_marker && wproto.artillery_shell_barrage_radius > 0.0 )
+        world->AddArtilleryShellMarker(targetCenter, wproto.artillery_shell_barrage_radius, unit->_owner, flight + 2000);
 
     return true;
 }
 
-// Fire one shell at the unit's current mortar target, then advance the shared shot
+// Fire one shell at the unit's current artillery shell target, then advance the shared shot
 // budget. When the budget is spent the barrage ends and the cooldown starts. This
 // single place owns the budget/cooldown bookkeeping for both the AI and manual paths.
-static void ypabact_FireMortarShotAndAdvance(NC_STACK_ypabact *unit, int weaponId,
+static void ypabact_FireArtilleryShellShotAndAdvance(NC_STACK_ypabact *unit, int weaponId,
                                              const World::TWeapProto &wproto)
 {
-    int delay    = wproto.mortar_barrage_shot_delay > 0 ? wproto.mortar_barrage_shot_delay : 0;
-    int cooldown = wproto.mortar_barrage_cooldown  > 0 ? wproto.mortar_barrage_cooldown  : 10000;
+    int delay    = wproto.artillery_shell_barrage_shot_delay > 0 ? wproto.artillery_shell_barrage_shot_delay : 0;
+    int cooldown = wproto.artillery_shell_barrage_cooldown  > 0 ? wproto.artillery_shell_barrage_cooldown  : 10000;
 
-    if ( !ypabact_FireMortarShell(unit, weaponId, wproto, unit->_mortar_target_center) )
+    if ( !ypabact_FireArtilleryShell(unit, weaponId, wproto, unit->_artillery_shell_target_center) )
     {
         // Do not spend barrage budget if the projectile could not be created. Retry
         // after the normal shot delay instead of silently eating a shell.
-        unit->_mortar_next_shot_time = unit->_clock + delay;
+        unit->_artillery_shell_next_shot_time = unit->_clock + delay;
         return;
     }
 
-    unit->_mortar_shots_remaining--;
+    unit->_artillery_shell_shots_remaining--;
 
-    if ( unit->_mortar_shots_remaining <= 0 )
+    if ( unit->_artillery_shell_shots_remaining <= 0 )
     {
-        unit->_mortar_shots_remaining = 0;
-        unit->_mortar_barrage_active = false;
-        unit->_mortar_next_activation_time = unit->_clock + cooldown; // cooldown starts now
+        unit->_artillery_shell_shots_remaining = 0;
+        unit->_artillery_shell_barrage_active = false;
+        unit->_artillery_shell_next_activation_time = unit->_clock + cooldown; // cooldown starts now
     }
     else
     {
-        unit->_mortar_next_shot_time = unit->_clock + delay;
+        unit->_artillery_shell_next_shot_time = unit->_clock + delay;
     }
 }
 
-void NC_STACK_ypabact::UpdateMortar(update_msg *arg)
+void NC_STACK_ypabact::UpdateArtilleryShell(update_msg *arg)
 {
     if ( IsActiveDebuffDisorientFireBlocked() )
         return;
@@ -10049,51 +10347,51 @@ void NC_STACK_ypabact::UpdateMortar(update_msg *arg)
     // V1 is single-player/local only; unsynchronised network projectiles are unsafe.
     if ( _world->_isNetGame )
     {
-        _mortar_barrage_active = false;
+        _artillery_shell_barrage_active = false;
         return;
     }
 
-    int weaponId = ypabact_GetMortarWeaponId(this);
-    if ( weaponId <= 0 || !ypabact_CanUseMortar(this) )
+    int weaponId = ypabact_GetArtilleryShellWeaponId(this);
+    if ( weaponId <= 0 || !ypabact_CanUseArtilleryShell(this) )
     {
-        _mortar_barrage_active = false;
+        _artillery_shell_barrage_active = false;
         return;
     }
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
 
-    int shots = wproto.mortar_barrage_shots;
+    int shots = wproto.artillery_shell_barrage_shots;
     if ( shots <= 0 )
     {
-        _mortar_barrage_active = false;
+        _artillery_shell_barrage_active = false;
         return;
     }
 
     // Active barrage: fire one shell per shot-delay until the shared budget runs out.
-    if ( _mortar_barrage_active )
+    if ( _artillery_shell_barrage_active )
     {
-        ypabact_AimMortarLauncherVisual(this, wproto, _mortar_target_center, arg ? arg->frameTime : 0, false);
+        ypabact_AimArtilleryShellLauncherVisual(this, wproto, _artillery_shell_target_center, arg ? arg->frameTime : 0, false);
 
-        if ( _clock < _mortar_next_shot_time )
+        if ( _clock < _artillery_shell_next_shot_time )
             return;
 
-        ypabact_FireMortarShotAndAdvance(this, weaponId, wproto);
+        ypabact_FireArtilleryShellShotAndAdvance(this, weaponId, wproto);
         return;
     }
 
     // Pending manual order (queued while on cooldown): keep its azure zone ring alive
     // and fire it the instant the cooldown elapses. It takes priority over auto-scan
     // but never fires early, so it cannot bypass the cooldown.
-    if ( _mortar_has_pending )
+    if ( _artillery_shell_has_pending )
     {
-        if ( wproto.mortar_minimap_marker && wproto.mortar_barrage_radius > 0.0 )
-            _world->AddMortarMarker(_mortar_pending_target, wproto.mortar_barrage_radius, _owner, 1000);
+        if ( wproto.artillery_shell_minimap_marker && wproto.artillery_shell_barrage_radius > 0.0 )
+            _world->AddArtilleryShellMarker(_artillery_shell_pending_target, wproto.artillery_shell_barrage_radius, _owner, 1000);
 
-        if ( _clock >= _mortar_next_activation_time )
+        if ( _clock >= _artillery_shell_next_activation_time )
         {
-            vec3d pending = _mortar_pending_target;
-            _mortar_has_pending = false;
-            StartMortarBarrage(pending);
+            vec3d pending = _artillery_shell_pending_target;
+            _artillery_shell_has_pending = false;
+            StartArtilleryShellBarrage(pending);
         }
 
         return;
@@ -10101,24 +10399,24 @@ void NC_STACK_ypabact::UpdateMortar(update_msg *arg)
 
     // Manual-only mode: the auto AI is disabled. Active barrages and queued manual
     // orders (handled above) still run; we just never auto-acquire a target here.
-    if ( wproto.mortar_manual_mode_only )
+    if ( wproto.artillery_shell_manual_mode_only )
         return;
 
     // Cooldown gate between barrages.
-    if ( _clock < _mortar_next_activation_time )
+    if ( _clock < _artillery_shell_next_activation_time )
         return;
 
-    // Throttle the mortar_max_range target scan so it never runs every frame while
-    // the mortar is ready but has no valid target in range.
-    if ( _clock < _mortar_next_scan_time )
+    // Throttle the artillery_shell_max_range target scan so it never runs every frame while
+    // the artillery shell is ready but has no valid target in range.
+    if ( _clock < _artillery_shell_next_scan_time )
         return;
-    _mortar_next_scan_time = _clock + 500;
+    _artillery_shell_next_scan_time = _clock + 500;
 
     vec3d targetCenter;
-    if ( !ypabact_FindMortarTargetZone(this, wproto, &targetCenter) )
+    if ( !ypabact_FindArtilleryShellTargetZone(this, wproto, &targetCenter) )
         return;
 
-    StartMortarBarrage(targetCenter);
+    StartArtilleryShellBarrage(targetCenter);
 }
 
 // Begin OR redirect a barrage aimed at targetCenter. Shared by the automatic AI and
@@ -10128,58 +10426,58 @@ void NC_STACK_ypabact::UpdateMortar(update_msg *arg)
 // active barrage only re-aims it and keeps spending the SAME budget (no refill), so
 // rapidly re-targeting can never dodge the cooldown. The budget refills (and the
 // cooldown clears) only after the cooldown has fully elapsed.
-bool NC_STACK_ypabact::StartMortarBarrage(const vec3d &targetCenter)
+bool NC_STACK_ypabact::StartArtilleryShellBarrage(const vec3d &targetCenter)
 {
     if ( !_world )
         return false;
 
-    int weaponId = ypabact_GetMortarWeaponId(this);
+    int weaponId = ypabact_GetArtilleryShellWeaponId(this);
     if ( weaponId <= 0 )
     {
-        if ( NC_STACK_ypabact *mountedMortar = ypabact_GetMountedMortarActor(this) )
-            return mountedMortar->StartMortarBarrage(targetCenter);
+        if ( NC_STACK_ypabact *mountedArtilleryShell = ypabact_GetMountedArtilleryShellActor(this) )
+            return mountedArtilleryShell->StartArtilleryShellBarrage(targetCenter);
         return false;
     }
 
-    if ( !ypabact_CanUseMortar(this) )
+    if ( !ypabact_CanUseArtilleryShell(this) )
         return false;
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
 
-    int shots = wproto.mortar_barrage_shots;
+    int shots = wproto.artillery_shell_barrage_shots;
     if ( shots <= 0 )
         return false;
 
     // Redirect an in-progress barrage: keep the remaining budget, just re-aim. The
     // already-scheduled next shot lands on the new area. No refill => no exploit.
-    if ( _mortar_barrage_active && _mortar_shots_remaining > 0 )
+    if ( _artillery_shell_barrage_active && _artillery_shell_shots_remaining > 0 )
     {
-        _mortar_target_center = targetCenter;
+        _artillery_shell_target_center = targetCenter;
         return true;
     }
 
     // Fresh barrage: only allowed once the cooldown has fully elapsed.
-    if ( _clock < _mortar_next_activation_time )
+    if ( _clock < _artillery_shell_next_activation_time )
         return false;
 
-    _mortar_barrage_active = true;
-    _mortar_shots_remaining = shots; // refill the cycle budget
-    _mortar_target_center = targetCenter;
+    _artillery_shell_barrage_active = true;
+    _artillery_shell_shots_remaining = shots; // refill the cycle budget
+    _artillery_shell_target_center = targetCenter;
 
     // Fire the first shell immediately (this also spends one budget shot and, if the
     // budget is just 1, ends the barrage and starts the cooldown right away).
-    ypabact_FireMortarShotAndAdvance(this, weaponId, wproto);
+    ypabact_FireArtilleryShellShotAndAdvance(this, weaponId, wproto);
 
     return true;
 }
 
 // Check whether this unit can ACCEPT a manual bombardment call against targetPos.
 // Returns true when the target is valid (range and radar; manual control is always
-// enabled for mortars). It does NOT reject by cooldown/in-progress barrage: instead,
+// enabled for artillery shells). It does NOT reject by cooldown/in-progress barrage: instead,
 // *outReadyNow tells the caller whether the strike can fire immediately (redirect an
 // active barrage, or start a fresh one off cooldown) or must be QUEUED until the
 // cooldown elapses.
-bool NC_STACK_ypabact::CanManualMortar(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow)
+bool NC_STACK_ypabact::CanManualArtilleryShell(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow)
 {
     if ( outReadyNow )
         *outReadyNow = false;
@@ -10187,38 +10485,38 @@ bool NC_STACK_ypabact::CanManualMortar(const vec3d &targetPos, int *outWeaponId,
     if ( !_world || _world->_isNetGame )
         return false;
 
-    int weaponId = ypabact_GetMortarWeaponId(this);
+    int weaponId = ypabact_GetArtilleryShellWeaponId(this);
     if ( weaponId <= 0 )
     {
-        if ( NC_STACK_ypabact *mountedMortar = ypabact_GetMountedMortarActor(this) )
-            return mountedMortar->CanManualMortar(targetPos, outWeaponId, outReadyNow);
+        if ( NC_STACK_ypabact *mountedArtilleryShell = ypabact_GetMountedArtilleryShellActor(this) )
+            return mountedArtilleryShell->CanManualArtilleryShell(targetPos, outWeaponId, outReadyNow);
         return false;
     }
 
-    if ( !ypabact_CanUseMortar(this) )
+    if ( !ypabact_CanUseArtilleryShell(this) )
         return false;
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
 
-    // Manual map-click control is always available for mortars (no opt-in flag).
+    // Manual map-click control is always available for artillery shells (no opt-in flag).
 
-    if ( wproto.mortar_barrage_shots <= 0 )
+    if ( wproto.artillery_shell_barrage_shots <= 0 )
         return false;
 
-    // Range from this unit to the requested target point. mortar_max_range is the
+    // Range from this unit to the requested target point. artillery_shell_max_range is the
     // single authoritative maximum range for both manual fire and auto-search.
-    float maxRange = wproto.mortar_max_range;
+    float maxRange = wproto.artillery_shell_max_range;
     if ( maxRange <= 0.0 )
         return false;
 
-    float minRange = wproto.mortar_min_range > 0.0 ? wproto.mortar_min_range : 0.0;
+    float minRange = wproto.artillery_shell_min_range > 0.0 ? wproto.artillery_shell_min_range : 0.0;
     float distSq = (targetPos.XZ() - _position.XZ()).square();
     if ( distSq < minRange * minRange || distSq > maxRange * maxRange )
         return false;
 
     // Radar: the target sector must be visible to our faction. This is the only
     // visibility gate on a manual strike.
-    if ( wproto.mortar_requires_radar )
+    if ( wproto.artillery_shell_requires_radar )
     {
         Common::Point cellId = World::PositionToSectorID(targetPos);
         if ( !_world->IsSector(cellId) || !_world->SectorAt(cellId).IsCanSee(_owner) )
@@ -10231,8 +10529,8 @@ bool NC_STACK_ypabact::CanManualMortar(const vec3d &targetPos, int *outWeaponId,
     // NEVER bypasses the cooldown once the shot budget is spent (anti-exploit).
     if ( outReadyNow )
     {
-        bool canRedirect = _mortar_barrage_active && _mortar_shots_remaining > 0;
-        bool canStartNew = !_mortar_barrage_active && _clock >= _mortar_next_activation_time;
+        bool canRedirect = _artillery_shell_barrage_active && _artillery_shell_shots_remaining > 0;
+        bool canStartNew = !_artillery_shell_barrage_active && _clock >= _artillery_shell_next_activation_time;
         *outReadyNow = canRedirect || canStartNew;
     }
 
@@ -10243,24 +10541,24 @@ bool NC_STACK_ypabact::CanManualMortar(const vec3d &targetPos, int *outWeaponId,
 }
 
 // Queue a manual strike to fire once the cooldown elapses (used when the target is
-// valid but the mortar is mid-cooldown). The azure zone ring is shown immediately
-// by UpdateMortar while the order is pending. Never fires early (anti-exploit).
-void NC_STACK_ypabact::QueueManualMortar(const vec3d &targetPos)
+// valid but the artillery shell is mid-cooldown). The azure zone ring is shown immediately
+// by UpdateArtilleryShell while the order is pending. Never fires early (anti-exploit).
+void NC_STACK_ypabact::QueueManualArtilleryShell(const vec3d &targetPos)
 {
-    if ( ypabact_GetMortarWeaponId(this) <= 0 )
+    if ( ypabact_GetArtilleryShellWeaponId(this) <= 0 )
     {
-        if ( NC_STACK_ypabact *mountedMortar = ypabact_GetMountedMortarActor(this) )
+        if ( NC_STACK_ypabact *mountedArtilleryShell = ypabact_GetMountedArtilleryShellActor(this) )
         {
-            mountedMortar->QueueManualMortar(targetPos);
+            mountedArtilleryShell->QueueManualArtilleryShell(targetPos);
             return;
         }
     }
 
-    _mortar_pending_target = targetPos;
-    _mortar_has_pending = true;
+    _artillery_shell_pending_target = targetPos;
+    _artillery_shell_has_pending = true;
 }
 
-static NC_STACK_ypabact *ypabact_GetSeekAndExplodePayloadListOwner(NC_STACK_ypabact *unit)
+static NC_STACK_ypabact *ypabact_GetKamikazePayloadListOwner(NC_STACK_ypabact *unit)
 {
     if ( unit->_parent && unit->_parent->_status != BACT_STATUS_DEAD )
         return unit->_parent;
@@ -10885,13 +11183,36 @@ static void ypabact_AddLaserMultiTargetRequests(NC_STACK_ypabact *shooter, const
     }
 }
 
-static void ypabact_ApplyLaserLoopNormalFX(TSoundSource &snd, World::TWeapProto &wproto)
+static bool ypabact_PrepareLaserSoundSource(TSoundSource &snd, World::TVhclSound &fx)
 {
-    World::TVhclSound &normalFx = wproto.sndFXes[World::TWeapProto::SND_NORMAL];
+    fx.LoadSamples();
 
-    if ( normalFx.sndPrm.slot )
+    TSampleData *mainSample = fx.MainSample.Sample
+                            ? fx.MainSample.Sample->GetSampleData()
+                            : NULL;
+
+    snd.PSample = mainSample;
+    snd.SampleVariants.clear();
+    if ( mainSample )
+        snd.SampleVariants.push_back(mainSample);
+
+    for (const World::TVhclSound::TSndSample &variant : fx.MainSampleVariants)
     {
-        snd.PPFx = &normalFx.sndPrm;
+        if ( variant.Sample )
+            snd.SampleVariants.push_back(variant.Sample->GetSampleData());
+    }
+
+    snd.Volume = fx.volume;
+    snd.Pitch = fx.pitch;
+    snd.Radius = fx.radius;
+    snd.PriorityBias = 0;
+    snd.SetLoop(false);
+    snd.SetFragmented(false);
+    snd.PFragments = NULL;
+
+    if ( fx.sndPrm.slot )
+    {
+        snd.PPFx = &fx.sndPrm;
         snd.SetPFx(true);
     }
     else
@@ -10900,9 +11221,9 @@ static void ypabact_ApplyLaserLoopNormalFX(TSoundSource &snd, World::TWeapProto 
         snd.SetPFx(false);
     }
 
-    if ( normalFx.sndPrm_shk.slot )
+    if ( fx.sndPrm_shk.slot )
     {
-        snd.PShkFx = &normalFx.sndPrm_shk;
+        snd.PShkFx = &fx.sndPrm_shk;
         snd.SetShk(true);
     }
     else
@@ -10910,6 +11231,104 @@ static void ypabact_ApplyLaserLoopNormalFX(TSoundSource &snd, World::TWeapProto 
         snd.PShkFx = NULL;
         snd.SetShk(false);
     }
+
+    return mainSample || !snd.SampleVariants.empty() ||
+           fx.sndPrm.slot || fx.sndPrm_shk.slot;
+}
+
+static bool ypabact_LaserSoundHasContent(World::TVhclSound &fx)
+{
+    fx.LoadSamples();
+
+    if ( fx.MainSample.Sample || fx.sndPrm.slot || fx.sndPrm_shk.slot )
+        return true;
+
+    for (const World::TVhclSound::TSndSample &variant : fx.MainSampleVariants)
+    {
+        if ( variant.Sample )
+            return true;
+    }
+
+    return false;
+}
+
+static void ypabact_UpdateLaserNormalSound(NC_STACK_ypabact *bact,
+                                            World::TWeapProto &wproto,
+                                            TSndCarrier *carrier,
+                                            const vec3d &position,
+                                            const vec3d &direction)
+{
+    if ( !bact || !carrier )
+        return;
+
+    World::TVhclSound &normalFx = wproto.sndFXes[World::TWeapProto::SND_NORMAL];
+
+    if ( carrier->Sounds.empty() )
+        carrier->Resize(1);
+
+    TSoundSource &snd = carrier->Sounds[0];
+    if ( !ypabact_LaserSoundHasContent(normalFx) )
+    {
+        if ( snd.IsEnabled() || snd.IsPFxEnabled() || snd.IsShkEnabled() )
+            SFXEngine::SFXe.StopCarrier(carrier);
+        return;
+    }
+
+    carrier->Position = position;
+    carrier->Vector = direction;
+
+    // Laser snd_normal is intentionally serialized rather than hardware-looped:
+    // while FIRE remains held, a new play starts only after the previous one-shot
+    // (and its optional FX) has finished, so successive samples never overlap.
+    if ( !snd.IsEnabled() && !snd.IsPFxEnabled() && !snd.IsShkEnabled() )
+    {
+        if ( ypabact_PrepareLaserSoundSource(snd, normalFx) )
+            SFXEngine::SFXe.startSound(carrier, 0);
+    }
+    else
+    {
+        // Keep authored gain/spatial settings live without replacing PSample while
+        // a selected sample variant is still playing.
+        snd.Volume = normalFx.volume;
+        snd.Pitch = normalFx.pitch;
+        snd.Radius = normalFx.radius;
+    }
+
+    SFXEngine::SFXe.UpdateSoundCarrier(carrier);
+}
+
+static void ypabact_PlayLaserLaunchSound(NC_STACK_ypabact *bact,
+                                          World::TWeapProto &wproto,
+                                          const vec3d &position,
+                                          const vec3d &direction)
+{
+    if ( !bact )
+        return;
+
+    World::TVhclSound &launchFx = wproto.sndFXes[World::TWeapProto::SND_LAUNCH];
+    TSndCarrier &carrier = bact->_laser_launch_soundcarrier;
+
+    if ( !ypabact_LaserSoundHasContent(launchFx) )
+        return;
+
+    if ( carrier.Sounds.empty() )
+        carrier.Resize(1);
+
+    TSoundSource &snd = carrier.Sounds[0];
+
+    // A new FIRE activation owns exactly one launch event. If the player releases
+    // and presses again before the previous launch sample ends, restart this same
+    // carrier so the new activation is audible immediately without overlap.
+    if ( snd.IsEnabled() || snd.IsPFxEnabled() || snd.IsShkEnabled() )
+        SFXEngine::SFXe.StopCarrier(&carrier);
+
+    if ( !ypabact_PrepareLaserSoundSource(snd, launchFx) )
+        return;
+
+    carrier.Position = position;
+    carrier.Vector = direction;
+    SFXEngine::SFXe.startSound(&carrier, 0);
+    SFXEngine::SFXe.UpdateSoundCarrier(&carrier);
 }
 
 static void ypabact_UpdateLaserHitSound(
@@ -11285,8 +11704,11 @@ void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg)
 
 void NC_STACK_ypabact::StopLaser()
 {
-    // Disconnect: stop the loop sound (only if running), drop the beam and reset tick state.
-    if ( !_laser_soundcarrier.Sounds.empty() && _laser_soundcarrier.Sounds[0].IsEnabled() )
+    // Disconnect: stop active snd_normal/snd_hit playback, drop the beam and reset tick state.
+    if ( !_laser_soundcarrier.Sounds.empty() &&
+         (_laser_soundcarrier.Sounds[0].IsEnabled() ||
+          _laser_soundcarrier.Sounds[0].IsPFxEnabled() ||
+          _laser_soundcarrier.Sounds[0].IsShkEnabled()) )
         SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     if ( !_laser_hit_soundcarrier.Sounds.empty() &&
          _laser_hit_soundcarrier.Sounds[0].IsEnabled() )
@@ -11345,6 +11767,15 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
     bool wasActive = _laser_active;
     size_t oldBeamCount = _laser_beams.size();
     _laser_active = true;
+
+    if ( !wasActive )
+    {
+        vec3d launchPos = requests.front().start;
+        vec3d launchDir = requests.front().dir;
+        if ( launchDir.normalise() < 0.001f )
+            launchDir = _rotation.AxisZ();
+        ypabact_PlayLaserLaunchSound(this, wproto, launchPos, launchDir);
+    }
     if ( _laser_beams.size() < requests.size() )
         _laser_beams.resize(requests.size());
     size_t activeBeamCount = requests.size();
@@ -11670,42 +12101,13 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
     ypabact_UpdateLaserHitSound(this, wproto, &_laser_hit_soundcarrier, _laser_beams);
 
-    // ---- Loop sound: laser loops by default while the trigger is held ----
-    wproto.snd_loop.LoadSamples(); // idempotent: real load happens only once
-
-    TSampleData *psample = wproto.snd_loop.MainSample.Sample
-                         ? wproto.snd_loop.MainSample.Sample->GetSampleData()
-                         : NULL;
-
-    if ( psample )
-    {
-        if ( _laser_soundcarrier.Sounds.empty() )
-            _laser_soundcarrier.Resize(1);
-
-        TSoundSource &snd = _laser_soundcarrier.Sounds[0];
-        snd.PSample = psample;
-        snd.SampleVariants.clear();
-        snd.SampleVariants.push_back(psample);
-        snd.Volume = wproto.snd_loop.volume ? wproto.snd_loop.volume : 120;
-        snd.Pitch = wproto.snd_loop.pitch;
-        snd.PriorityBias = 0;
-        snd.SetLoop(true);
-        snd.SetFragmented(false);
-        ypabact_ApplyLaserLoopNormalFX(snd, wproto);
-
-        _laser_soundcarrier.Position = _laser_beam_start;
-        _laser_soundcarrier.Vector = _fly_dir * _fly_dir_length;
-
-        if ( !snd.IsEnabled() )
-            SFXEngine::SFXe.startSound(&_laser_soundcarrier, 0);
-
-        SFXEngine::SFXe.UpdateSoundCarrier(&_laser_soundcarrier);
-    }
+    ypabact_UpdateLaserNormalSound(this, wproto, &_laser_soundcarrier,
+                                   _laser_beam_start, _fly_dir * _fly_dir_length);
 }
 
-static float ypabact_VerticalLaserFireRadius(const World::TWeapProto &wproto)
+static float ypabact_AiVerticalFireTriggerRadius(const World::TWeapProto &wproto)
 {
-    return wproto.vertical_laser_fire_radius > 0.0f ? wproto.vertical_laser_fire_radius : 300.0f;
+    return wproto.ai_vertical_laser_trigger_radius > 0.0f ? wproto.ai_vertical_laser_trigger_radius : 300.0f;
 }
 
 static vec3d ypabact_VerticalLaserSourceOrigin(NC_STACK_ypabact *bact, const bact_arg79 *arg)
@@ -11719,7 +12121,7 @@ static vec3d ypabact_VerticalLaserSourceOrigin(NC_STACK_ypabact *bact, const bac
 
 static bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit,
                                                   bool friendlyTargets, const vec3d &origin,
-                                                  float range, float fireRadius,
+                                                  float range, float aiTriggerRadius,
                                                   const std::vector<NC_STACK_ypabact *> &excluded)
 {
     if ( !ypabact_IsLaserSecondaryTargetCandidate(shooter, unit, friendlyTargets) )
@@ -11731,24 +12133,24 @@ static bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_
     if ( to.y < 0.0f || to.y > range )
         return false;
 
-    return to.XZ().length() <= fireRadius;
+    return to.XZ().length() <= aiTriggerRadius;
 }
 
 static NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shooter,
                                                                const vec3d &origin,
-                                                               float range, float fireRadius,
+                                                               float range, float aiTriggerRadius,
                                                                bool friendlyTargets,
                                                                const std::vector<NC_STACK_ypabact *> &excluded)
 {
-    if ( !shooter || !shooter->getBACT_pWorld() || range <= 0.0f || fireRadius <= 0.0f )
+    if ( !shooter || !shooter->getBACT_pWorld() || range <= 0.0f || aiTriggerRadius <= 0.0f )
         return NULL;
 
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
-    int sectorRadius = (int)(fireRadius / World::CVSectorLength) + 2;
+    int sectorRadius = (int)(aiTriggerRadius / World::CVSectorLength) + 2;
     Common::Point center = World::PositionToSectorID(origin);
 
     NC_STACK_ypabact *best = NULL;
-    float bestDist = fireRadius + 1.0f;
+    float bestDist = aiTriggerRadius + 1.0f;
 
     for (int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++)
     {
@@ -11763,7 +12165,7 @@ static NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact
             for (NC_STACK_ypabact *bct : cell.unitsList)
             {
                 if ( !ypabact_IsVerticalLaserMultiCandidate(shooter, bct, friendlyTargets,
-                                                            origin, range, fireRadius, excluded) )
+                                                            origin, range, aiTriggerRadius, excluded) )
                     continue;
 
                 float dist = (bct->_position.XZ() - origin.XZ()).length();
@@ -11926,7 +12328,9 @@ void NC_STACK_ypabact::RequestVerticalLaserFire(int weaponId, bact_arg79 *arg)
 void NC_STACK_ypabact::StopVerticalLaser()
 {
     if ( !_vertical_laser_soundcarrier.Sounds.empty() &&
-         _vertical_laser_soundcarrier.Sounds[0].IsEnabled() )
+         (_vertical_laser_soundcarrier.Sounds[0].IsEnabled() ||
+          _vertical_laser_soundcarrier.Sounds[0].IsPFxEnabled() ||
+          _vertical_laser_soundcarrier.Sounds[0].IsShkEnabled()) )
     {
         SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
     }
@@ -11975,7 +12379,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
     // UA world coordinates use +Y as "down" toward terrain/buildings.
     const vec3d down(0.0, 1.0, 0.0);
     float range = ypabact_LaserRange(wproto);
-    float fireRadius = ypabact_VerticalLaserFireRadius(wproto);
+    float aiTriggerRadius = ypabact_AiVerticalFireTriggerRadius(wproto);
     bool playerControlled = getBACT_inputting() || getBACT_viewer();
     bool wasActive = _vertical_laser_active;
     size_t oldBeamCount = _vertical_laser_beams.size();
@@ -11983,6 +12387,9 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
                          _clock >= _vertical_laser_next_beam_vp_time);
 
     _vertical_laser_active = true;
+
+    if ( !wasActive )
+        ypabact_PlayLaserLaunchSound(this, wproto, _vertical_laser_request_start, down);
 
     if ( _vertical_laser_beams.empty() )
         _vertical_laser_beams.resize(1);
@@ -11992,7 +12399,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
     directHitTargets.reserve((size_t)wproto.laser_beam_count + 1);
 
     // Vertical Laser shares the same aggressive player targeting as the normal
-    // Laser. vertical_laser_fire_radius remains AI-only: player acquisition uses
+    // Laser. ai_vertical_laser_trigger_radius remains AI-only: player acquisition uses
     // the common laser range and a downward aim cone, not the AI fire cylinder.
     NC_STACK_ypabact *primaryAimTarget = NULL;
     vec3d primaryDir = down;
@@ -12084,7 +12491,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
             else
             {
                 extraTarget = ypabact_FindNearestVerticalLaserTarget(
-                    this, _vertical_laser_request_start, range, fireRadius,
+                    this, _vertical_laser_request_start, range, aiTriggerRadius,
                     friendlyMultiTargets, selectedTargets);
             }
 
@@ -12213,84 +12620,64 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
     ypabact_UpdateLaserHitSound(this, wproto, &_vertical_laser_hit_soundcarrier,
                                 _vertical_laser_beams);
 
-    wproto.snd_loop.LoadSamples();
-
-    TSampleData *psample = wproto.snd_loop.MainSample.Sample
-                         ? wproto.snd_loop.MainSample.Sample->GetSampleData()
-                         : NULL;
-
-    if ( psample )
-    {
-        if ( _vertical_laser_soundcarrier.Sounds.empty() )
-            _vertical_laser_soundcarrier.Resize(1);
-
-        TSoundSource &snd = _vertical_laser_soundcarrier.Sounds[0];
-        snd.PSample = psample;
-        snd.SampleVariants.clear();
-        snd.SampleVariants.push_back(psample);
-        snd.Volume = wproto.snd_loop.volume ? wproto.snd_loop.volume : 120;
-        snd.Pitch = wproto.snd_loop.pitch;
-        snd.PriorityBias = 0;
-        snd.SetLoop(true);
-        snd.SetFragmented(false);
-        ypabact_ApplyLaserLoopNormalFX(snd, wproto);
-
-        _vertical_laser_soundcarrier.Position = _vertical_laser_beams.empty()
-                                              ? _vertical_laser_request_start
-                                              : _vertical_laser_beams[0].start;
-        _vertical_laser_soundcarrier.Vector = down;
-
-        if ( !snd.IsEnabled() )
-            SFXEngine::SFXe.startSound(&_vertical_laser_soundcarrier, 0);
-
-        SFXEngine::SFXe.UpdateSoundCarrier(&_vertical_laser_soundcarrier);
-    }
+    ypabact_UpdateLaserNormalSound(this, wproto, &_vertical_laser_soundcarrier,
+                                   _vertical_laser_beams.empty()
+                                       ? _vertical_laser_request_start
+                                       : _vertical_laser_beams[0].start,
+                                   down);
 }
 
-void NC_STACK_ypabact::UpdateSeekAndExplode(update_msg *)
+void NC_STACK_ypabact::UpdateKamikaze(update_msg *)
 {
-    NC_STACK_ypabact *target = ypabact_FindSeekAndExplodeContactTarget(this);
+    TKamikazeMount mount;
+    if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
+         mount.carrier != this ||
+         !ypabact_IsKamikazeMountArmed(mount) )
+    {
+        return;
+    }
+
+    NC_STACK_ypabact *target = ypabact_FindKamikazeContactTarget(mount);
     if ( !target )
         return;
 
-    _seek_and_explode_triggered = true;
+    _kamikaze_triggered = true;
     RevealInvisibleOnAttack();
+    if ( mount.payloadSource != this )
+        mount.payloadSource->RevealInvisibleOnAttack();
 
-    if ( _seek_and_explode_weapon > 0 )
+    ypaworld_arg146 arg147;
+    arg147.vehicle_id = mount.weaponId;
+    arg147.pos = _position;
+
+    NC_STACK_ypamissile *payload = _world->ypaworld_func147(&arg147);
+    if ( !payload )
     {
-        ypaworld_arg146 arg147;
-        arg147.vehicle_id = _seek_and_explode_weapon;
-        arg147.pos = _position;
-
-        NC_STACK_ypamissile *payload = _world->ypaworld_func147(&arg147);
-        if ( !payload )
-        {
-            _seek_and_explode_triggered = false;
-            return;
-        }
-
-        vec3d payloadDir = _rotation.AxisZ();
-        if ( payloadDir.normalise() <= 0.001 )
-            payloadDir = vec3d::OZ(1.0);
-
-        payload->SetLauncherBact(this);
-        // Seek-and-explode detonates at the carrier position. If the payload is
-        // model=bomb, the normal drop-height filter would skip nearby ground
-        // units that sit slightly below the carrier.
-        payload->SetStartHeight(std::numeric_limits<float>::lowest());
-        payload->_owner = _owner;
-        payload->_host_station = _host_station;
-        payload->_fly_dir = payloadDir;
-        payload->_fly_dir_length = 0.0;
-        payload->_rotation.SetZ(payload->_fly_dir);
-        payload->_rotation.SetX(_rotation.AxisX());
-        payload->_rotation.SetY(payload->_rotation.AxisZ() * payload->_rotation.AxisX());
-        payload->_kidRef.Detach();
-        payload->_parent = NULL;
-        ypabact_GetSeekAndExplodePayloadListOwner(this)->_missiles_list.push_back(payload);
-
-        payload->DetonateSeekAndExplodePayload(target);
+        _kamikaze_triggered = false;
+        return;
     }
+
+    vec3d payloadDir = _rotation.AxisZ();
+    if ( payloadDir.normalise() <= 0.001 )
+        payloadDir = vec3d::OZ(1.0);
+
+    payload->SetLauncherBact(mount.payloadSource);
+    // The payload exists only long enough to reuse the normal Weapon direct-hit,
+    // Impact/AoE/debuff/push and FX pipeline at the physical carrier position.
+    payload->SetStartHeight(std::numeric_limits<float>::lowest());
+    payload->_owner = _owner;
+    payload->_host_station = mount.payloadSource->_host_station
+        ? mount.payloadSource->_host_station : _host_station;
+    payload->_fly_dir = payloadDir;
+    payload->_fly_dir_length = 0.0;
+    payload->_rotation.SetZ(payload->_fly_dir);
+    payload->_rotation.SetX(_rotation.AxisX());
+    payload->_rotation.SetY(payload->_rotation.AxisZ() * payload->_rotation.AxisX());
+    payload->_kidRef.Detach();
+    payload->_parent = NULL;
+    ypabact_GetKamikazePayloadListOwner(mount.payloadSource)->_missiles_list.push_back(payload);
+
+    payload->DetonateKamikazePayload(target);
 
     // Global debug invulnerability protects the carrier while preserving the
     // payload detonation and its visual/gameplay reactions. Keep the trigger
@@ -12496,7 +12883,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         // slot supplies the cooldown gate, then the shot chooses a random slot.
         int currentWeapon = ypabact_GetWeaponIdForSourceSlot(this, _current_weapon_source_slot);
         cooldownWeapon = currentWeapon == _current_weapon_id &&
-                         ypabact_IsValidWeaponId(this, currentWeapon)
+                         ypabact_IsValidFireWeaponId(this, currentWeapon)
                              ? currentWeapon
                              : slots[0];
     }
@@ -12511,6 +12898,12 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         return 0;
 
     World::TWeapProto &cooldownProto = _world->GetWeaponsProtos().at(cooldownWeapon);
+
+    // Central safety gate: a Kamikaze Weapon is a mounted carrier payload,
+    // never a normally launchable projectile, even from secondary call sites.
+    if ( cooldownProto.IsKamikaze() )
+        return 0;
+
     bact_arg79 cockpitAimArg;
     if ( arg && arg->tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive() )
     {
@@ -12523,17 +12916,17 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     // OpenNeoUA custom: a laser weapon does not spawn projectiles and is not rate-limited
     // by shot_time. It registers a per-frame fire request that UpdateLaser() turns into
-    // a continuous beam (static tick damage + VP beam visual + loop sound). Bail out here,
+    // a continuous beam (static tick damage + VP beam visual + serialized snd_normal). Bail out here,
     // before the cooldown gate and the normal missile-spawn path.
-    if ( cooldownProto.IsLaser() )
-    {
-        RequestLaserFire(cooldownWeapon, arg);
-        return 0;
-    }
-
     if ( cooldownProto.IsVerticalLaser() )
     {
         RequestVerticalLaserFire(cooldownWeapon, arg);
+        return 0;
+    }
+
+    if ( cooldownProto.IsLaser() )
+    {
+        RequestLaserFire(cooldownWeapon, arg);
         return 0;
     }
 
@@ -12573,6 +12966,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         return 0;
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(selectedWeapon);
+    if ( wproto.IsKamikaze() )
+        return 0;
+
     const bool usePlayerLaunchShake = ypabact_ShouldUsePlayerLaunchShake(this, wproto);
     float weaponEnergyCostPercent = 0.0f;
     const bool hasConfiguredWeaponEnergyCost =
@@ -12580,9 +12976,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             System::IniConf::GameWeaponEnergyCostPercent,
             &weaponEnergyCostPercent);
 
-    // OpenNeoUA custom: mortar weapons are driven exclusively by UpdateMortar()'s
+    // OpenNeoUA custom: artillery shell weapons are driven exclusively by UpdateArtilleryShell()'s
     // barrage AI. Never fire them through the normal direct/missile path.
-    if ( wproto.IsMortar() )
+    if ( wproto.IsArtilleryShell() )
         return 0;
 
     // OpenNeoUA invisible: committed to firing the primary weapon this frame -> reveal now
@@ -13177,7 +13573,7 @@ void NC_STACK_ypabact::UpdateActiveDebuffDisorientFire(update_msg *arg)
     if ( ypabact_IsValidFireWeaponId(this, _weapon) )
     {
         World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_weapon);
-        if ( !wproto.IsLaser() && !wproto.IsVerticalLaser() && !wproto.IsMortar() )
+        if ( !wproto.IsLaser() && !wproto.IsArtilleryShell() )
         {
             bact_arg79 fireArg = {};
             fireArg.direction = fireDirection;
@@ -15528,20 +15924,17 @@ void NC_STACK_ypabact::Renew()
     _proximity_defense_next_shot_time = 0;
     _proximity_defense_next_activation_time = 0;
     _proximity_defense_at_death_done = false;
-    _mortar_barrage_active = false;
-    _mortar_shots_remaining = 0;
-    _mortar_next_shot_time = 0;
-    _mortar_next_activation_time = 0;
-    _mortar_next_scan_time = 0;
-    _mortar_target_center = vec3d(0.0, 0.0, 0.0);
-    _mortar_has_pending = false;
-    _mortar_pending_target = vec3d(0.0, 0.0, 0.0);
+    _artillery_shell_barrage_active = false;
+    _artillery_shell_shots_remaining = 0;
+    _artillery_shell_next_shot_time = 0;
+    _artillery_shell_next_activation_time = 0;
+    _artillery_shell_next_scan_time = 0;
+    _artillery_shell_target_center = vec3d(0.0, 0.0, 0.0);
+    _artillery_shell_has_pending = false;
+    _artillery_shell_pending_target = vec3d(0.0, 0.0, 0.0);
     StopLaser();
     StopVerticalLaser();
-    _seek_and_explode = 0;
-    _seek_and_explode_weapon = 0;
-    _seek_and_explode_trigger_radius = 0.0;
-    _seek_and_explode_triggered = false;
+    _kamikaze_triggered = false;
     _newtarget_time = 0;
     _assess_time = 0;
     _scale_pos = 0;
@@ -15762,7 +16155,8 @@ static bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponI
         bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId);
 
     const bool activeNormal =
-        wproto.IsLaser() && bact->_laser_active && bact->_laser_weapon == weaponId;
+        wproto.IsLaser() && !wproto.IsVerticalLaser() &&
+        bact->_laser_active && bact->_laser_weapon == weaponId;
     const bool activeVertical =
         wproto.IsVerticalLaser() && bact->_vertical_laser_active &&
         bact->_vertical_laser_weapon == weaponId;
@@ -15788,7 +16182,7 @@ static bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponI
             return false;
 
         if ( (arg->pos.XZ() - fireOrigin.XZ()).length() >
-             ypabact_VerticalLaserFireRadius(wproto) )
+             ypabact_AiVerticalFireTriggerRadius(wproto) )
             return false;
 
         return (arg->pos - fireOrigin).length() <= ypabact_LaserRange(wproto);
@@ -15829,16 +16223,12 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
     World::TWeapProto *v8 = NULL;
 
     int v36;
-    int fireWeapon = arg->weapon >= 0 ? arg->weapon : _weapon;
+    int fireWeapon = arg->weapon >= 0 ? arg->weapon : GetCurrentWeaponId();
 
-    if ( fireWeapon != -1 && ypabact_IsValidWeaponId(this, fireWeapon) )
+    if ( ypabact_IsValidFireWeaponId(this, fireWeapon) )
     {
         v8 = &_world->GetWeaponsProtos().at( fireWeapon );
-
-        if ( v8->_weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE )
-            v36 = v8->GetFireControlFlags();
-        else
-            v8 = NULL;
+        v36 = v8->GetFireControlFlags();
     }
 
     if ( !v8 )
@@ -15855,7 +16245,7 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
         if ( arg->pos.y < fireOrigin.y )
             return 0;
 
-        return (arg->pos.XZ() - fireOrigin.XZ()).length() <= ypabact_VerticalLaserFireRadius(*v8);
+        return (arg->pos.XZ() - fireOrigin.XZ()).length() <= ypabact_AiVerticalFireTriggerRadius(*v8);
     }
 
     if ( arg->unkn == 2 )
@@ -17045,15 +17435,14 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     float v56 = 0.0;
 
     int targetingWeaponId = GetCurrentWeaponId();
-    if ( !ypabact_IsValidWeaponId(this, targetingWeaponId) )
-        targetingWeaponId = _weapon;
-
     const World::TWeapProto *targetingProto =
-        ypabact_IsValidWeaponId(this, targetingWeaponId)
+        ypabact_IsValidFireWeaponId(this, targetingWeaponId)
             ? &_world->GetWeaponsProtos().at(targetingWeaponId) : NULL;
 
     float v55 = targetingProto ? targetingProto->radius : 0.0;
-    int targetingWeaponFlags = targetingProto ? targetingProto->_weaponFlags : _weapon_flags;
+    int targetingWeaponFlags = targetingProto
+        ? targetingProto->_weaponFlags
+        : (HasMinigun() ? World::TWeapProto::WEAPON_FLAG_DIRECT : 0);
     int a3a = !(targetingWeaponFlags & 2) && !(targetingWeaponFlags & 0x10);
     bool searchWeaponTarget = !a3a;
 
@@ -18471,6 +18860,7 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
     ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
+    ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
 }
 
@@ -19407,9 +19797,9 @@ void NC_STACK_ypabact::setBACT_viewer(bool vwr)
         if ( _world && !_world->CanControlUnitInSpectatorMode(this) )
             return;
 
-        // OpenNeoUA custom: mortar platforms are map-only artillery; never let the
+        // OpenNeoUA custom: artillery shell platforms are map-only artillery; never let the
         // camera/viewer enter one (that is what made it look possessed in 1st person).
-        if ( _world && IsMortarPlatform() )
+        if ( _world && IsArtilleryShellPlatform() )
             return;
 
         if (_world->_viewerBact)
@@ -19484,9 +19874,9 @@ void NC_STACK_ypabact::setBACT_inputting(bool inpt)
         if ( _world && !_world->CanControlUnitInSpectatorMode(this) )
             return;
 
-        // OpenNeoUA custom: mortar platforms are artillery used only from the 2D
+        // OpenNeoUA custom: artillery shell platforms are artillery used only from the 2D
         // strategic map. Never let the player take first-person control of them.
-        if ( _world && IsMortarPlatform() )
+        if ( _world && IsArtilleryShellPlatform() )
             return;
 
         _oflags |= BACT_OFLAG_USERINPT;

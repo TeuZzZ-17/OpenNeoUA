@@ -85,13 +85,12 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
 
     int v5 = _world->ypaworld_func145(this);
 
+    const bool kamikazeRamming = ApplyKamikazeRammingGuidance();
+
     float v108 = _target_vec.length();
 
     if ( v108 != 0.0 )
         _target_dir = _target_vec / v108;
-
-    if ( ApplySeekAndExplodeRammingGuidance() )
-        v108 = _target_vec.length();
 
     if ( IsActiveDebuffDisorienting() )
     {
@@ -301,7 +300,8 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                     }
                     else
                     {
-                        if ( !HasLocalPlayerForceVerticalPursuitTarget() || _target_dir.y >= 0.0 )
+                        if ( (!kamikazeRamming && !HasLocalPlayerForceVerticalPursuitTarget()) ||
+                             _target_dir.y >= 0.0 )
                         {
                             _ufoFlags |= 5;
                         }
