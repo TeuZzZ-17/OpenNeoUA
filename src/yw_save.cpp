@@ -349,6 +349,7 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
 
             fil->printf("    shield         = %d\n", proto.shield);
             fil->printf("    energy         = %d\n", proto.energy);
+            fil->printf("    max_active_at_once = %d\n", proto.max_active_at_once);
             if (proto.mimic_energy_cost > 0)
                 fil->printf("    mimic_energy_cost = %d\n", proto.mimic_energy_cost);
             fil->printf("    num_weapons    = %d\n", proto.num_weapons);
@@ -576,6 +577,9 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
     fil->printf("    extrastate     = %d\n", bct->_status_flg);
     fil->printf("    ident          = %d\n", bct->_gid);
     fil->printf("    killerowner    = %d\n", bct->_killer_owner);
+
+    if ( bct->_isGenesisProduced )
+        fil->printf("    genesis_produced = yes\n");
 
     if ( saveInvisibleState )
         fil->printf("    invisible_unrevealed = %s\n", bct->IsInvisibleUnrevealed() ? "yes" : "no");
