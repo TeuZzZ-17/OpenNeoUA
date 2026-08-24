@@ -3839,6 +3839,7 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     {
         uint32_t tpm = profiler_begin();
         sb_0x4d7c08__sub0(this);
+        yw_FinalizePriorityGameplayUi(this);
         _profileVals[PFID_NEWGUITIME] = profiler_end(tpm);
     }
 }

@@ -3362,8 +3362,9 @@ public:
     // Shared fractional accumulator for every gameplay time-scale trigger.
     double _gameplayTimeScaleRemainder = 0.0;
     uint32_t _roboDeathTimeScaleEndTick = 0;
-    NC_STACK_ypabact *_kamikazeFireTimeScaleDrainUnit = NULL;
+    int32_t _kamikazeFireTimeScaleDrainGid = 0;
     double _kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+    bool _kamikazeFireInputWasHeld = false;
     int32_t _gameplayRenderTimeBase = 0;
     bool _gameplayRenderTimeBaseSet = false;
     int32_t _upgradeVehicleId = 0;

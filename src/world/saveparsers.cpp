@@ -674,6 +674,12 @@ int SaveGlobalsParser::Handle(ScriptParser::Parser &parser, const std::string &p
 
     if ( !StriCmp(p1, "time") )
         _o._timeStamp = parser.stoi(p2);
+    else if ( !StriCmp(p1, "kamikaze_fire_latched_gid") )
+    {
+        const int32_t gid = parser.stoi(p2);
+        _o._kamikazeFireTimeScaleDrainGid = gid > 0 ? gid : 0;
+        _o._kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+    }
     else
         return ScriptParser::RESULT_UNKNOWN;
     return ScriptParser::RESULT_OK;
