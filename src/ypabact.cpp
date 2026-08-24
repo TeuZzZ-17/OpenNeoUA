@@ -647,9 +647,9 @@ static bool ypabact_ShouldApplyVPSpin(NC_STACK_ypabact *bact, NC_STACK_base *bas
     return ypabact_IsMainVPBase(bact, base);
 }
 
-static bool ypabact_ShouldApplyProjectileCorkspin(NC_STACK_ypabact *bact, NC_STACK_base *base)
+static bool ypabact_ShouldApplyProjectileSpiral(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
-    if ( bact->_projectile_corkspin_speed <= 0.0f && !bact->_projectile_corkspin_visual_frozen )
+    if ( bact->_spiral_speed <= 0.0f && !bact->_spiral_visual_frozen )
         return false;
 
     if ( ypabact_IsMainVPBase(bact, base) )
@@ -657,12 +657,12 @@ static bool ypabact_ShouldApplyProjectileCorkspin(NC_STACK_ypabact *bact, NC_STA
 
     // Freeze the final render-only offset for the projectile's short dead/megadeth
     // VP so impact visuals do not snap back to the physical center line.
-    return bact->_projectile_corkspin_visual_frozen &&
+    return bact->_spiral_visual_frozen &&
            bact->_bact_type == BACT_TYPES_MISSLE &&
            (base == bact->_vp_dead || base == bact->_vp_megadeth);
 }
 
-static double ypabact_GetProjectileCorkspinPhase(float speed, int32_t age)
+static double ypabact_GetProjectileSpiralPhase(float speed, int32_t age)
 {
     constexpr double TWO_PI = 6.28318530717958647692;
     const double safeAgeSeconds = (double)std::max<int32_t>(age, 0) * 0.001;
@@ -670,20 +670,20 @@ static double ypabact_GetProjectileCorkspinPhase(float speed, int32_t age)
     return std::fmod(turns, 1.0) * TWO_PI;
 }
 
-static mat3x3 ypabact_BuildProjectileCorkspinRoll(float speed, int32_t age)
+static mat3x3 ypabact_BuildProjectileSpiralRoll(float speed, int32_t age)
 {
-    return mat3x3::RotateZ(ypabact_GetProjectileCorkspinPhase(speed, age));
+    return mat3x3::RotateZ(ypabact_GetProjectileSpiralPhase(speed, age));
 }
 
-static vec3d ypabact_BuildProjectileCorkspinLocalOffset(const NC_STACK_ypabact *bact)
+static vec3d ypabact_BuildProjectileSpiralLocalOffset(const NC_STACK_ypabact *bact)
 {
-    if ( !bact || bact->_projectile_corkspin_speed <= 0.0f ||
-         (bact->_projectile_corkspin_radius <= 0.0f && bact->_projectile_corkspin_forward <= 0.0f) )
+    if ( !bact || bact->_spiral_speed <= 0.0f ||
+         (bact->_spiral_radius <= 0.0f && bact->_spiral_forward <= 0.0f) )
         return vec3d(0.0, 0.0, 0.0);
 
-    const double phase = ypabact_GetProjectileCorkspinPhase(bact->_projectile_corkspin_speed, bact->_clock);
-    const double radius = bact->_projectile_corkspin_radius;
-    const double forwardDistance = bact->_projectile_corkspin_forward;
+    const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
+    const double radius = bact->_spiral_radius;
+    const double forwardDistance = bact->_spiral_forward;
 
     // RotateZ() uses this clockwise X/Y convention. Keeping the orbit on the
     // same phase makes the model, its children and its emitter directions sweep
@@ -697,27 +697,27 @@ static vec3d ypabact_BuildProjectileCorkspinLocalOffset(const NC_STACK_ypabact *
                  (1.0 - std::cos(phase)) * 0.5 * forwardDistance);
 }
 
-static vec3d ypabact_BuildProjectileCorkspinOffset(const NC_STACK_ypabact *bact)
+static vec3d ypabact_BuildProjectileSpiralOffset(const NC_STACK_ypabact *bact)
 {
     if ( !bact )
         return vec3d(0.0, 0.0, 0.0);
 
     // Local Z is the projectile's forward axis. Orbit in its perpendicular X/Y
     // plane, then transform that offset with the physical projectile orientation.
-    return bact->_rotation.Transpose().Transform(ypabact_BuildProjectileCorkspinLocalOffset(bact));
+    return bact->_rotation.Transpose().Transform(ypabact_BuildProjectileSpiralLocalOffset(bact));
 }
 
-static mat3x3 ypabact_BuildProjectileCorkspinTangent(const NC_STACK_ypabact *bact)
+static mat3x3 ypabact_BuildProjectileSpiralTangent(const NC_STACK_ypabact *bact)
 {
-    if ( !bact || bact->_projectile_corkspin_speed <= 0.0f ||
-         (bact->_projectile_corkspin_radius <= 0.0f && bact->_projectile_corkspin_forward <= 0.0f) )
+    if ( !bact || bact->_spiral_speed <= 0.0f ||
+         (bact->_spiral_radius <= 0.0f && bact->_spiral_forward <= 0.0f) )
         return mat3x3::Ident();
 
     constexpr double TWO_PI = 6.28318530717958647692;
-    const double phase = ypabact_GetProjectileCorkspinPhase(bact->_projectile_corkspin_speed, bact->_clock);
-    const double angularSpeed = (double)bact->_projectile_corkspin_speed * TWO_PI;
-    const double radius = bact->_projectile_corkspin_radius;
-    const double forwardDistance = bact->_projectile_corkspin_forward;
+    const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
+    const double angularSpeed = (double)bact->_spiral_speed * TWO_PI;
+    const double radius = bact->_spiral_radius;
+    const double forwardDistance = bact->_spiral_forward;
 
     // Missile integration advances the physical center by speed * dt * 6.
     // Convert that world-space center velocity back into projectile-local space
@@ -748,74 +748,74 @@ static mat3x3 ypabact_BuildProjectileCorkspinTangent(const NC_STACK_ypabact *bac
     return mat3x3::AxisAngle(axis, std::acos(alignment)).Transpose();
 }
 
-bool NC_STACK_ypabact::GetProjectileCorkspinVisualDelta(vec3d *worldOffset, mat3x3 *renderRotationDelta) const
+bool NC_STACK_ypabact::GetProjectileSpiralVisualDelta(vec3d *worldOffset, mat3x3 *renderRotationDelta) const
 {
     if ( worldOffset )
         *worldOffset = vec3d(0.0, 0.0, 0.0);
     if ( renderRotationDelta )
         *renderRotationDelta = mat3x3::Ident();
 
-    if ( _projectile_corkspin_visual_frozen )
+    if ( _spiral_visual_frozen )
     {
         if ( worldOffset )
-            *worldOffset = _projectile_corkspin_frozen_offset;
+            *worldOffset = _spiral_frozen_offset;
         if ( renderRotationDelta )
-            *renderRotationDelta = _projectile_corkspin_frozen_rotation;
+            *renderRotationDelta = _spiral_frozen_rotation;
         return true;
     }
 
-    if ( _projectile_corkspin_speed <= 0.0f )
+    if ( _spiral_speed <= 0.0f )
         return false;
 
     if ( worldOffset )
-        *worldOffset = ypabact_BuildProjectileCorkspinOffset(this);
+        *worldOffset = ypabact_BuildProjectileSpiralOffset(this);
 
     if ( renderRotationDelta )
     {
-        *renderRotationDelta = ypabact_BuildProjectileCorkspinTangent(this);
-        *renderRotationDelta *= ypabact_BuildProjectileCorkspinRoll(_projectile_corkspin_speed, _clock);
+        *renderRotationDelta = ypabact_BuildProjectileSpiralTangent(this);
+        *renderRotationDelta *= ypabact_BuildProjectileSpiralRoll(_spiral_speed, _clock);
     }
 
     return true;
 }
 
-void NC_STACK_ypabact::FreezeProjectileCorkspinVisual()
+void NC_STACK_ypabact::FreezeProjectileSpiralVisual()
 {
-    if ( _projectile_corkspin_visual_frozen || _projectile_corkspin_speed <= 0.0f )
+    if ( _spiral_visual_frozen || _spiral_speed <= 0.0f )
         return;
 
     vec3d offset;
     mat3x3 rotation;
-    if ( GetProjectileCorkspinVisualDelta(&offset, &rotation) )
+    if ( GetProjectileSpiralVisualDelta(&offset, &rotation) )
     {
-        _projectile_corkspin_frozen_offset = offset;
-        _projectile_corkspin_frozen_rotation = rotation;
-        _projectile_corkspin_visual_frozen = true;
+        _spiral_frozen_offset = offset;
+        _spiral_frozen_rotation = rotation;
+        _spiral_visual_frozen = true;
     }
 }
 
-void NC_STACK_ypabact::ResetProjectileCorkspinVisualFreeze()
+void NC_STACK_ypabact::ResetProjectileSpiralVisualFreeze()
 {
-    _projectile_corkspin_visual_frozen = false;
-    _projectile_corkspin_frozen_offset = vec3d(0.0, 0.0, 0.0);
-    _projectile_corkspin_frozen_rotation = mat3x3::Ident();
+    _spiral_visual_frozen = false;
+    _spiral_frozen_offset = vec3d(0.0, 0.0, 0.0);
+    _spiral_frozen_rotation = mat3x3::Ident();
 }
 
-static void ypabact_ApplyProjectileCorkspinVisual(NC_STACK_ypabact *bact, NC_STACK_base *base)
+static void ypabact_ApplyProjectileSpiralVisual(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
-    if ( !ypabact_ShouldApplyProjectileCorkspin(bact, base) )
+    if ( !ypabact_ShouldApplyProjectileSpiral(bact, base) )
         return;
 
     vec3d visualOffset;
     mat3x3 visualRotationDelta;
-    if ( !bact->GetProjectileCorkspinVisualDelta(&visualOffset, &visualRotationDelta) )
+    if ( !bact->GetProjectileSpiralVisualDelta(&visualOffset, &visualRotationDelta) )
         return;
 
     // Move and orient the root VP only for rendering. Child VPs and every embedded
     // particle emitter inherit this transform through NC_STACK_base::Render().
     // Attached decoration FX reuse the exact same delta through the transient-VP
     // follow path. Once emitted, particles remain at their world-space spawn
-    // positions, so consecutive emissions trace the corkscrew instead of moving
+    // positions, so consecutive emissions trace the spiral instead of moving
     // as one rigid tube. Gameplay position, physics and collision stay central.
     base->TForm().Pos += visualOffset;
     base->TForm().SclRot *= visualRotationDelta;
@@ -4753,7 +4753,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( visualRecoilPitch != 0.0f && ypabact_IsMainVPBase(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= mat3x3::RotateX(visualRecoilPitch);
 
-                ypabact_ApplyProjectileCorkspinVisual(this, _current_vp->Bas);
+                ypabact_ApplyProjectileSpiralVisual(this, _current_vp->Bas);
 
                 if ( ypabact_ShouldApplyVPSpin(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= World::Spin::BuildMatrix(_vp_spin_strength, _clock);
@@ -4818,7 +4818,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( ypabact_ShouldApplyVPOrientation(this, bd->vp->Bas) )
                     bd->vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_orientation);
 
-                ypabact_ApplyProjectileCorkspinVisual(this, bd->vp->Bas);
+                ypabact_ApplyProjectileSpiralVisual(this, bd->vp->Bas);
 
                 if ( ypabact_ShouldApplyVPSpin(this, bd->vp->Bas) )
                     bd->vp->Bas->TForm().SclRot *= World::Spin::BuildMatrix(_vp_spin_strength, _clock);
@@ -18630,7 +18630,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
 
             vec3d visualOffset;
             mat3x3 visualRotationDelta;
-            if ( GetProjectileCorkspinVisualDelta(&visualOffset, &visualRotationDelta) )
+            if ( GetProjectileSpiralVisualDelta(&visualOffset, &visualRotationDelta) )
             {
                 visualPos += visualOffset;
                 visualRot = (_rotation.Transpose() * visualRotationDelta).Transpose();

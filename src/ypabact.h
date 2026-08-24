@@ -725,13 +725,13 @@ public:
         return NULL;
     }
 
-    // OpenNeoUA custom: returns the render-only corkscrew offset and local
+    // OpenNeoUA custom: returns the render-only spiral offset and local
     // rotation delta used by supported physical projectiles. Attached visual
     // effects can reuse this exact transform without touching gameplay position
     // or collision.
-    bool GetProjectileCorkspinVisualDelta(vec3d *worldOffset, mat3x3 *renderRotationDelta) const;
-    void FreezeProjectileCorkspinVisual();
-    void ResetProjectileCorkspinVisualFreeze();
+    bool GetProjectileSpiralVisualDelta(vec3d *worldOffset, mat3x3 *renderRotationDelta) const;
+    void FreezeProjectileSpiralVisual();
+    void ResetProjectileSpiralVisualFreeze();
 
     virtual int getBACT_aggression() const
     { return _aggr; }
@@ -931,12 +931,12 @@ public:
     World::TVisualTint _vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
     vec3d _vp_orientation = vec3d(0.0, 0.0, 0.0);
     vec3d _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
-    float _projectile_corkspin_speed = 0.0f;   // OpenNeoUA: render-only corkscrew revolutions/s
-    float _projectile_corkspin_radius = 0.0f;  // OpenNeoUA: visual orbit radius in model/world units
-    float _projectile_corkspin_forward = 0.0f; // OpenNeoUA: bounded longitudinal visual excursion per turn
-    bool _projectile_corkspin_visual_frozen = false;
-    vec3d _projectile_corkspin_frozen_offset = vec3d(0.0, 0.0, 0.0);
-    mat3x3 _projectile_corkspin_frozen_rotation = mat3x3::Ident();
+    float _spiral_speed = 0.0f;   // OpenNeoUA: render-only spiral revolutions/s
+    float _spiral_radius = 0.0f;  // OpenNeoUA: visual orbit radius in model/world units
+    float _spiral_forward = 0.0f; // OpenNeoUA: bounded longitudinal visual excursion per turn
+    bool _spiral_visual_frozen = false;
+    vec3d _spiral_frozen_offset = vec3d(0.0, 0.0, 0.0);
+    mat3x3 _spiral_frozen_rotation = mat3x3::Ident();
     vec3d _vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     World::TVisualTint _vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
     vec3d _vp_trail_spin_strength = vec3d(0.0, 0.0, 0.0);
