@@ -1006,7 +1006,9 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vehicleID);
 
-    if ( !wproto.chain.allow || wproto.IsLaser() || wproto.IsMortar() || !(wproto._weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE) )
+    if ( !wproto.chain.allow || wproto.IsLaser() || wproto.IsArtilleryShell() ||
+         wproto.IsKamikaze() ||
+         !(wproto._weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE) )
         return false;
 
     vec3d chainDir = nextTarget->_position - originPos;
@@ -1124,7 +1126,7 @@ void NC_STACK_ypamissile::TrySpawnChainProjectile(NC_STACK_ypabact *currentHit, 
     if ( !chain.allow || chain.max_jumps <= 0 || chain.radius <= 0.0 || chain.damage_mult <= 0.0 )
         return;
 
-    if ( wproto.IsLaser() || wproto.IsMortar() )
+    if ( wproto.IsLaser() || wproto.IsArtilleryShell() || wproto.IsKamikaze() )
         return;
 
     if ( !(wproto._weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE) )
@@ -2314,11 +2316,11 @@ void NC_STACK_ypamissile::SteerHomingBombDirection(float dtime)
 
 void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 {
-    // OpenNeoUA custom: mortar shells use a fully isolated ballistic path so normal
+    // OpenNeoUA custom: artillery shells use a fully isolated ballistic path so normal
     // missile/bomb behavior is left completely unchanged.
-    if ( _isMortarProjectile )
+    if ( _isArtilleryShellProjectile )
     {
-        UpdateMortarBallistic(arg);
+        UpdateArtilleryShellBallistic(arg);
         return;
     }
 
@@ -2599,22 +2601,22 @@ void NC_STACK_ypamissile::User_layer(update_msg *arg)
         ResetViewing();
 }
 
-void NC_STACK_ypamissile::SetupMortarShell(const vec3d &startPos, const vec3d &targetPos,
+void NC_STACK_ypamissile::SetupArtilleryShell(const vec3d &startPos, const vec3d &targetPos,
                                            int flightTime, float arcHeight, const vec3d &driftVec, bool impactOnSurface)
 {
-    _isMortarProjectile = true;
-    _mortarStartPos     = startPos;
-    _mortarTargetPos    = targetPos;
-    _mortarDriftVec     = driftVec;
-    _mortarArcHeight    = arcHeight;
-    _mortarFlightTime   = flightTime > 0 ? flightTime : 2500;
-    _mortarElapsed      = 0;
-    _mortarImpactOnSurface = impactOnSurface;
+    _isArtilleryShellProjectile = true;
+    _artilleryShellStartPos     = startPos;
+    _artilleryShellTargetPos    = targetPos;
+    _artilleryShellDriftVec     = driftVec;
+    _artilleryShellArcHeight    = arcHeight;
+    _artilleryShellFlightTime   = flightTime > 0 ? flightTime : 2500;
+    _artilleryShellElapsed      = 0;
+    _artilleryShellImpactOnSurface = impactOnSurface;
 
     _position = startPos;
     _old_pos  = startPos;
 
-    // Mortar shells never home; they fly a fixed parametric arc.
+    // Artillery shells never home; they fly a fixed parametric arc.
     _primTtype = BACT_TGT_TYPE_DRCT;
 
     // Initial facing toward the target zone (purely cosmetic; refreshed each frame).
@@ -2632,16 +2634,16 @@ void NC_STACK_ypamissile::SetupMortarShell(const vec3d &startPos, const vec3d &t
     }
 }
 
-void NC_STACK_ypamissile::UpdateMortarBallistic(update_msg *arg)
+void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
 {
     if ( _status != BACT_STATUS_NORMAL )
         return;
 
-    _mortarElapsed += arg->frameTime;
+    _artilleryShellElapsed += arg->frameTime;
 
-    int flightTime = _mortarFlightTime > 0 ? _mortarFlightTime : 2500;
+    int flightTime = _artilleryShellFlightTime > 0 ? _artilleryShellFlightTime : 2500;
 
-    float t = (float)_mortarElapsed / (float)flightTime;
+    float t = (float)_artilleryShellElapsed / (float)flightTime;
     bool impactNow = false;
     if ( t >= 1.0f )
     {
@@ -2653,22 +2655,22 @@ void NC_STACK_ypamissile::UpdateMortarBallistic(update_msg *arg)
 
     // Horizontal interpolation start -> target.
     vec3d pos;
-    pos.x = _mortarStartPos.x + (_mortarTargetPos.x - _mortarStartPos.x) * t;
-    pos.z = _mortarStartPos.z + (_mortarTargetPos.z - _mortarStartPos.z) * t;
+    pos.x = _artilleryShellStartPos.x + (_artilleryShellTargetPos.x - _artilleryShellStartPos.x) * t;
+    pos.z = _artilleryShellStartPos.z + (_artilleryShellTargetPos.z - _artilleryShellStartPos.z) * t;
 
     // Vertical: straight-line baseline + parabolic arc.
     // Engine convention: +Y is DOWN, so "up" means subtracting from Y.
-    float baseY = _mortarStartPos.y + (_mortarTargetPos.y - _mortarStartPos.y) * t;
-    float arc   = _mortarArcHeight * 4.0f * t * (1.0f - t); // peak == arc_height at t = 0.5
+    float baseY = _artilleryShellStartPos.y + (_artilleryShellTargetPos.y - _artilleryShellStartPos.y) * t;
+    float arc   = _artilleryShellArcHeight * 4.0f * t * (1.0f - t); // peak == arc_height at t = 0.5
     pos.y = baseY - arc;
 
     // Optional in-flight drift that fades to zero at launch and at landing,
     // so the shell still lands on its chosen point.
-    if ( _mortarDriftVec.x != 0.0 || _mortarDriftVec.z != 0.0 )
+    if ( _artilleryShellDriftVec.x != 0.0 || _artilleryShellDriftVec.z != 0.0 )
     {
         float driftFactor = sin(t * C_PI);
-        pos.x += _mortarDriftVec.x * driftFactor;
-        pos.z += _mortarDriftVec.z * driftFactor;
+        pos.x += _artilleryShellDriftVec.x * driftFactor;
+        pos.z += _artilleryShellDriftVec.z * driftFactor;
     }
 
     _old_pos  = prevPos;
@@ -2693,7 +2695,7 @@ void NC_STACK_ypamissile::UpdateMortarBallistic(update_msg *arg)
     if ( !impactNow )
         return;
 
-    // Ground-burst mortars land on a point previously snapped to world
+    // Ground-burst artillery shells land on a point previously snapped to world
     // collision geometry. Reacquire that same real surface at impact time so
     // ground decals receive valid, short-lived skeleton/poly data; airbursts
     // intentionally have no world-hit context.
@@ -2708,7 +2710,7 @@ void NC_STACK_ypamissile::UpdateMortarBallistic(update_msg *arg)
         }
     }
 
-    if ( _mortarImpactOnSurface && !_world->_isNetGame && hasGroundDecalChainFX )
+    if ( _artilleryShellImpactOnSurface && !_world->_isNetGame && hasGroundDecalChainFX )
     {
         ypaworld_arg136 groundHit;
         groundHit.stPos = vec3d(_position.x, -30000.0, _position.z);
@@ -2722,7 +2724,7 @@ void NC_STACK_ypamissile::UpdateMortarBallistic(update_msg *arg)
     }
 
     // Timed impact: reuse the same path a normal bomb uses on contact for AoE
-    // damage/push, building/sector damage, VP dead/megadeth and chain FX. Mortar
+    // damage/push, building/sector damage, VP dead/megadeth and chain FX. The artillery shell
     // F10 AoE rings are suppressed in Impact() so they do not look like target
     // markers in the 3D view.
     bool applySectorDamage = (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) ||
@@ -2850,15 +2852,15 @@ void NC_STACK_ypamissile::Renew()
     _weaponTracerVisualSeed = 0;
     _weaponTracerPoints.clear();
 
-    // OpenNeoUA custom: clear mortar shell state on recycle.
-    _isMortarProjectile = false;
-    _mortarStartPos  = vec3d(0.0, 0.0, 0.0);
-    _mortarTargetPos = vec3d(0.0, 0.0, 0.0);
-    _mortarDriftVec  = vec3d(0.0, 0.0, 0.0);
-    _mortarElapsed    = 0;
-    _mortarFlightTime = 0;
-    _mortarArcHeight  = 0.0;
-    _mortarImpactOnSurface = false;
+    // OpenNeoUA custom: clear artillery shell state on recycle.
+    _isArtilleryShellProjectile = false;
+    _artilleryShellStartPos  = vec3d(0.0, 0.0, 0.0);
+    _artilleryShellTargetPos = vec3d(0.0, 0.0, 0.0);
+    _artilleryShellDriftVec  = vec3d(0.0, 0.0, 0.0);
+    _artilleryShellElapsed    = 0;
+    _artilleryShellFlightTime = 0;
+    _artilleryShellArcHeight  = 0.0;
+    _artilleryShellImpactOnSurface = false;
 
     setBACT_yourLastSeconds(3000);
 }
@@ -3026,7 +3028,7 @@ void NC_STACK_ypamissile::Impact()
     ApplySectorAreaDamage();
 
     // F10 debug overlay: record transient AoE rings at the impact point (no gameplay effect).
-    if ( _world && _world->_showCollDebug && !_isMortarProjectile )
+    if ( _world && _world->_showCollDebug && !_isArtilleryShellProjectile )
     {
         _world->DebugAddAoeRing(_position, _mislAoeUnitRadius,     255, 140, 0);   // unit AoE: orange
         _world->DebugAddAoeRing(_position, _mislAoeBuildingRadius, 200, 80, 220);  // building AoE: purple
@@ -3041,10 +3043,10 @@ void NC_STACK_ypamissile::Impact()
 
 void NC_STACK_ypamissile::DetonateAtContact(NC_STACK_ypabact *directHit)
 {
-    DetonateSeekAndExplodePayload(directHit);
+    DetonateKamikazePayload(directHit);
 }
 
-void NC_STACK_ypamissile::DetonateSeekAndExplodePayload(NC_STACK_ypabact *directHit)
+void NC_STACK_ypamissile::DetonateKamikazePayload(NC_STACK_ypabact *directHit)
 {
     if ( _status == BACT_STATUS_DEAD )
         return;
@@ -3149,7 +3151,7 @@ NC_STACK_ypamissile::NC_STACK_ypamissile()
     _mislEnergyRobo = 0.;
     _mislAoeFalloff = 0;
     _mislClusterGeneration = 0;
-    _mortarImpactOnSurface = false;
+    _artilleryShellImpactOnSurface = false;
 }
 
 

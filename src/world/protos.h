@@ -650,9 +650,6 @@ struct TVhclProto
     bool proximity_defense_random_pitch_set = false;
     float proximity_defense_random_pitch_min = -10.0;
     float proximity_defense_random_pitch_max = 45.0;
-    int seek_and_explode = 0;
-    int seek_and_explode_weapon = 0;
-    float seek_and_explode_trigger_radius = 0.0;
     int ai_max_active_at_once = 0;
     std::vector<DestFX> dest_fx;      // dest_fx
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
@@ -821,9 +818,9 @@ struct TWeapProto
         WEAPON_FLAG_OBSAVOID = 8,
         WEAPON_FLAG_GRENADE = 16,
         WEAPON_FLAG_HOMING_BOMB = 32,
-        WEAPON_FLAG_MORTAR = 64, // OpenNeoUA custom: radar-guided ballistic barrage
+        WEAPON_FLAG_ARTILLERY_SHELL = 64, // OpenNeoUA custom: radar-guided ballistic barrage
         WEAPON_FLAG_LASER = 128, // OpenNeoUA custom: continuous targeted beam weapon
-        WEAPON_FLAG_VERTICAL_LASER = 256, // OpenNeoUA custom: downward continuous beam weapon
+        WEAPON_FLAG_KAMIKAZE = 512, // OpenNeoUA custom: carrier-mounted detonation payload
 
         WEAPON_FLAGS_BOMB = WEAPON_FLAG_PROJECTILE,
         WEAPON_FLAGS_ROCKET = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT,
@@ -831,12 +828,12 @@ struct TWeapProto
         WEAPON_FLAGS_OBSAVOID = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT | WEAPON_FLAG_OBSAVOID,
         WEAPON_FLAGS_GRENADE = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_GRENADE,
         WEAPON_FLAGS_HOMING_BOMB = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_HOMING_BOMB,
-        WEAPON_FLAGS_MORTAR = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_MORTAR,
+        WEAPON_FLAGS_ARTILLERY_SHELL = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_ARTILLERY_SHELL,
         // Laser keeps PROJECTILE|DIRECT|TARGETED so the AI/aim/lock logic treats it
         // like a normal targeted weapon, but the LASER bit reroutes firing to the
         // continuous-beam path (UpdateLaser) instead of spawning a projectile.
         WEAPON_FLAGS_LASER = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT | WEAPON_FLAG_TARGETED | WEAPON_FLAG_LASER,
-        WEAPON_FLAGS_VERTICAL_LASER = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_VERTICAL_LASER
+        WEAPON_FLAGS_KAMIKAZE = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_KAMIKAZE
     };
 
     int8_t unitID = 0;
@@ -848,10 +845,10 @@ struct TWeapProto
         return _weaponFlags == WEAPON_FLAGS_HOMING_BOMB;
     }
 
-    // OpenNeoUA custom: true only for weapons declared as "model = mortar".
-    bool IsMortar() const
+    // OpenNeoUA custom: true only for weapons declared as "model = artillery_shell".
+    bool IsArtilleryShell() const
     {
-        return (_weaponFlags & WEAPON_FLAG_MORTAR) != 0;
+        return (_weaponFlags & WEAPON_FLAG_ARTILLERY_SHELL) != 0;
     }
 
     // OpenNeoUA custom: true only for weapons declared as "model = laser".
@@ -860,10 +857,17 @@ struct TWeapProto
         return (_weaponFlags & WEAPON_FLAG_LASER) != 0;
     }
 
-    // OpenNeoUA custom: true only for weapons declared as "model = vertical_laser".
+    // OpenNeoUA custom: vertical fire is a mode of model = laser, never a separate model.
     bool IsVerticalLaser() const
     {
-        return (_weaponFlags & WEAPON_FLAG_VERTICAL_LASER) != 0;
+        return IsLaser() && vertical_laser_enable;
+    }
+
+    // OpenNeoUA custom: true only for carrier payloads declared as
+    // "model = kamikaze". They are mounted but never fired as projectiles.
+    bool IsKamikaze() const
+    {
+        return (_weaponFlags & WEAPON_FLAG_KAMIKAZE) != 0;
     }
 
     // OpenNeoUA custom: the render-only projectile corkscrew is available to every
@@ -872,13 +876,13 @@ struct TWeapProto
     bool SupportsProjectileCorkspin() const
     {
         return (_weaponFlags & WEAPON_FLAG_PROJECTILE) != 0 &&
-               !IsLaser() && !IsVerticalLaser();
+               !IsLaser() && !IsKamikaze();
     }
 
     bool SupportsProjectileTracer() const
     {
         return (_weaponFlags & WEAPON_FLAG_PROJECTILE) != 0 &&
-               !IsLaser() && !IsVerticalLaser();
+               !IsLaser() && !IsKamikaze();
     }
 
     bool IsBombLike() const
@@ -908,7 +912,7 @@ struct TWeapProto
     vec3d vp_orientation = vec3d(0.0, 0.0, 0.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
     // OpenNeoUA custom: render-only corkscrew orbit for every physical projectile
-    // class except model = laser and model = vertical_laser.
+    // class except model = laser (including vertical mode).
     // Speed uses the shared 0..10 revolutions-per-second scale. Radius is the
     // radial orbit distance in model/world units (0..1000). Forward is the maximum
     // bounded longitudinal visual excursion during each turn (0..1000). The
@@ -961,8 +965,8 @@ struct TWeapProto
     // OpenNeoUA: generic multi-target count for compatible weapon models.
     // Currently consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
     int multi_target = 0;
-    // OpenNeoUA custom: shared continuous beam parameters for model = laser and
-    // model = vertical_laser. "energy" is static base damage per tick; the class
+    // OpenNeoUA custom: shared continuous beam parameters for model = laser.
+    // vertical_laser_enable selects the downward-fire mode. "energy" is static base damage per tick; the class
     // multipliers below (energy_heli/tank/flyer/robo) are applied like normal weapons.
     int   laser_energy_tick_time = 250;        // ms between damage ticks for AI/non-player fire
     int   laser_energy_tick_time_user = 150;   // ms between damage ticks for player-controlled fire
@@ -974,8 +978,9 @@ struct TWeapProto
     float laser_chain_radius = 0.0;            // search radius around the last chained unit
     float laser_chain_damage_mult = 1.0;       // cumulative damage multiplier per chain jump
     int   laser_beam_count = 1;                // total direct shooter-to-target laser beams (<=1 = off)
-    float vertical_laser_fire_radius = 300.0;  // X/Z distance required before AI fires downward
-    TLaserMeshConfig laser_mesh;                // visual-only mesh body for laser/vertical_laser
+    bool  vertical_laser_enable = false;          // 1 = model=laser uses the downward vertical-fire mode
+    float ai_vertical_laser_trigger_radius = 300.0; // X/Z distance required before AI fires downward
+    TLaserMeshConfig laser_mesh;                    // visual-only mesh body for laser, including vertical mode
     float energy_heli = 0.0;
     float energy_tank = 0.0;
     float energy_flyer = 0.0;
@@ -1012,6 +1017,11 @@ struct TWeapProto
     // radius is direct projectile collision. AoE has separate unit/building/sector values.
     // vp_scale never affects any gameplay radius.
     float radius = 0.0;
+    // OpenNeoUA custom, model = kamikaze only: true XYZ proximity fuse.
+    // Zero means physical contact (effective carrier radius + target radius).
+    float trigger_radius = 0.0;
+    float fire_time_scale = 1.0f; // model=kamikaze: hold FIRE as sole weapon; 1.0 disables slowdown
+    float fire_time_scale_hp_drain_percent = 0.0f; // max-HP percent drained per real second while FIRE time scale is active
     float aoe_unit_radius = 0.0;
     float aoe_building_radius = 0.0;
     float aoe_sector_radius = 0.0;
@@ -1019,27 +1029,24 @@ struct TWeapProto
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
     float start_speed = 0.0;
-    // OpenNeoUA custom: dedicated mortar barrage weapon ("model = mortar").
-    // All defaults are vanilla-safe: with mortar_barrage_shots <= 0 / no max range,
-    // a mortar weapon simply never fires.
-    float mortar_min_range = 0.0;          // min distance from mortar to target zone
-    float mortar_max_range = 0.0;          // max distance for manual fire and automatic target search (<=0 = disabled)
-    int   mortar_requires_radar = 1;       // 1 = target sector must be visible to the owner faction
-    int   mortar_manual_mode_only = 0;     // 1 = disable the auto AI; the mortar only fires via manual map-click
-    int   mortar_prefer_host_station = 0;  // 1 = auto AI prefers an enemy Host Station (robo) among radar-visible enemies (still honours mortar_requires_radar)
-    float mortar_barrage_radius = 0.0;     // bombardment zone radius (marker size)
-    int   mortar_barrage_shots = 0;        // shells per barrage (<=0 = no barrage)
-    int   mortar_barrage_shot_delay = 250; // ms between shells in the same barrage
-    int   mortar_barrage_cooldown = 10000; // ms cooldown after a barrage ends
-    float mortar_arc_height = 2500.0;      // extra ballistic arc height (engine units)
-    int   mortar_flight_time = 2500;       // ms from launch to impact (<=0 => 2500 default)
-    float mortar_spread_radius = 0.0;      // per-shell random landing scatter radius
-    float mortar_inflight_drift = 0.0;     // optional small horizontal drift during flight
-    int   mortar_airburst = 1;             // 1 = explode at the timed arc apex/target height (airburst); 0 = land on the real terrain height at the shell's own impact point
-    int   mortar_minimap_marker = 0;       // 1 = show bombardment zone on the 2D strategic map
-    // OpenNeoUA custom: looped beam sound for model = laser (snd_loop_sample/volume/pitch).
-    // Loaded lazily on first laser activation; vanilla weapons never touch it.
-    TVhclSound snd_loop;
+    // OpenNeoUA custom: dedicated artillery shell barrage weapon ("model = artillery_shell").
+    // All defaults are vanilla-safe: with artillery_shell_barrage_shots <= 0 / no max range,
+    // an artillery shell weapon simply never fires.
+    float artillery_shell_min_range = 0.0;          // min distance from artillery shell to target zone
+    float artillery_shell_max_range = 0.0;          // max distance for manual fire and automatic target search (<=0 = disabled)
+    int   artillery_shell_requires_radar = 1;       // 1 = target sector must be visible to the owner faction
+    int   artillery_shell_manual_mode_only = 0;     // 1 = disable the auto AI; the artillery shell only fires via manual map-click
+    int   artillery_shell_prefer_host_station = 0;  // 1 = auto AI prefers an enemy Host Station (robo) among radar-visible enemies (still honours artillery_shell_requires_radar)
+    float artillery_shell_barrage_radius = 0.0;     // bombardment zone radius (marker size)
+    int   artillery_shell_barrage_shots = 0;        // shells per barrage (<=0 = no barrage)
+    int   artillery_shell_barrage_shot_delay = 250; // ms between shells in the same barrage
+    int   artillery_shell_barrage_cooldown = 10000; // ms cooldown after a barrage ends
+    float artillery_shell_arc_height = 2500.0;      // extra ballistic arc height (engine units)
+    int   artillery_shell_flight_time = 2500;       // ms from launch to impact (<=0 => 2500 default)
+    float artillery_shell_spread_radius = 0.0;      // per-shell random landing scatter radius
+    float artillery_shell_inflight_drift = 0.0;     // optional small horizontal drift during flight
+    int   artillery_shell_airburst = 1;             // 1 = explode at the timed arc apex/target height (airburst); 0 = land on the real terrain height at the shell's own impact point
+    int   artillery_shell_minimap_marker = 0;       // 1 = show bombardment zone on the 2D strategic map
     NC_STACK_skeleton *wireframe = NULL;
     IDVList initParams;
     std::vector<TChainFXConfig> chain_fx;

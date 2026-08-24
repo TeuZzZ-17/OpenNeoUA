@@ -5372,6 +5372,10 @@ void NC_STACK_yparobo::AI_layer3(update_msg *arg)
 {
     int a4 = getBACT_bactCollisions();
 
+    // Feed the shared live XYZ Kamikaze destination into the native Robo
+    // locomotion path. Direct player control is rejected by the shared helper.
+    ApplyKamikazeRammingGuidance();
+
     float tmp = _target_vec.length();
 
     if ( tmp <= 0.0 )

@@ -3618,12 +3618,12 @@ static std::string db_vehicle_model_display_name(const World::TVhclProto &p)
 
 static std::string db_weapon_model_display_name(const World::TWeapProto &p)
 {
+    if ( p.IsKamikaze() )
+        return "kamikaze";
     if ( p.IsLaser() )
         return "laser";
-    if ( p.IsVerticalLaser() )
-        return "vertical_laser";
-    if ( p.IsMortar() )
-        return "mortar";
+    if ( p.IsArtilleryShell() )
+        return "artillery_shell";
     if ( p.IsHomingBomb() )
         return "homing_bomb";
 
@@ -3887,7 +3887,67 @@ static std::vector<std::string> db_weapon_specialties(const World::TWeapProto &p
     return items;
 }
 
-static std::vector<std::string> db_vehicle_specialties(const World::TVhclProto &p)
+static bool db_vehicle_has_mounted_kamikaze(
+    const World::TVhclProto &vehicle,
+    const std::vector<World::TWeapProto> &weapons)
+{
+    const int weaponIds[4] = {
+        vehicle.weapon,
+        vehicle.extra_weapons[0],
+        vehicle.extra_weapons[1],
+        vehicle.extra_weapons[2]
+    };
+
+    for (int slot = 0; slot < 4; slot++)
+    {
+        const int weaponId = weaponIds[slot];
+        if ( ((slot == 0 && weaponId >= 0) ||
+              (slot > 0 && weaponId > 0)) &&
+             (size_t)weaponId < weapons.size() &&
+             weapons[weaponId].IsKamikaze() )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool db_vehicle_has_kamikaze(
+    const World::TVhclProto &vehicle,
+    const std::vector<World::TWeapProto> &weapons,
+    const std::vector<World::TVhclProto> &vehicles)
+{
+    if ( db_vehicle_has_mounted_kamikaze(vehicle, weapons) )
+        return true;
+
+    auto hasAttachedKamikaze = [&weapons, &vehicles](
+        const std::vector<World::TRoboGun> &guns)
+    {
+        for (const World::TRoboGun &gun : guns)
+        {
+            const int vehicleId = gun.robo_gun_type;
+            if ( vehicleId > 0 &&
+                 (size_t)vehicleId < vehicles.size() &&
+                 db_vehicle_has_mounted_kamikaze(vehicles[vehicleId], weapons) )
+            {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    if ( hasAttachedKamikaze(vehicle.unit_guns) )
+        return true;
+
+    return vehicle.RoboProto && hasAttachedKamikaze(vehicle.RoboProto->guns);
+}
+
+static std::vector<std::string> db_vehicle_specialties(
+    const World::TVhclProto &p,
+    const std::vector<World::TWeapProto> &weapons,
+    const std::vector<World::TVhclProto> &vehicles)
 {
     std::vector<std::string> items;
 
@@ -3907,8 +3967,8 @@ static std::vector<std::string> db_vehicle_specialties(const World::TVhclProto &
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVISIBILITY));
     if ( p.invulnerable )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVULNERABLE));
-    if ( p.seek_and_explode )
-        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_SEEK_AND_EXPLODE));
+    if ( db_vehicle_has_kamikaze(p, weapons, vehicles) )
+        items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_KAMIKAZE));
     if ( p.proximity_defense_enable || p.proximity_defense_at_death )
         items.push_back(Locale::Text::OpenUA(p.proximity_defense_at_death ? Locale::OUA_DB_PROXIMITY_DEFENSE_AT_DEATH : Locale::OUA_DB_PROXIMITY_DEFENSE));
     if ( p.extra_weapons[0] > 0 || p.extra_weapons[1] > 0 || p.extra_weapons[2] > 0 )
@@ -4569,7 +4629,8 @@ void UserData::PopulateDetailPane()
                             fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_PUSH_RESISTANCE_FORMAT), p.push_resistance) :
                             Locale::Text::OpenUA(Locale::OUA_DB_PUSH_RESISTANCE_NONE));
         db_add_vehicle_job_lines(&statLines, DB_STATS_LINES, p);
-        db_add_speciality_lines(&statLines, DB_STATS_LINES, db_vehicle_specialties(p));
+        db_add_speciality_lines(&statLines, DB_STATS_LINES,
+                                db_vehicle_specialties(p, wpns, vhcls));
     }
     else if ( db_tab == 1 )
     {

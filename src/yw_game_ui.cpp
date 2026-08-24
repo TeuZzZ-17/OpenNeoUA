@@ -219,9 +219,9 @@ const std::string &StatusIconPowerPath()
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconPower);
 }
 
-const std::string &StatusIconSeekAndExplodePath()
+const std::string &StatusIconKamikazePath()
 {
-    return StatusIconConfiguredPath(System::IniConf::UiStatusIconSeekAndExplode);
+    return StatusIconConfiguredPath(System::IniConf::UiStatusIconKamikaze);
 }
 
 const std::string &StatusIconInvisiblePath()
@@ -817,18 +817,63 @@ bool StatusIconHasVehicleSpawnConfig(NC_STACK_ypaworld *yw, const World::TVhclPr
            vhcl.spawn_trigger_radius > 0.0;
 }
 
-bool StatusIconHasVehicleSeekAndExplodeConfig(NC_STACK_ypaworld *yw, const World::TVhclProto &vhcl)
+bool StatusIconHasMountedKamikazeWeapon(NC_STACK_ypaworld *yw,
+                                        const World::TVhclProto &vhcl)
 {
-    if ( !yw || !vhcl.seek_and_explode )
+    if ( !yw )
         return false;
 
-    if ( vhcl.seek_and_explode_weapon <= 0 )
+    const int weaponIds[4] = {
+        vhcl.weapon,
+        vhcl.extra_weapons[0],
+        vhcl.extra_weapons[1],
+        vhcl.extra_weapons[2]
+    };
+
+    for (int slot = 0; slot < 4; slot++)
+    {
+        const int weaponId = weaponIds[slot];
+        if ( ((slot == 0 && weaponId >= 0) ||
+              (slot > 0 && weaponId > 0)) &&
+             (size_t)weaponId < yw->_weaponProtos.size() &&
+             yw->_weaponProtos[weaponId].IsKamikaze() )
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool StatusIconHasVehicleKamikazeConfig(NC_STACK_ypaworld *yw,
+                                         const World::TVhclProto &vhcl)
+{
+    if ( StatusIconHasMountedKamikazeWeapon(yw, vhcl) )
         return true;
 
-    if ( (size_t)vhcl.seek_and_explode_weapon >= yw->_weaponProtos.size() )
-        return false;
+    auto hasAttachedKamikaze = [yw](const std::vector<World::TRoboGun> &guns)
+    {
+        if ( !yw )
+            return false;
 
-    return (yw->_weaponProtos[vhcl.seek_and_explode_weapon]._weaponFlags & 1) != 0;
+        for (const World::TRoboGun &gun : guns)
+        {
+            const int vehicleId = gun.robo_gun_type;
+            if ( vehicleId > 0 &&
+                 (size_t)vehicleId < yw->_vhclProtos.size() &&
+                 StatusIconHasMountedKamikazeWeapon(yw, yw->_vhclProtos[vehicleId]) )
+            {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    if ( hasAttachedKamikaze(vhcl.unit_guns) )
+        return true;
+
+    return vhcl.RoboProto && hasAttachedKamikaze(vhcl.RoboProto->guns);
 }
 
 bool StatusIconHasVehicleProximityDefenseConfig(NC_STACK_ypaworld *yw, const World::TVhclProto &vhcl)
@@ -890,8 +935,8 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
         if ( yw && yw->IsValidMobilePowerGenerator(bact) )
             StatusIconAdd(icons, iconCount, StatusIconPowerPath());
 
-        if ( bact->IsSeekAndExplodeArmed() )
-            StatusIconAdd(icons, iconCount, StatusIconSeekAndExplodePath());
+        if ( bact->IsKamikazeArmed() )
+            StatusIconAdd(icons, iconCount, StatusIconKamikazePath());
 
         if ( bact->IsInvisibleUnrevealed() )
             StatusIconAdd(icons, iconCount, StatusIconInvisiblePath());
@@ -1143,9 +1188,9 @@ static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int le
     }
 }
 
-static bool yw_ShouldRenderMortarCooldownBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+static bool yw_ShouldRenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
-    if ( !yw || !bact || !bact->IsMortarPlatform() )
+    if ( !yw || !bact || !bact->IsArtilleryShellPlatform() )
         return false;
 
     if ( yw->IsSpectatorControlled() )
@@ -1154,13 +1199,13 @@ static bool yw_ShouldRenderMortarCooldownBar(NC_STACK_ypaworld *yw, NC_STACK_ypa
     return yw->_userRobo && bact->_owner == yw->_userRobo->_owner;
 }
 
-static bool yw_RenderMortarCooldownBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact,
+static bool yw_RenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact,
                                        int left, int top, int squareCount)
 {
-    if ( !yw_ShouldRenderMortarCooldownBar(yw, bact) )
+    if ( !yw_ShouldRenderArtilleryShellCooldownBar(yw, bact) )
         return false;
 
-    float ratio = bact->GetMortarReadinessRatio();
+    float ratio = bact->GetArtilleryShellReadinessRatio();
     if ( ratio < 0.0f )
         ratio = 0.0f;
     if ( ratio > 1.0f )
@@ -1248,8 +1293,8 @@ int StatusIconCollectVehicleRoleIcons(NC_STACK_ypaworld *yw, World::TVhclProto *
     if ( vhcl->power > 0 && vhcl->power_radius > 0.0 )
         StatusIconAdd(icons, iconCount, StatusIconPowerPath());
 
-    if ( StatusIconHasVehicleSeekAndExplodeConfig(yw, *vhcl) )
-        StatusIconAdd(icons, iconCount, StatusIconSeekAndExplodePath());
+    if ( StatusIconHasVehicleKamikazeConfig(yw, *vhcl) )
+        StatusIconAdd(icons, iconCount, StatusIconKamikazePath());
 
     if ( vhcl->invisible )
         StatusIconAdd(icons, iconCount, StatusIconInvisiblePath());
@@ -2237,13 +2282,13 @@ static void yw_RenderCustomHudRadarMarkers(NC_STACK_ypaworld *yw)
     }
 }
 
-static void yw_RenderMortarCooldownRadarBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+static void yw_RenderArtilleryShellCooldownRadarBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
                                             int iconWidth, int iconHeight)
 {
-    if ( !yw_ShouldRenderMortarCooldownBar(yw, bact) || bact->_energy_max <= 0 )
+    if ( !yw_ShouldRenderArtilleryShellCooldownBar(yw, bact) || bact->_energy_max <= 0 )
         return;
 
-    float ratio = bact->GetMortarReadinessRatio();
+    float ratio = bact->GetArtilleryShellReadinessRatio();
     if ( ratio < 0.0f )
         ratio = 0.0f;
     if ( ratio > 1.0f )
@@ -2285,11 +2330,11 @@ static void yw_RenderMortarCooldownRadarBar(NC_STACK_ypaworld *yw, NC_STACK_ypab
     GFX::Engine.raster_func201(Common::Line(Common::Point(x0, y), Common::Point(filled, y)));
 }
 
-static void yw_RenderMortarCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0, int cellY0, int cellX1, int cellY1)
+static void yw_RenderArtilleryShellCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0, int cellY0, int cellX1, int cellY1)
 {
     // This helper is used by both the opened strategic map and the small gameplay
     // radar/minimap. Do not gate it on field_1EC & 4: the small radar path
-    // temporarily sets field_1EC to 1 even though we still want the mortar
+    // temporarily sets field_1EC to 1 even though we still want the artillery shell
     // readiness bar there. Visibility/ownership is filtered per unit below.
     if ( !yw || robo_map.field_1EE <= 2 )
         return;
@@ -2307,7 +2352,7 @@ static void yw_RenderMortarCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0, 
                 if ( !bact || bact->ShouldHideFromStrategicUI() || bact->_bact_type == BACT_TYPES_MISSLE )
                     continue;
 
-                // OpenNeoUA invisible: no mortar-cooldown radar bar for a cloaked unit.
+                // OpenNeoUA invisible: no artillery shell-cooldown radar bar for a cloaked unit.
                 if ( bact->IsInvisibleUnrevealed() )
                     continue;
 
@@ -2320,18 +2365,18 @@ static void yw_RenderMortarCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0, 
                     iconW = yw->_guiTiles[1]->map[24].w;
                 }
 
-                yw_RenderMortarCooldownRadarBar(yw, bact, iconW, iconH);
+                yw_RenderArtilleryShellCooldownRadarBar(yw, bact, iconW, iconH);
             }
         }
     }
 }
 
-// OpenNeoUA custom: draw active mortar bombardment zones on the 2D strategic map and
+// OpenNeoUA custom: draw active artillery shell bombardment zones on the 2D strategic map and
 // the small gameplay radar. Own strike markers stay visible as player orders;
 // enemy markers require the target sector to be currently visible/discovered.
 // Colour follows the owner's faction colour.
 // Helper: draw one circle on the 2D map (world XZ centre + world radius).
-static void yw_DrawMortarMapCircle(float cx, float cz, float radius, int segs)
+static void yw_DrawArtilleryShellMapCircle(float cx, float cz, float radius, int segs)
 {
     Common::Point prev;
     bool hasPrev = false;
@@ -2349,7 +2394,7 @@ static void yw_DrawMortarMapCircle(float cx, float cz, float radius, int segs)
     }
 }
 
-static bool yw_IsMortarMarkerVisible(NC_STACK_ypaworld *yw, const NC_STACK_ypaworld::MortarMarker &marker, const Common::Point &cellId)
+static bool yw_IsArtilleryShellMarkerVisible(NC_STACK_ypaworld *yw, const NC_STACK_ypaworld::ArtilleryShellMarker &marker, const Common::Point &cellId)
 {
     if ( !yw || !yw->IsSector(cellId) )
         return false;
@@ -2364,9 +2409,9 @@ static bool yw_IsMortarMarkerVisible(NC_STACK_ypaworld *yw, const NC_STACK_ypawo
     return yw->_userRobo && cell.IsCanSee(yw->_userRobo->_owner);
 }
 
-void NC_STACK_ypaworld::RenderMortarMapMarkers()
+void NC_STACK_ypaworld::RenderArtilleryShellMapMarkers()
 {
-    ExpireMortarMarkers();
+    ExpireArtilleryShellMarkers();
 
     if ( robo_map.field_1E0 <= 0.001f || robo_map.field_1E4 <= 0.001f )
         return;
@@ -2375,31 +2420,31 @@ void NC_STACK_ypaworld::RenderMortarMapMarkers()
 
     // Active bombardment zones (confirmed strikes): faction colour (azure for the
     // player). Double ring so a zone reads as a deliberate strike marker.
-    for ( const MortarMarker &marker : _mortarMarkers )
+    for ( const ArtilleryShellMarker &marker : _artilleryShellMarkers )
     {
         if ( marker.radius <= 0.01f )
             continue;
 
         Common::Point cellId = World::PositionToSectorID(marker.pos);
-        if ( !yw_IsMortarMarkerVisible(this, marker, cellId) )
+        if ( !yw_IsArtilleryShellMarkerVisible(this, marker, cellId) )
             continue;
 
         SDL_Color clr = GetColor(marker.owner);
         GFX::Engine.raster_func217(clr);
 
-        yw_DrawMortarMapCircle(marker.pos.x, marker.pos.z, marker.radius, SEGS);
-        yw_DrawMortarMapCircle(marker.pos.x, marker.pos.z, marker.radius * 0.66f, SEGS);
+        yw_DrawArtilleryShellMapCircle(marker.pos.x, marker.pos.z, marker.radius, SEGS);
+        yw_DrawArtilleryShellMapCircle(marker.pos.x, marker.pos.z, marker.radius * 0.66f, SEGS);
     }
 
     // White aiming preview: only on the opened map. The small radar shows accepted
     // barrage/pending markers, not the cursor-following targeting preview.
-    if ( robo_map.IsOpen() && _mortarManualGid && _mortarManualRadius > 0.01f )
+    if ( robo_map.IsOpen() && _artilleryShellManualGid && _artilleryShellManualRadius > 0.01f )
     {
         SDL_Color white = {255, 255, 255, 255};
         GFX::Engine.raster_func217(white);
 
-        yw_DrawMortarMapCircle(_cellMouseIsectPos.x, _cellMouseIsectPos.z, _mortarManualRadius, SEGS);
-        yw_DrawMortarMapCircle(_cellMouseIsectPos.x, _cellMouseIsectPos.z, _mortarManualRadius * 0.66f, SEGS);
+        yw_DrawArtilleryShellMapCircle(_cellMouseIsectPos.x, _cellMouseIsectPos.z, _artilleryShellManualRadius, SEGS);
+        yw_DrawArtilleryShellMapCircle(_cellMouseIsectPos.x, _cellMouseIsectPos.z, _artilleryShellManualRadius * 0.66f, SEGS);
     }
 }
 
@@ -2575,30 +2620,30 @@ void NC_STACK_ypaworld::RenderLaserMapBeams(int mapTilesetId)
     }
 }
 
-// OpenNeoUA custom: ultra-simple manual mortar control on the 2D strategic map.
+// OpenNeoUA custom: ultra-simple manual artillery shell control on the 2D strategic map.
 // Flow (no extra key, no energy cost):
-//   1. Player clicks one of their own manual-capable mortar platforms -> selected.
+//   1. Player clicks one of their own manual-capable artillery shell platforms -> selected.
 //   2. Player clicks a target area (empty cell or a visible enemy) -> that single
-//      mortar starts a bombardment there if the strike is valid.
+//      artillery shell starts a bombardment there if the strike is valid.
 // Returns true when the click was consumed (so no first-person entry / RTS order
 // is generated for it). Single-player only.
-bool NC_STACK_ypaworld::HandleMortarMapClick()
+bool NC_STACK_ypaworld::HandleArtilleryShellMapClick()
 {
     if ( _isNetGame || !_userRobo )
         return false;
 
     int playerOwner = _userRobo->_owner;
 
-    // A mortar is already selected: this click chooses the target area.
-    // Clicking another own mortar keeps the old convenient re-select behaviour.
-    if ( _mortarManualGid )
+    // A artillery shell is already selected: this click chooses the target area.
+    // Clicking another own artillery shell keeps the old convenient re-select behaviour.
+    if ( _artilleryShellManualGid )
     {
         if ( (_guiActFlags & 0x20) && _bactOnMouse &&
              _bactOnMouse->_owner == playerOwner &&
-             _bactOnMouse->IsManualMortarPlatform() )
+             _bactOnMouse->IsManualArtilleryShellPlatform() )
         {
-            _mortarManualGid = _bactOnMouse->_gid;
-            _mortarManualRadius = _bactOnMouse->GetMortarBarrageRadius();
+            _artilleryShellManualGid = _bactOnMouse->_gid;
+            _artilleryShellManualRadius = _bactOnMouse->GetArtilleryShellBarrageRadius();
             return true;
         }
 
@@ -2620,14 +2665,14 @@ bool NC_STACK_ypaworld::HandleMortarMapClick()
         if ( !haveTarget )
             return false; // nothing useful under the cursor: leave selection pending
 
-        uint32_t gid = _mortarManualGid;
+        uint32_t gid = _artilleryShellManualGid;
 
-        // Re-resolve the selected mortar by gid (no dangling pointer risk if it
+        // Re-resolve the selected artillery shell by gid (no dangling pointer risk if it
         // died between the two clicks).
-        NC_STACK_ypabact *mortar = NULL;
-        for (int y = 0; y < _mapSize.y && !mortar; y++)
+        NC_STACK_ypabact *artilleryShell = NULL;
+        for (int y = 0; y < _mapSize.y && !artilleryShell; y++)
         {
-            for (int x = 0; x < _mapSize.x && !mortar; x++)
+            for (int x = 0; x < _mapSize.x && !artilleryShell; x++)
             {
                 Common::Point cellId(x, y);
                 if ( !IsSector(cellId) )
@@ -2637,37 +2682,37 @@ bool NC_STACK_ypaworld::HandleMortarMapClick()
                 {
                     if ( unit && unit->_gid == gid && unit->_owner == playerOwner )
                     {
-                        mortar = unit;
+                        artilleryShell = unit;
                         break;
                     }
                 }
             }
         }
 
-        if ( !mortar )
+        if ( !artilleryShell )
         {
-            // The selected mortar is gone: clear the selection/preview.
-            _mortarManualGid = 0;
-            _mortarManualRadius = 0.0f;
+            // The selected artillery shell is gone: clear the selection/preview.
+            _artilleryShellManualGid = 0;
+            _artilleryShellManualRadius = 0.0f;
             return true;
         }
 
         int wid = 0;
         bool readyNow = false;
-        if ( mortar->CanManualMortar(target, &wid, &readyNow) )
+        if ( artilleryShell->CanManualArtilleryShell(target, &wid, &readyNow) )
         {
-            // Target is valid (range + radar + manual-call). Fire now if the mortar
+            // Target is valid (range + radar + manual-call). Fire now if the artillery shell
             // is ready, otherwise queue it: it fires when the cooldown elapses. Either
             // way the azure zone ring appears (now from the shells, or from the pending
-            // marker drawn by UpdateMortar).
+            // marker drawn by UpdateArtilleryShell).
             if ( readyNow )
-                mortar->StartMortarBarrage(target);
+                artilleryShell->StartArtilleryShellBarrage(target);
             else
-                mortar->QueueManualMortar(target);
+                artilleryShell->QueueManualArtilleryShell(target);
 
             // Order accepted: clear selection and hide the white preview ring.
-            _mortarManualGid = 0;
-            _mortarManualRadius = 0.0f;
+            _artilleryShellManualGid = 0;
+            _artilleryShellManualRadius = 0.0f;
         }
         // Else (out of range / no radar): invalid target, keep the selection + white
         // preview so the player can pick a different spot without re-selecting.
@@ -2675,17 +2720,17 @@ bool NC_STACK_ypaworld::HandleMortarMapClick()
         return true; // consume the target click
     }
 
-    // No mortar selected yet: clicking one of our manual mortars selects it.
+    // No artillery shell selected yet: clicking one of our manual artillery shells selects it.
     if ( (_guiActFlags & 0x20) && _bactOnMouse &&
          _bactOnMouse->_owner == playerOwner &&
-         _bactOnMouse->IsManualMortarPlatform() )
+         _bactOnMouse->IsManualArtilleryShellPlatform() )
     {
-        _mortarManualGid = _bactOnMouse->_gid;
-        _mortarManualRadius = _bactOnMouse->GetMortarBarrageRadius();
-        return true; // consume: no first-person / RTS select on a mortar platform
+        _artilleryShellManualGid = _bactOnMouse->_gid;
+        _artilleryShellManualRadius = _bactOnMouse->GetArtilleryShellBarrageRadius();
+        return true; // consume: no first-person / RTS select on an artillery shell platform
     }
 
-    return false; // not a mortar interaction: keep vanilla behaviour
+    return false; // not an artillery shell interaction: keep vanilla behaviour
 }
 
 bool GetPlayerRoboAIBehaviorMapTarget(NC_STACK_ypaworld *yw, vec3d *target)
@@ -4021,7 +4066,7 @@ static void yw_RenderLegacyStrategicMap(NC_STACK_ypaworld *yw)
     FontUA::select_tileset(&robo_map.t1_cmdbuf_3, setid);
 
     sb_0x4f8f64__sub1(yw);
-    yw->RenderMortarMapMarkers();
+    yw->RenderArtilleryShellMapMarkers();
     yw->RenderLaserMapBeams(setid);
 
     for (int v42 = v38; v42 <= vii; v42++)
@@ -4114,11 +4159,11 @@ static void yw_RenderLegacyStrategicMap(NC_STACK_ypaworld *yw)
     GFX::Engine.ProcessDrawSeq(robo_map.t1_cmdbuf_3, NULL,
                               yw_GetFactionUiAccent(yw, &uiAccentColor));
 
-    // OpenNeoUA custom: draw the mortar cooldown/readiness bar on top of the
-    // strategic-map unit icons/HP bars, using the same parent/child mortar
+    // OpenNeoUA custom: draw the artillery shell cooldown/readiness bar on top of the
+    // strategic-map unit icons/HP bars, using the same parent/child artillery shell
     // platform rules as the 3D world overlay and the small radar.
     GFX::Engine.raster_func211(rect);
-    yw_RenderMortarCooldownRadarBars(yw, v33, v38, v43, vii);
+    yw_RenderArtilleryShellCooldownRadarBars(yw, v33, v38, v43, vii);
 }
 
 
@@ -7142,9 +7187,9 @@ void sb_0x4c66f8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, NC_STACK_ypabac
     if ( !yw->CanControlUnitInSpectatorMode(bact1) )
         return;
 
-    // OpenNeoUA custom: never take control of a mortar platform. Bail out before the
+    // OpenNeoUA custom: never take control of an artillery shell platform. Bail out before the
     // current unit's viewer/input is dropped, so the player is not left viewer-less.
-    if ( bact1 && bact1->IsMortarPlatform() )
+    if ( bact1 && bact1->IsArtilleryShellPlatform() )
         return;
 
     if ( bact1 != bact2 )
@@ -13255,7 +13300,7 @@ void yw_RenderInfoReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
         if ( bact )
         {
 
-            bool laserLike = wpn->IsLaser() || wpn->IsVerticalLaser();
+            bool laserLike = wpn->IsLaser();
             int v10 = laserLike ? wpn->laser_energy_tick_time_user : wpn->shot_time_user;
             if ( v10 <= 0 )
                 v10 = laserLike ? 150 : 1000;
@@ -13298,7 +13343,7 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
         // marks and Black Sect clone balance stay runtime-only and never mutate
         // shared weapon prototypes, but the player readout now reflects the
         // same effective value used by the final damage choke point.
-        if ( weap->IsLaser() || weap->IsVerticalLaser() )
+        if ( weap->IsLaser() )
         {
             txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
 
@@ -14550,11 +14595,11 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                                 yw_RenderUnitSquareBar(yw, cur, v42, shieldTop, v13, (int)bact->GetEffectiveShield(), 100, 1, 5, worldUiOpacity);
 
                             int statusAnchorTop = lifeTop;
-                            int mortarCooldownTop = lifeTop - barHeight - 1;
-                            if ( mortarCooldownTop >= 0 &&
-                                 yw_RenderMortarCooldownBar(yw, cur, bact, v42, mortarCooldownTop, v13) )
+                            int artilleryShellCooldownTop = lifeTop - barHeight - 1;
+                            if ( artilleryShellCooldownTop >= 0 &&
+                                 yw_RenderArtilleryShellCooldownBar(yw, cur, bact, v42, artilleryShellCooldownTop, v13) )
                             {
-                                statusAnchorTop = mortarCooldownTop;
+                                statusAnchorTop = artilleryShellCooldownTop;
                             }
 
                             uint8_t protoId = bact->_mimic_disguise_vehicleID ? bact->_mimic_disguise_vehicleID : bact->_vehicleID;
@@ -15495,7 +15540,7 @@ void sb_0x4d7c08__sub0__sub4__sub2__sub0(NC_STACK_ypaworld *yw)
     drect.bottom = robo_map.field_1FC + robo_map.field_204 - 1;
 
     GFX::Engine.raster_func211(drect);
-    yw->RenderMortarMapMarkers();
+    yw->RenderArtilleryShellMapMarkers();
     yw->RenderLaserMapBeams(61);
 
     int v14 = dround(robo_map.field_1F0 * robo_map.field_1E0) / World::CVSectorLength;
@@ -15584,11 +15629,11 @@ void sb_0x4d7c08__sub0__sub4__sub2__sub0(NC_STACK_ypaworld *yw)
 
     GFX::Engine.ProcessDrawSeq(buf);
 
-    // OpenNeoUA custom: the 3D world already shows the mortar cooldown/readiness bar
+    // OpenNeoUA custom: the 3D world already shows the artillery shell cooldown/readiness bar
     // above the HP bar. Mirror that feedback on the small gameplay radar too,
     // drawing it after unit icons so it stays visible.
     GFX::Engine.raster_func211(drect);
-    yw_RenderMortarCooldownRadarBars(yw, v14, v29, v28, v30);
+    yw_RenderArtilleryShellCooldownRadarBars(yw, v14, v29, v28, v30);
 
     // Draw custom annotations last so they remain readable above unit icons and
     // cooldown bars while the player is controlling a unit.
@@ -16718,8 +16763,8 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
         break;
 
     case World::DOACTION_19:
-        // OpenNeoUA custom: refuse to cycle the viewer into a mortar platform.
-        if ( _bactOnMouse && _bactOnMouse->IsMortarPlatform() )
+        // OpenNeoUA custom: refuse to cycle the viewer into an artillery shell platform.
+        if ( _bactOnMouse && _bactOnMouse->IsArtilleryShellPlatform() )
             break;
         _viewerBact->setBACT_viewer(false);
         _viewerBact->setBACT_inputting(false);
@@ -16767,18 +16812,18 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
             return;
         }
 
-        // OpenNeoUA custom: manual mortar control on the opened 2D strategic map in
+        // OpenNeoUA custom: manual artillery shell control on the opened 2D strategic map in
         // normal command mode (field_1D0 == 1). Build (16) / teleport (32) modes
         // are left untouched. Consumes the click so no first-person entry or RTS
-        // order is produced for a mortar interaction.
+        // order is produced for an artillery shell interaction.
         if ( !IsSpectatorControlled() &&
              bzda.field_1D0 == 1 &&
              (_guiActFlags & 8) &&
-             _mortarManualGid &&
+             _artilleryShellManualGid &&
              (arg->ClickInf.flag & TClickBoxInf::FLAG_RM_DOWN) )
         {
-            _mortarManualGid = 0;
-            _mortarManualRadius = 0.0f;
+            _artilleryShellManualGid = 0;
+            _artilleryShellManualRadius = 0.0f;
             arg->ClickInf.flag &= ~TClickBoxInf::FLAG_RM_DOWN;
             return;
         }
@@ -16787,7 +16832,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
              bzda.field_1D0 == 1 &&
              (_guiActFlags & 8) &&
              (arg->ClickInf.flag & TClickBoxInf::FLAG_LM_DOWN) &&
-             HandleMortarMapClick() )
+             HandleArtilleryShellMapClick() )
         {
             arg->ClickInf.flag &= ~TClickBoxInf::FLAG_LM_DOWN;
             return;
@@ -17000,10 +17045,10 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
             {
                 if ( _guiActFlags & 0x20 )
                 {
-                    // OpenNeoUA custom: mortar platforms cannot be possessed, so show no
+                    // OpenNeoUA custom: artillery shell platforms cannot be possessed, so show no
                     // "take control" cursor/tooltip when hovering one (it would wrongly
                     // suggest the player can enter it).
-                    if ( _bactOnMouse->IsMortarPlatform() )
+                    if ( _bactOnMouse->IsArtilleryShellPlatform() )
                     {
                         // leave mousePointer at its neutral value: no control prompt
                     }
@@ -17150,30 +17195,30 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
                 }
             }
 
-            // OpenNeoUA custom: mortar cursor feedback.
-            //  - In the 3D world, hovering one of our mortars shows the "can't enter"
+            // OpenNeoUA custom: artillery shell cursor feedback.
+            //  - In the 3D world, hovering one of our artillery shells shows the "can't enter"
             //    cursor (it can't be possessed).
             //  - On the strategic map it must instead read as USABLE: a "target here"
-            //    cursor while aiming a selected mortar, and a "selectable" cursor when
+            //    cursor while aiming a selected artillery shell, and a "selectable" cursor when
             //    hovering one. (The blue "your unit" marker overlay is unaffected.)
             if ( !IsSpectatorControlled() )
             {
                 bool onMap = (_guiActFlags & 8) != 0;
-                bool hoverOwnMortar = (_guiActFlags & 0x20) && _bactOnMouse &&
+                bool hoverOwnArtilleryShell = (_guiActFlags & 0x20) && _bactOnMouse &&
                                       _bactOnMouse->_owner == _userRobo->_owner &&
-                                      _bactOnMouse->IsMortarPlatform();
+                                      _bactOnMouse->IsArtilleryShellPlatform();
 
-                if ( onMap && _mortarManualGid )
+                if ( onMap && _artilleryShellManualGid )
                 {
                     mousePointer = 3;   // aiming the bombardment zone: "target here"
                     tooltip = 0;
                 }
-                else if ( onMap && hoverOwnMortar )
+                else if ( onMap && hoverOwnArtilleryShell )
                 {
-                    mousePointer = 2;   // hovering our mortar on the map: "selectable"
+                    mousePointer = 2;   // hovering our artillery shell on the map: "selectable"
                     tooltip = 0;
                 }
-                else if ( !onMap && hoverOwnMortar )
+                else if ( !onMap && hoverOwnArtilleryShell )
                 {
                     mousePointer = 1;   // 3D world: can't be entered
                     tooltip = 0;
@@ -17212,8 +17257,8 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
 
             if ( !IsSpectatorControlled() && ypaworld_func64__sub21__sub6(&arg->ClickInf) )
             {
-                // OpenNeoUA custom: a double-click must never possess a mortar platform.
-                if ( !_bactOnMouse || !_bactOnMouse->IsMortarPlatform() )
+                // OpenNeoUA custom: a double-click must never possess an artillery shell platform.
+                if ( !_bactOnMouse || !_bactOnMouse->IsArtilleryShellPlatform() )
                 {
                     v18 = World::DOACTION_5;
                     mousePointer = 8;
