@@ -51,12 +51,10 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
 
 int dword_5BAF9C;
 
-// Momentary top-panel feedback while the GEM popup suppresses gameplay
-// windows. These bits live in the existing per-frame button-state field and
-// therefore cannot remain latched after the mouse is released.
+// Momentary top-panel feedback while the GEM popup suppresses Creation.
+// This bit lives in the existing per-frame button-state field and therefore
+// cannot remain latched after the mouse is released.
 static constexpr int BZDA_GEM_PRESS_CREATE = 0x800;
-static constexpr int BZDA_GEM_PRESS_MAP = 0x1000;
-static constexpr int BZDA_GEM_PRESS_SQUAD = 0x2000;
 
 namespace
 {
@@ -5698,15 +5696,20 @@ static void yw_CloseGameplayWindowsForGemNotification(NC_STACK_ypaworld *yw)
     if ( !yw || !yw->_guiLoaded )
         return;
 
-    // Close every registered gameplay window without destroying or unregistering
-    // the GUI. GUI_Close() is reserved for level teardown and would otherwise
-    // leave the interface unloaded after the notification expires.
+    // Close ordinary gameplay windows without destroying or unregistering the
+    // GUI. Map and Squadron Manager now have higher visual priority than the GEM
+    // notification, while the Exit Menu remains the absolute top-level window.
     std::vector<GuiBase *> activeWindows(yw->_guiActive.begin(),
                                          yw->_guiActive.end());
     for ( GuiBase *window : activeWindows )
     {
-        if ( window )
+        if ( window &&
+             window != &robo_map &&
+             window != &squadron_manager &&
+             window != &exit_menu )
+        {
             yw->GuiWinClose(window);
+        }
     }
 
     // The nested vehicle/building list is not guaranteed to be registered in
@@ -5719,6 +5722,181 @@ static void yw_CloseGameplayWindowsForGemNotification(NC_STACK_ypaworld *yw)
 }
 
 static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw);
+
+static bool yw_IsVisiblePriorityGameplayWindow(const GuiBase *window)
+{
+    if ( !window || !window->IsOpen() || (window->flags & GuiBase::FLAG_ICONIFED) )
+        return false;
+
+    return window == &robo_map || window == &squadron_manager;
+}
+
+bool yw_IsPriorityGameplayUiOpen()
+{
+    return yw_IsVisiblePriorityGameplayWindow(&robo_map) ||
+           yw_IsVisiblePriorityGameplayWindow(&squadron_manager);
+}
+
+static void yw_RenderGameplayGuiWindow(NC_STACK_ypaworld *yw, GuiBase *window,
+                                       const SDL_Color *uiAccent)
+{
+    if ( !yw || !window || (window->flags & 0x20) )
+        return;
+
+    if ( window->flags & GuiBase::FLAG_ICONIFED )
+    {
+        GFX::Engine.ProcessDrawSeq(window->iconString, NULL, uiAccent);
+        return;
+    }
+
+    if ( window->preDraw )
+        window->preDraw(yw);
+
+    GFX::Engine.ProcessDrawSeq(window->cmdCommands, &window->cmdInclude, uiAccent);
+
+    if ( window->postDraw )
+        window->postDraw(yw);
+}
+
+static void yw_ClearVirtualUiWindowRect(NC_STACK_ypaworld *yw, const GuiBase *window)
+{
+    if ( !yw || !window || !GFX::Engine.IsVirtualUIPass() )
+        return;
+
+    SDL_Surface *surface = GFX::Engine.Screen();
+    if ( !surface )
+        return;
+
+    const int left = std::max(0, static_cast<int>(window->x));
+    const int top = std::max(0, static_cast<int>(window->y));
+    const int right = std::min(yw->_screenSize.x, window->x + window->w);
+    const int bottom = std::min(yw->_screenSize.y, window->y + window->h);
+    if ( right <= left || bottom <= top )
+        return;
+
+    SDL_Rect oldClip;
+    SDL_GetClipRect(surface, &oldClip);
+    SDL_SetClipRect(surface, NULL);
+
+    SDL_Rect clearRect = {left, top, right - left, bottom - top};
+    SDL_FillRect(surface, &clearRect,
+                 SDL_MapRGBA(surface->format, 0, 0, 0, 0));
+
+    // Procedural HP/status bars are queued separately from the SDL virtual-UI
+    // surface and emitted later as one mesh. Clip those queued rectangles too,
+    // otherwise they would bleed through Map/Squadron after this surface clear.
+    GFX::Engine.OccludeVirtualUISolidRects(Common::Rect(left, top, right, bottom));
+
+    SDL_SetClipRect(surface, &oldClip);
+}
+
+static void yw_ClearPriorityGameplayUiUnderlay(NC_STACK_ypaworld *yw)
+{
+    if ( yw_IsVisiblePriorityGameplayWindow(&robo_map) )
+        yw_ClearVirtualUiWindowRect(yw, &robo_map);
+    if ( yw_IsVisiblePriorityGameplayWindow(&squadron_manager) )
+        yw_ClearVirtualUiWindowRect(yw, &squadron_manager);
+}
+
+static void yw_RenderPriorityGameplayWindows(NC_STACK_ypaworld *yw,
+                                             const SDL_Color *uiAccent)
+{
+    for ( GuiBase *window : yw->_guiActive )
+    {
+        if ( yw_IsVisiblePriorityGameplayWindow(window) )
+            yw_RenderGameplayGuiWindow(yw, window, uiAccent);
+    }
+}
+
+static void yw_ResetVirtualUiClipToFullScreen(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !GFX::Engine.IsVirtualUIPass() )
+        return;
+
+    const int halfW = yw->_screenSize.x / 2;
+    const int halfH = yw->_screenSize.y / 2;
+    GFX::Engine.raster_func211(Common::Rect(-halfW, -halfH,
+                                            yw->_screenSize.x - halfW,
+                                            yw->_screenSize.y - halfH));
+}
+
+static void yw_RenderAlwaysVisibleGameplayBars(NC_STACK_ypaworld *yw,
+                                                const SDL_Color *uiAccent)
+{
+    // The two fixed gameplay bars are deliberately above Map/Squadron Manager.
+    // They remain visible and usable regardless of strategic-window overlap.
+    GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude, uiAccent);
+
+    // up_panel may leave its own clip active too. Plasma is a direct bitmap, so
+    // reset once more to guarantee that opening Map/Squadron never hides it.
+    yw_ResetVirtualUiClipToFullScreen(yw);
+    yw_RenderPlasmaCurrencyHudIcon(yw);
+
+    if ( bzda.IsOpen() )
+        GFX::Engine.ProcessDrawSeq(bzda.cmdCommands, &bzda.cmdInclude, uiAccent);
+}
+
+static void yw_RenderForegroundGameplayGuiWindows(NC_STACK_ypaworld *yw,
+                                                  const SDL_Color *uiAccent)
+{
+    // Real GUI windows/dialogs stay above strategic windows. Map/Squadron only
+    // occlude gameplay overlays, never another menu/dialog.
+    for ( GuiBase *window : yw->_guiActive )
+    {
+        if ( yw_IsVisiblePriorityGameplayWindow(window) || window == &exit_menu )
+            continue;
+
+        yw_RenderGameplayGuiWindow(yw, window, uiAccent);
+    }
+
+    // The expandable creation list is managed outside _guiActive.
+    if ( bzda.IsOpen() && gui_lstvw.IsOpen() )
+        GFX::Engine.ProcessDrawSeq(gui_lstvw.cmdCommands, &gui_lstvw.cmdInclude,
+                                   uiAccent);
+}
+
+void yw_FinalizePriorityGameplayUi(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || yw->_hideHudForScreenshots || !yw->_userUnit ||
+         yw->_userUnit->_bact_type == BACT_TYPES_MISSLE ||
+         !yw_IsPriorityGameplayUiOpen() )
+    {
+        return;
+    }
+
+    SDL_Color uiAccentColor;
+    const SDL_Color *uiAccent = yw_GetFactionUiAccent(yw, &uiAccentColor);
+
+    // Ordinary gameplay UI has already been rendered. Remove only the pixels
+    // geometrically covered by Map/Squadron Manager, leaving every overlay
+    // outside those rectangles untouched and the 3D world visible through the
+    // strategic windows' translucent backgrounds.
+    yw_ClearPriorityGameplayUiUnderlay(yw);
+
+    // Preserve the normal relative order when Map and Squadron Manager overlap.
+    yw_RenderPriorityGameplayWindows(yw, uiAccent);
+
+    // Strategic-window draw sequences leave their own clip active. Restore the
+    // full virtual-UI clip before drawing fixed bars/direct bitmaps; otherwise
+    // the Plasma icon can disappear even when it is nowhere near the window.
+    yw_ResetVirtualUiClipToFullScreen(yw);
+
+    // Explicit exception requested by the UI hierarchy: the fixed top/bottom
+    // bars are always visible, even where a strategic window reaches them.
+    yw_RenderAlwaysVisibleGameplayBars(yw, uiAccent);
+
+    // Menus/dialogs are foreground GUI, not gameplay underlay. Render them once
+    // above Map/Squadron so the strategic-window clear cannot erase them.
+    yw_ResetVirtualUiClipToFullScreen(yw);
+    yw_RenderForegroundGameplayGuiWindows(yw, uiAccent);
+
+    // Exit Menu remains the absolute top-level gameplay dialog.
+    if ( exit_menu.IsOpen() )
+    {
+        yw_ResetVirtualUiClipToFullScreen(yw);
+        yw_RenderGameplayGuiWindow(yw, &exit_menu, uiAccent);
+    }
+}
 
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 {
@@ -5737,33 +5915,21 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 
     if ( yw->_userUnit->_bact_type != BACT_TYPES_MISSLE )
     {
+        const bool priorityWindowOpen = yw_IsPriorityGameplayUiOpen();
+
+        // Render the complete ordinary gameplay UI first. When Map/Squadron is
+        // open, only the pixels under its actual rectangle are removed later;
+        // nothing outside the overlap is globally suppressed.
         yw_RenderWorldSelectionDrag(yw);
         yw_RenderMoveOrderFeedback(yw);
         yw_RenderAttackOrderFeedback(yw);
         yw_RenderRoboRelocationMarker(yw);
         sb_0x4d7c08__sub0__sub4(yw);
 
-        for(GuiBaseList::iterator it = yw->_guiActive.begin(); it != yw->_guiActive.end(); it++)
+        if ( !priorityWindowOpen )
         {
-            GuiBase *lstnode = *it;
-            if ( !(lstnode->flags & 0x20) )
-            {
-                if ( lstnode->flags & GuiBase::FLAG_ICONIFED )
-                {
-                    GFX::Engine.ProcessDrawSeq(lstnode->iconString, NULL, uiAccent);
-                }
-                else
-                {
-                    if ( lstnode->preDraw )
-                        lstnode->preDraw(yw);
-
-                    GFX::Engine.ProcessDrawSeq(lstnode->cmdCommands, &lstnode->cmdInclude,
-                                               uiAccent);
-
-                    if ( lstnode->postDraw )
-                        lstnode->postDraw(yw);
-                }
-            }
+            for ( GuiBase *window : yw->_guiActive )
+                yw_RenderGameplayGuiWindow(yw, window, uiAccent);
         }
 
         if ( yw->_userUnit->_status != BACT_STATUS_DEAD )
@@ -5771,10 +5937,16 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
             sb_0x4d7c08__sub0__sub0(yw);
             sb_0x4d7c08__sub0__sub2(yw);
         }
+
         draw_tooltip(yw, uiAccent);
-        GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude, uiAccent);
-        yw_RenderPlasmaCurrencyHudIcon(yw);
-        sb_0x4d7c08__sub0__sub1(uiAccent);
+
+        if ( !priorityWindowOpen )
+        {
+            // Preserve the original draw order when no strategic window is open.
+            GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude, uiAccent);
+            yw_RenderPlasmaCurrencyHudIcon(yw);
+            sb_0x4d7c08__sub0__sub1(uiAccent);
+        }
     }
 }
 
@@ -6155,13 +6327,11 @@ void gui_update_map_squad_btn(NC_STACK_ypaworld *yw, CmdStream *cur)
             v8 += yw->_iconOrderW;
         }
 
-        const bool mapPressed = robo_map.IsOpen()
-                             || (bzda.field_91C & BZDA_GEM_PRESS_MAP) != 0;
+        const bool mapPressed = robo_map.IsOpen();
         FontUA::select_tileset(cur, mapPressed ? 22 : 21);
         FontUA::store_u8(cur, 72);
 
-        const bool squadPressed = squadron_manager.IsOpen()
-                               || (bzda.field_91C & BZDA_GEM_PRESS_SQUAD) != 0;
+        const bool squadPressed = squadron_manager.IsOpen();
         FontUA::select_tileset(cur, squadPressed ? 22 : 21);
         FontUA::store_u8(cur, 73);
     }
@@ -6645,10 +6815,9 @@ int ypaworld_func64__sub7__sub2__sub3(NC_STACK_ypaworld *yw, TInputState *inpt)
         return 0;
     }
 
-    // During the GEM popup, keyboard shortcuts must mirror the pressed visual
-    // feedback of the Creation/Map/Squad buttons without opening their windows.
-    // Mouse clicks are handled by the canonical button path below; this closes
-    // the remaining hotkey-only route that could briefly open gui_lstvw.
+    // During the GEM popup, Creation remains blocked. Map and Squadron Manager
+    // intentionally keep their normal hotkey path because they now have higher
+    // visual priority than every gameplay overlay except the Exit Menu.
     if ( yw->HasActiveNewGemNotification() )
     {
         switch ( inpt->HotKeyID )
@@ -6657,16 +6826,6 @@ int ypaworld_func64__sub7__sub2__sub3(NC_STACK_ypaworld *yw, TInputState *inpt)
         case 3:
             bzda.field_91C |= BZDA_GEM_PRESS_CREATE;
             yw->GuiWinClose(&gui_lstvw);
-            return 0;
-
-        case 8:
-            bzda.field_91C |= BZDA_GEM_PRESS_MAP;
-            yw->GuiWinClose(&robo_map);
-            return 0;
-
-        case 9:
-            bzda.field_91C |= BZDA_GEM_PRESS_SQUAD;
-            yw->GuiWinClose(&squadron_manager);
             return 0;
 
         default:
@@ -7241,6 +7400,17 @@ void sb_0x4c66f8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, NC_STACK_ypabac
     if ( !yw->CanControlUnitInSpectatorMode(bact1) )
         return;
 
+    // A latched player Kamikaze sequence is intentionally irreversible. Keep
+    // control on the armed carrier until its shared detonation path completes;
+    // this guard runs before viewer/input flags are dropped from the current unit.
+    if ( yw->_kamikazeFireTimeScaleDrainGid > 0 &&
+         yw->_userUnit &&
+         yw->_userUnit->_gid == yw->_kamikazeFireTimeScaleDrainGid &&
+         bact1 != bact2 )
+    {
+        return;
+    }
+
     // OpenNeoUA custom: never take control of an artillery shell platform. Bail out before the
     // current unit's viewer/input is dropped, so the player is not left viewer-less.
     if ( bact1 && bact1->IsArtilleryShellPlatform() )
@@ -7461,21 +7631,7 @@ void  ypaworld_func64__sub7__sub2(NC_STACK_ypaworld *yw, TInputState *inpt)
 
             case 2: //MAP
             case 3: //SQUAD
-                if ( yw->HasActiveNewGemNotification() )
-                {
-                    if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN
-                                      | TClickBoxInf::FLAG_BTN_HOLD) )
-                    {
-                        if ( winpt->selected_btnID == 2 )
-                            bzda.field_91C |= BZDA_GEM_PRESS_MAP;
-                        else if ( !yw->IsSpectatorControlled() )
-                            bzda.field_91C |= BZDA_GEM_PRESS_SQUAD;
-                    }
-
-                    yw->GuiWinClose(&robo_map);
-                    yw->GuiWinClose(&squadron_manager);
-                }
-                else if ( winpt->flag & TClickBoxInf::FLAG_BTN_DOWN )
+                if ( winpt->flag & TClickBoxInf::FLAG_BTN_DOWN )
                 {
                     if ( winpt->selected_btnID == 2 )
                     {
@@ -11806,8 +11962,10 @@ void NC_STACK_ypaworld::ypaworld_func64__sub7(TInputState *inpt)
             {
                 if ( winpt->flag & TClickBoxInf::FLAG_LM_HOLD )
                 {
-                    int v13 = winpt->move.ScreenPos.x - _guiDragPos.x;
-                    int v15 = winpt->move.ScreenPos.y - _guiDragPos.y;
+                    const int rawX = winpt->move.ScreenPos.x - _guiDragPos.x;
+                    const int rawY = winpt->move.ScreenPos.y - _guiDragPos.y;
+                    int v13 = rawX;
+                    int v15 = rawY;
 
                     if ( v13 >= 0 )
                     {
@@ -11827,6 +11985,19 @@ void NC_STACK_ypaworld::ypaworld_func64__sub7(TInputState *inpt)
                     else
                     {
                         v15 = _upScreenBorder;
+                    }
+
+                    // Map/Squadron keep the mouse attached to the dragged title
+                    // even after the window reaches a screen limit. Rebase the
+                    // grab offset at the clamp so reversing direction moves the
+                    // window immediately instead of crossing a dead zone first.
+                    if ( _guiDragElement == &robo_map ||
+                         _guiDragElement == &squadron_manager )
+                    {
+                        if ( v13 != rawX )
+                            _guiDragPos.x = winpt->move.ScreenPos.x - v13;
+                        if ( v15 != rawY )
+                            _guiDragPos.y = winpt->move.ScreenPos.y - v15;
                     }
 
                     _guiDragElement->y = v15;
@@ -13312,37 +13483,40 @@ void yw_RenderInfoWeaponName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cu
     yw_RenderInfoVehicleName(yw, wis, cur, name, xpos, ypos);
 }
 
+static void yw_RenderInfoWeaponLikeWire(NC_STACK_ypaworld *yw, sklt_wis *wis,
+                                        NC_STACK_skeleton *wireframe,
+                                        const World::TVisualTint *wireframeTint,
+                                        float xpos, float ypos)
+{
+    if ( !wireframe )
+        return;
+
+    UAskeleton::Data *wairufureimu = wireframe->GetSkelet();
+    if ( !wairufureimu )
+        return;
+
+    wis_color_func func = wis->field_72 ? wis_color : NULL;
+
+    SDL_Color v9 = yw->GetColor(20);
+    SDL_Color v10 = yw->GetColor(29);
+
+    yw->_hud.cl1_r = v10.r;
+    yw->_hud.cl1_g = v10.g;
+    yw->_hud.cl1_b = v10.b;
+    yw->_hud.cl2_r = v9.r;
+    yw->_hud.cl2_b = v9.b;
+    yw->_hud.cl2_g = v9.g;
+
+    yw_RenderVector2D(yw, wairufureimu, xpos, ypos,
+                      1.0, 0.0, 0.0, 1.0, 0.0415, 0.05,
+                      v10, NULL, func, true, wireframeTint);
+}
+
 void yw_RenderInfoWeaponWire(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TWeapProto *wpn, float xpos, float ypos)
 {
-    UAskeleton::Data *wairufureimu = NULL;
-
-    wis_color_func func;
-
-    if ( wis->field_72 )
-        func = wis_color;
-    else
-        func = NULL;
-
     if ( wpn )
-    {
-        if ( wpn->wireframe )
-            wairufureimu = wpn->wireframe->GetSkelet();
-
-        if ( wairufureimu )
-        {
-            SDL_Color v9 = yw->GetColor(20);
-            SDL_Color v10 = yw->GetColor(29);
-
-            yw->_hud.cl1_r = v10.r;
-            yw->_hud.cl1_g = v10.g;
-            yw->_hud.cl1_b = v10.b;
-            yw->_hud.cl2_r = v9.r;
-            yw->_hud.cl2_b = v9.b;
-            yw->_hud.cl2_g = v9.g;
-
-            yw_RenderVector2D(yw, wairufureimu, xpos, ypos, 1.0, 0.0, 0.0, 1.0, 0.0415, 0.05, v10, NULL, func, true, &wpn->wireframe_tint);
-        }
-    }
+        yw_RenderInfoWeaponLikeWire(yw, wis, wpn->wireframe, &wpn->wireframe_tint,
+                                    xpos, ypos);
 }
 
 void yw_RenderInfoReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, NC_STACK_ypabact *bact, World::TWeapProto *wpn, float xpos, float ypos)
@@ -13389,9 +13563,7 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
     if ( weap )
     {
         std::string txt2;
-        const int displayBaseEnergy = weap->IsKamikaze()
-                                          ? weap->aoe_unit_energy
-                                          : weap->energy;
+        const int displayBaseEnergy = weap->energy;
         const int effectiveEnergy = bact
             ? bact->GetEffectiveOutgoingDamage(displayBaseEnergy)
             : displayBaseEnergy;
@@ -13399,14 +13571,8 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
         // Show the actual current per-instance damage directly in DMG. Kill
         // marks and Black Sect clone balance stay runtime-only and never mutate
         // shared weapon prototypes, but the player readout now reflects the
-        // same effective value used by the final damage choke point. Kamikaze
-        // is a mounted AoE payload rather than a normal projectile, so its DMG
-        // row intentionally reports aoe_unit_energy (energy is commonly 0).
-        if ( weap->IsKamikaze() )
-        {
-            txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
-        }
-        else if ( weap->IsLaser() )
+        // same effective value used by the final damage choke point.
+        if ( weap->IsLaser() )
         {
             txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
 
@@ -13433,6 +13599,73 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
     }
 }
 
+
+static bool yw_IsMgunWeaponInfoAvailable(NC_STACK_ypabact *bact,
+                                         World::TVhclProto *vhcl)
+{
+    if ( !bact || !vhcl || bact->_bact_type != BACT_TYPES_GUN )
+        return false;
+
+    NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>(bact);
+    if ( !gun || gun->getGUN_fireType() != NC_STACK_ypagun::GUN_TYPE_PROTO )
+        return false;
+
+    // Opt-in only: old data without the two new authoring fields keeps the
+    // previous gun_type = mg HUD behavior.
+    return !vhcl->mgun_name.empty() || vhcl->mgun_wireframe;
+}
+
+static void yw_RenderInfoMgunReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis,
+                                       CmdStream *cur, NC_STACK_ypabact *bact,
+                                       World::TVhclProto *vhcl,
+                                       float xpos, float ypos)
+{
+    if ( !vhcl || vhcl->mgun_shot_time <= 0 )
+        return;
+
+    int reload = 100;
+    if ( bact )
+    {
+        const int shotTime = bact->GetMinigunShotTime(1);
+        if ( shotTime <= 0 )
+            return;
+
+        reload = 100 * (bact->_clock - bact->_mgun_time) / shotTime;
+        reload = std::max(0, std::min(100, reload));
+    }
+
+    const std::string text = reload == 100
+        ? Locale::Text::HUD(Locale::HUDSTR_OK)
+        : fmt::sprintf("%d%%", reload);
+
+    sub_4E4F80(yw, wis, cur, xpos, ypos, reload, 100, 1, 3,
+               Locale::Text::HUD(Locale::HUDSTR_RLD), text);
+}
+
+static void yw_RenderInfoMgunDamage(NC_STACK_ypaworld *yw, sklt_wis *wis,
+                                    CmdStream *cur, NC_STACK_ypabact *bact,
+                                    World::TVhclProto *vhcl,
+                                    float xpos, float ypos)
+{
+    if ( !vhcl )
+        return;
+
+    const int basePower = (int)(bact
+        ? bact->GetMinigunPower()
+        : (vhcl->mgun_power_set ? vhcl->mgun_power : vhcl->gun_power));
+    const int effectivePower = bact
+        ? bact->GetEffectiveOutgoingDamage(basePower)
+        : basePower;
+
+    std::string text = fmt::sprintf("%d", effectivePower / 100);
+    const int mgunCount = bact ? std::max(1, bact->_num_mguns)
+                               : std::max(1, (int)vhcl->num_mguns);
+    if ( mgunCount > 1 )
+        text += fmt::sprintf(" x%d", mgunCount);
+
+    sub_4E4F80(yw, wis, cur, xpos, ypos, effectivePower, 100, 7, 7,
+               Locale::Text::HUD(Locale::HUDSTR_DMG), text, 1 | 2);
+}
 
 void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float xpos, float ypos, NC_STACK_ypabact *bact, int vhclid, int flag)
 {
@@ -13510,23 +13743,36 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
                                  xpos, v15);
     }
 
-    if ( weap )
+    const bool showMgunWeaponInfo = yw_IsMgunWeaponInfoAvailable(bact, vhcl);
+
+    if ( v23 && showMgunWeaponInfo )
     {
-        if ( v23 )
-        {
-            yw_RenderInfoWeaponName(yw, wis, cur,
-                                    yw->ResolveGameplayWeaponName(*weap), xpos,
-                                    ypos - wis->field_92 * 12.0);
+        yw_RenderInfoWeaponName(yw, wis, cur, vhcl->mgun_name, xpos,
+                                ypos - wis->field_92 * 12.0);
+        yw_RenderInfoWeaponLikeWire(yw, wis, vhcl->mgun_wireframe,
+                                    &vhcl->wireframe_tint, xpos,
+                                    ypos - wis->field_92 * 9.0);
+        yw_RenderInfoMgunReloadbar(yw, wis, cur, bact, vhcl, xpos,
+                                   ypos - wis->field_92 * 7.0);
+        yw_RenderInfoMgunDamage(yw, wis, cur, bact, vhcl, xpos,
+                                ypos - wis->field_92 * 9.0);
+    }
+    else if ( weap && v23 )
+    {
+        yw_RenderInfoWeaponName(yw, wis, cur,
+                                yw->ResolveGameplayWeaponName(*weap), xpos,
+                                ypos - wis->field_92 * 12.0);
 
-            yw_RenderInfoWeaponWire(yw, wis, weap, xpos,   ypos - wis->field_92 * 9.0);
+        yw_RenderInfoWeaponWire(yw, wis, weap, xpos, ypos - wis->field_92 * 9.0);
 
-            // A Kamikaze payload is not a normally fireable/cooldown weapon, so
-            // keep its name/wireframe/DMG visible without inventing a fake RLD.
-            if ( !weap->IsKamikaze() )
-                yw_RenderInfoReloadbar(yw, wis, cur, bact, weap, xpos,  ypos - wis->field_92 * 7.0);
+        // A Kamikaze payload is not a normally fireable/cooldown weapon, so
+        // keep its name/wireframe/DMG visible without inventing a fake RLD.
+        if ( !weap->IsKamikaze() )
+            yw_RenderInfoReloadbar(yw, wis, cur, bact, weap, xpos,
+                                   ypos - wis->field_92 * 7.0);
 
-            yw_RenderInfoWeaponInf(yw, wis, cur, bact, vhcl, weap, xpos,  ypos - wis->field_92 * 9.0);
-        }
+        yw_RenderInfoWeaponInf(yw, wis, cur, bact, vhcl, weap, xpos,
+                               ypos - wis->field_92 * 9.0);
     }
 }
 

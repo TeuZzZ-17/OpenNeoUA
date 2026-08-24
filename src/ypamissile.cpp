@@ -1250,28 +1250,12 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                         continue;
                 }
 
-                const bool normallySkippedFriendly =
-                    !a5 && bct->_owner == _mislEmitter->_owner;
-                NC_STACK_ypabact *friendlyPushRecipient =
-                    normallySkippedFriendly ? ypamissile_ResolveDirectPushRecipient(bct) : bct;
-                const bool configuredFriendlyPush =
-                    normallySkippedFriendly && applyDirectDamage &&
-                    _mislDirectPush > 0 &&
-                    friendlyPushRecipient &&
-                    !GetAreaPushSkipReason(friendlyPushRecipient) &&
-                    !(friendlyPushRecipient->_status_flg &
-                      (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) &&
-                    friendlyPushRecipient->GetPushResistanceMultiplier() > 0.0f;
-
-                // Friendly damage/collision remains unchanged for ordinary
-                // weapons. A configured direct push is the sole exception:
-                // let the geometric hit stop the projectile, but route it as
-                // push-only so allies can never receive HP damage or debuffs.
-                if ( normallySkippedFriendly && !configuredFriendlyPush )
+                // Preserve the legacy/upstream AI friendly-collision rule:
+                // non-player-controlled projectiles ignore units of their emitter owner.
+                if ( !a5 && bct->_owner == _mislEmitter->_owner )
                     continue;
 
-                if ( !configuredFriendlyPush &&
-                     _mislEmitter->_bact_type == BACT_TYPES_GUN )
+                if ( _mislEmitter->_bact_type == BACT_TYPES_GUN )
                 {
                     NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( _mislEmitter );
 
@@ -1376,8 +1360,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                     Will hit only when distance ~ wpn_radius */
                                 if ( sqrt( POW2(dist_vect_len) + POW2(vp_len) ) > fabs(to_enemy_len - wpn_radius) )
                                 {
-                                    if ( applyDirectDamage && !configuredFriendlyPush &&
-                                         ShouldArmorPenetrateTarget(bct) )
+                                    if ( applyDirectDamage && ShouldArmorPenetrateTarget(bct) )
                                     {
                                         ApplyDirectHitToBact(bct);
                                         RememberArmorPenetratedTarget(bct);
@@ -1395,7 +1378,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
 
                                     if ( applyDirectDamage )
                                     {
-                                        ApplyDirectHitToBact(bct, !configuredFriendlyPush);
+                                        ApplyDirectHitToBact(bct);
                                     }
 
                                     break;
@@ -1586,8 +1569,6 @@ bool NC_STACK_ypamissile::ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *ap
     if ( !bct || !isfinite(_mislDirectPush) || _mislDirectPush <= 0 )
         return false;
 
-    // Configured push is deliberately owner-agnostic: allies and enemies share
-    // the same physics. Damage keeps its separate friendly-fire policy.
     if ( GetAreaPushSkipReason(bct) )
         return false;
 
@@ -1671,10 +1652,9 @@ const char *NC_STACK_ypamissile::GetAreaDamageSkipReason(NC_STACK_ypabact *bct, 
     return NULL;
 }
 
-// Push eligibility filter for normal direct/AoE push. It intentionally includes
-// tanks, Host Stations, allies and every other non-gun class. Only static guns
-// and final DEATH2 wrecks are excluded. A lethal impact still receives its
-// ordinary configured push, without any separate push-at-death path.
+// Push eligibility filter for normal direct/AoE push. Static guns and final
+// DEATH2 wrecks are excluded here; owner policy is applied by the collision/AoE
+// call sites so player-controlled legacy behavior remains unchanged.
 const char *NC_STACK_ypamissile::GetAreaPushSkipReason(NC_STACK_ypabact *bct) const
 {
     if ( !bct || bct == this || bct == _mislEmitter )
@@ -1993,6 +1973,10 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                 const char *dmgSkip  = GetAreaDamageSkipReason(bct, allowFriendly);
                 const char *pushSkip = doAoePush ? GetAreaPushSkipReason(bct) : "push_disabled";
 
+                if ( doAoePush && !pushSkip && !allowFriendly && _mislEmitter &&
+                     bct->_owner == _mislEmitter->_owner )
+                    pushSkip = "friendly";
+
                 if ( dmgSkip && pushSkip )
                     continue;
 
@@ -2037,8 +2021,8 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                 }
 
                 // AoE damage skips direct-hit units (they already received direct damage)
-                // and anything the strict damage filter rejected. Push has its
-                // own owner-agnostic eligibility and may still affect allies.
+                // and anything the strict damage filter rejected. AoE push has its
+                // own eligibility filter but follows the same AI-friendly policy.
                 if ( doAoeDamage && !dmgSkip && !IsDirectHitUnit(bct) )
                 {
                     int areaEnergy = ypamissile_ScaleAoeEnergy(_mislAoeUnitEnergy, ypamissile_AoeFalloffFactor(distance, _mislAoeUnitRadius, _mislAoeFalloff != 0));
