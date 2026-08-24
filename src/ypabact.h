@@ -690,6 +690,7 @@ public:
     { return _world; }
 
     int GetCurrentWeaponId();
+    int GetHUDWeaponId(); // UI-only fallback: shows mounted Kamikaze payload without making it fireable/selectable.
     int GetCurrentWeaponProjectileCount();
     bool RequestHomingTargetCycle();
     bool CycleControlledWeapon();
