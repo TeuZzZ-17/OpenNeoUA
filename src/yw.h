@@ -2512,7 +2512,6 @@ public:
 //protected:
     void sub_4491A0(const std::string &movie_fname);
     bool LoadProtosScript(const std::string &filename);
-    bool DebugReloadLiveData(std::string *details);
     bool LoadSpectatorVehicleProto();
     bool sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const std::string &fname);
     void ypaworld_func158__sub4__sub1();
@@ -2621,13 +2620,13 @@ public:
     void ExpireDebugAoeRings();
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
 
-    // OpenNeoUA custom: mortar bombardment markers + manual map-click control.
-    void AddMortarMarker(const vec3d &pos, float radius, int owner, int lingerMs);
-    void ExpireMortarMarkers();
-    void ClearMortarMarkers();
-    void RenderMortarMapMarkers();
+    // OpenNeoUA custom: artillery shell bombardment markers + manual map-click control.
+    void AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, int lingerMs);
+    void ExpireArtilleryShellMarkers();
+    void ClearArtilleryShellMarkers();
+    void RenderArtilleryShellMapMarkers();
     void RenderLaserMapBeams(int mapTilesetId);
-    bool HandleMortarMapClick(); // 2D-map: select a mortar, then click a target zone
+    bool HandleArtilleryShellMapClick(); // 2D-map: select an artillery shell, then click a target zone
 
     void ProfileCalcValues();
 
@@ -3097,12 +3096,6 @@ public:
     std::vector<World::TVhclProto> _vhclProtos;
     std::vector<World::TWeapProto> _weaponProtos;
     std::vector<World::TBuildingProto> _buildProtos;
-    // New Debug F7 keeps replaced prototype generations alive because active
-    // units/sound carriers can retain pointers into prototype-owned FX data.
-    std::vector<std::vector<World::TVhclProto>> _debugReloadRetiredVhclProtos;
-    std::vector<std::vector<World::TWeapProto>> _debugReloadRetiredWeaponProtos;
-    std::vector<std::vector<World::TBuildingProto>> _debugReloadRetiredBuildProtos;
-    std::vector<std::vector<World::TSuperItemProfile>> _debugReloadRetiredSuperItemProfiles;
     std::vector<World::TRoboProto> _roboProtos;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
@@ -3290,25 +3283,25 @@ public:
     };
     std::vector<DebugAoeRing> _debugAoeRings;
 
-    // OpenNeoUA custom: active mortar bombardment markers for the opened strategic map.
+    // OpenNeoUA custom: active artillery shell bombardment markers for the opened strategic map.
     // Independent of the F10 overlay; shown while a barrage is active and a short
     // time after the last shell lands, then auto-expire.
-    struct MortarMarker
+    struct ArtilleryShellMarker
     {
         vec3d   pos;
         float   radius      = 0.0f;
         int32_t expireStamp = 0;
         uint8_t owner       = 0;
     };
-    std::vector<MortarMarker> _mortarMarkers;
+    std::vector<ArtilleryShellMarker> _artilleryShellMarkers;
 
-    // OpenNeoUA custom: gid of the mortar the player selected on the 2D map for a
+    // OpenNeoUA custom: gid of the artillery shell the player selected on the 2D map for a
     // manual strike (0 = none). Stored by gid, not pointer, so a unit dying
     // between the select-click and the target-click can never dangle.
-    uint32_t _mortarManualGid = 0;
-    // Bombardment radius of the selected mortar, cached for the white aiming
+    uint32_t _artilleryShellManualGid = 0;
+    // Bombardment radius of the selected artillery shell, cached for the white aiming
     // preview ring that follows the cursor until the strike is confirmed.
-    float _mortarManualRadius = 0.0f;
+    float _artilleryShellManualRadius = 0.0f;
 
     int32_t _polysCount = 0;
     int32_t _polysDraw = 0;
@@ -3363,9 +3356,11 @@ public:
     std::vector<TMapGem> _techUpgrades; // tech upgrades in level
     int32_t _upgradeId = 0;
     uint32_t _upgradeTimeStamp = 0;
-    // Shared fractional accumulator for the Host Station death slowdown.
+    // Shared fractional accumulator for every gameplay time-scale trigger.
     double _gameplayTimeScaleRemainder = 0.0;
     uint32_t _roboDeathTimeScaleEndTick = 0;
+    NC_STACK_ypabact *_kamikazeFireTimeScaleDrainUnit = NULL;
+    double _kamikazeFireTimeScaleHpDrainRemainder = 0.0;
     int32_t _gameplayRenderTimeBase = 0;
     bool _gameplayRenderTimeBaseSet = false;
     int32_t _upgradeVehicleId = 0;

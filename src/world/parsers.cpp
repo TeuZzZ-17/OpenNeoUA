@@ -2522,8 +2522,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
               !StriCmp(p1, "damaged_icon") ||
               !StriCmp(p1, "spawn_icon") ||
               !StriCmp(p1, "radar_icon") ||
-              !StriCmp(p1, "power_icon") ||
-              !StriCmp(p1, "seek_and_explode_icon") )
+              !StriCmp(p1, "power_icon") )
     {
         // Legacy no-op: vehicle capability icons are assigned automatically.
         // Keep accepting old script keys so vanilla/OpenNeoUA scripts still load.
@@ -2795,20 +2794,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->proximity_defense_random_pitch_set = true;
         _vhcl->proximity_defense_random_pitch_max = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "seek_and_explode") )
-    {
-        _vhcl->seek_and_explode = parser.stol(p2, NULL, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "seek_and_explode_weapon") )
-    {
-        int weaponId = parser.stol(p2, NULL, 0);
-        _vhcl->seek_and_explode_weapon = weaponId > 0 ? weaponId : 0;
-    }
-    else if ( !StriCmp(p1, "seek_and_explode_trigger_radius") )
-    {
-        float radius = parser.stof(p2, 0);
-        _vhcl->seek_and_explode_trigger_radius = radius > 0.0 ? radius : 0.0;
     }
     else if ( !StriCmp(p1, "ai_max_active_at_once") )
     {
@@ -3846,9 +3831,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->proximity_defense_random_pitch_set = false;
         _vhcl->proximity_defense_random_pitch_min = -10.0;
         _vhcl->proximity_defense_random_pitch_max = 45.0;
-        _vhcl->seek_and_explode = 0;
-        _vhcl->seek_and_explode_weapon = 0;
-        _vhcl->seek_and_explode_trigger_radius = 0.0;
         _vhcl->ai_max_active_at_once = 0;
         _vhcl->shield = 50;
         _vhcl->energy = 10000;
@@ -3978,6 +3960,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->airconst = 50.0;
         _wpn->maxrot = 2.0;
         _wpn->radius = 20.0;
+        _wpn->trigger_radius = 0.0;
         _wpn->aoe_unit_radius = 0.0;
         _wpn->aoe_building_radius = 0.0;
         _wpn->aoe_sector_radius = 0.0;
@@ -4019,7 +4002,10 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_chain_radius = 0.0;
         _wpn->laser_chain_damage_mult = 1.0;
         _wpn->laser_beam_count = 1;
-        _wpn->vertical_laser_fire_radius = 300.0;
+        _wpn->vertical_laser_enable = false;
+        _wpn->ai_vertical_laser_trigger_radius = 300.0f;
+        _wpn->fire_time_scale = 1.0f;
+        _wpn->fire_time_scale_hp_drain_percent = 0.0f;
         _wpn->vp_normal = 0;
         _wpn->vp_fire = 1;
         _wpn->vp_megadeth = 2;
@@ -4118,12 +4104,12 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_MISSILE;
         else if ( !StriCmp(p2, "homing_bomb") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_HOMING_BOMB;
-        else if ( !StriCmp(p2, "mortar") )
-            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_MORTAR;
+        else if ( !StriCmp(p2, "artillery_shell") )
+            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_ARTILLERY_SHELL;
         else if ( !StriCmp(p2, "laser") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_LASER;
-        else if ( !StriCmp(p2, "vertical_laser") )
-            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_VERTICAL_LASER;
+        else if ( !StriCmp(p2, "kamikaze") )
+            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_KAMIKAZE;
         else if ( !StriCmp(p2, "bomb") || !StriCmp(p2, "special") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_BOMB;
         else
@@ -4254,6 +4240,28 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "radius") )
     {
         _wpn->radius = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "trigger_radius") )
+    {
+        // Canonical model=kamikaze fuse value. Zero, absent, negative,
+        // malformed and non-finite values all mean physical contact.
+        _wpn->trigger_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    }
+    else if ( !StriCmp(p1, "fire_time_scale") )
+    {
+        float scale = parser.stof(p2, 0);
+        if ( !std::isfinite(scale) || scale <= 0.0f || scale >= 1.0f )
+            _wpn->fire_time_scale = 1.0f;
+        else
+            _wpn->fire_time_scale = std::max(0.05f, scale);
+    }
+    else if ( !StriCmp(p1, "fire_time_scale_hp_drain_percent") )
+    {
+        float percent = parser.stof(p2, 0);
+        if ( !std::isfinite(percent) || percent <= 0.0f )
+            _wpn->fire_time_scale_hp_drain_percent = 0.0f;
+        else
+            _wpn->fire_time_scale_hp_drain_percent = std::min(percent, 100.0f);
     }
     else if ( !StriCmp(p1, "aoe_unit_radius") )
     {
@@ -4547,22 +4555,14 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int maxTargets = parser.stol(p2, NULL, 0);
         _wpn->laser_beam_count = maxTargets > 1 ? maxTargets : 1;
     }
-    else if ( !StriCmp(p1, "vertical_laser_fire_radius") )
+    else if ( !StriCmp(p1, "vertical_laser_enable") )
+    {
+        _wpn->vertical_laser_enable = parser.stol(p2, NULL, 0) == 1;
+    }
+    else if ( !StriCmp(p1, "ai_vertical_laser_trigger_radius") )
     {
         float radius = parser.stof(p2, 0);
-        _wpn->vertical_laser_fire_radius = radius > 0.0 ? radius : 300.0;
-    }
-    else if ( !StriCmp(p1, "snd_loop_sample") )
-    {
-        _wpn->snd_loop.SetMainSampleVariant(0, p2);
-    }
-    else if ( !StriCmp(p1, "snd_loop_volume") )
-    {
-        _wpn->snd_loop.volume = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "snd_loop_pitch") )
-    {
-        _wpn->snd_loop.pitch = parser.stol(p2, NULL, 0);
+        _wpn->ai_vertical_laser_trigger_radius = std::isfinite(radius) && radius > 0.0f ? radius : 300.0f;
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
@@ -4882,72 +4882,72 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         else
             return ScriptParser::RESULT_BAD_DATA;
     }
-    else if ( !StriCmp(p1, "mortar_min_range") )
+    else if ( !StriCmp(p1, "artillery_shell_min_range") )
     {
         float v = parser.stof(p2, 0);
-        _wpn->mortar_min_range = v > 0.0 ? v : 0.0;
+        _wpn->artillery_shell_min_range = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "mortar_max_range") )
+    else if ( !StriCmp(p1, "artillery_shell_max_range") )
     {
         float v = parser.stof(p2, 0);
-        _wpn->mortar_max_range = v > 0.0 ? v : 0.0;
+        _wpn->artillery_shell_max_range = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "mortar_requires_radar") )
+    else if ( !StriCmp(p1, "artillery_shell_requires_radar") )
     {
-        _wpn->mortar_requires_radar = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
+        _wpn->artillery_shell_requires_radar = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "mortar_manual_mode_only") )
+    else if ( !StriCmp(p1, "artillery_shell_manual_mode_only") )
     {
-        _wpn->mortar_manual_mode_only = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
+        _wpn->artillery_shell_manual_mode_only = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "mortar_prefer_host_station") )
+    else if ( !StriCmp(p1, "artillery_shell_prefer_host_station") )
     {
-        _wpn->mortar_prefer_host_station = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
+        _wpn->artillery_shell_prefer_host_station = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "mortar_barrage_radius") )
+    else if ( !StriCmp(p1, "artillery_shell_barrage_radius") )
     {
         float v = parser.stof(p2, 0);
-        _wpn->mortar_barrage_radius = v > 0.0 ? v : 0.0;
+        _wpn->artillery_shell_barrage_radius = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "mortar_barrage_shots") )
+    else if ( !StriCmp(p1, "artillery_shell_barrage_shots") )
     {
         int v = parser.stol(p2, NULL, 0);
-        _wpn->mortar_barrage_shots = v > 0 ? v : 0;
+        _wpn->artillery_shell_barrage_shots = v > 0 ? v : 0;
     }
-    else if ( !StriCmp(p1, "mortar_barrage_shot_delay") )
+    else if ( !StriCmp(p1, "artillery_shell_barrage_shot_delay") )
     {
-        _wpn->mortar_barrage_shot_delay = parser.stol(p2, NULL, 0);
+        _wpn->artillery_shell_barrage_shot_delay = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "mortar_barrage_cooldown") )
+    else if ( !StriCmp(p1, "artillery_shell_barrage_cooldown") )
     {
-        _wpn->mortar_barrage_cooldown = parser.stol(p2, NULL, 0);
+        _wpn->artillery_shell_barrage_cooldown = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "mortar_arc_height") )
-    {
-        float v = parser.stof(p2, 0);
-        _wpn->mortar_arc_height = v > 0.0 ? v : 0.0;
-    }
-    else if ( !StriCmp(p1, "mortar_flight_time") )
-    {
-        _wpn->mortar_flight_time = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "mortar_spread_radius") )
+    else if ( !StriCmp(p1, "artillery_shell_arc_height") )
     {
         float v = parser.stof(p2, 0);
-        _wpn->mortar_spread_radius = v > 0.0 ? v : 0.0;
+        _wpn->artillery_shell_arc_height = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "mortar_inflight_drift") )
+    else if ( !StriCmp(p1, "artillery_shell_flight_time") )
+    {
+        _wpn->artillery_shell_flight_time = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "artillery_shell_spread_radius") )
     {
         float v = parser.stof(p2, 0);
-        _wpn->mortar_inflight_drift = v > 0.0 ? v : 0.0;
+        _wpn->artillery_shell_spread_radius = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "mortar_airburst") )
+    else if ( !StriCmp(p1, "artillery_shell_inflight_drift") )
     {
-        _wpn->mortar_airburst = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
+        float v = parser.stof(p2, 0);
+        _wpn->artillery_shell_inflight_drift = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "mortar_minimap_marker") )
+    else if ( !StriCmp(p1, "artillery_shell_airburst") )
     {
-        _wpn->mortar_minimap_marker = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
+        _wpn->artillery_shell_airburst = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
+    }
+    else if ( !StriCmp(p1, "artillery_shell_minimap_marker") )
+    {
+        _wpn->artillery_shell_minimap_marker = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
     }
     else if ( !StriCmp(p1, "begin_chain_fx") )
     {

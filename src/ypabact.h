@@ -491,26 +491,28 @@ public:
     void UpdateProximityDefense(update_msg *arg);
     bool CanUseProximityDefense();
     bool CanUseProximityDefenseAtDeath();
-    void UpdateMortar(update_msg *arg); // OpenNeoUA custom: radar-guided mortar barrage AI
-    bool StartMortarBarrage(const vec3d &targetCenter); // OpenNeoUA custom: begin a barrage at a point
-    bool CanManualMortar(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow = nullptr); // OpenNeoUA custom: manual-call validity (+ ready-now flag)
-    void QueueManualMortar(const vec3d &targetPos); // OpenNeoUA custom: queue a manual strike during cooldown
-    bool IsMortarPlatform(); // OpenNeoUA custom: true if any weapon slot is a mortar (blocks first-person entry)
-    bool IsManualMortarPlatform(); // OpenNeoUA custom: mortar platform that opted into manual map-click control
-    float GetMortarBarrageRadius(); // OpenNeoUA custom: bombardment zone radius of this unit's mortar (0 if none)
-    float GetMortarReadinessRatio(); // OpenNeoUA custom: 0..1 cooldown readiness for UI bars
-    void UpdateSeekAndExplode(update_msg *arg);
-    bool IsSeekAndExplodeArmed();
-    bool ApplySeekAndExplodeRammingGuidance();
+    void UpdateArtilleryShell(update_msg *arg); // OpenNeoUA custom: radar-guided artillery shell barrage AI
+    bool StartArtilleryShellBarrage(const vec3d &targetCenter); // OpenNeoUA custom: begin a barrage at a point
+    bool CanManualArtilleryShell(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow = nullptr); // OpenNeoUA custom: manual-call validity (+ ready-now flag)
+    void QueueManualArtilleryShell(const vec3d &targetPos); // OpenNeoUA custom: queue a manual strike during cooldown
+    bool IsArtilleryShellPlatform(); // OpenNeoUA custom: true if any weapon slot is an artillery shell (blocks first-person entry)
+    bool IsManualArtilleryShellPlatform(); // OpenNeoUA custom: artillery shell platform that opted into manual map-click control
+    float GetArtilleryShellBarrageRadius(); // OpenNeoUA custom: bombardment zone radius of this unit's artillery shell (0 if none)
+    float GetArtilleryShellReadinessRatio(); // OpenNeoUA custom: 0..1 cooldown readiness for UI bars
+    void UpdateKamikaze(update_msg *arg);
+    bool IsKamikazeArmed();
+    bool GetExclusiveKamikazeFireTimeScale(float *outScale, float *outHpDrainPercent);
+    bool ApplyKamikazeRammingGuidance();
+    bool GetKamikazeDebugSphere(float *outRadius);
     bool ApplyAiMaxAltitudeAboveGround();
     bool HasLocalPlayerForceVerticalPursuitTarget() const;
     // OpenNeoUA custom: continuous laser beam ("model = laser"). UpdateLaser drives the
-    // static tick damage, beam state and loop sound each frame; the firing paths only
-    // register a per-frame request via RequestLaserFire().
+    // static tick damage, beam state and serialized snd_normal playback each frame;
+    // the firing paths only register a per-frame request via RequestLaserFire().
     void UpdateLaser(update_msg *arg);
     void RequestLaserFire(int weaponId, bact_arg79 *arg);
-    void StopLaser(); // disconnect: reset tick state, stop loop sound, hide beam
-    void UpdateVerticalLaser(update_msg *arg); // OpenNeoUA custom: model = vertical_laser downward beam
+    void StopLaser(); // disconnect: reset tick state, stop active snd_normal/snd_hit, hide beam
+    void UpdateVerticalLaser(update_msg *arg); // OpenNeoUA custom: downward mode of model = laser
     void RequestVerticalLaserFire(int weaponId, bact_arg79 *arg);
     void StopVerticalLaser();
     void ApplyLaserEnergyDrain(float nominalDamage, float &remainder);
@@ -960,10 +962,11 @@ public:
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
     TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA custom: hardcoded first-person world/camera shake scaled from mgun_recoil
     TSndCarrier _mgun_recoil_shake_carrier;
-    TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: managed loop sound for model = laser
-    TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: managed loop sound for model = vertical_laser
+    TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: ordered snd_normal playback while model=laser is firing
+    TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: same snd_normal path for laser vertical mode
+    TSndCarrier _laser_launch_soundcarrier; // OpenNeoUA custom: one non-overlapping snd_launch event per laser activation
     TSndCarrier _laser_hit_soundcarrier; // OpenNeoUA custom: serialized one-shot snd_hit while any laser beam is in contact
-    TSndCarrier _vertical_laser_hit_soundcarrier; // OpenNeoUA custom: same snd_hit path for vertical_laser
+    TSndCarrier _vertical_laser_hit_soundcarrier; // OpenNeoUA custom: same snd_hit path for laser vertical mode
     TSndCarrier _mgun_soundcarrier; // OpenNeoUA custom: one-shot pulse sound for vehicle-controlled MG
     TSndCarrier _mimic_soundcarrier; // OpenNeoUA custom: persistent loop for model = mimic shell
     int _mgun_sound_index;
@@ -1113,21 +1116,21 @@ public:
     int _proximity_defense_next_shot_time;
     int _proximity_defense_next_activation_time;
     bool _proximity_defense_at_death_done;
-    // OpenNeoUA custom: mortar barrage runtime state (transient, not saved per instance)
-    bool _mortar_barrage_active = false;
+    // OpenNeoUA custom: artillery shell barrage runtime state (transient, not saved per instance)
+    bool _artillery_shell_barrage_active = false;
     // Shots left in the CURRENT firing cycle. A cycle's shots are a shared budget:
     // redirecting the barrage (manual or auto) spends from it and never refills it.
     // Only the cooldown (after the budget is spent) refills it. This stops the
     // "infinite barrage" exploit of re-aiming to dodge the cooldown.
-    int _mortar_shots_remaining = 0;
-    int _mortar_next_shot_time = 0;
-    int _mortar_next_activation_time = 0;
-    int _mortar_next_scan_time = 0;
-    vec3d _mortar_target_center;
+    int _artillery_shell_shots_remaining = 0;
+    int _artillery_shell_next_shot_time = 0;
+    int _artillery_shell_next_activation_time = 0;
+    int _artillery_shell_next_scan_time = 0;
+    vec3d _artillery_shell_target_center;
     // Manual order queued while on cooldown: the strike is accepted now (azure ring
     // shown) but only fires once the cooldown has elapsed. Never bypasses cooldown.
-    bool _mortar_has_pending = false;
-    vec3d _mortar_pending_target;
+    bool _artillery_shell_has_pending = false;
+    vec3d _artillery_shell_pending_target;
     struct TLaserBeamRequest
     {
         NC_STACK_ypabact *target = NULL;
@@ -1167,7 +1170,7 @@ public:
     float _laserEnergyDrainRemainder = 0.0f;
     std::vector<TLaserBeamRequest> _laser_requests;
     std::vector<TLaserBeamRuntime> _laser_beams;
-    // OpenNeoUA custom: separate downward beam runtime for model = vertical_laser.
+    // OpenNeoUA custom: separate downward-beam runtime used by model=laser vertical mode.
     bool _vertical_laser_active = false;
     bool _vertical_laser_fire_request = false;
     int _vertical_laser_weapon = -1;
@@ -1177,10 +1180,7 @@ public:
     float _verticalLaserEnergyDrainRemainder = 0.0f;
     TLaserBeamRuntime _vertical_laser_beam;
     std::vector<TLaserBeamRuntime> _vertical_laser_beams;
-    int _seek_and_explode;
-    int _seek_and_explode_weapon;
-    float _seek_and_explode_trigger_radius;
-    bool _seek_and_explode_triggered;
+    bool _kamikaze_triggered;
     std::vector<World::TRoboGun> _unitGuns;
     std::string _gunDisplayName;
     mat3x3 _unitGunsParentRotation;
