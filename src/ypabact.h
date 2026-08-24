@@ -501,7 +501,8 @@ public:
     float GetArtilleryShellReadinessRatio(); // OpenNeoUA custom: 0..1 cooldown readiness for UI bars
     void UpdateKamikaze(update_msg *arg);
     bool IsKamikazeArmed();
-    bool GetExclusiveKamikazeFireTimeScale(float *outScale, float *outHpDrainPercent);
+    bool GetKamikazeFireTimeScale(float *outScale, float *outHpDrainPercent);
+    bool TriggerKamikazeDetonation(NC_STACK_ypabact *directHit);
     bool ApplyKamikazeRammingGuidance();
     bool GetKamikazeDebugSphere(float *outRadius);
     bool ApplyAiMaxAltitudeAboveGround();
@@ -639,7 +640,7 @@ public:
     bool HasMinigun() const;
     float GetMinigunRange() const;
     bool UsesVehicleMinigunTiming() const { return !_mgun_set && _mgun_shot_time > 0; }
-    int GetMinigunShotTime(bool userControlled, int frameDeltaMs) const;
+    int GetMinigunShotTime(int frameDeltaMs) const;
     float GetMinigunPower() const { return _mgun_power_set ? _mgun_power : _gun_power; }
     float GetMinigunAngle() const { return _mgun_angle_set ? _mgun_angle : _gun_angle; }
 
@@ -1029,7 +1030,6 @@ public:
     bool _mgun_set;
     int _num_mguns;
     int _mgun_shot_time;
-    int _mgun_shot_time_user;
     float _mgunEnergyDrainRemainder;
     int32_t _mgunEnergyDrainLastFireTime;
     float _mgun_recoil;

@@ -308,6 +308,12 @@ TVhclProto::~TVhclProto()
         mg_wireframe = NULL;
     }
 
+    if ( mgun_wireframe )
+    {
+        mgun_wireframe->Delete();
+        mgun_wireframe = NULL;
+    }
+
     if ( wpn_wireframe_1 )
     {
         wpn_wireframe_1->Delete();

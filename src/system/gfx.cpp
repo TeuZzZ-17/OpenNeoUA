@@ -5562,6 +5562,55 @@ void GFXEngine::QueueVirtualUISolidRect(float left, float top, float right, floa
     _virtualUiSolidRects.push_back(rect);
 }
 
+void GFXEngine::OccludeVirtualUISolidRects(const Common::Rect &occluder)
+{
+    if ( _virtualUiSolidRects.empty() || occluder.IsEmpty() )
+        return;
+
+    const float exLeft = (float)occluder.left;
+    const float exTop = (float)occluder.top;
+    const float exRight = (float)occluder.right;
+    const float exBottom = (float)occluder.bottom;
+
+    std::vector<TVirtualUISolidRect> clipped;
+    clipped.reserve(_virtualUiSolidRects.size() * 2);
+
+    auto append = [&clipped](const TVirtualUISolidRect &source,
+                             float left, float top, float right, float bottom)
+    {
+        if ( right <= left || bottom <= top )
+            return;
+
+        TVirtualUISolidRect part = source;
+        part.left = left;
+        part.top = top;
+        part.right = right;
+        part.bottom = bottom;
+        clipped.push_back(part);
+    };
+
+    for ( const TVirtualUISolidRect &rect : _virtualUiSolidRects )
+    {
+        const float hitLeft = std::max(rect.left, exLeft);
+        const float hitTop = std::max(rect.top, exTop);
+        const float hitRight = std::min(rect.right, exRight);
+        const float hitBottom = std::min(rect.bottom, exBottom);
+
+        if ( hitRight <= hitLeft || hitBottom <= hitTop )
+        {
+            clipped.push_back(rect);
+            continue;
+        }
+
+        append(rect, rect.left, rect.top, rect.right, hitTop);
+        append(rect, rect.left, hitBottom, rect.right, rect.bottom);
+        append(rect, rect.left, hitTop, hitLeft, hitBottom);
+        append(rect, hitRight, hitTop, rect.right, hitBottom);
+    }
+
+    _virtualUiSolidRects.swap(clipped);
+}
+
 void GFXEngine::DrawVirtualUISolidRects()
 {
     if ( _virtualUiSolidRects.empty() || !VirtualUISurface ||
