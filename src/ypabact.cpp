@@ -9225,6 +9225,26 @@ int NC_STACK_ypabact::GetCurrentWeaponId()
     return ypabact_IsValidFireWeaponId(this, weaponId) ? weaponId : -1;
 }
 
+int NC_STACK_ypabact::GetHUDWeaponId()
+{
+    const int weaponId = GetCurrentWeaponId();
+    if ( weaponId >= 0 )
+        return weaponId;
+
+    // Kamikaze Weapons are intentionally excluded from normal weapon selection
+    // and firing. The HUD still needs to expose the real mounted payload, so
+    // reuse the authoritative Kamikaze mount resolver instead of duplicating
+    // slot/attachment lookup logic in the UI.
+    TKamikazeMount mount;
+    if ( ypabact_ResolveKamikazeMount(this, &mount) &&
+         ypabact_IsKamikazeMountArmed(mount) )
+    {
+        return mount.weaponId;
+    }
+
+    return -1;
+}
+
 int NC_STACK_ypabact::GetCurrentWeaponProjectileCount()
 {
     // Low-HP weapon is an override, not a fifth selectable slot; preserve the
