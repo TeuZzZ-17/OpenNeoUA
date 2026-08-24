@@ -253,6 +253,9 @@ enum OPENUA_STRING
     OUA_VS_CRUISER,
     OUA_GEM_CRUISER_DAMAGE_UPGRADE,
 
+    // Genesis per-Vehicle production limit upgrade notification.
+    OUA_GEM_MAX_UNITS_UPGRADE,
+
     OUA_STRING_MAX
 };
 

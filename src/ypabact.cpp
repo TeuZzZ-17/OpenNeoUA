@@ -2287,6 +2287,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _bflags = 0;
     _commandID = 0;
     _host_station = NULL;
+    _isGenesisProduced = false;
     _parent = NULL;
 
     _soundFlags = 0;
@@ -2566,6 +2567,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _bact_type = BACT_TYPES_BACT;
 //    ypabact.field_3DA = 0;
     _host_station = NULL;
+    _isGenesisProduced = false;
     _viewer_rotation = mat3x3::Ident();
     _fly_dir = vec3d(0.0, 0.0, 0.0);
     _fly_dir_length = 0;
@@ -15810,6 +15812,7 @@ void NC_STACK_ypabact::Renew()
     _oflags = BACT_OFLAG_EXACTCOLL;
     _status_flg = 0;
     _host_station = NULL;
+    _isGenesisProduced = false;
     _yls_time = 3000;
     _primTtype = BACT_TGT_TYPE_NONE;
 

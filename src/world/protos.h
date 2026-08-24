@@ -650,7 +650,7 @@ struct TVhclProto
     bool proximity_defense_random_pitch_set = false;
     float proximity_defense_random_pitch_min = -10.0;
     float proximity_defense_random_pitch_max = 45.0;
-    int ai_max_active_at_once = 0;
+    int max_active_at_once = 0;
     std::vector<DestFX> dest_fx;      // dest_fx
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFX;

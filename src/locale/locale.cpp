@@ -429,6 +429,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_GEM_CAR_DAMAGE_UPGRADE:      fallback = "Car Damage Upgrade"; break;
         case OUA_GEM_GUN_DAMAGE_UPGRADE:      fallback = "Gun Damage Upgrade"; break;
         case OUA_GEM_CRUISER_DAMAGE_UPGRADE:  fallback = "Cruiser Damage Upgrade"; break;
+        case OUA_GEM_MAX_UNITS_UPGRADE:       fallback = "MAX UNITS UPGRADE"; break;
         default: break;
     }
 
