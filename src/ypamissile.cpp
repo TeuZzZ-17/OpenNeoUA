@@ -667,7 +667,7 @@ void NC_STACK_ypamissile::RenderWeaponTracer(baseRender_msg *arg)
 void NC_STACK_ypamissile::Render(baseRender_msg *arg)
 {
     // Preserve the complete existing projectile VP path, including particles,
-    // tint, scale and corkscrew. The procedural tracer is queued in addition.
+    // tint, scale and spiral. The procedural tracer is queued in addition.
     NC_STACK_ypabact::Render(arg);
     RenderWeaponTracer(arg);
 }
@@ -2866,7 +2866,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
 
     if ( arg->newStatus == BACT_STATUS_DEAD )
     {
-        FreezeProjectileCorkspinVisual();
+        FreezeProjectileSpiralVisual();
         SetVP(_vp_dead);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 2);
@@ -2879,7 +2879,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
 
     if ( arg->newStatus == BACT_STATUS_NORMAL )
     {
-        ResetProjectileCorkspinVisualFreeze();
+        ResetProjectileSpiralVisualFreeze();
         SetVP(_vp_normal);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 0);
@@ -2887,7 +2887,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
 
     if ( arg->unsetFlags == BACT_STFLAG_DEATH2 )
     {
-        ResetProjectileCorkspinVisualFreeze();
+        ResetProjectileSpiralVisualFreeze();
         SetVP(_vp_normal);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 0);
@@ -2897,7 +2897,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
     {
         _status = BACT_STATUS_DEAD;
 
-        FreezeProjectileCorkspinVisual();
+        FreezeProjectileSpiralVisual();
         SetVP(_vp_megadeth);
 
         SFXEngine::SFXe.startSound(&_soundcarrier, 2);
