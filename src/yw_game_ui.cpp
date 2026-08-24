@@ -13389,15 +13389,24 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
     if ( weap )
     {
         std::string txt2;
+        const int displayBaseEnergy = weap->IsKamikaze()
+                                          ? weap->aoe_unit_energy
+                                          : weap->energy;
         const int effectiveEnergy = bact
-            ? bact->GetEffectiveOutgoingDamage(weap->energy)
-            : weap->energy;
+            ? bact->GetEffectiveOutgoingDamage(displayBaseEnergy)
+            : displayBaseEnergy;
 
         // Show the actual current per-instance damage directly in DMG. Kill
         // marks and Black Sect clone balance stay runtime-only and never mutate
         // shared weapon prototypes, but the player readout now reflects the
-        // same effective value used by the final damage choke point.
-        if ( weap->IsLaser() )
+        // same effective value used by the final damage choke point. Kamikaze
+        // is a mounted AoE payload rather than a normal projectile, so its DMG
+        // row intentionally reports aoe_unit_energy (energy is commonly 0).
+        if ( weap->IsKamikaze() )
+        {
+            txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
+        }
+        else if ( weap->IsLaser() )
         {
             txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
 
@@ -13473,7 +13482,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
     int weaponId = vhcl->weapon;
 
     if ( bact )
-        weaponId = bact->GetCurrentWeaponId();
+        weaponId = bact->GetHUDWeaponId();
 
     if ( weaponId == -1 )
         weap = NULL;
@@ -13511,7 +13520,10 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
 
             yw_RenderInfoWeaponWire(yw, wis, weap, xpos,   ypos - wis->field_92 * 9.0);
 
-            yw_RenderInfoReloadbar(yw, wis, cur, bact, weap, xpos,  ypos - wis->field_92 * 7.0);
+            // A Kamikaze payload is not a normally fireable/cooldown weapon, so
+            // keep its name/wireframe/DMG visible without inventing a fake RLD.
+            if ( !weap->IsKamikaze() )
+                yw_RenderInfoReloadbar(yw, wis, cur, bact, weap, xpos,  ypos - wis->field_92 * 7.0);
 
             yw_RenderInfoWeaponInf(yw, wis, cur, bact, vhcl, weap, xpos,  ypos - wis->field_92 * 9.0);
         }
