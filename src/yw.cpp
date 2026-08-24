@@ -226,31 +226,76 @@ static PlayerSprintConfig yw_GetPlayerSprintConfig()
     return config;
 }
 
+static bool yw_IsKamikazeFireHeld(NC_STACK_ypaworld *yw, TInputState *inpt)
+{
+    return yw && inpt &&
+           (inpt->Buttons.Is(0) ||
+            (yw->_mouseGrabbed &&
+             World::IsFixedInputShortcutHeld(World::INPUT_BIND_FIRE)));
+}
+
+static void yw_UpdateKamikazeFireLatch(NC_STACK_ypaworld *yw, TInputState *inpt)
+{
+    if ( !yw )
+        return;
+
+    if ( yw->_isNetGame || !inpt )
+    {
+        yw->_kamikazeFireInputWasHeld = false;
+        yw->_kamikazeFireTimeScaleDrainGid = 0;
+        yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+        return;
+    }
+
+    const bool fireHeld = yw_IsKamikazeFireHeld(yw, inpt);
+    const bool firePressed = fireHeld && !yw->_kamikazeFireInputWasHeld;
+    yw->_kamikazeFireInputWasHeld = fireHeld;
+
+    if ( yw->_kamikazeFireTimeScaleDrainGid > 0 )
+    {
+        NC_STACK_ypabact *latchedUnit =
+            yw->FindLiveBactByGid(yw->_kamikazeFireTimeScaleDrainGid);
+        float scale = 1.0f;
+        float drain = 0.0f;
+        if ( latchedUnit && latchedUnit->GetKamikazeFireTimeScale(&scale, &drain) )
+            return;
+
+        yw->_kamikazeFireTimeScaleDrainGid = 0;
+        yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+    }
+
+    if ( !firePressed || !yw->_userUnit || !yw->_userUnit->getBACT_inputting() )
+        return;
+
+    float scale = 1.0f;
+    float drain = 0.0f;
+    if ( !yw->_userUnit->GetKamikazeFireTimeScale(&scale, &drain) )
+        return;
+
+    // One valid player FIRE press permanently arms this runtime sequence. The
+    // same input is intentionally left untouched so any normally fireable
+    // Weapon/MGUN can still react to the click in its existing User_layer.
+    yw->_kamikazeFireTimeScaleDrainGid = yw->_userUnit->_gid;
+    yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+}
+
 static bool yw_GetActiveKamikazeFireTimeScale(NC_STACK_ypaworld *yw,
-                                                   TInputState *inpt,
-                                                   float *outScale,
-                                                   float *outHpDrainPercent)
+                                               float *outScale,
+                                               float *outHpDrainPercent)
 {
     if ( outScale )
         *outScale = 1.0f;
     if ( outHpDrainPercent )
         *outHpDrainPercent = 0.0f;
 
-    if ( !yw || yw->_isNetGame || !inpt || !yw->_userUnit ||
-         !yw->_userUnit->getBACT_inputting() )
+    if ( !yw || yw->_isNetGame || yw->_kamikazeFireTimeScaleDrainGid <= 0 )
         return false;
 
-    const bool fireHeld =
-        inpt->Buttons.Is(0) ||
-        (yw->_mouseGrabbed && World::IsFixedInputShortcutHeld(World::INPUT_BIND_FIRE));
-    if ( !fireHeld )
-        return false;
-
-    return yw->_userUnit->GetExclusiveKamikazeFireTimeScale(outScale,
-                                                             outHpDrainPercent);
+    NC_STACK_ypabact *unit = yw->FindLiveBactByGid(yw->_kamikazeFireTimeScaleDrainGid);
+    return unit && unit->GetKamikazeFireTimeScale(outScale, outHpDrainPercent);
 }
 
-static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw, TInputState *inpt)
+static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw)
 {
     if ( !yw || yw->_isNetGame )
         return 1.0f;
@@ -260,14 +305,13 @@ static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw, TInputState *i
         scale = std::min(scale, yw_GetRoboDeathScaleProfile().scale);
 
     float fireScale = 1.0f;
-    if ( yw_GetActiveKamikazeFireTimeScale(yw, inpt, &fireScale, NULL) )
+    if ( yw_GetActiveKamikazeFireTimeScale(yw, &fireScale, NULL) )
         scale = std::min(scale, fireScale);
 
     return scale;
 }
 
 static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
-                                                   TInputState *inpt,
                                                    int32_t unscaledFrameTime)
 {
     if ( !yw )
@@ -275,25 +319,23 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
 
     float scale = 1.0f;
     float drainPercent = 0.0f;
-    const bool active = unscaledFrameTime > 0 &&
-                        yw_GetActiveKamikazeFireTimeScale(yw, inpt, &scale,
-                                                          &drainPercent);
-    if ( !active || drainPercent <= 0.0f || !yw->_userUnit )
+    if ( !yw_GetActiveKamikazeFireTimeScale(yw, &scale, &drainPercent) ||
+         drainPercent <= 0.0f )
     {
-        yw->_kamikazeFireTimeScaleDrainUnit = NULL;
+        yw->_kamikazeFireTimeScaleDrainGid = 0;
         yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
         return;
     }
 
-    NC_STACK_ypabact *unit = yw->_userUnit;
-    if ( yw->_kamikazeFireTimeScaleDrainUnit != unit )
-    {
-        yw->_kamikazeFireTimeScaleDrainUnit = unit;
-        yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
-    }
+    // Debug freeze pauses the irreversible sequence; it must not cancel the
+    // latch. Releasing FIRE likewise has no effect after activation.
+    if ( unscaledFrameTime <= 0 )
+        return;
 
-    if ( unit->IsInvulnerableToDamage() || unit->_energy <= 0 || unit->_energy_max <= 0 )
+    NC_STACK_ypabact *unit = yw->FindLiveBactByGid(yw->_kamikazeFireTimeScaleDrainGid);
+    if ( !unit || unit->_energy <= 0 || unit->_energy_max <= 0 )
     {
+        yw->_kamikazeFireTimeScaleDrainGid = 0;
         yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
         return;
     }
@@ -308,9 +350,20 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
         return;
 
     yw->_kamikazeFireTimeScaleHpDrainRemainder -= energyDrain;
+
+    if ( energyDrain >= unit->_energy )
+    {
+        // Detonate while the carrier is still alive so the shared Kamikaze
+        // payload path runs before the generic zero-energy death lifecycle.
+        if ( unit->TriggerKamikazeDetonation(NULL) )
+        {
+            yw->_kamikazeFireTimeScaleDrainGid = 0;
+            yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+        }
+        return;
+    }
+
     unit->_energy -= energyDrain;
-    if ( unit->_energy < 0 )
-        unit->_energy = 0;
 }
 
 static int32_t yw_GetScaledGameplayFrameTime(NC_STACK_ypaworld *yw,
@@ -1638,7 +1691,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
 
         const int32_t unscaledFrameTime = arg->DTime;
-        const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this, arg->field_8);
+        yw_UpdateKamikazeFireLatch(this, arg->field_8);
+        const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this);
 
         // Host Station death and Kamikaze FIRE share the single global gameplay-time scale.
         // GEM unlock notifications remain entirely on real/UI time.
@@ -1674,7 +1728,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         {
             ypaworld_func64__sub1(arg->field_8); //Precompute input (add mouse turn)
 
-            if ( HasActiveNewGemNotification() )
+            if ( HasActiveNewGemNotification() && !yw_IsPriorityGameplayUiOpen() )
             {
                 const bool escRequested =
                     _kbdLastKeyHit == Input::KC_ESCAPE ||
@@ -1874,7 +1928,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
         bool gameplayFrozen = openUADebug && _debugGameplayFrozen;
 
-        yw_UpdateKamikazeFireTimeScaleHpDrain(this, arg->field_8,
+        yw_UpdateKamikazeFireTimeScaleHpDrain(this,
                                                gameplayFrozen ? 0 : unscaledFrameTime);
 
         if ( !gameplayFrozen )
@@ -2157,6 +2211,11 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 }
 
                 debug_info_draw(arg->field_8);
+
+                // Map/Squadron Manager only occlude gameplay UI inside their
+                // own rectangles. Finalize them after every ordinary overlay
+                // so the overlap can be cleared without globally hiding HUD.
+                yw_FinalizePriorityGameplayUi(this);
 
                 GFX::Engine.EndVirtualUI();
 
@@ -3911,7 +3970,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_set = vhcl.mgun_set;
         bacto->_num_mguns = vhcl.num_mguns > 0 ? vhcl.num_mguns : 1;
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
-        bacto->_mgun_shot_time_user = vhcl.mgun_shot_time_user;
         bacto->_mgun_recoil = vhcl.mgun_recoil;
         bacto->_mgun_tracer = vhcl.mgun_tracer;
         bacto->_mgun_decal_enable = vhcl.mgun_decal_enable;
@@ -4865,8 +4923,9 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _upgradeTimeStamp = 0;
     _gameplayTimeScaleRemainder = 0.0;
     _roboDeathTimeScaleEndTick = 0;
-    _kamikazeFireTimeScaleDrainUnit = NULL;
+    _kamikazeFireTimeScaleDrainGid = 0;
     _kamikazeFireTimeScaleHpDrainRemainder = 0.0;
+    _kamikazeFireInputWasHeld = false;
     _gameplayRenderTimeBase = 0;
     _gameplayRenderTimeBaseSet = false;
     _upgradeVehicleId = 0;
@@ -5157,14 +5216,14 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_BRAKE]         = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 3, Input::KC_SPACE);
     usr->InputConfig[World::INPUT_BIND_CAMFIRE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_EXTRA7);
     usr->InputConfig[World::INPUT_BIND_HUD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 25, Input::KC_H);
-    usr->InputConfig[World::INPUT_BIND_NEW]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 2,  Input::KC_C);
+    usr->InputConfig[World::INPUT_BIND_NEW]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 2,  Input::KC_3);
     usr->InputConfig[World::INPUT_BIND_ADD]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 3,  Input::KC_Q);
     usr->InputConfig[World::INPUT_BIND_ORDER]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 0,  Input::KC_O);
     usr->InputConfig[World::INPUT_BIND_ATTACK]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 1,  Input::KC_SPACE);
     usr->InputConfig[World::INPUT_BIND_CONTROL]     = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 4,  Input::KC_J);
     usr->InputConfig[World::INPUT_BIND_AUTOPILOT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 7,  Input::KC_B);
-    usr->InputConfig[World::INPUT_BIND_MAP]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 8,  Input::KC_M);
-    usr->InputConfig[World::INPUT_BIND_SQ_MANAGE]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 9,  Input::KC_E);
+    usr->InputConfig[World::INPUT_BIND_MAP]         = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 8,  Input::KC_1);
+    usr->InputConfig[World::INPUT_BIND_SQ_MANAGE]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 9,  Input::KC_2);
     usr->InputConfig[World::INPUT_BIND_LANDLAYER]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 10, Input::KC_NUM1);
     usr->InputConfig[World::INPUT_BIND_OWNER]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 11, Input::KC_NUM2);
     usr->InputConfig[World::INPUT_BIND_HEIGHT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 12, Input::KC_NUM3);
@@ -5181,11 +5240,11 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_LAST_MSG]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 31, Input::KC_F8);
     usr->InputConfig[World::INPUT_BIND_PAUSE]       = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 32, Input::KC_P);
     usr->InputConfig[World::INPUT_BIND_TO_ALL]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 37, Input::KC_SHIFT);
-    usr->InputConfig[World::INPUT_BIND_AGGR_1]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 38, Input::KC_1);
-    usr->InputConfig[World::INPUT_BIND_AGGR_2]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 39, Input::KC_2);
-    usr->InputConfig[World::INPUT_BIND_AGGR_3]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 40, Input::KC_3);
-    usr->InputConfig[World::INPUT_BIND_AGGR_4]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 41, Input::KC_4);
-    usr->InputConfig[World::INPUT_BIND_AGGR_5]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 42, Input::KC_5);
+    usr->InputConfig[World::INPUT_BIND_AGGR_1]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 38, Input::KC_NONE);
+    usr->InputConfig[World::INPUT_BIND_AGGR_2]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 39, Input::KC_NONE);
+    usr->InputConfig[World::INPUT_BIND_AGGR_3]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 40, Input::KC_NONE);
+    usr->InputConfig[World::INPUT_BIND_AGGR_4]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 41, Input::KC_NONE);
+    usr->InputConfig[World::INPUT_BIND_AGGR_5]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 42, Input::KC_NONE);
     usr->InputConfig[World::INPUT_BIND_WAPOINT]     = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 4,  Input::KC_SHIFT);
     usr->InputConfig[World::INPUT_BIND_HELP]        = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 43, Input::KC_F1);
     usr->InputConfig[World::INPUT_BIND_LAST_SEAT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 44, Input::KC_BACKSPACE);

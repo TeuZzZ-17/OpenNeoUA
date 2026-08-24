@@ -23,7 +23,7 @@ namespace World
 // Energy / max HP and sound pitch are intentionally left untouched. See the call
 // sites in ypabact.cpp for the exact effective values adjusted at runtime: force,
 // maxrot, effective shield, outgoing unit/sector damage and the selected
-// shot_time/user or mgun_shot_time/user cooldown. The grey identity tint remains
+// shot_time/user or mgun_shot_time cooldown. The grey identity tint remains
 // render-only and is not part of the stat malus.
 namespace CloneBalance
 {

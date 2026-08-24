@@ -573,7 +573,6 @@ struct TVhclProto
     bool mgun_set = false;
     int16_t num_mguns = 1;
     int mgun_shot_time = 0;
-    int mgun_shot_time_user = 0;
     float mgun_recoil = 0.0f;
     // OpenNeoUA: shared tracer config used by normal Vehicle MGUNs and
     // model = gun/module + gun_type = mg; authoring uses mgun_mesh_tracer_*.
@@ -584,6 +583,7 @@ struct TVhclProto
     int16_t mgun_vp_megadeth = 0;
     float mgun_power = 0.0;
     float mgun_angle = 0.0;
+    std::string mgun_name;
     bool mgun_power_set = false;
     bool mgun_angle_set = false;
     float weapon_spread_x = 0.0;
@@ -745,6 +745,8 @@ struct TVhclProto
     NC_STACK_skeleton *wireframe = NULL;
     NC_STACK_skeleton *hud_wireframe = NULL;
     NC_STACK_skeleton *mg_wireframe = NULL;
+    // OpenNeoUA custom: optional Weapon-style info wireframe for gun_type = mg.
+    NC_STACK_skeleton *mgun_wireframe = NULL;
     NC_STACK_skeleton *wpn_wireframe_1 = NULL;
     NC_STACK_skeleton *wpn_wireframe_2 = NULL;
     IDVList initParams;
@@ -1020,8 +1022,8 @@ struct TWeapProto
     // OpenNeoUA custom, model = kamikaze only: true XYZ proximity fuse.
     // Zero means physical contact (effective carrier radius + target radius).
     float trigger_radius = 0.0;
-    float fire_time_scale = 1.0f; // model=kamikaze: hold FIRE as sole weapon; 1.0 disables slowdown
-    float fire_time_scale_hp_drain_percent = 0.0f; // max-HP percent drained per real second while FIRE time scale is active
+    float fire_time_scale = 1.0f; // model=kamikaze/player: one FIRE press latches slowdown; 1.0 disables the sequence
+    float fire_time_scale_hp_drain_percent = 0.0f; // max-HP percent drained per real second by the latched sequence; <=0 disables it
     float aoe_unit_radius = 0.0;
     float aoe_building_radius = 0.0;
     float aoe_sector_radius = 0.0;

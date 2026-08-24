@@ -836,6 +836,9 @@ int yw_write_globals(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
 {
     fil->printf("\nbegin_globals\n");
     fil->printf("    time = %d\n", yw->_timeStamp);
+    if ( yw->_kamikazeFireTimeScaleDrainGid > 0 )
+        fil->printf("    kamikaze_fire_latched_gid = %d\n",
+                    yw->_kamikazeFireTimeScaleDrainGid);
     fil->printf("end\n\n");
     return 1;
 }

@@ -594,6 +594,10 @@ public:
     // priority of vanilla world/HUD status bars without per-segment draw calls.
     void QueueVirtualUISolidRect(float left, float top, float right, float bottom,
                                  const TGLColor &color);
+    // Remove only the portions of queued virtual-UI solid rectangles covered
+    // by an opaque-priority UI rectangle. Used by strategic windows so mesh
+    // status bars obey the same geometric occlusion as the SDL UI surface.
+    void OccludeVirtualUISolidRects(const Common::Rect &occluder);
     Common::Point GetVirtualUIResolution() const;
     void BeginVirtualUI(const Common::Point &logicalSize);
     void EndVirtualUI();

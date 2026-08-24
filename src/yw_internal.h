@@ -109,6 +109,8 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
 
 
 void create_squad_man(NC_STACK_ypaworld *yw);
+bool yw_IsPriorityGameplayUiOpen();
+void yw_FinalizePriorityGameplayUi(NC_STACK_ypaworld *yw);
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw);
 
 void draw_tooltip(NC_STACK_ypaworld *yw, const SDL_Color *uiAccent = NULL);

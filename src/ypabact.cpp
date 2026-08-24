@@ -2420,7 +2420,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_set = false;
     _num_mguns = 1;
     _mgun_shot_time = 0;
-    _mgun_shot_time_user = 0;
     _mgunEnergyDrainRemainder = 0.0f;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil = 0.0f;
@@ -3427,14 +3426,9 @@ float NC_STACK_ypabact::GetMinigunRange() const
     return ypabact_GetMinigunRange();
 }
 
-int NC_STACK_ypabact::GetMinigunShotTime(bool userControlled, int frameDeltaMs) const
+int NC_STACK_ypabact::GetMinigunShotTime(int frameDeltaMs) const
 {
-    int shotTime = _mgun_shot_time;
-
-    if ( userControlled && _mgun_shot_time_user > 0 )
-        shotTime = _mgun_shot_time_user;
-
-    shotTime = GetEffectiveShotTime(shotTime);
+    int shotTime = GetEffectiveShotTime(_mgun_shot_time);
 
     if ( shotTime < frameDeltaMs )
         shotTime = frameDeltaMs;
@@ -6914,11 +6908,21 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
         _atk_ret = TargetAssess(&arg110);
     }
 
+    const bool kamikazeArmed = ypabact_IsKamikazeArmed(this);
+
     if ( _atk_ret == TA_FIGHT )
     {
         float cellDistance = (cellPos->XZ() - _position.XZ()).length();
 
-        if ( _status_flg & BACT_STFLAG_APPROACH )
+        // A Kamikaze assigned to a neutral/enemy sector must close all the way
+        // to its fuse point instead of using the vanilla sector standoff orbit.
+        // This mirrors the already-authoritative unit-target Kamikaze path.
+        if ( kamikazeArmed )
+        {
+            _status_flg &= ~BACT_STFLAG_APPROACH;
+            _status_flg |= BACT_STFLAG_ATTACK;
+        }
+        else if ( _status_flg & BACT_STFLAG_APPROACH )
         {
             _status_flg &= ~BACT_STFLAG_ATTACK;
 
@@ -7163,8 +7167,11 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
 
                 LaunchMissile(&arg79);
             }
-            else
+            else if ( !kamikazeArmed )
             {
+                // No normal Weapon can fire at this sector. A mounted Kamikaze
+                // is itself a valid sector attack path, so keep ATTACK latched
+                // for ApplyKamikazeRammingGuidance()/UpdateKamikaze().
                 _status_flg &= ~BACT_STFLAG_ATTACK;
             }
 
@@ -8003,48 +8010,8 @@ bool NC_STACK_ypabact::IsKamikazeArmed()
     return ypabact_IsKamikazeArmed(this);
 }
 
-static bool ypabact_SourceHasOtherWeaponForKamikazeTimeScale(
-    NC_STACK_ypabact *source,
-    const TKamikazeMount &mount,
-    bool *matchedPayloadSlot)
-{
-    if ( !source || !source->getBACT_pWorld() || !matchedPayloadSlot )
-        return false;
-
-    if ( ypabact_IsLowHPWeaponActive(source) || source->HasMinigun() )
-        return true;
-
-    const std::vector<World::TWeapProto> &weapons = source->getBACT_pWorld()->GetWeaponsProtos();
-    const int weaponIds[4] = {
-        source->_weapon,
-        source->_extra_weapons[0],
-        source->_extra_weapons[1],
-        source->_extra_weapons[2]
-    };
-
-    for (int slot = 0; slot < 4; ++slot)
-    {
-        const int weaponId = weaponIds[slot];
-        if ( (slot == 0 && weaponId < 0) ||
-             (slot > 0 && weaponId <= 0) ||
-             (size_t)weaponId >= weapons.size() )
-            continue;
-
-        if ( source == mount.payloadSource && weaponId == mount.weaponId &&
-             !*matchedPayloadSlot )
-        {
-            *matchedPayloadSlot = true;
-            continue;
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
-bool NC_STACK_ypabact::GetExclusiveKamikazeFireTimeScale(float *outScale,
-                                                          float *outHpDrainPercent)
+bool NC_STACK_ypabact::GetKamikazeFireTimeScale(float *outScale,
+                                                  float *outHpDrainPercent)
 {
     if ( outScale )
         *outScale = 1.0f;
@@ -8055,50 +8022,22 @@ bool NC_STACK_ypabact::GetExclusiveKamikazeFireTimeScale(float *outScale,
     if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
          !ypabact_IsKamikazeMountArmed(mount) ||
          mount.carrier != this || !mount.weapon )
+    {
         return false;
-
-    bool matchedPayloadSlot = false;
-    std::vector<NC_STACK_ypabact *> sources;
-    sources.push_back(mount.carrier);
-
-    for (const World::TRoboGun &gun : mount.carrier->_unitGuns)
-    {
-        if ( ypabact_IsKamikazeActorUsable(gun.gun_obj) &&
-             std::find(sources.begin(), sources.end(), gun.gun_obj) == sources.end() )
-            sources.push_back(gun.gun_obj);
     }
-
-    if ( NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(mount.carrier) )
-    {
-        for (const World::TRoboGun &gun : robo->GetGuns())
-        {
-            if ( ypabact_IsKamikazeActorUsable(gun.gun_obj) &&
-                 std::find(sources.begin(), sources.end(), gun.gun_obj) == sources.end() )
-                sources.push_back(gun.gun_obj);
-        }
-    }
-
-    for (NC_STACK_ypabact *source : sources)
-    {
-        if ( ypabact_SourceHasOtherWeaponForKamikazeTimeScale(source, mount,
-                                                              &matchedPayloadSlot) )
-            return false;
-    }
-
-    if ( !matchedPayloadSlot )
-        return false;
 
     const float scale = mount.weapon->fire_time_scale;
     const float drain = mount.weapon->fire_time_scale_hp_drain_percent;
-    if ( !std::isfinite(scale) || scale >= 1.0f || scale < 0.05f )
+    if ( !std::isfinite(scale) || scale >= 1.0f || scale < 0.05f ||
+         !std::isfinite(drain) || drain <= 0.0f )
+    {
         return false;
+    }
 
     if ( outScale )
         *outScale = scale;
     if ( outHpDrainPercent )
-        *outHpDrainPercent = std::isfinite(drain) && drain > 0.0f
-                                 ? std::min(drain, 100.0f)
-                                 : 0.0f;
+        *outHpDrainPercent = std::min(drain, 100.0f);
     return true;
 }
 
@@ -8291,6 +8230,80 @@ static NC_STACK_ypabact *ypabact_FindKamikazeContactTarget(const TKamikazeMount 
     return NULL;
 }
 
+static bool ypabact_GetKamikazeCellTarget(NC_STACK_ypabact *unit, vec3d *outTarget)
+{
+    if ( !unit || !outTarget || !unit->getBACT_pWorld() ||
+         (unit->_oflags & BACT_OFLAG_USERINPT) )
+    {
+        return false;
+    }
+
+    const bool roboCarrier = unit->_bact_type == BACT_TYPES_ROBO;
+    if ( !roboCarrier &&
+         (unit->_atk_ret != NC_STACK_ypabact::TA_FIGHT ||
+          !(unit->_status_flg & BACT_STFLAG_ATTACK)) )
+    {
+        return false;
+    }
+
+    vec3d targetPos;
+    if ( unit->_secndTtype != BACT_TGT_TYPE_NONE )
+    {
+        if ( unit->_secndTtype != BACT_TGT_TYPE_CELL )
+            return false;
+        targetPos = unit->_sencdTpos;
+    }
+    else if ( unit->_primTtype == BACT_TGT_TYPE_CELL )
+    {
+        targetPos = unit->_primTpos;
+    }
+    else
+    {
+        return false;
+    }
+
+    yw_130arg cellInfo;
+    cellInfo.pos_x = targetPos.x;
+    cellInfo.pos_z = targetPos.z;
+    if ( !unit->getBACT_pWorld()->GetSectorInfo(&cellInfo) || !cellInfo.pcell )
+        return false;
+
+    // Mirror normal sector aggression semantics. A non-owned sector remains a
+    // valid Kamikaze objective so the unit can complete conquest orders. At
+    // maximum aggression, an already-owned sector also remains a valid combat
+    // target while it still has sector energy/buildings to destroy; once it is
+    // razed (energy <= 0), the Kamikaze must not detonate there just because it
+    // happens to be passing through its own territory.
+    if ( cellInfo.pcell->owner == unit->_owner &&
+         (unit->_aggr < 100 || cellInfo.pcell->GetEnergy() <= 0) )
+    {
+        return false;
+    }
+
+    // Reuse the same authored/best-building point selected by normal sector
+    // combat so the fuse follows the same live target point as ordinary AI.
+    targetPos.y = cellInfo.pcell->height;
+    unit->GetBestSectorPart(&targetPos);
+    *outTarget = targetPos;
+    return true;
+}
+
+static bool ypabact_IsKamikazeCellContact(const TKamikazeMount &mount,
+                                          const vec3d &targetPos)
+{
+    if ( !mount.carrier || !mount.weapon )
+        return false;
+
+    float detonationDistance = mount.weapon->trigger_radius;
+    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
+        detonationDistance = mount.carrier->GetCollisionBroadRadius();
+
+    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
+        return false;
+
+    return (targetPos - mount.carrier->_position).length() <= detonationDistance;
+}
+
 static NC_STACK_ypabact *ypabact_GetKamikazeRammingTarget(NC_STACK_ypabact *unit)
 {
     TKamikazeMount mount;
@@ -8348,18 +8361,26 @@ bool NC_STACK_ypabact::ApplyKamikazeRammingGuidance()
     if ( _oflags & BACT_OFLAG_USERINPT )
         return false;
 
+    vec3d targetPos;
     NC_STACK_ypabact *target = ypabact_GetKamikazeRammingTarget(this);
-    if ( !target )
+    if ( target )
+    {
+        targetPos = target->_position;
+    }
+    else if ( !ypabact_GetKamikazeCellTarget(this, &targetPos) )
+    {
         return false;
+    }
 
-    vec3d desired = target->_position - _position;
+    vec3d desired = targetPos - _position;
     float desiredLen = desired.length();
     if ( desiredLen <= 0.001 )
         return false;
 
-    // Refresh the destination every frame from the live target. Do not replace
-    // _target_dir here: the class-specific AI may already have adjusted it for
-    // walls, buildings or terrain, and V1 must retain that vanilla avoidance.
+    // Refresh the destination every frame from the live unit or the normal
+    // best sector attack point. Do not replace _target_dir here: the
+    // class-specific AI may already have adjusted it for walls, buildings or
+    // terrain, and the shared avoidance path must remain authoritative.
     _target_vec = desired;
 
     _status_flg |= BACT_STFLAG_MOVE | BACT_STFLAG_ATTACK;
@@ -12649,19 +12670,15 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
                                    down);
 }
 
-void NC_STACK_ypabact::UpdateKamikaze(update_msg *)
+bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
 {
     TKamikazeMount mount;
     if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
          mount.carrier != this ||
          !ypabact_IsKamikazeMountArmed(mount) )
     {
-        return;
+        return false;
     }
-
-    NC_STACK_ypabact *target = ypabact_FindKamikazeContactTarget(mount);
-    if ( !target )
-        return;
 
     _kamikaze_triggered = true;
     RevealInvisibleOnAttack();
@@ -12676,7 +12693,7 @@ void NC_STACK_ypabact::UpdateKamikaze(update_msg *)
     if ( !payload )
     {
         _kamikaze_triggered = false;
-        return;
+        return false;
     }
 
     vec3d payloadDir = _rotation.AxisZ();
@@ -12699,13 +12716,13 @@ void NC_STACK_ypabact::UpdateKamikaze(update_msg *)
     payload->_parent = NULL;
     ypabact_GetKamikazePayloadListOwner(mount.payloadSource)->_missiles_list.push_back(payload);
 
-    payload->DetonateKamikazePayload(target);
+    payload->DetonateKamikazePayload(directHit);
 
     // Global debug invulnerability protects the carrier while preserving the
     // payload detonation and its visual/gameplay reactions. Keep the trigger
     // latched so the same unit does not emit a new payload every frame.
     if ( _world && _world->IsDebugGlobalInvulnerabilityEnabled() )
-        return;
+        return true;
 
     bool wasInvulnerable = _invulnerable;
     _invulnerable = false;
@@ -12734,6 +12751,35 @@ void NC_STACK_ypabact::UpdateKamikaze(update_msg *)
     }
 
     _invulnerable = wasInvulnerable;
+    return true;
+}
+
+void NC_STACK_ypabact::UpdateKamikaze(update_msg *)
+{
+    TKamikazeMount mount;
+    if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
+         mount.carrier != this ||
+         !ypabact_IsKamikazeMountArmed(mount) )
+    {
+        return;
+    }
+
+    NC_STACK_ypabact *target = ypabact_FindKamikazeContactTarget(mount);
+    if ( target )
+    {
+        TriggerKamikazeDetonation(target);
+        return;
+    }
+
+    // AI sector orders have no unit direct-hit target. A Kamikaze that is
+    // actively fighting a neutral/enemy CELL therefore uses the same best
+    // sector point as normal combat and detonates when its XYZ fuse reaches it.
+    vec3d cellTarget;
+    if ( ypabact_GetKamikazeCellTarget(this, &cellTarget) &&
+         ypabact_IsKamikazeCellContact(mount, cellTarget) )
+    {
+        TriggerKamikazeDetonation(NULL);
+    }
 }
 
 static void ypabact_EnsureFireXRandomSeeded(NC_STACK_ypabact *unit)
@@ -13840,7 +13886,7 @@ int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime) const
 
     // The kill bonus increases fire rate, therefore its linear stat multiplier
     // divides the selected cooldown. This one helper is used after choosing the
-    // exact shot_time/user or mgun_shot_time/user field and never mutates a proto.
+    // exact shot_time/user or shared mgun_shot_time field and never mutates a proto.
     const float killStatMultiplier = GetKillStatMultiplier();
     if ( killStatMultiplier > 0.0f )
         multiplier /= killStatMultiplier;
@@ -15882,7 +15928,6 @@ void NC_STACK_ypabact::Renew()
     _mgun_set = false;
     _num_mguns = 1;
     _mgun_shot_time = 0;
-    _mgun_shot_time_user = 0;
     _mgunEnergyDrainRemainder = 0.0f;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil = 0.0f;
@@ -17005,7 +17050,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
         if ( vehicleTimedMgun )
         {
-            v45 = GetMinigunShotTime(v88 != 0, frameDeltaMs);
+            v45 = GetMinigunShotTime(frameDeltaMs);
         }
         else
         {
