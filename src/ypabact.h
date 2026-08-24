@@ -832,6 +832,7 @@ public:
     uint8_t _bflags;
     uint32_t _commandID = 0;
     NC_STACK_yparobo *_host_station; // parent robo?
+    bool _isGenesisProduced = false;
     NC_STACK_ypabact *_parent;
     World::RefBactList _kidList;
     World::RefBactList::Node _kidRef;
