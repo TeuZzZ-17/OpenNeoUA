@@ -5131,10 +5131,6 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         _bld->spawn_instant = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "spawn_icon") )
-    {
-        _bld->spawn_icon = p2;
-    }
     else if ( p1.size() >= 11 && !StriCmp(p1.substr(0, 11), "snd_normal_") && ParseSampleVariantId(p1.substr(11)) >= 0 )
     {
         _bld->SndFX.SetMainSampleVariant(ParseSampleVariantId(p1.substr(11)), p2);
