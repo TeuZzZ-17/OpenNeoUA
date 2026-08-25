@@ -5820,6 +5820,20 @@ static void yw_ResetVirtualUiClipToFullScreen(NC_STACK_ypaworld *yw)
                                             yw->_screenSize.y - halfH));
 }
 
+static void yw_RenderTopLevelExitMenu(NC_STACK_ypaworld *yw,
+                                      const SDL_Color *uiAccent)
+{
+    if ( !yw || !exit_menu.IsOpen() )
+        return;
+
+    // Exit Menu is the absolute top-level gameplay dialog. Remove ordinary
+    // world/UI pixels below its rectangle and clip procedural HP/status bars
+    // queued for the later virtual-UI mesh pass, then redraw the menu last.
+    yw_ClearVirtualUiWindowRect(yw, &exit_menu);
+    yw_ResetVirtualUiClipToFullScreen(yw);
+    yw_RenderGameplayGuiWindow(yw, &exit_menu, uiAccent);
+}
+
 static void yw_RenderAlwaysVisibleGameplayBars(NC_STACK_ypaworld *yw,
                                                 const SDL_Color *uiAccent)
 {
@@ -5891,11 +5905,7 @@ void yw_FinalizePriorityGameplayUi(NC_STACK_ypaworld *yw)
     yw_RenderForegroundGameplayGuiWindows(yw, uiAccent);
 
     // Exit Menu remains the absolute top-level gameplay dialog.
-    if ( exit_menu.IsOpen() )
-    {
-        yw_ResetVirtualUiClipToFullScreen(yw);
-        yw_RenderGameplayGuiWindow(yw, &exit_menu, uiAccent);
-    }
+    yw_RenderTopLevelExitMenu(yw, uiAccent);
 }
 
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
@@ -5929,7 +5939,10 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
         if ( !priorityWindowOpen )
         {
             for ( GuiBase *window : yw->_guiActive )
-                yw_RenderGameplayGuiWindow(yw, window, uiAccent);
+            {
+                if ( window != &exit_menu )
+                    yw_RenderGameplayGuiWindow(yw, window, uiAccent);
+            }
         }
 
         if ( yw->_userUnit->_status != BACT_STATUS_DEAD )
@@ -5946,6 +5959,10 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
             GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude, uiAccent);
             yw_RenderPlasmaCurrencyHudIcon(yw);
             sb_0x4d7c08__sub0__sub1(uiAccent);
+
+            // Unlike ordinary windows, Exit Menu is finalized after every
+            // gameplay overlay so nothing from the world UI can cover it.
+            yw_RenderTopLevelExitMenu(yw, uiAccent);
         }
     }
 }
@@ -6805,13 +6822,32 @@ int ypaworld_func64__sub7__sub2__sub3(NC_STACK_ypaworld *yw, TInputState *inpt)
 
     if ( yw->IsSpectatorControlled() )
     {
-        if ( inpt->HotKeyID == 8 && yw->_userUnit->_status != BACT_STATUS_DEAD )
+        const int mapHotKey = yw->_GameShell
+            ? yw->_GameShell->InputConfig[World::INPUT_BIND_MAP].KeyID
+            : 8;
+        const int quitHotKey = yw->_GameShell
+            ? yw->_GameShell->InputConfig[World::INPUT_BIND_QUIT].KeyID
+            : 24;
+
+        if ( inpt->HotKeyID == mapHotKey && yw->_userUnit->_status != BACT_STATUS_DEAD )
         {
             winpt->selected_btnID = 2;
             winpt->selected_btn = &bzda;
             winpt->flag |= TClickBoxInf::FLAG_BTN_DOWN;
         }
+        else if ( inpt->HotKeyID == quitHotKey )
+        {
+            // Reuse the ordinary in-game Exit Menu button path. This supports
+            // both Escape and any remapped Quit binding without a spectator-only
+            // menu implementation.
+            winpt->selected_btnID = 10;
+            winpt->selected_btn = &bzda;
+            winpt->flag |= TClickBoxInf::FLAG_BTN_UP;
+            inpt->HotKeyID = -1;
+        }
 
+        // Spectator gameplay commands remain disabled here. Class-level input
+        // owned by the controlled UFO is left intact for its normal User_layer.
         return 0;
     }
 
@@ -7468,35 +7504,45 @@ void  ypaworld_func64__sub7__sub2(NC_STACK_ypaworld *yw, TInputState *inpt)
     bzda.field_91C = 0;
 
     int a2a = 1;
-    if ( yw->IsSpectatorControlled() && inpt->HotKeyID != 8 )
-        inpt->HotKeyID = -1;
 
     if ( bzda.field_1D4 & 1 )
     {
-        switch ( inpt->HotKeyID )
+        if ( yw->IsSpectatorControlled() )
         {
-            case 31:
+            // Spectator UI accepts only the observer-safe actions handled by
+            // sub3 (Map and Exit Menu). Unknown hotkeys are deliberately left
+            // untouched so the controlled UFO's normal User_layer can consume
+            // present and future class-level controls.
+            if ( inpt->HotKeyID >= 0 )
+                a2a = ypaworld_func64__sub7__sub2__sub3(yw, inpt);
+        }
+        else
+        {
+            switch ( inpt->HotKeyID )
             {
-                NC_STACK_ypabact *v9 = yw->GetLastMsgSender();
+                case 31:
+                {
+                    NC_STACK_ypabact *v9 = yw->GetLastMsgSender();
 
-                if ( v9 )
-                    bact1 = v9;
+                    if ( v9 )
+                        bact1 = v9;
+                }
+                break;
+
+                case 44:
+                    bact1 = ypaworld_func64__sub7__sub2__sub6(yw);
+                    break;
+
+                case 45:
+                    ypaworld_func64__sub7__sub2__sub7(yw);
+                    break;
+
+                default:
+                    if ( inpt->HotKeyID >= 0 )
+                        a2a = ypaworld_func64__sub7__sub2__sub3(yw, inpt);
+
+                    break;
             }
-            break;
-
-            case 44:
-                bact1 = ypaworld_func64__sub7__sub2__sub6(yw);
-                break;
-
-            case 45:
-                ypaworld_func64__sub7__sub2__sub7(yw);
-                break;
-
-            default:
-                if ( inpt->HotKeyID >= 0 )
-                    a2a = ypaworld_func64__sub7__sub2__sub3(yw, inpt);
-
-                break;
         }
 
         if ( yw->_userUnit->_status == BACT_STATUS_DEAD && !yw->IsSpectatorControlled() )
@@ -12035,9 +12081,10 @@ void NC_STACK_ypaworld::ypaworld_func64__sub7(TInputState *inpt)
 
         // The tactical map input handler runs first and consumes wheel/+/-
         // whenever the map is open. Spectator Follow then receives the same
-        // contextual controls here, before sub2 discards non-map hotkeys in
-        // Spectator Mode. Keeping this call outside FLAG_OK also preserves
-        // distance interpolation on frames without a click-box event.
+        // contextual controls here. The controlled Spectator UFO keeps its
+        // remaining class-level input for the normal User_layer below. Keeping
+        // this call outside FLAG_OK also preserves distance interpolation on
+        // frames without a click-box event.
         UpdateSpectatorFollowCamera(inpt);
 
         yw_WorldSelectionDragInput(this, inpt);
@@ -13569,8 +13616,8 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
             : displayBaseEnergy;
 
         // Show the actual current per-instance damage directly in DMG. Kill
-        // marks and Black Sect clone balance stay runtime-only and never mutate
-        // shared weapon prototypes, but the player readout now reflects the
+        // marks stay runtime-only and never mutate shared weapon prototypes,
+        // but the player readout now reflects the
         // same effective value used by the final damage choke point.
         if ( weap->IsLaser() )
         {
@@ -14955,47 +15002,6 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
     }
 }
 
-static bool yw_ShouldRenderSpectatorWorldStatus(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
-{
-    if ( !yw || !yw->IsSpectatorControlled() || !bact )
-        return false;
-
-    NC_STACK_ypabact *followTarget = yw->GetSpectatorFollowTarget();
-    const float spectatorStatusMaxDist = yw_GetWorldUiMaxDistance();
-    vec3d statusOrigin = yw->_viewerPosition;
-    vec3d delta = bact->_position - statusOrigin;
-
-    // Do not stop spectator overlays at the old fixed 2350-unit boundary:
-    // let the shared opacity function complete its fade up to the configured
-    // world-UI cutoff. The followed target keeps the legacy exemption.
-    if ( bact != followTarget && spectatorStatusMaxDist > 0.0f &&
-         delta.dot(delta) >= POW2(spectatorStatusMaxDist) )
-    {
-        return false;
-    }
-
-    return bact->_owner != World::OWNER_0 &&
-           !yw->IsSpectatorBact(bact) &&
-           bact->_bact_type != BACT_TYPES_MISSLE &&
-           bact->_status != BACT_STATUS_CREATE &&
-           bact->_status != BACT_STATUS_BEAM &&
-           bact->_status != BACT_STATUS_DEAD &&
-           bact->_energy_max > 0 &&
-           !bact->ShouldHideFromStrategicUI();
-}
-
-static void yw_RenderSpectatorWorldStatus(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact)
-{
-    if ( !bact )
-        return;
-
-    if ( yw_ShouldRenderSpectatorWorldStatus(yw, bact) )
-        yw_RenderUnitLifeBar(yw, cur, bact);
-
-    for ( NC_STACK_ypabact *kid : bact->_kidList )
-        yw_RenderSpectatorWorldStatus(yw, cur, kid);
-}
-
 static bool yw_IsExplicitWorldStatusTarget(NC_STACK_ypaworld *yw,
                                             NC_STACK_ypabact *bact,
                                             const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
@@ -15325,12 +15331,6 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
             yw->_hud.field_86 = 0;
 
         yw_RenderHUDVectorGFX(yw, &buf);
-    }
-
-    if ( yw->IsSpectatorControlled() )
-    {
-        for ( NC_STACK_ypabact *unit : yw->_unitsList )
-            yw_RenderSpectatorWorldStatus(yw, &buf, unit);
     }
 
     if ( yw->_guiActFlags & 0x20 )

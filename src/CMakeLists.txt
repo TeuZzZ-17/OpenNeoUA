@@ -76,7 +76,7 @@ set(SOURCES
     winp.cpp
     wintimer.cpp
     world/analyzer.cpp
-    world/clonebalance.cpp
+    world/blacksecttint.cpp
     world/energyfx.cpp
     world/grounddecal.cpp
     world/weapontracer.cpp
