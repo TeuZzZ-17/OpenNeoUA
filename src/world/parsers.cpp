@@ -1182,32 +1182,6 @@ static bool ParseVPSpinParam(ScriptParser::Parser &parser,
     return false;
 }
 
-static bool ParseVPOrientationParam(const std::string &p1,
-                                    const std::string &p2,
-                                    vec3d &orientation)
-{
-    if ( StriCmp(p1, "vp_orientation") )
-        return false;
-
-    if ( !StriCmp(p2, "normal") )
-        orientation = vec3d(0.0, 0.0, 0.0);
-    else if ( !StriCmp(p2, "upside_down") )
-        orientation = vec3d(180.0, 0.0, 0.0);
-    else if ( !StriCmp(p2, "half_turn") )
-        orientation = vec3d(0.0, 180.0, 0.0);
-    else if ( !StriCmp(p2, "sideways_left") )
-        orientation = vec3d(0.0, 0.0, 90.0);
-    else if ( !StriCmp(p2, "sideways_right") )
-        orientation = vec3d(0.0, 0.0, 270.0);
-    else
-    {
-        ypa_log_out("Unknown vp_orientation '%s', using normal\n", p2.c_str());
-        orientation = vec3d(0.0, 0.0, 0.0);
-    }
-
-    return true;
-}
-
 static float ParseFiniteFloatOrFallback(ScriptParser::Parser &parser,
                                         const std::string &value,
                                         float fallback)
@@ -1218,6 +1192,33 @@ static float ParseFiniteFloatOrFallback(ScriptParser::Parser &parser,
         return fallback;
 
     return result;
+}
+
+static bool ParseVPRotationParam(ScriptParser::Parser &parser,
+                                 const std::string &prefix,
+                                 const std::string &p1,
+                                 const std::string &p2,
+                                 vec3d &rotation)
+{
+    if ( !StriCmp(p1, prefix + "_rotation_x") )
+    {
+        rotation.x = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, prefix + "_rotation_y") )
+    {
+        rotation.y = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+        return true;
+    }
+
+    if ( !StriCmp(p1, prefix + "_rotation_z") )
+    {
+        rotation.z = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+        return true;
+    }
+
+    return false;
 }
 
 static bool ParseScriptIntRange(const std::string &value, int &minValue, int &maxValue)
@@ -2908,7 +2909,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( ParseWireframeTintParam(parser, p1, p2, _vhcl->wireframe_tint) )
     {
     }
-    else if ( ParseVPOrientationParam(p1, p2, _vhcl->vp_orientation) )
+    else if ( ParseVPRotationParam(parser, "vp", p1, p2, _vhcl->vp_rotation) )
     {
     }
     else if ( ParseVPSpinParam(parser, "vp", p1, p2, _vhcl->vp_spin) )
@@ -3874,7 +3875,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->vp_dead = 4;
         _vhcl->vp_genesis = 5;
         _vhcl->vp_scale = vec3d(1.0, 1.0, 1.0);
-        _vhcl->vp_orientation = vec3d(0.0, 0.0, 0.0);
+        _vhcl->vp_rotation = vec3d(0.0, 0.0, 0.0);
         _vhcl->vp_spin = vec3d(0.0, 0.0, 0.0);
         _vhcl->vp_tint = TVisualTint();
         _vhcl->wireframe_tint = TVisualTint();
@@ -4103,7 +4104,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_launch = 0;
         _wpn->vp_launch_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->vp_scale = vec3d(1.0, 1.0, 1.0);
-        _wpn->vp_orientation = vec3d(0.0, 0.0, 0.0);
+        _wpn->vp_rotation = vec3d(0.0, 0.0, 0.0);
         _wpn->vp_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->spiral_speed = 0.0f;
         _wpn->spiral_radius = 0.0f;
@@ -4860,7 +4861,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( ParseWireframeTintParam(parser, p1, p2, _wpn->wireframe_tint) )
     {
     }
-    else if ( ParseVPOrientationParam(p1, p2, _wpn->vp_orientation) )
+    else if ( ParseVPRotationParam(parser, "vp", p1, p2, _wpn->vp_rotation) )
     {
     }
     else if ( ParseVPSpinParam(parser, "vp", p1, p2, _wpn->vp_spin) )
