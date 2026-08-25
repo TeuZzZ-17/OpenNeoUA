@@ -2274,9 +2274,6 @@ static bool yw_VehicleReferencesWeapon(const World::TVhclProto &vehicle, int32_t
             return true;
     }
 
-    if ( vehicle.lowhp_weapon_enable && vehicle.lowhp_weapon == weaponId )
-        return true;
-
     if ( vehicle.mgun_set && vehicle.mgun == weaponId )
         return true;
 
@@ -3946,9 +3943,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_weapon_slot_index = 0;
         bacto->_current_weapon_id = vhcl.weapon;
         bacto->_current_weapon_source_slot = 0;
-        bacto->_lowhp_weapon_enable = vhcl.lowhp_weapon_enable;
-        bacto->_lowhp_threshold = vhcl.lowhp_threshold > 0.0 ? vhcl.lowhp_threshold : 0.30;
-        bacto->_lowhp_weapon = vhcl.lowhp_weapon > 0 ? vhcl.lowhp_weapon : 0;
 
         if ( vhcl.weapon == -1 )
             bacto->_weapon_flags = 0;
@@ -4027,7 +4021,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_damaged_maxrot_malus = vhcl.damaged_maxrot_malus;
         bacto->_damaged_snd_pitch_mult = vhcl.damaged_snd_pitch_mult;
         bacto->_damaged_fx_active = false;
-        bacto->_damaged_shake_carrier.Clear();
         bacto->_spawn_units = vhcl.spawn_units;
         bacto->_spawn_vehicle = vhcl.spawn_vehicle;
         bacto->_spawn_interval = vhcl.spawn_interval > 0 ? vhcl.spawn_interval : 5000;
