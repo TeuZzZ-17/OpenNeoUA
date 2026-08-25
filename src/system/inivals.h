@@ -351,7 +351,6 @@ public:
 
     static Common::Ini::Key GfxVBO;
 
-    static Common::Ini::Key UiHideMenuHints; // OpenNeoUA: ui.hide_menu_hints (default yes) — suppress passive menu hover/help hints
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
     static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional sound played once after successful map marker deployment
