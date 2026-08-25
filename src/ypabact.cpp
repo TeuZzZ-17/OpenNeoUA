@@ -22,7 +22,7 @@
 
 #include "system/inpt.h"
 #include "system/inivals.h"
-#include "world/clonebalance.h"
+#include "world/blacksecttint.h"
 #include "world/energyfx.h"
 #include "world/spin.h"
 
@@ -1574,20 +1574,8 @@ static void ypabact_ApplyDamagedRuntime(NC_STACK_ypabact *bact, bool active)
         maxrotMult *= ypabact_DebuffMalusToMult(bact->_active_debuff.maxrot_malus);
     }
 
-    // OpenNeoUA Black Sect clone balance: imperfect grey clones (owner 5) get slightly
-    // weaker thrust and turn rate. This runs every frame and always recomputes the
-    // effective _force/_maxrot from the unmodified _base_force/_base_maxrot, so the
-    // clone malus is folded into the same multiplier chain as the debuff/damaged
-    // maluses and can never accumulate over time or across save/load/respawn.
-    if ( World::CloneBalance::IsCloneActor(bact) )
-    {
-        float cloneFactor = World::CloneBalance::DownFactor();
-        forceMult *= cloneFactor;
-        maxrotMult *= cloneFactor;
-    }
-
     // Kill-mark bonuses use the same non-compounding runtime multiplier chain
-    // as damaged/debuff/clone effects. The immutable per-instance bases remain intact.
+    // as damaged/debuff effects. The immutable per-instance bases remain intact.
     const float killStatMult = bact->GetKillStatMultiplier();
     forceMult *= killStatMult;
     maxrotMult *= killStatMult;
@@ -4755,12 +4743,11 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     if ( IsInvisibleUnrevealed() )
         return;
 
-    // OpenNeoUA Black Sect clone balance: imperfect grey clones (owner 5) always wear the
-    // grey clone identity tint. In V1 this deliberately overrides any manual per-prototype
-    // vp_tint so the clone is always visually readable. This is render-only: it reads
-    // the cached config and never mutates _vp_tint or the shared prototype.
+    // OpenNeoUA Black Sect unit tint: owner-5 combat units use the configured render-only
+    // tint. It deliberately overrides per-prototype vp_tint without mutating actor or
+    // prototype state. Host Stations and projectiles remain untouched.
     World::TVisualTint effectiveTint =
-        World::CloneBalance::IsCloneActor(this) ? World::CloneBalance::Tint() : _vp_tint;
+        World::BlackSectTint::IsTintedUnit(this) ? World::BlackSectTint::Tint() : _vp_tint;
 
     // OpenNeoUA debuff target tint: compose a temporary RGBA multiplier over the unit's
     // already-effective instance tint. The prototype and _vp_tint remain untouched, so
@@ -4784,7 +4771,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
 
     // OpenNeoUA custom vp_tint: same eligible visual prototypes as vp_scale.
     // Tint is a visual-only per-instance RGBA multiplier; never affects gameplay.
-    // effectiveTint already folds in the Black Sect grey clone override (see above).
+    // effectiveTint already folds in the Black Sect unit tint override (see above).
     auto shouldApplyVPTint = [this, &effectiveTint](NC_STACK_base *base)
     {
         if ( effectiveTint.IsNeutral() )
@@ -13985,8 +13972,6 @@ int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime) const
         return baseShotTime;
 
     float multiplier = 1.0f;
-    if ( World::CloneBalance::IsCloneActor(this) )
-        multiplier *= World::CloneBalance::AttackTimeFactor();
 
     // The kill bonus increases fire rate, therefore its linear stat multiplier
     // divides the selected cooldown. This one helper is used after choosing the
@@ -14004,8 +13989,6 @@ int NC_STACK_ypabact::GetEffectiveOutgoingDamage(int baseDamage) const
         return 0;
 
     float multiplier = GetKillStatMultiplier();
-    if ( World::CloneBalance::IsCloneActor(this) )
-        multiplier *= World::CloneBalance::DownFactor();
 
     if ( multiplier == 1.0f )
         return baseDamage;
@@ -14027,13 +14010,6 @@ float NC_STACK_ypabact::GetEffectiveShieldWithAdditionalMalus(float additionalMa
         mult *= ypabact_DebuffMalusToMult(_active_debuff.shield_malus);
 
     mult *= ypabact_DebuffMalusToMult(additionalMalus);
-
-    // OpenNeoUA Black Sect clone balance: imperfect grey clones (owner 5) have a
-    // slightly lower effective defense. This scales the *effective* shield only;
-    // the stored _shield (and the shared prototype) are never modified, so the
-    // malus is recomputed each call and never compounds on save/load/respawn.
-    if ( World::CloneBalance::IsCloneActor(this) )
-        mult *= World::CloneBalance::DownFactor();
 
     if ( mult < 0.0f )
         mult = 0.0f;
