@@ -4607,12 +4607,12 @@ static void yw_AddMobilePowerInfluenceFromGenerator(NC_STACK_ypaworld *yw,
 
         if ( distSq <= radiusSq )
         {
-            float dist = sqrt(distSq);
-            float factor = 1.0 - (dist / proto.power_radius);
-            if ( factor < 0.25 )
-                factor = 0.25;
+            const float dist = sqrt(distSq);
+            const float factor = proto.power_falloff
+                ? World::ComputeSpatialFalloff(dist, proto.power_radius)
+                : 1.0f;
 
-            int addPower = (int)(proto.power * factor + 0.5);
+            int addPower = (int)(proto.power * factor + 0.5f);
             if ( addPower > 0 )
             {
                 float addEnergyPower = addPower;

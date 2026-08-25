@@ -961,7 +961,6 @@ public:
     bool _damaged_fx_active;
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
-    TSndCarrier _damaged_shake_carrier;
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
     TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA custom: hardcoded first-person world/camera shake scaled from mgun_recoil
     TSndCarrier _mgun_recoil_shake_carrier;
@@ -1022,9 +1021,6 @@ public:
     int32_t _userHomingPrimaryTargetGid;
     bool _userHomingTargetCycleRequested;
     bool _alternativeViewActive;
-    int _lowhp_weapon_enable;
-    float _lowhp_threshold;
-    int _lowhp_weapon;
     uint8_t _weapon_flags;
     int _mgun;
     bool _mgun_set;
