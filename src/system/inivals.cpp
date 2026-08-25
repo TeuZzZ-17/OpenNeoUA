@@ -380,10 +380,8 @@ Common::Ini::Key IniConf::GfxRegenFXVPSpinY("gfx.regen_fx_vp_spin_y", Common::In
 Common::Ini::Key IniConf::GfxRegenFXVPSpinZ("gfx.regen_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXTint("gfx.regen_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GfxRegenFXDuration("gfx.regen_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
-Common::Ini::Key IniConf::GfxRegenFXIntervalMin("gfx.regen_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXIntervalMax("gfx.regen_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXCountMin("gfx.regen_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXCountMax("gfx.regen_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXInterval("gfx.regen_fx_interval", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXCount("gfx.regen_fx_count", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXRandomOffsetPercent("gfx.regen_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
 Common::Ini::Key IniConf::GfxRegenMeshSize("gfx.regen_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxRegenMeshThickness("gfx.regen_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
@@ -398,10 +396,8 @@ Common::Ini::Key IniConf::GfxDrainFXVPSpinY("gfx.drain_fx_vp_spin_y", Common::In
 Common::Ini::Key IniConf::GfxDrainFXVPSpinZ("gfx.drain_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXTint("gfx.drain_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GfxDrainFXDuration("gfx.drain_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
-Common::Ini::Key IniConf::GfxDrainFXIntervalMin("gfx.drain_fx_interval_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXIntervalMax("gfx.drain_fx_interval_max", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXCountMin("gfx.drain_fx_count_min", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXCountMax("gfx.drain_fx_count_max", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXInterval("gfx.drain_fx_interval", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXCount("gfx.drain_fx_count", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXRandomOffsetPercent("gfx.drain_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
 Common::Ini::Key IniConf::GfxDrainMeshSize("gfx.drain_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxDrainMeshThickness("gfx.drain_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
@@ -695,10 +691,8 @@ void IniConf::Init()
         , &GfxRegenFXVPSpinZ
         , &GfxRegenFXTint
         , &GfxRegenFXDuration
-        , &GfxRegenFXIntervalMin
-        , &GfxRegenFXIntervalMax
-        , &GfxRegenFXCountMin
-        , &GfxRegenFXCountMax
+        , &GfxRegenFXInterval
+        , &GfxRegenFXCount
         , &GfxRegenFXRandomOffsetPercent
         , &GfxRegenMeshSize
         , &GfxRegenMeshThickness
@@ -712,10 +706,8 @@ void IniConf::Init()
         , &GfxDrainFXVPSpinZ
         , &GfxDrainFXTint
         , &GfxDrainFXDuration
-        , &GfxDrainFXIntervalMin
-        , &GfxDrainFXIntervalMax
-        , &GfxDrainFXCountMin
-        , &GfxDrainFXCountMax
+        , &GfxDrainFXInterval
+        , &GfxDrainFXCount
         , &GfxDrainFXRandomOffsetPercent
         , &GfxDrainMeshSize
         , &GfxDrainMeshThickness

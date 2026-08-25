@@ -396,28 +396,39 @@ static int32_t yw_GetScaledGameplayFrameTime(NC_STACK_ypaworld *yw,
 // method 169
 uint32_t dword_5A7A80;
 
-static int yw_SelectMimicVehicleID(std::vector<World::TVhclProto> &protos, int shellVehicleId)
+static int yw_SelectMimicVehicleID(const std::vector<World::TVhclProto> &protos, int shellVehicleId)
 {
     if ( shellVehicleId <= 0 || (size_t)shellVehicleId >= protos.size() )
         return 0;
 
-    World::TVhclProto &shell = protos[shellVehicleId];
-    if ( !shell.is_mimic || shell.mimic_vehicle_list.empty() )
+    const World::TVhclProto &shell = protos[shellVehicleId];
+    if ( !shell.is_mimic )
         return 0;
 
+    // OpenNeoUA: Mimic candidates are derived from the current level's canonical
+    // vehicle availability masks, removing the need for a manually authored list.
+    // A Mimic can therefore only disguise itself as a real vehicle
+    // enabled somewhere in this level. Host Stations, Guns/modules and other
+    // Mimics are shells/technical units, so they are never disguise candidates.
     std::vector<int16_t> validIds;
-    validIds.reserve(shell.mimic_vehicle_list.size());
+    validIds.reserve(protos.size());
 
-    for (int16_t vehicleId : shell.mimic_vehicle_list)
+    for (size_t vehicleId = 1; vehicleId < protos.size(); ++vehicleId)
     {
-        if ( vehicleId <= 0 || vehicleId == shellVehicleId || (size_t)vehicleId >= protos.size() )
+        if ((int)vehicleId == shellVehicleId)
             continue;
 
-        World::TVhclProto &candidate = protos[vehicleId];
-        if ( candidate.is_mimic || candidate.model_id == BACT_TYPES_NOPE )
+        const World::TVhclProto &candidate = protos[vehicleId];
+        if ( candidate.disable_enable_bitmask == 0 ||
+             candidate.is_mimic ||
+             candidate.model_id == BACT_TYPES_NOPE ||
+             candidate.model_id == BACT_TYPES_ROBO ||
+             candidate.model_id == BACT_TYPES_GUN )
+        {
             continue;
+        }
 
-        validIds.push_back(vehicleId);
+        validIds.push_back((int16_t)vehicleId);
     }
 
     if ( validIds.empty() )
