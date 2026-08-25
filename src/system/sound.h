@@ -345,8 +345,6 @@ public:
     float timeScale;
     double timeScaleRemainder;
     int dword_546F14;
-    int globalSndFadeIn;
-    int globalSndFadeOut;
     int globalShkFadeIn;
     int globalShkFadeOut;
     int globalPalFadeIn;
