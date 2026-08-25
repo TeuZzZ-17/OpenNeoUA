@@ -2903,6 +2903,7 @@ public:
     void ClearGemNotificationCapture();
     bool IsGemNotificationCaptureActive() const;
     bool HasActiveNewGemNotification() const;
+    uint32_t GetGemUnlockDuration() const;
     uint32_t GetNewGemNotificationElapsedTime() const;
     void DismissNewGemNotification();
     std::string BuildNewGemNotificationLogText();

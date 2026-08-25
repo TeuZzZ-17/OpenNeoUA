@@ -59,7 +59,6 @@ Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Commo
 Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string("0.95"));
 Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("0.80"));
 Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.60"));
-Common::Ini::Key IniConf::GfxVhsFilterName("gfx.vhs_filter_name", Common::Ini::KT_WORD, std::string("UA_Cinematic_1998_VHS"));
 Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs_vbo.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.60"));
@@ -353,13 +352,9 @@ Common::Ini::Key IniConf::GameAiTargetRange("game.ai_target_range", Common::Ini:
 // OpenNeoUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
 Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
-// OpenNeoUA custom: exact numeric opt-in for data-driven SuperItem profiles.
-// Missing, malformed, zero or any value other than 1 keeps the legacy path.
-Common::Ini::Key IniConf::GameCustomSuperitems("game.custom_superitems", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenNeoUA: one temporal envelope per SFX channel. Event-specific fade keys are
-// intentionally unsupported; missing, malformed, negative or zero means no fade.
-Common::Ini::Key IniConf::GameGlobalSndFadeIn("game.global_snd_fade_in", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GameGlobalSndFadeOut("game.global_snd_fade_out", Common::Ini::KT_WORD, std::string("0"));
+// OpenNeoUA: global temporal envelopes are limited to SHK and PAL.
+// Event-specific fade keys are intentionally unsupported; missing, malformed,
+// negative or zero means no additional fade. SND keeps its legacy behavior.
 Common::Ini::Key IniConf::GameGlobalShkFadeIn("game.global_shk_fade_in", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameGlobalShkFadeOut("game.global_shk_fade_out", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameGlobalPalFadeIn("game.global_pal_fade_in", Common::Ini::KT_WORD, std::string("0"));
@@ -368,10 +363,10 @@ Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Commo
 // OpenNeoUA custom: procedural HP bar shared by world/HUD. When enabled, the
 // world-space Shield bar is omitted while the personal cockpit Shield keeps
 // the classic MAPMISC squares. Missing/disabled HP mesh keys preserve the
-// full vanilla HP/Shield paths. Active HP tint converges toward target_tint.
+// full vanilla HP/Shield paths. Active HP tint converges from full_tint toward low_tint as HP decreases.
 Common::Ini::Key IniConf::GfxMeshHpBarEnable("gfx.mesh_hp_bar_enable", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GfxMeshHpBarTint("gfx.mesh_hp_bar_tint", Common::Ini::KT_WORD, std::string("0_217_81_255"));
-Common::Ini::Key IniConf::GfxMeshHpBarTargetTint("gfx.mesh_hp_bar_target_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
+Common::Ini::Key IniConf::GfxMeshHpBarFullTint("gfx.mesh_hp_bar_full_tint", Common::Ini::KT_WORD, std::string("0_217_81_255"));
+Common::Ini::Key IniConf::GfxMeshHpBarLowTint("gfx.mesh_hp_bar_low_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
 Common::Ini::Key IniConf::GfxMeshHpBarEmptyTint("gfx.mesh_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255_0_0_0"));
 
 // OpenNeoUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
@@ -687,16 +682,13 @@ void IniConf::Init()
         , &GameAiTargetRange
         , &GameMgunRange
         , &GameMgunAiFireAlignment
-        , &GameCustomSuperitems
-        , &GameGlobalSndFadeIn
-        , &GameGlobalSndFadeOut
         , &GameGlobalShkFadeIn
         , &GameGlobalShkFadeOut
         , &GameGlobalPalFadeIn
         , &GameGlobalPalFadeOut
         , &GfxMeshHpBarEnable
-        , &GfxMeshHpBarTint
-        , &GfxMeshHpBarTargetTint
+        , &GfxMeshHpBarFullTint
+        , &GfxMeshHpBarLowTint
         , &GfxMeshHpBarEmptyTint
         , &GfxRegenFXVP
         , &GfxRegenFXVPScale
@@ -776,7 +768,6 @@ void IniConf::Init()
 
         , &GfxAdditionalModes
         , &GfxVBO
-        , &GfxVhsFilterName
         , &GfxVhsFilterShader
         , &GfxVhsFilterShaderVbo
         , &GfxVhsFilterStrength
