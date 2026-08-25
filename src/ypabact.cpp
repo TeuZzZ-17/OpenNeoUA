@@ -2550,17 +2550,16 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _proximity_defense_trigger_radius = 0.0;
     _proximity_defense_interval = 1000;
     _proximity_defense_shots = 12;
-    _proximity_defense_fire_pos = vec3d(0.0, 0.0, 0.0);
     _proximity_defense_vp_launch = -1;
     _proximity_defense_fire_mode = 0;
     _proximity_defense_sequence_delay = 100;
-    _proximity_defense_at_death = 0;
-    _proximity_defense_random_yaw_set = false;
-    _proximity_defense_random_yaw_min = 0.0;
-    _proximity_defense_random_yaw_max = 360.0;
-    _proximity_defense_random_pitch_set = false;
-    _proximity_defense_random_pitch_min = -10.0;
-    _proximity_defense_random_pitch_max = 45.0;
+    _proximity_defense_mode = 0;
+    _proximity_defense_horizontal_angle_set = false;
+    _proximity_defense_horizontal_angle_min = 0.0;
+    _proximity_defense_horizontal_angle_max = 360.0;
+    _proximity_defense_vertical_angle_set = false;
+    _proximity_defense_vertical_angle_min = -10.0;
+    _proximity_defense_vertical_angle_max = 45.0;
     _proximity_defense_sequence_active = false;
     _proximity_defense_sequence_shots_fired = 0;
     _proximity_defense_next_shot_time = 0;
@@ -2744,17 +2743,16 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _proximity_defense_trigger_radius = 0.0;
     _proximity_defense_interval = 1000;
     _proximity_defense_shots = 12;
-    _proximity_defense_fire_pos = vec3d(0.0, 0.0, 0.0);
     _proximity_defense_vp_launch = -1;
     _proximity_defense_fire_mode = 0;
     _proximity_defense_sequence_delay = 100;
-    _proximity_defense_at_death = 0;
-    _proximity_defense_random_yaw_set = false;
-    _proximity_defense_random_yaw_min = 0.0;
-    _proximity_defense_random_yaw_max = 360.0;
-    _proximity_defense_random_pitch_set = false;
-    _proximity_defense_random_pitch_min = -10.0;
-    _proximity_defense_random_pitch_max = 45.0;
+    _proximity_defense_mode = 0;
+    _proximity_defense_horizontal_angle_set = false;
+    _proximity_defense_horizontal_angle_min = 0.0;
+    _proximity_defense_horizontal_angle_max = 360.0;
+    _proximity_defense_vertical_angle_set = false;
+    _proximity_defense_vertical_angle_min = -10.0;
+    _proximity_defense_vertical_angle_max = 45.0;
     _proximity_defense_sequence_active = false;
     _proximity_defense_sequence_shots_fired = 0;
     _proximity_defense_next_shot_time = 0;
@@ -9423,7 +9421,7 @@ static bool ypabact_CanUseProximityDefense(NC_STACK_ypabact *unit)
     if ( !unit->_proximity_defense_enable )
         return false;
 
-    if ( unit->_proximity_defense_at_death )
+    if ( unit->_proximity_defense_mode == 1 )
         return false;
 
     if ( unit->_proximity_defense_weapon <= 0 || (size_t)unit->_proximity_defense_weapon >= unit->getBACT_pWorld()->GetWeaponsProtos().size() )
@@ -9462,10 +9460,10 @@ static vec3d ypabact_GetProximityDefenseLocalDirection(NC_STACK_ypabact *unit, i
     float yaw = ((float)shotIndex / (float)totalShots) * 360.0;
     float pitch = 0.0;
 
-    if ( unit->_proximity_defense_random_yaw_set )
+    if ( unit->_proximity_defense_horizontal_angle_set )
     {
-        float yawMin = unit->_proximity_defense_random_yaw_min;
-        float yawMax = unit->_proximity_defense_random_yaw_max;
+        float yawMin = unit->_proximity_defense_horizontal_angle_min;
+        float yawMax = unit->_proximity_defense_horizontal_angle_max;
 
         if ( yawMin > yawMax )
             std::swap(yawMin, yawMax);
@@ -9473,10 +9471,10 @@ static vec3d ypabact_GetProximityDefenseLocalDirection(NC_STACK_ypabact *unit, i
         yaw = yawMin + ((float)rand() / (float)RAND_MAX) * (yawMax - yawMin);
     }
 
-    if ( unit->_proximity_defense_random_pitch_set )
+    if ( unit->_proximity_defense_vertical_angle_set )
     {
-        float pitchMin = unit->_proximity_defense_random_pitch_min;
-        float pitchMax = unit->_proximity_defense_random_pitch_max;
+        float pitchMin = unit->_proximity_defense_vertical_angle_min;
+        float pitchMax = unit->_proximity_defense_vertical_angle_max;
 
         if ( pitchMin > pitchMax )
             std::swap(pitchMin, pitchMax);
@@ -9553,7 +9551,7 @@ static bool ypabact_FireProximityDefenseShot(NC_STACK_ypabact *unit, int shotInd
 
     ypaworld_arg146 arg147;
     arg147.vehicle_id = unit->_proximity_defense_weapon;
-    arg147.pos = unit->_position + unit->_rotation.Transpose().Transform(unit->_proximity_defense_fire_pos);
+    arg147.pos = unit->_position;
 
     NC_STACK_ypamissile *wobj = world->ypaworld_func147(&arg147);
     if ( !wobj )
@@ -9627,7 +9625,7 @@ static bool ypabact_CanUseProximityDefenseAtDeath(NC_STACK_ypabact *unit)
     if ( unit->getBACT_pWorld()->_isNetGame )
         return false;
 
-    if ( !unit->_proximity_defense_enable || !unit->_proximity_defense_at_death || unit->_proximity_defense_at_death_done )
+    if ( !unit->_proximity_defense_enable || unit->_proximity_defense_mode != 1 || unit->_proximity_defense_at_death_done )
         return false;
 
     if ( unit->_proximity_defense_weapon <= 0 || (size_t)unit->_proximity_defense_weapon >= unit->getBACT_pWorld()->GetWeaponsProtos().size() )
@@ -9665,6 +9663,9 @@ static void ypabact_FireProximityDefenseAtDeath(NC_STACK_ypabact *unit)
     if ( !missileOwner )
         return;
 
+    // Death handling happens before the unit enters DEAD state, so at_death is
+    // intentionally one immediate all-at-once burst. Sequential timing remains
+    // a classic-mode behavior and does not extend the dying unit lifecycle.
     unit->_proximity_defense_at_death_done = true;
     ypabact_FireProximityDefenseBurst(unit, true, missileOwner);
 }
@@ -16043,17 +16044,16 @@ void NC_STACK_ypabact::Renew()
     _proximity_defense_trigger_radius = 0.0;
     _proximity_defense_interval = 1000;
     _proximity_defense_shots = 12;
-    _proximity_defense_fire_pos = vec3d(0.0, 0.0, 0.0);
     _proximity_defense_vp_launch = -1;
     _proximity_defense_fire_mode = 0;
     _proximity_defense_sequence_delay = 100;
-    _proximity_defense_at_death = 0;
-    _proximity_defense_random_yaw_set = false;
-    _proximity_defense_random_yaw_min = 0.0;
-    _proximity_defense_random_yaw_max = 360.0;
-    _proximity_defense_random_pitch_set = false;
-    _proximity_defense_random_pitch_min = -10.0;
-    _proximity_defense_random_pitch_max = 45.0;
+    _proximity_defense_mode = 0;
+    _proximity_defense_horizontal_angle_set = false;
+    _proximity_defense_horizontal_angle_min = 0.0;
+    _proximity_defense_horizontal_angle_max = 360.0;
+    _proximity_defense_vertical_angle_set = false;
+    _proximity_defense_vertical_angle_min = -10.0;
+    _proximity_defense_vertical_angle_max = 45.0;
     _proximity_defense_sequence_active = false;
     _proximity_defense_sequence_shots_fired = 0;
     _proximity_defense_next_shot_time = 0;

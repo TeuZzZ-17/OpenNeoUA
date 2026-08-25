@@ -1230,23 +1230,19 @@ static bool ParseScriptFloatRange(const std::string &value, float &minValue, flo
     return World::ParseFloatRangeValue(value, minValue, maxValue);
 }
 
-static int ResolveMimicEnergyCostRange(const std::string &value)
+static bool ParseMimicEnergyCostRange(const std::string &value,
+                                      int &minCost,
+                                      int &maxCost)
 {
-    int minCost = 0;
-    int maxCost = 0;
     if ( !ParseScriptIntRange(value, minCost, maxCost) )
-        return 0;
+        return false;
 
     if ( minCost == 0 && maxCost == 0 )
-        return 0;
+        return true;
     if ( minCost <= 0 || maxCost <= 0 )
-        return 0;
-    if ( minCost == maxCost )
-        return minCost;
+        return false;
 
-    const long long span = (long long)maxCost - (long long)minCost + 1LL;
-    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
-    return minCost + (int)(randomPart * (double)span);
+    return true;
 }
 
 static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
@@ -2425,7 +2421,20 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "mimic_energy_cost") )
     {
-        _vhcl->mimic_energy_cost = ResolveMimicEnergyCostRange(p2);
+        int minCost = 0;
+        int maxCost = 0;
+        if ( ParseMimicEnergyCostRange(p2, minCost, maxCost) )
+        {
+            _vhcl->mimic_energy_cost_min = minCost;
+            _vhcl->mimic_energy_cost_max = maxCost;
+            _vhcl->RollMimicProductionCost();
+        }
+        else
+        {
+            _vhcl->mimic_energy_cost = 0;
+            _vhcl->mimic_energy_cost_min = 0;
+            _vhcl->mimic_energy_cost_max = 0;
+        }
     }
     else if ( !StriCmp(p1, "shield") )
     {
@@ -2844,18 +2853,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int shots = parser.stol(p2, NULL, 0);
         _vhcl->proximity_defense_shots = shots > 0 ? shots : 1;
     }
-    else if ( !StriCmp(p1, "proximity_defense_fire_x") )
-    {
-        _vhcl->proximity_defense_fire_pos.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "proximity_defense_fire_y") )
-    {
-        _vhcl->proximity_defense_fire_pos.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "proximity_defense_fire_z") )
-    {
-        _vhcl->proximity_defense_fire_pos.z = parser.stof(p2, 0);
-    }
     else if ( !StriCmp(p1, "proximity_defense_vp_launch") )
     {
         int vp = parser.stol(p2, NULL, 0);
@@ -2873,27 +2870,27 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int delay = parser.stol(p2, NULL, 0);
         _vhcl->proximity_defense_sequence_delay = delay > 0 ? delay : 100;
     }
-    else if ( !StriCmp(p1, "proximity_defense_at_death") )
+    else if ( !StriCmp(p1, "proximity_defense_mode") )
     {
-        _vhcl->proximity_defense_at_death = parser.stol(p2, NULL, 0) ? 1 : 0;
+        _vhcl->proximity_defense_mode = !StriCmp(p2, "at_death") ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "proximity_defense_random_yaw") )
+    else if ( !StriCmp(p1, "proximity_defense_horizontal_angle") )
     {
-        float yawMin = 0.0f;
-        float yawMax = 360.0f;
-        _vhcl->proximity_defense_random_yaw_set =
-            ParseScriptFloatRange(p2, yawMin, yawMax);
-        _vhcl->proximity_defense_random_yaw_min = yawMin;
-        _vhcl->proximity_defense_random_yaw_max = yawMax;
+        float angleMin = 0.0f;
+        float angleMax = 360.0f;
+        _vhcl->proximity_defense_horizontal_angle_set =
+            ParseScriptFloatRange(p2, angleMin, angleMax);
+        _vhcl->proximity_defense_horizontal_angle_min = angleMin;
+        _vhcl->proximity_defense_horizontal_angle_max = angleMax;
     }
-    else if ( !StriCmp(p1, "proximity_defense_random_pitch") )
+    else if ( !StriCmp(p1, "proximity_defense_vertical_angle") )
     {
-        float pitchMin = -10.0f;
-        float pitchMax = 45.0f;
-        _vhcl->proximity_defense_random_pitch_set =
-            ParseScriptFloatRange(p2, pitchMin, pitchMax);
-        _vhcl->proximity_defense_random_pitch_min = pitchMin;
-        _vhcl->proximity_defense_random_pitch_max = pitchMax;
+        float angleMin = -10.0f;
+        float angleMax = 45.0f;
+        _vhcl->proximity_defense_vertical_angle_set =
+            ParseScriptFloatRange(p2, angleMin, angleMax);
+        _vhcl->proximity_defense_vertical_angle_min = angleMin;
+        _vhcl->proximity_defense_vertical_angle_max = angleMax;
     }
     else if ( !StriCmp(p1, "max_active_at_once") )
     {
@@ -3911,21 +3908,22 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->proximity_defense_trigger_radius = 0.0;
         _vhcl->proximity_defense_interval = 1000;
         _vhcl->proximity_defense_shots = 12;
-        _vhcl->proximity_defense_fire_pos = vec3d(0.0, 0.0, 0.0);
         _vhcl->proximity_defense_vp_launch = -1;
         _vhcl->proximity_defense_fire_mode = 0;
         _vhcl->proximity_defense_sequence_delay = 100;
-        _vhcl->proximity_defense_at_death = 0;
-        _vhcl->proximity_defense_random_yaw_set = false;
-        _vhcl->proximity_defense_random_yaw_min = 0.0;
-        _vhcl->proximity_defense_random_yaw_max = 360.0;
-        _vhcl->proximity_defense_random_pitch_set = false;
-        _vhcl->proximity_defense_random_pitch_min = -10.0;
-        _vhcl->proximity_defense_random_pitch_max = 45.0;
+        _vhcl->proximity_defense_mode = 0;
+        _vhcl->proximity_defense_horizontal_angle_set = false;
+        _vhcl->proximity_defense_horizontal_angle_min = 0.0;
+        _vhcl->proximity_defense_horizontal_angle_max = 360.0;
+        _vhcl->proximity_defense_vertical_angle_set = false;
+        _vhcl->proximity_defense_vertical_angle_min = -10.0;
+        _vhcl->proximity_defense_vertical_angle_max = 45.0;
         _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
+        _vhcl->mimic_energy_cost_min = 0;
+        _vhcl->mimic_energy_cost_max = 0;
         _vhcl->adist_sector = 800.0;
         _vhcl->adist_bact = 650.0;
         _vhcl->sdist_sector = 200.0;

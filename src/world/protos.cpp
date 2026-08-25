@@ -6,8 +6,32 @@
 #include "../ypabact.h"
 #include "../yw.h"
 
+#include <cstdlib>
+
 namespace World
 {
+int TVhclProto::RollMimicProductionCost()
+{
+    if ( mimic_energy_cost_min <= 0 || mimic_energy_cost_max <= 0 )
+    {
+        mimic_energy_cost = 0;
+        return energy;
+    }
+
+    if ( mimic_energy_cost_min == mimic_energy_cost_max )
+    {
+        mimic_energy_cost = mimic_energy_cost_min;
+        return mimic_energy_cost;
+    }
+
+    const long long span = (long long)mimic_energy_cost_max -
+                           (long long)mimic_energy_cost_min + 1LL;
+    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
+    mimic_energy_cost = mimic_energy_cost_min +
+                        (int)(randomPart * (double)span);
+    return mimic_energy_cost;
+}
+
 VehicleCombatClass ResolveVehicleCombatClass(const NC_STACK_ypabact *unit)
 {
     if ( !unit )

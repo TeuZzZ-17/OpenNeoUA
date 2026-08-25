@@ -4066,29 +4066,20 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_proximity_defense_trigger_radius = vhcl.proximity_defense_trigger_radius > 0.0 ? vhcl.proximity_defense_trigger_radius : 0.0;
         bacto->_proximity_defense_interval = vhcl.proximity_defense_interval > 0 ? vhcl.proximity_defense_interval : 1000;
         bacto->_proximity_defense_shots = vhcl.proximity_defense_shots > 0 ? vhcl.proximity_defense_shots : 1;
-        bacto->_proximity_defense_fire_pos = vhcl.proximity_defense_fire_pos;
         bacto->_proximity_defense_vp_launch = vhcl.proximity_defense_vp_launch;
         bacto->_proximity_defense_fire_mode = vhcl.proximity_defense_fire_mode;
         bacto->_proximity_defense_sequence_delay = vhcl.proximity_defense_sequence_delay > 0 ? vhcl.proximity_defense_sequence_delay : 100;
-        bacto->_proximity_defense_at_death = vhcl.proximity_defense_at_death ? 1 : 0;
-        bacto->_proximity_defense_random_yaw_set = vhcl.proximity_defense_random_yaw_set;
-        bacto->_proximity_defense_random_yaw_min = vhcl.proximity_defense_random_yaw_min;
-        bacto->_proximity_defense_random_yaw_max = vhcl.proximity_defense_random_yaw_max;
-        if ( bacto->_proximity_defense_random_yaw_min > bacto->_proximity_defense_random_yaw_max )
-        {
-            float tmpYaw = bacto->_proximity_defense_random_yaw_min;
-            bacto->_proximity_defense_random_yaw_min = bacto->_proximity_defense_random_yaw_max;
-            bacto->_proximity_defense_random_yaw_max = tmpYaw;
-        }
-        bacto->_proximity_defense_random_pitch_set = vhcl.proximity_defense_random_pitch_set;
-        bacto->_proximity_defense_random_pitch_min = vhcl.proximity_defense_random_pitch_min;
-        bacto->_proximity_defense_random_pitch_max = vhcl.proximity_defense_random_pitch_max;
-        if ( bacto->_proximity_defense_random_pitch_min > bacto->_proximity_defense_random_pitch_max )
-        {
-            float tmpPitch = bacto->_proximity_defense_random_pitch_min;
-            bacto->_proximity_defense_random_pitch_min = bacto->_proximity_defense_random_pitch_max;
-            bacto->_proximity_defense_random_pitch_max = tmpPitch;
-        }
+        bacto->_proximity_defense_mode = vhcl.proximity_defense_mode;
+        bacto->_proximity_defense_horizontal_angle_set = vhcl.proximity_defense_horizontal_angle_set;
+        bacto->_proximity_defense_horizontal_angle_min = vhcl.proximity_defense_horizontal_angle_min;
+        bacto->_proximity_defense_horizontal_angle_max = vhcl.proximity_defense_horizontal_angle_max;
+        if ( bacto->_proximity_defense_horizontal_angle_min > bacto->_proximity_defense_horizontal_angle_max )
+            std::swap(bacto->_proximity_defense_horizontal_angle_min, bacto->_proximity_defense_horizontal_angle_max);
+        bacto->_proximity_defense_vertical_angle_set = vhcl.proximity_defense_vertical_angle_set;
+        bacto->_proximity_defense_vertical_angle_min = vhcl.proximity_defense_vertical_angle_min;
+        bacto->_proximity_defense_vertical_angle_max = vhcl.proximity_defense_vertical_angle_max;
+        if ( bacto->_proximity_defense_vertical_angle_min > bacto->_proximity_defense_vertical_angle_max )
+            std::swap(bacto->_proximity_defense_vertical_angle_min, bacto->_proximity_defense_vertical_angle_max);
         bacto->_proximity_defense_sequence_active = false;
         bacto->_proximity_defense_sequence_shots_fired = 0;
         bacto->_proximity_defense_next_shot_time = 0;

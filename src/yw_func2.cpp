@@ -3634,8 +3634,8 @@ static std::vector<std::string> db_vehicle_specialties(
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVULNERABLE));
     if ( db_vehicle_has_kamikaze(p, weapons, vehicles) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_KAMIKAZE));
-    if ( p.proximity_defense_enable || p.proximity_defense_at_death )
-        items.push_back(Locale::Text::OpenUA(p.proximity_defense_at_death ? Locale::OUA_DB_PROXIMITY_DEFENSE_AT_DEATH : Locale::OUA_DB_PROXIMITY_DEFENSE));
+    if ( p.proximity_defense_enable )
+        items.push_back(Locale::Text::OpenUA(p.proximity_defense_mode == 1 ? Locale::OUA_DB_PROXIMITY_DEFENSE_AT_DEATH : Locale::OUA_DB_PROXIMITY_DEFENSE));
     if ( p.extra_weapons[0] > 0 || p.extra_weapons[1] > 0 || p.extra_weapons[2] > 0 )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MULTI_WEAPON));
     if ( db_static_gun_support_active(p) )
