@@ -647,9 +647,25 @@ static bool ypabact_ShouldApplyVPSpin(NC_STACK_ypabact *bact, NC_STACK_base *bas
     return ypabact_IsMainVPBase(bact, base);
 }
 
-static bool ypabact_ShouldApplyProjectileSpiral(NC_STACK_ypabact *bact, NC_STACK_base *base)
+static bool ypabact_HasProjectileChaos(const NC_STACK_ypabact *bact)
 {
-    if ( bact->_spiral_speed <= 0.0f && !bact->_spiral_visual_frozen )
+    return bact && bact->_chaos_speed > 0.0f &&
+           (bact->_chaos_radius > 0.0f || bact->_chaos_forward > 0.0f);
+}
+
+static bool ypabact_HasProjectileSpiral(const NC_STACK_ypabact *bact)
+{
+    return bact && bact->_spiral_speed > 0.0f;
+}
+
+static bool ypabact_HasProjectileVisualMotion(const NC_STACK_ypabact *bact)
+{
+    return ypabact_HasProjectileChaos(bact) || ypabact_HasProjectileSpiral(bact);
+}
+
+static bool ypabact_ShouldApplyProjectileVisualMotion(NC_STACK_ypabact *bact, NC_STACK_base *base)
+{
+    if ( !ypabact_HasProjectileVisualMotion(bact) && !bact->_projectile_visual_motion_frozen )
         return false;
 
     if ( ypabact_IsMainVPBase(bact, base) )
@@ -657,7 +673,7 @@ static bool ypabact_ShouldApplyProjectileSpiral(NC_STACK_ypabact *bact, NC_STACK
 
     // Freeze the final render-only offset for the projectile's short dead/megadeth
     // VP so impact visuals do not snap back to the physical center line.
-    return bact->_spiral_visual_frozen &&
+    return bact->_projectile_visual_motion_frozen &&
            bact->_bact_type == BACT_TYPES_MISSLE &&
            (base == bact->_vp_dead || base == bact->_vp_megadeth);
 }
@@ -707,28 +723,19 @@ static vec3d ypabact_BuildProjectileSpiralOffset(const NC_STACK_ypabact *bact)
     return bact->_rotation.Transpose().Transform(ypabact_BuildProjectileSpiralLocalOffset(bact));
 }
 
-static mat3x3 ypabact_BuildProjectileSpiralTangent(const NC_STACK_ypabact *bact)
+static mat3x3 ypabact_BuildProjectileVisualTangent(const NC_STACK_ypabact *bact,
+                                                   const vec3d &visualVelocityLocal)
 {
-    if ( !bact || bact->_spiral_speed <= 0.0f ||
-         (bact->_spiral_radius <= 0.0f && bact->_spiral_forward <= 0.0f) )
+    if ( !bact )
         return mat3x3::Ident();
-
-    constexpr double TWO_PI = 6.28318530717958647692;
-    const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
-    const double angularSpeed = (double)bact->_spiral_speed * TWO_PI;
-    const double radius = bact->_spiral_radius;
-    const double forwardDistance = bact->_spiral_forward;
 
     // Missile integration advances the physical center by speed * dt * 6.
     // Convert that world-space center velocity back into projectile-local space
-    // and add the derivative of the bounded visual orbit. The resulting vector
-    // is the tangent of the rendered curve, not a new gameplay velocity.
+    // and add the derivative of the render-only motion. The resulting vector is
+    // the tangent of the rendered curve, never a gameplay velocity.
     const vec3d centerVelocityWorld = bact->_fly_dir * (bact->_fly_dir_length * 6.0);
     const vec3d centerVelocityLocal = bact->_rotation.Transform(centerVelocityWorld);
-    vec3d tangent = centerVelocityLocal +
-                    vec3d(-std::sin(phase) * radius * angularSpeed,
-                          -std::cos(phase) * radius * angularSpeed,
-                           std::sin(phase) * 0.5 * forwardDistance * angularSpeed);
+    vec3d tangent = centerVelocityLocal + visualVelocityLocal;
 
     const double tangentLength = tangent.length();
     if ( tangentLength <= 0.000001 )
@@ -748,19 +755,127 @@ static mat3x3 ypabact_BuildProjectileSpiralTangent(const NC_STACK_ypabact *bact)
     return mat3x3::AxisAngle(axis, std::acos(alignment)).Transpose();
 }
 
-bool NC_STACK_ypabact::GetProjectileSpiralVisualDelta(vec3d *worldOffset, mat3x3 *renderRotationDelta) const
+static mat3x3 ypabact_BuildProjectileSpiralTangent(const NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->_spiral_speed <= 0.0f ||
+         (bact->_spiral_radius <= 0.0f && bact->_spiral_forward <= 0.0f) )
+        return mat3x3::Ident();
+
+    constexpr double TWO_PI = 6.28318530717958647692;
+    const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
+    const double angularSpeed = (double)bact->_spiral_speed * TWO_PI;
+    const double radius = bact->_spiral_radius;
+    const double forwardDistance = bact->_spiral_forward;
+
+    const vec3d visualVelocityLocal(-std::sin(phase) * radius * angularSpeed,
+                                   -std::cos(phase) * radius * angularSpeed,
+                                    std::sin(phase) * 0.5 * forwardDistance * angularSpeed);
+    return ypabact_BuildProjectileVisualTangent(bact, visualVelocityLocal);
+}
+
+static uint32_t ypabact_ProjectileChaosHash(uint32_t value)
+{
+    value ^= value >> 16;
+    value *= 0x7feb352du;
+    value ^= value >> 15;
+    value *= 0x846ca68bu;
+    value ^= value >> 16;
+    return value;
+}
+
+static double ypabact_ProjectileChaosUnit(uint32_t value)
+{
+    return (double)(ypabact_ProjectileChaosHash(value) & 0x00ffffffu) / 16777215.0;
+}
+
+static vec3d ypabact_GetProjectileChaosTarget(const NC_STACK_ypabact *bact, uint32_t segment)
+{
+    constexpr double TWO_PI = 6.28318530717958647692;
+    const uint32_t seed = bact->_gid ^ 0x9e3779b9u;
+    const uint32_t segmentSeed = seed ^ (segment * 0x85ebca6bu);
+    const double angle = ypabact_ProjectileChaosUnit(segmentSeed ^ 0xa341316cu) * TWO_PI;
+    const double radiusFactor = std::sqrt(ypabact_ProjectileChaosUnit(segmentSeed ^ 0xc8013ea4u));
+    const double radius = (double)bact->_chaos_radius * radiusFactor;
+    const double forward = (double)bact->_chaos_forward *
+                           ypabact_ProjectileChaosUnit(segmentSeed ^ 0xad90777du);
+
+    // Random targets are kept inside a lateral disc and inside 0..forward on Z.
+    // Smooth interpolation between targets therefore never exceeds configured bounds.
+    return vec3d(std::cos(angle) * radius,
+                 std::sin(angle) * radius,
+                 forward);
+}
+
+static vec3d ypabact_BuildProjectileChaosLocalOffsetAtAge(const NC_STACK_ypabact *bact,
+                                                          double ageMilliseconds)
+{
+    if ( !ypabact_HasProjectileChaos(bact) )
+        return vec3d(0.0, 0.0, 0.0);
+
+    const double ageSeconds = std::max(ageMilliseconds, 0.0) * 0.001;
+    const double motionPhase = ageSeconds * (double)bact->_chaos_speed;
+    const double segmentFloor = std::floor(motionPhase);
+    const uint32_t segment = segmentFloor > (double)std::numeric_limits<uint32_t>::max()
+                           ? std::numeric_limits<uint32_t>::max()
+                           : (uint32_t)segmentFloor;
+    const double phase = motionPhase - segmentFloor;
+    const double smoothPhase = phase * phase * (3.0 - 2.0 * phase);
+
+    const uint32_t nextSegment = segment == std::numeric_limits<uint32_t>::max()
+                               ? segment
+                               : segment + 1u;
+    const vec3d current = ypabact_GetProjectileChaosTarget(bact, segment);
+    const vec3d next = ypabact_GetProjectileChaosTarget(bact, nextSegment);
+    return current + (next - current) * smoothPhase;
+}
+
+static vec3d ypabact_BuildProjectileChaosOffset(const NC_STACK_ypabact *bact)
+{
+    if ( !bact )
+        return vec3d(0.0, 0.0, 0.0);
+
+    const vec3d localOffset = ypabact_BuildProjectileChaosLocalOffsetAtAge(bact, bact->_clock);
+    return bact->_rotation.Transpose().Transform(localOffset);
+}
+
+static mat3x3 ypabact_BuildProjectileChaosTangent(const NC_STACK_ypabact *bact)
+{
+    if ( !ypabact_HasProjectileChaos(bact) )
+        return mat3x3::Ident();
+
+    // A 1 ms finite difference is deterministic, cheap and keeps the rendered
+    // model aligned to the smoothed erratic path without introducing extra state.
+    const double age = (double)std::max<int32_t>(bact->_clock, 0);
+    const vec3d current = ypabact_BuildProjectileChaosLocalOffsetAtAge(bact, age);
+    const vec3d next = ypabact_BuildProjectileChaosLocalOffsetAtAge(bact, age + 1.0);
+    const vec3d visualVelocityLocal = (next - current) * 1000.0;
+    return ypabact_BuildProjectileVisualTangent(bact, visualVelocityLocal);
+}
+
+bool NC_STACK_ypabact::GetProjectileVisualMotionDelta(vec3d *worldOffset, mat3x3 *renderRotationDelta) const
 {
     if ( worldOffset )
         *worldOffset = vec3d(0.0, 0.0, 0.0);
     if ( renderRotationDelta )
         *renderRotationDelta = mat3x3::Ident();
 
-    if ( _spiral_visual_frozen )
+    if ( _projectile_visual_motion_frozen )
     {
         if ( worldOffset )
-            *worldOffset = _spiral_frozen_offset;
+            *worldOffset = _projectile_visual_frozen_offset;
         if ( renderRotationDelta )
-            *renderRotationDelta = _spiral_frozen_rotation;
+            *renderRotationDelta = _projectile_visual_frozen_rotation;
+        return true;
+    }
+
+    // Chaos is the explicit alternative to Spiral. A valid Chaos configuration
+    // therefore takes priority if both modes are present on the same Weapon.
+    if ( ypabact_HasProjectileChaos(this) )
+    {
+        if ( worldOffset )
+            *worldOffset = ypabact_BuildProjectileChaosOffset(this);
+        if ( renderRotationDelta )
+            *renderRotationDelta = ypabact_BuildProjectileChaosTangent(this);
         return true;
     }
 
@@ -779,44 +894,44 @@ bool NC_STACK_ypabact::GetProjectileSpiralVisualDelta(vec3d *worldOffset, mat3x3
     return true;
 }
 
-void NC_STACK_ypabact::FreezeProjectileSpiralVisual()
+void NC_STACK_ypabact::FreezeProjectileVisualMotion()
 {
-    if ( _spiral_visual_frozen || _spiral_speed <= 0.0f )
+    if ( _projectile_visual_motion_frozen || !ypabact_HasProjectileVisualMotion(this) )
         return;
 
     vec3d offset;
     mat3x3 rotation;
-    if ( GetProjectileSpiralVisualDelta(&offset, &rotation) )
+    if ( GetProjectileVisualMotionDelta(&offset, &rotation) )
     {
-        _spiral_frozen_offset = offset;
-        _spiral_frozen_rotation = rotation;
-        _spiral_visual_frozen = true;
+        _projectile_visual_frozen_offset = offset;
+        _projectile_visual_frozen_rotation = rotation;
+        _projectile_visual_motion_frozen = true;
     }
 }
 
-void NC_STACK_ypabact::ResetProjectileSpiralVisualFreeze()
+void NC_STACK_ypabact::ResetProjectileVisualMotionFreeze()
 {
-    _spiral_visual_frozen = false;
-    _spiral_frozen_offset = vec3d(0.0, 0.0, 0.0);
-    _spiral_frozen_rotation = mat3x3::Ident();
+    _projectile_visual_motion_frozen = false;
+    _projectile_visual_frozen_offset = vec3d(0.0, 0.0, 0.0);
+    _projectile_visual_frozen_rotation = mat3x3::Ident();
 }
 
-static void ypabact_ApplyProjectileSpiralVisual(NC_STACK_ypabact *bact, NC_STACK_base *base)
+static void ypabact_ApplyProjectileVisualMotion(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
-    if ( !ypabact_ShouldApplyProjectileSpiral(bact, base) )
+    if ( !ypabact_ShouldApplyProjectileVisualMotion(bact, base) )
         return;
 
     vec3d visualOffset;
     mat3x3 visualRotationDelta;
-    if ( !bact->GetProjectileSpiralVisualDelta(&visualOffset, &visualRotationDelta) )
+    if ( !bact->GetProjectileVisualMotionDelta(&visualOffset, &visualRotationDelta) )
         return;
 
     // Move and orient the root VP only for rendering. Child VPs and every embedded
     // particle emitter inherit this transform through NC_STACK_base::Render().
     // Attached decoration FX reuse the exact same delta through the transient-VP
     // follow path. Once emitted, particles remain at their world-space spawn
-    // positions, so consecutive emissions trace the spiral instead of moving
-    // as one rigid tube. Gameplay position, physics and collision stay central.
+    // positions, so consecutive emissions trace the selected visual motion instead
+    // of moving as one rigid tube. Gameplay position, physics and collision stay central.
     base->TForm().Pos += visualOffset;
     base->TForm().SclRot *= visualRotationDelta;
 }
@@ -4753,7 +4868,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( visualRecoilPitch != 0.0f && ypabact_IsMainVPBase(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= mat3x3::RotateX(visualRecoilPitch);
 
-                ypabact_ApplyProjectileSpiralVisual(this, _current_vp->Bas);
+                ypabact_ApplyProjectileVisualMotion(this, _current_vp->Bas);
 
                 if ( ypabact_ShouldApplyVPSpin(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= World::Spin::BuildMatrix(_vp_spin_strength, _clock);
@@ -4818,7 +4933,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( ypabact_ShouldApplyVPOrientation(this, bd->vp->Bas) )
                     bd->vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_orientation);
 
-                ypabact_ApplyProjectileSpiralVisual(this, bd->vp->Bas);
+                ypabact_ApplyProjectileVisualMotion(this, bd->vp->Bas);
 
                 if ( ypabact_ShouldApplyVPSpin(this, bd->vp->Bas) )
                     bd->vp->Bas->TForm().SclRot *= World::Spin::BuildMatrix(_vp_spin_strength, _clock);
@@ -18630,7 +18745,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
 
             vec3d visualOffset;
             mat3x3 visualRotationDelta;
-            if ( GetProjectileSpiralVisualDelta(&visualOffset, &visualRotationDelta) )
+            if ( GetProjectileVisualMotionDelta(&visualOffset, &visualRotationDelta) )
             {
                 visualPos += visualOffset;
                 visualRot = (_rotation.Transpose() * visualRotationDelta).Transpose();
