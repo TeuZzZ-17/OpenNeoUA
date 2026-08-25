@@ -500,7 +500,10 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
     int a4 = getBACT_bactCollisions();
     const bool spectatorObserver = _world && _world->IsSpectatorBact(this);
 
-    if (!spectatorObserver && _world && !_world->IsRoboMapOpen()
+    // The Spectator vehicle remains a real model = ufo. Observer-specific
+    // restrictions belong to the world/gameplay layer; class-level UFO features
+    // such as optical zoom are intentionally shared with it.
+    if (_world && !_world->IsRoboMapOpen()
             && _world->_userUnit == this && getBACT_inputting())
     {
         int zoomSteps = 0;

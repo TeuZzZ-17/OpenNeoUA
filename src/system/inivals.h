@@ -342,10 +342,8 @@ public:
     static Common::Ini::Key UiStatusIconPlasma;
     static Common::Ini::Key UiStatusIconBlinkCount;
 
-    // OpenNeoUA: Black Sect "imperfect grey clone" runtime balance (owner/faction 5 only).
-    // Pure runtime maluses applied to live actors; never mutate shared prototypes.
-    static Common::Ini::Key GameBlackSectCloneMalusPercent; // game.black_sect_clone_malus_percent (default 5)
-    static Common::Ini::Key GameBlackSectCloneTint;         // game.black_sect_clone_tint (default 140_140_140_255)
+    // OpenNeoUA: render-only tint for Black Sect combat units (owner/faction 5 only).
+    static Common::Ini::Key GameBlackSectUnitsTint; // game.black_sect_units_tint (default 140_140_140_255)
 
     static Common::Ini::Key NetGameExclusiveGem;
     static Common::Ini::Key NetWaitStart;

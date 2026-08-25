@@ -1143,11 +1143,15 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
     bool parsed = ScriptParser::ParseFile(spectatorScript, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
     Common::Env.SetPrefix("rsrc", oldRsrc);
 
-    if ( !parsed || _vhclProtos[targetID].Index != targetID || _vhclProtos[targetID].model_id == BACT_TYPES_NOPE )
+    if ( !parsed ||
+         _vhclProtos[targetID].Index != targetID ||
+         _vhclProtos[targetID].model_id != BACT_TYPES_UFO ||
+         !_vhclProtos[targetID].hidden ||
+         !_vhclProtos[targetID].invulnerable )
     {
         _vhclProtos[targetID] = previous;
         _spectatorVehicleProtoID = -1;
-        ypa_log_out("WARNING: spectator vehicle file %s is invalid. Spectator mode disabled for this level.\n", spectatorScript.c_str());
+        ypa_log_out("WARNING: spectator vehicle file %s must define a valid model = ufo with hidden = yes and invulnerable = 1. Spectator mode disabled for this level.\n", spectatorScript.c_str());
         return false;
     }
 
@@ -1602,7 +1606,6 @@ bool NC_STACK_ypaworld::IsUfoSpyUiControlContext() const
            _userRobo &&
            _userUnit &&
            _viewerBact == _userUnit &&
-           !IsSpectatorControlled() &&
            !IsRoboMapOpen() &&
            _userUnit->_bact_type == BACT_TYPES_UFO &&
            _userUnit->getBACT_inputting() &&
@@ -2000,8 +2003,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
             // Spectator Follow input is handled during the GUI input pass,
             // immediately after the tactical map. This lets an open map consume
-            // the shared wheel/+/- controls first and prevents the later
-            // spectator hotkey filter from discarding Camera Zoom input.
+            // the shared wheel/+/- controls first while the controlled Spectator
+            // UFO keeps its normal class-level input for the later User_layer.
 
             if ( !gameplayFrozen )
             {
@@ -2050,8 +2053,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
             uint32_t v37 = profiler_begin();
 
-            // Do user commands before any unit state can be changed
-            if (_userRobo)
+            // Do user commands before any unit state can be changed. Spectator Mode
+            // keeps the original faction under AI control, so do not consume the
+            // observer UFO's class-level hotkeys as Robo/squad commands here.
+            if (_userRobo && !IsSpectatorControlled())
             {
                 if (_userRobo->_bact_type == BACT_TYPES_ROBO)
                     ((NC_STACK_yparobo *)_userRobo)->HandleUserCommands(&_updateMessage);

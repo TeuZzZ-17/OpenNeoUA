@@ -1185,9 +1185,12 @@ static void yw_ApplySpectatorObserverSafety(NC_STACK_ypabact *spectator)
     if ( !spectator )
         return;
 
-    // Runtime-only neutralization: the spectator is an observer, not an
-    // owner-1 combat unit. Owner 1 keeps the LDF-loaded setup, while the
-    // observer itself is neutral/intangible.
+    // Runtime-only observer restrictions. The Spectator remains its authored
+    // vehicle class (normally model = ufo), so class-level movement/camera/UFO
+    // features keep flowing through the normal implementation instead of a
+    // parallel spectator path.
+    // Owner 1 keeps the LDF-loaded setup, while the observer itself is
+    // neutral/intangible and cannot participate in combat.
     spectator->_owner = World::OWNER_0;
     spectator->_m_owner = World::OWNER_0;
     spectator->_killer = NULL;
@@ -1257,6 +1260,10 @@ static vec3d yw_GetSpectatorSpawnPosition(NC_STACK_ypaworld *yw)
 
 void NC_STACK_ypaworld::TryActivateSpectatorMode()
 {
+    // Detailed UFO Spy UI is normally opt-in. Reset it on every level load so
+    // only Spectator Mode starts with the detailed layer enabled by default.
+    _ufoSpyUiEnabled = false;
+
     if ( !System::IniConf::GameSpectatorMode.Get<bool>() || _levelInfo.Mode == 1 )
         return;
 
@@ -1293,6 +1300,11 @@ void NC_STACK_ypaworld::TryActivateSpectatorMode()
 
     spectator->setBACT_viewer(true);
     spectator->setBACT_inputting(true);
+
+    // Spectator Mode starts with the normal UFO detailed Spy UI visible. The
+    // regular UFO toggle (including the fixed middle-click shortcut) remains
+    // authoritative afterwards, so the player can disable/re-enable it normally.
+    _ufoSpyUiEnabled = true;
 
     // Spectator mode must not start with owner-1 squads pre-selected. The
     // original player faction is simulated by AI only; direct player command

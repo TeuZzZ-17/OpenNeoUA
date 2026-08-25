@@ -43,7 +43,7 @@
 #include "gui/uaempty.h"
 #include "system/movie.h"
 #include "system/inivals.h"
-#include "world/clonebalance.h"
+#include "world/blacksecttint.h"
 #include "world/energyfx.h"
 #include "obj3d.h"
 #include "crashdiag.h"
@@ -853,7 +853,7 @@ int main(int argc, char *argv[])
     CrashDiag::Breadcrumb("STARTUP", "runtime initialized");
 
     // OpenNeoUA: cache global runtime configuration after Nucleus.ini is parsed.
-    World::CloneBalance::Init();
+    World::BlackSectTint::Init();
     World::EnergyFX::Init();
 
     uint32_t ticks = 0;
