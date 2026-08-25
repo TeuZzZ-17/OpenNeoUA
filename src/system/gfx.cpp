@@ -4446,8 +4446,7 @@ void GFXEngine::SetVhsFilterEnabled(bool enabled)
     }
 
     _vhsFilterActive = true;
-    ypa_log_out("VHS filter: ENABLED name=[%s] shader=[%s] strength=%.2f pass=final_frame_after_visual_filter\n",
-                System::IniConf::GfxVhsFilterName.Get<std::string>().c_str(),
+    ypa_log_out("VHS filter: ENABLED shader=[%s] strength=%.2f pass=final_frame_after_visual_filter\n",
                 _vhsFilterShaderPath.c_str(),
                 _vhsFilterStrength);
 }

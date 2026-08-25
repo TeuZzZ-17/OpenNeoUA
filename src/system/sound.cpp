@@ -42,25 +42,6 @@ static int SFX_SampleFrameCount(const TSampleData *sample)
     return sample->bufsz / SFX_SampleFrameSize(sample->Format);
 }
 
-// Returns the duration used by the global sound envelope. Finite looped
-// effects may provide a runtime lifetime; otherwise normal one-shot samples use
-// the audio engine's legacy 1024-tick duration. Open-ended loops have no fade-out.
-static double SFX_SampleDuration(TSoundSource &sound)
-{
-    if ( std::isfinite(sound.FadeDuration) && sound.FadeDuration > 0.0 )
-        return sound.FadeDuration;
-
-    if ( sound.IsLoop() || sound.IsFragmented() || !sound.PSample )
-        return 0.0;
-
-    const int rate = sound.PSample->SampleRate + sound.Pitch;
-    const int frames = SFX_SampleFrameCount(sound.PSample);
-    if ( rate <= 0 || frames <= 0 )
-        return 0.0;
-
-    return (double)frames * 1024.0 / (double)rate;
-}
-
 static float SFX_TemporalFactor(size_t startTime, size_t now,
                                 double duration, int fadeIn, int fadeOut)
 {
@@ -70,13 +51,6 @@ static float SFX_TemporalFactor(size_t startTime, size_t now,
     return World::ComputeTemporalEnvelope(elapsed, duration,
                                           fadeIn,
                                           duration > 0.0 ? fadeOut : 0);
-}
-
-static float SFX_SoundTemporalFactor(TSoundSource &sound, size_t now,
-                                     int fadeIn, int fadeOut)
-{
-    return SFX_TemporalFactor(sound.StartTime, now, SFX_SampleDuration(sound),
-                              fadeIn, fadeOut);
 }
 
 static float SFX_EffectTemporalFactor(TSoundSource &sound, size_t now,
@@ -167,8 +141,6 @@ int SFXEngine::init()
     timeScale = 1.0f;
     timeScaleRemainder = 0.0;
     dword_546F14 = 0;
-    globalSndFadeIn = 0;
-    globalSndFadeOut = 0;
     globalShkFadeIn = 0;
     globalShkFadeOut = 0;
     globalPalFadeIn = 0;
@@ -192,8 +164,6 @@ int SFXEngine::init()
     audio_volume    = System::IniConf::AudioVolume.Get<int>();
     audio_num_palfx = System::IniConf::AudioNumPalfx.Get<int>();
     audio_rev_stereo = System::IniConf::AudioRevStereo.Get<bool>();
-    globalSndFadeIn = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalSndFadeIn);
-    globalSndFadeOut = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalSndFadeOut);
     globalShkFadeIn = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalShkFadeIn);
     globalShkFadeOut = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalShkFadeOut);
     globalPalFadeIn = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalPalFadeIn);
@@ -624,22 +594,14 @@ void SFXEngine::SoundCarrierProcessSounds(TSndCarrier *smpls, float distance)
 
                     if ( snd.Radius > 0.0f )
                     {
-                        const float temporalFactor = SFX_SoundTemporalFactor(snd, currentTime, globalSndFadeIn, globalSndFadeOut);
                         snd.ResultVol = (int16_t)floorf((float)snd.ResultVol *
-                                                       spatialFactor * temporalFactor + 0.5f);
+                                                       spatialFactor + 0.5f);
                     }
                     else
                     {
                         const float legacyDistance = distance / 200.0f;
                         if ( legacyDistance >= 1.0f )
                             snd.ResultVol /= legacyDistance;
-
-                        if ( globalSndFadeIn > 0 || globalSndFadeOut > 0 )
-                        {
-                            const float temporalFactor = SFX_SoundTemporalFactor(
-                                snd, currentTime, globalSndFadeIn, globalSndFadeOut);
-                            snd.ResultVol = (int16_t)floorf((float)snd.ResultVol * temporalFactor + 0.5f);
-                        }
                     }
 
                     if ( snd.ResultVol > 4 )
