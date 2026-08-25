@@ -649,13 +649,12 @@ static bool ypabact_ShouldApplyVPSpin(NC_STACK_ypabact *bact, NC_STACK_base *bas
 
 static bool ypabact_HasProjectileChaos(const NC_STACK_ypabact *bact)
 {
-    return bact && bact->_chaos_speed > 0.0f &&
-           (bact->_chaos_radius > 0.0f || bact->_chaos_forward > 0.0f);
+    return bact && bact->_chaos_factor > 0.0f && bact->_chaos_radius > 0.0f;
 }
 
 static bool ypabact_HasProjectileSpiral(const NC_STACK_ypabact *bact)
 {
-    return bact && bact->_spiral_speed > 0.0f;
+    return bact && bact->_spiral_speed > 0.0f && bact->_spiral_radius > 0.0f;
 }
 
 static bool ypabact_HasProjectileVisualMotion(const NC_STACK_ypabact *bact)
@@ -693,24 +692,18 @@ static mat3x3 ypabact_BuildProjectileSpiralRoll(float speed, int32_t age)
 
 static vec3d ypabact_BuildProjectileSpiralLocalOffset(const NC_STACK_ypabact *bact)
 {
-    if ( !bact || bact->_spiral_speed <= 0.0f ||
-         (bact->_spiral_radius <= 0.0f && bact->_spiral_forward <= 0.0f) )
+    if ( !ypabact_HasProjectileSpiral(bact) )
         return vec3d(0.0, 0.0, 0.0);
 
     const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
     const double radius = bact->_spiral_radius;
-    const double forwardDistance = bact->_spiral_forward;
 
     // RotateZ() uses this clockwise X/Y convention. Keeping the orbit on the
     // same phase makes the model, its children and its emitter directions sweep
     // together instead of counter-rotating around the central flight line.
-    //
-    // The longitudinal component is a bounded 0..forward excursion. It starts
-    // and ends each turn at the physical center and reaches its maximum halfway
-    // through, adding visible forward spread without cumulative collider drift.
     return vec3d(std::cos(phase) * radius,
                 -std::sin(phase) * radius,
-                 (1.0 - std::cos(phase)) * 0.5 * forwardDistance);
+                 0.0);
 }
 
 static vec3d ypabact_BuildProjectileSpiralOffset(const NC_STACK_ypabact *bact)
@@ -757,19 +750,17 @@ static mat3x3 ypabact_BuildProjectileVisualTangent(const NC_STACK_ypabact *bact,
 
 static mat3x3 ypabact_BuildProjectileSpiralTangent(const NC_STACK_ypabact *bact)
 {
-    if ( !bact || bact->_spiral_speed <= 0.0f ||
-         (bact->_spiral_radius <= 0.0f && bact->_spiral_forward <= 0.0f) )
+    if ( !ypabact_HasProjectileSpiral(bact) )
         return mat3x3::Ident();
 
     constexpr double TWO_PI = 6.28318530717958647692;
     const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
     const double angularSpeed = (double)bact->_spiral_speed * TWO_PI;
     const double radius = bact->_spiral_radius;
-    const double forwardDistance = bact->_spiral_forward;
 
     const vec3d visualVelocityLocal(-std::sin(phase) * radius * angularSpeed,
                                    -std::cos(phase) * radius * angularSpeed,
-                                    std::sin(phase) * 0.5 * forwardDistance * angularSpeed);
+                                    0.0);
     return ypabact_BuildProjectileVisualTangent(bact, visualVelocityLocal);
 }
 
@@ -796,14 +787,12 @@ static vec3d ypabact_GetProjectileChaosTarget(const NC_STACK_ypabact *bact, uint
     const double angle = ypabact_ProjectileChaosUnit(segmentSeed ^ 0xa341316cu) * TWO_PI;
     const double radiusFactor = std::sqrt(ypabact_ProjectileChaosUnit(segmentSeed ^ 0xc8013ea4u));
     const double radius = (double)bact->_chaos_radius * radiusFactor;
-    const double forward = (double)bact->_chaos_forward *
-                           ypabact_ProjectileChaosUnit(segmentSeed ^ 0xad90777du);
 
-    // Random targets are kept inside a lateral disc and inside 0..forward on Z.
-    // Smooth interpolation between targets therefore never exceeds configured bounds.
+    // Random targets stay inside the configured lateral disc around the physical
+    // trajectory. Forward travel remains exclusively owned by projectile physics.
     return vec3d(std::cos(angle) * radius,
                  std::sin(angle) * radius,
-                 forward);
+                 0.0);
 }
 
 static vec3d ypabact_BuildProjectileChaosLocalOffsetAtAge(const NC_STACK_ypabact *bact,
@@ -813,7 +802,7 @@ static vec3d ypabact_BuildProjectileChaosLocalOffsetAtAge(const NC_STACK_ypabact
         return vec3d(0.0, 0.0, 0.0);
 
     const double ageSeconds = std::max(ageMilliseconds, 0.0) * 0.001;
-    const double motionPhase = ageSeconds * (double)bact->_chaos_speed;
+    const double motionPhase = ageSeconds * (double)bact->_chaos_factor;
     const double segmentFloor = std::floor(motionPhase);
     const uint32_t segment = segmentFloor > (double)std::numeric_limits<uint32_t>::max()
                            ? std::numeric_limits<uint32_t>::max()
@@ -879,7 +868,7 @@ bool NC_STACK_ypabact::GetProjectileVisualMotionDelta(vec3d *worldOffset, mat3x3
         return true;
     }
 
-    if ( _spiral_speed <= 0.0f )
+    if ( !ypabact_HasProjectileSpiral(this) )
         return false;
 
     if ( worldOffset )
