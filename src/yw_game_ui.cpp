@@ -14421,15 +14421,7 @@ int sb_0x4d7c08__sub0__sub0__sub0(NC_STACK_ypaworld *yw)
 
     FontUA::set_end(&buf);
 
-    SDL_Color uiAccentColor;
-    GFX::Engine.ProcessDrawSeq(buf, NULL,
-                              yw_GetFactionUiAccent(yw, &uiAccentColor));
-
-    if ( v6 && (size_t)v6 < yw->_vhclProtos.size() )
-        StatusIconRenderHudInfoRoles(yw, wis, &yw->_vhclProtos[v6], 0.0, -0.5);
-
-    if ( v14 && (size_t)v14 < yw->_buildProtos.size() )
-        StatusIconRenderBuildingHudInfoRoles(yw, wis, &yw->_buildProtos[v14], 0.0, v6 ? -0.43 : -0.5);
+    GFX::Engine.ProcessDrawSeq(buf);
 
     return 1;
 }
