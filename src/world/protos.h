@@ -145,9 +145,13 @@ struct TDecorationFXConfig
     float random_pos = 0.0;
     vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
+    int vp_fade_in = 0;
+    int vp_fade_out = 0;
     vec3d offset;
     TVisualTint vp_tint;
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
+    int vp_trail_fade_in = 0;
+    int vp_trail_fade_out = 0;
     TVisualTint vp_trail_tint;
 };
 
@@ -615,6 +619,7 @@ struct TVhclProto
     int spawn_interval = 5000;
     float spawn_trigger_radius = 0.0;
     float spawn_random_pos = 0.0;
+    vec3d spawn_offset = vec3d(0.0, 0.0, 0.0);
     int spawn_max_active = 0;
     int spawn_count = 1;
     int spawn_instant = 0;
@@ -1092,6 +1097,12 @@ struct TBuildingProto
     int16_t spawn_vehicle = 0;
     int spawn_interval = 0;
     float spawn_trigger_radius = 0.0;
+    // Preserve the current OpenNeoUA Building-spawner placement when the
+    // new data-driven positioning parameters are absent.
+    float spawn_random_pos = 340.0f;
+    vec3d spawn_offset = vec3d(37.0, 0.0, -41.0);
+    float spawn_height_min = 650.0f;
+    float spawn_height_max = 900.0f;
     int spawn_max_active = 0;
     int spawn_count = 1;
     int spawn_instant = 0;

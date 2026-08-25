@@ -4033,6 +4033,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_spawn_interval = vhcl.spawn_interval > 0 ? vhcl.spawn_interval : 5000;
         bacto->_spawn_trigger_radius = vhcl.spawn_trigger_radius > 0.0 ? vhcl.spawn_trigger_radius : 0.0;
         bacto->_spawn_random_pos = vhcl.spawn_random_pos > 0.0 ? vhcl.spawn_random_pos : 0.0;
+        bacto->_spawn_offset = vhcl.spawn_offset;
         bacto->_spawn_max_active = vhcl.spawn_max_active > 0 ? vhcl.spawn_max_active : 0;
         bacto->_spawn_count = vhcl.spawn_count > 0 ? vhcl.spawn_count : 1;
         bacto->_spawn_instant = vhcl.spawn_instant ? 1 : 0;
