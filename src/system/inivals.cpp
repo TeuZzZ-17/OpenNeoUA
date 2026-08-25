@@ -300,7 +300,7 @@ Common::Ini::Key IniConf::GameUnitEnemyCollisionDamagePercent("game.unit_enemy_c
 // Zero preserves current behavior.
 Common::Ini::Key IniConf::GameUnitFriendlyCollisionDamagePercent("game.unit_friendly_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
 // OpenNeoUA custom: multiplier for the vanilla power-station sector energy effect.
-// game.powerstation_energy_multiplier = 1.0 keeps vanilla; 3.0 triples recharge/drain.
+// game.powerstation_energy_multiplier = 1.0 keeps existing power-energy behaviour; higher values scale static and mobile recharge/drain.
 Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_energy_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
 // OpenNeoUA custom: when explicitly present, replaces vanilla fall damage with a
 // shield-aware percentage of the unit's maximum energy. Missing/invalid keeps
