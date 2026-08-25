@@ -85,8 +85,6 @@ Common::Ini::Key IniConf::GfxColorEffPower16("gfx.color_eff_pwr[16]", Common::In
 
 Common::Ini::Key IniConf::GfxVBO("gfx.vbo", Common::Ini::KT_BOOL, true);
 
-// OpenNeoUA custom: hide the legacy passive menu hover/help description texts by default.
-Common::Ini::Key IniConf::UiHideMenuHints("ui.hide_menu_hints", Common::Ini::KT_BOOL, true);
 // Stored as a single token when saved by Options, e.g. Liberation_Mono_Regular.
 // KT_STRING is intentionally kept so older test builds with spaces still parse.
 Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std::string("Default"));
@@ -772,7 +770,6 @@ void IniConf::Init()
         , &GfxVhsFilterShaderVbo
         , &GfxVhsFilterStrength
 
-        , &UiHideMenuHints
         , &UiMenuFont
         , &UiRetroInterface
         , &UiMapMarkerSound

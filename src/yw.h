@@ -1035,7 +1035,6 @@ public:
 
     void GameShellUiHandleInput();
     void ConnectToServer(std::string connStr);
-    void ShowToolTip(int id);
     void ExitFromNetworkToMain();
     void yw_NetPrintStartInfo();
 
