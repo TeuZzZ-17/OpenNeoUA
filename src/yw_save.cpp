@@ -350,8 +350,19 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
             fil->printf("    shield         = %d\n", proto.shield);
             fil->printf("    energy         = %d\n", proto.energy);
             fil->printf("    max_active_at_once = %d\n", proto.max_active_at_once);
-            if (proto.mimic_energy_cost > 0)
+            if ( proto.mimic_energy_cost_min > 0 && proto.mimic_energy_cost_max > 0 )
+            {
+                if ( proto.mimic_energy_cost_min == proto.mimic_energy_cost_max )
+                    fil->printf("    mimic_energy_cost = %d\n", proto.mimic_energy_cost_min);
+                else
+                    fil->printf("    mimic_energy_cost = %d_%d\n",
+                                proto.mimic_energy_cost_min,
+                                proto.mimic_energy_cost_max);
+            }
+            else if ( proto.mimic_energy_cost > 0 )
+            {
                 fil->printf("    mimic_energy_cost = %d\n", proto.mimic_energy_cost);
+            }
             fil->printf("    num_weapons    = %d\n", proto.num_weapons);
             fil->printf("    weapon         = %d\n", proto.weapon);
             fil->printf("    radar          = %d\n", proto.radar);

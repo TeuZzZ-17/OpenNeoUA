@@ -1,5 +1,5 @@
 ; OpenNeoUA data-driven SuperItem profiles.
-; Loaded only when game.custom_superitems = 1 in Nucleus.ini.
+; Caricato quando un livello LDF richiama un profile = id definito in questo file.
 
 begin_superitem_profile
     id = stoudson_nuclear
@@ -31,7 +31,6 @@ begin_superitem_profile
     shk_wave_time = 12000
     shk_wave_mag0 = 0.1
     shk_wave_mag1 = 0
-    shk_wave_mute = 0.02
     shk_wave_radius = 2000
 
 
