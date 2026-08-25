@@ -1767,341 +1767,6 @@ int UserData::ypaworld_func158__sub0__sub7()
 
 
 
-void UserData::ShowToolTip(int id)
-{
-    // OpenNeoUA: ui.hide_menu_hints (default yes) suppresses the legacy passive menu
-    // hover/help description texts (e.g. "Turn Sky On/Off...", "Go to Save/Load Screen").
-    // This is the single central place where menu buttons assign their hover hint, so the
-    // gate is fully centralized; no language.lng strings are touched. Set the key to "no"
-    // to restore the original behavior.
-    if ( System::IniConf::UiHideMenuHints.Get<bool>() )
-        return;
-
-    switch (id)
-    {
-    default:
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_SAVE_LOAD:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_PROFILESCREEN);
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_INPUT_SETTINGS:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_INPUTSCREEN);
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_OPTIONS:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_VIDEOSCREEN);
-        break;
-
-    case 1005:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SOUNDSCREEN);
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_QUIT:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_QUIT);
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_LANGUAGE:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_LANGSCREEN);
-        break;
-
-    case 1011:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_BRIEFRESET);
-        break;
-
-    case 1013:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_BRIEFFAST);
-        break;
-
-    case 1014:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_PLAYLEVEL);
-        break;
-
-    case 1015:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_LOADLAST);
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_MULTIPLAYER:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_NETSCREEN);
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_HELP:
-    case 1052:
-    case 1107:
-    case 1167:
-    case 1218:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_HELP);
-        break;
-
-    case UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_SINGLE_PLAYER:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_LVLSELECTMAP);
-        break;
-
-    case 1019:
-        if ( p_YW->_levelInfo.State == TLevelInfo::STATE_MENU )
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_TOMAIN);
-        else if ( p_YW->_levelInfo.State == TLevelInfo::STATE_DEBRIEFING )
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_EXITDEBRIEF);
-        else
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_BACKTOLVLSEL);
-        break;
-
-    case 1020:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_GOTOLOADSAVE);
-        break;
-
-    case 1050:
-        p_YW->SetShowingTooltip(Locale::TIP_INPUT_USEJOY);
-        break;
-
-    case 1051:
-        p_YW->SetShowingTooltip(Locale::TIP_INPUT_APPLY);
-        break;
-
-    case 1053:
-        p_YW->SetShowingTooltip(Locale::TIP_INPUT_RESET);
-        break;
-
-    case 1054:
-        p_YW->SetShowingTooltip(Locale::TIP_INPUT_CANCEL);
-        break;
-
-    case 1055:
-        p_YW->SetShowingTooltip(Locale::TIP_INPUT_FFJOY);
-        break;
-
-    case 1056:
-        p_YW->SetShowingTooltip(Locale::TIP_INPUT_REMOVEKEY);
-        break;
-
-    case 1061:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_ALTJOY);
-        break;
-
-    case 1101:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_LOADUSER);
-        break;
-
-    case 1102:
-        p_YW->SetShowingTooltip(Locale::TIP_PROFILE_DEL);
-        break;
-
-    case 1103:
-        p_YW->SetShowingTooltip(Locale::TIP_PFOFILE_NEW);
-        break;
-
-    case 1104:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SAVEUSER);
-        break;
-
-    case 1105:
-        switch ( diskScreenMode )
-        {
-        case 1:
-            p_YW->SetShowingTooltip(Locale::TIP_PFOFILE_SAVETHIS);
-            break;
-        case 2:
-            p_YW->SetShowingTooltip(Locale::TIP_PFOFILE_LOADTHIS);
-            break;
-        case 3:
-            p_YW->SetShowingTooltip(Locale::TIP_PFOFILE_NEWTHIS);
-            break;
-        case 4:
-            p_YW->SetShowingTooltip(Locale::TIP_PFOFILE_DELTHIS);
-            break;
-        default:
-            break;
-        }
-        break;
-
-    case 1106:
-        switch ( diskScreenMode )
-        {
-        case 0:
-            p_YW->SetShowingTooltip(Locale::TIP_PFOFILE_CLOSE);
-            break;
-        case 1:
-            p_YW->SetShowingTooltip(Locale::TIP_PROFILE_CANCELSAVE);
-            break;
-        case 2:
-            p_YW->SetShowingTooltip(Locale::TIP_PROFILE_CANCELLOAD);
-            break;
-        case 3:
-            p_YW->SetShowingTooltip(Locale::TIP_PROFILE_CANCELNEW);
-            break;
-        case 4:
-            p_YW->SetShowingTooltip(Locale::TIP_PROFILE_CANCELDEL);
-            break;
-        default:
-            break;
-        }
-        break;
-    case 1150:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_16BITTEX);
-        break;
-
-    case 1151:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_CHANNELS);
-        break;
-
-    case 1152:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_FXVOLUME);
-        break;
-
-    case 1154:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_MUSICVOLUME);
-        break;
-
-    case 1156:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_RESOLUTION);
-        break;
-
-    case 1157:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_FARDEPTH);
-        break;
-
-    case 1159:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_EXPLODES);
-        break;
-
-    case 1160:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_SKY);
-        break;
-
-    case 1161:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_APPLY);
-        break;
-
-    case 1162:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_CLOSE);
-        break;
-
-    case 1163:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_ENEMYSIGNS);
-        break;
-
-    case 1164:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_MUSIC);
-        break;
-
-    case 1165:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_HWSWMOUSE);
-        break;
-
-    case 1166:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_WINDOWED); // windowed
-        break;
-
-    case 1174:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_HOSTSTATIONAI);
-        break;
-
-    case 1175:
-        p_YW->SetShowingTooltip(Locale::TIP_CONF_SPECTATORMODE);
-        break;
-
-    case 1172:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SEL3DDEV);
-        break;
-
-    case 1201:
-        switch ( netSelMode )
-        {
-        case NETSCREEN_MODE_SELECT:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETSELPROV);
-            break;
-        case NETSCREEN_SESSION_SELECT:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETSELSESS);
-            break;
-        case NETSCREEN_ENTER_NAME:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETPLNAME);
-            break;
-        case NETSCREEN_CHOOSE_MAP:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETSELLVL);
-            break;
-        case NETSCREEN_INSESSION:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETSTART);
-            break;
-        default:
-            break;
-        }
-        break;
-
-    case 1202:
-        if ( netSelMode == NETSCREEN_SESSION_SELECT )
-        {
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_SELNEWLEVEL);
-        }
-        else if ( netSelMode == NETSCREEN_INSESSION )
-        {
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_SENDTOALL);
-        }
-        break;
-
-    case 1203:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_NETCLOSE);
-        break;
-
-    case 1205:
-        switch ( netSelMode )
-        {
-        case NETSCREEN_SESSION_SELECT:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETBACKPLAYER);
-            break;
-        case NETSCREEN_ENTER_NAME:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETBACKPROV);
-            break;
-        case NETSCREEN_CHOOSE_MAP:
-        case NETSCREEN_INSESSION:
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NETBACKSESS);
-            break;
-        default:
-            break;
-        }
-        break;
-
-    case 1206:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SELRESIST);
-        break;
-
-    case 1207:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SELGHOR);
-        break;
-
-    case 1208:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SELMYKO);
-        break;
-
-    case 1209:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SELTAER);
-        break;
-
-    case 1219:
-        if ( rdyStart )
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_NOTREADY);
-        else
-            p_YW->SetShowingTooltip(Locale::TIP_MENU_READY);
-        break;
-
-    case 1225:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_SENDMSG);
-        break;
-
-    case 1250:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_LANGCHOOSE);
-        break;
-
-    case 1251:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_LANGEXIT);
-        break;
-
-    case 1252:
-        p_YW->SetShowingTooltip(Locale::TIP_MENU_HELP);
-        break;
-    }
-}
-
 // Go to options menu
 void UserData::ShowOptionsMenu()
 {
@@ -4968,8 +4633,6 @@ void UserData::GameShellUiHandleInput()
 
     if ( r )
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
 
         if ( r.code == 1350 ) // OK
         {
@@ -5076,8 +4739,6 @@ void UserData::GameShellUiHandleInput()
 
     if ( r )
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
 
         if ( r.code == UIWidgets::MAIN_MENU_EVENT_IDS::BTN_SAVE_LOAD_UP )
         {
@@ -5209,8 +4870,6 @@ void UserData::GameShellUiHandleInput()
 
     if ( r )
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
         switch ( r.code )
         {
         case 1013:
@@ -5367,8 +5026,6 @@ void UserData::GameShellUiHandleInput()
 
     if ( r )
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
 
         if (r.code == 1050)
         {
@@ -5490,8 +5147,6 @@ void UserData::GameShellUiHandleInput()
             NC_STACK_button::ResCode atmosphereResult = atmosphere_button->ProcessWidgetsEvents(Input);
             if (atmosphereResult)
             {
-                if (atmosphereResult.btn)
-                    ShowToolTip(atmosphereResult.btn);
 
                 if (atmosphereResult.code == 1450)
                     AtmosphereOptionsSave();
@@ -5557,8 +5212,6 @@ void UserData::GameShellUiHandleInput()
 
     if ( r )
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
 
         if ( r.code == 1100 )
         {
@@ -5988,8 +5641,6 @@ void UserData::GameShellUiHandleInput()
 
     if ( r )
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
 
         if ( r.code == 103 )
         {
@@ -6250,8 +5901,6 @@ void UserData::GameShellUiHandleInput()
 
     if (r)
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
 
         if ( r.code == 103 )
         {
@@ -6432,8 +6081,6 @@ void UserData::GameShellUiHandleInput()
 
     if ( r )
     {
-        if ( r.btn )
-            ShowToolTip(r.btn);
 
         if ( r.code == 1204 || r.code == 1205 || r.code == 1206 || r.code == 1207 )
         {
