@@ -2,7 +2,10 @@
 #define WORLD_TOOLS_H
 
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
+#include <limits>
 #include <string>
 
 #include "common/common.h"
@@ -12,6 +15,98 @@
 #include "consts.h"
 
 namespace World {
+
+// OpenNeoUA range syntax shared by script/config parameters authored as either
+// a fixed "value" or an inclusive "min_max" range. The generic tokenizer is
+// intentionally untouched; only callers that opt in get this syntax. Reversed
+// endpoints are normalized automatically.
+inline bool ParseIntRangeValue(const std::string &value, int &minValue, int &maxValue)
+{
+    auto parsePart = [](const std::string &part, int &out) -> bool
+    {
+        if ( part.empty() )
+            return false;
+
+        errno = 0;
+        char *end = NULL;
+        const char *begin = part.c_str();
+        long long parsed = std::strtoll(begin, &end, 0);
+        if ( end == begin || errno == ERANGE || *end != '\0' ||
+             parsed < std::numeric_limits<int>::min() ||
+             parsed > std::numeric_limits<int>::max() )
+            return false;
+
+        out = (int)parsed;
+        return true;
+    };
+
+    const size_t separator = value.find('_');
+    if ( separator == std::string::npos )
+    {
+        int fixed = 0;
+        if ( !parsePart(value, fixed) )
+            return false;
+        minValue = fixed;
+        maxValue = fixed;
+        return true;
+    }
+
+    if ( value.find('_', separator + 1) != std::string::npos )
+        return false;
+
+    int first = 0;
+    int second = 0;
+    if ( !parsePart(value.substr(0, separator), first) ||
+         !parsePart(value.substr(separator + 1), second) )
+        return false;
+
+    minValue = std::min(first, second);
+    maxValue = std::max(first, second);
+    return true;
+}
+
+inline bool ParseFloatRangeValue(const std::string &value, float &minValue, float &maxValue)
+{
+    auto parsePart = [](const std::string &part, float &out) -> bool
+    {
+        if ( part.empty() )
+            return false;
+
+        errno = 0;
+        char *end = NULL;
+        const char *begin = part.c_str();
+        float parsed = std::strtof(begin, &end);
+        if ( end == begin || errno == ERANGE || *end != '\0' || !std::isfinite(parsed) )
+            return false;
+
+        out = parsed;
+        return true;
+    };
+
+    const size_t separator = value.find('_');
+    if ( separator == std::string::npos )
+    {
+        float fixed = 0.0f;
+        if ( !parsePart(value, fixed) )
+            return false;
+        minValue = fixed;
+        maxValue = fixed;
+        return true;
+    }
+
+    if ( value.find('_', separator + 1) != std::string::npos )
+        return false;
+
+    float first = 0.0f;
+    float second = 0.0f;
+    if ( !parsePart(value.substr(0, separator), first) ||
+         !parsePart(value.substr(separator + 1), second) )
+        return false;
+
+    minValue = std::min(first, second);
+    maxValue = std::max(first, second);
+    return true;
+}
 
 // Shared optional effect envelope. Fade-in and fade-out are part of the total
 // duration. If their sum exceeds the total, both are reduced proportionally so

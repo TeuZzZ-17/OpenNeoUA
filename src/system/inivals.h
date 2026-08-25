@@ -290,10 +290,8 @@ public:
     static Common::Ini::Key GfxRegenFXVPSpinZ;
     static Common::Ini::Key GfxRegenFXTint;
     static Common::Ini::Key GfxRegenFXDuration;
-    static Common::Ini::Key GfxRegenFXIntervalMin;
-    static Common::Ini::Key GfxRegenFXIntervalMax;
-    static Common::Ini::Key GfxRegenFXCountMin;
-    static Common::Ini::Key GfxRegenFXCountMax;
+    static Common::Ini::Key GfxRegenFXInterval;
+    static Common::Ini::Key GfxRegenFXCount;
     static Common::Ini::Key GfxRegenFXRandomOffsetPercent;
     static Common::Ini::Key GfxRegenMeshSize;
     static Common::Ini::Key GfxRegenMeshThickness;
@@ -308,10 +306,8 @@ public:
     static Common::Ini::Key GfxDrainFXVPSpinZ;
     static Common::Ini::Key GfxDrainFXTint;
     static Common::Ini::Key GfxDrainFXDuration;
-    static Common::Ini::Key GfxDrainFXIntervalMin;
-    static Common::Ini::Key GfxDrainFXIntervalMax;
-    static Common::Ini::Key GfxDrainFXCountMin;
-    static Common::Ini::Key GfxDrainFXCountMax;
+    static Common::Ini::Key GfxDrainFXInterval;
+    static Common::Ini::Key GfxDrainFXCount;
     static Common::Ini::Key GfxDrainFXRandomOffsetPercent;
     static Common::Ini::Key GfxDrainMeshSize;
     static Common::Ini::Key GfxDrainMeshThickness;
