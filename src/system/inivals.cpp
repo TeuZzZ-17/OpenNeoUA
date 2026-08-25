@@ -437,15 +437,9 @@ Common::Ini::Key IniConf::UiStatusIconPlasma(
 // immediate behavior; runtime clamps the value to 0..10.
 Common::Ini::Key IniConf::UiStatusIconBlinkCount("ui.status_icon_blink_count", Common::Ini::KT_DIGIT, (int32_t)0);
 
-// OpenNeoUA custom: Black Sect "imperfect grey clone" runtime balance (owner/faction 5).
-// When enabled, live Black Sect actors get a small malus (default 5%) to
-// effective shield, outgoing damage, force, maxrot and the selected weapon/MGUN
-// cooldown fields, plus an automatic grey identity tint. These are RUNTIME-only adjustments:
-// they never modify the shared vehicle/weapon prototypes and never touch energy/maxHP.
-// game.black_sect_clone_malus_percent = 5 ; malus to force/maxrot/effective shield/outgoing damage and all configured shot times
-Common::Ini::Key IniConf::GameBlackSectCloneMalusPercent("game.black_sect_clone_malus_percent", Common::Ini::KT_DIGIT, (int32_t)5);
-// game.black_sect_clone_tint = 140_140_140_255 ; grey clone identity tint, R_G_B_A each 0..255
-Common::Ini::Key IniConf::GameBlackSectCloneTint("game.black_sect_clone_tint", Common::Ini::KT_WORD, std::string("140_140_140_255"));
+// OpenNeoUA custom: render-only tint for Black Sect combat units (owner/faction 5).
+// game.black_sect_units_tint = 140_140_140_255 ; R_G_B_A, each component 0..255
+Common::Ini::Key IniConf::GameBlackSectUnitsTint("game.black_sect_units_tint", Common::Ini::KT_WORD, std::string("140_140_140_255"));
 
 // Ypaworld keys
 Common::Ini::Key IniConf::NetGameExclusiveGem("netgame.exclusivegem", Common::Ini::KT_BOOL, true);
@@ -751,8 +745,7 @@ void IniConf::Init()
         , &UiStatusIconHandbrake
         , &UiStatusIconPlasma
         , &UiStatusIconBlinkCount
-        , &GameBlackSectCloneMalusPercent
-        , &GameBlackSectCloneTint
+        , &GameBlackSectUnitsTint
 
         , &NetGameExclusiveGem
         , &NetWaitStart
