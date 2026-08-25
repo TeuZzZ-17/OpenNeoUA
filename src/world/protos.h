@@ -872,10 +872,10 @@ struct TWeapProto
         return (_weaponFlags & WEAPON_FLAG_KAMIKAZE) != 0;
     }
 
-    // OpenNeoUA custom: the render-only projectile spiral is available to every
-    // physical projectile class. Continuous laser classes deliberately remain
-    // excluded because they render beams instead of a travelling projectile VP.
-    bool SupportsProjectileSpiral() const
+    // OpenNeoUA custom: render-only projectile motion modifiers are available to
+    // every physical projectile class. Continuous laser classes deliberately
+    // remain excluded because they render beams instead of a travelling projectile VP.
+    bool SupportsProjectileVisualMotion() const
     {
         return (_weaponFlags & WEAPON_FLAG_PROJECTILE) != 0 &&
                !IsLaser() && !IsKamikaze();
@@ -922,6 +922,13 @@ struct TWeapProto
     float spiral_speed = 0.0f;
     float spiral_radius = 0.0f;
     float spiral_forward = 0.0f;
+    // OpenNeoUA custom: render-only erratic projectile motion. Speed controls
+    // smooth random target changes per second (0..10). Radius bounds lateral
+    // deviation and Forward bounds forward-only deviation (both 0..1000).
+    // When Chaos and Spiral are both valid, Chaos takes visual priority.
+    float chaos_speed = 0.0f;
+    float chaos_radius = 0.0f;
+    float chaos_forward = 0.0f;
     TVisualTint vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);

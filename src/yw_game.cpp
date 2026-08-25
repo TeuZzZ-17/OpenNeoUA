@@ -3580,7 +3580,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
                 {
                     vec3d visualOffset;
                     mat3x3 visualRotationDelta;
-                    if ( owner->GetProjectileSpiralVisualDelta(&visualOffset, &visualRotationDelta) )
+                    if ( owner->GetProjectileVisualMotionDelta(&visualOffset, &visualRotationDelta) )
                     {
                         ownerPos += visualOffset;
                         ownerRenderRot *= visualRotationDelta;
