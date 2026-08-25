@@ -1078,6 +1078,7 @@ public:
     int _spawn_interval;
     float _spawn_trigger_radius;
     float _spawn_random_pos;
+    vec3d _spawn_offset;
     int _spawn_max_active;
     int _spawn_count;
     int _spawn_instant;

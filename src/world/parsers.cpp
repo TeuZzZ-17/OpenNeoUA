@@ -1206,6 +1206,18 @@ static bool ParseVPOrientationParam(const std::string &p1,
     return true;
 }
 
+static float ParseFiniteFloatOrFallback(ScriptParser::Parser &parser,
+                                        const std::string &value,
+                                        float fallback)
+{
+    size_t parsed = 0;
+    float result = parser.stof(value, &parsed);
+    if ( parsed != value.size() || !std::isfinite(result) )
+        return fallback;
+
+    return result;
+}
+
 static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
                                    const std::string &p1,
                                    const std::string &p2,
@@ -1258,6 +1270,34 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
     {
         int duration = parser.stol(p2, NULL, 0);
         config.duration = duration > 0 ? duration : 1000;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "decoration_fx_vp_fade_in") )
+    {
+        int fade = parser.stol(p2, NULL, 0);
+        config.vp_fade_in = fade > 0 ? fade : 0;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "decoration_fx_vp_fade_out") )
+    {
+        int fade = parser.stol(p2, NULL, 0);
+        config.vp_fade_out = fade > 0 ? fade : 0;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "decoration_fx_vp_trail_fade_in") )
+    {
+        int fade = parser.stol(p2, NULL, 0);
+        config.vp_trail_fade_in = fade > 0 ? fade : 0;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "decoration_fx_vp_trail_fade_out") )
+    {
+        int fade = parser.stol(p2, NULL, 0);
+        config.vp_trail_fade_out = fade > 0 ? fade : 0;
         return true;
     }
 
@@ -2664,6 +2704,18 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         float radius = parser.stof(p2, 0);
         _vhcl->spawn_random_pos = radius > 0.0 ? radius : 0.0;
     }
+    else if ( !StriCmp(p1, "spawn_offset_x") )
+    {
+        _vhcl->spawn_offset.x = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+    }
+    else if ( !StriCmp(p1, "spawn_offset_y") )
+    {
+        _vhcl->spawn_offset.y = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+    }
+    else if ( !StriCmp(p1, "spawn_offset_z") )
+    {
+        _vhcl->spawn_offset.z = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+    }
     else if ( !StriCmp(p1, "spawn_max_active") )
     {
         int maxActive = parser.stol(p2, NULL, 0);
@@ -3837,6 +3889,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->spawn_interval = 5000;
         _vhcl->spawn_trigger_radius = 0.0;
         _vhcl->spawn_random_pos = 0.0;
+        _vhcl->spawn_offset = vec3d(0.0, 0.0, 0.0);
         _vhcl->spawn_max_active = 0;
         _vhcl->spawn_count = 1;
         _vhcl->spawn_instant = 0;
@@ -5116,6 +5169,29 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         float radius = parser.stof(p2, 0);
         _bld->spawn_trigger_radius = radius > 0.0 ? radius : 0.0;
+    }
+    else if ( !StriCmp(p1, "spawn_random_pos") )
+    {
+        float radius = ParseFiniteFloatOrFallback(parser, p2, 340.0f);
+        _bld->spawn_random_pos = radius >= 0.0 ? radius : 340.0f;
+    }
+    else if ( !StriCmp(p1, "spawn_offset_x") )
+    {
+        _bld->spawn_offset.x = ParseFiniteFloatOrFallback(parser, p2, 37.0f);
+    }
+    else if ( !StriCmp(p1, "spawn_offset_z") )
+    {
+        _bld->spawn_offset.z = ParseFiniteFloatOrFallback(parser, p2, -41.0f);
+    }
+    else if ( !StriCmp(p1, "spawn_height_min") )
+    {
+        float height = ParseFiniteFloatOrFallback(parser, p2, 650.0f);
+        _bld->spawn_height_min = height >= 0.0 ? height : 650.0f;
+    }
+    else if ( !StriCmp(p1, "spawn_height_max") )
+    {
+        float height = ParseFiniteFloatOrFallback(parser, p2, 900.0f);
+        _bld->spawn_height_max = height >= 0.0 ? height : 900.0f;
     }
     else if ( !StriCmp(p1, "spawn_max_active") )
     {

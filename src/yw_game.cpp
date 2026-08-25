@@ -2765,7 +2765,7 @@ static void yw_ConfigureTransientVPFade(NC_STACK_ypaworld::TTransientVP &effect,
     effect.fadeElapsed = std::isfinite(elapsed) && elapsed >= 0.0 ? elapsed : -1.0;
 }
 
-int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls)
+int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
 {
     if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() || lifeTime < 0 )
         return 0;
@@ -2784,6 +2784,7 @@ int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, c
         fx.spin = spin;
         fx.tint = tint;
         fx.particleControls = particleControls;
+        yw_ConfigureTransientVPFade(fx, fadeIn, fadeOut, (double)lifeTime);
         return fx.id;
     }
 
@@ -2875,7 +2876,7 @@ bool NC_STACK_ypaworld::UpdateRandomFXTimer(int intervalMin, int intervalMax, in
     return true;
 }
 
-int32_t NC_STACK_ypaworld::SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint, int32_t lifeTime, float scale, const vec3d &offset, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls)
+int32_t NC_STACK_ypaworld::SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint, int32_t lifeTime, float scale, const vec3d &offset, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
 {
     if ( modelId <= 0 )
         return 0;
@@ -2888,7 +2889,7 @@ int32_t NC_STACK_ypaworld::SpawnRandomizedTransientVP(int32_t modelId, const vec
         pos.z += (((float)rand() / (float)RAND_MAX) * 2.0 - 1.0) * randomPos;
     }
 
-    return SpawnTransientVP(modelId, pos, mat3x3::Ident(), lifeTime, scale, tint, axisScale, spin, particleControls);
+    return SpawnTransientVP(modelId, pos, mat3x3::Ident(), lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
 }
 
 void NC_STACK_ypaworld::UpdateDecorationFX(const World::TDecorationFXConfig &config, int32_t &nextTime, const vec3d &ownerPos, int32_t *persistentId)
@@ -2903,14 +2904,17 @@ void NC_STACK_ypaworld::UpdateDecorationFX(const World::TDecorationFXConfig &con
             return;
 
         if ( !HasTransientVP(*persistentId) )
-            *persistentId = SpawnTransientVP(config.vp, ownerPos + config.offset, mat3x3::Ident(), 0, 1.0, tint, config.vp_scale, config.vp_spin, TTransientVPParticleControls(config));
+            *persistentId = SpawnTransientVP(config.vp, ownerPos + config.offset, mat3x3::Ident(), 0, 1.0, tint,
+                                             config.vp_scale, config.vp_spin,
+                                             TTransientVPParticleControls(config),
+                                             config.vp_fade_in, config.vp_fade_out);
 
         return;
     }
 
     if ( persistentId && *persistentId > 0 )
     {
-        RemoveTransientVP(*persistentId);
+        RemoveTransientVP(*persistentId, config.vp_fade_out, config.vp_trail_fade_out);
         *persistentId = 0;
     }
 
@@ -2938,10 +2942,12 @@ void NC_STACK_ypaworld::UpdateDecorationFX(const World::TDecorationFXConfig &con
                                    config.offset,
                                    config.vp_scale,
                                    config.vp_spin,
-                                   TTransientVPParticleControls(config));
+                                   TTransientVPParticleControls(config),
+                                   config.vp_fade_in,
+                                   config.vp_fade_out);
 }
 
-int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale, bool useOwnerTransform, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, bool playerFirstPersonOnly, const vec3d &localRotation, bool hideInOwnerMissileCamera, const TTransientVPParticleControls &particleControls, bool followOwnerVisualTransform)
+int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale, bool useOwnerTransform, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, bool playerFirstPersonOnly, const vec3d &localRotation, bool hideInOwnerMissileCamera, const TTransientVPParticleControls &particleControls, bool followOwnerVisualTransform, int32_t fadeIn, int32_t fadeOut)
 {
     if ( !owner || modelId <= 0 || modelId >= (int32_t)_vhclModels.size() )
         return 0;
@@ -2973,6 +2979,7 @@ int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_yp
     fx.spin = spin;
     fx.tint = tint;
     fx.particleControls = particleControls;
+    yw_ConfigureTransientVPFade(fx, fadeIn, fadeOut, (double)lifeTime);
     return fx.id;
 }
 
@@ -3014,7 +3021,7 @@ bool NC_STACK_ypaworld::HasTransientVP(int32_t id) const
     return false;
 }
 
-void NC_STACK_ypaworld::RemoveTransientVP(int32_t id)
+void NC_STACK_ypaworld::RemoveTransientVP(int32_t id, int32_t fadeOut, int32_t particleFadeOut)
 {
     if ( id <= 0 )
         return;
@@ -3023,6 +3030,30 @@ void NC_STACK_ypaworld::RemoveTransientVP(int32_t id)
     {
         if ( it->id == id )
         {
+            const int32_t modelFadeOut = fadeOut > 0 ? fadeOut : 0;
+            const int32_t trailFadeOut = it->particleControls.enabled && particleFadeOut > 0
+                                       ? particleFadeOut : 0;
+            const int32_t endingDuration = std::max(modelFadeOut, trailFadeOut);
+
+            if ( endingDuration > 0 )
+            {
+                if ( !it->ending )
+                {
+                    it->ending = true;
+                    it->endingAge = it->age;
+                    it->endingDuration = endingDuration;
+                    it->endingFadeOut = modelFadeOut;
+                    it->endingParticleFadeOut = trailFadeOut;
+
+                    // Persistent attached Decoration FX must be able to finish
+                    // their visual fade even if the owner dies/disappears.
+                    // Keep the last resolved world transform and detach only
+                    // for the terminal visual envelope.
+                    it->followOwner = false;
+                }
+                return;
+            }
+
             _transientVPs.erase(it);
             return;
         }
@@ -3242,11 +3273,16 @@ static bool yw_AdjustBuildingSpawnHeight(NC_STACK_ypaworld *world, const World::
     // Spawn them above the building cell, not at ground level.
     // UA uses negative Y for higher altitude, so subtracting extraHeight
     // places the unit above the terrain/building.
-    const float baseAirSpawnHeight = 650.0;
-    const float randomAirSpawnHeight = 250.0;
-    float extraHeight = baseAirSpawnHeight;
+    float minHeight = std::isfinite(proto.spawn_height_min) && proto.spawn_height_min >= 0.0f
+                    ? proto.spawn_height_min : 650.0f;
+    float maxHeight = std::isfinite(proto.spawn_height_max) && proto.spawn_height_max >= 0.0f
+                    ? proto.spawn_height_max : 900.0f;
+    if ( maxHeight < minHeight )
+        std::swap(minHeight, maxHeight);
 
-    extraHeight += ((float)rand() / (float)RAND_MAX) * randomAirSpawnHeight;
+    float extraHeight = minHeight;
+    if ( maxHeight > minHeight )
+        extraHeight += ((float)rand() / (float)RAND_MAX) * (maxHeight - minHeight);
 
     pos->y = ground.isectPos.y - protos[proto.spawn_vehicle].overeof - extraHeight;
     return true;
@@ -3375,18 +3411,23 @@ static bool yw_FindBuildingSpawnPosition(NC_STACK_ypaworld *world, cellArea &cel
     // above the same powerstation/building cell, with limited random X/Z
     // jitter. This makes Sulg infected powerstations look like they are
     // emitting airborne spores from themselves instead of from nearby sectors.
-    const float randomXZ = World::CVSectorHalfLength - 260.0;
-    const int maxAttempts = 16;
+    const float randomXZ = std::isfinite(proto.spawn_random_pos) && proto.spawn_random_pos > 0.0f
+                         ? proto.spawn_random_pos : 0.0f;
+    const int maxAttempts = randomXZ > 0.0f ? 16 : 1;
 
     for (int attempt = 0; attempt < maxAttempts; attempt++)
     {
         vec3d pos = cell.CenterPos;
+        pos.x += proto.spawn_offset.x;
+        pos.z += proto.spawn_offset.z;
 
-        float rndX = ((float)rand() / (float)RAND_MAX) * 2.0 - 1.0;
-        float rndZ = ((float)rand() / (float)RAND_MAX) * 2.0 - 1.0;
-
-        pos.x += rndX * randomXZ + 37.0;
-        pos.z += rndZ * randomXZ - 41.0;
+        if ( randomXZ > 0.0f )
+        {
+            float rndX = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+            float rndZ = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+            pos.x += rndX * randomXZ;
+            pos.z += rndZ * randomXZ;
+        }
 
         if ( yw_IsBuildingSpawnPositionClear(world, cell, proto, &pos, &lastFailReason) )
         {
@@ -3537,7 +3578,11 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
 {
     for (auto it = effects->begin(); it != effects->end();)
     {
-        if ( !it->vp || (it->lifeTime > 0 && it->age >= it->lifeTime) )
+        const bool endingFinished = it->ending &&
+                                    it->endingDuration > 0 &&
+                                    it->age - it->endingAge >= it->endingDuration;
+        if ( !it->vp || endingFinished ||
+             (!it->ending && it->lifeTime > 0 && it->age >= it->lifeTime) )
         {
             it = effects->erase(it);
             continue;
@@ -3670,7 +3715,18 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
 
         World::TVisualTint renderTint = it->tint;
         float fadeFactor = 1.0f;
-        if ( it->fadeIn > 0 || it->fadeOut > 0 )
+        if ( it->ending )
+        {
+            const double endingElapsed = (double)std::max<int32_t>(0, it->age - it->endingAge);
+            fadeFactor = it->endingFadeOut > 0
+                       ? World::ComputeVPFadeEnvelope(endingElapsed,
+                                                      (double)it->endingFadeOut,
+                                                      0.0,
+                                                      (double)it->endingFadeOut)
+                       : 0.0f;
+            renderTint.a *= fadeFactor;
+        }
+        else if ( it->fadeIn > 0 || it->fadeOut > 0 )
         {
             const double fadeElapsed = it->fadeElapsed >= 0.0
                                      ? it->fadeElapsed : (double)it->age;
@@ -3693,7 +3749,28 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         if ( it->particleControls.enabled )
         {
             World::TVisualTint particleTint = it->particleControls.tint;
-            particleTint.a *= fadeFactor;
+            float particleFadeFactor = 1.0f;
+            if ( it->ending )
+            {
+                const double endingElapsed = (double)std::max<int32_t>(0, it->age - it->endingAge);
+                particleFadeFactor = it->endingParticleFadeOut > 0
+                                   ? World::ComputeVPFadeEnvelope(endingElapsed,
+                                                                  (double)it->endingParticleFadeOut,
+                                                                  0.0,
+                                                                  (double)it->endingParticleFadeOut)
+                                   : 0.0f;
+            }
+            else if ( it->particleControls.fadeIn > 0 || it->particleControls.fadeOut > 0 )
+            {
+                const double particleDuration = it->lifeTime > 0
+                                              ? (double)it->lifeTime : 0.0;
+                particleFadeFactor = World::ComputeVPFadeEnvelope((double)it->age,
+                                                                  particleDuration,
+                                                                  it->particleControls.fadeIn,
+                                                                  it->particleControls.fadeOut);
+            }
+
+            particleTint.a *= particleFadeFactor;
             arg->particleTint = GFX::TGLColor(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
             arg->particleScale = it->particleControls.scale;
             arg->particleLifetimeScale = it->particleControls.lifetimeScale;
@@ -4296,7 +4373,9 @@ void NC_STACK_ypaworld::BuildingDecorationFXUpdate()
     {
         if ( !yw_IsActiveBuildingSpawnerCell(cell) )
         {
-            RemoveTransientVP(cell.DecorationFXPersistentId);
+            RemoveTransientVP(cell.DecorationFXPersistentId,
+                              cell.DecorationFX.vp_fade_out,
+                              cell.DecorationFX.vp_trail_fade_out);
             cell.DecorationFXPersistentId = 0;
             cell.DecorationFXNextTime = 0;
             cell.BuildingSpawnLastTime = 0;

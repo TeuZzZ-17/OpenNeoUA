@@ -2045,10 +2045,11 @@ static bool ypabact_IsCarrierSpawnPositionValid(NC_STACK_ypabact *carrier, const
 static bool ypabact_FindCarrierSpawnPosition(NC_STACK_ypabact *carrier, vec3d *outPos)
 {
     int attempts = carrier->_spawn_random_pos > 0.0 ? 8 : 1;
+    const vec3d basePos = carrier->_position + carrier->_rotation.Transpose().Transform(carrier->_spawn_offset);
 
     for (int i = 0; i < attempts; i++)
     {
-        vec3d pos = carrier->_position;
+        vec3d pos = basePos;
 
         if ( carrier->_spawn_random_pos > 0.0 )
         {
@@ -2066,9 +2067,9 @@ static bool ypabact_FindCarrierSpawnPosition(NC_STACK_ypabact *carrier, vec3d *o
         }
     }
 
-    if ( carrier->_spawn_random_pos > 0.0 && ypabact_IsCarrierSpawnPositionValid(carrier, carrier->_position) )
+    if ( carrier->_spawn_random_pos > 0.0 && ypabact_IsCarrierSpawnPositionValid(carrier, basePos) )
     {
-        *outPos = carrier->_position;
+        *outPos = basePos;
         return true;
     }
 
@@ -2556,6 +2557,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _spawn_interval = 5000;
     _spawn_trigger_radius = 0.0;
     _spawn_random_pos = 0.0;
+    _spawn_offset = vec3d(0.0, 0.0, 0.0);
     _spawn_max_active = 0;
     _spawn_count = 1;
     _spawn_instant = 0;
@@ -2750,6 +2752,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _spawn_interval = 5000;
     _spawn_trigger_radius = 0.0;
     _spawn_random_pos = 0.0;
+    _spawn_offset = vec3d(0.0, 0.0, 0.0);
     _spawn_max_active = 0;
     _spawn_count = 1;
     _spawn_instant = 0;
@@ -4158,7 +4161,9 @@ static void ypabact_SpawnDecorationFXEvent(NC_STACK_ypabact *bact)
                                         vec3d(0.0, 0.0, 0.0),
                                         true,
                                         NC_STACK_ypaworld::TTransientVPParticleControls(bact->_decoration_fx),
-                                        true);
+                                        true,
+                                        bact->_decoration_fx.vp_fade_in,
+                                        bact->_decoration_fx.vp_fade_out);
     }
 }
 
@@ -4305,7 +4310,9 @@ void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
     {
         _decoration_fx_next_time = 0;
         if ( _world )
-            _world->RemoveTransientVP(_decoration_fx_persistent_id);
+            _world->RemoveTransientVP(_decoration_fx_persistent_id,
+                                      _decoration_fx.vp_fade_out,
+                                      _decoration_fx.vp_trail_fade_out);
         _decoration_fx_persistent_id = 0;
         return;
     }
@@ -4330,13 +4337,17 @@ void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
                                                  vec3d(0.0, 0.0, 0.0),
                                                  true,
                                                  NC_STACK_ypaworld::TTransientVPParticleControls(_decoration_fx),
-                                                 true);
+                                                 true,
+                                                 _decoration_fx.vp_fade_in,
+                                                 _decoration_fx.vp_fade_out);
         }
 
         return;
     }
 
-    _world->RemoveTransientVP(_decoration_fx_persistent_id);
+    _world->RemoveTransientVP(_decoration_fx_persistent_id,
+                              _decoration_fx.vp_fade_out,
+                              _decoration_fx.vp_trail_fade_out);
     _decoration_fx_persistent_id = 0;
 
     if ( !_world->UpdateRandomFXTimer(_decoration_fx.interval_min, _decoration_fx.interval_max, _decoration_fx_next_time) )
@@ -16028,6 +16039,7 @@ void NC_STACK_ypabact::Renew()
     _spawn_interval = 5000;
     _spawn_trigger_radius = 0.0;
     _spawn_random_pos = 0.0;
+    _spawn_offset = vec3d(0.0, 0.0, 0.0);
     _spawn_max_active = 0;
     _spawn_count = 1;
     _spawn_instant = 0;
