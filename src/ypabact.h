@@ -928,7 +928,7 @@ public:
     vec3d _scale;
     vec3d _vp_scale = vec3d(1.0, 1.0, 1.0);
     World::TVisualTint _vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
-    vec3d _vp_orientation = vec3d(0.0, 0.0, 0.0);
+    vec3d _vp_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
     float _spiral_speed = 0.0f;   // OpenNeoUA: render-only spiral revolutions/s
     float _spiral_radius = 0.0f;  // OpenNeoUA: visual orbit radius in model/world units

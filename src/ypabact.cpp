@@ -629,11 +629,11 @@ static bool ypabact_IsMainVPBase(NC_STACK_ypabact *bact, NC_STACK_base *base)
     return base == bact->_vp_normal || base == bact->_vp_fire || base == bact->_vp_wait || base == bact->_vp_genesis;
 }
 
-static bool ypabact_ShouldApplyVPOrientation(NC_STACK_ypabact *bact, NC_STACK_base *base)
+static bool ypabact_ShouldApplyVPRotation(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
-    if ( bact->_vp_orientation.x == 0.0 &&
-         bact->_vp_orientation.y == 0.0 &&
-         bact->_vp_orientation.z == 0.0 )
+    if ( bact->_vp_rotation.x == 0.0 &&
+         bact->_vp_rotation.y == 0.0 &&
+         bact->_vp_rotation.z == 0.0 )
         return false;
 
     return ypabact_IsMainVPBase(bact, base);
@@ -2418,7 +2418,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _player_max_altitude_above_ground = 0.0;
     _vp_scale = vec3d(1.0, 1.0, 1.0);
     _vp_tint = World::TVisualTint();
-    _vp_orientation = vec3d(0.0, 0.0, 0.0);
+    _vp_rotation = vec3d(0.0, 0.0, 0.0);
     _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
     _vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     _vp_trail_tint = World::TVisualTint();
@@ -2680,7 +2680,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     ypabact_ResetDamagedFX(this);
     _vp_scale = vec3d(1.0, 1.0, 1.0);
     _vp_tint = World::TVisualTint();
-    _vp_orientation = vec3d(0.0, 0.0, 0.0);
+    _vp_rotation = vec3d(0.0, 0.0, 0.0);
     _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
     _vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     _vp_trail_tint = World::TVisualTint();
@@ -4849,8 +4849,8 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 _current_vp->Bas->TForm().SclRot = _tForm.SclRot;
 
                 bool scaled = shouldApplyVPScale(_current_vp->Bas);
-                if ( ypabact_ShouldApplyVPOrientation(this, _current_vp->Bas) )
-                    _current_vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_orientation);
+                if ( ypabact_ShouldApplyVPRotation(this, _current_vp->Bas) )
+                    _current_vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_rotation);
 
                 float visualRecoilPitch = ypabact_GetTankWeaponRecoilVisualPitch(this) +
                                           ypabact_GetMgunRecoilVisualPitch(this);
@@ -4922,8 +4922,8 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                     bd->vp->Bas->TForm().SclRot = bd->rotate.Transpose();
 
                 bool scaled = shouldApplyVPScale(bd->vp->Bas);
-                if ( ypabact_ShouldApplyVPOrientation(this, bd->vp->Bas) )
-                    bd->vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_orientation);
+                if ( ypabact_ShouldApplyVPRotation(this, bd->vp->Bas) )
+                    bd->vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_rotation);
 
                 ypabact_ApplyProjectileVisualMotion(this, bd->vp->Bas);
 

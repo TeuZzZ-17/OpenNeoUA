@@ -584,7 +584,7 @@ struct TVhclProto
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
     vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
-    vec3d vp_orientation = vec3d(0.0, 0.0, 0.0);
+    vec3d vp_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
     TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA tint multiplier
@@ -896,7 +896,7 @@ struct TWeapProto
     int16_t vp_launch = 0;
     vec3d vp_launch_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
-    vec3d vp_orientation = vec3d(0.0, 0.0, 0.0);
+    vec3d vp_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
     // OpenNeoUA custom: render-only spiral orbit for every physical projectile
     // class except model = laser (including vertical mode). Speed uses the shared
