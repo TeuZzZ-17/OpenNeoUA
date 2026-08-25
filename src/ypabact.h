@@ -528,7 +528,6 @@ public:
     void UpdateAoePush(update_msg *arg);
     void UpdateWeaponRecoilPush(update_msg *arg);      // integrate/decay weapon recoil push or visual offset
     void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner = 0);
-    void ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source);
     void InheritActiveDebuffFromHostStation(NC_STACK_ypabact *hostStation);
     void UpdateActiveDebuff(update_msg *arg);
     void ClearActiveDebuff();
