@@ -4303,10 +4303,8 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     const bool supportsProjectileVisualMotion = wproto.SupportsProjectileVisualMotion();
     wobj->_spiral_speed = supportsProjectileVisualMotion ? wproto.spiral_speed : 0.0f;
     wobj->_spiral_radius = supportsProjectileVisualMotion ? wproto.spiral_radius : 0.0f;
-    wobj->_spiral_forward = supportsProjectileVisualMotion ? wproto.spiral_forward : 0.0f;
-    wobj->_chaos_speed = supportsProjectileVisualMotion ? wproto.chaos_speed : 0.0f;
+    wobj->_chaos_factor = supportsProjectileVisualMotion ? wproto.chaos_factor : 0.0f;
     wobj->_chaos_radius = supportsProjectileVisualMotion ? wproto.chaos_radius : 0.0f;
-    wobj->_chaos_forward = supportsProjectileVisualMotion ? wproto.chaos_forward : 0.0f;
     wobj->ResetProjectileVisualMotionFreeze();
     wobj->_vp_trail_scale = wproto.vp_trail_scale;
     wobj->_vp_trail_tint = wproto.vp_trail_tint;

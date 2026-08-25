@@ -187,16 +187,6 @@ static float ClampProjectileVisualMotionRadius(float value)
     return std::min(value, 1000.0f);
 }
 
-static float ClampProjectileVisualMotionForward(float value)
-{
-    if ( !std::isfinite(value) || value <= 0.0f )
-        return 0.0f;
-
-    // Maximum bounded forward-only visual excursion. Both Spiral and Chaos keep
-    // the rendered projectile within this distance from the physical collision path.
-    return std::min(value, 1000.0f);
-}
-
 static void InitStatusSoundFXDefaults(World::TVhclSound &snd, int defaultVolume)
 {
     snd.volume = defaultVolume;
@@ -4060,10 +4050,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->spiral_speed = 0.0f;
         _wpn->spiral_radius = 0.0f;
-        _wpn->spiral_forward = 0.0f;
-        _wpn->chaos_speed = 0.0f;
+        _wpn->chaos_factor = 0.0f;
         _wpn->chaos_radius = 0.0f;
-        _wpn->chaos_forward = 0.0f;
         _wpn->vp_tint = TVisualTint();
         _wpn->vp_trail_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->vp_trail_spin = vec3d(0.0, 0.0, 0.0);
@@ -4829,21 +4817,13 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->spiral_radius = ClampProjectileVisualMotionRadius(parser.stof(p2, 0));
     }
-    else if ( !StriCmp(p1, "spiral_forward") )
+    else if ( !StriCmp(p1, "chaos_factor") )
     {
-        _wpn->spiral_forward = ClampProjectileVisualMotionForward(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "chaos_speed") )
-    {
-        _wpn->chaos_speed = (float)World::Spin::ClampStrength(parser.stof(p2, 0));
+        _wpn->chaos_factor = (float)World::Spin::ClampStrength(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "chaos_radius") )
     {
         _wpn->chaos_radius = ClampProjectileVisualMotionRadius(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "chaos_forward") )
-    {
-        _wpn->chaos_forward = ClampProjectileVisualMotionForward(parser.stof(p2, 0));
     }
     else if ( ParseVPScaleParam(parser, "vp_trail", p1, p2, _wpn->vp_trail_scale) )
     {
