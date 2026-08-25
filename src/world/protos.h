@@ -623,17 +623,16 @@ struct TVhclProto
     float proximity_defense_trigger_radius = 0.0;
     int proximity_defense_interval = 1000;
     int proximity_defense_shots = 12;
-    vec3d proximity_defense_fire_pos;
     int proximity_defense_vp_launch = -1;
     int proximity_defense_fire_mode = 0;
     int proximity_defense_sequence_delay = 100;
-    int proximity_defense_at_death = 0;
-    bool proximity_defense_random_yaw_set = false;
-    float proximity_defense_random_yaw_min = 0.0;
-    float proximity_defense_random_yaw_max = 360.0;
-    bool proximity_defense_random_pitch_set = false;
-    float proximity_defense_random_pitch_min = -10.0;
-    float proximity_defense_random_pitch_max = 45.0;
+    int proximity_defense_mode = 0;
+    bool proximity_defense_horizontal_angle_set = false;
+    float proximity_defense_horizontal_angle_min = 0.0;
+    float proximity_defense_horizontal_angle_max = 360.0;
+    bool proximity_defense_vertical_angle_set = false;
+    float proximity_defense_vertical_angle_min = -10.0;
+    float proximity_defense_vertical_angle_max = 45.0;
     int max_active_at_once = 0;
     std::vector<DestFX> dest_fx;      // dest_fx
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
@@ -647,8 +646,11 @@ struct TVhclProto
     int16_t field_1D6F = 0;
     int shield = 0;
     int energy = 0;
-    int mimic_energy_cost = 0; // OpenNeoUA custom: mimic shell production cost override; 0 keeps vanilla energy-as-cost
+    int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
+    int mimic_energy_cost_min = 0;
+    int mimic_energy_cost_max = 0;
     int GetProductionCost() const { return mimic_energy_cost > 0 ? mimic_energy_cost : energy; }
+    int RollMimicProductionCost();
     bool invulnerable = false;
     int field_1D79 = 0;
     float adist_sector = 0.0;

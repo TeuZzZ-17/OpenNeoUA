@@ -26,6 +26,7 @@ static NC_STACK_ypabact *yparobo_TryCreateGenesisUnit(NC_STACK_yparobo *robo,
                                                        ypaworld_arg146 *arg);
 static int yparobo_GetVehicleProductionCost(NC_STACK_ypaworld *world, int vehicleId);
 static int yparobo_GetUnitProductionCost(NC_STACK_ypabact *unit);
+static void yparobo_AdvanceMimicProductionCost(NC_STACK_ypaworld *world, int vehicleId);
 
 robo_t2 stru_5B0628[100];
 int dword_515138[8];
@@ -585,7 +586,7 @@ void NC_STACK_yparobo::InitForce(NC_STACK_ypabact *unit)
         _energy -= v23;
     }
 
-    _roboDockEnerg -= yparobo_GetUnitProductionCost(newUnit);
+    _roboDockEnerg -= unitCost;
 
     setState_msg arg78;
     arg78.setFlags = 0;
@@ -598,6 +599,7 @@ void NC_STACK_yparobo::InitForce(NC_STACK_ypabact *unit)
     _roboDockCnt++;
 
     _world->HistoryAktCreate(newUnit);
+    yparobo_AdvanceMimicProductionCost(_world, newUnit->_vehicleID);
 }
 
 
@@ -3086,6 +3088,16 @@ static int yparobo_GetUnitProductionCost(NC_STACK_ypabact *unit)
     return cost > 0 ? cost : unit->_energy_max;
 }
 
+static void yparobo_AdvanceMimicProductionCost(NC_STACK_ypaworld *world, int vehicleId)
+{
+    if ( !world || vehicleId <= 0 || (size_t)vehicleId >= world->GetVhclProtos().size() )
+        return;
+
+    World::TVhclProto &proto = world->GetVhclProtos().at(vehicleId);
+    if ( proto.is_mimic )
+        proto.RollMimicProductionCost();
+}
+
 NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
 {
     int v72 = 0;
@@ -3285,6 +3297,8 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
         arg146.vehicle_id = v33;
         arg146.pos = _position + _roboDockPos;
 
+        const int producedUnitCost = yparobo_GetVehicleProductionCost(_world, v33);
+
         NC_STACK_ypabact *newUnit = yparobo_TryCreateGenesisUnit(this, &arg146);
 
         if ( !newUnit )
@@ -3325,7 +3339,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
         newUnit->setBACT_aggression(60);
 
         _roboDockUser = newUnit->_commandID;
-        _roboDockEnerg = arg->energ - yparobo_GetUnitProductionCost(newUnit);
+        _roboDockEnerg = arg->energ - producedUnitCost;
 
         newUnit->_scale_time = (float)newUnit->_energy_max * 0.2;
 
@@ -3349,7 +3363,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
 
         newUnit->SetTarget(&arg67);
 
-        int v70 = (float)yparobo_GetUnitProductionCost(newUnit) * v73;
+        int v70 = (float)producedUnitCost * v73;
 
         if ( _roboState & ROBOSTATE_BUILDROBO )
         {
@@ -3371,6 +3385,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
         selectedCommander = newUnit;
         v72 = 1;
         _world->HistoryAktCreate(newUnit);
+        yparobo_AdvanceMimicProductionCost(_world, newUnit->_vehicleID);
     }
 
     if ( v72 )
