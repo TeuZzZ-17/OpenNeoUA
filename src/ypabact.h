@@ -933,10 +933,8 @@ public:
     vec3d _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
     float _spiral_speed = 0.0f;   // OpenNeoUA: render-only spiral revolutions/s
     float _spiral_radius = 0.0f;  // OpenNeoUA: visual orbit radius in model/world units
-    float _spiral_forward = 0.0f; // OpenNeoUA: bounded longitudinal visual excursion per turn
-    float _chaos_speed = 0.0f;    // OpenNeoUA: smooth random target changes/s
+    float _chaos_factor = 0.0f;   // OpenNeoUA: smooth random target changes/s
     float _chaos_radius = 0.0f;   // OpenNeoUA: maximum lateral erratic deviation
-    float _chaos_forward = 0.0f;  // OpenNeoUA: maximum forward-only erratic deviation
     bool _projectile_visual_motion_frozen = false;
     vec3d _projectile_visual_frozen_offset = vec3d(0.0, 0.0, 0.0);
     mat3x3 _projectile_visual_frozen_rotation = mat3x3::Ident();

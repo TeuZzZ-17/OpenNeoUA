@@ -914,21 +914,16 @@ struct TWeapProto
     vec3d vp_orientation = vec3d(0.0, 0.0, 0.0);
     vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
     // OpenNeoUA custom: render-only spiral orbit for every physical projectile
-    // class except model = laser (including vertical mode).
-    // Speed uses the shared 0..10 revolutions-per-second scale. Radius is the
-    // radial orbit distance in model/world units (0..1000). Forward is the maximum
-    // bounded longitudinal visual excursion during each turn (0..1000). The
-    // projectile's physical position, direction and collision path stay central.
+    // class except model = laser (including vertical mode). Speed uses the shared
+    // 0..10 revolutions-per-second scale; radius is the lateral orbit distance in
+    // model/world units (0..1000). Physical movement and collision stay central.
     float spiral_speed = 0.0f;
     float spiral_radius = 0.0f;
-    float spiral_forward = 0.0f;
-    // OpenNeoUA custom: render-only erratic projectile motion. Speed controls
-    // smooth random target changes per second (0..10). Radius bounds lateral
-    // deviation and Forward bounds forward-only deviation (both 0..1000).
-    // When Chaos and Spiral are both valid, Chaos takes visual priority.
-    float chaos_speed = 0.0f;
+    // OpenNeoUA custom: render-only erratic projectile motion. Factor controls
+    // smooth random target changes per second (0..10), while radius bounds the
+    // lateral deviation (0..1000). Chaos takes priority over Spiral when valid.
+    float chaos_factor = 0.0f;
     float chaos_radius = 0.0f;
-    float chaos_forward = 0.0f;
     TVisualTint vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
