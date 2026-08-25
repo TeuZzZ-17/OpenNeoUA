@@ -723,7 +723,7 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
     {
         if ( candidate.source == source &&
              yw_SameAttachedFXTransform(candidate.scale, owner->_vp_scale) &&
-             yw_SameAttachedFXTransform(candidate.orientation, owner->_vp_orientation) )
+             yw_SameAttachedFXTransform(candidate.orientation, owner->_vp_rotation) )
         {
             cache = &candidate;
             break;
@@ -736,10 +736,10 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
         cache = &_attachedFXGeometryCache.back();
         cache->source = source;
         cache->scale = owner->_vp_scale;
-        cache->orientation = owner->_vp_orientation;
+        cache->orientation = owner->_vp_rotation;
 
         yw_ModelPointCloud bounds;
-        mat3x3 transform = yw_BuildVPRotationMatrix(owner->_vp_orientation);
+        mat3x3 transform = yw_BuildVPRotationMatrix(owner->_vp_rotation);
         transform *= mat3x3::Scale(yw_SafeVPScale(owner->_vp_scale));
         yw_CollectAttachedFXTriangles(source, transform, vec3d(0.0, 0.0, 0.0), cache, &bounds);
         if ( !cache->triangles.empty() )
@@ -4019,7 +4019,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
             bacto->_vp_tint.a *= requestedVhcl.mimic_vp_tint.a;
             bacto->_vp_tint.Clamp();
         }
-        bacto->_vp_orientation = vhcl.vp_orientation;
+        bacto->_vp_rotation = vhcl.vp_rotation;
         bacto->_vp_spin_strength = vhcl.vp_spin;
         bacto->_vp_trail_scale = vec3d(1.0, 1.0, 1.0);
         bacto->_vp_trail_tint = World::TVisualTint();
@@ -4283,7 +4283,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_vp_genesis =  _vhclModels.at(wproto.vp_genesis);
     wobj->_vp_scale = wproto.vp_scale;
     wobj->_vp_tint = wproto.vp_tint;
-    wobj->_vp_orientation = wproto.vp_orientation;
+    wobj->_vp_rotation = wproto.vp_rotation;
     wobj->_vp_spin_strength = wproto.vp_spin;
     const bool supportsProjectileVisualMotion = wproto.SupportsProjectileVisualMotion();
     wobj->_spiral_speed = supportsProjectileVisualMotion ? wproto.spiral_speed : 0.0f;

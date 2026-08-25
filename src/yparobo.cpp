@@ -2134,6 +2134,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
                 _world->SetCmdrIdToSelect(newbact->_commandID); // Select it for add next units
 
                 _world->HistoryAktCreate(newbact);
+                yparobo_AdvanceMimicProductionCost(_world, newbact->_vehicleID);
             }
         }
         break;
@@ -2185,6 +2186,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
                 _roboEnergyLife -= arg->energy;
 
                 _world->HistoryAktCreate(newbact2);
+                yparobo_AdvanceMimicProductionCost(_world, newbact2->_vehicleID);
                 newbact2->CopyTargetOf(arg->selectBact);
             }
         }
