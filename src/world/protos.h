@@ -367,21 +367,12 @@ struct TWeaponDebuffConfig
 
 struct TSuperItemProfile
 {
-    enum Type
-    {
-        TYPE_INVALID = 0,
-        TYPE_BOMB = 1
-    };
-
     std::string id;
-    int type = TYPE_INVALID;
     bool valid = false;
     bool duplicate = false;
-    std::string display_name;
 
     int wave_vp = 0;
     vec3d wave_vp_axis_scale = vec3d(1.0, 1.0, 1.0);
-    vec3d wave_vp_offset;
     TVisualTint wave_vp_tint;
     float wave_start_speed = 0.0f;
     float wave_end_speed = 0.0f;
@@ -389,7 +380,6 @@ struct TSuperItemProfile
     bool has_wave_start_speed = false;
     bool has_wave_end_speed = false;
     bool has_wave_speed_ramp_time = false;
-    float wave_max_radius = 0.0f;
     float push_force = 0.0f; // shared configured push intensity, 0..10
     float push_radius = 0.0f;
     int push_falloff = 0;
