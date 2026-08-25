@@ -308,22 +308,13 @@ struct TDamagedFXConfig
     std::vector<int16_t> vps = {0};
     float vp_scale = 1.0;
     float threshold = 0.0;
+    int count_min = 0;
+    int count_max = 0;
     int interval_min = 0;
     int interval_max = 0;
     float random_offset_percent = 0.0;
     bool has_random_offset_percent = false;
     bool trail_only = false;
-    TSndFxPosParam shake;
-
-    TDamagedFXConfig()
-    {
-        shake.mag0 = 1.0;
-        shake.time = 1000;
-        shake.mute = 0.02;
-        shake.pos.x = 0.2;
-        shake.pos.y = 0.2;
-        shake.pos.z = 0.2;
-    }
 };
 
 struct TWeaponDebuffConfig
@@ -559,9 +550,6 @@ struct TVhclProto
     std::array<int16_t, 3> extra_num_weapons = {0, 0, 0};
     int weapon_player_switch_mode = WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
     int weapon_ai_switch_mode = WEAPON_AI_SWITCH_MODE_SEQUENCE;
-    int lowhp_weapon_enable = 0;
-    float lowhp_threshold = 0.30;
-    int16_t lowhp_weapon = 0;
     int field_4 = 0;
     int8_t mgun = 0;
     bool mgun_set = false;
@@ -605,6 +593,7 @@ struct TVhclProto
     std::string unit_gun_icon;
     int power = 0;
     float power_radius = 0.0;
+    int power_falloff = 1;
     // OpenNeoUA custom: fixed horizontal radius for automatic world-UI inspection
     // while directly controlling model = ufo. Independent from optical zoom.
     float spy_ui_radius = 0.0f;

@@ -1641,34 +1641,6 @@ static void ypabact_ApplyDamagedSoundPitch(NC_STACK_ypabact *bact)
     }
 }
 
-static bool ypabact_EnsureDamagedShakeCarrier(NC_STACK_ypabact *bact)
-{
-    if ( !bact || !bact->getBACT_pWorld() )
-        return false;
-
-    World::TDamagedFXConfig &damagedFX = bact->_damaged_fx;
-    if ( damagedFX.shake.slot == 0 )
-        return false;
-
-    if ( bact->_damaged_shake_carrier.Sounds.empty() )
-        bact->_damaged_shake_carrier.Resize(1);
-
-    TSoundSource &snd = bact->_damaged_shake_carrier.Sounds[0];
-    snd.PSample = NULL;
-    snd.SampleVariants.clear();
-    snd.Volume = 0;
-    snd.Pitch = 0;
-    snd.PriorityBias = 0;
-    snd.SetLoop(false);
-    snd.SetFragmented(false);
-    snd.PPFx = NULL;
-    snd.SetPFx(false);
-    snd.PShkFx = &damagedFX.shake;
-    snd.SetShk(true);
-
-    return true;
-}
-
 static void ypabact_UpdateStatusSoundCarrier(NC_STACK_ypabact *bact, TSndCarrier *carrier)
 {
     if ( !bact || !carrier || carrier->Sounds.empty() )
@@ -2461,7 +2433,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _damaged_fx_active = false;
     _active_debuff.Clear();
     _debuff_soundcarrier.Clear();
-    _damaged_shake_carrier.Clear();
     _player_launch_shake_carrier.Clear();
     _laser_launch_soundcarrier.Clear();
     _mgun_recoil_shake = TSndFxPosParam();
@@ -2505,9 +2476,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _userHomingPrimaryTargetGid = 0;
     _userHomingTargetCycleRequested = false;
     _alternativeViewActive = false;
-    _lowhp_weapon_enable = 0;
-    _lowhp_threshold = 0.30;
-    _lowhp_weapon = 0;
     _weapon_flags = 0;
     _mgun = 0;
     _mgun_set = false;
@@ -2731,7 +2699,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _fire_x_random_state = 0;
     _fire_x_random_order.clear();
     _debuff_soundcarrier.Clear();
-    _damaged_shake_carrier.Clear();
     _player_launch_shake_carrier.Clear();
     _laser_launch_soundcarrier.Clear();
     _mgun_recoil_shake = TSndFxPosParam();
@@ -2946,7 +2913,6 @@ size_t NC_STACK_ypabact::Deinit()
     _deinitInProgress = true;
     SFXEngine::SFXe.StopCarrier(&_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
-    SFXEngine::SFXe.StopCarrier(&_damaged_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_player_launch_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_launch_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mgun_recoil_shake_carrier);
@@ -3781,7 +3747,6 @@ void NC_STACK_ypabact::Update(update_msg *arg)
             _vehicle_fire_vp_end_time = 0;
         }
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
-        ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
         ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
         ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
@@ -4053,38 +4018,6 @@ void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
         ClearActiveDebuff();
 }
 
-static void ypabact_SpawnDamagedFXEvent(NC_STACK_ypabact *bact)
-{
-    if ( !bact )
-        return;
-
-    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
-    if ( !world )
-        return;
-
-    for (int16_t vp : bact->_damaged_fx.vps)
-    {
-        if ( vp <= 0 )
-            continue;
-
-        // Damaged FX are status effects that visually belong to the damaged unit.
-        // They must follow the owner while they live; otherwise moving units leave
-        // smoke/fire stuck in world-space behind them.
-        //
-        // Use the same attached transient VP path already used by debuff FX. That
-        // render path intentionally does not clamp to coarse sector height, which
-        // avoids the old slope bug where FX popped/floated above the unit on hills.
-        vec3d localOffset;
-        bool rotateOffset = ypabact_BuildAttachedFXOffset(bact,
-                                                          bact->_damaged_fx.has_random_offset_percent,
-                                                          bact->_damaged_fx.random_offset_percent,
-                                                          &localOffset);
-        world->SpawnAttachedStatusTransientVP(vp, bact, localOffset, 1000,
-                                              bact->_damaged_fx.trail_only, rotateOffset,
-                                              ypabact_BuildUniformStatusFXScale(bact->_damaged_fx.vp_scale));
-    }
-}
-
 static int ypabact_RandomInRange(int minValue, int maxValue)
 {
     if ( maxValue < minValue )
@@ -4096,6 +4029,104 @@ static int ypabact_RandomInRange(int minValue, int maxValue)
     double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
     int64_t range = (int64_t)maxValue - minValue;
     return minValue + (int)((range + 1) * randomPart);
+}
+
+static bool ypabact_GetRandomFXSpawnCount(int configuredMin, int configuredMax, int &spawnCount)
+{
+    int countMin = std::max(0, std::min(configuredMin, 32));
+    int countMax = std::max(0, std::min(configuredMax, 32));
+
+    if ( countMin <= 0 || countMax <= 0 )
+        return false;
+
+    if ( countMax < countMin )
+        std::swap(countMin, countMax);
+
+    spawnCount = ypabact_RandomInRange(countMin, countMax);
+    return spawnCount > 0;
+}
+
+static void ypabact_ShuffleVPs(std::vector<int16_t> &vps)
+{
+    for (size_t remaining = vps.size(); remaining > 1; --remaining)
+    {
+        size_t randomIndex = (size_t)ypabact_RandomInRange(0, (int)remaining - 1);
+        std::swap(vps[remaining - 1], vps[randomIndex]);
+    }
+}
+
+static void ypabact_SpawnSingleDamagedFX(NC_STACK_ypabact *bact,
+                                         NC_STACK_ypaworld *world,
+                                         int16_t vp)
+{
+    if ( vp <= 0 )
+        return;
+
+    // Damaged FX are status effects that visually belong to the damaged unit.
+    // They must follow the owner while they live; otherwise moving units leave
+    // smoke/fire stuck in world-space behind them.
+    //
+    // Use the same attached transient VP path already used by debuff FX. That
+    // render path intentionally does not clamp to coarse sector height, which
+    // avoids the old slope bug where FX popped/floated above the unit on hills.
+    vec3d localOffset;
+    bool rotateOffset = ypabact_BuildAttachedFXOffset(bact,
+                                                      bact->_damaged_fx.has_random_offset_percent,
+                                                      bact->_damaged_fx.random_offset_percent,
+                                                      &localOffset);
+    world->SpawnAttachedStatusTransientVP(vp, bact, localOffset, 1000,
+                                          bact->_damaged_fx.trail_only, rotateOffset,
+                                          ypabact_BuildUniformStatusFXScale(bact->_damaged_fx.vp_scale));
+}
+
+static void ypabact_SpawnDamagedFXEvent(NC_STACK_ypabact *bact)
+{
+    if ( !bact )
+        return;
+
+    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
+    if ( !world )
+        return;
+
+    std::vector<int16_t> validVps;
+    validVps.reserve(bact->_damaged_fx.vps.size());
+    for (int16_t vp : bact->_damaged_fx.vps)
+    {
+        if ( vp > 0 )
+            validVps.push_back(vp);
+    }
+
+    if ( validVps.empty() )
+        return;
+
+    int spawnCount = 0;
+
+    // No explicit count keeps the pre-count behaviour: every configured VP is
+    // emitted once per interval trigger. This preserves existing scripts.
+    if ( !ypabact_GetRandomFXSpawnCount(bact->_damaged_fx.count_min,
+                                         bact->_damaged_fx.count_max,
+                                         spawnCount) )
+    {
+        for (int16_t vp : validVps)
+            ypabact_SpawnSingleDamagedFX(bact, world, vp);
+        return;
+    }
+
+    // Randomize the configured VPs as a small shuffle bag. This avoids choosing
+    // the same VP twice while another configured VP has not been used yet. If
+    // the requested count exceeds the number of configured VPs, reshuffle and
+    // continue until the requested amount has been emitted.
+    size_t vpIndex = validVps.size();
+    for (int i = 0; i < spawnCount; i++)
+    {
+        if ( vpIndex >= validVps.size() )
+        {
+            ypabact_ShuffleVPs(validVps);
+            vpIndex = 0;
+        }
+
+        ypabact_SpawnSingleDamagedFX(bact, world, validVps[vpIndex++]);
+    }
 }
 
 static vec3d ypabact_BuildRandomLocalDecorationFXOffset(float radius)
@@ -4112,17 +4143,7 @@ static vec3d ypabact_BuildRandomLocalDecorationFXOffset(float radius)
 
 static bool ypabact_GetDecorationFXSpawnCount(const World::TDecorationFXConfig &config, int &spawnCount)
 {
-    int countMin = std::max(0, std::min(config.count_min, 32));
-    int countMax = std::max(0, std::min(config.count_max, 32));
-
-    if ( countMin <= 0 || countMax <= 0 )
-        return false;
-
-    if ( countMax < countMin )
-        std::swap(countMin, countMax);
-
-    spawnCount = ypabact_RandomInRange(countMin, countMax);
-    return spawnCount > 0;
+    return ypabact_GetRandomFXSpawnCount(config.count_min, config.count_max, spawnCount);
 }
 
 static void ypabact_SpawnDecorationFXEvent(NC_STACK_ypabact *bact)
@@ -4167,14 +4188,6 @@ static void ypabact_SpawnDecorationFXEvent(NC_STACK_ypabact *bact)
     }
 }
 
-static void ypabact_PlayDamagedEventShake(NC_STACK_ypabact *bact)
-{
-    if ( !ypabact_EnsureDamagedShakeCarrier(bact) )
-        return;
-
-    ypabact_StartStatusSoundIfIdle(bact, &bact->_damaged_shake_carrier, 0, 0);
-}
-
 void NC_STACK_ypabact::UpdateDamageFX(update_msg *)
 {
     bool canUseDamaged = ypabact_CanUseGameplayStatusMechanics(this);
@@ -4192,7 +4205,6 @@ void NC_STACK_ypabact::UpdateDamageFX(update_msg *)
         return;
 
     ypabact_SpawnDamagedFXEvent(this);
-    ypabact_PlayDamagedEventShake(this);
 }
 
 
@@ -7891,17 +7903,6 @@ static bool ypabact_IsValidFireWeaponId(NC_STACK_ypabact *bact, int weaponId)
            !weapon.IsKamikaze();
 }
 
-static bool ypabact_IsLowHPWeaponActive(NC_STACK_ypabact *bact)
-{
-    if ( !bact ||
-         !bact->_lowhp_weapon_enable ||
-         bact->_energy_max <= 0 ||
-         bact->_energy > bact->_energy_max * bact->_lowhp_threshold )
-        return false;
-
-    return ypabact_IsValidFireWeaponId(bact, bact->_lowhp_weapon);
-}
-
 struct TKamikazeMount
 {
     NC_STACK_ypabact *carrier = NULL;
@@ -9335,9 +9336,6 @@ static void ypabact_AdvancePrimaryWeaponSlot(NC_STACK_ypabact *bact, int request
 
 int NC_STACK_ypabact::GetCurrentWeaponId()
 {
-    if ( ypabact_IsLowHPWeaponActive(this) )
-        return _lowhp_weapon;
-
     int sourceSlot = ypabact_GetCurrentPrimaryWeaponSourceSlot(this);
     int weaponId = ypabact_GetWeaponIdForSourceSlot(this, sourceSlot);
     return ypabact_IsValidFireWeaponId(this, weaponId) ? weaponId : -1;
@@ -9365,11 +9363,6 @@ int NC_STACK_ypabact::GetHUDWeaponId()
 
 int NC_STACK_ypabact::GetCurrentWeaponProjectileCount()
 {
-    // Low-HP weapon is an override, not a fifth selectable slot; preserve the
-    // legacy/global num_weapons count for it.
-    if ( ypabact_IsLowHPWeaponActive(this) )
-        return ypabact_NormalizeWeaponProjectileCount(_num_weapons);
-
     return ypabact_GetWeaponProjectileCountForSourceSlot(
         this, ypabact_GetCurrentPrimaryWeaponSourceSlot(this));
 }
@@ -9397,7 +9390,7 @@ bool NC_STACK_ypabact::CycleControlledWeapon()
     // manual mode. Sequence/random remain automatic player modes.
     if ( !(_oflags & BACT_OFLAG_USERINPT) ||
          _weapon_player_switch_mode != World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_MANUAL ||
-         _status == BACT_STATUS_DEAD || ypabact_IsLowHPWeaponActive(this) )
+         _status == BACT_STATUS_DEAD )
         return false;
 
     int slots[4];
@@ -13018,12 +13011,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     NC_STACK_ypamissile *wobj = NULL;
 
-    bool useLowHPWeapon = arg->weapon == _weapon && ypabact_IsLowHPWeaponActive(this);
     int slots[4];
     int sourceSlots[4];
     int slotCount = ypabact_GetPrimaryWeaponSlots(this, slots, sourceSlots);
     const bool usePlayerRandomSlots =
-        !useLowHPWeapon &&
         arg->weapon == _weapon &&
         arg->weapon_source_slot < 0 &&
         (_oflags & BACT_OFLAG_USERINPT) &&
@@ -13036,13 +13027,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     NC_STACK_ypabact *weaponTarget =
         arg->tgType == BACT_TGT_TYPE_UNIT ? arg->target.pbact : NULL;
 
-    if ( useLowHPWeapon )
-    {
-        selectedWeapon = _lowhp_weapon;
-        selectedWeaponSourceSlot = 0;
-        cooldownWeapon = selectedWeapon;
-    }
-    else if ( usePlayerRandomSlots )
+    if ( usePlayerRandomSlots )
     {
         // Preserve the existing player Random timing semantics: the current
         // slot supplies the cooldown gate, then the shot chooses a random slot.
@@ -13470,26 +13455,23 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         ModifyEnergy(&arg84);
     }
 
-    if ( !useLowHPWeapon )
+    ypabact_AdvancePrimaryWeaponSlot(this, arg->weapon);
+
+    const bool keepResolvedSlot =
+        (_oflags & BACT_OFLAG_USERINPT)
+            ? _weapon_player_switch_mode == World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_RANDOM
+            : (_weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_RANDOM ||
+               _weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_SMART);
+
+    if ( keepResolvedSlot )
     {
-        ypabact_AdvancePrimaryWeaponSlot(this, arg->weapon);
-
-        const bool keepResolvedSlot =
-            (_oflags & BACT_OFLAG_USERINPT)
-                ? _weapon_player_switch_mode == World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_RANDOM
-                : (_weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_RANDOM ||
-                   _weapon_ai_switch_mode == World::TVhclProto::WEAPON_AI_SWITCH_MODE_SMART);
-
-        if ( keepResolvedSlot )
-        {
-            _current_weapon_id = selectedWeapon;
-            _current_weapon_source_slot = selectedWeaponSourceSlot;
-        }
-        else
-        {
-            _current_weapon_source_slot = ypabact_GetCurrentPrimaryWeaponSourceSlot(this);
-            _current_weapon_id = GetCurrentWeaponId();
-        }
+        _current_weapon_id = selectedWeapon;
+        _current_weapon_source_slot = selectedWeaponSourceSlot;
+    }
+    else
+    {
+        _current_weapon_source_slot = ypabact_GetCurrentPrimaryWeaponSourceSlot(this);
+        _current_weapon_id = GetCurrentWeaponId();
     }
 
     return 1;
@@ -16009,9 +15991,6 @@ void NC_STACK_ypabact::Renew()
     _userHomingPrimaryTargetGid = 0;
     _userHomingTargetCycleRequested = false;
     _alternativeViewActive = false;
-    _lowhp_weapon_enable = 0;
-    _lowhp_threshold = 0.30;
-    _lowhp_weapon = 0;
     _mgun_set = false;
     _num_mguns = 1;
     _mgun_shot_time = 0;
@@ -19014,7 +18993,6 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
 
     SFXEngine::SFXe.UpdateSoundCarrier(&_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
-    ypabact_UpdateStatusSoundCarrier(this, &_damaged_shake_carrier);
     ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
     ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
