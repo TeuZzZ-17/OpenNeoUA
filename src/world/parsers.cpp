@@ -9,10 +9,12 @@
 #include "../utils.h"
 #include "../system/inivals.h"
 #include "spin.h"
+#include "tools.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 
 namespace World
@@ -1218,6 +1220,35 @@ static float ParseFiniteFloatOrFallback(ScriptParser::Parser &parser,
     return result;
 }
 
+static bool ParseScriptIntRange(const std::string &value, int &minValue, int &maxValue)
+{
+    return World::ParseIntRangeValue(value, minValue, maxValue);
+}
+
+static bool ParseScriptFloatRange(const std::string &value, float &minValue, float &maxValue)
+{
+    return World::ParseFloatRangeValue(value, minValue, maxValue);
+}
+
+static int ResolveMimicEnergyCostRange(const std::string &value)
+{
+    int minCost = 0;
+    int maxCost = 0;
+    if ( !ParseScriptIntRange(value, minCost, maxCost) )
+        return 0;
+
+    if ( minCost == 0 && maxCost == 0 )
+        return 0;
+    if ( minCost <= 0 || maxCost <= 0 )
+        return 0;
+    if ( minCost == maxCost )
+        return minCost;
+
+    const long long span = (long long)maxCost - (long long)minCost + 1LL;
+    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
+    return minCost + (int)(randomPart * (double)span);
+}
+
 static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
                                    const std::string &p1,
                                    const std::string &p2,
@@ -1240,29 +1271,37 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( !StriCmp(p1, "decoration_fx_interval_min") )
+    if ( !StriCmp(p1, "decoration_fx_interval") )
     {
-        config.interval_min = parser.stol(p2, NULL, 0);
+        int intervalMin = 0;
+        int intervalMax = 0;
+        if ( ParseScriptIntRange(p2, intervalMin, intervalMax) )
+        {
+            config.interval_min = intervalMin;
+            config.interval_max = intervalMax;
+        }
+        else
+        {
+            config.interval_min = 0;
+            config.interval_max = 0;
+        }
         return true;
     }
 
-    if ( !StriCmp(p1, "decoration_fx_interval_max") )
+    if ( !StriCmp(p1, "decoration_fx_count") )
     {
-        config.interval_max = parser.stol(p2, NULL, 0);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "decoration_fx_count_min") )
-    {
-        int count = parser.stol(p2, NULL, 0);
-        config.count_min = std::max(0, std::min(count, 32));
-        return true;
-    }
-
-    if ( !StriCmp(p1, "decoration_fx_count_max") )
-    {
-        int count = parser.stol(p2, NULL, 0);
-        config.count_max = std::max(0, std::min(count, 32));
+        int countMin = 0;
+        int countMax = 0;
+        if ( ParseScriptIntRange(p2, countMin, countMax) )
+        {
+            config.count_min = std::max(0, std::min(countMin, 32));
+            config.count_max = std::max(0, std::min(countMax, 32));
+        }
+        else
+        {
+            config.count_min = 0;
+            config.count_max = 0;
+        }
         return true;
     }
 
@@ -2097,7 +2136,6 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "name") ||
            !StriCmp(p1, "type_icon") ||
            !StriCmp(p1, "mimic_energy_cost") ||
-           !StriCmp(p1, "mimic_vehicle_list") ||
            !StriCmp(p1, "mimic_vp_tint") ||
            !StriCmp(p1, "snd_mimic_sample") ||
            !StriCmp(p1, "snd_mimic_pitch") ||
@@ -2340,12 +2378,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         }
         else if ( !StriCmp(p2, "mimic") )
         {
-            // OpenNeoUA custom: runtime shell that copies one listed vehicle proto
-            // when spawned, then keeps this proto's spawn_at_death_* reveal data.
+            // OpenNeoUA custom: runtime shell that copies one vehicle enabled by the
+            // current level, then keeps this proto's spawn_at_death_* reveal data.
             _vhcl->model_id = BACT_TYPES_TANK;
             _vhcl->combat_class = VEHICLE_COMBAT_CLASS_UNKNOWN;
             _vhcl->is_mimic = 1;
-            _vhcl->mimic_vehicle_list.clear();
             _vhcl->job_fightrobo = 6;
             _vhcl->job_fightflyer = 6;
             _vhcl->job_fighthelicopter = 6;
@@ -2388,8 +2425,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "mimic_energy_cost") )
     {
-        int cost = parser.stol(p2, NULL, 0);
-        _vhcl->mimic_energy_cost = cost > 0 ? cost : 0;
+        _vhcl->mimic_energy_cost = ResolveMimicEnergyCostRange(p2);
     }
     else if ( !StriCmp(p1, "shield") )
     {
@@ -2562,23 +2598,35 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
         _vhcl->damaged_fx.threshold = threshold;
     }
-    else if ( !StriCmp(p1, "damaged_fx_count_min") )
+    else if ( !StriCmp(p1, "damaged_fx_count") )
     {
-        int count = parser.stol(p2, NULL, 0);
-        _vhcl->damaged_fx.count_min = std::max(0, std::min(count, 32));
+        int countMin = 0;
+        int countMax = 0;
+        if ( ParseScriptIntRange(p2, countMin, countMax) )
+        {
+            _vhcl->damaged_fx.count_min = std::max(0, std::min(countMin, 32));
+            _vhcl->damaged_fx.count_max = std::max(0, std::min(countMax, 32));
+        }
+        else
+        {
+            _vhcl->damaged_fx.count_min = 0;
+            _vhcl->damaged_fx.count_max = 0;
+        }
     }
-    else if ( !StriCmp(p1, "damaged_fx_count_max") )
+    else if ( !StriCmp(p1, "damaged_fx_interval") )
     {
-        int count = parser.stol(p2, NULL, 0);
-        _vhcl->damaged_fx.count_max = std::max(0, std::min(count, 32));
-    }
-    else if ( !StriCmp(p1, "damaged_fx_interval_min") )
-    {
-        _vhcl->damaged_fx.interval_min = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "damaged_fx_interval_max") )
-    {
-        _vhcl->damaged_fx.interval_max = parser.stol(p2, NULL, 0);
+        int intervalMin = 0;
+        int intervalMax = 0;
+        if ( ParseScriptIntRange(p2, intervalMin, intervalMax) )
+        {
+            _vhcl->damaged_fx.interval_min = intervalMin;
+            _vhcl->damaged_fx.interval_max = intervalMax;
+        }
+        else
+        {
+            _vhcl->damaged_fx.interval_min = 0;
+            _vhcl->damaged_fx.interval_max = 0;
+        }
     }
     else if ( !StriCmp(p1, "damaged_fx_random_offset_percent") )
     {
@@ -2760,19 +2808,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int time = parser.stol(p2, NULL, 0);
         _vhcl->spawn_at_death_immunity_time = time > 0 ? time : 0;
     }
-    else if ( !StriCmp(p1, "mimic_vehicle_list") )
-    {
-        _vhcl->mimic_vehicle_list.clear();
-
-        Stok stok(p2, "_ ");
-        std::string val;
-        while ( stok.GetNext(&val) )
-        {
-            int vehicleId = parser.stol(val, NULL, 0);
-            if ( vehicleId > 0 && (size_t)vehicleId < _o._vhclProtos.size() )
-                _vhcl->mimic_vehicle_list.push_back((int16_t)vehicleId);
-        }
-    }
     else if ( !StriCmp(p1, "snd_mimic_sample") )
     {
         _vhcl->snd_mimic.MainSample.Name = p2;
@@ -2842,25 +2877,23 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->proximity_defense_at_death = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "proximity_defense_random_yaw_min") )
+    else if ( !StriCmp(p1, "proximity_defense_random_yaw") )
     {
-        _vhcl->proximity_defense_random_yaw_set = true;
-        _vhcl->proximity_defense_random_yaw_min = parser.stof(p2, 0);
+        float yawMin = 0.0f;
+        float yawMax = 360.0f;
+        _vhcl->proximity_defense_random_yaw_set =
+            ParseScriptFloatRange(p2, yawMin, yawMax);
+        _vhcl->proximity_defense_random_yaw_min = yawMin;
+        _vhcl->proximity_defense_random_yaw_max = yawMax;
     }
-    else if ( !StriCmp(p1, "proximity_defense_random_yaw_max") )
+    else if ( !StriCmp(p1, "proximity_defense_random_pitch") )
     {
-        _vhcl->proximity_defense_random_yaw_set = true;
-        _vhcl->proximity_defense_random_yaw_max = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "proximity_defense_random_pitch_min") )
-    {
-        _vhcl->proximity_defense_random_pitch_set = true;
-        _vhcl->proximity_defense_random_pitch_min = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "proximity_defense_random_pitch_max") )
-    {
-        _vhcl->proximity_defense_random_pitch_set = true;
-        _vhcl->proximity_defense_random_pitch_max = parser.stof(p2, 0);
+        float pitchMin = -10.0f;
+        float pitchMax = 45.0f;
+        _vhcl->proximity_defense_random_pitch_set =
+            ParseScriptFloatRange(p2, pitchMin, pitchMax);
+        _vhcl->proximity_defense_random_pitch_min = pitchMin;
+        _vhcl->proximity_defense_random_pitch_max = pitchMax;
     }
     else if ( !StriCmp(p1, "max_active_at_once") )
     {
@@ -3947,7 +3980,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
 
         _vhcl->initParams.clear();
         _vhcl->is_mimic = 0;
-        _vhcl->mimic_vehicle_list.clear();
         _vhcl->mimic_vp_tint = TVisualTint();
         _vhcl->snd_mimic = TVhclSound();
         _vhcl->coll = rbcolls();
@@ -5157,15 +5189,18 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         _bld->spawn_offset.z = ParseFiniteFloatOrFallback(parser, p2, -41.0f);
     }
-    else if ( !StriCmp(p1, "spawn_height_min") )
+    else if ( !StriCmp(p1, "spawn_height") )
     {
-        float height = ParseFiniteFloatOrFallback(parser, p2, 650.0f);
-        _bld->spawn_height_min = height >= 0.0 ? height : 650.0f;
-    }
-    else if ( !StriCmp(p1, "spawn_height_max") )
-    {
-        float height = ParseFiniteFloatOrFallback(parser, p2, 900.0f);
-        _bld->spawn_height_max = height >= 0.0 ? height : 900.0f;
+        float minHeight = 650.0f;
+        float maxHeight = 900.0f;
+        if ( !ParseScriptFloatRange(p2, minHeight, maxHeight) ||
+             minHeight < 0.0f || maxHeight < 0.0f )
+        {
+            minHeight = 650.0f;
+            maxHeight = 900.0f;
+        }
+        _bld->spawn_height_min = minHeight;
+        _bld->spawn_height_max = maxHeight;
     }
     else if ( !StriCmp(p1, "spawn_max_active") )
     {

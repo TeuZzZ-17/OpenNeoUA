@@ -86,6 +86,31 @@ static int ReadInt(Common::Ini::Key &key, int fallback, int minValue, int maxVal
     return (int)parsed;
 }
 
+static void ReadIntRange(Common::Ini::Key &key, int fallbackMin, int fallbackMax,
+                         int clampMin, int clampMax, int &outMin, int &outMax)
+{
+    int parsedMin = fallbackMin;
+    int parsedMax = fallbackMax;
+    const std::string value = key.Get<std::string>();
+
+    if ( !World::ParseIntRangeValue(value, parsedMin, parsedMax) )
+    {
+        if ( key.WasSet )
+            ypa_log_out("Warning: invalid %s '%s', using %d_%d\n",
+                        key.Name.c_str(), value.c_str(), fallbackMin, fallbackMax);
+        parsedMin = fallbackMin;
+        parsedMax = fallbackMax;
+    }
+
+    parsedMin = std::max(clampMin, std::min(parsedMin, clampMax));
+    parsedMax = std::max(clampMin, std::min(parsedMax, clampMax));
+    if ( parsedMax < parsedMin )
+        std::swap(parsedMin, parsedMax);
+
+    outMin = parsedMin;
+    outMax = parsedMax;
+}
+
 static float ReadFloat(Common::Ini::Key &key, float fallback)
 {
     float parsed = fallback;
@@ -188,10 +213,8 @@ static Config BuildConfig(Common::Ini::Key &vp,
                           Common::Ini::Key &spinZ,
                           Common::Ini::Key &tint,
                           Common::Ini::Key &duration,
-                          Common::Ini::Key &intervalMin,
-                          Common::Ini::Key &intervalMax,
-                          Common::Ini::Key &countMin,
-                          Common::Ini::Key &countMax,
+                          Common::Ini::Key &interval,
+                          Common::Ini::Key &count,
                           Common::Ini::Key &randomOffsetPercent,
                           Common::Ini::Key &size,
                           Common::Ini::Key &thickness,
@@ -221,10 +244,9 @@ static Config BuildConfig(Common::Ini::Key &vp,
     if ( config.duration <= 0 )
         config.duration = 1000;
 
-    config.interval_min = ReadInt(intervalMin, 0, 0, std::numeric_limits<int>::max() / 4);
-    config.interval_max = ReadInt(intervalMax, 0, 0, std::numeric_limits<int>::max() / 4);
-    config.count_min = ReadInt(countMin, 0, 0, 32);
-    config.count_max = ReadInt(countMax, 0, 0, 32);
+    ReadIntRange(interval, 0, 0, 0, std::numeric_limits<int>::max() / 4,
+                 config.interval_min, config.interval_max);
+    ReadIntRange(count, 0, 0, 0, 32, config.count_min, config.count_max);
 
     config.random_offset_percent = ReadFloat(randomOffsetPercent, 25.0f);
     if ( config.random_offset_percent < 0.0f )
@@ -253,11 +275,6 @@ static Config BuildConfig(Common::Ini::Key &vp,
     config.fade_in = ReadInt(fadeIn, 150, 0, config.duration);
     config.fade_out = ReadInt(fadeOut, 300, 0, config.duration);
 
-    if ( config.interval_max < config.interval_min )
-        std::swap(config.interval_min, config.interval_max);
-    if ( config.count_max < config.count_min )
-        std::swap(config.count_min, config.count_max);
-
     return config;
 }
 
@@ -270,10 +287,8 @@ void Init()
                           System::IniConf::GfxRegenFXVPSpinZ,
                           System::IniConf::GfxRegenFXTint,
                           System::IniConf::GfxRegenFXDuration,
-                          System::IniConf::GfxRegenFXIntervalMin,
-                          System::IniConf::GfxRegenFXIntervalMax,
-                          System::IniConf::GfxRegenFXCountMin,
-                          System::IniConf::GfxRegenFXCountMax,
+                          System::IniConf::GfxRegenFXInterval,
+                          System::IniConf::GfxRegenFXCount,
                           System::IniConf::GfxRegenFXRandomOffsetPercent,
                           System::IniConf::GfxRegenMeshSize,
                           System::IniConf::GfxRegenMeshThickness,
@@ -289,10 +304,8 @@ void Init()
                           System::IniConf::GfxDrainFXVPSpinZ,
                           System::IniConf::GfxDrainFXTint,
                           System::IniConf::GfxDrainFXDuration,
-                          System::IniConf::GfxDrainFXIntervalMin,
-                          System::IniConf::GfxDrainFXIntervalMax,
-                          System::IniConf::GfxDrainFXCountMin,
-                          System::IniConf::GfxDrainFXCountMax,
+                          System::IniConf::GfxDrainFXInterval,
+                          System::IniConf::GfxDrainFXCount,
                           System::IniConf::GfxDrainFXRandomOffsetPercent,
                           System::IniConf::GfxDrainMeshSize,
                           System::IniConf::GfxDrainMeshThickness,

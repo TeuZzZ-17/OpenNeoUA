@@ -749,7 +749,6 @@ struct TVhclProto
     std::vector<TRoboGun> unit_guns;
 
     int is_mimic = 0;                       // OpenNeoUA: model = mimic shell/disguise proto
-    std::vector<int16_t> mimic_vehicle_list;
     TVisualTint mimic_vp_tint;              // OpenNeoUA: model = mimic shell tint applied to copied VP
     TVhclSound snd_mimic;                   // OpenNeoUA: model = mimic persistent shell loop
 
