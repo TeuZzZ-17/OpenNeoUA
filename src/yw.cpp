@@ -1202,7 +1202,8 @@ static std::string yw_SuperItemProfileKey(const std::string &id)
 
 bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles)
 {
-    if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 )
+    static const std::string profilePath = "data:scripts/super_item_profiles.txt";
+    if ( !uaFileExist(profilePath) )
     {
         _superItemProfiles.clear();
         return false;
@@ -1214,10 +1215,10 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
         new World::Parsers::SuperItemProfileParser(&parsedProfiles)
     };
 
-    if ( !ScriptParser::ParseFile("data:scripts/super_item_profiles.txt", parsers,
+    if ( !ScriptParser::ParseFile(profilePath, parsers,
                                   ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
     {
-        ypa_log_out("WARNING: custom SuperItems enabled but Data/Scripts/super_item_profiles.txt is missing or invalid; keeping the previously loaded profile set.\n");
+        ypa_log_out("WARNING: Data/Scripts/super_item_profiles.txt is invalid; keeping the previously loaded profile set.\n");
         return false;
     }
 
@@ -1427,8 +1428,7 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
         return 0;
     }
 
-    if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 )
-        LoadSuperItemProfiles();
+    LoadSuperItemProfiles();
 
     _screenSize = GFX::Engine.GetScreenSize();
 
@@ -2323,9 +2323,14 @@ bool NC_STACK_ypaworld::IsGemNotificationCaptureActive() const
     return _gemNotificationCaptureActive;
 }
 
+uint32_t NC_STACK_ypaworld::GetGemUnlockDuration() const
+{
+    return yw_GetGemUnlockDuration();
+}
+
 bool NC_STACK_ypaworld::HasActiveNewGemNotification() const
 {
-    const uint32_t durationMs = yw_GetGemUnlockDuration();
+    const uint32_t durationMs = GetGemUnlockDuration();
     return durationMs > 0 &&
            System::IniConf::GameGemUnlockNewUI.Get<bool>() &&
            _upgradeId != -1 &&
@@ -2342,7 +2347,7 @@ void NC_STACK_ypaworld::DismissNewGemNotification()
     if ( !HasActiveNewGemNotification() )
         return;
 
-    _upgradeTimeStamp = SDL_GetTicks() - yw_GetGemUnlockDuration();
+    _upgradeTimeStamp = SDL_GetTicks() - GetGemUnlockDuration();
 }
 
 void NC_STACK_ypaworld::StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo)

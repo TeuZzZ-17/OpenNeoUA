@@ -1018,8 +1018,8 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
 struct YWProceduralStatusBarConfig
 {
     bool hpEnabled = false;
-    GFX::TGLColor hpTint = GFX::TGLColor(0.0f, 217.0f / 255.0f, 81.0f / 255.0f, 1.0f);
-    GFX::TGLColor hpTargetTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 1.0f);
+    GFX::TGLColor hpFullTint = GFX::TGLColor(0.0f, 217.0f / 255.0f, 81.0f / 255.0f, 1.0f);
+    GFX::TGLColor hpLowTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 1.0f);
     GFX::TGLColor hpEmptyTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 0.0f);
 };
 
@@ -1055,24 +1055,24 @@ static const YWProceduralStatusBarConfig &yw_GetProceduralStatusBarConfig()
     {
         YWProceduralStatusBarConfig out;
         out.hpEnabled = System::IniConf::GfxMeshHpBarEnable.Get<bool>();
-        out.hpTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarTint, out.hpTint);
-        out.hpTargetTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarTargetTint, out.hpTargetTint);
+        out.hpFullTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarFullTint, out.hpFullTint);
+        out.hpLowTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarLowTint, out.hpLowTint);
         out.hpEmptyTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarEmptyTint, out.hpEmptyTint);
         return out;
     }();
     return config;
 }
 
-static GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &targetTint,
+static GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &lowTint,
                                            const GFX::TGLColor &fullTint,
                                            float ratio, uint8_t opacity)
 {
     ratio = std::max(0.0f, std::min(1.0f, ratio));
     const float opacityMul = opacity / 255.0f;
-    return GFX::TGLColor(targetTint.r + (fullTint.r - targetTint.r) * ratio,
-                         targetTint.g + (fullTint.g - targetTint.g) * ratio,
-                         targetTint.b + (fullTint.b - targetTint.b) * ratio,
-                         (targetTint.a + (fullTint.a - targetTint.a) * ratio) * opacityMul);
+    return GFX::TGLColor(lowTint.r + (fullTint.r - lowTint.r) * ratio,
+                         lowTint.g + (fullTint.g - lowTint.g) * ratio,
+                         lowTint.b + (fullTint.b - lowTint.b) * ratio,
+                         (lowTint.a + (fullTint.a - lowTint.a) * ratio) * opacityMul);
 }
 
 static void yw_QueueStatusBarRectClipped(float left, float top, float right, float bottom,
@@ -1114,10 +1114,10 @@ static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int val
     value = std::max(0, std::min(value, maxValue));
     const float ratio = (float)value / (float)maxValue;
 
-    const GFX::TGLColor &fullTint = config.hpTint;
-    const GFX::TGLColor &targetTint = config.hpTargetTint;
+    const GFX::TGLColor &fullTint = config.hpFullTint;
+    const GFX::TGLColor &lowTint = config.hpLowTint;
     const GFX::TGLColor &emptyTint = config.hpEmptyTint;
-    const GFX::TGLColor activeTint = yw_StatusBarTintLerp(targetTint, fullTint, ratio, opacity);
+    const GFX::TGLColor activeTint = yw_StatusBarTintLerp(lowTint, fullTint, ratio, opacity);
     GFX::TGLColor inactiveTint = emptyTint;
     inactiveTint.a *= opacity / 255.0f;
 
@@ -14374,7 +14374,10 @@ int sb_0x4d7c08__sub0__sub0__sub0(NC_STACK_ypaworld *yw)
         return 0;
     }
 
-    if ( yw->_timeStamp - yw->_upgradeTimeStamp >= 10000 )
+    const uint32_t legacyGemDuration = System::IniConf::GameGemUnlockDuration.WasSet
+                                     ? yw->GetGemUnlockDuration()
+                                     : 10000;
+    if ( yw->_timeStamp - yw->_upgradeTimeStamp >= legacyGemDuration )
         return 0;
 
     if ( !yw->_upgradeVehicleId && !yw->_upgradeWeaponId && !yw->_upgradeBuildId )

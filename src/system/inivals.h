@@ -61,7 +61,6 @@ public:
     static Common::Ini::Key GfxAtmosphereContrast;
     static Common::Ini::Key GfxAtmosphereSaturation;
     static Common::Ini::Key GfxAtmosphereVignette;
-    static Common::Ini::Key GfxVhsFilterName;
     static Common::Ini::Key GfxVhsFilterShader;
     static Common::Ini::Key GfxVhsFilterShaderVbo;
     static Common::Ini::Key GfxVhsFilterStrength;
@@ -268,9 +267,6 @@ public:
     static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
-    static Common::Ini::Key GameCustomSuperitems;
-    static Common::Ini::Key GameGlobalSndFadeIn;
-    static Common::Ini::Key GameGlobalSndFadeOut;
     static Common::Ini::Key GameGlobalShkFadeIn;
     static Common::Ini::Key GameGlobalShkFadeOut;
     static Common::Ini::Key GameGlobalPalFadeIn;
@@ -280,8 +276,8 @@ public:
     // world-space Shield is omitted while the personal cockpit Shield keeps the
     // vanilla MAPMISC path. Missing/disabled HP keys keep vanilla HP/Shield.
     static Common::Ini::Key GfxMeshHpBarEnable;
-    static Common::Ini::Key GfxMeshHpBarTint;
-    static Common::Ini::Key GfxMeshHpBarTargetTint;
+    static Common::Ini::Key GfxMeshHpBarFullTint;
+    static Common::Ini::Key GfxMeshHpBarLowTint;
     static Common::Ini::Key GfxMeshHpBarEmptyTint;
 
     // OpenNeoUA: global opt-in visual profiles for units currently under the same

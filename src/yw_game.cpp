@@ -1474,34 +1474,26 @@ void NC_STACK_ypaworld::InitSuperItems()
         sitem.CustomHitUnitGids.clear();
         sitem.CustomHitBuildingSlots.clear();
 
-        if ( System::IniConf::GameCustomSuperitems.Get<int32_t>() != 1 ||
-             _isNetGame || sitem.Type != TMapSuperItem::TYPE_BOMB )
+        if ( _isNetGame || sitem.Type != TMapSuperItem::TYPE_BOMB ||
+             sitem.ProfileId.empty() )
             continue;
 
         int32_t resolvedProfile = -1;
-        if ( !sitem.ProfileId.empty() )
+        int matches = 0;
+        for (size_t profileIndex = 0; profileIndex < _superItemProfiles.size(); ++profileIndex)
         {
-            int matches = 0;
-            for (size_t profileIndex = 0; profileIndex < _superItemProfiles.size(); ++profileIndex)
+            if ( !StriCmp(_superItemProfiles[profileIndex].id, sitem.ProfileId) )
             {
-                if ( !StriCmp(_superItemProfiles[profileIndex].id, sitem.ProfileId) )
-                {
-                    resolvedProfile = (int32_t)profileIndex;
-                    ++matches;
-                }
-            }
-
-            if ( matches != 1 )
-            {
-                ypa_log_out("WARNING: SuperItem #%u profile '%s' is missing or ambiguous; using vanilla fallback.\n",
-                            (unsigned)i, sitem.ProfileId.c_str());
-                resolvedProfile = -1;
+                resolvedProfile = (int32_t)profileIndex;
+                ++matches;
             }
         }
-        else
+
+        if ( matches != 1 )
         {
-            ypa_log_out("WARNING: SuperItem #%u has no explicit profile; using vanilla fallback.\n",
-                        (unsigned)i);
+            ypa_log_out("WARNING: SuperItem #%u profile '%s' is missing or ambiguous; using vanilla fallback.\n",
+                        (unsigned)i, sitem.ProfileId.c_str());
+            resolvedProfile = -1;
         }
 
         if ( resolvedProfile < 0 || (size_t)resolvedProfile >= _superItemProfiles.size() )
@@ -1572,8 +1564,7 @@ const World::TSuperItemProfile *NC_STACK_ypaworld::GetSuperItemProfile(const TMa
 
 bool NC_STACK_ypaworld::IsCustomSuperItem(const TMapSuperItem &sitem) const
 {
-    return System::IniConf::GameCustomSuperitems.Get<int32_t>() == 1 &&
-           !_isNetGame &&
+    return !_isNetGame &&
            sitem.Type == TMapSuperItem::TYPE_BOMB &&
            GetSuperItemProfile(sitem) != NULL;
 }
