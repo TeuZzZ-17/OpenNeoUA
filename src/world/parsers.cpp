@@ -5711,15 +5711,6 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
 
     if ( !StriCmp(p1, "id") )
         _profile->id = p2;
-    else if ( !StriCmp(p1, "type") )
-        _profile->type = (!StriCmp(p2, "superitem") || !StriCmp(p2, "superbomb"))
-                             ? TSuperItemProfile::TYPE_BOMB
-                             : TSuperItemProfile::TYPE_INVALID;
-    else if ( !StriCmp(p1, "display_name") )
-    {
-        _profile->display_name = p2;
-        std::replace(_profile->display_name.begin(), _profile->display_name.end(), '_', ' ');
-    }
     else if ( !StriCmp(p1, "wave_vp") )
         _profile->wave_vp = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "wave_vp_scale_x") )
@@ -5728,12 +5719,6 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->wave_vp_axis_scale.y = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_vp_scale_z") )
         _profile->wave_vp_axis_scale.z = ParseSuperItemScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "wave_vp_offset_x") )
-        _profile->wave_vp_offset.x = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "wave_vp_offset_y") )
-        _profile->wave_vp_offset.y = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "wave_vp_offset_z") )
-        _profile->wave_vp_offset.z = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "wave_vp_tint") )
         ParseTintParam(parser, "wave_vp_tint", p1, p2, _profile->wave_vp_tint);
     else if ( !StriCmp(p1, "wave_start_speed") )
@@ -5751,8 +5736,6 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->wave_end_speed = parser.stof(p2, 0);
         _profile->has_wave_end_speed = true;
     }
-    else if ( !StriCmp(p1, "wave_max_radius") )
-        _profile->wave_max_radius = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "push_force") )
         _profile->push_force = ClampPushIntensity(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "push_radius") )

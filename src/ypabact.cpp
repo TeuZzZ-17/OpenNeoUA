@@ -3793,11 +3793,6 @@ void NC_STACK_ypabact::ClearActiveDebuff()
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
 }
 
-void NC_STACK_ypabact::ApplyWeaponDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source)
-{
-    ApplyDebuff(debuff, source);
-}
-
 void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner)
 {
     if ( !debuff.allow || debuff.duration <= 0 )
@@ -10858,7 +10853,7 @@ static void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapPr
         target->ModifyEnergy(&dmg);
 
         if ( wproto.debuff.allow && target->_energy > 0 && target->_status != BACT_STATUS_DEAD )
-            target->ApplyWeaponDebuff(wproto.debuff, shooter);
+            target->ApplyDebuff(wproto.debuff, shooter);
     }
 
     beam.energy_ticks++;

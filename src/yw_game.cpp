@@ -1500,8 +1500,7 @@ void NC_STACK_ypaworld::InitSuperItems()
             continue;
 
         const World::TSuperItemProfile &profile = _superItemProfiles[resolvedProfile];
-        if ( !profile.valid || profile.duplicate ||
-             profile.type != World::TSuperItemProfile::TYPE_BOMB )
+        if ( !profile.valid || profile.duplicate )
         {
             ypa_log_out("WARNING: SuperItem #%u profile '%s' is invalid; using vanilla fallback.\n",
                         (unsigned)i, profile.id.c_str());
@@ -1572,8 +1571,12 @@ bool NC_STACK_ypaworld::IsCustomSuperItem(const TMapSuperItem &sitem) const
 std::string NC_STACK_ypaworld::GetSuperItemDisplayName(const TMapSuperItem &sitem) const
 {
     const World::TSuperItemProfile *profile = GetSuperItemProfile(sitem);
-    if ( IsCustomSuperItem(sitem) && profile && !profile->display_name.empty() )
-        return profile->display_name;
+    if ( IsCustomSuperItem(sitem) && profile )
+    {
+        std::string name = profile->id;
+        std::replace(name.begin(), name.end(), '_', ' ');
+        return name;
+    }
 
     if ( sitem.Type == TMapSuperItem::TYPE_BOMB )
         return Locale::Text::Common(Locale::CMN_BOMBNAME);
@@ -4947,6 +4950,12 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemDetonationPush(int id)
     }
 }
 
+static double yw_SuperItemMapRadius(const vec2d &mapLength)
+{
+    return sqrt((double)mapLength.x * mapLength.x +
+                (double)mapLength.y * mapLength.y);
+}
+
 static double yw_SuperItemWaveTravelTimeMs(const World::TSuperItemProfile &profile,
                                             double radius);
 
@@ -5069,10 +5078,7 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
     audio.Volume = profile.wave_snd.volume;
     audio.Pitch = profile.wave_snd.pitch;
     audio.Radius = profile.wave_snd.radius;
-    const double maximumAudioRadius = profile.wave_max_radius > 0.0f
-                                    ? (double)profile.wave_max_radius
-                                    : sqrt((double)_mapLength.x * _mapLength.x +
-                                           (double)_mapLength.y * _mapLength.y);
+    const double maximumAudioRadius = yw_SuperItemMapRadius(_mapLength);
     audio.FadeDuration = yw_SuperItemWaveTravelTimeMs(profile, maximumAudioRadius);
     audio.PPFx = NULL;
     audio.PShkFx = NULL;
@@ -5205,10 +5211,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveEffects(int id)
     if ( !carrier->Sounds.empty() )
     {
         const World::TSuperItemProfile &profile = _superItemProfiles[sitem.CustomProfileIndex];
-        const double maximumRadius = profile.wave_max_radius > 0.0f
-                                   ? (double)profile.wave_max_radius
-                                   : sqrt((double)_mapLength.x * _mapLength.x +
-                                          (double)_mapLength.y * _mapLength.y);
+        const double maximumRadius = yw_SuperItemMapRadius(_mapLength);
         const double propagationEnd = yw_SuperItemWaveTravelTimeMs(profile, maximumRadius);
         int64_t elapsed = (int64_t)_timeStamp - (int64_t)sitem.TriggerTime;
         if ( elapsed < 0 )
@@ -5316,8 +5319,6 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
     vec3d center = World::SectorIDToCenterPos3(sitem.CellId);
     if ( sitem.PCell )
         center.y = sitem.PCell->height;
-    center += profile.wave_vp_offset;
-
     static constexpr float WAVE_VP_BASE_RADIUS = 300.0f;
     float factor = (float)sitem.CurrentRadius / WAVE_VP_BASE_RADIUS;
     vec3d runtimeScale(profile.wave_vp_axis_scale.x * factor,
@@ -5362,8 +5363,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
 
 void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
 {
-    const double mapRadius = sqrt((double)_mapLength.x * _mapLength.x +
-                                  (double)_mapLength.y * _mapLength.y);
+    const double mapRadius = yw_SuperItemMapRadius(_mapLength);
 
     for (size_t id = 0; id < _levelInfo.SuperItems.size(); ++id)
     {
@@ -5375,9 +5375,7 @@ void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
         if ( !profile )
             continue;
 
-        const double maximumRadius = profile->wave_max_radius > 0.0f
-                                   ? (double)profile->wave_max_radius
-                                   : mapRadius;
+        const double maximumRadius = mapRadius;
         const int32_t maximum = (int32_t)ceil(std::min(maximumRadius,
                                                        (double)std::numeric_limits<int32_t>::max()));
         int64_t elapsed = (int64_t)_timeStamp - (int64_t)sitem.TriggerTime;
@@ -6174,10 +6172,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
         elapsed = 0;
 
     double calculatedRadius = yw_SuperItemWaveRadiusAtElapsed(*profile, (double)elapsed);
-    double maximumRadius = profile->wave_max_radius > 0.0f
-                         ? (double)profile->wave_max_radius
-                         : sqrt((double)_mapLength.x * _mapLength.x +
-                                (double)_mapLength.y * _mapLength.y);
+    const double maximumRadius = yw_SuperItemMapRadius(_mapLength);
     bool reachedMaximum = calculatedRadius >= maximumRadius;
     if ( calculatedRadius > maximumRadius )
         calculatedRadius = maximumRadius;
