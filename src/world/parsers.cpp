@@ -2562,6 +2562,16 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
         _vhcl->damaged_fx.threshold = threshold;
     }
+    else if ( !StriCmp(p1, "damaged_fx_count_min") )
+    {
+        int count = parser.stol(p2, NULL, 0);
+        _vhcl->damaged_fx.count_min = std::max(0, std::min(count, 32));
+    }
+    else if ( !StriCmp(p1, "damaged_fx_count_max") )
+    {
+        int count = parser.stol(p2, NULL, 0);
+        _vhcl->damaged_fx.count_max = std::max(0, std::min(count, 32));
+    }
     else if ( !StriCmp(p1, "damaged_fx_interval_min") )
     {
         _vhcl->damaged_fx.interval_min = parser.stol(p2, NULL, 0);
@@ -2608,6 +2618,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         float radius = parser.stof(p2, 0);
         _vhcl->power_radius = radius > 0.0 ? radius : 0.0;
     }
+    else if ( !StriCmp(p1, "power_falloff") )
+    {
+        _vhcl->power_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
+    }
     else if ( !StriCmp(p1, "spy_ui_radius") )
     {
         // Vehicle-side and intentionally runtime-active only for model = ufo.
@@ -2626,30 +2640,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->zoom_steps = parsed == p2.size() && steps >= 0
             ? (int)std::min<long>(steps, 10)
             : -1;
-    }
-    else if ( !StriCmp(p1, "shk_damaged_slot") )
-    {
-        _vhcl->damaged_fx.shake.slot = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "shk_damaged_mag0") )
-    {
-        _vhcl->damaged_fx.shake.mag0 = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "shk_damaged_mag1") )
-    {
-        _vhcl->damaged_fx.shake.mag1 = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "shk_damaged_time") )
-    {
-        _vhcl->damaged_fx.shake.time = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "shk_damaged_radius") )
-    {
-        _vhcl->damaged_fx.shake.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "shk_damaged_mute") )
-    {
-        _vhcl->damaged_fx.shake.mute = parser.stof(p2, 0);
     }
     else if ( !StriCmp(p1, "damaged_force_malus") )
     {
@@ -2986,20 +2976,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         int weapon = parser.stol(p2, NULL, 0);
         _vhcl->extra_weapons[2] = weapon > 0 ? weapon : 0;
-    }
-    else if ( !StriCmp(p1, "lowhp_weapon_enable") )
-    {
-        _vhcl->lowhp_weapon_enable = parser.stol(p2, NULL, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "lowhp_threshold") )
-    {
-        float threshold = parser.stof(p2, 0);
-        _vhcl->lowhp_threshold = threshold > 0.0 ? threshold : 0.30;
-    }
-    else if ( !StriCmp(p1, "lowhp_weapon") )
-    {
-        int weapon = parser.stol(p2, NULL, 0);
-        _vhcl->lowhp_weapon = weapon > 0 ? weapon : 0;
     }
     else if ( !StriCmp(p1, "weapon_player_switch_mode") )
     {
@@ -3837,9 +3813,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->extra_num_weapons = {0, 0, 0};
         _vhcl->weapon_player_switch_mode = TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
         _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
-        _vhcl->lowhp_weapon_enable = 0;
-        _vhcl->lowhp_threshold = 0.30;
-        _vhcl->lowhp_weapon = 0;
         _vhcl->mgun = -1;
         _vhcl->mgun_set = false;
         _vhcl->num_mguns = 1;
@@ -3879,6 +3852,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->unit_gun_icon.clear();
         _vhcl->power = 0;
         _vhcl->power_radius = 0.0;
+        _vhcl->power_falloff = 1;
         _vhcl->spy_ui_radius = 0.0f;
         _vhcl->zoom_steps = -1;
         _vhcl->damaged_force_malus = 0.0;
