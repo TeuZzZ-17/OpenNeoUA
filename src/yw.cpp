@@ -1236,13 +1236,6 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
         else
             profilesById[yw_SuperItemProfileKey(profile.id)].push_back(i);
 
-        if ( profile.type != World::TSuperItemProfile::TYPE_BOMB )
-        {
-            profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' has an unsupported type and will be ignored.\n",
-                        profile.id.empty() ? "<missing>" : profile.id.c_str());
-        }
-
         if ( profile.wave_vp <= 0 )
         {
             profile.valid = false;
@@ -1266,20 +1259,6 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
             ypa_log_out("WARNING: SuperItem profile '%s' requires valid wave_start_speed, wave_speed_ramp_time and wave_end_speed; using vanilla fallback.\n",
                         profile.id.empty() ? "<missing>" : profile.id.c_str());
         }
-
-        if ( !std::isfinite(profile.wave_max_radius) || profile.wave_max_radius < 0.0f )
-        {
-            profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_max_radius; using vanilla fallback.\n",
-                        profile.id.empty() ? "<missing>" : profile.id.c_str());
-        }
-
-        if ( !std::isfinite(profile.wave_vp_offset.x) )
-            profile.wave_vp_offset.x = 0.0f;
-        if ( !std::isfinite(profile.wave_vp_offset.y) )
-            profile.wave_vp_offset.y = 0.0f;
-        if ( !std::isfinite(profile.wave_vp_offset.z) )
-            profile.wave_vp_offset.z = 0.0f;
 
         for (auto chainIt = profile.detonate_chain_fx.begin();
              chainIt != profile.detonate_chain_fx.end(); )

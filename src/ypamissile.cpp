@@ -1477,7 +1477,7 @@ int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy
     if ( wproto && wproto->debuff.allow && wproto->debuff.shield_malus > 0.0f &&
          bct->_energy > 0 && bct->_status != BACT_STATUS_DEAD )
     {
-        bct->ApplyWeaponDebuff(wproto->debuff, _mislEmitter);
+        bct->ApplyDebuff(wproto->debuff, _mislEmitter);
         preAppliedDebuff = true;
     }
 
@@ -1493,7 +1493,7 @@ int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy
     bct->ModifyEnergy(&arg84);
 
     if ( wproto && wproto->debuff.allow && !preAppliedDebuff && bct->_energy > 0 && bct->_status != BACT_STATUS_DEAD )
-        bct->ApplyWeaponDebuff(wproto->debuff, _mislEmitter);
+        bct->ApplyDebuff(wproto->debuff, _mislEmitter);
 
     return damage;
 }

@@ -3,58 +3,52 @@
 
 begin_superitem_profile
     id = stoudson_nuclear
-    type = superitem
-    display_name = stoudson_nuclear
 
     wave_vp = 283
     wave_vp_scale_x = 1
     wave_vp_scale_y = 30
     wave_vp_scale_z = 1
-    wave_vp_offset_x = 0
-    wave_vp_offset_y = 0
-    wave_vp_offset_z = 0
     ;wave_vp_tint = 255_0_0_255
     wave_start_speed = 0
     wave_speed_ramp_time = 10000
     wave_end_speed = 2000
-    wave_push_force = 6
-    wave_max_radius = 0
+    wave_push_force = 2
     wave_unit_damage = 50000
     wave_building_total_destruction_percent = 15
 
-snd_wave_sample = sounds/new/stoudson_1.wav
-snd_wave_volume = 800
-snd_wave_pitch = 0
-snd_wave_radius = 2000
+    snd_wave_sample = sounds/new/stoudson_1.wav
+    snd_wave_volume = 800
+    snd_wave_pitch = 0
+    snd_wave_radius = 2000
 
-pal_wave_slot = 1
-pal_wave_time = 12000
-pal_wave_mag0 = 10
-pal_wave_mag1 = 5
-pal_wave_radius = 2000
+    pal_wave_slot = 1
+    pal_wave_time = 12000
+    pal_wave_mag0 = 10
+    pal_wave_mag1 = 5
+    pal_wave_radius = 2000
 
-shk_wave_slot = 1
-shk_wave_time = 12000
-shk_wave_mag0 = 0.1
-shk_wave_mag1 = 0
-shk_wave_mute = 0.02
-shk_wave_radius = 2000
+    shk_wave_slot = 1
+    shk_wave_time = 12000
+    shk_wave_mag0 = 0.1
+    shk_wave_mag1 = 0
+    shk_wave_mute = 0.02
+    shk_wave_radius = 2000
 
 
-    push_force = 10
-    push_radius = 2000
+    push_force = 6
+    push_radius = 5000
     push_falloff = 1
 
     debuff_allow = 1
     debuff_allow_host_station = 1
     debuff_inherit_to_children = 1
-    debuff_icon = StatusIcons/radiation.png
+    debuff_icon = interface/StatusIcons/radiation.png
     debuff_name = radiations
     debuff_damage = 2500
     debuff_tick_time = 2000
     debuff_duration = 900000
-    debuff_force_malus = 0.20
-    debuff_maxrot_malus = 0.20
+    debuff_force_malus = 0.50
+    debuff_maxrot_malus = 0.50
     debuff_shield_malus = 0.20
     debuff_snd_pitch_mult = 0.30
     debuff_fx_vp  = 191
