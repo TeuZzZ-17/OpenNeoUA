@@ -13855,7 +13855,8 @@ void NC_STACK_ypabact::EnergyInteract(update_msg *arg)
 
             float v14 = v16 / 1000.0;
 
-            float denerg = ReadPowerStationEnergyMultiplier() * _energy_max * v14 * _pSector->energy_power * arg176.field_4 / 7000.0;
+            const float powerEnergyMultiplier = ReadPowerStationEnergyMultiplier();
+            float denerg = powerEnergyMultiplier * _energy_max * v14 * _pSector->energy_power * arg176.field_4 / 7000.0;
 
             if ( _owner == _pSector->owner )
                 _energy += denerg;
@@ -13863,7 +13864,7 @@ void NC_STACK_ypabact::EnergyInteract(update_msg *arg)
                 _energy -= denerg;
 
             TMobilePowerInfluence mobilePower = _world->FindMobilePowerInfluenceForUnit(this);
-            float mobileDelta = 2.0 * _energy_max * v14 * (mobilePower.AlliedEnergyPower - mobilePower.EnemyEnergyPower) / 7000.0;
+            float mobileDelta = powerEnergyMultiplier * 2.0 * _energy_max * v14 * (mobilePower.AlliedEnergyPower - mobilePower.EnemyEnergyPower) / 7000.0;
 
             if ( mobileDelta >= 0.0 || !IsInvulnerableToDamage() )
                 _energy += mobileDelta;

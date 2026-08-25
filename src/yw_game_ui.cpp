@@ -5723,6 +5723,22 @@ static void yw_CloseGameplayWindowsForGemNotification(NC_STACK_ypaworld *yw)
 
 static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw);
 
+static bool yw_IsTopLevelExitMenuFlowWindow(const GuiBase *window)
+{
+    if ( !window )
+        return false;
+
+    if ( window == &exit_menu )
+        return true;
+
+    // All five Exit Menu actions (Exit/Save/Load/Restart/Quit) reuse lstvw2
+    // as their confirmation dialog. Promote it only while it belongs to the
+    // Exit Menu flow, so unrelated confirmations keep their normal GUI order.
+    return window == &lstvw2 &&
+           dword_5BAFAC == &exit_menu &&
+           dword_5BAF9C == 3;
+}
+
 static bool yw_IsVisiblePriorityGameplayWindow(const GuiBase *window)
 {
     if ( !window || !window->IsOpen() || (window->flags & GuiBase::FLAG_ICONIFED) )
@@ -5820,18 +5836,46 @@ static void yw_ResetVirtualUiClipToFullScreen(NC_STACK_ypaworld *yw)
                                             yw->_screenSize.y - halfH));
 }
 
-static void yw_RenderTopLevelExitMenu(NC_STACK_ypaworld *yw,
-                                      const SDL_Color *uiAccent)
+static void yw_RenderTopLevelExitMenuFlow(NC_STACK_ypaworld *yw,
+                                          const SDL_Color *uiAccent)
 {
-    if ( !yw || !exit_menu.IsOpen() )
+    if ( !yw )
         return;
 
-    // Exit Menu is the absolute top-level gameplay dialog. Remove ordinary
-    // world/UI pixels below its rectangle and clip procedural HP/status bars
-    // queued for the later virtual-UI mesh pass, then redraw the menu last.
-    yw_ClearVirtualUiWindowRect(yw, &exit_menu);
+    const std::array<GuiBase *, 2> exitFlowWindows = {&exit_menu, &lstvw2};
+    bool hasVisibleWindow = false;
+
+    // Exit Menu and every confirmation spawned from it form one top-level
+    // flow. Clear all covered rectangles first, including queued procedural
+    // HP/status bars, then render parent -> child so a confirmation remains
+    // above the menu if both ever coexist.
+    for ( GuiBase *window : exitFlowWindows )
+    {
+        if ( !yw_IsTopLevelExitMenuFlowWindow(window) ||
+             !window->IsOpen() ||
+             (window->flags & GuiBase::FLAG_ICONIFED) )
+        {
+            continue;
+        }
+
+        yw_ClearVirtualUiWindowRect(yw, window);
+        hasVisibleWindow = true;
+    }
+
+    if ( !hasVisibleWindow )
+        return;
+
     yw_ResetVirtualUiClipToFullScreen(yw);
-    yw_RenderGameplayGuiWindow(yw, &exit_menu, uiAccent);
+
+    for ( GuiBase *window : exitFlowWindows )
+    {
+        if ( yw_IsTopLevelExitMenuFlowWindow(window) &&
+             window->IsOpen() &&
+             !(window->flags & GuiBase::FLAG_ICONIFED) )
+        {
+            yw_RenderGameplayGuiWindow(yw, window, uiAccent);
+        }
+    }
 }
 
 static void yw_RenderAlwaysVisibleGameplayBars(NC_STACK_ypaworld *yw,
@@ -5857,7 +5901,8 @@ static void yw_RenderForegroundGameplayGuiWindows(NC_STACK_ypaworld *yw,
     // occlude gameplay overlays, never another menu/dialog.
     for ( GuiBase *window : yw->_guiActive )
     {
-        if ( yw_IsVisiblePriorityGameplayWindow(window) || window == &exit_menu )
+        if ( yw_IsVisiblePriorityGameplayWindow(window) ||
+             yw_IsTopLevelExitMenuFlowWindow(window) )
             continue;
 
         yw_RenderGameplayGuiWindow(yw, window, uiAccent);
@@ -5904,8 +5949,9 @@ void yw_FinalizePriorityGameplayUi(NC_STACK_ypaworld *yw)
     yw_ResetVirtualUiClipToFullScreen(yw);
     yw_RenderForegroundGameplayGuiWindows(yw, uiAccent);
 
-    // Exit Menu remains the absolute top-level gameplay dialog.
-    yw_RenderTopLevelExitMenu(yw, uiAccent);
+    // Exit Menu and its confirmation dialogs remain the absolute top-level
+    // gameplay flow.
+    yw_RenderTopLevelExitMenuFlow(yw, uiAccent);
 }
 
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
@@ -5940,7 +5986,7 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
         {
             for ( GuiBase *window : yw->_guiActive )
             {
-                if ( window != &exit_menu )
+                if ( !yw_IsTopLevelExitMenuFlowWindow(window) )
                     yw_RenderGameplayGuiWindow(yw, window, uiAccent);
             }
         }
@@ -5960,9 +6006,10 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
             yw_RenderPlasmaCurrencyHudIcon(yw);
             sb_0x4d7c08__sub0__sub1(uiAccent);
 
-            // Unlike ordinary windows, Exit Menu is finalized after every
-            // gameplay overlay so nothing from the world UI can cover it.
-            yw_RenderTopLevelExitMenu(yw, uiAccent);
+            // Unlike ordinary windows, the complete Exit Menu flow is
+            // finalized after every gameplay overlay so nothing from the
+            // world UI can cover either the menu or its confirmations.
+            yw_RenderTopLevelExitMenuFlow(yw, uiAccent);
         }
     }
 }
