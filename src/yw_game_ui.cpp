@@ -172,21 +172,6 @@ const std::string &StatusIconConfiguredPath(Common::Ini::Key &key)
     return g_statusIconConfiguredPathCache.emplace(key.Name, resolved).first->second;
 }
 
-const std::string &StatusIconOverridePath(const std::string &overridePath, const std::string &fallbackPath)
-{
-    const std::string normalized = StatusIconTrimPath(overridePath);
-    if ( normalized.empty() )
-        return fallbackPath;
-
-    const std::string cacheKey = "override:" + normalized + "\n" + fallbackPath;
-    auto cached = g_statusIconConfiguredPathCache.find(cacheKey);
-    if ( cached != g_statusIconConfiguredPathCache.end() )
-        return cached->second;
-
-    const std::string resolved = StatusIconResourceExists(normalized) ? normalized : fallbackPath;
-    return g_statusIconConfiguredPathCache.emplace(cacheKey, resolved).first->second;
-}
-
 const std::string &StatusIconRegenPath()
 {
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconRegen);
@@ -806,85 +791,6 @@ void StatusIconCollectMountedUnitGunIcons(const std::vector<World::TRoboGun> &gu
     }
 }
 
-bool StatusIconHasVehicleSpawnConfig(NC_STACK_ypaworld *yw, const World::TVhclProto &vhcl)
-{
-    return yw &&
-           vhcl.spawn_units &&
-           vhcl.spawn_vehicle > 0 &&
-           (size_t)vhcl.spawn_vehicle < yw->_vhclProtos.size() &&
-           vhcl.spawn_trigger_radius > 0.0;
-}
-
-bool StatusIconHasMountedKamikazeWeapon(NC_STACK_ypaworld *yw,
-                                        const World::TVhclProto &vhcl)
-{
-    if ( !yw )
-        return false;
-
-    const int weaponIds[4] = {
-        vhcl.weapon,
-        vhcl.extra_weapons[0],
-        vhcl.extra_weapons[1],
-        vhcl.extra_weapons[2]
-    };
-
-    for (int slot = 0; slot < 4; slot++)
-    {
-        const int weaponId = weaponIds[slot];
-        if ( ((slot == 0 && weaponId >= 0) ||
-              (slot > 0 && weaponId > 0)) &&
-             (size_t)weaponId < yw->_weaponProtos.size() &&
-             yw->_weaponProtos[weaponId].IsKamikaze() )
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool StatusIconHasVehicleKamikazeConfig(NC_STACK_ypaworld *yw,
-                                         const World::TVhclProto &vhcl)
-{
-    if ( StatusIconHasMountedKamikazeWeapon(yw, vhcl) )
-        return true;
-
-    auto hasAttachedKamikaze = [yw](const std::vector<World::TRoboGun> &guns)
-    {
-        if ( !yw )
-            return false;
-
-        for (const World::TRoboGun &gun : guns)
-        {
-            const int vehicleId = gun.robo_gun_type;
-            if ( vehicleId > 0 &&
-                 (size_t)vehicleId < yw->_vhclProtos.size() &&
-                 StatusIconHasMountedKamikazeWeapon(yw, yw->_vhclProtos[vehicleId]) )
-            {
-                return true;
-            }
-        }
-
-        return false;
-    };
-
-    if ( hasAttachedKamikaze(vhcl.unit_guns) )
-        return true;
-
-    return vhcl.RoboProto && hasAttachedKamikaze(vhcl.RoboProto->guns);
-}
-
-bool StatusIconHasVehicleProximityDefenseConfig(NC_STACK_ypaworld *yw, const World::TVhclProto &vhcl)
-{
-    if ( !yw || !vhcl.proximity_defense_enable ||
-         vhcl.proximity_defense_weapon <= 0 ||
-         (size_t)vhcl.proximity_defense_weapon >= yw->_weaponProtos.size() ||
-         vhcl.proximity_defense_shots <= 0 )
-        return false;
-
-    return vhcl.proximity_defense_at_death || vhcl.proximity_defense_trigger_radius > 0.0;
-}
-
 int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, StatusIconList &icons)
 {
     if ( !bact || !vhcl )
@@ -953,18 +859,6 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
         StatusIconAdd(icons, iconCount, StatusIconDrainPath());
 
     return iconCount;
-}
-
-void StatusIconRenderList(NC_STACK_ypaworld *yw, const StatusIconList &icons, int iconCount, int left, int top, int size, uint8_t opacity = 255)
-{
-    for (int i = 0; i < iconCount; i++)
-    {
-        NC_STACK_bitmap *bitmap = StatusIconLoad(icons[i]);
-        if ( bitmap )
-            StatusIconRenderBitmap(yw, bitmap, left, top, size, opacity);
-
-        left += size + STATUS_ICON_SPACING;
-    }
 }
 
 void StatusIconRenderBlinkList(NC_STACK_ypaworld *yw, const StatusIconBlinkRenderList &icons,
@@ -1273,109 +1167,6 @@ void StatusIconRenderCockpit(NC_STACK_ypaworld *yw, sklt_wis *wis, NC_STACK_ypab
     StatusIconRenderBlinkList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE);
 }
 
-int StatusIconCollectVehicleRoleIcons(NC_STACK_ypaworld *yw, World::TVhclProto *vhcl, StatusIconList &icons)
-{
-    if ( !yw || !vhcl )
-        return 0;
-
-    int iconCount = 0;
-
-    if ( StatusIconHasVehicleSpawnConfig(yw, *vhcl) )
-        StatusIconAdd(icons, iconCount, StatusIconSpawnPath());
-
-    if ( vhcl->radar >= 2 )
-        StatusIconAdd(icons, iconCount, StatusIconRadarPath());
-
-    StatusIconCollectMountedUnitGunIcons(vhcl->unit_guns, vhcl->unit_gun_icon, icons, iconCount);
-
-    if ( vhcl->power > 0 && vhcl->power_radius > 0.0 )
-        StatusIconAdd(icons, iconCount, StatusIconPowerPath());
-
-    if ( StatusIconHasVehicleKamikazeConfig(yw, *vhcl) )
-        StatusIconAdd(icons, iconCount, StatusIconKamikazePath());
-
-    if ( vhcl->invisible )
-        StatusIconAdd(icons, iconCount, StatusIconInvisiblePath());
-
-    if ( StatusIconHasVehicleProximityDefenseConfig(yw, *vhcl) )
-        StatusIconAdd(icons, iconCount, StatusIconProximityDefensePath());
-
-    return iconCount;
-}
-
-int StatusIconCollectBuildingRoleIcons(World::TBuildingProto *bld, StatusIconList &icons)
-{
-    if ( !bld )
-        return 0;
-
-    int iconCount = 0;
-
-    if ( bld->spawn_units )
-        StatusIconAdd(icons, iconCount, StatusIconOverridePath(bld->spawn_icon, StatusIconSpawnPath()));
-
-    return iconCount;
-}
-
-void StatusIconRenderHudInfoRoles(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TVhclProto *vhcl, float hudX, float hudY)
-{
-    if ( !yw || !wis || !vhcl )
-        return;
-
-    StatusIconList icons;
-    int iconCount = StatusIconCollectVehicleRoleIcons(yw, vhcl, icons);
-    if ( iconCount <= 0 )
-        return;
-
-    int iconBlockWidth = iconCount * STATUS_ICON_SIZE + (iconCount - 1) * STATUS_ICON_SPACING;
-
-    float nameY = hudY + wis->field_92 * 12.0;
-    int nameCenterX = (yw->_screenSize.x / 2) + (yw->_screenSize.x / 2) * hudX;
-    int nameCenterY = (yw->_screenSize.y / 2) + (yw->_screenSize.y / 2) * nameY;
-    int left = nameCenterX - (iconBlockWidth / 2);
-    int top = nameCenterY + yw->_fontH + 4;
-
-    int maxLeft = yw->_screenSize.x - iconBlockWidth - 4;
-    if ( left > maxLeft )
-        left = maxLeft;
-    if ( left < 4 )
-        left = 4;
-    if ( top < 4 )
-        top = 4;
-    if ( top > yw->_screenSize.y - STATUS_ICON_SIZE - 4 )
-        top = yw->_screenSize.y - STATUS_ICON_SIZE - 4;
-
-    StatusIconRenderList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE);
-}
-
-void StatusIconRenderBuildingHudInfoRoles(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TBuildingProto *bld, float hudX, float hudY)
-{
-    if ( !yw || !wis || !bld )
-        return;
-
-    StatusIconList icons;
-    int iconCount = StatusIconCollectBuildingRoleIcons(bld, icons);
-    if ( iconCount <= 0 )
-        return;
-
-    int iconBlockWidth = iconCount * STATUS_ICON_SIZE + (iconCount - 1) * STATUS_ICON_SPACING;
-
-    int nameCenterX = (yw->_screenSize.x / 2) + (yw->_screenSize.x / 2) * hudX;
-    int nameCenterY = (yw->_screenSize.y / 2) + (yw->_screenSize.y / 2) * hudY;
-    int left = nameCenterX - (iconBlockWidth / 2);
-    int top = nameCenterY + yw->_fontH + 4;
-
-    int maxLeft = yw->_screenSize.x - iconBlockWidth - 4;
-    if ( left > maxLeft )
-        left = maxLeft;
-    if ( left < 4 )
-        left = 4;
-    if ( top < 4 )
-        top = 4;
-    if ( top > yw->_screenSize.y - STATUS_ICON_SIZE - 4 )
-        top = yw->_screenSize.y - STATUS_ICON_SIZE - 4;
-
-    StatusIconRenderList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE);
-}
 
 }
 

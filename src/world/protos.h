@@ -1105,7 +1105,6 @@ struct TBuildingProto
     int spawn_max_active = 0;
     int spawn_count = 1;
     int spawn_instant = 0;
-    std::string spawn_icon;
 };
 
 struct TRoboProto
