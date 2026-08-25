@@ -2819,19 +2819,23 @@ public:
         World::TVisualTint tint;
         vec3d scale;
         float lifetimeScale;
+        int32_t fadeIn;
+        int32_t fadeOut;
 
         TTransientVPParticleControls()
         : enabled(false), tintAlphaAffectsAdditive(false), tint(),
-          scale(1.0, 1.0, 1.0), lifetimeScale(1.0f)
+          scale(1.0, 1.0, 1.0), lifetimeScale(1.0f),
+          fadeIn(0), fadeOut(0)
         {}
         explicit TTransientVPParticleControls(const World::TDecorationFXConfig &config)
         : enabled(true), tintAlphaAffectsAdditive(true), tint(config.vp_trail_tint),
           scale(config.vp_trail_scale.x, config.vp_trail_scale.y, 1.0f),
-          lifetimeScale(config.vp_trail_scale.z)
+          lifetimeScale(config.vp_trail_scale.z),
+          fadeIn(config.vp_trail_fade_in), fadeOut(config.vp_trail_fade_out)
         {}
     };
 
-    int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls());
+    int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
     void RenderGroundDecals(baseRender_msg *arg);
@@ -2859,13 +2863,13 @@ public:
                                  const World::TVisualTint &tint);
     void RenderProceduralEnergyFX(baseRender_msg *arg);
     void ClearProceduralEnergyFX();
-    int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false);
+    int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false, int32_t fadeIn = 0, int32_t fadeOut = 0);
     int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
     bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, float randomOffsetPercent, vec3d *localPosition);
     bool UpdateRandomFXTimer(int intervalMin, int intervalMax, int32_t &nextTime);
-    int32_t SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint = World::TVisualTint(), int32_t lifeTime = 1000, float scale = 1.0, const vec3d &offset = vec3d(0.0, 0.0, 0.0), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls());
+    int32_t SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint = World::TVisualTint(), int32_t lifeTime = 1000, float scale = 1.0, const vec3d &offset = vec3d(0.0, 0.0, 0.0), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     bool HasTransientVP(int32_t id) const;
-    void RemoveTransientVP(int32_t id);
+    void RemoveTransientVP(int32_t id, int32_t fadeOut = 0, int32_t particleFadeOut = 0);
     void UpdateDecorationFX(const World::TDecorationFXConfig &config, int32_t &nextTime, const vec3d &ownerPos, int32_t *persistentId = NULL);
     void NoteUserDamageHover(NC_STACK_ypabact *attacker, NC_STACK_ypabact *target);
     std::vector<NC_STACK_ypabact *> GetUserDamageHoverTargets();
@@ -2986,6 +2990,11 @@ public:
         int32_t fadeOut = 0;
         double fadeDuration = 0.0;
         double fadeElapsed = -1.0;
+        bool ending = false;
+        int32_t endingAge = 0;
+        int32_t endingDuration = 0;
+        int32_t endingFadeOut = 0;
+        int32_t endingParticleFadeOut = 0;
         World::TVisualTint tint; // OpenNeoUA custom: VP tint for this spawned model (e.g. laser beam body)
         TTransientVPParticleControls particleControls;
 
