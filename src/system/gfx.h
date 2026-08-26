@@ -588,16 +588,11 @@ public:
     void RecreateScreenSurface();
     void DrawScreenSurface();
     void DrawVirtualUISurface();
-    // OpenNeoUA: batched solid-color overlay in virtual-UI pixel coordinates.
-    // Rectangles queued during BeginVirtualUI()/EndVirtualUI() are emitted in
-    // one dynamic mesh draw after the virtual-UI surface, matching the visual
-    // priority of vanilla world/HUD status bars without per-segment draw calls.
-    void QueueVirtualUISolidRect(float left, float top, float right, float bottom,
-                                 const TGLColor &color);
-    // Remove only the portions of queued virtual-UI solid rectangles covered
-    // by an opaque-priority UI rectangle. Used by strategic windows so mesh
-    // status bars obey the same geometric occlusion as the SDL UI surface.
-    void OccludeVirtualUISolidRects(const Common::Rect &occluder);
+    // OpenNeoUA: immediate solid-color rectangle on the virtual UI surface.
+    // Drawing into the same surface as the rest of the gameplay UI preserves
+    // normal window layering automatically instead of requiring a later overlay pass.
+    void DrawVirtualUISolidRect(float left, float top, float right, float bottom,
+                                const TGLColor &color);
     Common::Point GetVirtualUIResolution() const;
     void BeginVirtualUI(const Common::Point &logicalSize);
     void EndVirtualUI();
@@ -1004,23 +999,6 @@ protected:
 
     uint32_t _stdQuadDataBuf = 0;
     uint32_t _stdQuadIndexBuf = 0;
-
-    struct TVirtualUISolidRect
-    {
-        float left = 0.0f;
-        float top = 0.0f;
-        float right = 0.0f;
-        float bottom = 0.0f;
-        TGLColor color;
-    };
-
-    std::vector<TVirtualUISolidRect> _virtualUiSolidRects;
-    std::vector<TVertex> _virtualUiSolidVertices;
-    std::vector<IndexType> _virtualUiSolidIndices;
-    uint32_t _virtualUiSolidDataBuf = 0;
-    uint32_t _virtualUiSolidIndexBuf = 0;
-
-    void DrawVirtualUISolidRects();
 
     vec3d _normClr;
     vec3d _invClr;
