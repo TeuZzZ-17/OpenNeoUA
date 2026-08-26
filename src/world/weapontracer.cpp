@@ -1,4 +1,6 @@
 #include "../yw.h"
+#include "../loaders.h"
+#include "../log.h"
 
 #include <algorithm>
 #include <cmath>
@@ -103,14 +105,15 @@ static void WeaponTracerAppendRibbon(GFX::TMesh *mesh, bool vertical,
     mesh->Indixes.insert(mesh->Indixes.end(), indices, indices + 12);
 }
 
-static void WeaponTracerBuildMesh(GFX::TMesh *mesh, bool additive)
+static void WeaponBeamBuildProceduralMesh(GFX::TMesh *mesh, bool additive)
 {
     if ( !mesh || !mesh->Vertexes.empty() )
         return;
 
-    // Fixed crossed-ribbon topology: both transverse planes are always present.
-    // X/Y dimensions remain data-driven, while topology itself has no public
-    // switch and therefore no parallel flat/segmented render path.
+    // Procedural beam geometry retained for systems that still author their
+    // shape internally (currently Laser). Tracers themselves no longer use
+    // this builder: their geometry must come from mesh_tracer_path /
+    // mgun_mesh_tracer_path.
     WeaponTracerAppendRibbon(mesh, false, 0.5f, 1.0f);
     WeaponTracerAppendRibbon(mesh, true, 0.5f, 1.0f);
 
@@ -289,7 +292,8 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
                                      const World::TVisualTint &tint,
                                      float alpha, float vizLimit,
                                      float fadeLength,
-                                     const mat3x3 *orientationHint)
+                                     const mat3x3 *orientationHint,
+                                     bool additive)
 {
     if ( !arg || !mesh || !view || mesh->Vertexes.empty() ||
          !WeaponTracerFinite(start) || !WeaponTracerFinite(end) ||
@@ -310,8 +314,9 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
 
     const vec3d center = start + direction * 0.5f;
 
-    // Always span the full sampled interval. Endpoint taper changes only the
-    // transverse X/Y section; shrinking Z per subdivision creates visible gaps.
+    // External tracer assets use the normalized local convention expected by
+    // the runtime: local Z spans -0.5..+0.5, while X/Y are transverse.
+    // Runtime size/taper therefore remains authoritative.
     mat4x4 worldForm(rotation.Transpose() * mat3x3::Scale(
         vec3d(std::max(0.0f, sizeX), std::max(0.0f, sizeY),
               segmentLength)));
@@ -329,11 +334,33 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
     GFX::TRenderNode &render = GFX::Engine.AllocRenderNode();
     render = GFX::TRenderNode(GFX::TRenderNode::TYPE_MESH);
     render.Mesh = mesh;
-    render.Flags = mesh->Mat.Flags | arg->flags;
+
+    // Geometry/material/texture come from the selected mesh, while beam
+    // compositing remains runtime-owned so external meshes preserve the same
+    // transparent body + optional additive glow semantics.
+    uint32_t flags = mesh->Mat.Flags | GFX::RFLAGS_FOG |
+                     GFX::RFLAGS_DISABLE_ZWRITE;
+    flags &= ~(GFX::RFLAGS_LUMTRACY | GFX::RFLAGS_ALPHABLEND);
+    flags |= additive ? GFX::RFLAGS_LUMTRACY : GFX::RFLAGS_ALPHABLEND;
+    render.Flags = flags | arg->flags;
     render.Color = mesh->Mat.Color;
     render.ColorMul = GFX::TGLColor(tint.r, tint.g, tint.b,
                                     tint.a * clampedAlpha);
-    if ( mesh->Mat.Flags & GFX::RFLAGS_LUMTRACY )
+
+    if ((mesh->Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) && mesh->Mat.TexSource)
+    {
+        mesh->Mat.TexSource->SetTime(arg->globTime, arg->frameTime);
+        const uint32_t frameId = mesh->Mat.TexSource->GetCurrentFrameID();
+        if ( frameId < mesh->CoordsCache.size() )
+        {
+            render.Tex = mesh->CoordsCache.at(frameId).Tex;
+            render.coordsID = frameId;
+        }
+    }
+    else
+        render.Tex = mesh->Mat.Tex;
+
+    if ( additive )
         render.VPFadeFactor = WeaponTracerClamp01(clampedAlpha * tint.a);
     render.TForm = transform;
     render.Distance = distance;
@@ -346,12 +373,42 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
     GFX::Engine.QueueRenderMesh(&render);
 }
 
+static void WeaponTracerQueueGeometry(baseRender_msg *arg,
+                                      GFX::TMesh *proceduralMesh,
+                                      NC_STACK_base *externalMesh,
+                                      TF::TForm3D *view,
+                                      const vec3d &start, const vec3d &end,
+                                      float sizeX, float sizeY,
+                                      const World::TVisualTint &tint,
+                                      float alpha, float vizLimit,
+                                      float fadeLength,
+                                      const mat3x3 *orientationHint,
+                                      bool additive)
+{
+    if ( externalMesh && !externalMesh->Meshes.empty() )
+    {
+        for (GFX::TMesh &mesh : externalMesh->Meshes)
+        {
+            WeaponTracerQueueSegment(arg, &mesh, view, start, end,
+                                     sizeX, sizeY, tint, alpha,
+                                     vizLimit, fadeLength, orientationHint,
+                                     additive);
+        }
+        return;
+    }
+
+    WeaponTracerQueueSegment(arg, proceduralMesh, view, start, end,
+                             sizeX, sizeY, tint, alpha,
+                             vizLimit, fadeLength, orientationHint, additive);
+}
+
 static void RenderMeshBeamSegment(
     baseRender_msg *arg, GFX::TMesh *bodyMesh, GFX::TMesh *glowMesh,
     const vec3d &start, const vec3d &end,
     const TMeshBeamRenderConfig &config, int32_t timeStamp,
     float vizLimit, float fadeLength, float tailFactor, float headFactor,
-    uint32_t visualSeed, const mat3x3 *orientationHint)
+    uint32_t visualSeed, const mat3x3 *orientationHint,
+    NC_STACK_base *externalMesh, bool allowProceduralGeometry)
 {
     if ( !arg || !bodyMesh || !glowMesh || !WeaponTracerFinite(start) ||
          !WeaponTracerFinite(end) || !WeaponTracerFinite(config.tailTint) ||
@@ -371,9 +428,19 @@ static void RenderMeshBeamSegment(
     if ( !view )
         return;
 
-    WeaponTracerBuildMesh(bodyMesh, false);
-    if ( bodyMesh->Vertexes.empty() )
-        return;
+    const bool useExternalMesh = externalMesh && !externalMesh->Meshes.empty();
+    if ( !useExternalMesh )
+    {
+        // Tracers pass allowProceduralGeometry=false: their authored external
+        // mesh is mandatory. Procedural geometry is retained only for callers
+        // such as Laser that still intentionally own an internal beam shape.
+        if ( !allowProceduralGeometry )
+            return;
+
+        WeaponBeamBuildProceduralMesh(bodyMesh, false);
+        if ( bodyMesh->Vertexes.empty() )
+            return;
+    }
 
     const float glowRate = std::isfinite(config.glowRate) &&
                            config.glowRate > 0.0f
@@ -392,8 +459,8 @@ static void RenderMeshBeamSegment(
                                  ? config.pulseSpeed
                                  : 0.0f;
 
-    if ( glowRate > 0.0f )
-        WeaponTracerBuildMesh(glowMesh, true);
+    if ( glowRate > 0.0f && !useExternalMesh )
+        WeaponBeamBuildProceduralMesh(glowMesh, true);
 
     const float u0 = WeaponTracerClamp01(std::min(tailFactor, headFactor));
     const float u1 = WeaponTracerClamp01(std::max(tailFactor, headFactor));
@@ -463,21 +530,22 @@ static void RenderMeshBeamSegment(
             tint.b *= pulseValue;
         }
 
-        WeaponTracerQueueSegment(arg, bodyMesh, view,
-                                 partStart, partEnd, sizeX, sizeY,
-                                 tint, 1.0f, vizLimit, fadeLength,
-                                 orientationHint);
+        WeaponTracerQueueGeometry(arg, bodyMesh, externalMesh, view,
+                                  partStart, partEnd, sizeX, sizeY,
+                                  tint, 1.0f, vizLimit, fadeLength,
+                                  orientationHint, false);
 
-        if ( glowRate > 0.0f && !glowMesh->Vertexes.empty() )
+        if ( glowRate > 0.0f &&
+             (useExternalMesh || !glowMesh->Vertexes.empty()) )
         {
             float glowAlpha = std::min(1.0f, glowRate * 0.1f);
             if ( config.pulseBrightness )
                 glowAlpha *= pulseValue;
 
-            WeaponTracerQueueSegment(arg, glowMesh, view,
-                                     partStart, partEnd, sizeX, sizeY,
-                                     tint, glowAlpha, vizLimit, fadeLength,
-                                     orientationHint);
+            WeaponTracerQueueGeometry(arg, glowMesh, externalMesh, view,
+                                      partStart, partEnd, sizeX, sizeY,
+                                      tint, glowAlpha, vizLimit, fadeLength,
+                                      orientationHint, true);
         }
     }
 }
@@ -488,8 +556,8 @@ bool NC_STACK_ypaworld::SpawnMinigunTracer(
     const vec3d &origin, const vec3d &direction, float availableDistance,
     const World::TWeaponTracerConfig &config)
 {
-    if ( _isNetGame || !config.enabled || !WeaponTracerFinite(origin) ||
-         !WeaponTracerFinite(direction) ||
+    if ( _isNetGame || !config.enabled || config.mesh_path.empty() ||
+         !WeaponTracerFinite(origin) || !WeaponTracerFinite(direction) ||
          !std::isfinite(availableDistance) || availableDistance <= 0.01f ||
          !std::isfinite(config.size_z) || config.size_z <= 0.01f ||
          !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
@@ -605,10 +673,21 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
     renderConfig.pulseSpeed = config.pulse_speed;
     renderConfig.pulseGeometry = true;
 
+    // Tracer geometry is fully externalized. No path (or an invalid mesh) means
+    // no tracer render; the old crossed-ribbon procedural geometry is not used
+    // as a hidden fallback.
+    if ( config.mesh_path.empty() )
+        return;
+
+    NC_STACK_base *externalMesh = GetWeaponTracerExternalMesh(config.mesh_path);
+    if ( !externalMesh || externalMesh->Meshes.empty() )
+        return;
+
     RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
                           start, end, renderConfig, _timeStamp,
                           (float)_normalVizLimit, (float)_normalFadeLength,
-                          tailFactor, headFactor, visualSeed, NULL);
+                          tailFactor, headFactor, visualSeed, NULL, externalMesh,
+                          false);
 }
 
 void NC_STACK_ypaworld::RenderLaserMeshSegment(
@@ -652,7 +731,8 @@ void NC_STACK_ypaworld::RenderLaserMeshSegment(
         RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
                               start, end, renderConfig, _timeStamp,
                               (float)_normalVizLimit, (float)_normalFadeLength,
-                              0.0f, 1.0f, visualSeed, &orientationHint);
+                              0.0f, 1.0f, visualSeed, &orientationHint, NULL,
+                              true);
         return;
     }
 
@@ -666,7 +746,8 @@ void NC_STACK_ypaworld::RenderLaserMeshSegment(
         RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
                               start, fadeStart, renderConfig, _timeStamp,
                               (float)_normalVizLimit, (float)_normalFadeLength,
-                              0.0f, fadeStartFactor, visualSeed, &orientationHint);
+                              0.0f, fadeStartFactor, visualSeed, &orientationHint, NULL,
+                              true);
     }
 
     TMeshBeamRenderConfig fadeConfig = renderConfig;
@@ -680,11 +761,49 @@ void NC_STACK_ypaworld::RenderLaserMeshSegment(
     RenderMeshBeamSegment(arg, &_weaponTracerMesh, &_weaponTracerGlowMesh,
                           fadeStart, end, fadeConfig, _timeStamp,
                           (float)_normalVizLimit, (float)_normalFadeLength,
-                          fadeStartFactor, 1.0f, visualSeed, &orientationHint);
+                          fadeStartFactor, 1.0f, visualSeed, &orientationHint, NULL,
+                          true);
+}
+
+NC_STACK_base *NC_STACK_ypaworld::GetWeaponTracerExternalMesh(
+    const std::string &path)
+{
+    if ( path.empty() )
+        return NULL;
+
+    const auto cached = _weaponTracerExternalMeshes.find(path);
+    if ( cached != _weaponTracerExternalMeshes.end() )
+        return cached->second;
+
+    NC_STACK_base *meshObject = Utils::ProxyLoadBase(path);
+    if ( !meshObject || meshObject->Meshes.empty() )
+    {
+        if ( meshObject )
+            meshObject->Delete();
+
+        // Cache failures too so a bad authored path does not trigger disk I/O
+        // for every tracer segment every frame. The tracer remains invisible:
+        // there is intentionally no procedural geometry fallback.
+        _weaponTracerExternalMeshes[path] = NULL;
+        ypa_log_out("Weapon tracer external mesh '%s' could not be loaded; tracer disabled.\n",
+                    path.c_str());
+        return NULL;
+    }
+
+    meshObject->MakeVBO();
+    _weaponTracerExternalMeshes[path] = meshObject;
+    return meshObject;
 }
 
 void NC_STACK_ypaworld::ClearWeaponTracerMesh()
 {
     _weaponTracerMesh = GFX::TMesh();
     _weaponTracerGlowMesh = GFX::TMesh();
+
+    for (auto &entry : _weaponTracerExternalMeshes)
+    {
+        if ( entry.second )
+            entry.second->Delete();
+    }
+    _weaponTracerExternalMeshes.clear();
 }
