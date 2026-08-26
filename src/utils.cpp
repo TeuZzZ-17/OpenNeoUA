@@ -157,7 +157,7 @@ static std::string uaJoinPath(const std::string &base, const std::string &rest)
 
 static bool uaStandaloneRootDir(const std::string &first, std::string *canonical)
 {
-    static const char *dirs[] = {"Env", "Fonts", "Levels", "Locale", "Music", "Res", "Save"};
+    static const char *dirs[] = {"3DS", "Env", "Fonts", "Levels", "Locale", "Music", "Res", "Save"};
 
     for (const char *dir : dirs)
     {

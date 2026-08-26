@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <map>
+#include <string>
 
 class NC_STACK_ypabact;
 
@@ -74,11 +75,17 @@ struct TWeaponTracerConfig
     TVisualTint tint;
     float size_z = 300.0f;
     float size_x = 3.0f;
-    // Tracer geometry always uses crossed ribbons. Topology is intentionally
-    // fixed so data only controls dimensions/effects, not parallel render paths.
+    // Runtime dimensions/effects are independent from geometry. Tracer geometry
+    // is authored externally through mesh_path; there is no procedural fallback.
     bool has_size_y = false;
     float size_y = 0.0f;
     vec3d pos = vec3d(0.0, 0.0, 0.0);
+
+    // Required external geometry for visible tracers. The authoring prefixes
+    // expose this as mesh_tracer_path / mgun_mesh_tracer_path. Canonical paths
+    // are Data-relative (for example 3DS/mgun_tracer_cross.3ds). Empty or
+    // failed paths intentionally render no tracer.
+    std::string mesh_path;
 
     bool has_tint_head = false;
     bool has_tint_tail = false;
@@ -915,7 +922,7 @@ struct TWeapProto
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
     TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA tint multiplier
-    TWeaponTracerConfig tracer; // OpenNeoUA custom: additional procedural projectile tracer
+    TWeaponTracerConfig tracer; // OpenNeoUA custom: external-mesh projectile tracer
     std::vector<DestFX> dfx;
     std::vector<DestFX> ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFXes;
