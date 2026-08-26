@@ -68,7 +68,6 @@ struct TSoundSource
 
 
     TSampleData *PSample = NULL;
-    std::vector<TSampleData *> SampleVariants;
     TSndFXParam *PPFx = NULL;
     TSndFxPosParam *PShkFx = NULL;
     std::vector<TSampleParams> *PFragments = NULL;
@@ -81,6 +80,12 @@ struct TSoundSource
     double FadeDuration = 0.0;
     uint16_t Flags = 0;
     int Pitch = 0;
+    // OpenNeoUA authored pitch range. Fixed values use min == max; min_max
+    // ranges are resolved once per playback by SFXEngine::startSound().
+    int PitchBase = 0;
+    int PitchMin = 0;
+    int PitchMax = 0;
+    bool PitchConfigured = false;
     // Some runtime effects intentionally raise a loop above the legacy 44.1 kHz
     // playback ceiling. Disabled by default so vanilla sounds keep their exact
     // historical rate limit.
@@ -96,6 +101,9 @@ struct TSoundSource
     int16_t ResultVol = 0;
     int16_t ResultPan = 0;
     int ResultRate = 0;
+
+    void ConfigurePitchRange(int minPitch, int maxPitch);
+    void CopyPitchConfig(const TSoundSource &source);
 
     inline bool IsLoop()
     {

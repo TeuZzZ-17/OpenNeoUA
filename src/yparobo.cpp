@@ -385,7 +385,7 @@ void NC_STACK_yparobo::AI_layer1(update_msg *arg)
 
     _airconst = _airconst_static;
 
-    _soundcarrier.Sounds[0].Pitch = _pitch;
+    _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
     if ( _playerRoboAIBehavior )
         ResetPlayerMobileCockpitPitch();
@@ -1891,30 +1891,13 @@ void NC_STACK_yparobo::DrainPlayerMobileMoveResource(int resourceTotal, float &r
     _roboEnergyLossFlags |= lossFlag;
 }
 
-void NC_STACK_yparobo::CapturePlayerMobileCockpitPitchBase()
-{
-    _playerRoboAIBehaviorCockpitPitchBase = 0;
-    _playerRoboAIBehaviorCockpitPitchBaseValid = false;
-
-    if ( _soundcarrier.Sounds.size() <= World::TVhclProto::SND_COCKPIT )
-        return;
-
-    _playerRoboAIBehaviorCockpitPitchBase = _soundcarrier.Sounds[World::TVhclProto::SND_COCKPIT].Pitch;
-    _playerRoboAIBehaviorCockpitPitchBaseValid = true;
-}
-
 void NC_STACK_yparobo::ResetPlayerMobileCockpitPitch()
 {
-    if ( !_playerRoboAIBehaviorCockpitPitchBaseValid )
-        CapturePlayerMobileCockpitPitchBase();
-
-    if ( !_playerRoboAIBehaviorCockpitPitchBaseValid )
-        return;
-
     if ( _soundcarrier.Sounds.size() <= World::TVhclProto::SND_COCKPIT )
         return;
 
-    _soundcarrier.Sounds[World::TVhclProto::SND_COCKPIT].Pitch = _playerRoboAIBehaviorCockpitPitchBase;
+    TSoundSource &cockpit = _soundcarrier.Sounds[World::TVhclProto::SND_COCKPIT];
+    cockpit.Pitch = cockpit.PitchBase;
 }
 
 void NC_STACK_yparobo::ApplyPlayerMobileMovePitch(float speedPitchScale)
@@ -1925,20 +1908,14 @@ void NC_STACK_yparobo::ApplyPlayerMobileMovePitch(float speedPitchScale)
     if ( _soundcarrier.Sounds.size() > World::TVhclProto::SND_NORMAL )
     {
         TSoundSource &normal = _soundcarrier.Sounds[World::TVhclProto::SND_NORMAL];
-        normal.Pitch = PlayerMobileMoveScaledPitch(normal, _pitch, speedPitchScale);
+        normal.Pitch = PlayerMobileMoveScaledPitch(normal, normal.PitchBase, speedPitchScale);
     }
 
     if ( _soundcarrier.Sounds.size() <= World::TVhclProto::SND_COCKPIT )
         return;
 
-    if ( !_playerRoboAIBehaviorCockpitPitchBaseValid )
-        CapturePlayerMobileCockpitPitchBase();
-
-    int cockpitBasePitch = _playerRoboAIBehaviorCockpitPitchBaseValid ?
-                           _playerRoboAIBehaviorCockpitPitchBase :
-                           _soundcarrier.Sounds[World::TVhclProto::SND_COCKPIT].Pitch;
-
     TSoundSource &cockpit = _soundcarrier.Sounds[World::TVhclProto::SND_COCKPIT];
+    const int cockpitBasePitch = cockpit.PitchBase;
 
     // Enemy Robos get movement pitch on SND_NORMAL through Move(). The player can
     // hear either the normal loop or the cockpit loop depending on control/audio path,
@@ -5617,7 +5594,7 @@ void NC_STACK_yparobo::Move(move_msg *arg)
         }
     }
 
-    _soundcarrier.Sounds[0].Pitch = _pitch;
+    _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
 
     float v60 = fabs(_fly_dir_length) / (_force / _airconst_static) * 1.4;
@@ -6193,8 +6170,6 @@ void NC_STACK_yparobo::Renew()
     _playerRoboAIBehavior = false;
     ResetPlayerMobileMove();
     ResetPlayerRoboResourceTrend();
-    _playerRoboAIBehaviorCockpitPitchBase = 0;
-    _playerRoboAIBehaviorCockpitPitchBaseValid = false;
     _roboAttackersClearTime = 0;
     _roboAttackersTime = 0;
     _roboState = 0;
@@ -6854,8 +6829,6 @@ void NC_STACK_yparobo::setBACT_inputting(bool inpt)
 
         _roboState |= ROBOSTATE_PLAYERROBO;
         _playerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
-        if ( _playerRoboAIBehavior )
-            CapturePlayerMobileCockpitPitchBase();
     }
 }
 
@@ -7368,8 +7341,6 @@ NC_STACK_yparobo::NC_STACK_yparobo()
 
     _playerRoboAIBehavior = false;
     ResetPlayerMobileMove();
-    _playerRoboAIBehaviorCockpitPitchBase = 0;
-    _playerRoboAIBehaviorCockpitPitchBaseValid = false;
 
     for (auto &t : _roboAttackers)
     {

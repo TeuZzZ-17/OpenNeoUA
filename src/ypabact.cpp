@@ -1631,13 +1631,13 @@ static void ypabact_ApplyDamagedSoundPitch(NC_STACK_ypabact *bact)
     if ( pitchMult != 1.0 || firePitchMult != 1.0 )
     {
         normal.Pitch = ypabact_ScaledPitch(normal, normal.Pitch, pitchMult);
-        fire.Pitch = ypabact_ScaledPitch(fire, bact->_base_snd_fire_pitch, firePitchMult);
+        fire.Pitch = ypabact_ScaledPitch(fire, fire.PitchBase, firePitchMult);
 
         // SND_WAIT can be the active loop for heli hover/idle. Unlike SND_NORMAL,
         // SND_FIRE/SND_WAIT are not always rebuilt by Move(), so scale them from
         // the prototype base pitch instead of repeatedly scaling the previous
         // frame's pitch.
-        wait.Pitch = ypabact_ScaledPitch(wait, bact->_base_snd_wait_pitch, pitchMult);
+        wait.Pitch = ypabact_ScaledPitch(wait, wait.PitchBase, pitchMult);
     }
 }
 
@@ -1700,7 +1700,6 @@ static void ypabact_TriggerLocalShakeCarrier(NC_STACK_ypabact *bact,
 
     TSoundSource &snd = carrier->Sounds[0];
     snd.PSample = NULL;
-    snd.SampleVariants.clear();
     snd.PFragments = NULL;
     snd.PPFx = NULL;
     snd.PShkFx = shake;
@@ -2357,11 +2356,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
 
     _soundFlags = 0;
     _volume = 0;
-    _pitch = 0;
     _pitch_max = 0.0;
-    _base_snd_normal_pitch = 0;
-    _base_snd_fire_pitch = 0;
-    _base_snd_wait_pitch = 0;
     _energy = 0;
     _energy_max = 0;
     _invulnerable = false;
@@ -2669,9 +2664,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mgun_decal = World::TChainFXConfig();
     _energy = 10000;
     _shield = 0;
-    _base_snd_normal_pitch = 0;
-    _base_snd_fire_pitch = 0;
-    _base_snd_wait_pitch = 0;
     _heading_speed = 0.7;
     _yls_time = 3000;
     _aggr = 50;
@@ -3827,7 +3819,7 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     _active_debuff.source_owner = resolvedSourceOwner;
     _active_debuff.snd_sample = NULL;
     _active_debuff.snd_volume = debuff.tick_snd.volume ? debuff.tick_snd.volume : 120;
-    _active_debuff.snd_pitch = debuff.tick_snd.pitch;
+    _active_debuff.snd_pitch = debuff.tick_snd.pitch_min;
 
     if ( debuff.tick_snd.MainSample.Sample )
         _active_debuff.snd_sample = debuff.tick_snd.MainSample.Sample->GetSampleData();
@@ -3839,11 +3831,8 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
 
     TSoundSource &snd = _debuff_soundcarrier.Sounds[0];
     snd.PSample = _active_debuff.snd_sample;
-    snd.SampleVariants.clear();
-    if ( snd.PSample )
-        snd.SampleVariants.push_back(snd.PSample);
     snd.Volume = _active_debuff.snd_volume;
-    snd.Pitch = _active_debuff.snd_pitch;
+    debuff.tick_snd.ConfigureSoundSourcePitch(snd);
     snd.Radius = debuff.tick_snd.radius;
     snd.PriorityBias = 0;
     const bool loopDebuffSound = !debuff.has_tick_time && snd.PSample;
@@ -3922,12 +3911,11 @@ void NC_STACK_ypabact::InheritActiveDebuffFromHostStation(NC_STACK_ypabact *host
     TSoundSource &sound = _debuff_soundcarrier.Sounds[0];
     sound.Flags = 0;
     sound.PSample = sourceSound ? sourceSound->PSample : _active_debuff.snd_sample;
-    sound.SampleVariants = sourceSound ? sourceSound->SampleVariants
-                                       : std::vector<TSampleData *>();
-    if ( sound.SampleVariants.empty() && sound.PSample )
-        sound.SampleVariants.push_back(sound.PSample);
     sound.Volume = sourceSound ? sourceSound->Volume : _active_debuff.snd_volume;
-    sound.Pitch = sourceSound ? sourceSound->Pitch : _active_debuff.snd_pitch;
+    if ( sourceSound )
+        sound.CopyPitchConfig(*sourceSound);
+    else
+        sound.ConfigurePitchRange(_active_debuff.snd_pitch, _active_debuff.snd_pitch);
     sound.Radius = sourceSound ? sourceSound->Radius : 0.0f;
     sound.FadeDuration = sourceSound ? sourceSound->FadeDuration : 0.0;
     sound.AllowExtendedRate = sourceSound ? sourceSound->AllowExtendedRate : false;
@@ -5211,7 +5199,7 @@ void NC_STACK_ypabact::AI_layer1(update_msg *arg)
 
     _airconst = _airconst_static;
 
-    _soundcarrier.Sounds[0].Pitch = _pitch;
+    _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
 
     if ( _clock - _AI_time1 < 250 ||
@@ -6623,7 +6611,7 @@ void NC_STACK_ypabact::Move(move_msg *arg)
 
     CorrectPositionInLevelBox(NULL);
 
-    _soundcarrier.Sounds[0].Pitch = _pitch;
+    _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
 
     float v50;
@@ -11326,18 +11314,9 @@ static bool ypabact_PrepareLaserSoundSource(TSoundSource &snd, World::TVhclSound
                             : NULL;
 
     snd.PSample = mainSample;
-    snd.SampleVariants.clear();
-    if ( mainSample )
-        snd.SampleVariants.push_back(mainSample);
-
-    for (const World::TVhclSound::TSndSample &variant : fx.MainSampleVariants)
-    {
-        if ( variant.Sample )
-            snd.SampleVariants.push_back(variant.Sample->GetSampleData());
-    }
 
     snd.Volume = fx.volume;
-    snd.Pitch = fx.pitch;
+    fx.ConfigureSoundSourcePitch(snd);
     snd.Radius = fx.radius;
     snd.PriorityBias = 0;
     snd.SetLoop(false);
@@ -11366,8 +11345,7 @@ static bool ypabact_PrepareLaserSoundSource(TSoundSource &snd, World::TVhclSound
         snd.SetShk(false);
     }
 
-    return mainSample || !snd.SampleVariants.empty() ||
-           fx.sndPrm.slot || fx.sndPrm_shk.slot;
+    return mainSample || fx.sndPrm.slot || fx.sndPrm_shk.slot;
 }
 
 static bool ypabact_LaserSoundHasContent(World::TVhclSound &fx)
@@ -11376,12 +11354,6 @@ static bool ypabact_LaserSoundHasContent(World::TVhclSound &fx)
 
     if ( fx.MainSample.Sample || fx.sndPrm.slot || fx.sndPrm_shk.slot )
         return true;
-
-    for (const World::TVhclSound::TSndSample &variant : fx.MainSampleVariants)
-    {
-        if ( variant.Sample )
-            return true;
-    }
 
     return false;
 }
@@ -11422,9 +11394,8 @@ static void ypabact_UpdateLaserNormalSound(NC_STACK_ypabact *bact,
     else
     {
         // Keep authored gain/spatial settings live without replacing PSample while
-        // a selected sample variant is still playing.
+        // the active sample is still playing.
         snd.Volume = normalFx.volume;
-        snd.Pitch = normalFx.pitch;
         snd.Radius = normalFx.radius;
     }
 
@@ -11500,15 +11471,8 @@ static void ypabact_UpdateLaserHitSound(
 
     TSoundSource &snd = carrier->Sounds[0];
     snd.PSample = sample;
-    snd.SampleVariants.clear();
-    snd.SampleVariants.push_back(sample);
-    for (const World::TVhclSound::TSndSample &variant : hitFx.MainSampleVariants)
-    {
-        if ( variant.Sample )
-            snd.SampleVariants.push_back(variant.Sample->GetSampleData());
-    }
     snd.Volume = hitFx.volume;
-    snd.Pitch = hitFx.pitch;
+    hitFx.ConfigureSoundSourcePitch(snd);
     snd.Radius = hitFx.radius;
     snd.PriorityBias = 0;
     snd.SetLoop(false);
@@ -16105,7 +16069,6 @@ void NC_STACK_ypabact::Renew()
 
     _vp_active = 0;
     _volume = 0; //_soundcarrier.Sounds[0].Volume;
-    _pitch = 0; //_soundcarrier.Sounds[0].Pitch;
 
     _m_cmdID = 0;
     _gun_angle_user = _gun_angle;
@@ -16828,7 +16791,7 @@ static void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact)
         return;
 
     TSoundSource &src = bact->_soundcarrier.Sounds[World::TVhclProto::SND_FIRE];
-    if ( !src.PSample && src.SampleVariants.empty() )
+    if ( !src.PSample )
         return;
 
     if ( bact->_mgun_soundcarrier.Sounds.empty() )
@@ -16852,12 +16815,11 @@ static void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact)
 
     TSoundSource &snd = bact->_mgun_soundcarrier.Sounds[soundIndex];
     snd.PSample = src.PSample;
-    snd.SampleVariants = src.SampleVariants;
     snd.PFragments = NULL;
     snd.PPFx = NULL;
     snd.PShkFx = NULL;
     snd.Volume = src.Volume;
-    snd.Pitch = src.Pitch;
+    snd.CopyPitchConfig(src);
     snd.PriorityBias = src.PriorityBias;
     snd.SetLoop(false);
     snd.SetFragmented(false);
