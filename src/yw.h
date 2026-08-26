@@ -399,7 +399,7 @@ inline TInputFixedShortcut GetInputFixedShortcut(int32_t binding)
     case INPUT_BIND_SWITCH_WEAPON:
         return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
     case INPUT_BIND_PLACE_MAP_MARKER:
-        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
+        return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_RMB);
     case INPUT_BIND_TOGGLE_UFO_SPY_UI:
         return TInputFixedShortcut(INPUT_FIXED_SHORTCUT_KEY, Input::KC_MMB);
     case INPUT_BIND_ZOOMIN:
