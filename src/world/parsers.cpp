@@ -1638,6 +1638,12 @@ static bool ParseMeshTracerParam(ScriptParser::Parser &parser,
         return true;
     }
 
+    if ( !StriCmp(p1, key("path")) )
+    {
+        config.mesh_path = p2;
+        return true;
+    }
+
     if ( ParseTintParam(parser, key("head_tint"), p1, p2, config.tint_head, true) )
     {
         config.has_tint_head = true;
