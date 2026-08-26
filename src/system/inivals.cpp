@@ -343,6 +343,12 @@ Common::Ini::Key IniConf::GamePlasmaCurrencyEnable("game.plasma_currency_enable"
 // Percentage of each valid residual-plasma reward that is actually credited to
 // the global currency reserve. 100 preserves the existing currency scale.
 Common::Ini::Key IniConf::GamePlasmaCurrencyGainPercent("game.plasma_currency_gain_percent", Common::Ini::KT_WORD, std::string("100"));
+// OpenNeoUA: one positional pickup sound shared by every pickup-capable vehicle.
+// An empty or unloadable sample falls back to the vanilla World.ini plasma sample.
+// Distance attenuation deliberately stays on the legacy sound path (Radius == 0).
+Common::Ini::Key IniConf::GamePlasmaSndPickupSample("game.plasma_snd_pickup_sample", Common::Ini::KT_STRING, std::string());
+Common::Ini::Key IniConf::GamePlasmaSndPickupVolume("game.plasma_snd_pickup_volume", Common::Ini::KT_DIGIT, (int32_t)90);
+Common::Ini::Key IniConf::GamePlasmaSndPickupPitch("game.plasma_snd_pickup_pitch", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
 // OpenNeoUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
@@ -672,6 +678,9 @@ void IniConf::Init()
         , &GamePlasmaDeathMagnetSpeed
         , &GamePlasmaCurrencyEnable
         , &GamePlasmaCurrencyGainPercent
+        , &GamePlasmaSndPickupSample
+        , &GamePlasmaSndPickupVolume
+        , &GamePlasmaSndPickupPitch
         , &GameWorldUiMaxDistance
         , &GameAiTargetRange
         , &GameMgunRange

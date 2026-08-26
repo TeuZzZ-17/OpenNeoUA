@@ -1364,7 +1364,7 @@ void NC_STACK_ypatank::Move(move_msg *arg)
 
     CorrectPositionInLevelBox(NULL);
 
-    _soundcarrier.Sounds[0].Pitch = _pitch;
+    _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
 
     float v48 = fabs(_fly_dir_length) / (_force / _airconst_static);

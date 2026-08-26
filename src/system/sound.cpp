@@ -266,6 +266,42 @@ int SFXEngine::getMasterVolume()
 }
 
 
+
+void TSoundSource::ConfigurePitchRange(int minPitch, int maxPitch)
+{
+    if ( maxPitch < minPitch )
+        std::swap(minPitch, maxPitch);
+
+    PitchMin = minPitch;
+    PitchMax = maxPitch;
+    PitchBase = minPitch;
+    Pitch = minPitch;
+    PitchConfigured = true;
+}
+
+void TSoundSource::CopyPitchConfig(const TSoundSource &source)
+{
+    Pitch = source.Pitch;
+    PitchBase = source.PitchBase;
+    PitchMin = source.PitchMin;
+    PitchMax = source.PitchMax;
+    PitchConfigured = source.PitchConfigured;
+}
+
+static int SFX_RandomPitchInRange(int minPitch, int maxPitch)
+{
+    if ( maxPitch < minPitch )
+        std::swap(minPitch, maxPitch);
+
+    if ( minPitch == maxPitch )
+        return minPitch;
+
+    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
+    const int64_t span = (int64_t)maxPitch - (int64_t)minPitch + 1LL;
+    const int64_t offset = (int64_t)(randomPart * (double)span);
+    return (int)((int64_t)minPitch + offset);
+}
+
 void SFXEngine::startSound(TSndCarrier *smpls, size_t id)
 {
     if (id >= smpls->Sounds.size())
@@ -273,8 +309,11 @@ void SFXEngine::startSound(TSndCarrier *smpls, size_t id)
 
     TSoundSource *result = &smpls->Sounds.at(id);
 
-    if ( !result->SampleVariants.empty() )
-        result->PSample = result->SampleVariants.at(rand() % result->SampleVariants.size());
+    if ( result->PitchConfigured )
+    {
+        result->PitchBase = SFX_RandomPitchInRange(result->PitchMin, result->PitchMax);
+        result->Pitch = result->PitchBase;
+    }
 
     result->StartTime = currentTime;
 

@@ -5079,16 +5079,8 @@ void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
     sound.PSample = profile.detonate_snd.MainSample.Sample
                   ? profile.detonate_snd.MainSample.Sample->GetSampleData()
                   : NULL;
-    sound.SampleVariants.clear();
-    if ( sound.PSample )
-        sound.SampleVariants.push_back(sound.PSample);
-    for (const World::TVhclSound::TSndSample &variant : profile.detonate_snd.MainSampleVariants)
-    {
-        if ( variant.Sample )
-            sound.SampleVariants.push_back(variant.Sample->GetSampleData());
-    }
     sound.Volume = profile.detonate_snd.volume;
-    sound.Pitch = profile.detonate_snd.pitch;
+    profile.detonate_snd.ConfigureSoundSourcePitch(sound);
     sound.Radius = profile.detonate_snd.radius;
     sound.SetLoop(false);
     sound.SetFragmented(false);
@@ -5146,16 +5138,8 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
     audio.PSample = profile.wave_snd.MainSample.Sample
                   ? profile.wave_snd.MainSample.Sample->GetSampleData()
                   : NULL;
-    audio.SampleVariants.clear();
-    if ( audio.PSample )
-        audio.SampleVariants.push_back(audio.PSample);
-    for (const World::TVhclSound::TSndSample &variant : profile.wave_snd.MainSampleVariants)
-    {
-        if ( variant.Sample )
-            audio.SampleVariants.push_back(variant.Sample->GetSampleData());
-    }
     audio.Volume = profile.wave_snd.volume;
-    audio.Pitch = profile.wave_snd.pitch;
+    profile.wave_snd.ConfigureSoundSourcePitch(audio);
     audio.Radius = profile.wave_snd.radius;
     const double maximumAudioRadius = yw_SuperItemMapRadius(_mapLength);
     audio.FadeDuration = yw_SuperItemWaveTravelTimeMs(profile, maximumAudioRadius);
@@ -5168,7 +5152,6 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
 
     TSoundSource &palette = carrier->Sounds[1];
     palette.PSample = NULL;
-    palette.SampleVariants.clear();
     palette.Volume = 0;
     palette.Pitch = 0;
     palette.Radius = 0.0f;
@@ -5190,7 +5173,6 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
 
     TSoundSource &shake = carrier->Sounds[2];
     shake.PSample = NULL;
-    shake.SampleVariants.clear();
     shake.Volume = 0;
     shake.Pitch = 0;
     shake.Radius = 0.0f;
@@ -7366,8 +7348,6 @@ void NC_STACK_ypaworld::recorder_updateObject(NC_STACK_ypabact *bact, trec_bct *
         break;
     }
 
-    bact->_soundcarrier.Sounds[0].Pitch = ssnd->pitch;
-
     for(int i = 0; i < 16; i++)
     {
         int v48 = 1 << i;
@@ -7390,6 +7370,12 @@ void NC_STACK_ypaworld::recorder_updateObject(NC_STACK_ypabact *bact, trec_bct *
             }
         }
     }
+
+    // Replay owns the recorded runtime pitch for SND_NORMAL. startSound() may
+    // roll an authored range while restoring active channels, so reapply the
+    // captured value after channel state has been rebuilt.
+    bact->_soundcarrier.Sounds[0].Pitch = ssnd->pitch;
+    bact->_soundcarrier.Sounds[0].PitchBase = ssnd->pitch;
 }
 
 
