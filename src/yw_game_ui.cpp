@@ -969,36 +969,10 @@ static GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &lowTint,
                          (lowTint.a + (fullTint.a - lowTint.a) * ratio) * opacityMul);
 }
 
-static void yw_QueueStatusBarRectClipped(float left, float top, float right, float bottom,
-                                         const GFX::TGLColor &color,
-                                         int excludeLeft = 0, int excludeTop = 0,
-                                         int excludeRight = 0, int excludeBottom = 0)
-{
-    if ( right <= left || bottom <= top || color.a <= 0.0f )
-        return;
-
-    const bool hasExcludeRect = excludeRight > excludeLeft && excludeBottom > excludeTop;
-    if ( !hasExcludeRect || bottom <= excludeTop || top >= excludeBottom ||
-         right <= excludeLeft || left >= excludeRight )
-    {
-        GFX::Engine.QueueVirtualUISolidRect(left, top, right, bottom, color);
-        return;
-    }
-
-    // Keep the same Tactical Map exclusion semantics without returning to a
-    // segmented bar: only the overlapping horizontal portion is omitted.
-    if ( left < excludeLeft )
-        GFX::Engine.QueueVirtualUISolidRect(left, top, std::min(right, (float)excludeLeft), bottom, color);
-    if ( right > excludeRight )
-        GFX::Engine.QueueVirtualUISolidRect(std::max(left, (float)excludeRight), top, right, bottom, color);
-}
-
 static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int value,
                                       int maxValue, int cellWidth, int cellHeight,
                                       uint8_t opacity,
-                                          bool hideFilled = false, bool hideEmpty = false,
-                                          int excludeLeft = 0, int excludeTop = 0,
-                                          int excludeRight = 0, int excludeBottom = 0)
+                                      bool hideFilled = false, bool hideEmpty = false)
 {
     const YWProceduralStatusBarConfig &config = yw_GetProceduralStatusBarConfig();
     if ( !config.hpEnabled || squareCount <= 0 || maxValue <= 0 ||
@@ -1025,14 +999,12 @@ static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int val
     const float activeRight = barLeft + (barRight - barLeft) * ratio;
 
     if ( !hideEmpty )
-        yw_QueueStatusBarRectClipped(barLeft, (float)renderTop, barRight, barBottom,
-                                     inactiveTint, excludeLeft, excludeTop,
-                                     excludeRight, excludeBottom);
+        GFX::Engine.DrawVirtualUISolidRect(barLeft, (float)renderTop,
+                                           barRight, barBottom, inactiveTint);
 
     if ( !hideFilled && activeRight > barLeft )
-        yw_QueueStatusBarRectClipped(barLeft, (float)renderTop, activeRight, barBottom,
-                                     activeTint, excludeLeft, excludeTop,
-                                     excludeRight, excludeBottom);
+        GFX::Engine.DrawVirtualUISolidRect(barLeft, (float)renderTop,
+                                           activeRight, barBottom, activeTint);
 
     return true;
 }
@@ -5589,11 +5561,6 @@ static void yw_ClearVirtualUiWindowRect(NC_STACK_ypaworld *yw, const GuiBase *wi
     SDL_FillRect(surface, &clearRect,
                  SDL_MapRGBA(surface->format, 0, 0, 0, 0));
 
-    // Procedural HP/status bars are queued separately from the SDL virtual-UI
-    // surface and emitted later as one mesh. Clip those queued rectangles too,
-    // otherwise they would bleed through Map/Squadron after this surface clear.
-    GFX::Engine.OccludeVirtualUISolidRects(Common::Rect(left, top, right, bottom));
-
     SDL_SetClipRect(surface, &oldClip);
 }
 
@@ -5637,9 +5604,8 @@ static void yw_RenderTopLevelExitMenuFlow(NC_STACK_ypaworld *yw,
     bool hasVisibleWindow = false;
 
     // Exit Menu and every confirmation spawned from it form one top-level
-    // flow. Clear all covered rectangles first, including queued procedural
-    // HP/status bars, then render parent -> child so a confirmation remains
-    // above the menu if both ever coexist.
+    // flow. Clear all covered UI pixels first, then render parent -> child so
+    // a confirmation remains above the menu if both ever coexist.
     for ( GuiBase *window : exitFlowWindows )
     {
         if ( !yw_IsTopLevelExitMenuFlowWindow(window) ||
@@ -5773,6 +5739,15 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
         yw_RenderRoboRelocationMarker(yw);
         sb_0x4d7c08__sub0__sub4(yw);
 
+        if ( yw->_userUnit->_status != BACT_STATUS_DEAD )
+        {
+            sb_0x4d7c08__sub0__sub0(yw);
+            sb_0x4d7c08__sub0__sub2(yw);
+        }
+
+        // Ordinary GUI windows are foreground UI. Render them after world/HUD
+        // overlays so status bars and other gameplay indicators cannot bleed
+        // through dialogs or panels. Tooltips still render above these windows.
         if ( !priorityWindowOpen )
         {
             for ( GuiBase *window : yw->_guiActive )
@@ -5782,17 +5757,11 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
             }
         }
 
-        if ( yw->_userUnit->_status != BACT_STATUS_DEAD )
-        {
-            sb_0x4d7c08__sub0__sub0(yw);
-            sb_0x4d7c08__sub0__sub2(yw);
-        }
-
         draw_tooltip(yw, uiAccent);
 
         if ( !priorityWindowOpen )
         {
-            // Preserve the original draw order when no strategic window is open.
+            // Fixed gameplay bars and creation UI remain above ordinary windows.
             GFX::Engine.ProcessDrawSeq(up_panel.cmdCommands, &up_panel.cmdInclude, uiAccent);
             yw_RenderPlasmaCurrencyHudIcon(yw);
             sb_0x4d7c08__sub0__sub1(uiAccent);
@@ -13192,10 +13161,7 @@ void sub_4E4F80(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float x, f
                                      barLeft, barTop, wis->field_9E, value, maxval,
                                      yw->_guiTiles[51]->map[1].w, yw->_guiTiles[51]->h,
                                      255,
-                                     (flag & 1) != 0, (flag & 2) != 0,
-                                     wnd_vis ? robo_map.x : 0, wnd_vis ? robo_map.y : 0,
-                                     wnd_vis ? robo_map.x + robo_map.w : 0,
-                                     wnd_vis ? robo_map.y + robo_map.h : 0);
+                                     (flag & 1) != 0, (flag & 2) != 0);
     }
 
     for (int i = 1; i <= wis->field_9E; i++)

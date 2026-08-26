@@ -13021,8 +13021,12 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     if ( cooldownProto.IsKamikaze() )
         return 0;
 
+    const bool cockpitDirectAim =
+        arg && arg->tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive();
+    const vec3d cockpitRequestedViewDir = cockpitDirectAim ? arg->direction : vec3d();
+
     bact_arg79 cockpitAimArg;
-    if ( arg && arg->tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive() )
+    if ( cockpitDirectAim )
     {
         cockpitAimArg = *arg;
         vec3d origin = _position + _rotation.Transpose().Transform(arg->start_point);
@@ -13123,6 +13127,20 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     int v13 = ypabact_GetWeaponProjectileCountForSourceSlot(this, selectedWeaponSourceSlot);
 
+    // Cockpit aiming preserves the vanilla base direction for a multi-projectile salvo.
+    // fire_x still distributes the physical spawn points left/right, but it must
+    // not steer the whole salvo from the legacy alternating signed muzzle offset
+    // or make each projectile converge independently on the same aim point.
+    if ( cockpitDirectAim && v13 > 1 )
+    {
+        vec3d commonOrigin = _position + _rotation.Transpose().Transform(
+            vec3d(0.0, cockpitAimArg.start_point.y, cockpitAimArg.start_point.z));
+        cockpitAimArg.direction = ypabact_GetCockpitAimDirection(
+            this, commonOrigin, cockpitRequestedViewDir, _rotation.AxisZ(), 1400.0);
+        cockpitAimArg.tgt_pos = cockpitAimArg.direction;
+        arg = &cockpitAimArg;
+    }
+
     bool homingBomb = ypabact_IsHomingBombWeapon(wproto);
     int maxTargets = ypabact_GetMultiTargetLimit(wproto, v13);
     bool missileMultiTarget = maxTargets > 1 && wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE;
@@ -13200,7 +13218,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             missileArg.tgType = BACT_TGT_TYPE_DRCT;
         }
 
-        if ( missileArg.tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive() )
+        if ( v13 == 1 && missileArg.tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive() )
             missileArg.direction = ypabact_GetCockpitAimDirection(this, arg147.pos, missileArg.direction, _rotation.AxisZ(), 1400.0);
 
         // Separate gun units use this path only when the new percentage is
