@@ -2851,7 +2851,6 @@ void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
             sample->Delete();
             sample = NULL;
             source.PSample = NULL;
-            source.SampleVariants.clear();
         }
 
         _gemUnlockSoundAttemptedPath = path;
@@ -2905,7 +2904,6 @@ void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
             sample->Delete();
             sample = NULL;
             source.PSample = NULL;
-            source.SampleVariants.clear();
         }
 
         _mapMarkerSoundAttemptedPath = path;
@@ -3060,7 +3058,6 @@ void NC_STACK_ypaworld::StartAmbientLevelSound(const TLevelDescription &mapp)
 
         TSoundSource &sound = _ambientSoundCarrier.Sounds[0];
         sound.PSample = wav->GetSampleData();
-        sound.SampleVariants.clear();
         sound.Volume = (int16_t)volume;
         sound.Pitch = 0;
         sound.Radius = 0.0f;
@@ -4126,7 +4123,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
             TSoundSource *smpl_inf = &bacto->_soundcarrier.Sounds[ i ];
 
             smpl_inf->Volume = vhcl.sndFX[i].volume;
-            smpl_inf->Pitch = vhcl.sndFX[i].pitch;
+            vhcl.sndFX[i].ConfigureSoundSourcePitch(*smpl_inf);
             smpl_inf->Radius = vhcl.sndFX[i].radius;
             smpl_inf->PriorityBias = (i == World::TVhclProto::SND_COCKPIT) ? 4096 : 0;
 
@@ -4137,16 +4134,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
                 smpl_inf->PSample = vhcl.sndFX[i].MainSample.Sample->GetSampleData();
             else
                 smpl_inf->PSample = 0;
-
-            smpl_inf->SampleVariants.clear();
-            if ( smpl_inf->PSample )
-                smpl_inf->SampleVariants.push_back(smpl_inf->PSample);
-
-            for (const World::TVhclSound::TSndSample &sample : vhcl.sndFX[i].MainSampleVariants)
-            {
-                if ( sample.Sample )
-                    smpl_inf->SampleVariants.push_back(sample.Sample->GetSampleData());
-            }
 
             if ( vhcl.sndFX[i].sndPrm.slot )
             {
@@ -4179,25 +4166,19 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
             }
         }
 
-        // Vehicle pickup sounds are positional like the other vehicle events.
-        // Existing data without snd_pickup_sample keeps using the global
-        // World.ini plasma sample, while volume and pitch use vehicle defaults.
+        // Pickup audio stays positional on the collecting unit. Nucleus.ini can
+        // override its sample globally; empty or unloadable paths fall back to
+        // the vanilla World.ini plasma sample.
         TSoundSource &pickup = bacto->_soundcarrier.Sounds[World::TVhclProto::SND_PICKUP];
-        if ( !pickup.PSample && pickup.SampleVariants.empty() && _GameShell &&
+        if ( !pickup.PSample && _GameShell &&
              World::SOUND_ID_PLASMA < _GameShell->samples1_info.Sounds.size() )
         {
             TSoundSource &legacyPickup =
                 _GameShell->samples1_info.Sounds[World::SOUND_ID_PLASMA];
             pickup.PSample = legacyPickup.PSample;
-            if ( pickup.PSample )
-                pickup.SampleVariants.push_back(pickup.PSample);
         }
 
-        bacto->_pitch = bacto->_soundcarrier.Sounds[0].Pitch;
         bacto->_volume = bacto->_soundcarrier.Sounds[0].Volume;
-        bacto->_base_snd_normal_pitch = bacto->_soundcarrier.Sounds[World::TVhclProto::SND_NORMAL].Pitch;
-        bacto->_base_snd_fire_pitch = bacto->_soundcarrier.Sounds[World::TVhclProto::SND_FIRE].Pitch;
-        bacto->_base_snd_wait_pitch = bacto->_soundcarrier.Sounds[World::TVhclProto::SND_WAIT].Pitch;
 
         bacto->_mimic_soundcarrier.Clear();
         if ( requestedVhcl.is_mimic )
@@ -4209,11 +4190,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
                 TSoundSource &snd = bacto->_mimic_soundcarrier.Sounds[0];
                 snd.PSample = requestedVhcl.snd_mimic.MainSample.Sample->GetSampleData();
-                snd.SampleVariants.clear();
-                if ( snd.PSample )
-                    snd.SampleVariants.push_back(snd.PSample);
                 snd.Volume = requestedVhcl.snd_mimic.volume;
-                snd.Pitch = requestedVhcl.snd_mimic.pitch;
+                requestedVhcl.snd_mimic.ConfigureSoundSourcePitch(snd);
                 snd.PriorityBias = 0;
                 snd.SetLoop(true);
                 snd.SetPFx(false);
@@ -4363,7 +4341,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
         TSoundSource *v25 = &wobj->_soundcarrier.Sounds[i];
 
         v25->Volume = wproto.sndFXes[i].volume;
-        v25->Pitch = wproto.sndFXes[i].pitch;
+        wproto.sndFXes[i].ConfigureSoundSourcePitch(*v25);
         v25->Radius = wproto.sndFXes[i].radius;
 
         if ( i == 0 )
@@ -4373,16 +4351,6 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
             v25->PSample = wproto.sndFXes[i].MainSample.Sample->GetSampleData();
         else
             v25->PSample = 0;
-
-        v25->SampleVariants.clear();
-        if ( v25->PSample )
-            v25->SampleVariants.push_back(v25->PSample);
-
-        for (const World::TVhclSound::TSndSample &sample : wproto.sndFXes[i].MainSampleVariants)
-        {
-            if ( sample.Sample )
-                v25->SampleVariants.push_back(sample.Sample->GetSampleData());
-        }
 
         if ( wproto.sndFXes[i].sndPrm.slot )
         {

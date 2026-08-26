@@ -274,7 +274,6 @@ protected:
     void UpdatePlayerRoboResourceTrend(int frameTime);
     void UpdatePlayerRoboResourceTrendSlot(int slot, int value, uint8_t flag, int frameTime);
     bool ShouldUsePlayerRoboResourceTrend() const;
-    void CapturePlayerMobileCockpitPitchBase();
     void ResetPlayerMobileCockpitPitch();
     void ApplyPlayerMobileMovePitch(float speedPitchScale);
     void wallow(update_msg *arg);
@@ -484,8 +483,6 @@ public:
     float _playerRoboAIBehaviorMoveEnergyRemainder;
     float _playerRoboAIBehaviorTotalDistance;
     float _playerRoboAIBehaviorLastDistance;
-    int _playerRoboAIBehaviorCockpitPitchBase;
-    bool _playerRoboAIBehaviorCockpitPitchBaseValid;
 
     std::array<robo_t1, 16> _roboAttackers;
     int _roboAttackersTime;
