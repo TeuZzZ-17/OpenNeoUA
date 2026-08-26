@@ -10755,16 +10755,14 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             break;
 
         case 49:
-            // The remappable action is an additional route. Middle click
-            // remains the permanent contextual shortcut handled below.
-            if ( winpt->selected_btn == &robo_map && winpt->selected_btnID == 17 )
+            // The remappable action is an additional route. Right click
+            // remains the permanent contextual marker shortcut handled below.
+            // If the user remaps the primary action itself to RMB, let the
+            // contextual route own that click so add/remove still toggles cleanly.
+            if ( winpt->selected_btn == &robo_map && winpt->selected_btnID == 17 &&
+                 !World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
             {
                 yw_PlaceRoboMapMarker(yw, winpt->move.BtnPos);
-
-                // If the player explicitly binds this action to middle mouse,
-                // consume the physical click so the contextual route below
-                // does not create a second marker in the same frame.
-                winpt->flag &= ~TClickBoxInf::FLAG_MM_DOWN;
                 yw->_guiDragDefaultMouse = false;
             }
             break;
@@ -10861,7 +10859,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         }
         else if ( robo_map.field_1E8 & 0x10 )
         {
-            if ( winpt->flag & TClickBoxInf::FLAG_RM_HOLD )
+            if ( winpt->flag & TClickBoxInf::FLAG_MM_HOLD )
             {
                 robo_map.field_1ED = 0;
                 robo_map.field_1D8 = robo_map.field_220 + (float)(robo_map.field_21C - winpt->move.ScreenPos.x) * robo_map.field_1E0;
@@ -10916,10 +10914,14 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             {
                 if ( winpt->selected_btnID == 17 )
                 {
-                    // The fixed secondary marker shortcut comes from the same
-                    // shared definition used by Input Settings, so changing it
-                    // cannot leave a stale menu label behind.
-                    yw_PlaceRoboMapMarker(yw, winpt->move.BtnPos);
+                    // Right mouse owns marker interaction on the tactical map:
+                    // click an existing marker to remove it, otherwise place one.
+                    // The fixed shortcut comes from the same shared definition
+                    // used by Input Settings, so runtime and menu text stay aligned.
+                    if ( yw_FindRoboMapMarkerAt(winpt->move.BtnPos) >= 0 )
+                        yw_RemoveNearestRoboMapMarker(winpt->move.BtnPos);
+                    else
+                        yw_PlaceRoboMapMarker(yw, winpt->move.BtnPos);
 
                     const World::TInputFixedShortcut markerShortcut =
                         World::GetInputFixedShortcut(World::INPUT_BIND_PLACE_MAP_MARKER);
@@ -10934,30 +10936,20 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                 }
             }
 
-            if ( winpt->flag & TClickBoxInf::FLAG_RM_DOWN )
+            if ( winpt->flag & TClickBoxInf::FLAG_MM_DOWN )
             {
                 if ( winpt->selected_btnID == 17 )
                 {
-                    const bool markerRemoved = robo_map.markerMode
-                        && yw_RemoveNearestRoboMapMarker(winpt->move.BtnPos);
-                    if ( markerRemoved )
-                    {
-                        // A single right click on a marker deletes it. Do not
-                        // arm map panning from the same event.
-                        winpt->flag &= ~TClickBoxInf::FLAG_RM_DOWN;
-                        yw->_guiDragDefaultMouse = false;
-                    }
-                    else
-                    {
-                        // Elsewhere the right button keeps the existing shared
-                        // pan path; no second panning implementation is added.
-                        robo_map.field_220 = robo_map.field_1D8;
-                        robo_map.field_21C = winpt->move.ScreenPos.x;
-                        robo_map.field_21E = winpt->move.ScreenPos.y;
-                        robo_map.field_224 = robo_map.field_1DC;
-                        robo_map.field_1E8 |= 0x10;
-                        yw->_guiDragDefaultMouse = true;
-                    }
+                    // Middle mouse exclusively owns tactical-map panning.
+                    // Reuse the existing pan state/path rather than adding a
+                    // second implementation with subtly different behavior.
+                    robo_map.field_220 = robo_map.field_1D8;
+                    robo_map.field_21C = winpt->move.ScreenPos.x;
+                    robo_map.field_21E = winpt->move.ScreenPos.y;
+                    robo_map.field_224 = robo_map.field_1DC;
+                    robo_map.field_1E8 |= 0x10;
+                    winpt->flag &= ~TClickBoxInf::FLAG_MM_DOWN;
+                    yw->_guiDragDefaultMouse = true;
                 }
             }
 
