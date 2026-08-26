@@ -48,7 +48,6 @@ static constexpr int SETTINGS_CHANGE_MAXFPS                 = 0x40000;
 static constexpr int SETTINGS_CHANGE_BLENDING              = 0x80000;
 static constexpr int SETTINGS_CHANGE_MOVIE_PLAYER          = 0x100000;
 static constexpr int SETTINGS_CHANGE_MENU_FONT             = 0x200000;
-static constexpr int SETTINGS_CHANGE_DEFAULT_CAMERA_VIEW   = 0x400000;
 static constexpr int SETTINGS_CHANGE_INTERFACE_STYLE       = 0x800000;
 static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
     SETTINGS_CHANGE_BLENDING | SETTINGS_CHANGE_MENU_FONT;
@@ -219,11 +218,6 @@ static void LayoutSaveLoadActionButtons(UserData *usr, bool deleteVisible)
     layout.butID = 1102; // Delete occupies the fifth slot when available.
     layout.xpos = (int16_t)(4 * buttonStep);
     usr->disk_button->setXYWidth(&layout);
-}
-
-static std::string DefaultCameraViewLabel(bool cockpit)
-{
-    return Locale::Text::OpenUA(cockpit ? Locale::OUA_COCKPIT : Locale::OUA_POV);
 }
 
 static std::string BlendingLabel(int v)
@@ -1180,7 +1174,7 @@ void  UserData::sb_0x46ca74()
         InputConfig[World::INPUT_BIND_CYCLE_TARGET] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 6, Input::KC_TAB);
         InputConfig[World::INPUT_BIND_ALTERNATIVE_VIEW] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 7, Input::KC_F);
         InputConfig[World::INPUT_BIND_CAMFIRE] = UserData::TInputConf(World::INPUT_BIND_TYPE_BUTTON, 5, Input::KC_EXTRA7);
-        InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
+        InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_NONE);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
         InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
         InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
@@ -1667,12 +1661,6 @@ void UserData::sb_0x46aa8c()
             ypa_log_out("OpenNeoUA: saved ui.menu_font = %s (%s)\n", menuFont.c_str(), storedMenuFont.c_str());
     }
 
-    if ( _settingsChangeOptions & SETTINGS_CHANGE_DEFAULT_CAMERA_VIEW )
-    {
-        defaultCockpitCamera = confDefaultCockpitCamera;
-        cockpitCameraRuntimeMode = confDefaultCockpitCamera;
-    }
-
     if ( _settingsChangeOptions & SETTINGS_CHANGE_INTERFACE_STYLE )
     {
         interfaceStyle = confInterfaceStyle;
@@ -1782,7 +1770,6 @@ void UserData::ShowOptionsMenu()
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
-    confDefaultCockpitCamera = defaultCockpitCamera;
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     ambientSoundVolume = p_YW->GetAmbientSoundGlobalVolume();
@@ -2452,7 +2439,6 @@ void UserData::sub_46A3C0()
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
-    confDefaultCockpitCamera = defaultCockpitCamera;
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     confAmbientSoundVolume = ambientSoundVolume;
@@ -2890,7 +2876,6 @@ void UserData::UpdateGfxOptionTexts()
 {
     video_button->SetText(1183, BlendingLabel(confBlending));
     video_button->SetText(1187, std::to_string(NormalizeFrameRateLimit(confMaxFps)));
-    video_button->SetText(1188, DefaultCameraViewLabel(confDefaultCockpitCamera));
 }
 
 bool UserData::SavePlayerRoboAIBehaviorToNucleusIni()
@@ -5323,12 +5308,6 @@ void UserData::GameShellUiHandleInput()
                  !alreadyWarnedForMenuFont &&
                  StriCmp(oldMenuFont, confMenuFont) )
                 ShowMenuMsgBox(0, Locale::Text::OpenUA(Locale::OUA_RESTART_REQUIRED_TITLE), Locale::Text::OpenUA(Locale::OUA_RESTART_REQUIRED_TEXT), true);
-        }
-        else if ( r.code == 1313 ) // Default View cycle
-        {
-            confDefaultCockpitCamera = !confDefaultCockpitCamera;
-            video_button->SetText(1188, DefaultCameraViewLabel(confDefaultCockpitCamera));
-            _settingsChangeOptions |= SETTINGS_CHANGE_DEFAULT_CAMERA_VIEW;
         }
         else if ( r.code == 1314 ) // Retro Interface checkbox (checked)
         {
