@@ -1139,6 +1139,8 @@ void NC_STACK_ypabact::ToggleCockpitCameraMode()
     if ( !_world || !_world->_GameShell )
         return;
 
+    // Intentionally retained as an internal legacy POV/cockpit switch. OpenNeoUA no longer
+    // exposes or persists this action; normal player sessions always start in cockpit.
     // The two views are intentionally mutually exclusive. Do not leave an
     // Alternative View camera state latched behind a manual cockpit-camera change.
     ResetAlternativeView();
