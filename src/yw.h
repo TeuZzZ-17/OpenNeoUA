@@ -2856,6 +2856,7 @@ public:
                                 const World::TWeapProto::TLaserMeshConfig &config,
                                 bool impactContact, const mat3x3 &orientationHint,
                                 uint32_t visualSeed);
+    NC_STACK_base *GetWeaponTracerExternalMesh(const std::string &path);
     void ClearWeaponTracerMesh();
     bool SpawnProceduralEnergyFX(const vec3d &pos, bool plusSymbol,
                                  int32_t duration, float size, float thickness,
@@ -3123,6 +3124,7 @@ public:
     std::vector<TMinigunTracer> _mgunTracers;
     GFX::TMesh _weaponTracerMesh;
     GFX::TMesh _weaponTracerGlowMesh;
+    std::map<std::string, NC_STACK_base *> _weaponTracerExternalMeshes;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;
     GFX::TMesh _proceduralEnergyFXQuadMesh;
     std::vector<TPlasmaCurrencyPopup> _plasmaCurrencyPopups;
