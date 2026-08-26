@@ -948,10 +948,10 @@ static const YWProceduralStatusBarConfig &yw_GetProceduralStatusBarConfig()
     static const YWProceduralStatusBarConfig config = []()
     {
         YWProceduralStatusBarConfig out;
-        out.hpEnabled = System::IniConf::GfxMeshHpBarEnable.Get<bool>();
-        out.hpFullTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarFullTint, out.hpFullTint);
-        out.hpLowTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarLowTint, out.hpLowTint);
-        out.hpEmptyTint = yw_ReadStatusBarTint(System::IniConf::GfxMeshHpBarEmptyTint, out.hpEmptyTint);
+        out.hpEnabled = System::IniConf::GfxWorldNewHpBarEnable.Get<bool>();
+        out.hpFullTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewHpBarFullTint, out.hpFullTint);
+        out.hpLowTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewHpBarLowTint, out.hpLowTint);
+        out.hpEmptyTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewHpBarEmptyTint, out.hpEmptyTint);
         return out;
     }();
     return config;
@@ -1017,20 +1017,20 @@ static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int val
 
     // Keep the V2 50% vertical thickness, but render the bar as one continuous
     // filled strip instead of reproducing the old MAPMISC segmented glyphs.
-    const int meshHeight = std::max(1, cellHeight / 2);
-    const int meshTop = top + (cellHeight - meshHeight) / 2;
+    const int renderHeight = std::max(1, cellHeight / 2);
+    const int renderTop = top + (cellHeight - renderHeight) / 2;
     const float barLeft = (float)left;
     const float barRight = (float)(left + squareCount * cellWidth);
-    const float barBottom = (float)(meshTop + meshHeight);
+    const float barBottom = (float)(renderTop + renderHeight);
     const float activeRight = barLeft + (barRight - barLeft) * ratio;
 
     if ( !hideEmpty )
-        yw_QueueStatusBarRectClipped(barLeft, (float)meshTop, barRight, barBottom,
+        yw_QueueStatusBarRectClipped(barLeft, (float)renderTop, barRight, barBottom,
                                      inactiveTint, excludeLeft, excludeTop,
                                      excludeRight, excludeBottom);
 
     if ( !hideFilled && activeRight > barLeft )
-        yw_QueueStatusBarRectClipped(barLeft, (float)meshTop, activeRight, barBottom,
+        yw_QueueStatusBarRectClipped(barLeft, (float)renderTop, activeRight, barBottom,
                                      activeTint, excludeLeft, excludeTop,
                                      excludeRight, excludeBottom);
 
@@ -1048,7 +1048,7 @@ static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int le
         value = maxValue;
 
     const bool isHpBar = filledTile == 2 && emptyTile == 6;
-    // The procedural path covers HP only. With HP mesh enabled, the world-space
+    // The procedural path covers HP only. With the new world HP bar enabled, the world-space
     // Shield row is intentionally omitted; the personal cockpit Shield remains
     // on the classic MAPMISC squares through sub_4E4F80().
     if ( isHpBar &&

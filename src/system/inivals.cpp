@@ -366,12 +366,12 @@ Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Commo
 
 // OpenNeoUA custom: procedural HP bar shared by world/HUD. When enabled, the
 // world-space Shield bar is omitted while the personal cockpit Shield keeps
-// the classic MAPMISC squares. Missing/disabled HP mesh keys preserve the
+// the classic MAPMISC squares. Missing/disabled world HP keys preserve the
 // full vanilla HP/Shield paths. Active HP tint converges from full_tint toward low_tint as HP decreases.
-Common::Ini::Key IniConf::GfxMeshHpBarEnable("gfx.mesh_hp_bar_enable", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GfxMeshHpBarFullTint("gfx.mesh_hp_bar_full_tint", Common::Ini::KT_WORD, std::string("0_217_81_255"));
-Common::Ini::Key IniConf::GfxMeshHpBarLowTint("gfx.mesh_hp_bar_low_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
-Common::Ini::Key IniConf::GfxMeshHpBarEmptyTint("gfx.mesh_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255_0_0_0"));
+Common::Ini::Key IniConf::GfxWorldNewHpBarEnable("gfx.world_new_hp_bar_enable", Common::Ini::KT_BOOL, false);
+Common::Ini::Key IniConf::GfxWorldNewHpBarFullTint("gfx.world_new_hp_bar_full_tint", Common::Ini::KT_WORD, std::string("0_217_81_255"));
+Common::Ini::Key IniConf::GfxWorldNewHpBarLowTint("gfx.world_new_hp_bar_low_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
+Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255_0_0_0"));
 
 // OpenNeoUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
 // gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
@@ -689,10 +689,10 @@ void IniConf::Init()
         , &GameGlobalShkFadeOut
         , &GameGlobalPalFadeIn
         , &GameGlobalPalFadeOut
-        , &GfxMeshHpBarEnable
-        , &GfxMeshHpBarFullTint
-        , &GfxMeshHpBarLowTint
-        , &GfxMeshHpBarEmptyTint
+        , &GfxWorldNewHpBarEnable
+        , &GfxWorldNewHpBarFullTint
+        , &GfxWorldNewHpBarLowTint
+        , &GfxWorldNewHpBarEmptyTint
         , &GfxRegenFXVP
         , &GfxRegenFXVPScale
         , &GfxRegenFXVPSpinX
