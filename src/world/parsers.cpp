@@ -391,8 +391,7 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
         {
             // Preserve defaults for bindings introduced after older user.txt files.
             // Explicit entries, including nop, still override these defaults below.
-            if ( i == World::INPUT_BIND_COCKPIT_CAMERA ||
-                 i == World::INPUT_BIND_SPRINT ||
+            if ( i == World::INPUT_BIND_SPRINT ||
                  i == World::INPUT_BIND_CYCLE_TARGET ||
                  i == World::INPUT_BIND_ALTERNATIVE_VIEW ||
                  i == World::INPUT_BIND_TOGGLE_UFO_SPY_UI )
@@ -7205,16 +7204,9 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
     }
     else if ( !StriCmp(p1, "default_view") )
     {
-        if ( !StriCmp(p2, "pov") )
-        {
-            _o._GameShell->defaultCockpitCamera = false;
-            _o._GameShell->cockpitCameraRuntimeMode = false;
-        }
-        else if ( !StriCmp(p2, "cockpit") )
-        {
-            _o._GameShell->defaultCockpitCamera = true;
-            _o._GameShell->cockpitCameraRuntimeMode = true;
-        }
+        // Retired profile key: keep old user.txt files loadable without restoring
+        // POV as a saved default. OpenNeoUA always starts first-person play in cockpit.
+        _o._GameShell->cockpitCameraRuntimeMode = true;
     }
     else if ( !StriCmp(p1, "interface_style") )
     {

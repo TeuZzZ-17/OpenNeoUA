@@ -353,6 +353,8 @@ enum INPUT_BIND
     INPUT_BIND_TO_ALL     = 43,
     INPUT_BIND_HELP       = 44,
     INPUT_BIND_ANALYZER   = 45,
+    // Reserved legacy POV/cockpit toggle slot. OpenNeoUA keeps the numeric ID for profile compatibility,
+    // but the action is retired and no longer exposed or processed.
     INPUT_BIND_COCKPIT_CAMERA = 46,
     INPUT_BIND_SPRINT     = 47,
     INPUT_BIND_CAMFIRE    = 48,
@@ -801,12 +803,10 @@ public:
     bool confPlayerRoboAIBehavior;
     bool confSpectatorMode;
     bool confPlayAsOtherFactions;
-    // OpenNeoUA: saved menu default and current in-game camera preference are intentionally separate.
-    // The runtime value is changed by the cockpit-camera hotkey and must survive vehicle/missile-camera
-    // transitions until the player toggles it again or applies a new setting from the Options menu.
-    bool defaultCockpitCamera = true;
+    // OpenNeoUA: cockpit is the only exposed/default first-person view. The legacy POV path remains
+    // implemented internally, but has no Options selector, input binding or persisted default. This
+    // session-only flag always starts in cockpit mode and may only be changed by internal code.
     bool cockpitCameraRuntimeMode = true;
-    bool confDefaultCockpitCamera = true;
 
     // OpenNeoUA: modern graphics options shown in the Options menu.
     int confBlending;             // gfx.blending  0=Default 1=Additive 2=Sharp

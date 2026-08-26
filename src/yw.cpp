@@ -1633,22 +1633,6 @@ static void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
     }
 }
 
-static void yw_UpdateCockpitCameraToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
-{
-    if ( !yw || !inpt || !yw->_GameShell || !yw->_userUnit )
-        return;
-
-    const UserData::TInputConf &bind = yw->_GameShell->InputConfig[World::INPUT_BIND_COCKPIT_CAMERA];
-    if ( bind.Type != World::INPUT_BIND_TYPE_HOTKEY || inpt->HotKeyID != bind.KeyID )
-        return;
-
-    if ( yw->_userUnit->IsCockpitCameraAvailable() )
-    {
-        yw->_userUnit->ToggleCockpitCameraMode();
-        inpt->HotKeyID = -1;
-    }
-}
-
 size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 {
     CrashDiag::SetPhase("WorldPreprocess");
@@ -1742,7 +1726,6 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
 
             yw_UpdateUfoSpyUiToggle(this, arg->field_8);
-            yw_UpdateCockpitCameraToggle(this, arg->field_8);
 
             TClickBoxInf *winp = &arg->field_8->ClickInf;
 
@@ -4988,6 +4971,7 @@ bool UserData::IsInputBindingRetired(int binding)
         case World::INPUT_BIND_MINIMAP:
         case World::INPUT_BIND_LOCKVIEW:
         case World::INPUT_BIND_HELP:
+        case World::INPUT_BIND_COCKPIT_CAMERA:
             return true;
 
         default:
@@ -5204,7 +5188,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_LAST_SEAT]   = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 44, Input::KC_BACKSPACE);
     usr->InputConfig[World::INPUT_BIND_SET_COMM]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 45, Input::KC_L);
     usr->InputConfig[World::INPUT_BIND_ANALYZER]    = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 46, Input::KC_F2);
-    usr->InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_K);
+    usr->InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_NONE);
     usr->InputConfig[World::INPUT_BIND_SPRINT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
     usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
     usr->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
@@ -7349,58 +7333,6 @@ bool NC_STACK_ypaworld::CreateVideoControls()
             return false;
         }
 
-        int gv117 = dword_5A50B2 - 6 * buttonsSpace - 2 * checkBoxWidth;
-        int gv120 = gv117 / 2;
-
-        // --- Default View cycle-button (row 7, full-width bar below FPS Limit) ---
-        btn_64arg.tileset_down = 16;
-        btn_64arg.tileset_up = 16;
-        btn_64arg.field_3A = 16;
-        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-        btn_64arg.xpos = 0;
-        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
-        btn_64arg.width = v98;
-        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DEFAULT_VIEW);
-        btn_64arg.caption2.clear();
-        btn_64arg.downCode = 0;
-        btn_64arg.upCode = 0;
-        btn_64arg.pressedCode = 0;
-        btn_64arg.button_id = 2;
-        btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
-        btn_64arg.txt_r = _iniColors[60].r;
-        btn_64arg.txt_g = _iniColors[60].g;
-        btn_64arg.txt_b = _iniColors[60].b;
-
-        if ( !_GameShell->video_button->Add(&btn_64arg) )
-        {
-            ypa_log_out("Unable to add Default View label\n");
-            return false;
-        }
-
-        btn_64arg.tileset_down = 19;
-        btn_64arg.tileset_up = 18;
-        btn_64arg.field_3A = 30;
-        btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
-        btn_64arg.xpos = buttonsSpace + v294 * 0.4;
-        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
-        btn_64arg.width = v294 * 0.6;
-        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_COCKPIT);
-        btn_64arg.caption2.clear();
-        btn_64arg.downCode = 0;
-        btn_64arg.upCode = 1313;
-        btn_64arg.pressedCode = 0;
-        btn_64arg.button_id = 1188;
-        btn_64arg.flags = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
-        btn_64arg.txt_r = _iniColors[68].r;
-        btn_64arg.txt_g = _iniColors[68].g;
-        btn_64arg.txt_b = _iniColors[68].b;
-
-        if ( !_GameShell->video_button->Add(&btn_64arg) )
-        {
-            ypa_log_out("Unable to add Default View button\n");
-            return false;
-        }
-
     }
 
         // --- Intro Movies checkbox (row 9, right column) ---
@@ -9049,7 +8981,6 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_TO_ALL]      = Locale::Text::Inputs(Locale::INPUTS_MSGTOALL);
     _GameShell->InputConfigTitle[World::INPUT_BIND_HELP]        = Locale::Text::Inputs(Locale::INPUTS_HELP);
     _GameShell->InputConfigTitle[World::INPUT_BIND_ANALYZER]    = Locale::Text::Inputs(Locale::INPUTS_ANALYZER);
-    _GameShell->InputConfigTitle[World::INPUT_BIND_COCKPIT_CAMERA] = Locale::Text::OpenUA(Locale::OUA_TOGGLE_COCKPIT_CAMERA);
     _GameShell->InputConfigTitle[World::INPUT_BIND_SPRINT]      = Locale::Text::OpenUA(Locale::OUA_SPRINT);
     _GameShell->InputConfigTitle[World::INPUT_BIND_CAMFIRE]     = Locale::Text::Inputs(Locale::INPUTS_FIREVW);
     _GameShell->InputConfigTitle[World::INPUT_BIND_PLACE_MAP_MARKER] = Locale::Text::OpenUA(Locale::OUA_PLACE_MAP_MARKER);
@@ -10119,8 +10050,9 @@ void NC_STACK_ypaworld::UpdateGameShell()
     _GameShell->confMaxFps = System::IniConf::GfxMaxFps.Get<int32_t>();
     _GameShell->confMoviePlayer = System::IniConf::GfxMoviePlayer.Get<bool>();
     _GameShell->confMenuFont = _GameShell->menuFont;
-    _GameShell->cockpitCameraRuntimeMode = _GameShell->defaultCockpitCamera;
-    _GameShell->confDefaultCockpitCamera = _GameShell->defaultCockpitCamera;
+    // Cockpit is the only exposed/default first-person view. Legacy POV remains internal
+    // and is intentionally never restored from a previous session.
+    _GameShell->cockpitCameraRuntimeMode = true;
     _GameShell->confInterfaceStyle = _GameShell->interfaceStyle;
     GFX::Engine.SetVirtualUIStyle(_GameShell->interfaceStyle);
 
