@@ -12,6 +12,7 @@
 #include "tools.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -45,27 +46,34 @@ static int ParsePositiveIntOrZero(const std::string &value)
     }
 }
 
-static int ParseSampleVariantId(const std::string &token)
+static void ParseSoundPitchRange(const std::string &value, TVhclSound &sound)
 {
-    if ( token.size() < 6 || StriCmp(token.substr(0, 6), "sample") )
-        return -1;
+    int minPitch = 0;
+    int maxPitch = 0;
 
-    if ( token.size() == 6 )
-        return 0;
-
-    int variant = 0;
-    for (size_t i = 6; i < token.size(); i++)
+    if ( !World::ParseIntRangeValue(value, minPitch, maxPitch) )
     {
-        if ( token[i] < '0' || token[i] > '9' )
-            return -1;
-
-        variant = variant * 10 + (token[i] - '0');
+        minPitch = 0;
+        maxPitch = 0;
     }
 
-    if ( variant < 2 || variant > 8 )
-        return -1;
+    sound.SetPitchRange(minPitch, maxPitch);
+}
 
-    return variant - 1;
+static float ParseNonNegativeIniFloatOrZero(const std::string &value)
+{
+    if ( value.empty() )
+        return 0.0f;
+
+    errno = 0;
+    char *end = NULL;
+    const char *begin = value.c_str();
+    float parsed = std::strtof(begin, &end);
+    if ( end == begin || errno == ERANGE || *end != '\0' ||
+         !std::isfinite(parsed) || parsed < 0.0f )
+        return 0.0f;
+
+    return parsed;
 }
 
 static int ParseNumberedSlotId(const std::string &key, const char *base, int maxSlots)
@@ -842,7 +850,6 @@ TVhclSound *VhclProtoParser::GetSndFxByName(const std::string &sndname)
         {"beamout",    10},
         {"build",      11},
         {"airexplode", 12},
-        {"pickup",     TVhclProto::SND_PICKUP},
     };
 
     for (const SoundType &t : CmpVals)
@@ -910,14 +917,12 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
     {
         case 0:
         {
-            int sampleVariant = ParseSampleVariantId(val);
-
-            if ( sampleVariant >= 0 )
-                sndfx->SetMainSampleVariant(sampleVariant, p2);
+            if ( !StriCmp(val, "sample") )
+                sndfx->MainSample.Name = p2;
             else if ( !StriCmp(val, "volume") )
                 sndfx->volume = parser.stol(p2, NULL, 0);
             else if ( !StriCmp(val, "pitch") )
-                sndfx->pitch = parser.stol(p2, NULL, 0);
+                ParseSoundPitchRange(p2, *sndfx);
             else if ( !StriCmp(val, "radius") )
                 sndfx->radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
             else if ( !StriCmp(val, "ext") )
@@ -1120,9 +1125,9 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
     else if ( !StriCmp(p1, "debuff_icon") )
         debuff.icon = p2;
     else if ( !StriCmp(p1, "snd_debuff_sample") )
-        debuff.tick_snd.SetMainSampleVariant(0, p2);
+        debuff.tick_snd.MainSample.Name = p2;
     else if ( !StriCmp(p1, "snd_debuff_pitch") )
-        debuff.tick_snd.pitch = parser.stol(p2, NULL, 0);
+        ParseSoundPitchRange(p2, debuff.tick_snd);
     else if ( !StriCmp(p1, "snd_debuff_volume") )
         debuff.tick_snd.volume = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "snd_debuff_radius") )
@@ -2824,7 +2829,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "snd_mimic_pitch") )
     {
-        _vhcl->snd_mimic.pitch = parser.stol(p2, NULL, 0);
+        ParseSoundPitchRange(p2, _vhcl->snd_mimic);
     }
     else if ( !StriCmp(p1, "snd_mimic_volume") )
     {
@@ -3971,8 +3976,17 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
             x.sndPrm_shk.time = 1000;
         }
 
-        _vhcl->sndFX[TVhclProto::SND_PICKUP].volume = 90;
-        _vhcl->sndFX[TVhclProto::SND_PICKUP].pitch = 0;
+        // Pickup audio is global in Nucleus.ini rather than authored per Vehicle.
+        // The event remains attached to the collecting unit so playback stays positional.
+        TVhclSound &pickupSnd = _vhcl->sndFX[TVhclProto::SND_PICKUP];
+        pickupSnd.MainSample.Name =
+            System::IniConf::GamePlasmaSndPickupSample.Get<std::string>();
+        const int pickupVolume =
+            System::IniConf::GamePlasmaSndPickupVolume.Get<int32_t>();
+        pickupSnd.volume = pickupVolume >= 0 ? pickupVolume : 90;
+        ParseSoundPitchRange(
+            System::IniConf::GamePlasmaSndPickupPitch.Get<std::string>(), pickupSnd);
+        // Radius remains 0 so SFXEngine uses the classic legacy distance attenuation.
 
         _vhcl->sndFX[TVhclProto::SND_HANDBRAKE].MainSample.Name =
             System::IniConf::GameHandBrakeSound.Get<std::string>();
@@ -4438,11 +4452,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "snd_cluster_sample") )
     {
-        _wpn->cluster.snd.SetMainSampleVariant(0, p2);
+        _wpn->cluster.snd.MainSample.Name = p2;
     }
     else if ( !StriCmp(p1, "snd_cluster_pitch") )
     {
-        _wpn->cluster.snd.pitch = parser.stol(p2, NULL, 0);
+        ParseSoundPitchRange(p2, _wpn->cluster.snd);
     }
     else if ( !StriCmp(p1, "snd_cluster_volume") )
     {
@@ -5215,9 +5229,9 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         _bld->spawn_instant = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( p1.size() >= 11 && !StriCmp(p1.substr(0, 11), "snd_normal_") && ParseSampleVariantId(p1.substr(11)) >= 0 )
+    else if ( !StriCmp(p1, "snd_normal_sample") )
     {
-        _bld->SndFX.SetMainSampleVariant(ParseSampleVariantId(p1.substr(11)), p2);
+        _bld->SndFX.MainSample.Name = p2;
     }
     else if ( !StriCmp(p1, "snd_normal_volume") )
     {
@@ -5225,7 +5239,7 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     }
     else if ( !StriCmp(p1, "snd_normal_pitch") )
     {
-        _bld->SndFX.pitch = parser.stol(p2, NULL, 0);
+        ParseSoundPitchRange(p2, _bld->SndFX);
     }
     else if ( !StriCmp(p1, "sbact_act") )
     {
@@ -5742,11 +5756,11 @@ static bool ParseSuperItemSoundEventParam(ScriptParser::Parser &parser,
     const std::string shkPrefix = "shk_" + eventName + "_";
 
     if ( !StriCmp(p1, sndPrefix + "sample") )
-        sound.SetMainSampleVariant(0, p2);
+        sound.MainSample.Name = p2;
     else if ( !StriCmp(p1, sndPrefix + "volume") )
         sound.volume = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, sndPrefix + "pitch") )
-        sound.pitch = parser.stol(p2, NULL, 0);
+        ParseSoundPitchRange(p2, sound);
     else if ( !StriCmp(p1, sndPrefix + "radius") )
         sound.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, palPrefix + "slot") )

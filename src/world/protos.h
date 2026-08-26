@@ -284,17 +284,18 @@ struct TVhclSound
     };
 
     TSndSample MainSample;
-    std::vector<TSndSample> MainSampleVariants;
 
     std::vector<TSndSample> ExtSamples;
     int16_t volume = 0;
-    int16_t pitch = 0;
+    int pitch_min = 0;
+    int pitch_max = 0;
     float radius = 0.0f;
     TSndFXParam sndPrm;
     TSndFxPosParam sndPrm_shk;
     std::vector<TSampleParams> extS;
 
-    void SetMainSampleVariant(size_t variant, const std::string &name);
+    void SetPitchRange(int minPitch, int maxPitch);
+    void ConfigureSoundSourcePitch(TSoundSource &sound) const;
     void LoadSamples();
     void ClearSounds();
 };

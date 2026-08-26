@@ -263,6 +263,9 @@ public:
     static Common::Ini::Key GamePlasmaDeathMagnetSpeed;
     static Common::Ini::Key GamePlasmaCurrencyEnable;
     static Common::Ini::Key GamePlasmaCurrencyGainPercent;
+    static Common::Ini::Key GamePlasmaSndPickupSample;
+    static Common::Ini::Key GamePlasmaSndPickupVolume;
+    static Common::Ini::Key GamePlasmaSndPickupPitch;
     static Common::Ini::Key GameWorldUiMaxDistance;
     static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;

@@ -6,6 +6,7 @@
 #include "../ypabact.h"
 #include "../yw.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace World
@@ -205,19 +206,20 @@ uint8_t DestFX::ParseTypeName(const std::string &in)
 }
 
 
+void TVhclSound::SetPitchRange(int minPitch, int maxPitch)
+{
+    pitch_min = std::min(minPitch, maxPitch);
+    pitch_max = std::max(minPitch, maxPitch);
+}
+
+void TVhclSound::ConfigureSoundSourcePitch(TSoundSource &sound) const
+{
+    sound.ConfigurePitchRange(pitch_min, pitch_max);
+}
+
 void TVhclSound::LoadSamples()
 {
-    bool hasLoadedVariant = false;
-    for (const TSndSample &sample : MainSampleVariants)
-    {
-        if (sample.Sample)
-        {
-            hasLoadedVariant = true;
-            break;
-        }
-    }
-
-    if ( !MainSample.Sample && !hasLoadedVariant && (ExtSamples.empty() || !ExtSamples.at(0).Sample) )
+    if ( !MainSample.Sample && (ExtSamples.empty() || !ExtSamples.at(0).Sample) )
     {
         std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
 
@@ -261,44 +263,13 @@ void TVhclSound::LoadSamples()
                 ypa_log_out("Warning: Could not load sample %s.\n", MainSample.Name.c_str());
         }
 
-        if ( extS.empty() )
-        {
-            for (TSndSample &sample : MainSampleVariants)
-            {
-                if ( !sample.Name.empty() )
-                {
-                    sample.Sample = Nucleus::CInit<NC_STACK_wav>( {{NC_STACK_rsrc::RSRC_ATT_NAME, sample.Name}} );
-
-                    if ( !sample.Sample )
-                        ypa_log_out("Warning: Could not load sample %s.\n", sample.Name.c_str());
-                }
-            }
-        }
-
         Common::Env.SetPrefix("rsrc", oldRsrc);
     }
-}
-
-void TVhclSound::SetMainSampleVariant(size_t variant, const std::string &name)
-{
-    if ( variant == 0 )
-    {
-        MainSample.Name = name;
-        return;
-    }
-
-    if ( MainSampleVariants.size() < variant )
-        MainSampleVariants.resize(variant);
-
-    MainSampleVariants.at(variant - 1).Name = name;
 }
 
 void TVhclSound::ClearSounds()
 {
     MainSample.ClearLoaded();
-
-    for (TSndSample &sample : MainSampleVariants)
-        sample.ClearLoaded();
 
     for (TSndSample &sample : ExtSamples)
         sample.ClearLoaded();
