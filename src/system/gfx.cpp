@@ -23,7 +23,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <utility>
 
 namespace GFX
@@ -2453,7 +2452,6 @@ void GFXEngine::raster_func221(const Common::Rect &arg)
 void GFXEngine::BeginFrame()
 {
     setViewZoom(1.0f);
-    _virtualUiSolidRects.clear();
     SDL_FillRect(Screen(), NULL, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
 
     Common::Point scrSz = System::GetResolution();
@@ -2508,7 +2506,6 @@ void GFXEngine::EndFrame()
         Gui::Root::Instance.Draw(Screen());
         DrawScreenSurface();
         DrawVirtualUISurface();
-        DrawVirtualUISolidRects();
         Gui::Root::Instance.HwCompose();
 
         if (_colorEffects == 1 && !_atmosphereActive)
@@ -2552,7 +2549,6 @@ void GFXEngine::EndFrame()
     Gui::Root::Instance.Draw(Screen());
     DrawScreenSurface();
     DrawVirtualUISurface();
-    DrawVirtualUISolidRects();
     Gui::Root::Instance.HwCompose();
 
     if (_colorEffects == 1 && !_vhsFilterActive && !_atmosphereActive)
@@ -3631,17 +3627,6 @@ void GFXEngine::Deinit()
         Glext::GLDeleteBuffers(1, &_stdQuadIndexBuf);
 
     _stdQuadIndexBuf = 0;
-
-    if (_virtualUiSolidDataBuf)
-        Glext::GLDeleteBuffers(1, &_virtualUiSolidDataBuf);
-    _virtualUiSolidDataBuf = 0;
-
-    if (_virtualUiSolidIndexBuf)
-        Glext::GLDeleteBuffers(1, &_virtualUiSolidIndexBuf);
-    _virtualUiSolidIndexBuf = 0;
-    _virtualUiSolidRects.clear();
-    _virtualUiSolidVertices.clear();
-    _virtualUiSolidIndices.clear();
 
     if (_stdShaderProg.ID)
         Glext::GLDeleteProgram(_stdShaderProg.ID);
@@ -5538,183 +5523,34 @@ void GFXEngine::DrawScreenSurface()
     _states = save;
 }
 
-void GFXEngine::QueueVirtualUISolidRect(float left, float top, float right, float bottom,
-                                              const TGLColor &color)
+void GFXEngine::DrawVirtualUISolidRect(float left, float top, float right, float bottom,
+                                        const TGLColor &color)
 {
-    if ( !_virtualUiPass || _virtualUiResolution.x <= 0 || _virtualUiResolution.y <= 0 ||
+    if ( !_virtualUiPass || !VirtualUISurface ||
          color.a <= 0.0f || right <= left || bottom <= top )
-        return;
-
-    left = std::max(0.0f, std::min(left, (float)_virtualUiResolution.x));
-    right = std::max(0.0f, std::min(right, (float)_virtualUiResolution.x));
-    top = std::max(0.0f, std::min(top, (float)_virtualUiResolution.y));
-    bottom = std::max(0.0f, std::min(bottom, (float)_virtualUiResolution.y));
-    if ( right <= left || bottom <= top )
-        return;
-
-    TVirtualUISolidRect rect;
-    rect.left = left;
-    rect.top = top;
-    rect.right = right;
-    rect.bottom = bottom;
-    rect.color = color;
-    _virtualUiSolidRects.push_back(rect);
-}
-
-void GFXEngine::OccludeVirtualUISolidRects(const Common::Rect &occluder)
-{
-    if ( _virtualUiSolidRects.empty() || occluder.IsEmpty() )
-        return;
-
-    const float exLeft = (float)occluder.left;
-    const float exTop = (float)occluder.top;
-    const float exRight = (float)occluder.right;
-    const float exBottom = (float)occluder.bottom;
-
-    std::vector<TVirtualUISolidRect> clipped;
-    clipped.reserve(_virtualUiSolidRects.size() * 2);
-
-    auto append = [&clipped](const TVirtualUISolidRect &source,
-                             float left, float top, float right, float bottom)
     {
-        if ( right <= left || bottom <= top )
-            return;
-
-        TVirtualUISolidRect part = source;
-        part.left = left;
-        part.top = top;
-        part.right = right;
-        part.bottom = bottom;
-        clipped.push_back(part);
-    };
-
-    for ( const TVirtualUISolidRect &rect : _virtualUiSolidRects )
-    {
-        const float hitLeft = std::max(rect.left, exLeft);
-        const float hitTop = std::max(rect.top, exTop);
-        const float hitRight = std::min(rect.right, exRight);
-        const float hitBottom = std::min(rect.bottom, exBottom);
-
-        if ( hitRight <= hitLeft || hitBottom <= hitTop )
-        {
-            clipped.push_back(rect);
-            continue;
-        }
-
-        append(rect, rect.left, rect.top, rect.right, hitTop);
-        append(rect, rect.left, hitBottom, rect.right, rect.bottom);
-        append(rect, rect.left, hitTop, hitLeft, hitBottom);
-        append(rect, hitRight, hitTop, rect.right, hitBottom);
+        return;
     }
 
-    _virtualUiSolidRects.swap(clipped);
-}
-
-void GFXEngine::DrawVirtualUISolidRects()
-{
-    if ( _virtualUiSolidRects.empty() || !VirtualUISurface ||
-         VirtualUISurface->w <= 0 || VirtualUISurface->h <= 0 )
+    const int x0 = std::max(0, std::min((int)std::floor(left), VirtualUISurface->w));
+    const int x1 = std::max(0, std::min((int)std::ceil(right), VirtualUISurface->w));
+    const int y0 = std::max(0, std::min((int)std::floor(top), VirtualUISurface->h));
+    const int y1 = std::max(0, std::min((int)std::ceil(bottom), VirtualUISurface->h));
+    if ( x1 <= x0 || y1 <= y0 )
         return;
 
-    _virtualUiSolidVertices.clear();
-    _virtualUiSolidIndices.clear();
-    _virtualUiSolidVertices.reserve(_virtualUiSolidRects.size() * 4);
-    _virtualUiSolidIndices.reserve(_virtualUiSolidRects.size() * 6);
-
-    const float invW = 2.0f / (float)VirtualUISurface->w;
-    const float invH = 2.0f / (float)VirtualUISurface->h;
-
-    for ( const TVirtualUISolidRect &rect : _virtualUiSolidRects )
-    {
-        const size_t base = _virtualUiSolidVertices.size();
-        if ( base + 3 > (size_t)std::numeric_limits<IndexType>::max() )
-            break;
-
-        const float x0 = rect.left * invW - 1.0f;
-        const float x1 = rect.right * invW - 1.0f;
-        const float y0 = 1.0f - rect.top * invH;
-        const float y1 = 1.0f - rect.bottom * invH;
-
-        _virtualUiSolidVertices.push_back(TVertex(vec3f(x0, y0, 0.0f), tUtV(), rect.color));
-        _virtualUiSolidVertices.push_back(TVertex(vec3f(x0, y1, 0.0f), tUtV(), rect.color));
-        _virtualUiSolidVertices.push_back(TVertex(vec3f(x1, y1, 0.0f), tUtV(), rect.color));
-        _virtualUiSolidVertices.push_back(TVertex(vec3f(x1, y0, 0.0f), tUtV(), rect.color));
-
-        _virtualUiSolidIndices.push_back((IndexType)(base + 0));
-        _virtualUiSolidIndices.push_back((IndexType)(base + 1));
-        _virtualUiSolidIndices.push_back((IndexType)(base + 2));
-        _virtualUiSolidIndices.push_back((IndexType)(base + 0));
-        _virtualUiSolidIndices.push_back((IndexType)(base + 2));
-        _virtualUiSolidIndices.push_back((IndexType)(base + 3));
-    }
-
-    if ( _virtualUiSolidVertices.empty() || _virtualUiSolidIndices.empty() )
+    const uint8_t r = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.r * 255.0f)));
+    const uint8_t g = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.g * 255.0f)));
+    const uint8_t b = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.b * 255.0f)));
+    const uint8_t a = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.a * 255.0f)));
+    if ( a == 0 )
         return;
 
-    GfxStates saved = _states;
-    Common::Point scrSz = System::GetResolution();
-    glViewport(0, 0, scrSz.x, scrSz.y);
-    SetProjectionMatrix(mat4x4f());
-    SetModelViewMatrix(mat4x4f());
-
-    _states.DepthTest = false;
-    _states.Zwrite = false;
-    _states.AlphaBlend = true;
-    _states.SrcBlend = GL_SRC_ALPHA;
-    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-    _states.Tex = 0;
-    _states.TexBlend = 0;
-    _states.Prog = _stdShaderProg;
-    _states.AlphaTest = false;
-    _states.Shaded = true;
-    _states.Fog = false;
-    _states.AFog = false;
-
-    if ( _vbo )
+    for ( int y = y0; y < y1; ++y )
     {
-        if ( !_virtualUiSolidDataBuf )
-            Glext::GLGenBuffers(1, &_virtualUiSolidDataBuf);
-        if ( !_virtualUiSolidIndexBuf )
-            Glext::GLGenBuffers(1, &_virtualUiSolidIndexBuf);
-
-        _states.DataBuf = _virtualUiSolidDataBuf;
-        _states.IndexBuf = _virtualUiSolidIndexBuf;
-        SetRenderStates(0);
-
-        Glext::GLBufferData(GL_ARRAY_BUFFER,
-                            sizeof(TVertex) * _virtualUiSolidVertices.size(),
-                            _virtualUiSolidVertices.data(), GL_STREAM_DRAW);
-        Glext::GLBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                            sizeof(IndexType) * _virtualUiSolidIndices.size(),
-                            _virtualUiSolidIndices.data(), GL_STREAM_DRAW);
-
-        if ( _lastStates.Prog.PosLoc != -1 )
-            Glext::GLVertexAttribPointer(_lastStates.Prog.PosLoc, 3, GL_FLOAT, GL_FALSE,
-                                         sizeof(TVertex), (void *)offsetof(TVertex, Pos));
-        if ( _lastStates.Prog.ColorLoc != -1 )
-            Glext::GLVertexAttribPointer(_lastStates.Prog.ColorLoc, 4, GL_FLOAT, GL_FALSE,
-                                         sizeof(TVertex), (void *)offsetof(TVertex, Color));
-
-        _vboStatesBlock.ColorMul[0] = 1.0f;
-        _vboStatesBlock.ColorMul[1] = 1.0f;
-        _vboStatesBlock.ColorMul[2] = 1.0f;
-        _vboStatesBlock.ColorMul[3] = 1.0f;
-        _vboStatesBlock.Colorize = 0;
-        _vboStatesChanged = true;
-        CommitUBOParameters();
-
-        glDrawElements(GL_TRIANGLES, (GLsizei)_virtualUiSolidIndices.size(), GLINDEXTYPE, NULL);
+        DrawLine(VirtualUISurface, Common::Line(x0, y, x1 - 1, y),
+                 r, g, b, a, true);
     }
-    else
-    {
-        SetRenderStates(0);
-        glVertexPointer(3, GL_FLOAT, sizeof(TVertex), &_virtualUiSolidVertices[0].Pos);
-        glColorPointer(4, GL_FLOAT, sizeof(TVertex), &_virtualUiSolidVertices[0].Color);
-        glDrawElements(GL_TRIANGLES, (GLsizei)_virtualUiSolidIndices.size(), GLINDEXTYPE,
-                       _virtualUiSolidIndices.data());
-    }
-
-    _states = saved;
 }
 
 void GFXEngine::DrawVirtualUISurface()
