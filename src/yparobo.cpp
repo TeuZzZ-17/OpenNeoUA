@@ -10,6 +10,7 @@
 #include "fmtlib/printf.h"
 #include "system/inivals.h"
 #include "crashdiag.h"
+#include "world/tools.h"
 
 #include <math.h>
 #include <algorithm>
@@ -17,6 +18,7 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <limits>
 
 
 
@@ -538,7 +540,7 @@ void NC_STACK_yparobo::InitForce(NC_STACK_ypabact *unit)
     newUnit->_owner = _owner;
     newUnit->_commandID = unit->_commandID;
     newUnit->_host_station = this;
-    newUnit->InheritActiveDebuffFromHostStation(this);
+    newUnit->InheritActiveDebuffFromParent(this);
 
     int v20 = getBACT_bactCollisions();
     newUnit->setBACT_bactCollisions(v20);
@@ -950,18 +952,23 @@ void NC_STACK_yparobo::ChangeSectorEnergyFromRoboCollision(yw_arg129 *arg)
     if ( destroyedBuildings <= 0 || _energy_max <= 0 || IsInvulnerableToDamage() )
         return;
 
-    int damagePercent = System::IniConf::GameRoboBuildingCollisionDamagePercent.Get<int>();
-    if ( damagePercent < 0 )
-        damagePercent = 0;
-    else if ( damagePercent > 100 )
-        damagePercent = 100;
+    World::TAuthoredScalar authoredDamage;
+    if ( !World::ParseAuthoredScalar(
+             System::IniConf::GameRoboBuildingCollisionDamage.Get<std::string>(),
+             authoredDamage) ||
+         !std::isfinite(authoredDamage.value) || authoredDamage.value <= 0.0f )
+    {
+        return;
+    }
 
-    if ( damagePercent == 0 )
+    double resolvedRawDamage = authoredDamage.percent
+        ? (double)_energy_max * (double)std::min(authoredDamage.value, 100.0f) / 100.0
+        : (double)authoredDamage.value;
+    if ( !std::isfinite(resolvedRawDamage) || resolvedRawDamage <= 0.0 )
         return;
 
-    int rawDamage = (int)((int64_t)_energy_max * damagePercent / 100);
-    if ( rawDamage < 1 )
-        rawDamage = 1;
+    resolvedRawDamage = std::min(resolvedRawDamage, (double)std::numeric_limits<int>::max());
+    int rawDamage = std::max(1, (int)ceil(resolvedRawDamage));
 
     const int selfDamage = CalcShieldedCustomDamage(rawDamage);
     if ( selfDamage <= 0 )
@@ -2105,7 +2112,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
                 newbact->setBACT_bactCollisions(v67);
 
                 newbact->_host_station = this;
-                newbact->InheritActiveDebuffFromHostStation(this);
+                newbact->InheritActiveDebuffFromParent(this);
                 _roboEnergyLife -= arg->energy;
 
                 _world->SetCmdrIdToSelect(newbact->_commandID); // Select it for add next units
@@ -2159,7 +2166,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
                 newbact2->setBACT_bactCollisions(v67);
 
                 newbact2->_host_station = this;
-                newbact2->InheritActiveDebuffFromHostStation(this);
+                newbact2->InheritActiveDebuffFromParent(this);
                 _roboEnergyLife -= arg->energy;
 
                 _world->HistoryAktCreate(newbact2);
@@ -3288,7 +3295,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
 
         newUnit->_owner = _owner;
         newUnit->_host_station = this;
-        newUnit->InheritActiveDebuffFromHostStation(this);
+        newUnit->InheritActiveDebuffFromParent(this);
 
         int v69 = getBACT_bactCollisions();
         newUnit->setBACT_bactCollisions(v69);
@@ -6507,7 +6514,7 @@ bool NC_STACK_yparobo::MakeSquad(const std::vector<int> &VhclIDS, vec3d pos, boo
     squad_commander->_owner = _owner;
     squad_commander->_commandID = dword_5B1128;
     squad_commander->_host_station = this;
-    squad_commander->InheritActiveDebuffFromHostStation(this);
+    squad_commander->InheritActiveDebuffFromParent(this);
     squad_commander->_aggr = 60;
 
     setState_msg arg78;
@@ -6550,7 +6557,7 @@ bool NC_STACK_yparobo::MakeSquad(const std::vector<int> &VhclIDS, vec3d pos, boo
         next_bact->_owner = _owner;
         next_bact->_commandID = dword_5B1128;
         next_bact->_host_station = this;
-        next_bact->InheritActiveDebuffFromHostStation(this);
+        next_bact->InheritActiveDebuffFromParent(this);
         next_bact->_aggr = 60;
 
         next_bact->SetState(&arg78);

@@ -1,8 +1,10 @@
+#include <algorithm>
 #include "3ds.h"
 
 #include "image.h"
 #include "env.h"
 #include "system/inivals.h"
+#include "utils.h"
 
 NC_STACK_3ds::NC_STACK_3ds()
 {}
@@ -74,6 +76,13 @@ NC_STACK_3ds *NC_STACK_3ds::Load3DS(const std::string &filename)
         return NULL;
 
     NC_STACK_3ds *tmp = Nucleus::CInit<NC_STACK_3ds>();
+
+    std::string normalized = filename;
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    const size_t slash = normalized.find_last_of('/');
+    if ( slash != std::string::npos )
+        tmp->_sourceDir = normalized.substr(0, slash);
+
     if(tmp->LoadFromFile(&fil))
         return tmp;
 
@@ -376,19 +385,34 @@ size_t NC_STACK_3ds::readChunkTexMap(d3dsTextureMap &texmap, FSMgr::FileHandle *
             std::string texName;
             readed += readName(fil, &texName, 64);
 
-            texmap.name = texName;
+            std::string resolvedTexName = texName;
+            std::replace(resolvedTexName.begin(), resolvedTexName.end(), '\\', '/');
+
+            const bool rootedTexturePath = !resolvedTexName.empty() &&
+                                           (resolvedTexName[0] == '/' || resolvedTexName.find(':') != std::string::npos);
+            if ( !_sourceDir.empty() && !rootedTexturePath )
+            {
+                const std::string localCandidate = _sourceDir + "/" + resolvedTexName;
+                if ( uaFileExist(localCandidate) )
+                    resolvedTexName = localCandidate;
+            }
+
+            texmap.name = resolvedTexName;
 
             if (!texmap.tex)
             {
+                // External 3DS assets are authored under Data. Resolve material
+                // textures from the mesh directory first, then keep the exact old
+                // resource-name fallback when no sibling texture exists.
                 std::string oldprefix = Common::Env.SetPrefix("rsrc", "");
 
                 texmap.tex = Nucleus::CInit<NC_STACK_image>( {
-                    {NC_STACK_rsrc::RSRC_ATT_NAME, std::string(texName)},
+                    {NC_STACK_rsrc::RSRC_ATT_NAME, resolvedTexName},
                     {NC_STACK_rsrc::RSRC_ATT_TRYSHARED, (int32_t)2},
                     {NC_STACK_bitmap::BMD_ATT_CONVCOLOR, (int32_t)1}} );
 
                 Common::Env.SetPrefix("rsrc", oldprefix);
-                printf("%s\n", texName.c_str());
+                printf("%s\n", resolvedTexName.c_str());
             }
         }
         break;

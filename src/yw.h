@@ -2623,7 +2623,8 @@ public:
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
 
     // OpenNeoUA custom: artillery shell bombardment markers + manual map-click control.
-    void AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, int lingerMs);
+    void AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, bool pending, int lingerMs);
+    void RemovePendingArtilleryShellMarker(uint32_t sourceGid);
     void ExpireArtilleryShellMarkers();
     void ClearArtilleryShellMarkers();
     void RenderArtilleryShellMapMarkers();
@@ -2767,7 +2768,7 @@ public:
     void StopCustomSuperItemWaveEffects(int id);
     void ApplyCustomSuperItemDetonationPush(int id);
     void RestoreCustomSuperItemRuntimeAfterLoad();
-    void UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
+    void UpdateCustomSuperItemWaveVisual(TMapSuperItem &sitem,
                                      const World::TSuperItemProfile &profile,
                                      double fadeElapsed,
                                      double fadeDuration);
@@ -2835,6 +2836,9 @@ public:
         {}
     };
 
+    NC_STACK_base *ResolveVisualModel(int32_t modelId, const std::string &external3dsPath);
+    int32_t SpawnTransientVisualBase(NC_STACK_base *base, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut);
+    int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
@@ -2856,19 +2860,20 @@ public:
                                 const World::TWeapProto::TLaserMeshConfig &config,
                                 bool impactContact, const mat3x3 &orientationHint,
                                 uint32_t visualSeed);
-    NC_STACK_base *GetWeaponTracerExternalMesh(const std::string &path);
-    void ClearWeaponTracerMesh();
+    NC_STACK_base *GetSharedExternalMesh(const std::string &path);
+    void ClearSharedExternalMeshes();
     bool SpawnProceduralEnergyFX(const vec3d &pos, bool plusSymbol,
                                  int32_t duration, float size, float thickness,
                                  float riseSpeed, int32_t fadeIn, int32_t fadeOut,
                                  const World::TVisualTint &tint);
     void RenderProceduralEnergyFX(baseRender_msg *arg);
     void ClearProceduralEnergyFX();
-    int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false, int32_t fadeIn = 0, int32_t fadeOut = 0);
-    int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
-    bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, float randomOffsetPercent, vec3d *localPosition);
+    int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false, int32_t fadeIn = 0, int32_t fadeOut = 0, const std::string &external3dsPath = std::string());
+    int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint(), const World::TVisualTint *trailTint = NULL);
+    int32_t SpawnAttachedStatusTransientMesh(const std::string &path, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
+    bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, const World::TAbsoluteOrPercent &randomMaxOffset, vec3d *localPosition);
     bool UpdateRandomFXTimer(int intervalMin, int intervalMax, int32_t &nextTime);
-    int32_t SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint = World::TVisualTint(), int32_t lifeTime = 1000, float scale = 1.0, const vec3d &offset = vec3d(0.0, 0.0, 0.0), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
+    int32_t SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint = World::TVisualTint(), int32_t lifeTime = 1000, float scale = 1.0, const vec3d &offset = vec3d(0.0, 0.0, 0.0), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0, const std::string &external3dsPath = std::string());
     bool HasTransientVP(int32_t id) const;
     void RemoveTransientVP(int32_t id, int32_t fadeOut = 0, int32_t particleFadeOut = 0);
     void UpdateDecorationFX(const World::TDecorationFXConfig &config, int32_t &nextTime, const vec3d &ownerPos, int32_t *persistentId = NULL);
@@ -3122,9 +3127,7 @@ public:
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<TMinigunTracer> _mgunTracers;
-    GFX::TMesh _weaponTracerMesh;
-    GFX::TMesh _weaponTracerGlowMesh;
-    std::map<std::string, NC_STACK_base *> _weaponTracerExternalMeshes;
+    std::map<std::string, NC_STACK_base *> _sharedExternalMeshes;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;
     GFX::TMesh _proceduralEnergyFXQuadMesh;
     std::vector<TPlasmaCurrencyPopup> _plasmaCurrencyPopups;
@@ -3298,14 +3301,17 @@ public:
     std::vector<DebugAoeRing> _debugAoeRings;
 
     // OpenNeoUA custom: active artillery shell bombardment markers for the opened strategic map.
-    // Independent of the F10 overlay; shown while a barrage is active and a short
-    // time after the last shell lands, then auto-expire.
+    // Independent of the F10 overlay; an active zone remains visible only while
+    // shells aimed at that zone are still in flight. Pending cooldown orders use
+    // one replaceable marker per artillery platform.
     struct ArtilleryShellMarker
     {
         vec3d   pos;
         float   radius      = 0.0f;
         int32_t expireStamp = 0;
+        uint32_t sourceGid  = 0;
         uint8_t owner       = 0;
+        bool pending        = false;
     };
     std::vector<ArtilleryShellMarker> _artilleryShellMarkers;
 

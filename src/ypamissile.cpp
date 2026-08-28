@@ -709,8 +709,7 @@ bool NC_STACK_ypamissile::TryClusterSplit()
 
     _mislClusterDone = true;
 
-    if ( cluster.vp > 0 )
-        _world->SpawnTransientVP(cluster.vp, _position, _rotation, 1000);
+    _world->SpawnTransientVisual(cluster.vp, cluster.mesh3ds, _position, _rotation, 1000);
 
     cluster.snd.LoadSamples();
     TSampleData *clusterSample = cluster.snd.MainSample.Sample ? cluster.snd.MainSample.Sample->GetSampleData() : NULL;
@@ -772,9 +771,9 @@ bool NC_STACK_ypamissile::TryClusterSplit()
         child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
         child->StartWeaponTracer();
 
-        if ( childProto.vp_launch > 0 )
-            _world->SpawnTransientVP(childProto.vp_launch, child->_position, child->_rotation, 1000,
-                                     1.0, World::TVisualTint(), childProto.vp_launch_scale);
+        _world->SpawnTransientVisual(childProto.vp_launch, childProto.visual_3ds.launch,
+                                     child->_position, child->_rotation, 1000,
+                                     1.0, World::TVisualTint(), childProto.launch_scale);
 
         child->_kidRef.Detach();
         child->_parent = NULL;
@@ -1045,9 +1044,9 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
     child->StartWeaponTracer();
 
-    if ( wproto.vp_launch > 0 )
-        _world->SpawnTransientVP(wproto.vp_launch, child->_position, child->_rotation, 1000,
-                                 1.0, World::TVisualTint(), wproto.vp_launch_scale);
+    _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
+                                 child->_position, child->_rotation, 1000,
+                                 1.0, World::TVisualTint(), wproto.launch_scale);
 
     child->_kidRef.Detach();
     child->_parent = NULL;
@@ -2583,18 +2582,49 @@ void NC_STACK_ypamissile::User_layer(update_msg *arg)
         ResetViewing();
 }
 
-void NC_STACK_ypamissile::SetupArtilleryShell(const vec3d &startPos, const vec3d &targetPos,
-                                           int flightTime, float arcHeight, const vec3d &driftVec, bool impactOnSurface)
+int NC_STACK_ypamissile::SetupArtilleryShell(const vec3d &startPos, const vec3d &targetPos,
+                                                  float arcHeight, float shellSpeed, bool impactOnSurface)
 {
     _isArtilleryShellProjectile = true;
+    _artilleryShellVerticalBarrage = false;
+    _artilleryShellVerticalTransferred = false;
+    _artilleryShellVerticalAscentTime = 0;
+    _artilleryShellVerticalFallStartTime = 0;
+    _artilleryShellVerticalDescentTime = 0;
     _artilleryShellStartPos     = startPos;
     _artilleryShellTargetPos    = targetPos;
-    _artilleryShellDriftVec     = driftVec;
-    _artilleryShellArcHeight    = arcHeight;
-    _artilleryShellFlightTime   = flightTime > 0 ? flightTime : 2500;
+    _artilleryShellArcHeight    = (std::isfinite(arcHeight) && arcHeight > 0.0f) ? arcHeight : 0.0f;
     _artilleryShellElapsed      = 0;
     _artilleryShellImpactOnSurface = impactOnSurface;
 
+    // Derive flight time from the authored artillery speed. The trajectory itself is
+    // unchanged: sample its real parabolic path so artillery_shell_speed remains an
+    // intuitive world-units/second control instead of another fixed time parameter.
+    int flightTime = 2500;
+    if ( std::isfinite(shellSpeed) && shellSpeed > 0.0f )
+    {
+        const int SEGMENTS = 16;
+        float pathLength = 0.0f;
+        vec3d prev = startPos;
+
+        for ( int i = 1; i <= SEGMENTS; ++i )
+        {
+            float t = (float)i / (float)SEGMENTS;
+            vec3d cur;
+            cur.x = startPos.x + (targetPos.x - startPos.x) * t;
+            cur.z = startPos.z + (targetPos.z - startPos.z) * t;
+            float baseY = startPos.y + (targetPos.y - startPos.y) * t;
+            float arc = _artilleryShellArcHeight * 4.0f * t * (1.0f - t);
+            cur.y = baseY - arc;
+            pathLength += (cur - prev).length();
+            prev = cur;
+        }
+
+        if ( pathLength > 0.0f && std::isfinite(pathLength) )
+            flightTime = std::max(1, (int)std::ceil((pathLength / shellSpeed) * 1000.0f));
+    }
+
+    _artilleryShellFlightTime = flightTime;
     _position = startPos;
     _old_pos  = startPos;
 
@@ -2614,6 +2644,44 @@ void NC_STACK_ypamissile::SetupArtilleryShell(const vec3d &startPos, const vec3d
             _rotation.SetY(_fly_dir * x);
         }
     }
+
+    return _artilleryShellFlightTime;
+}
+
+int NC_STACK_ypamissile::SetupArtilleryShellVerticalBarrage(const vec3d &startPos, const vec3d &targetPos,
+                                                            int fallDelay, float fallHeight, float verticalSpeed, bool impactOnSurface)
+{
+    _isArtilleryShellProjectile = true;
+    _artilleryShellVerticalBarrage = true;
+    _artilleryShellVerticalTransferred = false;
+    _artilleryShellStartPos = startPos;
+    _artilleryShellTargetPos = targetPos;
+    _artilleryShellArcHeight = (std::isfinite(fallHeight) && fallHeight > 0.0f) ? fallHeight : 0.0f;
+    _artilleryShellElapsed = 0;
+    _artilleryShellImpactOnSurface = impactOnSurface;
+
+    const float speed = (std::isfinite(verticalSpeed) && verticalSpeed > 0.0f) ? verticalSpeed : 70.0f;
+    const int travelTime = _artilleryShellArcHeight > 0.0f
+        ? std::max(1, (int)std::ceil((_artilleryShellArcHeight / speed) * 1000.0f))
+        : 0;
+
+    _artilleryShellVerticalAscentTime = travelTime;
+    _artilleryShellVerticalFallStartTime = std::max(std::max(fallDelay, 0), travelTime);
+    _artilleryShellVerticalDescentTime = travelTime;
+    _artilleryShellFlightTime = std::max(1, _artilleryShellVerticalFallStartTime + _artilleryShellVerticalDescentTime);
+
+    _position = startPos;
+    _old_pos = startPos;
+    _primTtype = BACT_TGT_TYPE_DRCT;
+
+    // Mortar mode starts by pointing straight up. Engine +Y is down.
+    _fly_dir = vec3d(0.0, -1.0, 0.0);
+    _rotation.SetZ(_fly_dir);
+    vec3d x = vec3d::OX(1.0);
+    _rotation.SetX(x);
+    _rotation.SetY(_fly_dir * x);
+
+    return _artilleryShellFlightTime;
 }
 
 void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
@@ -2624,35 +2692,68 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
     _artilleryShellElapsed += arg->frameTime;
 
     int flightTime = _artilleryShellFlightTime > 0 ? _artilleryShellFlightTime : 2500;
-
-    float t = (float)_artilleryShellElapsed / (float)flightTime;
-    bool impactNow = false;
-    if ( t >= 1.0f )
-    {
-        t = 1.0f;
-        impactNow = true;
-    }
-
+    bool impactNow = _artilleryShellElapsed >= flightTime;
     vec3d prevPos = _position;
+    vec3d pos = _position;
 
-    // Horizontal interpolation start -> target.
-    vec3d pos;
-    pos.x = _artilleryShellStartPos.x + (_artilleryShellTargetPos.x - _artilleryShellStartPos.x) * t;
-    pos.z = _artilleryShellStartPos.z + (_artilleryShellTargetPos.z - _artilleryShellStartPos.z) * t;
-
-    // Vertical: straight-line baseline + parabolic arc.
-    // Engine convention: +Y is DOWN, so "up" means subtracting from Y.
-    float baseY = _artilleryShellStartPos.y + (_artilleryShellTargetPos.y - _artilleryShellStartPos.y) * t;
-    float arc   = _artilleryShellArcHeight * 4.0f * t * (1.0f - t); // peak == arc_height at t = 0.5
-    pos.y = baseY - arc;
-
-    // Optional in-flight drift that fades to zero at launch and at landing,
-    // so the shell still lands on its chosen point.
-    if ( _artilleryShellDriftVec.x != 0.0 || _artilleryShellDriftVec.z != 0.0 )
+    if ( _artilleryShellVerticalBarrage )
     {
-        float driftFactor = sin(t * C_PI);
-        pos.x += _artilleryShellDriftVec.x * driftFactor;
-        pos.z += _artilleryShellDriftVec.z * driftFactor;
+        // Mortar-style mode: the physical projectile first climbs straight above the
+        // launcher, waits there if fall_delay is longer than the ascent, then the same
+        // projectile is transferred above the target and falls vertically.
+        if ( _artilleryShellElapsed < _artilleryShellVerticalFallStartTime )
+        {
+            float ascentT = 1.0f;
+            if ( _artilleryShellVerticalAscentTime > 0 )
+                ascentT = ypamissile_Clamp01((float)_artilleryShellElapsed / (float)_artilleryShellVerticalAscentTime);
+
+            pos = _artilleryShellStartPos;
+            pos.y -= _artilleryShellArcHeight * ascentT;
+        }
+        else
+        {
+            if ( !_artilleryShellVerticalTransferred )
+            {
+                // This is intentionally the same projectile, not a second spawned shell.
+                // Reset tracer history so the transfer never draws a giant horizontal line
+                // from launcher apex to target apex.
+                _artilleryShellVerticalTransferred = true;
+                _position = vec3d(_artilleryShellTargetPos.x,
+                                  _artilleryShellTargetPos.y - _artilleryShellArcHeight,
+                                  _artilleryShellTargetPos.z);
+                _old_pos = _position;
+                StartWeaponTracer();
+                prevPos = _position;
+            }
+
+            float descentT = 1.0f;
+            if ( _artilleryShellVerticalDescentTime > 0 )
+            {
+                descentT = ypamissile_Clamp01(
+                    (float)(_artilleryShellElapsed - _artilleryShellVerticalFallStartTime) /
+                    (float)_artilleryShellVerticalDescentTime);
+            }
+
+            pos.x = _artilleryShellTargetPos.x;
+            pos.z = _artilleryShellTargetPos.z;
+            pos.y = (_artilleryShellTargetPos.y - _artilleryShellArcHeight) +
+                    _artilleryShellArcHeight * descentT;
+        }
+    }
+    else
+    {
+        float t = ypamissile_Clamp01((float)_artilleryShellElapsed / (float)flightTime);
+
+        // Horizontal interpolation start -> target.
+        pos.x = _artilleryShellStartPos.x + (_artilleryShellTargetPos.x - _artilleryShellStartPos.x) * t;
+        pos.z = _artilleryShellStartPos.z + (_artilleryShellTargetPos.z - _artilleryShellStartPos.z) * t;
+
+        // Vertical: straight-line baseline + parabolic arc.
+        // Engine convention: +Y is DOWN, so "up" means subtracting from Y.
+        float baseY = _artilleryShellStartPos.y + (_artilleryShellTargetPos.y - _artilleryShellStartPos.y) * t;
+        float arc   = _artilleryShellArcHeight * 4.0f * t * (1.0f - t); // peak == arc_height at t = 0.5
+        pos.y = baseY - arc;
+
     }
 
     _old_pos  = prevPos;
@@ -2838,11 +2939,15 @@ void NC_STACK_ypamissile::Renew()
     _isArtilleryShellProjectile = false;
     _artilleryShellStartPos  = vec3d(0.0, 0.0, 0.0);
     _artilleryShellTargetPos = vec3d(0.0, 0.0, 0.0);
-    _artilleryShellDriftVec  = vec3d(0.0, 0.0, 0.0);
     _artilleryShellElapsed    = 0;
     _artilleryShellFlightTime = 0;
     _artilleryShellArcHeight  = 0.0;
     _artilleryShellImpactOnSurface = false;
+    _artilleryShellVerticalBarrage = false;
+    _artilleryShellVerticalTransferred = false;
+    _artilleryShellVerticalAscentTime = 0;
+    _artilleryShellVerticalFallStartTime = 0;
+    _artilleryShellVerticalDescentTime = 0;
 
     setBACT_yourLastSeconds(3000);
 }

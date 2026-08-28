@@ -31,6 +31,7 @@
 #include "utils.h"
 #include "crashdiag.h"
 #include "world/energyfx.h"
+#include "world/tools.h"
 
 extern yw_infolog info_log;
 
@@ -158,32 +159,38 @@ static TimedGameplayScaleProfile yw_GetRoboDeathScaleProfile()
 struct PlayerSprintConfig
 {
     bool complete = false;
-    float forceUpPercent = 0.0f;
+    World::TAbsoluteOrPercent forceUp;
     float pitchUpPercent = 0.0f;
     int32_t rampTime = 0;
-    float energyCostPercent = 0.0f;
+    World::TAbsoluteOrPercent energyCost;
 };
 
-static float yw_ParseSprintPercent(Common::Ini::Key &key, float maximum)
+static World::TAbsoluteOrPercent yw_ParseSprintAbsoluteOrPercent(Common::Ini::Key &key,
+                                                                  float maximumPercent)
 {
-    const std::string value = key.Get<std::string>();
-    if ( value.empty() || value.find(',') != std::string::npos )
-        return 0.0f;
-
-    try
+    World::TAbsoluteOrPercent result;
+    World::TAuthoredScalar parsed;
+    if ( !World::ParseAuthoredScalar(key.Get<std::string>(), parsed) ||
+         !std::isfinite(parsed.value) || parsed.value < 0.0f )
     {
-        size_t pos = 0;
-        const float parsed = std::stof(value, &pos);
-        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
-             !isfinite(parsed) || parsed <= 0.0f )
-            return 0.0f;
-
-        return std::min(parsed, maximum);
+        return result;
     }
-    catch (...)
+
+    result.defined = true;
+    result.percent = parsed.percent;
+    result.value = parsed.percent ? std::min(parsed.value, maximumPercent) : parsed.value;
+    return result;
+}
+
+static float yw_ParseSprintExplicitPercent(Common::Ini::Key &key, float maximum)
+{
+    World::TAuthoredScalar parsed;
+    if ( !World::ParseAuthoredScalar(key.Get<std::string>(), parsed) ||
+         !parsed.percent || !std::isfinite(parsed.value) || parsed.value <= 0.0f )
     {
         return 0.0f;
     }
+    return std::min(parsed.value, maximum);
 }
 
 static int32_t yw_ParseSprintTime(Common::Ini::Key &key)
@@ -210,19 +217,19 @@ static int32_t yw_ParseSprintTime(Common::Ini::Key &key)
 static PlayerSprintConfig yw_GetPlayerSprintConfig()
 {
     PlayerSprintConfig config;
-    config.complete = System::IniConf::GameSprintForceUpPercent.WasSet &&
-                      System::IniConf::GameSprintPitchUpPercent.WasSet &&
+    config.complete = System::IniConf::GameSprintForceUp.WasSet &&
+                      System::IniConf::GameSprintPitchUp.WasSet &&
                       System::IniConf::GameSprintRampTime.WasSet;
     if ( !config.complete )
         return config;
 
-    config.forceUpPercent = yw_ParseSprintPercent(
-        System::IniConf::GameSprintForceUpPercent, 1000.0f);
-    config.pitchUpPercent = yw_ParseSprintPercent(
-        System::IniConf::GameSprintPitchUpPercent, 100.0f);
+    config.forceUp = yw_ParseSprintAbsoluteOrPercent(
+        System::IniConf::GameSprintForceUp, 1000.0f);
+    config.pitchUpPercent = yw_ParseSprintExplicitPercent(
+        System::IniConf::GameSprintPitchUp, 100.0f);
     config.rampTime = yw_ParseSprintTime(System::IniConf::GameSprintRampTime);
-    config.energyCostPercent = yw_ParseSprintPercent(
-        System::IniConf::GameSprintEnergyCostPercent, 100.0f);
+    config.energyCost = yw_ParseSprintAbsoluteOrPercent(
+        System::IniConf::GameSprintEnergyCost, 100.0f);
     return config;
 }
 
@@ -281,18 +288,18 @@ static void yw_UpdateKamikazeFireLatch(NC_STACK_ypaworld *yw, TInputState *inpt)
 
 static bool yw_GetActiveKamikazeFireTimeScale(NC_STACK_ypaworld *yw,
                                                float *outScale,
-                                               float *outHpDrainPercent)
+                                               float *outHpDrainPerSecond)
 {
     if ( outScale )
         *outScale = 1.0f;
-    if ( outHpDrainPercent )
-        *outHpDrainPercent = 0.0f;
+    if ( outHpDrainPerSecond )
+        *outHpDrainPerSecond = 0.0f;
 
     if ( !yw || yw->_isNetGame || yw->_kamikazeFireTimeScaleDrainGid <= 0 )
         return false;
 
     NC_STACK_ypabact *unit = yw->FindLiveBactByGid(yw->_kamikazeFireTimeScaleDrainGid);
-    return unit && unit->GetKamikazeFireTimeScale(outScale, outHpDrainPercent);
+    return unit && unit->GetKamikazeFireTimeScale(outScale, outHpDrainPerSecond);
 }
 
 static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw)
@@ -318,9 +325,9 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
         return;
 
     float scale = 1.0f;
-    float drainPercent = 0.0f;
-    if ( !yw_GetActiveKamikazeFireTimeScale(yw, &scale, &drainPercent) ||
-         drainPercent <= 0.0f )
+    float drainPerSecond = 0.0f;
+    if ( !yw_GetActiveKamikazeFireTimeScale(yw, &scale, &drainPerSecond) ||
+         drainPerSecond <= 0.0f )
     {
         yw->_kamikazeFireTimeScaleDrainGid = 0;
         yw->_kamikazeFireTimeScaleHpDrainRemainder = 0.0;
@@ -340,8 +347,7 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
         return;
     }
 
-    const double rawDrain = (double)unit->_energy_max *
-                            (double)drainPercent * 0.01 *
+    const double rawDrain = (double)drainPerSecond *
                             ((double)unscaledFrameTime / 1000.0);
     yw->_kamikazeFireTimeScaleHpDrainRemainder += rawDrain;
 
@@ -696,20 +702,41 @@ static bool yw_SameAttachedFXTransform(const vec3d &a, const vec3d &b)
 }
 
 bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
-                                                       float randomOffsetPercent,
+                                                       const World::TAbsoluteOrPercent &randomMaxOffset,
                                                        vec3d *localPosition)
 {
-    if ( !owner || !localPosition )
+    if ( !owner || !localPosition || !randomMaxOffset.defined )
         return false;
 
-    if ( randomOffsetPercent <= 0.0f )
+    if ( randomMaxOffset.value <= 0.0f )
     {
         *localPosition = vec3d(0.0, 0.0, 0.0);
         return true;
     }
 
-    if ( randomOffsetPercent > 100.0f )
-        randomOffsetPercent = 100.0f;
+    if ( !randomMaxOffset.percent )
+    {
+        // Absolute authoring uses a true radial maximum in world/model units.
+        // Rejection sampling keeps the distribution inside the sphere instead
+        // of allowing a cube corner to exceed the configured maximum distance.
+        vec3d sample;
+        for (int attempt = 0; attempt < 32; ++attempt)
+        {
+            sample.x = ((float)rand() / ((float)RAND_MAX + 1.0f)) * 2.0f - 1.0f;
+            sample.y = ((float)rand() / ((float)RAND_MAX + 1.0f)) * 2.0f - 1.0f;
+            sample.z = ((float)rand() / ((float)RAND_MAX + 1.0f)) * 2.0f - 1.0f;
+            if ( sample.length() <= 1.0f )
+            {
+                *localPosition = sample * randomMaxOffset.value;
+                return true;
+            }
+        }
+
+        *localPosition = vec3d(0.0, 0.0, 0.0);
+        return true;
+    }
+
+    float randomOffsetPercent = std::min(randomMaxOffset.value, 100.0f);
 
     NC_STACK_base *source = owner->_vp_normal;
     if ( !source ) source = owner->_vp_wait;
@@ -1247,10 +1274,10 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
         else
             profilesById[yw_SuperItemProfileKey(profile.id)].push_back(i);
 
-        if ( profile.wave_vp <= 0 )
+        if ( profile.wave_vp <= 0 && profile.wave_3ds.empty() )
         {
             profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' has an invalid wave_vp; using vanilla fallback.\n",
+            ypa_log_out("WARNING: SuperItem profile '%s' has no wave_vp or wave_3ds; using vanilla fallback.\n",
                         profile.id.empty() ? "<missing>" : profile.id.c_str());
         }
 
@@ -1275,14 +1302,14 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
              chainIt != profile.detonate_chain_fx.end(); )
         {
             World::TChainFXConfig &chain = *chainIt;
-            chain.vp_models.erase(
-                std::remove_if(chain.vp_models.begin(), chain.vp_models.end(),
-                               [](const World::TChainFXVPModel &vp) { return vp.model <= 0; }),
-                chain.vp_models.end());
+            chain.visuals.erase(
+                std::remove_if(chain.visuals.begin(), chain.visuals.end(),
+                               [](const World::TChainFXVisual &visual) { return visual.vp <= 0 && visual.mesh3ds.empty(); }),
+                chain.visuals.end());
 
             if ( chain.mode != World::TChainFXConfig::MODE_VISUAL ||
                  chain.trigger != World::TChainFXConfig::TRIGGER_DETONATE ||
-                 chain.duration <= 0 || chain.vp_models.empty() ||
+                 chain.duration <= 0 || chain.visuals.empty() ||
                  !std::isfinite(chain.start_size) || !std::isfinite(chain.end_size) ||
                  !std::isfinite(chain.offset.x) || !std::isfinite(chain.offset.y) ||
                  !std::isfinite(chain.offset.z) )
@@ -1526,7 +1553,11 @@ size_t NC_STACK_ypaworld::Deinit()
     ClearMinigunTracers();
     ClearProceduralEnergyFX();
     ClearGroundDecals();
-    ClearWeaponTracerMesh();
+    // Transient debuff 3DS instances may reference BASE objects owned by the
+    // shared external-mesh cache. Destroy the instances before the cache.
+    _transientVPs.clear();
+    _nextTransientVPId = 1;
+    ClearSharedExternalMeshes();
     FreeGameDataCursors();
     dprintf("MAKE ME %s\n","ypaworld_func1");
     return NC_STACK_nucleus::Deinit();
@@ -2370,11 +2401,11 @@ bool NC_STACK_ypaworld::IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK
 bool NC_STACK_ypaworld::IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const
 {
     const PlayerSprintConfig config = yw_GetPlayerSprintConfig();
-    if ( _isNetGame || !config.complete || config.forceUpPercent <= 0.0f ||
+    if ( _isNetGame || !config.complete || config.forceUp.value <= 0.0f ||
          !bact || bact != _userUnit || bact->_isDummy || IsSpectatorBact(bact) ||
-         bact->IsActiveDebuffDisorienting() ||
+         bact->IsActiveDebuffStunning() ||
          !bact->getBACT_inputting() ||
-         (config.energyCostPercent > 0.0f && bact->_energy <= 0) ||
+         (config.energyCost.value > 0.0f && bact->_energy <= 0) ||
          (bact->_status != BACT_STATUS_NORMAL && bact->_status != BACT_STATUS_IDLE) )
     {
         return false;
@@ -2400,7 +2431,10 @@ float NC_STACK_ypaworld::GetPlayerSprintForce(const NC_STACK_ypabact *bact) cons
     if ( !IsPlayerSprintEnabledFor(bact) || bact != _playerSprintUnit )
         return bact ? bact->_force : 0.0f;
 
-    return bact->_force * (1.0f + config.forceUpPercent * 0.01f * _playerSprintFactor);
+    const float increase = config.forceUp.percent
+        ? bact->_force * config.forceUp.value * 0.01f
+        : config.forceUp.value;
+    return bact->_force + increase * _playerSprintFactor;
 }
 
 float NC_STACK_ypaworld::GetPlayerSprintPitchScale(const NC_STACK_ypabact *bact) const
@@ -2425,7 +2459,7 @@ bool NC_STACK_ypaworld::IsPlayerSprintInputHeld() const
 {
     const PlayerSprintConfig config = yw_GetPlayerSprintConfig();
     if ( !_GameShell || _isNetGame || !config.complete ||
-         config.forceUpPercent <= 0.0f )
+         config.forceUp.value <= 0.0f )
         return false;
 
     // This helper owns the configured physical Sprint key even while the player
@@ -2499,17 +2533,18 @@ static bool yw_PlayerSprintCanRun(const NC_STACK_ypabact *bact, const TInputStat
 
 static void yw_ClampTankSprintExcessSpeed(NC_STACK_ypabact *bact,
                                            float sprintFactor,
-                                           float sprintForceUpPercent)
+                                           const World::TAbsoluteOrPercent &forceUp)
 {
     if ( !bact || bact->_bact_type != BACT_TYPES_TANK || bact->_force <= 0.0f ||
          fabs(bact->_airconst_static) <= 0.001f )
         return;
 
     sprintFactor = std::max(0.0f, std::min(sprintFactor, 1.0f));
-
-    const float normalSpeed = fabs(bact->_force / bact->_airconst_static);
-    const float sprintSpeedLimit = normalSpeed *
-        (1.0f + sprintForceUpPercent * 0.01f * sprintFactor);
+    const float forceIncrease = forceUp.percent
+        ? bact->_force * forceUp.value * 0.01f
+        : forceUp.value;
+    const float effectiveForce = bact->_force + std::max(0.0f, forceIncrease) * sprintFactor;
+    const float sprintSpeedLimit = fabs(effectiveForce / bact->_airconst_static);
 
     if ( fabs(bact->_fly_dir_length) > sprintSpeedLimit )
         bact->_fly_dir_length = bact->_fly_dir_length < 0.0f ? -sprintSpeedLimit : sprintSpeedLimit;
@@ -2556,13 +2591,16 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
                                  (_playerSprintState == PLAYER_SPRINT_RAMP_UP ||
                                   _playerSprintState == PLAYER_SPRINT_ACTIVE ||
                                   _playerSprintState == PLAYER_SPRINT_RAMP_DOWN);
-    if ( sprintWasActive && sprintConfig.energyCostPercent > 0.0f && frameTime > 0 )
+    if ( sprintWasActive && sprintConfig.energyCost.value > 0.0f && frameTime > 0 )
     {
         if ( !_playerSprintUnit->IsInvulnerableToDamage() )
         {
             const float sprintFactor = std::max(0.0f, std::min(_playerSprintFactor, 1.0f));
-            const float rawEnergyCost = (float)std::max(_playerSprintUnit->_energy_max, 0) *
-                                        sprintConfig.energyCostPercent * 0.01f *
+            const float configuredCostPerSecond = sprintConfig.energyCost.percent
+                ? (float)std::max(_playerSprintUnit->_energy_max, 0) *
+                  sprintConfig.energyCost.value * 0.01f
+                : sprintConfig.energyCost.value;
+            const float rawEnergyCost = configuredCostPerSecond *
                                         ((float)frameTime / 1000.0f) * sprintFactor;
             _playerSprintEnergyRemainder +=
                 _playerSprintUnit->CalcShieldedActionEnergyCost(rawEnergyCost);
@@ -2638,7 +2676,7 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
         if ( rampDuration == 0 || _playerSprintFactor <= 0.0f )
         {
             yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f,
-                                          sprintConfig.forceUpPercent);
+                                          sprintConfig.forceUp);
             _playerSprintState = PLAYER_SPRINT_READY;
             _playerSprintPhaseElapsed = 0;
             _playerSprintFactor = 0.0f;
@@ -2681,7 +2719,7 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
             if ( phaseDuration == 0 )
             {
                 yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f,
-                                              sprintConfig.forceUpPercent);
+                                              sprintConfig.forceUp);
                 _playerSprintState = PLAYER_SPRINT_READY;
                 _playerSprintPhaseElapsed = 0;
                 _playerSprintFactor = 0.0f;
@@ -2705,7 +2743,7 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
             // until the player brakes. Recover only the sprint-created excess
             // along the same smooth ramp-down curve.
             yw_ClampTankSprintExcessSpeed(_playerSprintUnit, _playerSprintFactor,
-                                          sprintConfig.forceUpPercent);
+                                          sprintConfig.forceUp);
         }
 
         if ( _playerSprintPhaseElapsed < phaseDuration )
@@ -2720,7 +2758,7 @@ void NC_STACK_ypaworld::UpdatePlayerSprint(TInputState *inpt, int32_t frameTime)
             break;
         case PLAYER_SPRINT_RAMP_DOWN:
             yw_ClampTankSprintExcessSpeed(_playerSprintUnit, 0.0f,
-                                          sprintConfig.forceUpPercent);
+                                          sprintConfig.forceUp);
             _playerSprintState = PLAYER_SPRINT_READY;
             _playerSprintFactor = 0.0f;
             break;
@@ -3950,6 +3988,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_decal = vhcl.mgun_decal;
         bacto->_mgun_vp_dead = vhcl.mgun_vp_dead;
         bacto->_mgun_vp_megadeth = vhcl.mgun_vp_megadeth;
+        bacto->_mgun_3ds_dead = vhcl.mgun_3ds_dead;
+        bacto->_mgun_3ds_megadeth = vhcl.mgun_3ds_megadeth;
         bacto->_mgun_power = vhcl.mgun_power;
         bacto->_mgun_angle = vhcl.mgun_angle;
         bacto->_mgun_power_set = vhcl.mgun_power_set;
@@ -3983,24 +4023,24 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
                 configuredCount > 0 ? (uint8_t)configuredCount : bacto->_num_weapons;
         }
         bacto->_kill_after_shot = vhcl.kill_after_shot;
-        bacto->_vp_normal = _vhclModels.at( vhcl.vp_normal );
-        bacto->_vp_fire = _vhclModels.at( vhcl.vp_fire );
-        bacto->_vp_dead = _vhclModels.at( vhcl.vp_dead );
-        bacto->_vp_wait = _vhclModels.at( vhcl.vp_wait );
-        bacto->_vp_megadeth = _vhclModels.at( vhcl.vp_megadeth );
-        bacto->_vp_genesis = _vhclModels.at( vhcl.vp_genesis );
-        bacto->_vp_scale = vhcl.vp_scale;
-        bacto->_vp_tint = vhcl.vp_tint;
-        if ( requestedVhcl.is_mimic && !requestedVhcl.mimic_vp_tint.IsNeutral() )
+        bacto->_vp_normal = ResolveVisualModel(vhcl.vp_normal, vhcl.visual_3ds.normal);
+        bacto->_vp_fire = ResolveVisualModel(vhcl.vp_fire, vhcl.visual_3ds.fire);
+        bacto->_vp_dead = ResolveVisualModel(vhcl.vp_dead, vhcl.visual_3ds.dead);
+        bacto->_vp_wait = ResolveVisualModel(vhcl.vp_wait, vhcl.visual_3ds.wait);
+        bacto->_vp_megadeth = ResolveVisualModel(vhcl.vp_megadeth, vhcl.visual_3ds.megadeth);
+        bacto->_vp_genesis = ResolveVisualModel(vhcl.vp_genesis, vhcl.visual_3ds.genesis);
+        bacto->_vp_scale = vhcl.visual_scale;
+        bacto->_vp_tint = vhcl.visual_tint;
+        if ( requestedVhcl.is_mimic && !requestedVhcl.mimic_tint.IsNeutral() )
         {
-            bacto->_vp_tint.r *= requestedVhcl.mimic_vp_tint.r;
-            bacto->_vp_tint.g *= requestedVhcl.mimic_vp_tint.g;
-            bacto->_vp_tint.b *= requestedVhcl.mimic_vp_tint.b;
-            bacto->_vp_tint.a *= requestedVhcl.mimic_vp_tint.a;
+            bacto->_vp_tint.r *= requestedVhcl.mimic_tint.r;
+            bacto->_vp_tint.g *= requestedVhcl.mimic_tint.g;
+            bacto->_vp_tint.b *= requestedVhcl.mimic_tint.b;
+            bacto->_vp_tint.a *= requestedVhcl.mimic_tint.a;
             bacto->_vp_tint.Clamp();
         }
-        bacto->_vp_rotation = vhcl.vp_rotation;
-        bacto->_vp_spin_strength = vhcl.vp_spin;
+        bacto->_vp_rotation = vhcl.visual_rotation;
+        bacto->_vp_spin_strength = vhcl.visual_spin;
         bacto->_vp_trail_scale = vec3d(1.0, 1.0, 1.0);
         bacto->_vp_trail_tint = World::TVisualTint();
         bacto->_vp_trail_spin_strength = vec3d(0.0, 0.0, 0.0);
@@ -4010,7 +4050,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_decoration_fx_next_time = 0;
         bacto->_damaged_force_malus = vhcl.damaged_force_malus;
         bacto->_damaged_maxrot_malus = vhcl.damaged_maxrot_malus;
-        bacto->_damaged_snd_pitch_mult = vhcl.damaged_snd_pitch_mult;
+        bacto->_damaged_snd_pitch_multiplier = vhcl.damaged_snd_pitch_multiplier;
         bacto->_damaged_fx_active = false;
         bacto->_spawn_units = vhcl.spawn_units;
         bacto->_spawn_vehicle = vhcl.spawn_vehicle;
@@ -4047,6 +4087,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_proximity_defense_interval = vhcl.proximity_defense_interval > 0 ? vhcl.proximity_defense_interval : 1000;
         bacto->_proximity_defense_shots = vhcl.proximity_defense_shots > 0 ? vhcl.proximity_defense_shots : 1;
         bacto->_proximity_defense_vp_launch = vhcl.proximity_defense_vp_launch;
+        bacto->_proximity_defense_3ds_launch = vhcl.proximity_defense_3ds_launch;
         bacto->_proximity_defense_fire_mode = vhcl.proximity_defense_fire_mode;
         bacto->_proximity_defense_sequence_delay = vhcl.proximity_defense_sequence_delay > 0 ? vhcl.proximity_defense_sequence_delay : 100;
         bacto->_proximity_defense_mode = vhcl.proximity_defense_mode;
@@ -4088,6 +4129,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         // A unit with `invisible = 1` spawns cloaked and stays so until its first attack.
         bacto->_invisibleUnrevealed = vhcl.invisible;
         bacto->_invisible_reveal_vp = vhcl.invisible_reveal_vp;
+        bacto->_invisible_reveal_3ds = vhcl.invisible_reveal_3ds;
 
         for (int i = 0; vhcl.scale_fx_pXX[ i ]; i++ )
         {
@@ -4236,16 +4278,16 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_vehicleID = arg->vehicle_id;
     wobj->_weapon = 0;
 
-    wobj->_vp_normal =   _vhclModels.at(wproto.vp_normal);
-    wobj->_vp_fire =     _vhclModels.at(wproto.vp_fire);
-    wobj->_vp_dead =     _vhclModels.at(wproto.vp_dead);
-    wobj->_vp_wait =     _vhclModels.at(wproto.vp_wait);
-    wobj->_vp_megadeth = _vhclModels.at(wproto.vp_megadeth);
-    wobj->_vp_genesis =  _vhclModels.at(wproto.vp_genesis);
-    wobj->_vp_scale = wproto.vp_scale;
-    wobj->_vp_tint = wproto.vp_tint;
-    wobj->_vp_rotation = wproto.vp_rotation;
-    wobj->_vp_spin_strength = wproto.vp_spin;
+    wobj->_vp_normal = ResolveVisualModel(wproto.vp_normal, wproto.visual_3ds.normal);
+    wobj->_vp_fire = ResolveVisualModel(wproto.vp_fire, wproto.visual_3ds.fire);
+    wobj->_vp_dead = ResolveVisualModel(wproto.vp_dead, wproto.visual_3ds.dead);
+    wobj->_vp_wait = ResolveVisualModel(wproto.vp_wait, wproto.visual_3ds.wait);
+    wobj->_vp_megadeth = ResolveVisualModel(wproto.vp_megadeth, wproto.visual_3ds.megadeth);
+    wobj->_vp_genesis = ResolveVisualModel(wproto.vp_genesis, wproto.visual_3ds.genesis);
+    wobj->_vp_scale = wproto.visual_scale;
+    wobj->_vp_tint = wproto.visual_tint;
+    wobj->_vp_rotation = wproto.visual_rotation;
+    wobj->_vp_spin_strength = wproto.visual_spin;
     const bool supportsProjectileVisualMotion = wproto.SupportsProjectileVisualMotion();
     wobj->_spiral_speed = supportsProjectileVisualMotion ? wproto.spiral_speed : 0.0f;
     wobj->_spiral_radius = supportsProjectileVisualMotion ? wproto.spiral_radius : 0.0f;

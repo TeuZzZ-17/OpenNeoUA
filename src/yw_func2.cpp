@@ -439,7 +439,8 @@ static std::string PaletteThemeDisplayName(const std::string &fileName)
 
 void sb_0x4eb94c__sub0(NC_STACK_ypaworld *yw, bool clockwise, int a3, vec3d *pos, baseRender_msg *arg)
 {
-    NC_STACK_base *model_base = yw->_vhclModels.at(yw->_vhclProtos[yw->_briefScreen.ViewingObject.ID].vp_normal);
+    const World::TVhclProto &proto = yw->_vhclProtos[yw->_briefScreen.ViewingObject.ID];
+    NC_STACK_base *model_base = yw->ResolveVisualModel(proto.vp_normal, proto.visual_3ds.normal);
 
     model_base->SetVizLimit(16000);
     model_base->SetFadeLength(100);
@@ -3525,11 +3526,11 @@ static std::vector<std::string> db_weapon_specialties(const World::TWeapProto &p
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_CHAIN_WEAPON));
     if ( p.armor_penetration_targets > 0 )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_ARMOR_PENETRATION));
-    if ( p.debuff.allow || p.debuff.damage != 0 || p.debuff.damage_percent != 0.0 ||
+    if ( p.debuff.allow || (p.debuff.damage.defined && p.debuff.damage.value > 0.0f) ||
          p.debuff.duration > 0 && (!p.debuff.name.empty() || p.debuff.mindcontrol ||
-         p.debuff.force_malus != 0.0 || p.debuff.maxrot_malus != 0.0 ||
-         p.debuff.shield_malus != 0.0 || p.debuff.snd_pitch_mult != 1.0 ||
-         !p.debuff.fx_vps.empty()) )
+         p.debuff.stun || p.debuff.force_malus != 0.0f || p.debuff.maxrot_malus != 0.0f ||
+         p.debuff.shield_malus != 0.0f || p.debuff.snd_pitch_multiplier != 1.0f ||
+         !p.debuff.vps.empty() || !p.debuff.mesh3ds.empty()) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_DEBUFF));
     if ( p.multi_target > 1 &&
          (p._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || p.IsHomingBomb()) )

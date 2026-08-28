@@ -92,9 +92,9 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
     if ( v108 != 0.0 )
         _target_dir = _target_vec / v108;
 
-    if ( IsActiveDebuffDisorienting() )
+    if ( IsActiveDebuffStunning() )
     {
-        UpdateActiveDebuffDisorientMoveIntent();
+        UpdateActiveDebuffStunMoveIntent();
         v108 = 1200.0f;
     }
 
@@ -113,7 +113,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                 || (!v5 && !v8)
                 || !CollisionWithBact(arg->frameTime) )
         {
-            if ( _primTtype || _secndTtype || IsActiveDebuffDisorienting() )
+            if ( _primTtype || _secndTtype || IsActiveDebuffStunning() )
             {
                 _ufoBoost = _mass * 9.80665;
                 _thraction = _force;
@@ -170,7 +170,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                         _ufoBoost = descentBoost;
                 }
 
-                _thraction = GetActiveDebuffDisorientTraction(_thraction, true);
+                _thraction = GetActiveDebuffStunTraction(_thraction, true);
 
                 move_msg arg74;
                 arg74.flag = 0;

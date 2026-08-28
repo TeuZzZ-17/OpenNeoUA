@@ -219,7 +219,7 @@ public:
     static Common::Ini::Key GameDebug;
     static Common::Ini::Key GameNewDebug;
     static Common::Ini::Key GameCrashDiagnostics;
-    static Common::Ini::Key GameBriefingVPRender;
+    static Common::Ini::Key GameBriefingModelRender;
     static bool IsGameNewDebugEnabled();
 
     static Common::Ini::Key GameNewAI;
@@ -227,11 +227,11 @@ public:
     static Common::Ini::Key GamePlayerTankBrakeTime;
     static Common::Ini::Key GamePlayerMaxAltitudeAboveGround;
     static Common::Ini::Key GameAiMaxAltitudeAboveGround;
-    static Common::Ini::Key GameSprintForceUpPercent;
-    static Common::Ini::Key GameSprintPitchUpPercent;
+    static Common::Ini::Key GameSprintForceUp;
+    static Common::Ini::Key GameSprintPitchUp;
     static Common::Ini::Key GameSprintRampTime;
-    static Common::Ini::Key GameWeaponEnergyCostPercent;
-    static Common::Ini::Key GameSprintEnergyCostPercent;
+    static Common::Ini::Key GameWeaponEnergyCost;
+    static Common::Ini::Key GameSprintEnergyCost;
     static Common::Ini::Key GameSprintEnergyDrainIntervalMs;
     static Common::Ini::Key GameTimeLine;
     static Common::Ini::Key GameRoboPlayerAIBehavior;
@@ -241,14 +241,14 @@ public:
     static Common::Ini::Key GameSpectatorMode;
     static Common::Ini::Key GamePlayAsOtherFactions;
     static Common::Ini::Key GameWeaponWeaponCollision;
-    static Common::Ini::Key GameRoboBuildingCollisionDamagePercent;
-    static Common::Ini::Key GameUnitEnemyCollisionDamagePercent;
-    static Common::Ini::Key GameUnitFriendlyCollisionDamagePercent;
+    static Common::Ini::Key GameRoboBuildingCollisionDamage;
+    static Common::Ini::Key GameUnitEnemyCollisionDamage;
+    static Common::Ini::Key GameUnitFriendlyCollisionDamage;
     static Common::Ini::Key GamePowerStationEnergyMultiplier;
-    static Common::Ini::Key GameFallDamagePercent;
+    static Common::Ini::Key GameFallDamage;
     static Common::Ini::Key GamePushAtDeathMultiplier;
     static Common::Ini::Key GameHandBrakePower;
-    static Common::Ini::Key GameUnitKillStatBonusPercent;
+    static Common::Ini::Key GameUnitKillStatBonus;
     static Common::Ini::Key GameHandBrakeSound;
     static Common::Ini::Key GameGemUnlockNewUI;
     static Common::Ini::Key GameGemUnlockSound;
@@ -262,7 +262,7 @@ public:
     static Common::Ini::Key GamePlasmaDeathMagnetRadius;
     static Common::Ini::Key GamePlasmaDeathMagnetSpeed;
     static Common::Ini::Key GamePlasmaCurrencyEnable;
-    static Common::Ini::Key GamePlasmaCurrencyGainPercent;
+    static Common::Ini::Key GamePlasmaCurrencyGain;
     static Common::Ini::Key GamePlasmaSndPickupSample;
     static Common::Ini::Key GamePlasmaSndPickupVolume;
     static Common::Ini::Key GamePlasmaSndPickupPitch;
@@ -287,15 +287,16 @@ public:
     // regen/drain conditions used by the automatic Status Icons. A missing or
     // incomplete profile is disabled and never changes energy gameplay.
     static Common::Ini::Key GfxRegenFXVP;
-    static Common::Ini::Key GfxRegenFXVPScale;
-    static Common::Ini::Key GfxRegenFXVPSpinX;
-    static Common::Ini::Key GfxRegenFXVPSpinY;
-    static Common::Ini::Key GfxRegenFXVPSpinZ;
+    static Common::Ini::Key GfxRegenFX3DS;
+    static Common::Ini::Key GfxRegenFXScale;
+    static Common::Ini::Key GfxRegenFXSpinX;
+    static Common::Ini::Key GfxRegenFXSpinY;
+    static Common::Ini::Key GfxRegenFXSpinZ;
     static Common::Ini::Key GfxRegenFXTint;
     static Common::Ini::Key GfxRegenFXDuration;
     static Common::Ini::Key GfxRegenFXInterval;
     static Common::Ini::Key GfxRegenFXCount;
-    static Common::Ini::Key GfxRegenFXRandomOffsetPercent;
+    static Common::Ini::Key GfxRegenFXRandomMaxOffset;
     static Common::Ini::Key GfxRegenMeshSize;
     static Common::Ini::Key GfxRegenMeshThickness;
     static Common::Ini::Key GfxRegenMeshRiseSpeed;
@@ -303,15 +304,16 @@ public:
     static Common::Ini::Key GfxRegenMeshFadeOut;
 
     static Common::Ini::Key GfxDrainFXVP;
-    static Common::Ini::Key GfxDrainFXVPScale;
-    static Common::Ini::Key GfxDrainFXVPSpinX;
-    static Common::Ini::Key GfxDrainFXVPSpinY;
-    static Common::Ini::Key GfxDrainFXVPSpinZ;
+    static Common::Ini::Key GfxDrainFX3DS;
+    static Common::Ini::Key GfxDrainFXScale;
+    static Common::Ini::Key GfxDrainFXSpinX;
+    static Common::Ini::Key GfxDrainFXSpinY;
+    static Common::Ini::Key GfxDrainFXSpinZ;
     static Common::Ini::Key GfxDrainFXTint;
     static Common::Ini::Key GfxDrainFXDuration;
     static Common::Ini::Key GfxDrainFXInterval;
     static Common::Ini::Key GfxDrainFXCount;
-    static Common::Ini::Key GfxDrainFXRandomOffsetPercent;
+    static Common::Ini::Key GfxDrainFXRandomMaxOffset;
     static Common::Ini::Key GfxDrainMeshSize;
     static Common::Ini::Key GfxDrainMeshThickness;
     static Common::Ini::Key GfxDrainMeshRiseSpeed;

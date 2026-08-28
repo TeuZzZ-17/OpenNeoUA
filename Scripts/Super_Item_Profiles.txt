@@ -5,16 +5,16 @@ begin_superitem_profile
     id = stoudson_nuclear
 
     wave_vp = 283
-    wave_vp_scale_x = 1
-    wave_vp_scale_y = 30
-    wave_vp_scale_z = 1
-    ;wave_vp_tint = 255_0_0_255
+    wave_scale_x = 1
+    wave_scale_y = 30
+    wave_scale_z = 1
+    ;wave_tint = 255_0_0_255
     wave_start_speed = 0
     wave_speed_ramp_time = 10000
     wave_end_speed = 2000
     wave_push_force = 2
     wave_unit_damage = 50000
-    wave_building_total_destruction_percent = 15
+    wave_building_total_destruction = 15%
 
     snd_wave_sample = sounds/new/stoudson_1.wav
     snd_wave_volume = 800
@@ -39,26 +39,22 @@ begin_superitem_profile
     push_falloff = 1
 
     debuff_allow = 1
-    debuff_allow_host_station = 1
+    debuff_allow_on_host_station = 1
     debuff_inherit_to_children = 1
     debuff_icon = interface/StatusIcons/radiation.png
     debuff_name = radiations
     debuff_damage = 2500
     debuff_tick_time = 2000
     debuff_duration = 900000
-    debuff_force_malus = 0.50
-    debuff_maxrot_malus = 0.50
-    debuff_shield_malus = 0.20
-    debuff_snd_pitch_mult = 0.30
-    debuff_fx_vp  = 191
-    debuff_fx_vp2 = 191
-    debuff_fx_vp3 = 191
-    debuff_fx_vp4 = 191
-    debuff_fx_vp5 = 191
-    debuff_fx_vp_tint = 0_255_0_255
-    debuff_target_vp_tint = 140_255_140_230
-    debuff_fx_vp_scale = 4.0
-    debuff_fx_random_offset_percent = 90
+    debuff_force_malus = -50%
+    debuff_maxrot_malus = -50%
+    debuff_shield_malus = -20%
+    debuff_snd_pitch = -70%
+    debuff_vp = 191_191_191_191_191
+    debuff_tint = 0_255_0_255
+    debuff_target_tint = 140_255_140_230
+    debuff_scale = 4.0
+    debuff_random_max_offset = 90%
 
     snd_detonate_sample = sounds/new/stoudson_2.wav
     snd_detonate_volume = 800
