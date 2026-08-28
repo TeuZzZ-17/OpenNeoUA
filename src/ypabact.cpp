@@ -10049,8 +10049,11 @@ float NC_STACK_ypabact::GetArtilleryShellReadinessRatio()
     if ( !actor || weaponId <= 0 || (size_t)weaponId >= _world->GetWeaponsProtos().size() )
         return IsArtilleryShellPlatform() ? 1.0f : 0.0f;
 
+    // While a barrage is actively spending its shot budget, the platform is not
+    // available for another area. The readiness bar therefore stays empty until the
+    // current barrage finishes, then fills normally across the configured cooldown.
     if ( actor->_artillery_shell_barrage_active && actor->_artillery_shell_shots_remaining > 0 )
-        return 1.0f;
+        return 0.0f;
 
     const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
     int cooldown = wproto.artillery_shell_barrage_cooldown > 0 ? wproto.artillery_shell_barrage_cooldown : 10000;
@@ -10481,9 +10484,27 @@ static bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, con
     return true;
 }
 
+// Keep the single queued artillery target visible while it is waiting behind either
+// an active barrage or its cooldown. Pending orders are unique per platform, so this
+// refreshes/moves one disabled-grey ring instead of creating parallel future zones.
+static void ypabact_RefreshPendingArtilleryShellMarker(NC_STACK_ypabact *unit, const World::TWeapProto &wproto)
+{
+    if ( !unit || !unit->_artillery_shell_has_pending )
+        return;
+
+    NC_STACK_ypaworld *world = unit->getBACT_pWorld();
+    if ( world && wproto.artillery_shell_barrage_radius > 0.0 )
+    {
+        world->AddArtilleryShellMarker(unit->_artillery_shell_pending_target,
+                                       wproto.artillery_shell_barrage_radius,
+                                       unit->_owner, unit->_gid, true, 1000);
+    }
+}
+
 // Queue/replace the next artillery target while the platform is unavailable. Manual
 // orders and automatic target acquisition intentionally share this one pending state, so
-// each artillery platform can advertise exactly one future strike during cooldown.
+// each artillery platform can advertise exactly one future strike while the current
+// barrage finishes and/or its cooldown is running.
 static void ypabact_QueueArtilleryShellTarget(NC_STACK_ypabact *unit, const World::TWeapProto &wproto,
                                                const vec3d &targetPos)
 {
@@ -10492,13 +10513,7 @@ static void ypabact_QueueArtilleryShellTarget(NC_STACK_ypabact *unit, const Worl
 
     unit->_artillery_shell_pending_target = targetPos;
     unit->_artillery_shell_has_pending = true;
-
-    NC_STACK_ypaworld *world = unit->getBACT_pWorld();
-    if ( world && wproto.artillery_shell_barrage_radius > 0.0 )
-    {
-        world->AddArtilleryShellMarker(targetPos, wproto.artillery_shell_barrage_radius,
-                                       unit->_owner, unit->_gid, true, 1000);
-    }
+    ypabact_RefreshPendingArtilleryShellMarker(unit, wproto);
 }
 
 // Fire one shell at the unit's current artillery shell target, then advance the shared shot
@@ -10563,9 +10578,12 @@ void NC_STACK_ypabact::UpdateArtilleryShell(update_msg *arg)
         return;
     }
 
-    // Active barrage: fire one shell per shot-delay until the shared budget runs out.
+    // Active barrage: its target is immutable until the shared shot budget is spent.
+    // A manual follow-up order may already be waiting, but it is only a grey pending
+    // zone and must never redirect any shell from the current barrage.
     if ( _artillery_shell_barrage_active )
     {
+        ypabact_RefreshPendingArtilleryShellMarker(this, wproto);
         ypabact_AimArtilleryShellLauncherVisual(this, wproto, _artillery_shell_target_center, arg ? arg->frameTime : 0, false);
 
         if ( _clock < _artillery_shell_next_shot_time )
@@ -10577,11 +10595,11 @@ void NC_STACK_ypabact::UpdateArtilleryShell(update_msg *arg)
 
     // One pending order (manual or automatic) is authoritative while the platform is
     // unavailable. Keep its disabled-grey map ring alive and promote it to an active
-    // faction-colour barrage the instant the cooldown elapses.
+    // faction-colour barrage only after the previous barrage has ended and its cooldown
+    // has elapsed.
     if ( _artillery_shell_has_pending )
     {
-        if ( wproto.artillery_shell_barrage_radius > 0.0 )
-            _world->AddArtilleryShellMarker(_artillery_shell_pending_target, wproto.artillery_shell_barrage_radius, _owner, _gid, true, 1000);
+        ypabact_RefreshPendingArtilleryShellMarker(this, wproto);
 
         if ( _clock >= _artillery_shell_next_activation_time )
         {
@@ -10619,13 +10637,10 @@ void NC_STACK_ypabact::UpdateArtilleryShell(update_msg *arg)
     StartArtilleryShellBarrage(targetCenter);
 }
 
-// Begin OR redirect a barrage aimed at targetCenter. Shared by the automatic AI and
-// the manual call. Returns false if not eligible.
-//
-// Anti-exploit: the barrage's shots are a shared per-cycle budget. Redirecting an
-// active barrage only re-aims it and keeps spending the SAME budget (no refill), so
-// rapidly re-targeting can never dodge the cooldown. The budget refills (and the
-// cooldown clears) only after the cooldown has fully elapsed.
+// Begin a fresh barrage aimed at targetCenter. Shared by the automatic AI and the
+// manual call. An in-progress barrage is deliberately immutable: follow-up manual
+// orders belong in the single pending slot and may only start after this barrage and
+// its cooldown have completed.
 bool NC_STACK_ypabact::StartArtilleryShellBarrage(const vec3d &targetCenter)
 {
     if ( !_world )
@@ -10648,17 +10663,24 @@ bool NC_STACK_ypabact::StartArtilleryShellBarrage(const vec3d &targetCenter)
     if ( shots <= 0 )
         return false;
 
-    // Redirect an in-progress barrage: keep the remaining budget, just re-aim. The
-    // already-scheduled next shot lands on the new area. No refill => no exploit.
-    if ( _artillery_shell_barrage_active && _artillery_shell_shots_remaining > 0 )
-    {
-        _artillery_shell_target_center = targetCenter;
-        return true;
-    }
+    // Never redirect an in-progress barrage. Manual follow-up targets are accepted by
+    // CanManualArtilleryShell() and QueueManualArtilleryShell() into the one pending
+    // slot, leaving every remaining shell committed to the original target centre.
+    if ( _artillery_shell_barrage_active )
+        return false;
 
     // Fresh barrage: only allowed once the cooldown has fully elapsed.
     if ( _clock < _artillery_shell_next_activation_time )
         return false;
+
+    // A direct fresh start wins over any stale pending order that may still exist at
+    // the exact cooldown boundary (for example a new manual click before the next
+    // UpdateArtilleryShell() promotes the old one). Keep one authoritative target.
+    if ( _artillery_shell_has_pending )
+    {
+        _artillery_shell_has_pending = false;
+        _world->RemovePendingArtilleryShellMarker(_gid);
+    }
 
     _artillery_shell_barrage_active = true;
     _artillery_shell_shots_remaining = shots; // refill the cycle budget
@@ -10673,10 +10695,9 @@ bool NC_STACK_ypabact::StartArtilleryShellBarrage(const vec3d &targetCenter)
 
 // Check whether this unit can ACCEPT a manual bombardment call against targetPos.
 // Returns true when the target is valid (range and radar; manual control is always
-// enabled for artillery shells). It does NOT reject by cooldown/in-progress barrage: instead,
-// *outReadyNow tells the caller whether the strike can fire immediately (redirect an
-// active barrage, or start a fresh one off cooldown) or must be QUEUED until the
-// cooldown elapses.
+// enabled for artillery shells). It does NOT reject an in-progress barrage/cooldown:
+// *outReadyNow is true only for an idle platform that may start a fresh barrage now.
+// Otherwise the valid order is queued as the single future target.
 bool NC_STACK_ypabact::CanManualArtilleryShell(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow)
 {
     if ( outReadyNow )
@@ -10723,16 +10744,11 @@ bool NC_STACK_ypabact::CanManualArtilleryShell(const vec3d &targetPos, int *outW
             return false;
     }
 
-    // Ready now if we can redirect an active barrage (spending its remaining shared
-    // budget) or start a fresh one (idle and off cooldown). Otherwise the order is
-    // still accepted, but queued: it fires when the cooldown elapses. A manual call
-    // NEVER bypasses the cooldown once the shot budget is spent (anti-exploit).
+    // An active barrage is never ready for a second area: every remaining shell stays
+    // committed to its current target. A valid follow-up click is queued and shown in
+    // grey until the barrage ends and its cooldown elapses.
     if ( outReadyNow )
-    {
-        bool canRedirect = _artillery_shell_barrage_active && _artillery_shell_shots_remaining > 0;
-        bool canStartNew = !_artillery_shell_barrage_active && _clock >= _artillery_shell_next_activation_time;
-        *outReadyNow = canRedirect || canStartNew;
-    }
+        *outReadyNow = !_artillery_shell_barrage_active && _clock >= _artillery_shell_next_activation_time;
 
     if ( outWeaponId )
         *outWeaponId = weaponId;
@@ -10740,10 +10756,10 @@ bool NC_STACK_ypabact::CanManualArtilleryShell(const vec3d &targetPos, int *outW
     return true;
 }
 
-// Queue a manual strike to fire once the cooldown elapses (used when the target is
-// valid but the artillery shell is mid-cooldown). It shares the same one-per-platform
-// pending state used by automatic acquisition; manual retargeting therefore replaces
-// any previous future target immediately. Never fires early (anti-exploit).
+// Queue a manual strike while the current barrage is still firing or its cooldown is
+// running. It shares the same one-per-platform pending state used by automatic
+// acquisition; another manual follow-up replaces only that future target immediately.
+// It never redirects the active barrage or fires early.
 void NC_STACK_ypabact::QueueManualArtilleryShell(const vec3d &targetPos)
 {
     if ( ypabact_GetArtilleryShellWeaponId(this) <= 0 )
