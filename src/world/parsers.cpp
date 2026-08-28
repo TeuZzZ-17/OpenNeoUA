@@ -76,57 +76,61 @@ static float ParseNonNegativeIniFloatOrZero(const std::string &value)
     return parsed;
 }
 
-static int ParseNumberedSlotId(const std::string &key, const char *base, int maxSlots)
+static bool ParseAbsoluteOrPercent(const std::string &value,
+                                   TAbsoluteOrPercent &out,
+                                   float maxPercent = 100.0f)
 {
-    std::string baseStr(base);
+    TAuthoredScalar parsed;
+    out.Clear();
+    if ( !ParseAuthoredScalar(value, parsed) || parsed.value < 0.0f )
+        return false;
 
-    if ( key.size() < baseStr.size() || StriCmp(key.substr(0, baseStr.size()), baseStr) )
-        return -1;
+    if ( parsed.percent )
+        parsed.value = std::min(parsed.value, maxPercent);
 
-    std::string suffix = key.substr(baseStr.size());
-    if ( suffix.empty() )
-        return 0;
-
-    int slot = 0;
-    for (char ch : suffix)
-    {
-        if ( ch < '0' || ch > '9' )
-            return -1;
-
-        slot = slot * 10 + (ch - '0');
-    }
-
-    if ( slot < 2 || slot > maxSlots )
-        return -1;
-
-    return slot - 1;
+    out.value = parsed.value;
+    out.percent = parsed.percent;
+    out.defined = true;
+    return true;
 }
 
-static void EnsureDamagedFXSlot(std::vector<int16_t> &slots, int slot)
+static float ParseMalusPercent(const std::string &value)
 {
-    if ( slot < 0 )
-        return;
-
-    if ( slots.size() <= (size_t)slot )
-        slots.resize(slot + 1, 0);
-}
-
-static void EnsureDebuffFXSlot(std::vector<int16_t> &slots, int slot)
-{
-    if ( slot < 0 )
-        return;
-
-    if ( slots.size() <= (size_t)slot )
-        slots.resize(slot + 1, 0);
-}
-
-static float ParseAttachedFXRandomOffsetPercent(ScriptParser::Parser &parser, const std::string &value)
-{
-    float percent = parser.stof(value, 0);
-    if ( !(percent >= 0.0f) )
+    TAuthoredScalar parsed;
+    if ( !ParseAuthoredScalar(value, parsed) || !parsed.percent ||
+         parsed.value > 0.0f )
         return 0.0f;
 
-    return percent > 100.0f ? 100.0f : percent;
+    const float signedPercent = std::max(-100.0f, parsed.value);
+    return -signedPercent / 100.0f;
+}
+
+static float ParseSignedPitchPercent(const std::string &value)
+{
+    TAuthoredScalar parsed;
+    if ( !ParseAuthoredScalar(value, parsed) || !parsed.percent )
+        return 1.0f;
+
+    const float signedPercent = std::max(-100.0f, parsed.value);
+    const float multiplier = 1.0f + signedPercent / 100.0f;
+    return std::isfinite(multiplier) && multiplier >= 0.0f ? multiplier : 1.0f;
+}
+
+static float ParseNormalizedOrPercent(const std::string &value)
+{
+    TAuthoredScalar parsed;
+    if ( !ParseAuthoredScalar(value, parsed) )
+        return 0.0f;
+
+    if ( parsed.percent )
+        return std::max(0.0f, std::min(parsed.value, 100.0f)) / 100.0f;
+
+    return std::max(0.0f, std::min(parsed.value, 1.0f));
+}
+
+static bool ParseSmartVPList(const std::string &value, std::vector<int16_t> &out)
+{
+    return ParsePositiveInt16ListValue(value, out);
 }
 
 static float Clamp01(float value)
@@ -1037,26 +1041,16 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
                              const std::string &p2,
                              TWeaponDebuffConfig &debuff)
 {
-    int debuffFxSlot = -1;
-
     if ( !StriCmp(p1, "debuff_allow") )
         debuff.allow = parser.stol(p2, NULL, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_allow_host_station") )
-        debuff.allow_host_station = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_allow_on_host_station") )
+        debuff.allow_on_host_station = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_inherit_to_children") )
-        debuff.inherit_to_children = p2 == "1";
+        debuff.inherit_to_children = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_name") )
         debuff.name = p2;
     else if ( !StriCmp(p1, "debuff_damage") )
-    {
-        int damage = parser.stol(p2, NULL, 0);
-        debuff.damage = damage > 0 ? damage : 0;
-    }
-    else if ( !StriCmp(p1, "debuff_damage_percent") )
-    {
-        float damagePercent = parser.stof(p2, 0);
-        debuff.damage_percent = damagePercent > 0.0f ? damagePercent : 0.0f;
-    }
+        ParseAbsoluteOrPercent(p2, debuff.damage, 100.0f);
     else if ( !StriCmp(p1, "debuff_mindcontrol") )
         debuff.mindcontrol = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_tick_time") )
@@ -1070,57 +1064,42 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         int duration = parser.stol(p2, NULL, 0);
         debuff.duration = duration > 0 ? duration : 0;
     }
-    else if ( !StriCmp(p1, "debuff_disorient") )
-        debuff.disorient = parser.stol(p2, NULL, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_disorient_motion_level") )
-    {
-        float motionLevel = parser.stof(p2, 0);
-        if ( !std::isfinite(motionLevel) )
-            motionLevel = 0.0f;
-        debuff.disorient_motion_level = std::max(0.0f, std::min(motionLevel, 1.0f));
-    }
-    else if ( !StriCmp(p1, "debuff_disorient_fire") )
-        debuff.disorient_fire = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_stun") )
+        debuff.stun = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_stun_motion_level") )
+        debuff.stun_motion_level = ParseNormalizedOrPercent(p2);
+    else if ( !StriCmp(p1, "debuff_stun_unit_fire") )
+        debuff.stun_unit_fire = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_force_malus") )
-    {
-        float malus = parser.stof(p2, 0);
-        debuff.force_malus = std::max(0.0f, std::min(malus, 1.0f));
-    }
+        debuff.force_malus = ParseMalusPercent(p2);
     else if ( !StriCmp(p1, "debuff_maxrot_malus") )
-    {
-        float malus = parser.stof(p2, 0);
-        debuff.maxrot_malus = std::max(0.0f, std::min(malus, 1.0f));
-    }
+        debuff.maxrot_malus = ParseMalusPercent(p2);
     else if ( !StriCmp(p1, "debuff_shield_malus") )
-    {
-        float malus = parser.stof(p2, 0);
-        debuff.shield_malus = std::max(0.0f, std::min(malus, 1.0f));
-    }
-    else if ( !StriCmp(p1, "debuff_snd_pitch_mult") )
-    {
-        float mult = parser.stof(p2, 0);
-        debuff.snd_pitch_mult = mult >= 0.0f ? mult : 1.0f;
-    }
-    else if ( ParseTintParam(parser, "debuff_target_vp_tint", p1, p2,
-                             debuff.target_vp_tint, true) )
+        debuff.shield_malus = ParseMalusPercent(p2);
+    else if ( !StriCmp(p1, "debuff_snd_pitch") )
+        debuff.snd_pitch_multiplier = ParseSignedPitchPercent(p2);
+    else if ( ParseTintParam(parser, "debuff_target_tint", p1, p2,
+                             debuff.target_tint, true) )
         return true;
-    else if ( (debuffFxSlot = ParseNumberedSlotId(p1, "debuff_fx_vp", World::DAMAGED_FX_SLOT_COUNT)) >= 0 )
+    else if ( !StriCmp(p1, "debuff_vp") )
     {
-        int vp = parser.stol(p2, NULL, 0);
-        EnsureDebuffFXSlot(debuff.fx_vps, debuffFxSlot);
-        debuff.fx_vps[debuffFxSlot] = vp > 0 ? vp : 0;
+        if ( !ParseSmartVPList(p2, debuff.vps) )
+            debuff.vps.clear();
     }
-    else if ( !StriCmp(p1, "debuff_fx_vp_scale") )
-        debuff.fx_vp_scale = ParseVPScaleValue(parser, p2);
-    else if ( ParseTintParam(parser, "debuff_fx_vp_tint", p1, p2, debuff.fx_vp_tint) )
+    else if ( !StriCmp(p1, "debuff_3ds") )
+        debuff.mesh3ds = p2;
+    else if ( !StriCmp(p1, "debuff_scale") )
+        debuff.scale = ParseVPScaleValue(parser, p2);
+    else if ( ParseTintParam(parser, "debuff_tint", p1, p2, debuff.tint) )
         return true;
-    else if ( !StriCmp(p1, "debuff_fx_random_offset_percent") )
+    else if ( !StriCmp(p1, "debuff_random_max_offset") )
+        ParseAbsoluteOrPercent(p2, debuff.random_max_offset, 100.0f);
+    else if ( ParseTintParam(parser, "debuff_vp_trail_tint", p1, p2,
+                             debuff.vp_trail_tint) )
     {
-        debuff.fx_random_offset_percent = ParseAttachedFXRandomOffsetPercent(parser, p2);
-        debuff.has_fx_random_offset_percent = true;
+        debuff.has_vp_trail_tint = true;
+        return true;
     }
-    else if ( !StriCmp(p1, "debuff_fx_trail_only") )
-        debuff.fx_trail_only = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_icon") )
         debuff.icon = p2;
     else if ( !StriCmp(p1, "snd_debuff_sample") )
@@ -1225,6 +1204,31 @@ static bool ParseVPRotationParam(ScriptParser::Parser &parser,
     return false;
 }
 
+static bool ParseExternalVisualParam(const std::string &p1,
+                                     const std::string &p2,
+                                     World::TExternalVisualSet &visuals,
+                                     bool allowLaunch)
+{
+    if ( !StriCmp(p1, "3ds_normal") )
+        visuals.normal = p2;
+    else if ( !StriCmp(p1, "3ds_fire") )
+        visuals.fire = p2;
+    else if ( !StriCmp(p1, "3ds_megadeth") )
+        visuals.megadeth = p2;
+    else if ( !StriCmp(p1, "3ds_wait") )
+        visuals.wait = p2;
+    else if ( !StriCmp(p1, "3ds_dead") )
+        visuals.dead = p2;
+    else if ( !StriCmp(p1, "3ds_genesis") )
+        visuals.genesis = p2;
+    else if ( allowLaunch && !StriCmp(p1, "3ds_launch") )
+        visuals.launch = p2;
+    else
+        return false;
+
+    return true;
+}
+
 static bool ParseScriptIntRange(const std::string &value, int &minValue, int &maxValue)
 {
     return World::ParseIntRangeValue(value, minValue, maxValue);
@@ -1259,6 +1263,12 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
     {
         int vp = parser.stol(p2, NULL, 0);
         config.vp = vp > 0 ? vp : 0;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "decoration_fx_3ds") )
+    {
+        config.mesh3ds = p2;
         return true;
     }
 
@@ -1313,17 +1323,17 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( !StriCmp(p1, "decoration_fx_vp_fade_in") )
+    if ( !StriCmp(p1, "decoration_fx_fade_in") )
     {
         int fade = parser.stol(p2, NULL, 0);
-        config.vp_fade_in = fade > 0 ? fade : 0;
+        config.fade_in = fade > 0 ? fade : 0;
         return true;
     }
 
-    if ( !StriCmp(p1, "decoration_fx_vp_fade_out") )
+    if ( !StriCmp(p1, "decoration_fx_fade_out") )
     {
         int fade = parser.stol(p2, NULL, 0);
-        config.vp_fade_out = fade > 0 ? fade : 0;
+        config.fade_out = fade > 0 ? fade : 0;
         return true;
     }
 
@@ -1366,7 +1376,7 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( ParseVPScaleParam(parser, "decoration_fx_vp", p1, p2, config.vp_scale) )
+    if ( ParseVPScaleParam(parser, "decoration_fx", p1, p2, config.scale) )
     {
         return true;
     }
@@ -1376,12 +1386,12 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( ParseVPSpinParam(parser, "decoration_fx_vp", p1, p2, config.vp_spin) )
+    if ( ParseVPSpinParam(parser, "decoration_fx", p1, p2, config.spin) )
     {
         return true;
     }
 
-    if ( ParseTintParam(parser, "decoration_fx_vp_tint", p1, p2, config.vp_tint) )
+    if ( ParseTintParam(parser, "decoration_fx_tint", p1, p2, config.tint) )
     {
         return true;
     }
@@ -1713,13 +1723,19 @@ static bool ParseLaserMeshParam(
         return true;
     }
 
+    if ( !StriCmp(p1, "laser_mesh_path") )
+    {
+        config.mesh_path = p2;
+        return true;
+    }
+
     if ( ParseTintParam(parser, "laser_mesh_tint", p1, p2, config.tint, true) )
         return true;
 
     if ( !StriCmp(p1, "laser_mesh_size_x") )
     {
-        // A non-positive or malformed primary size leaves the mesh unusable;
-        // the runtime predicate then keeps the legacy VP body visible.
+        // A non-positive or malformed primary size leaves the external mesh
+        // renderer disabled for this weapon; no hidden geometry is substituted.
         config.size_x = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
         return true;
     }
@@ -1857,7 +1873,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     bool groundDecalDurationValid = false;
     int fadeIn = 0;
     int fadeOut = 0;
-    std::vector<World::TChainFXVPModel> vpModels;
+    std::vector<World::TChainFXVisual> visuals;
     int physicalVehicle = 0;
     std::string groundDecalTexture;
     int groundDecalPoints = 12;
@@ -1907,7 +1923,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
 
             if ( mode == World::TChainFXConfig::MODE_VISUAL )
             {
-                if ( duration > 0 && !vpModels.empty() )
+                if ( duration > 0 && !visuals.empty() )
                 {
                     World::TChainFXConfig chain;
                     chain.mode = mode;
@@ -1920,7 +1936,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.duration = duration;
                     chain.fade_in = fadeIn;
                     chain.fade_out = fadeOut;
-                    chain.vp_models = vpModels;
+                    chain.visuals = visuals;
                     out->push_back(chain);
                 }
             }
@@ -2053,20 +2069,31 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             offset.z = parser.stof(p2, 0);
         else if ( !StriCmp(p1, "vp_model") )
         {
-            World::TChainFXVPModel vpModel;
-            vpModel.model = parser.stol(p2, NULL, 0);
-            vpModels.push_back(vpModel);
+            World::TChainFXVisual visual;
+            visual.vp = parser.stol(p2, NULL, 0);
+            visuals.push_back(visual);
         }
-        else if ( !StriCmp(p1, "vp_tint") )
+        else if ( !StriCmp(p1, "3ds_model") )
         {
-            if ( vpModels.empty() )
+            if ( !visuals.empty() && visuals.back().vp > 0 && visuals.back().mesh3ds.empty() )
+                visuals.back().mesh3ds = p2;
+            else
             {
-                ypa_log_out("WARNING: begin_chain_fx vp_tint without preceding vp_model ignored\n");
+                World::TChainFXVisual visual;
+                visual.mesh3ds = p2;
+                visuals.push_back(visual);
+            }
+        }
+        else if ( !StriCmp(p1, "visual_tint") )
+        {
+            if ( visuals.empty() )
+            {
+                ypa_log_out("WARNING: begin_chain_fx visual_tint without preceding vp_model/3ds_model ignored\n");
                 continue;
             }
 
-            ParseTintParam(parser, "vp_tint", p1, p2, vpModels.back().tint);
-            vpModels.back().has_tint = true;
+            ParseTintParam(parser, "visual_tint", p1, p2, visuals.back().tint);
+            visuals.back().has_tint = true;
         }
         else if ( !StriCmp(p1, "physical_vehicle") )
         {
@@ -2143,7 +2170,7 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "name") ||
            !StriCmp(p1, "type_icon") ||
            !StriCmp(p1, "mimic_energy_cost") ||
-           !StriCmp(p1, "mimic_vp_tint") ||
+           !StriCmp(p1, "mimic_tint") ||
            !StriCmp(p1, "snd_mimic_sample") ||
            !StriCmp(p1, "snd_mimic_pitch") ||
            !StriCmp(p1, "snd_mimic_volume") ||
@@ -2171,7 +2198,6 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
     TRoboProto *robo = _vhcl->RoboProto;
-    int damagedFxSlot = -1;
 
     if (!robo)
         robo = &_roboTmp;
@@ -2597,26 +2623,26 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vp_genesis = parser.stol(p2, NULL, 0);
     }
-    else if ( (damagedFxSlot = ParseNumberedSlotId(p1, "damaged_fx_vp", World::DAMAGED_FX_SLOT_COUNT)) >= 0 )
+    else if ( ParseExternalVisualParam(p1, p2, _vhcl->visual_3ds, false) )
     {
-        int vp = parser.stol(p2, NULL, 0);
-        EnsureDamagedFXSlot(_vhcl->damaged_fx.vps, damagedFxSlot);
-        _vhcl->damaged_fx.vps[damagedFxSlot] = vp > 0 ? vp : 0;
     }
-    else if ( !StriCmp(p1, "damaged_fx_vp_scale") )
+    else if ( !StriCmp(p1, "damaged_fx_vp") )
     {
-        _vhcl->damaged_fx.vp_scale = ParseVPScaleValue(parser, p2);
+        if ( !ParseSmartVPList(p2, _vhcl->damaged_fx.vps) )
+            _vhcl->damaged_fx.vps.clear();
+    }
+    else if ( !StriCmp(p1, "damaged_fx_3ds") )
+    {
+        if ( !p2.empty() )
+            _vhcl->damaged_fx.meshes3ds.push_back(p2);
+    }
+    else if ( !StriCmp(p1, "damaged_fx_scale") )
+    {
+        _vhcl->damaged_fx.scale = ParseVPScaleValue(parser, p2);
     }
     else if ( !StriCmp(p1, "damaged_fx_threshold") )
     {
-        float threshold = parser.stof(p2, 0);
-
-        if ( threshold < 0.0 )
-            threshold = 0.0;
-        else if ( threshold > 1.0 )
-            threshold = 1.0;
-
-        _vhcl->damaged_fx.threshold = threshold;
+        ParseAbsoluteOrPercent(p2, _vhcl->damaged_fx.threshold, 100.0f);
     }
     else if ( !StriCmp(p1, "damaged_fx_count") )
     {
@@ -2648,10 +2674,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             _vhcl->damaged_fx.interval_max = 0;
         }
     }
-    else if ( !StriCmp(p1, "damaged_fx_random_offset_percent") )
+    else if ( !StriCmp(p1, "damaged_fx_random_max_offset") )
     {
-        _vhcl->damaged_fx.random_offset_percent = ParseAttachedFXRandomOffsetPercent(parser, p2);
-        _vhcl->damaged_fx.has_random_offset_percent = true;
+        ParseAbsoluteOrPercent(p2, _vhcl->damaged_fx.random_max_offset, 100.0f);
     }
     else if ( !StriCmp(p1, "damaged_fx_trail_only") )
     {
@@ -2711,26 +2736,15 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "damaged_force_malus") )
     {
-        float malus = parser.stof(p2, 0);
-        if ( malus < 0.0 )
-            malus = 0.0;
-        else if ( malus > 1.0 )
-            malus = 1.0;
-        _vhcl->damaged_force_malus = malus;
+        _vhcl->damaged_force_malus = ParseMalusPercent(p2);
     }
     else if ( !StriCmp(p1, "damaged_maxrot_malus") )
     {
-        float malus = parser.stof(p2, 0);
-        if ( malus < 0.0 )
-            malus = 0.0;
-        else if ( malus > 1.0 )
-            malus = 1.0;
-        _vhcl->damaged_maxrot_malus = malus;
+        _vhcl->damaged_maxrot_malus = ParseMalusPercent(p2);
     }
-    else if ( !StriCmp(p1, "damaged_snd_pitch_mult") )
+    else if ( !StriCmp(p1, "damaged_snd_pitch") )
     {
-        float mult = parser.stof(p2, 0);
-        _vhcl->damaged_snd_pitch_mult = mult >= 0.0 ? mult : 1.0;
+        _vhcl->damaged_snd_pitch_multiplier = ParseSignedPitchPercent(p2);
     }
     else if ( !StriCmp(p1, "spawn_units") )
     {
@@ -2869,6 +2883,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int vp = parser.stol(p2, NULL, 0);
         _vhcl->proximity_defense_vp_launch = vp > 0 ? vp : -1;
     }
+    else if ( !StriCmp(p1, "proximity_defense_3ds_launch") )
+    {
+        _vhcl->proximity_defense_3ds_launch = p2;
+    }
     else if ( !StriCmp(p1, "proximity_defense_fire_mode") )
     {
         if ( !StriCmp(p2, "sequential") )
@@ -2907,22 +2925,22 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->max_active_at_once = ParsePositiveIntOrZero(p2);
     }
-    else if ( ParseVPScaleParam(parser, "vp", p1, p2, _vhcl->vp_scale) )
+    else if ( ParseVPScaleParam(parser, "visual", p1, p2, _vhcl->visual_scale) )
     {
     }
-    else if ( ParseTintParam(parser, "vp_tint", p1, p2, _vhcl->vp_tint) )
+    else if ( ParseTintParam(parser, "visual_tint", p1, p2, _vhcl->visual_tint) )
     {
     }
-    else if ( ParseTintParam(parser, "mimic_vp_tint", p1, p2, _vhcl->mimic_vp_tint) )
+    else if ( ParseTintParam(parser, "mimic_tint", p1, p2, _vhcl->mimic_tint) )
     {
     }
     else if ( ParseWireframeTintParam(parser, p1, p2, _vhcl->wireframe_tint) )
     {
     }
-    else if ( ParseVPRotationParam(parser, "vp", p1, p2, _vhcl->vp_rotation) )
+    else if ( ParseVPRotationParam(parser, "visual", p1, p2, _vhcl->visual_rotation) )
     {
     }
-    else if ( ParseVPSpinParam(parser, "vp", p1, p2, _vhcl->vp_spin) )
+    else if ( ParseVPSpinParam(parser, "visual", p1, p2, _vhcl->visual_spin) )
     {
     }
     else if ( !StriCmp(p1, "invulnerable") )
@@ -3136,6 +3154,14 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "mgun_vp_megadeth") )
     {
         _vhcl->mgun_vp_megadeth = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "mgun_3ds_dead") )
+    {
+        _vhcl->mgun_3ds_dead = p2;
+    }
+    else if ( !StriCmp(p1, "mgun_3ds_megadeth") )
+    {
+        _vhcl->mgun_3ds_megadeth = p2;
     }
     else if ( !StriCmp(p1, "mgun_power") )
     {
@@ -3801,6 +3827,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->invisible_reveal_vp = (int16_t)parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "invisible_reveal_3ds") )
+    {
+        _vhcl->invisible_reveal_3ds = p2;
+    }
     else if ( !StriCmp(p1, "unhide_radar") )
     {
         _vhcl->unhideRadar = parser.stol(p2, NULL, 0);
@@ -3870,6 +3900,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_angle = 0.0;
         _vhcl->mgun_power_set = false;
         _vhcl->mgun_angle_set = false;
+        _vhcl->mgun_3ds_dead.clear();
+        _vhcl->mgun_3ds_megadeth.clear();
         _vhcl->weapon_spread_x = 0.0;
         _vhcl->weapon_spread_y = 0.0;
         _vhcl->weapon_arc_x = 0.0;
@@ -3884,10 +3916,11 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->vp_wait = 3;
         _vhcl->vp_dead = 4;
         _vhcl->vp_genesis = 5;
-        _vhcl->vp_scale = vec3d(1.0, 1.0, 1.0);
-        _vhcl->vp_rotation = vec3d(0.0, 0.0, 0.0);
-        _vhcl->vp_spin = vec3d(0.0, 0.0, 0.0);
-        _vhcl->vp_tint = TVisualTint();
+        _vhcl->visual_3ds = TExternalVisualSet();
+        _vhcl->visual_scale = vec3d(1.0, 1.0, 1.0);
+        _vhcl->visual_rotation = vec3d(0.0, 0.0, 0.0);
+        _vhcl->visual_spin = vec3d(0.0, 0.0, 0.0);
+        _vhcl->visual_tint = TVisualTint();
         _vhcl->wireframe_tint = TVisualTint();
         _vhcl->damaged_fx = TDamagedFXConfig();
         _vhcl->unit_gun_icon.clear();
@@ -3898,7 +3931,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->zoom_steps = -1;
         _vhcl->damaged_force_malus = 0.0;
         _vhcl->damaged_maxrot_malus = 0.0;
-        _vhcl->damaged_snd_pitch_mult = 1.0;
+        _vhcl->damaged_snd_pitch_multiplier = 1.0;
         _vhcl->spawn_units = 0;
         _vhcl->spawn_vehicle = 0;
         _vhcl->spawn_interval = 5000;
@@ -3920,6 +3953,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->proximity_defense_interval = 1000;
         _vhcl->proximity_defense_shots = 12;
         _vhcl->proximity_defense_vp_launch = -1;
+        _vhcl->proximity_defense_3ds_launch.clear();
         _vhcl->proximity_defense_fire_mode = 0;
         _vhcl->proximity_defense_sequence_delay = 100;
         _vhcl->proximity_defense_mode = 0;
@@ -3998,7 +4032,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
 
         _vhcl->initParams.clear();
         _vhcl->is_mimic = 0;
-        _vhcl->mimic_vp_tint = TVisualTint();
+        _vhcl->mimic_tint = TVisualTint();
         _vhcl->snd_mimic = TVhclSound();
         _vhcl->coll = rbcolls();
         return true;
@@ -4104,16 +4138,16 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_energy_tick_time_user = 150;
         _wpn->laser_energy_increment_rate = 0.0;
         _wpn->laser_max_energy = 0.0;
-        _wpn->laser_vp_spacing = 40.0;
+        _wpn->laser_visual_spacing = 40.0;
         _wpn->laser_chain_allow = 0;
         _wpn->laser_chain_max_jumps = 0;
         _wpn->laser_chain_radius = 0.0;
         _wpn->laser_chain_damage_mult = 1.0;
         _wpn->laser_beam_count = 1;
         _wpn->vertical_laser_enable = false;
-        _wpn->ai_vertical_laser_trigger_radius = 300.0f;
+        _wpn->vertical_laser_ai_trigger_radius = 300.0f;
         _wpn->fire_time_scale = 1.0f;
-        _wpn->fire_time_scale_hp_drain_percent = 0.0f;
+        _wpn->fire_time_scale_hp_drain.Clear();
         _wpn->vp_normal = 0;
         _wpn->vp_fire = 1;
         _wpn->vp_megadeth = 2;
@@ -4121,15 +4155,16 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_dead = 4;
         _wpn->vp_genesis = 5;
         _wpn->vp_launch = 0;
-        _wpn->vp_launch_scale = vec3d(1.0, 1.0, 1.0);
-        _wpn->vp_scale = vec3d(1.0, 1.0, 1.0);
-        _wpn->vp_rotation = vec3d(0.0, 0.0, 0.0);
-        _wpn->vp_spin = vec3d(0.0, 0.0, 0.0);
+        _wpn->visual_3ds = TExternalVisualSet();
+        _wpn->launch_scale = vec3d(1.0, 1.0, 1.0);
+        _wpn->visual_scale = vec3d(1.0, 1.0, 1.0);
+        _wpn->visual_rotation = vec3d(0.0, 0.0, 0.0);
+        _wpn->visual_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->spiral_speed = 0.0f;
         _wpn->spiral_radius = 0.0f;
         _wpn->chaos_factor = 0.0f;
         _wpn->chaos_radius = 0.0f;
-        _wpn->vp_tint = TVisualTint();
+        _wpn->visual_tint = TVisualTint();
         _wpn->vp_trail_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->vp_trail_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->vp_trail_tint = TVisualTint();
@@ -4166,12 +4201,12 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         // OpenNeoUA custom: player-only launch shake defaults. Slot 0 keeps the
         // feature disabled; mute 0 makes the local feedback independent from
         // third-person camera distance.
-        _wpn->player_shk_launch.mag0 = 1.0;
-        _wpn->player_shk_launch.time = 1000;
-        _wpn->player_shk_launch.mute = 0.0;
-        _wpn->player_shk_launch.pos.x = 0.2;
-        _wpn->player_shk_launch.pos.y = 0.2;
-        _wpn->player_shk_launch.pos.z = 0.2;
+        _wpn->shk_launch_player.mag0 = 1.0;
+        _wpn->shk_launch_player.time = 1000;
+        _wpn->shk_launch_player.mute = 0.0;
+        _wpn->shk_launch_player.pos.x = 0.2;
+        _wpn->shk_launch_player.pos.y = 0.2;
+        _wpn->shk_launch_player.pos.z = 0.2;
 
         _wpn->initParams.clear();
         return true;
@@ -4364,13 +4399,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         else
             _wpn->fire_time_scale = std::max(0.05f, scale);
     }
-    else if ( !StriCmp(p1, "fire_time_scale_hp_drain_percent") )
+    else if ( !StriCmp(p1, "fire_time_scale_hp_drain") )
     {
-        float percent = parser.stof(p2, 0);
-        if ( !std::isfinite(percent) || percent <= 0.0f )
-            _wpn->fire_time_scale_hp_drain_percent = 0.0f;
-        else
-            _wpn->fire_time_scale_hp_drain_percent = std::min(percent, 100.0f);
+        ParseAbsoluteOrPercent(p2, _wpn->fire_time_scale_hp_drain, 100.0f);
     }
     else if ( !StriCmp(p1, "aoe_unit_radius") )
     {
@@ -4454,6 +4485,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         int vp = parser.stol(p2, NULL, 0);
         _wpn->cluster.vp = vp > 0 ? vp : 0;
+    }
+    else if ( !StriCmp(p1, "cluster_3ds") )
+    {
+        _wpn->cluster.mesh3ds = p2;
     }
     else if ( !StriCmp(p1, "snd_cluster_sample") )
     {
@@ -4575,25 +4610,25 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->shot_time_user = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "player_shk_launch_slot") )
+    else if ( !StriCmp(p1, "shk_launch_player_slot") )
     {
         const int slot = parser.stol(p2, NULL, 0);
-        _wpn->player_shk_launch.slot = slot > 0 ? slot : 0;
+        _wpn->shk_launch_player.slot = slot > 0 ? slot : 0;
     }
-    else if ( !StriCmp(p1, "player_shk_launch_time") )
+    else if ( !StriCmp(p1, "shk_launch_player_time") )
     {
         const int time = parser.stol(p2, NULL, 0);
-        _wpn->player_shk_launch.time = time > 0 ? time : 0;
+        _wpn->shk_launch_player.time = time > 0 ? time : 0;
     }
-    else if ( !StriCmp(p1, "player_shk_launch_mag0") )
+    else if ( !StriCmp(p1, "shk_launch_player_mag0") )
     {
         const float mag = parser.stof(p2, 0);
-        _wpn->player_shk_launch.mag0 = std::isfinite(mag) && mag >= 0.0f ? mag : 0.0f;
+        _wpn->shk_launch_player.mag0 = std::isfinite(mag) && mag >= 0.0f ? mag : 0.0f;
     }
-    else if ( !StriCmp(p1, "player_shk_launch_mag1") )
+    else if ( !StriCmp(p1, "shk_launch_player_mag1") )
     {
         const float mag = parser.stof(p2, 0);
-        _wpn->player_shk_launch.mag1 = std::isfinite(mag) && mag >= 0.0f ? mag : 0.0f;
+        _wpn->shk_launch_player.mag1 = std::isfinite(mag) && mag >= 0.0f ? mag : 0.0f;
     }
     else if ( !StriCmp(p1, "salve_shots") )
     {
@@ -4629,7 +4664,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float maxEnergy = parser.stof(p2, 0);
         _wpn->laser_max_energy = maxEnergy > 0.0 ? maxEnergy : 0.0;
     }
-    else if ( !StriCmp(p1, "laser_vp_spacing") )
+    else if ( !StriCmp(p1, "laser_visual_spacing") )
     {
         float spacing = parser.stof(p2, 0);
         if ( spacing <= 0.0 )
@@ -4638,7 +4673,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             spacing = 20.0;
         if ( spacing > 500.0 )
             spacing = 500.0;
-        _wpn->laser_vp_spacing = spacing;
+        _wpn->laser_visual_spacing = spacing;
     }
     else if ( !StriCmp(p1, "laser_chain_allow") )
     {
@@ -4668,10 +4703,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->vertical_laser_enable = parser.stol(p2, NULL, 0) == 1;
     }
-    else if ( !StriCmp(p1, "ai_vertical_laser_trigger_radius") )
+    else if ( !StriCmp(p1, "vertical_laser_ai_trigger_radius") )
     {
         float radius = parser.stof(p2, 0);
-        _wpn->ai_vertical_laser_trigger_radius = std::isfinite(radius) && radius > 0.0f ? radius : 300.0f;
+        _wpn->vertical_laser_ai_trigger_radius = std::isfinite(radius) && radius > 0.0f ? radius : 300.0f;
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
@@ -4842,9 +4877,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->vp_fire = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "weapon_use_vehicle_vp_fire") )
+    else if ( !StriCmp(p1, "weapon_use_vehicle_fire_visual") )
     {
-        _wpn->weapon_use_vehicle_vp_fire = parser.stol(p2, NULL, 0) == 1;
+        _wpn->weapon_use_vehicle_fire_visual = parser.stol(p2, NULL, 0) == 1;
     }
     else if ( !StriCmp(p1, "vp_megadeth") )
     {
@@ -4862,28 +4897,31 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->vp_genesis = parser.stol(p2, NULL, 0);
     }
+    else if ( ParseExternalVisualParam(p1, p2, _wpn->visual_3ds, true) )
+    {
+    }
     else if ( !StriCmp(p1, "vp_launch") )
     {
         _wpn->vp_launch = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "vp_launch_scale") )
+    else if ( !StriCmp(p1, "launch_scale") )
     {
         float scale = ParseVPScaleValue(parser, p2);
-        _wpn->vp_launch_scale = vec3d(scale, scale, scale);
+        _wpn->launch_scale = vec3d(scale, scale, scale);
     }
-    else if ( ParseVPScaleParam(parser, "vp", p1, p2, _wpn->vp_scale) )
+    else if ( ParseVPScaleParam(parser, "visual", p1, p2, _wpn->visual_scale) )
     {
     }
-    else if ( ParseTintParam(parser, "vp_tint", p1, p2, _wpn->vp_tint) )
+    else if ( ParseTintParam(parser, "visual_tint", p1, p2, _wpn->visual_tint) )
     {
     }
     else if ( ParseWireframeTintParam(parser, p1, p2, _wpn->wireframe_tint) )
     {
     }
-    else if ( ParseVPRotationParam(parser, "vp", p1, p2, _wpn->vp_rotation) )
+    else if ( ParseVPRotationParam(parser, "visual", p1, p2, _wpn->visual_rotation) )
     {
     }
-    else if ( ParseVPSpinParam(parser, "vp", p1, p2, _wpn->vp_spin) )
+    else if ( ParseVPSpinParam(parser, "visual", p1, p2, _wpn->visual_spin) )
     {
     }
     else if ( !StriCmp(p1, "spiral_speed") )
@@ -4995,6 +5033,20 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         else
             return ScriptParser::RESULT_BAD_DATA;
     }
+    else if ( !StriCmp(p1, "artillery_shell_mode") )
+    {
+        if ( !StriCmp(p2, "ballistic") )
+            _wpn->artillery_shell_mode = TWeapProto::ARTILLERY_SHELL_MODE_BALLISTIC;
+        else if ( !StriCmp(p2, "vertical_barrage") )
+            _wpn->artillery_shell_mode = TWeapProto::ARTILLERY_SHELL_MODE_VERTICAL_BARRAGE;
+        else
+            return ScriptParser::RESULT_BAD_DATA;
+    }
+    else if ( !StriCmp(p1, "artillery_shell_fall_delay") )
+    {
+        int v = parser.stol(p2, NULL, 0);
+        _wpn->artillery_shell_fall_delay = v > 0 ? v : 0;
+    }
     else if ( !StriCmp(p1, "artillery_shell_min_range") )
     {
         float v = parser.stof(p2, 0);
@@ -5012,10 +5064,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "artillery_shell_manual_mode_only") )
     {
         _wpn->artillery_shell_manual_mode_only = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "artillery_shell_prefer_host_station") )
-    {
-        _wpn->artillery_shell_prefer_host_station = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
     }
     else if ( !StriCmp(p1, "artillery_shell_barrage_radius") )
     {
@@ -5040,27 +5088,14 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float v = parser.stof(p2, 0);
         _wpn->artillery_shell_arc_height = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "artillery_shell_flight_time") )
-    {
-        _wpn->artillery_shell_flight_time = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "artillery_shell_spread_radius") )
+    else if ( !StriCmp(p1, "artillery_shell_speed") )
     {
         float v = parser.stof(p2, 0);
-        _wpn->artillery_shell_spread_radius = v > 0.0 ? v : 0.0;
-    }
-    else if ( !StriCmp(p1, "artillery_shell_inflight_drift") )
-    {
-        float v = parser.stof(p2, 0);
-        _wpn->artillery_shell_inflight_drift = v > 0.0 ? v : 0.0;
+        _wpn->artillery_shell_speed = v > 0.0 ? v : 0.0;
     }
     else if ( !StriCmp(p1, "artillery_shell_airburst") )
     {
         _wpn->artillery_shell_airburst = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "artillery_shell_minimap_marker") )
-    {
-        _wpn->artillery_shell_minimap_marker = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
     }
     else if ( !StriCmp(p1, "begin_chain_fx") )
     {
@@ -5816,14 +5851,16 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->id = p2;
     else if ( !StriCmp(p1, "wave_vp") )
         _profile->wave_vp = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "wave_vp_scale_x") )
-        _profile->wave_vp_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "wave_vp_scale_y") )
-        _profile->wave_vp_axis_scale.y = ParseSuperItemScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "wave_vp_scale_z") )
-        _profile->wave_vp_axis_scale.z = ParseSuperItemScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "wave_vp_tint") )
-        ParseTintParam(parser, "wave_vp_tint", p1, p2, _profile->wave_vp_tint);
+    else if ( !StriCmp(p1, "wave_3ds") )
+        _profile->wave_3ds = p2;
+    else if ( !StriCmp(p1, "wave_scale_x") )
+        _profile->wave_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "wave_scale_y") )
+        _profile->wave_axis_scale.y = ParseSuperItemScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "wave_scale_z") )
+        _profile->wave_axis_scale.z = ParseSuperItemScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "wave_tint") )
+        ParseTintParam(parser, "wave_tint", p1, p2, _profile->wave_tint);
     else if ( !StriCmp(p1, "wave_start_speed") )
     {
         _profile->wave_start_speed = parser.stof(p2, 0);
@@ -5867,10 +5904,13 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         int damage = parser.stol(p2, NULL, 0);
         _profile->wave_unit_damage = damage > 0 ? damage : 0;
     }
-    else if ( !StriCmp(p1, "wave_building_total_destruction_percent") )
+    else if ( !StriCmp(p1, "wave_building_total_destruction") )
     {
-        int percent = parser.stol(p2, NULL, 0);
-        _profile->wave_building_total_destruction_percent = std::max(0, std::min(percent, 100));
+        TAuthoredScalar value;
+        _profile->wave_building_total_destruction = 0;
+        if ( ParseAuthoredScalar(p2, value) && value.percent && value.value >= 0.0f )
+            _profile->wave_building_total_destruction =
+                (int)std::lround(std::min(value.value, 100.0f));
     }
     else if ( ParseDebuffParam(parser, p1, p2, _profile->debuff) )
     {}

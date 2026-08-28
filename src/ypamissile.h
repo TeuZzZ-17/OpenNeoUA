@@ -51,10 +51,12 @@ public:
     virtual void Impact(); // Apply impulse to all in sector
 
     // OpenNeoUA custom artillery shell: arm this projectile as a ballistic barrage shell.
-    // Once armed it follows a parametric arc (start->target) and force-impacts when
-    // its flight timer expires, reusing the normal Impact()/AoE/FX path.
-    void SetupArtilleryShell(const vec3d &startPos, const vec3d &targetPos,
-                          int flightTime, float arcHeight, const vec3d &driftVec, bool impactOnSurface);
+    // Once armed it follows a parametric arc (start->target) at the authored artillery
+    // speed and force-impacts when the computed flight timer expires, reusing Impact()/AoE/FX.
+    int SetupArtilleryShell(const vec3d &startPos, const vec3d &targetPos,
+                            float arcHeight, float shellSpeed, bool impactOnSurface);
+    int SetupArtilleryShellVerticalBarrage(const vec3d &startPos, const vec3d &targetPos,
+                                           int fallDelay, float fallHeight, float verticalSpeed, bool impactOnSurface);
     virtual void DetonateAtContact(NC_STACK_ypabact *directHit);
     virtual void DetonateKamikazePayload(NC_STACK_ypabact *directHit);
     virtual void AlignMissile(float dtime = 0.0);
@@ -262,11 +264,15 @@ protected:
     bool  _isArtilleryShellProjectile = false;
     vec3d _artilleryShellStartPos;
     vec3d _artilleryShellTargetPos;
-    vec3d _artilleryShellDriftVec;
     int   _artilleryShellElapsed    = 0;
     int   _artilleryShellFlightTime = 0;
     float _artilleryShellArcHeight  = 0.0;
     bool  _artilleryShellImpactOnSurface = false;
+    bool  _artilleryShellVerticalBarrage = false;
+    bool  _artilleryShellVerticalTransferred = false;
+    int   _artilleryShellVerticalAscentTime = 0;
+    int   _artilleryShellVerticalFallStartTime = 0;
+    int   _artilleryShellVerticalDescentTime = 0;
     World::TWeaponTracerConfig _weaponTracer;
     bool _weaponTracerStarted = false;
     uint32_t _weaponTracerVisualSeed = 0;

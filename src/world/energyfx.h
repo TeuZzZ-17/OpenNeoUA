@@ -11,13 +11,14 @@ namespace EnergyFX
 // Global visual profile used while a unit is in the same regen/drain state
 // that drives the corresponding automatic Status Icon.
 //
-// No public mode selector is needed: vp > 0 uses the existing VP path;
-// vp <= 0 uses the procedural +/- mesh path.
+// No public mode selector is needed: a valid 3DS overrides vp, vp is the
+// legacy fallback, and when neither is configured the procedural +/- path is used.
 struct Config
 {
     int16_t vp = 0;
-    float vp_scale = 1.0f;
-    vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
+    std::string mesh3ds;
+    float scale = 1.0f;
+    vec3d spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint tint;
 
     int duration = 1000;
@@ -25,7 +26,7 @@ struct Config
     int interval_max = 0;
     int count_min = 0;
     int count_max = 0;
-    float random_offset_percent = 25.0f;
+    TAbsoluteOrPercent random_max_offset = {25.0f, true, true};
 
     float size = 30.0f;
     float thickness = 5.0f;
@@ -35,7 +36,7 @@ struct Config
 
     bool IsProcedural() const
     {
-        return vp <= 0;
+        return vp <= 0 && mesh3ds.empty();
     }
 
     bool IsEnabled() const
@@ -47,7 +48,7 @@ struct Config
         if ( IsProcedural() )
             return size > 0.0f && thickness > 0.0f;
 
-        return vp > 0;
+        return vp > 0 || !mesh3ds.empty();
     }
 };
 
