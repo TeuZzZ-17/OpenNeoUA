@@ -1115,17 +1115,17 @@ public:
     bool _proximity_defense_at_death_done;
     // OpenNeoUA custom: artillery shell barrage runtime state (transient, not saved per instance)
     bool _artillery_shell_barrage_active = false;
-    // Shots left in the CURRENT firing cycle. A cycle's shots are a shared budget:
-    // redirecting the barrage (manual or auto) spends from it and never refills it.
-    // Only the cooldown (after the budget is spent) refills it. This stops the
-    // "infinite barrage" exploit of re-aiming to dodge the cooldown.
+    // Shots left in the CURRENT firing cycle. Once a barrage starts, its target is
+    // immutable until this budget is spent; follow-up orders use the one pending slot.
+    // Only a fresh barrage after cooldown refills the budget.
     int _artillery_shell_shots_remaining = 0;
     int _artillery_shell_next_shot_time = 0;
     int _artillery_shell_next_activation_time = 0;
     int _artillery_shell_next_scan_time = 0;
     vec3d _artillery_shell_target_center;
-    // Manual order queued while on cooldown: the strike is accepted now (azure ring
-    // shown) but only fires once the cooldown has elapsed. Never bypasses cooldown.
+    // Single future artillery order queued while the current barrage is firing and/or
+    // cooling down. It is shown with the disabled-grey ring and only becomes active
+    // after the current barrage ends and the cooldown has elapsed.
     bool _artillery_shell_has_pending = false;
     vec3d _artillery_shell_pending_target;
     struct TLaserBeamRequest

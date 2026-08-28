@@ -867,15 +867,28 @@ static BaseListLoadResult LoadBaseList(FSMgr::FileHandle *fil, BaseListParsePoli
             token = line;
         }
 
-        std::string basName = fmt::sprintf("rsrc:objects/%s", token);
-        NC_STACK_base *kid = Utils::ProxyLoadBase(basName);
+        NC_STACK_base *kid = NULL;
+        if ( !StriCmp(token, "dummy.base") )
+        {
+            // VISPROTO uses dummy.base as an intentional empty slot.  It is not
+            // a filesystem resource and must still occupy one VP index.  An
+            // empty BASE mirrors that semantic without inventing an asset.
+            kid = Nucleus::CInit<NC_STACK_base>();
+        }
+        else
+        {
+            std::string basName = fmt::sprintf("rsrc:objects/%s", token);
+            kid = Utils::ProxyLoadBase(basName);
+        }
 
         if ( !kid )
         {
             result.errorSlot = result.entryCount;
             result.errorLine = lineNumber;
             result.errorToken = token;
-            result.errorReason = "referenced BASE is missing or malformed";
+            result.errorReason = !StriCmp(token, "dummy.base")
+                ? "could not create dummy VP placeholder"
+                : "referenced BASE is missing or malformed";
             obj->Delete();
             return result;
         }
@@ -955,9 +968,9 @@ static SetLooseVisprotoCandidate LoadSetLooseVisprotoCandidate()
                                           result.errorToken.c_str(),
                                           result.errorReason.c_str());
         IFFile::ReportSetLooseOverrideFailed(candidate.overrideInfo, reason);
-        ypa_log_out("VP table: loose override invalid at slot %zu, falling back to Scripts/VISPROTO.LST.\n",
+        ypa_log_out("VP table: loose override invalid at slot %zu; keeping vanilla SET.BAS fallback.\n",
                     result.errorSlot);
-        ypa_log_out("WARNING: OpenNeoUA SET loose VISPROTO rejected for Set %d (%s): %s; Scripts/VISPROTO.LST fallback retained.\n",
+        ypa_log_out("WARNING: OpenNeoUA SET loose VISPROTO rejected for Set %d (%s): %s; embedded SET.BAS fallback retained.\n",
                     candidate.overrideInfo.setId,
                     candidate.overrideInfo.resolvedPath.c_str(),
                     reason.c_str());
@@ -1003,6 +1016,11 @@ static bool ReplaceSetVisproto(NC_STACK_base *setBase, NC_STACK_base *replacemen
 
 NC_STACK_base *load_set_base()
 {
+    // Retail/vanilla SET.BAS is authoritative when present.  OpenNeoUA may
+    // replace only its VISPROTO child with a valid editable Loose/VISPROTO.LST;
+    // a missing or invalid loose list must never make an otherwise valid SET
+    // unloadable.  Scripts/VISPROTO.LST remains the legacy fragment fallback
+    // used only when a complete set.base is unavailable.
     NC_STACK_base *base = NC_STACK_base::LoadBaseFromFile("rsrc:objects/set.base");
     SetLooseVisprotoCandidate looseVisproto = LoadSetLooseVisprotoCandidate();
 
@@ -1010,39 +1028,38 @@ NC_STACK_base *load_set_base()
     NC_STACK_base *visproto = looseVisproto.base;
     looseVisproto.base = NULL;
 
+    if ( base )
+    {
+        if ( !visproto )
+        {
+            ypa_log_out("VP table: using embedded visproto.base from SET.BAS.\n");
+            return base;
+        }
+
+        if ( ReplaceSetVisproto(base, visproto) )
+        {
+            ReportSetLooseVisprotoUsed(looseVisproto);
+            return base;
+        }
+
+        // A structurally incomplete set.base cannot accept the loose override.
+        // Keep the already-parsed loose table and continue through the original
+        // fragment-load path instead of returning a broken SET container.
+        ypa_log_out("WARNING: loaded SET has no replaceable VISPROTO child; trying fragment load.\n");
+        base->Delete();
+        base = NULL;
+    }
+
+    ypa_log_out("init: no usable set.base, trying fragment load.\n");
+
     if ( !visproto )
     {
-        ypa_log_out("VP table: no usable Loose/VISPROTO.LST, trying Scripts/VISPROTO.LST.\n");
+        ypa_log_out("VP table: trying legacy Scripts/VISPROTO.LST fragment fallback.\n");
         visproto = sub_44AD8C("rsrc:scripts/visproto.lst");
     }
 
     if ( !visproto )
-    {
-        ypa_log_out("init: no usable VISPROTO.LST; embedded visproto.base is intentionally not used.\n");
-        if ( base )
-            base->Delete();
         return NULL;
-    }
-
-    if ( base )
-    {
-        if ( !ReplaceSetVisproto(base, visproto) )
-        {
-            visproto->Delete();
-            base->Delete();
-            ypa_log_out("init: loaded SET has no VISPROTO child to replace; refusing embedded visproto.base fallback.\n");
-            return NULL;
-        }
-
-        if ( usingLooseVisproto )
-            ReportSetLooseVisprotoUsed(looseVisproto);
-        else
-            ypa_log_out("VP table: using Scripts/VISPROTO.LST.\n");
-
-        return base;
-    }
-
-    ypa_log_out("init: no set.base, trying fragment load.\n");
 
     base = Nucleus::CInit<NC_STACK_base>();
     if ( !base )
@@ -1082,7 +1099,7 @@ NC_STACK_base *load_set_base()
     if ( usingLooseVisproto )
         ReportSetLooseVisprotoUsed(looseVisproto);
     else
-        ypa_log_out("VP table: using Scripts/VISPROTO.LST.\n");
+        ypa_log_out("VP table: using Scripts/VISPROTO.LST fragment fallback.\n");
 
     return base;
 }
