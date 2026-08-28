@@ -33,6 +33,45 @@ bool SkipCurrentOrNextPayload(IFFile *mfile, int payloadParse)
 
     return false;
 }
+
+// Preserve the original embedded-resource parser path unless a concrete loose
+// replacement actually exists.  SET.BAS relies on the exact IFF cursor/parent
+// state here: merely probing/peeking at the payload must not change the vanilla
+// fallback path.
+bool HasLooseEmrsOverrideCandidate(const std::string &classname,
+                                   const std::string &resname,
+                                   size_t emrsOffset)
+{
+    if ( !IsSetLooseEmrsOverrideClass(classname) )
+        return false;
+
+    IFFile::SetLooseOverride probe;
+    const std::string payload = "embedded";
+
+    if ( IFFile::IsSkyLooseScopeActive() )
+    {
+        if ( classname == "ilbm.class" &&
+             IFFile::FindSkyLooseEmrsPngOverride(resname, "rb", classname, payload,
+                                                  &probe, "NC_STACK_embed::LoadingFromIFF",
+                                                  emrsOffset) )
+            return true;
+
+        if ( IFFile::FindSkyLooseEmrsOverride(resname, "rb", classname, payload,
+                                               &probe, "NC_STACK_embed::LoadingFromIFF",
+                                               emrsOffset) )
+            return true;
+    }
+
+    if ( classname == "ilbm.class" &&
+         IFFile::FindSetLooseEmrsPngOverride(resname, "rb", classname, payload,
+                                              &probe, "NC_STACK_embed::LoadingFromIFF",
+                                              emrsOffset) )
+        return true;
+
+    return IFFile::FindSetLooseEmrsOverride(resname, "rb", classname, payload,
+                                             &probe, "NC_STACK_embed::LoadingFromIFF",
+                                             emrsOffset);
+}
 }
 
 // Create embed resource node and fill rsrc field data
@@ -86,7 +125,6 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
         {
             std::string classname = mfile->readStr(255);
             size_t emrsOffset = mfile->tell();
-            int payloadParse = mfile->parse();
 
             std::string resname;
             size_t fnd = classname.find('\0');
@@ -100,12 +138,35 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
             if (!resname.empty() && resname.back() == '\0')
                 resname.pop_back();
 
+            // Critical vanilla-safe path: if this embedded resource has no
+            // concrete loose replacement, execute the original loader sequence
+            // unchanged.  In particular, do not peek ahead in the shared SET.BAS
+            // stream before handing it to the resource loader.
+            if ( !HasLooseEmrsOverrideCandidate(classname, resname, emrsOffset) )
+            {
+                mfile->parse();
+
+                NC_STACK_rsrc *embd_class = Nucleus::CTFInit<NC_STACK_rsrc>(classname,
+                   {{NC_STACK_rsrc::RSRC_ATT_NAME, resname},
+                    {NC_STACK_rsrc::RSRC_ATT_TRYSHARED, (int32_t)1},
+                    {NC_STACK_rsrc::RSRC_ATT_PIFFFILE, mfile}});
+
+                if ( !embd_class )
+                {
+                    Deinit();
+                    return 0;
+                }
+
+                _resources.push_back(embd_class);
+                continue;
+            }
+
+            int payloadParse = mfile->parse();
+
             if ( IsSetLooseEmrsOverrideClass(classname) )
             {
-                std::string payload = "unknown";
-                if ( payloadParse == IFFile::IFF_ERR_EOC )
-                    payload = mfile->PeekNextChunkLabel();
-                else if ( !payloadParse )
+                std::string payload = "embedded";
+                if ( !payloadParse )
                     payload = IFFile::ChunkLabel(mfile->GetCurrentChunk());
 
                 if ( IFFile::IsSkyLooseScopeActive() )
