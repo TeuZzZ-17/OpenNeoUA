@@ -10879,7 +10879,11 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
         }
         else if ( winpt->selected_btn == &robo_map )
         {
-            if ( World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
+            // While an artillery shell is in manual aiming mode, RMB belongs to
+            // artillery cancel. Do not let the normal map-marker handler consume
+            // the same edge before ypaworld_func64__sub21() can clear the white ring.
+            if ( !yw->_artilleryShellManualGid &&
+                 World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
             {
                 if ( winpt->selected_btnID == 17 )
                 {
@@ -16888,6 +16892,21 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
 
 void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
 {
+    // OpenNeoUA custom: while the white artillery targeting preview is active,
+    // RMB is first and foremost "cancel artillery aiming". Do this before the
+    // vanilla FLAG_OK/viewer gate so the map-marker RMB binding cannot swallow it.
+    if ( _userRobo && !IsSpectatorControlled() &&
+         bzda.field_1D0 == 1 &&
+         (_guiActFlags & 8) &&
+         _artilleryShellManualGid &&
+         (arg->ClickInf.flag & TClickBoxInf::FLAG_RM_DOWN) )
+    {
+        _artilleryShellManualGid = 0;
+        _artilleryShellManualRadius = 0.0f;
+        arg->ClickInf.flag &= ~TClickBoxInf::FLAG_RM_DOWN;
+        return;
+    }
+
     if ( _userRobo && (arg->ClickInf.flag & TClickBoxInf::FLAG_OK) && _viewerBact )
     {
         yw_MouseSelect(arg);
@@ -16918,22 +16937,6 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
                 bzda.field_1D0 = bzda.field_1CC & 1;
 
             arg->ClickInf.flag &= ~TClickBoxInf::FLAG_LM_DOWN;
-            return;
-        }
-
-        // OpenNeoUA custom: manual artillery shell control on the opened 2D strategic map in
-        // normal command mode (field_1D0 == 1). Build (16) / teleport (32) modes
-        // are left untouched. Consumes the click so no first-person entry or RTS
-        // order is produced for an artillery shell interaction.
-        if ( !IsSpectatorControlled() &&
-             bzda.field_1D0 == 1 &&
-             (_guiActFlags & 8) &&
-             _artilleryShellManualGid &&
-             (arg->ClickInf.flag & TClickBoxInf::FLAG_RM_DOWN) )
-        {
-            _artilleryShellManualGid = 0;
-            _artilleryShellManualRadius = 0.0f;
-            arg->ClickInf.flag &= ~TClickBoxInf::FLAG_RM_DOWN;
             return;
         }
 

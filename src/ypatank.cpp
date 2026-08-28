@@ -248,9 +248,9 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
     if ( v220 > 0.0 )
         _target_dir = _target_vec / v220;
 
-    if ( IsActiveDebuffDisorienting() )
+    if ( IsActiveDebuffStunning() )
     {
-        UpdateActiveDebuffDisorientMoveIntent();
+        UpdateActiveDebuffStunMoveIntent();
         v220 = 1200.0f;
     }
 
@@ -270,7 +270,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
             break;
         }
 
-        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorienting() )
+        if ( !_primTtype && !_secndTtype && !IsActiveDebuffStunning() )
         {
             _status = BACT_STATUS_IDLE;
             _status_flg &= ~(BACT_STFLAG_FIGHT_P | BACT_STFLAG_FIGHT_S);
@@ -480,12 +480,12 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
 
                 if ( !(_tankCollisionFlag &
                        (COLL_WALL_L | COLL_WALL_R | COLL_HILL_L | COLL_HILL_R)) )
-                    _thraction = GetActiveDebuffDisorientTraction(_thraction, true);
+                    _thraction = GetActiveDebuffStunTraction(_thraction, true);
 
                 bool allowRecoilRecoveryMove = !recoilRecovery || kamikazeRamming || _tankCollisionFlag;
 
                 if ( allowRecoilRecoveryMove &&
-                     (IsActiveDebuffDisorienting() ||
+                     (IsActiveDebuffStunning() ||
                       kamikazeRamming ||
                       !(_status_flg & BACT_STFLAG_ATTACK) ||
                       !_tankExpectTgt ||
@@ -1984,7 +1984,7 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
             return 0;
 
         return (arg->pos.XZ() - fireOrigin.XZ()).length() <=
-               (v22->ai_vertical_laser_trigger_radius > 0.0f ? v22->ai_vertical_laser_trigger_radius : 300.0f);
+               (v22->vertical_laser_ai_trigger_radius > 0.0f ? v22->vertical_laser_ai_trigger_radius : 300.0f);
     }
 
     float v38 = 0.0;

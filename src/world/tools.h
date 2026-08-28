@@ -5,8 +5,10 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include "common/common.h"
 #include "common/plane.h"
@@ -15,6 +17,105 @@
 #include "consts.h"
 
 namespace World {
+
+// Shared authored scalar syntax used by modern OpenNeoUA parameters:
+//   2000  -> absolute value
+//   5%    -> percentage value
+//   +20%  -> positive percentage adjustment
+//   -20%  -> negative percentage adjustment
+// The parser is deliberately strict and does not assign semantics beyond
+// identifying whether the author supplied a percent sign. Callers keep their
+// own range/default/fallback rules.
+struct TAuthoredScalar
+{
+    float value = 0.0f;
+    bool percent = false;
+};
+
+inline bool ParseAuthoredScalar(const std::string &text, TAuthoredScalar &out)
+{
+    if ( text.empty() )
+        return false;
+
+    const char *begin = text.c_str();
+    while ( *begin == ' ' || *begin == '\t' || *begin == '\r' || *begin == '\n' )
+        ++begin;
+    if ( !*begin )
+        return false;
+
+    errno = 0;
+    char *end = NULL;
+    float parsed = std::strtof(begin, &end);
+    if ( end == begin || errno == ERANGE || !std::isfinite(parsed) )
+        return false;
+
+    while ( *end == ' ' || *end == '\t' || *end == '\r' || *end == '\n' )
+        ++end;
+
+    bool isPercent = false;
+    if ( *end == '%' )
+    {
+        isPercent = true;
+        ++end;
+        while ( *end == ' ' || *end == '\t' || *end == '\r' || *end == '\n' )
+            ++end;
+    }
+
+    if ( *end != '\0' )
+        return false;
+
+    out.value = parsed;
+    out.percent = isPercent;
+    return true;
+}
+
+// Smart list syntax shared by VP-style parameters: "123_456_789". A single
+// positive integer is also valid. Zero/negative/invalid entries are rejected
+// instead of silently creating holes; maxItems <= 0 means no explicit limit.
+inline bool ParsePositiveInt16ListValue(const std::string &text,
+                                        std::vector<int16_t> &out,
+                                        int maxItems = 0)
+{
+    out.clear();
+    if ( text.empty() )
+        return false;
+
+    size_t start = 0;
+    while ( start <= text.size() )
+    {
+        const size_t separator = text.find('_', start);
+        const size_t end = separator == std::string::npos ? text.size() : separator;
+        const std::string part = text.substr(start, end - start);
+        if ( part.empty() )
+        {
+            out.clear();
+            return false;
+        }
+
+        errno = 0;
+        char *parseEnd = NULL;
+        const long value = std::strtol(part.c_str(), &parseEnd, 0);
+        if ( parseEnd == part.c_str() || errno == ERANGE || *parseEnd != '\0' ||
+             value <= 0 || value > std::numeric_limits<int16_t>::max() )
+        {
+            out.clear();
+            return false;
+        }
+
+        out.push_back((int16_t)value);
+        if ( maxItems > 0 && (int)out.size() > maxItems )
+        {
+            out.clear();
+            return false;
+        }
+
+        if ( separator == std::string::npos )
+            break;
+        start = separator + 1;
+    }
+
+    return !out.empty();
+}
 
 // OpenNeoUA range syntax shared by script/config parameters authored as either
 // a fixed "value" or an inclusive "min_max" range. The generic tokenizer is

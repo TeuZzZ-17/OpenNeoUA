@@ -121,6 +121,7 @@ private:
     std::vector<tUtV> texCoords;
     std::vector<d3dsMaterial *>faceMaterial;
     std::list<d3dsMaterial > materials;
+    std::string _sourceDir;
 
     int32_t faceNum = 0;
 };

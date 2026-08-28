@@ -241,7 +241,7 @@ Common::Ini::Key IniConf::GameNewDebug("game.new.debug", Common::Ini::KT_WORD, s
 Common::Ini::Key IniConf::GameCrashDiagnostics("game.crash_diagnostics", Common::Ini::KT_BOOL, false);
 // OpenNeoUA custom: choose the original VP model preview or the text-only briefing preview.
 // The default keeps the current text mode for vanilla-safe behavior.
-Common::Ini::Key IniConf::GameBriefingVPRender("game.briefing_vp_render", Common::Ini::KT_BOOL, false);
+Common::Ini::Key IniConf::GameBriefingModelRender("game.briefing_model_render", Common::Ini::KT_BOOL, false);
 
 // Yparobo keys
 Common::Ini::Key IniConf::GameNewAI("game.newai",    Common::Ini::KT_BOOL, true);
@@ -261,17 +261,17 @@ Common::Ini::Key IniConf::GamePlayerMaxAltitudeAboveGround("game.player_max_alti
 Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_above_ground", Common::Ini::KT_WORD, std::string("0.0"));
 // OpenNeoUA custom: the player Sprint exists only when all three Sprint values are
 // explicitly present in Nucleus.ini. Missing any one of them disables Sprint.
-Common::Ini::Key IniConf::GameSprintForceUpPercent("game.sprint_force_up_percent", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GameSprintPitchUpPercent("game.sprint_pitch_up_percent", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameSprintForceUp("game.sprint_force_up", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameSprintPitchUp("game.sprint_pitch_up", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
-// OpenNeoUA custom: one shared percentage of nominal weapon damage converted into
-// shooter-side energy cost for normal projectiles, MGUNs and laser (including vertical mode).
-// 0 disables the configured drain; missing or invalid preserves each weapon type's
-// previous fallback. The shooter's effective shield attenuates the final cost.
-Common::Ini::Key IniConf::GameWeaponEnergyCostPercent("game.weapon_energy_cost_percent", Common::Ini::KT_WORD, std::string());
-// OpenNeoUA custom: percentage of the unit's maximum energy consumed per second
-// while player Sprint is active. Zero keeps Sprint free.
-Common::Ini::Key IniConf::GameSprintEnergyCostPercent("game.sprint_energy_cost_percent", Common::Ini::KT_WORD, std::string("0"));
+// OpenNeoUA custom: one shared explicit percentage (for example 5%) of nominal
+// weapon damage converted into shooter-side energy cost for normal projectiles,
+// MGUNs and laser. A bare number is not treated as a percentage. Missing/invalid
+// preserves each weapon type's previous fallback; 0% disables configured drain.
+Common::Ini::Key IniConf::GameWeaponEnergyCost("game.weapon_energy_cost", Common::Ini::KT_WORD, std::string());
+// OpenNeoUA custom: Sprint energy cost per second. Explicit % uses maximum energy;
+// a bare value is an absolute energy amount per second. Zero keeps Sprint free.
+Common::Ini::Key IniConf::GameSprintEnergyCost("game.sprint_energy_cost", Common::Ini::KT_WORD, std::string("0"));
 // OpenNeoUA custom: application interval for continuous Sprint energy drain.
 // Zero applies the accumulated drain as soon as a whole energy unit is ready.
 Common::Ini::Key IniConf::GameSprintEnergyDrainIntervalMs("game.sprint_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
@@ -288,30 +288,31 @@ Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::
 // the Resistance campaign keeps its original presentation and start faction.
 Common::Ini::Key IniConf::GamePlayAsOtherFactions("game.play_as_other_factions", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameWeaponWeaponCollision("game.weapon_weapon_collision", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GameRoboBuildingCollisionDamagePercent("game.robo_building_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenNeoUA custom: raw max-energy percentage exchanged once when two enemy
-// non-neutral units begin a physical collision. The target's effective shield
-// reduces the final damage. Zero preserves current behavior.
-Common::Ini::Key IniConf::GameUnitEnemyCollisionDamagePercent("game.unit_enemy_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
-// OpenNeoUA custom: same shield-aware collision damage for allied non-neutral units.
-// Zero preserves current behavior.
-Common::Ini::Key IniConf::GameUnitFriendlyCollisionDamagePercent("game.unit_friendly_collision_damage_percent", Common::Ini::KT_DIGIT, (int32_t)0);
+Common::Ini::Key IniConf::GameRoboBuildingCollisionDamage("game.robo_building_collision_damage", Common::Ini::KT_WORD, std::string());
+// OpenNeoUA custom: collision damage when two enemy non-neutral units first touch.
+// Explicit % uses each target's max energy; bare value is absolute raw damage.
+// Effective shield reduces the final damage. Zero/absent preserves no extra damage.
+Common::Ini::Key IniConf::GameUnitEnemyCollisionDamage("game.unit_enemy_collision_damage", Common::Ini::KT_WORD, std::string());
+// OpenNeoUA custom: same absolute-or-% shield-aware collision damage for allied
+// non-neutral units. Zero/absent preserves no extra damage.
+Common::Ini::Key IniConf::GameUnitFriendlyCollisionDamage("game.unit_friendly_collision_damage", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: multiplier for the vanilla power-station sector energy effect.
 // game.powerstation_energy_multiplier = 1.0 keeps existing power-energy behaviour; higher values scale static and mobile recharge/drain.
 Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_energy_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenNeoUA custom: when explicitly present, replaces vanilla fall damage with a
-// shield-aware percentage of the unit's maximum energy. Missing/invalid keeps
+// OpenNeoUA custom: when explicitly present, replaces vanilla fall damage. Explicit
+// % uses maximum energy; a bare value is absolute raw damage. Missing/invalid keeps
 // the vanilla fall-damage calculation.
-Common::Ini::Key IniConf::GameFallDamagePercent("game.fall_damage_percent", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GameFallDamage("game.fall_damage", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: lethal-hit push multiplier, parsed and clamped to 0..10.
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
 // OpenNeoUA: single Hand Brake intensity for braking strength and the normalized
 // recoil/random-spread reduction. Zero disables all three effects; values above
 // one may strengthen braking while weapon modifiers remain capped at 100%.
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenNeoUA: linear per-session unit stat bonus derived from the existing 0..4 kill marks.
-// The runtime clamps the configured per-mark value and never mutates shared prototypes.
-Common::Ini::Key IniConf::GameUnitKillStatBonusPercent("game.unit_kill_stat_bonus_percent", Common::Ini::KT_WORD, std::string("0"));
+// OpenNeoUA: explicit %-only per-session unit stat bonus derived from the existing
+// 0..4 kill marks. Bare values are not interpreted as percentages. Runtime clamps
+// the configured per-mark value and never mutates shared prototypes.
+Common::Ini::Key IniConf::GameUnitKillStatBonus("game.unit_kill_stat_bonus", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
@@ -340,9 +341,9 @@ Common::Ini::Key IniConf::GamePlasmaDeathMagnetSpeed("game.plasma_death_magnet_s
 // OpenNeoUA: single-player-only Plasma currency accounting. Missing, zero or
 // invalid values keep the feature disabled and preserve the vanilla pickup.
 Common::Ini::Key IniConf::GamePlasmaCurrencyEnable("game.plasma_currency_enable", Common::Ini::KT_BOOL, false);
-// Percentage of each valid residual-plasma reward that is actually credited to
-// the global currency reserve. 100 preserves the existing currency scale.
-Common::Ini::Key IniConf::GamePlasmaCurrencyGainPercent("game.plasma_currency_gain_percent", Common::Ini::KT_WORD, std::string("100"));
+// Plasma currency gain: explicit % scales the residual value; a bare value grants
+// that fixed absolute currency amount. Default 100% preserves the existing scale.
+Common::Ini::Key IniConf::GamePlasmaCurrencyGain("game.plasma_currency_gain", Common::Ini::KT_WORD, std::string("100%"));
 // OpenNeoUA: one positional pickup sound shared by every pickup-capable vehicle.
 // An empty or unloadable sample falls back to the vanilla World.ini plasma sample.
 // Distance attenuation deliberately stays on the legacy sound path (Radius == 0).
@@ -380,15 +381,16 @@ Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_
 // throwing while Nucleus.ini is parsed. VP/interval/count default to zero, so
 // an absent or incomplete profile is fully disabled.
 Common::Ini::Key IniConf::GfxRegenFXVP("gfx.regen_fx_vp", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXVPScale("gfx.regen_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxRegenFXVPSpinX("gfx.regen_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXVPSpinY("gfx.regen_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXVPSpinZ("gfx.regen_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFX3DS("gfx.regen_fx_3ds", Common::Ini::KT_WORD, std::string(""));
+Common::Ini::Key IniConf::GfxRegenFXScale("gfx.regen_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxRegenFXSpinX("gfx.regen_fx_spin_x", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXSpinY("gfx.regen_fx_spin_y", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXSpinZ("gfx.regen_fx_spin_z", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXTint("gfx.regen_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GfxRegenFXDuration("gfx.regen_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GfxRegenFXInterval("gfx.regen_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXCount("gfx.regen_fx_count", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXRandomOffsetPercent("gfx.regen_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
+Common::Ini::Key IniConf::GfxRegenFXRandomMaxOffset("gfx.regen_fx_random_max_offset", Common::Ini::KT_WORD, std::string("25%"));
 Common::Ini::Key IniConf::GfxRegenMeshSize("gfx.regen_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxRegenMeshThickness("gfx.regen_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxRegenMeshRiseSpeed("gfx.regen_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
@@ -396,15 +398,16 @@ Common::Ini::Key IniConf::GfxRegenMeshFadeIn("gfx.regen_mesh_fade_in", Common::I
 Common::Ini::Key IniConf::GfxRegenMeshFadeOut("gfx.regen_mesh_fade_out", Common::Ini::KT_WORD, std::string("300"));
 
 Common::Ini::Key IniConf::GfxDrainFXVP("gfx.drain_fx_vp", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXVPScale("gfx.drain_fx_vp_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxDrainFXVPSpinX("gfx.drain_fx_vp_spin_x", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXVPSpinY("gfx.drain_fx_vp_spin_y", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXVPSpinZ("gfx.drain_fx_vp_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFX3DS("gfx.drain_fx_3ds", Common::Ini::KT_WORD, std::string(""));
+Common::Ini::Key IniConf::GfxDrainFXScale("gfx.drain_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
+Common::Ini::Key IniConf::GfxDrainFXSpinX("gfx.drain_fx_spin_x", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXSpinY("gfx.drain_fx_spin_y", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXSpinZ("gfx.drain_fx_spin_z", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXTint("gfx.drain_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GfxDrainFXDuration("gfx.drain_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GfxDrainFXInterval("gfx.drain_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXCount("gfx.drain_fx_count", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXRandomOffsetPercent("gfx.drain_fx_random_offset_percent", Common::Ini::KT_WORD, std::string("25"));
+Common::Ini::Key IniConf::GfxDrainFXRandomMaxOffset("gfx.drain_fx_random_max_offset", Common::Ini::KT_WORD, std::string("25%"));
 Common::Ini::Key IniConf::GfxDrainMeshSize("gfx.drain_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxDrainMeshThickness("gfx.drain_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxDrainMeshRiseSpeed("gfx.drain_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
@@ -635,18 +638,18 @@ void IniConf::Init()
         , &GameDebug
         , &GameNewDebug
         , &GameCrashDiagnostics
-        , &GameBriefingVPRender
+        , &GameBriefingModelRender
 
         , &GameNewAI
         , &GameFixedTickTankGroundPoseMult
         , &GamePlayerTankBrakeTime
         , &GamePlayerMaxAltitudeAboveGround
         , &GameAiMaxAltitudeAboveGround
-        , &GameSprintForceUpPercent
-        , &GameSprintPitchUpPercent
+        , &GameSprintForceUp
+        , &GameSprintPitchUp
         , &GameSprintRampTime
-        , &GameWeaponEnergyCostPercent
-        , &GameSprintEnergyCostPercent
+        , &GameWeaponEnergyCost
+        , &GameSprintEnergyCost
         , &GameSprintEnergyDrainIntervalMs
         , &GameTimeLine
         , &GameRoboPlayerAIBehavior
@@ -656,14 +659,14 @@ void IniConf::Init()
         , &GameSpectatorMode
         , &GamePlayAsOtherFactions
         , &GameWeaponWeaponCollision
-        , &GameRoboBuildingCollisionDamagePercent
-        , &GameUnitEnemyCollisionDamagePercent
-        , &GameUnitFriendlyCollisionDamagePercent
+        , &GameRoboBuildingCollisionDamage
+        , &GameUnitEnemyCollisionDamage
+        , &GameUnitFriendlyCollisionDamage
         , &GamePowerStationEnergyMultiplier
-        , &GameFallDamagePercent
+        , &GameFallDamage
         , &GamePushAtDeathMultiplier
         , &GameHandBrakePower
-        , &GameUnitKillStatBonusPercent
+        , &GameUnitKillStatBonus
         , &GameHandBrakeSound
         , &GameGemUnlockNewUI
         , &GameGemUnlockSound
@@ -677,7 +680,7 @@ void IniConf::Init()
         , &GamePlasmaDeathMagnetRadius
         , &GamePlasmaDeathMagnetSpeed
         , &GamePlasmaCurrencyEnable
-        , &GamePlasmaCurrencyGainPercent
+        , &GamePlasmaCurrencyGain
         , &GamePlasmaSndPickupSample
         , &GamePlasmaSndPickupVolume
         , &GamePlasmaSndPickupPitch
@@ -694,30 +697,32 @@ void IniConf::Init()
         , &GfxWorldNewHpBarLowTint
         , &GfxWorldNewHpBarEmptyTint
         , &GfxRegenFXVP
-        , &GfxRegenFXVPScale
-        , &GfxRegenFXVPSpinX
-        , &GfxRegenFXVPSpinY
-        , &GfxRegenFXVPSpinZ
+        , &GfxRegenFX3DS
+        , &GfxRegenFXScale
+        , &GfxRegenFXSpinX
+        , &GfxRegenFXSpinY
+        , &GfxRegenFXSpinZ
         , &GfxRegenFXTint
         , &GfxRegenFXDuration
         , &GfxRegenFXInterval
         , &GfxRegenFXCount
-        , &GfxRegenFXRandomOffsetPercent
+        , &GfxRegenFXRandomMaxOffset
         , &GfxRegenMeshSize
         , &GfxRegenMeshThickness
         , &GfxRegenMeshRiseSpeed
         , &GfxRegenMeshFadeIn
         , &GfxRegenMeshFadeOut
         , &GfxDrainFXVP
-        , &GfxDrainFXVPScale
-        , &GfxDrainFXVPSpinX
-        , &GfxDrainFXVPSpinY
-        , &GfxDrainFXVPSpinZ
+        , &GfxDrainFX3DS
+        , &GfxDrainFXScale
+        , &GfxDrainFXSpinX
+        , &GfxDrainFXSpinY
+        , &GfxDrainFXSpinZ
         , &GfxDrainFXTint
         , &GfxDrainFXDuration
         , &GfxDrainFXInterval
         , &GfxDrainFXCount
-        , &GfxDrainFXRandomOffsetPercent
+        , &GfxDrainFXRandomMaxOffset
         , &GfxDrainMeshSize
         , &GfxDrainMeshThickness
         , &GfxDrainMeshRiseSpeed
