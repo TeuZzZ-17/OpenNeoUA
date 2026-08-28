@@ -400,7 +400,51 @@ bool setLooseSupportedExtension(const std::string &assetPath)
     return ext == "base" || ext == "bas" ||
            ext == "sklt" || ext == "skl" ||
            ext == "ilbm" || ext == "ilb" ||
-           ext == "anm";
+           ext == "anm" || ext == "vanm";
+}
+
+std::string setLooseCanonicalFolderForExtension(const std::string &assetPath)
+{
+    const std::string ext = setLooseExtension(assetPath);
+    if ( ext == "base" || ext == "bas" )
+        return "BASE";
+    if ( ext == "sklt" || ext == "skl" )
+        return "SKLT";
+    if ( ext == "ilbm" || ext == "ilb" )
+        return "ILBM";
+    if ( ext == "anm" || ext == "vanm" )
+        return "ANM";
+    return std::string();
+}
+
+std::string setLooseCanonicalFolderForClass(const std::string &className)
+{
+    const std::string cls = setLooseLower(className);
+    if ( cls == "ilbm.class" )
+        return "ILBM";
+    if ( cls == "sklt.class" )
+        return "SKLT";
+    if ( cls == "bmpanim.class" )
+        return "ANM";
+    return std::string();
+}
+
+std::string setLooseCanonicalAssetPath(const std::string &assetPath)
+{
+    const std::string folder = setLooseCanonicalFolderForExtension(assetPath);
+    const std::string fileName = setLooseFileName(assetPath);
+    if ( folder.empty() || fileName.empty() )
+        return std::string();
+    return folder + "/" + fileName;
+}
+
+std::string setLooseCanonicalEmrsAssetPath(const std::string &className, const std::string &assetPath)
+{
+    const std::string folder = setLooseCanonicalFolderForClass(className);
+    const std::string fileName = setLooseFileName(assetPath);
+    if ( folder.empty() || fileName.empty() )
+        return std::string();
+    return folder + "/" + fileName;
 }
 
 bool set46RootPrefixActive()
@@ -1217,19 +1261,21 @@ bool IFFile::FindSetLooseOverride(const std::string &filename, const std::string
     if ( assetPath.find(':') != std::string::npos )
         return false;
 
-    if ( !setLooseEnsureReport(setId) )
+    const std::string canonicalAsset = setLooseCanonicalAssetPath(assetPath);
+    if ( canonicalAsset.empty() || !setLooseEnsureReport(setId) )
         return false;
 
-    std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
-    std::string originalPath = looseRoot + assetPath;
-    std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
+    const std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
+    const std::string originalPath = looseRoot + canonicalAsset;
+    const std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
     std::string originalOpenPath;
     std::string legacyOpenPath;
-    bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
-    bool legacyExists = setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
+    const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
+    const bool legacyExists = legacyPath != setLooseNormalizeSlashes(originalPath) &&
+                              setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     setLooseAddLookup(setId,
-                      assetPath,
+                      canonicalAsset,
                       originalPath,
                       originalExists,
                       legacyPath,
@@ -1237,43 +1283,38 @@ bool IFFile::FindSetLooseOverride(const std::string &filename, const std::string
                       sourceFunction,
                       false);
 
-    struct Candidate
+    std::string resolvedPath = originalExists ? originalOpenPath : legacyOpenPath;
+    std::string extensionForm = originalExists ? "canonical Runtime Loose path" : "canonical Runtime Loose path, legacy 3-letter extension";
+    if ( !originalExists && !legacyExists )
     {
-        std::string path;
-        std::string extensionForm;
-        bool exists = false;
-    };
-
-    std::vector<Candidate> candidates;
-    candidates.push_back({originalExists ? originalOpenPath : originalPath,
-                          "original requested extension form",
-                          originalExists});
-
-    if ( legacyPath != setLooseNormalizeSlashes(originalPath) )
-        candidates.push_back({legacyExists ? legacyOpenPath : legacyPath,
-                              "legacy 3-letter extension form",
-                              legacyExists});
-
-    for (const Candidate &candidate : candidates)
-    {
-        if ( candidate.exists )
-        {
-            if (out)
-            {
-                out->active = true;
-                out->setId = setId;
-                out->requested = assetPath;
-                out->resolvedPath = candidate.path;
-                out->extensionForm = candidate.extensionForm;
-                out->vanillaPath = setLooseNormalizeSlashes(uaSetDirectoryResolvedReadPath(filename));
-                out->embedded = false;
-                out->sourceFunction = sourceFunction ? sourceFunction : "IFFile::UAOpenFileWithSetLooseOverride";
-            }
-            return true;
-        }
+        const std::string oldOriginal = looseRoot + assetPath;
+        const std::string oldLegacy = setLooseNormalizeSlashes(correctSeparatorAndExt(oldOriginal));
+        std::string oldOriginalOpen;
+        std::string oldLegacyOpen;
+        const bool oldOriginalExists = oldOriginal != originalPath &&
+                                       setLooseResolveReadableFile(oldOriginal, &oldOriginalOpen);
+        const bool oldLegacyExists = oldLegacy != legacyPath && oldLegacy != oldOriginal &&
+                                     setLooseResolveReadableFile(oldLegacy, &oldLegacyOpen);
+        setLooseAddLookup(setId, assetPath, oldOriginal, oldOriginalExists, oldLegacy,
+                          oldLegacyExists, sourceFunction, false);
+        if ( !oldOriginalExists && !oldLegacyExists )
+            return false;
+        resolvedPath = oldOriginalExists ? oldOriginalOpen : oldLegacyOpen;
+        extensionForm = "legacy pre-canonical Runtime Loose path";
     }
 
-    return false;
+    if (out)
+    {
+        out->active = true;
+        out->setId = setId;
+        out->requested = assetPath;
+        out->resolvedPath = resolvedPath;
+        out->extensionForm = extensionForm;
+        out->vanillaPath = setLooseNormalizeSlashes(uaSetDirectoryResolvedReadPath(filename));
+        out->embedded = false;
+        out->sourceFunction = sourceFunction ? sourceFunction : "IFFile::UAOpenFileWithSetLooseOverride";
+    }
+    return true;
 }
 
 bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction)
@@ -1296,19 +1337,21 @@ bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std
     if ( assetPath.find(':') != std::string::npos )
         return false;
 
-    if ( !setLooseEnsureReport(setId) )
+    const std::string canonicalAsset = setLooseCanonicalAssetPath(assetPath);
+    if ( canonicalAsset.empty() || !setLooseEnsureReport(setId) )
         return false;
 
-    std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
-    std::string originalPath = looseRoot + assetPath;
-    std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
+    const std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
+    const std::string originalPath = looseRoot + canonicalAsset;
+    const std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
     std::string originalOpenPath;
     std::string legacyOpenPath;
-    bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
-    bool legacyExists = setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
+    const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
+    const bool legacyExists = legacyPath != setLooseNormalizeSlashes(originalPath) &&
+                              setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     setLooseAddLookup(setId,
-                      assetPath,
+                      canonicalAsset,
                       originalPath,
                       originalExists,
                       legacyPath,
@@ -1316,42 +1359,37 @@ bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std
                       sourceFunction,
                       true);
 
-    struct Candidate
+    std::string resolvedPath = originalExists ? originalOpenPath : legacyOpenPath;
+    std::string extensionForm = originalExists ? "canonical Runtime Loose embedded path" : "canonical Runtime Loose embedded path, legacy 3-letter extension";
+    if ( !originalExists && !legacyExists )
     {
-        std::string path;
-        std::string extensionForm;
-        bool exists = false;
-    };
-
-    std::vector<Candidate> candidates;
-    candidates.push_back({originalExists ? originalOpenPath : originalPath,
-                          "original requested extension form",
-                          originalExists});
-
-    if ( legacyPath != setLooseNormalizeSlashes(originalPath) )
-        candidates.push_back({legacyExists ? legacyOpenPath : legacyPath,
-                              "legacy 3-letter extension form",
-                              legacyExists});
-
-    for (const Candidate &candidate : candidates)
-    {
-        if ( candidate.exists )
-        {
-            if (out)
-            {
-                out->active = true;
-                out->setId = setId;
-                out->requested = assetPath;
-                out->resolvedPath = candidate.path;
-                out->extensionForm = candidate.extensionForm;
-                out->embedded = true;
-                out->sourceFunction = sourceFunction ? sourceFunction : "IFFile::UAOpenFileWithSetLooseEmbeddedOverride";
-            }
-            return true;
-        }
+        const std::string oldOriginal = looseRoot + assetPath;
+        const std::string oldLegacy = setLooseNormalizeSlashes(correctSeparatorAndExt(oldOriginal));
+        std::string oldOriginalOpen;
+        std::string oldLegacyOpen;
+        const bool oldOriginalExists = oldOriginal != originalPath &&
+                                       setLooseResolveReadableFile(oldOriginal, &oldOriginalOpen);
+        const bool oldLegacyExists = oldLegacy != legacyPath && oldLegacy != oldOriginal &&
+                                     setLooseResolveReadableFile(oldLegacy, &oldLegacyOpen);
+        setLooseAddLookup(setId, assetPath, oldOriginal, oldOriginalExists, oldLegacy,
+                          oldLegacyExists, sourceFunction, true);
+        if ( !oldOriginalExists && !oldLegacyExists )
+            return false;
+        resolvedPath = oldOriginalExists ? oldOriginalOpen : oldLegacyOpen;
+        extensionForm = "legacy pre-canonical Runtime Loose embedded path";
     }
 
-    return false;
+    if (out)
+    {
+        out->active = true;
+        out->setId = setId;
+        out->requested = assetPath;
+        out->resolvedPath = resolvedPath;
+        out->extensionForm = extensionForm;
+        out->embedded = true;
+        out->sourceFunction = sourceFunction ? sourceFunction : "IFFile::UAOpenFileWithSetLooseEmbeddedOverride";
+    }
+    return true;
 }
 
 bool IFFile::FindSetLooseVisprotoListOverride(const std::string &mode, SetLooseOverride *out, const char *sourceFunction)
@@ -1418,40 +1456,30 @@ bool IFFile::FindSetLooseBaseObjectOverride(const std::string &objectName, const
         return false;
 
     const std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
-
     struct CandidateGroup
     {
-        std::string folder;
-        std::string label;
+        const char *folder;
+        const char *label;
     };
-
     const CandidateGroup groups[] = {
-        {"Base", "BASE object override (Base folder)"},
-        // OpenNeoUAStudio currently exports the companion BASE beside the SKLT.
-        {"Skeleton", "BASE object override (Skeleton folder compatibility)"}
+        {"BASE", "BASE object override (canonical BASE folder)"},
+        {"Base", "BASE object override (legacy Base folder)"},
+        {"Skeleton", "BASE object override (legacy Skeleton folder)"}
     };
 
     for (const CandidateGroup &group : groups)
     {
-        const std::string requested = group.folder + "/" + cleanName + ".BASE";
+        const std::string requested = std::string(group.folder) + "/" + cleanName + ".BASE";
         const std::string originalCandidate = looseRoot + requested;
         const std::string legacyCandidate = setLooseNormalizeSlashes(correctSeparatorAndExt(originalCandidate));
-
         std::string originalOpenPath;
         std::string legacyOpenPath;
         const bool originalExists = setLooseResolveReadableFile(originalCandidate, &originalOpenPath);
         const bool legacyExists = legacyCandidate != setLooseNormalizeSlashes(originalCandidate) &&
                                   setLooseResolveReadableFile(legacyCandidate, &legacyOpenPath);
 
-        setLooseAddLookup(setId,
-                          requested,
-                          originalCandidate,
-                          originalExists,
-                          legacyCandidate,
-                          legacyExists,
-                          sourceFunction,
-                          true);
-
+        setLooseAddLookup(setId, requested, originalCandidate, originalExists,
+                          legacyCandidate, legacyExists, sourceFunction, true);
         if ( !originalExists && !legacyExists )
             continue;
 
@@ -1493,82 +1521,75 @@ bool IFFile::FindSetLooseEmrsOverride(const std::string &filename, const std::st
     if ( assetPath.find(':') != std::string::npos )
         return false;
 
-    if ( !setLooseEnsureReport(setId) )
+    const std::string canonicalAsset = setLooseCanonicalEmrsAssetPath(className, assetPath);
+    if ( canonicalAsset.empty() || !setLooseEnsureReport(setId) )
         return false;
 
-    std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
+    const std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
+    const std::string originalPath = looseRoot + canonicalAsset;
+    const std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
+    std::string originalOpenPath;
+    std::string legacyOpenPath;
+    const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
+    const bool legacyExists = legacyPath != setLooseNormalizeSlashes(originalPath) &&
+                              setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     g_setLooseReports[setId].emrsResourcesChecked++;
+    setLooseAddLookup(setId,
+                      canonicalAsset,
+                      originalPath,
+                      originalExists,
+                      legacyPath,
+                      legacyExists,
+                      sourceFunction,
+                      true);
 
-    struct Candidate
+    std::string resolvedPath = originalExists ? originalOpenPath : legacyOpenPath;
+    std::string extensionForm = originalExists ? "canonical Runtime Loose EMRS path" : "canonical Runtime Loose EMRS path, legacy 3-letter extension";
+    if ( !originalExists && !legacyExists )
     {
-        std::string path;
-        std::string extensionForm;
-        bool exists = false;
-    };
+        std::vector<std::string> oldRelativeCandidates;
+        if ( setLooseLower(className) == "ilbm.class" )
+            oldRelativeCandidates.push_back("Texture/" + assetPath);
+        oldRelativeCandidates.push_back(assetPath);
 
-    std::vector<Candidate> candidates;
-    const bool isTexture = setLooseLower(className) == "ilbm.class";
-    const std::string candidatePrefixes[] = {
-        isTexture ? "Texture/" : "",
-        ""
-    };
-
-    for (size_t prefixIndex = 0; prefixIndex < 2; ++prefixIndex)
-    {
-        const std::string &prefix = candidatePrefixes[prefixIndex];
-        if ( prefixIndex == 1 && prefix.empty() && !isTexture )
-            break;
-
-        const std::string originalPath = looseRoot + prefix + assetPath;
-        const std::string legacyPath = setLooseNormalizeSlashes(correctSeparatorAndExt(originalPath));
-        std::string originalOpenPath;
-        std::string legacyOpenPath;
-        const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
-        const bool legacyExists = setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
-        const std::string locationLabel = prefix.empty() ? "legacy Loose root" : "Texture folder";
-
-        setLooseAddLookup(setId,
-                          prefix + assetPath,
-                          originalPath,
-                          originalExists,
-                          legacyPath,
-                          legacyExists,
-                          sourceFunction,
-                          true);
-
-        candidates.push_back({originalExists ? originalOpenPath : originalPath,
-                              locationLabel + ", original requested extension form",
-                              originalExists});
-
-        if ( legacyPath != setLooseNormalizeSlashes(originalPath) )
-            candidates.push_back({legacyExists ? legacyOpenPath : legacyPath,
-                                  locationLabel + ", legacy 3-letter extension form",
-                                  legacyExists});
-    }
-
-    for (const Candidate &candidate : candidates)
-    {
-        if ( candidate.exists )
+        for (const std::string &oldRelative : oldRelativeCandidates)
         {
-            if (out)
+            const std::string oldOriginal = looseRoot + oldRelative;
+            const std::string oldLegacy = setLooseNormalizeSlashes(correctSeparatorAndExt(oldOriginal));
+            std::string oldOriginalOpen;
+            std::string oldLegacyOpen;
+            const bool oldOriginalExists = oldOriginal != originalPath &&
+                                           setLooseResolveReadableFile(oldOriginal, &oldOriginalOpen);
+            const bool oldLegacyExists = oldLegacy != legacyPath && oldLegacy != oldOriginal &&
+                                         setLooseResolveReadableFile(oldLegacy, &oldLegacyOpen);
+            setLooseAddLookup(setId, oldRelative, oldOriginal, oldOriginalExists, oldLegacy,
+                              oldLegacyExists, sourceFunction, true);
+            if ( oldOriginalExists || oldLegacyExists )
             {
-                out->active = true;
-                out->setId = setId;
-                out->requested = assetPath;
-                out->resolvedPath = candidate.path;
-                out->extensionForm = candidate.extensionForm;
-                out->embedded = true;
-                out->sourceFunction = sourceFunction ? sourceFunction : "NC_STACK_embed::LoadingFromIFF";
-                out->emrs = true;
-                out->emrsClass = className;
-                out->embeddedPayload = payload;
+                resolvedPath = oldOriginalExists ? oldOriginalOpen : oldLegacyOpen;
+                extensionForm = "legacy pre-canonical Runtime Loose EMRS path";
+                break;
             }
-            return true;
         }
+        if ( resolvedPath.empty() )
+            return false;
     }
 
-    return false;
+    if (out)
+    {
+        out->active = true;
+        out->setId = setId;
+        out->requested = assetPath;
+        out->resolvedPath = resolvedPath;
+        out->extensionForm = extensionForm;
+        out->embedded = true;
+        out->sourceFunction = sourceFunction ? sourceFunction : "NC_STACK_embed::LoadingFromIFF";
+        out->emrs = true;
+        out->emrsClass = className;
+        out->embeddedPayload = payload;
+    }
+    return true;
 }
 
 bool IFFile::FindSetLooseEmrsPngOverride(const std::string &filename, const std::string &mode, const std::string &className, const std::string &payload, SetLooseOverride *out, const char *sourceFunction, size_t currentOffset)
@@ -1578,10 +1599,7 @@ bool IFFile::FindSetLooseEmrsPngOverride(const std::string &filename, const std:
     if (out)
         *out = SetLooseOverride();
 
-    if ( !setLooseIsReadMode(mode) )
-        return false;
-
-    if ( setLooseLower(className) != "ilbm.class" )
+    if ( !setLooseIsReadMode(mode) || setLooseLower(className) != "ilbm.class" )
         return false;
 
     int32_t setId = setLooseCurrentSetId();
@@ -1596,45 +1614,42 @@ bool IFFile::FindSetLooseEmrsPngOverride(const std::string &filename, const std:
     if ( assetPath.find(':') != std::string::npos )
         return false;
 
-    std::string assetBase = setLooseLower(setLooseFileName(assetPath));
+    const std::string assetFile = setLooseFileName(assetPath);
+    const std::string assetBase = setLooseLower(assetFile);
     if ( assetBase == "fx1.ilbm" || assetBase == "fx1.ilb" ||
          assetBase == "fx2.ilbm" || assetBase == "fx2.ilb" ||
          assetBase == "fx3.ilbm" || assetBase == "fx3.ilb" )
         return false;
 
-    std::string ext = setLooseExtension(assetPath);
+    const std::string ext = setLooseExtension(assetFile);
     if ( ext != "ilbm" && ext != "ilb" )
         return false;
 
     if ( !setLooseEnsureReport(setId) )
         return false;
 
-    std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
-
-    struct Candidate
-    {
-        std::string path;
-        std::string locationLabel;
+    const std::string looseRoot = "Data/Set" + std::to_string(setId) + "/Loose/";
+    const std::string canonicalUpper = "ILBM/" + setLooseReplaceExtension(assetFile, ".PNG");
+    const std::string canonicalLower = "ILBM/" + setLooseReplaceExtension(assetFile, ".png");
+    std::vector<std::pair<std::string, std::string>> relativeCandidates = {
+        {canonicalUpper, "canonical ILBM folder"},
+        {canonicalLower, "canonical ILBM folder"},
+        {"Texture/" + setLooseReplaceExtension(assetPath, ".PNG"), "legacy Texture folder"},
+        {"Texture/" + setLooseReplaceExtension(assetPath, ".png"), "legacy Texture folder"},
+        {setLooseReplaceExtension(assetPath, ".PNG"), "legacy Loose root"},
+        {setLooseReplaceExtension(assetPath, ".png"), "legacy Loose root"}
     };
 
-    std::vector<Candidate> candidates;
-    const std::string candidatePrefixes[] = {"Texture/", ""};
-
-    for (const std::string &prefix : candidatePrefixes)
+    std::set<std::string> seen;
+    for (const auto &candidate : relativeCandidates)
     {
-        const std::string upperCandidate = looseRoot + prefix + setLooseReplaceExtension(assetPath, ".PNG");
-        const std::string lowerCandidate = looseRoot + prefix + setLooseReplaceExtension(assetPath, ".png");
-        const std::string locationLabel = prefix.empty() ? "legacy Loose root" : "Texture folder";
+        const std::string fullPath = looseRoot + candidate.first;
+        const std::string key = setLooseLower(setLooseNormalizeSlashes(fullPath));
+        if ( !seen.insert(key).second )
+            continue;
 
-        candidates.push_back({upperCandidate, locationLabel});
-        if ( setLooseNormalizeSlashes(lowerCandidate) != setLooseNormalizeSlashes(upperCandidate) )
-            candidates.push_back({lowerCandidate, locationLabel});
-    }
-
-    for (const Candidate &candidate : candidates)
-    {
         std::string openPath;
-        if ( setLooseResolveReadableFile(candidate.path, &openPath) )
+        if ( setLooseResolveReadableFile(fullPath, &openPath) )
         {
             if (out)
             {
@@ -1642,7 +1657,7 @@ bool IFFile::FindSetLooseEmrsPngOverride(const std::string &filename, const std:
                 out->setId = setId;
                 out->requested = assetPath;
                 out->resolvedPath = openPath;
-                out->extensionForm = "PNG texture override (" + candidate.locationLabel + ")";
+                out->extensionForm = "PNG texture override (" + candidate.second + ")";
                 out->embedded = true;
                 out->sourceFunction = sourceFunction ? sourceFunction : "NC_STACK_embed::LoadingFromIFF";
                 out->emrs = true;
