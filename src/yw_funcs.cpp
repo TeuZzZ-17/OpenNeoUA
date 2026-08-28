@@ -955,9 +955,9 @@ static SetLooseVisprotoCandidate LoadSetLooseVisprotoCandidate()
                                           result.errorToken.c_str(),
                                           result.errorReason.c_str());
         IFFile::ReportSetLooseOverrideFailed(candidate.overrideInfo, reason);
-        ypa_log_out("VP table: loose override invalid at slot %zu, falling back to embedded visproto.base.\n",
+        ypa_log_out("VP table: loose override invalid at slot %zu, falling back to Scripts/VISPROTO.LST.\n",
                     result.errorSlot);
-        ypa_log_out("WARNING: OpenNeoUA SET loose VISPROTO rejected for Set %d (%s): %s; standard VISPROTO fallback retained.\n",
+        ypa_log_out("WARNING: OpenNeoUA SET loose VISPROTO rejected for Set %d (%s): %s; Scripts/VISPROTO.LST fallback retained.\n",
                     candidate.overrideInfo.setId,
                     candidate.overrideInfo.resolvedPath.c_str(),
                     reason.c_str());
@@ -1006,104 +1006,83 @@ NC_STACK_base *load_set_base()
     NC_STACK_base *base = NC_STACK_base::LoadBaseFromFile("rsrc:objects/set.base");
     SetLooseVisprotoCandidate looseVisproto = LoadSetLooseVisprotoCandidate();
 
+    const bool usingLooseVisproto = looseVisproto.base != NULL;
+    NC_STACK_base *visproto = looseVisproto.base;
+    looseVisproto.base = NULL;
+
+    if ( !visproto )
+    {
+        ypa_log_out("VP table: no usable Loose/VISPROTO.LST, trying Scripts/VISPROTO.LST.\n");
+        visproto = sub_44AD8C("rsrc:scripts/visproto.lst");
+    }
+
+    if ( !visproto )
+    {
+        ypa_log_out("init: no usable VISPROTO.LST; embedded visproto.base is intentionally not used.\n");
+        if ( base )
+            base->Delete();
+        return NULL;
+    }
+
     if ( base )
     {
-        if ( looseVisproto.base )
+        if ( !ReplaceSetVisproto(base, visproto) )
         {
-            if ( ReplaceSetVisproto(base, looseVisproto.base) )
-            {
-                ReportSetLooseVisprotoUsed(looseVisproto);
-                looseVisproto.base = NULL;
-            }
-            else
-            {
-                looseVisproto.base->Delete();
-                looseVisproto.base = NULL;
-                const std::string reason = "loaded SET has no embedded VISPROTO child to replace";
-                IFFile::ReportSetLooseOverrideFailed(looseVisproto.overrideInfo, reason);
-                ypa_log_out("WARNING: OpenNeoUA SET loose VISPROTO rejected for Set %d (%s): %s; loaded SET retained.\n",
-                            looseVisproto.overrideInfo.setId,
-                            looseVisproto.overrideInfo.resolvedPath.c_str(),
-                            reason.c_str());
-                ypa_log_out("VP table: using embedded visproto.base.\n");
-            }
+            visproto->Delete();
+            base->Delete();
+            ypa_log_out("init: loaded SET has no VISPROTO child to replace; refusing embedded visproto.base fallback.\n");
+            return NULL;
         }
+
+        if ( usingLooseVisproto )
+            ReportSetLooseVisprotoUsed(looseVisproto);
         else
-        {
-            ypa_log_out("VP table: using embedded visproto.base.\n");
-        }
+            ypa_log_out("VP table: using Scripts/VISPROTO.LST.\n");
 
         return base;
     }
 
+    ypa_log_out("init: no set.base, trying fragment load.\n");
+
+    base = Nucleus::CInit<NC_STACK_base>();
     if ( !base )
     {
-        ypa_log_out("init: no set.base, trying fragment load.\n");
-
-        base = Nucleus::CInit<NC_STACK_base>();
-        if ( base )
-        {
-            const bool usingLooseVisproto = looseVisproto.base != NULL;
-            bool usingEmbeddedVisproto = false;
-            bool usingLegacyVisproto = false;
-            NC_STACK_base *visproto = looseVisproto.base;
-            looseVisproto.base = NULL;
-
-            if ( !visproto )
-            {
-                visproto = NC_STACK_base::LoadBaseFromFile("rsrc:objects/visproto.base");
-                usingEmbeddedVisproto = visproto != NULL;
-            }
-            if ( !visproto )
-            {
-                ypa_log_out("init: no visproto.base, trying single load.\n");
-                visproto = sub_44AD8C("rsrc:scripts/visproto.lst");
-                usingLegacyVisproto = visproto != NULL;
-            }
-            if ( !visproto )
-            {
-                base->Delete();
-                return NULL;
-            }
-            base->AddKid(visproto);
-
-            NC_STACK_base *lego = NC_STACK_base::LoadBaseFromFile("rsrc:objects/lego.base");
-            if ( !lego )
-            {
-                ypa_log_out("init: no lego.base, trying single load.\n");
-                lego = sub_44AD8C("rsrc:scripts/set.sdf");
-            }
-            if ( !lego )
-            {
-                base->Delete();
-                return NULL;
-            }
-            base->AddKid(lego);
-
-            NC_STACK_base *slurp = NC_STACK_base::LoadBaseFromFile("rsrc:objects/slurp.base");
-            if ( !slurp )
-            {
-                ypa_log_out("init: no slurp.base, trying single load.\n");
-                slurp = sub_44AD8C("rsrc:scripts/slurps.lst");
-            }
-            if ( !slurp )
-            {
-                base->Delete();
-                return NULL;
-            }
-            base->AddKid(slurp);
-
-            if ( usingLooseVisproto )
-                ReportSetLooseVisprotoUsed(looseVisproto);
-            else if ( usingEmbeddedVisproto )
-                ypa_log_out("VP table: using embedded visproto.base.\n");
-            else if ( usingLegacyVisproto )
-                ypa_log_out("VP table: using legacy scripts/visproto.lst fallback.\n");
-        }
+        visproto->Delete();
+        return NULL;
     }
 
-    if ( looseVisproto.base )
-        looseVisproto.base->Delete();
+    base->AddKid(visproto);
+
+    NC_STACK_base *lego = NC_STACK_base::LoadBaseFromFile("rsrc:objects/lego.base");
+    if ( !lego )
+    {
+        ypa_log_out("init: no lego.base, trying single load.\n");
+        lego = sub_44AD8C("rsrc:scripts/set.sdf");
+    }
+    if ( !lego )
+    {
+        base->Delete();
+        return NULL;
+    }
+    base->AddKid(lego);
+
+    NC_STACK_base *slurp = NC_STACK_base::LoadBaseFromFile("rsrc:objects/slurp.base");
+    if ( !slurp )
+    {
+        ypa_log_out("init: no slurp.base, trying single load.\n");
+        slurp = sub_44AD8C("rsrc:scripts/slurps.lst");
+    }
+    if ( !slurp )
+    {
+        base->Delete();
+        return NULL;
+    }
+    base->AddKid(slurp);
+
+    if ( usingLooseVisproto )
+        ReportSetLooseVisprotoUsed(looseVisproto);
+    else
+        ypa_log_out("VP table: using Scripts/VISPROTO.LST.\n");
 
     return base;
 }
