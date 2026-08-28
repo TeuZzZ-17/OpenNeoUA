@@ -2467,10 +2467,10 @@ bool NC_STACK_ypaworld::HandleArtilleryShellMapClick()
         bool readyNow = false;
         if ( artilleryShell->CanManualArtilleryShell(target, &wid, &readyNow) )
         {
-            // Target is valid (range + radar + manual-call). Fire now if the artillery shell
-            // is ready, otherwise queue it: it fires when the cooldown elapses. Either
-            // way the map zone appears (faction colour from active shells, or disabled
-            // grey from the pending marker drawn by UpdateArtilleryShell).
+            // Target is valid (range + radar + manual-call). Fire now only if the
+            // platform is idle and off cooldown. If a barrage is already active or
+            // cooling down, queue this as the single future area: the current barrage
+            // stays locked to its original target and the queued ring remains grey.
             if ( readyNow )
                 artilleryShell->StartArtilleryShellBarrage(target);
             else

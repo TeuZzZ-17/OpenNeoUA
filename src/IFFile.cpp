@@ -1698,9 +1698,6 @@ bool IFFile::FindSetHiEffectPngOverride(const std::string &filename, const std::
          assetBaseLower != "fx3.ilbm" && assetBaseLower != "fx3.ilb" )
         return false;
 
-    if ( !setLooseEnsureReport(setId) )
-        return false;
-
     std::string setRoot = "Data/Set" + std::to_string(setId) + "/";
     std::vector<std::string> candidates;
     candidates.push_back(setRoot + setLooseReplaceExtension(assetPath, ".PNG"));
@@ -2367,34 +2364,6 @@ std::string IFFile::readStr(int maxSz)
     delete[] bf;
     return tmp;
 }
-
-std::string IFFile::PeekNextChunkLabel()
-{
-    if ( !file_handle.OK() )
-        return "unknown";
-
-    size_t pos = file_handle.tell();
-    uint32_t tag = file_handle.readU32B();
-    file_handle.readU32B();
-
-    if ( file_handle.readErr() )
-    {
-        file_handle.seek((long int)pos, SEEK_SET);
-        return "unknown";
-    }
-
-    std::string label = setLooseTagToString(tag);
-    if ( tag == TAG_FORM )
-    {
-        uint32_t ext = file_handle.readU32B();
-        if ( !file_handle.readErr() )
-            label += " " + setLooseTagToString(ext);
-    }
-
-    file_handle.seek((long int)pos, SEEK_SET);
-    return label;
-}
-
 
 bool IFFile::eof() const
 {

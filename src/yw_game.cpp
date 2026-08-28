@@ -8790,10 +8790,10 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
         _debugAoeRings.erase(_debugAoeRings.begin());
 }
 
-// OpenNeoUA custom: register/refresh an artillery shell map zone. Active zones are tied
-// to the firing platform + target centre, so shells still in flight may keep more than one
-// genuine bombardment zone visible after a redirect. Pending cooldown orders are unique per
-// platform: retargeting moves that one pending ring instead of leaving stale copies behind.
+// OpenNeoUA custom: register/refresh an artillery shell map zone. A firing cycle keeps
+// one immutable active target centre per platform. Pending follow-up orders are also unique
+// per platform: retargeting moves that one disabled-grey pending ring instead of creating
+// another active bombardment zone.
 void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, bool pending, int lingerMs)
 {
     if ( radius < 0.01f )

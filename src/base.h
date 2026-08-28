@@ -234,7 +234,6 @@ protected:
 
 public:
     static NC_STACK_base *LoadBaseFromFile(const std::string &fname);
-    static NC_STACK_base *LoadBaseFromFileVanilla(const std::string &fname);
 
 
 public:
