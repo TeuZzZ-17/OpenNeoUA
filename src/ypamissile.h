@@ -56,7 +56,8 @@ public:
     int SetupArtilleryShell(const vec3d &startPos, const vec3d &targetPos,
                             float arcHeight, float shellSpeed, bool impactOnSurface);
     int SetupArtilleryShellVerticalBarrage(const vec3d &startPos, const vec3d &targetPos,
-                                           int fallDelay, float fallHeight, float verticalSpeed, bool impactOnSurface);
+                                           int fallDelay, float fallHeight, float verticalSpeed,
+                                           float spreadX, float spreadZ, bool impactOnSurface);
     virtual void DetonateAtContact(NC_STACK_ypabact *directHit);
     virtual void DetonateKamikazePayload(NC_STACK_ypabact *directHit);
     virtual void AlignMissile(float dtime = 0.0);
@@ -270,6 +271,7 @@ protected:
     bool  _artilleryShellImpactOnSurface = false;
     bool  _artilleryShellVerticalBarrage = false;
     bool  _artilleryShellVerticalTransferred = false;
+    vec3d _artilleryShellVerticalApexOffset;
     int   _artilleryShellVerticalAscentTime = 0;
     int   _artilleryShellVerticalFallStartTime = 0;
     int   _artilleryShellVerticalDescentTime = 0;

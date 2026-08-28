@@ -1090,6 +1090,8 @@ struct TWeapProto
     int   artillery_shell_barrage_cooldown = 10000; // ms cooldown after a barrage ends
     float artillery_shell_arc_height = 2500.0;      // extra ballistic arc height / vertical barrage ascent height (engine units)
     float artillery_shell_speed = 0.0;              // artillery trajectory speed; <=0 keeps the legacy-safe internal timing fallback
+    float artillery_shell_vertical_spread_x = 0.0;  // vertical_barrage only: random ascent tilt toward +/- world X, in degrees
+    float artillery_shell_vertical_spread_z = 0.0;  // vertical_barrage only: random ascent tilt toward +/- world Z, in degrees
     int   artillery_shell_airburst = 1;             // 1 = explode at the target height; 0 = land on the real terrain height at the shell's own impact point
     NC_STACK_skeleton *wireframe = NULL;
     IDVList initParams;
