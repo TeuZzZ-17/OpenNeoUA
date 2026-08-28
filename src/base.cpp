@@ -855,15 +855,6 @@ static NC_STACK_base *LoadBaseFromIFFFile(IFFile *mfile)
     return result;
 }
 
-NC_STACK_base *NC_STACK_base::LoadBaseFromFileVanilla(const std::string &fname)
-{
-    IFFile mfile = IFFile::UAOpenIFFileVanilla(fname, "rb");
-    if ( !mfile.OK() )
-        return NULL;
-
-    return LoadBaseFromIFFFile(&mfile);
-}
-
 NC_STACK_base *NC_STACK_base::LoadBaseFromFile(const std::string &fname)
 {
     std::string scanName = fname;

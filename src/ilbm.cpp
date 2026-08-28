@@ -966,13 +966,14 @@ rsrc * NC_STACK_ilbm::rsrc_func64(IDVList &stak)
 
     if ( reassignName )
     {
+        IDVList hiStak = stak;
+        if ( mfile )
+            hiStak.Add(BMD_ATT_CONVCOLOR, (int32_t)1);
+
         IFFile::SetLooseOverride pngOverrideInfo;
         if ( IFFile::FindSetHiEffectPngOverride(reassignName, "rb", &pngOverrideInfo, "NC_STACK_ilbm::rsrc_func64") )
         {
-            if ( mfile )
-                stak.Add(BMD_ATT_CONVCOLOR, (int32_t)1);
-
-            rsrc *pngRes = ILBM_ReadPngOverride(this, stak, pngOverrideInfo.resolvedPath, 1);
+            rsrc *pngRes = ILBM_ReadPngOverride(this, hiStak, pngOverrideInfo.resolvedPath, 1);
             if ( pngRes )
             {
                 IFFile::ReportSetLooseOverrideUsed(pngOverrideInfo);
@@ -986,14 +987,21 @@ rsrc * NC_STACK_ilbm::rsrc_func64(IDVList &stak)
             IFFile::ReportSetLooseOverrideFailed(pngOverrideInfo, "HI PNG effect override existed but failed to load; HI ILBM fallback used.");
         }
 
+        rsrc *replacement = ILBM_ReadOpenedOrVanilla(this, hiStak, reassignName, 1);
+        if ( replacement )
+        {
+            if ( mfile )
+                ILBM_SkipEmbeddedChunk(mfile);
+            return replacement;
+        }
+
         if ( mfile )
         {
             stak.Add(BMD_ATT_CONVCOLOR, (int32_t)1);
-
-            ILBM_SkipEmbeddedChunk(mfile);
+            return READ_ILBM(stak, mfile, 0);
         }
 
-        return ILBM_ReadOpenedOrVanilla(this, stak, reassignName, 1);
+        return NULL;
     }
     else
     {
