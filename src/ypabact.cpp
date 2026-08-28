@@ -10445,6 +10445,8 @@ static bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, con
         flight = shell->SetupArtilleryShellVerticalBarrage(
             launchPos, landing, wproto.artillery_shell_fall_delay,
             wproto.artillery_shell_arc_height, wproto.artillery_shell_speed,
+            wproto.artillery_shell_vertical_spread_x,
+            wproto.artillery_shell_vertical_spread_z,
             !wproto.artillery_shell_airburst);
     }
     else
@@ -10477,6 +10479,26 @@ static bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, con
         world->AddArtilleryShellMarker(targetCenter, wproto.artillery_shell_barrage_radius, unit->_owner, unit->_gid, false, flight);
 
     return true;
+}
+
+// Queue/replace the next artillery target while the platform is unavailable. Manual
+// orders and automatic target acquisition intentionally share this one pending state, so
+// each artillery platform can advertise exactly one future strike during cooldown.
+static void ypabact_QueueArtilleryShellTarget(NC_STACK_ypabact *unit, const World::TWeapProto &wproto,
+                                               const vec3d &targetPos)
+{
+    if ( !unit )
+        return;
+
+    unit->_artillery_shell_pending_target = targetPos;
+    unit->_artillery_shell_has_pending = true;
+
+    NC_STACK_ypaworld *world = unit->getBACT_pWorld();
+    if ( world && wproto.artillery_shell_barrage_radius > 0.0 )
+    {
+        world->AddArtilleryShellMarker(targetPos, wproto.artillery_shell_barrage_radius,
+                                       unit->_owner, unit->_gid, true, 1000);
+    }
 }
 
 // Fire one shell at the unit's current artillery shell target, then advance the shared shot
@@ -10553,9 +10575,9 @@ void NC_STACK_ypabact::UpdateArtilleryShell(update_msg *arg)
         return;
     }
 
-    // Pending manual order (queued while on cooldown): keep its azure zone ring alive
-    // and fire it the instant the cooldown elapses. It takes priority over auto-scan
-    // but never fires early, so it cannot bypass the cooldown.
+    // One pending order (manual or automatic) is authoritative while the platform is
+    // unavailable. Keep its disabled-grey map ring alive and promote it to an active
+    // faction-colour barrage the instant the cooldown elapses.
     if ( _artillery_shell_has_pending )
     {
         if ( wproto.artillery_shell_barrage_radius > 0.0 )
@@ -10577,12 +10599,9 @@ void NC_STACK_ypabact::UpdateArtilleryShell(update_msg *arg)
     if ( wproto.artillery_shell_manual_mode_only )
         return;
 
-    // Cooldown gate between barrages.
-    if ( _clock < _artillery_shell_next_activation_time )
-        return;
-
-    // Throttle the artillery_shell_max_range target scan so it never runs every frame while
-    // the artillery shell is ready but has no valid target in range.
+    // Throttle automatic target acquisition both while ready and while cooling down.
+    // During cooldown a valid target is queued and shown in disabled grey instead of
+    // being fired early; when ready, the same acquisition starts the barrage directly.
     if ( _clock < _artillery_shell_next_scan_time )
         return;
     _artillery_shell_next_scan_time = _clock + 500;
@@ -10590,6 +10609,12 @@ void NC_STACK_ypabact::UpdateArtilleryShell(update_msg *arg)
     vec3d targetCenter;
     if ( !ypabact_FindArtilleryShellTargetZone(this, wproto, &targetCenter) )
         return;
+
+    if ( _clock < _artillery_shell_next_activation_time )
+    {
+        ypabact_QueueArtilleryShellTarget(this, wproto, targetCenter);
+        return;
+    }
 
     StartArtilleryShellBarrage(targetCenter);
 }
@@ -10716,8 +10741,9 @@ bool NC_STACK_ypabact::CanManualArtilleryShell(const vec3d &targetPos, int *outW
 }
 
 // Queue a manual strike to fire once the cooldown elapses (used when the target is
-// valid but the artillery shell is mid-cooldown). The azure zone ring is shown immediately
-// by UpdateArtilleryShell while the order is pending. Never fires early (anti-exploit).
+// valid but the artillery shell is mid-cooldown). It shares the same one-per-platform
+// pending state used by automatic acquisition; manual retargeting therefore replaces
+// any previous future target immediately. Never fires early (anti-exploit).
 void NC_STACK_ypabact::QueueManualArtilleryShell(const vec3d &targetPos)
 {
     if ( ypabact_GetArtilleryShellWeaponId(this) <= 0 )
@@ -10729,21 +10755,14 @@ void NC_STACK_ypabact::QueueManualArtilleryShell(const vec3d &targetPos)
         }
     }
 
-    _artillery_shell_pending_target = targetPos;
-    _artillery_shell_has_pending = true;
+    if ( !_world )
+        return;
 
-    // Replace the previous cooldown-order drawing immediately. UpdateArtilleryShell()
-    // keeps this same per-platform pending marker refreshed until the cooldown ends.
-    if ( _world )
-    {
-        int weaponId = ypabact_GetArtilleryShellWeaponId(this);
-        if ( weaponId > 0 && (size_t)weaponId < _world->GetWeaponsProtos().size() )
-        {
-            const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
-            if ( wproto.artillery_shell_barrage_radius > 0.0 )
-                _world->AddArtilleryShellMarker(targetPos, wproto.artillery_shell_barrage_radius, _owner, _gid, true, 1000);
-        }
-    }
+    int weaponId = ypabact_GetArtilleryShellWeaponId(this);
+    if ( weaponId <= 0 || (size_t)weaponId >= _world->GetWeaponsProtos().size() )
+        return;
+
+    ypabact_QueueArtilleryShellTarget(this, _world->GetWeaponsProtos().at(weaponId), targetPos);
 }
 
 static NC_STACK_ypabact *ypabact_GetKamikazePayloadListOwner(NC_STACK_ypabact *unit)

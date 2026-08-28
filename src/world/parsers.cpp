@@ -5093,6 +5093,16 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float v = parser.stof(p2, 0);
         _wpn->artillery_shell_speed = v > 0.0 ? v : 0.0;
     }
+    else if ( !StriCmp(p1, "artillery_shell_vertical_spread_x") )
+    {
+        float v = parser.stof(p2, 0);
+        _wpn->artillery_shell_vertical_spread_x = (std::isfinite(v) && v > 0.0f) ? std::min(v, 45.0f) : 0.0f;
+    }
+    else if ( !StriCmp(p1, "artillery_shell_vertical_spread_z") )
+    {
+        float v = parser.stof(p2, 0);
+        _wpn->artillery_shell_vertical_spread_z = (std::isfinite(v) && v > 0.0f) ? std::min(v, 45.0f) : 0.0f;
+    }
     else if ( !StriCmp(p1, "artillery_shell_airburst") )
     {
         _wpn->artillery_shell_airburst = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;

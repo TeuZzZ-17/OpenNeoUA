@@ -2588,6 +2588,7 @@ int NC_STACK_ypamissile::SetupArtilleryShell(const vec3d &startPos, const vec3d 
     _isArtilleryShellProjectile = true;
     _artilleryShellVerticalBarrage = false;
     _artilleryShellVerticalTransferred = false;
+    _artilleryShellVerticalApexOffset = vec3d(0.0, 0.0, 0.0);
     _artilleryShellVerticalAscentTime = 0;
     _artilleryShellVerticalFallStartTime = 0;
     _artilleryShellVerticalDescentTime = 0;
@@ -2649,7 +2650,8 @@ int NC_STACK_ypamissile::SetupArtilleryShell(const vec3d &startPos, const vec3d 
 }
 
 int NC_STACK_ypamissile::SetupArtilleryShellVerticalBarrage(const vec3d &startPos, const vec3d &targetPos,
-                                                            int fallDelay, float fallHeight, float verticalSpeed, bool impactOnSurface)
+                                                            int fallDelay, float fallHeight, float verticalSpeed,
+                                                            float spreadX, float spreadZ, bool impactOnSurface)
 {
     _isArtilleryShellProjectile = true;
     _artilleryShellVerticalBarrage = true;
@@ -2660,6 +2662,26 @@ int NC_STACK_ypamissile::SetupArtilleryShellVerticalBarrage(const vec3d &startPo
     _artilleryShellElapsed = 0;
     _artilleryShellImpactOnSurface = impactOnSurface;
 
+    // Vertical spread is authored like the normal Weapon spread: degrees. It only
+    // tilts the visible ascent. The landing point and vertical descent remain
+    // controlled exclusively by artillery_shell_barrage_radius/targeting.
+    const float safeSpreadX = (std::isfinite(spreadX) && spreadX > 0.0f) ? std::min(spreadX, 45.0f) : 0.0f;
+    const float safeSpreadZ = (std::isfinite(spreadZ) && spreadZ > 0.0f) ? std::min(spreadZ, 45.0f) : 0.0f;
+    const float angleX = safeSpreadX > 0.0f
+        ? ((((float)rand() / (float)RAND_MAX) * 2.0f) - 1.0f) * safeSpreadX
+        : 0.0f;
+    const float angleZ = safeSpreadZ > 0.0f
+        ? ((((float)rand() / (float)RAND_MAX) * 2.0f) - 1.0f) * safeSpreadZ
+        : 0.0f;
+
+    _artilleryShellVerticalApexOffset = vec3d(
+        tan(angleX * C_PI_180) * _artilleryShellArcHeight,
+        0.0f,
+        tan(angleZ * C_PI_180) * _artilleryShellArcHeight);
+
+    // Spread is visual-only: it must not change barrage timing or the authored
+    // artillery_shell_speed cadence. Ascent/descent time therefore remains based
+    // on the vertical arc height exactly as with zero spread.
     const float speed = (std::isfinite(verticalSpeed) && verticalSpeed > 0.0f) ? verticalSpeed : 70.0f;
     const int travelTime = _artilleryShellArcHeight > 0.0f
         ? std::max(1, (int)std::ceil((_artilleryShellArcHeight / speed) * 1000.0f))
@@ -2674,10 +2696,15 @@ int NC_STACK_ypamissile::SetupArtilleryShellVerticalBarrage(const vec3d &startPo
     _old_pos = startPos;
     _primTtype = BACT_TGT_TYPE_DRCT;
 
-    // Mortar mode starts by pointing straight up. Engine +Y is down.
-    _fly_dir = vec3d(0.0, -1.0, 0.0);
+    vec3d ascentDir(_artilleryShellVerticalApexOffset.x, -_artilleryShellArcHeight,
+                    _artilleryShellVerticalApexOffset.z);
+    if ( ascentDir.normalise() <= 0.001f )
+        ascentDir = vec3d(0.0, -1.0, 0.0);
+    _fly_dir = ascentDir;
     _rotation.SetZ(_fly_dir);
-    vec3d x = vec3d::OX(1.0);
+    vec3d x = vec3d::OY(-1.0) * _fly_dir;
+    if ( x.normalise() <= 0.001f )
+        x = vec3d::OX(1.0);
     _rotation.SetX(x);
     _rotation.SetY(_fly_dir * x);
 
@@ -2707,7 +2734,7 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
             if ( _artilleryShellVerticalAscentTime > 0 )
                 ascentT = ypamissile_Clamp01((float)_artilleryShellElapsed / (float)_artilleryShellVerticalAscentTime);
 
-            pos = _artilleryShellStartPos;
+            pos = _artilleryShellStartPos + _artilleryShellVerticalApexOffset * ascentT;
             pos.y -= _artilleryShellArcHeight * ascentT;
         }
         else
@@ -2945,6 +2972,7 @@ void NC_STACK_ypamissile::Renew()
     _artilleryShellImpactOnSurface = false;
     _artilleryShellVerticalBarrage = false;
     _artilleryShellVerticalTransferred = false;
+    _artilleryShellVerticalApexOffset = vec3d(0.0, 0.0, 0.0);
     _artilleryShellVerticalAscentTime = 0;
     _artilleryShellVerticalFallStartTime = 0;
     _artilleryShellVerticalDescentTime = 0;
