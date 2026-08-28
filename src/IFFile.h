@@ -84,7 +84,6 @@ public:
     virtual int seek(long int offset, int origin) override;
 
     std::string readStr(int maxSz);
-    std::string PeekNextChunkLabel();
 
     struct SetLooseOverride
     {
