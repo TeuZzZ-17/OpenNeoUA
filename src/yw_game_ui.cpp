@@ -2190,7 +2190,12 @@ void NC_STACK_ypaworld::RenderArtilleryShellMapMarkers()
         if ( !yw_IsArtilleryShellMarkerVisible(this, marker, cellId) )
             continue;
 
-        SDL_Color clr = GetColor(marker.owner);
+        // A pending artillery order is intentionally unavailable until the source
+        // platform finishes its cooldown, so render it with a neutral disabled
+        // grey. Active/in-flight bombardment zones keep the normal faction colour.
+        SDL_Color clr = marker.pending
+            ? SDL_Color{128, 128, 128, 255}
+            : GetColor(marker.owner);
         GFX::Engine.raster_func217(clr);
 
         yw_DrawArtilleryShellMapCircle(marker.pos.x, marker.pos.z, marker.radius, SEGS);
@@ -2464,8 +2469,8 @@ bool NC_STACK_ypaworld::HandleArtilleryShellMapClick()
         {
             // Target is valid (range + radar + manual-call). Fire now if the artillery shell
             // is ready, otherwise queue it: it fires when the cooldown elapses. Either
-            // way the azure zone ring appears (now from the shells, or from the pending
-            // marker drawn by UpdateArtilleryShell).
+            // way the map zone appears (faction colour from active shells, or disabled
+            // grey from the pending marker drawn by UpdateArtilleryShell).
             if ( readyNow )
                 artilleryShell->StartArtilleryShellBarrage(target);
             else
