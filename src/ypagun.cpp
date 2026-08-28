@@ -216,9 +216,9 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
     case BACT_STATUS_NORMAL:
     case BACT_STATUS_IDLE:
     {
-        const bool disorienting = IsActiveDebuffDisorienting();
-        if ( disorienting )
-            UpdateActiveDebuffDisorientMoveIntent();
+        const bool stunned = IsActiveDebuffStunning();
+        if ( stunned )
+            UpdateActiveDebuffStunMoveIntent();
 
         if ( !(_gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_NO_FALL)) )
         {
@@ -257,13 +257,13 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
         // aiming is handled exclusively by UpdateArtilleryShell() while a barrage is
         // active/pending, so idle artillery shell turrets keep their artillery posture
         // instead of "following" units they cannot directly shoot.
-        if ( ypagun_UsesArtilleryShellWeapon(this) && !disorienting )
+        if ( ypagun_UsesArtilleryShellWeapon(this) && !stunned )
         {
             ypagun_ClearVanillaArtilleryShellTrackingTarget(this);
             break;
         }
 
-        if ( !disorienting && _secndTtype != BACT_TGT_TYPE_UNIT )
+        if ( !stunned && _secndTtype != BACT_TGT_TYPE_UNIT )
         {
             if ( !_secndTtype && _gunType == GUN_TYPE_PROTO && _gunFireCount <= 0 )
             {
@@ -281,7 +281,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
         }
 
         vec3d vTgt;
-        if ( disorienting )
+        if ( stunned )
             vTgt = _target_dir;
         else
             vTgt = _secndT.pbact->_position - _position;
@@ -380,7 +380,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
         if ( fabs(y_delta) > 0.001 )
             _rotation = mat3x3::RotateX(y_delta * 0.3) * _rotation;
 
-        if ( disorienting )
+        if ( stunned )
             break;
 
         bact_arg75 arg75;

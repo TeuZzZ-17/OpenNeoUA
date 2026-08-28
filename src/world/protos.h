@@ -42,7 +42,7 @@ enum DecorationFXMode
     DECORATION_FX_PERSISTENT = 1
 };
 
-// OpenNeoUA custom: RGBA tint multiplier (see vp_tint / wireframe_tint script params).
+// OpenNeoUA custom: RGBA tint multiplier (see visual_tint / wireframe_tint script params).
 // Stored as normalized 0..1 float multipliers. Neutral default = no change.
 struct TVisualTint
 {
@@ -63,6 +63,38 @@ struct TVisualTint
         g = cl(g);
         b = cl(b);
         a = cl(a);
+    }
+};
+
+// OpenNeoUA custom: external 3DS overrides for the legacy visual-state slots.
+// The numeric vp_* fields remain the vanilla-safe fallback; a non-empty 3DS path
+// only replaces rendering for the corresponding state when it loads successfully.
+struct TExternalVisualSet
+{
+    std::string normal;
+    std::string fire;
+    std::string dead;
+    std::string wait;
+    std::string megadeth;
+    std::string genesis;
+    std::string launch;
+};
+
+// Shared authored quantity for parameters that accept either an absolute value
+// (for example 2000) or an explicit percentage (for example 5%). The parser
+// owns syntax/range validation; runtime callers only consume the normalized
+// representation.
+struct TAbsoluteOrPercent
+{
+    float value = 0.0f;
+    bool percent = false;
+    bool defined = false;
+
+    void Clear()
+    {
+        value = 0.0f;
+        percent = false;
+        defined = false;
     }
 };
 
@@ -144,27 +176,29 @@ struct TDecorationFXConfig
 {
     uint8_t mode = DECORATION_FX_PERIODIC;
     int16_t vp = 0;
+    std::string mesh3ds;
     int interval_min = 0;
     int interval_max = 0;
     int count_min = 0;
     int count_max = 0;
     int duration = 1000;
     float random_pos = 0.0;
-    vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
-    vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
-    int vp_fade_in = 0;
-    int vp_fade_out = 0;
+    vec3d scale = vec3d(1.0, 1.0, 1.0);
+    vec3d spin = vec3d(0.0, 0.0, 0.0);
+    int fade_in = 0;
+    int fade_out = 0;
     vec3d offset;
-    TVisualTint vp_tint;
+    TVisualTint tint;
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     int vp_trail_fade_in = 0;
     int vp_trail_fade_out = 0;
     TVisualTint vp_trail_tint;
 };
 
-struct TChainFXVPModel
+struct TChainFXVisual
 {
-    int16_t model = 0;
+    int16_t vp = 0;
+    std::string mesh3ds;
     bool has_tint = false;
     TVisualTint tint;
 };
@@ -215,7 +249,7 @@ struct TChainFXConfig
     int duration = 0;
     int fade_in = 0;
     int fade_out = 0;
-    std::vector<TChainFXVPModel> vp_models;
+    std::vector<TChainFXVisual> visuals;
     int physical_vehicle = 0;
     std::string ground_decal_texture;
     int ground_decal_points = 12;
@@ -307,51 +341,50 @@ struct TVhclSound
     void ClearSounds();
 };
 
-constexpr int DAMAGED_FX_SLOT_COUNT = 8;
 constexpr size_t ROBO_GUN_MAX_COUNT = 20;
 constexpr size_t UNIT_COLL_MAX_COUNT = 32;  // OpenNeoUA: max compound collision spheres per vehicle
 
 struct TDamagedFXConfig
 {
-    std::vector<int16_t> vps = {0};
-    float vp_scale = 1.0;
-    float threshold = 0.0;
+    std::vector<int16_t> vps;
+    std::vector<std::string> meshes3ds;
+    float scale = 1.0;
+    TAbsoluteOrPercent threshold;
     int count_min = 0;
     int count_max = 0;
     int interval_min = 0;
     int interval_max = 0;
-    float random_offset_percent = 0.0;
-    bool has_random_offset_percent = false;
+    TAbsoluteOrPercent random_max_offset;
     bool trail_only = false;
 };
 
 struct TWeaponDebuffConfig
 {
     bool allow = false;
-    bool allow_host_station = false;
+    bool allow_on_host_station = false;
     bool inherit_to_children = false;
     std::string name;
     std::string icon;
-    int damage = 0;
-    float damage_percent = 0.0;
+    TAbsoluteOrPercent damage;
     bool mindcontrol = false;
     int tick_time = 1000;
     bool has_tick_time = false;
     int duration = 5000;
-    bool disorient = false;
-    float disorient_motion_level = 0.0f;
-    bool disorient_fire = true;
+    bool stun = false;
+    float stun_motion_level = 0.0f;
+    bool stun_unit_fire = true;
     float force_malus = 0.0;
     float maxrot_malus = 0.0;
     float shield_malus = 0.0;
-    float snd_pitch_mult = 1.0;
-    TVisualTint target_vp_tint;
-    std::vector<int16_t> fx_vps;
-    float fx_vp_scale = 1.0;
-    TVisualTint fx_vp_tint;
-    float fx_random_offset_percent = 0.0;
-    bool has_fx_random_offset_percent = false;
-    bool fx_trail_only = false;
+    float snd_pitch_multiplier = 1.0;
+    TVisualTint target_tint;
+    std::vector<int16_t> vps;
+    std::string mesh3ds;
+    float scale = 1.0;
+    TVisualTint tint;
+    TAbsoluteOrPercent random_max_offset;
+    TVisualTint vp_trail_tint;
+    bool has_vp_trail_tint = false;
     TVhclSound tick_snd;
 
     TWeaponDebuffConfig()
@@ -375,8 +408,9 @@ struct TSuperItemProfile
     bool duplicate = false;
 
     int wave_vp = 0;
-    vec3d wave_vp_axis_scale = vec3d(1.0, 1.0, 1.0);
-    TVisualTint wave_vp_tint;
+    std::string wave_3ds;
+    vec3d wave_axis_scale = vec3d(1.0, 1.0, 1.0);
+    TVisualTint wave_tint;
     float wave_start_speed = 0.0f;
     float wave_end_speed = 0.0f;
     float wave_speed_ramp_time = 0.0f;
@@ -391,7 +425,7 @@ struct TSuperItemProfile
     int fade_out = 0;
 
     int wave_unit_damage = 0;
-    int wave_building_total_destruction_percent = 0;
+    int wave_building_total_destruction = 0; // explicit authored percentage 0..100
     TWeaponDebuffConfig debuff;
     TVhclSound detonate_snd;
     TVhclSound wave_snd;
@@ -427,6 +461,7 @@ struct TWeaponClusterConfig
     float spread_x = 0.0;
     float spread_y = 0.0;
     int16_t vp = 0;
+    std::string mesh3ds;
     TVhclSound snd;
 };
 
@@ -571,6 +606,8 @@ struct TVhclProto
     TChainFXConfig mgun_decal;
     int16_t mgun_vp_dead = 0;
     int16_t mgun_vp_megadeth = 0;
+    std::string mgun_3ds_dead;
+    std::string mgun_3ds_megadeth;
     float mgun_power = 0.0;
     float mgun_angle = 0.0;
     std::string mgun_name;
@@ -591,10 +628,11 @@ struct TVhclProto
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
-    vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
-    vec3d vp_rotation = vec3d(0.0, 0.0, 0.0);
-    vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
-    TVisualTint vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
+    TExternalVisualSet visual_3ds;
+    vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
+    vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
+    vec3d visual_spin = vec3d(0.0, 0.0, 0.0);
+    TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA tint multiplier
     TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA tint multiplier
     TDamagedFXConfig damaged_fx;
     TDecorationFXConfig decoration_fx;
@@ -610,7 +648,7 @@ struct TVhclProto
     int zoom_steps = -1;
     float damaged_force_malus = 0.0;
     float damaged_maxrot_malus = 0.0;
-    float damaged_snd_pitch_mult = 1.0;
+    float damaged_snd_pitch_multiplier = 1.0;
     int spawn_units = 0;
     int16_t spawn_vehicle = 0;
     int spawn_interval = 5000;
@@ -632,6 +670,7 @@ struct TVhclProto
     int proximity_defense_interval = 1000;
     int proximity_defense_shots = 12;
     int proximity_defense_vp_launch = -1;
+    std::string proximity_defense_3ds_launch;
     int proximity_defense_fire_mode = 0;
     int proximity_defense_sequence_delay = 100;
     int proximity_defense_mode = 0;
@@ -754,12 +793,13 @@ struct TVhclProto
     // owner-based `hidden`/`unhide_radar` system above. Default off.
     bool invisible = false;
     int16_t invisible_reveal_vp = 0;
+    std::string invisible_reveal_3ds;
 
     TRoboProto *RoboProto = NULL;
     std::vector<TRoboGun> unit_guns;
 
     int is_mimic = 0;                       // OpenNeoUA: model = mimic shell/disguise proto
-    TVisualTint mimic_vp_tint;              // OpenNeoUA: model = mimic shell tint applied to copied VP
+    TVisualTint mimic_tint;                 // OpenNeoUA: model = mimic shell tint applied to the copied visual
     TVhclSound snd_mimic;                   // OpenNeoUA: model = mimic persistent shell loop
 
     rbcolls coll;                           // OpenNeoUA: universal compound collision spheres (coll_*)
@@ -769,12 +809,15 @@ struct TVhclProto
 
 struct TWeapProto
 {
-    // OpenNeoUA custom: optional procedural body for continuous laser beams.
+    // OpenNeoUA custom: optional external 3DS body for continuous laser beams.
     // The configuration is nested in the weapon prototype so normal and vertical
     // lasers share one data-driven visual path without changing gameplay state.
+    // When enabled, external geometry is mandatory: empty/failed mesh paths render
+    // no beam body and never fall back to procedural or vp_normal geometry.
     struct TLaserMeshConfig
     {
         bool enabled = false;
+        std::string mesh_path;
         TVisualTint tint;
         float size_x = 5.0f;
         bool has_size_y = false;
@@ -895,17 +938,18 @@ struct TWeapProto
     int16_t vp_normal = 0;
     int16_t vp_fire = 0;
     // OpenNeoUA custom, Weapon-side: when this Weapon is fired, the carrier
-    // temporarily uses its own Vehicle vp_fire. Missing/0 keeps vanilla behavior.
-    bool weapon_use_vehicle_vp_fire = false;
+    // temporarily uses its own Vehicle fire visual. Missing/0 keeps vanilla behavior.
+    bool weapon_use_vehicle_fire_visual = false;
     int16_t vp_dead = 0;
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
     int16_t vp_launch = 0;
-    vec3d vp_launch_scale = vec3d(1.0, 1.0, 1.0);
-    vec3d vp_scale = vec3d(1.0, 1.0, 1.0);
-    vec3d vp_rotation = vec3d(0.0, 0.0, 0.0);
-    vec3d vp_spin = vec3d(0.0, 0.0, 0.0);
+    TExternalVisualSet visual_3ds;
+    vec3d launch_scale = vec3d(1.0, 1.0, 1.0);
+    vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
+    vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
+    vec3d visual_spin = vec3d(0.0, 0.0, 0.0);
     // OpenNeoUA custom: render-only spiral orbit for every physical projectile
     // class except model = laser (including vertical mode). Speed uses the shared
     // 0..10 revolutions-per-second scale; radius is the lateral orbit distance in
@@ -917,7 +961,7 @@ struct TWeapProto
     // lateral deviation (0..1000). Chaos takes priority over Spiral when valid.
     float chaos_factor = 0.0f;
     float chaos_radius = 0.0f;
-    TVisualTint vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
+    TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA tint multiplier
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
@@ -929,7 +973,7 @@ struct TWeapProto
     // OpenNeoUA custom: local-player-only launch shake. When configured it replaces
     // the generic shk_launch shake for the directly controlled player weapon and
     // is fired once per successful LaunchMissile() call, regardless of num_weapons.
-    TSndFxPosParam player_shk_launch;
+    TSndFxPosParam shk_launch_player;
     TWeaponDebuffConfig debuff;
     TWeaponClusterConfig cluster;
     TWeaponChainConfig chain;
@@ -969,14 +1013,14 @@ struct TWeapProto
     int   laser_energy_tick_time_user = 150;   // ms between damage ticks for player-controlled fire
     float laser_energy_increment_rate = 0.0;   // extra base damage added after each connected tick
     float laser_max_energy = 0.0;              // max base damage per tick (<=0 => no clamp)
-    float laser_vp_spacing = 40.0;             // visual-only distance between vp_normal beam instances
+    float laser_visual_spacing = 40.0;             // visual-only distance between vp_normal beam instances
     int   laser_chain_allow = 0;               // 1 = primary laser hit may chain to nearby enemy units
     int   laser_chain_max_jumps = 0;           // max unit-to-unit chain segments after the primary hit
     float laser_chain_radius = 0.0;            // search radius around the last chained unit
     float laser_chain_damage_mult = 1.0;       // cumulative damage multiplier per chain jump
     int   laser_beam_count = 1;                // total direct shooter-to-target laser beams (<=1 = off)
     bool  vertical_laser_enable = false;          // 1 = model=laser uses the downward vertical-fire mode
-    float ai_vertical_laser_trigger_radius = 300.0; // X/Z distance required before AI fires downward
+    float vertical_laser_ai_trigger_radius = 300.0; // X/Z distance required before AI fires downward
     TLaserMeshConfig laser_mesh;                    // visual-only mesh body for laser, including vertical mode
     float energy_heli = 0.0;
     float energy_tank = 0.0;
@@ -1018,7 +1062,7 @@ struct TWeapProto
     // Zero means physical contact (effective carrier radius + target radius).
     float trigger_radius = 0.0;
     float fire_time_scale = 1.0f; // model=kamikaze/player: one FIRE press latches slowdown; 1.0 disables the sequence
-    float fire_time_scale_hp_drain_percent = 0.0f; // max-HP percent drained per real second by the latched sequence; <=0 disables it
+    TAbsoluteOrPercent fire_time_scale_hp_drain; // absolute HP/sec or explicit max-HP percentage/sec; zero/absent disables it
     float aoe_unit_radius = 0.0;
     float aoe_building_radius = 0.0;
     float aoe_sector_radius = 0.0;
@@ -1029,21 +1073,24 @@ struct TWeapProto
     // OpenNeoUA custom: dedicated artillery shell barrage weapon ("model = artillery_shell").
     // All defaults are vanilla-safe: with artillery_shell_barrage_shots <= 0 / no max range,
     // an artillery shell weapon simply never fires.
+    enum
+    {
+        ARTILLERY_SHELL_MODE_BALLISTIC = 0,
+        ARTILLERY_SHELL_MODE_VERTICAL_BARRAGE = 1
+    };
+    int   artillery_shell_mode = ARTILLERY_SHELL_MODE_BALLISTIC; // ballistic arc, or vertical_barrage mortar-style ascent/fall
+    int   artillery_shell_fall_delay = 0;           // vertical_barrage only: ms from launch before vertical descent may begin
     float artillery_shell_min_range = 0.0;          // min distance from artillery shell to target zone
     float artillery_shell_max_range = 0.0;          // max distance for manual fire and automatic target search (<=0 = disabled)
     int   artillery_shell_requires_radar = 1;       // 1 = target sector must be visible to the owner faction
     int   artillery_shell_manual_mode_only = 0;     // 1 = disable the auto AI; the artillery shell only fires via manual map-click
-    int   artillery_shell_prefer_host_station = 0;  // 1 = auto AI prefers an enemy Host Station (robo) among radar-visible enemies (still honours artillery_shell_requires_radar)
     float artillery_shell_barrage_radius = 0.0;     // bombardment zone radius (marker size)
     int   artillery_shell_barrage_shots = 0;        // shells per barrage (<=0 = no barrage)
     int   artillery_shell_barrage_shot_delay = 250; // ms between shells in the same barrage
     int   artillery_shell_barrage_cooldown = 10000; // ms cooldown after a barrage ends
-    float artillery_shell_arc_height = 2500.0;      // extra ballistic arc height (engine units)
-    int   artillery_shell_flight_time = 2500;       // ms from launch to impact (<=0 => 2500 default)
-    float artillery_shell_spread_radius = 0.0;      // per-shell random landing scatter radius
-    float artillery_shell_inflight_drift = 0.0;     // optional small horizontal drift during flight
-    int   artillery_shell_airburst = 1;             // 1 = explode at the timed arc apex/target height (airburst); 0 = land on the real terrain height at the shell's own impact point
-    int   artillery_shell_minimap_marker = 0;       // 1 = show bombardment zone on the 2D strategic map
+    float artillery_shell_arc_height = 2500.0;      // extra ballistic arc height / vertical barrage ascent height (engine units)
+    float artillery_shell_speed = 0.0;              // artillery trajectory speed; <=0 keeps the legacy-safe internal timing fallback
+    int   artillery_shell_airburst = 1;             // 1 = explode at the target height; 0 = land on the real terrain height at the shell's own impact point
     NC_STACK_skeleton *wireframe = NULL;
     IDVList initParams;
     std::vector<TChainFXConfig> chain_fx;

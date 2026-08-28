@@ -207,6 +207,7 @@ static TVisualTint ReadTint(Common::Ini::Key &key, const TVisualTint &fallback)
 }
 
 static Config BuildConfig(Common::Ini::Key &vp,
+                          Common::Ini::Key &mesh3ds,
                           Common::Ini::Key &scale,
                           Common::Ini::Key &spinX,
                           Common::Ini::Key &spinY,
@@ -215,7 +216,7 @@ static Config BuildConfig(Common::Ini::Key &vp,
                           Common::Ini::Key &duration,
                           Common::Ini::Key &interval,
                           Common::Ini::Key &count,
-                          Common::Ini::Key &randomOffsetPercent,
+                          Common::Ini::Key &randomMaxOffset,
                           Common::Ini::Key &size,
                           Common::Ini::Key &thickness,
                           Common::Ini::Key &riseSpeed,
@@ -225,14 +226,15 @@ static Config BuildConfig(Common::Ini::Key &vp,
 {
     Config config;
     config.vp = (int16_t)ReadInt(vp, 0, 0, std::numeric_limits<int16_t>::max());
+    config.mesh3ds = mesh3ds.Get<std::string>();
 
-    config.vp_scale = ReadFloat(scale, 1.0f);
-    if ( config.vp_scale <= 0.0f )
-        config.vp_scale = 1.0f;
+    config.scale = ReadFloat(scale, 1.0f);
+    if ( config.scale <= 0.0f )
+        config.scale = 1.0f;
 
-    config.vp_spin.x = Spin::ClampStrength(ReadFloat(spinX, 0.0f));
-    config.vp_spin.y = Spin::ClampStrength(ReadFloat(spinY, 0.0f));
-    config.vp_spin.z = Spin::ClampStrength(ReadFloat(spinZ, 0.0f));
+    config.spin.x = Spin::ClampStrength(ReadFloat(spinX, 0.0f));
+    config.spin.y = Spin::ClampStrength(ReadFloat(spinY, 0.0f));
+    config.spin.z = Spin::ClampStrength(ReadFloat(spinZ, 0.0f));
 
     const TVisualTint whiteTint = MakeTint(255, 255, 255, 255);
     const TVisualTint proceduralTint = regenProfile ?
@@ -248,11 +250,16 @@ static Config BuildConfig(Common::Ini::Key &vp,
                  config.interval_min, config.interval_max);
     ReadIntRange(count, 0, 0, 0, 32, config.count_min, config.count_max);
 
-    config.random_offset_percent = ReadFloat(randomOffsetPercent, 25.0f);
-    if ( config.random_offset_percent < 0.0f )
-        config.random_offset_percent = 0.0f;
-    else if ( config.random_offset_percent > 100.0f )
-        config.random_offset_percent = 100.0f;
+    TAuthoredScalar authoredOffset;
+    if ( ParseAuthoredScalar(randomMaxOffset.Get<std::string>(), authoredOffset) &&
+         std::isfinite(authoredOffset.value) && authoredOffset.value >= 0.0f )
+    {
+        config.random_max_offset.defined = true;
+        config.random_max_offset.percent = authoredOffset.percent;
+        config.random_max_offset.value = authoredOffset.percent
+            ? std::min(authoredOffset.value, 100.0f)
+            : authoredOffset.value;
+    }
 
     config.size = ReadFloat(size, 30.0f);
     if ( config.size <= 0.0f )
@@ -281,15 +288,16 @@ static Config BuildConfig(Common::Ini::Key &vp,
 void Init()
 {
     s_regen = BuildConfig(System::IniConf::GfxRegenFXVP,
-                          System::IniConf::GfxRegenFXVPScale,
-                          System::IniConf::GfxRegenFXVPSpinX,
-                          System::IniConf::GfxRegenFXVPSpinY,
-                          System::IniConf::GfxRegenFXVPSpinZ,
+                          System::IniConf::GfxRegenFX3DS,
+                          System::IniConf::GfxRegenFXScale,
+                          System::IniConf::GfxRegenFXSpinX,
+                          System::IniConf::GfxRegenFXSpinY,
+                          System::IniConf::GfxRegenFXSpinZ,
                           System::IniConf::GfxRegenFXTint,
                           System::IniConf::GfxRegenFXDuration,
                           System::IniConf::GfxRegenFXInterval,
                           System::IniConf::GfxRegenFXCount,
-                          System::IniConf::GfxRegenFXRandomOffsetPercent,
+                          System::IniConf::GfxRegenFXRandomMaxOffset,
                           System::IniConf::GfxRegenMeshSize,
                           System::IniConf::GfxRegenMeshThickness,
                           System::IniConf::GfxRegenMeshRiseSpeed,
@@ -298,15 +306,16 @@ void Init()
                           true);
 
     s_drain = BuildConfig(System::IniConf::GfxDrainFXVP,
-                          System::IniConf::GfxDrainFXVPScale,
-                          System::IniConf::GfxDrainFXVPSpinX,
-                          System::IniConf::GfxDrainFXVPSpinY,
-                          System::IniConf::GfxDrainFXVPSpinZ,
+                          System::IniConf::GfxDrainFX3DS,
+                          System::IniConf::GfxDrainFXScale,
+                          System::IniConf::GfxDrainFXSpinX,
+                          System::IniConf::GfxDrainFXSpinY,
+                          System::IniConf::GfxDrainFXSpinZ,
                           System::IniConf::GfxDrainFXTint,
                           System::IniConf::GfxDrainFXDuration,
                           System::IniConf::GfxDrainFXInterval,
                           System::IniConf::GfxDrainFXCount,
-                          System::IniConf::GfxDrainFXRandomOffsetPercent,
+                          System::IniConf::GfxDrainFXRandomMaxOffset,
                           System::IniConf::GfxDrainMeshSize,
                           System::IniConf::GfxDrainMeshThickness,
                           System::IniConf::GfxDrainMeshRiseSpeed,

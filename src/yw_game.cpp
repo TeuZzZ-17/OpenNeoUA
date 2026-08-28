@@ -1507,11 +1507,16 @@ void NC_STACK_ypaworld::InitSuperItems()
             continue;
         }
 
-        if ( profile.wave_vp <= 0 || (size_t)profile.wave_vp >= _vhclModels.size() ||
-             !_vhclModels[profile.wave_vp] )
+        NC_STACK_base *waveVisual = NULL;
+        if ( !profile.wave_3ds.empty() )
+            waveVisual = GetSharedExternalMesh(profile.wave_3ds);
+        if ( !waveVisual && profile.wave_vp > 0 &&
+             (size_t)profile.wave_vp < _vhclModels.size() )
+            waveVisual = _vhclModels[profile.wave_vp];
+        if ( !waveVisual )
         {
-            ypa_log_out("WARNING: SuperItem #%u profile '%s' wave_vp %d is unavailable in this level; using vanilla fallback.\n",
-                        (unsigned)i, profile.id.c_str(), profile.wave_vp);
+            ypa_log_out("WARNING: SuperItem #%u profile '%s' wave visual is unavailable; using vanilla fallback.\n",
+                        (unsigned)i, profile.id.c_str());
             continue;
         }
 
@@ -2534,9 +2539,8 @@ void NC_STACK_ypaworld::RenderSuperWave(vec2d pos, vec2d fromPos, baseRender_msg
     {
         if ( IsVisibleMapPos(pos) )
         {
-            int v10 = _vhclProtos[_stoudsonWaveVehicleId].vp_normal;
-
-            NC_STACK_base *wall_base = _vhclModels.at(v10);
+            const World::TVhclProto &waveProto = _vhclProtos[_stoudsonWaveVehicleId];
+            NC_STACK_base *wall_base = ResolveVisualModel(waveProto.vp_normal, waveProto.visual_3ds.normal);
 
             if ( wall_base )
             {
@@ -2765,53 +2769,79 @@ static void yw_ConfigureTransientVPFade(NC_STACK_ypaworld::TTransientVP &effect,
     effect.fadeElapsed = std::isfinite(elapsed) && elapsed >= 0.0 ? elapsed : -1.0;
 }
 
-int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+NC_STACK_base *NC_STACK_ypaworld::ResolveVisualModel(int32_t modelId, const std::string &external3dsPath)
 {
-    if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() || lifeTime < 0 )
-        return 0;
-
-    NC_STACK_base *base = _vhclModels.at(modelId);
-
-    if ( base )
+    if ( !external3dsPath.empty() )
     {
-        _transientVPs.emplace_back(base, pos, rot, lifeTime);
-        TTransientVP &fx = _transientVPs.back();
-        fx.id = _nextTransientVPId++;
-        fx.scale = scale > 0.0f ? scale : 1.0f;
-        fx.axisScale = vec3d(axisScale.x > 0.0f ? axisScale.x : 1.0f,
-                             axisScale.y > 0.0f ? axisScale.y : 1.0f,
-                             axisScale.z > 0.0f ? axisScale.z : 1.0f);
-        fx.spin = spin;
-        fx.tint = tint;
-        fx.particleControls = particleControls;
-        yw_ConfigureTransientVPFade(fx, fadeIn, fadeOut, (double)lifeTime);
-        return fx.id;
+        if ( NC_STACK_base *external = GetSharedExternalMesh(external3dsPath) )
+            return external;
     }
 
-    return 0;
+    // Preserve the legacy actor path exactly when no valid external override is
+    // available. Existing vp_* data therefore remains the authoritative fallback.
+    return _vhclModels.at(modelId);
+}
+
+int32_t NC_STACK_ypaworld::SpawnTransientVisualBase(NC_STACK_base *base, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+{
+    if ( !base || lifeTime < 0 )
+        return 0;
+
+    _transientVPs.emplace_back(base, pos, rot, lifeTime);
+    TTransientVP &fx = _transientVPs.back();
+    fx.id = _nextTransientVPId++;
+    fx.scale = scale > 0.0f ? scale : 1.0f;
+    fx.axisScale = vec3d(axisScale.x > 0.0f ? axisScale.x : 1.0f,
+                         axisScale.y > 0.0f ? axisScale.y : 1.0f,
+                         axisScale.z > 0.0f ? axisScale.z : 1.0f);
+    fx.spin = spin;
+    fx.tint = tint;
+    fx.particleControls = particleControls;
+    yw_ConfigureTransientVPFade(fx, fadeIn, fadeOut, (double)lifeTime);
+    return fx.id;
+}
+
+int32_t NC_STACK_ypaworld::SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+{
+    if ( !external3dsPath.empty() )
+    {
+        if ( NC_STACK_base *external = GetSharedExternalMesh(external3dsPath) )
+            return SpawnTransientVisualBase(external, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
+    }
+
+    return SpawnTransientVP(modelId, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
+}
+
+int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+{
+    if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() )
+        return 0;
+
+    return SpawnTransientVisualBase(_vhclModels.at(modelId), pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
 }
 
 void NC_STACK_ypaworld::SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot)
 {
-    if ( config.duration <= 0 || config.vp_models.empty() )
+    if ( config.duration <= 0 || config.visuals.empty() )
         return;
 
     std::vector<NC_STACK_base *> bases;
-    bases.reserve(config.vp_models.size());
+    bases.reserve(config.visuals.size());
     std::vector<World::TVisualTint> tints;
-    tints.reserve(config.vp_models.size());
+    tints.reserve(config.visuals.size());
 
-    for (const World::TChainFXVPModel &vpModel : config.vp_models)
+    for (const World::TChainFXVisual &visual : config.visuals)
     {
-        int16_t modelId = vpModel.model;
-        if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() )
-            continue;
+        NC_STACK_base *base = NULL;
+        if ( !visual.mesh3ds.empty() )
+            base = GetSharedExternalMesh(visual.mesh3ds);
+        if ( !base && visual.vp > 0 && visual.vp < (int32_t)_vhclModels.size() )
+            base = _vhclModels.at(visual.vp);
 
-        NC_STACK_base *base = _vhclModels.at(modelId);
         if ( base )
         {
             bases.push_back(base);
-            tints.push_back(vpModel.has_tint ? vpModel.tint : World::TVisualTint());
+            tints.push_back(visual.has_tint ? visual.tint : World::TVisualTint());
         }
     }
 
@@ -2876,9 +2906,9 @@ bool NC_STACK_ypaworld::UpdateRandomFXTimer(int intervalMin, int intervalMax, in
     return true;
 }
 
-int32_t NC_STACK_ypaworld::SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint, int32_t lifeTime, float scale, const vec3d &offset, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+int32_t NC_STACK_ypaworld::SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint, int32_t lifeTime, float scale, const vec3d &offset, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const std::string &external3dsPath)
 {
-    if ( modelId <= 0 )
+    if ( modelId <= 0 && external3dsPath.empty() )
         return 0;
 
     vec3d pos = ownerPos + offset;
@@ -2889,39 +2919,39 @@ int32_t NC_STACK_ypaworld::SpawnRandomizedTransientVP(int32_t modelId, const vec
         pos.z += (((float)rand() / (float)RAND_MAX) * 2.0 - 1.0) * randomPos;
     }
 
-    return SpawnTransientVP(modelId, pos, mat3x3::Ident(), lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
+    return SpawnTransientVisual(modelId, external3dsPath, pos, mat3x3::Ident(), lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
 }
 
 void NC_STACK_ypaworld::UpdateDecorationFX(const World::TDecorationFXConfig &config, int32_t &nextTime, const vec3d &ownerPos, int32_t *persistentId)
 {
-    const World::TVisualTint tint = config.vp_tint;
+    const World::TVisualTint tint = config.tint;
 
     if ( config.mode == World::DECORATION_FX_PERSISTENT )
     {
         nextTime = 0;
 
-        if ( !persistentId || config.vp <= 0 )
+        if ( !persistentId || (config.vp <= 0 && config.mesh3ds.empty()) )
             return;
 
         if ( !HasTransientVP(*persistentId) )
-            *persistentId = SpawnTransientVP(config.vp, ownerPos + config.offset, mat3x3::Ident(), 0, 1.0, tint,
-                                             config.vp_scale, config.vp_spin,
-                                             TTransientVPParticleControls(config),
-                                             config.vp_fade_in, config.vp_fade_out);
+            *persistentId = SpawnTransientVisual(config.vp, config.mesh3ds, ownerPos + config.offset, mat3x3::Ident(), 0, 1.0, tint,
+                                                 config.scale, config.spin,
+                                                 TTransientVPParticleControls(config),
+                                                 config.fade_in, config.fade_out);
 
         return;
     }
 
     if ( persistentId && *persistentId > 0 )
     {
-        RemoveTransientVP(*persistentId, config.vp_fade_out, config.vp_trail_fade_out);
+        RemoveTransientVP(*persistentId, config.fade_out, config.vp_trail_fade_out);
         *persistentId = 0;
     }
 
     int countMin = std::max(0, std::min(config.count_min, 32));
     int countMax = std::max(0, std::min(config.count_max, 32));
 
-    if ( config.vp <= 0 || countMin <= 0 || countMax <= 0 )
+    if ( (config.vp <= 0 && config.mesh3ds.empty()) || countMin <= 0 || countMax <= 0 )
     {
         nextTime = 0;
         return;
@@ -2940,22 +2970,29 @@ void NC_STACK_ypaworld::UpdateDecorationFX(const World::TDecorationFXConfig &con
                                    config.duration > 0 ? config.duration : 1000,
                                    1.0,
                                    config.offset,
-                                   config.vp_scale,
-                                   config.vp_spin,
+                                   config.scale,
+                                   config.spin,
                                    TTransientVPParticleControls(config),
-                                   config.vp_fade_in,
-                                   config.vp_fade_out);
+                                   config.fade_in,
+                                   config.fade_out,
+                                   config.mesh3ds);
 }
 
-int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale, bool useOwnerTransform, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, bool playerFirstPersonOnly, const vec3d &localRotation, bool hideInOwnerMissileCamera, const TTransientVPParticleControls &particleControls, bool followOwnerVisualTransform, int32_t fadeIn, int32_t fadeOut)
+int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale, bool useOwnerTransform, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, bool playerFirstPersonOnly, const vec3d &localRotation, bool hideInOwnerMissileCamera, const TTransientVPParticleControls &particleControls, bool followOwnerVisualTransform, int32_t fadeIn, int32_t fadeOut, const std::string &external3dsPath)
 {
-    if ( !owner || modelId <= 0 || modelId >= (int32_t)_vhclModels.size() )
+    if ( !owner || lifeTime < 0 )
         return 0;
 
-    if ( lifeTime < 0 )
-        return 0;
+    NC_STACK_base *base = NULL;
+    if ( !external3dsPath.empty() )
+        base = GetSharedExternalMesh(external3dsPath);
 
-    NC_STACK_base *base = _vhclModels.at(modelId);
+    if ( !base )
+    {
+        if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() )
+            return 0;
+        base = _vhclModels.at(modelId);
+    }
 
     if ( !base )
         return 0;
@@ -2987,7 +3024,8 @@ int32_t NC_STACK_ypaworld::SpawnAttachedStatusTransientVP(int32_t modelId, NC_ST
                                                           const vec3d &localOffset, int32_t lifeTime,
                                                           bool trailOnly, bool rotateOffsetWithOwner,
                                                           const vec3d &axisScale,
-                                                          const World::TVisualTint &tint)
+                                                          const World::TVisualTint &tint,
+                                                          const World::TVisualTint *trailTint)
 {
     int32_t id = SpawnAttachedTransientVP(modelId, owner, localOffset, lifeTime,
                                           1.0, false, tint, axisScale,
@@ -3004,7 +3042,45 @@ int32_t NC_STACK_ypaworld::SpawnAttachedStatusTransientVP(int32_t modelId, NC_ST
     if ( trailOnly && fx.vp )
         fx.vp->skipGeometry = true;
 
+    if ( trailTint )
+    {
+        fx.particleControls.enabled = true;
+        fx.particleControls.tint = *trailTint;
+        fx.particleControls.scale = axisScale;
+        fx.particleControls.lifetimeScale = 1.0f;
+    }
+
     return id;
+}
+
+int32_t NC_STACK_ypaworld::SpawnAttachedStatusTransientMesh(const std::string &path,
+                                                            NC_STACK_ypabact *owner,
+                                                            const vec3d &localOffset,
+                                                            int32_t lifeTime,
+                                                            bool rotateOffsetWithOwner,
+                                                            const vec3d &axisScale,
+                                                            const World::TVisualTint &tint)
+{
+    if ( !owner || path.empty() || lifeTime < 0 )
+        return 0;
+
+    NC_STACK_base *base = GetSharedExternalMesh(path);
+    if ( !base )
+        return 0;
+
+    _transientVPs.emplace_back(base, owner->_position, owner->_rotation, lifeTime);
+    TTransientVP &fx = _transientVPs.back();
+    fx.id = _nextTransientVPId++;
+    fx.followOwner = true;
+    fx.followOwnerGid = owner->_gid;
+    fx.followLocalOffset = localOffset;
+    fx.followRotateOffset = rotateOffsetWithOwner;
+    fx.scale = 1.0f;
+    fx.axisScale = vec3d(axisScale.x > 0.0f ? axisScale.x : 1.0f,
+                         axisScale.y > 0.0f ? axisScale.y : 1.0f,
+                         axisScale.z > 0.0f ? axisScale.z : 1.0f);
+    fx.tint = tint;
+    return fx.id;
 }
 
 bool NC_STACK_ypaworld::HasTransientVP(int32_t id) const
@@ -4374,7 +4450,7 @@ void NC_STACK_ypaworld::BuildingDecorationFXUpdate()
         if ( !yw_IsActiveBuildingSpawnerCell(cell) )
         {
             RemoveTransientVP(cell.DecorationFXPersistentId,
-                              cell.DecorationFX.vp_fade_out,
+                              cell.DecorationFX.fade_out,
                               cell.DecorationFX.vp_trail_fade_out);
             cell.DecorationFXPersistentId = 0;
             cell.DecorationFXNextTime = 0;
@@ -5369,7 +5445,7 @@ static double yw_SuperItemWaveTravelTimeMs(const World::TSuperItemProfile &profi
     return time * 1000.0;
 }
 
-void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
+void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVisual(TMapSuperItem &sitem,
                                                      const World::TSuperItemProfile &profile,
                                                      double fadeElapsed,
                                                      double fadeDuration)
@@ -5382,11 +5458,11 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
         center.y = sitem.PCell->height;
     static constexpr float WAVE_VP_BASE_RADIUS = 300.0f;
     float factor = (float)sitem.CurrentRadius / WAVE_VP_BASE_RADIUS;
-    vec3d runtimeScale(profile.wave_vp_axis_scale.x * factor,
-                       profile.wave_vp_axis_scale.y,
-                       profile.wave_vp_axis_scale.z * factor);
+    vec3d runtimeScale(profile.wave_axis_scale.x * factor,
+                       profile.wave_axis_scale.y,
+                       profile.wave_axis_scale.z * factor);
 
-    World::TVisualTint runtimeTint = profile.wave_vp_tint;
+    World::TVisualTint runtimeTint = profile.wave_tint;
 
     if ( sitem.WaveTransientVPId > 0 )
     {
@@ -5408,9 +5484,9 @@ void NC_STACK_ypaworld::UpdateCustomSuperItemWaveVP(TMapSuperItem &sitem,
         sitem.WaveTransientVPId = 0;
     }
 
-    sitem.WaveTransientVPId = SpawnTransientVP(profile.wave_vp, center,
-                                               mat3x3::Ident(), 0, 1.0f,
-                                               runtimeTint, runtimeScale);
+    sitem.WaveTransientVPId = SpawnTransientVisual(profile.wave_vp, profile.wave_3ds, center,
+                                                   mat3x3::Ident(), 0, 1.0f,
+                                                   runtimeTint, runtimeScale);
     if ( sitem.WaveTransientVPId > 0 && !_transientVPs.empty() &&
          _transientVPs.back().id == sitem.WaveTransientVPId )
     {
@@ -5452,7 +5528,7 @@ void NC_STACK_ypaworld::RestoreCustomSuperItemRuntimeAfterLoad()
                                    (double)elapsed < waveVisualEnd;
 
         if ( propagationActive || fadeOutActive )
-            UpdateCustomSuperItemWaveVP(sitem, *profile, (double)elapsed, waveVisualEnd);
+            UpdateCustomSuperItemWaveVisual(sitem, *profile, (double)elapsed, waveVisualEnd);
 
         if ( propagationActive )
             StartCustomSuperItemWaveEffects((int)id);
@@ -6181,12 +6257,12 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
 
                 if ( visuallyPerfect )
                 {
-                    bool destroy = profile.wave_building_total_destruction_percent >= 100;
-                    if ( profile.wave_building_total_destruction_percent > 0 &&
-                         profile.wave_building_total_destruction_percent < 100 )
+                    bool destroy = profile.wave_building_total_destruction >= 100;
+                    if ( profile.wave_building_total_destruction > 0 &&
+                         profile.wave_building_total_destruction < 100 )
                     {
                         destroy = (yw_SuperItemBuildingHash(profile, sitem, cell, bldX, bldY) % 100u) <
-                                  (uint32_t)profile.wave_building_total_destruction_percent;
+                                  (uint32_t)profile.wave_building_total_destruction;
                     }
 
                     if ( !destroy )
@@ -6260,7 +6336,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
         const bool fadeOutActive = profile->fade_out > 0 &&
                                    (double)elapsed < waveVisualEnd;
         if ( fadeOutActive )
-            UpdateCustomSuperItemWaveVP(sitem, *profile, (double)elapsed, waveVisualEnd);
+            UpdateCustomSuperItemWaveVisual(sitem, *profile, (double)elapsed, waveVisualEnd);
         else
         {
             if ( sitem.WaveTransientVPId > 0 )
@@ -6269,7 +6345,7 @@ void NC_STACK_ypaworld::UpdateCustomSuperItem(int id)
         }
     }
     else
-        UpdateCustomSuperItemWaveVP(sitem, *profile, (double)elapsed, waveVisualEnd);
+        UpdateCustomSuperItemWaveVisual(sitem, *profile, (double)elapsed, waveVisualEnd);
     sitem.LastRadius = sitem.CurrentRadius;
 }
 
@@ -8714,9 +8790,11 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
         _debugAoeRings.erase(_debugAoeRings.begin());
 }
 
-// OpenNeoUA custom: register/refresh an artillery shell bombardment marker. Multiple shells of
-// the same barrage merge into a single steady ring (refreshing its expiry).
-void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, int lingerMs)
+// OpenNeoUA custom: register/refresh an artillery shell map zone. Active zones are tied
+// to the firing platform + target centre, so shells still in flight may keep more than one
+// genuine bombardment zone visible after a redirect. Pending cooldown orders are unique per
+// platform: retargeting moves that one pending ring instead of leaving stale copies behind.
+void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, bool pending, int lingerMs)
 {
     if ( radius < 0.01f )
         return;
@@ -8730,11 +8808,20 @@ void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, 
 
     for (ArtilleryShellMarker &m : _artilleryShellMarkers)
     {
-        if ( m.owner == (uint8_t)owner && (m.pos.XZ() - pos.XZ()).length() <= radius )
+        if ( m.sourceGid != sourceGid || m.pending != pending )
+            continue;
+
+        // A pending order has exactly one authoritative target per artillery platform.
+        // Updating it must replace the old drawing immediately. Active markers instead
+        // only merge shells belonging to the same target centre, allowing a previous
+        // zone to remain visible while its already-fired shells are still in flight.
+        const float sameZoneTolerance = std::max(1.0f, radius * 0.01f);
+        if ( pending || (m.pos.XZ() - pos.XZ()).length() <= sameZoneTolerance )
         {
             m.pos = pos;
             m.radius = radius;
-            if ( expire > m.expireStamp )
+            m.owner = (uint8_t)owner;
+            if ( pending || expire > m.expireStamp )
                 m.expireStamp = expire;
             return;
         }
@@ -8743,12 +8830,29 @@ void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, 
     ArtilleryShellMarker marker;
     marker.pos = pos;
     marker.radius = radius;
-    marker.owner = (uint8_t)owner;
     marker.expireStamp = expire;
+    marker.sourceGid = sourceGid;
+    marker.owner = (uint8_t)owner;
+    marker.pending = pending;
     _artilleryShellMarkers.push_back(marker);
 
     if ( _artilleryShellMarkers.size() > 64 )
         _artilleryShellMarkers.erase(_artilleryShellMarkers.begin());
+}
+
+void NC_STACK_ypaworld::RemovePendingArtilleryShellMarker(uint32_t sourceGid)
+{
+    for (size_t i = 0; i < _artilleryShellMarkers.size(); )
+    {
+        const ArtilleryShellMarker &marker = _artilleryShellMarkers[i];
+        if ( marker.pending && marker.sourceGid == sourceGid )
+        {
+            _artilleryShellMarkers[i] = _artilleryShellMarkers.back();
+            _artilleryShellMarkers.pop_back();
+        }
+        else
+            i++;
+    }
 }
 
 // OpenNeoUA custom: expire old bombardment markers without drawing them in the 3D world.

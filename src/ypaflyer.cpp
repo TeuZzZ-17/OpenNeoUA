@@ -301,9 +301,9 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
     if ( v88 > 0.0 )
         _target_dir = _target_vec / v88;
 
-    if ( IsActiveDebuffDisorienting() )
+    if ( IsActiveDebuffStunning() )
     {
-        UpdateActiveDebuffDisorientMoveIntent();
+        UpdateActiveDebuffStunMoveIntent();
         v88 = 1200.0f;
     }
 
@@ -334,7 +334,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             }
         }
 
-        if ( !_primTtype && !_secndTtype && !IsActiveDebuffDisorienting() )
+        if ( !_primTtype && !_secndTtype && !IsActiveDebuffStunning() )
         {
             _status = BACT_STATUS_IDLE;
 
@@ -570,7 +570,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             if ( _flyerBoost > descentBoost )
                 _flyerBoost = descentBoost;
         }
-        _thraction = GetActiveDebuffDisorientTraction(_thraction, true);
+        _thraction = GetActiveDebuffStunTraction(_thraction, true);
 
         move_msg arg74;
         arg74.flag = 0;
