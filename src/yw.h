@@ -365,8 +365,11 @@ enum INPUT_BIND
     INPUT_BIND_ALTERNATIVE_VIEW = 51,
     // OpenNeoUA: remappable runtime toggle for the player-only UFO Spy UI.
     INPUT_BIND_TOGGLE_UFO_SPY_UI = 52,
+    // OpenNeoUA: remappable Tactical Map focus/lock toggle. Appended so existing
+    // profile binding IDs remain stable.
+    INPUT_BIND_MAP_FOCUS = 53,
 
-    INPUT_BIND_MAX        = 53,
+    INPUT_BIND_MAX        = 54,
 };
 
 // OpenNeoUA: fixed secondary shortcuts that intentionally coexist with the
@@ -803,6 +806,7 @@ public:
     bool confPlayerRoboAIBehavior;
     bool confSpectatorMode;
     bool confPlayAsOtherFactions;
+    bool confHideMapBorderWalls = false;
     // OpenNeoUA: cockpit is the only exposed/default first-person view. The legacy POV path remains
     // implemented internally, but has no Options selector, input binding or persisted default. This
     // session-only flag always starts in cockpit mode and may only be changed by internal code.
@@ -2506,6 +2510,7 @@ public:
 
 
     void SetFarView(bool farvw);
+    void SetHideMapBorderWalls(bool hide) { _hideMapBorderWalls = hide; }
     void ApplyNucleusViewDistanceOverrides();
 
     int TestVehicle(int protoID, int job, NC_STACK_ypabact *target = NULL);
@@ -3093,6 +3098,7 @@ public:
     // border walls level while preserving their ground geometry and gameplay.
     float _borderWallTopY = 0.0f;
     bool _borderWallTopReady = false;
+    bool _hideMapBorderWalls = false;
 
     vec2d _mapLength;
 

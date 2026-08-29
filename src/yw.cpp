@@ -895,6 +895,8 @@ static void yw_ApplyNucleusViewDistanceOverrides(NC_STACK_ypaworld *yw)
         yw->_skyHeight = v;
     if (yw_ParseOptionalBool(System::IniConf::GfxSkyRender.Get<std::string>(), &b))
         yw->_skyRender = b;
+
+    yw->SetHideMapBorderWalls(System::IniConf::GfxHideMapBorderWalls.Get<bool>());
 }
 
 void NC_STACK_ypaworld::ApplyNucleusViewDistanceOverrides()
@@ -5234,6 +5236,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_SPRINT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
     usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
     usr->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
+    usr->InputConfig[World::INPUT_BIND_MAP_FOCUS] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 53, Input::KC_E);
 
     // OpenNeoUA: keep the legacy IDs/type slots reserved for compatibility, but
     // these retired controls are no longer bindable or active.
@@ -7480,6 +7483,58 @@ bool NC_STACK_ypaworld::CreateVideoControls()
 
     // ===== end OpenNeoUA modern graphics options ==================================
 
+    // OpenNeoUA: visual-only map boundary wall toggle (left column, row 7).
+    // Unchecked by default: vanilla RAND boundary walls remain visible.
+    {
+        const int availableWidth = dword_5A50B2 - 6 * buttonsSpace - 2 * checkBoxWidth;
+        const int columnWidth = availableWidth / 2;
+
+        btn_64arg.tileset_down = 19;
+        btn_64arg.tileset_up = 18;
+        btn_64arg.field_3A = 30;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
+        btn_64arg.xpos = 0;
+        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
+        btn_64arg.width = checkBoxWidth;
+        btn_64arg.caption = "g";
+        btn_64arg.caption2 = "g";
+        btn_64arg.downCode = 1318;
+        btn_64arg.upCode = 1319;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 1193;
+        btn_64arg.flags = 0;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Hide Map Border Walls checkbox\n");
+            return false;
+        }
+
+        btn_64arg.tileset_down = 16;
+        btn_64arg.tileset_up = 16;
+        btn_64arg.field_3A = 16;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+        btn_64arg.xpos = checkBoxWidth + buttonsSpace;
+        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
+        btn_64arg.width = columnWidth;
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_HIDE_MAP_BORDER_WALLS);
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 0;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 0;
+        btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
+        btn_64arg.txt_r = _iniColors[60].r;
+        btn_64arg.txt_g = _iniColors[60].g;
+        btn_64arg.txt_b = _iniColors[60].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Hide Map Border Walls label\n");
+            return false;
+        }
+    }
+
     _GameShell->UpdatePaletteThemeText();
     _GameShell->UpdateGfxOptionTexts();
     _GameShell->UpdateMenuFontText();
@@ -9027,6 +9082,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_CAMFIRE]     = Locale::Text::Inputs(Locale::INPUTS_FIREVW);
     _GameShell->InputConfigTitle[World::INPUT_BIND_PLACE_MAP_MARKER] = Locale::Text::OpenUA(Locale::OUA_PLACE_MAP_MARKER);
     _GameShell->InputConfigTitle[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = Locale::Text::OpenUA(Locale::OUA_TOGGLE_UFO_SPY_UI);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_MAP_FOCUS] = Locale::Text::Inputs(Locale::INPUTS_LOCKVW);
 
     // Display only active bindings and sort them by their localized title.
     // Runtime IDs remain unchanged for profile compatibility.
@@ -10104,6 +10160,11 @@ void NC_STACK_ypaworld::UpdateGameShell()
 
     v16.butID = 1189; // Retro Interface checkbox
     v16.field_4 = (_GameShell->confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
+    _GameShell->video_button->SetState(&v16);
+
+    _GameShell->confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
+    v16.butID = 1193; // Hide Map Border Walls checkbox
+    v16.field_4 = _GameShell->confHideMapBorderWalls ? 1 : 2;
     _GameShell->video_button->SetState(&v16);
 
     _GameShell->video_button->SetText(1156, _GameShell->p_YW->_gfxMode.name);

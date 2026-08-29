@@ -2371,7 +2371,7 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
     // visible. Keep ordinary sector culling unchanged, but allow those two
     // camera-relevant visuals to reach their own mesh clipping stage.
     const bool renderSectorContents = sct->dword8 != 0;
-    const bool scanBorderWalls = !renderSectorContents && pcell->IsBorder();
+    const bool scanBorderWalls = !renderSectorContents && pcell->IsBorder() && !_hideMapBorderWalls;
 
     if ( renderSectorContents || scanBorderWalls )
     {
@@ -2444,30 +2444,42 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
                     if ( !renderSectorContents && !borderWallModel )
                         continue;
 
+                    const bool hideBorderWall = _hideMapBorderWalls && borderWallModel;
                     const bool straightenBorderWall =
-                        _borderWallTopReady && borderWallModel;
+                        !hideBorderWall && _borderWallTopReady && borderWallModel;
+                    const bool transformBorderWall = hideBorderWall || straightenBorderWall;
 
                     vec3d originalScale;
                     bool originalStatic = false;
 
-                    if ( straightenBorderWall )
+                    if ( transformBorderWall )
                     {
                         originalScale = bld->GetScale();
                         originalStatic = bld->IsStatic();
 
-                        vec3d straightScale = originalScale;
-                        straightScale.y = (pcell->CenterPos.y - _borderWallTopY) /
+                        vec3d wallScale = originalScale;
+                        if ( hideBorderWall )
+                        {
+                            // RAND boundary BASEs contain both the vertical wall and
+                            // their ground strip. Collapse only Y so wall polygons become
+                            // degenerate while the XZ ground geometry remains rendered.
+                            wallScale.y = 0.0f;
+                        }
+                        else
+                        {
+                            wallScale.y = (pcell->CenterPos.y - _borderWallTopY) /
                                           kMapBorderWallVanillaHeight;
 
-                        // The target is selected from the highest vanilla wall,
-                        // therefore this normally only extends shorter segments.
-                        if ( !isfinite(straightScale.y) || straightScale.y < 1.0 )
-                            straightScale.y = 1.0;
+                            // The target is selected from the highest vanilla wall,
+                            // therefore this normally only extends shorter segments.
+                            if ( !isfinite(wallScale.y) || wallScale.y < 1.0 )
+                                wallScale.y = 1.0;
+                        }
 
                         // Static BASE rendering ignores scale. Temporarily use the
                         // full transform and restore the shared model immediately.
                         bld->SetStatic(false);
-                        bld->SetScale(straightScale, NC_STACK_base::UF_Y);
+                        bld->SetScale(wallScale, NC_STACK_base::UF_Y);
                     }
 
                     bld->SetPosition(pos);
@@ -2476,7 +2488,7 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 
                     bld->Render(bs77, pcell->BldVPOpts.At(xx, zz));
 
-                    if ( straightenBorderWall )
+                    if ( transformBorderWall )
                     {
                         bld->SetScale(originalScale, NC_STACK_base::UF_Y);
                         bld->SetStatic(originalStatic);
