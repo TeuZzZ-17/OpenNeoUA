@@ -55,6 +55,13 @@ static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
 static constexpr int MENU_MSGBOX_INPUT_KEY_CONFLICT = 2;
 
+// Urban Assault factory profile values for the options still stored in USER.TXT.
+// OpenNeoUA-only Nucleus options use their IniConf DefaultValue instead, so the
+// reset path does not duplicate those defaults.
+static constexpr int OPTIONS_DEFAULT_FX_NUMBER = 16;
+static constexpr int OPTIONS_DEFAULT_SOUND_VOLUME = 127;
+static constexpr int OPTIONS_DEFAULT_MUSIC_VOLUME = 70;
+
 static std::string InputKeyDisplayTitle(int16_t keyCode)
 {
     // Mouse buttons can be described in the menu without making them newly
@@ -1831,6 +1838,136 @@ void UserData::ShowOptionsMenu()
     }
 
     video_listvw.selectedEntry = _gfxModeIndex;
+}
+
+// OpenNeoUA: restore only the controls exposed on the main Options page.
+// Atmosphere/Visibility keeps its independent reset button. Values are staged
+// exactly like ordinary UI edits: Back cancels them; OK persists them through
+// the existing USER.TXT/Nucleus.ini paths.
+void UserData::ResetOptionsToDefaults()
+{
+    const Common::Point defaultResolution(GFX::DEFAULT_WIDTH, GFX::DEFAULT_HEIGHT);
+    const int defaultModeIndex = GFX::GFXEngine::Instance.GetGfxModeIndex(defaultResolution);
+    const std::vector<GFX::GfxMode> &modes = GFX::GFXEngine::Instance.GetAvailableModes();
+
+    if ( defaultModeIndex >= 0 && defaultModeIndex < (int)modes.size() )
+    {
+        _gfxModeIndex = defaultModeIndex;
+        video_listvw.selectedEntry = defaultModeIndex;
+        _gfxMode = modes.at(defaultModeIndex);
+        video_button->SetText(1156, _gfxMode.name);
+        _settingsChangeOptions |= 1;
+    }
+
+    // Preserve hidden legacy flags and reset only the graphics toggles visible
+    // on this page: Sky on, Windowed Mode off.
+    confGFXFlags = GFXFlags;
+    confGFXFlags |= World::GFX_FLAG_SKYRENDER;
+    confGFXFlags &= ~World::GFX_FLAG_WINDOWED;
+    _settingsChangeOptions |= 8 | 0x400;
+
+    // The visible Music checkbox maps to the legacy SF_CDSOUND profile flag.
+    // Preserve hidden audio flags and restore the shipped checked state.
+    confSoundFlags = soundFlags;
+    confSoundFlags |= World::SF_CDSOUND;
+    _settingsChangeOptions |= 0x200;
+
+    confFxNumber = OPTIONS_DEFAULT_FX_NUMBER;
+    confSoundVolume = OPTIONS_DEFAULT_SOUND_VOLUME;
+    confMusicVolume = OPTIONS_DEFAULT_MUSIC_VOLUME;
+    _settingsChangeOptions |= 0x40 | 0x80 | 0x100;
+
+    confBlending = nonstd::any_cast<int32_t>(System::IniConf::GfxBlending.DefaultValue);
+    confMaxFps = NormalizeFrameRateLimit(nonstd::any_cast<int32_t>(System::IniConf::GfxMaxFps.DefaultValue));
+    confMoviePlayer = nonstd::any_cast<bool>(System::IniConf::GfxMoviePlayer.DefaultValue);
+    confMenuFont = nonstd::any_cast<std::string>(System::IniConf::UiMenuFont.DefaultValue);
+    confPlayerRoboAIBehavior = nonstd::any_cast<bool>(System::IniConf::GameRoboPlayerAIBehavior.DefaultValue);
+    confSpectatorMode = nonstd::any_cast<bool>(System::IniConf::GameSpectatorMode.DefaultValue);
+    confPlayAsOtherFactions = nonstd::any_cast<bool>(System::IniConf::GamePlayAsOtherFactions.DefaultValue);
+    confHideMapBorderWalls = nonstd::any_cast<bool>(System::IniConf::GfxHideMapBorderWalls.DefaultValue);
+
+    const bool defaultRetroInterface = nonstd::any_cast<bool>(System::IniConf::UiRetroInterface.DefaultValue);
+    confInterfaceStyle = defaultRetroInterface ? GFX::VirtualUIStyle::RETRO : GFX::VirtualUIStyle::SMOOTH;
+
+    const std::string defaultAmbient = nonstd::any_cast<std::string>(System::IniConf::GameAmbientSoundVolume.DefaultValue);
+    confAmbientSoundVolume = (int16_t)IntFromString(defaultAmbient, 100, 0, 127);
+
+    _settingsChangeOptions |= SETTINGS_CHANGE_BLENDING |
+                              SETTINGS_CHANGE_MAXFPS |
+                              SETTINGS_CHANGE_MOVIE_PLAYER |
+                              SETTINGS_CHANGE_MENU_FONT |
+                              SETTINGS_CHANGE_PLAYER_ROBO_AI_BEHAVIOR |
+                              SETTINGS_CHANGE_SPECTATOR_MODE |
+                              SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS |
+                              SETTINGS_CHANGE_AMBIENT_VOLUME |
+                              SETTINGS_CHANGE_INTERFACE_STYLE |
+                              SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS;
+
+    NC_STACK_button::button_66arg state;
+
+    state.butID = 1166; // Windowed Mode: default fullscreen/off.
+    state.field_4 = 2;
+    video_button->SetState(&state);
+
+    state.butID = 1160; // Sky: visible by default.
+    state.field_4 = 1;
+    video_button->SetState(&state);
+
+    state.butID = 1164; // Music: enabled by default.
+    state.field_4 = 1;
+    video_button->SetState(&state);
+
+    state.butID = 1175;
+    state.field_4 = (!confSpectatorMode) + 1;
+    video_button->SetState(&state);
+
+    state.butID = 1190;
+    state.field_4 = (!confPlayAsOtherFactions) + 1;
+    video_button->SetState(&state);
+
+    state.butID = 1184;
+    state.field_4 = (!confMoviePlayer) + 1;
+    video_button->SetState(&state);
+
+    state.butID = 1174;
+    state.field_4 = (!confPlayerRoboAIBehavior) + 1;
+    video_button->SetState(&state);
+
+    state.butID = 1189;
+    state.field_4 = defaultRetroInterface ? 1 : 2;
+    video_button->SetState(&state);
+
+    state.butID = 1193;
+    state.field_4 = confHideMapBorderWalls ? 1 : 2;
+    video_button->SetState(&state);
+
+    if ( NC_STACK_button::Slider *slider = video_button->GetSliderData(1159) )
+    {
+        slider->value = confFxNumber;
+        video_button->Refresh(1159);
+    }
+
+    if ( NC_STACK_button::Slider *slider = video_button->GetSliderData(1152) )
+    {
+        slider->value = confSoundVolume;
+        video_button->Refresh(1152);
+    }
+
+    if ( NC_STACK_button::Slider *slider = video_button->GetSliderData(1154) )
+    {
+        slider->value = confMusicVolume;
+        video_button->Refresh(1154);
+    }
+
+    if ( NC_STACK_button::Slider *slider = video_button->GetSliderData(1191) )
+    {
+        slider->value = confAmbientSoundVolume;
+        video_button->Refresh(1191);
+        video_button->SetText(1192, std::to_string(confAmbientSoundVolume));
+    }
+
+    UpdateGfxOptionTexts();
+    UpdateMenuFontText();
 }
 
 
@@ -5296,6 +5433,10 @@ void UserData::GameShellUiHandleInput()
         else if ( r.code == 1320 ) // Atmosphere & Visibility page
         {
             ShowAtmosphereOptionsMenu();
+        }
+        else if ( r.code == 1321 ) // Reset main Options page to factory defaults
+        {
+            ResetOptionsToDefaults();
         }
         else if ( r.code == 1306 ) // Blending cycle
         {
