@@ -43,6 +43,7 @@ Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::
 Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyRender("gfx.sky_render", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxHideMapBorderWalls("gfx.hide_map_border_walls", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GfxAdditionalModes("gfx.custommodes", Common::Ini::KT_STRING);
 
 // Gfx Engine
@@ -489,6 +490,7 @@ void IniConf::Init()
         , &GfxRenderSectors
         , &GfxSkyHeight
         , &GfxSkyRender
+        , &GfxHideMapBorderWalls
         , &GfxMode
         , &GfxXRes
         , &GfxYRes

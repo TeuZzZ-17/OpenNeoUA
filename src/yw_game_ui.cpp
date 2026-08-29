@@ -10822,7 +10822,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             winpt->flag |= TClickBoxInf::FLAG_BTN_DOWN;
             break;
 
-        case 14:
+        case 53:
             winpt->selected_btn = &robo_map;
             winpt->selected_btnID = 6;
             winpt->flag |= TClickBoxInf::FLAG_BTN_DOWN;
@@ -11208,7 +11208,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                 break;
 
             case 6:
-                yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_LOCKVIEWER, 14);
+                yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_LOCKVIEWER, 53);
                 break;
 
             default:
