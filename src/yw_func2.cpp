@@ -3462,6 +3462,8 @@ static std::string db_weapon_model_display_name(const World::TWeapProto &p)
         return "artillery_shell";
     if ( p.IsHomingBomb() )
         return "homing_bomb";
+    if ( p.IsArcGrenade() )
+        return "arc_grenade";
 
     switch ( p._weaponFlags )
     {

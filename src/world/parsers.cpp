@@ -4160,6 +4160,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->radius_flyer = 0;
         _wpn->radius_robo = 0;
         _wpn->start_speed = 70.0;
+        _wpn->grenade_arc_angle = 0.0f;
+        _wpn->grenade_arc_gravity = 0.0f;
         _wpn->life_time = 20000;
         _wpn->life_time_nt = 0;
         _wpn->drive_time = 7000;
@@ -4277,6 +4279,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         if ( !StriCmp(p2, "grenade") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_GRENADE;
+        else if ( !StriCmp(p2, "arc_grenade") )
+            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_ARC_GRENADE;
         else if ( !StriCmp(p2, "rocket") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_ROCKET;
         else if ( !StriCmp(p2, "missile") )
@@ -4481,6 +4485,17 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "start_speed") )
     {
         _wpn->start_speed = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "grenade_arc_angle") )
+    {
+        // model = arc_grenade only: one-time launch elevation in degrees.
+        _wpn->grenade_arc_angle = std::min(ParseNonNegativeIniFloatOrZero(p2), 89.0f);
+    }
+    else if ( !StriCmp(p1, "grenade_arc_gravity") )
+    {
+        // model = arc_grenade only: downward acceleration. Zero/absent/invalid
+        // selects the engine-standard gravity in the runtime.
+        _wpn->grenade_arc_gravity = std::min(ParseNonNegativeIniFloatOrZero(p2), 1000.0f);
     }
     else if ( !StriCmp(p1, "cluster_enable") )
     {

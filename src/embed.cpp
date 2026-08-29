@@ -34,43 +34,77 @@ bool SkipCurrentOrNextPayload(IFFile *mfile, int payloadParse)
     return false;
 }
 
-// Preserve the original embedded-resource parser path unless a concrete loose
-// replacement actually exists.  SET.BAS relies on the exact IFF cursor/parent
-// state here: merely probing/peeking at the payload must not change the vanilla
-// fallback path.
-bool HasLooseEmrsOverrideCandidate(const std::string &classname,
-                                   const std::string &resname,
-                                   size_t emrsOffset)
+enum class LooseEmrsCandidateKind
 {
-    if ( !IsSetLooseEmrsOverrideClass(classname) )
-        return false;
+    None,
+    SkyPng,
+    SkyEmbedded,
+    SetPng,
+    SetEmbedded
+};
 
-    IFFile::SetLooseOverride probe;
+struct LooseEmrsCandidate
+{
+    LooseEmrsCandidateKind kind = LooseEmrsCandidateKind::None;
+    IFFile::SetLooseOverride overrideInfo;
+};
+
+// Preserve the original embedded-resource parser path unless a concrete loose
+// replacement actually exists. SET.BAS relies on the exact IFF cursor/parent
+// state here: merely probing/peeking at the payload must not change the vanilla
+// fallback path. Keep the first resolved candidate so the real load does not
+// repeat the same successful lookup (or the known misses before it).
+LooseEmrsCandidate FindLooseEmrsOverrideCandidate(const std::string &classname,
+                                                  const std::string &resname,
+                                                  size_t emrsOffset)
+{
+    LooseEmrsCandidate result;
+    if ( !IsSetLooseEmrsOverrideClass(classname) )
+        return result;
+
     const std::string payload = "embedded";
 
     if ( IFFile::IsSkyLooseScopeActive() )
     {
         if ( classname == "ilbm.class" &&
              IFFile::FindSkyLooseEmrsPngOverride(resname, "rb", classname, payload,
-                                                  &probe, "NC_STACK_embed::LoadingFromIFF",
+                                                  &result.overrideInfo,
+                                                  "NC_STACK_embed::LoadingFromIFF",
                                                   emrsOffset) )
-            return true;
+        {
+            result.kind = LooseEmrsCandidateKind::SkyPng;
+            return result;
+        }
 
         if ( IFFile::FindSkyLooseEmrsOverride(resname, "rb", classname, payload,
-                                               &probe, "NC_STACK_embed::LoadingFromIFF",
+                                               &result.overrideInfo,
+                                               "NC_STACK_embed::LoadingFromIFF",
                                                emrsOffset) )
-            return true;
+        {
+            result.kind = LooseEmrsCandidateKind::SkyEmbedded;
+            return result;
+        }
     }
 
     if ( classname == "ilbm.class" &&
          IFFile::FindSetLooseEmrsPngOverride(resname, "rb", classname, payload,
-                                              &probe, "NC_STACK_embed::LoadingFromIFF",
+                                              &result.overrideInfo,
+                                              "NC_STACK_embed::LoadingFromIFF",
                                               emrsOffset) )
-        return true;
+    {
+        result.kind = LooseEmrsCandidateKind::SetPng;
+        return result;
+    }
 
-    return IFFile::FindSetLooseEmrsOverride(resname, "rb", classname, payload,
-                                             &probe, "NC_STACK_embed::LoadingFromIFF",
-                                             emrsOffset);
+    if ( IFFile::FindSetLooseEmrsOverride(resname, "rb", classname, payload,
+                                           &result.overrideInfo,
+                                           "NC_STACK_embed::LoadingFromIFF",
+                                           emrsOffset) )
+    {
+        result.kind = LooseEmrsCandidateKind::SetEmbedded;
+    }
+
+    return result;
 }
 }
 
@@ -142,7 +176,9 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
             // concrete loose replacement, execute the original loader sequence
             // unchanged.  In particular, do not peek ahead in the shared SET.BAS
             // stream before handing it to the resource loader.
-            if ( !HasLooseEmrsOverrideCandidate(classname, resname, emrsOffset) )
+            const LooseEmrsCandidate initialLooseCandidate =
+                FindLooseEmrsOverrideCandidate(classname, resname, emrsOffset);
+            if ( initialLooseCandidate.kind == LooseEmrsCandidateKind::None )
             {
                 mfile->parse();
 
@@ -169,18 +205,50 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
                 if ( !payloadParse )
                     payload = IFFile::ChunkLabel(mfile->GetCurrentChunk());
 
+                auto resolveLooseCandidate = [&](LooseEmrsCandidateKind kind,
+                                                 IFFile::SetLooseOverride *out) -> bool
+                {
+                    if ( static_cast<int>(kind) < static_cast<int>(initialLooseCandidate.kind) )
+                        return false;
+
+                    if ( kind == initialLooseCandidate.kind )
+                    {
+                        *out = initialLooseCandidate.overrideInfo;
+                        out->embeddedPayload = payload;
+                        return true;
+                    }
+
+                    switch (kind)
+                    {
+                        case LooseEmrsCandidateKind::SkyPng:
+                            return IFFile::FindSkyLooseEmrsPngOverride(
+                                resname, "rb", classname, payload, out,
+                                "NC_STACK_embed::LoadingFromIFF", emrsOffset);
+                        case LooseEmrsCandidateKind::SkyEmbedded:
+                            return IFFile::FindSkyLooseEmrsOverride(
+                                resname, "rb", classname, payload, out,
+                                "NC_STACK_embed::LoadingFromIFF", emrsOffset);
+                        case LooseEmrsCandidateKind::SetPng:
+                            return IFFile::FindSetLooseEmrsPngOverride(
+                                resname, "rb", classname, payload, out,
+                                "NC_STACK_embed::LoadingFromIFF", emrsOffset);
+                        case LooseEmrsCandidateKind::SetEmbedded:
+                            return IFFile::FindSetLooseEmrsOverride(
+                                resname, "rb", classname, payload, out,
+                                "NC_STACK_embed::LoadingFromIFF", emrsOffset);
+                        case LooseEmrsCandidateKind::None:
+                            break;
+                    }
+
+                    return false;
+                };
+
                 if ( IFFile::IsSkyLooseScopeActive() )
                 {
                     if ( classname == "ilbm.class" )
                     {
                         IFFile::SetLooseOverride skyPngOverrideInfo;
-                        if ( IFFile::FindSkyLooseEmrsPngOverride(resname,
-                                                                  "rb",
-                                                                  classname,
-                                                                  payload,
-                                                                  &skyPngOverrideInfo,
-                                                                  "NC_STACK_embed::LoadingFromIFF",
-                                                                  emrsOffset) )
+                        if ( resolveLooseCandidate(LooseEmrsCandidateKind::SkyPng, &skyPngOverrideInfo) )
                         {
                             NC_STACK_rsrc *png_class = Nucleus::CTFInit<NC_STACK_rsrc>(classname,
                                {{NC_STACK_rsrc::RSRC_ATT_NAME, resname},
@@ -208,13 +276,7 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
                     }
 
                     IFFile::SetLooseOverride skyOverrideInfo;
-                    if ( IFFile::FindSkyLooseEmrsOverride(resname,
-                                                          "rb",
-                                                          classname,
-                                                          payload,
-                                                          &skyOverrideInfo,
-                                                          "NC_STACK_embed::LoadingFromIFF",
-                                                          emrsOffset) )
+                    if ( resolveLooseCandidate(LooseEmrsCandidateKind::SkyEmbedded, &skyOverrideInfo) )
                     {
                         FSMgr::FileHandle looseHandle = FSMgr::iDir::openFile(skyOverrideInfo.resolvedPath, "rb");
                         if ( looseHandle.OK() )
@@ -255,13 +317,7 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
                 if ( classname == "ilbm.class" )
                 {
                     IFFile::SetLooseOverride pngOverrideInfo;
-                    if ( IFFile::FindSetLooseEmrsPngOverride(resname,
-                                                              "rb",
-                                                              classname,
-                                                              payload,
-                                                              &pngOverrideInfo,
-                                                              "NC_STACK_embed::LoadingFromIFF",
-                                                              emrsOffset) )
+                    if ( resolveLooseCandidate(LooseEmrsCandidateKind::SetPng, &pngOverrideInfo) )
                     {
                         NC_STACK_rsrc *png_class = Nucleus::CTFInit<NC_STACK_rsrc>(classname,
                            {{NC_STACK_rsrc::RSRC_ATT_NAME, resname},
@@ -292,13 +348,7 @@ size_t NC_STACK_embed::LoadingFromIFF(IFFile **file)
                 }
 
                 IFFile::SetLooseOverride overrideInfo;
-                if ( IFFile::FindSetLooseEmrsOverride(resname,
-                                                       "rb",
-                                                       classname,
-                                                       payload,
-                                                       &overrideInfo,
-                                                       "NC_STACK_embed::LoadingFromIFF",
-                                                       emrsOffset) )
+                if ( resolveLooseCandidate(LooseEmrsCandidateKind::SetEmbedded, &overrideInfo) )
                 {
                     overrideInfo.embeddedPayload = payload;
 

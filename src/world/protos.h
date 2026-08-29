@@ -859,12 +859,14 @@ struct TWeapProto
         WEAPON_FLAG_ARTILLERY_SHELL = 64, // OpenNeoUA custom: radar-guided ballistic barrage
         WEAPON_FLAG_LASER = 128, // OpenNeoUA custom: continuous targeted beam weapon
         WEAPON_FLAG_KAMIKAZE = 512, // OpenNeoUA custom: carrier-mounted detonation payload
+        WEAPON_FLAG_ARC_GRENADE = 1024, // OpenNeoUA custom: dedicated ballistic arc-grenade identity
 
         WEAPON_FLAGS_BOMB = WEAPON_FLAG_PROJECTILE,
         WEAPON_FLAGS_ROCKET = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT,
         WEAPON_FLAGS_MISSILE = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT | WEAPON_FLAG_TARGETED,
         WEAPON_FLAGS_OBSAVOID = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT | WEAPON_FLAG_OBSAVOID,
         WEAPON_FLAGS_GRENADE = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_GRENADE,
+        WEAPON_FLAGS_ARC_GRENADE = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_GRENADE | WEAPON_FLAG_ARC_GRENADE,
         WEAPON_FLAGS_HOMING_BOMB = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_HOMING_BOMB,
         WEAPON_FLAGS_ARTILLERY_SHELL = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_ARTILLERY_SHELL,
         // Laser keeps PROJECTILE|DIRECT|TARGETED so the AI/aim/lock logic treats it
@@ -877,6 +879,13 @@ struct TWeapProto
     int8_t unitID = 0;
     uint8_t enable_mask = 0;
     int16_t _weaponFlags = 0;
+
+    // OpenNeoUA custom: Arc Grenade has a dedicated Weapon identity while
+    // retaining the shared grenade bit for compatible grenade-family behavior.
+    bool IsArcGrenade() const
+    {
+        return (_weaponFlags & WEAPON_FLAG_ARC_GRENADE) != 0;
+    }
 
     bool IsHomingBomb() const
     {
@@ -930,7 +939,10 @@ struct TWeapProto
 
     int GetFireControlFlags() const
     {
-        return IsBombLike() ? 0 : (_weaponFlags & ~WEAPON_FLAG_PROJECTILE);
+        // Arc Grenade keeps the legacy grenade-family fire-control semantics;
+        // its dedicated identity bit is runtime-only and must not alter AI aim.
+        return IsBombLike() ? 0 :
+            (_weaponFlags & ~(WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_ARC_GRENADE));
     }
 
     uint8_t type_icon = 0;
@@ -1070,6 +1082,12 @@ struct TWeapProto
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
     float start_speed = 0.0;
+    // OpenNeoUA custom, model = arc_grenade only. The angle is applied once at
+    // launch as an absolute elevation above the world horizontal plane. Gravity
+    // is then applied every frame by the dedicated Arc Grenade runtime. A missing,
+    // zero or invalid gravity uses the engine-standard 9.80665 fallback.
+    float grenade_arc_angle = 0.0f;
+    float grenade_arc_gravity = 0.0f;
     // OpenNeoUA custom: dedicated artillery shell barrage weapon ("model = artillery_shell").
     // All defaults are vanilla-safe: with artillery_shell_barrage_shots <= 0 / no max range,
     // an artillery shell weapon simply never fires.
