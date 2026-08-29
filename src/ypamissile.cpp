@@ -1247,9 +1247,12 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                         continue;
                 }
 
-                // Preserve the legacy/upstream AI friendly-collision rule:
-                // non-player-controlled projectiles ignore units of their emitter owner.
-                if ( !a5 && bct->_owner == _mislEmitter->_owner )
+                // Preserve the legacy/upstream AI friendly-collision rule for normal
+                // projectiles. Artillery is a world-area bombardment: its direct path
+                // must not become harmless to same-owner units merely because the
+                // launcher is being commanded remotely from the Tactical Map.
+                if ( !_isArtilleryShellProjectile && !a5 &&
+                     bct->_owner == _mislEmitter->_owner )
                     continue;
 
                 if ( _mislEmitter->_bact_type == BACT_TYPES_GUN )
@@ -1274,7 +1277,11 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                     }
                 }
 
-                if ( _mislType == MISL_BOMB && bct->_position.y < _mislStartHeight )
+                // Artillery uses its own parametric trajectory and impact point; the
+                // legacy bomb start-height gate is unrelated to that trajectory and
+                // would incorrectly make valid artillery unit hits disappear.
+                if ( !_isArtilleryShellProjectile && _mislType == MISL_BOMB &&
+                     bct->_position.y < _mislStartHeight )
                     continue;
 
                 World::rbcolls *v82 = bct->getBACT_collNodes();
@@ -1643,7 +1650,11 @@ const char *NC_STACK_ypamissile::GetAreaDamageSkipReason(NC_STACK_ypabact *bct, 
         }
     }
 
-    if ( _mislType == MISL_BOMB && bct->_position.y < _mislStartHeight )
+    // The bomb start-height rule belongs to the legacy physical bomb path.
+    // Artillery has a dedicated ballistic/vertical trajectory and must evaluate
+    // unit AoE around its actual timed impact point instead.
+    if ( !_isArtilleryShellProjectile && _mislType == MISL_BOMB &&
+         bct->_position.y < _mislStartHeight )
         return "bomb_below_start_height";
 
     return NULL;
@@ -1941,7 +1952,10 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
     if ( !isfinite(_mislAoeUnitRadius) || _mislAoeUnitRadius <= 0.0 || (!doAoeDamage && !doAoePush) || !_world )
         return;
 
-    bool allowFriendly = getBACT_viewer();
+    // Artillery explosions are area bombardments and may damage every unit in
+    // the blast, including same-owner units. Normal weapons retain the existing
+    // player/AI friendly-fire policy unchanged.
+    bool allowFriendly = _isArtilleryShellProjectile || getBACT_viewer();
 
     if ( _mislEmitter && _mislEmitter->getBACT_inputting() )
         allowFriendly = true;
@@ -2804,6 +2818,16 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
 
     if ( !impactNow )
         return;
+
+    // The dedicated artillery trajectory bypasses the normal missile AI path,
+    // therefore it never reaches the usual TubeCollisionTest(). Reuse that exact
+    // direct-hit path on the terminal flight segment before the timed explosion:
+    // a physically intersected unit receives `energy`, is remembered as the direct
+    // hit, and Impact() below will then exclude it from aoe_unit_energy to avoid
+    // double damage. If no unit is intersected, the shell simply detonates at its
+    // authored landing/airburst point as before.
+    NC_STACK_ypabact *directHit = NULL;
+    TubeCollisionTest(true, &directHit);
 
     // Ground-burst artillery shells land on a point previously snapped to world
     // collision geometry. Reacquire that same real surface at impact time so

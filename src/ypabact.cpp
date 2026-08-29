@@ -10018,7 +10018,7 @@ bool NC_STACK_ypabact::IsManualArtilleryShellPlatform()
 }
 
 // OpenNeoUA custom: bombardment zone radius of this unit's artillery shell weapon (0 if none).
-// Used to draw the white aiming preview ring on the 2D map.
+// Used to size the external SVG aiming marker on the 2D map.
 float NC_STACK_ypabact::GetArtilleryShellBarrageRadius()
 {
     if ( !_world )
@@ -10037,6 +10037,26 @@ float NC_STACK_ypabact::GetArtilleryShellBarrageRadius()
         return _world->GetWeaponsProtos().at(weaponId).artillery_shell_barrage_radius;
 
     return 0.0f;
+}
+
+std::string NC_STACK_ypabact::GetArtilleryShellMarkerPath()
+{
+    if ( !_world )
+        return std::string();
+
+    int weaponId = 0;
+    if ( NC_STACK_ypabact *actor = ypabact_GetManualArtilleryShellActor(this, &weaponId) )
+    {
+        (void)actor;
+        if ( weaponId > 0 )
+            return _world->GetWeaponsProtos().at(weaponId).artillery_shell_marker_path;
+    }
+
+    weaponId = ypabact_GetMountedArtilleryShellWeaponId(this);
+    if ( weaponId > 0 )
+        return _world->GetWeaponsProtos().at(weaponId).artillery_shell_marker_path;
+
+    return std::string();
 }
 
 float NC_STACK_ypabact::GetArtilleryShellReadinessRatio()
@@ -10477,16 +10497,17 @@ static bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, con
         shell->SetLifeTime(flight + 1000);
 
     // OpenNeoUA custom: register/refresh the bombardment marker for this barrage zone.
-    // Each shell refreshes it so the ring stays up until the last shell has landed.
+    // Each shell refreshes it so the external marker stays up until the last shell has landed.
     if ( wproto.artillery_shell_barrage_radius > 0.0 )
-        world->AddArtilleryShellMarker(targetCenter, wproto.artillery_shell_barrage_radius, unit->_owner, unit->_gid, false, flight);
+        world->AddArtilleryShellMarker(targetCenter, wproto.artillery_shell_barrage_radius, unit->_owner, unit->_gid,
+                                       wproto.artillery_shell_marker_path, false, flight);
 
     return true;
 }
 
 // Keep the single queued artillery target visible while it is waiting behind either
 // an active barrage or its cooldown. Pending orders are unique per platform, so this
-// refreshes/moves one disabled-grey ring instead of creating parallel future zones.
+// refreshes/moves one disabled-grey marker instead of creating parallel future zones.
 static void ypabact_RefreshPendingArtilleryShellMarker(NC_STACK_ypabact *unit, const World::TWeapProto &wproto)
 {
     if ( !unit || !unit->_artillery_shell_has_pending )
@@ -10497,7 +10518,8 @@ static void ypabact_RefreshPendingArtilleryShellMarker(NC_STACK_ypabact *unit, c
     {
         world->AddArtilleryShellMarker(unit->_artillery_shell_pending_target,
                                        wproto.artillery_shell_barrage_radius,
-                                       unit->_owner, unit->_gid, true, 1000);
+                                       unit->_owner, unit->_gid,
+                                       wproto.artillery_shell_marker_path, true, 1000);
     }
 }
 
