@@ -1093,6 +1093,7 @@ struct TWeapProto
     float artillery_shell_vertical_spread_x = 0.0;  // vertical_barrage only: random ascent tilt toward +/- world X, in degrees
     float artillery_shell_vertical_spread_z = 0.0;  // vertical_barrage only: random ascent tilt toward +/- world Z, in degrees
     int   artillery_shell_airburst = 1;             // 1 = explode at the target height; 0 = land on the real terrain height at the shell's own impact point
+    std::string artillery_shell_marker_path = "artillery_ring_classic.svg"; // SVG path relative to Data/Interface/Map/Markers; invalid/missing falls back to the classic marker
     NC_STACK_skeleton *wireframe = NULL;
     IDVList initParams;
     std::vector<TChainFXConfig> chain_fx;

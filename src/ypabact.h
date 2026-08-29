@@ -498,6 +498,7 @@ public:
     bool IsArtilleryShellPlatform(); // OpenNeoUA custom: true if any weapon slot is an artillery shell (blocks first-person entry)
     bool IsManualArtilleryShellPlatform(); // OpenNeoUA custom: artillery shell platform that opted into manual map-click control
     float GetArtilleryShellBarrageRadius(); // OpenNeoUA custom: bombardment zone radius of this unit's artillery shell (0 if none)
+    std::string GetArtilleryShellMarkerPath(); // OpenNeoUA custom: SVG marker path authored by the artillery weapon
     float GetArtilleryShellReadinessRatio(); // OpenNeoUA custom: 0..1 cooldown readiness for UI bars
     void UpdateKamikaze(update_msg *arg);
     bool IsKamikazeArmed();

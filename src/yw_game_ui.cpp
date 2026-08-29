@@ -2132,27 +2132,107 @@ static void yw_RenderArtilleryShellCooldownRadarBars(NC_STACK_ypaworld *yw, int 
     }
 }
 
-// OpenNeoUA custom: draw active artillery shell bombardment zones on the 2D strategic map and
-// the small gameplay radar. Own strike markers stay visible as player orders;
-// enemy markers require the target sector to be currently visible/discovered.
-// Colour follows the owner's faction colour.
-// Helper: draw one circle on the 2D map (world XZ centre + world radius).
-static void yw_DrawArtilleryShellMapCircle(float cx, float cz, float radius, int segs)
+// OpenNeoUA custom: artillery bombardment marker artwork is fully asset-driven.
+// Weapon scripts author a SVG relative to Data/Interface/Map/Markers.  The same
+// white/alpha artwork is color-modulated at runtime for faction/queued/invalid
+// states, so one vector asset is the single visual source of truth.
+static const char *yw_ArtilleryShellDefaultMarkerFile()
 {
-    Common::Point prev;
-    bool hasPrev = false;
+    return "artillery_ring_classic.svg";
+}
 
-    for (int i = 0; i <= segs; i++)
-    {
-        float a = C_2PI * (float)i / (float)segs;
-        Common::Point cur = sub_4F681C( { cx + cosf(a) * radius, cz + sinf(a) * radius } );
+static std::string yw_ResolveArtilleryShellMarkerAsset(const std::string &authored)
+{
+    static const std::string ROOT = "Interface/Map/Markers/";
+    static const std::string DATA_ROOT = "Data/Interface/Map/Markers/";
 
-        if ( hasPrev )
-            GFX::Engine.raster_func201( Common::Line(prev, cur) );
+    std::string relative = authored.empty() ? yw_ArtilleryShellDefaultMarkerFile() : authored;
+    std::replace(relative.begin(), relative.end(), '\\', '/');
 
-        prev = cur;
-        hasPrev = true;
-    }
+    if ( relative.rfind(DATA_ROOT, 0) == 0 )
+        relative.erase(0, DATA_ROOT.size());
+    else if ( relative.rfind(ROOT, 0) == 0 )
+        relative.erase(0, ROOT.size());
+
+    const size_t dot = relative.find_last_of('.');
+    const bool safe = !relative.empty() && relative.front() != '/' &&
+                      relative.find(':') == std::string::npos &&
+                      relative.find("../") == std::string::npos &&
+                      relative.find("/..") == std::string::npos &&
+                      relative != "." && relative != ".." &&
+                      dot != std::string::npos && dot + 1 < relative.size() &&
+                      !StriCmp(relative.substr(dot + 1), "svg");
+
+    if ( !safe )
+        relative = yw_ArtilleryShellDefaultMarkerFile();
+
+    return ROOT + relative;
+}
+
+static NC_STACK_bitmap *yw_LoadArtilleryShellMarkerSvg(const std::string &authored,
+                                                        int width, int height)
+{
+    const std::string requested = yw_ResolveArtilleryShellMarkerAsset(authored);
+    NC_STACK_bitmap *bitmap = StatusIconLoad(requested, width, height);
+    if ( bitmap && bitmap->GetBitmap() )
+        return bitmap;
+
+    const std::string fallback = yw_ResolveArtilleryShellMarkerAsset(
+        yw_ArtilleryShellDefaultMarkerFile());
+    if ( requested != fallback )
+        return StatusIconLoad(fallback, width, height);
+
+    return NULL;
+}
+
+static bool yw_RenderArtilleryShellMarkerSvg(NC_STACK_ypaworld *yw,
+                                              const vec3d &pos, float radius,
+                                              const std::string &markerPath,
+                                              const SDL_Color &color)
+{
+    if ( !yw || radius <= 0.01f || robo_map.field_1E0 <= 0.001f ||
+         robo_map.field_1E4 <= 0.001f )
+        return false;
+
+    const Common::Point center = sub_4F681C(pos.XZ());
+    const int radiusX = std::max(2, dround(radius / robo_map.field_1E0));
+    const int radiusY = std::max(2, dround(radius / robo_map.field_1E4));
+    const int width = radiusX * 2;
+    const int height = radiusY * 2;
+
+    NC_STACK_bitmap *bitmap = yw_LoadArtilleryShellMarkerSvg(markerPath, width, height);
+    if ( !bitmap || !bitmap->GetBitmap() || !bitmap->GetBitmap()->swTex )
+        return false;
+
+    SDL_Surface *surface = bitmap->GetBitmap()->swTex;
+    Uint8 oldR = 255, oldG = 255, oldB = 255;
+    SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
+    SDL_GetSurfaceColorMod(surface, &oldR, &oldG, &oldB);
+    SDL_GetSurfaceBlendMode(surface, &oldBlendMode);
+    SDL_SetSurfaceColorMod(surface, color.r, color.g, color.b);
+    SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
+
+    const int screenCenterX = center.x + yw->_screenSize.x / 2;
+    const int screenCenterY = center.y + yw->_screenSize.y / 2;
+    const int left = screenCenterX - radiusX;
+    const int top = screenCenterY - radiusY;
+    const float halfW = (float)yw->_screenSize.x * 0.5f;
+    const float halfH = (float)yw->_screenSize.y * 0.5f;
+
+    GFX::rstr_arg204 arg;
+    arg.pbitm = bitmap->GetBitmap();
+    arg.float4 = Common::FRect(-1.0, -1.0, 1.0, 1.0);
+    arg.float14 = Common::FRect(
+        ((float)left / halfW) - 1.0f,
+        ((float)top / halfH) - 1.0f,
+        ((float)(left + width) / halfW) - 1.0f,
+        ((float)(top + height) / halfH) - 1.0f);
+    arg.opacity = color.a;
+    GFX::Engine.raster_func204(&arg);
+
+    SDL_SetSurfaceColorMod(surface, oldR, oldG, oldB);
+    SDL_SetSurfaceBlendMode(surface, oldBlendMode);
+    return true;
 }
 
 static bool yw_IsArtilleryShellMarkerVisible(NC_STACK_ypaworld *yw, const NC_STACK_ypaworld::ArtilleryShellMarker &marker, const Common::Point &cellId)
@@ -2170,6 +2250,29 @@ static bool yw_IsArtilleryShellMarkerVisible(NC_STACK_ypaworld *yw, const NC_STA
     return yw->_userRobo && cell.IsCanSee(yw->_userRobo->_owner);
 }
 
+// Resolve exactly the point that HandleArtilleryShellMapClick() would accept under
+// the current cursor. Keeping preview and click on the same target resolver avoids
+// colour/position disagreements when the cursor is over a unit instead of a cell.
+static bool yw_GetArtilleryShellMapCursorTarget(NC_STACK_ypaworld *yw, vec3d *outTarget)
+{
+    if ( !yw || !outTarget )
+        return false;
+
+    if ( yw->_guiActFlags & 0x10 )
+    {
+        *outTarget = yw->_cellMouseIsectPos;
+        return true;
+    }
+
+    if ( (yw->_guiActFlags & 0x20) && yw->_bactOnMouse )
+    {
+        *outTarget = yw->_bactOnMouse->_position;
+        return true;
+    }
+
+    return false;
+}
+
 void NC_STACK_ypaworld::RenderArtilleryShellMapMarkers()
 {
     ExpireArtilleryShellMarkers();
@@ -2177,10 +2280,8 @@ void NC_STACK_ypaworld::RenderArtilleryShellMapMarkers()
     if ( robo_map.field_1E0 <= 0.001f || robo_map.field_1E4 <= 0.001f )
         return;
 
-    const int SEGS = 32;
-
-    // Active bombardment zones (confirmed strikes): faction colour (azure for the
-    // player). Double ring so a zone reads as a deliberate strike marker.
+    // Active bombardment zones use the weapon-authored SVG. The rasterized
+    // size follows barrage_radius at the current map zoom; only the runtime tint changes.
     for ( const ArtilleryShellMarker &marker : _artilleryShellMarkers )
     {
         if ( marker.radius <= 0.01f )
@@ -2196,21 +2297,45 @@ void NC_STACK_ypaworld::RenderArtilleryShellMapMarkers()
         SDL_Color clr = marker.pending
             ? SDL_Color{128, 128, 128, 255}
             : GetColor(marker.owner);
-        GFX::Engine.raster_func217(clr);
-
-        yw_DrawArtilleryShellMapCircle(marker.pos.x, marker.pos.z, marker.radius, SEGS);
-        yw_DrawArtilleryShellMapCircle(marker.pos.x, marker.pos.z, marker.radius * 0.66f, SEGS);
+        yw_RenderArtilleryShellMarkerSvg(this, marker.pos, marker.radius,
+                                         marker.markerPath, clr);
     }
 
-    // White aiming preview: only on the opened map. The small radar shows accepted
-    // barrage/pending markers, not the cursor-following targeting preview.
+    // Cursor-following aiming preview on the opened map:
+    //   valid + ready now   -> selected platform faction colour
+    //   valid + queued      -> disabled grey
+    //   invalid target      -> bright red
+    // The small radar only shows accepted barrage/pending markers, never this preview.
     if ( robo_map.IsOpen() && _artilleryShellManualGid && _artilleryShellManualRadius > 0.01f )
     {
-        SDL_Color white = {255, 255, 255, 255};
-        GFX::Engine.raster_func217(white);
+        vec3d previewTarget;
+        if ( yw_GetArtilleryShellMapCursorTarget(this, &previewTarget) )
+        {
+            NC_STACK_ypabact *artilleryShell = FindLiveBactByGid(_artilleryShellManualGid);
+            bool validTarget = false;
+            bool readyNow = false;
 
-        yw_DrawArtilleryShellMapCircle(_cellMouseIsectPos.x, _cellMouseIsectPos.z, _artilleryShellManualRadius, SEGS);
-        yw_DrawArtilleryShellMapCircle(_cellMouseIsectPos.x, _cellMouseIsectPos.z, _artilleryShellManualRadius * 0.66f, SEGS);
+            if ( artilleryShell && _userRobo && artilleryShell->_owner == _userRobo->_owner &&
+                 artilleryShell->IsManualArtilleryShellPlatform() )
+            {
+                validTarget = artilleryShell->CanManualArtilleryShell(previewTarget, NULL, &readyNow);
+            }
+
+            SDL_Color previewColor;
+            if ( !validTarget )
+                previewColor = SDL_Color{255, 48, 48, 255};
+            else if ( !readyNow )
+                previewColor = SDL_Color{128, 128, 128, 255};
+            else
+                previewColor = GetColor(artilleryShell->_owner);
+
+            const std::string markerPath = artilleryShell
+                ? artilleryShell->GetArtilleryShellMarkerPath()
+                : std::string();
+            yw_RenderArtilleryShellMarkerSvg(this, previewTarget,
+                                              _artilleryShellManualRadius,
+                                              markerPath, previewColor);
+        }
     }
 }
 
@@ -2413,22 +2538,9 @@ bool NC_STACK_ypaworld::HandleArtilleryShellMapClick()
             return true;
         }
 
-        // Resolve the target point: an empty cell, or a clicked unit's position.
+        // Resolve the exact same point used by the faction/grey/red preview.
         vec3d target;
-        bool haveTarget = false;
-
-        if ( _guiActFlags & 0x10 )
-        {
-            target = _cellMouseIsectPos;
-            haveTarget = true;
-        }
-        else if ( (_guiActFlags & 0x20) && _bactOnMouse )
-        {
-            target = _bactOnMouse->_position;
-            haveTarget = true;
-        }
-
-        if ( !haveTarget )
+        if ( !yw_GetArtilleryShellMapCursorTarget(this, &target) )
             return false; // nothing useful under the cursor: leave selection pending
 
         uint32_t gid = _artilleryShellManualGid;
@@ -2476,11 +2588,11 @@ bool NC_STACK_ypaworld::HandleArtilleryShellMapClick()
             else
                 artilleryShell->QueueManualArtilleryShell(target);
 
-            // Order accepted: clear selection and hide the white preview ring.
+            // Order accepted: clear selection and hide the cursor-following SVG preview.
             _artilleryShellManualGid = 0;
             _artilleryShellManualRadius = 0.0f;
         }
-        // Else (out of range / no radar): invalid target, keep the selection + white
+        // Else (out of range / no radar): invalid target, keep the selection + red
         // preview so the player can pick a different spot without re-selecting.
 
         return true; // consume the target click
