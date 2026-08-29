@@ -1052,6 +1052,7 @@ public:
     void sub_46DC1C();
     void sub_46D960();
     void ShowOptionsMenu();
+    void ResetOptionsToDefaults();
     void ShowAtmosphereOptionsMenu();
     void AtmosphereOptionsLoad();
     void AtmosphereOptionsApplyLive();
