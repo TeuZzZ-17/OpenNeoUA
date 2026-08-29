@@ -8792,9 +8792,9 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
 
 // OpenNeoUA custom: register/refresh an artillery shell map zone. A firing cycle keeps
 // one immutable active target centre per platform. Pending follow-up orders are also unique
-// per platform: retargeting moves that one disabled-grey pending ring instead of creating
+// per platform: retargeting moves that one disabled-grey pending marker instead of creating
 // another active bombardment zone.
-void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, bool pending, int lingerMs)
+void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, const std::string &markerPath, bool pending, int lingerMs)
 {
     if ( radius < 0.01f )
         return;
@@ -8821,6 +8821,7 @@ void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, 
             m.pos = pos;
             m.radius = radius;
             m.owner = (uint8_t)owner;
+            m.markerPath = markerPath;
             if ( pending || expire > m.expireStamp )
                 m.expireStamp = expire;
             return;
@@ -8833,6 +8834,7 @@ void NC_STACK_ypaworld::AddArtilleryShellMarker(const vec3d &pos, float radius, 
     marker.expireStamp = expire;
     marker.sourceGid = sourceGid;
     marker.owner = (uint8_t)owner;
+    marker.markerPath = markerPath;
     marker.pending = pending;
     _artilleryShellMarkers.push_back(marker);
 

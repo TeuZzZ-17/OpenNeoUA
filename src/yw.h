@@ -2623,7 +2623,7 @@ public:
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
 
     // OpenNeoUA custom: artillery shell bombardment markers + manual map-click control.
-    void AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, bool pending, int lingerMs);
+    void AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, const std::string &markerPath, bool pending, int lingerMs);
     void RemovePendingArtilleryShellMarker(uint32_t sourceGid);
     void ExpireArtilleryShellMarkers();
     void ClearArtilleryShellMarkers();
@@ -3311,6 +3311,7 @@ public:
         int32_t expireStamp = 0;
         uint32_t sourceGid  = 0;
         uint8_t owner       = 0;
+        std::string markerPath;
         bool pending        = false;
     };
     std::vector<ArtilleryShellMarker> _artilleryShellMarkers;
@@ -3319,8 +3320,8 @@ public:
     // manual strike (0 = none). Stored by gid, not pointer, so a unit dying
     // between the select-click and the target-click can never dangle.
     uint32_t _artilleryShellManualGid = 0;
-    // Bombardment radius of the selected artillery shell, cached for the white aiming
-    // preview ring that follows the cursor until the strike is confirmed.
+    // Bombardment radius of the selected artillery shell, cached so the authored SVG
+    // preview scales to the real target zone while it follows the cursor.
     float _artilleryShellManualRadius = 0.0f;
 
     int32_t _polysCount = 0;
