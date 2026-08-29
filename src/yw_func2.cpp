@@ -55,12 +55,31 @@ static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
 static constexpr int MENU_MSGBOX_INPUT_KEY_CONFLICT = 2;
 
-// Urban Assault factory profile values for the options still stored in USER.TXT.
-// OpenNeoUA-only Nucleus options use their IniConf DefaultValue instead, so the
-// reset path does not duplicate those defaults.
-static constexpr int OPTIONS_DEFAULT_FX_NUMBER = 16;
-static constexpr int OPTIONS_DEFAULT_SOUND_VOLUME = 127;
-static constexpr int OPTIONS_DEFAULT_MUSIC_VOLUME = 70;
+// OpenNeoUA main Options-page reset profile. These are intentionally the values
+// exposed by the Reset Defaults button, not necessarily the parser/runtime
+// fallback defaults used when a Nucleus.ini key is absent. Keeping the two
+// concepts separate preserves vanilla-safe missing-key behaviour.
+//
+// MAINTENANCE: every new control added to this main Options page must also be
+// represented in ResetOptionsToDefaults(). Prefer the corresponding
+// IniConf::DefaultValue when the UI reset default is identical; use an explicit
+// OPTIONS_RESET_* value only when this page intentionally defines a different
+// OpenNeoUA reset profile.
+static constexpr int OPTIONS_RESET_WIDTH = 800;
+static constexpr int OPTIONS_RESET_HEIGHT = 600;
+static constexpr int OPTIONS_RESET_BLENDING = 1;          // Additive
+static constexpr int OPTIONS_RESET_MAX_FPS = 240;
+static constexpr const char *OPTIONS_RESET_MENU_FONT = "Xolonium_Regular";
+static constexpr bool OPTIONS_RESET_MOVIE_PLAYER = true;  // Intro Movies
+static constexpr bool OPTIONS_RESET_PLAYER_ROBO_AI = true;
+static constexpr bool OPTIONS_RESET_SPECTATOR = false;
+static constexpr bool OPTIONS_RESET_PLAY_AS = false;
+static constexpr bool OPTIONS_RESET_RETRO_INTERFACE = true;
+static constexpr bool OPTIONS_RESET_HIDE_MAP_BORDER_WALLS = false;
+static constexpr int OPTIONS_RESET_FX_NUMBER = 16;
+static constexpr int OPTIONS_RESET_SOUND_VOLUME = 127;
+static constexpr int OPTIONS_RESET_MUSIC_VOLUME = 60;
+static constexpr int OPTIONS_RESET_AMBIENT_VOLUME = 100;
 
 static std::string InputKeyDisplayTitle(int16_t keyCode)
 {
@@ -1846,9 +1865,18 @@ void UserData::ShowOptionsMenu()
 // the existing USER.TXT/Nucleus.ini paths.
 void UserData::ResetOptionsToDefaults()
 {
-    const Common::Point defaultResolution(GFX::DEFAULT_WIDTH, GFX::DEFAULT_HEIGHT);
-    const int defaultModeIndex = GFX::GFXEngine::Instance.GetGfxModeIndex(defaultResolution);
     const std::vector<GFX::GfxMode> &modes = GFX::GFXEngine::Instance.GetAvailableModes();
+
+    // OpenNeoUA reset profile prefers 800x600. On an unusual display that does
+    // not expose it, fall back safely to the engine's 640x480 default, then to
+    // the first available mode rather than leaving an invalid selection.
+    int defaultModeIndex = GFX::GFXEngine::Instance.GetGfxModeIndex(
+        Common::Point(OPTIONS_RESET_WIDTH, OPTIONS_RESET_HEIGHT));
+    if ( defaultModeIndex < 0 )
+        defaultModeIndex = GFX::GFXEngine::Instance.GetGfxModeIndex(
+            Common::Point(GFX::DEFAULT_WIDTH, GFX::DEFAULT_HEIGHT));
+    if ( defaultModeIndex < 0 && !modes.empty() )
+        defaultModeIndex = 0;
 
     if ( defaultModeIndex >= 0 && defaultModeIndex < (int)modes.size() )
     {
@@ -1872,25 +1900,24 @@ void UserData::ResetOptionsToDefaults()
     confSoundFlags |= World::SF_CDSOUND;
     _settingsChangeOptions |= 0x200;
 
-    confFxNumber = OPTIONS_DEFAULT_FX_NUMBER;
-    confSoundVolume = OPTIONS_DEFAULT_SOUND_VOLUME;
-    confMusicVolume = OPTIONS_DEFAULT_MUSIC_VOLUME;
+    confFxNumber = OPTIONS_RESET_FX_NUMBER;
+    confSoundVolume = OPTIONS_RESET_SOUND_VOLUME;
+    confMusicVolume = OPTIONS_RESET_MUSIC_VOLUME;
     _settingsChangeOptions |= 0x40 | 0x80 | 0x100;
 
-    confBlending = nonstd::any_cast<int32_t>(System::IniConf::GfxBlending.DefaultValue);
-    confMaxFps = NormalizeFrameRateLimit(nonstd::any_cast<int32_t>(System::IniConf::GfxMaxFps.DefaultValue));
-    confMoviePlayer = nonstd::any_cast<bool>(System::IniConf::GfxMoviePlayer.DefaultValue);
-    confMenuFont = nonstd::any_cast<std::string>(System::IniConf::UiMenuFont.DefaultValue);
-    confPlayerRoboAIBehavior = nonstd::any_cast<bool>(System::IniConf::GameRoboPlayerAIBehavior.DefaultValue);
-    confSpectatorMode = nonstd::any_cast<bool>(System::IniConf::GameSpectatorMode.DefaultValue);
-    confPlayAsOtherFactions = nonstd::any_cast<bool>(System::IniConf::GamePlayAsOtherFactions.DefaultValue);
-    confHideMapBorderWalls = nonstd::any_cast<bool>(System::IniConf::GfxHideMapBorderWalls.DefaultValue);
+    confBlending = OPTIONS_RESET_BLENDING;
+    confMaxFps = NormalizeFrameRateLimit(OPTIONS_RESET_MAX_FPS);
+    confMoviePlayer = OPTIONS_RESET_MOVIE_PLAYER;
+    confMenuFont = OPTIONS_RESET_MENU_FONT;
+    confPlayerRoboAIBehavior = OPTIONS_RESET_PLAYER_ROBO_AI;
+    confSpectatorMode = OPTIONS_RESET_SPECTATOR;
+    confPlayAsOtherFactions = OPTIONS_RESET_PLAY_AS;
+    confHideMapBorderWalls = OPTIONS_RESET_HIDE_MAP_BORDER_WALLS;
 
-    const bool defaultRetroInterface = nonstd::any_cast<bool>(System::IniConf::UiRetroInterface.DefaultValue);
+    const bool defaultRetroInterface = OPTIONS_RESET_RETRO_INTERFACE;
     confInterfaceStyle = defaultRetroInterface ? GFX::VirtualUIStyle::RETRO : GFX::VirtualUIStyle::SMOOTH;
 
-    const std::string defaultAmbient = nonstd::any_cast<std::string>(System::IniConf::GameAmbientSoundVolume.DefaultValue);
-    confAmbientSoundVolume = (int16_t)IntFromString(defaultAmbient, 100, 0, 127);
+    confAmbientSoundVolume = OPTIONS_RESET_AMBIENT_VOLUME;
 
     _settingsChangeOptions |= SETTINGS_CHANGE_BLENDING |
                               SETTINGS_CHANGE_MAXFPS |
