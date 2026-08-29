@@ -388,6 +388,7 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
         _legacyCameraZoomInSeen = false;
         _legacyCameraZoomOutSeen = false;
         _ufoSpyUiToggleSeen = false;
+        _mapFocusSeen = false;
         _legacyCameraZoomInKey = Input::KC_NONE;
         _legacyCameraZoomOutKey = Input::KC_NONE;
 
@@ -398,7 +399,8 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
             if ( i == World::INPUT_BIND_SPRINT ||
                  i == World::INPUT_BIND_CYCLE_TARGET ||
                  i == World::INPUT_BIND_ALTERNATIVE_VIEW ||
-                 i == World::INPUT_BIND_TOGGLE_UFO_SPY_UI )
+                 i == World::INPUT_BIND_TOGGLE_UFO_SPY_UI ||
+                 i == World::INPUT_BIND_MAP_FOCUS )
                 continue;
 
             UserData::TInputConf &k = _o._GameShell->InputConfig[i];
@@ -534,6 +536,37 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
                 {
                     ufoSpyToggle.PKeyCode = Input::KC_NONE;
                     Input::Engine.SetHotKey(ufoSpyToggle.KeyID, "nop");
+                    migrated = true;
+                }
+            }
+
+            // Map Focus is newer than older user.txt profiles. Preserve the
+            // new E default only when E is still free. An explicit slot 53
+            // entry, including nop, is always authoritative.
+            if ( !_mapFocusSeen )
+            {
+                UserData::TInputConf &mapFocus =
+                    _o._GameShell->InputConfig[World::INPUT_BIND_MAP_FOCUS];
+                bool eAlreadyUsed = false;
+
+                for ( size_t i = 1; i < _o._GameShell->InputConfig.size(); ++i )
+                {
+                    if ( i == World::INPUT_BIND_MAP_FOCUS ||
+                         UserData::IsInputBindingRetired((int)i) )
+                        continue;
+
+                    const UserData::TInputConf &cfg = _o._GameShell->InputConfig[i];
+                    if ( cfg.PKeyCode == Input::KC_E || cfg.NKeyCode == Input::KC_E )
+                    {
+                        eAlreadyUsed = true;
+                        break;
+                    }
+                }
+
+                if ( eAlreadyUsed && mapFocus.PKeyCode == Input::KC_E )
+                {
+                    mapFocus.PKeyCode = Input::KC_NONE;
+                    Input::Engine.SetHotKey(mapFocus.KeyID, "nop");
                     migrated = true;
                 }
             }
@@ -792,6 +825,8 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
 
             if ( cfgIdex == 52 )
                 _ufoSpyUiToggleSeen = true;
+            else if ( cfgIdex == 53 )
+                _mapFocusSeen = true;
 
             int gsIndex = UserData::InputIndexFromConfig(World::INPUT_BIND_TYPE_HOTKEY, cfgIdex);
             if ( gsIndex == -1 )

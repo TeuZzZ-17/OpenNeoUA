@@ -47,6 +47,7 @@ public:
     static Common::Ini::Key GfxRenderSectors;
     static Common::Ini::Key GfxSkyHeight;
     static Common::Ini::Key GfxSkyRender;
+    static Common::Ini::Key GfxHideMapBorderWalls; // OpenNeoUA: visual-only map boundary wall toggle; default false
     static Common::Ini::Key GfxAdditionalModes;
 
     static Common::Ini::Key GfxMode;
