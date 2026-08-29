@@ -256,6 +256,9 @@ enum OPENUA_STRING
     // Genesis per-Vehicle production limit upgrade notification.
     OUA_GEM_MAX_UNITS_UPGRADE,
 
+    // Visual-only toggle for the vanilla RAND map boundary walls.
+    OUA_HIDE_MAP_BORDER_WALLS,
+
     OUA_STRING_MAX
 };
 

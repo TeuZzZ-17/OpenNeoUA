@@ -49,6 +49,7 @@ static constexpr int SETTINGS_CHANGE_BLENDING              = 0x80000;
 static constexpr int SETTINGS_CHANGE_MOVIE_PLAYER          = 0x100000;
 static constexpr int SETTINGS_CHANGE_MENU_FONT             = 0x200000;
 static constexpr int SETTINGS_CHANGE_INTERFACE_STYLE       = 0x800000;
+static constexpr int SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS = 0x1000000;
 static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
     SETTINGS_CHANGE_BLENDING | SETTINGS_CHANGE_MENU_FONT;
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
@@ -1179,6 +1180,7 @@ void  UserData::sb_0x46ca74()
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
         InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
         InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
+        InputConfig[World::INPUT_BIND_MAP_FOCUS] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 53, Input::KC_E);
         InputConfig[World::INPUT_BIND_ZOOMIN] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 16, Input::KC_NUMPLUS);
         InputConfig[World::INPUT_BIND_ZOOMOUT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 17, Input::KC_NUMMINUS);
 
@@ -1662,6 +1664,15 @@ void UserData::sb_0x46aa8c()
             ypa_log_out("OpenNeoUA: saved ui.menu_font = %s (%s)\n", menuFont.c_str(), storedMenuFont.c_str());
     }
 
+    if ( _settingsChangeOptions & SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS )
+    {
+        System::IniConf::GfxHideMapBorderWalls.Value = confHideMapBorderWalls;
+        yw->SetHideMapBorderWalls(confHideMapBorderWalls);
+
+        if ( !SaveKeyToNucleusIni("gfx.hide_map_border_walls", confHideMapBorderWalls ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save gfx.hide_map_border_walls to nucleus.ini\n");
+    }
+
     if ( _settingsChangeOptions & SETTINGS_CHANGE_INTERFACE_STYLE )
     {
         interfaceStyle = confInterfaceStyle;
@@ -1771,6 +1782,7 @@ void UserData::ShowOptionsMenu()
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
+    confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     ambientSoundVolume = p_YW->GetAmbientSoundGlobalVolume();
@@ -1794,6 +1806,10 @@ void UserData::ShowOptionsMenu()
 
     state.butID = 1189;
     state.field_4 = (confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
+    video_button->SetState(&state);
+
+    state.butID = 1193;
+    state.field_4 = confHideMapBorderWalls ? 1 : 2;
     video_button->SetState(&state);
 
     if ( NC_STACK_button::Slider *ambientSlider = video_button->GetSliderData(1191) )
@@ -2440,6 +2456,7 @@ void UserData::sub_46A3C0()
     confPlayerRoboAIBehavior = System::IniConf::GameRoboPlayerAIBehavior.Get<bool>();
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
+    confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     confAmbientSoundVolume = ambientSoundVolume;
@@ -2516,6 +2533,10 @@ void UserData::sub_46A3C0()
     video_button->SetState(&v10);
     v10.field_4 = (confInterfaceStyle == GFX::VirtualUIStyle::RETRO) ? 1 : 2;
     v10.butID = 1189;
+    video_button->SetState(&v10);
+
+    v10.butID = 1193;
+    v10.field_4 = confHideMapBorderWalls ? 1 : 2;
     video_button->SetState(&v10);
     UpdateGfxOptionTexts();
     UpdateMenuFontText();
@@ -5320,6 +5341,16 @@ void UserData::GameShellUiHandleInput()
             confInterfaceStyle = GFX::VirtualUIStyle::SMOOTH;
             _settingsChangeOptions |= SETTINGS_CHANGE_INTERFACE_STYLE;
         }
+        else if ( r.code == 1318 ) // Hide Map Border Walls checkbox (checked)
+        {
+            confHideMapBorderWalls = true;
+            _settingsChangeOptions |= SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS;
+        }
+        else if ( r.code == 1319 ) // Hide Map Border Walls checkbox (unchecked)
+        {
+            confHideMapBorderWalls = false;
+            _settingsChangeOptions |= SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS;
+        }
         else if ( r.code == 1124 )
         {
             if ( (_settingsChangeOptions & 1) &&  _gfxMode != p_YW->_gfxMode && _gfxMode )
@@ -7261,7 +7292,7 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_DRIVE_SPEED,World::INPUT_BIND_GUN_HEIGHT,
     };
 
-    static const std::array<int, 53> HOTKEY
+    static const std::array<int, 54> HOTKEY
     {
         World::INPUT_BIND_ORDER,      World::INPUT_BIND_ATTACK,
         World::INPUT_BIND_NEW,        World::INPUT_BIND_ADD,
@@ -7300,7 +7331,8 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         // 50/51 are intentionally reserved for the retired split Camera Zoom
         // profile slots. New remappable hotkeys continue at 52.
         -1,                           -1,
-        World::INPUT_BIND_TOGGLE_UFO_SPY_UI
+        World::INPUT_BIND_TOGGLE_UFO_SPY_UI,
+        World::INPUT_BIND_MAP_FOCUS
     };
 
     if ( type == World::INPUT_BIND_TYPE_BUTTON && index < BUTTON.size())
