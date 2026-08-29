@@ -4329,6 +4329,10 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
         missileType = NC_STACK_ypamissile::MISL_GRENADE;
         break;
 
+    case World::TWeapProto::WEAPON_FLAGS_ARC_GRENADE:
+        missileType = NC_STACK_ypamissile::MISL_ARC_GRENADE;
+        break;
+
     default:
         missileType = NC_STACK_ypamissile::MISL_DIRECT;
         break;

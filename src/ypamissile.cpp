@@ -761,14 +761,23 @@ bool NC_STACK_ypamissile::TryClusterSplit()
         child->_owner = _owner;
         child->_host_station = _host_station;
         child->_fly_dir = childDir;
-        child->_fly_dir_length = childProto.start_speed;
+        if ( childProto.IsArcGrenade() )
+        {
+            child->SetupArcGrenadeLaunch(childProto.grenade_arc_angle,
+                                         childProto.grenade_arc_gravity,
+                                         childProto.start_speed);
+        }
+        else
+        {
+            child->_fly_dir_length = childProto.start_speed;
 
-        if ( !(childProto._weaponFlags & 0x12) )
-            child->_fly_dir_length *= 0.2;
+            if ( !(childProto._weaponFlags & 0x12) )
+                child->_fly_dir_length *= 0.2;
 
-        child->_rotation.SetZ(child->_fly_dir);
-        child->_rotation.SetX(_rotation.AxisX());
-        child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
+            child->_rotation.SetZ(child->_fly_dir);
+            child->_rotation.SetX(_rotation.AxisX());
+            child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
+        }
         child->StartWeaponTracer();
 
         _world->SpawnTransientVisual(childProto.vp_launch, childProto.visual_3ds.launch,
@@ -1034,14 +1043,23 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     child->_energy = childEnergy;
     child->_energy_max = childEnergy;
     child->_fly_dir = chainDir;
-    child->_fly_dir_length = wproto.start_speed;
+    if ( wproto.IsArcGrenade() )
+    {
+        child->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
+                                     wproto.grenade_arc_gravity,
+                                     wproto.start_speed);
+    }
+    else
+    {
+        child->_fly_dir_length = wproto.start_speed;
 
-    if ( !(wproto._weaponFlags & 0x12) )
-        child->_fly_dir_length *= 0.2;
+        if ( !(wproto._weaponFlags & 0x12) )
+            child->_fly_dir_length *= 0.2;
 
-    child->_rotation.SetZ(child->_fly_dir);
-    child->_rotation.SetX(_rotation.AxisX());
-    child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
+        child->_rotation.SetZ(child->_fly_dir);
+        child->_rotation.SetX(_rotation.AxisX());
+        child->_rotation.SetY(child->_rotation.AxisZ() * child->_rotation.AxisX());
+    }
     child->StartWeaponTracer();
 
     _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
@@ -2238,6 +2256,100 @@ vec3d NC_STACK_ypamissile::CalcForceVector()
                             - vec3d(0.0, _mass * 9.80665, 0.0));
 }
 
+void NC_STACK_ypamissile::SetupArcGrenadeVelocity(const vec3d &velocity, float gravity)
+{
+    _arcGrenadeGravity = (std::isfinite(gravity) && gravity > 0.0f)
+                             ? std::min(gravity, 1000.0f)
+                             : 9.80665f;
+
+    _arcGrenadeVelocity = velocity;
+    if ( !std::isfinite(_arcGrenadeVelocity.x) ||
+         !std::isfinite(_arcGrenadeVelocity.y) ||
+         !std::isfinite(_arcGrenadeVelocity.z) )
+    {
+        _arcGrenadeVelocity = vec3d(0.0, 0.0, 0.0);
+    }
+
+    _fly_dir_length = _arcGrenadeVelocity.length();
+    if ( _fly_dir_length > 0.001f )
+    {
+        _fly_dir = _arcGrenadeVelocity / _fly_dir_length;
+        AlignMissile();
+    }
+}
+
+void NC_STACK_ypamissile::SetupArcGrenadeLaunch(float angleDegrees,
+                                                 float gravity,
+                                                 float startSpeed)
+{
+    vec3d aimDir = _fly_dir;
+    if ( aimDir.normalise() <= 0.001f )
+        aimDir = _rotation.AxisZ();
+    if ( aimDir.normalise() <= 0.001f )
+        aimDir = vec3d::OZ(1.0f);
+
+    const float speed = (std::isfinite(startSpeed) && startSpeed > 0.0f)
+                            ? startSpeed
+                            : 0.0f;
+    const float angle = (std::isfinite(angleDegrees) && angleDegrees > 0.0f)
+                            ? std::min(angleDegrees, 89.0f)
+                            : 0.0f;
+
+    vec3d launchDir = aimDir;
+    if ( angle > 0.0f )
+    {
+        // Preserve the normal Weapon aim azimuth, but make elevation relative
+        // to world horizontal/gravity. Engine +Y is down, so upward is -Y.
+        vec3d horizontal(aimDir.x, 0.0f, aimDir.z);
+        if ( horizontal.normalise() <= 0.001f )
+        {
+            const vec3d fallback = _rotation.AxisZ();
+            horizontal = vec3d(fallback.x, 0.0f, fallback.z);
+            if ( horizontal.normalise() <= 0.001f )
+                horizontal = vec3d::OZ(1.0f);
+        }
+
+        const float radians = angle * (float)C_PI_180;
+        launchDir = horizontal * std::cos(radians);
+        launchDir.y = -std::sin(radians);
+        launchDir.normalise();
+    }
+
+    SetupArcGrenadeVelocity(launchDir * speed, gravity);
+}
+
+void NC_STACK_ypamissile::UpdateArcGrenadeBallistic(float dtime)
+{
+    if ( dtime <= 0.0f )
+        return;
+
+    _old_pos = _position;
+
+    // Dedicated trajectory: no legacy grenade thrust and no target steering.
+    // Gravity is an authored downward acceleration applied every frame.
+    _arcGrenadeVelocity.y += _arcGrenadeGravity * dtime;
+
+    // Preserve the generic Weapon air resistance as optional linear drag.
+    if ( _airconst > 0.0f )
+    {
+        const float mass = _mass > 0.001f ? _mass : 1.0f;
+        const float dragFactor = std::max(0.0f, 1.0f - (_airconst / mass) * dtime);
+        _arcGrenadeVelocity *= dragFactor;
+    }
+
+    // Missile movement in UA uses the historical x6 world-distance scale.
+    _position += _arcGrenadeVelocity * (dtime * 6.0f);
+
+    _fly_dir_length = _arcGrenadeVelocity.length();
+    if ( _fly_dir_length > 0.001f )
+    {
+        _fly_dir = _arcGrenadeVelocity / _fly_dir_length;
+        AlignMissile();
+    }
+
+    CorrectPositionInLevelBox(NULL);
+}
+
 static bool ypamissile_IsHomingBombProto(const World::TWeapProto &wproto)
 {
     return wproto.IsHomingBomb();
@@ -2435,8 +2547,11 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 arg74.field_0 = v38;
                 arg74.vec = _fly_dir;
                 arg74.flag = 0;
-
                 Move(&arg74);
+                break;
+
+            case MISL_ARC_GRENADE:
+                UpdateArcGrenadeBallistic(v38);
                 break;
 
             default:
@@ -2985,6 +3100,10 @@ void NC_STACK_ypamissile::Renew()
     _weaponTracerStarted = false;
     _weaponTracerVisualSeed = 0;
     _weaponTracerPoints.clear();
+
+    // OpenNeoUA custom: clear Arc Grenade ballistic state on recycle.
+    _arcGrenadeVelocity = vec3d(0.0, 0.0, 0.0);
+    _arcGrenadeGravity = 9.80665f;
 
     // OpenNeoUA custom: clear artillery shell state on recycle.
     _isArtilleryShellProjectile = false;

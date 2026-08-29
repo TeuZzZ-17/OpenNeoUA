@@ -31,6 +31,7 @@ public:
         MISL_GRENADE    = 4, // Gravity affected
         MISL_OBSAVOID   = 5, // Obstacle avoiding
         MISL_INTERNAL   = 6, // Only for internal use
+        MISL_ARC_GRENADE= 7, // OpenNeoUA: dedicated ballistic arc grenade
     };
 
 public:
@@ -112,6 +113,11 @@ public:
     virtual void SetDirectPush(int push);  // public intensity 0..10
     virtual void SetArmorPenetrationTargets(int targets);
     virtual void SetStartHeight(float);
+    // OpenNeoUA Arc Grenade: dedicated ballistic launch/runtime. The launch
+    // method applies elevation once; the network method restores an already
+    // resolved velocity without applying the angle twice.
+    void SetupArcGrenadeLaunch(float angleDegrees, float gravity, float startSpeed);
+    void SetupArcGrenadeVelocity(const vec3d &velocity, float gravity);
     virtual void SetClusterSpawnedChild(bool child);
     void ConfigureWeaponTracer(const World::TWeaponTracerConfig &config,
                                bool supported);
@@ -173,6 +179,7 @@ protected:
     void UpdateAttachedDetonationPosition();
     void ApplyAttachedDirectHitDamage();
     void SteerHomingBombDirection(float dtime);
+    void UpdateArcGrenadeBallistic(float dtime);
     bool TryClusterSplit();
     bool CanChainToTarget(NC_STACK_ypabact *target, NC_STACK_ypabact *currentHit) const;
     NC_STACK_ypabact *FindNextChainTarget(NC_STACK_ypabact *currentHit) const;
@@ -261,6 +268,11 @@ protected:
     std::vector<NC_STACK_ypabact *> _mislDirectHitUnits;
     std::vector<TBuildingHitRef> _mislDirectHitBuildings;
     std::vector<TBuildingHitRef> _mislDirectHitSectors;
+    // OpenNeoUA Arc Grenade: explicit world-space ballistic velocity. +Y is
+    // downward in Urban Assault, so positive gravity increases velocity.y.
+    vec3d _arcGrenadeVelocity = vec3d(0.0, 0.0, 0.0);
+    float _arcGrenadeGravity = 9.80665f;
+
     // OpenNeoUA custom artillery shell state (only meaningful when _isArtilleryShellProjectile).
     bool  _isArtilleryShellProjectile = false;
     vec3d _artilleryShellStartPos;

@@ -7900,6 +7900,7 @@ void NC_STACK_ypabact::SetState(setState_msg *arg)
 static vec3d ypabact_ApplyWeaponDirectionPattern(const mat3x3 &rotation, const vec3d &direction,
                                                    int shotIndex, int weaponCount,
                                                    float arcX, float arcY, float coneXY);
+static vec3d ypabact_ApplyDirectionalOffset(const mat3x3 &rotation, const vec3d &direction, float offsetX, float offsetY);
 static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY);
 static vec3d ypabact_GetCockpitAimDirection(NC_STACK_ypabact *bact, const vec3d &origin, const vec3d &viewDir, const vec3d &fallbackDir, float range);
 
@@ -13405,22 +13406,32 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             wobj->_fly_dir = ypabact_ApplyDirectionalSpread(_rotation, wobj->_fly_dir,
                                                             effectiveSpreadX, effectiveSpreadY);
 
-        wobj->_fly_dir_length = _fly_dir_length + wproto.start_speed;
+        if ( wproto.IsArcGrenade() )
+        {
+            // Arc Grenade owns its complete ballistic launch. start_speed is the
+            // muzzle speed, grenade_arc_angle is applied once, and gravity is
+            // consumed by the missile update every frame.
+            wobj->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
+                                        wproto.grenade_arc_gravity,
+                                        wproto.start_speed);
+        }
+        else
+        {
+            wobj->_fly_dir_length = _fly_dir_length + wproto.start_speed;
 
-        if ( !(wproto._weaponFlags & 0x12) )
-            wobj->_fly_dir_length *= 0.2;
+            if ( !(wproto._weaponFlags & 0x12) )
+                wobj->_fly_dir_length *= 0.2;
 
-        wobj->_rotation.SetZ( wobj->_fly_dir );
+            wobj->_rotation.SetZ( wobj->_fly_dir );
+            wobj->_rotation.SetX( _rotation.AxisX() );
+            wobj->_rotation.SetY( wobj->_rotation.AxisZ() * wobj->_rotation.AxisX() );
+        }
 
         if ( wproto.recoil > 0.0f )
         {
             recoilDirSum -= wobj->_fly_dir;
             recoilShotCount++;
         }
-
-        wobj->_rotation.SetX( _rotation.AxisX() );
-
-        wobj->_rotation.SetY( wobj->_rotation.AxisZ() * wobj->_rotation.AxisX() );
 
         if ( i == 0 )
         {
