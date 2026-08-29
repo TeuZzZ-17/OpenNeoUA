@@ -1271,7 +1271,8 @@ bool IFFile::FindSetLooseOverride(const std::string &filename, const std::string
     std::string originalOpenPath;
     std::string legacyOpenPath;
     const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
-    const bool legacyExists = legacyPath != setLooseNormalizeSlashes(originalPath) &&
+    const bool legacyExists = !originalExists &&
+                              legacyPath != setLooseNormalizeSlashes(originalPath) &&
                               setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     setLooseAddLookup(setId,
@@ -1293,7 +1294,8 @@ bool IFFile::FindSetLooseOverride(const std::string &filename, const std::string
         std::string oldLegacyOpen;
         const bool oldOriginalExists = oldOriginal != originalPath &&
                                        setLooseResolveReadableFile(oldOriginal, &oldOriginalOpen);
-        const bool oldLegacyExists = oldLegacy != legacyPath && oldLegacy != oldOriginal &&
+        const bool oldLegacyExists = !oldOriginalExists &&
+                                     oldLegacy != legacyPath && oldLegacy != oldOriginal &&
                                      setLooseResolveReadableFile(oldLegacy, &oldLegacyOpen);
         setLooseAddLookup(setId, assetPath, oldOriginal, oldOriginalExists, oldLegacy,
                           oldLegacyExists, sourceFunction, false);
@@ -1347,7 +1349,8 @@ bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std
     std::string originalOpenPath;
     std::string legacyOpenPath;
     const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
-    const bool legacyExists = legacyPath != setLooseNormalizeSlashes(originalPath) &&
+    const bool legacyExists = !originalExists &&
+                              legacyPath != setLooseNormalizeSlashes(originalPath) &&
                               setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     setLooseAddLookup(setId,
@@ -1369,7 +1372,8 @@ bool IFFile::FindSetLooseEmbeddedOverride(const std::string &filename, const std
         std::string oldLegacyOpen;
         const bool oldOriginalExists = oldOriginal != originalPath &&
                                        setLooseResolveReadableFile(oldOriginal, &oldOriginalOpen);
-        const bool oldLegacyExists = oldLegacy != legacyPath && oldLegacy != oldOriginal &&
+        const bool oldLegacyExists = !oldOriginalExists &&
+                                     oldLegacy != legacyPath && oldLegacy != oldOriginal &&
                                      setLooseResolveReadableFile(oldLegacy, &oldLegacyOpen);
         setLooseAddLookup(setId, assetPath, oldOriginal, oldOriginalExists, oldLegacy,
                           oldLegacyExists, sourceFunction, true);
@@ -1475,7 +1479,8 @@ bool IFFile::FindSetLooseBaseObjectOverride(const std::string &objectName, const
         std::string originalOpenPath;
         std::string legacyOpenPath;
         const bool originalExists = setLooseResolveReadableFile(originalCandidate, &originalOpenPath);
-        const bool legacyExists = legacyCandidate != setLooseNormalizeSlashes(originalCandidate) &&
+        const bool legacyExists = !originalExists &&
+                                  legacyCandidate != setLooseNormalizeSlashes(originalCandidate) &&
                                   setLooseResolveReadableFile(legacyCandidate, &legacyOpenPath);
 
         setLooseAddLookup(setId, requested, originalCandidate, originalExists,
@@ -1531,7 +1536,8 @@ bool IFFile::FindSetLooseEmrsOverride(const std::string &filename, const std::st
     std::string originalOpenPath;
     std::string legacyOpenPath;
     const bool originalExists = setLooseResolveReadableFile(originalPath, &originalOpenPath);
-    const bool legacyExists = legacyPath != setLooseNormalizeSlashes(originalPath) &&
+    const bool legacyExists = !originalExists &&
+                              legacyPath != setLooseNormalizeSlashes(originalPath) &&
                               setLooseResolveReadableFile(legacyPath, &legacyOpenPath);
 
     g_setLooseReports[setId].emrsResourcesChecked++;
@@ -1561,7 +1567,8 @@ bool IFFile::FindSetLooseEmrsOverride(const std::string &filename, const std::st
             std::string oldLegacyOpen;
             const bool oldOriginalExists = oldOriginal != originalPath &&
                                            setLooseResolveReadableFile(oldOriginal, &oldOriginalOpen);
-            const bool oldLegacyExists = oldLegacy != legacyPath && oldLegacy != oldOriginal &&
+            const bool oldLegacyExists = !oldOriginalExists &&
+                                         oldLegacy != legacyPath && oldLegacy != oldOriginal &&
                                          setLooseResolveReadableFile(oldLegacy, &oldLegacyOpen);
             setLooseAddLookup(setId, oldRelative, oldOriginal, oldOriginalExists, oldLegacy,
                               oldLegacyExists, sourceFunction, true);
