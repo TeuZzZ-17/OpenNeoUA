@@ -1,0 +1,6318 @@
+#include "../fmtlib/printf.h"
+#include <SDL2/SDL_opengl.h>
+
+#if defined(__APPLE__) && defined(__MACH__)
+#include <OpenGL/glext.h>
+#else
+#include <GL/glext.h>
+#include <queue>
+#endif
+
+#include "gfx.h"
+#include "../utils.h"
+#include "../env.h"
+#include "common/common.h"
+#include "../ini.h"
+#include "../gui/root.h"
+#include "../bitmap.h"
+#include "../ilbm.h"
+#include "../log.h"
+#include "../font.h"
+#include "inivals.h"
+#include "glfuncs.h"
+
+#include <algorithm>
+#include <cmath>
+#include <utility>
+
+namespace GFX
+{
+GFXEngine GFXEngine::Instance;
+
+int GFXEngine::can_srcblend;
+int GFXEngine::can_destblend;
+int GFXEngine::can_stippling;
+uint32_t GFXEngine::FpsMaxTicks = 1000/60;
+
+SDL_PixelFormat *GFXEngine::_pixfmt = NULL;
+GLint GFXEngine::_glPixfmt, GFXEngine::_glPixtype;
+bool GFXEngine::_staticInited = false;
+
+static int NormalizeFrameRateLimit(int value)
+{
+    static const int validLimits[] = {60, 75, 90, 120, 144, 165, 200, 240};
+
+    for (int limit : validLimits)
+    {
+        if (value == limit)
+            return value;
+    }
+
+    return 60;
+}
+
+const std::array<vec3d, 17> GFXEngine::_clrEff
+{   vec3d(1.0,  1.0,  1.0)
+,   vec3d(1.21, 0.0,  0.29)
+,   vec3d(0.13, 0.43, 2.17)
+,   vec3d(0.0,  1.60, 1.60)
+,   vec3d(1.0,  1.0,  1.0)
+,   vec3d(0.57, 0.59, 0.59)
+,   vec3d(1.4,  1.08,  1.12)
+,   vec3d(0.3,  0.60, 0.7)
+,   vec3d(1.60, 1.45, 0.05)
+,   vec3d(1.80, 0.72, 0.05)
+,   vec3d(1.05, 0.25, 1.50)
+,   vec3d(0.10, 1.55, 1.55)
+,   vec3d(1.55, 0.10, 1.55)
+,   vec3d(1.70, 1.70, 1.70)
+,   vec3d(0.08, 0.08, 0.08)
+,   vec3d(0.70, 0.70, 0.70)
+,   vec3d(0.80, 0.42, 0.16)};
+
+std::vector<TGFXDeviceInfo> GFXEngine::_devices
+{
+    TGFXDeviceInfo("Opengl", "<primary>")
+};
+
+struct HorizonFogConfig
+{
+    bool FogEnable = true;
+    bool FogStartOverride = false;
+    bool FogLengthOverride = false;
+    float FogStart = 0.0f;
+    float FogLength = 0.0f;
+    float FogStrength = 0.8f;
+    TGLColor FogColor = TGLColor(150.0f / 255.0f, 155.0f / 255.0f, 160.0f / 255.0f, 1.0f);
+
+    bool DarkEnable = true;
+    bool DarkStartOverride = false;
+    bool DarkLengthOverride = false;
+    float DarkStart = 0.0f;
+    float DarkLength = 0.0f;
+    float DarkStrength = 0.65f;
+    TGLColor DarkColor = TGLColor(0.0, 0.0, 0.0, 1.0);
+};
+
+static HorizonFogConfig gHorizonFogConfig;
+
+static std::string HorizonTrim(std::string s)
+{
+    size_t first = s.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return std::string();
+
+    size_t last = s.find_last_not_of(" \t\r\n");
+    return s.substr(first, last - first + 1);
+}
+
+static float HorizonClamp01(float v)
+{
+    if (v < 0.0f)
+        return 0.0f;
+    if (v > 1.0f)
+        return 1.0f;
+    return v;
+}
+
+static bool HorizonParseFloat(std::string s, float *out)
+{
+    s = HorizonTrim(s);
+    if (s.empty())
+        return false;
+
+    for (char &c : s)
+    {
+        if (c == ',')
+            c = '.';
+    }
+
+    try
+    {
+        size_t pos = 0;
+        float v = std::stof(s, &pos);
+        size_t rest = s.find_first_not_of(" \t\r\n", pos);
+        if (rest != std::string::npos)
+            return false;
+
+        *out = v;
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+static float HorizonReadStrength(const std::string &s, float fallback)
+{
+    float v = fallback;
+    if (!HorizonParseFloat(s, &v))
+        v = fallback;
+
+    return HorizonClamp01(v);
+}
+
+static int HorizonClampColor(int v)
+{
+    if (v < 0)
+        return 0;
+    if (v > 255)
+        return 255;
+    return v;
+}
+
+static TGLColor HorizonParseColor(std::string s, const TGLColor &fallback)
+{
+    s = HorizonTrim(s);
+    if (s.empty())
+        return fallback;
+
+    std::vector<std::string> parts = Stok::Split(s, "_, \t");
+    if (parts.size() < 3)
+        return fallback;
+
+    try
+    {
+        int r = HorizonClampColor(std::stoi(parts[0]));
+        int g = HorizonClampColor(std::stoi(parts[1]));
+        int b = HorizonClampColor(std::stoi(parts[2]));
+
+        return TGLColor((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, 1.0f);
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static void HorizonLoadConfigFromIni()
+{
+    HorizonFogConfig cfg;
+
+    cfg.FogEnable = System::IniConf::GfxHorizonFogEnable.Get<bool>();
+    cfg.FogStartOverride = HorizonParseFloat(System::IniConf::GfxHorizonFogStart.Get<std::string>(), &cfg.FogStart);
+    cfg.FogLengthOverride = HorizonParseFloat(System::IniConf::GfxHorizonFogLength.Get<std::string>(), &cfg.FogLength);
+    cfg.FogStrength = HorizonReadStrength(System::IniConf::GfxHorizonFogStrength.Get<std::string>(), 0.8f);
+    cfg.FogColor = HorizonParseColor(System::IniConf::GfxHorizonFogColor.Get<std::string>(), cfg.FogColor);
+
+    cfg.DarkEnable = System::IniConf::GfxHorizonDarkEnable.Get<bool>();
+    cfg.DarkStartOverride = HorizonParseFloat(System::IniConf::GfxHorizonDarkStart.Get<std::string>(), &cfg.DarkStart);
+    cfg.DarkLengthOverride = HorizonParseFloat(System::IniConf::GfxHorizonDarkLength.Get<std::string>(), &cfg.DarkLength);
+    cfg.DarkStrength = HorizonReadStrength(System::IniConf::GfxHorizonDarkStrength.Get<std::string>(), 0.65f);
+    cfg.DarkColor = HorizonParseColor(System::IniConf::GfxHorizonDarkColor.Get<std::string>(), cfg.DarkColor);
+
+    gHorizonFogConfig = cfg;
+}
+
+void GFXEngine::ReloadHorizonConfig()
+{
+    HorizonLoadConfigFromIni();
+}
+
+
+bool TRenderNode::CompareSolid(TRenderNode *a, TRenderNode *b)
+{
+    if ( !a->Mesh )
+        return true;
+
+    if ( !b->Mesh )
+        return false;
+
+    return a->Tex < b->Tex;
+}
+
+bool TRenderNode::CompareTransparent(TRenderNode* a, TRenderNode* b)
+{
+    return a->Distance > b->Distance;
+}
+
+bool TRenderNode::CompareDistance(TRenderNode* a, TRenderNode* b)
+{
+    return a->Distance < b->Distance;
+}
+
+static float HorizonDefaultAlphaFogStart(float fogStart, float fogLength)
+{
+    // OpenNeoUA: push the transparent horizon mist farther away from the player.
+    // This keeps the atmosphere visible only in the far band instead of in mid-range.
+    return fogStart + fogLength * 0.46f;
+}
+
+static float HorizonDefaultAlphaFogLength(float fogLength)
+{
+    // Keep the distant dissolve gradual after moving it farther back.
+    return fogLength * 0.90f;
+}
+
+static float HorizonAlphaFogStart(float fogStart, float fogLength)
+{
+    return gHorizonFogConfig.FogStartOverride
+         ? gHorizonFogConfig.FogStart
+         : HorizonDefaultAlphaFogStart(fogStart, fogLength);
+}
+
+static float HorizonAlphaFogLength(float fogLength)
+{
+    return gHorizonFogConfig.FogLengthOverride
+         ? gHorizonFogConfig.FogLength
+         : HorizonDefaultAlphaFogLength(fogLength);
+}
+
+static float HorizonDarkFogStart(float fogStart, float fogLength)
+{
+    // Keep the black matte aligned with the far alpha band: less near fog, darker horizon.
+    return gHorizonFogConfig.DarkStartOverride
+         ? gHorizonFogConfig.DarkStart
+         : HorizonDefaultAlphaFogStart(fogStart, fogLength);
+}
+
+static float HorizonDarkFogLength(float fogLength)
+{
+    // Reach black faster inside the far band, so the edge reads as dark horizon
+    // instead of bright sky-colored mist.
+    return gHorizonFogConfig.DarkLengthOverride
+         ? gHorizonFogConfig.DarkLength
+         : HorizonDefaultAlphaFogLength(fogLength) * 0.22f;
+}
+
+static bool HorizonAlphaFogEnabled(float fogLength)
+{
+    return gHorizonFogConfig.FogEnable
+        && gHorizonFogConfig.FogStrength > 0.0f
+        && HorizonAlphaFogLength(fogLength) > 0.0f;
+}
+
+static bool HorizonDarkFogEnabled(float fogLength)
+{
+    return gHorizonFogConfig.DarkEnable
+        && gHorizonFogConfig.DarkStrength > 0.0f
+        && HorizonDarkFogLength(fogLength) > 0.0f;
+}
+
+static float HorizonFogFactor(const vec3d &viewPos, float start, float length)
+{
+    if (length <= 0.0f)
+        return 0.0f;
+
+    // Horizon Atmosphere V2 uses horizontal radial distance around the viewer,
+    // not a flat camera-Z plane. Smoothstep removes the visible start/end seam.
+    const float radialDistance = (float)sqrt(viewPos.x * viewPos.x +
+                                             viewPos.z * viewPos.z);
+    float t = HorizonClamp01((radialDistance - start) / length);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+bool TRenderParams::operator==(const TRenderParams &b)
+{
+    if (Flags != b.Flags)
+        return false;
+
+    if (Flags & RFLAGS_DYNAMIC_TEXTURE)
+        return TexSource->IsSameRes( b.TexSource );
+
+    return Tex == b.Tex;
+}
+
+void GFXEngine::StaticInit()
+{
+    if (_staticInited)
+        return;
+
+    _staticInited = true;
+
+    SDL_DisplayMode curr;
+    SDL_GetCurrentDisplayMode(0, &curr);
+
+    switch(curr.format)
+    {
+        case SDL_PIXELFORMAT_RGB888:
+        case SDL_PIXELFORMAT_ARGB8888:
+            _pixfmt = SDL_AllocFormat( SDL_PIXELFORMAT_ARGB8888 );
+            _glPixfmt = GL_BGRA;
+            _glPixtype = GL_UNSIGNED_BYTE;
+            break;
+
+        case SDL_PIXELFORMAT_BGR888:
+        case SDL_PIXELFORMAT_ABGR8888:
+        default:
+            _pixfmt = SDL_AllocFormat( SDL_PIXELFORMAT_ABGR8888 );
+            _glPixfmt = GL_RGBA;
+            _glPixtype = GL_UNSIGNED_BYTE;
+            break;
+    }
+}
+
+GFXEngine::GFXEngine()
+{
+    for(TileMap *&t : _tiles)
+        t = NULL;
+
+    for(SDL_Color &c : _palette)
+        c = {0, 0, 0, 0};
+
+    _forcesoftcursor = 0;
+    _field_38 = 0;
+    _txt16bit = 0;
+    _use_simple_d3d = 0;
+    _disable_lowres = 0;
+    _export_window_mode = 0;
+    _flags = 0;
+
+    _dither = 0;
+    _filter = 0;
+    _antialias = 0;
+    _alpha = 255;
+    _zbuf_when_tracy = 0;
+    _colorkey = 0;
+
+    _sceneBeginned = 0;
+
+    _corrIW = _corrW = 1.0;
+    _corrIH = _corrH = 1.0;
+
+    _solidFont = true;
+
+    _setFrustumClip(1.0f, WORLD_FAR_CLIP);
+
+    _normClr = vec3d(1.0, 1.0, 1.0);
+    _invClr = vec3d(0.0, 0.0, 0.0);
+}
+
+std::string read_guid(const std::string &filename)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc(filename, "r");
+    if ( !fil )
+        return "";
+
+    std::string guid;
+    fil->ReadLine(&guid);
+    delete fil;
+    return guid;
+}
+
+bool out_guid_to_file(const std::string &filename, const std::string &name)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc(filename, "w");
+    if ( !fil )
+        return false;
+
+    fil->puts(name);
+    delete fil;
+    return true;
+}
+
+void out_yes_no_status(const char *filename, int val)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc(filename, "w");
+    if ( fil )
+    {
+        if ( val )
+            fil->puts("yes");
+        else
+            fil->puts("no");
+        delete fil;
+    }
+}
+
+void GFXEngine::DrawTextEntry(const ScreenText *txt)
+{
+    if ( _font.ttfFont )
+    {
+        if ( txt->flag & 0x20 )
+        {
+            _font.r = txt->p1;
+            _font.g = txt->p2;
+            _font.b = txt->p3;
+        }
+        else
+        {
+            if (!txt->string.empty())
+            {
+
+                int cx = 0, cy = 0;
+
+                if ( txt->flag & 0xE )
+                {
+                    TTF_SizeUTF8(_font.ttfFont, txt->string.c_str(), &cx, &cy);
+                }
+
+                int p1 = txt->p1;
+                int p2 = txt->p2;
+                int p3 = txt->p3;
+                int p4 = txt->p4;
+
+                if ( txt->flag & 8 )
+                    p3 = cx * p3 / 100;
+
+                SDL_Rect clipRect;
+
+                clipRect.x = p1;
+                clipRect.w = p3 + 4;
+                clipRect.h = p4 + 1;
+                clipRect.y = p2;
+
+                if ( txt->flag & 2 )
+                {
+                    if ( txt->flag & 8 )
+                    {
+                        p1 -= cx;
+                        clipRect.x = p1;
+                        clipRect.w = p3 + 4;
+                    }
+                    else
+                    {
+                        p1 += (p3 - cx);
+                    }
+                }
+                else if ( txt->flag & 4 )
+                {
+                    if ( txt->flag & 8 )
+                    {
+                        p1 -= cx / 2;
+                        clipRect.x = p1;
+                        clipRect.w = p3 + 4;
+                    }
+                    else
+                    {
+                        p1 += (p3 - cx) / 2;
+                    }
+                }
+
+                SDL_SetClipRect(Screen(), &clipRect);
+
+
+                int v10 = ((p4 - _font.height) / 2) - 2 + p2;
+                if ( txt->flag & 0x10 )
+                {
+                    v10++;
+                    p1++;
+                }
+
+                SDL_Color clr;
+                clr.a = 255;
+                clr.r = 0;
+                clr.g = 0;
+                clr.b = 0;
+
+                SDL_Surface *tmp;
+
+                if (_solidFont)
+                {
+                    tmp = TTF_RenderUTF8_Solid(_font.ttfFont, txt->string.c_str(), clr);
+                }
+                else
+                {
+                    tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
+                }
+
+                if (!tmp)
+                {
+                    SDL_SetClipRect(Screen(), NULL);
+                    return;
+                }
+
+                SDL_SetSurfaceBlendMode(tmp, _solidFont ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+
+                SDL_Rect want;
+                want.w = tmp->w;
+                want.h = tmp->h;
+                want.x = p1 + 2;
+                want.y = v10 + 1;
+
+                SDL_BlitSurface(tmp, NULL, Screen(), &want);
+
+                clr.a = 255;
+                clr.r = _font.r;
+                clr.g = _font.g;
+                clr.b = _font.b;
+
+                if (_solidFont)
+                {
+                    SDL_SetPaletteColors(tmp->format->palette, &clr, 1, 1);
+                }
+                else
+                {
+                    SDL_FreeSurface(tmp);
+                    tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
+                    if (!tmp)
+                    {
+                        SDL_SetClipRect(Screen(), NULL);
+                        return;
+                    }
+
+                    SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND);
+                }
+
+                want.w = tmp->w;
+                want.h = tmp->h;
+                want.x = p1 + 1;
+                want.y = v10;
+
+                SDL_BlitSurface(tmp, NULL, Screen(), &want);
+                SDL_FreeSurface(tmp);
+
+                SDL_SetClipRect(Screen(), NULL);
+            }
+        }
+    }
+}
+
+void GFXEngine::AddScreenText(const std::string &string, int p1, int p2, int p3, int p4, int flag)
+{
+    ScreenText entry;
+    entry.string = string;
+    entry.p1 = p1;
+    entry.p2 = p2;
+    entry.p3 = p3;
+    entry.p4 = p4;
+    entry.flag = flag;
+
+    _font.entries.push_back(std::move(entry));
+}
+
+void GFXEngine::DrawScreenText()
+{
+    _font.r = 255;
+    _font.g = 255;
+    _font.b = 0;
+
+    for (const ScreenText &entry : _font.entries)
+        DrawTextEntry(&entry);
+
+    _font.entries.clear();
+}
+
+int GFXEngine::MeasureScreenTextWidth(const std::string &text) const
+{
+    int width = 0;
+    int height = 0;
+
+    if ( _font.ttfFont && TTF_SizeUTF8(_font.ttfFont, text.c_str(), &width, &height) == 0 )
+        return width;
+
+    return 0;
+}
+
+void GFXEngine::initPolyEngine()
+{
+    _states = GfxStates();
+    _states.LinearFilter = (_filter != 0);
+
+    SetRenderStates(1);
+
+    glEnable(GL_CULL_FACE);
+
+    if (_dither)
+        glEnable(GL_DITHER);
+    else
+        glDisable(GL_DITHER);
+}
+
+int GFXEngine::LoadFontByDescr(const std::string &fontname)
+{
+    std::vector<std::string> splt = Stok::Split(fontname, ",");
+
+    std::string facename;
+    std::string s_height;
+
+    if (splt.size() > 0)
+        facename = splt[0];
+
+    if (splt.size() > 1)
+        s_height = splt[1];
+    //const char *s_weight = strtok(0, ",");
+    //const char *s_charset = strtok(0, ",");
+
+    int height;//, weight, charset;
+    if ( !facename.empty() && !s_height.empty() )//&& s_weight && s_charset )
+    {
+        height = std::stoi(s_height);
+        //weight = atoi(s_weight);
+        //charset = atoi(s_charset);
+    }
+    else
+    {
+        height = 12;
+        //charset = 0;
+        facename = "MS Sans Serif";
+        //weight = 400;
+    }
+
+    if ( _font.ttfFont )
+    {
+        TTF_CloseFont(_font.ttfFont);
+        _font.ttfFont = NULL;
+    }
+
+    _font.height = height;
+    _font.ttfFont = System::LoadFont(facename, height);
+
+    if ( _font.ttfFont )
+    {
+        if (!_solidFont)
+            TTF_SetFontHinting(_font.ttfFont, TTF_HINTING_LIGHT);
+        else
+            TTF_SetFontHinting(_font.ttfFont, TTF_HINTING_MONO);
+
+        return 1;
+    }
+
+    printf("Can't load font\n");
+
+    return 0;
+}
+
+
+size_t GFXEngine::windd_func0(IDVList &stak)
+{
+    int txt16bit_def = read_yes_no_status("env/txt16bit.def", 1);
+    int drawprim_def = read_yes_no_status("env/drawprim.def", 0);
+    _export_window_mode = System::IniConf::GfxExportWindowMode.Get<bool>();     // gfx.export_window_mode
+
+    switch(System::IniConf::GfxBlending.Get<int>())
+    {
+        case 0:
+        {
+            can_srcblend = 1;
+            can_destblend = 0;
+            can_stippling = 0;
+        }
+        break;
+
+        default:
+        case 1:
+        {
+            can_srcblend = 1;
+            can_destblend = 1;
+            can_stippling = 0;
+        }
+        break;
+
+        case 2:
+        {
+            can_srcblend = 0;
+            can_destblend = 0;
+            can_stippling = 1;
+        }
+        break;
+    }
+
+    SetResVariables( Common::Point(stak.Get<int32_t>(ATT_WIDTH, DEFAULT_WIDTH), stak.Get<int32_t>(ATT_HEIGHT, DEFAULT_HEIGHT)) );
+
+    _forcesoftcursor = 0;
+    _disable_lowres = System::IniConf::GfxDisableLowres.Get<bool>();
+    _txt16bit = txt16bit_def;
+    _use_simple_d3d = drawprim_def;
+
+    _solidFont = System::IniConf::GfxSolidFont.Get<bool>();
+
+    switch( System::IniConf::GfxVsync.Get<int>() )
+    {
+        case 0:
+            SDL_GL_SetSwapInterval(0);
+            break;
+
+        default:
+        case 1:
+            SDL_GL_SetSwapInterval(1);
+            break;
+
+        case 2:
+            {
+                if ( SDL_GL_SetSwapInterval(-1) == -1)
+                    SDL_GL_SetSwapInterval(1);
+            }
+            break;
+    }
+
+    fpsLimitter(NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>()));
+
+    LoadFontByDescr("MS Sans Serif,12,400,0");
+
+    //win3d->field_54______rsrc_field4 = (bitmap_intern *)getRsrc_pData();
+    return 1;
+}
+
+
+bool GFXEngine::SetResVariables(Common::Point res)
+{
+    _resolution = res;   //stak.Get<int32_t>(ATT_WIDTH, 0);
+
+    _clip = _resolution - Common::Point(1, 1);
+
+    _field_54c = _resolution.x / 2;
+    _field_550 = _resolution.y / 2;
+
+    _field_554 = _resolution.x / 2;
+    _field_558 = _resolution.y / 2;
+
+    return true;
+}
+
+size_t GFXEngine::func0(IDVList &stak)
+{
+    System::IniConf::ReadFromNucleusIni();
+
+    if ( !windd_func0(stak) )
+        return 0;
+
+    _dither = System::IniConf::GfxDither.Get<bool>();
+    _filter = System::IniConf::GfxFilter.Get<bool>();
+    _antialias = System::IniConf::GfxAntialias.Get<bool>();
+    _zbuf_when_tracy = System::IniConf::GfxZbufWhenTracy.Get<bool>();
+    _colorkey = System::IniConf::GfxColorkey.Get<bool>();
+
+    if ( can_srcblend )
+        _alpha = 192;
+    else
+        _alpha = 128;
+
+    ApplyResolution();
+
+    return 1;
+}
+
+void GFXEngine::ApplyResolution()
+{
+    if ( (float)_resolution.x / (float)_resolution.y >= 1.4 )
+    {
+        int half = (_resolution.x + _resolution.y) / 2;
+        _corrW = (float)half * 1.1429 / (float)_resolution.x;
+        _corrH = (float)half * 0.85715 / (float)_resolution.y;
+        _corrIW = 1.0 / _corrW;
+        _corrIH = 1.0 / _corrH;
+    }
+    else //No correction
+    {
+        _corrIW = _corrW = 1.0;
+        _corrIH = _corrH = 1.0;
+    }
+
+    initPolyEngine();
+}
+
+
+size_t GFXEngine::raster_func198(const Common::FLine &arg)
+{
+    float tX = _field_554 - 1.0;
+    float tY = _field_558 - 1.0;
+
+    int y1 = (arg.y1 + 1.0) * tY;
+    int y2 = (arg.y2 + 1.0) * tY;
+    int x1 = (arg.x1 + 1.0) * tX;
+    int x2 = (arg.x2 + 1.0) * tX;
+
+    DrawLine(Screen(),
+                      Common::Line(x1, y1, x2, y2),
+                      _field_4.r,
+                      _field_4.g,
+                      _field_4.b,
+                      _field_4.a,
+                      _virtualUiPass);
+    return 1;
+}
+
+
+size_t GFXEngine::raster_func199(const Common::Line &arg)
+{
+    DrawLine(Screen(),
+                      Common::Line(_field_54c + arg.x1, _field_550 + arg.y1,
+                                   _field_54c + arg.x2, _field_550 + arg.y2),
+                      _field_4.r,
+                      _field_4.g,
+                      _field_4.b,
+                      _field_4.a,
+                      _virtualUiPass );
+
+    return 1;
+}
+
+void GFXEngine::sub_420EDC(Common::Line line, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha)
+{
+    if ( line.ClipBy(_clip) )
+    {
+        Common::Line tmp2 = line;
+
+        if ( _inverseClip.IsEmpty() || !tmp2.ClipBy(_inverseClip) )
+        {
+            DrawLine(Screen(), line, r, g, b, alpha, _virtualUiPass);
+        }
+        else
+        {
+            if ( tmp2.P2() != line.P2() )
+            {
+                if ( tmp2.P1() != line.P1() )
+                {
+                    DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha, _virtualUiPass);
+                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha, _virtualUiPass);
+                }
+                else
+                {
+                    DrawLine(Screen(), Common::Line(tmp2.P2(), line.P2()), r, g, b, alpha, _virtualUiPass);
+                }
+            }
+            else
+            {
+                DrawLine(Screen(), Common::Line(line.P1(), tmp2.P1()), r, g, b, alpha, _virtualUiPass);
+            }
+        }
+    }
+}
+
+size_t GFXEngine::raster_func200(const Common::FLine &arg)
+{
+    float tX = _field_554 - 1.0;
+    float tY = _field_558 - 1.0;
+
+    sub_420EDC (Common::Line( (arg.x1 + 1.0) * tX
+                            , (arg.y1 + 1.0) * tY
+                            , (arg.x2 + 1.0) * tX
+                            , (arg.y2 + 1.0) * tY),
+                        _field_4.r,
+                        _field_4.g,
+                        _field_4.b,
+                        _field_4.a);
+
+    return 1;
+}
+
+size_t GFXEngine::raster_func201(const Common::Line &l)
+{
+    sub_420EDC( Common::Line( _field_54c + l.x1
+                            , _field_550 + l.y1
+                            , _field_54c + l.x2
+                            , _field_550 + l.y2),
+                        _field_4.r,
+                        _field_4.g,
+                        _field_4.b,
+                        _field_4.a );
+
+    return 1;
+}
+
+size_t GFXEngine::raster_func202(rstr_arg204 *arg)
+{
+    Common::Rect r1;
+    r1.left   = (arg->float4.left   + 1.0) * (arg->pbitm->width / 2);
+    r1.top    = (arg->float4.top    + 1.0) * (arg->pbitm->height / 2);
+    r1.right  = (arg->float4.right  + 1.0) * (arg->pbitm->width / 2);
+    r1.bottom = (arg->float4.bottom + 1.0) * (arg->pbitm->height / 2);
+
+    Common::Rect r2;
+    r2.left   = _field_554 * (arg->float14.left   + 1.0);
+    r2.top    = _field_558 * (arg->float14.top    + 1.0);
+    r2.right  = _field_554 * (arg->float14.right  + 1.0);
+    r2.bottom = _field_558 * (arg->float14.bottom + 1.0);
+
+    SDL_Rect src = r1;
+    SDL_Rect dst = r2;
+
+    SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
+
+    return 1;
+}
+
+size_t GFXEngine::raster_func204(rstr_arg204 *arg)
+{
+    Common::Rect r1;
+    r1.left   = (arg->float4.left   + 1.0) * (arg->pbitm->width / 2);
+    r1.top    = (arg->float4.top    + 1.0) * (arg->pbitm->height / 2);
+    r1.right  = (arg->float4.right  + 1.0) * (arg->pbitm->width / 2);
+    r1.bottom = (arg->float4.bottom + 1.0) * (arg->pbitm->height / 2);
+
+    Common::Rect r2;
+    r2.left   = _field_554 * (arg->float14.left   + 1.0);
+    r2.top    = _field_558 * (arg->float14.top    + 1.0);
+    r2.right  = _field_554 * (arg->float14.right  + 1.0);
+    r2.bottom = _field_558 * (arg->float14.bottom + 1.0);
+
+    if ( _clip.IsIntersects(r2) )
+    {
+        if ( r2.left < _clip.left )
+        {
+            r1.left += (_clip.left - r2.left) * r1.Width() / r2.Width();
+            r2.left = _clip.left;
+        }
+
+        if ( r2.right > _clip.right )
+        {
+            r1.right += (_clip.right - r2.right) * r1.Width() / r2.Width();
+            r2.right = _clip.right;
+        }
+
+        if ( r2.top < _clip.top )
+        {
+            r1.top += (_clip.top - r2.top) * r1.Height() / r2.Height();
+            r2.top = _clip.top;
+        }
+
+        if ( r2.bottom > _clip.bottom )
+        {
+            r1.bottom += (_clip.bottom - r2.bottom) * r1.Height() / r2.Height();
+            r2.bottom = _clip.bottom;
+        }
+
+        SDL_Rect src = r1;
+        SDL_Rect dst = r2;
+        if (arg->opacity == 255)
+        {
+            SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
+            return 1;
+        }
+
+        uint8_t oldOpacity = 255;
+        SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
+        SDL_GetSurfaceAlphaMod(arg->pbitm->swTex, &oldOpacity);
+        SDL_GetSurfaceBlendMode(arg->pbitm->swTex, &oldBlendMode);
+        SDL_SetSurfaceAlphaMod(arg->pbitm->swTex, arg->opacity);
+        SDL_SetSurfaceBlendMode(arg->pbitm->swTex, SDL_BLENDMODE_BLEND);
+        SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
+        SDL_SetSurfaceAlphaMod(arg->pbitm->swTex, oldOpacity);
+        SDL_SetSurfaceBlendMode(arg->pbitm->swTex, oldBlendMode);
+    }
+
+    return 1;
+}
+
+void GFXEngine::SetRenderStates(int setAll)
+{
+//    static const std::array<int, 4> blends = {GL_ZERO, GL_ONE, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
+    GfxStates *newStates;
+
+    if (setAll < 2)
+        newStates = &_states;
+    else
+        newStates = &_lastStates;
+
+    bool forceSetShader = false;
+    if (setAll)
+        forceSetShader = true;
+
+    if (_glext)
+    {
+        if (setAll || (newStates->Prog.ID != _lastStates.Prog.ID))
+        {
+            if (_vbo && _lastStates.Prog.ID)
+            {
+                if (_lastStates.Prog.PosLoc != -1)
+                    Glext::GLDisableVertexAttribArray(_lastStates.Prog.PosLoc);
+
+                if (_lastStates.Prog.ColorLoc != -1)
+                    Glext::GLDisableVertexAttribArray(_lastStates.Prog.ColorLoc);
+
+                if (_lastStates.Prog.UVLoc != -1)
+                    Glext::GLDisableVertexAttribArray(_lastStates.Prog.UVLoc);
+            }
+
+            Glext::GLUseProgram(newStates->Prog.ID);
+
+            forceSetShader = true;
+
+            if (_vbo && newStates->Prog.ID)
+            {
+                if (newStates->Prog.PosLoc != -1)
+                    Glext::GLEnableVertexAttribArray(newStates->Prog.PosLoc);
+
+                if (newStates->Prog.ColorLoc != -1)
+                    Glext::GLEnableVertexAttribArray(newStates->Prog.ColorLoc);
+            }
+        }
+    }
+
+    if (_vbo)
+    {
+        if (setAll || (newStates->DataBuf != _lastStates.DataBuf))
+        {
+            Glext::GLBindBuffer(GL_ARRAY_BUFFER, newStates->DataBuf);
+        }
+
+        if (setAll || (newStates->IndexBuf != _lastStates.IndexBuf))
+        {
+            Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, newStates->IndexBuf);
+        }
+
+        if (forceSetShader || (newStates->Tex != _lastStates.Tex))
+        {
+            if (newStates->Tex)
+            {
+                if (newStates->Prog.UVLoc != -1)
+                    Glext::GLEnableVertexAttribArray(newStates->Prog.UVLoc);
+
+                glBindTexture(GL_TEXTURE_2D, newStates->Tex);
+
+                _vboStatesBlock.Textured = 1;
+            }
+            else
+            {
+                if (newStates->Prog.UVLoc != -1)
+                    Glext::GLDisableVertexAttribArray(newStates->Prog.UVLoc);
+
+                glBindTexture(GL_TEXTURE_2D, 0);
+
+                _vboStatesBlock.Textured = 0;
+            }
+            _vboStatesChanged = true;
+        }
+
+        if ((forceSetShader || (newStates->Fog != _lastStates.Fog) ||
+            (newStates->FogLength != _lastStates.FogLength) ||
+            (newStates->FogStart != _lastStates.FogStart) ||
+            (newStates->FogStrength != _lastStates.FogStrength) ||
+            (newStates->FogColor.r != _lastStates.FogColor.r) ||
+            (newStates->FogColor.g != _lastStates.FogColor.g) ||
+            (newStates->FogColor.b != _lastStates.FogColor.b)) )
+        {
+            if (newStates->Fog)
+            {
+                _vboStatesBlock.Fog = 1.0;
+                _vboStatesBlock.FogStart = newStates->FogStart;
+                _vboStatesBlock.FogLength = newStates->FogLength;
+                _vboStatesBlock.FogStrength = newStates->FogStrength;
+                _vboStatesBlock.FogColor[0] = newStates->FogColor.r;
+                _vboStatesBlock.FogColor[1] = newStates->FogColor.g;
+                _vboStatesBlock.FogColor[2] = newStates->FogColor.b;
+                _vboStatesBlock.FogColor[3] = 1.0;
+            }
+            else
+            {
+                _vboStatesBlock.Fog = 0.0;
+            }
+            _vboStatesChanged = true;
+        }
+
+        if ((forceSetShader || (newStates->AFog != _lastStates.AFog) ||
+            (newStates->AFogLength != _lastStates.AFogLength) ||
+            (newStates->AFogStart != _lastStates.AFogStart) ||
+            (newStates->AFogStrength != _lastStates.AFogStrength) ||
+            (newStates->AFogColor.r != _lastStates.AFogColor.r) ||
+            (newStates->AFogColor.g != _lastStates.AFogColor.g) ||
+            (newStates->AFogColor.b != _lastStates.AFogColor.b)) )
+        {
+            if (newStates->AFog)
+            {
+                _vboStatesBlock.AFog = 1.0;
+                _vboStatesBlock.AFogStart = newStates->AFogStart;
+                _vboStatesBlock.AFogLength = newStates->AFogLength;
+                _vboStatesBlock.AFogStrength = newStates->AFogStrength;
+                _vboStatesBlock.AtmosphereColor[0] = newStates->AFogColor.r;
+                _vboStatesBlock.AtmosphereColor[1] = newStates->AFogColor.g;
+                _vboStatesBlock.AtmosphereColor[2] = newStates->AFogColor.b;
+                _vboStatesBlock.AtmosphereColor[3] = 1.0;
+            }
+            else
+            {
+                _vboStatesBlock.AFog = 0.0;
+            }
+            _vboStatesChanged = true;
+        }
+
+        if (forceSetShader || (newStates->Shaded != _lastStates.Shaded))
+        {
+            if (newStates->Shaded)
+            {
+                _vboStatesBlock.Flat = 0;
+            }
+            else
+            {
+                _vboStatesBlock.Flat = 1;
+            }
+            _vboStatesChanged = true;
+        }
+
+        if (setAll || (newStates->AlphaTest != _lastStates.AlphaTest))
+        {
+            if (newStates->AlphaTest == false)
+            {
+                _vboStatesBlock.ATest = 0;
+            }
+            else
+            {
+                _vboStatesBlock.ATest = 1;
+            }
+            _vboStatesChanged = true;
+        }
+    }
+    else
+    {
+        if (setAll || (newStates->Stipple != _lastStates.Stipple))
+        {
+        }
+
+        if (setAll || (newStates->Fog != _lastStates.Fog) ||
+            (newStates->FogLength != _lastStates.FogLength) ||
+            (newStates->FogStart != _lastStates.FogStart) ||
+            (newStates->FogColor.r != _lastStates.FogColor.r) ||
+            (newStates->FogColor.g != _lastStates.FogColor.g) ||
+            (newStates->FogColor.b != _lastStates.FogColor.b) )
+        {
+            if (newStates->Fog)
+            {
+                glEnable(GL_FOG);
+                glFogf(GL_FOG_DENSITY, 1.0);
+                glFogi(GL_FOG_MODE, GL_LINEAR);
+                glHint(GL_FOG_HINT, GL_DONT_CARE);
+
+                float fcolors[4] = {
+                    newStates->FogColor.r,
+                    newStates->FogColor.g,
+                    newStates->FogColor.b,
+                    1.0
+                };
+
+                glFogfv(GL_FOG_COLOR, fcolors);
+
+                glFogf(GL_FOG_START, newStates->FogStart);
+                glFogf(GL_FOG_END, newStates->FogStart + newStates->FogLength);
+            }
+            else
+            {
+                glDisable(GL_FOG);
+            }
+        }
+
+        if (setAll || (newStates->Shaded != _lastStates.Shaded))
+        {
+            if (newStates->Shaded)
+                glShadeModel(GL_SMOOTH);
+            else
+                glShadeModel(GL_FLAT);
+        }
+
+        if (setAll || (newStates->Tex != _lastStates.Tex))
+        {
+            if (newStates->Tex)
+            {
+                glEnable(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, newStates->Tex);
+                glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            }
+            else
+            {
+                glDisable(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, 0);
+                glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+            }
+        }
+
+        if (setAll || (newStates->AlphaTest != _lastStates.AlphaTest))
+        {
+            if (newStates->AlphaTest == false)
+            {
+                glDisable(GL_ALPHA_TEST);
+            }
+            else
+            {
+                glEnable(GL_ALPHA_TEST);
+                glAlphaFunc(GL_GREATER, 0.0);
+            }
+        }
+    }
+
+    if (setAll || (newStates->DepthTest != _lastStates.DepthTest))
+    {
+        if (newStates->DepthTest)
+        {
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_LEQUAL);
+        }
+        else
+        {
+            glDisable(GL_DEPTH_TEST);
+        }
+    }
+
+    if (setAll || (newStates->Tex != _lastStates.Tex)
+               || (newStates->LinearFilter != _lastStates.LinearFilter) )
+    {
+        if (newStates->Tex)
+        {
+            if (newStates->LinearFilter)
+            {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            }
+            else
+            {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            }
+        }
+    }
+
+    if (setAll || (newStates->SrcBlend != _lastStates.SrcBlend)
+                   || (newStates->DstBlend != _lastStates.DstBlend))
+    {
+        glBlendFunc(newStates->SrcBlend, newStates->DstBlend);
+    }
+
+    if (setAll || (newStates->TexBlend != _lastStates.TexBlend))
+    {
+        if (newStates->TexBlend == 0)
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+        else if (newStates->TexBlend == 1)
+        {
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_RGB, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+        }
+        else if (newStates->TexBlend == 2)
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        else if (newStates->TexBlend == 3)
+        {
+            // Colorized fixed-function fallback: vertex RGB already carries
+            // target hue/intensity. Ignore source texture RGB but retain its
+            // alpha mask, so cyan plasma does not suppress red/yellow channels.
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
+        }
+    }
+
+    if (setAll || (newStates->AlphaBlend != _lastStates.AlphaBlend))
+    {
+        if (newStates->AlphaBlend)
+            glEnable(GL_BLEND);
+        else
+            glDisable(GL_BLEND);
+    }
+
+    if (setAll || (newStates->Zwrite != _lastStates.Zwrite))
+    {
+        if (newStates->Zwrite)
+            glDepthMask(GL_TRUE);
+        else
+            glDepthMask(GL_FALSE);
+    }
+
+    if (setAll < 2)
+        _lastStates = _states;
+}
+
+void GFXEngine::RenderingMeshOld(TRenderNode *nod)
+{
+    if ( !_sceneBeginned )
+        return;
+
+    if (!nod)
+        return;
+
+    TMesh *mesh = nod->Mesh;
+
+    if (!mesh)
+        return;
+
+    uint32_t flags = nod->Flags;
+
+    _states.Shaded = false;
+    _states.Stipple = false;
+    _states.SrcBlend = GL_ONE;
+    _states.DstBlend = GL_ZERO;
+    _states.TexBlend = 0; //REPLACE
+    _states.AlphaBlend = false;
+    _states.Zwrite = true;
+    _states.Tex = 0;
+    _states.LinearFilter = (_filter != 0);
+    _states.Fog = false;
+    _states.AlphaTest = false;
+    _states.AFog = false;
+    _states.Prog = TShaderProg();
+
+    bool useComputedColor = false;
+
+    if ( flags & RFLAGS_TEXTURED )
+    {
+        if (nod->Tex)
+            _states.Tex = nod->Tex->hwTex;
+    }
+
+    if ( flags & RFLAGS_SHADED )
+    {
+        _states.TexBlend = 2; //MODULATE
+        _states.Shaded = true;
+    }
+
+    if ( flags & RFLAGS_FOG )
+    {
+        _states.Fog = true;
+        _states.FogStart = nod->FogStart;
+        _states.FogLength = nod->FogLength;
+        _states.FogStrength = 1.0f;
+        _states.FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
+    }
+
+    if ( flags & RFLAGS_LUMTRACY )
+    {
+        if ( !_zbuf_when_tracy )
+            _states.Zwrite = false;
+
+        if ( can_destblend )
+        {
+            _states.AlphaBlend = true;
+            _states.TexBlend = 1; //MODULATEALPHA;
+            _states.SrcBlend = GL_ONE;
+            _states.DstBlend = GL_ONE;
+            _states.Shaded = false;
+        }
+        else if ( can_srcblend )
+        {
+            _states.AlphaBlend = true;
+            _states.TexBlend = 1; //MODULATEALPHA;
+            _states.SrcBlend = GL_SRC_ALPHA;
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+            _states.Shaded = false;
+        }
+        else if ( can_stippling )
+        {
+            _states.AlphaBlend = true;
+            _states.TexBlend = 1; //MODULATEALPHA;
+            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
+            _states.Stipple = true;
+            _states.Shaded = false;
+        }
+    }
+    else if ( flags & RFLAGS_ZEROTRACY )
+    {
+        _states.AlphaTest = true;
+
+        if ( _pixfmt->BytesPerPixel != 1 )
+        {
+            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
+        }
+
+        _states.AlphaBlend = true;
+        _states.LinearFilter = false;
+        _states.TexBlend = 2; //MODULATE
+    }
+    else if ( flags & RFLAGS_ALPHABLEND )
+    {
+        _states.AlphaBlend = true;
+        _states.SrcBlend = GL_SRC_ALPHA;
+        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        _states.TexBlend = 2; //MODULATE
+    }
+
+    if (flags & RFLAGS_SKY)
+    {
+        _states.Fog = false;
+        _states.Shaded = true;
+    }
+
+
+    if (flags & RFLAGS_COMPUTED_COLOR)
+        useComputedColor = true;
+
+    if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && nod->FogLength > 0.0f)
+    {
+        const bool atmosphereFog = HorizonAlphaFogEnabled(nod->FogLength);
+        const bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
+
+        // Fixed-function fallback: emulate Atmosphere V2 per vertex. Unlike the
+        // old path, world geometry never loses alpha, so the sky cannot bleed
+        // through opaque terrain/buildings. VBO mode performs the same blend
+        // per pixel in the standard fragment shader.
+        _states.Fog = false;
+        _states.AFog = false;
+
+        if (atmosphereFog || darkFog)
+        {
+            const float atmosphereStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
+            const float atmosphereLength = HorizonAlphaFogLength(nod->FogLength);
+            const float darkStart = HorizonDarkFogStart(nod->FogStart, nod->FogLength);
+            const float darkLength = HorizonDarkFogLength(nod->FogLength);
+
+            for (TVertex &v : mesh->Vertexes)
+            {
+                const TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
+                TGLColor out = src;
+                const vec3d viewPos = nod->TForm.Transform(v.Pos);
+
+                if (atmosphereFog)
+                {
+                    const float f = HorizonFogFactor(viewPos, atmosphereStart, atmosphereLength) *
+                                    gHorizonFogConfig.FogStrength;
+                    out.r += (gHorizonFogConfig.FogColor.r - out.r) * f;
+                    out.g += (gHorizonFogConfig.FogColor.g - out.g) * f;
+                    out.b += (gHorizonFogConfig.FogColor.b - out.b) * f;
+                }
+
+                if (darkFog)
+                {
+                    const float f = HorizonFogFactor(viewPos, darkStart, darkLength) *
+                                    gHorizonFogConfig.DarkStrength;
+                    out.r += (gHorizonFogConfig.DarkColor.r - out.r) * f;
+                    out.g += (gHorizonFogConfig.DarkColor.g - out.g) * f;
+                    out.b += (gHorizonFogConfig.DarkColor.b - out.b) * f;
+                }
+
+                out.a = src.a;
+                v.ComputedColor = out;
+            }
+            useComputedColor = true;
+        }
+    }
+
+    TGLColor effectiveColorMul = nod->ColorMul;
+    float vpFadeFactor = nod->VPFadeFactor;
+    if ( !std::isfinite(vpFadeFactor) )
+        vpFadeFactor = 1.0f;
+    vpFadeFactor = std::max(0.0f, std::min(vpFadeFactor, 1.0f));
+
+    // LUMTRACY uses GL_ONE/GL_ONE when destination blending is available.
+    // Alpha does not attenuate RGB in that additive path, so transient VP
+    // fades must scale RGB intensity instead. Keep this separate from the
+    // ordinary tint alpha path to avoid double-fading alpha-blended meshes.
+    if ( (flags & RFLAGS_LUMTRACY) && can_destblend && vpFadeFactor < 1.0f )
+    {
+        effectiveColorMul.r *= vpFadeFactor;
+        effectiveColorMul.g *= vpFadeFactor;
+        effectiveColorMul.b *= vpFadeFactor;
+    }
+
+    if ( nod->Colorize )
+    {
+        // True hue replacement for the legacy fixed-function renderer. Preserve
+        // source vertex intensity/alpha and use the texture only as an alpha
+        // mask when present. This avoids cyan-channel multiplication artefacts.
+        for (TVertex &v : mesh->Vertexes)
+        {
+            const TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
+            const float intensity = std::max(src.r, std::max(src.g, src.b));
+            v.ComputedColor.r = effectiveColorMul.r * intensity;
+            v.ComputedColor.g = effectiveColorMul.g * intensity;
+            v.ComputedColor.b = effectiveColorMul.b * intensity;
+            v.ComputedColor.a = src.a * effectiveColorMul.a;
+        }
+        useComputedColor = true;
+
+        if ( flags & RFLAGS_TEXTURED )
+            _states.TexBlend = 3;
+
+        if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
+        {
+            _states.AlphaBlend = true;
+            _states.SrcBlend = GL_SRC_ALPHA;
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        }
+    }
+    // OpenNeoUA custom VP tint: ordinary per-node color multiplier.
+    else if ( effectiveColorMul.r != 1.0 || effectiveColorMul.g != 1.0 ||
+              effectiveColorMul.b != 1.0 || effectiveColorMul.a != 1.0 )
+    {
+        for (TVertex &v : mesh->Vertexes)
+        {
+            TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
+            v.ComputedColor.r = src.r * effectiveColorMul.r;
+            v.ComputedColor.g = src.g * effectiveColorMul.g;
+            v.ComputedColor.b = src.b * effectiveColorMul.b;
+            v.ComputedColor.a = src.a * effectiveColorMul.a;
+        }
+        useComputedColor = true;
+
+        if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
+        {
+            _states.AlphaBlend = true;
+            _states.SrcBlend = GL_SRC_ALPHA;
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        }
+    }
+
+    if (flags & RFLAGS_DISABLE_ZWRITE)
+        _states.Zwrite = false;
+
+    SetRenderStates(0);
+
+    SetModelViewMatrix( nod->TForm );
+
+    glVertexPointer(3, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].Pos);
+
+    if (useComputedColor)
+        glColorPointer(4, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].ComputedColor);
+    else
+        glColorPointer(4, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].Color);
+
+    if (flags & RFLAGS_TEXTURED)
+    {
+        if ( (flags & RFLAGS_DYNAMIC_TEXTURE) && nod->coordsID >= 0 )
+            glTexCoordPointer(2, GL_FLOAT, sizeof(tUtV), nod->Mesh->CoordsCache.at( nod->coordsID ).Coords.data());
+        else
+            glTexCoordPointer(2, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].TexCoord);
+    }
+
+    glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, mesh->Indixes.data());
+}
+
+void GFXEngine::RenderingMesh(TRenderNode *nod)
+{
+    if ( !_sceneBeginned )
+        return;
+
+    if (!nod)
+        return;
+
+    TMesh *mesh = nod->Mesh;
+
+    if (!mesh)
+        return;
+
+    uint32_t flags = nod->Flags;
+
+    _states.Shaded = false;
+    _states.Stipple = false;
+    _states.SrcBlend = GL_ONE;
+    _states.DstBlend = GL_ZERO;
+    _states.TexBlend = 0; //REPLACE
+    _states.AlphaBlend = false;
+    _states.Zwrite = true;
+    _states.Tex = 0;
+    _states.LinearFilter = (_filter != 0);
+    _states.Fog = false;
+    _states.AlphaTest = false;
+    _states.AFog = false;
+    _states.Prog = _stdShaderProg;
+
+    if ( flags & RFLAGS_TEXTURED )
+    {
+        if (nod->Tex)
+            _states.Tex = nod->Tex->hwTex;
+    }
+
+    if ( flags & RFLAGS_SHADED )
+    {
+        _states.TexBlend = 2; //MODULATE
+        _states.Shaded = true;
+    }
+
+    if ( flags & RFLAGS_FOG )
+    {
+        _states.Fog = true;
+        _states.FogStart = nod->FogStart;
+        _states.FogLength = nod->FogLength;
+        _states.FogStrength = 1.0f;
+        _states.FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
+    }
+
+    if ( flags & RFLAGS_LUMTRACY )
+    {
+        if ( !_zbuf_when_tracy )
+            _states.Zwrite = false;
+
+        if ( can_destblend )
+        {
+            _states.AlphaBlend = true;
+            _states.TexBlend = 1; //MODULATEALPHA;
+            _states.SrcBlend = GL_ONE;
+            _states.DstBlend = GL_ONE;
+            _states.Shaded = false;
+        }
+        else if ( can_srcblend )
+        {
+            _states.AlphaBlend = true;
+            _states.TexBlend = 1; //MODULATEALPHA;
+            _states.SrcBlend = GL_SRC_ALPHA;
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+            _states.Shaded = false;
+        }
+        else if ( can_stippling )
+        {
+            _states.AlphaBlend = true;
+            _states.TexBlend = 1; //MODULATEALPHA;
+            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
+            _states.Stipple = true;
+            _states.Shaded = false;
+        }
+    }
+    else if ( flags & RFLAGS_ZEROTRACY )
+    {
+        _states.AlphaTest = true;
+
+        if ( _pixfmt->BytesPerPixel != 1 )
+        {
+            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
+            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
+        }
+
+        _states.AlphaBlend = true;
+        _states.LinearFilter = false;
+        _states.TexBlend = 2; //MODULATE
+    }
+    else if ( flags & RFLAGS_ALPHABLEND )
+    {
+        _states.AlphaBlend = true;
+        _states.SrcBlend = GL_SRC_ALPHA;
+        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    }
+
+    if (flags & RFLAGS_SKY)
+    {
+        _states.Fog = false;
+        _states.Shaded = true;
+    }
+
+
+    if (flags & RFLAGS_DISABLE_ZWRITE)
+        _states.Zwrite = false;
+
+    if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && nod->FogLength > 0.0f)
+    {
+        const bool atmosphereFog = HorizonAlphaFogEnabled(nod->FogLength);
+        const bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
+
+        _states.Fog = false;
+        _states.AFog = atmosphereFog || darkFog; // also selects radial Atmosphere V2 mode
+
+        if (_states.AFog)
+        {
+            _states.AFogStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
+            _states.AFogLength = HorizonAlphaFogLength(nod->FogLength);
+            _states.AFogStrength = atmosphereFog ? gHorizonFogConfig.FogStrength : 0.0f;
+            _states.AFogColor = gHorizonFogConfig.FogColor;
+        }
+
+        if (darkFog)
+        {
+            _states.Fog = true;
+            _states.FogStart = HorizonDarkFogStart(nod->FogStart, nod->FogLength);
+            _states.FogLength = HorizonDarkFogLength(nod->FogLength);
+            _states.FogStrength = gHorizonFogConfig.DarkStrength;
+            _states.FogColor = gHorizonFogConfig.DarkColor;
+        }
+
+        // Atmosphere V2 blends RGB and preserves the original alpha/depth.
+        // Do not force transparent sorting/blending for opaque world geometry.
+    }
+
+    TGLColor effectiveColorMul = nod->ColorMul;
+    float vpFadeFactor = nod->VPFadeFactor;
+    if ( !std::isfinite(vpFadeFactor) )
+        vpFadeFactor = 1.0f;
+    vpFadeFactor = std::max(0.0f, std::min(vpFadeFactor, 1.0f));
+
+    // See RenderingMeshOld(): additive LUMTRACY ignores source alpha with
+    // GL_ONE/GL_ONE, so only transient VP fades attenuate RGB in that path.
+    if ( (flags & RFLAGS_LUMTRACY) && can_destblend && vpFadeFactor < 1.0f )
+    {
+        effectiveColorMul.r *= vpFadeFactor;
+        effectiveColorMul.g *= vpFadeFactor;
+        effectiveColorMul.b *= vpFadeFactor;
+    }
+
+    // OpenNeoUA custom VP tint: enable a local alpha blend when the tint lowers alpha.
+    if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
+    {
+        _states.AlphaBlend = true;
+        _states.SrcBlend = GL_SRC_ALPHA;
+        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    }
+
+    _states.DataBuf = nod->Mesh->glDataBuf;
+    _states.IndexBuf = nod->Mesh->glIndexBuf;
+
+    SetRenderStates(0);
+
+    SetModelViewMatrix(nod->TForm);
+
+    Glext::GLVertexAttribPointer(_lastStates.Prog.PosLoc, 3, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Pos));
+
+    if (flags & RFLAGS_COMPUTED_COLOR)
+        Glext::GLVertexAttribPointer(_lastStates.Prog.ColorLoc, 4, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, ComputedColor));
+    else
+        Glext::GLVertexAttribPointer(_lastStates.Prog.ColorLoc, 4, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Color));
+
+    if (flags & RFLAGS_TEXTURED)
+    {
+        if ( (flags & RFLAGS_DYNAMIC_TEXTURE) && nod->coordsID >= 0 )
+            Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(tUtV), (void *)(size_t)nod->Mesh->CoordsCache.at( nod->coordsID ).BufferPos);
+        else
+            Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, TexCoord));
+    }
+
+    // OpenNeoUA custom VP tint: push the per-node color multiplier to the shader UBO.
+    const int32_t colorize = nod->Colorize ? 1 : 0;
+    if ( _vboStatesBlock.Colorize != colorize )
+    {
+        _vboStatesBlock.Colorize = colorize;
+        _vboStatesChanged = true;
+    }
+
+    if ( _vboStatesBlock.ColorMul[0] != effectiveColorMul.r ||
+         _vboStatesBlock.ColorMul[1] != effectiveColorMul.g ||
+         _vboStatesBlock.ColorMul[2] != effectiveColorMul.b ||
+         _vboStatesBlock.ColorMul[3] != effectiveColorMul.a )
+    {
+        _vboStatesBlock.ColorMul[0] = effectiveColorMul.r;
+        _vboStatesBlock.ColorMul[1] = effectiveColorMul.g;
+        _vboStatesBlock.ColorMul[2] = effectiveColorMul.b;
+        _vboStatesBlock.ColorMul[3] = effectiveColorMul.a;
+        _vboStatesChanged = true;
+    }
+
+    CommitUBOParameters();
+    glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, NULL);
+}
+
+void GFXEngine::RenderNode(TRenderNode *node)
+{
+    if (!node)
+        return;
+
+    switch(node->Type)
+    {
+        case TRenderNode::TYPE_MESH:
+            if (_vbo)
+                RenderingMesh(node);
+            else
+                RenderingMeshOld(node);
+            break;
+
+        case TRenderNode::TYPE_PARTICLE:
+        {
+            if (_vbo)
+                RenderingMesh(node);
+            else
+                RenderingMeshOld(node);
+        }
+            break;
+
+        default:
+            break;
+    }
+}
+
+void GFXEngine::QueueRenderMesh(TRenderNode *nod)
+{
+    if (!nod)
+        return;
+
+    TMesh *mesh = nod->Mesh;
+    if (!mesh)
+        return;
+
+    uint32_t flags = nod->Flags;
+
+    if (flags & RFLAGS_SKY)
+        _renderSkyBoxList.push_back(nod);
+    else if (flags & RFLAGS_ZEROTRACY)
+        _renderZeroTracyList.push_back(nod);
+    else if (flags & RFLAGS_ALPHABLEND)
+        _renderLumaTracyList.push_back(nod);
+    else if (flags & RFLAGS_LUMTRACY)
+        _renderLumaTracyList.push_back(nod);
+    else
+        _renderSolidList.push_back(nod);
+}
+
+void GFXEngine::Rasterize(uint32_t RasterEtapes)
+{
+    if (RasterEtapes & RASTER_SKY)
+    {
+        // OpenNeoUA: render the camera-following sky with its own extended
+        // projection, then restore the unlocked world projection immediately.
+        mat4x4f skyFrustum = mat4x4f::UAFrustum(_frustumNear, SKY_FAR_CLIP);
+        skyFrustum.m00 *= _viewZoom;
+        skyFrustum.m11 *= _viewZoom;
+        SetProjectionMatrix(skyFrustum);
+
+        std::stable_sort(_renderSkyBoxList.begin(), _renderSkyBoxList.end(),
+                         TRenderNode::CompareSolid);
+
+        for (size_t nodeIndex = 0; nodeIndex < _renderSkyBoxList.size(); nodeIndex++)
+            RenderNode(_renderSkyBoxList[nodeIndex]);
+        _renderSkyBoxList.clear();
+
+        // Every non-sky queue must continue with the normal world projection.
+        SetProjectionMatrix(_frustum);
+    }
+
+    if (RasterEtapes & RASTER_SOLID)
+    {
+        std::stable_sort(_renderSolidList.begin(), _renderSolidList.end(),
+                         TRenderNode::CompareSolid);
+
+        for (size_t nodeIndex = 0; nodeIndex < _renderSolidList.size(); nodeIndex++)
+            RenderNode(_renderSolidList[nodeIndex]);
+        _renderSolidList.clear();
+    }
+
+    if (RasterEtapes & RASTER_ZEROTR)
+    {
+        std::stable_sort(_renderZeroTracyList.begin(), _renderZeroTracyList.end(),
+                         TRenderNode::CompareSolid);
+
+        for (size_t nodeIndex = 0; nodeIndex < _renderZeroTracyList.size(); nodeIndex++)
+            RenderNode(_renderZeroTracyList[nodeIndex]);
+        _renderZeroTracyList.clear();
+    }
+
+    if (RasterEtapes & RASTER_LUMATR)
+    {
+        std::stable_sort(_renderLumaTracyList.begin(), _renderLumaTracyList.end(),
+                         TRenderNode::CompareTransparent);
+
+        for (size_t nodeIndex = 0; nodeIndex < _renderLumaTracyList.size(); nodeIndex++)
+            RenderNode(_renderLumaTracyList[nodeIndex]);
+        _renderLumaTracyList.clear();
+    }
+}
+
+
+void GFXEngine::raster_func207(int id, TileMap *t)
+{
+    if (_tiles[id] != t)
+        ClearUiAccentCache();
+
+    _tiles[id] = t;
+}
+
+TileMap *GFXEngine::raster_func208(int id)
+{
+    return _tiles[id];
+}
+
+int GFXEngine::raster_func208(TileMap *t)
+{
+    if ( t )
+    {
+        for (int i = 0; i < 256; i++)
+        {
+            if (_tiles[i] == t)
+                return i;
+        }
+    }
+    return -1;
+}
+
+void GFXEngine::ClearUiAccentCache()
+{
+    for (auto &entry : _uiAccentSurfaces)
+        SDL_FreeSurface(entry.second);
+
+    _uiAccentSurfaces.clear();
+    _uiAccentCacheValid = false;
+}
+
+bool GFXEngine::IsUiAccentTileset(uint8_t id)
+{
+    // H_E_P (30) and the lower action-bar atlases H_IBN/H_IBP/H_IBD
+    // (21-23) are selected from authored faction PNGs and must not receive
+    // the runtime accent remap used by the rest of the gameplay UI.
+    return id == 0 || id == 2 || id == 3 || id == 5 || id == 8 ||
+           (id >= 9 && id <= 15) || id == 24 || id == 25;
+}
+
+bool GFXEngine::IsUiAccentNeutralHighlightTileset(uint8_t id)
+{
+    // Limit neutral recolouring to control atlases. Font atlases (notably 0
+    // and 15) must keep their authored white highlights for legible resource
+    // numbers and labels, especially with the Taerkasten yellow theme.
+    return id >= 9 && id <= 14;
+}
+
+SDL_Color GFXEngine::RemapUiAccentColor(const SDL_Color &source, const SDL_Color &accent,
+                                        bool includeNeutralHighlights,
+                                        int neutralThreshold,
+                                        bool tintAllNonDark)
+{
+    const int sourceMax = std::max(source.r, std::max(source.g, source.b));
+    const int sourceMin = std::min(source.r, std::min(source.g, source.b));
+    const bool tealAccent = source.g > source.r + 8 && source.b > source.r + 8;
+    const bool neutralHighlight = includeNeutralHighlights &&
+                                  sourceMax >= neutralThreshold &&
+                                  sourceMax - sourceMin <= 36;
+
+    // Dark teal pixels form the neutral panel fill in the original artwork.
+    // Only medium/bright accents are themed. Very dark panel fills and grey
+    // backgrounds remain neutral; bright UI highlights are admitted so
+    // gauges, borders and buttons cannot remain patchy.
+    const int darkThreshold = tintAllNonDark ? 48 : 72;
+    if (sourceMax < darkThreshold ||
+        (!tintAllNonDark && !tealAccent && !neutralHighlight))
+    {
+        return source;
+    }
+
+    const int accentValue = std::max(1, (int)std::max(accent.r,
+                                                      std::max(accent.g, accent.b)));
+    int themedValue = sourceMax;
+
+    // Near-white faction accents need a small luminance lift; otherwise the
+    // original teal value survives merely as grey despite the white target.
+    const int accentMin = std::min(accent.r, std::min(accent.g, accent.b));
+    if (accentMin >= 245)
+        themedValue = std::min(255, sourceMax + 28);
+
+    SDL_Color themed = source;
+    themed.r = (uint8_t)std::min(255, accent.r * themedValue / accentValue);
+    themed.g = (uint8_t)std::min(255, accent.g * themedValue / accentValue);
+    themed.b = (uint8_t)std::min(255, accent.b * themedValue / accentValue);
+    return themed;
+}
+
+SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color &accent,
+                                           uint8_t tilesetId)
+{
+    if (!source)
+        return source;
+
+    if (!_uiAccentCacheValid ||
+        _uiAccentCacheColor.r != accent.r ||
+        _uiAccentCacheColor.g != accent.g ||
+        _uiAccentCacheColor.b != accent.b)
+    {
+        ClearUiAccentCache();
+        _uiAccentCacheColor = accent;
+        _uiAccentCacheValid = true;
+    }
+
+    const std::pair<SDL_Surface *, uint8_t> cacheKey(source, tilesetId);
+    auto cached = _uiAccentSurfaces.find(cacheKey);
+    if (cached != _uiAccentSurfaces.end())
+        return cached->second;
+
+    SDL_Surface *copy = SDL_ConvertSurface(source, source->format, 0);
+    if (!copy)
+        return source;
+
+    const int bytesPerPixel = copy->format->BytesPerPixel;
+    if (bytesPerPixel >= 2 && bytesPerPixel <= 4 && SDL_LockSurface(copy) == 0)
+    {
+        for (int y = 0; y < copy->h; ++y)
+        {
+            uint8_t *row = (uint8_t *)copy->pixels + y * copy->pitch;
+            for (int x = 0; x < copy->w; ++x)
+            {
+                uint8_t *pixel = row + x * bytesPerPixel;
+                uint32_t value = 0;
+
+                if (bytesPerPixel == 2)
+                    memcpy(&value, pixel, 2);
+                else if (bytesPerPixel == 3)
+                {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                    value = pixel[0] << 16 | pixel[1] << 8 | pixel[2];
+#else
+                    value = pixel[0] | pixel[1] << 8 | pixel[2] << 16;
+#endif
+                }
+                else
+                    memcpy(&value, pixel, 4);
+
+                SDL_Color original;
+                SDL_GetRGBA(value, copy->format, &original.r, &original.g,
+                            &original.b, &original.a);
+                // Keep the dark frame/track ramp neutral for every faction.
+                // The normal accent remap still colours the authored scrollbar
+                // highlights, arrows and knob. In particular, do not tint the
+                // whole 11..13 map-control atlases for Ghorkov: that special
+                // case also coloured the outer map frame red.
+                const bool tintAllMapControls = tilesetId == 10;
+                const bool includeNeutralHighlights =
+                    IsUiAccentNeutralHighlightTileset(tilesetId);
+                const int neutralThreshold = tilesetId == 10 ? 90 : 180;
+                SDL_Color themed = RemapUiAccentColor(
+                    original, accent, includeNeutralHighlights, neutralThreshold,
+                    tintAllMapControls);
+                if (themed.r == original.r && themed.g == original.g &&
+                    themed.b == original.b)
+                {
+                    continue;
+                }
+
+                value = SDL_MapRGBA(copy->format, themed.r, themed.g,
+                                    themed.b, original.a);
+                if (bytesPerPixel == 2)
+                    memcpy(pixel, &value, 2);
+                else if (bytesPerPixel == 3)
+                {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                    pixel[0] = (value >> 16) & 0xff;
+                    pixel[1] = (value >> 8) & 0xff;
+                    pixel[2] = value & 0xff;
+#else
+                    pixel[0] = value & 0xff;
+                    pixel[1] = (value >> 8) & 0xff;
+                    pixel[2] = (value >> 16) & 0xff;
+#endif
+                }
+                else
+                    memcpy(pixel, &value, 4);
+            }
+        }
+        SDL_UnlockSurface(copy);
+    }
+
+    _uiAccentSurfaces[cacheKey] = copy;
+    return copy;
+}
+
+static bool IsFactionAccentTextSource(uint8_t r, uint8_t g, uint8_t b)
+{
+    // The original gameplay/menu accent text is cyan/azure. Remap only that
+    // chromatic family; authored white, grey and other semantic colours remain
+    // untouched.
+    return g >= 80 && b >= 80 &&
+           g >= r + 18 && b >= r + 18 &&
+           std::abs((int)g - (int)b) <= 96;
+}
+
+void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *includes,
+                               const SDL_Color *uiAccent)
+{
+    struct CmdStkEntr
+    {
+        const CmdStream &seq;
+        const int32_t pos;
+    };
+
+    int v11;
+
+    int bytesPerColor = Screen()->format->BytesPerPixel;
+
+    int32_t curPos = 0;
+    const CmdStream *curStream = &drawSeq;
+
+    int w_pixels = Screen()->pitch / bytesPerColor;
+    TileMap *tile = NULL;
+    uint8_t tileId = 0;
+    uint8_t opacity = 255;
+
+    int x_out = 0;
+    int y_out = 0;
+
+    int x_out_txt = 0;
+    int y_out_txt = 0;
+    int txt_flag = 0;
+
+    int y_pos_line = 0;
+    int x_pos_line = 0;
+
+    const Common::Point drawResolution = _virtualUiPass ? _virtualUiResolution : _resolution;
+    int halfWidth = drawResolution.x / 2;
+    int halfHeight = drawResolution.y / 2;
+
+    int line_width = 0;
+    int line_height = 0;
+
+    //if v11 = 0 - clone first column of tile  (count = line_width)
+    //if v11 = 1 - normal copy of tile
+    v11 = 1;
+
+
+    int x_off = 0;
+    int y_off = 0;
+
+    std::stack<CmdStkEntr> Stack;
+
+    while ( 1 )
+    {
+        int v13 = FontUA::get_u8(*curStream, &curPos);
+
+        if ( v13 )
+        {
+            Common::PointRect &chrr = tile->map[v13];
+
+            int cpy_width;
+
+            if ( line_width )
+                cpy_width = line_width - x_off;
+            else
+                cpy_width = chrr.w - x_off;
+
+            int cpy_height = line_height - y_off;
+
+            //SDL_Rect srcR, dstR;
+            Common::Rect dstR(x_out, y_out, x_out + cpy_width, y_out + cpy_height);
+            /*dstR.x = x_out;
+            dstR.y = y_out;
+            dstR.w = cpy_width;
+            dstR.h = cpy_height;*/
+
+            Common::Rect srcR;
+            srcR.left = chrr.x + x_off;
+            srcR.top = chrr.y + y_off;
+            srcR.bottom = chrr.y + y_off + cpy_height;
+
+            if (v11)
+                srcR.right = chrr.x + x_off + cpy_width;
+            else
+                srcR.right = chrr.x + x_off + 1;
+
+            SDL_Surface *source = tile->img->GetSwTex();
+            if (uiAccent && IsUiAccentTileset(tileId))
+                source = GetUiAccentSurface(source, *uiAccent, tileId);
+            if (opacity == 255)
+                DrawFill(source, srcR, Screen(), dstR);
+            else
+                DrawFillAlpha(source, srcR, Screen(), dstR, opacity);
+
+            /*srcR.h = cpy_height;
+
+            if (v11)
+                srcR.w = cpy_width;
+            else
+                srcR.w = 1;
+
+            for(int i = 0; i < cpy_width; i += srcR.w)
+            {
+                SDL_BlitSurface(tile->img->GetSwTex(), &srcR, Screen(), &dstR);
+                dstR.x += srcR.w;
+            }*/
+
+            line_width = 0;
+            x_off = 0;
+            x_out += cpy_width;
+            v11 = 1;
+        }
+        else // 0
+        {
+            int opcode = FontUA::get_u8(*curStream, &curPos);
+
+            switch ( opcode )
+            {
+            case 0: // End
+
+                if (Stack.empty())
+                {
+                    DrawScreenText();
+                    return;
+                }
+
+                curPos = Stack.top().pos;
+                curStream = &Stack.top().seq;
+
+                Stack.pop();
+                break;
+
+            case 1: // x pos from center
+                x_out = halfWidth + FontUA::get_s16(*curStream, &curPos);
+                x_pos_line = x_out;
+
+                y_pos_line = y_out;
+                y_off = 0;
+
+                line_height = tile->h;
+                break;
+
+            case 2: // y pos from center
+                y_out = halfHeight + FontUA::get_s16(*curStream, &curPos);
+                x_pos_line = x_out;
+
+                y_pos_line = y_out;
+                y_off = 0;
+
+                line_height = tile->h;
+                break;
+
+            case 3: //xpos
+                x_out = FontUA::get_s16(*curStream, &curPos);
+                if ( x_out < 0 )
+                    x_out += w_pixels;
+
+                x_pos_line = x_out;
+                y_pos_line = y_out;
+
+                line_height = tile->h;
+                y_off = 0;
+                break;
+
+            case 4: //ypos
+                y_out = FontUA::get_s16(*curStream, &curPos);
+                if ( y_out < 0 )
+                    y_out += drawResolution.y;
+
+                x_pos_line = x_out;
+                y_pos_line = y_out;
+
+                line_height = tile->h;
+                y_off = 0;
+                break;
+
+            case 5: //add to x pos
+                x_out += FontUA::get_s16(*curStream, &curPos);
+                break;
+
+            case 6: //add to y pos
+                y_out += FontUA::get_s16(*curStream, &curPos);
+                break;
+
+            case 7: //next line
+                y_out = (line_height - y_off) + y_pos_line;
+                y_pos_line = y_out;
+                x_out = x_pos_line;
+
+                y_off = 0;
+                line_height = tile->h;
+                break;
+
+            case 8: // Select tileset
+                tileId = FontUA::get_u8(*curStream, &curPos);
+                tile = _tiles[tileId];
+                break;
+
+            case 9: // Include another cmdlist source
+            {
+                int azaza = FontUA::get_u8(*curStream, &curPos);
+                Stack.push( {*curStream, curPos} );
+                curPos = 0;
+                curStream = includes->at(azaza);
+            }
+            break;
+
+            case 10:
+                line_width = FontUA::get_u8(*curStream, &curPos);
+
+                v11 = 0;
+                x_off = 0;
+
+                break;
+
+            case 11:
+
+                line_width = FontUA::get_u8(*curStream, &curPos);
+
+                v11 = 0;
+                x_off = 0;
+
+                line_width -= (x_out - x_pos_line);
+                break;
+
+            case 12: // Set x offset
+                x_off = FontUA::get_u8(*curStream, &curPos);
+                break;
+
+            case 13: // Set x width
+                line_width = FontUA::get_u8(*curStream, &curPos);
+                break;
+
+            case 14: // Set y offset
+                y_off = FontUA::get_u8(*curStream, &curPos);
+                break;
+
+            case 15: // Set y height
+                line_height = FontUA::get_u8(*curStream, &curPos);
+                break;
+
+            case 16: // Full reset tileset
+                tileId = FontUA::get_u8(*curStream, &curPos);
+                tile = _tiles[tileId];
+                line_height = tile->h;
+                y_off = 0;
+                break;
+
+            case 17:
+                line_width = FontUA::get_s16(*curStream, &curPos);
+                v11 = 0;
+                x_off = 0;
+                line_width -= (x_out - x_pos_line);
+                break;
+
+            case 18: // Add text
+            {
+                int block_width = FontUA::get_s16(*curStream, &curPos);
+                int flag = txt_flag | FontUA::get_u16(*curStream, &curPos);
+
+                int32_t sz = FontUA::get_u16(*curStream, &curPos);
+
+                std::string txt;
+                txt.assign((const char *)(curStream->data()) + curPos, sz);
+
+
+                curPos += sz + 1;
+                AddScreenText(txt, x_out_txt, y_out_txt, block_width, tile->h, flag);
+            }
+            break;
+
+            case 19: // Copy current x/y pos for text output
+                x_out_txt = x_out;
+                y_out_txt = y_out;
+                break;
+
+            case 20: // Add txtout flag
+                txt_flag |= FontUA::get_u16(*curStream, &curPos);
+                break;
+
+            case 21: // Delete txtout flag
+                txt_flag &= ~(FontUA::get_u16(*curStream, &curPos));
+                break;
+
+            case 22: // set colour for font, with selective faction accent
+            {
+                int r = FontUA::get_u16(*curStream, &curPos);
+                int g = FontUA::get_u16(*curStream, &curPos);
+                int b = FontUA::get_u16(*curStream, &curPos);
+
+                if ( uiAccent && IsFactionAccentTextSource((uint8_t)r,
+                                                           (uint8_t)g,
+                                                           (uint8_t)b) )
+                {
+                    r = uiAccent->r;
+                    g = uiAccent->g;
+                    b = uiAccent->b;
+                }
+
+                AddScreenText("", r, g, b, 0, 0x20);
+            }
+            break;
+
+            case 24: // set tile opacity
+                opacity = FontUA::get_u16(*curStream, &curPos);
+                break;
+            }
+        }
+    }
+}
+
+
+void GFXEngine::raster_func210(const Common::FRect &arg)
+{
+    _clip = Common::Rect(   (arg.left + 1.0) * (_field_554 + -1.0),
+                            (arg.top + 1.0) * (_field_558 + -1.0),
+                            (arg.right + 1.0) * (_field_554 + -1.0),
+                            (arg.bottom + 1.0) * (_field_558 + -1.0) );
+    }
+
+void GFXEngine::raster_func211(const Common::Rect &arg)
+{
+    _clip = Common::Rect(   _field_54c + arg.left,
+                            _field_550 + arg.top,
+                            _field_54c + arg.right,
+                            _field_550 + arg.bottom );
+}
+
+
+void GFXEngine::BeginScene()
+{
+    SetRenderStates(2);
+
+    SetProjectionMatrix( _frustum );
+    SetModelViewMatrix( mat4x4f() );
+
+    _sceneBeginned = 1;
+}
+
+// Draw transparent
+void GFXEngine::EndScene()
+{
+    _sceneBeginned = 0;
+
+    _renderSkyBoxList.clear();
+    _renderSolidList.clear();
+    _renderZeroTracyList.clear();
+    _renderLumaTracyList.clear();
+
+    _renderNodesCache.Rewind();
+}
+
+size_t GFXEngine::raster_func217(SDL_Color color)
+{
+    //if ( !ColorCmp(color, Color(255, 255, 255, 255) ) )
+    _field_4 = color;
+
+    return 0;
+}
+
+void GFXEngine::raster_func218(rstr_218_arg *arg)
+{
+    Common::Rect sRect( (arg->rect1.left + 1.0) * (arg->bitm_intern->width / 2),
+                        (arg->rect1.top + 1.0) * (arg->bitm_intern->height / 2),
+                        (arg->rect1.right + 1.0) * (arg->bitm_intern->width / 2),
+                        (arg->rect1.bottom + 1.0) * (arg->bitm_intern->height / 2) );
+
+    Common::Rect dRect( (arg->rect2.left + 1.0) * _field_554,
+                        (arg->rect2.top + 1.0) * _field_558,
+                        (arg->rect2.right + 1.0) * _field_554,
+                        (arg->rect2.bottom + 1.0) * _field_558 );
+
+    BlitScaleMasked(arg->bitm_intern->swTex, sRect, arg->bitm_intern2->swTex, arg->flg, Screen(), dRect);
+}
+
+void GFXEngine::raster_func221(const Common::Rect &arg)
+{
+    _inverseClip.left = _field_54c + arg.left;
+    _inverseClip.top = _field_550 + arg.top;
+    _inverseClip.right = _field_54c + arg.right;
+    _inverseClip.bottom = _field_550 + arg.bottom;
+}
+
+void GFXEngine::BeginFrame()
+{
+    setViewZoom(1.0f);
+    SDL_FillRect(Screen(), NULL, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
+
+    Common::Point scrSz = System::GetResolution();
+    glViewport(0, 0, scrSz.x, scrSz.y);
+
+    bool saved = _states.Zwrite;
+
+    _states.Zwrite = true;
+    SetRenderStates(0);
+
+    if (_colorEffects)
+    {
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glClearColor(0, 0, 0, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+    }
+
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    _states.Zwrite = saved;
+    SetRenderStates(0);
+
+    if (!_vbo)
+    {
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_COLOR_ARRAY);
+    }
+
+    _states.Prog = _stdShaderProg;
+}
+
+void GFXEngine::EndFrame()
+{
+    // The optional atmospheric pass must process the 3D scene only. When it is
+    // active, resolve the scene FBO before composing the software/HW UI even
+    // with the legacy gfx.color_effects = 1 ordering. With the feature absent
+    // or disabled, the original ordering remains byte-for-byte equivalent.
+    const bool drawWorldBeforeUi = (_colorEffects > 1) || _atmosphereActive;
+
+    if (_vhsFilterActive)
+    {
+        if (drawWorldBeforeUi)
+        {
+            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+            DrawFBO();
+        }
+
+        Gui::Root::Instance.Draw(Screen());
+        DrawScreenSurface();
+        DrawVirtualUISurface();
+        Gui::Root::Instance.HwCompose();
+
+        if (_colorEffects == 1 && !_atmosphereActive)
+        {
+            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+            DrawFBO();
+        }
+
+        Common::Point scrSz = System::GetResolution();
+        if (EnsureVhsFilterTexture(scrSz))
+        {
+            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, scrSz.x, scrSz.y);
+            glReadBuffer(GL_BACK);
+            glBindTexture(GL_TEXTURE_2D, _vhsCopyTex);
+            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, scrSz.x, scrSz.y);
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsOutFbo);
+            glViewport(0, 0, scrSz.x, scrSz.y);
+            glClearColor(0, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            DrawVhsEffect();
+
+            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, scrSz.x, scrSz.y);
+            glClearColor(0, 0, 0, 0);
+            glClear(GL_COLOR_BUFFER_BIT);
+            DrawVhsFilter();
+        }
+
+        System::Flip();
+        return;
+    }
+    else if (drawWorldBeforeUi)
+    {
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+        DrawFBO();
+    }
+
+    Gui::Root::Instance.Draw(Screen());
+    DrawScreenSurface();
+    DrawVirtualUISurface();
+    Gui::Root::Instance.HwCompose();
+
+    if (_colorEffects == 1 && !_vhsFilterActive && !_atmosphereActive)
+    {
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+        DrawFBO();
+    }
+
+    System::Flip();
+}
+
+void GFXEngine::SetColorEffectsPowers(const std::vector<ColorFx> &arg)
+{
+    if (arg.empty())
+    {
+        _normClr = vec3d(1.0, 1.0, 1.0);
+        _invClr = vec3d(0.0, 0.0, 0.0);
+    }
+    else
+    {
+        _normClr = vec3d(0.0, 0.0, 0.0);
+        _invClr = vec3d(0.0, 0.0, 0.0);
+
+        for (ColorFx fx : arg)
+        {
+            if ( fx.Id < 0 || fx.Id >= (int)_clrEff.size() )
+                continue;
+
+            switch(fx.Id)
+            {
+                case 4:
+                case 5:
+                case 7:
+                    _invClr += _clrEff.at( fx.Id ) * fx.Pwr;
+                    break;
+                default:
+                    _normClr += _clrEff.at( fx.Id ) * fx.Pwr;
+                    break;
+            }
+        }
+    }
+}
+
+bool GFXEngine::AllocTexture(ResBitmap *bitm)
+{
+    if (bitm->swTex && !bitm->hwTex)
+    {
+        glGenTextures(1, &bitm->hwTex);
+
+        if (!bitm->hwTex)
+        {
+            return false;
+        }
+
+        _states.Tex = bitm->hwTex;
+        SetRenderStates(0);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        if (bitm->swTex->format->format == _pixfmt->format)
+        {
+            SDL_LockSurface(bitm->swTex);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bitm->width, bitm->height, 0, _glPixfmt, _glPixtype, bitm->swTex->pixels);
+            SDL_UnlockSurface(bitm->swTex);
+        }
+        else
+        {
+            SDL_Surface *conv = ConvertSDLSurface(bitm->swTex, _pixfmt);
+            if ( !conv )
+                return false;
+
+            SDL_LockSurface(conv);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bitm->width, bitm->height, 0, _glPixfmt, _glPixtype, conv->pixels);
+            SDL_UnlockSurface(conv);
+
+            SDL_FreeSurface(conv);
+        }
+    }
+
+    return true;
+}
+
+void GFXEngine::FreeTexture(ResBitmap *bitm)
+{
+    if ( bitm->hwTex )
+        glDeleteTextures(1, &bitm->hwTex);
+
+    bitm->hwTex = 0;
+}
+
+void GFXEngine::display_func271(IDVPair *stak)
+{
+
+}
+
+void GFXEngine::win3d_func274__sub0(FSMgr::FileHandle *fil)
+{
+    int bf_w = 0, bf_h = 0;
+
+    uint8_t *buf = MakeScreenCopy(&bf_w, &bf_h);
+
+    if (buf && bf_w && bf_h)
+    {
+        fil->printf("P6\n#YPA screenshot\n%d %d\n255\n", bf_w, bf_h);
+
+        int lwidth = 3 * bf_w;
+
+        for (int j = 0; j < bf_h; j++)
+        {
+            uint8_t *ln = buf + lwidth * (bf_h - 1 - j);
+
+            for (int i = 0; i < bf_w; i++)
+            {
+                uint8_t *px = ln + i * 3;
+
+                uint8_t r = px[0];
+                uint8_t g = px[1];
+                uint8_t b = px[2];
+
+                fil->writeU8(r);
+                fil->writeU8(g);
+                fil->writeU8(b);
+            }
+        }
+
+        free(buf);
+    }
+}
+
+void GFXEngine::SaveScreenshot(const std::string & screenName)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc(fmt::sprintf("%s.ppm", screenName), "wb");
+    if ( fil )
+    {
+        win3d_func274__sub0(fil);
+        delete fil;
+    }
+}
+
+
+void GFXEngine::windd_func320(IDVPair *)
+{
+}
+
+void GFXEngine::windd_func321(IDVPair *)
+{
+}
+
+
+
+
+
+char * GFXEngine::windd_func322__sub0(const char *box_title, const char *box_ok, const char *box_cancel, const char *box_startText, uint32_t timer_time, void (*timer_func)(int, int, int), void *timer_context, int replace, int maxLen)
+{
+    dprintf("MAKE ME %s\n","windd_func322__sub0");
+    return NULL;
+}
+
+//Show DLGBox with edit field and get entered value
+void GFXEngine::windd_func322(windd_dlgBox *dlgBox)
+{
+    windd_func320(NULL);
+
+    dlgBox->result = windd_func322__sub0(
+                         dlgBox->title,
+                         dlgBox->ok,
+                         dlgBox->cancel,
+                         dlgBox->startText,
+                         dlgBox->time,
+                         dlgBox->timer_func,
+                         dlgBox->timer_context,
+                         dlgBox->replace,
+                         dlgBox->maxLen);
+
+    windd_func321(NULL);
+}
+
+
+
+const std::vector<TGFXDeviceInfo>& GFXEngine::GetDevices()
+{
+    return _devices;
+}
+
+void GFXEngine::SetDeviceByGUID(const std::string &guid, bool writefile)
+{
+    std::string guidWrite = guid;
+
+    bool found = false;
+    for( TGFXDeviceInfo &dev: _devices )
+    {
+        if (dev.guid == guid)
+        {
+            dev.isCurrent = true;
+            found = true;
+        }
+        else
+            dev.isCurrent = false;
+    }
+
+    if ( !found )
+    {
+        for( TGFXDeviceInfo &dev: _devices )
+        {
+            if (dev.guid == "<primary>")
+            {
+                dev.isCurrent = true;
+                found = true;
+                guidWrite = "<primary>";
+            }
+        }
+
+        for( TGFXDeviceInfo &dev: _devices )
+        {
+            if (dev.guid == "<software>")
+            {
+                dev.isCurrent = true;
+                found = true;
+                guidWrite = "<software>";
+            }
+        }
+
+        if (!_devices.empty())
+        {
+            TGFXDeviceInfo &dev = _devices[0];
+            found = true;
+            dev.isCurrent = true;
+            guidWrite = dev.guid;
+        }
+    }
+
+    if (writefile)
+    {
+        if (guidWrite == "<primary>" || guidWrite == "<software>")
+            out_guid_to_file("env/guid3d.def", guidWrite);
+        else
+            out_guid_to_file("env/guid3d.def", "<error>");
+    }
+}
+
+
+
+void GFXEngine::setWDD_cursor(int mode)
+{
+}
+
+void GFXEngine::setWDD_disLowRes(int arg)
+{
+}
+
+void GFXEngine::setWDD_16bitTex(int arg)
+{
+    out_yes_no_status("env/txt16bit.def", arg);
+}
+
+void GFXEngine::setWDD_drawPrim(int arg)
+{
+    out_yes_no_status("env/drawprim.def", arg);
+}
+
+
+
+int GFXEngine::getWDD_16bitTex()
+{
+    return _txt16bit;
+}
+
+int GFXEngine::getWDD_drawPrim()
+{
+    return _use_simple_d3d;
+}
+
+void GFXEngine::setW3D_texFilt(int arg)
+{
+    _filter = arg;
+}
+
+void GFXEngine::SetPalette(UA_PALETTE &newPal)
+{
+    _palette = newPal;
+
+    _normClr = vec3d(1.0, 1.0, 1.0);
+    _invClr = vec3d(0.0, 0.0, 0.0);
+}
+
+void GFXEngine::SetPen(SDL_Color pen)
+{
+    _field_4 = pen;
+}
+
+UA_PALETTE *GFXEngine::GetPalette()
+{
+    return &_palette;
+}
+
+
+
+
+void GFXEngine::draw2DandFlush()
+{
+    if (_colorEffects)
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    Gui::Root::Instance.Draw(Screen());
+    if (_virtualUiPass)
+    {
+        // Briefing/debriefing performs an intermediate 2D flush while the
+        // shell virtual-UI pass is still open. Present the current low-res
+        // layer now, then let the caller continue drawing into the cleared
+        // virtual surface for the final composition.
+        _virtualUiPending = true;
+        DrawVirtualUISurface();
+    }
+    else
+    {
+        DrawScreenSurface();
+        DrawVirtualUISurface();
+    }
+    Gui::Root::Instance.HwCompose();
+
+    SDL_FillRect(Screen(), NULL, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
+
+    if (_colorEffects)
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+}
+
+void GFXEngine::matrixAspectCorrection(mat3x3 &inout, bool invert)
+{
+    if (invert)
+    {
+        inout.m00 *= _corrIW;
+        inout.m01 *= _corrIW;
+        inout.m02 *= _corrIW;
+        inout.m10 *= _corrIH;
+        inout.m11 *= _corrIH;
+        inout.m12 *= _corrIH;
+    }
+    else
+    {
+        inout.m00 *= _corrW;
+        inout.m01 *= _corrW;
+        inout.m02 *= _corrW;
+        inout.m10 *= _corrH;
+        inout.m11 *= _corrH;
+        inout.m12 *= _corrH;
+    }
+}
+
+void GFXEngine::getAspectCorrection(float &cW, float &cH, bool invert)
+{
+    if (invert)
+    {
+        cW = _corrIW;
+        cH = _corrIH;
+    }
+    else
+    {
+        cW = _corrW;
+        cH = _corrH;
+    }
+}
+
+void GFXEngine::viewZoomCorrection(float &x, float &y, bool invert) const
+{
+    const float correction = invert ? 1.0f / _viewZoom : _viewZoom;
+    x *= correction;
+    y *= correction;
+}
+
+void GFXEngine::setFrustumClip(float _near, float _far)
+{
+    if (_near != _frustumNear || _far != _frustumFar)
+        _setFrustumClip(_near, _far);
+}
+
+void GFXEngine::_setFrustumClip(float _near, float _far)
+{
+    //-z * frustum
+    _frustumNear = _near;
+    _frustumFar = _far;
+
+    _frustum = mat4x4f::UAFrustum(_near, _far);
+    _frustum.m00 *= _viewZoom;
+    _frustum.m11 *= _viewZoom;
+}
+
+void GFXEngine::setViewZoom(float zoom)
+{
+    if (!std::isfinite(zoom))
+        zoom = 1.0f;
+
+    if (zoom < VIEW_ZOOM_MIN)
+        zoom = VIEW_ZOOM_MIN;
+    else if (zoom > VIEW_ZOOM_MAX)
+        zoom = VIEW_ZOOM_MAX;
+
+    if (std::fabs(_viewZoom - zoom) < 0.0001f)
+        return;
+
+    _viewZoom = zoom;
+    _frustum = mat4x4f::UAFrustum(_frustumNear, _frustumFar);
+    _frustum.m00 *= _viewZoom;
+    _frustum.m11 *= _viewZoom;
+}
+
+void GFXEngine::ConvAlphaPalette(UA_PALETTE *dst, const UA_PALETTE &src, bool transp)
+{
+    for (uint16_t i = 0; i < dst->size(); i++)
+    {
+        SDL_Color &c = (*dst)[i];
+        c = src[i];
+        c.a = 255;
+
+        if (c.r == 255 && c.g == 255 && c.b == 0)
+        {
+            c.a = 0;
+            c.r = 0;
+            c.g = 0;
+            c.b = 0;
+        }
+        else
+        {
+            if (!can_destblend && can_srcblend && transp)
+            {
+                int mx = (c.r >= c.g) ? (c.r > c.b ? c.r: c.b) : (c.g > c.b ? c.g : c.b);
+
+                if (mx <= 8)
+                {
+                    c.r = 0;
+                    c.g = 0;
+                    c.b = 0;
+                    c.a = 0;
+                }
+                else
+                {
+                    float prm = mx;
+                    c.r = 255.0 * (c.r / prm);
+                    c.g = 255.0 * (c.g / prm);
+                    c.b = 255.0 * (c.b / prm);
+                    c.a = mx;
+                }
+            }
+            else
+            {
+                c.a = 255;
+            }
+        }
+    }
+}
+
+SDL_Surface *GFXEngine::CreateSurfaceScreenFormat(int width, int height)
+{
+#if SDL_VERSION_ATLEAST(2,0,5)
+    return SDL_CreateRGBSurfaceWithFormat(0, width, height, _pixfmt->BitsPerPixel, _pixfmt->format);
+#else
+    return SDL_CreateRGBSurface(0, width, height, _pixfmt->BitsPerPixel, _pixfmt->Rmask, _pixfmt->Gmask, _pixfmt->Bmask, _pixfmt->Amask );
+#endif
+}
+
+SDL_Surface *GFXEngine::ConvertToScreenFormat(SDL_Surface *src)
+{
+    return ConvertSDLSurface(src, _pixfmt);
+}
+
+SDL_Surface * GFXEngine::ConvertSDLSurface(SDL_Surface *src, const SDL_PixelFormat * fmt)
+{
+#if (SDL_COMPILEDVERSION == SDL_VERSIONNUM(2, 0, 12))
+    /***
+     * Workaround for bug with convertation of surface with palette introduced
+     * in SDL2 2.0.12 and fixed soon but after release.
+     ***/
+    if (src->format->BytesPerPixel == 1)
+    {
+#if SDL_VERSION_ATLEAST(2,0,5)
+        SDL_Surface *tmp = SDL_CreateRGBSurfaceWithFormat(0, src->w, src->h, fmt->BitsPerPixel, fmt->format);
+#else
+        SDL_Surface *tmp = SDL_CreateRGBSurface(0, src->w, src->h, fmt->BitsPerPixel, fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask );
+#endif
+        SDL_BlendMode blend = SDL_BLENDMODE_NONE;
+        SDL_GetSurfaceBlendMode(src, &blend);
+        SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_NONE);
+        SDL_BlitSurface(src, NULL, tmp, NULL);
+        SDL_SetSurfaceBlendMode(src, blend);
+        return tmp;
+    }
+    else
+        return SDL_ConvertSurface(src, fmt, 0);
+#else
+    return SDL_ConvertSurface(src, fmt, 0);
+#endif
+}
+
+void GFXEngine::fpsLimitter(int value)
+{
+    if (value > 1000)
+        FpsMaxTicks = 0;
+    else if (value <= 0)
+        FpsMaxTicks = 0;
+    else
+        FpsMaxTicks = 1000/value;
+}
+
+
+}
+
+
+TileMap::TileMap()
+{
+    img = NULL;
+    h = 0;
+}
+
+TileMap::~TileMap()
+{
+    if (img)
+        img->Delete();
+}
+
+void TileMap::Draw(SDL_Surface *surface, const Common::Point &pos, uint8_t c)
+{
+    SDL_Rect src = map[c];
+    SDL_Rect dst = pos;
+    SDL_BlitSurface(img->GetSwTex(), &src, surface, &dst);
+}
+
+void TileMap::Draw(SDL_Surface *surface, const Common::PointRect &pos, uint8_t c)
+{
+    SDL_Rect src = map[c];
+    if (src.w > pos.w)
+        src.w = pos.w;
+    if (src.h > pos.h)
+        src.h = pos.h;
+    SDL_Rect dst = pos;
+    SDL_BlitSurface(img->GetSwTex(), &src, surface, &dst);
+}
+
+void TileMap::Draw(SDL_Surface *surface, const Common::Rect &pos, uint8_t c)
+{
+    SDL_Rect src = map[c];
+    if (src.w > pos.Width())
+        src.w = pos.Width();
+    if (src.h > pos.Height())
+        src.h = pos.Height();
+    SDL_Rect dst = pos;
+    SDL_BlitSurface(img->GetSwTex(), &src, surface, &dst);
+}
+
+void TileMap::Fill(SDL_Surface *surface, const Common::Rect &rect, uint8_t c)
+{
+    GFX::Engine.DrawFill(img->GetSwTex(), map[c], surface, rect);
+}
+
+void TileMap::Fill(SDL_Surface *surface, const Common::PointRect &rect, uint8_t c)
+{
+    GFX::Engine.DrawFill(img->GetSwTex(), map[c], surface, rect);
+}
+
+void TileMap::FillColumn(SDL_Surface *surface, const Common::Rect &rect, uint8_t c)
+{
+    Common::PointRect sPRect = map[c];
+    sPRect.w = 1;
+    GFX::Engine.DrawFill(img->GetSwTex(), sPRect, surface, rect);
+}
+
+void TileMap::FillColumn(SDL_Surface *surface, const Common::PointRect &rect, uint8_t c)
+{
+    Common::PointRect sPRect = map[c];
+    sPRect.w = 1;
+    GFX::Engine.DrawFill(img->GetSwTex(), sPRect, surface, rect);
+}
+
+int TileMap::GetWidth(uint8_t c) const
+{
+    return map[c].w;
+}
+
+int TileMap::GetWidth(const std::string &str) const
+{
+    int wdth = 0;
+    for (uint8_t c : str)
+        wdth += map[c].w;
+    return wdth;
+}
+
+Common::Point TileMap::GetSize(uint8_t c) const
+{
+    return Common::Point(map[c].w, h);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+namespace GFX
+{
+
+GfxMode::GfxMode(GfxMode &&g)
+{
+    w = std::move(g.w);
+    h = std::move(g.h);
+    bpp = std::move(g.bpp);
+    mode = std::move(g.mode);
+    name = std::move(g.name);
+    windowed = std::move(g.windowed);
+}
+
+GfxMode::GfxMode(const GfxMode &g)
+{
+    w = g.w;
+    h = g.h;
+    bpp = g.bpp;
+    mode = g.mode;
+    name = g.name;
+    windowed = g.windowed;
+}
+
+GfxMode::GfxMode(const Common::Point &sz)
+: w(sz.x), h(sz.y)
+{
+    name = GenName(w, h);
+}
+
+GfxMode& GfxMode::operator=(const GfxMode &g)
+{
+    w = g.w;
+    h = g.h;
+    bpp = g.bpp;
+    mode = g.mode;
+    name = g.name;
+    windowed = g.windowed;
+    return *this;
+}
+
+GfxMode::operator bool() const
+{
+    if (w == 0 || h == 0)
+        return false;
+    return true;
+}
+
+bool GfxMode::operator==(const GfxMode &g) const
+{
+    return (w == g.w && h == g.h);
+}
+
+bool GfxMode::operator==(const Common::Point &g) const
+{
+    return (w == g.x && h == g.y);
+}
+
+bool GfxMode::operator!=(const GfxMode &g) const
+{
+    return w != g.w || h != g.h;
+}
+
+bool GfxMode::operator!=(const Common::Point &g) const
+{
+    return w != g.x || h != g.y;
+}
+
+bool GfxMode::SortCompare(const GfxMode &a, const GfxMode &b)
+{
+    if (a.w > b.w)
+        return true;
+    else if (a.w == b.w && a.h > b.h)
+        return true;
+    return false;
+}
+
+std::string GfxMode::GenName(int w, int h)
+{
+    return fmt::sprintf("%d x %d", w, h);
+}
+
+
+
+
+void GFXEngine::AddGfxMode(const GfxMode &md)
+{
+    for (const GfxMode &m : graphicsModes)
+    {
+        if ( m.w == md.w && m.h == md.h )
+            return;
+    }
+
+    graphicsModes.push_back(md);
+}
+
+
+uint32_t GFXEngine::CursPix(uint8_t *data, int ofs, int bpp)
+{
+    switch (bpp)
+    {
+    case 1:
+        return (data[ofs / 8] >> (7 - ofs % 8)) & 1;
+    case 2:
+        return (data[ofs / 4] >> ((3 - ofs % 4) << 1)) & 3;
+    case 4:
+        return (data[ofs / 2] >> ((1 - ofs % 2) << 2)) & 15;
+    case 8:
+        return data[ofs];
+    case 16:
+        return data[2 * ofs] | data[2 * ofs + 1] << 8;
+    case 24:
+        return data[3 * ofs] | data[3 * ofs + 1] << 8 | data[ 3 * ofs + 2] << 16;
+    case 32:
+        return data[4 * ofs] | data[4 * ofs + 1] << 8 | data[4 * ofs + 2] << 16 | data[4 * ofs + 3] << 24;
+    }
+
+    return 0;
+}
+
+SDL_Cursor *GFXEngine::LoadCursor(const std::string &name)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc( fmt::sprintf("res/%s.cur", name) , "rb");
+
+    UA_PALETTE pal;
+
+    if (!fil)
+        return NULL;
+
+    fil->readU16L();
+    if (fil->readU16L() != 2)
+    {
+        delete fil;
+        return NULL;
+    }
+
+    fil->readU16L(); //count
+
+    //Only first entry
+    fil->readU8(); //w
+    fil->readU8(); //h
+    fil->readU8(); //color count
+    fil->readU8(); //reserved
+    int hotX = fil->readU16L();
+    int hotY = fil->readU16L();
+    fil->readU32L(); //size
+    int off = fil->readU32L();
+
+    //seek to cursor
+    fil->seek(off, SEEK_SET);
+
+    //read InfoHeader
+    fil->readU32L(); //header size
+    int bmpw = fil->readS32L();
+    int bmph = fil->readS32L();
+    fil->readU16L(); //planes
+    int bitcount = fil->readU16L();
+    fil->readU32L(); //compression
+    fil->readU32L(); //imagesize
+    fil->readU32L(); //XpixelsPerM
+    fil->readU32L(); //YpixelsPerM
+    int clrused = fil->readU32L(); //ColorsUsed
+    fil->readU32L(); //ColorsImportant
+
+    // read pallete
+    int palcnt = 0;
+    if (clrused == 0 || bitcount < 16)
+    {
+        palcnt = clrused != 0 ? clrused : 1 << bitcount;
+
+        for (int i = 0; i < palcnt; i++)
+        {
+            pal[i].r = fil->readU8();
+            pal[i].g = fil->readU8();
+            pal[i].b = fil->readU8();
+            fil->readU8(); //reserved
+        }
+    }
+
+    int width = bmpw;
+    int height = abs(bmph)/2;
+
+    int imgsz = height * width * bitcount / 8;
+    int mask_size = height * width / 8;
+
+    uint8_t *data = (uint8_t *)malloc(imgsz);
+    uint8_t *mask = (uint8_t *)malloc(mask_size);
+
+    fil->read(data, imgsz);
+    fil->read(mask, mask_size);
+
+    delete fil;
+
+
+    SDL_Surface *cursr = SDL_CreateRGBSurface(0, width, height, 32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000);
+
+    for (int y = 0; y < height; y++)
+    {
+        int invY = height - 1 - y;
+        uint8_t *row = (uint8_t *)cursr->pixels + y * cursr->pitch;
+
+        for (int x = 0; x < width; x++)
+        {
+            if (palcnt > 0)
+            {
+                int idx = CursPix(data, invY * width + x, bitcount);
+                int alph = CursPix(mask, invY * width + x, 1);
+                row[x * 4 + 0] = pal[ idx ].r;
+                row[x * 4 + 1] = pal[ idx ].g;
+                row[x * 4 + 2] = pal[ idx ].b;
+                row[x * 4 + 3] = (1 - alph) * 255;
+            }
+            else
+            {
+                uint32_t clr = CursPix(data, invY * width + x, bitcount);
+                int alph = CursPix(mask, invY * width + x, 1);
+                row[x * 4 + 0] = clr & 0xFF;
+                row[x * 4 + 1] = (clr >> 8) & 0xFF;
+                row[x * 4 + 2] = (clr >> 16) & 0xFF;
+                row[x * 4 + 3] = (1 - alph) * 255;
+            }
+        }
+    }
+
+    free(data);
+    free(mask);
+
+    SDL_Cursor* cursor = SDL_CreateColorCursor(cursr, hotX, hotY);
+
+    SDL_FreeSurface(cursr);
+
+    return cursor;
+}
+
+void GFXEngine::Init()
+{
+    StaticInit();
+
+    _glext = Glext::init();
+
+    SetDeviceByGUID( read_guid("env/guid3d.def") );
+
+    System::EventsAddHandler(EventsWatcher);
+
+    System::IniConf::ReadFromNucleusIni();
+    HorizonLoadConfigFromIni();
+
+    _vbo = System::IniConf::GfxVBO.Get<bool>();
+    _colorEffects = System::IniConf::GfxColorEffects.Get<int32_t>();
+
+    if (!_glext)
+    {
+        _colorEffects = 0;
+        _vbo = false;
+    }
+
+    if (_vbo)
+    {
+        Glext::GLGenVertexArrays(1, &_globalVao);
+        Glext::GLBindVertexArray(_globalVao);
+
+        Glext::GLGenBuffers(1, &_vboParams);
+        Glext::GLBindBuffer(GL_UNIFORM_BUFFER, _vboParams);
+        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, NULL, GL_STREAM_DRAW);
+
+        Glext::GLBindBufferBase(GL_UNIFORM_BUFFER, _vboParamsBlockBinding, _vboParams);
+    }
+
+    std::array<Common::Point, 17> checkModes
+    {{
+        {640, 480},     {800, 600},     {1024, 768},    {1280, 1024},
+        {1440, 1050},   {1600, 1200},   {720, 480},     {852, 480},
+        {1280, 720},    {1366, 768},    {1600, 900},    {1920, 1080},
+        {1920, 1200},   {2560, 1080},   {2560, 1440},   {3440, 1440},
+        {3840, 2160}
+     }};
+
+    graphicsModes.reserve(checkModes.size());
+
+    for(Common::Point m : checkModes)
+    {
+        SDL_DisplayMode target, closest;
+
+        target.w = m.x;
+        target.h = m.y;
+        target.format = _pixfmt->format;
+        target.refresh_rate = 0;
+        target.driverdata   = 0;
+
+        if (SDL_GetClosestDisplayMode(0, &target, &closest) )
+        {
+            GfxMode mode;
+            mode.w = closest.w;
+            mode.h = closest.h;
+            mode.mode = closest;
+            mode.bpp = _pixfmt->BytesPerPixel;
+            mode.name = GfxMode::GenName(mode.w, mode.h);
+
+            AddGfxMode(mode);
+        }
+    }
+
+    // Force to add custom resolutions
+    std::vector<std::string> customModes = Stok::Split(System::IniConf::GfxAdditionalModes.Get<std::string>(), ",");
+    for (std::string mod : customModes)
+    {
+        std::vector<std::string> vals = Stok::Split(mod, ":-x \t");
+        if (vals.size() >= 2)
+        {
+            SDL_DisplayMode target, closest;
+
+            target.w = std::stoi(vals[0]);
+            target.h = std::stoi(vals[1]);
+            target.format = _pixfmt->format;
+            target.refresh_rate = 0;
+            target.driverdata   = 0;
+
+            GfxMode mode;
+            mode.w = target.w;
+            mode.h = target.h;
+            mode.mode = target;
+            mode.bpp = _pixfmt->BytesPerPixel;
+            mode.name = GfxMode::GenName(mode.w, mode.h);
+
+            if (SDL_GetClosestDisplayMode(0, &target, &closest) )
+            {
+                mode.mode = closest;
+                mode.bpp = SDL_BYTESPERPIXEL(closest.format) * 8;
+                mode.name = GfxMode::GenName(mode.w, mode.h);
+            }
+
+            AddGfxMode(mode);
+        }
+    }
+
+
+
+    std::sort(graphicsModes.begin(), graphicsModes.end(), GfxMode::SortCompare);
+
+    cursors[0] = LoadCursor("Pointer");
+    cursors[1] = LoadCursor("Cancel");
+    cursors[2] = LoadCursor("Select");
+    cursors[3] = LoadCursor("Attack");
+    cursors[4] = LoadCursor("Goto");
+    cursors[5] = LoadCursor("Disk");
+    cursors[6] = LoadCursor("New");
+    cursors[7] = LoadCursor("Add");
+    cursors[8] = LoadCursor("Control");
+    cursors[9] = LoadCursor("Beam");
+    cursors[10] = LoadCursor("Build");
+
+    IDVList stak { {ATT_WIDTH,  (int32_t)640},
+            {ATT_HEIGHT, (int32_t)480} };
+    func0( stak );
+
+    RecreateScreenSurface();
+    Gui::Instance.SetScreenSize(GetScreenSize());
+
+    LoadPalette(System::IniConf::GfxPalette.Get<std::string>());
+
+    if (_vbo)
+    {
+        _stdPsShader = CompileShader(GL_FRAGMENT_SHADER, _stdPShaderText);
+        _stdVsShader = CompileShader(GL_VERTEX_SHADER,   _stdVShaderText);
+        uint32_t progID = Glext::GLCreateProgram();
+
+        Glext::GLAttachShader(progID, _stdPsShader);
+        Glext::GLAttachShader(progID, _stdVsShader);
+        Glext::GLLinkProgram(progID);
+
+        _stdShaderProg = TShaderProg( progID );
+
+        BindVBOParameters(_stdShaderProg);
+    }
+
+    if (_colorEffects > 0)
+    {
+        Glext::GLGenFramebuffers(1, &_fbo);
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+
+        glGenTextures(1, &_fboTex);
+        glBindTexture(GL_TEXTURE_2D, _fboTex);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, 640, 480, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+
+        Glext::GLGenRenderbuffers(1, &_fbod);
+        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, _fbod);
+        Glext::GLRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 640, 480);
+
+
+        Glext::GLFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, _fbod);
+
+        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _fboTex, 0);
+
+        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        if (_vbo)
+        {
+            _psShader = LoadShader(GL_FRAGMENT_SHADER, "res/clreff_vbo.ps");
+            _vsShader = LoadShader(GL_VERTEX_SHADER, "res/clreff_vbo.vs");
+        }
+        else
+        {
+            _psShader = LoadShader(GL_FRAGMENT_SHADER, "res/clreff.ps");
+            _vsShader = LoadShader(GL_VERTEX_SHADER, "res/clreff.vs");
+        }
+
+        uint32_t progID = Glext::GLCreateProgram();
+
+        Glext::GLAttachShader(progID, _psShader);
+        Glext::GLAttachShader(progID, _vsShader);
+        Glext::GLLinkProgram(progID);
+
+        _colorEffectsShaderProg = TColorEffectsProg(progID);
+
+        if (_vbo)
+            BindVBOParameters(_colorEffectsShaderProg);
+    }
+
+    // OpenNeoUA custom: load the fullscreen visual filter selected in nucleus.ini.
+    // Safe no-op when "Standard"/empty or when the file is missing.
+    ApplyVisualFilterFromConfig();
+
+    // OpenNeoUA custom: world-only atmospheric color pass. When enabled, it uses
+    // the dedicated shader; if that shader is absent or cannot be linked, the
+    // renderer falls back to the existing DrawFBO path without changing vanilla.
+    ApplyAtmosphereFromConfig();
+
+    // OpenNeoUA: VHS pass enabled by default, loaded from its own INI shader path.
+    ApplyVhsFilterFromConfig();
+}
+
+void GFXEngine::Deinit()
+{
+    ClearUiAccentCache();
+
+    if ( _font.ttfFont )
+    {
+        TTF_CloseFont(_font.ttfFont);
+        _font.ttfFont = NULL;
+    }
+
+    if (ScreenSurface)
+        SDL_FreeSurface(ScreenSurface);
+
+    ScreenSurface = NULL;
+
+    if (VirtualUISurface)
+        SDL_FreeSurface(VirtualUISurface);
+
+    VirtualUISurface = NULL;
+    _virtualUiPass = false;
+    _virtualUiPending = false;
+    _virtualUiResolution = Common::Point();
+    _virtualUiTextureSize = Common::Point();
+
+    if (virtualUiTex)
+        glDeleteTextures(1, &virtualUiTex);
+
+    virtualUiTex = 0;
+
+    if (_stdQuadDataBuf)
+        Glext::GLDeleteBuffers(1, &_stdQuadDataBuf);
+
+    _stdQuadDataBuf = 0;
+
+    if (_stdQuadIndexBuf)
+        Glext::GLDeleteBuffers(1, &_stdQuadIndexBuf);
+
+    _stdQuadIndexBuf = 0;
+
+    if (_stdShaderProg.ID)
+        Glext::GLDeleteProgram(_stdShaderProg.ID);
+
+    if (_stdVsShader)
+        Glext::GLDeleteShader(_stdVsShader);
+
+    if (_stdPsShader)
+        Glext::GLDeleteShader(_stdPsShader);
+
+    _stdShaderProg.ID = 0;
+    _stdVsShader = 0;
+    _stdPsShader = 0;
+
+    // The atmospheric program reuses the color-effects vertex shader, so
+    // release its program before deleting that shared shader object.
+    FreeAtmosphereShader();
+    _atmosphereEnabled = false;
+    _atmosphereActive = false;
+
+    if (_colorEffectsShaderProg.ID)
+        Glext::GLDeleteProgram(_colorEffectsShaderProg.ID);
+
+    if (_psShader)
+        Glext::GLDeleteShader(_psShader);
+
+    if (_vsShader)
+        Glext::GLDeleteShader(_vsShader);
+
+    _colorEffectsShaderProg.ID = 0;
+    _vsShader = 0;
+    _psShader = 0;
+
+    // OpenNeoUA custom: free the visual filter LUT texture
+    if (_visualFilterLut)
+        glDeleteTextures(1, &_visualFilterLut);
+    _visualFilterLut = 0;
+    _visualFilterActive = false;
+
+    FreeVhsFilterShader();
+    if (_vhsCopyTex)
+        glDeleteTextures(1, &_vhsCopyTex);
+    if (_vhsOutTex)
+        glDeleteTextures(1, &_vhsOutTex);
+    _vhsFbo = 0;
+    _vhsOutFbo = 0;
+    _vhsFboReady = false;
+    _vhsCopyTex = 0;
+    _vhsOutTex = 0;
+    _vhsCopyTexSize = Common::Point();
+    _vhsFilterActive = false;
+}
+
+GFXEngine::~GFXEngine()
+{
+    Deinit();
+}
+
+int GFXEngine::EventsWatcher(void *, SDL_Event *event)
+{
+    switch(event->type)
+    {
+    case SDL_WINDOWEVENT:
+    {
+        switch(event->window.event)
+        {
+        case SDL_WINDOWEVENT_RESIZED:
+        case SDL_WINDOWEVENT_SIZE_CHANGED:
+            Instance.UpdateFBOSizes();
+            break;
+        default:
+            break;
+        }
+
+    }
+    break;
+    }
+
+    return 1; // This event can be passed to another event watcher
+}
+
+void GFXEngine::SetCursor(int curID, int force)
+{
+    int sett = 0;
+
+    if ( force )
+        sett = 1;
+    else if ( curID != CurrentCursorID )
+        sett = 1;
+
+    if ( sett )
+    {
+        if ( curID == 0 )
+            SDL_ShowCursor(SDL_DISABLE);
+        else if ( curID <= 11 )
+        {
+            if ( cursors[curID - 1] )
+                SDL_SetCursor( cursors[curID - 1] );
+
+            if (!CurrentCursorID)
+                SDL_ShowCursor(SDL_ENABLE);
+        }
+
+    }
+
+    CurrentCursorID = curID;
+}
+
+GfxMode GFXEngine::sub_41F68C()
+{
+    for (const GfxMode &m : graphicsModes)
+    {
+        if (m.w == 640 && m.h == 480)
+            return m;
+    }
+
+    return graphicsModes.front();
+}
+
+
+GfxMode GFXEngine::windd_func0__sub0(const std::string &file)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc(file, "r");
+
+    if ( fil )
+    {
+        std::string line;
+        if ( fil->ReadLine(&line) )
+        {
+            size_t pos = line.find_first_of("\n\r");
+
+            if (pos != std::string::npos)
+                line.erase(pos);
+
+            bool windowed = false;
+            pos = line.find("Windowed");
+
+            if (pos != std::string::npos && pos >= 1)
+            {
+                windowed = true;
+                line.erase(pos - 1);
+            }
+
+            for (const GfxMode &m : graphicsModes)
+            {
+                if ( StriCmp(m.name, line) == 0 )
+                {
+                    GfxMode tmp = m;
+                    tmp.windowed = windowed;
+                    return tmp;
+                }
+            }
+        }
+        delete fil;
+    }
+
+    return sub_41F68C();
+}
+
+int GFXEngine::GetGfxModeIndex(const Common::Point &res)
+{
+    int i = 0;
+    for (const GfxMode &m : graphicsModes)
+    {
+        if (m == res)
+            return i;
+        ++i;
+    }
+    return -1;
+}
+
+void GFXEngine::SetResolution(const Common::Point &res, bool windowed)
+{
+    if (GfxSelectedMode == res && GfxSelectedMode.windowed == windowed)
+        return;
+
+    UA_PALETTE *screen_palette = GetPalette();
+
+    UA_PALETTE palette_copy;
+
+    if ( screen_palette )
+        palette_copy = *screen_palette; // Copy palette
+    else
+    {
+        for(auto &x : palette_copy)
+        {
+            x.r = 0;
+            x.g = 0;
+            x.b = 0;
+            x.a = 0;
+        }
+    }
+
+    EndFrame();
+
+    //cls3D->Delete();
+
+    GfxMode picked;
+    if ( res )
+    {
+        for (const GfxMode &m : graphicsModes)
+        {
+            if ( m.w == res.x && m.h == res.y )
+            {
+                picked = m;
+                picked.windowed = windowed;
+                break;
+            }
+        }
+
+        if ( !picked )
+            picked = sub_41F68C();
+    }
+    else
+    {
+        picked = windd_func0__sub0("env/vid.def");
+    }
+
+    if (!picked.windowed)
+        System::SetVideoMode(Common::Point(picked.w, picked.h), SDL_WINDOW_FULLSCREEN_DESKTOP, &picked.mode);
+    else
+        System::SetVideoMode(Common::Point(picked.w, picked.h), 0, NULL);
+
+    SetResVariables(picked);
+    ApplyResolution();
+
+    RecreateScreenSurface();
+
+    BeginFrame();
+    SetPalette(palette_copy);
+
+    GfxSelectedMode = picked;
+
+    FSMgr::FileHandle *fil = uaOpenFileAlloc("env/vid.def", "w");
+    if ( fil )
+    {
+        if (picked.windowed)
+            fil->printf("%s Windowed\n", picked.name.c_str());
+        else
+            fil->printf("%s\n", picked.name.c_str());
+
+        delete fil;
+    }
+
+    Gui::Instance.SetScreenSize(GetScreenSize());
+
+    UpdateFBOSizes();
+}
+
+const std::vector<GfxMode> &GFXEngine::GetAvailableModes()
+{
+    return graphicsModes;
+}
+
+
+
+
+void GFXEngine::SetTracyRmp(ResBitmap *rmp)
+{
+    setRSTR_trcRmp(rmp);
+}
+
+void GFXEngine::SetShadeRmp(ResBitmap *rmp)
+{
+    setRSTR_shdRmp(rmp);
+}
+
+GfxMode GFXEngine::GetGfxMode()
+{
+    return GfxSelectedMode;
+}
+
+TileMap * GFXEngine::GetTileset(int id)
+{
+    return raster_func208(id);
+}
+
+void GFXEngine::SetTileset(TileMap *tileset, int id)
+{
+    raster_func207(id, tileset);
+}
+
+
+bool GFXEngine::LoadPalette(const std::string &palette_ilbm)
+{
+    NC_STACK_bitmap *ilbm = Nucleus::CInit<NC_STACK_ilbm>( {
+        {NC_STACK_rsrc::RSRC_ATT_NAME, palette_ilbm},
+        {NC_STACK_bitmap::BMD_ATT_HAS_COLORMAP, (int32_t)1}} );
+
+    if (!ilbm)
+        return false;
+
+    SetPalette( *ilbm->getBMD_palette() );
+
+    ilbm->Delete();
+
+    return true;
+}
+
+// OpenNeoUA custom: read gfx.visual_filter_strength ("0.0".."1.0") with a safe default.
+// NUCLEUS.INI is the single source of truth; missing/empty/invalid values only fall
+// back in memory and are not rewritten unless the user saves Options.
+static float ParseVisualFilterStrength(std::string s, float fallback)
+{
+    if (s.empty())
+        return fallback;
+
+    try
+    {
+        if (s.find(',') != std::string::npos)
+            return fallback;
+
+        size_t pos = 0;
+        float strength = std::stof(s, &pos);
+        size_t rest = s.find_first_not_of(" \t\r\n", pos);
+        if (rest != std::string::npos)
+            return fallback;
+
+        if (strength < 0.0f) strength = 0.0f;
+        if (strength > 1.0f) strength = 1.0f;
+        return strength;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static float ReadVisualFilterStrength()
+{
+    const float defaultStrength = 0.25f; // default if missing/invalid
+
+    return ParseVisualFilterStrength(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), defaultStrength);
+}
+
+// OpenNeoUA custom: select the fullscreen visual filter.
+// filterName == "Standard"/"None"/"Original"/empty disables the filter (no visual change).
+// Otherwise loads Data/Filters/<name>.pal as a 256-entry RGB LUT (read with the normal
+// ILBM/CMAP loader) and uploads it to a 256x1 GL texture used by the post-process shader.
+void GFXEngine::SetVisualFilter(const std::string &filterName)
+{
+    // Trim whitespace
+    std::string name = filterName;
+    size_t a = name.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos)
+        name.clear();
+    else
+    {
+        size_t b = name.find_last_not_of(" \t\r\n");
+        name = name.substr(a, b - a + 1);
+    }
+
+    float strength = ReadVisualFilterStrength();
+
+    bool disable = name.empty()
+                || !StriCmp(name, "Standard")
+                || !StriCmp(name, "Original")
+                || !StriCmp(name, "None");
+
+    if (disable)
+    {
+        _visualFilterActive = false;
+        _visualFilterStrength = 0.0f;
+        _visualFilterName = "Standard";
+        ypa_log_out("Visual filter: disabled (Standard / no fullscreen filter, rendering unchanged)\n");
+        return;
+    }
+
+    if (!_glext)
+    {
+        // No GL extensions -> no post-process path at all; remember the name but stay inert.
+        _visualFilterActive = false;
+        _visualFilterStrength = 0.0f;
+        _visualFilterName = "Standard";
+        ypa_log_out("Visual filter: [%s] requested but GL extensions are unavailable; filter inactive.\n",
+                    name.c_str());
+        return;
+    }
+
+    // Ensure ".pal" extension
+    std::string file = name;
+    if (file.size() < 4 || StriCmp(file.substr(file.size() - 4), ".pal"))
+        file += ".pal";
+
+    const std::string loadPath = "Filters/" + file;
+
+    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+
+    NC_STACK_bitmap *ilbm = Nucleus::CInit<NC_STACK_ilbm>( {
+        {NC_STACK_rsrc::RSRC_ATT_NAME, loadPath},
+        {NC_STACK_bitmap::BMD_ATT_HAS_COLORMAP, (int32_t)1}} );
+
+    Common::Env.SetPrefix("rsrc", oldRsrc);
+
+    UA_PALETTE *pal = ilbm ? ilbm->getBMD_palette() : NULL;
+    if (!pal)
+    {
+        ypa_log_out("WARNING: Visual filter [%s] could not be loaded from [data:%s]; filter disabled.\n",
+                    name.c_str(), loadPath.c_str());
+        if (ilbm)
+            ilbm->Delete();
+        _visualFilterActive = false;
+        _visualFilterStrength = 0.0f;
+        _visualFilterName = "Standard";
+        return;
+    }
+
+    // OpenNeoUA: build a SMOOTH luminance grade from the palette.
+    // A UA .pal CMAP is an arbitrary indexed game palette. Even sorted by luminance it has
+    // harsh chroma jumps (colors of similar luminance but very different hue) which show up
+    // as red/blue speckle. So we:
+    //   1) sort the 256 colors by perceived luminance,
+    //   2) average them into a few equal-count buckets (non-empty by construction),
+    //   3) linearly interpolate the bucket averages back into a 256-entry ramp,
+    //   4) run a small moving-average smoothing pass.
+    // The result is a smooth color-grade ramp, not indexed-palette noise.
+    struct LumColor { float r, g, b, lum; };
+    std::array<LumColor, 256> sorted;
+    for (int i = 0; i < 256; i++)
+    {
+        const SDL_Color &c = (*pal)[i];
+        sorted[i].r = c.r;
+        sorted[i].g = c.g;
+        sorted[i].b = c.b;
+        sorted[i].lum = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+    }
+
+    std::sort(sorted.begin(), sorted.end(),
+              [](const LumColor &a, const LumColor &b) { return a.lum < b.lum; });
+
+    // Equal-count buckets averaged into control colors.
+    const int kBuckets = 16;
+    std::array<float, kBuckets> br, bg, bb;
+    for (int k = 0; k < kBuckets; k++)
+    {
+        int start = (k * 256) / kBuckets;
+        int end   = ((k + 1) * 256) / kBuckets;
+        if (end <= start)
+            end = start + 1;
+
+        float sr = 0, sg = 0, sb = 0;
+        for (int j = start; j < end; j++)
+        {
+            sr += sorted[j].r;
+            sg += sorted[j].g;
+            sb += sorted[j].b;
+        }
+        float n = float(end - start);
+        br[k] = sr / n;
+        bg[k] = sg / n;
+        bb[k] = sb / n;
+    }
+
+    // Interpolate the bucket control colors into a continuous 256-entry ramp.
+    float rampR[256], rampG[256], rampB[256];
+    for (int i = 0; i < 256; i++)
+    {
+        float t = (i / 255.0f) * (kBuckets - 1);
+        int lo = (int)t;
+        int hi = lo + 1;
+        if (hi > kBuckets - 1)
+            hi = kBuckets - 1;
+        float f = t - lo;
+        rampR[i] = br[lo] + (br[hi] - br[lo]) * f;
+        rampG[i] = bg[lo] + (bg[hi] - bg[lo]) * f;
+        rampB[i] = bb[lo] + (bb[hi] - bb[lo]) * f;
+    }
+
+    // Moving-average smoothing pass (removes any residual chroma steps).
+    auto clamp8 = [](float v) -> uint8_t
+    {
+        if (v < 0.0f)   v = 0.0f;
+        if (v > 255.0f) v = 255.0f;
+        return (uint8_t)(v + 0.5f);
+    };
+
+    std::vector<uint8_t> lut(256 * 3); // tightly packed r,g,b,r,g,b...
+    const int radius = 3;
+    for (int i = 0; i < 256; i++)
+    {
+        float sr = 0, sg = 0, sb = 0;
+        int cnt = 0;
+        for (int d = -radius; d <= radius; d++)
+        {
+            int j = i + d;
+            if (j < 0)   j = 0;
+            if (j > 255) j = 255;
+            sr += rampR[j];
+            sg += rampG[j];
+            sb += rampB[j];
+            cnt++;
+        }
+        lut[i * 3 + 0] = clamp8(sr / cnt);
+        lut[i * 3 + 1] = clamp8(sg / cnt);
+        lut[i * 3 + 2] = clamp8(sb / cnt);
+    }
+
+    ilbm->Delete();
+
+    if (!_visualFilterLut)
+        glGenTextures(1, &_visualFilterLut);
+
+    // Upload on texture unit 1 so the engine's unit-0 binding cache is never disturbed.
+    Glext::GLActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, _visualFilterLut);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, lut.data());
+    // Smooth ramp -> GL_LINEAR; clamp at the edges.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    Glext::GLActiveTexture(GL_TEXTURE0);
+
+    _visualFilterActive = true;
+    _visualFilterStrength = strength;
+    _visualFilterName = name;
+
+    const bool postFxOn = (_colorEffects > 0);
+    ypa_log_out("Visual filter: ENABLED name=[%s] path=[data:%s] strength=%.2f post_process=%s%s\n",
+                name.c_str(), loadPath.c_str(), strength,
+                postFxOn ? "on" : "off",
+                postFxOn ? "" : " (WARNING: gfx.color_effects=0 -> post-process pass disabled, filter not visible)");
+}
+
+void GFXEngine::SetVisualFilterStrength(float strength)
+{
+    if (!std::isfinite(strength))
+        strength = 0.0f;
+    if (strength < 0.0f) strength = 0.0f;
+    if (strength > 1.0f) strength = 1.0f;
+    _visualFilterStrength = strength;
+}
+
+// OpenNeoUA custom: apply the visual filter selected in nucleus.ini (gfx.visual_filter).
+void GFXEngine::ApplyVisualFilterFromConfig()
+{
+    SetVisualFilter(System::IniConf::GfxVisualFilter.Get<std::string>());
+}
+
+static float ParseVhsFilterStrength(std::string s, float fallback)
+{
+    if (s.empty())
+        return fallback;
+
+    try
+    {
+        size_t pos = 0;
+        float strength = std::stof(s, &pos);
+        if ( s.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             !std::isfinite(strength) )
+            return fallback;
+
+        if (strength < 0.0f) strength = 0.0f;
+        if (strength > 1.0f) strength = 1.0f;
+        return strength;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static std::string TrimConfigString(std::string s)
+{
+    size_t first = s.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return std::string();
+
+    size_t last = s.find_last_not_of(" \t\r\n");
+    return s.substr(first, last - first + 1);
+}
+
+static float ParseAtmosphereValue(std::string s, float fallback, float minValue, float maxValue)
+{
+    s = TrimConfigString(s);
+    if (s.empty() || s.find(',') != std::string::npos)
+        return fallback;
+
+    try
+    {
+        size_t pos = 0;
+        float value = std::stof(s, &pos);
+        if (s.find_first_not_of(" \t\r\n", pos) != std::string::npos || !std::isfinite(value))
+            return fallback;
+
+        if (value < minValue) value = minValue;
+        if (value > maxValue) value = maxValue;
+        return value;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+void GFXEngine::FreeAtmosphereShader()
+{
+    if (_atmosphereShaderProg.ID)
+        Glext::GLDeleteProgram(_atmosphereShaderProg.ID);
+    if (_atmospherePsShader)
+        Glext::GLDeleteShader(_atmospherePsShader);
+
+    _atmosphereShaderProg = TAtmosphereProg();
+    _atmospherePsShader = 0;
+}
+
+bool GFXEngine::LoadAtmosphereShader()
+{
+    if (_atmosphereShaderProg.ID)
+        return true;
+
+    const std::string shaderPath = _vbo ? "res/atmosphere_vbo.ps" : "res/atmosphere.ps";
+    _atmospherePsShader = LoadShader(GL_FRAGMENT_SHADER, shaderPath);
+    if (!_atmospherePsShader)
+    {
+        ypa_log_out("WARNING: Atmospheric pass shader [%s] is missing or failed to compile; continuing with the existing renderer.\n",
+                    shaderPath.c_str());
+        return false;
+    }
+
+    if (!_vsShader)
+    {
+        ypa_log_out("WARNING: Atmospheric pass cannot reuse the fullscreen vertex shader; continuing with the existing renderer.\n");
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    uint32_t progID = Glext::GLCreateProgram();
+    if (!progID)
+    {
+        ypa_log_out("WARNING: Atmospheric pass program could not be created; continuing with the existing renderer.\n");
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    Glext::GLAttachShader(progID, _atmospherePsShader);
+    Glext::GLAttachShader(progID, _vsShader);
+    Glext::GLLinkProgram(progID);
+
+    GLint linked = GL_FALSE;
+    Glext::GLGetProgramiv(progID, GL_LINK_STATUS, &linked);
+    if (linked == GL_FALSE)
+    {
+        GLint logLength = 0;
+        Glext::GLGetProgramiv(progID, GL_INFO_LOG_LENGTH, &logLength);
+        if (logLength > 0)
+        {
+            std::vector<char> logBuffer((size_t)logLength + 1, 0);
+            Glext::GLGetProgramInfoLog(progID, logLength, NULL, logBuffer.data());
+            ypa_log_out("WARNING: Atmospheric pass shader link failed: %s\n", logBuffer.data());
+        }
+        else
+        {
+            ypa_log_out("WARNING: Atmospheric pass shader link failed; continuing with the existing renderer.\n");
+        }
+
+        Glext::GLDeleteProgram(progID);
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    _atmosphereShaderProg = TAtmosphereProg(progID);
+    if (_vbo)
+        BindVBOParameters(_atmosphereShaderProg);
+
+    if (_atmosphereShaderProg.NormLoc < 0 ||
+        _atmosphereShaderProg.InvLoc < 0 ||
+        _atmosphereShaderProg.ScrSizeLoc < 0 ||
+        _atmosphereShaderProg.FilterLutLoc < 0 ||
+        _atmosphereShaderProg.FilterStrengthLoc < 0 ||
+        _atmosphereShaderProg.StrengthLoc < 0 ||
+        _atmosphereShaderProg.ExposureLoc < 0 ||
+        _atmosphereShaderProg.ContrastLoc < 0 ||
+        _atmosphereShaderProg.SaturationLoc < 0 ||
+        _atmosphereShaderProg.VignetteLoc < 0)
+    {
+        ypa_log_out("WARNING: Atmospheric pass shader [%s] is missing one or more required uniforms; continuing with the existing renderer.\n",
+                    shaderPath.c_str());
+        FreeAtmosphereShader();
+        return false;
+    }
+
+    return true;
+}
+
+void GFXEngine::ApplyAtmosphereFromConfig()
+{
+    _atmosphereEnabled = System::IniConf::GfxAtmosphereFx.Get<bool>();
+    _atmosphereActive = false;
+
+    if (!_atmosphereEnabled)
+    {
+        FreeAtmosphereShader();
+        ypa_log_out("Atmospheric pass: disabled (gfx.atmosphere_fx=no; rendering order unchanged)\n");
+        return;
+    }
+
+    _atmosphereStrength = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereStrength.Get<std::string>(), 0.5f, 0.0f, 1.0f);
+    _atmosphereExposure = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereExposure.Get<std::string>(), 1.7f, 0.25f, 2.0f);
+    _atmosphereContrast = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereContrast.Get<std::string>(), 0.95f, 0.50f, 2.0f);
+    _atmosphereSaturation = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereSaturation.Get<std::string>(), 0.8f, 0.0f, 2.0f);
+    _atmosphereVignette = ParseAtmosphereValue(
+        System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0.6f, 0.0f, 1.0f);
+
+    if (!_glext)
+    {
+        ypa_log_out("WARNING: Atmospheric pass requested but GL extensions are unavailable; continuing with the existing renderer.\n");
+        return;
+    }
+
+    if (_colorEffects <= 0)
+    {
+        ypa_log_out("WARNING: Atmospheric pass requested but gfx.color_effects=0 disables the scene framebuffer; continuing with the existing renderer.\n");
+        return;
+    }
+
+    if (!LoadAtmosphereShader())
+        return;
+
+    _atmosphereActive = true;
+    ypa_log_out("Atmospheric pass: ENABLED strength=%.2f exposure=%.2f contrast=%.2f saturation=%.2f vignette=%.2f scope=world_before_ui\n",
+                _atmosphereStrength,
+                _atmosphereExposure,
+                _atmosphereContrast,
+                _atmosphereSaturation,
+                _atmosphereVignette);
+}
+
+static std::string VhsBlendShaderText(bool vbo)
+{
+    if (vbo)
+    {
+        return
+            "#version 140\n"
+            "uniform sampler2D texture;\n"
+            "uniform sampler2D vhsTexture;\n"
+            "uniform float vhsStrength;\n"
+            "in vec2 texCoords;\n"
+            "void main()\n"
+            "{\n"
+            "    vec4 base = texture2D(texture, texCoords);\n"
+            "    vec4 vhs = texture2D(vhsTexture, texCoords);\n"
+            "    gl_FragColor = mix(base, vhs, clamp(vhsStrength, 0.0, 1.0));\n"
+            "}\n";
+    }
+
+    return
+        "#version 120\n"
+        "uniform sampler2D texture;\n"
+        "uniform sampler2D vhsTexture;\n"
+        "uniform float vhsStrength;\n"
+        "void main()\n"
+        "{\n"
+        "    vec2 uv = gl_TexCoord[0].xy;\n"
+        "    vec4 base = texture2D(texture, uv);\n"
+        "    vec4 vhs = texture2D(vhsTexture, uv);\n"
+        "    gl_FragColor = mix(base, vhs, clamp(vhsStrength, 0.0, 1.0));\n"
+        "}\n";
+}
+
+void GFXEngine::SetVhsFilterEnabled(bool enabled)
+{
+    _vhsFilterStrength = ParseVhsFilterStrength(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 0.60f);
+
+    if (!enabled)
+    {
+        _vhsFilterActive = false;
+        return;
+    }
+
+    if (_vhsFilterStrength <= 0.0f)
+    {
+        _vhsFilterActive = false;
+        ypa_log_out("VHS filter: disabled because gfx.vhs_filter_strength is 0\n");
+        return;
+    }
+
+    if (!_glext)
+    {
+        _vhsFilterActive = false;
+        ypa_log_out("WARNING: VHS filter requested but GL extensions are unavailable; continuing without VHS.\n");
+        return;
+    }
+
+    if (_colorEffects <= 0)
+    {
+        _vhsFilterActive = false;
+        ypa_log_out("WARNING: VHS filter requested but gfx.color_effects=0 disables the post-process framebuffer; continuing without VHS.\n");
+        return;
+    }
+
+    if (!LoadVhsFilterShader())
+    {
+        _vhsFilterActive = false;
+        return;
+    }
+
+    _vhsFilterActive = true;
+    ypa_log_out("VHS filter: ENABLED shader=[%s] strength=%.2f pass=final_frame_after_visual_filter\n",
+                _vhsFilterShaderPath.c_str(),
+                _vhsFilterStrength);
+}
+
+void GFXEngine::ApplyVhsFilterFromConfig()
+{
+    SetVhsFilterEnabled(true);
+}
+
+void GFXEngine::FreeVhsFilterShader()
+{
+    if (_vhsBlendProg.ID)
+        Glext::GLDeleteProgram(_vhsBlendProg.ID);
+    if (_vhsFilterProg.ID)
+        Glext::GLDeleteProgram(_vhsFilterProg.ID);
+    if (_vhsBlendPsShader)
+        Glext::GLDeleteShader(_vhsBlendPsShader);
+    if (_vhsPsShader)
+        Glext::GLDeleteShader(_vhsPsShader);
+    if (_vhsVsShader)
+        Glext::GLDeleteShader(_vhsVsShader);
+
+    _vhsFilterProg = TVhsFilterProg();
+    _vhsBlendProg = TVhsBlendProg();
+    _vhsBlendPsShader = 0;
+    _vhsPsShader = 0;
+    _vhsVsShader = 0;
+}
+
+bool GFXEngine::LoadVhsFilterShader()
+{
+    std::string shaderPath = TrimConfigString(_vbo
+                           ? System::IniConf::GfxVhsFilterShaderVbo.Get<std::string>()
+                           : System::IniConf::GfxVhsFilterShader.Get<std::string>());
+
+    if (_vhsFilterProg.ID && !StriCmp(shaderPath, _vhsFilterShaderPath))
+        return true;
+
+    FreeVhsFilterShader();
+    _vhsFilterShaderPath = shaderPath;
+
+    _vhsPsShader = LoadShader(GL_FRAGMENT_SHADER, shaderPath);
+    if (!_vhsPsShader)
+    {
+        ypa_log_out("WARNING: VHS filter shader [%s] is missing or failed to compile; continuing without VHS.\n",
+                    shaderPath.c_str());
+        return false;
+    }
+
+    const std::string vertexPath = _vbo ? "res/clreff_vbo.vs" : "res/clreff.vs";
+    _vhsVsShader = LoadShader(GL_VERTEX_SHADER, vertexPath);
+    if (!_vhsVsShader)
+    {
+        ypa_log_out("WARNING: VHS filter vertex shader [%s] is missing or failed to compile; continuing without VHS.\n",
+                    vertexPath.c_str());
+        FreeVhsFilterShader();
+        return false;
+    }
+
+    uint32_t progID = Glext::GLCreateProgram();
+    Glext::GLAttachShader(progID, _vhsPsShader);
+    Glext::GLAttachShader(progID, _vhsVsShader);
+    Glext::GLLinkProgram(progID);
+
+    _vhsFilterProg = TVhsFilterProg(progID);
+
+    _vhsBlendPsShader = CompileShader(GL_FRAGMENT_SHADER, VhsBlendShaderText(_vbo));
+    if (!_vhsBlendPsShader)
+    {
+        ypa_log_out("WARNING: VHS filter blend shader failed to compile; continuing without VHS.\n");
+        FreeVhsFilterShader();
+        return false;
+    }
+
+    uint32_t blendProgID = Glext::GLCreateProgram();
+    Glext::GLAttachShader(blendProgID, _vhsBlendPsShader);
+    Glext::GLAttachShader(blendProgID, _vhsVsShader);
+    Glext::GLLinkProgram(blendProgID);
+
+    _vhsBlendProg = TVhsBlendProg(blendProgID);
+
+    if (_vbo)
+    {
+        BindVBOParameters(_vhsFilterProg);
+        BindVBOParameters(_vhsBlendProg);
+    }
+
+    if (_vhsFilterProg.StrengthLoc < 0)
+    {
+        ypa_log_out("WARNING: VHS filter shader [%s] loaded but does not expose uniform vhsStrength; strength control is unavailable for this shader.\n",
+                    shaderPath.c_str());
+    }
+
+    return true;
+}
+
+uint8_t *GFXEngine::MakeScreenCopy(int *ow, int *oh)
+{
+    Common::Point res = System::GetResolution();
+
+    // power of 2
+    res.x &= ~1;
+    res.y &= ~1;
+
+    uint8_t *buf = (uint8_t *)malloc(res.x * res.y * 3);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glReadBuffer(GL_FRONT);
+    glReadPixels(0, 0, res.x, res.y, GL_RGB, GL_UNSIGNED_BYTE, buf);
+
+    *ow = res.x;
+    *oh = res.y;
+    return buf;
+}
+
+uint8_t *GFXEngine::MakeDepthScreenCopy(int *ow, int *oh)
+{
+    Common::Point res = System::GetResolution();
+
+    // power of 2
+    res.x &= ~1;
+    res.y &= ~1;
+
+    uint8_t *buf = (uint8_t *)malloc(res.x * res.y);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glReadBuffer(GL_FRONT);
+    glReadPixels(0, 0, res.x, res.y, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, buf);
+
+    *ow = res.x;
+    *oh = res.y;
+    return buf;
+}
+
+
+
+SDL_Surface *GFXEngine::Screen()
+{
+    if (_virtualUiPass && VirtualUISurface)
+        return VirtualUISurface;
+
+    return ScreenSurface;
+}
+
+
+
+// Draw line Bresenham's algorithm
+void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha, bool preserveSurfaceAlpha)
+{
+    if ((line.Width() == 0 && line.Height() == 0) ||
+         !Common::Rect(surface->w, surface->h).IsIn(line.P1()) ||
+         !Common::Rect(surface->w, surface->h).IsIn(line.P2()) )
+        return;
+
+    int rilWidth = surface->pitch / surface->format->BytesPerPixel;
+
+    int xCount = line.Width();
+    int yCount = line.Height();
+
+    uint32_t color = SDL_MapRGBA(surface->format, cr, cg, cb, 255);
+
+    // The virtual UI surface is transparent and composited over the 3D world
+    // later. Pre-blending a partially transparent line against its cleared
+    // black RGB turns the fade into an opaque black silhouette. Preserve the
+    // destination alpha here so the final OpenGL composition performs the
+    // actual fade against the world framebuffer.
+    auto blendPixel = [&](uint32_t dstPixel) -> uint32_t
+    {
+        if (!preserveSurfaceAlpha)
+        {
+            if (alpha == 255)
+                return color;
+
+            uint8_t dr, dg, db;
+            SDL_GetRGB(dstPixel, surface->format, &dr, &dg, &db);
+            return SDL_MapRGB(surface->format,
+                (uint8_t)((cr * alpha + dr * (255 - alpha)) / 255),
+                (uint8_t)((cg * alpha + dg * (255 - alpha)) / 255),
+                (uint8_t)((cb * alpha + db * (255 - alpha)) / 255));
+        }
+
+        if (alpha == 0)
+            return dstPixel;
+        if (alpha == 255)
+            return color;
+
+        uint8_t dr, dg, db, da;
+        SDL_GetRGBA(dstPixel, surface->format, &dr, &dg, &db, &da);
+
+        const uint32_t invAlpha = 255u - alpha;
+        const uint32_t outAlpha = alpha + (da * invAlpha + 127u) / 255u;
+        if (outAlpha == 0)
+            return SDL_MapRGBA(surface->format, 0, 0, 0, 0);
+
+        const uint32_t denominator = outAlpha * 255u;
+        const uint32_t outR = (cr * alpha * 255u + dr * da * invAlpha + denominator / 2u) / denominator;
+        const uint32_t outG = (cg * alpha * 255u + dg * da * invAlpha + denominator / 2u) / denominator;
+        const uint32_t outB = (cb * alpha * 255u + db * da * invAlpha + denominator / 2u) / denominator;
+
+        return SDL_MapRGBA(surface->format,
+                           (uint8_t)outR, (uint8_t)outG, (uint8_t)outB,
+                           (uint8_t)outAlpha);
+    };
+
+    int stepAdd, stepOdd;
+    int steps, subSteps;
+
+    if ( xCount <= yCount )
+    {
+        if ( line.y2 <= line.y1 )
+            stepAdd = -rilWidth;
+        else
+            stepAdd = rilWidth;
+
+        if ( line.x2 <= line.x1 )
+            stepOdd = -1;
+        else
+            stepOdd = 1;
+
+        steps = yCount;
+        subSteps = xCount;
+    }
+    else
+    {
+        if ( line.x2 <= line.x1 )
+            stepAdd = -1;
+        else
+            stepAdd = 1;
+
+        if ( line.y2 <= line.y1 )
+            stepOdd = -rilWidth;
+        else
+            stepOdd = rilWidth;
+
+        steps = xCount;
+        subSteps = yCount;
+    }
+
+    int incr1 = 2 * subSteps;
+    int t = 2 * subSteps - steps;
+    int incr2 = 2 * (subSteps - steps);
+
+    SDL_LockSurface(surface);
+
+    void *surfPos = (void *) ((uint8_t *) surface->pixels
+                    + line.y1 * surface->pitch
+                    + line.x1 * surface->format->BytesPerPixel );
+
+    switch(surface->format->BytesPerPixel)
+    {
+        case 1:
+        {
+            uint8_t *surf = (uint8_t *)surfPos;
+
+            for (int i = 0; i <= steps; i++) // Verify i bound
+            {
+                if (alpha >= 128)
+                    *surf = color;
+                if ( t > 0 )
+                {
+                    t += incr2;
+                    surf += stepOdd;
+                }
+                else
+                    t += incr1;
+
+                surf += stepAdd;
+            }
+        }
+        break;
+
+        case 2:
+        {
+            uint16_t *surf = (uint16_t *)surfPos;
+
+            for (int i = 0; i <= steps; i++) // Verify i bound
+            {
+                *surf = (uint16_t)blendPixel(*surf);
+                if ( t > 0 )
+                {
+                    t += incr2;
+                    surf += stepOdd;
+                }
+                else
+                    t += incr1;
+
+                surf += stepAdd;
+            }
+        }
+        break;
+
+        case 4:
+        {
+            uint32_t *surf = (uint32_t *)surfPos;
+
+            for (int i = 0; i <= steps; i++) // Verify i bound
+            {
+                *surf = blendPixel(*surf);
+                if ( t > 0 )
+                {
+                    t += incr2;
+                    surf += stepOdd;
+                }
+                else
+                    t += incr1;
+
+                surf += stepAdd;
+            }
+        }
+        break;
+
+        default:
+        break;
+    }
+
+    SDL_UnlockSurface(surface);
+}
+
+void GFXEngine::BlitScaleMasked(SDL_Surface *src, Common::Rect sRect, SDL_Surface *mask, uint8_t index, SDL_Surface *dst, Common::Rect dRect)
+{
+    if (mask->format->BitsPerPixel != 8)
+        return;
+
+    if (src->w != mask->w || src->h != mask->h)
+        return;
+
+    if (sRect.IsEmpty() || !sRect.IsValid())
+        sRect = Common::Rect(src->w, src->h);
+    else if (!Common::Rect(src->w, src->h).IsIn(sRect))
+        return;
+
+    if (dRect.IsEmpty() || !dRect.IsValid())
+        dRect = Common::Rect(dst->w, dst->h);
+    else if (!Common::Rect(dst->w, dst->h).IsIn(dRect))
+        return;
+
+    // Try fast
+    if (src->format->format == dst->format->format)
+    {
+        switch(src->format->BytesPerPixel)
+        {
+            case 2:
+            {
+                SDL_LockSurface(src);
+                SDL_LockSurface(mask);
+                SDL_LockSurface(dst);
+
+                int32_t dY = (sRect.Height() << 16) / dRect.Height();
+                int32_t dX = (sRect.Width()  << 16) / dRect.Width();
+
+                int32_t srcY  = sRect.top << 16;
+                for (int y = dRect.top; y < dRect.bottom; y++)
+                {
+                    uint16_t *dBuf = (uint16_t *)((uint8_t *)dst->pixels + y * dst->pitch) + dRect.left;
+                    uint16_t *sBuf = (uint16_t *)((uint8_t *)src->pixels + (srcY >> 16) * src->pitch) + sRect.left;
+                    uint8_t  *mBuf = (uint8_t *)mask->pixels + (srcY >> 16) * mask->pitch + sRect.left;
+
+                    int32_t xx = 0;
+                    for (int x = dRect.left; x < dRect.right; x++)
+                    {
+                        if (mBuf[xx >> 16] == index)
+                            *dBuf = sBuf[xx >> 16];
+                        dBuf++;
+                        xx += dX;
+                    }
+                    srcY += dY;
+                }
+
+                SDL_UnlockSurface(dst);
+                SDL_UnlockSurface(mask);
+                SDL_UnlockSurface(src);
+            }
+            break;
+
+            case 4:
+            {
+                SDL_LockSurface(src);
+                SDL_LockSurface(mask);
+                SDL_LockSurface(dst);
+
+                int32_t dY = (sRect.Height() << 16) / dRect.Height();
+                int32_t dX = (sRect.Width()  << 16) / dRect.Width();
+
+                int32_t srcY  = sRect.top << 16;
+                for (int y = dRect.top; y < dRect.bottom; y++)
+                {
+                    uint32_t *dBuf = (uint32_t *)((uint8_t *)dst->pixels + y * dst->pitch) + dRect.left;
+                    uint32_t *sBuf = (uint32_t *)((uint8_t *)src->pixels + (srcY >> 16) * src->pitch) + sRect.left;
+                    uint8_t  *mBuf = (uint8_t *)mask->pixels + (srcY >> 16) * mask->pitch + sRect.left;
+
+                    int32_t xx = 0;
+                    for (int x = dRect.left; x < dRect.right; x++)
+                    {
+                        if (mBuf[xx >> 16] == index)
+                            *dBuf = sBuf[xx >> 16];
+                        dBuf++;
+                        xx += dX;
+                    }
+                    srcY += dY;
+                }
+
+                SDL_UnlockSurface(dst);
+                SDL_UnlockSurface(mask);
+                SDL_UnlockSurface(src);
+            }
+            break;
+
+            default:
+            break;
+        }
+    }
+    else // Slow
+    {
+        SDL_LockSurface(src);
+        SDL_LockSurface(mask);
+        SDL_LockSurface(dst);
+
+        uint8_t sbpp = src->format->BytesPerPixel;
+        uint8_t dbpp = dst->format->BytesPerPixel;
+
+        int32_t dY = (sRect.Height() << 16) / dRect.Height();
+        int32_t dX = (sRect.Width()  << 16) / dRect.Width();
+
+        int32_t srcY  = sRect.top << 16;
+        for (int y = dRect.top; y < dRect.bottom; y++)
+        {
+            uint8_t *dBuf = (uint8_t *)dst->pixels + y * dst->pitch + dRect.left * dbpp;
+            uint8_t *sBuf = (uint8_t *)src->pixels + (srcY >> 16) * src->pitch + sRect.left * sbpp;
+            uint8_t  *mBuf = (uint8_t *)mask->pixels + (srcY >> 16) * mask->pitch + sRect.left;
+
+            int32_t xx = 0;
+            for (int x = dRect.left; x < dRect.right; x++)
+            {
+                if (mBuf[xx >> 16] == index)
+                {
+                    uint8_t r,g,b;
+                    uint32_t clr = 0;
+
+                    uint8_t *spix = sBuf + (xx >> 16) * sbpp;
+                    for(int i = 0; i < sbpp; i++)
+                        clr |= spix[i] << (i * 8);
+
+                    SDL_GetRGB(clr, src->format, &r, &g, &b);
+                    clr = SDL_MapRGB(dst->format, r, g, b);
+
+                    for(int i = 0; i < dbpp; i++)
+                        dBuf[i] = (clr >> (i * 8)) & 0xFF;
+                }
+                dBuf += dbpp;
+                xx += dX;
+            }
+            srcY += dY;
+        }
+
+        SDL_UnlockSurface(dst);
+        SDL_UnlockSurface(mask);
+        SDL_UnlockSurface(src);
+    }
+}
+
+void GFXEngine::DrawFillIntCpy(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, const Common::Rect &dRect)
+{
+    const int32_t sh = sRect.Height();
+    const int32_t sw = sRect.Width();
+    const int32_t dh = dRect.Height();
+    const int32_t dw = dRect.Width();
+
+    SDL_LockSurface(src);
+    SDL_LockSurface(dst);
+
+    if (dw > sw)
+    {
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+
+        const int32_t nit = dw / sw;
+        const int32_t nit2 = (dw % sw) * dst->format->BytesPerPixel;
+        const int32_t cpsz = sw * dst->format->BytesPerPixel;
+        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel + nit2;
+
+        int sptch = src->pitch;
+
+        int ln = 0;
+        uint8_t *psrcl = psrc;
+        for(int ih = dh; ih > 0; --ih)
+        {
+            for(int n = nit; n > 0; --n)
+            {
+                memcpy(pdst, psrcl, cpsz);
+                pdst += cpsz;
+            }
+
+            memcpy(pdst, psrcl, nit2);
+            pdst += skipdst;
+
+            ++ln;
+            if (ln >= sh)
+            {
+                ln = 0;
+                psrcl = psrc;
+            }
+            else
+                psrcl += sptch;
+        }
+    }
+    else
+    {
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+
+        const int32_t cpsz = dw * dst->format->BytesPerPixel;
+        const int32_t skipdst = dst->pitch;
+
+        int sptch = src->pitch;
+
+        int ln = 0;
+        uint8_t *psrcl = psrc;
+        for(int ih = dh; ih > 0; --ih)
+        {
+            memcpy(pdst, psrcl, cpsz);
+            pdst += skipdst;
+
+            ++ln;
+            if (ln >= sh)
+            {
+                ln = 0;
+                psrcl = psrc;
+            }
+            else
+                psrcl += sptch;
+        }
+    }
+
+    SDL_UnlockSurface(dst);
+    SDL_UnlockSurface(src);
+}
+
+template <typename T>
+void GFXEngine::DrawFillIntCKey(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, const Common::Rect &dRect)
+{
+    const int32_t sh = sRect.Height();
+    const int32_t sw = sRect.Width();
+    const int32_t dh = dRect.Height();
+    const int32_t dw = dRect.Width();
+
+    SDL_LockSurface(src);
+    SDL_LockSurface(dst);
+
+    uint32_t clrKey = 0;
+    SDL_GetColorKey(src, &clrKey);
+
+    if (dw > sw)
+    {
+        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+
+        const int32_t nit = dw / sw;
+        const int32_t nit2 = dw % sw;
+
+        const int sz = dst->format->BytesPerPixel;
+
+        int sptch = src->pitch;
+
+        int ln = 0;
+        uint8_t *psrcl = psrc;
+        for(int ih = dh; ih > 0; --ih)
+        {
+
+            for(int n = nit; n > 0; --n)
+            {
+                const uint8_t *lsrc = psrcl;
+                for (int iw = sw; iw > 0; --iw)
+                {
+                    if (*(T *)lsrc != clrKey)
+                        *(T *)pdst = *(T *)lsrc;
+
+                    lsrc += sz;
+                    pdst += sz;
+                }
+            }
+
+            uint8_t *rsrc = psrcl;
+            for(int iw = nit2; iw > 0; --iw)
+            {
+                if (*(T *)rsrc != clrKey)
+                    *(T *)pdst = *(T *)rsrc;
+
+                rsrc += sz;
+                pdst += sz;
+            }
+
+            ++ln;
+            if (ln >= sh)
+            {
+                ln = 0;
+                psrcl = psrc;
+            }
+            else
+                psrcl += sptch;
+
+            pdst += skipdst;
+        }
+    }
+    else
+    {
+        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+
+        const int sz = dst->format->BytesPerPixel;
+
+        int sptch = src->pitch;
+
+        int ln = 0;
+        uint8_t *psrcl = psrc;
+        for(int ih = dh; ih > 0; --ih)
+        {
+            uint8_t *rsrc = psrcl;
+            for(int iw = dw; iw > 0; --iw)
+            {
+                if (*(T *)rsrc != clrKey)
+                    *(T *)pdst = *(T *)rsrc;
+
+                rsrc += sz;
+                pdst += sz;
+            }
+
+            ++ln;
+            if (ln >= sh)
+            {
+                ln = 0;
+                psrcl = psrc;
+            }
+            else
+                psrcl += sptch;
+
+            pdst += skipdst;
+        }
+    }
+
+    SDL_UnlockSurface(dst);
+    SDL_UnlockSurface(src);
+}
+
+template <typename T>
+void GFXEngine::DrawFillIntACpy(SDL_Surface* src, const Common::Rect& sRect, SDL_Surface* dst, const Common::Rect& dRect)
+{
+    const int32_t sh = sRect.Height();
+    const int32_t sw = sRect.Width();
+    const int32_t dh = dRect.Height();
+    const int32_t dw = dRect.Width();
+
+    SDL_LockSurface(src);
+    SDL_LockSurface(dst);
+
+    if (dw > sw)
+    {
+        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+
+        const int32_t nit = dw / sw;
+        const int32_t nit2 = dw % sw;
+        uint32_t amask = src->format->Amask;
+
+        const int sz = dst->format->BytesPerPixel;
+
+        int sptch = src->pitch;
+
+        int ln = 0;
+        uint8_t *psrcl = psrc;
+        for(int ih = dh; ih > 0; --ih)
+        {
+
+            for(int n = nit; n > 0; --n)
+            {
+                const uint8_t *lsrc = psrcl;
+                for (int iw = sw; iw > 0; --iw)
+                {
+                    if (*(T *)lsrc & amask)
+                        *(T *)pdst = *(T *)lsrc;
+
+                    lsrc += sz;
+                    pdst += sz;
+                }
+            }
+
+            uint8_t *rsrc = psrcl;
+            for(int iw = nit2; iw > 0; --iw)
+            {
+                if (*(T *)rsrc & amask)
+                    *(T *)pdst = *(T *)rsrc;
+
+                rsrc += sz;
+                pdst += sz;
+            }
+
+            ++ln;
+            if (ln >= sh)
+            {
+                ln = 0;
+                psrcl = psrc;
+            }
+            else
+                psrcl += sptch;
+
+            pdst += skipdst;
+        }
+    }
+    else
+    {
+        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+
+        const int sz = dst->format->BytesPerPixel;
+
+        int sptch = src->pitch;
+        uint32_t amask = src->format->Amask;
+
+        int ln = 0;
+        uint8_t *psrcl = psrc;
+        for(int ih = dh; ih > 0; --ih)
+        {
+            uint8_t *rsrc = psrcl;
+            for(int iw = dw; iw > 0; --iw)
+            {
+                if (*(T *)rsrc & amask)
+                    *(T *)pdst = *(T *)rsrc;
+
+                rsrc += sz;
+                pdst += sz;
+            }
+
+            ++ln;
+            if (ln >= sh)
+            {
+                ln = 0;
+                psrcl = psrc;
+            }
+            else
+                psrcl += sptch;
+
+            pdst += skipdst;
+        }
+    }
+
+    SDL_UnlockSurface(dst);
+    SDL_UnlockSurface(src);
+}
+
+void GFXEngine::DrawFill(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, const Common::Rect &dRect)
+{
+    if (sRect.IsEmpty() || dRect.IsEmpty())
+        return;
+
+    if (src->format->format == dst->format->format)
+    {
+#if SDL_VERSION_ATLEAST(2, 0, 9)
+        if (SDL_HasColorKey(src))
+#else
+        uint32_t tmp;
+        if (SDL_GetColorKey(src, &tmp) == 0)
+#endif
+        {
+            switch(src->format->BytesPerPixel)
+            {
+
+                case 2:
+                    DrawFillIntCKey<uint16_t>(src, sRect, dst, dRect);
+                    break;
+
+                case 4:
+                    DrawFillIntCKey<uint32_t>(src, sRect, dst, dRect);
+                    break;
+
+                default:
+                break;
+            }
+        }
+        else
+        {
+            if (src->format->Amask)
+            {
+                switch(src->format->BytesPerPixel)
+                {
+
+                    case 2:
+                        DrawFillIntACpy<uint16_t>(src, sRect, dst, dRect);
+                        break;
+
+                    case 4:
+                        DrawFillIntACpy<uint32_t>(src, sRect, dst, dRect);
+                        break;
+
+                    default:
+                    break;
+                }
+            }
+            else
+                DrawFillIntCpy(src, sRect, dst, dRect);
+        }
+    }
+    else
+    {
+        SDL_Rect lsrc = sRect;
+        SDL_Rect ldst;
+        for(ldst.y = dRect.top; ldst.y < dRect.bottom; ldst.y += lsrc.h)
+        {
+            if (dRect.bottom - ldst.y < lsrc.h)
+                lsrc.h = dRect.bottom - ldst.y;
+
+            lsrc.w = sRect.Width();
+
+            for(ldst.x = dRect.left; ldst.x < dRect.right; ldst.x += lsrc.w)
+            {
+                if (dRect.right - ldst.x < lsrc.w)
+                    lsrc.w = dRect.right - ldst.x;
+
+                SDL_BlitSurface(src, &lsrc, dst, &ldst);
+            }
+        }
+    }
+}
+
+void GFXEngine::DrawFillAlpha(SDL_Surface *src, const Common::Rect &sRect,
+                              SDL_Surface *dst, const Common::Rect &dRect,
+                              uint8_t opacity)
+{
+    if (opacity == 0 || sRect.IsEmpty() || dRect.IsEmpty())
+        return;
+    if (opacity == 255)
+    {
+        DrawFill(src, sRect, dst, dRect);
+        return;
+    }
+
+    uint8_t oldOpacity = 255;
+    SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
+    SDL_GetSurfaceAlphaMod(src, &oldOpacity);
+    SDL_GetSurfaceBlendMode(src, &oldBlendMode);
+    SDL_SetSurfaceAlphaMod(src, opacity);
+    SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_BLEND);
+
+    SDL_Rect source = sRect;
+    SDL_Rect target;
+    for (target.y = dRect.top; target.y < dRect.bottom; target.y += sRect.Height())
+    {
+        source.h = std::min(sRect.Height(), dRect.bottom - target.y);
+        source.w = sRect.Width();
+        for (target.x = dRect.left; target.x < dRect.right; target.x += sRect.Width())
+        {
+            source.w = std::min(sRect.Width(), dRect.right - target.x);
+            SDL_BlitSurface(src, &source, dst, &target);
+        }
+    }
+
+    SDL_SetSurfaceAlphaMod(src, oldOpacity);
+    SDL_SetSurfaceBlendMode(src, oldBlendMode);
+}
+
+void GFXEngine::Draw(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, Common::Point dPoint)
+{
+    SDL_Rect Ssrc = sRect;
+    SDL_Rect Sdst = dPoint;
+    SDL_BlitSurface(src, &Ssrc, dst, &Sdst);
+}
+
+void GFXEngine::Draw(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, Common::PointRect dRect)
+{
+    SDL_Rect Ssrc = sRect;
+    if (Ssrc.w > dRect.w)
+        Ssrc.w = dRect.w;
+    if (Ssrc.h > dRect.h)
+        Ssrc.h = dRect.h;
+    SDL_Rect Sdst = dRect;
+    SDL_BlitSurface(src, &Ssrc, dst, &Sdst);
+}
+
+Common::Point GFXEngine::GetVirtualUIResolution() const
+{
+    if (_resolution.x <= 0 || _resolution.y <= 0)
+        return Common::Point(640, 480);
+
+    // Urban Assault's in-game interface was authored around a 480-line
+    // canvas. Keep that visual size at modern resolutions while extending the
+    // logical width to the current aspect ratio, so widescreen layouts reach
+    // both edges without stretching the original 4:3 geometry.
+    if (_resolution.y <= 480)
+        return _resolution;
+
+    const int logicalHeight = 480;
+    const int logicalWidth = std::max(640,
+                                      (_resolution.x * logicalHeight + _resolution.y / 2) /
+                                      _resolution.y);
+    return Common::Point(logicalWidth, logicalHeight);
+}
+
+void GFXEngine::BeginVirtualUI(const Common::Point &logicalSize)
+{
+    if (_virtualUiPass || logicalSize.x <= 0 || logicalSize.y <= 0 || !ScreenSurface)
+        return;
+
+    if (!VirtualUISurface ||
+        VirtualUISurface->w != logicalSize.x ||
+        VirtualUISurface->h != logicalSize.y ||
+        VirtualUISurface->format->format != ScreenSurface->format->format)
+    {
+        if (VirtualUISurface)
+            SDL_FreeSurface(VirtualUISurface);
+
+        VirtualUISurface = SDL_CreateRGBSurface(0,
+                                             logicalSize.x,
+                                             logicalSize.y,
+                                             ScreenSurface->format->BitsPerPixel,
+                                             ScreenSurface->format->Rmask,
+                                             ScreenSurface->format->Gmask,
+                                             ScreenSurface->format->Bmask,
+                                             ScreenSurface->format->Amask);
+        if (!VirtualUISurface)
+            return;
+
+        SDL_SetSurfaceBlendMode(VirtualUISurface, SDL_BLENDMODE_BLEND);
+    }
+
+    SDL_FillRect(VirtualUISurface, NULL,
+                 SDL_MapRGBA(VirtualUISurface->format, 0, 0, 0, 0));
+
+    _virtualUiSavedClip = _clip;
+    _virtualUiSavedInverseClip = _inverseClip;
+    _virtualUiSavedField54c = _field_54c;
+    _virtualUiSavedField550 = _field_550;
+    _virtualUiSavedField554 = _field_554;
+    _virtualUiSavedField558 = _field_558;
+
+    _virtualUiResolution = logicalSize;
+    _virtualUiPending = false;
+    _virtualUiPass = true;
+
+    _clip = logicalSize - Common::Point(1, 1);
+    _inverseClip = Common::Rect();
+    _field_54c = logicalSize.x / 2;
+    _field_550 = logicalSize.y / 2;
+    _field_554 = logicalSize.x / 2;
+    _field_558 = logicalSize.y / 2;
+}
+
+void GFXEngine::EndVirtualUI()
+{
+    if (!_virtualUiPass)
+        return;
+
+    _virtualUiPass = false;
+
+    _clip = _virtualUiSavedClip;
+    _inverseClip = _virtualUiSavedInverseClip;
+    _field_54c = _virtualUiSavedField54c;
+    _field_550 = _virtualUiSavedField550;
+    _field_554 = _virtualUiSavedField554;
+    _field_558 = _virtualUiSavedField558;
+
+    _virtualUiPending = VirtualUISurface != NULL;
+}
+
+void GFXEngine::GetGlPixTypeFmt(GLint *format, GLint *type)
+{
+    *format = _glPixfmt;
+    *type = _glPixtype;
+}
+
+void GFXEngine::RecreateScreenSurface()
+{
+    if ( ScreenSurface )
+        SDL_FreeSurface(ScreenSurface);
+
+    ScreenSurface = SDL_CreateRGBSurface(0, _resolution.x, _resolution.y, _pixfmt->BitsPerPixel, _pixfmt->Rmask, _pixfmt->Gmask, _pixfmt->Bmask, _pixfmt->Amask);
+
+    if ( !screenTex )
+        glGenTextures(1, &screenTex);
+
+    _states.Tex = screenTex;
+    SetRenderStates(0);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ScreenSurface->w, ScreenSurface->h, 0, _glPixfmt, _glPixtype, NULL);
+}
+
+void GFXEngine::DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx)
+{
+    static const uint16_t indexes[6] = {0, 1, 2, 0, 2, 3};
+
+    if (_vbo)
+    {
+        if (!_stdQuadDataBuf)
+        {
+            Glext::GLGenBuffers(1, &_stdQuadDataBuf);
+            Glext::GLBindBuffer(GL_ARRAY_BUFFER, _stdQuadDataBuf);
+            Glext::GLBufferData(GL_ARRAY_BUFFER, sizeof(TVertex) * vtx.size(), NULL, GL_STREAM_DRAW);
+        }
+
+        if (!_stdQuadIndexBuf)
+        {
+            Glext::GLGenBuffers(1, &_stdQuadIndexBuf);
+            Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _stdQuadIndexBuf);
+            Glext::GLBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indexes), &indexes, GL_STATIC_DRAW);
+        }
+
+        _states.DataBuf = _stdQuadDataBuf;
+        _states.IndexBuf = _stdQuadIndexBuf;
+
+        SetRenderStates(0);
+
+        Glext::GLBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(TVertex) * vtx.size(), vtx.data());
+
+        if (_lastStates.Prog.PosLoc != -1)
+            Glext::GLVertexAttribPointer(_lastStates.Prog.PosLoc, 3, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Pos));
+        if (_lastStates.Prog.ColorLoc != -1)
+            Glext::GLVertexAttribPointer(_lastStates.Prog.ColorLoc, 4, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Color));
+        if (_lastStates.Prog.UVLoc != -1)
+            Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, TexCoord));
+
+        // OpenNeoUA custom VP tint: screen/HUD/UI quads must never inherit a mesh tint.
+        if ( _vboStatesBlock.Colorize != 0 ||
+             _vboStatesBlock.ColorMul[0] != 1.0 || _vboStatesBlock.ColorMul[1] != 1.0 ||
+             _vboStatesBlock.ColorMul[2] != 1.0 || _vboStatesBlock.ColorMul[3] != 1.0 )
+        {
+            _vboStatesBlock.ColorMul[0] = 1.0;
+            _vboStatesBlock.ColorMul[1] = 1.0;
+            _vboStatesBlock.ColorMul[2] = 1.0;
+            _vboStatesBlock.ColorMul[3] = 1.0;
+            _vboStatesBlock.Colorize = 0;
+            _vboStatesChanged = true;
+        }
+
+        CommitUBOParameters();
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
+    }
+    else
+    {
+        glVertexPointer(3, GL_FLOAT, sizeof(TVertex), &vtx[0].Pos);
+        glColorPointer(4, GL_FLOAT, sizeof(TVertex), &vtx[0].Color);
+        glTexCoordPointer(2, GL_FLOAT, sizeof(TVertex), &vtx[0].TexCoord);
+
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, &indexes);
+    }
+}
+
+void GFXEngine::DrawScreenSurface()
+{
+    GfxStates save = _states;
+
+    Common::Point scrSz = System::GetResolution();
+    glViewport(0, 0, scrSz.x, scrSz.y);
+
+    SetProjectionMatrix( mat4x4f() );
+    SetModelViewMatrix( mat4x4f() );
+
+    _states.DepthTest = false;
+    _states.Zwrite = false;
+    _states.AlphaBlend = true;
+    _states.SrcBlend = GL_SRC_ALPHA;
+    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    _states.Tex = screenTex;
+    _states.TexBlend = 2;
+    _states.Prog = _stdShaderProg;
+    _states.AlphaTest = false;
+    _states.Shaded = true;
+    _states.LinearFilter = true;
+
+    SetRenderStates(0);
+
+    // Will be binded with SetRenderStates
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ScreenSurface->w, ScreenSurface->h, _glPixfmt, _glPixtype, ScreenSurface->pixels);
+
+    static std::array<TVertex, 4> vtx = {
+        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 0.0) ),
+        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 1.0) ),
+        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 1.0) ),
+        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 0.0) )
+    };
+
+    DrawVtxQuad(vtx);
+
+    _states = save;
+}
+
+void GFXEngine::DrawVirtualUISolidRect(float left, float top, float right, float bottom,
+                                        const TGLColor &color)
+{
+    if ( !_virtualUiPass || !VirtualUISurface ||
+         color.a <= 0.0f || right <= left || bottom <= top )
+    {
+        return;
+    }
+
+    const int x0 = std::max(0, std::min((int)std::floor(left), VirtualUISurface->w));
+    const int x1 = std::max(0, std::min((int)std::ceil(right), VirtualUISurface->w));
+    const int y0 = std::max(0, std::min((int)std::floor(top), VirtualUISurface->h));
+    const int y1 = std::max(0, std::min((int)std::ceil(bottom), VirtualUISurface->h));
+    if ( x1 <= x0 || y1 <= y0 )
+        return;
+
+    const uint8_t r = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.r * 255.0f)));
+    const uint8_t g = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.g * 255.0f)));
+    const uint8_t b = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.b * 255.0f)));
+    const uint8_t a = (uint8_t)std::max(0, std::min(255, (int)std::lround(color.a * 255.0f)));
+    if ( a == 0 )
+        return;
+
+    for ( int y = y0; y < y1; ++y )
+    {
+        DrawLine(VirtualUISurface, Common::Line(x0, y, x1 - 1, y),
+                 r, g, b, a, true);
+    }
+}
+
+void GFXEngine::DrawVirtualUISurface()
+{
+    if (!_virtualUiPending || !VirtualUISurface)
+        return;
+
+    GfxStates save = _states;
+
+    Common::Point scrSz = System::GetResolution();
+    glViewport(0, 0, scrSz.x, scrSz.y);
+
+    SetProjectionMatrix(mat4x4f());
+    SetModelViewMatrix(mat4x4f());
+
+    if (!virtualUiTex)
+        glGenTextures(1, &virtualUiTex);
+
+    _states.DepthTest = false;
+    _states.Zwrite = false;
+    _states.AlphaBlend = true;
+    _states.SrcBlend = GL_SRC_ALPHA;
+    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    _states.Tex = virtualUiTex;
+    _states.TexBlend = 2;
+    _states.Prog = _stdShaderProg;
+    _states.AlphaTest = false;
+    _states.Shaded = true;
+    _states.LinearFilter = (_virtualUiStyle == VirtualUIStyle::SMOOTH);
+
+    SetRenderStates(0);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    SDL_LockSurface(VirtualUISurface);
+    const Common::Point surfaceSize(VirtualUISurface->w, VirtualUISurface->h);
+    if (_virtualUiTextureSize != surfaceSize)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surfaceSize.x, surfaceSize.y, 0,
+                     _glPixfmt, _glPixtype, VirtualUISurface->pixels);
+        _virtualUiTextureSize = surfaceSize;
+    }
+    else
+    {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, surfaceSize.x, surfaceSize.y,
+                        _glPixfmt, _glPixtype, VirtualUISurface->pixels);
+    }
+    SDL_UnlockSurface(VirtualUISurface);
+
+    static std::array<TVertex, 4> vtx = {
+        GFX::TVertex(vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 0.0)),
+        GFX::TVertex(vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 1.0)),
+        GFX::TVertex(vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 1.0)),
+        GFX::TVertex(vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 0.0))
+    };
+
+    DrawVtxQuad(vtx);
+
+    _states = save;
+    _virtualUiPending = false;
+}
+
+uint32_t GFXEngine::CompileShader(int32_t type, const std::string &string)
+{
+    GLuint sh = Glext::GLCreateShader(type);
+    if (!sh)
+        return 0;
+
+    const GLchar *source = (const GLchar *)string.c_str();
+
+    Glext::GLShaderSource(sh, 1, &source, 0);
+    Glext::GLCompileShader(sh);
+
+    GLint tmpvar;
+    Glext::GLGetShaderiv(sh, GL_COMPILE_STATUS, &tmpvar);
+
+    if (tmpvar == GL_FALSE)
+    {
+        Glext::GLGetShaderiv(sh, GL_INFO_LOG_LENGTH, &tmpvar);
+        if (tmpvar > 0)
+        {
+            char *logbuff = new char[tmpvar + 2];
+            Glext::GLGetShaderInfoLog(sh, tmpvar, NULL, logbuff);
+            printf("Shader error: %s\n", logbuff);
+            log_d3dlog("Shader error: %s\n", logbuff);
+            delete[] logbuff;
+        }
+        Glext::GLDeleteShader(sh);
+        return 0;
+    }
+
+    return sh;
+}
+
+
+uint32_t GFXEngine::LoadShader(int32_t type, const std::string &fl)
+{
+    FSMgr::FileHandle *f = FSMgr::iDir::openFileAlloc(uaDataFirstResolvedReadPath(fl), "rb");
+    if (!f)
+        return 0;
+
+    f->seek(0, SEEK_END);
+    size_t sz = f->tell();
+    f->seek(0, SEEK_SET);
+
+    char *tmp = new char[sz];
+    f->read(tmp, sz);
+
+    std::string b;
+    b.assign(tmp, sz);
+
+    delete[] tmp;
+
+    delete f;
+
+    return CompileShader(type, b);
+}
+
+void GFXEngine::DrawFBO()
+{
+    GfxStates save = _states;
+
+    TColorEffectsProg *postProg = &_colorEffectsShaderProg;
+    if (_atmosphereActive && _atmosphereShaderProg.ID)
+        postProg = &_atmosphereShaderProg;
+
+    Common::Point scrSz = System::GetResolution();
+    glViewport(0, 0, scrSz.x, scrSz.y);
+
+    SetProjectionMatrix( mat4x4f() );
+    SetModelViewMatrix( mat4x4f() );
+
+    _states.DepthTest = false;
+    _states.Zwrite = false;
+    _states.AlphaBlend = true;
+
+    if (_fboBlend == 0)
+    {
+        _states.SrcBlend = GL_ONE;
+        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    }
+    else if (_fboBlend == 1)
+    {
+        _states.SrcBlend = GL_SRC_ALPHA;
+        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    }
+
+    _states.Tex = _fboTex;
+    _states.TexBlend = 2;
+    _states.Prog = *postProg;
+
+    _states.AlphaTest = false;
+    _states.Shaded = true;
+    _states.LinearFilter = true;
+
+    // Apply texture and program
+    SetRenderStates(0);
+
+    if (postProg->NormLoc >= 0)
+        Glext::GLUniform3f(postProg->NormLoc, _normClr.x, _normClr.y, _normClr.z);
+
+    if (postProg->InvLoc >= 0)
+        Glext::GLUniform3f(postProg->InvLoc, _invClr.x, _invClr.y, _invClr.z);
+
+    if (postProg->RandLoc >= 0)
+        Glext::GLUniform1i(postProg->RandLoc, rand());
+
+    if (postProg->ScrSizeLoc >= 0)
+        Glext::GLUniform2i(postProg->ScrSizeLoc, scrSz.x, scrSz.y);
+
+    if (postProg->MillisecsLoc >= 0)
+        Glext::GLUniform1i(postProg->MillisecsLoc, SDL_GetTicks());
+
+    if (_atmosphereActive && postProg == &_atmosphereShaderProg)
+    {
+        if (_atmosphereShaderProg.StrengthLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.StrengthLoc, _atmosphereStrength);
+        if (_atmosphereShaderProg.ExposureLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.ExposureLoc, _atmosphereExposure);
+        if (_atmosphereShaderProg.ContrastLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.ContrastLoc, _atmosphereContrast);
+        if (_atmosphereShaderProg.SaturationLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.SaturationLoc, _atmosphereSaturation);
+        if (_atmosphereShaderProg.VignetteLoc >= 0)
+            Glext::GLUniform1f(_atmosphereShaderProg.VignetteLoc, _atmosphereVignette);
+    }
+
+    // OpenNeoUA custom: fullscreen visual filter LUT.
+    // Strength 0 => shader passthrough (identical to vanilla post-process output).
+    if (postProg->FilterStrengthLoc >= 0)
+    {
+        float strength = (_visualFilterActive && _visualFilterLut) ? _visualFilterStrength : 0.0f;
+        Glext::GLUniform1f(postProg->FilterStrengthLoc, strength);
+
+        if (strength > 0.0f && postProg->FilterLutLoc >= 0)
+        {
+            Glext::GLUniform1i(postProg->FilterLutLoc, 1);
+            Glext::GLActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, _visualFilterLut);
+            Glext::GLActiveTexture(GL_TEXTURE0); // engine assumes unit 0 is active
+        }
+    }
+
+    static std::array<TVertex, 4> vtx = {
+        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 1.0) ),
+        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 1.0) )
+    };
+
+    DrawVtxQuad(vtx);
+
+    _states = save;
+}
+
+bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
+{
+    if (!_vhsCopyTex)
+    {
+        glGenTextures(1, &_vhsCopyTex);
+        _vhsCopyTexSize = Common::Point();
+    }
+
+    if (!_vhsFbo)
+        Glext::GLGenFramebuffers(1, &_vhsFbo);
+    if (!_vhsOutFbo)
+        Glext::GLGenFramebuffers(1, &_vhsOutFbo);
+    if (!_vhsOutTex)
+        glGenTextures(1, &_vhsOutTex);
+
+    if (_vhsCopyTexSize == scrSz && _vhsFboReady)
+        return true;
+
+    glBindTexture(GL_TEXTURE_2D, _vhsCopyTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glBindTexture(GL_TEXTURE_2D, _vhsOutTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsFbo);
+    Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _vhsCopyTex, 0);
+
+    GLenum fboStatus = Glext::GLCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fboStatus == GL_FRAMEBUFFER_COMPLETE)
+    {
+        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsOutFbo);
+        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _vhsOutTex, 0);
+        fboStatus = Glext::GLCheckFramebufferStatus(GL_FRAMEBUFFER);
+    }
+    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
+    {
+        ypa_log_out("WARNING: VHS filter framebuffer is incomplete (status=0x%X); disabling VHS and keeping the visual filter path.\n",
+                    (unsigned int)fboStatus);
+        _vhsFilterActive = false;
+        _vhsFboReady = false;
+        return false;
+    }
+
+    _vhsCopyTexSize = scrSz;
+    _vhsFboReady = true;
+    return true;
+}
+
+void GFXEngine::DrawVhsEffect()
+{
+    if (!_vhsFilterActive || !_vhsFilterProg.ID || _vhsFilterStrength <= 0.0f)
+        return;
+
+    GfxStates save = _states;
+
+    Common::Point scrSz = System::GetResolution();
+    if (!EnsureVhsFilterTexture(scrSz))
+        return;
+
+    glViewport(0, 0, scrSz.x, scrSz.y);
+
+    SetProjectionMatrix( mat4x4f() );
+    SetModelViewMatrix( mat4x4f() );
+
+    _states.DepthTest = false;
+    _states.Zwrite = false;
+    _states.AlphaBlend = false;
+    _states.Tex = _vhsCopyTex;
+    _states.TexBlend = 2;
+    _states.Prog = _vhsFilterProg;
+    _states.AlphaTest = false;
+    _states.Shaded = true;
+    _states.LinearFilter = true;
+
+    SetRenderStates(0);
+
+    if (_vhsFilterProg.RandLoc >= 0)
+        Glext::GLUniform1i(_vhsFilterProg.RandLoc, rand());
+
+    if (_vhsFilterProg.ScrSizeLoc >= 0)
+        Glext::GLUniform2i(_vhsFilterProg.ScrSizeLoc, scrSz.x, scrSz.y);
+
+    if (_vhsFilterProg.MillisecsLoc >= 0)
+        Glext::GLUniform1i(_vhsFilterProg.MillisecsLoc, SDL_GetTicks());
+
+    if (_vhsFilterProg.StrengthLoc >= 0)
+        Glext::GLUniform1f(_vhsFilterProg.StrengthLoc, _vhsFilterStrength);
+
+    static std::array<TVertex, 4> vtx = {
+        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 1.0) ),
+        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 1.0) )
+    };
+
+    DrawVtxQuad(vtx);
+
+    _states = save;
+}
+
+void GFXEngine::DrawVhsFilter()
+{
+    if (!_vhsFilterActive || !_vhsBlendProg.ID || _vhsFilterStrength <= 0.0f)
+        return;
+
+    GfxStates save = _states;
+
+    Common::Point scrSz = System::GetResolution();
+    if (!EnsureVhsFilterTexture(scrSz))
+        return;
+
+    glViewport(0, 0, scrSz.x, scrSz.y);
+
+    SetProjectionMatrix( mat4x4f() );
+    SetModelViewMatrix( mat4x4f() );
+
+    _states.DepthTest = false;
+    _states.Zwrite = false;
+    _states.AlphaBlend = false;
+    _states.Tex = _vhsCopyTex;
+    _states.TexBlend = 2;
+    _states.Prog = _vhsBlendProg;
+    _states.AlphaTest = false;
+    _states.Shaded = true;
+    _states.LinearFilter = true;
+
+    SetRenderStates(0);
+
+    if (_vhsBlendProg.VhsTexLoc >= 0)
+    {
+        Glext::GLUniform1i(_vhsBlendProg.VhsTexLoc, 1);
+        Glext::GLActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, _vhsOutTex);
+        Glext::GLActiveTexture(GL_TEXTURE0);
+    }
+
+    if (_vhsBlendProg.StrengthLoc >= 0)
+        Glext::GLUniform1f(_vhsBlendProg.StrengthLoc, _vhsFilterStrength);
+
+    static std::array<TVertex, 4> vtx = {
+        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 1.0) ),
+        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 1.0) )
+    };
+
+    DrawVtxQuad(vtx);
+
+    _states = save;
+}
+
+void GFXEngine::SetFBOBlending(int mode)
+{
+    _fboBlend = mode;
+}
+
+void GFXEngine::UpdateFBOSizes()
+{
+    if (_colorEffects)
+    {
+        Common::Point scrSz = System::GetResolution();
+
+        _states.Tex = _fboTex;
+        SetRenderStates(0);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, _fbod);
+        Glext::GLRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, scrSz.x, scrSz.y);
+        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+        if (_vhsCopyTex)
+            _vhsCopyTexSize = Common::Point();
+        _vhsFboReady = false;
+    }
+}
+
+SDL_Color GFXEngine::Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    SDL_Color tmp;
+    tmp.a = a;
+    tmp.r = r;
+    tmp.g = g;
+    tmp.b = b;
+    return tmp;
+}
+
+bool GFXEngine::ColorCmp(const SDL_Color &a, const SDL_Color &b)
+{
+    if (a.a != b.a || a.r != b.r || a.g != b.g || a.b != b.b)
+        return false;
+    return true;
+}
+
+float GFXEngine::GetColorEffectPower(int id)
+{
+    int32_t pwr = 0;
+    switch(id)
+    {
+        default:
+        case 0:
+            return 1.0;
+
+        case 1:
+            pwr = System::IniConf::GfxColorEffPower1.Get<int32_t>();
+            break;
+
+        case 2:
+            pwr = System::IniConf::GfxColorEffPower2.Get<int32_t>();
+            break;
+
+        case 3:
+            pwr = System::IniConf::GfxColorEffPower3.Get<int32_t>();
+            break;
+
+        case 4:
+            pwr = System::IniConf::GfxColorEffPower4.Get<int32_t>();
+            break;
+
+        case 5:
+            pwr = System::IniConf::GfxColorEffPower5.Get<int32_t>();
+            break;
+
+        case 6:
+            pwr = System::IniConf::GfxColorEffPower6.Get<int32_t>();
+            break;
+
+        case 7:
+            pwr = System::IniConf::GfxColorEffPower7.Get<int32_t>();
+            break;
+
+        case 8:
+            pwr = System::IniConf::GfxColorEffPower8.Get<int32_t>();
+            break;
+
+        case 9:
+            pwr = System::IniConf::GfxColorEffPower9.Get<int32_t>();
+            break;
+
+        case 10:
+            pwr = System::IniConf::GfxColorEffPower10.Get<int32_t>();
+            break;
+
+        case 11:
+            pwr = System::IniConf::GfxColorEffPower11.Get<int32_t>();
+            break;
+
+        case 12:
+            pwr = System::IniConf::GfxColorEffPower12.Get<int32_t>();
+            break;
+
+        case 13:
+            pwr = System::IniConf::GfxColorEffPower13.Get<int32_t>();
+            break;
+
+        case 14:
+            pwr = System::IniConf::GfxColorEffPower14.Get<int32_t>();
+            break;
+
+        case 15:
+            pwr = System::IniConf::GfxColorEffPower15.Get<int32_t>();
+            break;
+
+        case 16:
+            pwr = System::IniConf::GfxColorEffPower16.Get<int32_t>();
+            break;
+    }
+
+    if (pwr < 0)
+        pwr = 0;
+
+    if (pwr > 100)
+        pwr = 100;
+
+    return (float)pwr / 100.0;
+}
+
+Common::Point GFXEngine::ConvertPosTo2DStuff(const Common::Point &pos)
+{
+    Common::Point real = System::GetResolution();
+
+    if (real == _resolution)
+        return pos;
+
+    Common::Point t( pos.x * _resolution.x / real.x,
+                     pos.y * _resolution.y / real.y );
+
+    if (t.x < 0)
+        t.x = 0;
+    if (t.x >= _resolution.x)
+        t.x = _resolution.x - 1;
+
+    if (t.y < 0)
+        t.y = 0;
+    if (t.y >= _resolution.y)
+        t.y = _resolution.y - 1;
+
+    return t;
+}
+
+TMesh::TMesh(const TMesh &b)
+{
+    Mat = b.Mat;
+    Vertexes = b.Vertexes;
+    Indixes = b.Indixes;
+    CoordsCache = b.CoordsCache;
+    BoundBox = b.BoundBox;
+
+    glDataBuf = 0;
+    glIndexBuf = 0;
+}
+
+TMesh::TMesh(TMesh &&b) noexcept
+{
+    Mat = std::move(b.Mat);
+    Vertexes = std::move(b.Vertexes);
+    Indixes = std::move(b.Indixes);
+    CoordsCache = std::move(b.CoordsCache);
+    BoundBox = std::move(b.BoundBox);
+
+    glDataBuf = b.glDataBuf;
+    glIndexBuf = b.glIndexBuf;
+    b.glDataBuf = 0;
+    b.glIndexBuf = 0;
+}
+
+TMesh &TMesh::operator=(const TMesh& b)
+{
+    if (this == &b)
+        return *this;
+
+    GFX::Engine.MeshFreeVBO(this);
+
+    Mat = b.Mat;
+    Vertexes = b.Vertexes;
+    Indixes = b.Indixes;
+    CoordsCache = b.CoordsCache;
+    BoundBox = b.BoundBox;
+
+    glDataBuf = 0;
+    glIndexBuf = 0;
+
+    return *this;
+}
+
+TMesh &TMesh::operator=(TMesh &&b) noexcept
+{
+    if (this == &b)
+        return *this;
+
+    GFX::Engine.MeshFreeVBO(this);
+
+    Mat = std::move(b.Mat);
+    Vertexes = std::move(b.Vertexes);
+    Indixes = std::move(b.Indixes);
+    CoordsCache = std::move(b.CoordsCache);
+    BoundBox = std::move(b.BoundBox);
+
+    glDataBuf = b.glDataBuf;
+    glIndexBuf = b.glIndexBuf;
+    b.glDataBuf = 0;
+    b.glIndexBuf = 0;
+
+    return *this;
+}
+
+TMesh::~TMesh()
+{
+    GFX::Engine.MeshFreeVBO(this);
+
+    // Just notify about still existing buffers
+    if (glDataBuf || glIndexBuf)
+        printf("TMesh still has buffers!\n");
+}
+
+void GFXEngine::MeshMakeVBO(TMesh *mesh)
+{
+    if (_vbo)
+    {
+        if (!mesh->glDataBuf)
+            Glext::GLGenBuffers(1, &mesh->glDataBuf);
+
+        if (!mesh->glIndexBuf)
+            Glext::GLGenBuffers(1, &mesh->glIndexBuf);
+
+        Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->glIndexBuf);
+        Glext::GLBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->Indixes.size() * sizeof(IndexType), mesh->Indixes.data(), GL_STATIC_DRAW);
+
+        Glext::GLBindBuffer(GL_ARRAY_BUFFER, mesh->glDataBuf);
+        int32_t vtxDataSz = mesh->Vertexes.size() * sizeof(TVertex);
+        int32_t coordDataSz = mesh->Vertexes.size() * sizeof(tUtV);
+        Glext::GLBufferData(GL_ARRAY_BUFFER, vtxDataSz + mesh->CoordsCache.size() * coordDataSz, NULL, GL_STATIC_DRAW);
+
+        int32_t off = 0;
+        Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, vtxDataSz, mesh->Vertexes.data());
+
+        off += vtxDataSz;
+        for (TCoordsCache &cch : mesh->CoordsCache)
+        {
+            Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, coordDataSz, cch.Coords.data());
+            cch.BufferPos = off;
+
+            off += coordDataSz;
+        }
+
+        Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _lastStates.IndexBuf);
+        Glext::GLBindBuffer(GL_ARRAY_BUFFER, _lastStates.DataBuf);
+    }
+}
+
+void GFXEngine::MeshFreeVBO(TMesh *mesh)
+{
+    if (_vbo)
+    {
+        if (mesh->glDataBuf)
+        {
+            Glext::GLDeleteBuffers(1, &mesh->glDataBuf);
+            mesh->glDataBuf = 0;
+        }
+
+        if (mesh->glIndexBuf)
+        {
+            Glext::GLDeleteBuffers(1, &mesh->glIndexBuf);
+            mesh->glIndexBuf = 0;
+        }
+
+//        if (mesh->glVao)
+//        {
+//            Glext::GLDeleteVertexArrays(1, &mesh->glVao);
+//            mesh->glVao = 0;
+//        }
+    }
+}
+
+void GFXEngine::BindVBOParameters(TShaderProg &shader)
+{
+    if (_vbo)
+    {
+        uint32_t blockIndex = Glext::GLGetUniformBlockIndex(shader.ID, "Parameters");
+        if (blockIndex != GL_INVALID_INDEX)
+            Glext::GLUniformBlockBinding(shader.ID, blockIndex, _vboParamsBlockBinding);
+    }
+}
+
+void GFXEngine::CommitUBOParameters()
+{
+    if (_vbo && _vboStatesChanged)
+    {
+        _vboStatesChanged = false;
+
+        Glext::GLBindBuffer(GL_UNIFORM_BUFFER, _vboParams);
+
+        // Orphan ubo
+        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, NULL, GL_STREAM_DRAW);
+
+        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, &_vboStatesBlock, GL_STREAM_DRAW);
+    }
+}
+
+void GFXEngine::SetProjectionMatrix(const mat4x4f &mat)
+{
+    mat4x4f tmp = mat.Transpose();
+    if (_vbo)
+    {
+        _vboStatesBlock.Proj = tmp;
+        _vboStatesChanged = true;
+    }
+    else
+    {
+        glMatrixMode(GL_PROJECTION);
+        glLoadMatrixf(&tmp.m00);
+    }
+}
+
+void GFXEngine::SetModelViewMatrix(const mat4x4f &mat)
+{
+    mat4x4f tmp = mat.Transpose();
+    if (_vbo)
+    {
+        _vboStatesBlock.View = tmp;
+        _vboStatesChanged = true;
+    }
+    else
+    {
+        glMatrixMode(GL_MODELVIEW);
+        glLoadMatrixf(&tmp.m00);
+    }
+}
+
+TShaderProg::TShaderProg(uint32_t id)
+: ID(id)
+{
+    PosLoc = Glext::GLGetAttribLocation(ID, "vPos");
+    UVLoc  = Glext::GLGetAttribLocation(ID, "vUV");
+    ColorLoc = Glext::GLGetAttribLocation(ID, "vColor");
+}
+
+TColorEffectsProg::TColorEffectsProg(uint32_t id)
+: TShaderProg(id)
+{
+    NormLoc = Glext::GLGetUniformLocation(ID, "normclr");
+    InvLoc = Glext::GLGetUniformLocation(ID, "invclr");
+    RandLoc = Glext::GLGetUniformLocation(ID, "randval");
+    ScrSizeLoc = Glext::GLGetUniformLocation(ID, "screenSize");
+    MillisecsLoc = Glext::GLGetUniformLocation(ID, "millisecs");
+    // OpenNeoUA custom: fullscreen visual filter
+    FilterLutLoc = Glext::GLGetUniformLocation(ID, "filterLut");
+    FilterStrengthLoc = Glext::GLGetUniformLocation(ID, "filterStrength");
+}
+
+TAtmosphereProg::TAtmosphereProg(uint32_t id)
+: TColorEffectsProg(id)
+{
+    StrengthLoc = Glext::GLGetUniformLocation(ID, "atmosphereStrength");
+    ExposureLoc = Glext::GLGetUniformLocation(ID, "atmosphereExposure");
+    ContrastLoc = Glext::GLGetUniformLocation(ID, "atmosphereContrast");
+    SaturationLoc = Glext::GLGetUniformLocation(ID, "atmosphereSaturation");
+    VignetteLoc = Glext::GLGetUniformLocation(ID, "atmosphereVignette");
+}
+
+TVhsFilterProg::TVhsFilterProg(uint32_t id)
+: TShaderProg(id)
+{
+    RandLoc = Glext::GLGetUniformLocation(ID, "randval");
+    ScrSizeLoc = Glext::GLGetUniformLocation(ID, "screenSize");
+    MillisecsLoc = Glext::GLGetUniformLocation(ID, "millisecs");
+    StrengthLoc = Glext::GLGetUniformLocation(ID, "vhsStrength");
+}
+
+TVhsBlendProg::TVhsBlendProg(uint32_t id)
+: TShaderProg(id)
+{
+    VhsTexLoc = Glext::GLGetUniformLocation(ID, "vhsTexture");
+    StrengthLoc = Glext::GLGetUniformLocation(ID, "vhsStrength");
+}
+
+}
