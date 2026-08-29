@@ -5107,6 +5107,12 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->artillery_shell_airburst = parser.stol(p2, NULL, 0) != 0 ? 1 : 0;
     }
+    else if ( !StriCmp(p1, "artillery_shell_marker_path") )
+    {
+        // Author relative to Data/Interface/Map/Markers. Empty/invalid/missing
+        // assets are handled by the UI loader with the canonical classic SVG fallback.
+        _wpn->artillery_shell_marker_path = p2;
+    }
     else if ( !StriCmp(p1, "begin_chain_fx") )
     {
         return ParseWeaponChainFXBlock(parser, _wpn);
