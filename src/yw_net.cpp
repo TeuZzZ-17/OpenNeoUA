@@ -1605,6 +1605,8 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
         int wpnType = weapo->GetMissileType();
 
         World::TWeapProto &netWproto = yw->GetWeaponsProtos().at(nwMsg->type);
+        if ( netWproto.IsArcGrenade() )
+            weapo->SetupArcGrenadeVelocity(nwMsg->dir, netWproto.grenade_arc_gravity);
         bool homingBomb = netWproto.IsHomingBomb();
 
         if ( wpnType == 3 || homingBomb )
