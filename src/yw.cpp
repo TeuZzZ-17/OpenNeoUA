@@ -7042,9 +7042,12 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                                                         btn_64arg.tileset_up = 18;
                                                                                                                                         btn_64arg.field_3A = 30;
                                                                                                                                         btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
+                                                                                                                                        const int optionsActionButtonWidth = (menuWidth - 3 * buttonsSpace) / 4;
+                                                                                                                                        const int optionsActionButtonStep = optionsActionButtonWidth + buttonsSpace;
+
                                                                                                                                         btn_64arg.xpos = 0;
                                                                                                                                         btn_64arg.ypos = bottomButtonsY;
-                                                                                                                                        btn_64arg.width = button1LineWidth;
+                                                                                                                                        btn_64arg.width = optionsActionButtonWidth;
                                                                                                                                         btn_64arg.tileset_down = 19;
                                                                                                                                         btn_64arg.caption = Locale::Text::Common(Locale::CMN_OK);
                                                                                                                                         btn_64arg.upCode = 1124;
@@ -7059,21 +7062,21 @@ bool NC_STACK_ypaworld::CreateVideoControls()
 
                                                                                                                                         if ( _GameShell->video_button->Add(&btn_64arg) )
                                                                                                                                         {
-                                                                                                                                            btn_64arg.xpos = bottomThirdBtnPosX;
+                                                                                                                                            btn_64arg.xpos = 2 * optionsActionButtonStep;
                                                                                                                                             btn_64arg.ypos = bottomButtonsY;
-                                                                                                                                            btn_64arg.width = button1LineWidth;
-                                                                                                                                            btn_64arg.caption = Locale::Text::Common(Locale::CMN_HELP);
-                                                                                                                                            btn_64arg.upCode = 1250;
+                                                                                                                                            btn_64arg.width = optionsActionButtonWidth;
+                                                                                                                                            btn_64arg.caption = Locale::Text::Common(Locale::CMN_RESETDEF);
+                                                                                                                                            btn_64arg.upCode = 1321;
                                                                                                                                             btn_64arg.caption2.clear();
                                                                                                                                             btn_64arg.downCode = 0;
                                                                                                                                             btn_64arg.pressedCode = 0;
-                                                                                                                                            btn_64arg.button_id = 1167;
+                                                                                                                                            btn_64arg.button_id = 1194;
 
                                                                                                                                             if ( _GameShell->video_button->Add(&btn_64arg) )
                                                                                                                                             {
-                                                                                                                                                btn_64arg.xpos = bottomSecondBtnPosX;
+                                                                                                                                                btn_64arg.xpos = optionsActionButtonStep;
                                                                                                                                                 btn_64arg.ypos = bottomButtonsY;
-                                                                                                                                                btn_64arg.width = button1LineWidth;
+                                                                                                                                                btn_64arg.width = optionsActionButtonWidth;
                                                                                                                                                 btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
                                                                                                                                                 btn_64arg.upCode = 1125;
                                                                                                                                                 btn_64arg.caption2.clear();
@@ -7208,10 +7211,12 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     btn_64arg.tileset_up = 18;
     btn_64arg.field_3A = 30;
     btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
-    // Use the third centered column after OK and Back.
-    btn_64arg.xpos = bottomThirdBtnPosX;
+    // OpenNeoUA: fourth compact bottom action after OK / Back / Reset Defaults.
+    const int optionsActionButtonWidth = (menuWidth - 3 * buttonsSpace) / 4;
+    const int optionsActionButtonStep = optionsActionButtonWidth + buttonsSpace;
+    btn_64arg.xpos = 3 * optionsActionButtonStep;
     btn_64arg.ypos = bottomButtonsY;
-    btn_64arg.width = button1LineWidth;
+    btn_64arg.width = optionsActionButtonWidth;
     btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_MORE_OPTIONS);
     btn_64arg.caption2.clear();
     btn_64arg.downCode = 0;
@@ -7544,10 +7549,6 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     v229.field_4 = ((_GameShell->soundFlags & World::SF_INVERTLR) == 0) + 1;
 
     _GameShell->video_button->SetState(&v229);
-
-
-        // OpenNeoUA: remove deprecated online-help button from Options.
-    _GameShell->video_button->Remove(1167);
 
 _GameShell->video_button->HideScreen();
     return true;
