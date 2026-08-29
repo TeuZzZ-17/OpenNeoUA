@@ -1559,7 +1559,7 @@ static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, b
     if ( owner <= World::OWNER_0 || !iconName || !*iconName )
         return NULL;
 
-    // Prefer the requested visual state first inside the canonical Interface/Map/Buttons tree.
+    // Prefer the requested visual state first inside the canonical Interface/Map tree.
     // SVG is preferred for crisp scaling; PNG remains supported in the same tree.
     const bool variants[] = {active, false};
     const int variantCount = active ? 2 : 1;
@@ -1569,7 +1569,7 @@ static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, b
     {
         for ( const char *extension : extensions )
         {
-            std::string path = "Interface/Map/Buttons/owner_";
+            std::string path = "Interface/Map/owner_";
             path += std::to_string(owner);
             path += "/";
             path += iconName;
@@ -1598,7 +1598,7 @@ static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
     const int owner = yw_RoboMapMarkerOwner(yw);
     const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
 
-    // Faction artwork is asset-driven from the canonical Interface/Map/Buttons tree.
+    // Faction artwork is asset-driven from the canonical Interface/Map tree.
     // Missing custom assets are safe: the caller falls back to its vector glyph.
     NC_STACK_bitmap *bitmap = yw_LoadFactionMapIcon(owner, iconName, active, iconSize);
     if ( !bitmap || !bitmap->GetBitmap() )
