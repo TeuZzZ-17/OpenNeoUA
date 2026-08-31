@@ -289,6 +289,7 @@ public:
     // incomplete profile is disabled and never changes energy gameplay.
     static Common::Ini::Key GfxRegenFXVP;
     static Common::Ini::Key GfxRegenFX3DS;
+    static Common::Ini::Key GfxRegenFXBase;
     static Common::Ini::Key GfxRegenFXScale;
     static Common::Ini::Key GfxRegenFXSpinX;
     static Common::Ini::Key GfxRegenFXSpinY;
@@ -306,6 +307,7 @@ public:
 
     static Common::Ini::Key GfxDrainFXVP;
     static Common::Ini::Key GfxDrainFX3DS;
+    static Common::Ini::Key GfxDrainFXBase;
     static Common::Ini::Key GfxDrainFXScale;
     static Common::Ini::Key GfxDrainFXSpinX;
     static Common::Ini::Key GfxDrainFXSpinY;

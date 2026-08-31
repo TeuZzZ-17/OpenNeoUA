@@ -2842,9 +2842,10 @@ public:
         {}
     };
 
-    NC_STACK_base *ResolveVisualModel(int32_t modelId, const std::string &external3dsPath);
+    NC_STACK_base *ResolveVisualModel(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath = std::string());
     int32_t SpawnTransientVisualBase(NC_STACK_base *base, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut);
     int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
+    int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
@@ -2868,18 +2869,20 @@ public:
                                 uint32_t visualSeed);
     NC_STACK_base *GetSharedExternalMesh(const std::string &path);
     void ClearSharedExternalMeshes();
+    NC_STACK_base *GetSharedExternalBase(const std::string &path);
+    void ClearSharedExternalBases();
     bool SpawnProceduralEnergyFX(const vec3d &pos, bool plusSymbol,
                                  int32_t duration, float size, float thickness,
                                  float riseSpeed, int32_t fadeIn, int32_t fadeOut,
                                  const World::TVisualTint &tint);
     void RenderProceduralEnergyFX(baseRender_msg *arg);
     void ClearProceduralEnergyFX();
-    int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false, int32_t fadeIn = 0, int32_t fadeOut = 0, const std::string &external3dsPath = std::string());
+    int32_t SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale = 1.0, bool useOwnerTransform = false, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), bool playerFirstPersonOnly = false, const vec3d &localRotation = vec3d(0.0, 0.0, 0.0), bool hideInOwnerMissileCamera = false, const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), bool followOwnerVisualTransform = false, int32_t fadeIn = 0, int32_t fadeOut = 0, const std::string &external3dsPath = std::string(), const std::string &externalBasePath = std::string());
     int32_t SpawnAttachedStatusTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool trailOnly, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint(), const World::TVisualTint *trailTint = NULL);
     int32_t SpawnAttachedStatusTransientMesh(const std::string &path, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, bool rotateOffsetWithOwner, const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const World::TVisualTint &tint = World::TVisualTint());
     bool SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner, const World::TAbsoluteOrPercent &randomMaxOffset, vec3d *localPosition);
     bool UpdateRandomFXTimer(int intervalMin, int intervalMax, int32_t &nextTime);
-    int32_t SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint = World::TVisualTint(), int32_t lifeTime = 1000, float scale = 1.0, const vec3d &offset = vec3d(0.0, 0.0, 0.0), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0, const std::string &external3dsPath = std::string());
+    int32_t SpawnRandomizedTransientVP(int32_t modelId, const vec3d &ownerPos, float randomPos, const World::TVisualTint &tint = World::TVisualTint(), int32_t lifeTime = 1000, float scale = 1.0, const vec3d &offset = vec3d(0.0, 0.0, 0.0), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0, const std::string &external3dsPath = std::string(), const std::string &externalBasePath = std::string());
     bool HasTransientVP(int32_t id) const;
     void RemoveTransientVP(int32_t id, int32_t fadeOut = 0, int32_t particleFadeOut = 0);
     void UpdateDecorationFX(const World::TDecorationFXConfig &config, int32_t &nextTime, const vec3d &ownerPos, int32_t *persistentId = NULL);
@@ -3135,6 +3138,7 @@ public:
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<TMinigunTracer> _mgunTracers;
     std::map<std::string, NC_STACK_base *> _sharedExternalMeshes;
+    std::map<std::string, NC_STACK_base *> _sharedExternalBases;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;
     GFX::TMesh _proceduralEnergyFXQuadMesh;
     std::vector<TPlasmaCurrencyPopup> _plasmaCurrencyPopups;

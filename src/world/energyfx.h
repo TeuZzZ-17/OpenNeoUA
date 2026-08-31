@@ -11,12 +11,14 @@ namespace EnergyFX
 // Global visual profile used while a unit is in the same regen/drain state
 // that drives the corresponding automatic Status Icon.
 //
-// No public mode selector is needed: a valid 3DS overrides vp, vp is the
-// legacy fallback, and when neither is configured the procedural +/- path is used.
+// No public mode selector is needed: a valid 3DS overrides BASE, a valid BASE
+// overrides vp, vp is the legacy fallback, and when none is configured the
+// procedural +/- path is used.
 struct Config
 {
     int16_t vp = 0;
     std::string mesh3ds;
+    std::string basePath;
     float scale = 1.0f;
     vec3d spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint tint;
@@ -36,7 +38,7 @@ struct Config
 
     bool IsProcedural() const
     {
-        return vp <= 0 && mesh3ds.empty();
+        return vp <= 0 && mesh3ds.empty() && basePath.empty();
     }
 
     bool IsEnabled() const
@@ -48,7 +50,7 @@ struct Config
         if ( IsProcedural() )
             return size > 0.0f && thickness > 0.0f;
 
-        return vp > 0 || !mesh3ds.empty();
+        return vp > 0 || !mesh3ds.empty() || !basePath.empty();
     }
 };
 

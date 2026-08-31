@@ -709,7 +709,8 @@ bool NC_STACK_ypamissile::TryClusterSplit()
 
     _mislClusterDone = true;
 
-    _world->SpawnTransientVisual(cluster.vp, cluster.mesh3ds, _position, _rotation, 1000);
+    _world->SpawnTransientVisual(cluster.vp, cluster.mesh3ds, cluster.basePath,
+                                 _position, _rotation, 1000);
 
     cluster.snd.LoadSamples();
     TSampleData *clusterSample = cluster.snd.MainSample.Sample ? cluster.snd.MainSample.Sample->GetSampleData() : NULL;
@@ -781,6 +782,7 @@ bool NC_STACK_ypamissile::TryClusterSplit()
         child->StartWeaponTracer();
 
         _world->SpawnTransientVisual(childProto.vp_launch, childProto.visual_3ds.launch,
+                                     childProto.visual_base.launch,
                                      child->_position, child->_rotation, 1000,
                                      1.0, World::TVisualTint(), childProto.launch_scale);
 
@@ -1063,6 +1065,7 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     child->StartWeaponTracer();
 
     _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
+                                 wproto.visual_base.launch,
                                  child->_position, child->_rotation, 1000,
                                  1.0, World::TVisualTint(), wproto.launch_scale);
 

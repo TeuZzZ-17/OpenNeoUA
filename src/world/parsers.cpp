@@ -1241,22 +1241,23 @@ static bool ParseVPRotationParam(ScriptParser::Parser &parser,
 
 static bool ParseExternalVisualParam(const std::string &p1,
                                      const std::string &p2,
+                                     const std::string &prefix,
                                      World::TExternalVisualSet &visuals,
                                      bool allowLaunch)
 {
-    if ( !StriCmp(p1, "3ds_normal") )
+    if ( !StriCmp(p1, prefix + "_normal") )
         visuals.normal = p2;
-    else if ( !StriCmp(p1, "3ds_fire") )
+    else if ( !StriCmp(p1, prefix + "_fire") )
         visuals.fire = p2;
-    else if ( !StriCmp(p1, "3ds_megadeth") )
+    else if ( !StriCmp(p1, prefix + "_megadeth") )
         visuals.megadeth = p2;
-    else if ( !StriCmp(p1, "3ds_wait") )
+    else if ( !StriCmp(p1, prefix + "_wait") )
         visuals.wait = p2;
-    else if ( !StriCmp(p1, "3ds_dead") )
+    else if ( !StriCmp(p1, prefix + "_dead") )
         visuals.dead = p2;
-    else if ( !StriCmp(p1, "3ds_genesis") )
+    else if ( !StriCmp(p1, prefix + "_genesis") )
         visuals.genesis = p2;
-    else if ( allowLaunch && !StriCmp(p1, "3ds_launch") )
+    else if ( allowLaunch && !StriCmp(p1, prefix + "_launch") )
         visuals.launch = p2;
     else
         return false;
@@ -1304,6 +1305,12 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
     if ( !StriCmp(p1, "decoration_fx_3ds") )
     {
         config.mesh3ds = p2;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "decoration_fx_base") )
+    {
+        config.basePath = p2;
         return true;
     }
 
@@ -2110,7 +2117,9 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "3ds_model") )
         {
-            if ( !visuals.empty() && visuals.back().vp > 0 && visuals.back().mesh3ds.empty() )
+            if ( !visuals.empty() &&
+                 (visuals.back().vp > 0 || !visuals.back().basePath.empty()) &&
+                 visuals.back().mesh3ds.empty() )
                 visuals.back().mesh3ds = p2;
             else
             {
@@ -2119,11 +2128,23 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 visuals.push_back(visual);
             }
         }
+        else if ( !StriCmp(p1, "base_model") )
+        {
+            if ( !visuals.empty() && visuals.back().vp > 0 &&
+                 visuals.back().mesh3ds.empty() && visuals.back().basePath.empty() )
+                visuals.back().basePath = p2;
+            else
+            {
+                World::TChainFXVisual visual;
+                visual.basePath = p2;
+                visuals.push_back(visual);
+            }
+        }
         else if ( !StriCmp(p1, "visual_tint") )
         {
             if ( visuals.empty() )
             {
-                ypa_log_out("WARNING: begin_chain_fx visual_tint without preceding vp_model/3ds_model ignored\n");
+                ypa_log_out("WARNING: begin_chain_fx visual_tint without preceding vp_model/base_model/3ds_model ignored\n");
                 continue;
             }
 
@@ -2658,7 +2679,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vp_genesis = parser.stol(p2, NULL, 0);
     }
-    else if ( ParseExternalVisualParam(p1, p2, _vhcl->visual_3ds, false) )
+    else if ( ParseExternalVisualParam(p1, p2, "3ds", _vhcl->visual_3ds, false) )
+    {
+    }
+    else if ( ParseExternalVisualParam(p1, p2, "base", _vhcl->visual_base, false) )
     {
     }
     else if ( !StriCmp(p1, "damaged_fx_vp") )
@@ -2921,6 +2945,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "proximity_defense_3ds_launch") )
     {
         _vhcl->proximity_defense_3ds_launch = p2;
+    }
+    else if ( !StriCmp(p1, "proximity_defense_base_launch") )
+    {
+        _vhcl->proximity_defense_base_launch = p2;
     }
     else if ( !StriCmp(p1, "proximity_defense_fire_mode") )
     {
@@ -3197,6 +3225,14 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "mgun_3ds_megadeth") )
     {
         _vhcl->mgun_3ds_megadeth = p2;
+    }
+    else if ( !StriCmp(p1, "mgun_base_dead") )
+    {
+        _vhcl->mgun_base_dead = p2;
+    }
+    else if ( !StriCmp(p1, "mgun_base_megadeth") )
+    {
+        _vhcl->mgun_base_megadeth = p2;
     }
     else if ( !StriCmp(p1, "mgun_power") )
     {
@@ -3866,6 +3902,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->invisible_reveal_3ds = p2;
     }
+    else if ( !StriCmp(p1, "invisible_reveal_base") )
+    {
+        _vhcl->invisible_reveal_base = p2;
+    }
     else if ( !StriCmp(p1, "unhide_radar") )
     {
         _vhcl->unhideRadar = parser.stol(p2, NULL, 0);
@@ -3937,6 +3977,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_angle_set = false;
         _vhcl->mgun_3ds_dead.clear();
         _vhcl->mgun_3ds_megadeth.clear();
+        _vhcl->mgun_base_dead.clear();
+        _vhcl->mgun_base_megadeth.clear();
         _vhcl->weapon_spread_x = 0.0;
         _vhcl->weapon_spread_y = 0.0;
         _vhcl->weapon_arc_x = 0.0;
@@ -3952,6 +3994,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->vp_dead = 4;
         _vhcl->vp_genesis = 5;
         _vhcl->visual_3ds = TExternalVisualSet();
+        _vhcl->visual_base = TExternalVisualSet();
         _vhcl->visual_scale = vec3d(1.0, 1.0, 1.0);
         _vhcl->visual_rotation = vec3d(0.0, 0.0, 0.0);
         _vhcl->visual_spin = vec3d(0.0, 0.0, 0.0);
@@ -3989,6 +4032,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->proximity_defense_shots = 12;
         _vhcl->proximity_defense_vp_launch = -1;
         _vhcl->proximity_defense_3ds_launch.clear();
+        _vhcl->proximity_defense_base_launch.clear();
         _vhcl->proximity_defense_fire_mode = 0;
         _vhcl->proximity_defense_sequence_delay = 100;
         _vhcl->proximity_defense_mode = 0;
@@ -4193,6 +4237,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_genesis = 5;
         _wpn->vp_launch = 0;
         _wpn->visual_3ds = TExternalVisualSet();
+        _wpn->visual_base = TExternalVisualSet();
         _wpn->launch_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->visual_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->visual_rotation = vec3d(0.0, 0.0, 0.0);
@@ -4539,6 +4584,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "cluster_3ds") )
     {
         _wpn->cluster.mesh3ds = p2;
+    }
+    else if ( !StriCmp(p1, "cluster_base") )
+    {
+        _wpn->cluster.basePath = p2;
     }
     else if ( !StriCmp(p1, "snd_cluster_sample") )
     {
@@ -4947,7 +4996,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->vp_genesis = parser.stol(p2, NULL, 0);
     }
-    else if ( ParseExternalVisualParam(p1, p2, _wpn->visual_3ds, true) )
+    else if ( ParseExternalVisualParam(p1, p2, "3ds", _wpn->visual_3ds, true) )
+    {
+    }
+    else if ( ParseExternalVisualParam(p1, p2, "base", _wpn->visual_base, true) )
     {
     }
     else if ( !StriCmp(p1, "vp_launch") )
@@ -5919,6 +5971,8 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->wave_vp = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "wave_3ds") )
         _profile->wave_3ds = p2;
+    else if ( !StriCmp(p1, "wave_base") )
+        _profile->wave_base = p2;
     else if ( !StriCmp(p1, "wave_scale_x") )
         _profile->wave_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_scale_y") )
