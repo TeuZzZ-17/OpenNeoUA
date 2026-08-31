@@ -1021,6 +1021,11 @@ struct TWeapProto
     float recoil = 0.0; // OpenNeoUA custom: shooter-side knockback multiplier, 0..10
 //    int field_87C = 0;
     int life_time = 0;
+    // OpenNeoUA: life_time accepts either a fixed value or an inclusive
+    // min_max range. life_time remains the stable scalar/lower endpoint for
+    // legacy consumers; projectiles resolve the range when they are created.
+    int life_time_min = 0;
+    int life_time_max = 0;
     int life_time_nt = 0;
     int drive_time = 0;
     int delay_time = 0;
@@ -1136,6 +1141,7 @@ struct TWeapProto
     IDVList initParams;
     std::vector<TChainFXConfig> chain_fx;
 
+    int RollLifeTime() const;
     ~TWeapProto();
 };
 
