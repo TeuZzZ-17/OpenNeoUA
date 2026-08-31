@@ -896,6 +896,11 @@ struct TWeapProto
         return (_weaponFlags & WEAPON_FLAG_ARC_GRENADE) != 0;
     }
 
+    bool HasArcGrenadeHoming() const
+    {
+        return IsArcGrenade() && grenade_homing_delay > 0;
+    }
+
     bool IsHomingBomb() const
     {
         return _weaponFlags == WEAPON_FLAGS_HOMING_BOMB;
@@ -1026,7 +1031,8 @@ struct TWeapProto
     int salve_shots = 0;
     int salve_delay = 0;
     // OpenNeoUA: generic multi-target count for compatible weapon models.
-    // Currently consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
+    // Consumed by missile, homing_bomb and delayed-homing Arc Grenade;
+    // 0/1 keeps single-target behaviour.
     int multi_target = 0;
     // OpenNeoUA custom: shared continuous beam parameters for model = laser.
     // vertical_laser_enable selects the downward-fire mode. "energy" is static base damage per tick; the class
@@ -1098,6 +1104,10 @@ struct TWeapProto
     // zero or invalid gravity uses the engine-standard 9.80665 fallback.
     float grenade_arc_angle = 0.0f;
     float grenade_arc_gravity = 0.0f;
+    // Optional milliseconds spent in the ballistic phase before this Arc
+    // Grenade enters the existing targeted-missile path. Non-positive values
+    // keep the projectile ballistic for its complete lifetime.
+    int grenade_homing_delay = 0;
     // OpenNeoUA custom: dedicated artillery shell barrage weapon ("model = artillery_shell").
     // All defaults are vanilla-safe: with artillery_shell_barrage_shots <= 0 / no max range,
     // an artillery shell weapon simply never fires.

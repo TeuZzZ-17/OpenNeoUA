@@ -4206,6 +4206,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->start_speed = 70.0;
         _wpn->grenade_arc_angle = 0.0f;
         _wpn->grenade_arc_gravity = 0.0f;
+        _wpn->grenade_homing_delay = 0;
         _wpn->life_time = 20000;
         _wpn->life_time_nt = 0;
         _wpn->drive_time = 7000;
@@ -4541,6 +4542,12 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         // model = arc_grenade only: downward acceleration. Zero/absent/invalid
         // selects the engine-standard gravity in the runtime.
         _wpn->grenade_arc_gravity = std::min(ParseNonNegativeIniFloatOrZero(p2), 1000.0f);
+    }
+    else if ( !StriCmp(p1, "grenade_homing_delay") )
+    {
+        // model = arc_grenade only: strict positive milliseconds. Zero,
+        // negative, malformed and overflowing values leave homing disabled.
+        _wpn->grenade_homing_delay = ParsePositiveIntOrZero(p2);
     }
     else if ( !StriCmp(p1, "cluster_enable") )
     {

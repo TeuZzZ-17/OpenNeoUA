@@ -4349,6 +4349,8 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetDelay(wproto.delay_time);
     wobj->SetDriveTime(wproto.drive_time);
     wobj->SetMissileType(missileType);
+    wobj->ConfigureArcGrenadeHoming(
+        wproto.IsArcGrenade() ? wproto.grenade_homing_delay : 0);
     wobj->SetPowerHeli(wproto.energy_heli * 1000.0);
     wobj->SetPowerTank(wproto.energy_tank * 1000.0);
     wobj->SetPowerFlyer(wproto.energy_flyer * 1000.0);

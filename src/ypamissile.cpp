@@ -326,6 +326,8 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _weaponTracerStarted = false;
     _weaponTracerVisualSeed = 0;
     _weaponTracerPoints.clear();
+    _arcGrenadeHomingRemaining = 0;
+    _arcGrenadeHomingActive = false;
 
     for( auto& it : stak )
     {
@@ -832,7 +834,9 @@ bool NC_STACK_ypamissile::TryClusterSplit()
             clusterSoundPlayed = true;
         }
 
-        if ( child->GetMissileType() == MISL_TARGETED && childTargetType != BACT_TGT_TYPE_DRCT )
+        if ( (child->GetMissileType() == MISL_TARGETED ||
+              childProto.HasArcGrenadeHoming()) &&
+             childTargetType != BACT_TGT_TYPE_DRCT )
         {
             setTarget_msg arg67;
             arg67.tgt = childTarget;
@@ -1079,7 +1083,8 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     child->_mislChainSpawned = false;
     child->_mislChainAllowFriendly = _mislChainAllowFriendly;
 
-    if ( child->GetMissileType() == MISL_TARGETED || wproto.IsHomingBomb() )
+    if ( child->GetMissileType() == MISL_TARGETED ||
+         wproto.IsHomingBomb() || wproto.HasArcGrenadeHoming() )
     {
         setTarget_msg arg67;
         arg67.tgt.pbact = nextTarget;
@@ -2321,6 +2326,54 @@ void NC_STACK_ypamissile::SetupArcGrenadeLaunch(float angleDegrees,
     SetupArcGrenadeVelocity(launchDir * speed, gravity);
 }
 
+void NC_STACK_ypamissile::ConfigureArcGrenadeHoming(int delay)
+{
+    _arcGrenadeHomingRemaining = 0;
+    _arcGrenadeHomingActive = false;
+
+    // A delay at or beyond this projectile's effective lifetime can never
+    // activate. Keeping it disabled also avoids a one-frame transition at the
+    // exact death boundary.
+    if ( _mislType != MISL_ARC_GRENADE || delay <= 0 ||
+         _mislLifeTime <= 0 || delay >= _mislLifeTime )
+    {
+        return;
+    }
+
+    _arcGrenadeHomingRemaining = delay;
+}
+
+bool NC_STACK_ypamissile::ActivateArcGrenadeHomingIfDue(int frameTime)
+{
+    if ( _arcGrenadeHomingActive || _mislType != MISL_ARC_GRENADE ||
+         _arcGrenadeHomingRemaining <= 0 )
+    {
+        return false;
+    }
+
+    if ( frameTime <= 0 )
+        return false;
+
+    if ( frameTime < _arcGrenadeHomingRemaining )
+    {
+        _arcGrenadeHomingRemaining -= frameTime;
+        return false;
+    }
+
+    _arcGrenadeHomingRemaining = 0;
+    _arcGrenadeHomingActive = true;
+    _mislType = MISL_TARGETED;
+
+    vec3d lastTargetDirection = _target_dir;
+    if ( lastTargetDirection.normalise() <= 0.001f )
+        _target_dir = _fly_dir;
+
+    // _fly_dir/_fly_dir_length already describe the instantaneous ballistic
+    // velocity. They are deliberately preserved: the targeted-missile path
+    // starts from that exact direction and speed with no position or speed reset.
+    return true;
+}
+
 void NC_STACK_ypamissile::UpdateArcGrenadeBallistic(float dtime)
 {
     if ( dtime <= 0.0f )
@@ -2512,6 +2565,8 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
         {
             move_msg arg74;
 
+            ActivateArcGrenadeHomingIfDue(arg->frameTime);
+
             switch ( _mislType )
             {
             case MISL_BOMB:
@@ -2542,8 +2597,24 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             case MISL_TARGETED:
                 arg74.field_0 = v38;
                 arg74.flag = 0;
-                arg74.vec = CalcForceVector();
+                if ( _arcGrenadeHomingActive )
+                {
+                    // Reuse the established maxrot steering implementation,
+                    // then feed the resolved direction through normal missile
+                    // movement. Arc Grenade keeps its existing force contract:
+                    // no thrust is added, so maxrot remains the only target-turn
+                    // control and the instantaneous ballistic speed is preserved.
+                    if ( std::isfinite(_maxrot) && _maxrot > 0.0f )
+                        SteerHomingBombDirection(v38);
+                    arg74.flag = 1;
+                }
+                else
+                {
+                    arg74.vec = CalcForceVector();
+                }
                 Move(&arg74);
+                if ( _arcGrenadeHomingActive )
+                    _arcGrenadeVelocity = _fly_dir * _fly_dir_length;
                 break;
 
             case MISL_GRENADE:
@@ -2670,14 +2741,20 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             }
             else
             {
-                _mislDriveTime -= arg->frameTime;
-
-                if ( _mislDriveTime < 0 )
+                // A purely ballistic Arc Grenade has no powered drive phase.
+                // Once delayed homing activates it is MISL_TARGETED and follows
+                // the normal drive-time/fallout policy from that point onward.
+                if ( _mislType != MISL_ARC_GRENADE )
                 {
-                    _mislType = MISL_BOMB;
+                    _mislDriveTime -= arg->frameTime;
 
-                    _airconst = 10.0;
-                    _airconst_static = 10.0;
+                    if ( _mislDriveTime < 0 )
+                    {
+                        _mislType = MISL_BOMB;
+
+                        _airconst = 10.0;
+                        _airconst_static = 10.0;
+                    }
                 }
 
                 _mislLifeTime -= arg->frameTime;
@@ -3107,6 +3184,8 @@ void NC_STACK_ypamissile::Renew()
     // OpenNeoUA custom: clear Arc Grenade ballistic state on recycle.
     _arcGrenadeVelocity = vec3d(0.0, 0.0, 0.0);
     _arcGrenadeGravity = 9.80665f;
+    _arcGrenadeHomingRemaining = 0;
+    _arcGrenadeHomingActive = false;
 
     // OpenNeoUA custom: clear artillery shell state on recycle.
     _isArtilleryShellProjectile = false;
@@ -3481,6 +3560,12 @@ void NC_STACK_ypamissile::SetMissileType(int tp)
 void NC_STACK_ypamissile::SetLifeTime(int time)
 {
     _mislLifeTime = time;
+
+    if ( !_arcGrenadeHomingActive && _arcGrenadeHomingRemaining > 0 &&
+         (time <= 0 || _arcGrenadeHomingRemaining >= time) )
+    {
+        _arcGrenadeHomingRemaining = 0;
+    }
 }
 
 void NC_STACK_ypamissile::SetDelay(int delay)

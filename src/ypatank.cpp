@@ -1977,6 +1977,19 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
         v43 = 2;
     }
 
+    if ( v22 && v22->IsArcGrenade() )
+    {
+        const vec3d launchPos = arg->has_launch_pos
+                                    ? arg->launch_pos
+                                    : _position + _rotation.Transpose().Transform(_fire_pos);
+        vec3d launchDirection;
+        if ( !ypabact_TrySolveArcGrenadeDirection(
+                 launchPos, arg->pos, *v22, &launchDirection) )
+        {
+            return 0;
+        }
+    }
+
     if ( v22 && v22->IsVerticalLaser() )
     {
         vec3d fireOrigin = _position + _rotation.Transpose().Transform(_fire_pos);
@@ -2014,7 +2027,8 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
         {
             if ( v37 < World::CVSectorLength && v38 > 0.93 )
             {
-                if ( v34.y > -0.85 && v34.y < 0.2 )
+                if ( (v22 && v22->IsArcGrenade()) ||
+                     (v34.y > -0.85 && v34.y < 0.2) )
                     return 1;
             }
         }
@@ -2029,7 +2043,8 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
         {
             if ( v37 < World::CVSectorLength && v38 > 0.91 )
             {
-                if ( v34.y > -0.4 && v34.y < 0.3 )
+                if ( (v22 && v22->IsArcGrenade()) ||
+                     (v34.y > -0.4 && v34.y < 0.3) )
                     return 1;
             }
         }
