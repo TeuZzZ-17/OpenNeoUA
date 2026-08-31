@@ -40,6 +40,96 @@ static bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponI
 static bool ypabact_HasActiveAILaserSectorFocus(const NC_STACK_ypabact *bact);
 static float ypabact_LaserClampVisualSpacing(float spacing);
 
+// Missile movement converts the authored velocity to world distance with this
+// historical scale. Solve in authored-speed space so the launch vector reaches
+// the same world-space target used by the Arc Grenade runtime.
+static constexpr double YPABACT_MISSILE_DISTANCE_SCALE = 6.0;
+
+static double ypabact_GetArcGrenadeGravity(const World::TWeapProto &wproto)
+{
+    return std::isfinite(wproto.grenade_arc_gravity) &&
+           wproto.grenade_arc_gravity > 0.0f
+               ? std::min((double)wproto.grenade_arc_gravity, 1000.0)
+               : 9.80665;
+}
+
+bool ypabact_TrySolveArcGrenadeDirection(
+    const vec3d &launchPos, const vec3d &targetPos,
+    const World::TWeapProto &wproto, vec3d *outDirection)
+{
+    if ( !outDirection ||
+         !std::isfinite(launchPos.x) || !std::isfinite(launchPos.y) ||
+         !std::isfinite(launchPos.z) || !std::isfinite(targetPos.x) ||
+         !std::isfinite(targetPos.y) || !std::isfinite(targetPos.z) ||
+         !std::isfinite(wproto.start_speed) || wproto.start_speed <= 0.0f )
+    {
+        return false;
+    }
+
+    const double speed = (double)wproto.start_speed;
+    const double gravity = ypabact_GetArcGrenadeGravity(wproto);
+    const double deltaX = (double)targetPos.x - launchPos.x;
+    const double deltaZ = (double)targetPos.z - launchPos.z;
+    const double horizontalWorld = std::sqrt(deltaX * deltaX + deltaZ * deltaZ);
+    const double verticalUp = ((double)launchPos.y - targetPos.y) /
+                              YPABACT_MISSILE_DISTANCE_SCALE;
+
+    if ( horizontalWorld <= 0.001 )
+    {
+        if ( std::fabs(verticalUp) <= 0.001 )
+            return false;
+
+        const double maxUp = speed * speed / (2.0 * gravity);
+        if ( verticalUp > maxUp )
+            return false;
+
+        *outDirection = vec3d::OY(-1.0f);
+        return true;
+    }
+
+    const double horizontal = horizontalWorld /
+                              YPABACT_MISSILE_DISTANCE_SCALE;
+    const double speedSquared = speed * speed;
+    const double discriminant =
+        speedSquared * speedSquared -
+        gravity * (gravity * horizontal * horizontal +
+                   2.0 * verticalUp * speedSquared);
+    const double tolerance =
+        std::max(1.0, speedSquared * speedSquared) * 1.0e-10;
+
+    if ( discriminant < -tolerance )
+        return false;
+
+    const double root = std::sqrt(std::max(0.0, discriminant));
+    const double denominator = gravity * horizontal;
+    if ( denominator <= 0.0 || !std::isfinite(denominator) )
+        return false;
+
+    const double lowAngle = std::atan((speedSquared - root) / denominator);
+    const double highAngle = std::atan((speedSquared + root) / denominator);
+    const double preferredDegrees =
+        std::isfinite(wproto.grenade_arc_angle) &&
+        wproto.grenade_arc_angle > 0.0f
+            ? std::min((double)wproto.grenade_arc_angle, 89.0)
+            : 0.0;
+    const double preferred = preferredDegrees * C_PI_180;
+    const double launchAngle =
+        std::fabs(highAngle - preferred) < std::fabs(lowAngle - preferred)
+            ? highAngle : lowAngle;
+
+    const double horizontalCos = std::cos(launchAngle);
+    const double horizontalSin = std::sin(launchAngle);
+    vec3d direction((float)(deltaX / horizontalWorld * horizontalCos),
+                    (float)-horizontalSin,
+                    (float)(deltaZ / horizontalWorld * horizontalCos));
+
+    if ( direction.normalise() <= 0.001f )
+        return false;
+
+    *outDirection = direction;
+    return true;
+}
+
 static vec3d ypabact_LaserViewerVisualStart(
     const NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
     const vec3d &beamStart, const vec3d &beamEnd)
@@ -6850,6 +6940,14 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             arg101.weapon = ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(
                 this, arg->target.pbact, &aiWeaponSourceSlot);
 
+            vec3d aiStartPoint;
+            aiStartPoint.x = (arg->g_time & 1) ? _fire_pos.x : -_fire_pos.x;
+            aiStartPoint.y = _fire_pos.y;
+            aiStartPoint.z = _fire_pos.z;
+            arg101.launch_pos =
+                _position + _rotation.Transpose().Transform(aiStartPoint);
+            arg101.has_launch_pos = true;
+
             const bool keepContinuousLaser =
                 ypabact_ShouldPersistAILaserFire(this, arg101.weapon, &arg101, arg->target.pbact);
 
@@ -6872,14 +6970,8 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
                 arg79.weapon_source_slot = aiWeaponSourceSlot;
                 arg79.g_time = _clock;
 
-                if ( arg->g_time & 1 )
-                    arg79.start_point.x = _fire_pos.x;
-                else
-                    arg79.start_point.x = -_fire_pos.x;
-
-                arg79.start_point.y = _fire_pos.y;
-                arg79.start_point.z = _fire_pos.z;
-                arg79.flags = 0;
+                arg79.start_point = aiStartPoint;
+                arg79.flags = BACT_ARG79_FLAG_AI_BALLISTIC_AIM;
 
                 LaunchMissile(&arg79);
             }
@@ -7266,6 +7358,14 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
             arg101.weapon = ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(
                 this, NULL, &aiWeaponSourceSlot);
 
+            vec3d aiStartPoint;
+            aiStartPoint.x = (arg->g_time & 1) ? _fire_pos.x : -_fire_pos.x;
+            aiStartPoint.y = _fire_pos.y;
+            aiStartPoint.z = _fire_pos.z;
+            arg101.launch_pos =
+                _position + _rotation.Transpose().Transform(aiStartPoint);
+            arg101.has_launch_pos = true;
+
             const bool keepContinuousLaser =
                 ypabact_ShouldPersistAILaserFire(this, arg101.weapon, &arg101, NULL);
 
@@ -7293,14 +7393,8 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                 arg79.weapon_source_slot = aiWeaponSourceSlot;
                 arg79.g_time = _clock;
 
-                if ( arg->g_time & 1 )
-                    arg79.start_point.x = _fire_pos.x;
-                else
-                    arg79.start_point.x = -_fire_pos.x;
-
-                arg79.start_point.y = _fire_pos.y;
-                arg79.start_point.z = _fire_pos.z;
-                arg79.flags = 0;
+                arg79.start_point = aiStartPoint;
+                arg79.flags = BACT_ARG79_FLAG_AI_BALLISTIC_AIM;
 
                 LaunchMissile(&arg79);
             }
@@ -8880,9 +8974,16 @@ static bool ypabact_IsHomingBombWeapon(const World::TWeapProto &wproto)
     return wproto.IsHomingBomb();
 }
 
+static bool ypabact_UsesMissileTargeting(const World::TWeapProto &wproto)
+{
+    return wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE ||
+           wproto.HasArcGrenadeHoming();
+}
+
 static bool ypabact_IsCompatibleMultiTargetWeapon(const World::TWeapProto &wproto)
 {
-    return wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE || ypabact_IsHomingBombWeapon(wproto);
+    return ypabact_UsesMissileTargeting(wproto) ||
+           ypabact_IsHomingBombWeapon(wproto);
 }
 
 static int ypabact_GetMultiTargetLimit(const World::TWeapProto &wproto, int weaponCount)
@@ -9161,7 +9262,7 @@ static void ypabact_UpdateHUDWeaponMultiLockTargets(NC_STACK_ypabact *launcher, 
     }
 
     std::vector<NC_STACK_ypabact *> targets;
-    if ( wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
+    if ( ypabact_UsesMissileTargeting(wproto) )
         targets = ypabact_CollectMissileMultiTargets(launcher, arg, wproto, maxTargets);
 
     // Homing bombs intentionally keep automatic targeting with no multi-lock HUD.
@@ -9174,9 +9275,9 @@ constexpr int YPA_HOMING_TARGET_CYCLE_MAX = 64;
 static bool ypabact_IsHomingCycleTargetLockable(NC_STACK_ypabact *launcher, NC_STACK_ypabact *target,
                                                  const World::TWeapProto &wproto, const vec3d &requestedAimDir)
 {
-    // Manual Cycle Target is deliberately missile-only. Homing bombs select
-    // their targets automatically at launch and never enter this path.
-    if ( !launcher || !target || wproto._weaponFlags != YPA_WEAPON_FLAGS_MISSILE )
+    // Manual Cycle Target follows the shared missile lock path. Homing bombs
+    // select automatically and purely ballistic Arc Grenades stay excluded.
+    if ( !launcher || !target || !ypabact_UsesMissileTargeting(wproto) )
         return false;
 
     vec3d aimDir = requestedAimDir;
@@ -9223,7 +9324,7 @@ static NC_STACK_ypabact *ypabact_SelectNextHomingCycleTarget(NC_STACK_ypabact *l
                                                               const World::TWeapProto &wproto,
                                                               NC_STACK_ypabact *currentTarget)
 {
-    if ( !launcher || !targetingArg || wproto._weaponFlags != YPA_WEAPON_FLAGS_MISSILE )
+    if ( !launcher || !targetingArg || !ypabact_UsesMissileTargeting(wproto) )
         return NULL;
 
     bact_arg79 collectArg = {};
@@ -9413,7 +9514,7 @@ bool NC_STACK_ypabact::RequestHomingTargetCycle()
         return false;
 
     const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
-    if ( wproto._weaponFlags != YPA_WEAPON_FLAGS_MISSILE )
+    if ( !ypabact_UsesMissileTargeting(wproto) )
         return false;
 
     _userHomingTargetCycleRequested = true;
@@ -13304,8 +13405,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     }
 
     bool homingBomb = ypabact_IsHomingBombWeapon(wproto);
+    bool arcGrenadeHoming = wproto.HasArcGrenadeHoming();
+    bool missileTargeting = ypabact_UsesMissileTargeting(wproto);
     int maxTargets = ypabact_GetMultiTargetLimit(wproto, v13);
-    bool missileMultiTarget = maxTargets > 1 && wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE;
+    bool missileMultiTarget = maxTargets > 1 && missileTargeting;
     bool bombMultiTarget = maxTargets > 1 && homingBomb;
     std::vector<NC_STACK_ypabact *> weaponTargets;
 
@@ -13319,8 +13422,8 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             weaponTargets = ypabact_CollectHomingBombTargets(this, arg, wproto, 1);
     }
 
-    // Multi-lock HUD and manual target cycling are missile-only. Homing bombs
-    // still use weaponTargets below for automatic single/multi-target fan-out.
+    // Multi-lock HUD and manual target cycling use the shared missile targeting
+    // path. Homing bombs remain automatic and do not enter that HUD path.
     ypabact_StoreHUDMissileMultiLockTargets(
         this, missileMultiTarget ? weaponTargets : std::vector<NC_STACK_ypabact *>());
 
@@ -13348,6 +13451,60 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         arg147.vehicle_id = selectedWeapon;
         arg147.pos = _position + _rotation.Transpose().Transform( vec3d(v37, arg->start_point.y, arg->start_point.z) );
 
+        if ( multiTarget )
+        {
+            missileArg.tgType = BACT_TGT_TYPE_UNIT;
+            missileArg.target.pbact = multiTarget;
+            missileArg.tgt_pos = multiTarget->_position;
+
+            vec3d targetDir = multiTarget->_position - arg147.pos;
+            float targetDirLen = targetDir.length();
+            if ( targetDirLen > 0.001 )
+                missileArg.direction = targetDir / targetDirLen;
+        }
+        else if ( missileMultiTarget && missileArg.tgType == BACT_TGT_TYPE_UNIT &&
+                  !ypabact_IsValidMissileMultiTarget(this, missileArg.target.pbact) )
+        {
+            missileArg.tgType = BACT_TGT_TYPE_DRCT;
+        }
+
+        if ( v13 == 1 && missileArg.tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive() )
+            missileArg.direction = ypabact_GetCockpitAimDirection(this, arg147.pos, missileArg.direction, _rotation.AxisZ(), 1400.0);
+
+        vec3d aiArcDirection;
+        const bool useAiArcDirection =
+            wproto.IsArcGrenade() &&
+            (arg->flags & BACT_ARG79_FLAG_AI_BALLISTIC_AIM);
+        if ( useAiArcDirection )
+        {
+            vec3d ballisticTarget;
+            bool hasBallisticTarget = false;
+
+            if ( missileArg.tgType == BACT_TGT_TYPE_UNIT && missileArg.target.pbact )
+            {
+                ballisticTarget = missileArg.target.pbact->_position;
+                hasBallisticTarget = true;
+            }
+            else if ( missileArg.tgType == BACT_TGT_TYPE_CELL )
+            {
+                ballisticTarget = missileArg.tgt_pos;
+                hasBallisticTarget = true;
+            }
+
+            if ( !hasBallisticTarget ||
+                 !ypabact_TrySolveArcGrenadeDirection(
+                     arg147.pos, ballisticTarget, wproto, &aiArcDirection) )
+            {
+                // Do not manufacture speed/range for an unreachable target.
+                // A later projectile in a multi-target salvo may be outside the
+                // ballistic envelope even though the primary AI target passed
+                // CheckFireAI(), so end the salvo without spawning that shot.
+                if ( i == 0 )
+                    return 0;
+                break;
+            }
+        }
+
         wobj = _world->ypaworld_func147(&arg147);
 
         if ( !wobj )
@@ -13363,25 +13520,6 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         wobj->SetStartHeight(arg147.pos.y);
 
         wobj->_owner = _owner;
-
-        if ( multiTarget )
-        {
-            missileArg.tgType = BACT_TGT_TYPE_UNIT;
-            missileArg.target.pbact = multiTarget;
-            missileArg.tgt_pos = multiTarget->_position;
-
-            vec3d targetDir = multiTarget->_position - arg147.pos;
-            float targetDirLen = targetDir.length();
-            if ( targetDirLen > 0.001 )
-                missileArg.direction = targetDir / targetDirLen;
-        }
-        else if ( missileMultiTarget && missileArg.tgType == BACT_TGT_TYPE_UNIT && !ypabact_IsValidMissileMultiTarget(this, missileArg.target.pbact) )
-        {
-            missileArg.tgType = BACT_TGT_TYPE_DRCT;
-        }
-
-        if ( v13 == 1 && missileArg.tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive() )
-            missileArg.direction = ypabact_GetCockpitAimDirection(this, arg147.pos, missileArg.direction, _rotation.AxisZ(), 1400.0);
 
         // Separate gun units use this path only when the new percentage is
         // explicitly configured; otherwise preserve their legacy no-cost path.
@@ -13433,12 +13571,22 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
         if ( wproto.IsArcGrenade() )
         {
-            // Arc Grenade owns its complete ballistic launch. start_speed is the
-            // muzzle speed, grenade_arc_angle is applied once, and gravity is
-            // consumed by the missile update every frame.
-            wobj->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
-                                        wproto.grenade_arc_gravity,
-                                        wproto.start_speed);
+            if ( useAiArcDirection )
+            {
+                // AI replaces only the initial vector. The projectile then uses
+                // the exact same Arc Grenade runtime as a player-fired shot.
+                wobj->SetupArcGrenadeVelocity(
+                    aiArcDirection * wproto.start_speed,
+                    wproto.grenade_arc_gravity);
+            }
+            else
+            {
+                // Player/manual fire keeps the authored preference as an exact
+                // launch elevation and receives no ballistic auto-aim.
+                wobj->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
+                                            wproto.grenade_arc_gravity,
+                                            wproto.start_speed);
+            }
         }
         else
         {
@@ -13485,7 +13633,8 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         _missiles_list.push_back(wobj);
 
         int v42 = wobj->GetMissileType();
-        if ( v42 == NC_STACK_ypamissile::MISL_TARGETED || homingBomb )
+        if ( v42 == NC_STACK_ypamissile::MISL_TARGETED ||
+             homingBomb || arcGrenadeHoming )
         {
             setTarget_msg arg67;
 
@@ -16531,6 +16680,22 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
         v36 = 2;
     }
 
+    if ( v8 && v8->IsArcGrenade() )
+    {
+        const vec3d launchPos = arg->has_launch_pos
+                                    ? arg->launch_pos
+                                    : _position + _rotation.Transpose().Transform(_fire_pos);
+        vec3d launchDirection;
+        if ( !ypabact_TrySolveArcGrenadeDirection(
+                 launchPos, arg->pos, *v8, &launchDirection) )
+        {
+            // No physical trajectory exists at the authored speed/gravity.
+            // Returning through the normal fire-control gate lets the existing
+            // AI movement and weapon-selection logic keep repositioning.
+            return 0;
+        }
+    }
+
     if ( v8 && v8->IsVerticalLaser() )
     {
         vec3d fireOrigin = _position + _rotation.Transpose().Transform(_fire_pos);
@@ -17697,6 +17862,9 @@ void NC_STACK_ypabact::sub_4843BC(NC_STACK_ypabact *bact2, int a3)
     const bool hasHudWeapon = ypabact_IsValidWeaponId(this, hudWeaponId);
     const int hudWeaponFlags = hasHudWeapon
         ? _world->GetWeaponsProtos().at(hudWeaponId)._weaponFlags : _weapon_flags;
+    const bool hudUsesMissileTargeting =
+        hasHudWeapon &&
+        ypabact_UsesMissileTargeting(_world->GetWeaponsProtos().at(hudWeaponId));
 
     if ( !hasHudWeapon || a3 )
     {
@@ -17704,7 +17872,7 @@ void NC_STACK_ypabact::sub_4843BC(NC_STACK_ypabact *bact2, int a3)
     }
     else
     {
-        if ( hudWeaponFlags & 4 )
+        if ( (hudWeaponFlags & 4) || hudUsesMissileTargeting )
         {
             hudi.field_4 = 4;
             hudi.field_10 = v23;
@@ -17739,6 +17907,8 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     int targetingWeaponFlags = targetingProto
         ? targetingProto->_weaponFlags
         : (HasMinigun() ? World::TWeapProto::WEAPON_FLAG_DIRECT : 0);
+    const bool usesMissileTargeting =
+        targetingProto && ypabact_UsesMissileTargeting(*targetingProto);
     int a3a = !(targetingWeaponFlags & 2) && !(targetingWeaponFlags & 0x10);
     bool searchWeaponTarget = !a3a;
 
@@ -17819,7 +17989,8 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
                                                     float v59 = mv_len * 1000.0 * 0.0005 + 20.0;
                                                     float mvd_len = mvd.length();
 
-                                                    if ( ((mvd_len < v59 && (targetingWeaponFlags & 4)) || (bct->_radius + v55 > mvd_len && !(targetingWeaponFlags & 4)) )
+                                                    if ( ((mvd_len < v59 && ((targetingWeaponFlags & 4) || usesMissileTargeting)) ||
+                                                         (bct->_radius + v55 > mvd_len && !(targetingWeaponFlags & 4) && !usesMissileTargeting) )
                                                             && mv_len < 2000.0
                                                             && (v56 > mvd_len || !targeto) )
                                                     {
@@ -17841,9 +18012,9 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     }
 
     // A remappable Cycle Target press is consumed here, where the exact user
-    // aim vector is available. This is deliberately missile-only: homing bombs
-    // keep their automatic launch-time target selection.
-    if ( targetingProto && targetingProto->_weaponFlags == YPA_WEAPON_FLAGS_MISSILE )
+    // aim vector is available. Delayed-homing Arc Grenades share the missile
+    // lock path; homing bombs keep automatic launch-time target selection.
+    if ( targetingProto && usesMissileTargeting )
     {
         NC_STACK_ypabact *manualTarget =
             _userHomingPrimaryTargetGid > 0
