@@ -50,6 +50,12 @@ bool SaveRoboParser::RoboParser(ScriptParser::Parser &parser, const std::string 
     if ( !StriCmp(p1, "owner") )
     {
         _r->_owner = parser.stoi(p2);
+
+        // Save files write is_user_robo before owner. setYW_userHostStation()
+        // therefore initially sees owner 0 while loading; refresh the cached
+        // player owner as soon as the real Robo owner has been restored.
+        if ( _o._userRobo == _r )
+            _o.setYW_userHostStation(_r);
     }
     else if ( !StriCmp(p1, "is_user_robo") )
     {

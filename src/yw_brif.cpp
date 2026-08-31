@@ -89,6 +89,9 @@ int yw_MBLoadSet(NC_STACK_ypaworld *yw, int setID)
 {
     std::string oldRsrc = Common::Env.SetPrefix("rsrc", fmt::sprintf("data:set%d:", setID));
 
+    if ( setID != yw->_setId )
+        yw->ClearSharedExternalBases();
+
     if ( setID != yw->_setId && setID != 46 )
     {
         if ( yw->_setData )

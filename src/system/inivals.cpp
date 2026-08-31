@@ -383,6 +383,7 @@ Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_
 // an absent or incomplete profile is fully disabled.
 Common::Ini::Key IniConf::GfxRegenFXVP("gfx.regen_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFX3DS("gfx.regen_fx_3ds", Common::Ini::KT_WORD, std::string(""));
+Common::Ini::Key IniConf::GfxRegenFXBase("gfx.regen_fx_base", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxRegenFXScale("gfx.regen_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GfxRegenFXSpinX("gfx.regen_fx_spin_x", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXSpinY("gfx.regen_fx_spin_y", Common::Ini::KT_WORD, std::string("0"));
@@ -400,6 +401,7 @@ Common::Ini::Key IniConf::GfxRegenMeshFadeOut("gfx.regen_mesh_fade_out", Common:
 
 Common::Ini::Key IniConf::GfxDrainFXVP("gfx.drain_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFX3DS("gfx.drain_fx_3ds", Common::Ini::KT_WORD, std::string(""));
+Common::Ini::Key IniConf::GfxDrainFXBase("gfx.drain_fx_base", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxDrainFXScale("gfx.drain_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
 Common::Ini::Key IniConf::GfxDrainFXSpinX("gfx.drain_fx_spin_x", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXSpinY("gfx.drain_fx_spin_y", Common::Ini::KT_WORD, std::string("0"));
@@ -700,6 +702,7 @@ void IniConf::Init()
         , &GfxWorldNewHpBarEmptyTint
         , &GfxRegenFXVP
         , &GfxRegenFX3DS
+        , &GfxRegenFXBase
         , &GfxRegenFXScale
         , &GfxRegenFXSpinX
         , &GfxRegenFXSpinY
@@ -716,6 +719,7 @@ void IniConf::Init()
         , &GfxRegenMeshFadeOut
         , &GfxDrainFXVP
         , &GfxDrainFX3DS
+        , &GfxDrainFXBase
         , &GfxDrainFXScale
         , &GfxDrainFXSpinX
         , &GfxDrainFXSpinY

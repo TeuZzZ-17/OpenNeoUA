@@ -1514,6 +1514,9 @@ int NC_STACK_ypaworld::yw_LoadSet(int setID)
 
     Common::Env.SetPrefix("rsrc", fmt::sprintf("data:set%d", setID));
 
+    if ( setID != _setId )
+        ClearSharedExternalBases();
+
     if ( !GFX::Engine.LoadPalette("palette/standard.pal") )
         ypa_log_out("WARNING: Could not load set default palette!\n");
 
@@ -1754,6 +1757,9 @@ void NC_STACK_ypaworld::FreeLegos()
 
 void NC_STACK_ypaworld::FreeBriefDataSet()
 {
+    // External BASE families may reuse shared resources from the active SET.
+    // Release them before the SET owner so no cached pointer crosses SETs.
+    ClearSharedExternalBases();
     _vhclModels.clear();
     _attachedFXGeometryCache.clear();
     FreeLegos();
@@ -3524,6 +3530,7 @@ void sb_0x44ac24(NC_STACK_ypaworld *yw)
 
     if ( yw->_setData )
     {
+        yw->ClearSharedExternalBases();
         yw->_setData->Delete();
         yw->_setData = NULL;
         yw->_setId = 0;

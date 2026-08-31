@@ -2494,6 +2494,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_vp_megadeth = 0;
     _mgun_3ds_dead.clear();
     _mgun_3ds_megadeth.clear();
+    _mgun_base_dead.clear();
+    _mgun_base_megadeth.clear();
     _mgun_power = 0.0;
     _mgun_angle = 0.0;
     _mgun_power_set = false;
@@ -2559,6 +2561,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _proximity_defense_shots = 12;
     _proximity_defense_vp_launch = -1;
     _proximity_defense_3ds_launch.clear();
+    _proximity_defense_base_launch.clear();
     _proximity_defense_fire_mode = 0;
     _proximity_defense_sequence_delay = 100;
     _proximity_defense_mode = 0;
@@ -2750,6 +2753,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _proximity_defense_shots = 12;
     _proximity_defense_vp_launch = -1;
     _proximity_defense_3ds_launch.clear();
+    _proximity_defense_base_launch.clear();
     _proximity_defense_fire_mode = 0;
     _proximity_defense_sequence_delay = 100;
     _proximity_defense_mode = 0;
@@ -4162,7 +4166,9 @@ static bool ypabact_GetDecorationFXSpawnCount(const World::TDecorationFXConfig &
 
 static void ypabact_SpawnDecorationFXEvent(NC_STACK_ypabact *bact)
 {
-    if ( !bact || (bact->_decoration_fx.vp <= 0 && bact->_decoration_fx.mesh3ds.empty()) )
+    if ( !bact || (bact->_decoration_fx.vp <= 0 &&
+                    bact->_decoration_fx.mesh3ds.empty() &&
+                    bact->_decoration_fx.basePath.empty()) )
         return;
 
     NC_STACK_ypaworld *world = bact->getBACT_pWorld();
@@ -4199,7 +4205,8 @@ static void ypabact_SpawnDecorationFXEvent(NC_STACK_ypabact *bact)
                                         true,
                                         bact->_decoration_fx.fade_in,
                                         bact->_decoration_fx.fade_out,
-                                        bact->_decoration_fx.mesh3ds);
+                                        bact->_decoration_fx.mesh3ds,
+                                        bact->_decoration_fx.basePath);
     }
 }
 
@@ -4264,8 +4271,8 @@ static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
             continue;
         }
 
-        // A valid external 3DS overrides the legacy VP; if loading fails,
-        // SpawnAttachedTransientVP falls back to the configured VP automatically.
+        // External visual priority matches the shared runtime rule:
+        // valid 3DS -> valid BASE -> legacy VP.
         world->SpawnAttachedTransientVP(config.vp,
                                         bact,
                                         localOffset,
@@ -4279,7 +4286,8 @@ static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
                                         vec3d(0.0, 0.0, 0.0),
                                         true,
                                         NC_STACK_ypaworld::TTransientVPParticleControls(),
-                                        true, 0, 0, config.mesh3ds);
+                                        true, 0, 0, config.mesh3ds,
+                                        config.basePath);
     }
 }
 
@@ -4332,7 +4340,9 @@ void NC_STACK_ypabact::UpdateEnergyStatusFX(update_msg *)
 
 void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
 {
-    if ( !ypabact_CanSpawnDecorationFX(this) || (_decoration_fx.vp <= 0 && _decoration_fx.mesh3ds.empty()) )
+    if ( !ypabact_CanSpawnDecorationFX(this) ||
+         (_decoration_fx.vp <= 0 && _decoration_fx.mesh3ds.empty() &&
+          _decoration_fx.basePath.empty()) )
     {
         _decoration_fx_next_time = 0;
         if ( _world )
@@ -4366,7 +4376,8 @@ void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
                                                  true,
                                                  _decoration_fx.fade_in,
                                                  _decoration_fx.fade_out,
-                                                 _decoration_fx.mesh3ds);
+                                                 _decoration_fx.mesh3ds,
+                                                 _decoration_fx.basePath);
         }
 
         return;
@@ -9600,7 +9611,9 @@ static bool ypabact_FireProximityDefenseShot(NC_STACK_ypabact *unit, int shotInd
     wobj->_rotation.SetY(wobj->_rotation.AxisZ() * wobj->_rotation.AxisX());
     wobj->StartWeaponTracer();
 
-    world->SpawnTransientVisual(unit->_proximity_defense_vp_launch, unit->_proximity_defense_3ds_launch,
+    world->SpawnTransientVisual(unit->_proximity_defense_vp_launch,
+                                unit->_proximity_defense_3ds_launch,
+                                unit->_proximity_defense_base_launch,
                                 wobj->_position, wobj->_rotation, 1000);
 
     wobj->_kidRef.Detach();
@@ -10488,6 +10501,7 @@ static bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, con
     unit->_missiles_list.push_back(shell);
 
     world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
+                                wproto.visual_base.launch,
                                 shell->_position, shell->_rotation, 1000,
                                 1.0, World::TVisualTint(), wproto.launch_scale);
 
@@ -11806,15 +11820,20 @@ static void ypabact_SpawnWeaponImpactVisual(NC_STACK_ypaworld *world,
     if ( !world )
         return;
 
-    const bool hasDead = wproto.vp_dead > 0 || !wproto.visual_3ds.dead.empty();
-    const bool hasMegadeth = wproto.vp_megadeth > 0 || !wproto.visual_3ds.megadeth.empty();
+    const bool hasDead = wproto.vp_dead > 0 || !wproto.visual_3ds.dead.empty() ||
+                         !wproto.visual_base.dead.empty();
+    const bool hasMegadeth = wproto.vp_megadeth > 0 || !wproto.visual_3ds.megadeth.empty() ||
+                             !wproto.visual_base.megadeth.empty();
 
     if ( preferMegadeth && hasMegadeth )
-        world->SpawnTransientVisual(wproto.vp_megadeth, wproto.visual_3ds.megadeth, pos, rot, lifeTime);
+        world->SpawnTransientVisual(wproto.vp_megadeth, wproto.visual_3ds.megadeth,
+                                    wproto.visual_base.megadeth, pos, rot, lifeTime);
     else if ( hasDead )
-        world->SpawnTransientVisual(wproto.vp_dead, wproto.visual_3ds.dead, pos, rot, lifeTime);
+        world->SpawnTransientVisual(wproto.vp_dead, wproto.visual_3ds.dead,
+                                    wproto.visual_base.dead, pos, rot, lifeTime);
     else if ( hasMegadeth )
-        world->SpawnTransientVisual(wproto.vp_megadeth, wproto.visual_3ds.megadeth, pos, rot, lifeTime);
+        world->SpawnTransientVisual(wproto.vp_megadeth, wproto.visual_3ds.megadeth,
+                                    wproto.visual_base.megadeth, pos, rot, lifeTime);
 }
 
 static void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
@@ -11827,7 +11846,9 @@ static void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::T
     // normal-state segmented body. The external 3DS is mandatory in this mode: missing or
     // invalid geometry intentionally leaves the beam body invisible rather
     // than falling back to the normal visual or hidden procedural geometry.
-    if ( wproto.laser_mesh.enabled || (wproto.vp_normal <= 0 && wproto.visual_3ds.normal.empty()) )
+    if ( wproto.laser_mesh.enabled ||
+         (wproto.vp_normal <= 0 && wproto.visual_3ds.normal.empty() &&
+          wproto.visual_base.normal.empty()) )
         return;
 
     NC_STACK_ypaworld *world = bact->getBACT_pWorld();
@@ -11874,7 +11895,9 @@ static void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::T
         vec3d pos = visualStart + span * t;
         // OpenNeoUA custom: the laser beam body uses vp_normal, so honour the weapon's
         // main VP controls here. Impact/launch FX below deliberately stay neutral.
-        world->SpawnTransientVisual(wproto.vp_normal, wproto.visual_3ds.normal, pos, rot, 45, 1.0, wproto.visual_tint, axisScale, wproto.visual_spin);
+        world->SpawnTransientVisual(wproto.vp_normal, wproto.visual_3ds.normal,
+                                    wproto.visual_base.normal, pos, rot, 45, 1.0,
+                                    wproto.visual_tint, axisScale, wproto.visual_spin);
     }
 }
 
@@ -12153,6 +12176,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
         if ( !beamWasActive )
             _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
+                                         wproto.visual_base.launch,
                                          beam.start, ypabact_LaserRotationFromDir(dir, _rotation), 90,
                                          1.0, World::TVisualTint(), wproto.launch_scale);
 
@@ -12463,6 +12487,7 @@ static NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shoot
 
     if ( !beamWasActive )
         world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
+                                    wproto.visual_base.launch,
                                     beam.start, ypabact_LaserRotationFromDir(down, shooter->_rotation), 90,
                                     1.0, World::TVisualTint(), wproto.launch_scale);
 
@@ -13445,6 +13470,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         wobj->StartWeaponTracer();
 
         _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
+                                     wproto.visual_base.launch,
                                      wobj->_position, wobj->_rotation, 1000,
                                      1.0, World::TVisualTint(), wproto.launch_scale);
 
@@ -16129,6 +16155,8 @@ void NC_STACK_ypabact::Renew()
     _mgun_vp_megadeth = 0;
     _mgun_3ds_dead.clear();
     _mgun_3ds_megadeth.clear();
+    _mgun_base_dead.clear();
+    _mgun_base_megadeth.clear();
     _mgun_power = 0.0;
     _mgun_angle = 0.0;
     _mgun_power_set = false;
@@ -16174,6 +16202,7 @@ void NC_STACK_ypabact::Renew()
     _proximity_defense_shots = 12;
     _proximity_defense_vp_launch = -1;
     _proximity_defense_3ds_launch.clear();
+    _proximity_defense_base_launch.clear();
     _proximity_defense_fire_mode = 0;
     _proximity_defense_sequence_delay = 100;
     _proximity_defense_mode = 0;
@@ -17022,14 +17051,18 @@ static bool ypabact_SpawnVehicleMinigunImpact(NC_STACK_ypabact *bact, const vec3
     const int fallbackVP = worldHit ? bact->_mgun_vp_dead : bact->_mgun_vp_megadeth;
     const std::string &preferred3DS = worldHit ? bact->_mgun_3ds_megadeth : bact->_mgun_3ds_dead;
     const std::string &fallback3DS = worldHit ? bact->_mgun_3ds_dead : bact->_mgun_3ds_megadeth;
+    const std::string &preferredBase = worldHit ? bact->_mgun_base_megadeth : bact->_mgun_base_dead;
+    const std::string &fallbackBase = worldHit ? bact->_mgun_base_dead : bact->_mgun_base_megadeth;
 
     int vp = preferredVP > 0 ? preferredVP : fallbackVP;
     const std::string &mesh3ds = !preferred3DS.empty() ? preferred3DS : fallback3DS;
-    if ( vp <= 0 && mesh3ds.empty() )
+    const std::string &basePath = !preferredBase.empty() ? preferredBase : fallbackBase;
+    if ( vp <= 0 && mesh3ds.empty() && basePath.empty() )
         return false;
 
     bact->getBACT_pWorld()->SpawnTransientVisual(
-        vp, mesh3ds, pos, ypabact_LaserRotationFromDir(dir, bact->_rotation), 90);
+        vp, mesh3ds, basePath, pos,
+        ypabact_LaserRotationFromDir(dir, bact->_rotation), 90);
     return true;
 }
 
@@ -20387,11 +20420,15 @@ void NC_STACK_ypabact::RevealInvisibleOnAttack()
 
     _invisibleUnrevealed = false;
 
-    if ( _invisible_reveal_vp > 0 || !_invisible_reveal_3ds.empty() )
+    if ( _invisible_reveal_vp > 0 || !_invisible_reveal_3ds.empty() ||
+         !_invisible_reveal_base.empty() )
     {
         NC_STACK_ypaworld *world = getBACT_pWorld();
         if ( world )
-            world->SpawnTransientVisual(_invisible_reveal_vp, _invisible_reveal_3ds, _position, _rotation, 1000);
+            world->SpawnTransientVisual(_invisible_reveal_vp,
+                                        _invisible_reveal_3ds,
+                                        _invisible_reveal_base,
+                                        _position, _rotation, 1000);
     }
 
     // Reveal attached unit-guns/modules together with their carrier so the whole unit
