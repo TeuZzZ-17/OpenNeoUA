@@ -839,6 +839,33 @@ bool NC_STACK_base::IsStatic()
 }
 
 
+class ExternalBaseResourceScope
+{
+public:
+    explicit ExternalBaseResourceScope(const std::string &filename)
+    {
+        std::string normalized = filename;
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
+
+        // Only direct Data-relative BASE files own a local family root. rsrc: BASE
+        // files keep the existing active-SET Loose/SET.BAS resolver unchanged.
+        if (normalized.compare(0, 5, "Data/") == 0)
+        {
+            IFFile::BeginExternalBaseResourceScope(normalized);
+            _active = IFFile::IsExternalBaseResourceScopeActive();
+        }
+    }
+
+    ~ExternalBaseResourceScope()
+    {
+        if (_active)
+            IFFile::EndExternalBaseResourceScope();
+    }
+
+private:
+    bool _active = false;
+};
+
 static NC_STACK_base *LoadBaseFromIFFFile(IFFile *mfile)
 {
     NC_STACK_base *result = NULL;
@@ -862,6 +889,7 @@ NC_STACK_base *NC_STACK_base::LoadBaseFromFile(const std::string &fname)
     bool traceSetBas = !StriCmp(scanName, "rsrc:objects/set.base") || !StriCmp(scanName, "rsrc:objects/set.bas") ||
                        !StriCmp(scanName, "objects/set.base") || !StriCmp(scanName, "objects/set.bas");
     SetLooseBaseObjectScope baseObjectScope(traceSetBas);
+    ExternalBaseResourceScope externalResourceScope(fname);
 
     IFFile mfile = IFFile::UAOpenIFFile(fname, "rb", "NC_STACK_base::LoadBaseFromFile");
     if ( !mfile.OK() )

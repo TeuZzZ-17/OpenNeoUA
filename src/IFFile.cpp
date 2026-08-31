@@ -102,6 +102,7 @@ int32_t g_setBasParseTraceSetId = 0;
 size_t g_setBasParseTraceCount = 0;
 const size_t SETBAS_PARSE_TRACE_LIMIT = 200;
 int g_setLooseBaseObjectScopeDepth = 0;
+std::vector<std::string> g_externalBaseResourceRoots;
 
 std::string setLooseNormalizeSlashes(std::string path)
 {
@@ -317,6 +318,118 @@ std::string setLooseExtension(const std::string &path)
         return std::string();
 
     return setLooseLower(path.substr(dotPos + 1));
+}
+
+
+std::string externalBaseParentPath(std::string path)
+{
+    path = setLooseNormalizeSlashes(path);
+    while (!path.empty() && path.back() == '/')
+        path.pop_back();
+
+    const size_t slash = path.rfind('/');
+    if (slash == std::string::npos)
+        return std::string();
+
+    return path.substr(0, slash);
+}
+
+bool externalBaseFindUniqueRecursive(const std::string &dirPath, const std::string &fileName,
+                                     std::string *match, int *matchCount)
+{
+    FSMgr::DirIter it = FSMgr::iDir::readDir(dirPath);
+    if (!it)
+        return false;
+
+    FSMgr::iNode *node = NULL;
+    while (it.getNext(&node))
+    {
+        if (!node)
+            continue;
+
+        const std::string childPath = setLooseNormalizeSlashes(node->getVPath());
+        if (node->getType() == FSMgr::iNode::NTYPE_DIR)
+        {
+            externalBaseFindUniqueRecursive(childPath, fileName, match, matchCount);
+            if (*matchCount > 1)
+                return false;
+        }
+        else if (node->getType() == FSMgr::iNode::NTYPE_FILE && !StriCmp(node->getName(), fileName))
+        {
+            *match = childPath;
+            (*matchCount)++;
+            if (*matchCount > 1)
+                return false;
+        }
+    }
+
+    return *matchCount == 1;
+}
+
+std::string setLooseFileName(const std::string &path);
+
+bool externalBaseResolveLocalResource(const std::string &filename, const std::string &mode,
+                                      std::string *resolved)
+{
+    if (!resolved || g_externalBaseResourceRoots.empty() || !setLooseIsReadMode(mode))
+        return false;
+
+    std::string assetPath = setLooseTrimResourceName(setLooseStripLeadingSlashes(setLooseNormalizeSlashes(filename)));
+    const size_t colon = assetPath.find(':');
+    if (colon != std::string::npos)
+        assetPath = setLooseStripLeadingSlashes(assetPath.substr(colon + 1));
+
+    if (assetPath.empty() || assetPath.find(':') != std::string::npos)
+        return false;
+
+    size_t segmentStart = 0;
+    while (segmentStart <= assetPath.size())
+    {
+        const size_t separator = assetPath.find('/', segmentStart);
+        const size_t segmentEnd = separator == std::string::npos ? assetPath.size() : separator;
+        const std::string segment = assetPath.substr(segmentStart, segmentEnd - segmentStart);
+        if (segment.empty() || segment == "." || segment == "..")
+            return false;
+        if (separator == std::string::npos)
+            break;
+        segmentStart = separator + 1;
+    }
+
+    const std::string &root = g_externalBaseResourceRoots.back();
+
+    // 1) Honor the path authored inside the BASE exactly, relative to its directory.
+    const std::string exact = root + "/" + assetPath;
+    if (FSMgr::iDir::fileExist(exact))
+    {
+        *resolved = exact;
+        return true;
+    }
+
+    // 2) Legacy BASE families are often unpacked flat: ignore archived prefixes
+    // such as Skeleton/ or rsrcpool/ and try the requested basename beside the BASE.
+    const std::string basename = setLooseFileName(assetPath);
+    if (basename.empty())
+        return false;
+
+    const std::string besideBase = root + "/" + basename;
+    if (FSMgr::iDir::fileExist(besideBase))
+    {
+        *resolved = besideBase;
+        return true;
+    }
+
+    // 3) Finally search the BASE family's subdirectories by basename. Only a unique
+    // match is accepted so two identically named resources never resolve at random.
+    std::string recursiveMatch;
+    int matchCount = 0;
+    externalBaseFindUniqueRecursive(root, basename, &recursiveMatch, &matchCount);
+    if (matchCount == 1)
+    {
+        *resolved = recursiveMatch;
+        return true;
+    }
+
+    return false;
 }
 
 std::string setLooseReplaceExtension(const std::string &path, const std::string &newExt)
@@ -1783,6 +1896,19 @@ FSMgr::FileHandle IFFile::UAOpenFileWithSetLooseOverride(const std::string &file
 {
     SetLooseOverride overrideInfo;
 
+
+    std::string externalBaseLocalPath;
+    if ( externalBaseResolveLocalResource(filename, mode, &externalBaseLocalPath) )
+    {
+        FSMgr::FileHandle fil = FSMgr::iDir::openFile(externalBaseLocalPath, mode);
+        if ( fil.OK() )
+        {
+            if (out)
+                *out = SetLooseOverride();
+            return fil;
+        }
+    }
+
     std::string skyArchiveOverridePath;
     if ( FindSkyLooseArchiveOverride(filename, mode, &skyArchiveOverridePath, sourceFunction) )
     {
@@ -1935,6 +2061,24 @@ void IFFile::EndSetLooseBaseObjectScope()
 bool IFFile::IsSetLooseBaseObjectScopeActive()
 {
     return g_setLooseBaseObjectScopeDepth > 0;
+}
+
+void IFFile::BeginExternalBaseResourceScope(const std::string &baseFilePath)
+{
+    const std::string root = externalBaseParentPath(baseFilePath);
+    if (!root.empty())
+        g_externalBaseResourceRoots.push_back(root);
+}
+
+void IFFile::EndExternalBaseResourceScope()
+{
+    if (!g_externalBaseResourceRoots.empty())
+        g_externalBaseResourceRoots.pop_back();
+}
+
+bool IFFile::IsExternalBaseResourceScopeActive()
+{
+    return !g_externalBaseResourceRoots.empty();
 }
 
 bool IFFile::IsSetLooseOverride() const
