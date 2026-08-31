@@ -118,6 +118,7 @@ public:
     // resolved velocity without applying the angle twice.
     void SetupArcGrenadeLaunch(float angleDegrees, float gravity, float startSpeed);
     void SetupArcGrenadeVelocity(const vec3d &velocity, float gravity);
+    void ConfigureArcGrenadeHoming(int delay);
     virtual void SetClusterSpawnedChild(bool child);
     void ConfigureWeaponTracer(const World::TWeaponTracerConfig &config,
                                bool supported);
@@ -180,6 +181,7 @@ protected:
     void ApplyAttachedDirectHitDamage();
     void SteerHomingBombDirection(float dtime);
     void UpdateArcGrenadeBallistic(float dtime);
+    bool ActivateArcGrenadeHomingIfDue(int frameTime);
     bool TryClusterSplit();
     bool CanChainToTarget(NC_STACK_ypabact *target, NC_STACK_ypabact *currentHit) const;
     NC_STACK_ypabact *FindNextChainTarget(NC_STACK_ypabact *currentHit) const;
@@ -272,6 +274,8 @@ protected:
     // downward in Urban Assault, so positive gravity increases velocity.y.
     vec3d _arcGrenadeVelocity = vec3d(0.0, 0.0, 0.0);
     float _arcGrenadeGravity = 9.80665f;
+    int _arcGrenadeHomingRemaining = 0;
+    bool _arcGrenadeHomingActive = false;
 
     // OpenNeoUA custom artillery shell state (only meaningful when _isArtilleryShellProjectile).
     bool  _isArtilleryShellProjectile = false;
