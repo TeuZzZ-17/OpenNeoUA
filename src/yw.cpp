@@ -1276,10 +1276,10 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
         else
             profilesById[yw_SuperItemProfileKey(profile.id)].push_back(i);
 
-        if ( profile.wave_vp <= 0 && profile.wave_3ds.empty() )
+        if ( profile.wave_vp <= 0 && profile.wave_3ds.empty() && profile.wave_base.empty() )
         {
             profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' has no wave_vp or wave_3ds; using vanilla fallback.\n",
+            ypa_log_out("WARNING: SuperItem profile '%s' has no wave_vp, wave_base or wave_3ds; using vanilla fallback.\n",
                         profile.id.empty() ? "<missing>" : profile.id.c_str());
         }
 
@@ -1306,7 +1306,9 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
             World::TChainFXConfig &chain = *chainIt;
             chain.visuals.erase(
                 std::remove_if(chain.visuals.begin(), chain.visuals.end(),
-                               [](const World::TChainFXVisual &visual) { return visual.vp <= 0 && visual.mesh3ds.empty(); }),
+                               [](const World::TChainFXVisual &visual) {
+                                   return visual.vp <= 0 && visual.mesh3ds.empty() && visual.basePath.empty();
+                               }),
                 chain.visuals.end());
 
             if ( chain.mode != World::TChainFXConfig::MODE_VISUAL ||
@@ -1555,10 +1557,11 @@ size_t NC_STACK_ypaworld::Deinit()
     ClearMinigunTracers();
     ClearProceduralEnergyFX();
     ClearGroundDecals();
-    // Transient debuff 3DS instances may reference BASE objects owned by the
-    // shared external-mesh cache. Destroy the instances before the cache.
+    // Transient instances may reference BASE objects owned by either external
+    // visual cache. Destroy the instances before releasing those caches.
     _transientVPs.clear();
     _nextTransientVPId = 1;
+    ClearSharedExternalBases();
     ClearSharedExternalMeshes();
     FreeGameDataCursors();
     dprintf("MAKE ME %s\n","ypaworld_func1");
@@ -3992,6 +3995,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_vp_megadeth = vhcl.mgun_vp_megadeth;
         bacto->_mgun_3ds_dead = vhcl.mgun_3ds_dead;
         bacto->_mgun_3ds_megadeth = vhcl.mgun_3ds_megadeth;
+        bacto->_mgun_base_dead = vhcl.mgun_base_dead;
+        bacto->_mgun_base_megadeth = vhcl.mgun_base_megadeth;
         bacto->_mgun_power = vhcl.mgun_power;
         bacto->_mgun_angle = vhcl.mgun_angle;
         bacto->_mgun_power_set = vhcl.mgun_power_set;
@@ -4025,12 +4030,12 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
                 configuredCount > 0 ? (uint8_t)configuredCount : bacto->_num_weapons;
         }
         bacto->_kill_after_shot = vhcl.kill_after_shot;
-        bacto->_vp_normal = ResolveVisualModel(vhcl.vp_normal, vhcl.visual_3ds.normal);
-        bacto->_vp_fire = ResolveVisualModel(vhcl.vp_fire, vhcl.visual_3ds.fire);
-        bacto->_vp_dead = ResolveVisualModel(vhcl.vp_dead, vhcl.visual_3ds.dead);
-        bacto->_vp_wait = ResolveVisualModel(vhcl.vp_wait, vhcl.visual_3ds.wait);
-        bacto->_vp_megadeth = ResolveVisualModel(vhcl.vp_megadeth, vhcl.visual_3ds.megadeth);
-        bacto->_vp_genesis = ResolveVisualModel(vhcl.vp_genesis, vhcl.visual_3ds.genesis);
+        bacto->_vp_normal = ResolveVisualModel(vhcl.vp_normal, vhcl.visual_3ds.normal, vhcl.visual_base.normal);
+        bacto->_vp_fire = ResolveVisualModel(vhcl.vp_fire, vhcl.visual_3ds.fire, vhcl.visual_base.fire);
+        bacto->_vp_dead = ResolveVisualModel(vhcl.vp_dead, vhcl.visual_3ds.dead, vhcl.visual_base.dead);
+        bacto->_vp_wait = ResolveVisualModel(vhcl.vp_wait, vhcl.visual_3ds.wait, vhcl.visual_base.wait);
+        bacto->_vp_megadeth = ResolveVisualModel(vhcl.vp_megadeth, vhcl.visual_3ds.megadeth, vhcl.visual_base.megadeth);
+        bacto->_vp_genesis = ResolveVisualModel(vhcl.vp_genesis, vhcl.visual_3ds.genesis, vhcl.visual_base.genesis);
         bacto->_vp_scale = vhcl.visual_scale;
         bacto->_vp_tint = vhcl.visual_tint;
         if ( requestedVhcl.is_mimic && !requestedVhcl.mimic_tint.IsNeutral() )
@@ -4090,6 +4095,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_proximity_defense_shots = vhcl.proximity_defense_shots > 0 ? vhcl.proximity_defense_shots : 1;
         bacto->_proximity_defense_vp_launch = vhcl.proximity_defense_vp_launch;
         bacto->_proximity_defense_3ds_launch = vhcl.proximity_defense_3ds_launch;
+        bacto->_proximity_defense_base_launch = vhcl.proximity_defense_base_launch;
         bacto->_proximity_defense_fire_mode = vhcl.proximity_defense_fire_mode;
         bacto->_proximity_defense_sequence_delay = vhcl.proximity_defense_sequence_delay > 0 ? vhcl.proximity_defense_sequence_delay : 100;
         bacto->_proximity_defense_mode = vhcl.proximity_defense_mode;
@@ -4132,6 +4138,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_invisibleUnrevealed = vhcl.invisible;
         bacto->_invisible_reveal_vp = vhcl.invisible_reveal_vp;
         bacto->_invisible_reveal_3ds = vhcl.invisible_reveal_3ds;
+        bacto->_invisible_reveal_base = vhcl.invisible_reveal_base;
 
         for (int i = 0; vhcl.scale_fx_pXX[ i ]; i++ )
         {
@@ -4280,12 +4287,12 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_vehicleID = arg->vehicle_id;
     wobj->_weapon = 0;
 
-    wobj->_vp_normal = ResolveVisualModel(wproto.vp_normal, wproto.visual_3ds.normal);
-    wobj->_vp_fire = ResolveVisualModel(wproto.vp_fire, wproto.visual_3ds.fire);
-    wobj->_vp_dead = ResolveVisualModel(wproto.vp_dead, wproto.visual_3ds.dead);
-    wobj->_vp_wait = ResolveVisualModel(wproto.vp_wait, wproto.visual_3ds.wait);
-    wobj->_vp_megadeth = ResolveVisualModel(wproto.vp_megadeth, wproto.visual_3ds.megadeth);
-    wobj->_vp_genesis = ResolveVisualModel(wproto.vp_genesis, wproto.visual_3ds.genesis);
+    wobj->_vp_normal = ResolveVisualModel(wproto.vp_normal, wproto.visual_3ds.normal, wproto.visual_base.normal);
+    wobj->_vp_fire = ResolveVisualModel(wproto.vp_fire, wproto.visual_3ds.fire, wproto.visual_base.fire);
+    wobj->_vp_dead = ResolveVisualModel(wproto.vp_dead, wproto.visual_3ds.dead, wproto.visual_base.dead);
+    wobj->_vp_wait = ResolveVisualModel(wproto.vp_wait, wproto.visual_3ds.wait, wproto.visual_base.wait);
+    wobj->_vp_megadeth = ResolveVisualModel(wproto.vp_megadeth, wproto.visual_3ds.megadeth, wproto.visual_base.megadeth);
+    wobj->_vp_genesis = ResolveVisualModel(wproto.vp_genesis, wproto.visual_3ds.genesis, wproto.visual_base.genesis);
     wobj->_vp_scale = wproto.visual_scale;
     wobj->_vp_tint = wproto.visual_tint;
     wobj->_vp_rotation = wproto.visual_rotation;

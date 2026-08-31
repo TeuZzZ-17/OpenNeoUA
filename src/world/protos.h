@@ -66,9 +66,9 @@ struct TVisualTint
     }
 };
 
-// OpenNeoUA custom: external 3DS overrides for the legacy visual-state slots.
-// The numeric vp_* fields remain the vanilla-safe fallback; a non-empty 3DS path
-// only replaces rendering for the corresponding state when it loads successfully.
+// OpenNeoUA custom: external visual paths for the legacy visual-state slots.
+// Vehicle/Weapon prototypes keep one instance for 3DS and one for BASE paths;
+// the numeric vp_* fields remain the vanilla-safe fallback.
 struct TExternalVisualSet
 {
     std::string normal;
@@ -177,6 +177,7 @@ struct TDecorationFXConfig
     uint8_t mode = DECORATION_FX_PERIODIC;
     int16_t vp = 0;
     std::string mesh3ds;
+    std::string basePath;
     int interval_min = 0;
     int interval_max = 0;
     int count_min = 0;
@@ -199,6 +200,7 @@ struct TChainFXVisual
 {
     int16_t vp = 0;
     std::string mesh3ds;
+    std::string basePath;
     bool has_tint = false;
     TVisualTint tint;
 };
@@ -409,6 +411,7 @@ struct TSuperItemProfile
 
     int wave_vp = 0;
     std::string wave_3ds;
+    std::string wave_base;
     vec3d wave_axis_scale = vec3d(1.0, 1.0, 1.0);
     TVisualTint wave_tint;
     float wave_start_speed = 0.0f;
@@ -462,6 +465,7 @@ struct TWeaponClusterConfig
     float spread_y = 0.0;
     int16_t vp = 0;
     std::string mesh3ds;
+    std::string basePath;
     TVhclSound snd;
 };
 
@@ -608,6 +612,8 @@ struct TVhclProto
     int16_t mgun_vp_megadeth = 0;
     std::string mgun_3ds_dead;
     std::string mgun_3ds_megadeth;
+    std::string mgun_base_dead;
+    std::string mgun_base_megadeth;
     float mgun_power = 0.0;
     float mgun_angle = 0.0;
     std::string mgun_name;
@@ -629,6 +635,7 @@ struct TVhclProto
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
     TExternalVisualSet visual_3ds;
+    TExternalVisualSet visual_base;
     vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
     vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d visual_spin = vec3d(0.0, 0.0, 0.0);
@@ -671,6 +678,7 @@ struct TVhclProto
     int proximity_defense_shots = 12;
     int proximity_defense_vp_launch = -1;
     std::string proximity_defense_3ds_launch;
+    std::string proximity_defense_base_launch;
     int proximity_defense_fire_mode = 0;
     int proximity_defense_sequence_delay = 100;
     int proximity_defense_mode = 0;
@@ -794,6 +802,7 @@ struct TVhclProto
     bool invisible = false;
     int16_t invisible_reveal_vp = 0;
     std::string invisible_reveal_3ds;
+    std::string invisible_reveal_base;
 
     TRoboProto *RoboProto = NULL;
     std::vector<TRoboGun> unit_guns;
@@ -958,6 +967,7 @@ struct TWeapProto
     int16_t vp_genesis = 0;
     int16_t vp_launch = 0;
     TExternalVisualSet visual_3ds;
+    TExternalVisualSet visual_base;
     vec3d launch_scale = vec3d(1.0, 1.0, 1.0);
     vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
     vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
