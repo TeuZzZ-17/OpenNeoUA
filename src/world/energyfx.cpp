@@ -208,6 +208,7 @@ static TVisualTint ReadTint(Common::Ini::Key &key, const TVisualTint &fallback)
 
 static Config BuildConfig(Common::Ini::Key &vp,
                           Common::Ini::Key &mesh3ds,
+                          Common::Ini::Key &basePath,
                           Common::Ini::Key &scale,
                           Common::Ini::Key &spinX,
                           Common::Ini::Key &spinY,
@@ -227,6 +228,7 @@ static Config BuildConfig(Common::Ini::Key &vp,
     Config config;
     config.vp = (int16_t)ReadInt(vp, 0, 0, std::numeric_limits<int16_t>::max());
     config.mesh3ds = mesh3ds.Get<std::string>();
+    config.basePath = basePath.Get<std::string>();
 
     config.scale = ReadFloat(scale, 1.0f);
     if ( config.scale <= 0.0f )
@@ -289,6 +291,7 @@ void Init()
 {
     s_regen = BuildConfig(System::IniConf::GfxRegenFXVP,
                           System::IniConf::GfxRegenFX3DS,
+                          System::IniConf::GfxRegenFXBase,
                           System::IniConf::GfxRegenFXScale,
                           System::IniConf::GfxRegenFXSpinX,
                           System::IniConf::GfxRegenFXSpinY,
@@ -307,6 +310,7 @@ void Init()
 
     s_drain = BuildConfig(System::IniConf::GfxDrainFXVP,
                           System::IniConf::GfxDrainFX3DS,
+                          System::IniConf::GfxDrainFXBase,
                           System::IniConf::GfxDrainFXScale,
                           System::IniConf::GfxDrainFXSpinX,
                           System::IniConf::GfxDrainFXSpinY,

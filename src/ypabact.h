@@ -1033,6 +1033,8 @@ public:
     int _mgun_vp_megadeth;
     std::string _mgun_3ds_dead;
     std::string _mgun_3ds_megadeth;
+    std::string _mgun_base_dead;
+    std::string _mgun_base_megadeth;
     float _mgun_power;
     float _mgun_angle;
     bool _mgun_power_set;
@@ -1100,6 +1102,7 @@ public:
     int _proximity_defense_shots;
     int _proximity_defense_vp_launch;
     std::string _proximity_defense_3ds_launch;
+    std::string _proximity_defense_base_launch;
     int _proximity_defense_fire_mode;
     int _proximity_defense_sequence_delay;
     int _proximity_defense_mode;
@@ -1227,6 +1230,7 @@ public:
     bool _invisibleUnrevealed = false;
     int16_t _invisible_reveal_vp = 0;
     std::string _invisible_reveal_3ds;
+    std::string _invisible_reveal_base;
 
 protected:
     NC_STACK_ypaworld *_world;

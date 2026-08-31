@@ -467,7 +467,11 @@ static std::string PaletteThemeDisplayName(const std::string &fileName)
 void sb_0x4eb94c__sub0(NC_STACK_ypaworld *yw, bool clockwise, int a3, vec3d *pos, baseRender_msg *arg)
 {
     const World::TVhclProto &proto = yw->_vhclProtos[yw->_briefScreen.ViewingObject.ID];
-    NC_STACK_base *model_base = yw->ResolveVisualModel(proto.vp_normal, proto.visual_3ds.normal);
+    NC_STACK_base *model_base = yw->ResolveVisualModel(proto.vp_normal,
+                                                       proto.visual_3ds.normal,
+                                                       proto.visual_base.normal);
+    if ( !model_base )
+        return;
 
     model_base->SetVizLimit(16000);
     model_base->SetFadeLength(100);
