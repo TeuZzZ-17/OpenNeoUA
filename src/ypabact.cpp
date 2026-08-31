@@ -13555,6 +13555,26 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             wobj->_fly_dir = _rotation.AxisZ();
         }
 
+        if ( wproto.IsArcGrenade() )
+        {
+            if ( useAiArcDirection )
+            {
+                // The solver supplies the unmodified ballistic intercept.
+                // Pattern/cone/spread below intentionally perturb that base
+                // vector just like they do for every other projectile Weapon.
+                wobj->_fly_dir = aiArcDirection;
+            }
+            else
+            {
+                // Player/manual fire first establishes the configured Arc
+                // Grenade elevation. The common directional modifiers below
+                // then apply their authored horizontal and vertical offsets.
+                wobj->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
+                                            wproto.grenade_arc_gravity,
+                                            wproto.start_speed);
+            }
+        }
+
         wobj->_fly_dir = ypabact_ApplyWeaponDirectionPattern(_rotation, wobj->_fly_dir,
                                                                i, v13,
                                                                _weapon_arc_x, _weapon_arc_y,
@@ -13571,22 +13591,12 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
         if ( wproto.IsArcGrenade() )
         {
-            if ( useAiArcDirection )
-            {
-                // AI replaces only the initial vector. The projectile then uses
-                // the exact same Arc Grenade runtime as a player-fired shot.
-                wobj->SetupArcGrenadeVelocity(
-                    aiArcDirection * wproto.start_speed,
-                    wproto.grenade_arc_gravity);
-            }
-            else
-            {
-                // Player/manual fire keeps the authored preference as an exact
-                // launch elevation and receives no ballistic auto-aim.
-                wobj->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
-                                            wproto.grenade_arc_gravity,
-                                            wproto.start_speed);
-            }
+            // SetupArcGrenadeLaunch()/the AI solver establish the base vector
+            // above. Commit the direction only after the shared pattern and
+            // weapon_spread_x/weapon_spread_y path has run, otherwise Arc
+            // Grenade would overwrite the vertical spread (and all AI spread).
+            wobj->SetupArcGrenadeVelocity(wobj->_fly_dir * wproto.start_speed,
+                                          wproto.grenade_arc_gravity);
         }
         else
         {
