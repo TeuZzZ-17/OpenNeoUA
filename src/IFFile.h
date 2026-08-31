@@ -144,6 +144,10 @@ public:
     static void EndSetLooseBaseObjectScope();
     static bool IsSetLooseBaseObjectScopeActive();
 
+    static void BeginExternalBaseResourceScope(const std::string &baseFilePath);
+    static void EndExternalBaseResourceScope();
+    static bool IsExternalBaseResourceScopeActive();
+
 protected:
     FSMgr::FileHandle file_handle;
     SetLooseOverride _setLooseOverride;
