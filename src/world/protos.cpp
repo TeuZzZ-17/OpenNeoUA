@@ -11,6 +11,32 @@
 
 namespace World
 {
+int TWeapProto::RollLifeTime() const
+{
+    int minLifeTime = life_time_min;
+    int maxLifeTime = life_time_max;
+
+    // Keep prototypes created by older callers/source snapshots compatible:
+    // before the range fields existed, life_time was the only source value.
+    if ( minLifeTime == 0 && maxLifeTime == 0 && life_time != 0 )
+    {
+        minLifeTime = life_time;
+        maxLifeTime = life_time;
+    }
+
+    if ( maxLifeTime < minLifeTime )
+        std::swap(minLifeTime, maxLifeTime);
+
+    if ( minLifeTime == maxLifeTime )
+        return minLifeTime;
+
+    const int64_t span = (int64_t)maxLifeTime -
+                         (int64_t)minLifeTime + 1LL;
+    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
+    const int64_t offset = (int64_t)(randomPart * (double)span);
+    return (int)((int64_t)minLifeTime + offset);
+}
+
 int TVhclProto::RollMimicProductionCost()
 {
     if ( mimic_energy_cost_min <= 0 || mimic_energy_cost_max <= 0 )

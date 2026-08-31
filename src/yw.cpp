@@ -4345,7 +4345,9 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
         break;
     }
 
-    wobj->SetLifeTime(wproto.life_time);
+    // Resolve an authored fixed lifetime or min_max range once per physical
+    // projectile. The prototype keeps the range; the missile owns the result.
+    wobj->SetLifeTime(wproto.RollLifeTime());
     wobj->SetDelay(wproto.delay_time);
     wobj->SetDriveTime(wproto.drive_time);
     wobj->SetMissileType(missileType);

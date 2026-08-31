@@ -4208,6 +4208,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->grenade_arc_gravity = 0.0f;
         _wpn->grenade_homing_delay = 0;
         _wpn->life_time = 20000;
+        _wpn->life_time_min = 20000;
+        _wpn->life_time_max = 20000;
         _wpn->life_time_nt = 0;
         _wpn->drive_time = 7000;
         _wpn->shot_time = 3000;
@@ -4694,7 +4696,28 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "life_time") )
     {
-        _wpn->life_time = parser.stol(p2, NULL, 0);
+        int minLifeTime = 0;
+        int maxLifeTime = 0;
+        if ( ParseScriptIntRange(p2, minLifeTime, maxLifeTime) )
+        {
+            _wpn->life_time = minLifeTime;
+            _wpn->life_time_min = minLifeTime;
+            _wpn->life_time_max = maxLifeTime;
+        }
+        else if ( p2.find('_') == std::string::npos )
+        {
+            _wpn->life_time = parser.stol(p2, NULL, 0);
+            _wpn->life_time_min = _wpn->life_time;
+            _wpn->life_time_max = _wpn->life_time;
+        }
+        else
+        {
+            // Do not let stol() silently accept only the first endpoint of a
+            // malformed range such as 2500_3000_3500.
+            _wpn->life_time = 0;
+            _wpn->life_time_min = 0;
+            _wpn->life_time_max = 0;
+        }
     }
     else if ( !StriCmp(p1, "life_time_nt") )
     {
