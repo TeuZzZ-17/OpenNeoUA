@@ -3724,7 +3724,8 @@ static std::vector<std::string> db_weapon_specialties(const World::TWeapProto &p
          !p.debuff.vps.empty() || !p.debuff.mesh3ds.empty()) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_DEBUFF));
     if ( p.multi_target > 1 &&
-         (p._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || p.IsHomingBomb()) )
+         (p._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE ||
+          p.IsHomingBomb() || p.HasArcGrenadeHoming()) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MULTI_TARGET));
     return items;
 }

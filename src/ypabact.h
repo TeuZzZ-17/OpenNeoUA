@@ -22,6 +22,12 @@ struct ypaworld_arg136;
 
 struct cellArea;
 
+// Shared Arc Grenade fire-control solver. AI call sites use the same function
+// for reachability and for the final per-muzzle launch vector.
+bool ypabact_TrySolveArcGrenadeDirection(
+    const vec3d &launchPos, const vec3d &targetPos,
+    const World::TWeapProto &wproto, vec3d *outDirection);
+
 
 
 
@@ -391,6 +397,7 @@ struct bact_arg79
 // recoil is reduced without touching push_resistance, push or ApplyImpulse().
 static const int BACT_ARG79_FLAG_RECOIL_BRAKE_HELD = 0x100;
 static const int BACT_ARG79_FLAG_NO_AUTO_TARGETS = 0x200;
+static const int BACT_ARG79_FLAG_AI_BALLISTIC_AIM = 0x400;
 
 struct bact_arg75
 {
@@ -421,6 +428,10 @@ struct bact_arg101
     // Optional weapon selected by the AI before CheckFireAI(). -1 preserves
     // the legacy primary-weapon fallback for call sites that do not set it.
     int weapon = -1;
+    // Exact world-space muzzle origin when the AI call site knows it. Arc
+    // Grenade reachability falls back to the unit fire point when unavailable.
+    vec3d launch_pos;
+    bool has_launch_pos = false;
 };
 
 struct bact_arg83

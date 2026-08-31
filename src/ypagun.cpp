@@ -612,8 +612,26 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
     // distance its hitscan can actually reach. Missing/invalid config resolves
     // through the existing MGUN fallback (1000).
     const float engagementRange = (_gunType == GUN_TYPE_PROTO) ? GetMinigunRange() : 2400.0f;
+    bool arcGrenadeReachable = true;
+    bool usesArcGrenade = false;
 
-    if ( dist <= engagementRange && vTgt.dot( _rotation.AxisZ() ) >= 0.95 )
+    if ( _gunType == GUN_TYPE_REAL && _world && _weapon >= 0 &&
+         (size_t)_weapon < _world->GetWeaponsProtos().size() )
+    {
+        const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_weapon);
+        usesArcGrenade = wproto.IsArcGrenade();
+        if ( usesArcGrenade )
+        {
+            vec3d launchDirection;
+            const vec3d launchPos =
+                _position + _rotation.Transpose().Transform(_fire_pos);
+            arcGrenadeReachable = ypabact_TrySolveArcGrenadeDirection(
+                launchPos, arg->target.pbact->_position, wproto, &launchDirection);
+        }
+    }
+
+    if ( dist <= engagementRange && arcGrenadeReachable &&
+         vTgt.dot( _rotation.AxisZ() ) >= 0.95 )
     {
         if ( _gunType == GUN_TYPE_REAL )
         {
@@ -622,9 +640,11 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
             arg79.start_point = _fire_pos;
             arg79.tgType = BACT_TGT_TYPE_UNIT;
             arg79.target.pbact = arg->target.pbact;
+            arg79.tgt_pos = arg->target.pbact->_position;
             arg79.weapon = _weapon;
             arg79.g_time = arg->g_time;
-            arg79.flags = (!getBACT_inputting() ? 4 : 0);
+            arg79.flags = (!getBACT_inputting() ? 4 : 0) |
+                          (usesArcGrenade ? BACT_ARG79_FLAG_AI_BALLISTIC_AIM : 0);
 
             if ( LaunchMissile(&arg79) )
             {
