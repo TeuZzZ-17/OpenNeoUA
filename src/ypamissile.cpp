@@ -1274,9 +1274,9 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                 }
 
                 // Preserve the legacy/upstream AI friendly-collision rule for normal
-                // projectiles. Artillery is a world-area bombardment: its direct path
-                // must not become harmless to same-owner units merely because the
-                // launcher is being commanded remotely from the Tactical Map.
+                // projectiles. Artillery still detects terminal contact with same-owner
+                // units so its explosion is unchanged; ApplyDamageToBact() suppresses
+                // only the resulting artillery damage to those units.
                 if ( !_isArtilleryShellProjectile && !a5 &&
                      bct->_owner == _mislEmitter->_owner )
                     continue;
@@ -1492,6 +1492,14 @@ int NC_STACK_ypamissile::CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy
 int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy)
 {
     if ( !bct )
+        return 0;
+
+    // Artillery keeps its normal terminal collision and explosion, but never
+    // damages units owned by the shell's emitter. This central unit-damage
+    // guard covers both the direct-hit and AoE paths without affecting enemy
+    // units, buildings, sectors, or other projectile models.
+    if ( _isArtilleryShellProjectile && _mislEmitter &&
+         bct->_owner == _mislEmitter->_owner )
         return 0;
 
     NC_STACK_ypabact *userHost = _world ? _world->getYW_userHostStation() : NULL;
@@ -1978,9 +1986,10 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
     if ( !isfinite(_mislAoeUnitRadius) || _mislAoeUnitRadius <= 0.0 || (!doAoeDamage && !doAoePush) || !_world )
         return;
 
-    // Artillery explosions are area bombardments and may damage every unit in
-    // the blast, including same-owner units. Normal weapons retain the existing
-    // player/AI friendly-fire policy unchanged.
+    // Artillery retains its normal blast target scan, including same-owner units,
+    // so collision and explosion behavior are unchanged. ApplyDamageToBact()
+    // suppresses artillery damage to those units; normal weapons retain the
+    // existing player/AI friendly-fire policy unchanged.
     bool allowFriendly = _isArtilleryShellProjectile || getBACT_viewer();
 
     if ( _mislEmitter && _mislEmitter->getBACT_inputting() )
