@@ -205,6 +205,29 @@ struct TChainFXVisual
     TVisualTint tint;
 };
 
+struct TAtmosphericFXLayer
+{
+    std::string mesh3ds;
+    int count = 0;
+    vec3d spawn_radius = vec3d(0.0, 0.0, 0.0);
+    vec3d spawn_offset = vec3d(0.0, 0.0, 0.0);
+    int lifetime_min = 0;
+    int lifetime_max = 0;
+    vec3d velocity = vec3d(0.0, 0.0, 0.0);
+    vec3d velocity_random = vec3d(0.0, 0.0, 0.0);
+    vec3d scale = vec3d(1.0, 1.0, 1.0);
+    vec3d spin = vec3d(0.0, 0.0, 0.0);
+    int fade_in = 0;
+    int fade_out = 0;
+    TVisualTint tint;
+};
+
+struct TAtmosphericFXProfile
+{
+    bool valid = false;
+    std::vector<TAtmosphericFXLayer> layers;
+};
+
 struct DestFX
 {
     enum FXTYPES {
