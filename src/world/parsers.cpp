@@ -5833,6 +5833,122 @@ bool MiscParser::IsScope(ScriptParser::Parser &parser, const std::string &word, 
     return true;
 }
 
+
+bool AtmosphericFXProfileParser::IsScope(ScriptParser::Parser &parser,
+                                         const std::string &word,
+                                         const std::string &opt)
+{
+    if ( StriCmp(word, "begin_atmospheric_fx_profile") )
+        return false;
+
+    if ( _seenScope )
+    {
+        _duplicateScope = true;
+        return true;
+    }
+
+    _profile = TAtmosphericFXProfile();
+    _seenScope = true;
+    _layer = NULL;
+    return true;
+}
+
+static float ParseAtmosphericFXPositiveScale(ScriptParser::Parser &parser,
+                                             const std::string &param,
+                                             const std::string &value)
+{
+    float scale = parser.stof(value, 0);
+    if ( std::isfinite(scale) && scale > 0.0f )
+        return scale;
+
+    ypa_log_out("WARNING: Atmospheric FX parameter '%s' must be finite and greater than zero; using 1.0\n",
+                param.c_str());
+    return 1.0f;
+}
+
+int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
+                                       const std::string &p1,
+                                       const std::string &p2)
+{
+    if ( _duplicateScope )
+        return ScriptParser::RESULT_BAD_DATA;
+
+    if ( !StriCmp(p1, "end") )
+    {
+        if ( _layer )
+        {
+            _layer = NULL;
+            return ScriptParser::RESULT_OK;
+        }
+        return ScriptParser::RESULT_SCOPE_END;
+    }
+
+    if ( !StriCmp(p1, "begin_layer") )
+    {
+        _profile.layers.emplace_back();
+        _layer = &_profile.layers.back();
+        return ScriptParser::RESULT_OK;
+    }
+
+    if ( !_layer )
+        return ScriptParser::RESULT_UNKNOWN;
+
+    if ( !StriCmp(p1, "mesh_3ds") )
+        _layer->mesh3ds = p2;
+    else if ( !StriCmp(p1, "count") )
+        _layer->count = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "spawn_radius_x") )
+        _layer->spawn_radius.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "spawn_radius_y") )
+        _layer->spawn_radius.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "spawn_radius_z") )
+        _layer->spawn_radius.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "spawn_offset_x") )
+        _layer->spawn_offset.x = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "spawn_offset_y") )
+        _layer->spawn_offset.y = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "spawn_offset_z") )
+        _layer->spawn_offset.z = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "lifetime_min") )
+        _layer->lifetime_min = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "lifetime_max") )
+        _layer->lifetime_max = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "velocity_x") )
+        _layer->velocity.x = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "velocity_y") )
+        _layer->velocity.y = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "velocity_z") )
+        _layer->velocity.z = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "velocity_random_x") )
+        _layer->velocity_random.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "velocity_random_y") )
+        _layer->velocity_random.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "velocity_random_z") )
+        _layer->velocity_random.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "scale_x") )
+        _layer->scale.x = ParseAtmosphericFXPositiveScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "scale_y") )
+        _layer->scale.y = ParseAtmosphericFXPositiveScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "scale_z") )
+        _layer->scale.z = ParseAtmosphericFXPositiveScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "spin_x") )
+        _layer->spin.x = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "spin_y") )
+        _layer->spin.y = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "spin_z") )
+        _layer->spin.z = parser.stof(p2, 0);
+    else if ( !StriCmp(p1, "fade_in") )
+        _layer->fade_in = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "fade_out") )
+        _layer->fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "tint") )
+        ParseTintParam(parser, "tint", p1, p2, _layer->tint);
+    else
+        return ScriptParser::RESULT_UNKNOWN;
+
+    return ScriptParser::RESULT_OK;
+}
+
 int MiscParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
     if ( !StriCmp(p1, "end") )
@@ -6160,6 +6276,7 @@ bool LevelDataParser::IsScope(ScriptParser::Parser &parser, const std::string &w
     _o._levelUnitLimitType = _o._defaultUnitLimitType;
     _o._levelUnitLimitArg = _o._defaultUnitLimitArg;
     _o._luaScriptName = "";
+    _m.AtmosphericFXProfilePath.clear();
     return true;
 }
 
@@ -6275,6 +6392,10 @@ int LevelDataParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "ambient_sound") )
     {
         _m.AmbientSoundStr = p2;
+    }
+    else if ( !StriCmp(p1, "atmospheric_fx_profile") )
+    {
+        _m.AtmosphericFXProfilePath = p2;
     }
     else if ( !StriCmp(p1, "movie") )
     {
