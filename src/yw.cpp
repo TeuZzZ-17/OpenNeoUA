@@ -963,6 +963,23 @@ uint64_t NC_STACK_ypaworld::AddPlasmaCurrency(uint64_t amount, const vec3d &worl
     _plasmaCurrencyHudTargetValue = _plasmaCurrency;
     _plasmaCurrencyHudPulseStartTime = _timeStamp;
 
+    if ( _mapLength.x > 0.0f && _mapLength.y > 0.0f )
+    {
+        int posX = dround(worldPos.x * 255.0f / _mapLength.x);
+        int posY = dround(-worldPos.z * 255.0f / _mapLength.y);
+        posX = std::max(0, std::min(posX, 255));
+        posY = std::max(0, std::min(posY, 255));
+
+        uint8_t owner = 0;
+        if ( _userRobo )
+            owner = _userRobo->_owner;
+        else if ( _userUnit )
+            owner = _userUnit->_owner;
+
+        HistoryEventAdd(World::History::Plasma(
+            delta, (uint8_t)posX, (uint8_t)posY, owner));
+    }
+
     if ( _plasmaCurrencyPopups.size() >= 32 )
         _plasmaCurrencyPopups.erase(_plasmaCurrencyPopups.begin());
 
@@ -1746,18 +1763,29 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 const bool escRequested =
                     _kbdLastKeyHit == Input::KC_ESCAPE ||
                     arg->field_8->KbdLastHit == Input::KC_ESCAPE;
+                const bool fireRequested =
+                    arg->field_8->Buttons.IsAny({0, 2, 5});
 
-                if ( escRequested )
+                if ( escRequested || fireRequested )
                 {
                     DismissNewGemNotification();
 
-                    // ESC belongs exclusively to the GEM popup while it is
-                    // active. Do not let the original menu/window handlers
-                    // observe the same key in this frame.
-                    _kbdLastKeyHit = Input::KC_NONE;
-                    arg->field_8->KbdLastHit = Input::KC_NONE;
-                    arg->field_8->KbdLastDown = Input::KC_NONE;
-                    arg->field_8->HotKeyID = -1;
+                    // FIRE is an action, not a physical key, so this works with
+                    // the player's current bindings. Consume it in the same frame
+                    // so dismissing the popup never also fires a weapon.
+                    if ( fireRequested )
+                        arg->field_8->Buttons.UnSet({0, 2, 5});
+
+                    if ( escRequested )
+                    {
+                        // ESC belongs exclusively to the GEM popup while it is
+                        // active. Do not let the original menu/window handlers
+                        // observe the same key in this frame.
+                        _kbdLastKeyHit = Input::KC_NONE;
+                        arg->field_8->KbdLastHit = Input::KC_NONE;
+                        arg->field_8->KbdLastDown = Input::KC_NONE;
+                        arg->field_8->HotKeyID = -1;
+                    }
                 }
             }
 
@@ -3988,6 +4016,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_num_mguns = vhcl.num_mguns > 0 ? vhcl.num_mguns : 1;
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
         bacto->_mgun_recoil = vhcl.mgun_recoil;
+        bacto->_mgun_recoil_cockpit = vhcl.mgun_recoil_cockpit;
         bacto->_mgun_tracer = vhcl.mgun_tracer;
         bacto->_mgun_decal_enable = vhcl.mgun_decal_enable;
         bacto->_mgun_decal = vhcl.mgun_decal;
@@ -4018,7 +4047,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_fire_x_slots = vhcl.fire_x_slots;
         bacto->_fire_x_advanced = vhcl.fire_x_advanced;
         bacto->_cockpit_camera_offset = vhcl.cockpit_camera_offset;
-        bacto->_cockpit_camera_recoil = vhcl.cockpit_camera_recoil;
+        bacto->_cockpit_gun_camera_recoil = vhcl.cockpit_gun_camera_recoil;
         bacto->_gun_angle = vhcl.gun_angle;
         bacto->_gun_angle_user = vhcl.gun_angle;
         bacto->_num_weapons = vhcl.num_weapons;
@@ -4057,6 +4086,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_decoration_fx_next_time = 0;
         bacto->_damaged_force_malus = vhcl.damaged_force_malus;
         bacto->_damaged_maxrot_malus = vhcl.damaged_maxrot_malus;
+        bacto->_damaged_mgun_shot_time_malus = vhcl.damaged_mgun_shot_time_malus;
+        bacto->_damaged_shot_time_malus = vhcl.damaged_shot_time_malus;
         bacto->_damaged_snd_pitch_multiplier = vhcl.damaged_snd_pitch_multiplier;
         bacto->_damaged_fx_active = false;
         bacto->_spawn_units = vhcl.spawn_units;
@@ -4351,8 +4382,6 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetDelay(wproto.delay_time);
     wobj->SetDriveTime(wproto.drive_time);
     wobj->SetMissileType(missileType);
-    wobj->ConfigureArcGrenadeHoming(
-        wproto.IsArcGrenade() ? wproto.grenade_homing_delay : 0);
     wobj->SetPowerHeli(wproto.energy_heli * 1000.0);
     wobj->SetPowerTank(wproto.energy_tank * 1000.0);
     wobj->SetPowerFlyer(wproto.energy_flyer * 1000.0);
@@ -4716,6 +4745,16 @@ void NC_STACK_ypaworld::ypaworld_func150(yw_arg150 *arg)
 
 void NC_STACK_ypaworld::DeleteLevel()
 {
+    _missionMapStatusSnapshotValid = false;
+    if ( _levelInfo.State == TLevelInfo::STATE_COMPLETED && !_isNetGame )
+    {
+        for ( size_t i = 0; i < _globalMapRegions.MapRegions.size(); i++ )
+            _missionMapStatusSnapshot[i] = _globalMapRegions.MapRegions[i].Status;
+
+        _missionMapStatusSnapshotLevel = _levelInfo.LevelID;
+        _missionMapStatusSnapshotValid = true;
+    }
+
     EnableLevelPasses();
 
     if ( _levelInfo.State == TLevelInfo::STATE_COMPLETED )
@@ -11115,6 +11154,7 @@ void NC_STACK_ypaworld::HistoryEventAdd(const World::History::Record &arg)
     case World::History::TYPE_CONQ:
     case World::History::TYPE_VHCLKILL:
     case World::History::TYPE_VHCLCREATE:
+    case World::History::TYPE_PLASMA:
     case World::History::TYPE_POWERST:
     case World::History::TYPE_UPGRADE:
 

@@ -317,6 +317,8 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislChainPendingOrigin = vec3d(0.0, 0.0, 0.0);
     _mislChainPendingOriginRadius = 0.0;
     _mislChainHitGids.clear();
+    _suicideViewerReturnGids.clear();
+    _suicideViewerHostGid = 0;
     _mislAttachedToTarget = false;
     _mislAttachTargetGid = 0;
     _mislAttachOffset = vec3d(0.0, 0.0, 0.0);
@@ -326,8 +328,6 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _weaponTracerStarted = false;
     _weaponTracerVisualSeed = 0;
     _weaponTracerPoints.clear();
-    _arcGrenadeHomingRemaining = 0;
-    _arcGrenadeHomingActive = false;
 
     for( auto& it : stak )
     {
@@ -834,8 +834,7 @@ bool NC_STACK_ypamissile::TryClusterSplit()
             clusterSoundPlayed = true;
         }
 
-        if ( (child->GetMissileType() == MISL_TARGETED ||
-              childProto.HasArcGrenadeHoming()) &&
+        if ( child->GetMissileType() == MISL_TARGETED &&
              childTargetType != BACT_TGT_TYPE_DRCT )
         {
             setTarget_msg arg67;
@@ -1083,8 +1082,7 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     child->_mislChainSpawned = false;
     child->_mislChainAllowFriendly = _mislChainAllowFriendly;
 
-    if ( child->GetMissileType() == MISL_TARGETED ||
-         wproto.IsHomingBomb() || wproto.HasArcGrenadeHoming() )
+    if ( child->GetMissileType() == MISL_TARGETED || wproto.IsHomingBomb() )
     {
         setTarget_msg arg67;
         arg67.tgt.pbact = nextTarget;
@@ -2335,54 +2333,6 @@ void NC_STACK_ypamissile::SetupArcGrenadeLaunch(float angleDegrees,
     SetupArcGrenadeVelocity(launchDir * speed, gravity);
 }
 
-void NC_STACK_ypamissile::ConfigureArcGrenadeHoming(int delay)
-{
-    _arcGrenadeHomingRemaining = 0;
-    _arcGrenadeHomingActive = false;
-
-    // A delay at or beyond this projectile's effective lifetime can never
-    // activate. Keeping it disabled also avoids a one-frame transition at the
-    // exact death boundary.
-    if ( _mislType != MISL_ARC_GRENADE || delay <= 0 ||
-         _mislLifeTime <= 0 || delay >= _mislLifeTime )
-    {
-        return;
-    }
-
-    _arcGrenadeHomingRemaining = delay;
-}
-
-bool NC_STACK_ypamissile::ActivateArcGrenadeHomingIfDue(int frameTime)
-{
-    if ( _arcGrenadeHomingActive || _mislType != MISL_ARC_GRENADE ||
-         _arcGrenadeHomingRemaining <= 0 )
-    {
-        return false;
-    }
-
-    if ( frameTime <= 0 )
-        return false;
-
-    if ( frameTime < _arcGrenadeHomingRemaining )
-    {
-        _arcGrenadeHomingRemaining -= frameTime;
-        return false;
-    }
-
-    _arcGrenadeHomingRemaining = 0;
-    _arcGrenadeHomingActive = true;
-    _mislType = MISL_TARGETED;
-
-    vec3d lastTargetDirection = _target_dir;
-    if ( lastTargetDirection.normalise() <= 0.001f )
-        _target_dir = _fly_dir;
-
-    // _fly_dir/_fly_dir_length already describe the instantaneous ballistic
-    // velocity. They are deliberately preserved: the targeted-missile path
-    // starts from that exact direction and speed with no position or speed reset.
-    return true;
-}
-
 void NC_STACK_ypamissile::UpdateArcGrenadeBallistic(float dtime)
 {
     if ( dtime <= 0.0f )
@@ -2574,8 +2524,6 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
         {
             move_msg arg74;
 
-            ActivateArcGrenadeHomingIfDue(arg->frameTime);
-
             switch ( _mislType )
             {
             case MISL_BOMB:
@@ -2606,24 +2554,8 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             case MISL_TARGETED:
                 arg74.field_0 = v38;
                 arg74.flag = 0;
-                if ( _arcGrenadeHomingActive )
-                {
-                    // Reuse the established maxrot steering implementation,
-                    // then feed the resolved direction through normal missile
-                    // movement. Arc Grenade keeps its existing force contract:
-                    // no thrust is added, so maxrot remains the only target-turn
-                    // control and the instantaneous ballistic speed is preserved.
-                    if ( std::isfinite(_maxrot) && _maxrot > 0.0f )
-                        SteerHomingBombDirection(v38);
-                    arg74.flag = 1;
-                }
-                else
-                {
-                    arg74.vec = CalcForceVector();
-                }
+                arg74.vec = CalcForceVector();
                 Move(&arg74);
-                if ( _arcGrenadeHomingActive )
-                    _arcGrenadeVelocity = _fly_dir * _fly_dir_length;
                 break;
 
             case MISL_GRENADE:
@@ -3179,6 +3111,8 @@ void NC_STACK_ypamissile::Renew()
     _mislChainPendingOrigin = vec3d(0.0, 0.0, 0.0);
     _mislChainPendingOriginRadius = 0.0;
     _mislChainHitGids.clear();
+    _suicideViewerReturnGids.clear();
+    _suicideViewerHostGid = 0;
     _mislAttachedToTarget = false;
     _mislAttachTargetGid = 0;
     _mislAttachOffset = vec3d(0.0, 0.0, 0.0);
@@ -3193,8 +3127,6 @@ void NC_STACK_ypamissile::Renew()
     // OpenNeoUA custom: clear Arc Grenade ballistic state on recycle.
     _arcGrenadeVelocity = vec3d(0.0, 0.0, 0.0);
     _arcGrenadeGravity = 9.80665f;
-    _arcGrenadeHomingRemaining = 0;
-    _arcGrenadeHomingActive = false;
 
     // OpenNeoUA custom: clear artillery shell state on recycle.
     _isArtilleryShellProjectile = false;
@@ -3276,13 +3208,68 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
     return 1;
 }
 
+void NC_STACK_ypamissile::ConfigureSuicideViewerReturn(
+    const std::vector<int32_t> &squadGids, int32_t hostGid)
+{
+    _suicideViewerReturnGids = squadGids;
+    _suicideViewerHostGid = hostGid;
+}
+
+static bool ypamissile_IsUsableSuicideReturn(NC_STACK_ypabact *candidate)
+{
+    return candidate && candidate->_energy > 0 &&
+           candidate->_status != BACT_STATUS_DEAD &&
+           candidate->_status != BACT_STATUS_CREATE &&
+           candidate->_status != BACT_STATUS_BEAM &&
+           !(candidate->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) &&
+           candidate->_bact_type != BACT_TYPES_MISSLE &&
+           candidate->_bact_type != BACT_TYPES_GUN &&
+           !candidate->ShouldHideFromStrategicUI();
+}
+
 void NC_STACK_ypamissile::ResetViewing()
 {
-    if ( getBACT_viewer() )
-    {
-        setBACT_viewer(false);
-        setBACT_inputting(false);
+    if ( !getBACT_viewer() )
+        return;
 
+    setBACT_viewer(false);
+    setBACT_inputting(false);
+
+    NC_STACK_ypabact *returnUnit = NULL;
+    if ( !_suicideViewerReturnGids.empty() || _suicideViewerHostGid )
+    {
+        for ( int32_t gid : _suicideViewerReturnGids )
+        {
+            NC_STACK_ypabact *candidate = _world ? _world->FindLiveBactByGid(gid) : NULL;
+            if ( ypamissile_IsUsableSuicideReturn(candidate) )
+            {
+                returnUnit = candidate;
+                break;
+            }
+        }
+
+        if ( !returnUnit && _suicideViewerHostGid && _world )
+        {
+            NC_STACK_ypabact *host = _world->FindLiveBactByGid(_suicideViewerHostGid);
+            if ( ypamissile_IsUsableSuicideReturn(host) )
+                returnUnit = host;
+        }
+
+        _suicideViewerReturnGids.clear();
+        _suicideViewerHostGid = 0;
+    }
+
+    if ( returnUnit )
+    {
+        returnUnit->setBACT_viewer(true);
+        returnUnit->setBACT_inputting(true);
+        returnUnit->ArmSuicideHandoffFireRelease();
+        return;
+    }
+
+    // Non-suicide cameras retain the original launcher/parent return semantics.
+    if ( _mislEmitter )
+    {
         if ( _mislEmitter->_status != BACT_STATUS_DEAD || _mislEmitter->_parent == NULL )
         {
             _mislEmitter->setBACT_viewer(true);
@@ -3293,7 +3280,6 @@ void NC_STACK_ypamissile::ResetViewing()
             _mislEmitter->_parent->setBACT_viewer(true);
             _mislEmitter->_parent->setBACT_inputting(true);
         }
-
     }
 }
 
@@ -3569,12 +3555,6 @@ void NC_STACK_ypamissile::SetMissileType(int tp)
 void NC_STACK_ypamissile::SetLifeTime(int time)
 {
     _mislLifeTime = time;
-
-    if ( !_arcGrenadeHomingActive && _arcGrenadeHomingRemaining > 0 &&
-         (time <= 0 || _arcGrenadeHomingRemaining >= time) )
-    {
-        _arcGrenadeHomingRemaining = 0;
-    }
 }
 
 void NC_STACK_ypamissile::SetDelay(int delay)

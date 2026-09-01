@@ -18,7 +18,7 @@ enum TYPES
     TYPE_CONQ       = 2,
     TYPE_VHCLKILL   = 3,
     TYPE_VHCLCREATE = 4,
-    // 5 unused
+    TYPE_PLASMA     = 5,
     TYPE_POWERST    = 6,
     TYPE_UPGRADE    = 7,
 
@@ -274,6 +274,54 @@ public:
 };
 
 
+class Plasma: public Record
+{
+public:
+    uint64_t amount;
+    uint8_t posX;
+    uint8_t posY;
+    uint8_t owner;
+
+public:
+    Plasma() : Record(TYPE_PLASMA, 11), amount(0), posX(0), posY(0), owner(0) {};
+    Plasma(uint64_t value, uint8_t x, uint8_t y, uint8_t own)
+    : Record(TYPE_PLASMA, 11), amount(value), posX(x), posY(y), owner(own) {};
+
+    virtual Common::ByteArray MakeByteArray() const
+    {
+        Common::ByteArray tmp;
+        tmp.push_back(TYPE_PLASMA);
+        Common::AppendByteUL32(&tmp, (uint32_t)(amount & 0xFFFFFFFFULL));
+        Common::AppendByteUL32(&tmp, (uint32_t)(amount >> 32));
+        tmp.push_back(posX);
+        tmp.push_back(posY);
+        tmp.push_back(owner);
+        return tmp;
+    }
+
+    virtual void WriteBytes(void *dst) const
+    {
+        uint8_t *d = (uint8_t *)dst;
+        d[0] = TYPE_PLASMA;
+        Utils::ByteUL32(&d[1], (uint32_t)(amount & 0xFFFFFFFFULL));
+        Utils::ByteUL32(&d[5], (uint32_t)(amount >> 32));
+        d[9] = posX;
+        d[10] = posY;
+        d[11] = owner;
+    }
+
+    virtual void ReadBytes(const void *bt)
+    {
+        const uint8_t *d = (const uint8_t *)bt;
+        amount = (uint64_t)Utils::UL32Byte(&d[0]) |
+                 ((uint64_t)Utils::UL32Byte(&d[4]) << 32);
+        posX = d[8];
+        posY = d[9];
+        owner = d[10];
+    }
+};
+
+
 class PowerST: public Record
 {
 public:
@@ -427,7 +475,7 @@ public:
         instances[TYPE_CONQ] = new Conq;
         instances[TYPE_VHCLKILL] = new VhclKill;
         instances[TYPE_VHCLCREATE] = new VhclCreate;
-        instances[5] = NULL;
+        instances[TYPE_PLASMA] = new Plasma;
         instances[TYPE_POWERST] = new PowerST;
         instances[TYPE_UPGRADE] = new Upgrade;
     }

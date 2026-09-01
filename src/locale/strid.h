@@ -259,6 +259,16 @@ enum OPENUA_STRING
     // Visual-only toggle for the vanilla RAND map boundary walls.
     OUA_HIDE_MAP_BORDER_WALLS,
 
+    // Mission briefing/debrief controls and mission-local Plasma statistic.
+    OUA_QUIT_MISSION,
+    OUA_REPLAY_BRIEFING,
+    OUA_RESTART_MISSION,
+    OUA_COMPLETE_MISSION,
+    OUA_PLASMA_OBTAINED,
+
+    // Weapon HUD magazine/salve label owned by OpenNeoUA.
+    OUA_HUD_MAG,
+
     OUA_STRING_MAX
 };
 

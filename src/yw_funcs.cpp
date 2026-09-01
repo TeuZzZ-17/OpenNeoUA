@@ -1971,6 +1971,57 @@ void NC_STACK_ypaworld::FreeDebrief()
     _briefScreen.Stage = TBriefengScreen::STAGE_NONE;
 
     _levelInfo.State = TLevelInfo::STATE_MENU;
+    _missionMapStatusSnapshotValid = false;
+}
+
+bool NC_STACK_ypaworld::CanRestartCompletedMission() const
+{
+    return _missionMapStatusSnapshotValid &&
+           !_gameWasNetGame &&
+           _levelInfo.State == TLevelInfo::STATE_DEBRIEFING &&
+           _missionMapStatusSnapshotLevel == _levelInfo.LevelID;
+}
+
+bool NC_STACK_ypaworld::RestartCompletedMission()
+{
+    if ( !CanRestartCompletedMission() || !_GameShell )
+        return false;
+
+    const int32_t levelID = _missionMapStatusSnapshotLevel;
+
+    // Reuse the mission-start rollback already used by the abort/net paths so
+    // buddies, upgrades, player totals and first-contact state return to their
+    // exact pre-run values. Map-region statuses are not part of settings.tmp,
+    // so restore only that one missing progression surface from our snapshot.
+    if ( !LoadSettings("settings.tmp", _GameShell->UserName,
+                       (World::SDF_BUDDY | World::SDF_PROTO | World::SDF_USER),
+                       false) )
+    {
+        ypa_log_out("Restart Mission: unable to restore pre-mission settings.\n");
+        return false;
+    }
+
+    for ( size_t i = 0; i < _globalMapRegions.MapRegions.size(); i++ )
+        _globalMapRegions.MapRegions[i].Status = _missionMapStatusSnapshot[i];
+
+    // DeleteLevel has already persisted the completed run. Replace that file
+    // with the restored pre-run state before starting the level again.
+    if ( !SaveSettings(_GameShell,
+                       fmt::sprintf("%s/user.txt", _GameShell->UserName),
+                       World::SDF_ALL) )
+    {
+        // Keep the restored in-memory state authoritative and continue into
+        // ACTION_PLAY. ProcessMenuFrame performs the normal settings save once
+        // more before loading the mission, avoiding an inconsistent debrief
+        // where Complete Mission could act on an already-restored run.
+        ypa_log_out("Restart Mission: restored progression could not be persisted yet; retrying on level start.\n");
+    }
+
+    _GameShell->envAction.action = EnvAction::ACTION_PLAY;
+    _GameShell->envAction.params[0] = levelID;
+    _GameShell->envAction.params[1] = levelID;
+    FreeDebrief();
+    return true;
 }
 
 // Select map
@@ -2517,6 +2568,11 @@ void yw_calcPlayerScore(NC_STACK_ypaworld *yw)
                 case World::History::TYPE_POWERST:
                 case World::History::TYPE_UPGRADE:
                     decoder->AddScore(&yw->_playersStats);
+                    break;
+
+                case World::History::TYPE_PLASMA:
+                    // Mission-local currency is visualized by the debrief
+                    // timeline but never contributes to the legacy score.
                     break;
 
                 default:
