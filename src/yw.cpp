@@ -7618,6 +7618,13 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     int valueWidth = usableWidth - labelWidth - sliderWidth;
     int rowHeight = _fontH + vertMenuSpace;
 
+    // Keep the two additional rows clear of the fixed bottom buttons even at
+    // classic low resolutions (for example 640x480).
+    const int maxRowHeight =
+        (bottomButtonsY - buttonsSpace - _fontH) / (UserData::ATMOPT_COUNT + 1);
+    if (maxRowHeight >= _fontH)
+        rowHeight = std::min(rowHeight, maxRowHeight);
+
     _GameShell->atmosphere_button = Nucleus::CInit<NC_STACK_button>({
         {NC_STACK_button::BTN_ATT_X, (int32_t)posLeftPaddingX},
         {NC_STACK_button::BTN_ATT_Y, (int32_t)scaledFontHeight},
@@ -7645,13 +7652,15 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         Locale::Text::OpenUA(Locale::OUA_DARK_LENGTH),
         Locale::Text::OpenUA(Locale::OUA_DARK_STRENGTH),
         Locale::Text::OpenUA(Locale::OUA_WORLD_UI_MAX_DISTANCE),
-        Locale::Text::OpenUA(Locale::OUA_VHS_STRENGTH)
+        Locale::Text::OpenUA(Locale::OUA_VHS_STRENGTH),
+        Locale::Text::OpenUA(Locale::OUA_PARTICLE_LIMIT),
+        Locale::Text::OpenUA(Locale::OUA_RENDER_SECTORS)
     }};
 
     const std::array<int, UserData::ATMOPT_COUNT> mins =
-    {{0, 0, 25, 50, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0}};
+    {{0, 0, 25, 50, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 3}};
     const std::array<int, UserData::ATMOPT_COUNT> maxs =
-    {{100, 100, 200, 200, 200, 100, 10000, 10000, 100, 10000, 10000, 100, 20000, 100}};
+    {{100, 100, 200, 200, 200, 100, 10000, 10000, 100, 10000, 10000, 100, 20000, 100, YW_PARTICLE_LIMIT_UI_MAX, YW_RENDER_SECTORS_MAX}};
 
     NC_STACK_button::button_64_arg btn;
     btn.caption2.clear();

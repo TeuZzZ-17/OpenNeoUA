@@ -2037,6 +2037,19 @@ void UserData::AtmosphereOptionsLoad()
     atmosphereValues[ATMOPT_VHS_STRENGTH] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 60);
 
+    atmosphereValues[ATMOPT_PARTICLE_LIMIT] =
+        std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, System::IniConf::GfxParticlesLimit.Get<int32_t>()));
+
+    const int32_t currentRenderSectors = p_YW ? p_YW->getYW_visSectors() : 9;
+    atmosphereValues[ATMOPT_RENDER_SECTORS] =
+        IntFromString(System::IniConf::GfxRenderSectors.Get<std::string>(), currentRenderSectors, 3, YW_RENDER_SECTORS_MAX);
+    if (p_YW)
+    {
+        // Reuse the runtime's canonical normalization (odd centered window, 3..max).
+        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+        atmosphereValues[ATMOPT_RENDER_SECTORS] = p_YW->getYW_visSectors();
+    }
+
     atmosphereSavedValues = atmosphereValues;
 
     for (int i = 0; i < ATMOPT_COUNT; ++i)
@@ -2133,6 +2146,29 @@ void UserData::AtmosphereOptionsApplyLive()
     System::IniConf::GfxVhsFilterStrength.Value =
         VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH]);
 
+    // Particle spawns read this key directly, so the new limit applies live.
+    System::IniConf::GfxParticlesLimit.Value =
+        (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
+
+    // Reuse the existing renderer setter so UI and runtime share one normalization path.
+    if (p_YW)
+    {
+        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+        const int normalizedRenderSectors = p_YW->getYW_visSectors();
+        if (normalizedRenderSectors != atmosphereValues[ATMOPT_RENDER_SECTORS])
+        {
+            atmosphereValues[ATMOPT_RENDER_SECTORS] = normalizedRenderSectors;
+            if (NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400 + ATMOPT_RENDER_SECTORS))
+            {
+                slider->value = (int16_t)normalizedRenderSectors;
+                atmosphere_button->Refresh(1400 + ATMOPT_RENDER_SECTORS);
+            }
+            UpdateAtmosphereOptionTexts();
+        }
+    }
+    System::IniConf::GfxRenderSectors.Value =
+        std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
     GFX::Engine.ReloadHorizonConfig();
@@ -2150,7 +2186,7 @@ void UserData::AtmosphereOptionsSave()
     if (!SavePaletteThemeToNucleusIni())
         ypa_log_out("WARNING: Could not save gfx.visual_filter to nucleus.ini\n");
 
-    const std::array<std::pair<const char *, std::string>, 14> values =
+    const std::array<std::pair<const char *, std::string>, 16> values =
     {{
         {"gfx.visual_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
         {"gfx.atmosphere_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH])},
@@ -2165,7 +2201,9 @@ void UserData::AtmosphereOptionsSave()
         {"gfx.horizon_dark_length", std::to_string(atmosphereValues[ATMOPT_DARK_LENGTH])},
         {"gfx.horizon_dark_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_DARK_STRENGTH])},
         {"game.world_ui_max_distance", std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE])},
-        {"gfx.vhs_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH])}
+        {"gfx.vhs_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH])},
+        {"gfx.particles.limit", std::to_string(atmosphereValues[ATMOPT_PARTICLE_LIMIT])},
+        {"gfx.render_sectors", std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS])}
     }};
 
     for (const auto &entry : values)
@@ -2188,6 +2226,13 @@ void UserData::AtmosphereOptionsSave()
 
     // Force the final saved state into the current session even when the user
     // opened the page and pressed Save without moving a slider.
+    System::IniConf::GfxParticlesLimit.Value =
+        (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
+    System::IniConf::GfxRenderSectors.Value =
+        std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+    if (p_YW)
+        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
     GFX::Engine.ReloadHorizonConfig();
@@ -2245,6 +2290,12 @@ void UserData::AtmosphereOptionsCancel()
         std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE]);
     System::IniConf::GfxVhsFilterStrength.Value =
         VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH]);
+    System::IniConf::GfxParticlesLimit.Value =
+        (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
+    System::IniConf::GfxRenderSectors.Value =
+        std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+    if (p_YW)
+        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2268,7 +2319,9 @@ void UserData::AtmosphereOptionsReset()
         4000, 2000, 80,
         2000, 2000, 65,
         5700,
-        60
+        60,
+        YW_PARTICLE_LIMIT_UI_DEFAULT,
+        YW_RENDER_SECTORS_UI_DEFAULT
     }};
 
     confPaletteTheme = "Black_Wadi.pal";

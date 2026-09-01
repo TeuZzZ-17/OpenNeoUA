@@ -436,6 +436,8 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_RESTART_MISSION:             fallback = "Restart Mission"; break;
         case OUA_COMPLETE_MISSION:            fallback = "Complete Mission"; break;
         case OUA_PLASMA_OBTAINED:             fallback = "Plasma Obtained"; break;
+        case OUA_PARTICLE_LIMIT:              fallback = "Particle Limit"; break;
+        case OUA_RENDER_SECTORS:              fallback = "Render Sectors"; break;
         default: break;
     }
 
