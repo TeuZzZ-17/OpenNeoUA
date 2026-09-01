@@ -1811,6 +1811,7 @@ struct TBriefengScreen
     uint32_t LastFrameTimeStamp = 0;
     std::array<World::TPlayerStatus, World::CVFractionsCount> StatsGlobal;
     std::array<World::TPlayerStatus, World::CVFractionsCount> StatsIngame;
+    uint64_t PlasmaObtained = 0;
     std::string MovieStr;
     std::vector<World::History::Upgrade> Upgrades;
     std::vector<int16_t> PlayAsOwners;
@@ -1888,6 +1889,7 @@ struct TBriefengScreen
 
         StatsGlobal.fill( World::TPlayerStatus() );
         StatsIngame.fill( World::TPlayerStatus() );
+        PlasmaObtained = 0;
 
         MovieStr.clear();
         Upgrades.clear();
@@ -2535,6 +2537,8 @@ public:
     void BriefingCyclePlayAsOwner();
     std::vector<MapRobo> BriefingReorderRobosForPlayAs(const std::vector<MapRobo> &Robos) const;
     std::string BriefingPlayAsButtonText() const;
+    bool CanRestartCompletedMission() const;
+    bool RestartCompletedMission();
     void FreeBriefDataSet();
     int ypaworld_func158__sub4__sub1__sub3__sub0();
     void yw_ActivateWunderstein(cellArea *cell, int a3);
@@ -3421,6 +3425,9 @@ public:
     bool _prepareDebrief = false; // prepare debrief and do it? or exit without
     bool _gameWasNetGame = false;
     uint8_t _userOwnerIdWasInNetGame = 0;
+    std::array<int, 256> _missionMapStatusSnapshot = Common::ArrayInit<int, 256>(0);
+    int32_t _missionMapStatusSnapshotLevel = 0;
+    bool _missionMapStatusSnapshotValid = false;
 
     Common::PlaneBytes _lvlTypeMap;
     Common::PlaneBytes _lvlOwnMap;

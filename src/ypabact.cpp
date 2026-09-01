@@ -1029,21 +1029,20 @@ static mat3x3 ypabact_BuildVPRotationMatrix(const vec3d &degrees)
 static constexpr int WEAPON_RECOIL_VISUAL_DURATION_MS = 220;
 static constexpr float WEAPON_RECOIL_VISUAL_DEGREES_PER_UNIT = 0.75f;
 static constexpr float WEAPON_RECOIL_VISUAL_MAX_DEGREES = 5.0f;
-static constexpr float MGUN_RECOIL_VISUAL_DEGREES_PER_UNIT = 1.2f;
-static constexpr float MGUN_RECOIL_VISUAL_MAX_DEGREES = 12.0f;
+static constexpr float MGUN_RECOIL_FEEDBACK_DEGREES_PER_UNIT = 1.2f;
+static constexpr float MGUN_RECOIL_FEEDBACK_MAX_DEGREES = 12.0f;
+// Preserve the smoother multi-axis cockpit vibration used by the earlier SHK
+// implementation. These affect camera shake only; body recoil remains purely longitudinal.
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_X = 0.35f;
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_Y = 0.20f;
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_Z = 0.35f;
-static constexpr float RECOIL_VISUAL_COMBINED_MAX_DEGREES =
-    WEAPON_RECOIL_VISUAL_MAX_DEGREES + MGUN_RECOIL_VISUAL_MAX_DEGREES;
 
-static float ypabact_GetTankWeaponRecoilVisualPitch(const NC_STACK_ypabact *bact)
+static float ypabact_GetWeaponRecoilVisualPitch(const NC_STACK_ypabact *bact)
 {
-    // OpenNeoUA tank recoil: keep the physical recoil stable/horizontal, but add
-    // a small render-only pitch kick for third-person tanks.  This restores the
-    // visible firing tilt without feeding vertical velocity back into tank AI,
-    // collision or pathing.
-    if ( bact->_bact_type != BACT_TYPES_TANK ||
+    // Tanks and gun/flak actors share the same render-only firing tilt. The gun
+    // branch intentionally changes only its own VP, never parent or physics.
+    if ( (bact->_bact_type != BACT_TYPES_TANK &&
+          bact->_bact_type != BACT_TYPES_GUN) ||
          bact->_weaponRecoilVisualDuration <= 0 ||
          bact->_weaponRecoilVisualPitch == 0.0f ||
          bact->_clock >= bact->_weaponRecoilVisualEndTime )
@@ -1060,9 +1059,10 @@ static float ypabact_GetTankWeaponRecoilVisualPitch(const NC_STACK_ypabact *bact
     return bact->_weaponRecoilVisualPitch * remain * remain;
 }
 
-static void ypabact_StartTankWeaponRecoilVisual(NC_STACK_ypabact *bact, float recoil)
+static void ypabact_StartWeaponRecoilVisual(NC_STACK_ypabact *bact, float recoil)
 {
-    if ( bact->_bact_type != BACT_TYPES_TANK || recoil <= 0.0f )
+    if ( (bact->_bact_type != BACT_TYPES_TANK &&
+          bact->_bact_type != BACT_TYPES_GUN) || recoil <= 0.0f )
         return;
 
     float degrees = recoil * WEAPON_RECOIL_VISUAL_DEGREES_PER_UNIT;
@@ -1079,55 +1079,61 @@ static void ypabact_StartTankWeaponRecoilVisual(NC_STACK_ypabact *bact, float re
     bact->_weaponRecoilVisualPitch = degrees * C_PI_180;
 }
 
-static float ypabact_GetMgunRecoilVisualPitch(const NC_STACK_ypabact *bact)
+static constexpr float MGUN_RECOIL_VISUAL_DISTANCE_PER_UNIT = 5.0f;
+static constexpr float MGUN_RECOIL_VISUAL_MAX_DISTANCE = 50.0f;
+
+static bool ypabact_IsPlayerMgunRecoilFirstPersonView(NC_STACK_ypabact *bact);
+static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact);
+
+static float ypabact_GetMgunRecoilFeedbackDegrees(const NC_STACK_ypabact *bact)
 {
-    if ( !ypabact_IsMgunRecoilVisualVehicleClass(bact) ||
-         bact->_mgunRecoilVisualDuration <= 0 ||
-         bact->_mgunRecoilVisualPitch == 0.0f ||
-         bact->_clock >= bact->_mgunRecoilVisualEndTime )
-        return 0.0f;
-
-    float remain = (float)(bact->_mgunRecoilVisualEndTime - bact->_clock) /
-                   (float)bact->_mgunRecoilVisualDuration;
-    if ( remain <= 0.0f )
-        return 0.0f;
-    if ( remain > 1.0f )
-        remain = 1.0f;
-
-    return bact->_mgunRecoilVisualPitch * remain * remain;
-}
-
-static float ypabact_GetMgunRecoilVisualDegrees(const NC_STACK_ypabact *bact)
-{
-    if ( !ypabact_IsMgunRecoilVisualVehicleClass(bact) ||
-         bact->_mgun_recoil <= 0.0f )
+    if ( !bact || bact->_mgun_recoil_cockpit <= 0.0f )
         return 0.0f;
 
     return std::min(
-        bact->_mgun_recoil * MGUN_RECOIL_VISUAL_DEGREES_PER_UNIT,
-        MGUN_RECOIL_VISUAL_MAX_DEGREES);
+        bact->_mgun_recoil_cockpit * MGUN_RECOIL_FEEDBACK_DEGREES_PER_UNIT,
+        MGUN_RECOIL_FEEDBACK_MAX_DEGREES);
 }
 
 static void ypabact_StartMgunRecoilVisual(NC_STACK_ypabact *bact)
 {
-    const float degrees = ypabact_GetMgunRecoilVisualDegrees(bact);
-    if ( degrees <= 0.0f )
+    if ( !bact || !ypabact_IsMgunRecoilVisualVehicleClass(bact) ||
+         bact->_mgun_recoil <= 0.0f ||
+         ypabact_IsPlayerMgunRecoilFirstPersonView(bact) )
         return;
 
-    bact->_mgunRecoilVisualDuration = WEAPON_RECOIL_VISUAL_DURATION_MS;
-    bact->_mgunRecoilVisualEndTime = bact->_clock + WEAPON_RECOIL_VISUAL_DURATION_MS;
-    bact->_mgunRecoilVisualPitch = degrees * C_PI_180;
+    // MGUN recoil follows the chassis forward used by the runtime itself.
+    // Flatten only the world vertical component: this is a pure longitudinal
+    // back-kick, never aim/camera direction, yaw, pitch or roll.
+    vec3d forward = bact->_rotation.AxisZ();
+    forward.y = 0.0f;
+    const float len = forward.length();
+    if ( !std::isfinite(len) || len <= 0.001f )
+        return;
+    forward /= len;
+
+    bact->_mgunRecoilVisualOffset -=
+        forward * (bact->_mgun_recoil * MGUN_RECOIL_VISUAL_DISTANCE_PER_UNIT);
+
+    const float offsetLen = bact->_mgunRecoilVisualOffset.length();
+    if ( std::isfinite(offsetLen) && offsetLen > MGUN_RECOIL_VISUAL_MAX_DISTANCE )
+        bact->_mgunRecoilVisualOffset *= MGUN_RECOIL_VISUAL_MAX_DISTANCE / offsetLen;
 }
 
-static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact)
+static bool ypabact_IsPlayerMgunRecoilFirstPersonView(NC_STACK_ypabact *bact)
 {
     if ( !bact || bact->IsAlternativeViewActive() )
         return false;
 
-    // Only the locally possessed first-person vehicle receives this feedback.
-    // AI, remote units, spectator/missile cameras and external views keep the
-    // existing render-only MGUN recoil without adding a world/camera shake.
+    // Keep the render-only body kick out of local first-person views. The cockpit
+    // shake itself is controlled independently by mgun_recoil_cockpit below.
     return bact->IsPlayerFirstPersonCameraActive() || bact->IsCockpitCameraActive();
+}
+
+static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact)
+{
+    return bact && bact->_mgun_recoil_cockpit > 0.0f &&
+           bact->IsCockpitCameraActive();
 }
 
 static bool ypabact_IsAiTankWeaponRecoilUnit(const NC_STACK_ypabact *unit)
@@ -1211,13 +1217,13 @@ vec3d NC_STACK_ypabact::GetCockpitCameraViewPosition() const
 
     if ( !IsCockpitCameraActive() ||
          _bact_type != BACT_TYPES_GUN ||
-         _cockpit_camera_recoil <= 0.0f )
+         _cockpit_gun_camera_recoil <= 0.0f )
         return position;
 
     // Reuse the original gun first-person recoil displacement without feeding it
     // back into aiming, projectile origins, physics or the generic recoil system.
     return position + _rotation.Transpose().Transform(
-        _viewer_position * _cockpit_camera_recoil);
+        _viewer_position * _cockpit_gun_camera_recoil);
 }
 
 void NC_STACK_ypabact::ToggleCockpitCameraMode()
@@ -1552,6 +1558,87 @@ static void ypabact_SafeDetachControlFrom(NC_STACK_ypabact *dying, NC_STACK_ypab
     world->_playerInHSGun = false;
 }
 
+static bool ypabact_IsUsableSquadControlCandidate(NC_STACK_ypabact *candidate,
+                                                   NC_STACK_ypabact *dying)
+{
+    return ypabact_IsUsableControlFallback(candidate, dying) &&
+           candidate->_status != BACT_STATUS_CREATE &&
+           candidate->_status != BACT_STATUS_BEAM &&
+           !candidate->ShouldHideFromStrategicUI();
+}
+
+static std::vector<NC_STACK_ypabact *> ypabact_GetSquadControlFallbacks(NC_STACK_ypabact *dying)
+{
+    std::vector<NC_STACK_ypabact *> result;
+    if ( !dying )
+        return result;
+
+    // Mirror the existing next-unit cycle order. Keep every valid candidate so
+    // a long-lived missile camera can skip a member that dies before it ends.
+    if ( dying->IsParentMyRobo() )
+    {
+        for ( NC_STACK_ypabact *candidate : dying->_kidList )
+        {
+            if ( ypabact_IsUsableSquadControlCandidate(candidate, dying) )
+                result.push_back(candidate);
+        }
+    }
+    else
+    {
+        World::RefBactList *siblings = dying->_kidRef.PList();
+        if ( siblings )
+        {
+            World::RefBactList::iterator it = dying->_kidRef.iter();
+            if ( it != siblings->end() )
+                ++it;
+
+            for ( ; it != siblings->end(); ++it )
+            {
+                if ( ypabact_IsUsableSquadControlCandidate(*it, dying) )
+                    result.push_back(*it);
+            }
+        }
+    }
+
+    if ( dying->_parent != dying->_host_station &&
+         ypabact_IsUsableSquadControlCandidate(dying->_parent, dying) )
+    {
+        result.push_back(dying->_parent);
+    }
+
+    return result;
+}
+
+static NC_STACK_ypabact *ypabact_GetNextSquadControlFallback(NC_STACK_ypabact *dying)
+{
+    const std::vector<NC_STACK_ypabact *> candidates =
+        ypabact_GetSquadControlFallbacks(dying);
+    return candidates.empty() ? NULL : candidates.front();
+}
+
+void NC_STACK_ypabact::PrepareSuicideControlHandoff()
+{
+    if ( !_world ||
+         (_world->_userUnit != this && _world->_viewerBact != this) )
+    {
+        return;
+    }
+
+    // Suicide-only handoff: prefer the next unit in the same squad before the
+    // existing safe-detach fallback can return control to the Host Station.
+    // Normal combat deaths continue to use their untouched vanilla/OpenNeoUA path.
+    ypabact_SafeDetachControlFrom(this, ypabact_GetNextSquadControlFallback(this));
+
+    // setYW_userVehicle() takes effect immediately, while the world's unit loop
+    // can still update the newly controlled squad member later in this same frame.
+    // Without a release latch that unit consumes the very same held FIRE input,
+    // fires, dies, hands off again and can cascade through the entire squad.
+    // Arm the actual fallback selected by SafeDetach; normal input resumes as soon
+    // as FIRE has been observed released once.
+    if ( _world->_userUnit && _world->_userUnit != this )
+        _world->_userUnit->_suicide_handoff_wait_fire_release = true;
+}
+
 static bool ypabact_IsDamagedStateActive(const NC_STACK_ypabact *bact)
 {
     if ( ypabact_IsDamagedFXSystemDisabled(bact) || bact->_energy <= 0 || bact->_energy_max <= 0 )
@@ -1837,14 +1924,13 @@ static void ypabact_TriggerPlayerMgunRecoilShake(NC_STACK_ypabact *bact)
     if ( !ypabact_ShouldUsePlayerMgunRecoilShake(bact) )
         return;
 
-    const float recoilDegrees = ypabact_GetMgunRecoilVisualDegrees(bact);
+    const float recoilDegrees = ypabact_GetMgunRecoilFeedbackDegrees(bact);
     if ( recoilDegrees <= 0.0f )
         return;
 
-    // Reuse the existing SHK engine. The magnitude is derived directly from
-    // the same capped visual recoil angle, so mgun_recoil remains the single
-    // point of truth. Axis multipliers keep the world vibration noticeable but
-    // weaker than the vehicle's own visual kick.
+    // Reuse the existing local SHK carrier, but keep cockpit feedback completely
+    // independent from the physical/body recoil. mgun_recoil_cockpit is the sole
+    // tuning value for this cockpit-only shake.
     bact->_mgun_recoil_shake.slot = 1;
     bact->_mgun_recoil_shake.mag0 = recoilDegrees * C_PI_180;
     bact->_mgun_recoil_shake.mag1 = 0.0f;
@@ -2502,9 +2588,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _weaponRecoilVisualEndTime = 0;
     _weaponRecoilVisualDuration = 0;
     _weaponRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualEndTime = 0;
-    _mgunRecoilVisualDuration = 0;
-    _mgunRecoilVisualPitch = 0.0f;
+    _mgunRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _weaponRecoilAiRecoveryEndTime = 0;
     _weaponRecoilPlayerRecoveryEndTime = 0;
@@ -2524,6 +2608,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _decoration_fx_persistent_id = 0;
     _damaged_force_malus = 0.0;
     _damaged_maxrot_malus = 0.0;
+    _damaged_mgun_shot_time_malus = 0.0;
+    _damaged_shot_time_malus = 0.0;
     _damaged_snd_pitch_multiplier = 1.0;
     _damaged_fx_active = false;
     _active_debuff.Clear();
@@ -2543,7 +2629,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _overeof = 0.0;
     _viewer_overeof = 0.0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
-    _cockpit_camera_recoil = 0.0f;
+    _cockpit_gun_camera_recoil = 0.0f;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _clock = 0;
@@ -2579,6 +2665,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgunEnergyDrainRemainder = 0.0f;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil = 0.0f;
+    _mgun_recoil_cockpit = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
@@ -2602,6 +2689,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _num_weapons = 0;
     _weapon_projectile_counts = {0, 0, 0, 0};
     _weapon_time = 0;
+    ResetProgressiveWeaponFireRate();
     _fire_x_mode = World::TVhclProto::FIRE_X_MODE_VANILLA;
     _fire_x_start = 0.0;
     _fire_x_step = 0.0;
@@ -2619,6 +2707,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_time = 0;
     _salve_counter = 0;
     _kill_after_shot = 0;
+    _suicide_handoff_wait_fire_release = false;
     _spawn_units = 0;
     _spawn_vehicle = 0;
     _spawn_interval = 5000;
@@ -2735,9 +2824,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _weaponRecoilVisualEndTime = 0;
     _weaponRecoilVisualDuration = 0;
     _weaponRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualEndTime = 0;
-    _mgunRecoilVisualDuration = 0;
-    _mgunRecoilVisualPitch = 0.0f;
+    _mgunRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _weaponRecoilAiRecoveryEndTime = 0;
     _weaponRecoilPlayerRecoveryEndTime = 0;
@@ -2765,7 +2852,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _overeof = 10.0;
     _viewer_overeof = 40.0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
-    _cockpit_camera_recoil = 0.0f;
+    _cockpit_gun_camera_recoil = 0.0f;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _energy = 10000;
@@ -2788,6 +2875,8 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _decoration_fx_persistent_id = 0;
     _damaged_force_malus = 0.0;
     _damaged_maxrot_malus = 0.0;
+    _damaged_mgun_shot_time_malus = 0.0;
+    _damaged_shot_time_malus = 0.0;
     _damaged_snd_pitch_multiplier = 1.0;
     _damaged_fx_active = false;
     _active_debuff.Clear();
@@ -3588,7 +3677,7 @@ float NC_STACK_ypabact::GetMinigunRange() const
 
 int NC_STACK_ypabact::GetMinigunShotTime(int frameDeltaMs) const
 {
-    int shotTime = GetEffectiveShotTime(_mgun_shot_time);
+    int shotTime = GetEffectiveShotTime(_mgun_shot_time, true);
 
     if ( shotTime < frameDeltaMs )
         shotTime = frameDeltaMs;
@@ -3704,6 +3793,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateArtilleryShell(arg);
     ResolveGenesisCompoundOverlap(arg->frameTime);
     AI_layer1(arg);
+    UpdateProgressiveWeaponFireRate(arg);
 
     // Collision damage or a Host Station death cascade may call Die() from
     // inside AI_layer1. Some legacy vehicle paths then write NORMAL/IDLE before
@@ -3912,6 +4002,8 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     _active_debuff.force_malus = std::max(0.0f, std::min(debuff.force_malus, 1.0f));
     _active_debuff.maxrot_malus = std::max(0.0f, std::min(debuff.maxrot_malus, 1.0f));
     _active_debuff.shield_malus = std::max(0.0f, std::min(debuff.shield_malus, 1.0f));
+    _active_debuff.mgun_shot_time_malus = std::max(0.0f, std::min(debuff.mgun_shot_time_malus, 1.0f));
+    _active_debuff.shot_time_malus = std::max(0.0f, std::min(debuff.shot_time_malus, 1.0f));
     _active_debuff.snd_pitch_multiplier = ypabact_SafeDamageMult(debuff.snd_pitch_multiplier);
     _active_debuff.target_tint = debuff.target_tint;
     _active_debuff.vps = debuff.vps;
@@ -4699,15 +4791,12 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
     *pushVel *= expf(-dtime / tau);
 }
 
-static void ypabact_UpdateTankWeaponRecoilVisualOffset(NC_STACK_ypabact *unit, update_msg *arg)
+static void ypabact_DecayRecoilVisualOffset(vec3d *offset, update_msg *arg)
 {
-    if ( !ypabact_IsAiTankWeaponRecoilUnit(unit) )
-        return;
-
-    float offsetLen = unit->_weaponRecoilVisualOffset.length();
+    const float offsetLen = offset->length();
     if ( !isfinite(offsetLen) || offsetLen < 0.01f )
     {
-        unit->_weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
+        *offset = vec3d(0.0, 0.0, 0.0);
         return;
     }
 
@@ -4718,7 +4807,13 @@ static void ypabact_UpdateTankWeaponRecoilVisualOffset(NC_STACK_ypabact *unit, u
     if ( dtime > AOE_PUSH_MAX_DT )
         dtime = AOE_PUSH_MAX_DT;
 
-    unit->_weaponRecoilVisualOffset *= expf(-dtime / WEAPON_RECOIL_TAU);
+    *offset *= expf(-dtime / WEAPON_RECOIL_TAU);
+}
+
+static void ypabact_UpdateTankWeaponRecoilVisualOffset(NC_STACK_ypabact *unit, update_msg *arg)
+{
+    if ( ypabact_IsAiTankWeaponRecoilUnit(unit) )
+        ypabact_DecayRecoilVisualOffset(&unit->_weaponRecoilVisualOffset, arg);
 }
 
 float NC_STACK_ypabact::GetPushResistanceMultiplier() const
@@ -4785,15 +4880,22 @@ void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
 void NC_STACK_ypabact::ApplyWeaponRecoil(const vec3d &dir, float recoil)
 {
     recoil = ypabact_ClampWeaponRecoil(recoil);
-    if ( _bact_type == BACT_TYPES_GUN || recoil <= 0.0f )
+    if ( recoil <= 0.0f )
         return;
+
+    // Gun/flak keeps its existing local visual kick, but no longer exits here:
+    // the same generic recoil impulse path used by every other supported unit
+    // now applies to the gun actor itself. Attached guns never redirect recoil
+    // to their carrier/parent; their normal attachment update remains authoritative.
+    if ( _bact_type == BACT_TYPES_GUN )
+        ypabact_StartWeaponRecoilVisual(this, recoil);
 
     if ( _bact_type == BACT_TYPES_TANK && !(_status_flg & BACT_STFLAG_LAND) )
         return;
 
     if ( _bact_type == BACT_TYPES_TANK )
     {
-        ypabact_StartTankWeaponRecoilVisual(this, recoil);
+        ypabact_StartWeaponRecoilVisual(this, recoil);
 
         // AI tanks use render-only recoil translation below, while player tanks
         // still receive physical recoil. Keep a short forward recovery damp so
@@ -4834,6 +4936,8 @@ void NC_STACK_ypabact::UpdateAoePush(update_msg *arg)
 
 void NC_STACK_ypabact::UpdateWeaponRecoilPush(update_msg *arg)
 {
+    ypabact_DecayRecoilVisualOffset(&_mgunRecoilVisualOffset, arg);
+
     if ( ypabact_IsAiTankWeaponRecoilUnit(this) )
     {
         _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
@@ -4962,19 +5066,19 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             if ( !(_oflags & BACT_OFLAG_VIEWER) || _oflags & BACT_OFLAG_ALWAYSREND || ShouldRenderCockpitCameraBody() )
             {
                 _current_vp->Bas->TForm().Pos = _tForm.Pos;
-                if ( ypabact_IsAiTankWeaponRecoilUnit(this) && ypabact_IsMainVPBase(this, _current_vp->Bas) )
-                    _current_vp->Bas->TForm().Pos += _weaponRecoilVisualOffset;
+                if ( ypabact_IsMainVPBase(this, _current_vp->Bas) )
+                {
+                    if ( ypabact_IsAiTankWeaponRecoilUnit(this) )
+                        _current_vp->Bas->TForm().Pos += _weaponRecoilVisualOffset;
+                    _current_vp->Bas->TForm().Pos += _mgunRecoilVisualOffset;
+                }
                 _current_vp->Bas->TForm().SclRot = _tForm.SclRot;
 
                 bool scaled = shouldApplyVPScale(_current_vp->Bas);
                 if ( ypabact_ShouldApplyVPRotation(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_rotation);
 
-                float visualRecoilPitch = ypabact_GetTankWeaponRecoilVisualPitch(this) +
-                                          ypabact_GetMgunRecoilVisualPitch(this);
-                visualRecoilPitch = std::min(
-                    visualRecoilPitch,
-                    (float)(RECOIL_VISUAL_COMBINED_MAX_DEGREES * C_PI_180));
+                const float visualRecoilPitch = ypabact_GetWeaponRecoilVisualPitch(this);
                 if ( visualRecoilPitch != 0.0f && ypabact_IsMainVPBase(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= mat3x3::RotateX(visualRecoilPitch);
 
@@ -5461,13 +5565,29 @@ static void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
         return;
     }
 
+    // A suicide handoff can happen in the middle of the world's unit-update loop.
+    // The next squad member may therefore become USERINPT before its own Update()
+    // runs and see the same still-held FIRE input that killed its predecessor.
+    // Require one real release before allowing fire on the newly controlled unit;
+    // otherwise one press can cascade through an entire kill_after_shot squad.
+    bool suppressSuicideHandoffFire = false;
+    if ( bact->_suicide_handoff_wait_fire_release )
+    {
+        if ( arg->inpt->Buttons.IsAny({0, 2, 5}) )
+            suppressSuicideHandoffFire = true;
+        else
+            bact->_suicide_handoff_wait_fire_release = false;
+    }
+
     // While stun owns the fire policy, suppress the raw player fire buttons
     // even when stun_unit_fire=1: UpdateActiveDebuffStunFire() has already
     // issued the forced shot for this frame, so passing FIRE through as well
-    // could duplicate continuous/laser requests.
+    // could duplicate continuous/laser requests. The suicide-handoff latch shares
+    // this existing filtered-input path instead of creating a second User_layer.
     const bool suppressWeapons =
         world->IsNewGemNotificationBlockingPlayerWeapons(bact) ||
-        bact->IsActiveDebuffStunning(false);
+        bact->IsActiveDebuffStunning(false) ||
+        suppressSuicideHandoffFire;
     if ( !suppressWeapons )
     {
         bact->User_layer(arg);
@@ -8976,8 +9096,7 @@ static bool ypabact_IsHomingBombWeapon(const World::TWeapProto &wproto)
 
 static bool ypabact_UsesMissileTargeting(const World::TWeapProto &wproto)
 {
-    return wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE ||
-           wproto.HasArcGrenadeHoming();
+    return wproto._weaponFlags == YPA_WEAPON_FLAGS_MISSILE;
 }
 
 static bool ypabact_IsCompatibleMultiTargetWeapon(const World::TWeapProto &wproto)
@@ -13047,6 +13166,8 @@ bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
     bool wasInvulnerable = _invulnerable;
     _invulnerable = false;
 
+    PrepareSuicideControlHandoff();
+
     int suicideDamage = _energy_max > 0 ? _energy_max : (_energy > 0 ? _energy : 1);
     if ( suicideDamage > std::numeric_limits<int>::max() / 2 )
         suicideDamage = std::numeric_limits<int>::max() / 2;
@@ -13314,6 +13435,18 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         return 0;
     }
 
+    const bool salveCooldown =
+        cooldownProto.salve_shots > 0 && cooldownProto.salve_delay > 0 &&
+        cooldownProto.salve_shots <= _salve_counter;
+
+    // Progressive cadence belongs only to the uninterrupted shot_time chain.
+    // A vanilla structural pause (currently salve_delay) ends that chain, so
+    // holding FIRE through the pause must not spool the next burst in advance.
+    if ( salveCooldown )
+        ResetProgressiveWeaponFireRate();
+    else
+        RegisterProgressiveWeaponFireRequest(cooldownWeapon);
+
     if ( _weapon_time )
     {
         int v4;
@@ -13323,21 +13456,26 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         else
             v4 = cooldownProto.shot_time;
 
-        if ( cooldownProto.salve_shots &&
-             cooldownProto.salve_shots <= _salve_counter )
+        if ( salveCooldown )
         {
-            // salve_delay is a separate burst-pattern field, not one of the
-            // requested shot_time statistics.
+            // salve_delay is a separate burst-pattern cooldown. Entering it
+            // resets Progressive Fire Rate to the authored base shot time.
             v4 = cooldownProto.salve_delay;
         }
         else
         {
-            v4 = GetEffectiveShotTime(v4);
+            v4 = GetProgressiveWeaponShotTime(cooldownProto, v4);
+            v4 = GetEffectiveShotTime(v4, false);
         }
 
         if ( arg->g_time - _weapon_time < v4 )
             return 0;
     }
+
+    // The salve pause has just completed. Start a fresh ramp sequence from the
+    // base cadence on the first shot of the new burst, never during the delay.
+    if ( salveCooldown )
+        RegisterProgressiveWeaponFireRequest(cooldownWeapon);
 
     if ( usePlayerRandomSlots )
     {
@@ -13347,11 +13485,17 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     }
 
     if ( selectedWeapon == -1 || !ypabact_IsValidWeaponId(this, selectedWeapon) )
+    {
+        ResetProgressiveWeaponFireRate();
         return 0;
+    }
 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(selectedWeapon);
     if ( wproto.IsKamikaze() )
+    {
+        ResetProgressiveWeaponFireRate();
         return 0;
+    }
 
     const bool usePlayerLaunchShake = ypabact_ShouldUsePlayerLaunchShake(this, wproto);
     float weaponEnergyCostPercent = 0.0f;
@@ -13363,7 +13507,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     // OpenNeoUA custom: artillery shell weapons are driven exclusively by UpdateArtilleryShell()'s
     // barrage AI. Never fire them through the normal direct/missile path.
     if ( wproto.IsArtilleryShell() )
+    {
+        ResetProgressiveWeaponFireRate();
         return 0;
+    }
 
     // OpenNeoUA invisible: committed to firing the primary weapon this frame -> reveal now
     // (before the projectile spawns) so a cloaked unit never launches an invisible shot.
@@ -13405,7 +13552,6 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     }
 
     bool homingBomb = ypabact_IsHomingBombWeapon(wproto);
-    bool arcGrenadeHoming = wproto.HasArcGrenadeHoming();
     bool missileTargeting = ypabact_UsesMissileTargeting(wproto);
     int maxTargets = ypabact_GetMultiTargetLimit(wproto, v13);
     bool missileMultiTarget = maxTargets > 1 && missileTargeting;
@@ -13430,10 +13576,27 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     vec3d recoilDirSum(0.0, 0.0, 0.0);
     int recoilShotCount = 0;
 
+    const bool suicideControlledAtFire =
+        _kill_after_shot && _world &&
+        (_world->_userUnit == this || _world->_viewerBact == this);
+    std::vector<int32_t> suicideReturnGids;
+    int32_t suicideHostGid = 0;
+    bool suicideViewerStarted = false;
+    if ( suicideControlledAtFire )
+    {
+        for ( NC_STACK_ypabact *candidate : ypabact_GetSquadControlFallbacks(this) )
+            suicideReturnGids.push_back(candidate->_gid);
+        if ( _world->_userRobo )
+            suicideHostGid = _world->_userRobo->_gid;
+    }
+
     for (int i = 0; i < v13; i++)
     {
         float v37;
         bact_arg79 missileArg = *arg;
+        if ( suicideControlledAtFire && i == 0 )
+            missileArg.flags |= 1; // kill_after_shot always owns a Weapon Cam sequence.
+
         bool distributeTargets = missileMultiTarget || bombMultiTarget || homingBomb;
         NC_STACK_ypabact *multiTarget = distributeTargets ? ypabact_GetDistributedMissileTarget(weaponTargets, i) : NULL;
 
@@ -13500,7 +13663,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
                 // ballistic envelope even though the primary AI target passed
                 // CheckFireAI(), so end the salvo without spawning that shot.
                 if ( i == 0 )
+                {
+                    ResetProgressiveWeaponFireRate();
                     return 0;
+                }
                 break;
             }
         }
@@ -13508,7 +13674,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         wobj = _world->ypaworld_func147(&arg147);
 
         if ( !wobj )
+        {
+            ResetProgressiveWeaponFireRate();
             return 0;
+        }
 
         if ( i == 0 )
             ypabact_StartVehicleFireVPForWeapon(this, selectedWeapon, arg->g_time);
@@ -13618,7 +13787,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
         if ( i == 0 )
         {
-            if ( arg->flags & 1 )
+            if ( missileArg.flags & 1 )
                 wobj->_position = wobj->_position - wobj->_rotation.AxisZ() * 30.0;
         }
 
@@ -13643,8 +13812,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         _missiles_list.push_back(wobj);
 
         int v42 = wobj->GetMissileType();
-        if ( v42 == NC_STACK_ypamissile::MISL_TARGETED ||
-             homingBomb || arcGrenadeHoming )
+        if ( v42 == NC_STACK_ypamissile::MISL_TARGETED || homingBomb )
         {
             setTarget_msg arg67;
 
@@ -13718,6 +13886,11 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             {
                 if ( _oflags & BACT_OFLAG_VIEWER )
                 {
+                    if ( suicideControlledAtFire )
+                    {
+                        wobj->ConfigureSuicideViewerReturn(suicideReturnGids, suicideHostGid);
+                        suicideViewerStarted = true;
+                    }
                     setBACT_viewer(false);
                     wobj->setBACT_viewer(true);
                 }
@@ -13759,10 +13932,22 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     if ( _kill_after_shot )
     {
-        if ( _oflags & BACT_OFLAG_USERINPT )
+        if ( suicideControlledAtFire )
         {
-            setBACT_viewer(false);
-            wobj->setBACT_viewer(true);
+            if ( suicideViewerStarted )
+            {
+                // The missile is already the viewer/_userUnit. Drop only the
+                // dying launcher's stale input flag; ResetViewing() performs the
+                // same-squad handoff after the camera sequence actually ends.
+                setBACT_inputting(false);
+            }
+            else
+            {
+                // A controlled kill_after_shot normally forces the first projectile
+                // into Weapon Cam above. Keep the existing immediate fallback only
+                // for unusual cases where no projectile viewer could take ownership.
+                PrepareSuicideControlHandoff();
+            }
         }
 
         bact_arg84 arg84;
@@ -13790,6 +13975,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         _current_weapon_source_slot = ypabact_GetCurrentPrimaryWeaponSourceSlot(this);
         _current_weapon_id = GetCurrentWeaponId();
     }
+
+    if ( _progressive_weapon_id >= 0 && _current_weapon_id != _progressive_weapon_id )
+        ResetProgressiveWeaponFireRate();
 
     return 1;
 }
@@ -14268,7 +14456,106 @@ float NC_STACK_ypabact::GetKillStatMultiplier() const
     return 1.0f + GetKillStatBonusPercent() / 100.0f;
 }
 
-int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime) const
+static int ypabact_GetProgressiveWeaponBaseShotTime(const NC_STACK_ypabact *bact,
+                                                       const World::TWeapProto &proto)
+{
+    if ( !bact )
+        return 0;
+
+    return (bact->_oflags & BACT_OFLAG_USERINPT) ? proto.shot_time_user : proto.shot_time;
+}
+
+static bool ypabact_HasProgressiveWeaponFireRate(const NC_STACK_ypabact *bact,
+                                                  const World::TWeapProto &proto)
+{
+    const int baseShotTime = ypabact_GetProgressiveWeaponBaseShotTime(bact, proto);
+    return proto.ramp_up_time > 0 &&
+           proto.ramp_up_max_shot_time > 0 &&
+           baseShotTime > proto.ramp_up_max_shot_time;
+}
+
+void NC_STACK_ypabact::ResetProgressiveWeaponFireRate()
+{
+    _progressive_weapon_id = -1;
+    _progressive_weapon_level = 0.0f;
+    _progressive_weapon_requested = false;
+}
+
+void NC_STACK_ypabact::RegisterProgressiveWeaponFireRequest(int weaponId)
+{
+    if ( !_world || !ypabact_IsValidWeaponId(this, weaponId) )
+        return;
+
+    const World::TWeapProto &proto = _world->GetWeaponsProtos().at(weaponId);
+    if ( !ypabact_HasProgressiveWeaponFireRate(this, proto) )
+        return;
+
+    if ( _progressive_weapon_id != weaponId )
+    {
+        _progressive_weapon_id = weaponId;
+        _progressive_weapon_level = 0.0f;
+    }
+
+    _progressive_weapon_requested = true;
+}
+
+int NC_STACK_ypabact::GetProgressiveWeaponShotTime(const World::TWeapProto &proto,
+                                                    int fallbackShotTime)
+{
+    if ( !ypabact_HasProgressiveWeaponFireRate(this, proto) ||
+         _progressive_weapon_id < 0 || !_world ||
+         !ypabact_IsValidWeaponId(this, _progressive_weapon_id) ||
+         &_world->GetWeaponsProtos().at(_progressive_weapon_id) != &proto )
+    {
+        return fallbackShotTime;
+    }
+
+    if ( fallbackShotTime <= proto.ramp_up_max_shot_time )
+        return fallbackShotTime;
+
+    const float level = std::max(0.0f, std::min(_progressive_weapon_level, 1.0f));
+    const double slow = (double)fallbackShotTime;
+    const double fast = (double)proto.ramp_up_max_shot_time;
+    const double interpolated = slow + (fast - slow) * (double)level;
+
+    if ( !std::isfinite(interpolated) )
+        return fallbackShotTime;
+
+    return std::max(1, (int)floor(interpolated + 0.5));
+}
+
+void NC_STACK_ypabact::UpdateProgressiveWeaponFireRate(update_msg *arg)
+{
+    if ( !arg || arg->frameTime <= 0 || _progressive_weapon_id < 0 || !_world ||
+         !ypabact_IsValidWeaponId(this, _progressive_weapon_id) )
+    {
+        if ( _progressive_weapon_id >= 0 && (!_world || !ypabact_IsValidWeaponId(this, _progressive_weapon_id)) )
+            ResetProgressiveWeaponFireRate();
+        else
+            _progressive_weapon_requested = false;
+        return;
+    }
+
+    const World::TWeapProto &proto = _world->GetWeaponsProtos().at(_progressive_weapon_id);
+    if ( !ypabact_HasProgressiveWeaponFireRate(this, proto) )
+    {
+        ResetProgressiveWeaponFireRate();
+        return;
+    }
+
+    if ( !_progressive_weapon_requested )
+    {
+        // Releasing FIRE immediately restores the authored shot_time/shot_time_user.
+        ResetProgressiveWeaponFireRate();
+        return;
+    }
+
+    _progressive_weapon_level = std::min(1.0f,
+        _progressive_weapon_level + (float)arg->frameTime / (float)proto.ramp_up_time);
+    _progressive_weapon_requested = false;
+}
+
+int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime, bool minigun) const
 {
     if ( baseShotTime <= 0 )
         return baseShotTime;
@@ -14282,7 +14569,48 @@ int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime) const
     if ( killStatMultiplier > 0.0f )
         multiplier /= killStatMultiplier;
 
-    return std::max(1, (int)floorf(baseShotTime * multiplier + 0.5f));
+    // Damaged fire-rate maluses reuse the same damaged-state gate as the
+    // existing force/maxrot/sound penalties. Authoring follows the established
+    // negative-percent malus convention: e.g. -50% halves fire rate, therefore
+    // doubles the selected cooldown. MGUN and normal Weapon timing remain
+    // independently configurable and never mutate prototype shot_time values.
+    if ( _damaged_fx_active )
+    {
+        const float malus = minigun
+            ? _damaged_mgun_shot_time_malus
+            : _damaged_shot_time_malus;
+        const float fireRateMultiplier = ypabact_DebuffMalusToMult(malus);
+
+        if ( fireRateMultiplier <= 0.0f )
+            return std::numeric_limits<int>::max();
+
+        multiplier /= fireRateMultiplier;
+    }
+
+    // Debuff cadence penalties deliberately reuse this same multiplier path.
+    // Damaged + Debuff therefore compose deterministically instead of one
+    // overwriting the other, while MGUN and normal Weapon timing stay separate.
+    if ( _active_debuff.active )
+    {
+        const float malus = minigun
+            ? _active_debuff.mgun_shot_time_malus
+            : _active_debuff.shot_time_malus;
+        const float fireRateMultiplier = ypabact_DebuffMalusToMult(malus);
+
+        if ( fireRateMultiplier <= 0.0f )
+            return std::numeric_limits<int>::max();
+
+        multiplier /= fireRateMultiplier;
+    }
+
+    const double scaled = (double)baseShotTime * (double)multiplier;
+    if ( !std::isfinite(scaled) ||
+         scaled >= (double)std::numeric_limits<int>::max() )
+    {
+        return std::numeric_limits<int>::max();
+    }
+
+    return std::max(1, (int)floor(scaled + 0.5));
 }
 
 int NC_STACK_ypabact::GetEffectiveOutgoingDamage(int baseDamage) const
@@ -16294,6 +16622,7 @@ void NC_STACK_ypabact::Renew()
 //    bact->field_951 = 0;
     _mgun_time = 0;
     _weapon_time = 0;
+    ResetProgressiveWeaponFireRate();
     _extra_weapons = {0, 0, 0};
     _weapon_player_switch_mode = World::TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
     _weapon_ai_switch_mode = World::TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
@@ -16309,6 +16638,7 @@ void NC_STACK_ypabact::Renew()
     _mgunEnergyDrainRemainder = 0.0f;
     _mgunEnergyDrainLastFireTime = -1;
     _mgun_recoil = 0.0f;
+    _mgun_recoil_cockpit = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
@@ -16326,7 +16656,7 @@ void NC_STACK_ypabact::Renew()
     _mgun_sound_index = 0;
     _vehicle_fire_vp_end_time = 0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
-    _cockpit_camera_recoil = 0.0f;
+    _cockpit_gun_camera_recoil = 0.0f;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _spawn_units = 0;
@@ -16396,9 +16726,7 @@ void NC_STACK_ypabact::Renew()
     _weaponRecoilVisualEndTime = 0;
     _weaponRecoilVisualDuration = 0;
     _weaponRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualEndTime = 0;
-    _mgunRecoilVisualDuration = 0;
-    _mgunRecoilVisualPitch = 0.0f;
+    _mgunRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
     _heliLandingVisualOffsetY = 0.0f;
     _weaponRecoilAiRecoveryEndTime = 0;
@@ -16417,6 +16745,7 @@ void NC_STACK_ypabact::Renew()
     _fe_time = -45000;
     _salve_counter = 0;
     _kill_after_shot = 0;
+    _suicide_handoff_wait_fire_release = false;
 
     Common::DeleteAndNull(&_current_vp);
 
@@ -17391,9 +17720,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             &weaponEnergyCostPercent);
     RevealInvisibleOnAttack();
 
-    if ( vehicleTimedMgun )
-        ypabact_StartVehicleFireVP(this, arg->field_10);
-
     const int32_t frameDeltaMs = std::max(0, (int32_t)(arg->field_C * 1000.0f + 0.5f));
     if ( _mgunEnergyDrainLastFireTime < 0 ||
          arg->field_10 < _mgunEnergyDrainLastFireTime ||
@@ -17461,7 +17787,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                 ? mgunProto->shot_time_user
                 : mgunProto->shot_time;
             v45 = std::max(frameDeltaMs,
-                           GetEffectiveShotTime(configuredShotTime));
+                           GetEffectiveShotTime(configuredShotTime, true));
         }
 
         if ( arg->field_10 - _mgun_time > v45 )
@@ -17469,9 +17795,16 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             _mgun_time = arg->field_10;
             spawnVisual = true;
 
-            // mgun_recoil is MGUN-specific but vehicle-class agnostic:
-            // every supported unit that actually emits an MGUN pulse gets the same
-            // render-only kick. Normal weapons do not trigger it; 0/absent disables it.
+            // Keep the Vehicle FIRE visual state on the exact same effective
+            // cadence that emitted this real MGUN pulse. This prevents damaged
+            // shot-time malus from slowing gameplay while the FIRE VP runs at
+            // the old undamaged request rate.
+            if ( vehicleTimedMgun )
+                ypabact_StartVehicleFireVP(this, arg->field_10);
+
+            // mgun_recoil is MGUN-specific but vehicle-class agnostic. Each real
+            // pulse adds one small chassis-forward/back render kick. Cockpit SHK
+            // is independent and is driven only by mgun_recoil_cockpit.
             ypabact_StartMgunRecoilVisual(this);
             ypabact_TriggerPlayerMgunRecoilShake(this);
 
@@ -18022,8 +18355,8 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
     }
 
     // A remappable Cycle Target press is consumed here, where the exact user
-    // aim vector is available. Delayed-homing Arc Grenades share the missile
-    // lock path; homing bombs keep automatic launch-time target selection.
+    // aim vector is available. Homing bombs keep their automatic launch-time
+    // target selection and do not enter this manual missile lock path.
     if ( targetingProto && usesMissileTargeting )
     {
         NC_STACK_ypabact *manualTarget =

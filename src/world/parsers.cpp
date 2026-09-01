@@ -1111,6 +1111,10 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.maxrot_malus = ParseMalusPercent(p2);
     else if ( !StriCmp(p1, "debuff_shield_malus") )
         debuff.shield_malus = ParseMalusPercent(p2);
+    else if ( !StriCmp(p1, "debuff_mgun_shot_time_malus") )
+        debuff.mgun_shot_time_malus = ParseMalusPercent(p2);
+    else if ( !StriCmp(p1, "debuff_shot_time_malus") )
+        debuff.shot_time_malus = ParseMalusPercent(p2);
     else if ( !StriCmp(p1, "debuff_snd_pitch") )
         debuff.snd_pitch_multiplier = ParseSignedPitchPercent(p2);
     else if ( ParseTintParam(parser, "debuff_target_tint", p1, p2,
@@ -2801,6 +2805,14 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->damaged_maxrot_malus = ParseMalusPercent(p2);
     }
+    else if ( !StriCmp(p1, "damaged_mgun_shot_time_malus") )
+    {
+        _vhcl->damaged_mgun_shot_time_malus = ParseMalusPercent(p2);
+    }
+    else if ( !StriCmp(p1, "damaged_shot_time_malus") )
+    {
+        _vhcl->damaged_shot_time_malus = ParseMalusPercent(p2);
+    }
     else if ( !StriCmp(p1, "damaged_snd_pitch") )
     {
         _vhcl->damaged_snd_pitch_multiplier = ParseSignedPitchPercent(p2);
@@ -3164,6 +3176,15 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             intensity = 10.0f;
         _vhcl->mgun_recoil = intensity;
     }
+    else if ( !StriCmp(p1, "mgun_recoil_cockpit") )
+    {
+        float intensity = parser.stof(p2, 0);
+        if ( !std::isfinite(intensity) || intensity < 1.0f )
+            intensity = 0.0f;
+        else if ( intensity > 10.0f )
+            intensity = 10.0f;
+        _vhcl->mgun_recoil_cockpit = intensity;
+    }
     else if ( ParseMeshTracerParam(parser, p1, p2, _vhcl->mgun_tracer, "mgun_mesh_tracer_") )
     {
         // Every MGUN path, including model = gun/module + gun_type = mg,
@@ -3345,9 +3366,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->cockpit_camera_offset.z = parser.stof(p2, 0);
     }
-    else if ( !StriCmp(p1, "cockpit_camera_recoil") )
+    else if ( !StriCmp(p1, "cockpit_gun_camera_recoil") )
     {
-        _vhcl->cockpit_camera_recoil = ParseBoundedPositiveFiniteOrZero(
+        _vhcl->cockpit_gun_camera_recoil = ParseBoundedPositiveFiniteOrZero(
             parser, p2, 5.0f);
     }
     else if ( !StriCmp(p1, "gun_radius") )
@@ -3964,6 +3985,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->num_mguns = 1;
         _vhcl->mgun_shot_time = 0;
         _vhcl->mgun_recoil = 0.0f;
+        _vhcl->mgun_recoil_cockpit = 0.0f;
         _vhcl->mgun_tracer = TWeaponTracerConfig();
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
@@ -4009,6 +4031,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->zoom_steps = -1;
         _vhcl->damaged_force_malus = 0.0;
         _vhcl->damaged_maxrot_malus = 0.0;
+        _vhcl->damaged_mgun_shot_time_malus = 0.0;
+        _vhcl->damaged_shot_time_malus = 0.0;
         _vhcl->damaged_snd_pitch_multiplier = 1.0;
         _vhcl->spawn_units = 0;
         _vhcl->spawn_vehicle = 0;
@@ -4070,7 +4094,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->vwr_radius = 30.0;
         _vhcl->vwr_overeof = 30.0;
         _vhcl->cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
-        _vhcl->cockpit_camera_recoil = 0.0f;
+        _vhcl->cockpit_gun_camera_recoil = 0.0f;
         _vhcl->gun_power = 4000.0;
         _vhcl->gun_radius = 5.0;
         _vhcl->max_pitch = -1.0;
@@ -4206,7 +4230,6 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->start_speed = 70.0;
         _wpn->grenade_arc_angle = 0.0f;
         _wpn->grenade_arc_gravity = 0.0f;
-        _wpn->grenade_homing_delay = 0;
         _wpn->life_time = 20000;
         _wpn->life_time_min = 20000;
         _wpn->life_time_max = 20000;
@@ -4214,6 +4237,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->drive_time = 7000;
         _wpn->shot_time = 3000;
         _wpn->shot_time_user = 1000;
+        _wpn->ramp_up_time = 0;
+        _wpn->ramp_up_max_shot_time = 0;
         _wpn->salve_delay = 0;
         _wpn->salve_shots = 0;
         _wpn->multi_target = 0;
@@ -4545,12 +4570,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         // selects the engine-standard gravity in the runtime.
         _wpn->grenade_arc_gravity = std::min(ParseNonNegativeIniFloatOrZero(p2), 1000.0f);
     }
-    else if ( !StriCmp(p1, "grenade_homing_delay") )
-    {
-        // model = arc_grenade only: strict positive milliseconds. Zero,
-        // negative, malformed and overflowing values leave homing disabled.
-        _wpn->grenade_homing_delay = ParsePositiveIntOrZero(p2);
-    }
     else if ( !StriCmp(p1, "cluster_enable") )
     {
         _wpn->cluster.enable = parser.stol(p2, NULL, 0) != 0;
@@ -4738,6 +4757,14 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "shot_time_user") )
     {
         _wpn->shot_time_user = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "ramp_up_time") )
+    {
+        _wpn->ramp_up_time = NonNegativeFiniteMilliseconds(parser, p2);
+    }
+    else if ( !StriCmp(p1, "ramp_up_max_shot_time") )
+    {
+        _wpn->ramp_up_max_shot_time = NonNegativeFiniteMilliseconds(parser, p2);
     }
     else if ( !StriCmp(p1, "shk_launch_player_slot") )
     {

@@ -431,6 +431,11 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_HIDE_MAP_BORDER_WALLS:        fallback = "Hide Map Border Walls"; break;
         case OUA_GEM_CRUISER_DAMAGE_UPGRADE:  fallback = "Cruiser Damage Upgrade"; break;
         case OUA_GEM_MAX_UNITS_UPGRADE:       fallback = "MAX UNITS UPGRADE"; break;
+        case OUA_QUIT_MISSION:                fallback = "Quit Mission"; break;
+        case OUA_REPLAY_BRIEFING:             fallback = "Replay Briefing"; break;
+        case OUA_RESTART_MISSION:             fallback = "Restart Mission"; break;
+        case OUA_COMPLETE_MISSION:            fallback = "Complete Mission"; break;
+        case OUA_PLASMA_OBTAINED:             fallback = "Plasma Obtained"; break;
         default: break;
     }
 

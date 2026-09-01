@@ -284,6 +284,11 @@ void NC_STACK_ypacar::DoKamikaze()
 
     _fly_dir_length = 200.0;
     _status_flg &= ~BACT_STFLAG_LAND;
+
+    // Resolve the blast first, then select a still-living squad fallback before
+    // the legacy kamikaze actor enters its own DEAD state.
+    PrepareSuicideControlHandoff();
+
     _bact_type = BACT_TYPES_FLYER;
 
     setState_msg arg78;

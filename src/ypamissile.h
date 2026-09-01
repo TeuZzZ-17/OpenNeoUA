@@ -49,6 +49,7 @@ public:
     virtual size_t SetStateInternal(setState_msg *arg) override;
 
     virtual void ResetViewing(); // Detach camera
+    void ConfigureSuicideViewerReturn(const std::vector<int32_t> &squadGids, int32_t hostGid);
     virtual void Impact(); // Apply impulse to all in sector
 
     // OpenNeoUA custom artillery shell: arm this projectile as a ballistic barrage shell.
@@ -118,7 +119,6 @@ public:
     // resolved velocity without applying the angle twice.
     void SetupArcGrenadeLaunch(float angleDegrees, float gravity, float startSpeed);
     void SetupArcGrenadeVelocity(const vec3d &velocity, float gravity);
-    void ConfigureArcGrenadeHoming(int delay);
     virtual void SetClusterSpawnedChild(bool child);
     void ConfigureWeaponTracer(const World::TWeaponTracerConfig &config,
                                bool supported);
@@ -181,7 +181,6 @@ protected:
     void ApplyAttachedDirectHitDamage();
     void SteerHomingBombDirection(float dtime);
     void UpdateArcGrenadeBallistic(float dtime);
-    bool ActivateArcGrenadeHomingIfDue(int frameTime);
     bool TryClusterSplit();
     bool CanChainToTarget(NC_STACK_ypabact *target, NC_STACK_ypabact *currentHit) const;
     NC_STACK_ypabact *FindNextChainTarget(NC_STACK_ypabact *currentHit) const;
@@ -267,6 +266,8 @@ protected:
     std::vector<int32_t> _mislChainHitGids;
     std::vector<int32_t> _mislArmorPenetratedGids;
     std::vector<int32_t> _mislDirectPushRecipientGids;
+    std::vector<int32_t> _suicideViewerReturnGids;
+    int32_t _suicideViewerHostGid = 0;
     std::vector<NC_STACK_ypabact *> _mislDirectHitUnits;
     std::vector<TBuildingHitRef> _mislDirectHitBuildings;
     std::vector<TBuildingHitRef> _mislDirectHitSectors;
@@ -274,8 +275,6 @@ protected:
     // downward in Urban Assault, so positive gravity increases velocity.y.
     vec3d _arcGrenadeVelocity = vec3d(0.0, 0.0, 0.0);
     float _arcGrenadeGravity = 9.80665f;
-    int _arcGrenadeHomingRemaining = 0;
-    bool _arcGrenadeHomingActive = false;
 
     // OpenNeoUA custom artillery shell state (only meaningful when _isArtilleryShellProjectile).
     bool  _isArtilleryShellProjectile = false;
