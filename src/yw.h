@@ -48,6 +48,12 @@
 // remains odd-sized internally, so an input value of 50 is normalized to 49.
 #define YW_RENDER_SECTORS_MAX   99
 
+// Atmosphere & Visibility UI bounds/defaults for existing runtime controls.
+// These do not change the underlying INI parser; they define only the public menu range.
+constexpr int32_t YW_PARTICLE_LIMIT_UI_MAX = 20000;
+constexpr int32_t YW_PARTICLE_LIMIT_UI_DEFAULT = 9000;
+constexpr int32_t YW_RENDER_SECTORS_UI_DEFAULT = 55;
+
 class NC_STACK_ypaworld;
 class NC_STACK_button;
 class NC_STACK_windp;
@@ -689,6 +695,8 @@ public:
         ATMOPT_DARK_STRENGTH,
         ATMOPT_WORLD_UI_MAX_DISTANCE,
         ATMOPT_VHS_STRENGTH,
+        ATMOPT_PARTICLE_LIMIT,
+        ATMOPT_RENDER_SECTORS,
         ATMOPT_COUNT
     };
 

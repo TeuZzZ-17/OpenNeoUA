@@ -269,6 +269,10 @@ enum OPENUA_STRING
     // Weapon HUD magazine/salve label owned by OpenNeoUA.
     OUA_HUD_MAG,
 
+    // Atmosphere & Visibility runtime limits. Appended to preserve existing IDs.
+    OUA_PARTICLE_LIMIT,
+    OUA_RENDER_SECTORS,
+
     OUA_STRING_MAX
 };
 
