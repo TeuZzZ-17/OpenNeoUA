@@ -115,6 +115,20 @@ protected:
     TSuperItemProfile *_profile = NULL;
 };
 
+class AtmosphericFXProfileParser : public ScriptParser::DataHandler
+{
+public:
+    AtmosphericFXProfileParser(TAtmosphericFXProfile *profile)
+    : _profile(*profile) {};
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+protected:
+    TAtmosphericFXProfile &_profile;
+    TAtmosphericFXLayer *_layer = NULL;
+    bool _seenScope = false;
+    bool _duplicateScope = false;
+};
+
 class MiscParser : public ScriptParser::DataHandler
 {
 public:

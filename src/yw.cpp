@@ -1381,6 +1381,123 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     return true;
 }
 
+
+static bool yw_IsSafeAtmosphericFXProfilePath(std::string path)
+{
+    std::replace(path.begin(), path.end(), '\\', '/');
+    if ( path.empty() || path.front() == '/' || path.find(':') != std::string::npos )
+        return false;
+
+    size_t start = 0;
+    while ( start <= path.size() )
+    {
+        size_t end = path.find('/', start);
+        std::string component = path.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if ( component == ".." )
+            return false;
+        if ( end == std::string::npos )
+            break;
+        start = end + 1;
+    }
+    return true;
+}
+
+bool NC_STACK_ypaworld::LoadAtmosphericFXProfile(const TLevelDescription &mapp)
+{
+    ClearAtmosphericFXRuntime();
+    _atmosphericFXProfile = World::TAtmosphericFXProfile();
+
+    if ( mapp.AtmosphericFXProfilePath.empty() )
+        return false;
+
+    if ( !yw_IsSafeAtmosphericFXProfilePath(mapp.AtmosphericFXProfilePath) )
+    {
+        ypa_log_out("WARNING: Atmospheric FX profile path '%s' must be relative to Data and cannot contain '..' or a virtual prefix; atmospheric FX disabled for this level.\n",
+                    mapp.AtmosphericFXProfilePath.c_str());
+        return false;
+    }
+
+    const std::string profilePath = "data:" + mapp.AtmosphericFXProfilePath;
+    if ( !uaFileExist(profilePath) )
+    {
+        ypa_log_out("WARNING: Atmospheric FX profile '%s' was not found; atmospheric FX disabled for this level.\n",
+                    mapp.AtmosphericFXProfilePath.c_str());
+        return false;
+    }
+
+    World::TAtmosphericFXProfile parsedProfile;
+    ScriptParser::HandlersList parsers {
+        new World::Parsers::AtmosphericFXProfileParser(&parsedProfile)
+    };
+
+    if ( !ScriptParser::ParseFile(profilePath, parsers,
+                                  ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
+    {
+        ypa_log_out("WARNING: Atmospheric FX profile '%s' is invalid; atmospheric FX disabled for this level.\n",
+                    mapp.AtmosphericFXProfilePath.c_str());
+        return false;
+    }
+
+    for (auto layerIt = parsedProfile.layers.begin(); layerIt != parsedProfile.layers.end(); )
+    {
+        World::TAtmosphericFXLayer &layer = *layerIt;
+        if ( layer.mesh3ds.empty() || layer.count <= 0 )
+        {
+            ypa_log_out("WARNING: invalid layer ignored in Atmospheric FX profile '%s' (missing mesh_3ds or count <= 0).\n",
+                        mapp.AtmosphericFXProfilePath.c_str());
+            layerIt = parsedProfile.layers.erase(layerIt);
+            continue;
+        }
+
+        if ( layer.count > 512 )
+        {
+            ypa_log_out("WARNING: Atmospheric FX profile '%s' requests count=%d; clamping to 512.\n",
+                        mapp.AtmosphericFXProfilePath.c_str(), layer.count);
+            layer.count = 512;
+        }
+
+        if ( layer.lifetime_min <= 0 && layer.lifetime_max <= 0 )
+            layer.lifetime_min = layer.lifetime_max = 1000;
+        else if ( layer.lifetime_min <= 0 )
+            layer.lifetime_min = layer.lifetime_max;
+        else if ( layer.lifetime_max <= 0 )
+            layer.lifetime_max = layer.lifetime_min;
+
+        if ( layer.lifetime_max < layer.lifetime_min )
+            std::swap(layer.lifetime_min, layer.lifetime_max);
+
+        layer.scale.x = (std::isfinite(layer.scale.x) && layer.scale.x > 0.0f) ? layer.scale.x : 1.0f;
+        layer.scale.y = (std::isfinite(layer.scale.y) && layer.scale.y > 0.0f) ? layer.scale.y : 1.0f;
+        layer.scale.z = (std::isfinite(layer.scale.z) && layer.scale.z > 0.0f) ? layer.scale.z : 1.0f;
+        layer.tint.Clamp();
+        ++layerIt;
+    }
+
+    if ( parsedProfile.layers.empty() )
+    {
+        ypa_log_out("WARNING: Atmospheric FX profile '%s' has no valid layers; atmospheric FX disabled for this level.\n",
+                    mapp.AtmosphericFXProfilePath.c_str());
+        return false;
+    }
+
+    parsedProfile.valid = true;
+    _atmosphericFXProfile = std::move(parsedProfile);
+    ypa_log_out("OpenNeoUA: loaded Atmospheric FX profile Data/%s for this level.\n",
+                mapp.AtmosphericFXProfilePath.c_str());
+    return true;
+}
+
+void NC_STACK_ypaworld::ClearAtmosphericFXRuntime()
+{
+    for (auto it = _transientVPs.begin(); it != _transientVPs.end(); )
+    {
+        if ( it->atmosphericFX )
+            it = _transientVPs.erase(it);
+        else
+            ++it;
+    }
+}
+
 int yw_InitSceneRecorder(NC_STACK_ypaworld *yw)
 {
     yw->_replayRecorder = new TGameRecorder();
@@ -1562,6 +1679,8 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
 size_t NC_STACK_ypaworld::Deinit()
 {
     StopAmbientLevelSound();
+    ClearAtmosphericFXRuntime();
+    _atmosphericFXProfile = World::TAtmosphericFXProfile();
     ClearSuperItemRuntime();
     for (World::TSuperItemProfile &profile : _superItemProfiles)
     {
@@ -2059,6 +2178,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func64__sub19();
                 BuildingConstructUpdate(arg->DTime);
                 BuildingDecorationFXUpdate();
+                UpdateAtmosphericFX();
             }
 
             if ( !_doNotRender )
@@ -4906,6 +5026,8 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _debugGlobalInvulnerability = false;
     ResetPlasmaCurrencyRuntime();
     StopAmbientLevelSound();
+    ClearAtmosphericFXRuntime();
+    _atmosphericFXProfile = World::TAtmosphericFXProfile();
     ClearSuperItemRuntime();
 
     // NC_STACK_ypaworld is reused by restart/load/menu transitions. Invalidate
