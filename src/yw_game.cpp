@@ -345,7 +345,15 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     FFeedback_Init();
 
     if ( ok )
+    {
         StartAmbientLevelSound(*mapp);
+        LoadAtmosphericFXProfile(*mapp);
+    }
+    else
+    {
+        ClearAtmosphericFXRuntime();
+        _atmosphericFXProfile = World::TAtmosphericFXProfile();
+    }
 
     return ok;
 }
@@ -3027,6 +3035,98 @@ void NC_STACK_ypaworld::UpdateDecorationFX(const World::TDecorationFXConfig &con
                                    config.basePath);
 }
 
+static float yw_RandomFloatSigned(float magnitude)
+{
+    if ( magnitude <= 0.0f )
+        return 0.0f;
+
+    return (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f) * magnitude;
+}
+
+static bool yw_IsAtmosphericFXInsideVolume(const NC_STACK_ypaworld::TTransientVP &fx,
+                                           const vec3d &viewerPos,
+                                           const World::TAtmosphericFXLayer &layer)
+{
+    vec3d center = viewerPos + layer.spawn_offset;
+    const double marginX = std::max(200.0, (double)layer.spawn_radius.x * 2.0 + 200.0);
+    const double marginY = std::max(200.0, (double)layer.spawn_radius.y * 2.0 + 200.0);
+    const double marginZ = std::max(200.0, (double)layer.spawn_radius.z * 2.0 + 200.0);
+    return fabs(fx.pos.x - center.x) <= marginX &&
+           fabs(fx.pos.y - center.y) <= marginY &&
+           fabs(fx.pos.z - center.z) <= marginZ;
+}
+
+void NC_STACK_ypaworld::UpdateAtmosphericFX()
+{
+    const World::TAtmosphericFXProfile &profile = _atmosphericFXProfile;
+    if ( !profile.valid || profile.layers.empty() )
+        return;
+
+    std::vector<int32_t> activeCounts(profile.layers.size(), 0);
+
+    for (auto it = _transientVPs.begin(); it != _transientVPs.end(); )
+    {
+        if ( !it->atmosphericFX )
+        {
+            ++it;
+            continue;
+        }
+
+        if ( it->atmosphericLayerIndex < 0 ||
+             (size_t)it->atmosphericLayerIndex >= profile.layers.size() )
+        {
+            it = _transientVPs.erase(it);
+            continue;
+        }
+
+        const World::TAtmosphericFXLayer &layer = profile.layers[it->atmosphericLayerIndex];
+        if ( !yw_IsAtmosphericFXInsideVolume(*it, _viewerPosition, layer) )
+        {
+            it = _transientVPs.erase(it);
+            continue;
+        }
+
+        activeCounts[it->atmosphericLayerIndex]++;
+        ++it;
+    }
+
+    for (size_t layerIndex = 0; layerIndex < profile.layers.size(); ++layerIndex)
+    {
+        const World::TAtmosphericFXLayer &layer = profile.layers[layerIndex];
+        int32_t spawnNeeded = layer.count - activeCounts[layerIndex];
+        if ( spawnNeeded <= 0 )
+            continue;
+
+        vec3d center = _viewerPosition + layer.spawn_offset;
+        for (int32_t i = 0; i < spawnNeeded; ++i)
+        {
+            vec3d pos = center;
+            pos.x += yw_RandomFloatSigned(layer.spawn_radius.x);
+            pos.y += yw_RandomFloatSigned(layer.spawn_radius.y);
+            pos.z += yw_RandomFloatSigned(layer.spawn_radius.z);
+
+            vec3d velocity = layer.velocity;
+            velocity.x += yw_RandomFloatSigned(layer.velocity_random.x);
+            velocity.y += yw_RandomFloatSigned(layer.velocity_random.y);
+            velocity.z += yw_RandomFloatSigned(layer.velocity_random.z);
+
+            const int32_t lifeTime = yw_RandomInRange(layer.lifetime_min, layer.lifetime_max);
+            const int32_t id = SpawnTransientVisual(0, layer.mesh3ds, pos, mat3x3::Ident(),
+                                                    lifeTime, 1.0, layer.tint,
+                                                    layer.scale, layer.spin,
+                                                    TTransientVPParticleControls(),
+                                                    layer.fade_in, layer.fade_out);
+            if ( id > 0 && !_transientVPs.empty() && _transientVPs.back().id == id )
+            {
+                TTransientVP &fx = _transientVPs.back();
+                fx.velocity = velocity;
+                fx.atmosphericFX = true;
+                fx.atmosphericLayerIndex = (int32_t)layerIndex;
+            }
+        }
+    }
+}
+
 int32_t NC_STACK_ypaworld::SpawnAttachedTransientVP(int32_t modelId, NC_STACK_ypabact *owner, const vec3d &localOffset, int32_t lifeTime, float scale, bool useOwnerTransform, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, bool playerFirstPersonOnly, const vec3d &localRotation, bool hideInOwnerMissileCamera, const TTransientVPParticleControls &particleControls, bool followOwnerVisualTransform, int32_t fadeIn, int32_t fadeOut, const std::string &external3dsPath, const std::string &externalBasePath)
 {
     if ( !owner || lifeTime < 0 )
@@ -3928,6 +4028,9 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         arg->particleSpin = oldParticleSpin;
         arg->particleLifetimeScale = oldParticleLifetimeScale;
         arg->particleTintAlphaAffectsAdditive = oldParticleTintAlphaAffectsAdditive;
+
+        if ( !it->followOwner && (it->velocity.x != 0.0 || it->velocity.y != 0.0 || it->velocity.z != 0.0) )
+            it->pos += it->velocity * ((double)arg->frameTime / 1000.0);
 
         it->age += arg->frameTime;
         ++it;

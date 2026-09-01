@@ -1525,6 +1525,7 @@ struct TLevelDescription
     std::string HgtStr;
     std::string BlgStr;
     std::string AmbientSoundStr;
+    std::string AtmosphericFXProfilePath;
     std::vector<MapRobo> Robos;
     std::vector<MapSquad> Squads;
     std::array<std::string, 8> Palettes;
@@ -2776,6 +2777,9 @@ public:
     void InitBuddies();
     void InitSuperItems();
     bool LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles = NULL);
+    bool LoadAtmosphericFXProfile(const TLevelDescription &mapp);
+    void ClearAtmosphericFXRuntime();
+    void UpdateAtmosphericFX();
     void ClearSuperItemRuntime();
     bool IsCustomSuperItem(const TMapSuperItem &sitem) const;
     const World::TSuperItemProfile *GetSuperItemProfile(const TMapSuperItem &sitem) const;
@@ -3005,6 +3009,9 @@ public:
         float scale = 1.0;
         vec3d axisScale = vec3d(1.0, 1.0, 1.0);
         vec3d spin = vec3d(0.0, 0.0, 0.0);
+        vec3d velocity = vec3d(0.0, 0.0, 0.0);
+        bool atmosphericFX = false;
+        int32_t atmosphericLayerIndex = -1;
         bool chainFX = false;
         std::vector<NC_STACK_base *> chainBases;
         std::vector<World::TVisualTint> chainTints;
@@ -3138,6 +3145,7 @@ public:
     std::vector<World::TBuildingProto> _buildProtos;
     std::vector<World::TRoboProto> _roboProtos;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
+    World::TAtmosphericFXProfile _atmosphericFXProfile;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemWaveSoundCarriers;
     NC_STACK_sample *_ambientSoundSample = NULL;
