@@ -13686,6 +13686,12 @@ void yw_RenderInfoReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
     }
 }
 
+static bool yw_HasInfoMagazineBar(const World::TWeapProto *wpn)
+{
+    return wpn && !wpn->IsKamikaze() && wpn->salve_shots > 0 &&
+           !wpn->IsLaser() && !wpn->IsArtilleryShell();
+}
+
 static void yw_RenderInfoMagazineBar(NC_STACK_ypaworld *yw, sklt_wis *wis,
                                      CmdStream *cur, NC_STACK_ypabact *bact,
                                      World::TWeapProto *wpn,
@@ -13693,7 +13699,7 @@ static void yw_RenderInfoMagazineBar(NC_STACK_ypaworld *yw, sklt_wis *wis,
 {
     // salve_shots belongs to the normal projectile firing path. Special
     // continuous/barrage payloads bypass that vanilla salve counter.
-    if ( !wpn || wpn->salve_shots <= 0 || wpn->IsLaser() || wpn->IsArtilleryShell() )
+    if ( !yw_HasInfoMagazineBar(wpn) )
         return;
 
     int magazine = 100;
@@ -13901,8 +13907,13 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
     else
         weap = &yw->_weaponProtos.at(weaponId);
 
+    // Match the unit wireframe headroom to the optional MAG row. Without
+    // that row the position remains the vanilla ypos anchor.
+    const bool hasWeaponMagazine = yw_HasInfoMagazineBar(weap);
+
     if ( v25 )
-        yw_RenderInfoVehicleWire(yw, wis, vhcl, xpos, ypos, a6a);
+        yw_RenderInfoVehicleWire(yw, wis, vhcl, xpos,
+                                 ypos + (hasWeaponMagazine ? wis->field_92 : 0.0f), a6a);
 
     if ( v11 )
         yw_RenderInfoLifebar(yw, wis, cur, bact, vhcl, xpos,   wis->field_92 * 7.0 + ypos  );
