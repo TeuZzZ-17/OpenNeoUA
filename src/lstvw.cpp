@@ -475,7 +475,6 @@ int GuiList::Init(NC_STACK_ypaworld *yw, tInit &in)
     factionCloseVisual = in.factionCloseVisual;
     factionAccentTitle = in.factionAccentTitle;
     wheelScroll = in.wheelScroll;
-    horizontalResizeLocked = in.horizontalResizeLocked;
     backgroundOpacity = in.backgroundOpacity;
     numEntries = in.numEntries;
     shownEntries = in.shownEntries;
@@ -730,9 +729,7 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
     {
         if ( v6->flag & TClickBoxInf::FLAG_LM_HOLD )
         {
-            int xps = horizontalResizeLocked
-                ? yw->_fontVBScrollW + entryWidth
-                : v6->move.ScreenPos.x + rszX;
+            int xps = v6->move.ScreenPos.x + rszX;
             int yps = v6->move.ScreenPos.y + rszY;
 
             int v43 = lowerVborder + upperVborder + entryHeight * maxShownEntries;
@@ -744,19 +741,16 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                 v43 += yw->_fontH;
             }
 
-            if ( !horizontalResizeLocked )
+            int v16 = yw->_fontVBScrollW + maxEntryWidth;
+
+            if ( xps > v16 )
+                xps = v16;
+            else
             {
-                int v16 = yw->_fontVBScrollW + maxEntryWidth;
+                v16 = yw->_fontVBScrollW + minEntryWidth;
 
-                if ( xps > v16 )
+                if ( xps < v16 )
                     xps = v16;
-                else
-                {
-                    v16 = yw->_fontVBScrollW + minEntryWidth;
-
-                    if ( xps < v16 )
-                        xps = v16;
-                }
             }
 
             if ( yps > v43 )
@@ -782,8 +776,7 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
                     firstShownEntries = 0;
             }
 
-            if ( !horizontalResizeLocked )
-                entryWidth = xps - yw->_fontVBScrollW;
+            entryWidth = xps - yw->_fontVBScrollW;
 
             SetRect(yw, -2, -2);
         }

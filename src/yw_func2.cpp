@@ -3720,12 +3720,13 @@ static std::vector<std::string> db_weapon_specialties(const World::TWeapProto &p
     if ( p.debuff.allow || (p.debuff.damage.defined && p.debuff.damage.value > 0.0f) ||
          p.debuff.duration > 0 && (!p.debuff.name.empty() || p.debuff.mindcontrol ||
          p.debuff.stun || p.debuff.force_malus != 0.0f || p.debuff.maxrot_malus != 0.0f ||
-         p.debuff.shield_malus != 0.0f || p.debuff.snd_pitch_multiplier != 1.0f ||
+         p.debuff.shield_malus != 0.0f || p.debuff.mgun_shot_time_malus != 0.0f ||
+         p.debuff.shot_time_malus != 0.0f || p.debuff.snd_pitch_multiplier != 1.0f ||
          !p.debuff.vps.empty() || !p.debuff.mesh3ds.empty()) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_DEBUFF));
     if ( p.multi_target > 1 &&
          (p._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE ||
-          p.IsHomingBomb() || p.HasArcGrenadeHoming()) )
+          p.IsHomingBomb()) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MULTI_TARGET));
     return items;
 }
@@ -4708,7 +4709,10 @@ void UserData::GameShellUiHandleInput()
             v393.xpos = 0;
             sub_bar_button->setXYWidth(&v393);
 
-            sub_bar_button->SetText(1019, Locale::Text::Advanced(Locale::ADV_BACK));
+            sub_bar_button->SetText(1019,
+                                    p_YW->_levelInfo.State == TLevelInfo::STATE_BRIEFING
+                                        ? Locale::Text::OpenUA(Locale::OUA_QUIT_MISSION)
+                                        : Locale::Text::Advanced(Locale::ADV_BACK));
         }
 
         if ( p_YW->_levelInfo.State == TLevelInfo::STATE_DEBRIEFING )
@@ -4720,7 +4724,22 @@ void UserData::GameShellUiHandleInput()
             v393.xpos = 0;
             sub_bar_button->setXYWidth(&v393);
 
-            sub_bar_button->SetText(1019, Locale::Text::Advanced(Locale::ADV_CONTINUE));
+            sub_bar_button->SetText(1011, Locale::Text::OpenUA(Locale::OUA_REPLAY_BRIEFING));
+            sub_bar_button->SetText(1019, Locale::Text::OpenUA(Locale::OUA_COMPLETE_MISSION));
+
+            if ( p_YW->CanRestartCompletedMission() )
+            {
+                int restartWidth = p_YW->_screenSize.x * 0.36;
+
+                v410.butID = 1027;
+                sub_bar_button->Enable(&v410);
+
+                v393.butID = 1027;
+                v393.xpos = (p_YW->_screenSize.x - restartWidth) / 2;
+                v393.width = restartWidth;
+                sub_bar_button->setXYWidth(&v393);
+                sub_bar_button->SetText(1027, Locale::Text::OpenUA(Locale::OUA_RESTART_MISSION));
+            }
         }
 
         v410.butID = 1019;
@@ -5109,8 +5128,16 @@ void UserData::GameShellUiHandleInput()
             break;
 
         case 1027:
-            p_YW->BriefingCyclePlayAsOwner();
-            sub_bar_button->SetText(1027, p_YW->BriefingPlayAsButtonText());
+            if ( p_YW->_levelInfo.State == TLevelInfo::STATE_DEBRIEFING )
+            {
+                if ( p_YW->RestartCompletedMission() )
+                    sub_bar_button->HideScreen();
+            }
+            else
+            {
+                p_YW->BriefingCyclePlayAsOwner();
+                sub_bar_button->SetText(1027, p_YW->BriefingPlayAsButtonText());
+            }
             break;
 
         case 1026:

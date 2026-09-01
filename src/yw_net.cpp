@@ -1608,10 +1608,8 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
         if ( netWproto.IsArcGrenade() )
             weapo->SetupArcGrenadeVelocity(nwMsg->dir, netWproto.grenade_arc_gravity);
         bool homingBomb = netWproto.IsHomingBomb();
-        bool arcGrenadeHoming = netWproto.HasArcGrenadeHoming();
 
-        if ( wpnType == NC_STACK_ypamissile::MISL_TARGETED ||
-             homingBomb || arcGrenadeHoming )
+        if ( wpnType == NC_STACK_ypamissile::MISL_TARGETED || homingBomb )
         {
             setTarget_msg stargt;
             stargt.tgt_pos = nwMsg->targetPos;

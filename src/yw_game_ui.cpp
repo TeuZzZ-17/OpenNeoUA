@@ -1213,7 +1213,13 @@ static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw);
 static void yw_PreDrawSquadronManager(NC_STACK_ypaworld *yw);
 static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw);
 static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw);
+static int yw_GetSquadronManagerTitleButtonWidth(NC_STACK_ypaworld *yw);
+static int yw_GetSquadronManagerCompactEntryWidth(NC_STACK_ypaworld *yw);
+static int yw_GetSquadronManagerDefaultEntryWidth(NC_STACK_ypaworld *yw);
 static constexpr uint8_t kSquadronManagerDragOpacity = 128;
+static constexpr int kSquadronManagerDefaultShownEntries = 6;
+static constexpr int kSquadronManagerExpandedShownEntries = 10;
+static constexpr int kSquadronManagerExpandedIconSlots = 5;
 
 
 ///////// up panel ///////////
@@ -1262,29 +1268,22 @@ void create_squad_man(NC_STACK_ypaworld *yw)
     const int spacerWidth = fnt28[64].w;
     const int statusCellWidth = fnt28[97].w + spacerWidth;
     const int leaderCellWidth = iconCellWidth + spacerWidth;
-    const int contentWidth = statusCellWidth + leaderCellWidth + iconCellWidth
-                           + yw->_guiTiles[0]->GetWidth(" x999")
-                           + 2 * yw->_fontBorderW;
-    const int titleWidth = yw->_guiTiles[6]->GetWidth(std::string(" ") + title)
-                         + yw->_fontDefCloseW + yw->_fontBorderW;
-    const int compactEntryWidth = std::max(contentWidth, titleWidth);
+    const int compactEntryWidth = yw_GetSquadronManagerCompactEntryWidth(yw);
+    const int defaultEntryWidth = yw_GetSquadronManagerDefaultEntryWidth(yw);
 
     GuiList::tInit args;
     args.title = title;
     args.resizeable = true;
     args.numEntries = 0;
-    args.shownEntries = 6;
+    args.shownEntries = kSquadronManagerDefaultShownEntries;
     args.firstShownEntry = 0;
     args.selectedEntry = 0;
     args.maxShownEntries = 24;
     args.minShownEntries = 1;
     args.withIcon = false;
     args.entryHeight = yw->_fontH;
-    args.entryWidth = compactEntryWidth;
+    args.entryWidth = defaultEntryWidth;
     args.minEntryWidth = compactEntryWidth;
-    // The title-bar lock keeps the compact width fixed by default. Unlocking
-    // it permits horizontal expansion so additional squad members can be
-    // shown without changing the compact vanilla-safe starting layout.
     args.maxEntryWidth = 32000;
     args.enabled = true;
     args.upperVborder = yw->_fontBorderH;
@@ -1301,7 +1300,6 @@ void create_squad_man(NC_STACK_ypaworld *yw)
     args.factionCloseVisual = false;
     args.backgroundOpacity = 128;
     args.wheelScroll = true;
-    args.horizontalResizeLocked = true;
 
     if ( squadron_manager.Init(yw, args) )
     {
@@ -1554,12 +1552,16 @@ static const char *yw_MapToolbarIconName(int buttonId)
 
 static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw);
 
-static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, bool active, int iconSize)
+static NC_STACK_bitmap *yw_LoadFactionToolbarIcon(int owner,
+                                                  const char *assetRoot,
+                                                  const char *iconName,
+                                                  bool active, int iconSize)
 {
-    if ( owner <= World::OWNER_0 || !iconName || !*iconName )
+    if ( owner <= World::OWNER_0 || !assetRoot || !*assetRoot ||
+         !iconName || !*iconName )
         return NULL;
 
-    // Prefer the requested visual state first inside the canonical Interface/Map/Buttons tree.
+    // Prefer the requested visual state first inside the caller-owned UI tree.
     // SVG is preferred for crisp scaling; PNG remains supported in the same tree.
     const bool variants[] = {active, false};
     const int variantCount = active ? 2 : 1;
@@ -1569,7 +1571,8 @@ static NC_STACK_bitmap *yw_LoadFactionMapIcon(int owner, const char *iconName, b
     {
         for ( const char *extension : extensions )
         {
-            std::string path = "Interface/Map/Buttons/owner_";
+            std::string path = assetRoot;
+            path += "/owner_";
             path += std::to_string(owner);
             path += "/";
             path += iconName;
@@ -1600,13 +1603,38 @@ static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
 
     // Faction artwork is asset-driven from the canonical Interface/Map/Buttons tree.
     // Missing custom assets are safe: the caller falls back to its vector glyph.
-    NC_STACK_bitmap *bitmap = yw_LoadFactionMapIcon(owner, iconName, active, iconSize);
+    NC_STACK_bitmap *bitmap = yw_LoadFactionToolbarIcon(
+        owner, "Interface/Map/Buttons", iconName, active, iconSize);
     if ( !bitmap || !bitmap->GetBitmap() )
         return false;
 
     const int screenLeft = windowX + box.x + (box.w - iconSize) / 2;
     const int screenTop = windowY + box.y + (box.h - iconSize) / 2;
 
+    StatusIconRenderBitmap(yw, bitmap, screenLeft, screenTop, iconSize, 255);
+    return true;
+}
+
+static bool yw_RenderSquadronManagerIcon(NC_STACK_ypaworld *yw,
+                                         int windowX, int windowY,
+                                         const char *iconName, bool active,
+                                         const ButtonBox &box)
+{
+    if ( !yw || !iconName || !*iconName )
+        return false;
+
+    const int owner = yw_RoboMapMarkerOwner(yw);
+    const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
+    // StatusIconLoad resolves Data-relative paths, so Compact is sourced from
+    // Data/Interface/Squad/Buttons/owner_N/compact[_active].svg (PNG fallback
+    // remains supported by the shared loader).
+    NC_STACK_bitmap *bitmap = yw_LoadFactionToolbarIcon(
+        owner, "Interface/Squad/Buttons", iconName, active, iconSize);
+    if ( !bitmap || !bitmap->GetBitmap() )
+        return false;
+
+    const int screenLeft = windowX + box.x + (box.w - iconSize) / 2;
+    const int screenTop = windowY + box.y + (box.h - iconSize) / 2;
     StatusIconRenderBitmap(yw, bitmap, screenLeft, screenTop, iconSize, 255);
     return true;
 }
@@ -1768,53 +1796,160 @@ static void yw_SetFullScreenUiClip(NC_STACK_ypaworld *yw)
                                              yw->_screenSize.y / 2));
 }
 
-static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw)
+static int yw_GetSquadronManagerTitleButtonWidth(NC_STACK_ypaworld *yw)
 {
-    if ( !yw || squadron_manager.buttons.size() < 8 )
+    return std::max(18, std::min(24, yw->_fontH));
+}
+
+static int yw_GetSquadronManagerCompactEntryWidth(NC_STACK_ypaworld *yw)
+{
+    const auto &fnt28 = yw->_guiTiles[28]->map;
+    const int iconCellWidth = fnt28[65].w;
+    const int spacerWidth = fnt28[64].w;
+    const int statusCellWidth = fnt28[97].w + spacerWidth;
+    const int leaderCellWidth = iconCellWidth + spacerWidth;
+    const int contentWidth = statusCellWidth + leaderCellWidth + iconCellWidth
+                           + yw->_guiTiles[0]->GetWidth(" x999")
+                           + 2 * yw->_fontBorderW;
+    const int titleWidth = yw->_guiTiles[6]->GetWidth(" Squad")
+                         + yw->_fontDefCloseW
+                         + yw_GetSquadronManagerTitleButtonWidth(yw)
+                         + yw->_fontBorderW;
+    return std::max(contentWidth, titleWidth);
+}
+
+static int yw_GetSquadronManagerDefaultEntryWidth(NC_STACK_ypaworld *yw)
+{
+    return yw_GetSquadronManagerCompactEntryWidth(yw)
+         + yw_GetSquadronManagerTitleButtonWidth(yw);
+}
+
+static int yw_GetSquadronManagerExpandedEntryWidth(NC_STACK_ypaworld *yw)
+{
+    const int iconCellWidth = yw->_guiTiles[28]->map[65].w;
+    return yw_GetSquadronManagerCompactEntryWidth(yw)
+         + std::max(0, kSquadronManagerExpandedIconSlots - 1) * iconCellWidth;
+}
+
+static bool yw_IsSquadronManagerCompactSize(NC_STACK_ypaworld *yw)
+{
+    return yw &&
+           squadron_manager.entryWidth == yw_GetSquadronManagerCompactEntryWidth(yw) &&
+           squadron_manager.shownEntries == kSquadronManagerDefaultShownEntries;
+}
+
+static void yw_SetSquadronManagerSize(NC_STACK_ypaworld *yw, int entryWidth,
+                                      int shownEntries)
+{
+    if ( !yw )
         return;
 
-    const ButtonBox &closeBox = squadron_manager.buttons[0];
+    squadron_manager.entryWidth = entryWidth;
+    squadron_manager.shownEntries = shownEntries;
+    if ( squadron_manager.firstShownEntries + squadron_manager.shownEntries
+         > squadron_manager.numEntries )
+    {
+        squadron_manager.firstShownEntries = std::max(
+            0,
+            (int)squadron_manager.numEntries - (int)squadron_manager.shownEntries);
+    }
+    squadron_manager.SetRect(yw, -2, -2);
+}
+
+static void yw_ToggleSquadronManagerCompact(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return;
+
+    // Compact is the single size-mode control. Its active state is derived
+    // from the real window geometry: clicking an already compact window
+    // restores the larger layout; any other size compacts it.
+    if ( yw_IsSquadronManagerCompactSize(yw) )
+    {
+        yw_SetSquadronManagerSize(yw,
+                                  yw_GetSquadronManagerExpandedEntryWidth(yw),
+                                  kSquadronManagerExpandedShownEntries);
+    }
+    else
+    {
+        yw_SetSquadronManagerSize(yw,
+                                  yw_GetSquadronManagerCompactEntryWidth(yw),
+                                  kSquadronManagerDefaultShownEntries);
+    }
+}
+
+static void yw_ApplySquadronManagerSavedRect(NC_STACK_ypaworld *yw,
+                                             const Common::PointRect &rect)
+{
+    if ( !yw )
+        return;
+
+    squadron_manager.x = rect.x;
+    squadron_manager.y = rect.y;
+    squadron_manager.entryWidth = rect.w - yw->_fontVBScrollW;
+
+    const int fixedHeight = yw->_fontH + squadron_manager.upperVborder
+                          + squadron_manager.lowerVborder;
+    squadron_manager.shownEntries =
+        (rect.h - fixedHeight) / std::max(1, (int)squadron_manager.entryHeight);
+    squadron_manager.SetRect(yw, -2, -2);
+}
+
+static int yw_GetSquadronManagerCompactButtonId()
+{
+    // Button 6 is neutral in GuiList input handling. Button 7 is the legacy
+    // Help control and must not be reused because GuiList still gives it
+    // FLAG_HELP_DOWN semantics. Row buttons start at 8.
+    return 6;
+}
+
+static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return;
+
+    const int compactButtonId = yw_GetSquadronManagerCompactButtonId();
+    if ( squadron_manager.buttons.size() <= (size_t)compactButtonId )
+        squadron_manager.buttons.resize(compactButtonId + 1);
+
+    const ButtonBox closeBox = squadron_manager.buttons[0];
     if ( !closeBox )
     {
-        squadron_manager.buttons[7] = ButtonBox();
+        squadron_manager.buttons[compactButtonId] = ButtonBox();
         return;
     }
 
-    const int lockWidth = std::max(18, std::min(24, yw->_fontH));
-    const int lockX = std::max(0, closeBox.x - lockWidth);
-    squadron_manager.buttons[7] = ButtonBox(lockX, 1, lockWidth, yw->_fontH);
+    const int compactWidth = yw_GetSquadronManagerTitleButtonWidth(yw);
+    const int compactX = std::max(0, closeBox.x - compactWidth);
+    squadron_manager.buttons[compactButtonId] =
+        ButtonBox(compactX, 1, compactWidth, yw->_fontH);
 
-    // Keep dragging out of both title controls. The title text is short, so
+    // Keep dragging out of the Compact control. The title text is short, so
     // no additional clipping or layout path is required.
-    squadron_manager.buttons[1] = ButtonBox(0, 0, lockX, yw->_fontH);
+    squadron_manager.buttons[1] = ButtonBox(0, 0, compactX, yw->_fontH);
 }
 
-static void yw_DrawSquadronManagerLockFallback(NC_STACK_ypaworld *yw,
-                                                const ButtonBox &box,
-                                                bool locked)
+static void yw_DrawSquadronManagerCompactFallback(NC_STACK_ypaworld *yw,
+                                                   const ButtonBox &box,
+                                                   bool active)
 {
     const int halfW = yw->_screenSize.x / 2;
     const int halfH = yw->_screenSize.y / 2;
     const int left = squadron_manager.x + box.x - halfW;
     const int top = squadron_manager.y + box.y - halfH;
     const int right = left + box.w - 1;
-    const int bottom = top + box.h - 1;
-    const int cx = (left + right) / 2;
-    const int cy = (top + bottom) / 2;
+    const int cy = top + box.h / 2;
     const int pad = std::max(3, std::min(box.w, box.h) / 5);
 
-    SDL_Color color = yw_MapToolbarColor(yw, locked);
+    SDL_Color color = yw_MapToolbarColor(yw, active);
     color.a = 255;
     GFX::Engine.raster_func217(color);
-    yw_DrawMapToolbarRect(left + pad, cy - 1, right - pad, bottom - pad, 2);
-    yw_DrawMapToolbarLine(left + pad + 2, cy - 2,
-                          left + pad + 2, top + pad + 2);
-    yw_DrawMapToolbarLine(left + pad + 2, top + pad + 2,
-                          cx, top + pad);
-    yw_DrawMapToolbarLine(cx, top + pad,
-                          right - pad - 2, top + pad + 2);
-    yw_DrawMapToolbarLine(right - pad - 2, top + pad + 2,
-                          right - pad - 2, cy - 2);
+    yw_DrawMapToolbarStroke(left + pad, cy, left + pad + 5, cy, 2);
+    yw_DrawMapToolbarLine(left + pad, cy, left + pad + 3, cy - 3);
+    yw_DrawMapToolbarLine(left + pad, cy, left + pad + 3, cy + 3);
+    yw_DrawMapToolbarStroke(right - pad, cy, right - pad - 5, cy, 2);
+    yw_DrawMapToolbarLine(right - pad, cy, right - pad - 3, cy - 3);
+    yw_DrawMapToolbarLine(right - pad, cy, right - pad - 3, cy + 3);
 }
 
 static bool yw_IsSquadronManagerRowSelected(NC_STACK_ypaworld *yw,
@@ -1889,15 +2024,16 @@ static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw)
     yw_SetFullScreenUiClip(yw);
     yw_UpdateSquadronManagerTitleButtons(yw);
 
-    const ButtonBox &lockBox = squadron_manager.buttons[7];
-    if ( lockBox )
+    const ButtonBox &compactBox = squadron_manager.buttons[
+        yw_GetSquadronManagerCompactButtonId()];
+    if ( compactBox )
     {
-        const bool locked = squadron_manager.horizontalResizeLocked;
-        if ( !yw_RenderFactionToolbarIcon(yw, squadron_manager.x,
-                                         squadron_manager.y, 6, locked,
-                                         lockBox) )
+        const bool active = yw_IsSquadronManagerCompactSize(yw);
+        if ( !yw_RenderSquadronManagerIcon(yw, squadron_manager.x,
+                                           squadron_manager.y, "compact",
+                                           active, compactBox) )
         {
-            yw_DrawSquadronManagerLockFallback(yw, lockBox, locked);
+            yw_DrawSquadronManagerCompactFallback(yw, compactBox, active);
         }
     }
 
@@ -1941,7 +2077,8 @@ static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw, int ma
     {
         // Reuse the same SVG-first faction loader as the title toolbar. A map
         // marker is an active annotation, so the active asset is requested.
-        NC_STACK_bitmap *ownerBitmap = yw_LoadFactionMapIcon(owner, "marker", true, markerSize);
+        NC_STACK_bitmap *ownerBitmap = yw_LoadFactionToolbarIcon(
+            owner, "Interface/Map/Buttons", "marker", true, markerSize);
         if ( ownerBitmap && ownerBitmap->GetBitmap() )
             return ownerBitmap;
     }
@@ -5228,12 +5365,7 @@ int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
         else
             yw->GuiWinClose(&squadron_manager);
 
-        squadron_manager.x = yw->_roboFinderStatus.Rect.x;
-        squadron_manager.y = yw->_roboFinderStatus.Rect.y;
-        squadron_manager.w = yw->_roboFinderStatus.Rect.w;
-        squadron_manager.h = yw->_roboFinderStatus.Rect.h;
-
-        squadron_manager.SetRect(yw, -2, -2);
+        yw_ApplySquadronManagerSavedRect(yw, yw->_roboFinderStatus.Rect);
     }
 
     return 1;
@@ -9289,9 +9421,26 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
     {
         TClickBoxInf *winpt = &inpt->ClickInf;
         bool onAggressionControl = false;
-        bool onWidthLockControl = false;
+        bool onSizeControl = false;
         sub_4C707C(this);
         yw_UpdateSquadronManagerDynamicLayout(this);
+
+        const int compactButtonId = yw_GetSquadronManagerCompactButtonId();
+
+        // Squadron Manager has no double-click titlebar action. Consume the
+        // second click explicitly so no generic drag/window path can reinterpret
+        // it as a size action later in the frame. Tactical Map double-click is
+        // handled independently and remains unchanged.
+        if ( winpt->selected_btn == &squadron_manager
+                && winpt->selected_btnID == 1
+                && (winpt->flag & TClickBoxInf::FLAG_DBL_CLICK) )
+        {
+            winpt->flag &= ~(TClickBoxInf::FLAG_DBL_CLICK
+                           | TClickBoxInf::FLAG_LM_DOWN
+                           | TClickBoxInf::FLAG_LM_HOLD
+                           | TClickBoxInf::FLAG_BTN_DOWN
+                           | TClickBoxInf::FLAG_BTN_HOLD);
+        }
 
         if ( squadron_manager.field_2A8 & 1 )
         {
@@ -9317,14 +9466,13 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
         }
         else if ( inpt->ClickInf.selected_btn == &squadron_manager )
         {
-            if ( inpt->ClickInf.selected_btnID == 7 )
+            if ( inpt->ClickInf.selected_btnID == compactButtonId )
             {
-                onWidthLockControl = true;
+                onSizeControl = true;
                 if ( winpt->flag & (TClickBoxInf::FLAG_BTN_DOWN
                                    | TClickBoxInf::FLAG_LM_DOWN) )
                 {
-                    squadron_manager.horizontalResizeLocked =
-                        !squadron_manager.horizontalResizeLocked;
+                    yw_ToggleSquadronManagerCompact(this);
 
                     if ( _GameShell )
                         SFXEngine::SFXe.startSound(&_GameShell->samples1_info, 3);
@@ -9386,7 +9534,7 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
                 }
             }
 
-            if ( !onAggressionControl && !onWidthLockControl
+            if ( !onAggressionControl && !onSizeControl
                     && (winpt->flag & (TClickBoxInf::FLAG_RM_DOWN
                                       | TClickBoxInf::FLAG_LM_DOWN)) )
             {
@@ -9419,11 +9567,11 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
             }
         }
 
-        // The footer and title lock own their clicks; do not let GuiList start
+        // The footer and Compact control own their clicks; do not let GuiList start
         // row selection, title dragging or help-button handling from the same
         // mouse event.
         const int savedSelectedButtonId = winpt->selected_btnID;
-        if ( onAggressionControl || onWidthLockControl )
+        if ( onAggressionControl || onSizeControl )
         {
             squadron_manager.listFlags &= ~(GuiList::GLIST_FLAG_IN_SELECT
                                            | GuiList::GLIST_FLAG_SEL_DONE);
@@ -9432,7 +9580,7 @@ void NC_STACK_ypaworld::SquadManager_InputHandle(TInputState *inpt)
 
         squadron_manager.InputHandle(this, inpt);
 
-        if ( onAggressionControl || onWidthLockControl )
+        if ( onAggressionControl || onSizeControl )
             winpt->selected_btnID = savedSelectedButtonId;
 
         squadron_manager.Formate(this);
@@ -13240,11 +13388,14 @@ void sub_4E4F80(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float x, f
     int v50 = (yw->_screenSize.y / 2) * y;
 
     int v49 = yw->_guiTiles[51]->map[valCH].w * wis->field_9E;
+    // Keep every classic HUD status row on the same shared layout, but leave
+    // a small breathing space between the three-letter label and the bar.
+    const int labelBarGap = txt1.empty() ? 0 : std::max(2, yw->_guiTiles[51]->map[1].w / 2);
 
 
     FontUA::set_txtColor(cur, yw->_iniColors[65].r, yw->_iniColors[65].g, yw->_iniColors[65].b);
 
-    v51 -= (wis->field_9A + wis->field_96 + v49) / 2;
+    v51 -= (wis->field_9A + wis->field_96 + labelBarGap + v49) / 2;
 
     if ( !txt1.empty() )
     {
@@ -13264,7 +13415,7 @@ void sub_4E4F80(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float x, f
 
     FontUA::select_tileset(cur, 51);
 
-    v51 += wis->field_96;
+    v51 += wis->field_96 + labelBarGap;
 
     FontUA::set_center_xpos(cur, v51);
     FontUA::set_center_ypos(cur, v50 - (yw->_guiTiles[51]->h / 2));
@@ -13497,13 +13648,26 @@ void yw_RenderInfoReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
             if ( v10 <= 0 )
                 v10 = laserLike ? 150 : 1000;
 
+            bool usingSalveDelay = false;
             if ( !laserLike && wpn->salve_shots )
             {
                 if ( bact->_salve_counter >= wpn->salve_shots )
+                {
                     v10 = wpn->salve_delay;
+                    usingSalveDelay = true;
+                }
             }
 
-            v12 = 100 * (bact->_clock - bact->_weapon_time) / v10;
+            // The HUD must use the same effective cooldown as LaunchMissile().
+            // salve_delay and laser tick timing intentionally keep their own
+            // existing semantics.
+            if ( !laserLike && !usingSalveDelay )
+            {
+                v10 = bact->GetProgressiveWeaponShotTime(*wpn, v10);
+                v10 = bact->GetEffectiveShotTime(v10, false);
+            }
+
+            v12 = 100 * (bact->_clock - bact->_weapon_time) / std::max(1, v10);
 
             if ( v12 >= 100 )
                 v12 = 100;
@@ -13520,6 +13684,57 @@ void yw_RenderInfoReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
 
         sub_4E4F80(yw, wis, cur, xpos, ypos, v12, 100, 1, 3, Locale::Text::HUD(Locale::HUDSTR_RLD), txt2);
     }
+}
+
+static void yw_RenderInfoMagazineBar(NC_STACK_ypaworld *yw, sklt_wis *wis,
+                                     CmdStream *cur, NC_STACK_ypabact *bact,
+                                     World::TWeapProto *wpn,
+                                     float xpos, float ypos)
+{
+    // salve_shots belongs to the normal projectile firing path. Special
+    // continuous/barrage payloads bypass that vanilla salve counter.
+    if ( !wpn || wpn->salve_shots <= 0 || wpn->IsLaser() || wpn->IsArtilleryShell() )
+        return;
+
+    int magazine = 100;
+
+    if ( bact )
+    {
+        const int salveShots = std::max(1, wpn->salve_shots);
+
+        if ( bact->_salve_counter >= salveShots )
+        {
+            // A completed salve is empty. salve_delay is the native refill
+            // cooldown, so visualize that same timer filling the magazine
+            // back to 100%. A zero delay means an instantaneous refill.
+            if ( wpn->salve_delay > 0 )
+            {
+                const int elapsed = std::max(0, bact->_clock - bact->_weapon_time);
+                magazine = 100 * elapsed / wpn->salve_delay;
+                magazine = std::max(0, std::min(100, magazine));
+            }
+            else
+            {
+                magazine = 100;
+            }
+        }
+        else
+        {
+            const int remaining = std::max(0, salveShots - bact->_salve_counter);
+            magazine = 100 * remaining / salveShots;
+            magazine = std::max(0, std::min(100, magazine));
+        }
+    }
+
+    const std::string text = magazine == 100
+        ? Locale::Text::HUD(Locale::HUDSTR_OK)
+        : fmt::sprintf("%d%%", magazine);
+
+    // Reuse the classic MAPMISC segmented Weapon bar renderer unchanged.
+    // Tile 3 is the existing white segment; tile 5 is the existing grey
+    // background segment. No new HUD style or drawing primitive is needed.
+    sub_4E4F80(yw, wis, cur, xpos, ypos, magazine, 100, 3, 5,
+               Locale::Text::OpenUA(Locale::OUA_HUD_MAG), text);
 }
 
 void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, World::TWeapProto *weap, float xpos, float ypos)
@@ -13732,8 +13947,12 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
         // A Kamikaze payload is not a normally fireable/cooldown weapon, so
         // keep its name/wireframe/DMG visible without inventing a fake RLD.
         if ( !weap->IsKamikaze() )
+        {
             yw_RenderInfoReloadbar(yw, wis, cur, bact, weap, xpos,
                                    ypos - wis->field_92 * 7.0);
+            yw_RenderInfoMagazineBar(yw, wis, cur, bact, weap, xpos,
+                                     ypos - wis->field_92 * 5.0);
+        }
 
         yw_RenderInfoWeaponInf(yw, wis, cur, bact, vhcl, weap, xpos,
                                ypos - wis->field_92 * 9.0);
@@ -16160,12 +16379,7 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
             else
                 yw->GuiWinClose( &squadron_manager );
 
-            squadron_manager.x = yw->_roboFinderStatus.Rect.x;
-            squadron_manager.y = yw->_roboFinderStatus.Rect.y;
-            squadron_manager.w = yw->_roboFinderStatus.Rect.w;
-            squadron_manager.h = yw->_roboFinderStatus.Rect.h;
-
-            squadron_manager.SetRect(yw, -2, -2);
+            yw_ApplySquadronManagerSavedRect(yw, yw->_roboFinderStatus.Rect);
         }
     }
     else if ( bact1->_bact_type == BACT_TYPES_ROBO )
@@ -16205,12 +16419,7 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
             else
                 yw->GuiWinClose( &squadron_manager );
 
-            squadron_manager.x = yw->_vhclFinderStatus.Rect.x;
-            squadron_manager.y = yw->_vhclFinderStatus.Rect.y;
-            squadron_manager.w = yw->_vhclFinderStatus.Rect.w;
-            squadron_manager.h = yw->_vhclFinderStatus.Rect.h;
-
-            squadron_manager.SetRect(yw, -2, -2);
+            yw_ApplySquadronManagerSavedRect(yw, yw->_vhclFinderStatus.Rect);
         }
     }
     else if ( bact1->_status == BACT_STATUS_DEAD )

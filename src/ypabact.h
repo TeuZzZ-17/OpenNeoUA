@@ -89,6 +89,8 @@ struct TActiveDebuffState
     float force_malus = 0.0f;
     float maxrot_malus = 0.0f;
     float shield_malus = 0.0f;
+    float mgun_shot_time_malus = 0.0f;
+    float shot_time_malus = 0.0f;
     float snd_pitch_multiplier = 1.0f;
     World::TVisualTint target_tint;
     std::vector<int16_t> vps;
@@ -124,6 +126,8 @@ struct TActiveDebuffState
         force_malus = 0.0f;
         maxrot_malus = 0.0f;
         shield_malus = 0.0f;
+        mgun_shot_time_malus = 0.0f;
+        shot_time_malus = 0.0f;
         snd_pitch_multiplier = 1.0f;
         target_tint = World::TVisualTint();
         vps.clear();
@@ -558,7 +562,13 @@ public:
     uint8_t GetSessionKillMarks() const;
     float GetKillStatBonusPercent() const;
     float GetKillStatMultiplier() const;
-    int GetEffectiveShotTime(int baseShotTime) const;
+    int GetEffectiveShotTime(int baseShotTime, bool minigun = false) const;
+    void RegisterProgressiveWeaponFireRequest(int weaponId);
+    void UpdateProgressiveWeaponFireRate(update_msg *arg);
+    int GetProgressiveWeaponShotTime(const World::TWeapProto &proto, int fallbackShotTime);
+    void ResetProgressiveWeaponFireRate();
+    void PrepareSuicideControlHandoff();
+    void ArmSuicideHandoffFireRelease() { _suicide_handoff_wait_fire_release = true; }
     int GetEffectiveOutgoingDamage(int baseDamage) const;
     float GetEffectiveShield() const;
     float GetEffectiveShieldWithAdditionalMalus(float additionalMalus) const;
@@ -916,9 +926,7 @@ public:
     int _weaponRecoilVisualEndTime = 0; // OpenNeoUA: render-only tank firing tilt, does not affect physics
     int _weaponRecoilVisualDuration = 0;
     float _weaponRecoilVisualPitch = 0.0f;
-    int _mgunRecoilVisualEndTime = 0;
-    int _mgunRecoilVisualDuration = 0;
-    float _mgunRecoilVisualPitch = 0.0f;
+    vec3d _mgunRecoilVisualOffset = vec3d(0.0, 0.0, 0.0); // OpenNeoUA: MGUN-only longitudinal render kick; decays back to the chassis origin
     vec3d _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0); // OpenNeoUA: render-only AI tank recoil translation
     int _weaponRecoilAiRecoveryEndTime = 0; // OpenNeoUA: short AI tank forward-thrust pause after fake recoil
     int _weaponRecoilPlayerRecoveryEndTime = 0; // OpenNeoUA: short player tank forward-input damping after fake recoil
@@ -965,12 +973,14 @@ public:
     uint8_t _energy_visual_state = 0;
     float _damaged_force_malus;
     float _damaged_maxrot_malus;
+    float _damaged_mgun_shot_time_malus;
+    float _damaged_shot_time_malus;
     float _damaged_snd_pitch_multiplier;
     bool _damaged_fx_active;
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
-    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA custom: hardcoded first-person world/camera shake scaled from mgun_recoil
+    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA custom: cockpit-only MGUN SHK scaled from mgun_recoil_cockpit
     TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: ordered snd_normal playback while model=laser is firing
     TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: same snd_normal path for laser vertical mode
@@ -992,7 +1002,7 @@ public:
     float _overeof;
     float _viewer_overeof;
     vec3d _cockpit_camera_offset;
-    float _cockpit_camera_recoil;
+    float _cockpit_gun_camera_recoil;
 //    float pos_x_cntr;
 //
 //    float pos_y_cntr;
@@ -1037,6 +1047,7 @@ public:
     float _mgunEnergyDrainRemainder;
     int32_t _mgunEnergyDrainLastFireTime;
     float _mgun_recoil;
+    float _mgun_recoil_cockpit;
     World::TWeaponTracerConfig _mgun_tracer;
     bool _mgun_decal_enable;
     World::TChainFXConfig _mgun_decal;
@@ -1063,6 +1074,12 @@ public:
 
     World::MissileList _missiles_list;
     int _weapon_time;
+    // OpenNeoUA: transient ramp-up state for optional normal/main Weapon cadence.
+    // This state never affects MGUN timing and resets when continuous normal firing ends
+    // (FIRE release, structural burst pause, weapon change or failed launch).
+    int _progressive_weapon_id = -1;
+    float _progressive_weapon_level = 0.0f; // 0 = shot_time/shot_time_user, 1 = ramp_up_max_shot_time
+    bool _progressive_weapon_requested = false;
     vec3d _fire_pos;
     int8_t _fire_x_mode;
     float _fire_x_start;
@@ -1081,6 +1098,10 @@ public:
     int _mgun_time;
     int _salve_counter;
     int _kill_after_shot;
+    // Transient player-input latch used only after a suicide handoff. It prevents
+    // the same still-held FIRE press from cascading through newly controlled
+    // squad members during the current/subsequent update frames.
+    bool _suicide_handoff_wait_fire_release = false;
     int _spawn_units;
     int _spawn_vehicle;
     int _spawn_interval;

@@ -70,7 +70,6 @@ public:
     bool factionCloseVisual = false;
     bool factionAccentTitle = true;
     bool wheelScroll = false;
-    bool horizontalResizeLocked = false;
     uint8_t backgroundOpacity = 255;
     int closeChar = 0;
     int16_t numEntries = 0;
@@ -145,8 +144,7 @@ public:
         int thinScrollbarVisualWidth = kThinScrollbarVisualSize;//22 // visible width; hit area stays vanilla-sized
         bool fillThinScrollbarGap = false;//23 // extend panel fill up to the thin visible scrollbar
         bool factionCloseVisual = false;//24 // hide legacy glyph; caller renders faction PNG close icon
-        bool horizontalResizeLocked = false;//25 // allow vertical resize while freezing the current width
-        bool factionAccentTitle = true;//26 // remap the title cyan to the current faction accent
+        bool factionAccentTitle = true;//25 // remap the title cyan to the current faction accent
     };
 
 
