@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <limits>
 #include <string.h>
 
 #include "includes.h"
@@ -1223,6 +1224,7 @@ void ypaworld_func158__sub4__sub1__sub6__sub2(NC_STACK_ypaworld *yw, TInputState
         brf->StatsGlobal[i] = yw->_playersStats[i];
 
     brf->StatsIngame.fill(World::TPlayerStatus());
+    brf->PlasmaObtained = 0;
 
     brf->Upgrades.clear();
 }
@@ -1342,6 +1344,42 @@ void yw_DebriefVhclCreate(NC_STACK_ypaworld *yw, TBriefengScreen *brf, World::Hi
             yw_RenderVector2D(yw, brf->VectorGfx[1]->GetSkelet(), a3a, a4a, 1.0, 0.0, 0.0, 1.0, a9, a10, yw->GetColor(arg->owner), NULL, NULL);
         }
     }
+}
+
+void yw_DebriefPlasma(NC_STACK_ypaworld *yw, TBriefengScreen *brf,
+                      World::History::Plasma *arg, uint32_t time, uint32_t stime)
+{
+    if ( stime == brf->LastFrameTimeStamp )
+    {
+        const uint64_t available = std::numeric_limits<uint64_t>::max()
+                                 - brf->PlasmaObtained;
+        brf->PlasmaObtained += std::min(arg->amount, available);
+
+        if ( yw->_GameShell )
+            SFXEngine::SFXe.startSound(&yw->_GameShell->samples1_info, 14);
+    }
+
+    const uint32_t dtime = time - stime;
+    if ( dtime >= 45000 || !brf->VectorGfx[0] )
+        return;
+
+    const float mapWidth = brf->MapBlitEnd.Width();
+    const float mapHeight = brf->MapBlitEnd.Height();
+    const float mapX = mapWidth * (arg->posX / 256.0f)
+                     + brf->MapBlitEnd.left;
+    const float mapY = mapHeight * (arg->posY / 256.0f)
+                     + brf->MapBlitEnd.top;
+    const float life = 1.0f - dtime / 45000.0f;
+    const float markerScale = 0.25f + 0.75f * life;
+    const float scaleX = ((mapWidth / (float)yw->_mapSize.x) / 3.0f)
+                       * markerScale;
+    const float scaleY = ((mapHeight / (float)yw->_mapSize.y) / 3.0f)
+                       * markerScale;
+
+    yw_RenderVector2D(yw, brf->VectorGfx[0]->GetSkelet(),
+                      mapX, mapY, 1.0f, 0.0f, 0.0f, 1.0f,
+                      scaleX, scaleY, yw->GetColor(arg->owner),
+                      NULL, NULL);
 }
 
 void yw_DebriefAddTechUpgrade(NC_STACK_ypaworld *yw, TBriefengScreen *brf, World::History::Upgrade *arg)
@@ -1687,6 +1725,28 @@ void yw_DebriefMPlayScore(NC_STACK_ypaworld *yw, TBriefengScreen *brf, CmdStream
         FontUA::set_txtColor(in, yw->_iniColors[67].r, yw->_iniColors[67].g, yw->_iniColors[67].b);
 
         FontUA::ColumnItem v35[2];
+
+        if ( yw->IsPlasmaCurrencyEnabled() )
+        {
+            v35[0].txt = Locale::Text::OpenUA(Locale::OUA_PLASMA_OBTAINED);
+            v35[0].spaceChar = 32;
+            v35[0].prefixChar = 0;
+            v35[0].postfixChar = 0;
+            v35[0].width = a4 * 0.7;
+            v35[0].fontID = 15;
+            v35[0].flags = 36;
+
+            v35[1].txt = fmt::sprintf("%" PRIu64, brf->PlasmaObtained);
+            v35[1].fontID = 15;
+            v35[1].spaceChar = 32;
+            v35[1].prefixChar = 0;
+            v35[1].width = a4 * 0.3;
+            v35[1].postfixChar = 0;
+            v35[1].flags = 36;
+
+            FormateColumnItem(yw, in, 2, v35);
+            FontUA::next_line(in);
+        }
 
         v35[0].txt = Locale::Text::Advanced(Locale::ADV_SCOREMISSION);
         v35[0].spaceChar = 32;
@@ -2071,6 +2131,12 @@ void yw_DebriefRunDebrief(NC_STACK_ypaworld *yw, TInputState *struc, TBriefengSc
 
                 case World::History::TYPE_VHCLCREATE:
                     yw_DebriefVhclCreate(yw, brf, static_cast<World::History::VhclCreate *>(decoder), dtime, lastFrameTimeStamp);
+                    break;
+
+                case World::History::TYPE_PLASMA:
+                    yw_DebriefPlasma(yw, brf,
+                                     static_cast<World::History::Plasma *>(decoder),
+                                     dtime, lastFrameTimeStamp);
                     break;
 
                 case World::History::TYPE_POWERST:

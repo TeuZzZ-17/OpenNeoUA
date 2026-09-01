@@ -378,6 +378,8 @@ struct TWeaponDebuffConfig
     float force_malus = 0.0;
     float maxrot_malus = 0.0;
     float shield_malus = 0.0;
+    float mgun_shot_time_malus = 0.0;
+    float shot_time_malus = 0.0;
     float snd_pitch_multiplier = 1.0;
     TVisualTint target_tint;
     std::vector<int16_t> vps;
@@ -603,6 +605,8 @@ struct TVhclProto
     int16_t num_mguns = 1;
     int mgun_shot_time = 0;
     float mgun_recoil = 0.0f;
+    // Optional cockpit-only MGUN SHK intensity. 0/absent disables cockpit shake.
+    float mgun_recoil_cockpit = 0.0f;
     // OpenNeoUA: shared tracer config used by normal Vehicle MGUNs and
     // model = gun/module + gun_type = mg; authoring uses mgun_mesh_tracer_*.
     TWeaponTracerConfig mgun_tracer;
@@ -655,6 +659,8 @@ struct TVhclProto
     int zoom_steps = -1;
     float damaged_force_malus = 0.0;
     float damaged_maxrot_malus = 0.0;
+    float damaged_mgun_shot_time_malus = 0.0;
+    float damaged_shot_time_malus = 0.0;
     float damaged_snd_pitch_multiplier = 1.0;
     int spawn_units = 0;
     int16_t spawn_vehicle = 0;
@@ -734,7 +740,7 @@ struct TVhclProto
     // OpenNeoUA modern cockpit camera: per-vehicle offset only. Missing axes remain 0.
     vec3d cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     // Player-only gun cockpit recoil multiplier. 0/absent keeps the current cockpit camera stable.
-    float cockpit_camera_recoil = 0.0f;
+    float cockpit_gun_camera_recoil = 0.0f;
     float gun_angle = 0.0;
     float fire_x = 0.0;
     float fire_y = 0.0;
@@ -896,11 +902,6 @@ struct TWeapProto
         return (_weaponFlags & WEAPON_FLAG_ARC_GRENADE) != 0;
     }
 
-    bool HasArcGrenadeHoming() const
-    {
-        return IsArcGrenade() && grenade_homing_delay > 0;
-    }
-
     bool IsHomingBomb() const
     {
         return _weaponFlags == WEAPON_FLAGS_HOMING_BOMB;
@@ -1033,11 +1034,16 @@ struct TWeapProto
     float adistBact = 0;
     int shot_time = 0;
     int shot_time_user = 0;
+    // OpenNeoUA custom: optional ramp-up cadence for normal/main Weapons.
+    // shot_time/shot_time_user remain the canonical starting cadence; while uninterrupted
+    // normal Weapon fire is held, ramp_up_time interpolates toward ramp_up_max_shot_time.
+    // Releasing FIRE or entering a structural firing pause/reset restores the base cadence.
+    int ramp_up_time = 0;
+    int ramp_up_max_shot_time = 0;
     int salve_shots = 0;
     int salve_delay = 0;
-    // OpenNeoUA: generic multi-target count for compatible weapon models.
-    // Consumed by missile, homing_bomb and delayed-homing Arc Grenade;
-    // 0/1 keeps single-target behaviour.
+    // OpenNeoUA: generic multi-target count for compatible homing weapon models.
+    // Consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
     int multi_target = 0;
     // OpenNeoUA custom: shared continuous beam parameters for model = laser.
     // vertical_laser_enable selects the downward-fire mode. "energy" is static base damage per tick; the class
@@ -1109,10 +1115,6 @@ struct TWeapProto
     // zero or invalid gravity uses the engine-standard 9.80665 fallback.
     float grenade_arc_angle = 0.0f;
     float grenade_arc_gravity = 0.0f;
-    // Optional milliseconds spent in the ballistic phase before this Arc
-    // Grenade enters the existing targeted-missile path. Non-positive values
-    // keep the projectile ballistic for its complete lifetime.
-    int grenade_homing_delay = 0;
     // OpenNeoUA custom: dedicated artillery shell barrage weapon ("model = artillery_shell").
     // All defaults are vanilla-safe: with artillery_shell_barrage_shots <= 0 / no max range,
     // an artillery shell weapon simply never fires.
