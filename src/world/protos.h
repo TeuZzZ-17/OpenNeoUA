@@ -205,8 +205,12 @@ struct TChainFXVisual
     TVisualTint tint;
 };
 
-struct TAtmosphericFXLayer
+struct TAtmosphericFXProfile
 {
+    bool valid = false;
+    std::string loop_sound;
+    int loop_sound_volume = 100;
+    int loop_sound_radius = 10000;
     std::string mesh3ds;
     int count = 0;
     vec3d spawn_radius = vec3d(0.0, 0.0, 0.0);
@@ -220,12 +224,6 @@ struct TAtmosphericFXLayer
     int fade_in = 0;
     int fade_out = 0;
     TVisualTint tint;
-};
-
-struct TAtmosphericFXProfile
-{
-    bool valid = false;
-    std::vector<TAtmosphericFXLayer> layers;
 };
 
 struct DestFX
@@ -437,6 +435,7 @@ struct TSuperItemProfile
     int wave_vp = 0;
     std::string wave_3ds;
     std::string wave_base;
+    std::string fallout_atmospheric_fx_profile; // Data-relative profile activated locally behind the propagated wave
     vec3d wave_axis_scale = vec3d(1.0, 1.0, 1.0);
     TVisualTint wave_tint;
     float wave_start_speed = 0.0f;
