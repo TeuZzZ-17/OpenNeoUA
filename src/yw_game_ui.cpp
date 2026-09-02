@@ -1216,10 +1216,22 @@ static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw);
 static int yw_GetSquadronManagerTitleButtonWidth(NC_STACK_ypaworld *yw);
 static int yw_GetSquadronManagerCompactEntryWidth(NC_STACK_ypaworld *yw);
 static int yw_GetSquadronManagerDefaultEntryWidth(NC_STACK_ypaworld *yw);
+static int yw_GetSquadronManagerCountReserveWidth(NC_STACK_ypaworld *yw);
+static void yw_UpdateSquadronManagerColumnLayout(NC_STACK_ypaworld *yw);
+static std::vector<NC_STACK_ypabact *> yw_GetSquadronDisplayUnits(
+    NC_STACK_ypabact *leader);
+static char yw_GetSquadronManagerUnitIcon(NC_STACK_ypaworld *yw,
+                                          NC_STACK_ypabact *bact, int blink);
 static constexpr uint8_t kSquadronManagerDragOpacity = 128;
 static constexpr int kSquadronManagerDefaultShownEntries = 6;
 static constexpr int kSquadronManagerExpandedShownEntries = 10;
 static constexpr int kSquadronManagerExpandedIconSlots = 5;
+static constexpr int kSquadronManagerTitleLabelSummaryGap = 6;
+static constexpr int kSquadronManagerTitleIconTextGap = 2;
+static constexpr int kSquadronManagerTitleCompactGap = 4;
+static constexpr int kSquadronManagerTitleTextPadding = 4;
+static constexpr int kSquadronManagerStatusCountGap = 2;
+static constexpr int kSquadronManagerRowCountIconGap = 6;
 
 
 ///////// up panel ///////////
@@ -1262,12 +1274,7 @@ void NC_STACK_ypaworld::sub_449DE8(const std::string &a2)
 
 void create_squad_man(NC_STACK_ypaworld *yw)
 {
-    auto &fnt28 = yw->_guiTiles[28]->map;
     const std::string title = "Squad";
-    const int iconCellWidth = fnt28[65].w;
-    const int spacerWidth = fnt28[64].w;
-    const int statusCellWidth = fnt28[97].w + spacerWidth;
-    const int leaderCellWidth = iconCellWidth + spacerWidth;
     const int compactEntryWidth = yw_GetSquadronManagerCompactEntryWidth(yw);
     const int defaultEntryWidth = yw_GetSquadronManagerDefaultEntryWidth(yw);
 
@@ -1303,9 +1310,7 @@ void create_squad_man(NC_STACK_ypaworld *yw)
 
     if ( squadron_manager.Init(yw, args) )
     {
-        squadron_manager.field_2CC = iconCellWidth;
-        squadron_manager.field_2D0 = yw->_fontBorderW + statusCellWidth;
-        squadron_manager.field_2D4 = squadron_manager.field_2D0 + leaderCellWidth;
+        yw_UpdateSquadronManagerColumnLayout(yw);
         int aggressionWidth = 0;
         for ( int i = 0; i < 5; i++ )
             aggressionWidth += yw->_guiTiles[24]->map[49 + i].w;
@@ -1801,19 +1806,45 @@ static int yw_GetSquadronManagerTitleButtonWidth(NC_STACK_ypaworld *yw)
     return std::max(18, std::min(24, yw->_fontH));
 }
 
+static int yw_GetSquadronManagerTextWidth(NC_STACK_ypaworld *yw,
+                                          const std::string &text)
+{
+    const int screenTextWidth = GFX::Engine.MeasureScreenTextWidth(text);
+    return screenTextWidth > 0
+        ? screenTextWidth
+        : yw->_guiTiles[0]->GetWidth(text);
+}
+
+static int yw_GetSquadronManagerStatusCellWidth(NC_STACK_ypaworld *yw)
+{
+    const auto &fnt28 = yw->_guiTiles[28]->map;
+    return std::max(
+        1, fnt28[97].w - fnt28[64].w + kSquadronManagerStatusCountGap);
+}
+
 static int yw_GetSquadronManagerCompactEntryWidth(NC_STACK_ypaworld *yw)
 {
     const auto &fnt28 = yw->_guiTiles[28]->map;
     const int iconCellWidth = fnt28[65].w;
     const int spacerWidth = fnt28[64].w;
-    const int statusCellWidth = fnt28[97].w + spacerWidth;
+    const int statusCellWidth = yw_GetSquadronManagerStatusCellWidth(yw);
     const int leaderCellWidth = iconCellWidth + spacerWidth;
     const int contentWidth = statusCellWidth + leaderCellWidth + iconCellWidth
-                           + yw->_guiTiles[0]->GetWidth(" x999")
+                           + yw_GetSquadronManagerCountReserveWidth(yw)
+                           + kSquadronManagerRowCountIconGap
                            + 2 * yw->_fontBorderW;
+    const int selectionCountWidth =
+        yw_GetSquadronManagerCountReserveWidth(yw)
+        + kSquadronManagerTitleTextPadding;
+    const int selectionSummaryWidth = iconCellWidth
+                                    + kSquadronManagerTitleIconTextGap
+                                    + selectionCountWidth
+                                    + kSquadronManagerTitleCompactGap;
     const int titleWidth = yw->_guiTiles[6]->GetWidth(" Squad")
+                         + kSquadronManagerTitleLabelSummaryGap
                          + yw->_fontDefCloseW
                          + yw_GetSquadronManagerTitleButtonWidth(yw)
+                         + selectionSummaryWidth
                          + yw->_fontBorderW;
     return std::max(contentWidth, titleWidth);
 }
@@ -1968,6 +1999,92 @@ static bool yw_IsSquadronManagerRowSelected(NC_STACK_ypaworld *yw,
         && bact->_commandID == yw->_activeCmdrID;
 }
 
+static NC_STACK_ypabact *yw_GetSquadronManagerSelectedCommander(
+    NC_STACK_ypaworld *yw)
+{
+    if ( !yw || yw->_activeCmdrID == 0 )
+        return NULL;
+
+    for ( NC_STACK_ypabact *commander : yw->_cmdrsRemap )
+    {
+        if ( !commander || commander->_commandID != yw->_activeCmdrID )
+            continue;
+
+        return commander->IsParentMyRobo() ? commander : NULL;
+    }
+
+    return NULL;
+}
+
+static void yw_DrawSquadronManagerSelectionSummary(
+    NC_STACK_ypaworld *yw, const ButtonBox &compactBox)
+{
+    NC_STACK_ypabact *commander =
+        yw_GetSquadronManagerSelectedCommander(yw);
+    if ( !commander )
+        return;
+
+    const std::vector<NC_STACK_ypabact *> displayUnits =
+        yw_GetSquadronDisplayUnits(commander);
+    if ( displayUnits.empty() )
+        return;
+
+    const uint8_t icon = (uint8_t)yw_GetSquadronManagerUnitIcon(
+        yw, commander, 0);
+    const Common::PointRect &source = yw->_guiTiles[28]->map[icon];
+    const int iconWidth = source.w;
+    const int iconHeight = source.h;
+    const std::string count = fmt::sprintf("%d", (int)displayUnits.size());
+    const int countTextWidth = yw_GetSquadronManagerTextWidth(yw, count);
+    const int countWidth = countTextWidth
+                         + kSquadronManagerTitleTextPadding;
+    const int countRight = squadron_manager.x + compactBox.x
+                         - kSquadronManagerTitleCompactGap;
+    const int countX = countRight - countWidth;
+    const int iconX = countRight - countTextWidth
+                    - kSquadronManagerTitleIconTextGap - iconWidth;
+    const int iconY = squadron_manager.y
+                    + std::max(0, (yw->_fontH - iconHeight) / 2);
+
+    CmdStream summary;
+    summary.reserve(64);
+    // ProcessDrawSeq position commands read the current tileset height. Select
+    // it first so this standalone stream is valid independently of prior UI.
+    FontUA::reset_tileset(&summary, 28);
+    FontUA::set_center_xpos(&summary, iconX - yw->_screenSize.x / 2);
+    FontUA::set_center_ypos(&summary, iconY - yw->_screenSize.y / 2);
+    // At 100% the standard glyph path preserves the original unit artwork.
+    // The title summary intentionally omits the separate row health glyph.
+    FontUA::store_u8(&summary, icon);
+
+    FontUA::reset_tileset(&summary, 0);
+    FontUA::set_center_xpos(&summary, countX - yw->_screenSize.x / 2);
+    FontUA::set_center_ypos(&summary,
+        squadron_manager.y + std::max(0, (yw->_fontH
+                                          - yw->_guiTiles[0]->h) / 2)
+        - yw->_screenSize.y / 2);
+    FontUA::set_txtColor(&summary, yw->_iniColors[60].r,
+                         yw->_iniColors[60].g, yw->_iniColors[60].b);
+    FontUA::copy_position(&summary);
+    // Keep the safety padding inside the measured box. Right alignment makes
+    // the visible digits end at countRight instead of turning that padding
+    // into an additional gap before the compact button.
+    FontUA::add_txt(&summary, countWidth, 2, count);
+    FontUA::set_end(&summary);
+
+    SDL_Color uiAccentColor;
+    const int halfW = yw->_screenSize.x / 2;
+    const int halfH = yw->_screenSize.y / 2;
+    GFX::Engine.raster_func211(Common::Rect(
+        squadron_manager.x - halfW,
+        squadron_manager.y - halfH,
+        squadron_manager.x + squadron_manager.w - halfW,
+        squadron_manager.y + yw->_fontH - halfH));
+    GFX::Engine.ProcessDrawSeq(summary, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
+    yw_SetFullScreenUiClip(yw);
+}
+
 static void yw_PreDrawSquadronManager(NC_STACK_ypaworld *yw)
 {
     if ( !yw || squadron_manager.IsClosed() )
@@ -2028,6 +2145,8 @@ static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw)
         yw_GetSquadronManagerCompactButtonId()];
     if ( compactBox )
     {
+        yw_DrawSquadronManagerSelectionSummary(yw, compactBox);
+
         const bool active = yw_IsSquadronManagerCompactSize(yw);
         if ( !yw_RenderSquadronManagerIcon(yw, squadron_manager.x,
                                            squadron_manager.y, "compact",
@@ -8586,7 +8705,34 @@ static int yw_GetSquadronManagerBackgroundFillWidth(NC_STACK_ypaworld *yw)
 
 static int yw_GetSquadronManagerCountReserveWidth(NC_STACK_ypaworld *yw)
 {
-    return yw->_guiTiles[0]->GetWidth(" x999");
+    size_t digitCount = 1;
+    for ( NC_STACK_ypabact *commander : yw->_cmdrsRemap )
+    {
+        if ( !commander || !commander->IsParentMyRobo() )
+            continue;
+
+        digitCount = std::max(
+            digitCount,
+            std::to_string(yw_GetSquadronDisplayUnits(commander).size()).size());
+    }
+
+    const std::string countReserve(digitCount, '9');
+    return yw_GetSquadronManagerTextWidth(yw, countReserve);
+}
+
+static void yw_UpdateSquadronManagerColumnLayout(NC_STACK_ypaworld *yw)
+{
+    const auto &fnt28 = yw->_guiTiles[28]->map;
+    const int iconCellWidth = fnt28[65].w;
+    const int spacerWidth = fnt28[64].w;
+    const int statusCellWidth = yw_GetSquadronManagerStatusCellWidth(yw);
+    const int leaderCellWidth = iconCellWidth + spacerWidth;
+
+    squadron_manager.field_2CC = iconCellWidth;
+    squadron_manager.field_2D0 = yw->_fontBorderW + statusCellWidth
+                               + yw_GetSquadronManagerCountReserveWidth(yw)
+                               + kSquadronManagerRowCountIconGap;
+    squadron_manager.field_2D4 = squadron_manager.field_2D0 + leaderCellWidth;
 }
 
 static int yw_GetSquadronManagerUnitSlotCount(NC_STACK_ypaworld *yw)
@@ -8596,11 +8742,12 @@ static int yw_GetSquadronManagerUnitSlotCount(NC_STACK_ypaworld *yw)
 
     const int iconCellWidth = squadron_manager.field_2CC;
     const int spacerWidth = yw->_guiTiles[28]->map[64].w;
-    const int statusCellWidth = yw->_guiTiles[28]->map[97].w + spacerWidth;
+    const int statusCellWidth = yw_GetSquadronManagerStatusCellWidth(yw);
     const int leaderCellWidth = iconCellWidth + spacerWidth;
     int available = squadron_manager.entryWidth - 2 * yw->_fontBorderW
                   - statusCellWidth
-                  - yw_GetSquadronManagerCountReserveWidth(yw);
+                  - yw_GetSquadronManagerCountReserveWidth(yw)
+                  - kSquadronManagerRowCountIconGap;
 
     if ( available <= leaderCellWidth )
         return 1;
@@ -8613,6 +8760,36 @@ static void yw_UpdateSquadronManagerDynamicLayout(NC_STACK_ypaworld *yw)
 {
     if ( !yw )
         return;
+
+    const int oldCompactWidth = squadron_manager.minEntryWidth;
+    const int newCompactWidth = yw_GetSquadronManagerCompactEntryWidth(yw);
+    if ( oldCompactWidth != newCompactWidth )
+    {
+        const int titleButtonWidth = yw_GetSquadronManagerTitleButtonWidth(yw);
+        const int expandedExtra = std::max(
+            0, kSquadronManagerExpandedIconSlots - 1)
+            * yw->_guiTiles[28]->map[65].w;
+        const bool followsCompact =
+            squadron_manager.entryWidth == oldCompactWidth;
+        const bool followsDefault =
+            squadron_manager.entryWidth == oldCompactWidth + titleButtonWidth;
+        const bool followsExpanded =
+            squadron_manager.entryWidth == oldCompactWidth + expandedExtra;
+
+        squadron_manager.minEntryWidth = newCompactWidth;
+        if ( followsCompact )
+            squadron_manager.entryWidth = newCompactWidth;
+        else if ( followsDefault )
+            squadron_manager.entryWidth = newCompactWidth + titleButtonWidth;
+        else if ( followsExpanded )
+            squadron_manager.entryWidth = newCompactWidth + expandedExtra;
+        else if ( squadron_manager.entryWidth < newCompactWidth )
+            squadron_manager.entryWidth = newCompactWidth;
+
+        squadron_manager.SetRect(yw, -2, -2);
+    }
+
+    yw_UpdateSquadronManagerColumnLayout(yw);
 
     int aggressionWidth = 0;
     for ( int i = 0; i < 5; i++ )
@@ -8795,22 +8972,31 @@ static void yw_RenderSquadronManagerSquadContent(NC_STACK_ypaworld *yw,
     const int blink = (yw->_timeStamp / 300) & 1;
     const int iconCellWidth = squadron_manager.field_2CC;
     const int spacerWidth = yw->_guiTiles[28]->map[64].w;
-    const int statusCellWidth = yw->_guiTiles[28]->map[97].w + spacerWidth;
+    const int statusCellWidth = yw_GetSquadronManagerStatusCellWidth(yw);
     const int leaderCellWidth = iconCellWidth + spacerWidth;
     const int unitSlotCount = yw_GetSquadronManagerUnitSlotCount(yw);
-    const int unitCellsWidth = leaderCellWidth
-                             + std::max(0, unitSlotCount - 1) * iconCellWidth;
-    const int countWidth = std::max(0,
-        squadron_manager.entryWidth - 2 * yw->_fontBorderW
-        - statusCellWidth - unitCellsWidth);
+    const int countWidth = yw_GetSquadronManagerCountReserveWidth(yw);
 
     if ( opacity != 255 )
         FontUA::set_opacity(cur, opacity);
 
     FontUA::select_tileset(cur, 28);
-    sub_4514F0(yw->_guiTiles[28], cur,
-               std::string(1, yw_GetSquadronManagerStatusIcon(bact)),
-               statusCellWidth, 64);
+    const uint8_t statusIcon = yw_GetSquadronManagerStatusIcon(bact);
+    FontUA::store_u8(cur, statusIcon);
+    FontUA::add_xpos(cur,
+                    statusCellWidth
+                    - yw->_guiTiles[28]->map[statusIcon].w);
+
+    if ( !displayUnits.empty() )
+    {
+        FontUA::select_tileset(cur, 0);
+        FontUA::copy_position(cur);
+        FontUA::add_txt(cur, countWidth, 2,
+                       fmt::sprintf("%d", (int)displayUnits.size()));
+        FontUA::add_xpos(cur,
+                        countWidth + kSquadronManagerRowCountIconGap);
+        FontUA::select_tileset(cur, 28);
+    }
 
     for ( int slot = 0; slot < unitSlotCount; slot++ )
     {
@@ -8833,14 +9019,6 @@ static void yw_RenderSquadronManagerSquadContent(NC_STACK_ypaworld *yw,
             FontUA::store_u8(cur, healthGlyph);
             FontUA::add_xpos(cur, cellWidth - healthWidth);
         }
-    }
-
-    if ( !displayUnits.empty() )
-    {
-        FontUA::select_tileset(cur, 0);
-        FontUA::copy_position(cur);
-        FontUA::add_txt(cur, countWidth, 1,
-                       fmt::sprintf(" x%d", (int)displayUnits.size()));
     }
 
     if ( opacity != 255 )
@@ -9312,17 +9490,13 @@ static bool yw_IsSquadronManagerWholeSquadDragArea(
     if ( !leader || leader == yw->_userRobo || !leader->IsParentMyRobo() )
         return false;
 
-    const std::vector<NC_STACK_ypabact *> displayUnits =
-        yw_GetSquadronDisplayUnits(leader);
     const int unitSlotCount = yw_GetSquadronManagerUnitSlotCount(yw);
-    const int countStart = squadron_manager.field_2D4
-                         + std::max(0, unitSlotCount - 1)
-                           * squadron_manager.field_2CC;
-    const int countTextEnd = countStart + yw->_guiTiles[0]->GetWidth(
-        fmt::sprintf(" x%d", (int)displayUnits.size()));
+    const int unitContentEnd = squadron_manager.field_2D4
+                             + std::max(0, unitSlotCount - 1)
+                               * squadron_manager.field_2CC;
     const int contentEnd = squadron_manager.entryWidth - yw->_fontBorderW;
 
-    return mouseX >= countTextEnd && mouseX < contentEnd;
+    return mouseX >= unitContentEnd && mouseX < contentEnd;
 }
 
 int NC_STACK_ypaworld::ypaworld_func64__sub7__sub3__sub1(TClickBoxInf *winpt)
@@ -9339,7 +9513,8 @@ int NC_STACK_ypaworld::ypaworld_func64__sub7__sub3__sub1(TClickBoxInf *winpt)
     const int squadIndex = winpt->selected_btnID - 8;
     NC_STACK_ypabact *v5 = sub_4C7B0C(squadIndex, winpt->move.BtnPos.x);
 
-    // The blank part after "xN" is the drag handle for the complete squad.
+    // The blank part after the visible unit icons is the drag handle for the
+    // complete squad.
     // A normal LMB click still goes through the GuiList selection path; holding
     // LMB and moving starts the existing drag/drop flow.  The whole-group flag
     // makes the drop reuse ORG_NEWCHIEF so leader and members are absorbed by
@@ -9372,6 +9547,16 @@ int NC_STACK_ypaworld::ypaworld_func64__sub7__sub3__sub1(TClickBoxInf *winpt)
 
     if ( v5 == _userRobo )
         return 0;
+
+    if ( winpt->flag & TClickBoxInf::FLAG_LM_DOWN )
+    {
+        // The list rows are rebuilt before the generic DOACTION_8 handler runs.
+        // Publish the new stable squad identity now so that buffer and overlay
+        // agree in this same frame; the normal action path completes selection.
+        NC_STACK_ypabact *squadCommander = sub_4D3C3C(v5);
+        if ( squadCommander )
+            _activeCmdrID = squadCommander->_commandID;
+    }
 
     squadron_manager.field_2B4 = squadron_manager.field_2AC;
     squadron_manager.field_2B8 = squadron_manager.field_2B0;
@@ -17685,20 +17870,6 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
                 mousePointer = 0;
                 doAction = World::DOACTION_0;
                 tooltip = 0;
-            }
-
-            const bool squadMemberIcon =
-                (_guiActFlags & 0x40) && squadron_manager.field_2B0 >= 0;
-            if ( squadMemberIcon && doAction == World::DOACTION_8 )
-            {
-                // Match the requested vanilla-style split: the commander/row
-                // selects its squad, while one click on a member icon is inert.
-                // Keep the same small "+" selection cursor on every member;
-                // the generic double-click path below still promotes that exact
-                // member to DOACTION_5 (Jump into Vehicle).
-                doAction = World::DOACTION_0;
-                mousePointer = 2;
-                tooltip = Locale::TIP_DO_CONTROL;
             }
 
             _doAction = ypaworld_func64__sub21__sub4(arg, doAction);
