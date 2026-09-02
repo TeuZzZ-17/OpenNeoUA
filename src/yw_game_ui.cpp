@@ -1232,6 +1232,7 @@ static constexpr int kSquadronManagerTitleCompactGap = 4;
 static constexpr int kSquadronManagerTitleTextPadding = 4;
 static constexpr int kSquadronManagerStatusCountGap = 2;
 static constexpr int kSquadronManagerRowCountIconGap = 6;
+static constexpr int kSquadronManagerSingleDigitCenterNudge = 1;
 
 
 ///////// up panel ///////////
@@ -8989,10 +8990,22 @@ static void yw_RenderSquadronManagerSquadContent(NC_STACK_ypaworld *yw,
 
     if ( !displayUnits.empty() )
     {
+        const std::string count = fmt::sprintf(
+            "%d", (int)displayUnits.size());
         FontUA::select_tileset(cur, 0);
-        FontUA::copy_position(cur);
-        FontUA::add_txt(cur, countWidth, 2,
-                       fmt::sprintf("%d", (int)displayUnits.size()));
+        if ( displayUnits.size() < 10 )
+        {
+            FontUA::add_xpos(cur,
+                            kSquadronManagerSingleDigitCenterNudge);
+            FontUA::copy_position(cur);
+            FontUA::add_xpos(cur,
+                            -kSquadronManagerSingleDigitCenterNudge);
+        }
+        else
+        {
+            FontUA::copy_position(cur);
+        }
+        FontUA::add_txt(cur, countWidth, 4, count);
         FontUA::add_xpos(cur,
                         countWidth + kSquadronManagerRowCountIconGap);
         FontUA::select_tileset(cur, 28);
