@@ -5849,7 +5849,6 @@ bool AtmosphericFXProfileParser::IsScope(ScriptParser::Parser &parser,
 
     _profile = TAtmosphericFXProfile();
     _seenScope = true;
-    _layer = NULL;
     return true;
 }
 
@@ -5874,75 +5873,64 @@ int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
         return ScriptParser::RESULT_BAD_DATA;
 
     if ( !StriCmp(p1, "end") )
-    {
-        if ( _layer )
-        {
-            _layer = NULL;
-            return ScriptParser::RESULT_OK;
-        }
         return ScriptParser::RESULT_SCOPE_END;
-    }
 
-    if ( !StriCmp(p1, "begin_layer") )
-    {
-        _profile.layers.emplace_back();
-        _layer = &_profile.layers.back();
-        return ScriptParser::RESULT_OK;
-    }
-
-    if ( !_layer )
-        return ScriptParser::RESULT_UNKNOWN;
-
-    if ( !StriCmp(p1, "mesh_3ds") )
-        _layer->mesh3ds = p2;
+    if ( !StriCmp(p1, "loop_sound") )
+        _profile.loop_sound = p2;
+    else if ( !StriCmp(p1, "loop_sound_volume") )
+        _profile.loop_sound_volume = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "loop_sound_radius") )
+        _profile.loop_sound_radius = parser.stol(p2, NULL, 0);
+    else if ( !StriCmp(p1, "mesh_3ds") )
+        _profile.mesh3ds = p2;
     else if ( !StriCmp(p1, "count") )
-        _layer->count = parser.stol(p2, NULL, 0);
+        _profile.count = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "spawn_radius_x") )
-        _layer->spawn_radius.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile.spawn_radius.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "spawn_radius_y") )
-        _layer->spawn_radius.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile.spawn_radius.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "spawn_radius_z") )
-        _layer->spawn_radius.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile.spawn_radius.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "spawn_offset_x") )
-        _layer->spawn_offset.x = parser.stof(p2, 0);
+        _profile.spawn_offset.x = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "spawn_offset_y") )
-        _layer->spawn_offset.y = parser.stof(p2, 0);
+        _profile.spawn_offset.y = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "spawn_offset_z") )
-        _layer->spawn_offset.z = parser.stof(p2, 0);
+        _profile.spawn_offset.z = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "lifetime_min") )
-        _layer->lifetime_min = NonNegativeFiniteMilliseconds(parser, p2);
+        _profile.lifetime_min = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "lifetime_max") )
-        _layer->lifetime_max = NonNegativeFiniteMilliseconds(parser, p2);
+        _profile.lifetime_max = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "velocity_x") )
-        _layer->velocity.x = parser.stof(p2, 0);
+        _profile.velocity.x = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "velocity_y") )
-        _layer->velocity.y = parser.stof(p2, 0);
+        _profile.velocity.y = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "velocity_z") )
-        _layer->velocity.z = parser.stof(p2, 0);
+        _profile.velocity.z = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "velocity_random_x") )
-        _layer->velocity_random.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile.velocity_random.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "velocity_random_y") )
-        _layer->velocity_random.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile.velocity_random.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "velocity_random_z") )
-        _layer->velocity_random.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _profile.velocity_random.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "scale_x") )
-        _layer->scale.x = ParseAtmosphericFXPositiveScale(parser, p1, p2);
+        _profile.scale.x = ParseAtmosphericFXPositiveScale(parser, p1, p2);
     else if ( !StriCmp(p1, "scale_y") )
-        _layer->scale.y = ParseAtmosphericFXPositiveScale(parser, p1, p2);
+        _profile.scale.y = ParseAtmosphericFXPositiveScale(parser, p1, p2);
     else if ( !StriCmp(p1, "scale_z") )
-        _layer->scale.z = ParseAtmosphericFXPositiveScale(parser, p1, p2);
+        _profile.scale.z = ParseAtmosphericFXPositiveScale(parser, p1, p2);
     else if ( !StriCmp(p1, "spin_x") )
-        _layer->spin.x = parser.stof(p2, 0);
+        _profile.spin.x = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "spin_y") )
-        _layer->spin.y = parser.stof(p2, 0);
+        _profile.spin.y = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "spin_z") )
-        _layer->spin.z = parser.stof(p2, 0);
+        _profile.spin.z = parser.stof(p2, 0);
     else if ( !StriCmp(p1, "fade_in") )
-        _layer->fade_in = NonNegativeFiniteMilliseconds(parser, p2);
+        _profile.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "fade_out") )
-        _layer->fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+        _profile.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "tint") )
-        ParseTintParam(parser, "tint", p1, p2, _layer->tint);
+        ParseTintParam(parser, "tint", p1, p2, _profile.tint, true);
     else
         return ScriptParser::RESULT_UNKNOWN;
 
@@ -6146,6 +6134,8 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->wave_3ds = p2;
     else if ( !StriCmp(p1, "wave_base") )
         _profile->wave_base = p2;
+    else if ( !StriCmp(p1, "fallout_atmospheric_fx_profile") )
+        _profile->fallout_atmospheric_fx_profile = p2;
     else if ( !StriCmp(p1, "wave_scale_x") )
         _profile->wave_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_scale_y") )

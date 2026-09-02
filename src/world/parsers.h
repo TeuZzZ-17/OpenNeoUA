@@ -124,7 +124,6 @@ public:
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
 protected:
     TAtmosphericFXProfile &_profile;
-    TAtmosphericFXLayer *_layer = NULL;
     bool _seenScope = false;
     bool _duplicateScope = false;
 };

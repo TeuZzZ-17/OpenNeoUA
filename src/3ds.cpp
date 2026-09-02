@@ -506,19 +506,17 @@ size_t NC_STACK_3ds::readChunkColor(float colors[3], FSMgr::FileHandle *fil, siz
 size_t NC_STACK_3ds::readName(FSMgr::FileHandle *fil, std::string *dst, size_t maxn)
 {
     *dst = "";
-    size_t readed = 0;
 
     for(size_t i = 0; i < maxn; ++i)
     {
         char c = fil->readS8();
-        readed++;
         if (!c)
             break;
 
         *dst += c;
     }
 
-    return readed;
+    return dst->size();
 }
 
 d3dsMaterial * NC_STACK_3ds::findMaterial(const std::string &matName)
