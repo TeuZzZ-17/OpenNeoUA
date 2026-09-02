@@ -27,6 +27,7 @@
 
 !/Scripts/
 /Scripts/*
+!/Scripts/Atmospheric_FX_Profiles/
 !/Scripts/Spectator_vehicle.txt
 !/Scripts/Super_Item_Profiles.txt
 
