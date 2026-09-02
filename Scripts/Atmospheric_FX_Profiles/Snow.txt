@@ -1,0 +1,38 @@
+begin_atmospheric_fx_profile
+
+        mesh_3ds = 3DS\snow.3ds
+        count = 180
+
+        spawn_radius_x = 1800
+        spawn_radius_y = 700
+        spawn_radius_z = 1800
+
+        spawn_offset_x = 0
+        spawn_offset_y = 450
+        spawn_offset_z = 0
+
+        lifetime_min = 6500
+        lifetime_max = 10000
+
+        velocity_x = 15
+        velocity_y = -100
+        velocity_z = 10
+
+        velocity_random_x = 45
+        velocity_random_y = 30
+        velocity_random_z = 45
+
+        scale_x = 1.5
+        scale_y = 1.5
+        scale_z = 1.5
+
+        spin_x = 0.25
+        spin_y = 0.70
+        spin_z = 0.35
+
+        fade_in = 350
+        fade_out = 600
+
+        tint = 255_255_255_230
+
+end

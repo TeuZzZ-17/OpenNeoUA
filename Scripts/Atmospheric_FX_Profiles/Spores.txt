@@ -1,0 +1,41 @@
+begin_atmospheric_fx_profile
+
+        mesh_3ds = 3DS\spore.3ds
+        count = 135
+
+        spawn_radius_x = 1950
+        spawn_radius_y = 720
+        spawn_radius_z = 1950
+
+        spawn_offset_x = 0
+        spawn_offset_y = 260
+        spawn_offset_z = 0
+
+        lifetime_min = 5000
+        lifetime_max = 9000
+
+        velocity_x = 8
+        velocity_y = -18
+        velocity_z = 5
+
+        velocity_random_x = 40
+        velocity_random_y = 22
+        velocity_random_z = 40
+
+        scale_x = 3.2
+        scale_y = 3.2
+        scale_z = 3.2
+
+        spin_x = 0.20
+        spin_y = 0.55
+        spin_z = 0.25
+
+        fade_in = 300
+        fade_out = 700
+
+        tint = 170_255_145_165
+
+        loop_sound = sounds/ambient/suig_spore_loop.wav
+        loop_sound_volume = 70
+        loop_sound_radius = 0
+end
