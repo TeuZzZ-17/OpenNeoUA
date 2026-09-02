@@ -1,0 +1,38 @@
+begin_atmospheric_fx_profile
+
+        mesh_3ds = 3DS\dust.3ds
+        count = 150
+
+        spawn_radius_x = 2100
+        spawn_radius_y = 450
+        spawn_radius_z = 2100
+
+        spawn_offset_x = 0
+        spawn_offset_y = 100
+        spawn_offset_z = 0
+
+        lifetime_min = 5000
+        lifetime_max = 8500
+
+        velocity_x = 70
+        velocity_y = 5
+        velocity_z = 35
+
+        velocity_random_x = 85
+        velocity_random_y = 12
+        velocity_random_z = 85
+
+        scale_x = 6.0
+        scale_y = 4.5
+        scale_z = 6.0
+
+        spin_x = 0.35
+        spin_y = 0.30
+        spin_z = 0.50
+
+        fade_in = 500
+        fade_out = 800
+
+        tint = 225_190_120_135
+
+end
