@@ -3,6 +3,7 @@
 
 begin_superitem_profile
     id = stoudson_nuclear
+    fallout_atmospheric_fx_profile = Scripts\Atmospheric_FX_Profiles\radiation.txt
 
     wave_vp = 283
     wave_scale_x = 1

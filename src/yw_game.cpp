@@ -170,6 +170,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
         return 0;
 
     StopAmbientLevelSound();
+    StopAtmosphericFXLoopSound();
 
     int ok = 0;
 
@@ -1444,6 +1445,10 @@ void NC_STACK_ypaworld::InitSuperItems()
     ClearSuperItemRuntime();
     _superItemSoundCarriers.resize(_levelInfo.SuperItems.size());
     _superItemWaveSoundCarriers.resize(_levelInfo.SuperItems.size());
+    _superItemFalloutAtmosphericFXProfiles.resize(_levelInfo.SuperItems.size());
+    _superItemFalloutSoundCarriers.resize(_levelInfo.SuperItems.size());
+    _superItemFalloutSoundSamples.assign(_levelInfo.SuperItems.size(), NULL);
+    _superItemFalloutActive.assign(_levelInfo.SuperItems.size(), 0);
 
     for ( size_t i = 0; i < _levelInfo.SuperItems.size(); i++ )
     {
@@ -1534,6 +1539,24 @@ void NC_STACK_ypaworld::InitSuperItems()
         sitem.CustomHitBuildingSlots.assign(_cells.size() * 9, 0);
         _superItemSoundCarriers[i].reset(new TSndCarrier());
         _superItemWaveSoundCarriers[i].reset(new TSndCarrier());
+
+        if ( !profile.fallout_atmospheric_fx_profile.empty() )
+        {
+            World::TAtmosphericFXProfile falloutProfile;
+            if ( LoadAtmosphericFXProfilePath(profile.fallout_atmospheric_fx_profile,
+                                              falloutProfile) )
+            {
+                _superItemFalloutAtmosphericFXProfiles[i] = std::move(falloutProfile);
+                _superItemFalloutSoundCarriers[i].reset(new TSndCarrier());
+                ypa_log_out("OpenNeoUA: SuperItem #%u loaded fallout Atmospheric FX Data/%s.\n",
+                            (unsigned)i, profile.fallout_atmospheric_fx_profile.c_str());
+            }
+            else
+            {
+                ypa_log_out("WARNING: SuperItem #%u fallout Atmospheric FX '%s' is unavailable; fallout visuals disabled for this bomb.\n",
+                            (unsigned)i, profile.fallout_atmospheric_fx_profile.c_str());
+            }
+        }
     }
 }
 
@@ -1552,6 +1575,30 @@ void NC_STACK_ypaworld::ClearSuperItemRuntime()
             SFXEngine::SFXe.StopCarrier(carrier.get());
     }
     _superItemWaveSoundCarriers.clear();
+
+    for (size_t i = 0; i < _superItemFalloutSoundSamples.size(); ++i)
+    {
+        NC_STACK_sample *&sample = _superItemFalloutSoundSamples[i];
+        if ( i < _superItemFalloutSoundCarriers.size() && _superItemFalloutSoundCarriers[i] )
+            StopAtmosphericFXLoopSoundInstance(sample, *_superItemFalloutSoundCarriers[i]);
+        else if ( sample )
+        {
+            sample->Delete();
+            sample = NULL;
+        }
+    }
+    _superItemFalloutSoundSamples.clear();
+    _superItemFalloutSoundCarriers.clear();
+    _superItemFalloutAtmosphericFXProfiles.clear();
+    _superItemFalloutActive.clear();
+
+    for (auto it = _transientVPs.begin(); it != _transientVPs.end(); )
+    {
+        if ( it->atmosphericFX && it->atmosphericSuperItemIndex >= 0 )
+            it = _transientVPs.erase(it);
+        else
+            ++it;
+    }
 
     for (TMapSuperItem &sitem : _levelInfo.SuperItems)
     {
@@ -3045,12 +3092,12 @@ static float yw_RandomFloatSigned(float magnitude)
 
 static bool yw_IsAtmosphericFXInsideVolume(const NC_STACK_ypaworld::TTransientVP &fx,
                                            const vec3d &viewerPos,
-                                           const World::TAtmosphericFXLayer &layer)
+                                           const World::TAtmosphericFXProfile &profile)
 {
-    vec3d center = viewerPos + layer.spawn_offset;
-    const double marginX = std::max(200.0, (double)layer.spawn_radius.x * 2.0 + 200.0);
-    const double marginY = std::max(200.0, (double)layer.spawn_radius.y * 2.0 + 200.0);
-    const double marginZ = std::max(200.0, (double)layer.spawn_radius.z * 2.0 + 200.0);
+    vec3d center = viewerPos + profile.spawn_offset;
+    const double marginX = std::max(200.0, (double)profile.spawn_radius.x * 2.0 + 200.0);
+    const double marginY = std::max(200.0, (double)profile.spawn_radius.y * 2.0 + 200.0);
+    const double marginZ = std::max(200.0, (double)profile.spawn_radius.z * 2.0 + 200.0);
     return fabs(fx.pos.x - center.x) <= marginX &&
            fabs(fx.pos.y - center.y) <= marginY &&
            fabs(fx.pos.z - center.z) <= marginZ;
@@ -3059,69 +3106,232 @@ static bool yw_IsAtmosphericFXInsideVolume(const NC_STACK_ypaworld::TTransientVP
 void NC_STACK_ypaworld::UpdateAtmosphericFX()
 {
     const World::TAtmosphericFXProfile &profile = _atmosphericFXProfile;
-    if ( !profile.valid || profile.layers.empty() )
+    if ( !profile.valid )
         return;
 
-    std::vector<int32_t> activeCounts(profile.layers.size(), 0);
+    int32_t activeCount = 0;
 
     for (auto it = _transientVPs.begin(); it != _transientVPs.end(); )
     {
-        if ( !it->atmosphericFX )
+        if ( !it->atmosphericFX || it->atmosphericSuperItemIndex >= 0 )
         {
             ++it;
             continue;
         }
 
-        if ( it->atmosphericLayerIndex < 0 ||
-             (size_t)it->atmosphericLayerIndex >= profile.layers.size() )
+        if ( !yw_IsAtmosphericFXInsideVolume(*it, _viewerPosition, profile) )
         {
             it = _transientVPs.erase(it);
             continue;
         }
 
-        const World::TAtmosphericFXLayer &layer = profile.layers[it->atmosphericLayerIndex];
-        if ( !yw_IsAtmosphericFXInsideVolume(*it, _viewerPosition, layer) )
-        {
-            it = _transientVPs.erase(it);
-            continue;
-        }
-
-        activeCounts[it->atmosphericLayerIndex]++;
+        ++activeCount;
         ++it;
     }
 
-    for (size_t layerIndex = 0; layerIndex < profile.layers.size(); ++layerIndex)
+    int32_t spawnNeeded = profile.count - activeCount;
+    if ( spawnNeeded <= 0 )
+        return;
+
+    vec3d center = _viewerPosition + profile.spawn_offset;
+    for (int32_t i = 0; i < spawnNeeded; ++i)
     {
-        const World::TAtmosphericFXLayer &layer = profile.layers[layerIndex];
-        int32_t spawnNeeded = layer.count - activeCounts[layerIndex];
+        vec3d pos = center;
+        pos.x += yw_RandomFloatSigned(profile.spawn_radius.x);
+        pos.y += yw_RandomFloatSigned(profile.spawn_radius.y);
+        pos.z += yw_RandomFloatSigned(profile.spawn_radius.z);
+
+        vec3d velocity = profile.velocity;
+        velocity.x += yw_RandomFloatSigned(profile.velocity_random.x);
+        velocity.y += yw_RandomFloatSigned(profile.velocity_random.y);
+        velocity.z += yw_RandomFloatSigned(profile.velocity_random.z);
+
+        const int32_t lifeTime = yw_RandomInRange(profile.lifetime_min, profile.lifetime_max);
+        const int32_t id = SpawnTransientVisual(0, profile.mesh3ds, pos, mat3x3::Ident(),
+                                                lifeTime, 1.0, profile.tint,
+                                                profile.scale, profile.spin,
+                                                TTransientVPParticleControls(),
+                                                profile.fade_in, profile.fade_out);
+        if ( id > 0 && !_transientVPs.empty() && _transientVPs.back().id == id )
+        {
+            TTransientVP &fx = _transientVPs.back();
+            fx.velocity = velocity;
+            fx.atmosphericFX = true;
+        }
+    }
+}
+
+static bool yw_IsInsideSuperItemWaveXZ(const vec3d &pos,
+                                        const vec3d &waveCenter,
+                                        float waveRadius)
+{
+    if ( !std::isfinite(waveRadius) || waveRadius <= 0.0f )
+        return false;
+
+    const double dx = pos.x - waveCenter.x;
+    const double dz = pos.z - waveCenter.z;
+    const double radius = waveRadius;
+    return dx * dx + dz * dz <= radius * radius;
+}
+
+void NC_STACK_ypaworld::UpdateSuperItemFalloutAtmosphericFX()
+{
+    const size_t superItemCount = _levelInfo.SuperItems.size();
+    if ( _superItemFalloutAtmosphericFXProfiles.size() != superItemCount )
+        return;
+
+    std::vector<uint8_t> active(superItemCount, 0);
+    std::vector<vec3d> waveCenters(superItemCount, vec3d(0.0, 0.0, 0.0));
+    std::vector<float> waveRadii(superItemCount, 0.0f);
+    std::vector<int32_t> activeCounts(superItemCount, 0);
+
+    for (size_t i = 0; i < superItemCount; ++i)
+    {
+        TMapSuperItem &sitem = _levelInfo.SuperItems[i];
+        const World::TAtmosphericFXProfile &profile = _superItemFalloutAtmosphericFXProfiles[i];
+
+        if ( !profile.valid ||
+             sitem.State != TMapSuperItem::STATE_TRIGGED ||
+             !IsCustomSuperItem(sitem) || sitem.CurrentRadius <= 0 )
+            continue;
+
+        vec3d waveCenter = World::SectorIDToCenterPos3(sitem.CellId);
+        if ( sitem.PCell )
+            waveCenter.y = sitem.PCell->height;
+
+        const float waveRadius = (float)sitem.CurrentRadius;
+        waveCenters[i] = waveCenter;
+        waveRadii[i] = waveRadius;
+
+        // Fallout is only an illusion around the viewer. The full map is never
+        // populated: the local Atmospheric FX volume turns on only after the
+        // Stoudson wave has already crossed the viewer's X/Z position.
+        if ( yw_IsInsideSuperItemWaveXZ(_viewerPosition, waveCenter, waveRadius) )
+            active[i] = 1;
+    }
+
+    // Sound follows the same viewer-local rule as the visuals. Start/stop only
+    // on boundary transitions so a missing authored sample is not retried every frame.
+    if ( _superItemFalloutActive.size() != superItemCount )
+        _superItemFalloutActive.assign(superItemCount, 0);
+
+    for (size_t i = 0; i < superItemCount; ++i)
+    {
+        const bool wasActive = _superItemFalloutActive[i] != 0;
+        const bool isActive = active[i] != 0;
+
+        if ( isActive && !wasActive &&
+             i < _superItemFalloutSoundCarriers.size() &&
+             i < _superItemFalloutSoundSamples.size() &&
+             _superItemFalloutSoundCarriers[i] )
+        {
+            StartAtmosphericFXLoopSoundInstance(_superItemFalloutAtmosphericFXProfiles[i],
+                                                _superItemFalloutSoundSamples[i],
+                                                *_superItemFalloutSoundCarriers[i]);
+        }
+        else if ( !isActive && wasActive &&
+                  i < _superItemFalloutSoundCarriers.size() &&
+                  i < _superItemFalloutSoundSamples.size() &&
+                  _superItemFalloutSoundCarriers[i] )
+        {
+            StopAtmosphericFXLoopSoundInstance(_superItemFalloutSoundSamples[i],
+                                               *_superItemFalloutSoundCarriers[i]);
+        }
+
+        _superItemFalloutActive[i] = isActive ? 1 : 0;
+
+        if ( isActive &&
+             i < _superItemFalloutSoundCarriers.size() &&
+             i < _superItemFalloutSoundSamples.size() &&
+             _superItemFalloutSoundSamples[i] &&
+             _superItemFalloutSoundCarriers[i] )
+        {
+            _superItemFalloutSoundCarriers[i]->Position = _viewerPosition;
+            _superItemFalloutSoundCarriers[i]->Vector = vec3d(0.0, 0.0, 0.0);
+            SFXEngine::SFXe.UpdateSoundCarrier(_superItemFalloutSoundCarriers[i].get());
+        }
+    }
+
+    // Cull or count only fallout transients. Normal level Atmospheric FX are
+    // intentionally left to UpdateAtmosphericFX().
+    for (auto it = _transientVPs.begin(); it != _transientVPs.end(); )
+    {
+        if ( !it->atmosphericFX || it->atmosphericSuperItemIndex < 0 )
+        {
+            ++it;
+            continue;
+        }
+
+        const int32_t superItemIndex = it->atmosphericSuperItemIndex;
+        if ( superItemIndex < 0 || (size_t)superItemIndex >= superItemCount ||
+             !active[superItemIndex] )
+        {
+            it = _transientVPs.erase(it);
+            continue;
+        }
+
+        const World::TAtmosphericFXProfile &profile =
+            _superItemFalloutAtmosphericFXProfiles[superItemIndex];
+        if ( !yw_IsAtmosphericFXInsideVolume(*it, _viewerPosition, profile) ||
+             !yw_IsInsideSuperItemWaveXZ(it->pos, waveCenters[superItemIndex],
+                                         waveRadii[superItemIndex]) )
+        {
+            it = _transientVPs.erase(it);
+            continue;
+        }
+
+        ++activeCounts[superItemIndex];
+        ++it;
+    }
+
+    for (size_t superItemIndex = 0; superItemIndex < superItemCount; ++superItemIndex)
+    {
+        if ( !active[superItemIndex] )
+            continue;
+
+        const World::TAtmosphericFXProfile &profile =
+            _superItemFalloutAtmosphericFXProfiles[superItemIndex];
+        int32_t spawnNeeded = profile.count - activeCounts[superItemIndex];
         if ( spawnNeeded <= 0 )
             continue;
 
-        vec3d center = _viewerPosition + layer.spawn_offset;
-        for (int32_t i = 0; i < spawnNeeded; ++i)
+        const vec3d localCenter = _viewerPosition + profile.spawn_offset;
+
+        // Near the wave front only part of the viewer-local spawn box is
+        // contaminated. Rejection sampling keeps particles behind the wave
+        // without creating a persistent per-sector contamination map.
+        int32_t attemptsRemaining = spawnNeeded * 8;
+        while ( spawnNeeded > 0 && attemptsRemaining-- > 0 )
         {
-            vec3d pos = center;
-            pos.x += yw_RandomFloatSigned(layer.spawn_radius.x);
-            pos.y += yw_RandomFloatSigned(layer.spawn_radius.y);
-            pos.z += yw_RandomFloatSigned(layer.spawn_radius.z);
+            vec3d pos = localCenter;
+            pos.x += yw_RandomFloatSigned(profile.spawn_radius.x);
+            pos.y += yw_RandomFloatSigned(profile.spawn_radius.y);
+            pos.z += yw_RandomFloatSigned(profile.spawn_radius.z);
 
-            vec3d velocity = layer.velocity;
-            velocity.x += yw_RandomFloatSigned(layer.velocity_random.x);
-            velocity.y += yw_RandomFloatSigned(layer.velocity_random.y);
-            velocity.z += yw_RandomFloatSigned(layer.velocity_random.z);
+            if ( !yw_IsInsideSuperItemWaveXZ(pos, waveCenters[superItemIndex],
+                                             waveRadii[superItemIndex]) )
+                continue;
 
-            const int32_t lifeTime = yw_RandomInRange(layer.lifetime_min, layer.lifetime_max);
-            const int32_t id = SpawnTransientVisual(0, layer.mesh3ds, pos, mat3x3::Ident(),
-                                                    lifeTime, 1.0, layer.tint,
-                                                    layer.scale, layer.spin,
+            vec3d velocity = profile.velocity;
+            velocity.x += yw_RandomFloatSigned(profile.velocity_random.x);
+            velocity.y += yw_RandomFloatSigned(profile.velocity_random.y);
+            velocity.z += yw_RandomFloatSigned(profile.velocity_random.z);
+
+            const int32_t lifeTime = yw_RandomInRange(profile.lifetime_min,
+                                                      profile.lifetime_max);
+            const int32_t id = SpawnTransientVisual(0, profile.mesh3ds, pos,
+                                                    mat3x3::Ident(), lifeTime,
+                                                    1.0, profile.tint,
+                                                    profile.scale, profile.spin,
                                                     TTransientVPParticleControls(),
-                                                    layer.fade_in, layer.fade_out);
+                                                    profile.fade_in, profile.fade_out);
             if ( id > 0 && !_transientVPs.empty() && _transientVPs.back().id == id )
             {
                 TTransientVP &fx = _transientVPs.back();
                 fx.velocity = velocity;
                 fx.atmosphericFX = true;
-                fx.atmosphericLayerIndex = (int32_t)layerIndex;
+                fx.atmosphericSuperItemIndex = (int32_t)superItemIndex;
+                --spawnNeeded;
             }
         }
     }
@@ -6560,6 +6770,8 @@ void NC_STACK_ypaworld::ypaworld_func64__sub19()
             }
         }
     }
+
+    UpdateSuperItemFalloutAtmosphericFX();
 
     for (const std::unique_ptr<TSndCarrier> &carrier : _superItemSoundCarriers)
     {
