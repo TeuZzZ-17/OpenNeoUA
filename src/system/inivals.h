@@ -249,6 +249,9 @@ public:
     static Common::Ini::Key GameFallDamage;
     static Common::Ini::Key GamePushAtDeathMultiplier;
     static Common::Ini::Key GameHandBrakePower;
+    static Common::Ini::Key GameRecoilKickTime;
+    static Common::Ini::Key GameRecoilHoldTime;
+    static Common::Ini::Key GameRecoilReturnTime;
     static Common::Ini::Key GameUnitKillStatBonus;
     static Common::Ini::Key GameHandBrakeSound;
     static Common::Ini::Key GameGemUnlockNewUI;
@@ -337,9 +340,6 @@ public:
     static Common::Ini::Key UiStatusIconProximityDefense;
     static Common::Ini::Key UiStatusIconSprint;
     static Common::Ini::Key UiStatusIconHandbrake;
-    // Owner-aware Plasma Currency icon template. `{owner}` resolves to the
-    // current player faction (1..6); default: Interface/Plasma/owner_{owner}/plasma.png.
-    static Common::Ini::Key UiStatusIconPlasma;
     static Common::Ini::Key UiStatusIconBlinkCount;
 
     // OpenNeoUA: render-only tint for Black Sect combat units (owner/faction 5 only).
@@ -358,9 +358,6 @@ public:
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
     static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional sound played once after successful map marker deployment
-    static Common::Ini::Key UiMoveOrderTemplate; // OpenNeoUA: direct resource path for squad move-order feedback
-    static Common::Ini::Key UiAttackOrderTemplate; // OpenNeoUA: direct resource path for attack-order feedback
-    static Common::Ini::Key UiRoboMoveOrderTemplate; // OpenNeoUA: direct resource path for Host Station relocation feedback
 
 private:
     static Common::Ini::PKeyList _varList;

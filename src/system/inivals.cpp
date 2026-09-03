@@ -92,14 +92,6 @@ Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std
 // OpenNeoUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::UiMapMarkerSound("ui.map_marker_sound", Common::Ini::KT_STRING, std::string());
-Common::Ini::Key IniConf::UiMoveOrderTemplate(
-    "ui.move_order_template", Common::Ini::KT_STRING,
-    std::string("Interface/Actions/MoveOrder/owner_{owner}/move_order_01.svg"));
-Common::Ini::Key IniConf::UiAttackOrderTemplate(
-    "ui.attack_order_template", Common::Ini::KT_STRING, std::string());
-Common::Ini::Key IniConf::UiRoboMoveOrderTemplate(
-    "ui.robo.move_order_template", Common::Ini::KT_STRING,
-    std::string("Interface/Actions/MoveOrder/owner_{owner}/move_order_01.svg"));
 
 
 // Input Engine
@@ -310,6 +302,11 @@ Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", C
 // recoil/random-spread reduction. Zero disables all three effects; values above
 // one may strengthen braking while weapon modifiers remain capped at 100%.
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
+// OpenNeoUA: one global recoil envelope shared by Weapon recoil and MGUN recoil.
+// Missing values preserve the current instant kick/no-hold/exponential-style return feel.
+Common::Ini::Key IniConf::GameRecoilKickTime("game.recoil_kick_time", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameRecoilHoldTime("game.recoil_hold_time", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameRecoilReturnTime("game.recoil_return_time", Common::Ini::KT_WORD, std::string("420"));
 // OpenNeoUA: explicit %-only per-session unit stat bonus derived from the existing
 // 0..4 kill marks. Bare values are not interpreted as percentages. Runtime clamps
 // the configured per-mark value and never mutates shared prototypes.
@@ -430,9 +427,6 @@ Common::Ini::Key IniConf::UiStatusIconInvisible("ui.status_icon_invisible", Comm
 Common::Ini::Key IniConf::UiStatusIconProximityDefense("ui.status_icon_proximity_defense", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconSprint("ui.status_icon_sprint", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Common::Ini::KT_STRING);
-Common::Ini::Key IniConf::UiStatusIconPlasma(
-    "ui.status_icon_plasma", Common::Ini::KT_STRING,
-    std::string("Interface/Plasma/owner_{owner}/plasma.png"));
 // Number of complete 200 ms on/off blink cycles used both when a dynamic
 // status icon appears and when it disappears. Zero keeps the previous
 // immediate behavior; runtime clamps the value to 0..10.
@@ -670,6 +664,9 @@ void IniConf::Init()
         , &GameFallDamage
         , &GamePushAtDeathMultiplier
         , &GameHandBrakePower
+        , &GameRecoilKickTime
+        , &GameRecoilHoldTime
+        , &GameRecoilReturnTime
         , &GameUnitKillStatBonus
         , &GameHandBrakeSound
         , &GameGemUnlockNewUI
@@ -745,7 +742,6 @@ void IniConf::Init()
         , &UiStatusIconProximityDefense
         , &UiStatusIconSprint
         , &UiStatusIconHandbrake
-        , &UiStatusIconPlasma
         , &UiStatusIconBlinkCount
         , &GameBlackSectUnitsTint
 
@@ -785,9 +781,6 @@ void IniConf::Init()
         , &UiMenuFont
         , &UiRetroInterface
         , &UiMapMarkerSound
-        , &UiMoveOrderTemplate
-        , &UiAttackOrderTemplate
-        , &UiRoboMoveOrderTemplate
     };
 }
 
