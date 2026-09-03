@@ -316,28 +316,6 @@ static bool ypabact_IsGenesisSeparationVehicle(const NC_STACK_ypabact *unit)
     }
 }
 
-static bool ypabact_IsMgunRecoilVisualVehicleClass(const NC_STACK_ypabact *unit)
-{
-    if ( !unit )
-        return false;
-
-    switch ( unit->_bact_type )
-    {
-    case BACT_TYPES_BACT:
-    case BACT_TYPES_TANK:
-    case BACT_TYPES_ROBO:
-    case BACT_TYPES_ZEPP:
-    case BACT_TYPES_FLYER:
-    case BACT_TYPES_UFO:
-    case BACT_TYPES_CAR:
-    case BACT_TYPES_GUN:
-        return true;
-
-    default:
-        return false;
-    }
-}
-
 static bool ypabact_IsKamikazeArmed(NC_STACK_ypabact *unit);
 static void ypabact_FireProximityDefenseAtDeath(NC_STACK_ypabact *unit);
 
@@ -1026,63 +1004,178 @@ static mat3x3 ypabact_BuildVPRotationMatrix(const vec3d &degrees)
     return rot;
 }
 
-static constexpr int WEAPON_RECOIL_VISUAL_DURATION_MS = 220;
-static constexpr float WEAPON_RECOIL_VISUAL_DEGREES_PER_UNIT = 0.75f;
-static constexpr float WEAPON_RECOIL_VISUAL_MAX_DEGREES = 5.0f;
+static constexpr float RECOIL_DISTANCE_PER_UNIT = 7.0f;
+static constexpr float RECOIL_MAX_INTENSITY = 10.0f;
+static constexpr float RECOIL_VISUAL_MAX_DISTANCE =
+    RECOIL_DISTANCE_PER_UNIT * RECOIL_MAX_INTENSITY;
+static constexpr float RECOIL_VISUAL_DEGREES_PER_UNIT = 0.75f;
+static constexpr float RECOIL_VISUAL_MAX_DEGREES = 5.0f;
+static constexpr int RECOIL_DEFAULT_KICK_TIME_MS = 0;
+static constexpr int RECOIL_DEFAULT_HOLD_TIME_MS = 0;
+// The old 0.14 s exponential offset has ~95% returned after 0.42 s.
+static constexpr int RECOIL_DEFAULT_RETURN_TIME_MS = 420;
+static constexpr int RECOIL_MAX_PHASE_TIME_MS = 5000;
+static constexpr int RECOIL_COCKPIT_SHAKE_DURATION_MS = 220;
 static constexpr float MGUN_RECOIL_FEEDBACK_DEGREES_PER_UNIT = 1.2f;
 static constexpr float MGUN_RECOIL_FEEDBACK_MAX_DEGREES = 12.0f;
 // Preserve the smoother multi-axis cockpit vibration used by the earlier SHK
-// implementation. These affect camera shake only; body recoil remains purely longitudinal.
+// implementation. These affect camera shake only; body recoil is shared with
+// normal Weapon recoil and remains independent from the cockpit-only setting.
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_X = 0.35f;
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_Y = 0.20f;
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_Z = 0.35f;
 
-static float ypabact_GetWeaponRecoilVisualPitch(const NC_STACK_ypabact *bact)
+static int ypabact_ReadRecoilPhaseTimeMs(Common::Ini::Key &key, int dflt)
 {
-    // Tanks and gun/flak actors share the same render-only firing tilt. The gun
-    // branch intentionally changes only its own VP, never parent or physics.
-    if ( (bact->_bact_type != BACT_TYPES_TANK &&
-          bact->_bact_type != BACT_TYPES_GUN) ||
-         bact->_weaponRecoilVisualDuration <= 0 ||
-         bact->_weaponRecoilVisualPitch == 0.0f ||
-         bact->_clock >= bact->_weaponRecoilVisualEndTime )
-        return 0.0f;
+    float parsed = ypabact_ReadNonNegativeFloatIni(key, (float)dflt);
+    if ( !std::isfinite(parsed) )
+        return dflt;
 
-    float remain = (float)(bact->_weaponRecoilVisualEndTime - bact->_clock) /
-                   (float)bact->_weaponRecoilVisualDuration;
-    if ( remain <= 0.0f )
-        return 0.0f;
-    if ( remain > 1.0f )
-        remain = 1.0f;
-
-    // Ease out quickly: full kick immediately after the shot, then fade fast.
-    return bact->_weaponRecoilVisualPitch * remain * remain;
+    parsed = std::min(parsed, (float)RECOIL_MAX_PHASE_TIME_MS);
+    return std::max(0, (int)std::lround(parsed));
 }
 
-static void ypabact_StartWeaponRecoilVisual(NC_STACK_ypabact *bact, float recoil)
+static int ypabact_GetRecoilKickTimeMs()
 {
-    if ( (bact->_bact_type != BACT_TYPES_TANK &&
-          bact->_bact_type != BACT_TYPES_GUN) || recoil <= 0.0f )
-        return;
-
-    float degrees = recoil * WEAPON_RECOIL_VISUAL_DEGREES_PER_UNIT;
-    if ( degrees < 0.0f )
-        degrees = 0.0f;
-    else if ( degrees > WEAPON_RECOIL_VISUAL_MAX_DEGREES )
-        degrees = WEAPON_RECOIL_VISUAL_MAX_DEGREES;
-
-    if ( degrees <= 0.0f )
-        return;
-
-    bact->_weaponRecoilVisualDuration = WEAPON_RECOIL_VISUAL_DURATION_MS;
-    bact->_weaponRecoilVisualEndTime = bact->_clock + WEAPON_RECOIL_VISUAL_DURATION_MS;
-    bact->_weaponRecoilVisualPitch = degrees * C_PI_180;
+    return ypabact_ReadRecoilPhaseTimeMs(System::IniConf::GameRecoilKickTime,
+                                         RECOIL_DEFAULT_KICK_TIME_MS);
 }
 
-static constexpr float MGUN_RECOIL_VISUAL_DISTANCE_PER_UNIT = 5.0f;
-static constexpr float MGUN_RECOIL_VISUAL_MAX_DISTANCE = 50.0f;
+static int ypabact_GetRecoilHoldTimeMs()
+{
+    return ypabact_ReadRecoilPhaseTimeMs(System::IniConf::GameRecoilHoldTime,
+                                         RECOIL_DEFAULT_HOLD_TIME_MS);
+}
 
-static bool ypabact_IsPlayerMgunRecoilFirstPersonView(NC_STACK_ypabact *bact);
+static int ypabact_GetRecoilReturnTimeMs()
+{
+    return ypabact_ReadRecoilPhaseTimeMs(System::IniConf::GameRecoilReturnTime,
+                                         RECOIL_DEFAULT_RETURN_TIME_MS);
+}
+
+static float ypabact_RecoilKickCurve(float t)
+{
+    t = std::max(0.0f, std::min(t, 1.0f));
+    // Fixed ease-out: the shot reacts promptly without making the curve itself
+    // another authoring parameter.
+    const float oneMinus = 1.0f - t;
+    return 1.0f - oneMinus * oneMinus;
+}
+
+static float ypabact_RecoilReturnCurve(float t)
+{
+    t = std::max(0.0f, std::min(t, 1.0f));
+    // Normalized exponential return, chosen to preserve the old recoil feel.
+    const float end = std::exp(-3.0f);
+    return (std::exp(-3.0f * t) - end) / (1.0f - end);
+}
+
+static void ypabact_EvaluateRecoilVisual(const NC_STACK_ypabact *bact,
+                                         vec3d *offset, float *pitch)
+{
+    if ( offset )
+        *offset = vec3d(0.0, 0.0, 0.0);
+    if ( pitch )
+        *pitch = 0.0f;
+    if ( !bact || bact->_recoilVisualReturnEndTime <= bact->_recoilVisualPhaseStartTime )
+        return;
+
+    const int now = bact->_clock;
+    if ( now >= bact->_recoilVisualReturnEndTime )
+        return;
+
+    vec3d visualOffset;
+    float visualPitch = 0.0f;
+
+    if ( now < bact->_recoilVisualKickEndTime &&
+         bact->_recoilVisualKickEndTime > bact->_recoilVisualPhaseStartTime )
+    {
+        const float t = (float)(now - bact->_recoilVisualPhaseStartTime) /
+                        (float)(bact->_recoilVisualKickEndTime - bact->_recoilVisualPhaseStartTime);
+        const float f = ypabact_RecoilKickCurve(t);
+        visualOffset = bact->_recoilVisualStartOffset +
+                       (bact->_recoilVisualPeakOffset - bact->_recoilVisualStartOffset) * f;
+        visualPitch = bact->_recoilVisualStartPitch +
+                      (bact->_recoilVisualPeakPitch - bact->_recoilVisualStartPitch) * f;
+    }
+    else if ( now < bact->_recoilVisualHoldEndTime )
+    {
+        visualOffset = bact->_recoilVisualPeakOffset;
+        visualPitch = bact->_recoilVisualPeakPitch;
+    }
+    else if ( bact->_recoilVisualReturnEndTime > bact->_recoilVisualHoldEndTime )
+    {
+        const float t = (float)(now - bact->_recoilVisualHoldEndTime) /
+                        (float)(bact->_recoilVisualReturnEndTime - bact->_recoilVisualHoldEndTime);
+        const float f = ypabact_RecoilReturnCurve(t);
+        visualOffset = bact->_recoilVisualPeakOffset * f;
+        visualPitch = bact->_recoilVisualPeakPitch * f;
+    }
+
+    if ( offset )
+        *offset = visualOffset;
+    if ( pitch )
+        *pitch = visualPitch;
+}
+
+static bool ypabact_IsPlayerGunRecoilFirstPersonView(const NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->_bact_type != BACT_TYPES_GUN ||
+         bact->IsAlternativeViewActive() )
+        return false;
+
+    // Generic recoil must never add a second first-person kick to guns.
+    // cockpit_gun_camera_recoil remains the sole gun camera recoil source.
+    return bact->IsPlayerFirstPersonCameraActive() || bact->IsCockpitCameraActive();
+}
+
+static float ypabact_GetRecoilVisualPitch(const NC_STACK_ypabact *bact)
+{
+    if ( !bact ||
+         ypabact_IsPlayerGunRecoilFirstPersonView(bact) ||
+         (bact->_bact_type != BACT_TYPES_TANK &&
+          bact->_bact_type != BACT_TYPES_GUN) )
+        return 0.0f;
+
+    float pitch = 0.0f;
+    ypabact_EvaluateRecoilVisual(bact, NULL, &pitch);
+    return pitch;
+}
+
+static void ypabact_StartRecoilVisual(NC_STACK_ypabact *bact,
+                                      const vec3d &recoilDir, float recoil)
+{
+    if ( !bact || recoil <= 0.0f )
+        return;
+
+    vec3d currentOffset;
+    float currentPitch = 0.0f;
+    ypabact_EvaluateRecoilVisual(bact, &currentOffset, &currentPitch);
+
+    vec3d peakOffset = currentOffset +
+                       recoilDir * (recoil * RECOIL_DISTANCE_PER_UNIT);
+    const float offsetLen = peakOffset.length();
+    if ( std::isfinite(offsetLen) && offsetLen > RECOIL_VISUAL_MAX_DISTANCE )
+        peakOffset *= RECOIL_VISUAL_MAX_DISTANCE / offsetLen;
+
+    const float pitchAdd = recoil * RECOIL_VISUAL_DEGREES_PER_UNIT * C_PI_180;
+    const float maxPitch = RECOIL_VISUAL_MAX_DEGREES * C_PI_180;
+    const float peakPitch = std::max(0.0f, std::min(currentPitch + pitchAdd, maxPitch));
+
+    const int kick = ypabact_GetRecoilKickTimeMs();
+    const int hold = ypabact_GetRecoilHoldTimeMs();
+    const int ret = ypabact_GetRecoilReturnTimeMs();
+
+    bact->_recoilVisualStartOffset = currentOffset;
+    bact->_recoilVisualPeakOffset = peakOffset;
+    bact->_recoilVisualStartPitch = currentPitch;
+    bact->_recoilVisualPeakPitch = peakPitch;
+    bact->_recoilVisualPhaseStartTime = bact->_clock;
+    bact->_recoilVisualKickEndTime = bact->_clock + kick;
+    bact->_recoilVisualHoldEndTime = bact->_recoilVisualKickEndTime + hold;
+    bact->_recoilVisualReturnEndTime = bact->_recoilVisualHoldEndTime + ret;
+}
+
 static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact);
 
 static float ypabact_GetMgunRecoilFeedbackDegrees(const NC_STACK_ypabact *bact)
@@ -1095,53 +1188,41 @@ static float ypabact_GetMgunRecoilFeedbackDegrees(const NC_STACK_ypabact *bact)
         MGUN_RECOIL_FEEDBACK_MAX_DEGREES);
 }
 
-static void ypabact_StartMgunRecoilVisual(NC_STACK_ypabact *bact)
-{
-    if ( !bact || !ypabact_IsMgunRecoilVisualVehicleClass(bact) ||
-         bact->_mgun_recoil <= 0.0f ||
-         ypabact_IsPlayerMgunRecoilFirstPersonView(bact) )
-        return;
-
-    // MGUN recoil follows the chassis forward used by the runtime itself.
-    // Flatten only the world vertical component: this is a pure longitudinal
-    // back-kick, never aim/camera direction, yaw, pitch or roll.
-    vec3d forward = bact->_rotation.AxisZ();
-    forward.y = 0.0f;
-    const float len = forward.length();
-    if ( !std::isfinite(len) || len <= 0.001f )
-        return;
-    forward /= len;
-
-    bact->_mgunRecoilVisualOffset -=
-        forward * (bact->_mgun_recoil * MGUN_RECOIL_VISUAL_DISTANCE_PER_UNIT);
-
-    const float offsetLen = bact->_mgunRecoilVisualOffset.length();
-    if ( std::isfinite(offsetLen) && offsetLen > MGUN_RECOIL_VISUAL_MAX_DISTANCE )
-        bact->_mgunRecoilVisualOffset *= MGUN_RECOIL_VISUAL_MAX_DISTANCE / offsetLen;
-}
-
-static bool ypabact_IsPlayerMgunRecoilFirstPersonView(NC_STACK_ypabact *bact)
-{
-    if ( !bact || bact->IsAlternativeViewActive() )
-        return false;
-
-    // Keep the render-only body kick out of local first-person views. The cockpit
-    // shake itself is controlled independently by mgun_recoil_cockpit below.
-    return bact->IsPlayerFirstPersonCameraActive() || bact->IsCockpitCameraActive();
-}
-
 static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact)
 {
     return bact && bact->_mgun_recoil_cockpit > 0.0f &&
            bact->IsCockpitCameraActive();
 }
 
-static bool ypabact_IsAiTankWeaponRecoilUnit(const NC_STACK_ypabact *unit)
+static bool ypabact_IsAiTankRecoilUnit(const NC_STACK_ypabact *unit)
 {
     return unit &&
            unit->_bact_type == BACT_TYPES_TANK &&
            !(unit->_oflags & BACT_OFLAG_VIEWER) &&
            !(unit->_oflags & BACT_OFLAG_USERINPT);
+}
+
+static bool ypabact_UsesRenderOnlyRecoilTranslation(const NC_STACK_ypabact *unit)
+{
+    // AI tanks use the established render-only recoil translation.
+    // Fixed/attached guns reuse the same shared envelope so recoil
+    // cannot displace their logical pedestal/attachment position. This is the
+    // recoil-only fall protection: normal pedestal loss/destruction still reaches
+    // ypagun::CheckPedestal()/Die() unchanged, and gun_does_not_fall is untouched.
+    return unit && (ypabact_IsAiTankRecoilUnit(unit) ||
+                    unit->_bact_type == BACT_TYPES_GUN);
+}
+
+static bool ypabact_ShouldRenderRecoilVisualOffset(const NC_STACK_ypabact *unit)
+{
+    if ( !ypabact_UsesRenderOnlyRecoilTranslation(unit) )
+        return false;
+
+    // Externally viewed guns show the same kick. In first person the gun's
+    // shared body recoil is intentionally invisible; cockpit_gun_camera_recoil
+    // remains the only local camera recoil source.
+    return unit->_bact_type != BACT_TYPES_GUN ||
+           !ypabact_IsPlayerGunRecoilFirstPersonView(unit);
 }
 
 static bool ypabact_IsCockpitCameraSupportedType(const NC_STACK_ypabact *unit)
@@ -1934,7 +2015,7 @@ static void ypabact_TriggerPlayerMgunRecoilShake(NC_STACK_ypabact *bact)
     bact->_mgun_recoil_shake.slot = 1;
     bact->_mgun_recoil_shake.mag0 = recoilDegrees * C_PI_180;
     bact->_mgun_recoil_shake.mag1 = 0.0f;
-    bact->_mgun_recoil_shake.time = WEAPON_RECOIL_VISUAL_DURATION_MS;
+    bact->_mgun_recoil_shake.time = RECOIL_COCKPIT_SHAKE_DURATION_MS;
     bact->_mgun_recoil_shake.radius = 0.0f;
     bact->_mgun_recoil_shake.mute = 0.0f;
     bact->_mgun_recoil_shake.pos = vec3d(
@@ -2585,14 +2666,17 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _fly_dir_length = 0.0;
     _fallDamageAirborne = false;
     _fallDamageConsumed = false;
-    _weaponRecoilVisualEndTime = 0;
-    _weaponRecoilVisualDuration = 0;
-    _weaponRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
-    _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
-    _weaponRecoilAiRecoveryEndTime = 0;
-    _weaponRecoilPlayerRecoveryEndTime = 0;
-    _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualStartOffset = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualPeakOffset = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualStartPitch = 0.0f;
+    _recoilVisualPeakPitch = 0.0f;
+    _recoilVisualPhaseStartTime = 0;
+    _recoilVisualKickEndTime = 0;
+    _recoilVisualHoldEndTime = 0;
+    _recoilVisualReturnEndTime = 0;
+    _recoilAiRecoveryEndTime = 0;
+    _recoilPlayerRecoveryEndTime = 0;
+    _recoilPushVel = vec3d(0.0, 0.0, 0.0);
     _height = 0.0;
     _player_max_altitude_above_ground = 0.0;
     _vp_scale = vec3d(1.0, 1.0, 1.0);
@@ -2821,14 +2905,17 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _viewer_rotation = mat3x3::Ident();
     _fly_dir = vec3d(0.0, 0.0, 0.0);
     _fly_dir_length = 0;
-    _weaponRecoilVisualEndTime = 0;
-    _weaponRecoilVisualDuration = 0;
-    _weaponRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
-    _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
-    _weaponRecoilAiRecoveryEndTime = 0;
-    _weaponRecoilPlayerRecoveryEndTime = 0;
-    _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualStartOffset = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualPeakOffset = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualStartPitch = 0.0f;
+    _recoilVisualPeakPitch = 0.0f;
+    _recoilVisualPhaseStartTime = 0;
+    _recoilVisualKickEndTime = 0;
+    _recoilVisualHoldEndTime = 0;
+    _recoilVisualReturnEndTime = 0;
+    _recoilAiRecoveryEndTime = 0;
+    _recoilPlayerRecoveryEndTime = 0;
+    _recoilPushVel = vec3d(0.0, 0.0, 0.0);
     _deinitInProgress = false;
     _target_vec = vec3d(0.0, 0.0, 0.0);
 
@@ -3805,7 +3892,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateLaser(arg); // OpenNeoUA custom: process this frame's laser fire request (must run after AI_layer1 firing)
     UpdateVerticalLaser(arg);
     UpdateAoePush(arg);
-    UpdateWeaponRecoilPush(arg);
+    UpdateRecoilPush(arg);
     UpdateKamikaze(arg);
     UpdateUnitGuns(arg);
 
@@ -4588,10 +4675,12 @@ static const float AOE_PUSH_MAX_STEP = 80.0f;
 // 1=100, 4=1600, 6=3600, 10=10000.
 static const float CONFIGURED_PUSH_MAX_INTENSITY = 10.0f;
 static const float CONFIGURED_PUSH_DISTANCE_PER_SQUARED_LEVEL = 100.0f;
-static const float WEAPON_RECOIL_TAU = 0.14f;
-static const float WEAPON_RECOIL_DISTANCE_PER_UNIT = 35.0f;
-static const int WEAPON_RECOIL_AI_TANK_RECOVERY_MS = 220;
-static const int WEAPON_RECOIL_PLAYER_TANK_RECOVERY_MS = 220;
+// Weapon recoil and MGUN recoil enter the same normalized mechanical path.
+// 7 world units per level keeps the useful fine control of the former MGUN
+// scale while making 0..10 meaningful for heavy main-weapon recoil too.
+static const float RECOIL_MECHANICAL_TAU = 0.14f;
+static const int RECOIL_AI_TANK_RECOVERY_MS = 220;
+static const int RECOIL_PLAYER_TANK_RECOVERY_MS = 220;
 
 static bool ypabact_IsAoePushGroundAlignedUnit(NC_STACK_ypabact *unit)
 {
@@ -4626,6 +4715,96 @@ static bool ypabact_NormalizeXZ(vec3d *dir)
     return true;
 }
 
+
+static bool ypabact_IsGroundRecoilSurfaceUnit(const NC_STACK_ypabact *unit)
+{
+    if ( !unit )
+        return false;
+
+    if ( unit->_bact_type == BACT_TYPES_GUN )
+        return true;
+
+    if ( !(unit->_status_flg & BACT_STFLAG_LAND) )
+        return false;
+
+    return unit->_bact_type == BACT_TYPES_TANK ||
+           unit->_bact_type == BACT_TYPES_CAR;
+}
+
+static bool ypabact_GetRecoilSupportNormal(NC_STACK_ypabact *unit, vec3d *normal)
+{
+    if ( !unit || !normal || !ypabact_IsGroundRecoilSurfaceUnit(unit) )
+        return false;
+
+    NC_STACK_ypaworld *world = unit->getBACT_pWorld();
+    if ( !world )
+        return false;
+
+    // Probe locally through the actor's support instead of using its current
+    // rotation. Gun pitch is an aiming transform, so using AxisY there would
+    // incorrectly turn upward/downward aiming into vertical body recoil.
+    const float probeReach = std::max(2000.0f, std::fabs(unit->_height) * 6.0f + 1000.0f);
+    ypaworld_arg136 support;
+    // Start only a few units above the actor and trace downward. This selects
+    // the supporting surface beneath the unit instead of an unrelated ceiling
+    // or bridge that could exist farther above it.
+    support.stPos = unit->_position - vec3d::OY(10.0f);
+    support.vect = vec3d::OY(probeReach);
+    support.flags = 0;
+    world->ypaworld_func136(&support);
+
+    if ( !support.isect || !support.skel || support.polyID < 0 ||
+         (size_t)support.polyID >= support.skel->polygons.size() )
+        return false;
+
+    vec3d n = support.skel->polygons[support.polyID].Normal();
+    if ( !std::isfinite(n.x) || !std::isfinite(n.y) || !std::isfinite(n.z) ||
+         n.normalise() <= 0.001f || std::fabs(n.y) < 0.05f )
+        return false;
+
+    *normal = n;
+    return true;
+}
+
+static bool ypabact_ResolveRecoilDirection(NC_STACK_ypabact *unit,
+                                           const vec3d &requestedDir,
+                                           vec3d *resolvedDir)
+{
+    if ( !unit || !resolvedDir )
+        return false;
+
+    auto resolveOne = [unit](vec3d dir, vec3d *out) -> bool
+    {
+        vec3d supportNormal;
+        if ( ypabact_GetRecoilSupportNormal(unit, &supportNormal) )
+        {
+            // Project onto the actual support plane. This preserves backwards
+            // travel along a hill/structure surface without letting barrel aim
+            // or chassis pitch create a vertical launch component.
+            dir -= supportNormal * dir.dot(supportNormal);
+            const float len = dir.length();
+            if ( std::isfinite(len) && len > 0.001f )
+            {
+                *out = dir / len;
+                return true;
+            }
+        }
+
+        if ( ypabact_NormalizeXZ(&dir) )
+        {
+            *out = dir;
+            return true;
+        }
+
+        return false;
+    };
+
+    if ( resolveOne(requestedDir, resolvedDir) )
+        return true;
+
+    return resolveOne(-unit->_rotation.AxisZ(), resolvedDir);
+}
+
 static bool ypabact_SnapAoePushGroundUnit(NC_STACK_ypabact *unit)
 {
     ypaworld_arg136 ground;
@@ -4643,18 +4822,18 @@ static bool ypabact_SnapAoePushGroundUnit(NC_STACK_ypabact *unit)
     return true;
 }
 
-static float ypabact_ClampWeaponRecoil(float recoil)
+static float ypabact_ClampRecoil(float recoil)
 {
     if ( !(recoil > 0.0f) )
         return 0.0f;
 
-    if ( recoil > 10.0f )
-        return 10.0f;
+    if ( recoil > RECOIL_MAX_INTENSITY )
+        return RECOIL_MAX_INTENSITY;
 
     return recoil;
 }
 
-static bool ypabact_ConstrainWeaponRecoilStepToLevelBox(NC_STACK_ypabact *unit,
+static bool ypabact_ConstrainRecoilStepToLevelBox(NC_STACK_ypabact *unit,
                                                          const vec3d &requestedStep,
                                                          vec3d *constrainedStep,
                                                          bool *blockedX,
@@ -4752,7 +4931,7 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
         bool blockedX = false;
         bool blockedZ = false;
         if ( confineToLevelBox &&
-             ypabact_ConstrainWeaponRecoilStepToLevelBox(unit, step, &moveStep, &blockedX, &blockedZ) )
+             ypabact_ConstrainRecoilStepToLevelBox(unit, step, &moveStep, &blockedX, &blockedZ) )
         {
             // Remove only the outward component. A recoil vector parallel to
             // the wall may still move the unit along the valid map area.
@@ -4789,31 +4968,6 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
     }
 
     *pushVel *= expf(-dtime / tau);
-}
-
-static void ypabact_DecayRecoilVisualOffset(vec3d *offset, update_msg *arg)
-{
-    const float offsetLen = offset->length();
-    if ( !isfinite(offsetLen) || offsetLen < 0.01f )
-    {
-        *offset = vec3d(0.0, 0.0, 0.0);
-        return;
-    }
-
-    float dtime = arg->frameTime / 1000.0f;
-    if ( !isfinite(dtime) || dtime <= 0.0f )
-        return;
-
-    if ( dtime > AOE_PUSH_MAX_DT )
-        dtime = AOE_PUSH_MAX_DT;
-
-    *offset *= expf(-dtime / WEAPON_RECOIL_TAU);
-}
-
-static void ypabact_UpdateTankWeaponRecoilVisualOffset(NC_STACK_ypabact *unit, update_msg *arg)
-{
-    if ( ypabact_IsAiTankWeaponRecoilUnit(unit) )
-        ypabact_DecayRecoilVisualOffset(&unit->_weaponRecoilVisualOffset, arg);
 }
 
 float NC_STACK_ypabact::GetPushResistanceMultiplier() const
@@ -4877,56 +5031,48 @@ void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
     _aoePushVel += (pushDir / dirLen) * (distance / AOE_PUSH_TAU);
 }
 
-void NC_STACK_ypabact::ApplyWeaponRecoil(const vec3d &dir, float recoil)
+void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
 {
-    recoil = ypabact_ClampWeaponRecoil(recoil);
+    recoil = ypabact_ClampRecoil(recoil);
     if ( recoil <= 0.0f )
         return;
 
-    // Gun/flak keeps its existing local visual kick, but no longer exits here:
-    // the same generic recoil impulse path used by every other supported unit
-    // now applies to the gun actor itself. Attached guns never redirect recoil
-    // to their carrier/parent; their normal attachment update remains authoritative.
-    if ( _bact_type == BACT_TYPES_GUN )
-        ypabact_StartWeaponRecoilVisual(this, recoil);
-
+    // Landed tanks retain the established rule that recoil is disabled while
+    // airborne. MGUN and normal Weapon recoil now enter this exact same gate.
     if ( _bact_type == BACT_TYPES_TANK && !(_status_flg & BACT_STFLAG_LAND) )
         return;
 
+    vec3d recoilDir;
+    if ( !ypabact_ResolveRecoilDirection(this, dir, &recoilDir) )
+        return;
+
+    // One shared presentation envelope for both public authoring paths.
+    ypabact_StartRecoilVisual(this, recoilDir, recoil);
+
     if ( _bact_type == BACT_TYPES_TANK )
     {
-        ypabact_StartWeaponRecoilVisual(this, recoil);
-
-        // AI tanks use render-only recoil translation below, while player tanks
-        // still receive physical recoil. Keep a short forward recovery damp so
-        // controllers do not immediately cancel the visible kick.
+        // Preserve the small controller-recovery guard around the unified kick.
         if ( !(_oflags & BACT_OFLAG_VIEWER) && !(_oflags & BACT_OFLAG_USERINPT) )
-            _weaponRecoilAiRecoveryEndTime = _clock + WEAPON_RECOIL_AI_TANK_RECOVERY_MS;
+            _recoilAiRecoveryEndTime = _clock + RECOIL_AI_TANK_RECOVERY_MS;
         else
-            _weaponRecoilPlayerRecoveryEndTime = _clock + WEAPON_RECOIL_PLAYER_TANK_RECOVERY_MS;
+            _recoilPlayerRecoveryEndTime = _clock + RECOIL_PLAYER_TANK_RECOVERY_MS;
     }
 
-    vec3d recoilDir = dir;
-    if ( !ypabact_NormalizeXZ(&recoilDir) )
+    if ( ypabact_UsesRenderOnlyRecoilTranslation(this) )
     {
-        recoilDir = -_rotation.AxisZ();
-        if ( !ypabact_NormalizeXZ(&recoilDir) )
-            return;
-    }
-
-    if ( ypabact_IsAiTankWeaponRecoilUnit(this) )
-    {
-        _weaponRecoilVisualOffset += recoilDir * (recoil * WEAPON_RECOIL_DISTANCE_PER_UNIT);
-
-        float maxOffset = WEAPON_RECOIL_DISTANCE_PER_UNIT * 10.0f;
-        float offsetLen = _weaponRecoilVisualOffset.length();
-        if ( isfinite(offsetLen) && offsetLen > maxOffset )
-            _weaponRecoilVisualOffset *= maxOffset / offsetLen;
-
+        // AI tanks and attached/fixed guns present the same recoil envelope
+        // without moving their logical world position. For guns this is the
+        // recoil-only fall protection: pedestal destruction and gun_does_not_fall
+        // remain entirely owned by ypagun and are untouched here.
+        _recoilPushVel = vec3d(0.0, 0.0, 0.0);
         return;
     }
 
-    _weaponRecoilPushVel += recoilDir * ((recoil * WEAPON_RECOIL_DISTANCE_PER_UNIT) / WEAPON_RECOIL_TAU);
+    // Mechanical recoil uses the same 0..10 -> distance scale for Weapon and
+    // MGUN. The existing stable impulse integrator remains unchanged; only the
+    // source scale/direction are centralized.
+    _recoilPushVel += recoilDir *
+        ((recoil * RECOIL_DISTANCE_PER_UNIT) / RECOIL_MECHANICAL_TAU);
 }
 
 void NC_STACK_ypabact::UpdateAoePush(update_msg *arg)
@@ -4934,18 +5080,16 @@ void NC_STACK_ypabact::UpdateAoePush(update_msg *arg)
     ypabact_UpdateFakePushVel(this, &_aoePushVel, arg, AOE_PUSH_TAU, false);
 }
 
-void NC_STACK_ypabact::UpdateWeaponRecoilPush(update_msg *arg)
+void NC_STACK_ypabact::UpdateRecoilPush(update_msg *arg)
 {
-    ypabact_DecayRecoilVisualOffset(&_mgunRecoilVisualOffset, arg);
-
-    if ( ypabact_IsAiTankWeaponRecoilUnit(this) )
+    if ( ypabact_UsesRenderOnlyRecoilTranslation(this) )
     {
-        _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
-        ypabact_UpdateTankWeaponRecoilVisualOffset(this, arg);
+        _recoilPushVel = vec3d(0.0, 0.0, 0.0);
         return;
     }
 
-    ypabact_UpdateFakePushVel(this, &_weaponRecoilPushVel, arg, WEAPON_RECOIL_TAU, true);
+    ypabact_UpdateFakePushVel(this, &_recoilPushVel, arg,
+                              RECOIL_MECHANICAL_TAU, true);
 }
 
 static bool ypabact_GetPlasmaFactionTint(NC_STACK_ypabact *bact,
@@ -5066,11 +5210,12 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             if ( !(_oflags & BACT_OFLAG_VIEWER) || _oflags & BACT_OFLAG_ALWAYSREND || ShouldRenderCockpitCameraBody() )
             {
                 _current_vp->Bas->TForm().Pos = _tForm.Pos;
-                if ( ypabact_IsMainVPBase(this, _current_vp->Bas) )
+                if ( ypabact_IsMainVPBase(this, _current_vp->Bas) &&
+                     ypabact_ShouldRenderRecoilVisualOffset(this) )
                 {
-                    if ( ypabact_IsAiTankWeaponRecoilUnit(this) )
-                        _current_vp->Bas->TForm().Pos += _weaponRecoilVisualOffset;
-                    _current_vp->Bas->TForm().Pos += _mgunRecoilVisualOffset;
+                    vec3d recoilVisualOffset;
+                    ypabact_EvaluateRecoilVisual(this, &recoilVisualOffset, NULL);
+                    _current_vp->Bas->TForm().Pos += recoilVisualOffset;
                 }
                 _current_vp->Bas->TForm().SclRot = _tForm.SclRot;
 
@@ -5078,7 +5223,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( ypabact_ShouldApplyVPRotation(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_rotation);
 
-                const float visualRecoilPitch = ypabact_GetWeaponRecoilVisualPitch(this);
+                const float visualRecoilPitch = ypabact_GetRecoilVisualPitch(this);
                 if ( visualRecoilPitch != 0.0f && ypabact_IsMainVPBase(this, _current_vp->Bas) )
                     _current_vp->Bas->TForm().SclRot *= mat3x3::RotateX(visualRecoilPitch);
 
@@ -13925,7 +14070,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             recoilAmount *= 1.0f - ypabact_ReadHandBrakeRecoilReduction();
 
         if ( recoilAmount > 0.0f )
-            ApplyWeaponRecoil(recoilDirSum, recoilAmount);
+            ApplyRecoil(recoilDirSum, recoilAmount);
     }
 
     ypabact_TriggerPlayerLaunchShake(this, wproto);
@@ -16723,15 +16868,18 @@ void NC_STACK_ypabact::Renew()
     _scale_delay = 0;
     _beam_time = 0;
     _energy_time = 0;
-    _weaponRecoilVisualEndTime = 0;
-    _weaponRecoilVisualDuration = 0;
-    _weaponRecoilVisualPitch = 0.0f;
-    _mgunRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
-    _weaponRecoilVisualOffset = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualStartOffset = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualPeakOffset = vec3d(0.0, 0.0, 0.0);
+    _recoilVisualStartPitch = 0.0f;
+    _recoilVisualPeakPitch = 0.0f;
+    _recoilVisualPhaseStartTime = 0;
+    _recoilVisualKickEndTime = 0;
+    _recoilVisualHoldEndTime = 0;
+    _recoilVisualReturnEndTime = 0;
     _heliLandingVisualOffsetY = 0.0f;
-    _weaponRecoilAiRecoveryEndTime = 0;
-    _weaponRecoilPlayerRecoveryEndTime = 0;
-    _weaponRecoilPushVel = vec3d(0.0, 0.0, 0.0);
+    _recoilAiRecoveryEndTime = 0;
+    _recoilPlayerRecoveryEndTime = 0;
+    _recoilPushVel = vec3d(0.0, 0.0, 0.0);
     _aoePushVel = vec3d(0.0, 0.0, 0.0);
     _fallDamageAirborne = false;
     _fallDamageConsumed = false;
@@ -17802,10 +17950,15 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             if ( vehicleTimedMgun )
                 ypabact_StartVehicleFireVP(this, arg->field_10);
 
-            // mgun_recoil is MGUN-specific but vehicle-class agnostic. Each real
-            // pulse adds one small chassis-forward/back render kick. Cockpit SHK
-            // is independent and is driven only by mgun_recoil_cockpit.
-            ypabact_StartMgunRecoilVisual(this);
+            // mgun_recoil keeps its Vehicle-script authoring name, but enters
+            // the exact same 0..10 recoil engine used by Weapon recoil. The
+            // support-plane projection prevents slope/aim pitch from lifting
+            // tanks or mounted guns. Cockpit SHK remains independently authored.
+            float mgunRecoilAmount = _mgun_recoil;
+            if ( ypabact_IsDirectLocalPlayerHandBrakeActive(this) )
+                mgunRecoilAmount *= 1.0f - ypabact_ReadHandBrakeRecoilReduction();
+            if ( mgunRecoilAmount > 0.0f )
+                ApplyRecoil(-_rotation.AxisZ(), mgunRecoilAmount);
             ypabact_TriggerPlayerMgunRecoilShake(this);
 
             if ( vehicleTimedMgun )

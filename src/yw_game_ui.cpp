@@ -238,54 +238,20 @@ static int yw_GetUiOwner(const NC_STACK_ypaworld *yw)
 
 static const std::string &StatusIconPlasmaPath(const NC_STACK_ypaworld *yw)
 {
-    static const std::string fallbackTemplate =
-        "Interface/Plasma/owner_{owner}/plasma.png";
-
-    std::string pathTemplate =
-        StatusIconTrimPath(System::IniConf::UiStatusIconPlasma.Get<std::string>());
-
-    // Plasma icons are faction-specific. A custom path is therefore accepted
-    // only as an owner-aware template; stale single-icon configurations fall
-    // back to the canonical owner_N hierarchy instead of forcing one faction's
-    // icon on every playable side.
-    const std::string token = "{owner}";
-    if ( pathTemplate.empty() || pathTemplate.find(token) == std::string::npos )
-        pathTemplate = fallbackTemplate;
-
-    const std::string ownerText = std::to_string(yw_GetUiOwner(yw));
-    const std::string cacheKey = "plasma:" + pathTemplate + ":" + ownerText;
+    const int owner = yw_GetUiOwner(yw);
+    const std::string cacheKey = "plasma:" + std::to_string(owner);
     auto cached = g_statusIconConfiguredPathCache.find(cacheKey);
     if ( cached != g_statusIconConfiguredPathCache.end() )
         return cached->second;
 
-    std::string path = pathTemplate;
-    size_t tokenPos = 0;
-    while ( (tokenPos = path.find(token, tokenPos)) != std::string::npos )
-    {
-        path.replace(tokenPos, token.size(), ownerText);
-        tokenPos += ownerText.size();
-    }
-
-    if ( path.compare(0, 5, "rsrc:") == 0 )
-        path.erase(0, 5);
-
+    std::string path = "Interface/Plasma/owner_" + std::to_string(owner) + "/plasma.png";
     std::string resolved;
     if ( StatusIconResourceExists(path) )
-    {
         resolved = path;
-    }
-    else if ( pathTemplate != fallbackTemplate )
-    {
-        std::string fallback = fallbackTemplate;
-        const size_t pos = fallback.find(token);
-        if ( pos != std::string::npos )
-            fallback.replace(pos, token.size(), ownerText);
-        if ( StatusIconResourceExists(fallback) )
-            resolved = fallback;
-    }
 
     return g_statusIconConfiguredPathCache.emplace(cacheKey, resolved).first->second;
 }
+
 
 const char *SpeechEventKeyFromMsgID(int msgID)
 {
@@ -769,6 +735,68 @@ void StatusIconRenderBitmap(NC_STACK_ypaworld *yw, NC_STACK_bitmap *bitmap, int 
 
     GFX::Engine.raster_func204(&arg);
 }
+
+static SDL_Color yw_GetUiOwnerTintColor(NC_STACK_ypaworld *yw, int owner)
+{
+    SDL_Color tint = {255, 255, 255, 255};
+    if ( yw && owner > World::OWNER_0 )
+        tint = yw->GetColor(owner);
+
+    tint.a = 255;
+    return tint;
+}
+
+void StatusIconRenderBitmapTinted(NC_STACK_ypaworld *yw, NC_STACK_bitmap *bitmap,
+                                  int left, int top, int size,
+                                  const SDL_Color *tint,
+                                  uint8_t opacity = 255)
+{
+    if ( !bitmap || !bitmap->GetBitmap() )
+        return;
+
+    if ( !tint || !bitmap->GetBitmap()->swTex )
+    {
+        StatusIconRenderBitmap(yw, bitmap, left, top, size, opacity);
+        return;
+    }
+
+    SDL_Surface *surface = bitmap->GetBitmap()->swTex;
+    Uint8 oldR = 255, oldG = 255, oldB = 255;
+    SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
+    SDL_GetSurfaceColorMod(surface, &oldR, &oldG, &oldB);
+    SDL_GetSurfaceBlendMode(surface, &oldBlendMode);
+    SDL_SetSurfaceColorMod(surface, tint->r, tint->g, tint->b);
+    SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
+
+    StatusIconRenderBitmap(yw, bitmap, left, top, size, opacity);
+
+    SDL_SetSurfaceColorMod(surface, oldR, oldG, oldB);
+    SDL_SetSurfaceBlendMode(surface, oldBlendMode);
+}
+
+struct YwLoadedUiBitmap
+{
+    NC_STACK_bitmap *bitmap = NULL;
+    bool ownerTint = false;
+};
+
+static YwLoadedUiBitmap yw_LoadNeutralOwnerTintSvg(const std::string &path,
+                                                    int width = 0,
+                                                    int height = 0)
+{
+    YwLoadedUiBitmap loaded;
+    if ( path.empty() || !StatusIconResourceExists(path) )
+        return loaded;
+
+    loaded.bitmap = StatusIconLoad(path, width, height);
+    if ( loaded.bitmap && loaded.bitmap->GetBitmap() )
+        loaded.ownerTint = true;
+    else
+        loaded.bitmap = NULL;
+
+    return loaded;
+}
+
 
 bool StatusIconCanUseMobilePowerUnit(NC_STACK_ypabact *bact)
 {
@@ -1558,22 +1586,24 @@ static const char *yw_MapToolbarIconName(int buttonId)
 
 static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw);
 
-static NC_STACK_bitmap *yw_LoadFactionToolbarIcon(int owner,
+static YwLoadedUiBitmap yw_LoadFactionToolbarIcon(int owner,
                                                   const char *assetRoot,
                                                   const char *iconName,
                                                   bool active, int iconSize)
 {
+    YwLoadedUiBitmap loaded;
     if ( owner <= World::OWNER_0 || !assetRoot || !*assetRoot ||
          !iconName || !*iconName )
-        return NULL;
+        return loaded;
 
-    // Prefer the requested visual state first inside the caller-owned UI tree.
-    // SVG is preferred for crisp scaling; PNG remains supported in the same tree.
+    // Toolbar and Squadron Manager artwork stays owner-authored: the original
+    // SVGs use layered dark/mid/bright strokes to keep small icons crisp.
+    // Active state prefers *_active and safely falls back to the normal icon.
     const bool variants[] = {active, false};
     const int variantCount = active ? 2 : 1;
     const char *extensions[] = {".svg", ".png"};
 
-    for ( int variant = 0; variant < variantCount; variant++ )
+    for ( int variant = 0; variant < variantCount; ++variant )
     {
         for ( const char *extension : extensions )
         {
@@ -1586,14 +1616,23 @@ static NC_STACK_bitmap *yw_LoadFactionToolbarIcon(int owner,
                 path += "_active";
             path += extension;
 
-            NC_STACK_bitmap *bitmap = StatusIconLoad(path, iconSize, iconSize);
-            if ( bitmap && bitmap->GetBitmap() )
-                return bitmap;
+            if ( !StatusIconResourceExists(path) )
+                continue;
+
+            loaded.bitmap = StatusIconLoad(path, iconSize, iconSize);
+            if ( loaded.bitmap && loaded.bitmap->GetBitmap() )
+            {
+                loaded.ownerTint = false;
+                return loaded;
+            }
         }
     }
 
-    return NULL;
+    loaded.bitmap = NULL;
+    loaded.ownerTint = false;
+    return loaded;
 }
+
 
 static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
                                         int windowX, int windowY,
@@ -1607,17 +1646,23 @@ static bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
     const int owner = yw_RoboMapMarkerOwner(yw);
     const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
 
-    // Faction artwork is asset-driven from the canonical Interface/Map/Buttons tree.
-    // Missing custom assets are safe: the caller falls back to its vector glyph.
-    NC_STACK_bitmap *bitmap = yw_LoadFactionToolbarIcon(
+    // Faction artwork keeps the original owner-authored layered SVGs. Missing
+    // custom assets safely fall back to the existing vector glyph.
+    YwLoadedUiBitmap icon = yw_LoadFactionToolbarIcon(
         owner, "Interface/Map/Buttons", iconName, active, iconSize);
-    if ( !bitmap || !bitmap->GetBitmap() )
+    if ( !icon.bitmap || !icon.bitmap->GetBitmap() )
         return false;
 
     const int screenLeft = windowX + box.x + (box.w - iconSize) / 2;
     const int screenTop = windowY + box.y + (box.h - iconSize) / 2;
+    const SDL_Color tint = yw_GetUiOwnerTintColor(yw, owner);
 
-    StatusIconRenderBitmap(yw, bitmap, screenLeft, screenTop, iconSize, 255);
+    if ( icon.ownerTint )
+        StatusIconRenderBitmapTinted(yw, icon.bitmap, screenLeft, screenTop,
+                                     iconSize, &tint, 255);
+    else
+        StatusIconRenderBitmap(yw, icon.bitmap, screenLeft, screenTop,
+                               iconSize, 255);
     return true;
 }
 
@@ -1631,17 +1676,22 @@ static bool yw_RenderSquadronManagerIcon(NC_STACK_ypaworld *yw,
 
     const int owner = yw_RoboMapMarkerOwner(yw);
     const int iconSize = std::max(8, std::min(box.w, box.h) - 2);
-    // StatusIconLoad resolves Data-relative paths, so Compact is sourced from
-    // Data/Interface/Squad/Buttons/owner_N/compact[_active].svg (PNG fallback
-    // remains supported by the shared loader).
-    NC_STACK_bitmap *bitmap = yw_LoadFactionToolbarIcon(
+    // StatusIconLoad resolves Data-relative paths. Squadron buttons keep the
+    // original owner-authored layered SVGs for maximum small-size definition.
+    YwLoadedUiBitmap icon = yw_LoadFactionToolbarIcon(
         owner, "Interface/Squad/Buttons", iconName, active, iconSize);
-    if ( !bitmap || !bitmap->GetBitmap() )
+    if ( !icon.bitmap || !icon.bitmap->GetBitmap() )
         return false;
 
     const int screenLeft = windowX + box.x + (box.w - iconSize) / 2;
     const int screenTop = windowY + box.y + (box.h - iconSize) / 2;
-    StatusIconRenderBitmap(yw, bitmap, screenLeft, screenTop, iconSize, 255);
+    const SDL_Color tint = yw_GetUiOwnerTintColor(yw, owner);
+    if ( icon.ownerTint )
+        StatusIconRenderBitmapTinted(yw, icon.bitmap, screenLeft, screenTop,
+                                     iconSize, &tint, 255);
+    else
+        StatusIconRenderBitmap(yw, icon.bitmap, screenLeft, screenTop,
+                               iconSize, 255);
     return true;
 }
 
@@ -2190,21 +2240,19 @@ static int yw_RoboMapMarkerOwner(NC_STACK_ypaworld *yw)
     return 0;
 }
 
-static NC_STACK_bitmap *yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw, int markerSize)
+static YwLoadedUiBitmap yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw, int markerSize)
 {
     const int owner = yw_RoboMapMarkerOwner(yw);
     if ( owner > World::OWNER_0 )
     {
-        // Reuse the same SVG-first faction loader as the title toolbar. A map
-        // marker is an active annotation, so the active asset is requested.
-        NC_STACK_bitmap *ownerBitmap = yw_LoadFactionToolbarIcon(
+        // Reuse the owner-authored marker asset from the strategic-map toolbar.
+        return yw_LoadFactionToolbarIcon(
             owner, "Interface/Map/Buttons", "marker", true, markerSize);
-        if ( ownerBitmap && ownerBitmap->GetBitmap() )
-            return ownerBitmap;
     }
 
-    return NULL;
+    return YwLoadedUiBitmap();
 }
+
 
 static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
 {
@@ -2223,7 +2271,8 @@ static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
     const int clipBottom = robo_map.field_204 + robo_map.field_1FC - 1;
 
     const int markerSize = yw_RoboMapMarkerSizePx();
-    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw, markerSize);
+    YwLoadedUiBitmap markerBitmap = yw_LoadRoboMapMarkerBitmap(yw, markerSize);
+    const SDL_Color markerTint = yw_GetUiOwnerTintColor(yw, yw_RoboMapMarkerOwner(yw));
 
     for ( const vec2d &marker : robo_map.customMarkers )
     {
@@ -2231,13 +2280,20 @@ static void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
         if ( p.x < clipLeft || p.x > clipRight || p.y < clipTop || p.y > clipBottom )
             continue;
 
-        if ( markerBitmap && markerBitmap->GetBitmap() )
+        if ( markerBitmap.bitmap && markerBitmap.bitmap->GetBitmap() )
         {
             const int screenX = p.x + yw->_screenSize.x / 2;
             const int screenY = p.y + yw->_screenSize.y / 2;
-            StatusIconRenderBitmap(yw, markerBitmap,
-                                   screenX - markerSize / 2, screenY - markerSize / 2,
-                                   markerSize, 255);
+            if ( markerBitmap.ownerTint )
+                StatusIconRenderBitmapTinted(yw, markerBitmap.bitmap,
+                                             screenX - markerSize / 2,
+                                             screenY - markerSize / 2,
+                                             markerSize, &markerTint, 255);
+            else
+                StatusIconRenderBitmap(yw, markerBitmap.bitmap,
+                                       screenX - markerSize / 2,
+                                       screenY - markerSize / 2,
+                                       markerSize, 255);
             continue;
         }
 
@@ -2267,7 +2323,8 @@ static void yw_RenderCustomHudRadarMarkers(NC_STACK_ypaworld *yw)
     GFX::Engine.raster_func211(clipRect);
 
     constexpr int markerSize = 12;
-    NC_STACK_bitmap *markerBitmap = yw_LoadRoboMapMarkerBitmap(yw, markerSize);
+    YwLoadedUiBitmap markerBitmap = yw_LoadRoboMapMarkerBitmap(yw, markerSize);
+    const SDL_Color markerTint = yw_GetUiOwnerTintColor(yw, yw_RoboMapMarkerOwner(yw));
 
     for ( const vec2d &marker : robo_map.customMarkers )
     {
@@ -2278,14 +2335,20 @@ static void yw_RenderCustomHudRadarMarkers(NC_STACK_ypaworld *yw)
             continue;
         }
 
-        if ( markerBitmap && markerBitmap->GetBitmap() )
+        if ( markerBitmap.bitmap && markerBitmap.bitmap->GetBitmap() )
         {
             const int screenX = p.x + yw->_screenSize.x / 2;
             const int screenY = p.y + yw->_screenSize.y / 2;
-            StatusIconRenderBitmap(yw, markerBitmap,
-                                   screenX - markerSize / 2,
-                                   screenY - markerSize / 2,
-                                   markerSize, 255);
+            if ( markerBitmap.ownerTint )
+                StatusIconRenderBitmapTinted(yw, markerBitmap.bitmap,
+                                             screenX - markerSize / 2,
+                                             screenY - markerSize / 2,
+                                             markerSize, &markerTint, 255);
+            else
+                StatusIconRenderBitmap(yw, markerBitmap.bitmap,
+                                       screenX - markerSize / 2,
+                                       screenY - markerSize / 2,
+                                       markerSize, 255);
             continue;
         }
 
@@ -8401,7 +8464,8 @@ static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw)
     if ( icon && icon->GetBitmap() )
     {
         StatusIconRenderBitmap(yw, icon, layout.iconLeft, layout.iconTop,
-                               layout.iconSize, yw->GetPlasmaCurrencyHudOpacity());
+                               layout.iconSize,
+                               yw->GetPlasmaCurrencyHudOpacity());
     }
 }
 
@@ -10286,7 +10350,8 @@ static void yw_RenderPlasmaCurrencyPopups(NC_STACK_ypaworld *yw, CmdStream *cur)
         {
             const int iconLeft = contentLeft + textWidth + popupItemGap;
             const int iconTop = contentTop + (yw->_guiTiles[15]->h - iconSize) / 2;
-            StatusIconRenderBitmap(yw, icon, iconLeft, iconTop, iconSize, opacity);
+            StatusIconRenderBitmap(yw, icon, iconLeft, iconTop,
+                                   iconSize, opacity);
         }
 
         FontUA::set_txtColor(cur, 255, 255, 255);
@@ -10579,60 +10644,73 @@ static int yw_GetOrderIconOwner(NC_STACK_ypaworld *yw)
     return 0;
 }
 
-static std::string yw_ResolveOrderTemplatePath(NC_STACK_ypaworld *yw,
-                                                Common::Ini::Key &key)
+enum YwOrderTemplateId
 {
-    std::string path = key.Get<std::string>();
-    const size_t first = path.find_first_not_of(" \t\r\n");
-    if ( first == std::string::npos )
-        return std::string();
-    path.erase(0, first);
+    YW_ORDER_TEMPLATE_MOVE = 0,
+    YW_ORDER_TEMPLATE_ATTACK,
+    YW_ORDER_TEMPLATE_ROBO_MOVE
+};
 
-    const size_t last = path.find_last_not_of(" \t\r\n");
-    path.erase(last + 1);
-
-    if ( path.compare(0, 5, "rsrc:") == 0 )
-        path.erase(0, 5);
-
-    const std::string ownerText = std::to_string(yw_GetOrderIconOwner(yw));
-    const std::string token = "{owner}";
-    size_t tokenPos = 0;
-    while ( (tokenPos = path.find(token, tokenPos)) != std::string::npos )
+static std::string yw_OrderTemplateCanonicalPath(YwOrderTemplateId templateId)
+{
+    switch ( templateId )
     {
-        path.replace(tokenPos, token.size(), ownerText);
-        tokenPos += ownerText.size();
+    case YW_ORDER_TEMPLATE_ATTACK:
+        return "Interface/Actions/AttackOrder/attack_order.svg";
+
+    case YW_ORDER_TEMPLATE_ROBO_MOVE:
+        return "Interface/Actions/MoveOrder/robo_move_order.svg";
+
+    case YW_ORDER_TEMPLATE_MOVE:
+    default:
+        return "Interface/Actions/MoveOrder/move_order.svg";
     }
-
-    return path;
 }
 
-static NC_STACK_bitmap *yw_LoadOrderTemplateBitmap(NC_STACK_ypaworld *yw,
-                                                    Common::Ini::Key &key)
+static YwLoadedUiBitmap yw_LoadOrderTemplateBitmap(NC_STACK_ypaworld *yw,
+                                                   YwOrderTemplateId templateId)
 {
-    const std::string path = yw_ResolveOrderTemplatePath(yw, key);
-    if ( path.empty() || !StatusIconResourceExists(path) )
-        return NULL;
-
-    NC_STACK_bitmap *bitmap = StatusIconLoad(path);
-    return bitmap && bitmap->GetBitmap() ? bitmap : NULL;
+    (void)yw;
+    return yw_LoadNeutralOwnerTintSvg(yw_OrderTemplateCanonicalPath(templateId));
 }
+
 
 static void yw_RenderOrderTemplateAt(NC_STACK_ypaworld *yw,
                                      const Common::Point &point,
                                      int radius, uint8_t worldUiOpacity,
-                                     Common::Ini::Key &templatePathKey)
+                                     YwOrderTemplateId templateId)
 {
-    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(yw, templatePathKey);
-    if ( !bitmap || !bitmap->GetBitmap() )
+    YwLoadedUiBitmap bitmap = yw_LoadOrderTemplateBitmap(yw, templateId);
+    if ( !bitmap.bitmap || !bitmap.bitmap->GetBitmap() )
         return;
 
+    const int owner = std::max(yw_GetOrderIconOwner(yw), static_cast<int>(World::OWNER_RESIST));
+    const SDL_Color tint = yw_GetUiOwnerTintColor(yw, owner);
     const int size = std::max(1, radius * 2 + 8);
-    StatusIconRenderBitmap(yw, bitmap,
-                           point.x - size / 2 + 1, point.y - size / 2 + 1,
-                           size + 2, (uint8_t)(worldUiOpacity / 3));
-    StatusIconRenderBitmap(yw, bitmap,
-                           point.x - size / 2, point.y - size / 2,
-                           size, worldUiOpacity);
+
+    if ( bitmap.ownerTint )
+    {
+        StatusIconRenderBitmapTinted(yw, bitmap.bitmap,
+                                     point.x - size / 2 + 1,
+                                     point.y - size / 2 + 1,
+                                     size + 2, &tint,
+                                     (uint8_t)(worldUiOpacity / 3));
+        StatusIconRenderBitmapTinted(yw, bitmap.bitmap,
+                                     point.x - size / 2,
+                                     point.y - size / 2,
+                                     size, &tint, worldUiOpacity);
+    }
+    else
+    {
+        StatusIconRenderBitmap(yw, bitmap.bitmap,
+                               point.x - size / 2 + 1,
+                               point.y - size / 2 + 1,
+                               size + 2, (uint8_t)(worldUiOpacity / 3));
+        StatusIconRenderBitmap(yw, bitmap.bitmap,
+                               point.x - size / 2,
+                               point.y - size / 2,
+                               size, worldUiOpacity);
+    }
 }
 
 static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
@@ -10658,15 +10736,11 @@ static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
     if ( !yw_ProjectWorldSelectionPoint(yw, target, &point) )
         return;
 
-    // Host Station relocation uses its dedicated direct-path template and
-    // remains persistent while a relocation target exists.
+    // Host Station relocation uses its dedicated canonical marker and remains
+    // persistent while a relocation target exists.
     const int radius = 7 + (int)((yw->_timeStamp % 240) * 7 / 240);
-
-    // Host Station relocation has its own direct-path template. Invalid or
-    // absent paths intentionally draw nothing: numeric/procedural fallbacks
-    // have been removed from all order markers.
     yw_RenderOrderTemplateAt(yw, point, radius, worldUiOpacity,
-                             System::IniConf::UiRoboMoveOrderTemplate);
+                             YW_ORDER_TEMPLATE_ROBO_MOVE);
 }
 
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
@@ -10694,7 +10768,7 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
 
     int radius = 7 + (int)((age % 240) * 7 / 240);
     yw_RenderOrderTemplateAt(yw, point, radius, worldUiOpacity,
-                             System::IniConf::UiMoveOrderTemplate);
+                             YW_ORDER_TEMPLATE_MOVE);
 }
 
 static uint64_t yw_AttackOrderSquadKey(uint32_t commandID, uint8_t owner)
@@ -11036,9 +11110,9 @@ static bool yw_ProjectAttackOrderTargetPoint(
 
 static void yw_RenderAttackOrderTargetMarker(
         NC_STACK_ypaworld *yw, NC_STACK_ypabact *target,
-        NC_STACK_bitmap *bitmap)
+        const YwLoadedUiBitmap &bitmap)
 {
-    if ( !yw || !target || !bitmap || !bitmap->GetBitmap() )
+    if ( !yw || !target || !bitmap.bitmap || !bitmap.bitmap->GetBitmap() )
         return;
 
     Common::Point point;
@@ -11052,13 +11126,32 @@ static void yw_RenderAttackOrderTargetMarker(
     const int baseSize = baseRadius * 2 + 8;
     const int size = std::max(8, dround(baseSize * ATTACK_MARKER_SCALE));
     const uint8_t worldUiOpacity = 255;
+    const SDL_Color tint = yw_GetUiOwnerTintColor(
+        yw, std::max(yw_GetOrderIconOwner(yw), static_cast<int>(World::OWNER_RESIST)));
 
-    StatusIconRenderBitmap(yw, bitmap,
-                           point.x - size / 2 + 1, point.y - size / 2 + 1,
-                           size + 2, (uint8_t)(worldUiOpacity / 3));
-    StatusIconRenderBitmap(yw, bitmap,
-                           point.x - size / 2, point.y - size / 2,
-                           size, worldUiOpacity);
+    if ( bitmap.ownerTint )
+    {
+        StatusIconRenderBitmapTinted(yw, bitmap.bitmap,
+                                     point.x - size / 2 + 1,
+                                     point.y - size / 2 + 1,
+                                     size + 2, &tint,
+                                     (uint8_t)(worldUiOpacity / 3));
+        StatusIconRenderBitmapTinted(yw, bitmap.bitmap,
+                                     point.x - size / 2,
+                                     point.y - size / 2,
+                                     size, &tint, worldUiOpacity);
+    }
+    else
+    {
+        StatusIconRenderBitmap(yw, bitmap.bitmap,
+                               point.x - size / 2 + 1,
+                               point.y - size / 2 + 1,
+                               size + 2, (uint8_t)(worldUiOpacity / 3));
+        StatusIconRenderBitmap(yw, bitmap.bitmap,
+                               point.x - size / 2,
+                               point.y - size / 2,
+                               size, worldUiOpacity);
+    }
 }
 
 static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
@@ -11066,9 +11159,9 @@ static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
     if ( !yw || !yw->_userRobo )
         return;
 
-    NC_STACK_bitmap *bitmap = yw_LoadOrderTemplateBitmap(
-        yw, System::IniConf::UiAttackOrderTemplate);
-    if ( !bitmap )
+    YwLoadedUiBitmap bitmap = yw_LoadOrderTemplateBitmap(
+        yw, YW_ORDER_TEMPLATE_ATTACK);
+    if ( !bitmap.bitmap )
         return;
 
     // The marker reflects actual allied combat state, not only the currently
@@ -11085,6 +11178,7 @@ static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw)
     for ( NC_STACK_ypabact *target : targets )
         yw_RenderAttackOrderTargetMarker(yw, target, bitmap);
 }
+
 
 bool NC_STACK_ypaworld::IsRoboMapOpen() const
 {
@@ -17302,7 +17396,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub5(int arg)
                     // The move marker confirms the player's click, not sector
                     // ownership, fog state or distance from the ordered squad.
                     // Any valid world intersection accepted as a move order
-                    // must therefore display ui.move_order_template.
+                    // must therefore display the canonical move-order marker.
                     _moveOrderFeedbackActive = true;
                     _moveOrderFeedbackPos = _cellMouseIsectPos;
                     _moveOrderFeedbackStartTime = _timeStamp;
