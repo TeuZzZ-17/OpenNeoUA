@@ -47,7 +47,7 @@ void NC_STACK_ypatank::setBACT_inputting(bool inpt)
 static bool ypatank_IsAiRecoilRecoveryActive(const NC_STACK_ypatank *tank)
 {
     return tank &&
-           tank->_weaponRecoilAiRecoveryEndTime > tank->_clock &&
+           tank->_recoilAiRecoveryEndTime > tank->_clock &&
            !(tank->_oflags & BACT_OFLAG_VIEWER) &&
            !(tank->_oflags & BACT_OFLAG_USERINPT);
 }
@@ -55,7 +55,7 @@ static bool ypatank_IsAiRecoilRecoveryActive(const NC_STACK_ypatank *tank)
 static bool ypatank_IsPlayerRecoilRecoveryActive(const NC_STACK_ypatank *tank)
 {
     return tank &&
-           tank->_weaponRecoilPlayerRecoveryEndTime > tank->_clock &&
+           tank->_recoilPlayerRecoveryEndTime > tank->_clock &&
            (tank->_oflags & (BACT_OFLAG_VIEWER | BACT_OFLAG_USERINPT));
 }
 
@@ -451,7 +451,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                 {
                     _old_pos = _position;
 
-                    // OpenNeoUA recoil: AI tanks use a render-only recoil offset.
+                    // OpenNeoUA shared recoil: AI tanks use a render-only recoil offset.
                     // Briefly suppress forward recovery so the controller does
                     // not visually cancel the kick on the next frame.
                     if ( _thraction > 0.0f )
@@ -1055,7 +1055,7 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         bool playerRecoilRecovery = ypatank_IsPlayerRecoilRecoveryActive(this);
         if ( playerRecoilRecovery && v88 > 0.0f )
         {
-            // OpenNeoUA mechanical recoil: when the player fires a tank while
+            // OpenNeoUA shared mechanical recoil: when the player fires a tank while
             // holding forward, the simulated backward recoil is immediately
             // contradicted by full forward traction, creating a slingshot.
             // Briefly damp only forward recovery; steering, braking, reverse,

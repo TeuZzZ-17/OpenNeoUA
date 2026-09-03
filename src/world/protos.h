@@ -626,7 +626,7 @@ struct TVhclProto
     bool mgun_set = false;
     int16_t num_mguns = 1;
     int mgun_shot_time = 0;
-    float mgun_recoil = 0.0f;
+    float mgun_recoil = 0.0f; // OpenNeoUA: shared recoil intensity 0..10; same scale/runtime as Weapon recoil
     // Optional cockpit-only MGUN SHK intensity. 0/absent disables cockpit shake.
     float mgun_recoil_cockpit = 0.0f;
     // OpenNeoUA: shared tracer config used by normal Vehicle MGUNs and
@@ -1041,7 +1041,7 @@ struct TWeapProto
     // the direct-hit unit receives only push; nearby units receive aoe_unit_push.
     int push = 0;
     int armor_penetration_targets = 0; // OpenNeoUA custom: direct-hit unit penetrations before final impact
-    float recoil = 0.0; // OpenNeoUA custom: shooter-side knockback multiplier, 0..10
+    float recoil = 0.0; // OpenNeoUA: shared recoil intensity 0..10; same scale/runtime as mgun_recoil
 //    int field_87C = 0;
     int life_time = 0;
     // OpenNeoUA: life_time accepts either a fixed value or an inclusive
