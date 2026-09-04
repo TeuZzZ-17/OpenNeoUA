@@ -1279,6 +1279,21 @@ static bool ParseScriptFloatRange(const std::string &value, float &minValue, flo
     return World::ParseFloatRangeValue(value, minValue, maxValue);
 }
 
+static bool ParseNumWeaponsRange(const std::string &value,
+                                 int &minCount,
+                                 int &maxCount)
+{
+    if ( !ParseScriptIntRange(value, minCount, maxCount) )
+        return false;
+
+    // Preserve the vanilla-compatible fixed zero value. Mixed zero ranges are
+    // rejected instead of giving zero two different meanings inside one roll.
+    if ( minCount == 0 && maxCount == 0 )
+        return true;
+
+    return minCount >= 1 && maxCount <= 255;
+}
+
 static bool ParseMimicEnergyCostRange(const std::string &value,
                                       int &minCost,
                                       int &maxCost)
@@ -2343,8 +2358,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         const bool weaponArcXActive = _vhcl->weapon_arc_x > 0.0f;
         const bool weaponArcYActive = _vhcl->weapon_arc_y > 0.0f;
         const bool weaponConeActive = _vhcl->weapon_cone_xy > 0.0f;
-        const int primaryWeaponCount = _vhcl->num_weapons <= 1 ? 1 : _vhcl->num_weapons;
-
         if ( (weaponArcXActive || weaponArcYActive) && weaponConeActive )
         {
             ypa_log_out("WARNING: vehicle %d weapon Arc/Cone conflict (arc_x=%.3f, arc_y=%.3f, cone_xy=%.3f); Arc and Cone disabled, normal launch direction retained for every weapon slot.\n",
@@ -2362,14 +2375,28 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                      (weaponSlot > 0 && weaponIds[weaponSlot] <= 0) )
                     continue;
 
-                int weaponCount = primaryWeaponCount;
-                if ( weaponSlot > 0 && _vhcl->extra_num_weapons[weaponSlot - 1] > 0 )
-                    weaponCount = _vhcl->extra_num_weapons[weaponSlot - 1];
+                int minWeaponCount = 1;
+                int maxWeaponCount = 1;
+                _vhcl->GetWeaponProjectileCountRange(
+                    weaponSlot, minWeaponCount, maxWeaponCount);
 
-                if ( weaponCount > 1 && weaponCount % 4 != 0 && weaponCount % 4 != 1 )
+                bool hasInvalidArcCount = false;
+                for (int weaponCount = minWeaponCount;
+                     weaponCount <= maxWeaponCount; ++weaponCount)
                 {
-                    ypa_log_out("WARNING: vehicle %d weapon slot %d Arc cross requires effective projectile count 4k or 4k+1 (got %d); Arc disabled for that slot and normal launch direction retained.\n",
-                                _vhclID, weaponSlot + 1, weaponCount);
+                    if ( weaponCount > 1 &&
+                         weaponCount % 4 != 0 && weaponCount % 4 != 1 )
+                    {
+                        hasInvalidArcCount = true;
+                        break;
+                    }
+                }
+
+                if ( hasInvalidArcCount )
+                {
+                    ypa_log_out("WARNING: vehicle %d weapon slot %d Arc cross requires every effective projectile count to be 4k or 4k+1 (configured %d_%d); Arc is disabled on incompatible random rolls.\n",
+                                _vhclID, weaponSlot + 1,
+                                minWeaponCount, maxWeaponCount);
                 }
             }
         }
@@ -3390,7 +3417,19 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "num_weapons") )
     {
         int previousValue = _vhcl->num_weapons;
-        _vhcl->num_weapons = parser.stol(p2, NULL, 0);
+        int minCount = 0;
+        int maxCount = 0;
+
+        if ( !ParseNumWeaponsRange(p2, minCount, maxCount) )
+        {
+            ypa_log_out("WARNING: vehicle %d num_weapons='%s' is invalid; expected 0 or an inclusive value/min_max in range 1-255. Keeping the previous value.\n",
+                        _vhclID, p2.c_str());
+            return ScriptParser::RESULT_OK;
+        }
+
+        _vhcl->num_weapons = minCount;
+        _vhcl->num_weapons_min = minCount;
+        _vhcl->num_weapons_max = maxCount;
 
         if ( _isModify && _o.IsGemNotificationCaptureActive() )
             _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
@@ -3402,18 +3441,20 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
               !StriCmp(p1, "num_weapons_4") )
     {
         int sourceSlot = p1.back() - '2';
-        int count = parser.stol(p2, NULL, 0);
+        int minCount = 0;
+        int maxCount = 0;
 
-        if ( count == 0 )
-            _vhcl->extra_num_weapons[sourceSlot] = 0;
-        else if ( count < 1 || count > 255 )
+        if ( !ParseNumWeaponsRange(p2, minCount, maxCount) )
         {
-            _vhcl->extra_num_weapons[sourceSlot] = 0;
-            ypa_log_out("WARNING: vehicle %d %s=%d is outside range 1-255; num_weapons inherited.\n",
-                        _vhclID, p1.c_str(), count);
+            ypa_log_out("WARNING: vehicle %d %s='%s' is invalid; expected 0/inherit or an inclusive value/min_max in range 1-255. Keeping the previous value.\n",
+                        _vhclID, p1.c_str(), p2.c_str());
         }
         else
-            _vhcl->extra_num_weapons[sourceSlot] = count;
+        {
+            _vhcl->extra_num_weapons[sourceSlot] = minCount;
+            _vhcl->extra_num_weapons_min[sourceSlot] = minCount;
+            _vhcl->extra_num_weapons_max[sourceSlot] = maxCount;
+        }
     }
     else if ( !StriCmp(p1, "kill_after_shot") )
     {
@@ -3982,6 +4023,8 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->weapon = -1;
         _vhcl->extra_weapons = {0, 0, 0};
         _vhcl->extra_num_weapons = {0, 0, 0};
+        _vhcl->extra_num_weapons_min = {0, 0, 0};
+        _vhcl->extra_num_weapons_max = {0, 0, 0};
         _vhcl->weapon_player_switch_mode = TVhclProto::WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
         _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
         _vhcl->mgun = -1;

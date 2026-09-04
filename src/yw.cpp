@@ -4276,13 +4276,20 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_cockpit_gun_camera_recoil = vhcl.cockpit_gun_camera_recoil;
         bacto->_gun_angle = vhcl.gun_angle;
         bacto->_gun_angle_user = vhcl.gun_angle;
-        bacto->_num_weapons = vhcl.num_weapons;
-        bacto->_weapon_projectile_counts[0] = bacto->_num_weapons;
+        int primaryMin = 1;
+        int primaryMax = 1;
+        vhcl.GetWeaponProjectileCountRange(0, primaryMin, primaryMax);
+        bacto->_num_weapons = (uint8_t)primaryMin;
+        bacto->_weapon_projectile_counts[0] = (uint8_t)primaryMin;
+        bacto->_weapon_projectile_count_maxs[0] = (uint8_t)primaryMax;
         for (size_t weaponSlot = 0; weaponSlot < vhcl.extra_num_weapons.size(); weaponSlot++)
         {
-            int configuredCount = vhcl.extra_num_weapons[weaponSlot];
-            bacto->_weapon_projectile_counts[weaponSlot + 1] =
-                configuredCount > 0 ? (uint8_t)configuredCount : bacto->_num_weapons;
+            int slotMin = 1;
+            int slotMax = 1;
+            vhcl.GetWeaponProjectileCountRange((int)weaponSlot + 1,
+                                               slotMin, slotMax);
+            bacto->_weapon_projectile_counts[weaponSlot + 1] = (uint8_t)slotMin;
+            bacto->_weapon_projectile_count_maxs[weaponSlot + 1] = (uint8_t)slotMax;
         }
         bacto->_kill_after_shot = vhcl.kill_after_shot;
         bacto->_vp_normal = ResolveVisualModel(vhcl.vp_normal, vhcl.visual_3ds.normal, vhcl.visual_base.normal);

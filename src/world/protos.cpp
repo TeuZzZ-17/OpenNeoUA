@@ -59,6 +59,45 @@ int TVhclProto::RollMimicProductionCost()
     return mimic_energy_cost;
 }
 
+void TVhclProto::GetWeaponProjectileCountRange(int sourceSlot,
+                                               int &minCount,
+                                               int &maxCount) const
+{
+    int rawMin = num_weapons_min;
+    int rawMax = num_weapons_max;
+
+    // Backward compatibility for prototypes populated by older code that only
+    // knows the scalar field. Authored zero still means the vanilla one-shot
+    // behavior after normalization below.
+    if ( rawMin == 0 && rawMax == 0 && num_weapons != 0 )
+        rawMin = rawMax = num_weapons;
+
+    if ( sourceSlot > 0 && sourceSlot <= (int)extra_num_weapons.size() )
+    {
+        const size_t index = (size_t)(sourceSlot - 1);
+        const int extraScalar = extra_num_weapons[index];
+        const int extraMin = extra_num_weapons_min[index];
+        const int extraMax = extra_num_weapons_max[index];
+
+        // A completely empty/zero extra count inherits the primary range.
+        if ( extraScalar != 0 || extraMin != 0 || extraMax != 0 )
+        {
+            rawMin = extraMin;
+            rawMax = extraMax;
+            if ( rawMin == 0 && rawMax == 0 && extraScalar > 0 )
+                rawMin = rawMax = extraScalar;
+        }
+    }
+
+    rawMin = std::max(1, std::min(rawMin, 255));
+    rawMax = std::max(1, std::min(rawMax, 255));
+    if ( rawMax < rawMin )
+        std::swap(rawMin, rawMax);
+
+    minCount = rawMin;
+    maxCount = rawMax;
+}
+
 VehicleCombatClass ResolveVehicleCombatClass(const NC_STACK_ypabact *unit)
 {
     if ( !unit )
