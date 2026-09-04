@@ -171,6 +171,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
 
     StopAmbientLevelSound();
     StopAtmosphericFXLoopSound();
+    ClearMobilePowerFXRuntime();
 
     int ok = 0;
 
@@ -353,6 +354,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     else
     {
         ClearAtmosphericFXRuntime();
+        ClearMobilePowerFXRuntime();
         _atmosphericFXProfile = World::TAtmosphericFXProfile();
     }
 
@@ -1540,21 +1542,21 @@ void NC_STACK_ypaworld::InitSuperItems()
         _superItemSoundCarriers[i].reset(new TSndCarrier());
         _superItemWaveSoundCarriers[i].reset(new TSndCarrier());
 
-        if ( !profile.fallout_atmospheric_fx_profile.empty() )
+        if ( !profile.fallout_fx_profile.empty() )
         {
             World::TAtmosphericFXProfile falloutProfile;
-            if ( LoadAtmosphericFXProfilePath(profile.fallout_atmospheric_fx_profile,
+            if ( LoadAtmosphericFXProfilePath(profile.fallout_fx_profile,
                                               falloutProfile) )
             {
                 _superItemFalloutAtmosphericFXProfiles[i] = std::move(falloutProfile);
                 _superItemFalloutSoundCarriers[i].reset(new TSndCarrier());
                 ypa_log_out("OpenNeoUA: SuperItem #%u loaded fallout Atmospheric FX Data/%s.\n",
-                            (unsigned)i, profile.fallout_atmospheric_fx_profile.c_str());
+                            (unsigned)i, profile.fallout_fx_profile.c_str());
             }
             else
             {
                 ypa_log_out("WARNING: SuperItem #%u fallout Atmospheric FX '%s' is unavailable; fallout visuals disabled for this bomb.\n",
-                            (unsigned)i, profile.fallout_atmospheric_fx_profile.c_str());
+                            (unsigned)i, profile.fallout_fx_profile.c_str());
             }
         }
     }
@@ -4241,6 +4243,9 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
 
         if ( !it->followOwner && (it->velocity.x != 0.0 || it->velocity.y != 0.0 || it->velocity.z != 0.0) )
             it->pos += it->velocity * ((double)arg->frameTime / 1000.0);
+        else if ( it->followOwner && it->mobilePowerFX &&
+                  (it->velocity.x != 0.0 || it->velocity.y != 0.0 || it->velocity.z != 0.0) )
+            it->followLocalOffset += it->velocity * ((double)arg->frameTime / 1000.0);
 
         it->age += arg->frameTime;
         ++it;
@@ -5025,6 +5030,212 @@ static bool yw_IsValidMobilePowerGenerator(NC_STACK_ypaworld *yw, NC_STACK_ypaba
 bool NC_STACK_ypaworld::IsValidMobilePowerGenerator(NC_STACK_ypabact *unit)
 {
     return yw_IsValidMobilePowerGenerator(this, unit);
+}
+
+void NC_STACK_ypaworld::ClearMobilePowerFXRuntime()
+{
+    for (auto &entry : _mobilePowerFXSounds)
+    {
+        TMobilePowerFXSound &sound = entry.second;
+        if ( sound.carrier )
+            StopAtmosphericFXLoopSoundInstance(sound.sample, *sound.carrier);
+        else if ( sound.sample )
+        {
+            sound.sample->Delete();
+            sound.sample = NULL;
+        }
+    }
+    _mobilePowerFXSounds.clear();
+    _mobilePowerFXProfileCache.clear();
+
+    for (auto it = _transientVPs.begin(); it != _transientVPs.end(); )
+    {
+        if ( it->mobilePowerFX )
+            it = _transientVPs.erase(it);
+        else
+            ++it;
+    }
+}
+
+static vec3d yw_RandomPointInDisk(float radius)
+{
+    if ( !std::isfinite(radius) || radius <= 0.0f )
+        return vec3d(0.0, 0.0, 0.0);
+
+    const double unit = (double)rand() / (double)RAND_MAX;
+    const double angle = ((double)rand() / (double)RAND_MAX) * 6.28318530717958647692;
+    const double r = sqrt(unit) * radius;
+    return vec3d(cos(angle) * r, 0.0, sin(angle) * r);
+}
+
+void NC_STACK_ypaworld::UpdateMobilePowerFX()
+{
+    std::map<int32_t, int32_t> activeCounts;
+    std::map<int32_t, NC_STACK_ypabact *> generators;
+    std::map<int32_t, const World::TAtmosphericFXProfile *> profiles;
+    std::map<int32_t, float> radii;
+
+    // Match the mechanical Mobile Power traversal exactly: mounted power
+    // modules live in _kidList and must be visible to the FX system too.
+    std::vector<NC_STACK_ypabact *> pendingGenerators;
+    for (NC_STACK_ypabact *root : _unitsList)
+        pendingGenerators.push_back(root);
+
+    while ( !pendingGenerators.empty() )
+    {
+        NC_STACK_ypabact *generator = pendingGenerators.back();
+        pendingGenerators.pop_back();
+
+        if ( !generator )
+            continue;
+
+        for (NC_STACK_ypabact *kid : generator->_kidList)
+            pendingGenerators.push_back(kid);
+
+        if ( !yw_IsValidMobilePowerGenerator(this, generator) )
+            continue;
+
+        const uint8_t protoId = generator->_mimic_disguise_vehicleID
+                              ? generator->_mimic_disguise_vehicleID
+                              : generator->_vehicleID;
+        const World::TVhclProto &proto = _vhclProtos[protoId];
+        if ( proto.power_fx_profile.empty() )
+            continue;
+
+        auto cacheIt = _mobilePowerFXProfileCache.find(proto.power_fx_profile);
+        if ( cacheIt == _mobilePowerFXProfileCache.end() )
+        {
+            World::TAtmosphericFXProfile parsed;
+            if ( !LoadAtmosphericFXProfilePath(proto.power_fx_profile, parsed) )
+                parsed = World::TAtmosphericFXProfile();
+            cacheIt = _mobilePowerFXProfileCache.emplace(proto.power_fx_profile,
+                                                          std::move(parsed)).first;
+        }
+
+        if ( !cacheIt->second.valid )
+            continue;
+
+        const int32_t gid = generator->_gid;
+        generators[gid] = generator;
+        profiles[gid] = &cacheIt->second;
+        radii[gid] = proto.power_radius;
+    }
+
+    for (auto it = _transientVPs.begin(); it != _transientVPs.end(); )
+    {
+        if ( !it->mobilePowerFX )
+        {
+            ++it;
+            continue;
+        }
+
+        const int32_t gid = it->followOwnerGid;
+        auto genIt = generators.find(gid);
+        auto radiusIt = radii.find(gid);
+        if ( genIt == generators.end() || radiusIt == radii.end() )
+        {
+            it = _transientVPs.erase(it);
+            continue;
+        }
+
+        const float radius = radiusIt->second;
+        const double dx = it->followLocalOffset.x;
+        const double dz = it->followLocalOffset.z;
+        if ( dx * dx + dz * dz > (double)radius * (double)radius )
+        {
+            it = _transientVPs.erase(it);
+            continue;
+        }
+
+        ++activeCounts[gid];
+        ++it;
+    }
+
+    for (const auto &entry : generators)
+    {
+        const int32_t gid = entry.first;
+        NC_STACK_ypabact *generator = entry.second;
+        const World::TAtmosphericFXProfile &profile = *profiles[gid];
+        const float radius = radii[gid];
+
+        int32_t spawnNeeded = profile.count - activeCounts[gid];
+        for (int32_t i = 0; i < spawnNeeded; ++i)
+        {
+            vec3d local = yw_RandomPointInDisk(radius);
+            // Mobile Power owns the X/Z domain. Profile X/Z radius and offsets
+            // are intentionally ignored so power_radius remains the single
+            // source of truth for both mechanics and visuals.
+            local.y = profile.spawn_offset.y + yw_RandomFloatSigned(profile.spawn_radius.y);
+
+            vec3d velocity = profile.velocity;
+            velocity.x += yw_RandomFloatSigned(profile.velocity_random.x);
+            velocity.y += yw_RandomFloatSigned(profile.velocity_random.y);
+            velocity.z += yw_RandomFloatSigned(profile.velocity_random.z);
+
+            const int32_t lifeTime = yw_RandomInRange(profile.lifetime_min,
+                                                      profile.lifetime_max);
+            const int32_t id = SpawnAttachedTransientVP(0, generator, local,
+                                                        lifeTime, 1.0, false,
+                                                        profile.tint,
+                                                        profile.scale,
+                                                        profile.spin,
+                                                        false, vec3d(0.0, 0.0, 0.0),
+                                                        false,
+                                                        TTransientVPParticleControls(),
+                                                        false,
+                                                        profile.fade_in,
+                                                        profile.fade_out,
+                                                        profile.mesh3ds);
+            if ( id > 0 && !_transientVPs.empty() && _transientVPs.back().id == id )
+            {
+                TTransientVP &fx = _transientVPs.back();
+                fx.mobilePowerFX = true;
+                fx.velocity = velocity;
+            }
+        }
+
+        auto soundIt = _mobilePowerFXSounds.find(gid);
+        if ( !profile.loop_sound.empty() && profile.loop_sound_volume > 0 )
+        {
+            if ( soundIt == _mobilePowerFXSounds.end() )
+            {
+                TMobilePowerFXSound state;
+                state.carrier.reset(new TSndCarrier());
+                if ( StartAtmosphericFXLoopSoundInstance(profile, state.sample, *state.carrier) )
+                    soundIt = _mobilePowerFXSounds.emplace(gid, std::move(state)).first;
+            }
+
+            if ( soundIt != _mobilePowerFXSounds.end() && soundIt->second.carrier )
+            {
+                TSndCarrier &carrier = *soundIt->second.carrier;
+                carrier.Position = generator->_position;
+                carrier.Vector = vec3d(0.0, 0.0, 0.0);
+                if ( !carrier.Sounds.empty() )
+                    carrier.Sounds[0].Radius = radius;
+                SFXEngine::SFXe.UpdateSoundCarrier(&carrier);
+            }
+        }
+        else if ( soundIt != _mobilePowerFXSounds.end() )
+        {
+            if ( soundIt->second.carrier )
+                StopAtmosphericFXLoopSoundInstance(soundIt->second.sample,
+                                                   *soundIt->second.carrier);
+            _mobilePowerFXSounds.erase(soundIt);
+        }
+    }
+
+    for (auto it = _mobilePowerFXSounds.begin(); it != _mobilePowerFXSounds.end(); )
+    {
+        if ( generators.find(it->first) != generators.end() )
+        {
+            ++it;
+            continue;
+        }
+
+        if ( it->second.carrier )
+            StopAtmosphericFXLoopSoundInstance(it->second.sample, *it->second.carrier);
+        it = _mobilePowerFXSounds.erase(it);
+    }
 }
 
 static void yw_AddMobilePowerInfluenceFromGenerator(NC_STACK_ypaworld *yw,
@@ -6772,6 +6983,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub19()
     }
 
     UpdateSuperItemFalloutAtmosphericFX();
+    UpdateMobilePowerFX();
 
     for (const std::unique_ptr<TSndCarrier> &carrier : _superItemSoundCarriers)
     {
