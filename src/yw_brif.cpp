@@ -1967,14 +1967,25 @@ void yw_DebriefTechUpgradeLine(NC_STACK_ypaworld *yw, TBriefengScreen *brf, cons
                 vhcl->GetWeaponProjectileCountRange(
                     0, minWeaponCount, maxWeaponCount);
 
-                if ( maxWeaponCount <= 1 )
-                    v14 = fmt::sprintf("(%d)", wpn->energy / 100);
-                else if ( minWeaponCount == maxWeaponCount )
-                    v14 = fmt::sprintf("(%d x%d)", wpn->energy / 100,
-                                       maxWeaponCount);
-                else
-                    v14 = fmt::sprintf("(%d x%d-%d)", wpn->energy / 100,
-                                       minWeaponCount, maxWeaponCount);
+                int minDisplayCount = minWeaponCount;
+                int maxDisplayCount = maxWeaponCount;
+                wpn->GetCombinedProjectileCountRange(
+                    minWeaponCount, maxWeaponCount,
+                    minDisplayCount, maxDisplayCount);
+
+                std::string countSuffix;
+                if ( maxDisplayCount > 1 )
+                {
+                    if ( minDisplayCount == maxDisplayCount )
+                        countSuffix = fmt::sprintf("x%d", maxDisplayCount);
+                    else
+                        countSuffix = fmt::sprintf("x%d-%d",
+                                                   minDisplayCount,
+                                                   maxDisplayCount);
+                }
+
+                v14 = fmt::sprintf("(%d%s)", wpn->energy / 100,
+                                   countSuffix.c_str());
             }
         }
         break;

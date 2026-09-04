@@ -11,6 +11,38 @@
 
 namespace World
 {
+void TWeaponClusterConfig::GetCountRange(int &minCount, int &maxCount) const
+{
+    minCount = std::max(1, std::min(count, (int)MAX_COUNT));
+
+    const int rawMax = count_max > 0 ? count_max : count;
+    maxCount = std::max(1, std::min(rawMax, (int)MAX_COUNT));
+
+    if ( maxCount < minCount )
+        std::swap(minCount, maxCount);
+}
+
+void TWeapProto::GetCombinedProjectileCountRange(int carrierMinCount,
+                                                 int carrierMaxCount,
+                                                 int &minCount,
+                                                 int &maxCount) const
+{
+    minCount = std::max(1, carrierMinCount);
+    maxCount = std::max(1, carrierMaxCount);
+    if ( maxCount < minCount )
+        std::swap(minCount, maxCount);
+
+    if ( cluster.enable && cluster.count > 0 && cluster.weapon_id > 0 )
+    {
+        int minClusterCount = 1;
+        int maxClusterCount = 1;
+        cluster.GetCountRange(minClusterCount, maxClusterCount);
+
+        minCount *= minClusterCount;
+        maxCount *= maxClusterCount;
+    }
+}
+
 int TWeapProto::RollLifeTime() const
 {
     int minLifeTime = life_time_min;

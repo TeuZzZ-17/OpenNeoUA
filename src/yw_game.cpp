@@ -3901,6 +3901,11 @@ static NC_STACK_ypabact *yw_CreateBuildingSpawnedUnit(NC_STACK_ypaworld *world, 
     unit->_carrier_spawn_root_gid = 0;
     unit->_carrier_spawn_root_vehicle = 0;
 
+    // Building spawners are still part of the owning Host Station's production
+    // tree.  If that Host Station is carrying an inheritable debuff, every unit
+    // produced afterwards must start with the same remaining debuff state.
+    unit->InheritActiveDebuffFromParent(ownerRobo);
+
     if ( unit->_spawn_units )
         unit->_spawn_last_time = unit->_clock > 0 ? unit->_clock : 1;
 
@@ -4532,6 +4537,13 @@ void NC_STACK_ypaworld::sb_0x456384(const Common::Point &cellId, int ownerid2, i
 
                         gun_obj->_host_station = robo;
                         gun_obj->_commandID = v39;
+
+                        // A newly constructed building's gameplay gun/module
+                        // components are children of the owner Host Station too.
+                        // Keep debuff inheritance consistent with normal vehicle
+                        // production so post-infection buildings cannot spawn
+                        // clean attached actors.
+                        gun_obj->InheritActiveDebuffFromParent(robo);
 
                         if ( _isNetGame && i < 8 )
                         {
