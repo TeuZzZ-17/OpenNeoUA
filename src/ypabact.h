@@ -714,6 +714,7 @@ public:
     int GetCurrentWeaponId();
     int GetHUDWeaponId(); // UI-only fallback: shows mounted Kamikaze payload without making it fireable/selectable.
     int GetCurrentWeaponProjectileCount();
+    void GetCurrentWeaponProjectileCountRange(int *outMin, int *outMax);
     bool RequestHomingTargetCycle();
     bool CycleControlledWeapon();
 
@@ -1077,6 +1078,7 @@ public:
     float _mgun_spread_y;
     uint8_t _num_weapons;
     std::array<uint8_t, 4> _weapon_projectile_counts;
+    std::array<uint8_t, 4> _weapon_projectile_count_maxs;
 
     World::MissileList _missiles_list;
     int _weapon_time;
