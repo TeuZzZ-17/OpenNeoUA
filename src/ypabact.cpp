@@ -2772,6 +2772,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_spread_y = 0.0;
     _num_weapons = 0;
     _weapon_projectile_counts = {0, 0, 0, 0};
+    _weapon_projectile_count_maxs = {0, 0, 0, 0};
     _weapon_time = 0;
     ResetProgressiveWeaponFireRate();
     _fire_x_mode = World::TVhclProto::FIRE_X_MODE_VANILLA;
@@ -8917,12 +8918,64 @@ static int ypabact_NormalizeWeaponProjectileCount(int count)
     return count <= 1 ? 1 : count;
 }
 
-static int ypabact_GetWeaponProjectileCountForSourceSlot(NC_STACK_ypabact *bact, int sourceSlot)
+static void ypabact_GetWeaponProjectileCountRangeForSourceSlot(
+        NC_STACK_ypabact *bact, int sourceSlot, int *outMin, int *outMax)
 {
-    if ( !bact || sourceSlot < 0 || sourceSlot >= (int)bact->_weapon_projectile_counts.size() )
-        return bact ? ypabact_NormalizeWeaponProjectileCount(bact->_num_weapons) : 1;
+    int minCount = 1;
+    int maxCount = 1;
 
-    return ypabact_NormalizeWeaponProjectileCount(bact->_weapon_projectile_counts[sourceSlot]);
+    if ( bact )
+    {
+        if ( sourceSlot >= 0 && sourceSlot < (int)bact->_weapon_projectile_counts.size() )
+        {
+            int rawMin = bact->_weapon_projectile_counts[sourceSlot];
+            int rawMax = bact->_weapon_projectile_count_maxs[sourceSlot];
+            if ( rawMax == 0 && rawMin > 0 )
+                rawMax = rawMin;
+
+            minCount = ypabact_NormalizeWeaponProjectileCount(rawMin);
+            maxCount = ypabact_NormalizeWeaponProjectileCount(rawMax);
+        }
+        else
+        {
+            minCount = ypabact_NormalizeWeaponProjectileCount(bact->_num_weapons);
+            maxCount = minCount;
+        }
+    }
+
+    if ( maxCount < minCount )
+        std::swap(minCount, maxCount);
+
+    if ( outMin )
+        *outMin = minCount;
+    if ( outMax )
+        *outMax = maxCount;
+}
+
+static int ypabact_GetWeaponProjectileCountForSourceSlot(NC_STACK_ypabact *bact,
+                                                          int sourceSlot)
+{
+    int minCount = 1;
+    int maxCount = 1;
+    ypabact_GetWeaponProjectileCountRangeForSourceSlot(
+        bact, sourceSlot, &minCount, &maxCount);
+    return maxCount;
+}
+
+static int ypabact_RollWeaponProjectileCountForSourceSlot(NC_STACK_ypabact *bact,
+                                                           int sourceSlot)
+{
+    int minCount = 1;
+    int maxCount = 1;
+    ypabact_GetWeaponProjectileCountRangeForSourceSlot(
+        bact, sourceSlot, &minCount, &maxCount);
+
+    if ( minCount == maxCount )
+        return minCount;
+
+    const int span = maxCount - minCount + 1;
+    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
+    return minCount + (int)(randomPart * (double)span);
 }
 
 static int ypabact_GetWeaponIdForSourceSlot(NC_STACK_ypabact *bact, int sourceSlot)
@@ -9766,6 +9819,13 @@ int NC_STACK_ypabact::GetCurrentWeaponProjectileCount()
 {
     return ypabact_GetWeaponProjectileCountForSourceSlot(
         this, ypabact_GetCurrentPrimaryWeaponSourceSlot(this));
+}
+
+void NC_STACK_ypabact::GetCurrentWeaponProjectileCountRange(int *outMin,
+                                                             int *outMax)
+{
+    ypabact_GetWeaponProjectileCountRangeForSourceSlot(
+        this, ypabact_GetCurrentPrimaryWeaponSourceSlot(this), outMin, outMax);
 }
 
 bool NC_STACK_ypabact::RequestHomingTargetCycle()
@@ -13680,7 +13740,11 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         _world->ypaworld_func180(&v26);
     }
 
-    int v13 = ypabact_GetWeaponProjectileCountForSourceSlot(this, selectedWeaponSourceSlot);
+    // Resolve Random Num Weapons exactly once per successful firing event. All
+    // later salvo logic (spawn spacing, multi-target distribution, recoil,
+    // tracer count and energy cost) consumes this same rolled value.
+    int v13 = ypabact_RollWeaponProjectileCountForSourceSlot(
+        this, selectedWeaponSourceSlot);
 
     // Cockpit aiming preserves the vanilla base direction for a multi-projectile salvo.
     // fire_x still distributes the physical spawn points left/right, but it must
