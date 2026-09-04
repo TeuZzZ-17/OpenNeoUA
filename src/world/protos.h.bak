@@ -1046,13 +1046,6 @@ struct TWeapProto
     TSndFxPosParam shk_launch_player;
     TWeaponDebuffConfig debuff;
     TWeaponClusterConfig cluster;
-    // OpenNeoUA UI helper: combines the carrier num_weapons range with
-    // this weapon's valid cluster_count range into one total min/max.
-    // Gameplay rolls stay independent; this is only a compact readout.
-    void GetCombinedProjectileCountRange(int carrierMinCount,
-                                         int carrierMaxCount,
-                                         int &minCount,
-                                         int &maxCount) const;
     TWeaponChainConfig chain;
     TDecorationFXConfig decoration_fx;
 //    int field_870 = 0;

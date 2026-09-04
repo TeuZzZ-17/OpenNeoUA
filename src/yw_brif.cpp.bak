@@ -1967,21 +1967,35 @@ void yw_DebriefTechUpgradeLine(NC_STACK_ypaworld *yw, TBriefengScreen *brf, cons
                 vhcl->GetWeaponProjectileCountRange(
                     0, minWeaponCount, maxWeaponCount);
 
-                int minDisplayCount = minWeaponCount;
-                int maxDisplayCount = maxWeaponCount;
-                wpn->GetCombinedProjectileCountRange(
-                    minWeaponCount, maxWeaponCount,
-                    minDisplayCount, maxDisplayCount);
-
                 std::string countSuffix;
-                if ( maxDisplayCount > 1 )
+                if ( maxWeaponCount > 1 )
                 {
-                    if ( minDisplayCount == maxDisplayCount )
-                        countSuffix = fmt::sprintf("x%d", maxDisplayCount);
+                    if ( minWeaponCount == maxWeaponCount )
+                        countSuffix += fmt::sprintf("x%d", maxWeaponCount);
                     else
-                        countSuffix = fmt::sprintf("x%d-%d",
-                                                   minDisplayCount,
-                                                   maxDisplayCount);
+                        countSuffix += fmt::sprintf("x%d-%d",
+                                                    minWeaponCount,
+                                                    maxWeaponCount);
+                }
+
+                if ( wpn->cluster.enable && wpn->cluster.count > 0 &&
+                     wpn->cluster.weapon_id > 0 )
+                {
+                    int minClusterCount = 1;
+                    int maxClusterCount = 1;
+                    wpn->cluster.GetCountRange(minClusterCount,
+                                               maxClusterCount);
+
+                    if ( maxClusterCount > 1 )
+                    {
+                        if ( minClusterCount == maxClusterCount )
+                            countSuffix += fmt::sprintf("x%d",
+                                                        maxClusterCount);
+                        else
+                            countSuffix += fmt::sprintf("x%d-%d",
+                                                        minClusterCount,
+                                                        maxClusterCount);
+                    }
                 }
 
                 v14 = fmt::sprintf("(%d%s)", wpn->energy / 100,

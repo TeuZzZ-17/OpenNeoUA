@@ -166,6 +166,29 @@ inline bool ParseIntRangeValue(const std::string &value, int &minValue, int &max
     return true;
 }
 
+// Positive bounded specialization for authored count ranges. It deliberately
+// delegates syntax and reversed-endpoint handling to ParseIntRangeValue().
+inline bool ParsePositiveIntRangeValue(const std::string &value,
+                                       int maxAllowed,
+                                       int &minValue,
+                                       int &maxValue)
+{
+    int parsedMin = 0;
+    int parsedMax = 0;
+    if ( maxAllowed <= 0 ||
+         !ParseIntRangeValue(value, parsedMin, parsedMax) ||
+         parsedMin <= 0 || parsedMax <= 0 )
+    {
+        minValue = 0;
+        maxValue = 0;
+        return false;
+    }
+
+    minValue = std::min(parsedMin, maxAllowed);
+    maxValue = std::min(parsedMax, maxAllowed);
+    return true;
+}
+
 inline bool ParseFloatRangeValue(const std::string &value, float &minValue, float &maxValue)
 {
     auto parsePart = [](const std::string &part, float &out) -> bool
@@ -207,6 +230,130 @@ inline bool ParseFloatRangeValue(const std::string &value, float &minValue, floa
     minValue = std::min(first, second);
     maxValue = std::max(first, second);
     return true;
+}
+
+// Shared inclusive integer roll for authored value/min_max ranges. Keeping the
+// calculation here prevents each runtime feature from growing its own subtly
+// different rand() endpoint handling.
+inline int RandomIntRangeInclusive(int minValue, int maxValue)
+{
+    if ( maxValue < minValue )
+        std::swap(minValue, maxValue);
+
+    if ( minValue == maxValue )
+        return minValue;
+
+    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
+    const int64_t range = (int64_t)maxValue - minValue;
+    return minValue + (int)((range + 1) * randomPart);
+}
+
+// Shared yaw/pitch direction used by Proximity Defense and Weapon Cluster.
+// Authored angle ranges are sampled uniformly. Callers may instead request the
+// existing evenly-spaced full-circle distribution by supplying a valid shot
+// index/count and evenlyDistributeYaw=true.
+inline vec3d ResolveYawPitchDirection(bool horizontalAngleSet,
+                                      float horizontalMin,
+                                      float horizontalMax,
+                                      bool verticalAngleSet,
+                                      float verticalMin,
+                                      float verticalMax,
+                                      int shotIndex = 0,
+                                      int totalShots = 0,
+                                      bool evenlyDistributeYaw = false)
+{
+    if ( horizontalMax < horizontalMin )
+        std::swap(horizontalMin, horizontalMax);
+    if ( verticalMax < verticalMin )
+        std::swap(verticalMin, verticalMax);
+
+    double yaw = 0.0;
+    double pitch = 0.0;
+
+    if ( evenlyDistributeYaw && totalShots > 0 )
+    {
+        yaw = (double)horizontalMin +
+              ((double)shotIndex / (double)totalShots) * 360.0;
+    }
+    else if ( horizontalAngleSet )
+    {
+        const double randomPart = (double)rand() / (double)RAND_MAX;
+        yaw = (double)horizontalMin +
+              randomPart * ((double)horizontalMax - horizontalMin);
+    }
+
+    if ( verticalAngleSet )
+    {
+        const double randomPart = (double)rand() / (double)RAND_MAX;
+        pitch = (double)verticalMin +
+                randomPart * ((double)verticalMax - verticalMin);
+    }
+
+    const double degreesToRadians = 0.01745329251994329577;
+    const double yawRad = yaw * degreesToRadians;
+    const double pitchRad = pitch * degreesToRadians;
+    const double horizontal = std::cos(pitchRad);
+
+    return vec3d(std::sin(yawRad) * horizontal,
+                 std::sin(pitchRad),
+                 std::cos(yawRad) * horizontal);
+}
+
+inline vec3d ApplyDirectionalSpread(const mat3x3 &rotation,
+                                    const vec3d &direction,
+                                    float spreadX,
+                                    float spreadY)
+{
+    if ( spreadX <= 0.0f && spreadY <= 0.0f )
+        return direction;
+
+    vec3d aimDir = direction;
+    if ( aimDir.normalise() <= 0.001f )
+        return direction;
+
+    vec3d right = rotation.AxisX();
+    right -= aimDir * right.dot(aimDir);
+
+    if ( right.normalise() <= 0.001f )
+    {
+        const vec3d refAxis = std::fabs(aimDir.y) < 0.99f
+                                  ? vec3d::OY(1.0f)
+                                  : vec3d::OX(1.0f);
+        right = refAxis * aimDir;
+    }
+
+    if ( right.normalise() <= 0.001f )
+        return aimDir;
+
+    vec3d up = aimDir * right;
+    if ( up.normalise() <= 0.001f )
+        return aimDir;
+
+    float randomX = 0.0f;
+    float randomY = 0.0f;
+
+    if ( spreadX > 0.0f )
+        randomX = (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f) *
+                  std::tan(spreadX * 0.01745329251994329577);
+    if ( spreadY > 0.0f )
+        randomY = (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f) *
+                  std::tan(spreadY * 0.01745329251994329577);
+
+    aimDir += right * randomX + up * randomY;
+    if ( aimDir.normalise() > 0.001f )
+        return aimDir;
+
+    return direction;
+}
+
+inline bool IsWeaponClusterTriggerDue(int triggerTime,
+                                      int elapsedTime,
+                                      bool impactOrDetonation)
+{
+    if ( triggerTime <= 0 )
+        return impactOrDetonation;
+
+    return !impactOrDetonation && elapsedTime >= triggerTime;
 }
 
 // Shared optional effect envelope. Fade-in and fade-out are part of the total

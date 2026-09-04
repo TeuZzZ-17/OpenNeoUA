@@ -14035,90 +14035,11 @@ static void yw_RenderInfoMagazineBar(NC_STACK_ypaworld *yw, sklt_wis *wis,
                Locale::Text::OpenUA(Locale::OUA_HUD_MAG), text);
 }
 
-static std::string yw_BuildInfoWeaponDamageText(NC_STACK_ypabact *bact,
-                                                    World::TVhclProto *vhcl,
-                                                    World::TWeapProto *weap,
-                                                    int effectiveEnergy)
-{
-    if ( !weap )
-        return std::string();
-
-    std::string txt2;
-
-    if ( weap->IsLaser() )
-    {
-        txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
-
-        if ( weap->laser_energy_increment_rate > 0.0f )
-            txt2 += " +";
-
-        if ( weap->laser_beam_count > 1 )
-            txt2 += fmt::sprintf(" x%d", weap->laser_beam_count);
-    }
-    else
-    {
-        txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
-
-        int minWeaponCount = 1;
-        int maxWeaponCount = 1;
-        if ( bact )
-        {
-            bact->GetCurrentWeaponProjectileCountRange(
-                &minWeaponCount, &maxWeaponCount);
-        }
-        else if ( vhcl )
-        {
-            vhcl->GetWeaponProjectileCountRange(
-                0, minWeaponCount, maxWeaponCount);
-        }
-
-        int minDisplayCount = minWeaponCount;
-        int maxDisplayCount = maxWeaponCount;
-        weap->GetCombinedProjectileCountRange(
-            minWeaponCount, maxWeaponCount,
-            minDisplayCount, maxDisplayCount);
-
-        if ( maxDisplayCount > 1 )
-        {
-            if ( minDisplayCount == maxDisplayCount )
-                txt2 += fmt::sprintf("x%d", maxDisplayCount);
-            else
-                txt2 += fmt::sprintf("x%d-%d", minDisplayCount,
-                                     maxDisplayCount);
-        }
-    }
-
-    return txt2;
-}
-
-static float yw_GetInfoDamageWireX(NC_STACK_ypaworld *yw, float vanillaX,
-                                   const std::string &damageText)
-{
-    // Seven characters fit the authored HUD without touching the wireframe.
-    // Longer DMG strings keep the vanilla font and move only the wireframe
-    // slightly left. The offset is deliberately conservative so the wireframe
-    // does not crowd the DMG label. It is recomputed from vanillaX every frame
-    // and clamped, so the movement never accumulates or escapes the panel.
-    constexpr size_t safeCharacters = 7;
-    constexpr int pixelsPerExtraCharacter = 8;
-    constexpr int maxShiftPixels = 24;
-
-    if ( !yw || yw->_screenSize.x <= 0 || damageText.size() <= safeCharacters )
-        return vanillaX;
-
-    const size_t extraCharacters = damageText.size() - safeCharacters;
-    const int shiftPixels = std::min(
-        maxShiftPixels,
-        static_cast<int>(extraCharacters) * pixelsPerExtraCharacter);
-
-    return vanillaX - (2.0f * static_cast<float>(shiftPixels)
-                       / static_cast<float>(yw->_screenSize.x));
-}
-
 void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, World::TWeapProto *weap, float xpos, float ypos)
 {
     if ( weap )
     {
+        std::string txt2;
         const int displayBaseEnergy = weap->energy;
         const int effectiveEnergy = bact
             ? bact->GetEffectiveOutgoingDamage(displayBaseEnergy)
@@ -14126,10 +14047,64 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
 
         // Show the actual current per-instance damage directly in DMG. Kill
         // marks stay runtime-only and never mutate shared weapon prototypes,
-        // but the player readout now reflects the same effective value used by
-        // the final damage choke point.
-        const std::string txt2 = yw_BuildInfoWeaponDamageText(
-            bact, vhcl, weap, effectiveEnergy);
+        // but the player readout now reflects the
+        // same effective value used by the final damage choke point.
+        if ( weap->IsLaser() )
+        {
+            txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
+
+            if ( weap->laser_energy_increment_rate > 0.0f )
+                txt2 += " +";
+
+            if ( weap->laser_beam_count > 1 )
+                txt2 += fmt::sprintf(" x%d", weap->laser_beam_count);
+        }
+        else
+        {
+            txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
+
+            int minWeaponCount = 1;
+            int maxWeaponCount = 1;
+            if ( bact )
+            {
+                bact->GetCurrentWeaponProjectileCountRange(
+                    &minWeaponCount, &maxWeaponCount);
+            }
+            else if ( vhcl )
+            {
+                vhcl->GetWeaponProjectileCountRange(
+                    0, minWeaponCount, maxWeaponCount);
+            }
+
+            if ( maxWeaponCount > 1 )
+            {
+                if ( minWeaponCount == maxWeaponCount )
+                    txt2 += fmt::sprintf("x%d", maxWeaponCount);
+                else
+                    txt2 += fmt::sprintf("x%d-%d", minWeaponCount,
+                                         maxWeaponCount);
+            }
+
+            // Cluster count uses the same compact fixed/range convention as
+            // num_weapons. Keep it as a separate multiplier so a carrier with
+            // num_weapons > 1 does not lose either authored count.
+            if ( weap->cluster.enable && weap->cluster.count > 0 &&
+                 weap->cluster.weapon_id > 0 )
+            {
+                int minClusterCount = 1;
+                int maxClusterCount = 1;
+                weap->cluster.GetCountRange(minClusterCount, maxClusterCount);
+
+                if ( maxClusterCount > 1 )
+                {
+                    if ( minClusterCount == maxClusterCount )
+                        txt2 += fmt::sprintf("x%d", maxClusterCount);
+                    else
+                        txt2 += fmt::sprintf("x%d-%d", minClusterCount,
+                                             maxClusterCount);
+                }
+            }
+        }
 
         sub_4E4F80(yw, wis, cur, xpos, ypos, effectiveEnergy, 100, 7, 7,
                    Locale::Text::HUD(Locale::HUDSTR_DMG), txt2, 1 | 2);
@@ -14179,22 +14154,6 @@ static void yw_RenderInfoMgunReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis,
                Locale::Text::HUD(Locale::HUDSTR_RLD), text);
 }
 
-static std::string yw_BuildInfoMgunDamageText(NC_STACK_ypabact *bact,
-                                                  World::TVhclProto *vhcl,
-                                                  int effectivePower)
-{
-    if ( !vhcl )
-        return std::string();
-
-    std::string text = fmt::sprintf("%d", effectivePower / 100);
-    const int mgunCount = bact ? std::max(1, bact->_num_mguns)
-                               : std::max(1, (int)vhcl->num_mguns);
-    if ( mgunCount > 1 )
-        text += fmt::sprintf(" x%d", mgunCount);
-
-    return text;
-}
-
 static void yw_RenderInfoMgunDamage(NC_STACK_ypaworld *yw, sklt_wis *wis,
                                     CmdStream *cur, NC_STACK_ypabact *bact,
                                     World::TVhclProto *vhcl,
@@ -14210,8 +14169,11 @@ static void yw_RenderInfoMgunDamage(NC_STACK_ypaworld *yw, sklt_wis *wis,
         ? bact->GetEffectiveOutgoingDamage(basePower)
         : basePower;
 
-    const std::string text = yw_BuildInfoMgunDamageText(
-        bact, vhcl, effectivePower);
+    std::string text = fmt::sprintf("%d", effectivePower / 100);
+    const int mgunCount = bact ? std::max(1, bact->_num_mguns)
+                               : std::max(1, (int)vhcl->num_mguns);
+    if ( mgunCount > 1 )
+        text += fmt::sprintf(" x%d", mgunCount);
 
     sub_4E4F80(yw, wis, cur, xpos, ypos, effectivePower, 100, 7, 7,
                Locale::Text::HUD(Locale::HUDSTR_DMG), text, 1 | 2);
@@ -14304,20 +14266,8 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
     {
         yw_RenderInfoWeaponName(yw, wis, cur, vhcl->mgun_name, xpos,
                                 ypos - wis->field_92 * 12.0);
-
-        const int mgunBasePower = (int)(bact
-            ? bact->GetMinigunPower()
-            : (vhcl->mgun_power_set ? vhcl->mgun_power : vhcl->gun_power));
-        const int mgunEffectivePower = bact
-            ? bact->GetEffectiveOutgoingDamage(mgunBasePower)
-            : mgunBasePower;
-        const std::string mgunDamageText = yw_BuildInfoMgunDamageText(
-            bact, vhcl, mgunEffectivePower);
-        const float mgunWireX = yw_GetInfoDamageWireX(
-            yw, xpos, mgunDamageText);
-
         yw_RenderInfoWeaponLikeWire(yw, wis, vhcl->mgun_wireframe,
-                                    &vhcl->wireframe_tint, mgunWireX,
+                                    &vhcl->wireframe_tint, xpos,
                                     ypos - wis->field_92 * 9.0);
         yw_RenderInfoMgunReloadbar(yw, wis, cur, bact, vhcl, xpos,
                                    ypos - wis->field_92 * 7.0);
@@ -14330,17 +14280,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
                                 yw->ResolveGameplayWeaponName(*weap), xpos,
                                 ypos - wis->field_92 * 12.0);
 
-        const int weaponBaseEnergy = weap->energy;
-        const int weaponEffectiveEnergy = bact
-            ? bact->GetEffectiveOutgoingDamage(weaponBaseEnergy)
-            : weaponBaseEnergy;
-        const std::string weaponDamageText = yw_BuildInfoWeaponDamageText(
-            bact, vhcl, weap, weaponEffectiveEnergy);
-        const float weaponWireX = yw_GetInfoDamageWireX(
-            yw, xpos, weaponDamageText);
-
-        yw_RenderInfoWeaponWire(yw, wis, weap, weaponWireX,
-                                ypos - wis->field_92 * 9.0);
+        yw_RenderInfoWeaponWire(yw, wis, weap, xpos, ypos - wis->field_92 * 9.0);
 
         // A Kamikaze payload is not a normally fireable/cooldown weapon, so
         // keep its name/wireframe/DMG visible without inventing a fake RLD.
