@@ -14080,7 +14080,7 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
                 txt2 = fmt::sprintf("%d x%d", effectiveEnergy / 100,
                                     maxWeaponCount);
             else
-                txt2 = fmt::sprintf("%d x%d - %d", effectiveEnergy / 100,
+                txt2 = fmt::sprintf("%d x%d-%d", effectiveEnergy / 100,
                                     minWeaponCount, maxWeaponCount);
         }
 

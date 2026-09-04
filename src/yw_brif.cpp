@@ -1973,7 +1973,7 @@ void yw_DebriefTechUpgradeLine(NC_STACK_ypaworld *yw, TBriefengScreen *brf, cons
                     v14 = fmt::sprintf("(%d x%d)", wpn->energy / 100,
                                        maxWeaponCount);
                 else
-                    v14 = fmt::sprintf("(%d x%d - %d)", wpn->energy / 100,
+                    v14 = fmt::sprintf("(%d x%d-%d)", wpn->energy / 100,
                                        minWeaponCount, maxWeaponCount);
             }
         }
