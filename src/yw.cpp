@@ -1259,7 +1259,7 @@ static std::string yw_SuperItemProfileKey(const std::string &id)
 
 bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles)
 {
-    static const std::string profilePath = "data:scripts/super_item_profiles.txt";
+    static const std::string profilePath = "data:scripts/super_item_profiles/super_item_profiles.txt";
     if ( !uaFileExist(profilePath) )
     {
         _superItemProfiles.clear();
@@ -1275,7 +1275,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     if ( !ScriptParser::ParseFile(profilePath, parsers,
                                   ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
     {
-        ypa_log_out("WARNING: Data/Scripts/super_item_profiles.txt is invalid; keeping the previously loaded profile set.\n");
+        ypa_log_out("WARNING: Data/Scripts/Super_Item_Profiles/Super_Item_Profiles.txt is invalid; keeping the previously loaded profile set.\n");
         return false;
     }
 
@@ -1376,7 +1376,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     {
         _superItemProfiles.swap(parsedProfiles);
     }
-    ypa_log_out("Loaded %u SuperItem profile(s) from Data/Scripts/super_item_profiles.txt.\n",
+    ypa_log_out("Loaded %u SuperItem profile(s) from Data/Scripts/Super_Item_Profiles/Super_Item_Profiles.txt.\n",
                 (unsigned)_superItemProfiles.size());
     return true;
 }
@@ -1480,9 +1480,6 @@ bool NC_STACK_ypaworld::LoadAtmosphericFXProfilePath(const std::string &authored
         parsedProfile.loop_sound_volume = 0;
     if ( parsedProfile.loop_sound_volume > 127 )
         parsedProfile.loop_sound_volume = 127;
-    if ( parsedProfile.loop_sound_radius < 0 )
-        parsedProfile.loop_sound_radius = 0;
-
     parsedProfile.valid = true;
     outProfile = std::move(parsedProfile);
     return true;
@@ -1705,6 +1702,7 @@ size_t NC_STACK_ypaworld::Deinit()
     StopAmbientLevelSound();
     StopAtmosphericFXLoopSound();
     ClearAtmosphericFXRuntime();
+    ClearMobilePowerFXRuntime();
     _atmosphericFXProfile = World::TAtmosphericFXProfile();
     ClearSuperItemRuntime();
     for (World::TSuperItemProfile &profile : _superItemProfiles)
@@ -3267,7 +3265,10 @@ bool NC_STACK_ypaworld::StartAtmosphericFXLoopSoundInstance(const World::TAtmosp
     sound.PSample = wav->GetSampleData();
     sound.Volume = (int16_t)std::max(0, std::min(profile.loop_sound_volume, 127));
     sound.Pitch = 0;
-    sound.Radius = (float)std::max(0, profile.loop_sound_radius);
+    // FX profile loop sounds are viewer-local by default. Context-specific
+    // bindings (for example Mobile Power) may override this with their own
+    // existing gameplay radius instead of duplicating a profile radius.
+    sound.Radius = 0.0f;
     sound.FadeDuration = 0.0;
     sound.PPFx = NULL;
     sound.PShkFx = NULL;
@@ -5133,6 +5134,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     StopAmbientLevelSound();
     StopAtmosphericFXLoopSound();
     ClearAtmosphericFXRuntime();
+    ClearMobilePowerFXRuntime();
     _atmosphericFXProfile = World::TAtmosphericFXProfile();
     ClearSuperItemRuntime();
 

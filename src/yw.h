@@ -2782,6 +2782,8 @@ public:
     void ClearAtmosphericFXRuntime();
     void UpdateAtmosphericFX();
     void UpdateSuperItemFalloutAtmosphericFX();
+    void UpdateMobilePowerFX();
+    void ClearMobilePowerFXRuntime();
     void ClearSuperItemRuntime();
     bool IsCustomSuperItem(const TMapSuperItem &sitem) const;
     const World::TSuperItemProfile *GetSuperItemProfile(const TMapSuperItem &sitem) const;
@@ -3020,6 +3022,7 @@ public:
         vec3d spin = vec3d(0.0, 0.0, 0.0);
         vec3d velocity = vec3d(0.0, 0.0, 0.0);
         bool atmosphericFX = false;
+        bool mobilePowerFX = false;
         // -1 = normal level Atmospheric FX; >= 0 = fallout owned by that SuperItem index.
         int32_t atmosphericSuperItemIndex = -1;
         bool chainFX = false;
@@ -3156,6 +3159,12 @@ public:
     std::vector<World::TRoboProto> _roboProtos;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
     World::TAtmosphericFXProfile _atmosphericFXProfile;
+
+    struct TMobilePowerFXSound
+    {
+        NC_STACK_sample *sample = NULL;
+        std::unique_ptr<TSndCarrier> carrier;
+    };
     std::vector<World::TAtmosphericFXProfile> _superItemFalloutAtmosphericFXProfiles;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemSoundCarriers;
     std::vector<std::unique_ptr<TSndCarrier>> _superItemWaveSoundCarriers;
@@ -3166,6 +3175,8 @@ public:
     TSndCarrier _ambientSoundCarrier;
     NC_STACK_sample *_atmosphericFXLoopSoundSample = NULL;
     TSndCarrier _atmosphericFXLoopSoundCarrier;
+    std::map<std::string, World::TAtmosphericFXProfile> _mobilePowerFXProfileCache;
+    std::map<int32_t, TMobilePowerFXSound> _mobilePowerFXSounds;
 
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;
