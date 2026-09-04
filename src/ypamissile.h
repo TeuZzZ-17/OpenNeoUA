@@ -119,6 +119,10 @@ public:
     // resolved velocity without applying the angle twice.
     void SetupArcGrenadeLaunch(float angleDegrees, float gravity, float startSpeed);
     void SetupArcGrenadeVelocity(const vec3d &velocity, float gravity);
+    void ConfigureSpawnedProjectileBase(NC_STACK_ypabact *launcher,
+                                        NC_STACK_yparobo *hostStation,
+                                        uint8_t owner,
+                                        const vec3d &direction);
     virtual void SetClusterSpawnedChild(bool child);
     void ConfigureWeaponTracer(const World::TWeaponTracerConfig &config,
                                bool supported);
@@ -181,7 +185,7 @@ protected:
     void ApplyAttachedDirectHitDamage();
     void SteerHomingBombDirection(float dtime);
     void UpdateArcGrenadeBallistic(float dtime);
-    bool TryClusterSplit();
+    bool TryClusterSplit(bool impactOrDetonation = false);
     bool CanChainToTarget(NC_STACK_ypabact *target, NC_STACK_ypabact *currentHit) const;
     NC_STACK_ypabact *FindNextChainTarget(NC_STACK_ypabact *currentHit) const;
     bool SpawnChainProjectile(const vec3d &originPos, float originRadius, NC_STACK_ypabact *nextTarget, int childEnergy);

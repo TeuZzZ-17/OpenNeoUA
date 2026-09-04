@@ -479,11 +479,23 @@ struct TSuperItemProfile
 
 struct TWeaponClusterConfig
 {
+    enum { MAX_COUNT = 64 };
+
     bool enable = false;
     int generations = 0;
+    // count remains the scalar/lower endpoint for source compatibility.
+    // count_max is equal to count for a fixed authored value.
     int count = 0;
+    int count_max = 0;
+    void GetCountRange(int &minCount, int &maxCount) const;
     int16_t weapon_id = 0;
     int trigger_time = 0;
+    bool horizontal_angle_set = false;
+    float horizontal_angle_min = 0.0f;
+    float horizontal_angle_max = 0.0f;
+    bool vertical_angle_set = false;
+    float vertical_angle_min = 0.0f;
+    float vertical_angle_max = 0.0f;
     float spread_x = 0.0;
     float spread_y = 0.0;
     int16_t vp = 0;
@@ -1034,6 +1046,13 @@ struct TWeapProto
     TSndFxPosParam shk_launch_player;
     TWeaponDebuffConfig debuff;
     TWeaponClusterConfig cluster;
+    // OpenNeoUA UI helper: combines the carrier num_weapons range with
+    // this weapon's valid cluster_count range into one total min/max.
+    // Gameplay rolls stay independent; this is only a compact readout.
+    void GetCombinedProjectileCountRange(int carrierMinCount,
+                                         int carrierMaxCount,
+                                         int &minCount,
+                                         int &maxCount) const;
     TWeaponChainConfig chain;
     TDecorationFXConfig decoration_fx;
 //    int field_870 = 0;

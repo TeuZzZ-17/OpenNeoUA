@@ -240,50 +240,6 @@ static NC_STACK_ypabact *ypamissile_FindLiveBactByGid(World::RefBactList &list, 
     return NULL;
 }
 
-static vec3d ypamissile_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY)
-{
-    if ( spreadX <= 0.0 && spreadY <= 0.0 )
-        return direction;
-
-    vec3d aimDir = direction;
-
-    if ( aimDir.normalise() <= 0.001 )
-        return direction;
-
-    vec3d right = rotation.AxisX();
-    right -= aimDir * right.dot(aimDir);
-
-    if ( right.normalise() <= 0.001 )
-    {
-        vec3d refAxis = fabs(aimDir.y) < 0.99 ? vec3d::OY(1.0) : vec3d::OX(1.0);
-        right = refAxis * aimDir;
-    }
-
-    if ( right.normalise() <= 0.001 )
-        return aimDir;
-
-    vec3d up = aimDir * right;
-
-    if ( up.normalise() <= 0.001 )
-        return aimDir;
-
-    float randX = 0.0;
-    float randY = 0.0;
-
-    if ( spreadX > 0.0 )
-        randX = (((float)rand() / (float)RAND_MAX) * 2.0 - 1.0) * tan(spreadX * C_PI_180);
-
-    if ( spreadY > 0.0 )
-        randY = (((float)rand() / (float)RAND_MAX) * 2.0 - 1.0) * tan(spreadY * C_PI_180);
-
-    aimDir += right * randX + up * randY;
-
-    if ( aimDir.normalise() > 0.001 )
-        return aimDir;
-
-    return direction;
-}
-
 size_t NC_STACK_ypamissile::Init(IDVList &stak)
 {
     if ( !NC_STACK_ypabact::Init(stak) )
@@ -674,7 +630,7 @@ void NC_STACK_ypamissile::Render(baseRender_msg *arg)
     RenderWeaponTracer(arg);
 }
 
-bool NC_STACK_ypamissile::TryClusterSplit()
+bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
 {
     if ( !_world || !_mislEmitter || _mislClusterDone || _mislClusterChild )
         return false;
@@ -690,7 +646,9 @@ bool NC_STACK_ypamissile::TryClusterSplit()
     if ( !cluster.enable || cluster.count <= 0 || cluster.weapon_id <= 0 )
         return false;
 
-    if ( _mislClusterAge < cluster.trigger_time )
+    if ( !World::IsWeaponClusterTriggerDue(cluster.trigger_time,
+                                            _mislClusterAge,
+                                            impactOrDetonation) )
         return false;
 
     int childClusterGeneration = _mislClusterGeneration + 1;
@@ -741,8 +699,21 @@ bool NC_STACK_ypamissile::TryClusterSplit()
         childTargetPos = _primTpos;
     }
 
-    int spawnCount = std::min(cluster.count, 64);
+    int countMin = 1;
+    int countMax = 1;
+    cluster.GetCountRange(countMin, countMax);
+    int spawnCount = World::RandomIntRangeInclusive(countMin, countMax);
     int spawned = 0;
+
+    const bool hasClusterAngles = cluster.horizontal_angle_set ||
+                                  cluster.vertical_angle_set;
+    float horizontalMin = cluster.horizontal_angle_min;
+    float horizontalMax = cluster.horizontal_angle_max;
+    if ( horizontalMax < horizontalMin )
+        std::swap(horizontalMin, horizontalMax);
+    const bool evenlyDistributeYaw =
+        cluster.horizontal_angle_set &&
+        std::fabs((horizontalMax - horizontalMin) - 360.0f) <= 0.001f;
 
     for (int i = 0; i < spawnCount; i++)
     {
@@ -755,20 +726,59 @@ bool NC_STACK_ypamissile::TryClusterSplit()
         if ( !child )
             continue;
 
-        vec3d childDir = ypamissile_ApplyDirectionalSpread(_rotation, baseDir, cluster.spread_x, cluster.spread_y);
+        vec3d childDir = baseDir;
+        if ( hasClusterAngles )
+        {
+            vec3d localDir = World::ResolveYawPitchDirection(
+                cluster.horizontal_angle_set,
+                horizontalMin,
+                horizontalMax,
+                cluster.vertical_angle_set,
+                cluster.vertical_angle_min,
+                cluster.vertical_angle_max,
+                i,
+                spawnCount,
+                evenlyDistributeYaw);
+            childDir = _rotation.Transpose().Transform(localDir);
+            if ( childDir.normalise() <= 0.001f )
+                childDir = baseDir;
+        }
 
-        child->SetLauncherBact(_mislEmitter);
+        // Cluster spread remains an independent deviation applied after the
+        // new yaw/pitch base direction, so both controls compose.
+        childDir = World::ApplyDirectionalSpread(_rotation, childDir,
+                                                  cluster.spread_x,
+                                                  cluster.spread_y);
+
+        NC_STACK_yparobo *childHost = _host_station
+                                          ? _host_station
+                                          : _mislEmitter->_host_station;
+        child->ConfigureSpawnedProjectileBase(_mislEmitter, childHost,
+                                               _owner, childDir);
         child->SetClusterSpawnedChild(cluster.generations <= 0);
         child->_mislClusterGeneration = childClusterGeneration;
-        child->SetStartHeight(arg147.pos.y);
-        child->_owner = _owner;
-        child->_host_station = _host_station;
-        child->_fly_dir = childDir;
         if ( childProto.IsArcGrenade() )
         {
-            child->SetupArcGrenadeLaunch(childProto.grenade_arc_angle,
-                                         childProto.grenade_arc_gravity,
-                                         childProto.start_speed);
+            if ( hasClusterAngles )
+            {
+                // The Cluster angles and subsequent spread are already the
+                // complete authored launch direction. Commit that vector to
+                // the Arc Grenade runtime without overwriting its pitch.
+                const float childSpeed =
+                    std::isfinite(childProto.start_speed) && childProto.start_speed > 0.0f
+                        ? childProto.start_speed
+                        : 0.0f;
+                child->SetupArcGrenadeVelocity(child->_fly_dir * childSpeed,
+                                               childProto.grenade_arc_gravity);
+            }
+            else
+            {
+                // No Cluster angles: preserve the legacy Arc Grenade launch
+                // path, including grenade_arc_angle.
+                child->SetupArcGrenadeLaunch(childProto.grenade_arc_angle,
+                                             childProto.grenade_arc_gravity,
+                                             childProto.start_speed);
+            }
         }
         else
         {
@@ -3362,6 +3372,10 @@ void NC_STACK_ypamissile::Impact()
     ApplyBuildingAreaDamage();
     ApplySectorAreaDamage();
 
+    // A missing, zero or invalid cluster_trigger_time uses the existing
+    // impact/detonation path. Positive times are handled only by AI_layer3.
+    TryClusterSplit(true);
+
     // F10 debug overlay: record transient AoE rings at the impact point (no gameplay effect).
     if ( _world && _world->_showCollDebug && !_isArtilleryShellProjectile )
     {
@@ -3654,6 +3668,19 @@ void NC_STACK_ypamissile::SetClusterSpawnedChild(bool child)
     _mislClusterChild = child;
     _mislClusterDone = child;
     _mislClusterAge = 0;
+}
+
+void NC_STACK_ypamissile::ConfigureSpawnedProjectileBase(
+    NC_STACK_ypabact *launcher,
+    NC_STACK_yparobo *hostStation,
+    uint8_t owner,
+    const vec3d &direction)
+{
+    SetLauncherBact(launcher);
+    SetStartHeight(_position.y);
+    _owner = owner;
+    _host_station = hostStation;
+    _fly_dir = direction;
 }
 
 

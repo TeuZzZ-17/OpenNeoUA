@@ -4288,19 +4288,6 @@ void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
         ClearActiveDebuff();
 }
 
-static int ypabact_RandomInRange(int minValue, int maxValue)
-{
-    if ( maxValue < minValue )
-        std::swap(minValue, maxValue);
-
-    if ( minValue == maxValue )
-        return minValue;
-
-    double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
-    int64_t range = (int64_t)maxValue - minValue;
-    return minValue + (int)((range + 1) * randomPart);
-}
-
 static bool ypabact_GetRandomFXSpawnCount(int configuredMin, int configuredMax, int &spawnCount)
 {
     int countMin = std::max(0, std::min(configuredMin, 32));
@@ -4312,7 +4299,7 @@ static bool ypabact_GetRandomFXSpawnCount(int configuredMin, int configuredMax, 
     if ( countMax < countMin )
         std::swap(countMin, countMax);
 
-    spawnCount = ypabact_RandomInRange(countMin, countMax);
+    spawnCount = World::RandomIntRangeInclusive(countMin, countMax);
     return spawnCount > 0;
 }
 
@@ -4326,7 +4313,7 @@ static void ypabact_ShuffleDamagedVisuals(std::vector<TDamagedVisualRef> &visual
 {
     for (size_t remaining = visuals.size(); remaining > 1; --remaining)
     {
-        size_t randomIndex = (size_t)ypabact_RandomInRange(0, (int)remaining - 1);
+        size_t randomIndex = (size_t)World::RandomIntRangeInclusive(0, (int)remaining - 1);
         std::swap(visuals[remaining - 1], visuals[randomIndex]);
     }
 }
@@ -4511,7 +4498,7 @@ static void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
     if ( !world )
         return;
 
-    int spawnCount = ypabact_RandomInRange(config.count_min, config.count_max);
+    int spawnCount = World::RandomIntRangeInclusive(config.count_min, config.count_max);
     const vec3d axisScale(config.scale, config.scale, config.scale);
 
     for (int i = 0; i < spawnCount; i++)
@@ -8272,7 +8259,6 @@ static vec3d ypabact_ApplyWeaponDirectionPattern(const mat3x3 &rotation, const v
                                                    int shotIndex, int weaponCount,
                                                    float arcX, float arcY, float coneXY);
 static vec3d ypabact_ApplyDirectionalOffset(const mat3x3 &rotation, const vec3d &direction, float offsetX, float offsetY);
-static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY);
 static vec3d ypabact_GetCockpitAimDirection(NC_STACK_ypabact *bact, const vec3d &origin, const vec3d &viewDir, const vec3d &fallbackDir, float range);
 
 static bool ypabact_IsValidWeaponId(NC_STACK_ypabact *bact, int weaponId)
@@ -9920,36 +9906,16 @@ bool NC_STACK_ypabact::CanUseProximityDefense()
 
 static vec3d ypabact_GetProximityDefenseLocalDirection(NC_STACK_ypabact *unit, int shotIndex, int totalShots)
 {
-    float yaw = ((float)shotIndex / (float)totalShots) * 360.0;
-    float pitch = 0.0;
-
-    if ( unit->_proximity_defense_horizontal_angle_set )
-    {
-        float yawMin = unit->_proximity_defense_horizontal_angle_min;
-        float yawMax = unit->_proximity_defense_horizontal_angle_max;
-
-        if ( yawMin > yawMax )
-            std::swap(yawMin, yawMax);
-
-        yaw = yawMin + ((float)rand() / (float)RAND_MAX) * (yawMax - yawMin);
-    }
-
-    if ( unit->_proximity_defense_vertical_angle_set )
-    {
-        float pitchMin = unit->_proximity_defense_vertical_angle_min;
-        float pitchMax = unit->_proximity_defense_vertical_angle_max;
-
-        if ( pitchMin > pitchMax )
-            std::swap(pitchMin, pitchMax);
-
-        pitch = pitchMin + ((float)rand() / (float)RAND_MAX) * (pitchMax - pitchMin);
-    }
-
-    float yawRad = yaw * C_PI / 180.0;
-    float pitchRad = pitch * C_PI / 180.0;
-    float horizontal = cos(pitchRad);
-
-    return vec3d(sin(yawRad) * horizontal, sin(pitchRad), cos(yawRad) * horizontal);
+    return World::ResolveYawPitchDirection(
+        unit->_proximity_defense_horizontal_angle_set,
+        unit->_proximity_defense_horizontal_angle_min,
+        unit->_proximity_defense_horizontal_angle_max,
+        unit->_proximity_defense_vertical_angle_set,
+        unit->_proximity_defense_vertical_angle_min,
+        unit->_proximity_defense_vertical_angle_max,
+        shotIndex,
+        totalShots,
+        !unit->_proximity_defense_horizontal_angle_set);
 }
 
 static bool ypabact_IsLiveProximityMissileOwner(NC_STACK_ypabact *candidate, NC_STACK_ypabact *unit)
@@ -10022,10 +9988,11 @@ static bool ypabact_FireProximityDefenseShot(NC_STACK_ypabact *unit, int shotInd
 
     NC_STACK_ypabact *liveLauncher = missileListOwner ? missileListOwner : unit;
 
-    wobj->SetLauncherBact(liveLauncher);
-    wobj->SetStartHeight(arg147.pos.y);
-    wobj->_owner = unit->_owner;
-    wobj->_fly_dir = shotDir;
+    NC_STACK_yparobo *hostStation = unit->_host_station
+                                        ? unit->_host_station
+                                        : (liveLauncher ? liveLauncher->_host_station : NULL);
+    wobj->ConfigureSpawnedProjectileBase(liveLauncher, hostStation,
+                                         unit->_owner, shotDir);
     wobj->_fly_dir_length = unit->_fly_dir_length + wproto.start_speed;
 
     if ( !(wproto._weaponFlags & 0x12) )
@@ -10066,7 +10033,6 @@ static bool ypabact_FireProximityDefenseShot(NC_STACK_ypabact *unit, int shotInd
         wobj->SetTarget(&target);
     }
 
-    wobj->_host_station = unit->_host_station ? unit->_host_station : (liveLauncher ? liveLauncher->_host_station : NULL);
     SFXEngine::SFXe.startSound(&wobj->_soundcarrier, 1);
 
     if ( wobj->_primTtype != BACT_TGT_TYPE_UNIT && wproto.life_time_nt )
@@ -13964,8 +13930,8 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         const float effectiveSpreadX = _weapon_spread_x * handBrakeSpreadScale;
         const float effectiveSpreadY = _weapon_spread_y * handBrakeSpreadScale;
         if ( effectiveSpreadX > 0.0f || effectiveSpreadY > 0.0f )
-            wobj->_fly_dir = ypabact_ApplyDirectionalSpread(_rotation, wobj->_fly_dir,
-                                                            effectiveSpreadX, effectiveSpreadY);
+            wobj->_fly_dir = World::ApplyDirectionalSpread(_rotation, wobj->_fly_dir,
+                                                           effectiveSpreadX, effectiveSpreadY);
 
         if ( wproto.IsArcGrenade() )
         {
@@ -17628,23 +17594,6 @@ static vec3d ypabact_ApplyDirectionalOffset(const mat3x3 &rotation,
     return direction;
 }
 
-static vec3d ypabact_ApplyDirectionalSpread(const mat3x3 &rotation, const vec3d &direction, float spreadX, float spreadY)
-{
-    if ( spreadX <= 0.0 && spreadY <= 0.0 )
-        return direction;
-
-    float randX = 0.0;
-    float randY = 0.0;
-
-    if ( spreadX > 0.0 )
-        randX = (((float)rand() / (float)RAND_MAX) * 2.0 - 1.0) * tan(spreadX * C_PI_180);
-
-    if ( spreadY > 0.0 )
-        randY = (((float)rand() / (float)RAND_MAX) * 2.0 - 1.0) * tan(spreadY * C_PI_180);
-
-    return ypabact_ApplyDirectionalOffset(rotation, direction, randX, randY);
-}
-
 static vec3d ypabact_GetCockpitViewDirection(NC_STACK_ypabact *bact, const vec3d &viewDir)
 {
     vec3d forward = viewDir;
@@ -18050,7 +17999,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         vec3d fireDir = ypabact_GetMinigunFireDir(this, arg->field_0);
         if ( cockpitAim )
             fireDir = ypabact_GetCockpitViewDirection(this, fireDir);
-        vec3d shotDir = ypabact_ApplyDirectionalSpread(_rotation, fireDir, spreadX, spreadY);
+        vec3d shotDir = World::ApplyDirectionalSpread(_rotation, fireDir, spreadX, spreadY);
         float minigunTraceRange = ypabact_GetMinigunRange();
 
         // Resolve the nearest world obstruction before applying unit damage.
