@@ -4629,8 +4629,20 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "cluster_count") )
     {
-        int count = parser.stol(p2, NULL, 0);
-        _wpn->cluster.count = count > 0 ? count : 0;
+        int countMin = 0;
+        int countMax = 0;
+        if ( World::ParsePositiveIntRangeValue(
+                 p2, (int)TWeaponClusterConfig::MAX_COUNT,
+                 countMin, countMax) )
+        {
+            _wpn->cluster.count = countMin;
+            _wpn->cluster.count_max = countMax;
+        }
+        else
+        {
+            _wpn->cluster.count = 0;
+            _wpn->cluster.count_max = 0;
+        }
     }
     else if ( !StriCmp(p1, "cluster_weapon_id") )
     {
@@ -4639,8 +4651,35 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "cluster_trigger_time") )
     {
-        int triggerTime = parser.stol(p2, NULL, 0);
-        _wpn->cluster.trigger_time = triggerTime > 0 ? triggerTime : 0;
+        int triggerTime = 0;
+        int triggerTimeMax = 0;
+        _wpn->cluster.trigger_time =
+            ParseScriptIntRange(p2, triggerTime, triggerTimeMax) &&
+            triggerTime == triggerTimeMax && triggerTime > 0
+                ? triggerTime
+                : 0;
+    }
+    else if ( !StriCmp(p1, "cluster_horizontal_angle") )
+    {
+        float angleMin = 0.0f;
+        float angleMax = 0.0f;
+        _wpn->cluster.horizontal_angle_set =
+            ParseScriptFloatRange(p2, angleMin, angleMax);
+        _wpn->cluster.horizontal_angle_min =
+            _wpn->cluster.horizontal_angle_set ? angleMin : 0.0f;
+        _wpn->cluster.horizontal_angle_max =
+            _wpn->cluster.horizontal_angle_set ? angleMax : 0.0f;
+    }
+    else if ( !StriCmp(p1, "cluster_vertical_angle") )
+    {
+        float angleMin = 0.0f;
+        float angleMax = 0.0f;
+        _wpn->cluster.vertical_angle_set =
+            ParseScriptFloatRange(p2, angleMin, angleMax);
+        _wpn->cluster.vertical_angle_min =
+            _wpn->cluster.vertical_angle_set ? angleMin : 0.0f;
+        _wpn->cluster.vertical_angle_max =
+            _wpn->cluster.vertical_angle_set ? angleMax : 0.0f;
     }
     else if ( !StriCmp(p1, "cluster_spread_x") )
     {
