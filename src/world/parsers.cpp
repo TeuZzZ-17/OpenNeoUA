@@ -2778,6 +2778,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->power_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
+    else if ( !StriCmp(p1, "power_fx_profile") )
+    {
+        _vhcl->power_fx_profile = p2;
+    }
     else if ( !StriCmp(p1, "spy_ui_radius") )
     {
         // Vehicle-side and intentionally runtime-active only for model = ufo.
@@ -4027,6 +4031,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->power = 0;
         _vhcl->power_radius = 0.0;
         _vhcl->power_falloff = 1;
+        _vhcl->power_fx_profile.clear();
         _vhcl->spy_ui_radius = 0.0f;
         _vhcl->zoom_steps = -1;
         _vhcl->damaged_force_malus = 0.0;
@@ -5838,7 +5843,7 @@ bool AtmosphericFXProfileParser::IsScope(ScriptParser::Parser &parser,
                                          const std::string &word,
                                          const std::string &opt)
 {
-    if ( StriCmp(word, "begin_atmospheric_fx_profile") )
+    if ( StriCmp(word, "begin_fx_profile") )
         return false;
 
     if ( _seenScope )
@@ -5879,8 +5884,6 @@ int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
         _profile.loop_sound = p2;
     else if ( !StriCmp(p1, "loop_sound_volume") )
         _profile.loop_sound_volume = parser.stol(p2, NULL, 0);
-    else if ( !StriCmp(p1, "loop_sound_radius") )
-        _profile.loop_sound_radius = parser.stol(p2, NULL, 0);
     else if ( !StriCmp(p1, "mesh_3ds") )
         _profile.mesh3ds = p2;
     else if ( !StriCmp(p1, "count") )
@@ -6134,8 +6137,8 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->wave_3ds = p2;
     else if ( !StriCmp(p1, "wave_base") )
         _profile->wave_base = p2;
-    else if ( !StriCmp(p1, "fallout_atmospheric_fx_profile") )
-        _profile->fallout_atmospheric_fx_profile = p2;
+    else if ( !StriCmp(p1, "fallout_fx_profile") )
+        _profile->fallout_fx_profile = p2;
     else if ( !StriCmp(p1, "wave_scale_x") )
         _profile->wave_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_scale_y") )
