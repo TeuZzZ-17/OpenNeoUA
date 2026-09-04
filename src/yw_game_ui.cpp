@@ -14061,14 +14061,27 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
         }
         else
         {
-            int weaponCount = bact
-                                  ? bact->GetCurrentWeaponProjectileCount()
-                                  : (vhcl->num_weapons <= 1 ? 1 : vhcl->num_weapons);
+            int minWeaponCount = 1;
+            int maxWeaponCount = 1;
+            if ( bact )
+            {
+                bact->GetCurrentWeaponProjectileCountRange(
+                    &minWeaponCount, &maxWeaponCount);
+            }
+            else if ( vhcl )
+            {
+                vhcl->GetWeaponProjectileCountRange(
+                    0, minWeaponCount, maxWeaponCount);
+            }
 
-            if ( weaponCount <= 1 )
+            if ( maxWeaponCount <= 1 )
                 txt2 = fmt::sprintf("%d", effectiveEnergy / 100);
+            else if ( minWeaponCount == maxWeaponCount )
+                txt2 = fmt::sprintf("%d x%d", effectiveEnergy / 100,
+                                    maxWeaponCount);
             else
-                txt2 = fmt::sprintf("%d x%d", effectiveEnergy / 100, weaponCount);
+                txt2 = fmt::sprintf("%d x%d - %d", effectiveEnergy / 100,
+                                    minWeaponCount, maxWeaponCount);
         }
 
         sub_4E4F80(yw, wis, cur, xpos, ypos, effectiveEnergy, 100, 7, 7,

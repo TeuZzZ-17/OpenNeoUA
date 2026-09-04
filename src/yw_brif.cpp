@@ -1962,10 +1962,19 @@ void yw_DebriefTechUpgradeLine(NC_STACK_ypaworld *yw, TBriefengScreen *brf, cons
             {
                 v13 = Locale::Text::Advanced(Locale::ADV_WEAPONUPG);
 
-                if ( vhcl->num_weapons > 1 )
-                    v14 = fmt::sprintf("(%d x%d)", wpn->energy / 100, vhcl->num_weapons);
-                else
+                int minWeaponCount = 1;
+                int maxWeaponCount = 1;
+                vhcl->GetWeaponProjectileCountRange(
+                    0, minWeaponCount, maxWeaponCount);
+
+                if ( maxWeaponCount <= 1 )
                     v14 = fmt::sprintf("(%d)", wpn->energy / 100);
+                else if ( minWeaponCount == maxWeaponCount )
+                    v14 = fmt::sprintf("(%d x%d)", wpn->energy / 100,
+                                       maxWeaponCount);
+                else
+                    v14 = fmt::sprintf("(%d x%d - %d)", wpn->energy / 100,
+                                       minWeaponCount, maxWeaponCount);
             }
         }
         break;

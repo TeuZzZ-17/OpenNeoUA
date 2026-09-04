@@ -618,6 +618,11 @@ struct TVhclProto
     // OpenNeoUA custom: optional projectile-count overrides for weapon_2/_3/_4.
     // A zero value inherits the primary num_weapons count.
     std::array<int16_t, 3> extra_num_weapons = {0, 0, 0};
+    // OpenNeoUA custom: inclusive min_max authoring for projectile counts.
+    // The scalar fields above remain the legacy/lower-endpoint compatibility
+    // values; zero on an extra slot still means "inherit primary".
+    std::array<int16_t, 3> extra_num_weapons_min = {0, 0, 0};
+    std::array<int16_t, 3> extra_num_weapons_max = {0, 0, 0};
     int weapon_player_switch_mode = WEAPON_PLAYER_SWITCH_MODE_SEQUENCE;
     int weapon_ai_switch_mode = WEAPON_AI_SWITCH_MODE_SEQUENCE;
     int field_4 = 0;
@@ -776,6 +781,9 @@ struct TVhclProto
     bool fire_x_slots_defined = false;
     bool fire_x_advanced = false;
     int16_t num_weapons = 0;
+    int16_t num_weapons_min = 0;
+    int16_t num_weapons_max = 0;
+    void GetWeaponProjectileCountRange(int sourceSlot, int &minCount, int &maxCount) const;
     float gun_power = 0.0;
     float gun_radius = 0.0;
     int kill_after_shot = 0;
