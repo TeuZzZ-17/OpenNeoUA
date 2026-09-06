@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include "3ds.h"
 
 #include "image.h"
@@ -27,41 +29,65 @@ size_t NC_STACK_3ds::Deinit()
 
 bool NC_STACK_3ds::LoadFromFile(const std::string &filename)
 {
-    FSMgr::FileHandle fil = FSMgr::iDir::openFile(filename, "rb");
+    FSMgr::FileHandle fil = uaOpenFile(filename, "rb");
 
     if (!fil.OK())
         return false;
+
+    std::string normalized = filename;
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    const size_t slash = normalized.find_last_of('/');
+    _sourceDir = slash == std::string::npos ? std::string() : normalized.substr(0, slash);
 
     return LoadFromFile(&fil);
 }
 
 bool NC_STACK_3ds::LoadFromFile(FSMgr::FileHandle *fil)
 {
+    // A loader instance owns one parsed asset. Do not replace live resources.
+    if (!fil || !fil->OK() || _skeleton || !materials.empty())
+        return false;
+    const size_t start = fil->tell();
+    if (fil->seek(0, SEEK_END) != 0)
+        return false;
+    _fileEnd = fil->tell();
+    if (fil->seek(start, SEEK_SET) != 0 || !requireBytes(fil, 6))
+        return false;
     if (fil->readU16L() != 0x4D4D)
         return false;
-
-    size_t datSz = fil->readU32L() - 6;
+    const size_t mainSize = fil->readU32L();
+    if (mainSize < 6 || mainSize > _fileEnd - start)
+        return false;
+    _legacyNameBudget = _fileEnd - start - mainSize;
+    size_t datSz = mainSize - 6;
     size_t readed = 0;
 
-    while (readed < datSz)
+    while (!_parseError && readed < datSz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        datSz += 6;
-
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, datSz, readed, tag, tagsz))
+            break;
         switch(tag)
         {
-        case 0x3D3D: //Object
+        case 0x3D3D: // Editor
             readed += readChunkEditor(fil, tagsz);
             break;
-
         default:
             fil->seek(tagsz, SEEK_CUR);
             readed += tagsz;
             break;
         }
     }
+    if (_parseError || fil->readErr() || readed != datSz ||
+        fil->tell() != start + mainSize + _legacyNameBytes ||
+        (_legacyNameLengths && _legacyNameBytes != _legacyNameBudget))
+        return false;
+
+    // FaceMaterial may precede its Material, even in another Editor block.
+    for (size_t i = 0; i < _faceMaterialNames.size(); ++i)
+        faceMaterial[i] = findMaterial(_faceMaterialNames[i]);
+    std::vector<std::string>().swap(_faceMaterialNames);
 
     RecalcInternal();
     MakeCoordsCache();
@@ -71,19 +97,10 @@ bool NC_STACK_3ds::LoadFromFile(FSMgr::FileHandle *fil)
 
 NC_STACK_3ds *NC_STACK_3ds::Load3DS(const std::string &filename)
 {
-    FSMgr::FileHandle fil = uaOpenFile(filename, "rb");
-    if (!fil.OK())
-        return NULL;
-
     NC_STACK_3ds *tmp = Nucleus::CInit<NC_STACK_3ds>();
-
-    std::string normalized = filename;
-    std::replace(normalized.begin(), normalized.end(), '\\', '/');
-    const size_t slash = normalized.find_last_of('/');
-    if ( slash != std::string::npos )
-        tmp->_sourceDir = normalized.substr(0, slash);
-
-    if(tmp->LoadFromFile(&fil))
+    if (!tmp)
+        return NULL;
+    if(tmp->LoadFromFile(filename))
         return tmp;
 
     tmp->Delete();
@@ -92,17 +109,13 @@ NC_STACK_3ds *NC_STACK_3ds::Load3DS(const std::string &filename)
 
 size_t NC_STACK_3ds::readChunkEditor(FSMgr::FileHandle *fil, size_t sz)
 {
-    printf("3D3D\n");
     size_t readed = 0;
 
-    while (readed < sz)
+    while (!_parseError && readed < sz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        readed += 6;
-
-        if (tagsz > 100 * 1024 * 1024)
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, sz, readed, tag, tagsz))
             break;
 
         switch(tag)
@@ -129,19 +142,14 @@ size_t NC_STACK_3ds::readChunkObject(FSMgr::FileHandle *fil, size_t sz)
 {
     size_t readed = 0;
 
-    while (fil->readU8() != 0)
-        readed++;
+    std::string objectName;
+    readed += readName(fil, &objectName, sz, false, false);
 
-    readed++;
-
-    while (readed < sz)
+    while (!_parseError && readed < sz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        readed += 6;
-
-        if (tagsz > 100 * 1024 * 1024)
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, sz, readed, tag, tagsz))
             break;
 
         switch(tag)
@@ -162,16 +170,26 @@ size_t NC_STACK_3ds::readChunkObject(FSMgr::FileHandle *fil, size_t sz)
 
 size_t NC_STACK_3ds::readChunkTrimesh(FSMgr::FileHandle *fil, size_t sz)
 {
+    if (!_skeleton)
+        _skeleton = Nucleus::CInit<NC_STACK_skeleton>({
+            {NC_STACK_rsrc::RSRC_ATT_NAME, std::string("3ds_sklt")},
+            {NC_STACK_rsrc::RSRC_ATT_TRYSHARED, (int32_t)2}});
+    if (!_skeleton)
+    {
+        _parseError = true;
+        return 0;
+    }
+    UAskeleton::Data *dat = _skeleton->GetSkelet();
+    _meshVertexStart = dat->POO.size();
+    _meshFaceStart = dat->polygons.size();
+    _meshVertices = _meshFaces = _meshUV = false;
     size_t readed = 0;
 
-    while (readed < sz)
+    while (!_parseError && readed < sz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        readed += 6;
-
-        if (tagsz > 100 * 1024 * 1024)
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, sz, readed, tag, tagsz))
             break;
 
         switch(tag)
@@ -186,18 +204,22 @@ size_t NC_STACK_3ds::readChunkTrimesh(FSMgr::FileHandle *fil, size_t sz)
 
         case 0x4140: //Vertex coords
         {
-            printf("tex coords\n");
+            if (_meshUV || tagsz < 2 || !requireBytes(fil, 2))
+            { _parseError = true; return 0; }
+            _meshUV = true;
             uint16_t coNum = fil->readU16L();
-            readed += 2;
-
-            texCoords.resize(coNum);
-
-            for(tUtV &uv : texCoords)
+            if (tagsz != 2 + size_t(coNum) * 8 || !requireBytes(fil, size_t(coNum) * 8))
+            { _parseError = true; return 0; }
+            texCoords.resize(_meshVertexStart + coNum);
+            for (size_t i = _meshVertexStart; i < texCoords.size(); ++i)
             {
+                tUtV &uv = texCoords[i];
                 uv.tu = fil->readFloatL();
                 uv.tv = fil->readFloatL();
-                readed += 8;
+                if (!std::isfinite(uv.tu) || !std::isfinite(uv.tv))
+                    _parseError = true;
             }
+            readed += tagsz;
         }
         break;
 
@@ -208,6 +230,23 @@ size_t NC_STACK_3ds::readChunkTrimesh(FSMgr::FileHandle *fil, size_t sz)
         }
     }
 
+    if (_parseError)
+        return 0;
+    if ((_meshFaces && !_meshVertices) || (_meshUV && texCoords.size() != dat->POO.size()))
+    { _parseError = true; return 0; }
+    texCoords.resize(dat->POO.size()); // Missing UVs remain unused, not synthesized.
+    const size_t vertexCount = dat->POO.size() - _meshVertexStart;
+    for (size_t i = _meshFaceStart; i < dat->polygons.size(); ++i)
+    {
+        _faceHasUV[i] = _meshUV;
+        for (int j = 0; j < 3; ++j)
+        {
+            int32_t &idx = dat->polygons[i].v[j];
+            if (idx < 0 || size_t(idx) >= vertexCount)
+            { _parseError = true; return 0; }
+            idx += _meshVertexStart;
+        }
+    }
     return readed;
 }
 
@@ -215,25 +254,29 @@ size_t NC_STACK_3ds::readChunkVertex(FSMgr::FileHandle *fil, size_t sz)
 {
     size_t readed = 0;
 
+    if (_meshVertices || sz < 2 || !requireBytes(fil, 2))
+    { _parseError = true; return 0; }
+    _meshVertices = true;
     uint16_t numvertex = fil->readU16L();
     readed += 2;
 
-    printf("vtx %d\n", numvertex);
 
-    _skeleton = Nucleus::CInit<NC_STACK_skeleton>( {
-        {NC_STACK_rsrc::RSRC_ATT_NAME, std::string("3ds_sklt")},
-        {NC_STACK_rsrc::RSRC_ATT_TRYSHARED, (int32_t)2},
-        {NC_STACK_skeleton::SKEL_ATT_POINTSCNT, (int32_t)numvertex}});
-
+    if (sz != 2 + size_t(numvertex) * 12 || !requireBytes(fil, size_t(numvertex) * 12) ||
+        _meshVertexStart + numvertex > size_t(std::numeric_limits<int32_t>::max()))
+    { _parseError = true; return 0; }
     UAskeleton::Data *dat = _skeleton->GetSkelet();
+    dat->POO.resize(_meshVertexStart + numvertex);
 
     for (int i = 0; i < numvertex; i++)
     {
-        dat->POO[i].x = fil->readFloatL();
-        dat->POO[i].z = fil->readFloatL();
-        dat->POO[i].y = -fil->readFloatL();
-        dat->POO[i].flags = 0;
+        dat->POO[_meshVertexStart + i].x = fil->readFloatL();
+        dat->POO[_meshVertexStart + i].z = fil->readFloatL();
+        dat->POO[_meshVertexStart + i].y = -fil->readFloatL();
+        dat->POO[_meshVertexStart + i].flags = 0;
 
+        const auto &v = dat->POO[_meshVertexStart + i];
+        if (!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z))
+            _parseError = true;
         readed += 12;
     }
 
@@ -244,44 +287,47 @@ size_t NC_STACK_3ds::readChunkFaces(FSMgr::FileHandle *fil, size_t sz)
 {
     size_t readed = 0;
 
+    if (_meshFaces || sz < 2 || !requireBytes(fil, 2))
+    { _parseError = true; return 0; }
+    _meshFaces = true;
     uint16_t numfaces = fil->readU16L();
     readed += 2;
-    printf("faces %d\n", numfaces);
 
     UAskeleton::Data *dat = _skeleton->GetSkelet();
 
-    dat->polygons.resize(numfaces);
+    if (size_t(numfaces) * 8 > sz - readed || !requireBytes(fil, size_t(numfaces) * 8))
+    { _parseError = true; return 0; }
+    dat->polygons.resize(_meshFaceStart + numfaces);
+    _faceMaterialNames.resize(dat->polygons.size());
+    _faceHasUV.resize(dat->polygons.size(), false);
 
-    faceMaterial.resize(numfaces);
+    faceMaterial.resize(dat->polygons.size());
 
     for (int i = 0; i < numfaces; i++)
     {
-        dat->polygons[i].num_vertices = 3;
-        dat->polygons[i].v[2] = fil->readU16L();
-        dat->polygons[i].v[1] = fil->readU16L();
-        dat->polygons[i].v[0] = fil->readU16L();
+        dat->polygons[_meshFaceStart + i].num_vertices = 3;
+        dat->polygons[_meshFaceStart + i].v[2] = fil->readU16L();
+        dat->polygons[_meshFaceStart + i].v[1] = fil->readU16L();
+        dat->polygons[_meshFaceStart + i].v[0] = fil->readU16L();
 
         //uint16_t diff = fil->readU16L();
         fil->readU16L();
 
-        dat->polygons[i].A = 0;
-        dat->polygons[i].B = 0;
-        dat->polygons[i].C = 0;
-        dat->polygons[i].D = 0;
+        dat->polygons[_meshFaceStart + i].A = 0;
+        dat->polygons[_meshFaceStart + i].B = 0;
+        dat->polygons[_meshFaceStart + i].C = 0;
+        dat->polygons[_meshFaceStart + i].D = 0;
 
-        faceMaterial[i] = NULL;
+        faceMaterial[_meshFaceStart + i] = NULL;
 
         readed += 8;
     }
 
-    while (readed < sz)
+    while (!_parseError && readed < sz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        readed += 6;
-
-        if (tagsz > 100 * 1024 * 1024)
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, sz, readed, tag, tagsz))
             break;
 
         switch(tag)
@@ -289,11 +335,15 @@ size_t NC_STACK_3ds::readChunkFaces(FSMgr::FileHandle *fil, size_t sz)
         case 0x4130: //FaceMaterial
         {
             std::string matName;
-            readed += readName(fil, &matName, 64);
-
-            d3dsMaterial *mat = findMaterial(matName);
-
+            if (tagsz < 3)
+            { _parseError = true; return 0; }
+            size_t nameSize = readName(fil, &matName, tagsz - 2);
+            if (_parseError || nameSize > tagsz - 2 || !requireBytes(fil, 2))
+            { _parseError = true; return 0; }
+            readed += nameSize;
             uint16_t n = fil->readU16L();
+            if (tagsz - nameSize - 2 != size_t(n) * 2 || !requireBytes(fil, size_t(n) * 2))
+            { _parseError = true; return 0; }
             readed += 2;
 
             for (int i = 0; i < n; i++)
@@ -301,7 +351,9 @@ size_t NC_STACK_3ds::readChunkFaces(FSMgr::FileHandle *fil, size_t sz)
                 uint16_t idx = fil->readU16L();
                 readed += 2;
 
-                faceMaterial[idx] = mat;
+                if (idx >= numfaces)
+                { _parseError = true; return 0; }
+                _faceMaterialNames[_meshFaceStart + idx] = matName;
             }
         }
         break;
@@ -313,7 +365,7 @@ size_t NC_STACK_3ds::readChunkFaces(FSMgr::FileHandle *fil, size_t sz)
         }
     }
 
-    faceNum = numfaces;
+    faceNum = dat->polygons.size();
 
     return readed;
 }
@@ -325,14 +377,11 @@ size_t NC_STACK_3ds::readChunkMaterial(FSMgr::FileHandle *fil, size_t sz)
     materials.emplace_back();
     d3dsMaterial &mat = materials.back();
 
-    while (readed < sz)
+    while (!_parseError && readed < sz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        readed += 6;
-
-        if (tagsz > 100 * 1024 * 1024)
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, sz, readed, tag, tagsz))
             break;
 
         switch(tag)
@@ -340,7 +389,10 @@ size_t NC_STACK_3ds::readChunkMaterial(FSMgr::FileHandle *fil, size_t sz)
         case 0xA000: //Mat name
         {
             std::string matName;
-            readed += readName(fil, &matName, 64);
+            const size_t used = readName(fil, &matName, tagsz, true);
+            if (_parseError || used != tagsz)
+            { _parseError = true; return 0; }
+            readed += used;
 
             mat.name = matName;
         }
@@ -368,14 +420,11 @@ size_t NC_STACK_3ds::readChunkTexMap(d3dsTextureMap &texmap, FSMgr::FileHandle *
 {
     size_t readed = 0;
 
-    while (readed < sz)
+    while (!_parseError && readed < sz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        readed += 6;
-
-        if (tagsz > 100 * 1024 * 1024)
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, sz, readed, tag, tagsz))
             break;
 
         switch(tag)
@@ -383,18 +432,52 @@ size_t NC_STACK_3ds::readChunkTexMap(d3dsTextureMap &texmap, FSMgr::FileHandle *
         case 0xA300: //Mat name
         {
             std::string texName;
-            readed += readName(fil, &texName, 64);
+            const size_t used = readName(fil, &texName, tagsz, true);
+            if (_parseError || used != tagsz)
+            { _parseError = true; return 0; }
+            readed += used;
 
             std::string resolvedTexName = texName;
             std::replace(resolvedTexName.begin(), resolvedTexName.end(), '\\', '/');
 
-            const bool rootedTexturePath = !resolvedTexName.empty() &&
-                                           (resolvedTexName[0] == '/' || resolvedTexName.find(':') != std::string::npos);
-            if ( !_sourceDir.empty() && !rootedTexturePath )
+            if ( !_sourceDir.empty() && !resolvedTexName.empty() )
             {
-                const std::string localCandidate = _sourceDir + "/" + resolvedTexName;
-                if ( uaFileExist(localCandidate) )
-                    resolvedTexName = localCandidate;
+                bool resolvedLocalTexture = false;
+
+                // First preserve the existing relative-path behaviour, e.g.
+                // Textures/missile.png -> <3ds dir>/Textures/missile.png.
+                const bool rootedTexturePath = resolvedTexName[0] == '/' ||
+                                               resolvedTexName.find(':') != std::string::npos;
+                if ( !rootedTexturePath )
+                {
+                    const std::string localCandidate = _sourceDir + "/" + resolvedTexName;
+                    if ( uaFileExist(localCandidate) )
+                    {
+                        resolvedTexName = localCandidate;
+                        resolvedLocalTexture = true;
+                    }
+                }
+
+                // Legacy exporters often store an absolute authoring-machine
+                // path in A300. If the relative candidate above was not found,
+                // also try the basename next to the 3DS before falling back to
+                // the original authored name/path.
+                if ( !resolvedLocalTexture )
+                {
+                    std::string normalizedTexName = texName;
+                    std::replace(normalizedTexName.begin(), normalizedTexName.end(), '\\', '/');
+                    const size_t separator = normalizedTexName.find_last_of("/:");
+                    const std::string textureBaseName = separator == std::string::npos
+                                                      ? normalizedTexName
+                                                      : normalizedTexName.substr(separator + 1);
+
+                    if ( !textureBaseName.empty() )
+                    {
+                        const std::string siblingCandidate = _sourceDir + "/" + textureBaseName;
+                        if ( uaFileExist(siblingCandidate) )
+                            resolvedTexName = siblingCandidate;
+                    }
+                }
             }
 
             texmap.name = resolvedTexName;
@@ -412,7 +495,6 @@ size_t NC_STACK_3ds::readChunkTexMap(d3dsTextureMap &texmap, FSMgr::FileHandle *
                     {NC_STACK_bitmap::BMD_ATT_CONVCOLOR, (int32_t)1}} );
 
                 Common::Env.SetPrefix("rsrc", oldprefix);
-                printf("%s\n", resolvedTexName.c_str());
             }
         }
         break;
@@ -433,15 +515,16 @@ size_t NC_STACK_3ds::readChunkColor(float colors[3], FSMgr::FileHandle *fil, siz
 
     bool hasLin = false;
 
-    while (readed < sz)
+    while (!_parseError && readed < sz)
     {
-        uint16_t tag = fil->readU16L();
-        uint32_t tagsz = fil->readU32L() - 6;
-
-        readed += 6;
-
-        if (tagsz > 100 * 1024 * 1024)
+        uint16_t tag;
+        uint32_t tagsz;
+        if (!readChunkHeader(fil, sz, readed, tag, tagsz))
             break;
+
+        if (((tag == 0x0011 || tag == 0x0012) && tagsz != 3) ||
+            ((tag == 0x0010 || tag == 0x0013) && tagsz != 12))
+        { _parseError = true; return 0; }
 
         switch(tag)
         {
@@ -503,20 +586,63 @@ size_t NC_STACK_3ds::readChunkColor(float colors[3], FSMgr::FileHandle *fil, siz
     return readed;
 }
 
-size_t NC_STACK_3ds::readName(FSMgr::FileHandle *fil, std::string *dst, size_t maxn)
+bool NC_STACK_3ds::requireBytes(FSMgr::FileHandle *fil, size_t count)
 {
-    *dst = "";
-
-    for(size_t i = 0; i < maxn; ++i)
+    if (_parseError || fil->readErr() || fil->tell() > _fileEnd || count > _fileEnd - fil->tell())
     {
-        char c = fil->readS8();
-        if (!c)
-            break;
+        _parseError = true;
+        return false;
+    }
+    return true;
+}
 
+bool NC_STACK_3ds::readChunkHeader(FSMgr::FileHandle *fil, size_t size, size_t &readed,
+                                 uint16_t &tag, uint32_t &payload)
+{
+    if (readed > size || size - readed < 6 || !requireBytes(fil, 6))
+    { _parseError = true; return false; }
+    tag = fil->readU16L();
+    const uint32_t length = fil->readU32L();
+    readed += 6;
+    if (length < 6 || length - 6 > size - readed || !requireBytes(fil, length - 6))
+    { _parseError = true; return false; }
+    payload = length - 6;
+    return true;
+}
+
+size_t NC_STACK_3ds::readName(FSMgr::FileHandle *fil, std::string *dst, size_t maxn,
+                            bool nameOnly, bool legacyName)
+{
+    dst->clear();
+    size_t used = 0;
+    bool terminated = false;
+    while (used < maxn && requireBytes(fil, 1))
+    {
+        const char c = fil->readS8();
+        ++used;
+        if (!c) { terminated = true; break; }
         *dst += c;
     }
-
-    return dst->size();
+    // The shipped test missile omits these NUL bytes from name chunks and
+    // all ancestor sizes. Accept only that measurable legacy convention:
+    // a NUL exactly one byte past a name-only payload, paid for by the
+    // physical bytes beyond Main. Standard files never enter this mode.
+    if (!terminated && nameOnly && legacyName && _legacyNameBudget > _legacyNameBytes &&
+        requireBytes(fil, 1) && fil->readU8() == 0)
+    {
+        ++used;
+        terminated = true;
+        _legacyNameLengths = true;
+    }
+    if (!terminated)
+    { _parseError = true; return 0; }
+    if (_legacyNameLengths && legacyName)
+    {
+        if (++_legacyNameBytes > _legacyNameBudget)
+        { _parseError = true; return 0; }
+        --used;
+    }
+    return used;
 }
 
 d3dsMaterial * NC_STACK_3ds::findMaterial(const std::string &matName)
@@ -537,11 +663,18 @@ void NC_STACK_3ds::RecalcInternal(bool kids)
     {
         UAskeleton::Data *skeldat = _skeleton->GetSkelet();
 
-        for(int32_t i = 0; i < faceNum; ++i)
+        for(size_t i = 0; i < faceNum; ++i)
         {
             GFX::TRenderParams mat;
             if (faceMaterial[i])
                 mat = GenRenderParams(faceMaterial[i]);
+
+            if (!_faceHasUV[i])
+            {
+                mat.Flags &= ~(GFX::RFLAGS_TEXTURED | GFX::RFLAGS_DYNAMIC_TEXTURE);
+                mat.TexSource = nullptr;
+                mat.Tex = nullptr;
+            }
 
             GFX::TMesh *msh = NC_STACK_base::FindMeshByRenderParams(&Meshes, mat);
 
@@ -567,7 +700,7 @@ void NC_STACK_3ds::RecalcInternal(bool kids)
 
                     msh->BoundBox.Add( skeldat->POO[ pol.v[j] ] );
 
-                    if (!texCoords.empty())
+                    if (_faceHasUV[i])
                         msh->Vertexes.back().TexCoord = texCoords.at(pol.v[j]);
                 }
 
@@ -593,6 +726,7 @@ GFX::TRenderParams NC_STACK_3ds::GenRenderParams(d3dsMaterial *mat)
 
     if (mat->texture1_map.tex)
     {
+        mat->texture1_map.tex->PrepareTexture();
         tmp.Flags |= GFX::RFLAGS_TEXTURED;
         tmp.TexSource = mat->texture1_map.tex;
 
