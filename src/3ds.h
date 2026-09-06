@@ -108,7 +108,9 @@ private:
     size_t readChunkTexMap(d3dsTextureMap &texmap, FSMgr::FileHandle *fil, size_t sz);
     size_t readChunkColor(float colors[3], FSMgr::FileHandle *fil, size_t sz);
 
-    size_t readName(FSMgr::FileHandle *fil, std::string *dst, size_t maxn);
+    size_t readName(FSMgr::FileHandle *fil, std::string *dst, size_t maxn, bool nameOnly = false, bool legacyName = true);
+    bool requireBytes(FSMgr::FileHandle *fil, size_t count);
+    bool readChunkHeader(FSMgr::FileHandle *fil, size_t size, size_t &readed, uint16_t &tag, uint32_t &payload);
 
     d3dsMaterial *findMaterial(const std::string &matName);
     GFX::TRenderParams GenRenderParams(d3dsMaterial *);
@@ -123,7 +125,13 @@ private:
     std::list<d3dsMaterial > materials;
     std::string _sourceDir;
 
-    int32_t faceNum = 0;
+    std::vector<std::string> _faceMaterialNames; // Released after final material resolution.
+    std::vector<bool> _faceHasUV;
+    size_t _meshVertexStart = 0, _meshFaceStart = 0;
+    bool _meshVertices = false, _meshFaces = false, _meshUV = false;
+    size_t _fileEnd = 0, _legacyNameBudget = 0, _legacyNameBytes = 0;
+    bool _parseError = false, _legacyNameLengths = false;
+    size_t faceNum = 0;
 };
 
 #endif // BASE_H_INCLUDED
