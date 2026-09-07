@@ -42,8 +42,9 @@ enum DecorationFXMode
     DECORATION_FX_PERSISTENT = 1
 };
 
-// OpenNeoUA custom: RGBA tint multiplier (see visual_tint / wireframe_tint script params).
-// Stored as normalized 0..1 float multipliers. Neutral default = no change.
+// OpenNeoUA custom: RGBA visual tint (see visual_tint / wireframe_tint and related params).
+// RGB is a target hue: when it differs from white, renderers replace the source hue
+// while preserving source intensity. Alpha remains multiplicative. Neutral default = no change.
 struct TVisualTint
 {
     float r = 1.0;
@@ -54,6 +55,11 @@ struct TVisualTint
     bool IsNeutral() const
     {
         return r == 1.0 && g == 1.0 && b == 1.0 && a == 1.0;
+    }
+
+    bool ColorizesRGB() const
+    {
+        return r != 1.0 || g != 1.0 || b != 1.0;
     }
 
     void Clamp()
@@ -681,8 +687,8 @@ struct TVhclProto
     vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
     vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d visual_spin = vec3d(0.0, 0.0, 0.0);
-    TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA tint multiplier
-    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA tint multiplier
+    TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA target hue/alpha
+    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA target hue/alpha
     TDamagedFXConfig damaged_fx;
     TDecorationFXConfig decoration_fx;
     std::string unit_gun_icon;
@@ -856,7 +862,7 @@ struct TVhclProto
     std::vector<TRoboGun> unit_guns;
 
     int is_mimic = 0;                       // OpenNeoUA: model = mimic shell/disguise proto
-    TVisualTint mimic_tint;                 // OpenNeoUA: model = mimic shell tint applied to the copied visual
+    TVisualTint mimic_tint;                 // OpenNeoUA: model = mimic target hue/alpha composed with the copied visual tint
     TVhclSound snd_mimic;                   // OpenNeoUA: model = mimic persistent shell loop
 
     rbcolls coll;                           // OpenNeoUA: universal compound collision spheres (coll_*)
@@ -1031,11 +1037,11 @@ struct TWeapProto
     // lateral deviation (0..1000). Chaos takes priority over Spiral when valid.
     float chaos_factor = 0.0f;
     float chaos_radius = 0.0f;
-    TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA tint multiplier
+    TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA target hue/alpha
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
-    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA tint multiplier
+    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA target hue/alpha
     TWeaponTracerConfig tracer; // OpenNeoUA custom: external-mesh projectile tracer
     std::vector<DestFX> dfx;
     std::vector<DestFX> ExtDestroyFX; // ext_dest_fx

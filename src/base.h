@@ -77,7 +77,7 @@ struct baseRender_msg
     float minZ = 0.;
     float maxZ = 0.;
     uint32_t flags = 0;
-    // OpenNeoUA custom: per-render main VP tint multiplier. Neutral (1,1,1,1) = no change.
+    // OpenNeoUA custom: per-render main visual target hue/alpha. Neutral (1,1,1,1) = no change.
     GFX::TGLColor tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
     // Render tint as a target hue while preserving source intensity/alpha.
     bool colorizeTint = false;
