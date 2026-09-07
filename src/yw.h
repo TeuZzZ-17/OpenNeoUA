@@ -1649,6 +1649,7 @@ struct TBriefObject
     std::string Title;
 
     NC_STACK_base::Instance *VP = NULL; // Must not be copied
+    std::vector<std::unique_ptr<NC_STACK_base::Instance>> GunVPs; // Visual-only, per mount.
 
     TBriefObject() = default;
 
@@ -1674,7 +1675,7 @@ struct TBriefObject
 
     TBriefObject(TBriefObject &&b) noexcept
         : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), TileSet(b.TileSet),
-          TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title), VP(b.VP)
+          TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title), VP(b.VP), GunVPs(std::move(b.GunVPs))
     {
         b.VP = NULL;
     }
@@ -1697,6 +1698,7 @@ struct TBriefObject
             Owner = b.Owner;
             Title = b.Title;
             Common::DeleteAndNull(&VP);
+            GunVPs.clear();
         }
         return *this;
     }
@@ -1715,6 +1717,7 @@ struct TBriefObject
             Owner = b.Owner;
             Title = b.Title;
             VP = b.VP;
+            GunVPs = std::move(b.GunVPs);
             b.VP = NULL;
         }
         return *this;
