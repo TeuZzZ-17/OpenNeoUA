@@ -5421,17 +5421,32 @@ int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
     int v3 = yw->_screenSize.x - 11 * yw->_iconOrderW;
     bzda.field_8FC = v3 / 4;
 
-    int v5;
-    if ( yw->_screenSize.x >= 512 )
-        v5 = 7 * yw->_guiTiles[0]->map[87].w;
-    else
-        v5 = 9 * yw->_guiTiles[0]->map[87].w;
+    // OpenNeoUA default: keep the Genesis/Creation panel compact and anchored to
+    // the left edge. nucleus.ini can still override all three geometry values.
+    int configuredGenesisWidth = System::IniConf::UiGenesisListWidth.Get<int32_t>();
+    if ( configuredGenesisWidth <= 0 )
+        configuredGenesisWidth = System::IniConf::UiGenesisListDefaultWidth;
+    bzda.field_900 = std::min(yw->_screenSize.x, std::max(60, configuredGenesisWidth));
 
-    bzda.field_900 = 2 * v5;
-    bzda.field_904 = bzda.field_8FC / 2;
+    int configuredGenesisX = System::IniConf::UiGenesisListX.Get<int32_t>();
+    if ( configuredGenesisX < 0 )
+        configuredGenesisX = System::IniConf::UiGenesisListDefaultX;
+    bzda.field_904 = std::min(configuredGenesisX, std::max(0, yw->_screenSize.x - bzda.field_900));
+
+    // Preserve the legacy spacing inside the non-Genesis toolbar block, then
+    // shift that whole block as one unit so its final Analyzer/Menu pair is
+    // flush with the right edge. Render positions and click boxes share these
+    // same absolute anchors below, avoiding the historical desync caused by
+    // moving only the Genesis/create origin.
     bzda.field_908 = yw->_iconOrderW + bzda.field_8FC + bzda.field_8FC / 2;
     bzda.field_90C = 2 * yw->_iconOrderW + bzda.field_908 + bzda.field_8FC;
     bzda.field_910 = 5 * yw->_iconOrderW + bzda.field_90C + bzda.field_8FC;
+
+    const int toolbarRight = bzda.field_910 + 2 * yw->_iconOrderW;
+    const int toolbarShiftRight = std::max(0, yw->_screenSize.x - toolbarRight);
+    bzda.field_908 += toolbarShiftRight;
+    bzda.field_90C += toolbarShiftRight;
+    bzda.field_910 += toolbarShiftRight;
     bzda.field_914 = 1;
     bzda.field_918 = 0;
     bzda.flags = 0;
@@ -5471,9 +5486,20 @@ int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
     args.firstShownEntry = 0;
     args.selectedEntry = 0;
     args.maxShownEntries = 16;
+
+    int genesisListHeight = System::IniConf::UiGenesisListHeight.Get<int32_t>();
+    if ( genesisListHeight <= 0 )
+        genesisListHeight = System::IniConf::UiGenesisListDefaultHeight;
+
+    const int usableHeight = std::max(1, genesisListHeight - 2 * yw->_fontBorderH);
+    const int configuredRows = std::max(1, usableHeight / std::max(1, yw->_fontH));
+    args.maxShownEntries = std::min(configuredRows, 64);
+    args.shownEntries = std::min(args.shownEntries, args.maxShownEntries);
+
     args.withIcon = false;
     args.entryHeight = yw->_fontH;
     args.entryWidth = bzda.field_900;
+    args.maxEntryWidth = std::max(1024, yw->_screenSize.x);
     args.enabled = true;
     args.vborder = yw->_fontBorderH;
     args.instantInput = true;
@@ -5481,9 +5507,11 @@ int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
     args.thinScrollbar = true;
     args.fillThinScrollbarGap = true;
     args.wheelScroll = true;
-    // Keep the Operations list translucent while reducing interference from
-    // world-space wireframes and markers behind the text.
-    args.backgroundOpacity = 216;
+    // Genesis background opacity is data-driven. The OpenNeoUA runtime default is 200
+    // when the nucleus.ini key is absent; explicit values still override it.
+    int genesisListOpacity = System::IniConf::UiGenesisListOpacity.Get<int32_t>();
+    genesisListOpacity = std::max(0, std::min(255, genesisListOpacity));
+    args.backgroundOpacity = static_cast<uint8_t>(genesisListOpacity);
 
     if ( !gui_lstvw.Init(yw, args) )
         return 0;
@@ -5944,6 +5972,9 @@ static bool yw_IsVisiblePriorityGameplayWindow(const GuiBase *window)
     if ( !window || !window->IsOpen() || (window->flags & GuiBase::FLAG_ICONIFED) )
         return false;
 
+    if ( window == &gui_lstvw )
+        return bzda.IsOpen();
+
     return window == &robo_map || window == &squadron_manager;
 }
 
@@ -5951,6 +5982,12 @@ bool yw_IsPriorityGameplayUiOpen()
 {
     return yw_IsVisiblePriorityGameplayWindow(&robo_map) ||
            yw_IsVisiblePriorityGameplayWindow(&squadron_manager);
+}
+
+static bool yw_IsPriorityGameplayUiOcclusionOpen()
+{
+    return yw_IsPriorityGameplayUiOpen() ||
+           yw_IsVisiblePriorityGameplayWindow(&gui_lstvw);
 }
 
 static void yw_RenderGameplayGuiWindow(NC_STACK_ypaworld *yw, GuiBase *window,
@@ -6007,6 +6044,8 @@ static void yw_ClearPriorityGameplayUiUnderlay(NC_STACK_ypaworld *yw)
         yw_ClearVirtualUiWindowRect(yw, &robo_map);
     if ( yw_IsVisiblePriorityGameplayWindow(&squadron_manager) )
         yw_ClearVirtualUiWindowRect(yw, &squadron_manager);
+    if ( yw_IsVisiblePriorityGameplayWindow(&gui_lstvw) )
+        yw_ClearVirtualUiWindowRect(yw, &gui_lstvw);
 }
 
 static void yw_RenderPriorityGameplayWindows(NC_STACK_ypaworld *yw,
@@ -6017,6 +6056,14 @@ static void yw_RenderPriorityGameplayWindows(NC_STACK_ypaworld *yw,
         if ( yw_IsVisiblePriorityGameplayWindow(window) )
             yw_RenderGameplayGuiWindow(yw, window, uiAccent);
     }
+
+    // The expandable Genesis/Creation list is intentionally managed outside
+    // _guiActive. Keep its historical foreground position relative to Map and
+    // Squadron Manager, but render it in the same occluding pass so HUD/world
+    // UI beneath its translucent panel cannot bleed through.
+    if ( yw_IsVisiblePriorityGameplayWindow(&gui_lstvw) )
+        GFX::Engine.ProcessDrawSeq(gui_lstvw.cmdCommands, &gui_lstvw.cmdInclude,
+                                   uiAccent);
 }
 
 static void yw_ResetVirtualUiClipToFullScreen(NC_STACK_ypaworld *yw)
@@ -6102,17 +6149,13 @@ static void yw_RenderForegroundGameplayGuiWindows(NC_STACK_ypaworld *yw,
         yw_RenderGameplayGuiWindow(yw, window, uiAccent);
     }
 
-    // The expandable creation list is managed outside _guiActive.
-    if ( bzda.IsOpen() && gui_lstvw.IsOpen() )
-        GFX::Engine.ProcessDrawSeq(gui_lstvw.cmdCommands, &gui_lstvw.cmdInclude,
-                                   uiAccent);
 }
 
 void yw_FinalizePriorityGameplayUi(NC_STACK_ypaworld *yw)
 {
     if ( !yw || yw->_hideHudForScreenshots || !yw->_userUnit ||
          yw->_userUnit->_bact_type == BACT_TYPES_MISSLE ||
-         !yw_IsPriorityGameplayUiOpen() )
+         !yw_IsPriorityGameplayUiOcclusionOpen() )
     {
         return;
     }
@@ -6121,25 +6164,25 @@ void yw_FinalizePriorityGameplayUi(NC_STACK_ypaworld *yw)
     const SDL_Color *uiAccent = yw_GetFactionUiAccent(yw, &uiAccentColor);
 
     // Ordinary gameplay UI has already been rendered. Remove only the pixels
-    // geometrically covered by Map/Squadron Manager, leaving every overlay
-    // outside those rectangles untouched and the 3D world visible through the
-    // strategic windows' translucent backgrounds.
+    // geometrically covered by Map/Squadron Manager or the Genesis list,
+    // leaving every overlay outside those rectangles untouched and the 3D world
+    // visible through the windows' translucent backgrounds.
     yw_ClearPriorityGameplayUiUnderlay(yw);
 
-    // Preserve the normal relative order when Map and Squadron Manager overlap.
+    // Preserve the normal relative order when priority gameplay windows overlap.
     yw_RenderPriorityGameplayWindows(yw, uiAccent);
 
-    // Strategic-window draw sequences leave their own clip active. Restore the
+    // Priority-window draw sequences can leave their own clip active. Restore the
     // full virtual-UI clip before drawing fixed bars/direct bitmaps; otherwise
     // the Plasma icon can disappear even when it is nowhere near the window.
     yw_ResetVirtualUiClipToFullScreen(yw);
 
     // Explicit exception requested by the UI hierarchy: the fixed top/bottom
-    // bars are always visible, even where a strategic window reaches them.
+    // bars are always visible, even where a priority window reaches them.
     yw_RenderAlwaysVisibleGameplayBars(yw, uiAccent);
 
     // Menus/dialogs are foreground GUI, not gameplay underlay. Render them once
-    // above Map/Squadron so the strategic-window clear cannot erase them.
+    // above priority windows so the underlay clear cannot erase them.
     yw_ResetVirtualUiClipToFullScreen(yw);
     yw_RenderForegroundGameplayGuiWindows(yw, uiAccent);
 
@@ -6165,11 +6208,12 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 
     if ( yw->_userUnit->_bact_type != BACT_TYPES_MISSLE )
     {
-        const bool priorityWindowOpen = yw_IsPriorityGameplayUiOpen();
+        const bool priorityWindowOpen = yw_IsPriorityGameplayUiOcclusionOpen();
 
-        // Render the complete ordinary gameplay UI first. When Map/Squadron is
-        // open, only the pixels under its actual rectangle are removed later;
-        // nothing outside the overlap is globally suppressed.
+        // Render the complete ordinary gameplay UI first. When Map/Squadron or
+        // the Genesis list is open, only the pixels under the actual window
+        // rectangle are removed later; nothing outside the overlap is globally
+        // suppressed.
         yw_RenderWorldSelectionDrag(yw);
         yw_RenderMoveOrderFeedback(yw);
         yw_RenderAttackOrderFeedback(yw);
@@ -6255,45 +6299,68 @@ static void yw_StoreGuiListRowBackground(const GuiList *lstvw, CmdStream *cur,
         FontUA::set_opacity(cur, 255);
 }
 
-static std::string yw_FormatGenesisVehicleName(NC_STACK_ypaworld *yw, int fontId,
-                                                int textWidth, const std::string &name,
+static int yw_GetGenesisScreenTextWidth(NC_STACK_ypaworld *yw, const std::string &text)
+{
+    if ( !yw )
+        return 0;
+
+    // Genesis names are ultimately rendered by the screen-text/TTF path (op18).
+    // Measuring them with the legacy tile glyph widths can substantially
+    // overestimate the real rendered width when ui.menu_font is active, which
+    // caused premature "..." even with hundreds of free pixels in the row.
+    const int screenWidth = GFX::Engine.MeasureScreenTextWidth(text);
+    if ( screenWidth > 0 )
+        return screenWidth;
+
+    int fallbackWidth = 0;
+    if ( yw->_guiTiles[0] )
+        fallbackWidth = yw->_guiTiles[0]->GetWidth(text);
+    if ( yw->_guiTiles[9] )
+        fallbackWidth = std::max(fallbackWidth, yw->_guiTiles[9]->GetWidth(text));
+
+    return fallbackWidth;
+}
+
+static std::string yw_FormatGenesisVehicleName(NC_STACK_ypaworld *yw,
+                                                int normalTextWidth,
+                                                int selectedTextWidth,
+                                                const std::string &name,
                                                 int remaining)
 {
-    if ( !yw || remaining < 0 || fontId < 0 ||
-         (size_t)fontId >= yw->_guiTiles.size() || !yw->_guiTiles[fontId] )
+    if ( !yw || remaining < 0 )
         return name;
 
-    TileMap *font = yw->_guiTiles[fontId];
+    const int availableWidth = std::max(0, std::min(normalTextWidth, selectedTextWidth));
     const std::string count = fmt::sprintf("[%d]", remaining);
-    const int gapWidth = font->GetWidth(" ");
-    int nameWidth = textWidth - font->GetWidth(count) - gapWidth;
 
-    if ( nameWidth <= 0 )
+    const auto fits = [&](const std::string &text) -> bool
+    {
+        return yw_GetGenesisScreenTextWidth(yw, text) <= availableWidth;
+    };
+
+    const std::string full = name + " " + count;
+    if ( fits(full) )
+        return full;
+
+    const std::string compact = name + count;
+    if ( fits(compact) )
+        return compact;
+
+    const std::string ellipsis = "...";
+    if ( !fits(ellipsis + count) )
         return count;
 
-    if ( font->GetWidth(name) <= nameWidth )
-        return name + " " + count;
-
     std::string clipped;
-    std::string ellipsis = "...";
-    const int ellipsisWidth = font->GetWidth(ellipsis);
-    if ( ellipsisWidth < nameWidth )
-        nameWidth -= ellipsisWidth;
-    else
-        ellipsis.clear();
-
-    int usedWidth = 0;
     for (unsigned char ch : name)
     {
-        const int charWidth = font->GetWidth(ch);
-        if ( usedWidth + charWidth > nameWidth )
+        const std::string candidate = clipped + (char)ch + ellipsis + count;
+        if ( !fits(candidate) )
             break;
 
         clipped.push_back((char)ch);
-        usedWidth += charWidth;
     }
 
-    return clipped + ellipsis + " " + count;
+    return clipped + ellipsis + count;
 }
 
 void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStream *cur,
@@ -6334,7 +6401,22 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
     else
         FontUA::set_txtColor(cur, yw->_iniColors[61].r, yw->_iniColors[61].g, yw->_iniColors[61].b);
 
-    int v19 = yw->_guiTiles[v14]->map[48].w;
+    const std::string priceText = fmt::sprintf("%d", a7);
+
+    // Keep the price block state-independent. Vanilla used five digit cells from
+    // the active row tileset, so simply moving the selection changed the width
+    // left for the name. Reserve only what the current price really needs, using
+    // the larger requirement of the normal and selected row assets.
+    const int renderedPriceWidth = yw_GetGenesisScreenTextWidth(yw, priceText);
+    const int normalPricePadding = std::max(2, yw_GetGenesisScreenTextWidth(yw, "0") / 4);
+    const int selectedPricePadding = normalPricePadding;
+    const int normalPriceWidth = renderedPriceWidth
+                               + yw->_guiTiles[0]->map[102].w
+                               + normalPricePadding;
+    const int selectedPriceWidth = renderedPriceWidth
+                                 + yw->_guiTiles[9]->map[100].w
+                                 + selectedPricePadding;
+    const int effectivePriceColumnWidth = std::max(normalPriceWidth, selectedPriceWidth);
 
     v24[0].txt = a5;
     v24[0].fontID = 28;
@@ -6348,16 +6430,19 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
     v24[1].spaceChar = v16;
     v24[1].prefixChar = v15;
     v24[1].flags = 37;
-    v24[1].width = v33 - squadron_manager.field_2CC - 5 * v19;
+    v24[1].width = v33 - squadron_manager.field_2CC - effectivePriceColumnWidth;
     v24[1].postfixChar = 0;
-    const int nameTextWidth = v24[1].width - yw->_guiTiles[v14]->map[v15].w;
-    v24[1].txt = yw_FormatGenesisVehicleName(yw, v14, nameTextWidth, a6, remaining);
 
-    v24[2].txt = fmt::sprintf("%d", a7);
+    const int normalNameTextWidth = v24[1].width - yw->_guiTiles[0]->map[102].w;
+    const int selectedNameTextWidth = v24[1].width - yw->_guiTiles[9]->map[98].w;
+    v24[1].txt = yw_FormatGenesisVehicleName(yw, normalNameTextWidth,
+                                             selectedNameTextWidth, a6, remaining);
+
+    v24[2].txt = priceText;
     v24[2].fontID = v14;
     v24[2].spaceChar = v16;
     v24[2].postfixChar = v17;
-    v24[2].width = 5 * v19;
+    v24[2].width = effectivePriceColumnWidth;
     v24[2].flags = 42;
     v24[2].prefixChar = 0;
 
@@ -6435,7 +6520,9 @@ void gui_update_create_btn__sub0(NC_STACK_ypaworld *yw)
 
     gui_lstvw.SetRect(yw, -2, -2);
 
-    gui_lstvw.x = bzda.field_904 + bzda.x;
+    const int desiredGenesisX = bzda.field_904 + bzda.x;
+    gui_lstvw.x = std::max(0, std::min(desiredGenesisX,
+                                      std::max(0, yw->_screenSize.x - gui_lstvw.w)));
     gui_lstvw.y = bzda.field_918 + bzda.y - gui_lstvw.h;
 
     gui_lstvw.ItemsPreLayout(yw, &gui_lstvw.itemBlock, 0, "uvw");
@@ -6993,18 +7080,28 @@ void ypaworld_func64__sub7__sub2__sub1(NC_STACK_ypaworld *yw)
 
         gui_update_create_btn(yw, &bzda.cmdCommands);
 
-        if ( bzda.field_8FC > 0 )
-            FontUA::add_xpos(&bzda.cmdCommands, bzda.field_8FC);
+        // The create glyph advances the command cursor by one icon. From here
+        // onward use the same absolute anchors as the click boxes instead of
+        // accumulating legacy gaps from the Genesis origin. This keeps visual
+        // buttons and input hitboxes perfectly aligned for every Genesis X.
+        const int afterCreateX = bzda.field_904 + yw->_iconOrderW;
+        const int toMapSquad = bzda.field_908 - afterCreateX;
+        if ( toMapSquad != 0 )
+            FontUA::add_xpos(&bzda.cmdCommands, toMapSquad);
 
         gui_update_map_squad_btn(yw, &bzda.cmdCommands);
 
-        if ( bzda.field_8FC > 0 )
-            FontUA::add_xpos(&bzda.cmdCommands, bzda.field_8FC);
+        const int afterMapSquadX = bzda.field_908 + 2 * yw->_iconOrderW;
+        const int toPlayerPanel = bzda.field_90C - afterMapSquadX;
+        if ( toPlayerPanel != 0 )
+            FontUA::add_xpos(&bzda.cmdCommands, toPlayerPanel);
 
         gui_update_player_panel(yw, &bzda.cmdCommands);
 
-        if ( bzda.field_8FC > 0 )
-            FontUA::add_xpos(&bzda.cmdCommands, bzda.field_8FC);
+        const int afterPlayerPanelX = bzda.field_90C + 5 * yw->_iconOrderW;
+        const int toTools = bzda.field_910 - afterPlayerPanelX;
+        if ( toTools != 0 )
+            FontUA::add_xpos(&bzda.cmdCommands, toTools);
 
         gui_update_tools(yw, &bzda.cmdCommands);
 
