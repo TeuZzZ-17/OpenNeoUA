@@ -1467,7 +1467,8 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
 
 // OpenNeoUA custom: parse "*_tint = R_G_B_A" (each component 0..255).
 // Alpha is optional and defaults to 255. Out-of-range values are clamped.
-// Stored as normalized 0..1 float multipliers. Neutral default = no change.
+// RGB is stored as a normalized target hue; alpha remains multiplicative.
+// Neutral white/opaque default = no change.
 static bool ParseTintParam(ScriptParser::Parser &parser,
                            const std::string &paramName,
                            const std::string &p1,

@@ -950,7 +950,7 @@ public:
     float _player_max_altitude_above_ground;
     vec3d _scale;
     vec3d _vp_scale = vec3d(1.0, 1.0, 1.0);
-    World::TVisualTint _vp_tint; // OpenNeoUA custom: main VP visual-only RGBA tint multiplier
+    World::TVisualTint _vp_tint; // OpenNeoUA custom: main visual RGBA target hue/alpha
     vec3d _vp_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
     float _spiral_speed = 0.0f;   // OpenNeoUA: render-only spiral revolutions/s
@@ -961,7 +961,7 @@ public:
     vec3d _projectile_visual_frozen_offset = vec3d(0.0, 0.0, 0.0);
     mat3x3 _projectile_visual_frozen_rotation = mat3x3::Ident();
     vec3d _vp_trail_scale = vec3d(1.0, 1.0, 1.0);
-    World::TVisualTint _vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
+    World::TVisualTint _vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail target hue/alpha
     vec3d _vp_trail_spin_strength = vec3d(0.0, 0.0, 0.0);
     NC_STACK_base *_vp_normal;
     NC_STACK_base *_vp_fire;

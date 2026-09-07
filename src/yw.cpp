@@ -4302,9 +4302,15 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_vp_tint = vhcl.visual_tint;
         if ( requestedVhcl.is_mimic && !requestedVhcl.mimic_tint.IsNeutral() )
         {
-            bacto->_vp_tint.r *= requestedVhcl.mimic_tint.r;
-            bacto->_vp_tint.g *= requestedVhcl.mimic_tint.g;
-            bacto->_vp_tint.b *= requestedVhcl.mimic_tint.b;
+            // Tint parameters are target-hue colorizers: a Mimic RGB tint must not
+            // be contaminated by the copied vehicle's authored color/tint. Alpha
+            // remains multiplicative so translucency/fade composition is preserved.
+            if ( requestedVhcl.mimic_tint.ColorizesRGB() )
+            {
+                bacto->_vp_tint.r = requestedVhcl.mimic_tint.r;
+                bacto->_vp_tint.g = requestedVhcl.mimic_tint.g;
+                bacto->_vp_tint.b = requestedVhcl.mimic_tint.b;
+            }
             bacto->_vp_tint.a *= requestedVhcl.mimic_tint.a;
             bacto->_vp_tint.Clamp();
         }

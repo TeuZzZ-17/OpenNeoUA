@@ -839,6 +839,7 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
             render.Color = it->mesh.Mat.Color;
             render.ColorMul = GFX::TGLColor(it->tint.r, it->tint.g, it->tint.b,
                                             it->tint.a * fade);
+            render.Colorize = it->tint.ColorizesRGB();
             render.TForm = transform;
             render.Distance = distance;
             render.TimeStamp = arg->globTime;

@@ -4184,8 +4184,10 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         // OpenNeoUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.
         GFX::TGLColor oldTint = arg->tint;
+        bool oldColorizeTint = arg->colorizeTint;
         float oldVPFadeFactor = arg->vpFadeFactor;
         GFX::TGLColor oldParticleTint = arg->particleTint;
+        bool oldParticleColorizeTint = arg->particleColorizeTint;
         vec3d oldParticleScale = arg->particleScale;
         vec3d oldParticleSpin = arg->particleSpin;
         float oldParticleLifetimeScale = arg->particleLifetimeScale;
@@ -4216,6 +4218,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
 
             particleTint.a *= particleFadeFactor;
             arg->particleTint = GFX::TGLColor(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
+            arg->particleColorizeTint = it->particleControls.tint.ColorizesRGB();
             arg->particleScale = it->particleControls.scale;
             arg->particleLifetimeScale = it->particleControls.lifetimeScale;
             arg->particleTintAlphaAffectsAdditive = it->particleControls.tintAlphaAffectsAdditive;
@@ -4223,6 +4226,7 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
         else
         {
             arg->particleTint = GFX::TGLColor(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
+            arg->particleColorizeTint = it->tint.ColorizesRGB();
             arg->particleScale = renderScale;
             arg->particleLifetimeScale = 1.0f;
             arg->particleTintAlphaAffectsAdditive = false;
@@ -4235,12 +4239,17 @@ static void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_y
             arg->tint = GFX::TGLColor(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
         else
             arg->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+        // Alpha-only tint/fade must not force grayscale. RGB colorization is enabled
+        // only when the authored tint actually changes the target hue.
+        arg->colorizeTint = it->tint.ColorizesRGB();
 
         it->vp->Bas->Render(arg, it->vp.get());
 
         arg->tint = oldTint;
+        arg->colorizeTint = oldColorizeTint;
         arg->vpFadeFactor = oldVPFadeFactor;
         arg->particleTint = oldParticleTint;
+        arg->particleColorizeTint = oldParticleColorizeTint;
         arg->particleScale = oldParticleScale;
         arg->particleSpin = oldParticleSpin;
         arg->particleLifetimeScale = oldParticleLifetimeScale;

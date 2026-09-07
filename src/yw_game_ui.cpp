@@ -638,9 +638,14 @@ static SDL_Color ApplyWireframeTint(SDL_Color color, const World::TVisualTint *t
     if ( !tint || tint->IsNeutral() )
         return color;
 
-    color.r = ApplyWireframeTintComponent(color.r, tint->r);
-    color.g = ApplyWireframeTintComponent(color.g, tint->g);
-    color.b = ApplyWireframeTintComponent(color.b, tint->b);
+    if ( tint->ColorizesRGB() )
+    {
+        const uint8_t intensity = std::max(color.r, std::max(color.g, color.b));
+        color.r = ApplyWireframeTintComponent(intensity, tint->r);
+        color.g = ApplyWireframeTintComponent(intensity, tint->g);
+        color.b = ApplyWireframeTintComponent(intensity, tint->b);
+    }
+
     color.a = ApplyWireframeTintComponent(color.a, tint->a);
     return color;
 }
