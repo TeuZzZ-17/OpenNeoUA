@@ -567,7 +567,7 @@ enum RASTER
 class GFXEngine
 {
 public:
-    static const std::array<vec3d, 17> _clrEff;
+    static const std::array<vec3d, 8> _clrEff;
 
     static int can_srcblend;
     static int can_destblend;
@@ -711,6 +711,7 @@ public:
     virtual void BeginFrame();
     virtual void EndFrame();
     virtual void SetColorEffectsPowers(const std::vector<ColorFx> &arg);
+    void LoadCustomColorEffectsFromConfig();
 
     virtual bool AllocTexture(ResBitmap *arg);
     virtual void FreeTexture(ResBitmap *arg);
@@ -1002,6 +1003,8 @@ protected:
 
     vec3d _normClr;
     vec3d _invClr;
+    std::array<vec3d, 17> _customClrEff{};
+    std::array<bool, 17> _customClrEffDefined{};
 
     int32_t _colorEffects = 0;
 

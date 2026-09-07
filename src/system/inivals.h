@@ -76,15 +76,15 @@ public:
     static Common::Ini::Key GfxColorEffPower5;
     static Common::Ini::Key GfxColorEffPower6;
     static Common::Ini::Key GfxColorEffPower7;
-    static Common::Ini::Key GfxColorEffPower8;
-    static Common::Ini::Key GfxColorEffPower9;
-    static Common::Ini::Key GfxColorEffPower10;
-    static Common::Ini::Key GfxColorEffPower11;
-    static Common::Ini::Key GfxColorEffPower12;
-    static Common::Ini::Key GfxColorEffPower13;
-    static Common::Ini::Key GfxColorEffPower14;
-    static Common::Ini::Key GfxColorEffPower15;
-    static Common::Ini::Key GfxColorEffPower16;
+    static Common::Ini::Key GfxColorEff8;
+    static Common::Ini::Key GfxColorEff9;
+    static Common::Ini::Key GfxColorEff10;
+    static Common::Ini::Key GfxColorEff11;
+    static Common::Ini::Key GfxColorEff12;
+    static Common::Ini::Key GfxColorEff13;
+    static Common::Ini::Key GfxColorEff14;
+    static Common::Ini::Key GfxColorEff15;
+    static Common::Ini::Key GfxColorEff16;
 
     static Common::Ini::Key InputDebug;
     static Common::Ini::Key InputTimer;
