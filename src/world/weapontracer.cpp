@@ -321,6 +321,7 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
     render.Color = mesh->Mat.Color;
     render.ColorMul = GFX::TGLColor(tint.r, tint.g, tint.b,
                                     tint.a * clampedAlpha);
+    render.Colorize = tint.ColorizesRGB();
 
     if ((mesh->Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) && mesh->Mat.TexSource)
     {
