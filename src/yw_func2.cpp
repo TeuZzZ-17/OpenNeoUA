@@ -25,6 +25,7 @@
 #include "ypaflyer.h"
 #include "utils.h"
 #include "IFFile.h"
+#include "world/gunrotation.h"
 
 extern int vertMenuSpace;
 extern int dword_5A50B2;
@@ -496,6 +497,53 @@ void sb_0x4eb94c__sub0(NC_STACK_ypaworld *yw, bool clockwise, int a3, vec3d *pos
     NC_STACK_base::CheckOpts(&yw->_briefScreen.ViewingObject.VP, model_base);
 
     model_base->Render(arg, yw->_briefScreen.ViewingObject.VP);
+
+    // Capture the parent transform before rendering shared attachment bases:
+    // a mount can reference the same visual as its parent or another mount.
+    const mat3x3 parentRotation = model_base->TForm().SclRot;
+    TBriefObject &object = yw->_briefScreen.ViewingObject;
+    const World::TRoboProto *robo =
+        proto.model_id == BACT_TYPES_ROBO ? proto.RoboProto : NULL;
+    object.GunVPs.resize((robo ? robo->guns.size() : 0) + proto.unit_guns.size());
+    size_t mountIndex = 0;
+    auto renderGuns = [&](const std::vector<World::TRoboGun> &guns)
+    {
+        for (const World::TRoboGun &gun : guns)
+        {
+            auto &instance = object.GunVPs[mountIndex++];
+            if ( !gun.robo_gun_type || gun.robo_gun_type >= yw->_vhclProtos.size() )
+            {
+                instance.reset();
+                continue;
+            }
+
+            const World::TVhclProto &gunProto = yw->_vhclProtos[gun.robo_gun_type];
+            NC_STACK_base *visual = yw->ResolveVisualModel(gunProto.vp_normal,
+                                                         gunProto.visual_3ds.normal,
+                                                         gunProto.visual_base.normal);
+            if ( !visual )
+            {
+                instance.reset();
+                continue;
+            }
+
+            if ( !instance || instance->Bas != visual )
+                instance.reset(visual->GenRenderInstance());
+
+            visual->SetStatic(false);
+            visual->SetVizLimit(16000);
+            visual->SetFadeLength(100);
+            visual->SetPosition(*pos + parentRotation.Transform(gun.pos));
+            visual->TForm().SclRot = parentRotation *
+                World::InitialGunRotation(gun.dir).Transpose();
+            visual->Render(arg, instance.get());
+        }
+    };
+
+    if ( robo )
+        renderGuns(robo->guns);
+    renderGuns(proto.unit_guns);
+
 }
 
 void sb_0x4eb94c__sub1(NC_STACK_ypaworld *yw, bool clockwise, int rot, vec3d *pos, baseRender_msg *arg)

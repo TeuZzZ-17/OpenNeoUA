@@ -13971,10 +13971,13 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         // produces the same number of correctly positioned tracers.
         wobj->StartWeaponTracer();
 
-        _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
-                                     wproto.visual_base.launch,
-                                     wobj->_position, wobj->_rotation, 1000,
-                                     1.0, World::TVisualTint(), wproto.launch_scale);
+        // A launch flash belongs to the vehicle fire event, not each projectile.
+        // The first successful projectile supplies the final muzzle transform.
+        if ( i == 0 )
+            _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
+                                         wproto.visual_base.launch,
+                                         wobj->_position, wobj->_rotation, 1000,
+                                         1.0, World::TVisualTint(), wproto.launch_scale);
 
         /** Missiles will be stored in another list
          *  so kidref will be not attached to anything.
