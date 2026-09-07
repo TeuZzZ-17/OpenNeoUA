@@ -94,6 +94,12 @@ Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std
 // OpenNeoUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::UiMapMarkerSound("ui.map_marker_sound", Common::Ini::KT_STRING, std::string());
+// OpenNeoUA Genesis/Creation list geometry defaults. Numeric parsing keeps invalid
+// authored values on the declared defaults automatically.
+Common::Ini::Key IniConf::UiGenesisListX("ui.genesis_list_x", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultX);
+Common::Ini::Key IniConf::UiGenesisListWidth("ui.genesis_list_width", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultWidth);
+Common::Ini::Key IniConf::UiGenesisListHeight("ui.genesis_list_height", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultHeight);
+Common::Ini::Key IniConf::UiGenesisListOpacity("ui.genesis_list_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultOpacity);
 
 
 // Input Engine
@@ -783,6 +789,10 @@ void IniConf::Init()
         , &UiMenuFont
         , &UiRetroInterface
         , &UiMapMarkerSound
+        , &UiGenesisListX
+        , &UiGenesisListWidth
+        , &UiGenesisListHeight
+        , &UiGenesisListOpacity
     };
 }
 
