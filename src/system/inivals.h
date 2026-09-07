@@ -358,6 +358,14 @@ public:
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
     static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional sound played once after successful map marker deployment
+    static constexpr int UiGenesisListDefaultX = 0;
+    static constexpr int UiGenesisListDefaultWidth = 180;
+    static constexpr int UiGenesisListDefaultHeight = 220;
+    static constexpr int UiGenesisListDefaultOpacity = 200;
+    static Common::Ini::Key UiGenesisListX; // OpenNeoUA: Genesis/Creation list X position; default 0
+    static Common::Ini::Key UiGenesisListWidth; // OpenNeoUA: Genesis/Creation list width; default 180
+    static Common::Ini::Key UiGenesisListHeight; // OpenNeoUA: Genesis/Creation list maximum height in pixels; default 220
+    static Common::Ini::Key UiGenesisListOpacity; // OpenNeoUA: Genesis/Creation list background opacity 0..255; default 200
 
 private:
     static Common::Ini::PKeyList _varList;
