@@ -6,6 +6,7 @@
 #include "yw.h"
 #include "ypagun.h"
 #include "yparobo.h"
+#include "world/gunrotation.h"
 
 // OpenNeoUA custom: artillery shell guns are artillery pieces. They must be aimed only by
 // UpdateArtilleryShell()/ypabact_AimArtilleryShellLauncherVisual() at the current barrage zone,
@@ -824,66 +825,10 @@ bool NC_STACK_ypagun::TestTargetSector(const NC_STACK_ypabact * cel_unit) const
 
 void NC_STACK_ypagun::ypagun_func128(const vec3d &_basis, bool directDown)
 {
-    vec3d basis = _basis;
-    float ln = basis.length();
-
-    if ( ln > 0.001 )
-        basis /= ln;
-
-    _gunBasis = basis;
-    _rotation.SetZ( basis );
-
-    if ( basis.y != 0.0 )
-    {
-        if ( basis.x != 0.0 || basis.z != 0.0 )
-        {
-            float v12 = -1.0 / ( basis.y / basis.XZ().length() );
-
-            _rotation.m11 = sqrt(POW2(v12) / (POW2(v12) + 1.0));
-
-            if ( basis.x != 0.0 )
-            {
-                float v14 = 1.0 - POW2(_rotation.m11);
-                _rotation.m10 = sqrt( v14 / (POW2(basis.z) / (POW2(basis.x)) + 1.0) );
-                _rotation.m12 = sqrt( v14 - POW2(_rotation.m10) );
-            }
-            else
-            {
-                float v17 = 1.0 - POW2(_rotation.m11);
-                _rotation.m12 = sqrt( v17 / (POW2(basis.x) / (POW2(basis.z)) + 1.0) );
-                _rotation.m10 = sqrt( v17 - POW2(_rotation.m12) );
-            }
-
-            if ( basis.x < 0.0 )
-                _rotation.m10 = -_rotation.m10;
-
-            if ( basis.z < 0.0 )
-                _rotation.m12 = -_rotation.m12;
-
-            if ( basis.y > 0.0 )
-            {
-                _rotation.m10 = -_rotation.m10;
-                _rotation.m12 = -_rotation.m12;
-            }
-        }
-        else
-        {
-            _rotation.SetY( vec3d(0.0, 0.0, 1.0) );
-        }
-    }
-    else
-    {
-        _rotation.SetY( vec3d(0.0, 1.0, 0.0) );
-    }
-
+    _rotation = World::InitialGunRotation(_basis, directDown);
+    _gunBasis = _rotation.AxisZ();
     if ( directDown )
-    {
         _gunFlags |= GUN_FLAGS_FALLDOWN;
-        _rotation.SetY( -_rotation.AxisY() );
-    }
-
-    _rotation.SetX( _rotation.AxisY() * _rotation.AxisZ() );
-
     _gunRott = _rotation.AxisY();
 }
 
