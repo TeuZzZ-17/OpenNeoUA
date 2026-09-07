@@ -74,15 +74,17 @@ Common::Ini::Key IniConf::GfxColorEffPower4("gfx.color_eff_pwr[4]", Common::Ini:
 Common::Ini::Key IniConf::GfxColorEffPower5("gfx.color_eff_pwr[5]", Common::Ini::KT_DIGIT, (int32_t)100);
 Common::Ini::Key IniConf::GfxColorEffPower6("gfx.color_eff_pwr[6]", Common::Ini::KT_DIGIT, (int32_t)100);
 Common::Ini::Key IniConf::GfxColorEffPower7("gfx.color_eff_pwr[7]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower8("gfx.color_eff_pwr[8]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower9("gfx.color_eff_pwr[9]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower10("gfx.color_eff_pwr[10]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower11("gfx.color_eff_pwr[11]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower12("gfx.color_eff_pwr[12]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower13("gfx.color_eff_pwr[13]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower14("gfx.color_eff_pwr[14]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower15("gfx.color_eff_pwr[15]", Common::Ini::KT_DIGIT, (int32_t)100);
-Common::Ini::Key IniConf::GfxColorEffPower16("gfx.color_eff_pwr[16]", Common::Ini::KT_DIGIT, (int32_t)100);
+// OpenNeoUA custom palette slots. Slots 8..16 have no hardcoded color: they exist
+// only when nucleus.ini defines an RGB value in the R_G_B form.
+Common::Ini::Key IniConf::GfxColorEff8("gfx.color_eff[8]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff9("gfx.color_eff[9]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff10("gfx.color_eff[10]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff11("gfx.color_eff[11]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff12("gfx.color_eff[12]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff13("gfx.color_eff[13]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff14("gfx.color_eff[14]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff15("gfx.color_eff[15]", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxColorEff16("gfx.color_eff[16]", Common::Ini::KT_WORD, std::string());
 
 Common::Ini::Key IniConf::GfxVBO("gfx.vbo", Common::Ini::KT_BOOL, true);
 
@@ -757,15 +759,15 @@ void IniConf::Init()
         , &GfxColorEffPower5
         , &GfxColorEffPower6
         , &GfxColorEffPower7
-        , &GfxColorEffPower8
-        , &GfxColorEffPower9
-        , &GfxColorEffPower10
-        , &GfxColorEffPower11
-        , &GfxColorEffPower12
-        , &GfxColorEffPower13
-        , &GfxColorEffPower14
-        , &GfxColorEffPower15
-        , &GfxColorEffPower16
+        , &GfxColorEff8
+        , &GfxColorEff9
+        , &GfxColorEff10
+        , &GfxColorEff11
+        , &GfxColorEff12
+        , &GfxColorEff13
+        , &GfxColorEff14
+        , &GfxColorEff15
+        , &GfxColorEff16
 
         , &GfxParticlesLimit
         , &GfxGroundDecalLimit
