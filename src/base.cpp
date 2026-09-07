@@ -552,7 +552,7 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
 
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
-            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object VP tint multiplier/target hue
+            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object visual target hue/alpha
             rend.Colorize = arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags;
@@ -664,7 +664,7 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             GFX::TRenderNode rend( GFX::TRenderNode::TYPE_MESH );
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
-            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object VP tint multiplier/target hue
+            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object visual target hue/alpha
             rend.Colorize = arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags | arg->flags;

@@ -693,6 +693,12 @@ static bool ypabact_IsMainVPBase(NC_STACK_ypabact *bact, NC_STACK_base *base)
     return base == bact->_vp_normal || base == bact->_vp_fire || base == bact->_vp_wait || base == bact->_vp_genesis;
 }
 
+static bool ypabact_IsTintableVisualBase(NC_STACK_ypabact *bact, NC_STACK_base *base)
+{
+    return base == bact->_vp_normal || base == bact->_vp_fire || base == bact->_vp_wait ||
+           base == bact->_vp_dead || base == bact->_vp_megadeth || base == bact->_vp_genesis;
+}
+
 static bool ypabact_ShouldApplyVPRotation(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
     if ( bact->_vp_rotation.x == 0.0 &&
@@ -5119,14 +5125,18 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     World::TVisualTint effectiveTint =
         World::BlackSectTint::IsTintedUnit(this) ? World::BlackSectTint::Tint() : _vp_tint;
 
-    // OpenNeoUA debuff target tint: compose a temporary RGBA multiplier over the unit's
-    // already-effective instance tint. The prototype and _vp_tint remain untouched, so
-    // expiration, death or replacement of the debuff restores the exact previous look.
+    // OpenNeoUA debuff target tint: RGB is an absolute target hue, so an active
+    // debuff deliberately overrides any previous authored/Black-Sect hue instead of
+    // multiplying into it. Alpha still composes multiplicatively. Prototype and
+    // _vp_tint state remain untouched, so expiration restores the exact prior look.
     if ( _active_debuff.active && !_active_debuff.target_tint.IsNeutral() )
     {
-        effectiveTint.r *= _active_debuff.target_tint.r;
-        effectiveTint.g *= _active_debuff.target_tint.g;
-        effectiveTint.b *= _active_debuff.target_tint.b;
+        if ( _active_debuff.target_tint.ColorizesRGB() )
+        {
+            effectiveTint.r = _active_debuff.target_tint.r;
+            effectiveTint.g = _active_debuff.target_tint.g;
+            effectiveTint.b = _active_debuff.target_tint.b;
+        }
         effectiveTint.a *= _active_debuff.target_tint.a;
         effectiveTint.Clamp();
     }
@@ -5139,15 +5149,16 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         return ypabact_IsMainVPBase(this, base);
     };
 
-    // OpenNeoUA custom vp_tint: same eligible visual prototypes as vp_scale.
-    // Tint is a visual-only per-instance RGBA multiplier; never affects gameplay.
-    // effectiveTint already folds in the Black Sect unit tint override (see above).
+    // OpenNeoUA custom visual tint: all authored visual-state bodies are eligible
+    // (normal/fire/wait/dead/megadeth/genesis), independently from scale/spin rules.
+    // RGB is rendered as a target hue while preserving source intensity; alpha remains
+    // multiplicative. effectiveTint already includes Black Sect/mimic/debuff composition.
     auto shouldApplyVPTint = [this, &effectiveTint](NC_STACK_base *base)
     {
         if ( effectiveTint.IsNeutral() )
             return false;
 
-        return ypabact_IsMainVPBase(this, base);
+        return ypabact_IsTintableVisualBase(this, base);
     };
 
     auto tintToGL = [](const World::TVisualTint &tint) -> GFX::TGLColor
@@ -5157,17 +5168,21 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
 
     auto applyRenderControls = [&](NC_STACK_base *base)
     {
-        bool mainBase = ypabact_IsMainVPBase(this, base);
-        bool missileMain = _bact_type == BACT_TYPES_MISSLE && mainBase;
+        const bool mainBase = ypabact_IsMainVPBase(this, base);
+        const bool tintBase = ypabact_IsTintableVisualBase(this, base);
+        const bool applyTint = shouldApplyVPTint(base);
+        const bool missileMain = _bact_type == BACT_TYPES_MISSLE && mainBase;
 
-        if ( shouldApplyVPTint(base) )
+        if ( applyTint )
             arg->tint = tintToGL(effectiveTint);
         else
             arg->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+        arg->colorizeTint = applyTint && effectiveTint.ColorizesRGB();
 
         if ( missileMain )
         {
             arg->particleTint = tintToGL(_vp_trail_tint);
+            arg->particleColorizeTint = _vp_trail_tint.ColorizesRGB();
             // Trail X/Y keep scaling each flat particle. Z is deliberately
             // repurposed as a lifetime multiplier so values below 1.0 shorten
             // the visible trail while 1.0 (or an absent key) stays vanilla.
@@ -5175,16 +5190,19 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             arg->particleSpin = _vp_trail_spin_strength;
             arg->particleLifetimeScale = _vp_trail_scale.z;
         }
-        else if ( mainBase )
+        else if ( tintBase )
         {
+            // Particles emitted by any tinted visual state inherit the same target hue.
             arg->particleTint = arg->tint;
-            arg->particleScale = shouldApplyVPScale(base) ? _vp_scale : vec3d(1.0, 1.0, 1.0);
-            arg->particleSpin = ypabact_ShouldApplyVPSpin(this, base) ? _vp_spin_strength : vec3d(0.0, 0.0, 0.0);
+            arg->particleColorizeTint = arg->colorizeTint;
+            arg->particleScale = mainBase && shouldApplyVPScale(base) ? _vp_scale : vec3d(1.0, 1.0, 1.0);
+            arg->particleSpin = mainBase && ypabact_ShouldApplyVPSpin(this, base) ? _vp_spin_strength : vec3d(0.0, 0.0, 0.0);
             arg->particleLifetimeScale = 1.0f;
         }
         else
         {
             arg->particleTint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            arg->particleColorizeTint = false;
             arg->particleScale = vec3d(1.0, 1.0, 1.0);
             arg->particleSpin = vec3d(0.0, 0.0, 0.0);
             arg->particleLifetimeScale = 1.0f;
@@ -12218,13 +12236,16 @@ static void ypabact_SpawnWeaponImpactVisual(NC_STACK_ypaworld *world,
 
     if ( preferMegadeth && hasMegadeth )
         world->SpawnTransientVisual(wproto.vp_megadeth, wproto.visual_3ds.megadeth,
-                                    wproto.visual_base.megadeth, pos, rot, lifeTime);
+                                    wproto.visual_base.megadeth, pos, rot, lifeTime,
+                                    1.0f, wproto.visual_tint);
     else if ( hasDead )
         world->SpawnTransientVisual(wproto.vp_dead, wproto.visual_3ds.dead,
-                                    wproto.visual_base.dead, pos, rot, lifeTime);
+                                    wproto.visual_base.dead, pos, rot, lifeTime,
+                                    1.0f, wproto.visual_tint);
     else if ( hasMegadeth )
         world->SpawnTransientVisual(wproto.vp_megadeth, wproto.visual_3ds.megadeth,
-                                    wproto.visual_base.megadeth, pos, rot, lifeTime);
+                                    wproto.visual_base.megadeth, pos, rot, lifeTime,
+                                    1.0f, wproto.visual_tint);
 }
 
 static void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto,

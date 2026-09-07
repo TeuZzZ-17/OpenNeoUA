@@ -484,6 +484,7 @@ void NC_STACK_ypaworld::RenderProceduralEnergyFX(baseRender_msg *arg)
                 render.Color = _proceduralEnergyFXQuadMesh.Mat.Color;
                 render.ColorMul = GFX::TGLColor(it->tint.r, it->tint.g, it->tint.b,
                                                 it->tint.a * fade * alpha);
+                render.Colorize = it->tint.ColorizesRGB();
                 render.TForm = transform;
                 render.Distance = distance;
                 render.TimeStamp = arg->globTime;

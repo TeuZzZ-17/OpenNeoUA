@@ -282,7 +282,7 @@ struct TRenderNode
 
     uint32_t Flags = 0;
     TGLColor Color;
-    // OpenNeoUA custom: per-node VP tint multiplier. Neutral (1,1,1,1) = no change.
+    // OpenNeoUA custom: per-node visual target hue/alpha. Neutral (1,1,1,1) = no change.
     TGLColor ColorMul = TGLColor(1.0, 1.0, 1.0, 1.0);
     // Treat ColorMul.rgb as a replacement hue instead of a channel multiplier.
     bool Colorize = false;
@@ -962,7 +962,7 @@ protected:
     static constexpr int32_t _vboTextured = 160; // 4
     static constexpr int32_t _vboFlat     = 164; // 4
     static constexpr int32_t _vboATest    = 168; // 4
-    // OpenNeoUA custom: VP tint multiplier (std140 vec4 -> 16-byte aligned at 176)
+    // OpenNeoUA custom: visual target hue/alpha (std140 vec4 -> 16-byte aligned at 176)
     static constexpr int32_t _vboColorMul = 176; // 4 * 4 = 16
     static constexpr int32_t _vboFogColor = 192; // 4 * 4 = 16
     static constexpr int32_t _vboAtmosphereColor = 208; // 4 * 4 = 16
