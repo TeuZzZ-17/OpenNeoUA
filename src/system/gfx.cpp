@@ -51,7 +51,9 @@ static int NormalizeFrameRateLimit(int value)
     return 60;
 }
 
-const std::array<vec3d, 17> GFXEngine::_clrEff
+// Vanilla palette effects only. OpenNeoUA custom slots 8..16 are loaded from
+// nucleus.ini and intentionally have no hardcoded fallback color.
+const std::array<vec3d, 8> GFXEngine::_clrEff
 {   vec3d(1.0,  1.0,  1.0)
 ,   vec3d(1.21, 0.0,  0.29)
 ,   vec3d(0.13, 0.43, 2.17)
@@ -59,16 +61,7 @@ const std::array<vec3d, 17> GFXEngine::_clrEff
 ,   vec3d(1.0,  1.0,  1.0)
 ,   vec3d(0.57, 0.59, 0.59)
 ,   vec3d(1.4,  1.08,  1.12)
-,   vec3d(0.3,  0.60, 0.7)
-,   vec3d(1.60, 1.45, 0.05)
-,   vec3d(1.80, 0.72, 0.05)
-,   vec3d(1.05, 0.25, 1.50)
-,   vec3d(0.10, 1.55, 1.55)
-,   vec3d(1.55, 0.10, 1.55)
-,   vec3d(1.70, 1.70, 1.70)
-,   vec3d(0.08, 0.08, 0.08)
-,   vec3d(0.70, 0.70, 0.70)
-,   vec3d(0.80, 0.42, 0.16)};
+,   vec3d(0.3,  0.60, 0.7)};
 
 std::vector<TGFXDeviceInfo> GFXEngine::_devices
 {
@@ -184,6 +177,39 @@ static TGLColor HorizonParseColor(std::string s, const TGLColor &fallback)
     {
         return fallback;
     }
+}
+
+static bool ParseColorEffectRgb(std::string s, vec3d *out)
+{
+    s = HorizonTrim(s);
+    if (s.empty() || !out)
+        return false;
+
+    std::vector<std::string> parts = Stok::Split(s, "_, \t");
+    if (parts.size() != 3)
+        return false;
+
+    int component[3] = {0, 0, 0};
+    for (int i = 0; i < 3; ++i)
+    {
+        try
+        {
+            size_t pos = 0;
+            int value = std::stoi(parts[i], &pos, 10);
+            if (pos != parts[i].size() || value < 0 || value > 255)
+                return false;
+            component[i] = value;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    *out = vec3d((double)component[0] / 255.0,
+                 (double)component[1] / 255.0,
+                 (double)component[2] / 255.0);
+    return true;
 }
 
 static void HorizonLoadConfigFromIni()
@@ -2566,29 +2592,80 @@ void GFXEngine::SetColorEffectsPowers(const std::vector<ColorFx> &arg)
     {
         _normClr = vec3d(1.0, 1.0, 1.0);
         _invClr = vec3d(0.0, 0.0, 0.0);
+        return;
     }
-    else
+
+    _normClr = vec3d(0.0, 0.0, 0.0);
+    _invClr = vec3d(0.0, 0.0, 0.0);
+    bool applied = false;
+
+    for (ColorFx fx : arg)
     {
-        _normClr = vec3d(0.0, 0.0, 0.0);
-        _invClr = vec3d(0.0, 0.0, 0.0);
+        vec3d color;
+        bool inverse = false;
 
-        for (ColorFx fx : arg)
+        if (fx.Id >= 0 && fx.Id < (int)_clrEff.size())
         {
-            if ( fx.Id < 0 || fx.Id >= (int)_clrEff.size() )
-                continue;
-
-            switch(fx.Id)
-            {
-                case 4:
-                case 5:
-                case 7:
-                    _invClr += _clrEff.at( fx.Id ) * fx.Pwr;
-                    break;
-                default:
-                    _normClr += _clrEff.at( fx.Id ) * fx.Pwr;
-                    break;
-            }
+            color = _clrEff.at(fx.Id);
+            inverse = (fx.Id == 4 || fx.Id == 5 || fx.Id == 7);
         }
+        else if (fx.Id >= 8 && fx.Id < (int)_customClrEff.size() &&
+                 _customClrEffDefined.at(fx.Id))
+        {
+            color = _customClrEff.at(fx.Id);
+        }
+        else
+        {
+            continue;
+        }
+
+        applied = true;
+        if (inverse)
+            _invClr += color * fx.Pwr;
+        else
+            _normClr += color * fx.Pwr;
+    }
+
+    // An undefined custom slot is a safe no-op, not a black-screen effect.
+    if (!applied)
+        _normClr = vec3d(1.0, 1.0, 1.0);
+}
+
+void GFXEngine::LoadCustomColorEffectsFromConfig()
+{
+    _customClrEff.fill(vec3d());
+    _customClrEffDefined.fill(false);
+
+    Common::Ini::Key *keys[] =
+    {
+        &System::IniConf::GfxColorEff8,
+        &System::IniConf::GfxColorEff9,
+        &System::IniConf::GfxColorEff10,
+        &System::IniConf::GfxColorEff11,
+        &System::IniConf::GfxColorEff12,
+        &System::IniConf::GfxColorEff13,
+        &System::IniConf::GfxColorEff14,
+        &System::IniConf::GfxColorEff15,
+        &System::IniConf::GfxColorEff16
+    };
+
+    for (int i = 0; i < 9; ++i)
+    {
+        const int slot = 8 + i;
+        const std::string value = keys[i]->Get<std::string>();
+        if (value.empty())
+            continue;
+
+        vec3d color;
+        if (!ParseColorEffectRgb(value, &color))
+        {
+            ypa_log_out("WARNING: invalid custom palette color [gfx.color_eff[%d]=%s]; expected R_G_B with each component in 0..255. Slot disabled.\n",
+                        slot, value.c_str());
+            continue;
+        }
+
+        _customClrEff.at(slot) = color;
+        _customClrEffDefined.at(slot) = true;
     }
 }
 
@@ -3397,6 +3474,7 @@ void GFXEngine::Init()
 
     System::IniConf::ReadFromNucleusIni();
     HorizonLoadConfigFromIni();
+    LoadCustomColorEffectsFromConfig();
 
     _vbo = System::IniConf::GfxVBO.Get<bool>();
     _colorEffects = System::IniConf::GfxColorEffects.Get<int32_t>();
@@ -5978,9 +6056,8 @@ float GFXEngine::GetColorEffectPower(int id)
     int32_t pwr = 0;
     switch(id)
     {
-        default:
         case 0:
-            return 1.0;
+            return 1.0f;
 
         case 1:
             pwr = System::IniConf::GfxColorEffPower1.Get<int32_t>();
@@ -6010,41 +6087,10 @@ float GFXEngine::GetColorEffectPower(int id)
             pwr = System::IniConf::GfxColorEffPower7.Get<int32_t>();
             break;
 
-        case 8:
-            pwr = System::IniConf::GfxColorEffPower8.Get<int32_t>();
-            break;
-
-        case 9:
-            pwr = System::IniConf::GfxColorEffPower9.Get<int32_t>();
-            break;
-
-        case 10:
-            pwr = System::IniConf::GfxColorEffPower10.Get<int32_t>();
-            break;
-
-        case 11:
-            pwr = System::IniConf::GfxColorEffPower11.Get<int32_t>();
-            break;
-
-        case 12:
-            pwr = System::IniConf::GfxColorEffPower12.Get<int32_t>();
-            break;
-
-        case 13:
-            pwr = System::IniConf::GfxColorEffPower13.Get<int32_t>();
-            break;
-
-        case 14:
-            pwr = System::IniConf::GfxColorEffPower14.Get<int32_t>();
-            break;
-
-        case 15:
-            pwr = System::IniConf::GfxColorEffPower15.Get<int32_t>();
-            break;
-
-        case 16:
-            pwr = System::IniConf::GfxColorEffPower16.Get<int32_t>();
-            break;
+        default:
+            if (id >= 8 && id < (int)_customClrEffDefined.size())
+                return _customClrEffDefined.at(id) ? 1.0f : 0.0f;
+            return 0.0f;
     }
 
     if (pwr < 0)
@@ -6053,7 +6099,7 @@ float GFXEngine::GetColorEffectPower(int id)
     if (pwr > 100)
         pwr = 100;
 
-    return (float)pwr / 100.0;
+    return (float)pwr / 100.0f;
 }
 
 Common::Point GFXEngine::ConvertPosTo2DStuff(const Common::Point &pos)
