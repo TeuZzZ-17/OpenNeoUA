@@ -4282,6 +4282,10 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         int primaryMax = 1;
         vhcl.GetWeaponProjectileCountRange(0, primaryMin, primaryMax);
         bacto->_num_weapons = (uint8_t)primaryMin;
+        bacto->_weapon_energy_cost = vhcl.weapon_energy_cost;
+        bacto->_weapon_energy_cost_defined = vhcl.weapon_energy_cost_defined;
+        bacto->_mgun_fire_energy_cost = vhcl.mgun_fire_energy_cost;
+        bacto->_mgun_fire_energy_cost_defined = vhcl.mgun_fire_energy_cost_defined;
         bacto->_num_weapons_snd_events = (uint8_t)vhcl.num_weapons_snd_events;
         bacto->_weapon_projectile_counts[0] = (uint8_t)primaryMin;
         bacto->_weapon_projectile_count_maxs[0] = (uint8_t)primaryMax;
