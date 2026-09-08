@@ -6855,7 +6855,39 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
                 arg137.field_30 = 0;
                 arg137.coll_max = 10;
 
-                _world->ypaworld_func137(&arg137);
+                if ( HasManualCompoundCollision() )
+                {
+                    // Heli player movement must use the same authored body as
+                    // unit/hit collisions, rather than the fixed 32-unit probe.
+                    // Keep the existing contact buffer and recoil response.
+                    arg137.coll_count = 0;
+                    const mat3x3 bodyRotation = _rotation.Transpose();
+                    for (const World::TRoboColl &sphere : _collNodes.roboColls)
+                    {
+                        if ( sphere.robo_coll_radius <= 0.01f ||
+                             arg137.coll_count == arg137.coll_max )
+                            continue;
+
+                        ypaworld_arg137 bodyProbe = arg137;
+                        bodyProbe.pos = _position + bodyRotation.Transform(sphere.coll_pos);
+                        bodyProbe.radius = sphere.robo_coll_radius;
+                        bodyProbe.collisions = v43 + arg137.coll_count;
+                        bodyProbe.coll_max = arg137.coll_max - arg137.coll_count;
+                        _world->ypaworld_func137(&bodyProbe);
+                        arg137.coll_count += bodyProbe.coll_count;
+                    }
+
+                    if ( UsesLegacyRadiusCollision() && arg137.coll_count < arg137.coll_max )
+                    {
+                        ypaworld_arg137 legacyProbe = arg137;
+                        legacyProbe.collisions = v43 + arg137.coll_count;
+                        legacyProbe.coll_max = arg137.coll_max - arg137.coll_count;
+                        _world->ypaworld_func137(&legacyProbe);
+                        arg137.coll_count += legacyProbe.coll_count;
+                    }
+                }
+                else
+                    _world->ypaworld_func137(&arg137);
 
                 if ( arg137.coll_count )
                 {
