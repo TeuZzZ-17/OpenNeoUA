@@ -1561,6 +1561,8 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
         ypaworld_arg146 newWpn;
         newWpn.pos = nwMsg->pos;
         newWpn.vehicle_id = nwMsg->type;
+        newWpn.weapon_sound_events_enabled =
+            (nwMsg->flags & UAMSG_NEWWEAPON_FLAG_SILENT_SOUND_EVENTS) == 0;
 
         NC_STACK_ypamissile *weapo = yw->ypaworld_func147(&newWpn);
 

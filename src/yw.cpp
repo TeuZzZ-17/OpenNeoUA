@@ -4205,9 +4205,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         // collision, while an authored radius keeps the vanilla sphere active
         // alongside the compound set. The prototype default radius remains
         // available to non-collision systems without silently becoming a hitbox.
-        bacto->_collNodes = vhcl.coll;
-        bacto->_manualCompoundCollision = !vhcl.coll.roboColls.empty();
-        bacto->_legacyRadiusDefined = vhcl.radius_defined;
+        bacto->ApplyCompoundCollision(vhcl.coll, vhcl.radius_defined);
 
         bacto->_overeof = vhcl.overeof;
         bacto->_viewer_overeof = vhcl.vwr_overeof;
@@ -4217,6 +4215,10 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_adist_bact = vhcl.adist_bact;
         bacto->_sdist_sector = vhcl.sdist_sector;
         bacto->_sdist_bact = vhcl.sdist_bact;
+        bacto->_ai_attack_range = vhcl.ai_attack_range;
+        bacto->_ai_retreat_range = vhcl.ai_retreat_range;
+        bacto->_ai_reengage_range = vhcl.ai_reengage_range;
+        bacto->_unifiedAICombatDistance = vhcl.HasValidUnifiedAICombatDistance();
         bacto->_radar = vhcl.radar;
         bacto->_gun_radius = vhcl.gun_radius;
         bacto->_gun_power = vhcl.gun_power;
@@ -4280,6 +4282,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         int primaryMax = 1;
         vhcl.GetWeaponProjectileCountRange(0, primaryMin, primaryMax);
         bacto->_num_weapons = (uint8_t)primaryMin;
+        bacto->_num_weapons_snd_events = (uint8_t)vhcl.num_weapons_snd_events;
         bacto->_weapon_projectile_counts[0] = (uint8_t)primaryMin;
         bacto->_weapon_projectile_count_maxs[0] = (uint8_t)primaryMax;
         for (size_t weaponSlot = 0; weaponSlot < vhcl.extra_num_weapons.size(); weaponSlot++)
@@ -4547,6 +4550,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_base_maxrot = wproto.maxrot;  // _base_force/_base_maxrot too, or they crawl at the 5000/0.5 defaults.
     wobj->_height = wproto.heightStd;
     wobj->_radius = wproto.radius;
+    wobj->ApplyCompoundCollision(wproto.coll, wproto.radius_defined);
     wobj->_viewer_radius = wproto.vwr_radius;
     wobj->_overeof = wproto.overeof;
     wobj->_viewer_overeof = wproto.vwr_overeof;
@@ -4638,60 +4642,67 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetDirectPush(wproto.push);
     wobj->SetArmorPenetrationTargets(wproto.armor_penetration_targets);
 
+    wobj->SetWeaponSoundEventsEnabled(arg->weapon_sound_events_enabled);
     wobj->_soundcarrier.Resize(wproto.sndFXes.size());
 
-    for (World::TVhclSound &sfx : wproto.sndFXes)
-        sfx.LoadSamples();
-
-    if ( wproto.debuff.allow )
-        wproto.debuff.tick_snd.LoadSamples();
-
-    for (size_t i = 0; i < wproto.sndFXes.size(); i++)
+    if ( wobj->WeaponSoundEventsEnabled() )
     {
-        TSoundSource *v25 = &wobj->_soundcarrier.Sounds[i];
+        for (World::TVhclSound &sfx : wproto.sndFXes)
+            sfx.LoadSamples();
 
-        v25->Volume = wproto.sndFXes[i].volume;
-        wproto.sndFXes[i].ConfigureSoundSourcePitch(*v25);
-        v25->Radius = wproto.sndFXes[i].radius;
+        for (size_t i = 0; i < wproto.sndFXes.size(); i++)
+        {
+            TSoundSource *v25 = &wobj->_soundcarrier.Sounds[i];
 
-        if ( i == 0 )
-            v25->SetLoop(true);
+            v25->Volume = wproto.sndFXes[i].volume;
+            wproto.sndFXes[i].ConfigureSoundSourcePitch(*v25);
+            v25->Radius = wproto.sndFXes[i].radius;
 
-        if ( wproto.sndFXes[i].MainSample.Sample )
-            v25->PSample = wproto.sndFXes[i].MainSample.Sample->GetSampleData();
-        else
-            v25->PSample = 0;
+            if ( i == 0 )
+                v25->SetLoop(true);
 
-        if ( wproto.sndFXes[i].sndPrm.slot )
-        {
-            v25->SetPFx(true);
-            v25->PPFx = &wproto.sndFXes[i].sndPrm;
-        }
-        else
-        {
-            v25->SetPFx(false);
-        }
+            if ( wproto.sndFXes[i].MainSample.Sample )
+                v25->PSample =
+                    wproto.sndFXes[i].MainSample.Sample->GetSampleData();
+            else
+                v25->PSample = 0;
 
-        if ( wproto.sndFXes[i].sndPrm_shk.slot )
-        {
-            v25->SetShk(true);
-            v25->PShkFx = &wproto.sndFXes[i].sndPrm_shk;
-        }
-        else
-        {
-            v25->SetShk(false);
-        }
+            if ( wproto.sndFXes[i].sndPrm.slot )
+            {
+                v25->SetPFx(true);
+                v25->PPFx = &wproto.sndFXes[i].sndPrm;
+            }
+            else
+            {
+                v25->SetPFx(false);
+            }
 
-        if ( !wproto.sndFXes[i].extS.empty() )
-        {
-            v25->SetFragmented(true);
-            v25->PFragments = &wproto.sndFXes[i].extS;
-        }
-        else
-        {
-            v25->SetFragmented(false);
+            if ( wproto.sndFXes[i].sndPrm_shk.slot )
+            {
+                v25->SetShk(true);
+                v25->PShkFx = &wproto.sndFXes[i].sndPrm_shk;
+            }
+            else
+            {
+                v25->SetShk(false);
+            }
+
+            if ( !wproto.sndFXes[i].extS.empty() )
+            {
+                v25->SetFragmented(true);
+                v25->PFragments = &wproto.sndFXes[i].extS;
+            }
+            else
+            {
+                v25->SetFragmented(false);
+            }
         }
     }
+
+    // Debuff tick audio is a separate status-effect system, not one of the
+    // projectile Weapon SND_NORMAL/SND_LAUNCH/SND_HIT packages.
+    if ( wproto.debuff.allow )
+        wproto.debuff.tick_snd.LoadSamples();
 
     wobj->SetParameters(wproto.initParams);
 

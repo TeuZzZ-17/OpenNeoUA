@@ -102,6 +102,11 @@ struct uamessage_newLeader : uamessage_base
     uint32_t newLeader = 0;
 };
 
+enum : uint8_t
+{
+    UAMSG_NEWWEAPON_FLAG_SILENT_SOUND_EVENTS = 1 << 0
+};
+
 struct uamessage_newWeapon : uamessage_base
 {
     vec3d pos;
