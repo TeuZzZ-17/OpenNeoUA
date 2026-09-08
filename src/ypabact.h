@@ -535,7 +535,6 @@ public:
     void UpdateVerticalLaser(update_msg *arg); // OpenNeoUA custom: downward mode of model = laser
     void RequestVerticalLaserFire(int weaponId, bact_arg79 *arg);
     void StopVerticalLaser();
-    void ApplyLaserEnergyDrain(float nominalDamage, float &remainder);
     void UpdateDamageFX(update_msg *arg);
     void UpdateDecorationFX(update_msg *arg);
     void UpdateEnergyStatusFX(update_msg *arg);
@@ -1070,8 +1069,6 @@ public:
     bool _mgun_set;
     int _num_mguns;
     int _mgun_shot_time;
-    float _mgunEnergyDrainRemainder;
-    int32_t _mgunEnergyDrainLastFireTime;
     float _mgun_recoil;
     float _mgun_recoil_cockpit;
     World::TWeaponTracerConfig _mgun_tracer;
@@ -1096,6 +1093,10 @@ public:
     float _mgun_spread_x;
     float _mgun_spread_y;
     uint8_t _num_weapons;
+    float _weapon_energy_cost;
+    bool _weapon_energy_cost_defined;
+    float _mgun_fire_energy_cost;
+    bool _mgun_fire_energy_cost_defined;
     uint8_t _num_weapons_snd_events;
     std::array<uint8_t, 4> _weapon_projectile_counts;
     std::array<uint8_t, 4> _weapon_projectile_count_maxs;
@@ -1124,6 +1125,7 @@ public:
     float _gun_radius;
     float _gun_power;
     int _mgun_time;
+    int _mgun_energy_cost_time;
     int _salve_counter;
     int _kill_after_shot;
     // Transient player-input latch used only after a suicide handoff. It prevents
@@ -1228,7 +1230,6 @@ public:
     int _laser_next_damage_time = 0;       // next _clock at which static tick damage may apply
     int _laser_next_fx_time = 0;           // next _clock at which a throttled impact VP may spawn
     int _laser_next_beam_vp_time = 0;      // next _clock at which the VP beam body may be refreshed
-    float _laserEnergyDrainRemainder = 0.0f;
     std::vector<TLaserBeamRequest> _laser_requests;
     std::vector<TLaserBeamRuntime> _laser_beams;
     // OpenNeoUA custom: separate downward-beam runtime used by model=laser vertical mode.
@@ -1238,7 +1239,6 @@ public:
     NC_STACK_ypabact *_vertical_laser_request_target = NULL;
     vec3d _vertical_laser_request_start;
     int _vertical_laser_next_beam_vp_time = 0;
-    float _verticalLaserEnergyDrainRemainder = 0.0f;
     TLaserBeamRuntime _vertical_laser_beam;
     std::vector<TLaserBeamRuntime> _vertical_laser_beams;
     bool _kamikaze_triggered;
