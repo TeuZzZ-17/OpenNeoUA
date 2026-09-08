@@ -826,6 +826,18 @@ struct TVhclProto
     int16_t num_weapons = 0;
     int16_t num_weapons_min = 0;
     int16_t num_weapons_max = 0;
+    // OpenNeoUA custom: optional per-Vehicle percentage of maximum energy charged
+    // once per successful normal Weapon firing event, regardless of num_weapons.
+    // Presence is tracked separately so 0% can explicitly disable the legacy
+    // per-projectile weapon drain while missing/invalid preserves vanilla behavior.
+    float weapon_energy_cost = 0.0f;
+    bool weapon_energy_cost_defined = false;
+    // OpenNeoUA custom: optional per-Vehicle percentage of maximum energy charged
+    // once per effective MGUN firing pulse. Presence is tracked separately so
+    // 0% explicitly disables the legacy continuous MGUN drain while
+    // missing/invalid preserves vanilla behavior.
+    float mgun_fire_energy_cost = 0.0f;
+    bool mgun_fire_energy_cost_defined = false;
     // 0/absent keeps the current unlimited per-projectile Weapon sound package.
     int16_t num_weapons_snd_events = 0;
     void GetWeaponProjectileCountRange(int sourceSlot, int &minCount, int &maxCount) const;
