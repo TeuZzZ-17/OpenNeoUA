@@ -3270,7 +3270,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "mgun_recoil_cockpit") )
     {
         float intensity = parser.stof(p2, 0);
-        if ( !std::isfinite(intensity) || intensity < 1.0f )
+        if ( !std::isfinite(intensity) || intensity < 0.0f )
             intensity = 0.0f;
         else if ( intensity > 10.0f )
             intensity = 10.0f;

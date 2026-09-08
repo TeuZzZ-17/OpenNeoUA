@@ -265,11 +265,6 @@ Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_abo
 Common::Ini::Key IniConf::GameSprintForceUp("game.sprint_force_up", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintPitchUp("game.sprint_pitch_up", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
-// OpenNeoUA custom: one shared explicit percentage (for example 5%) of nominal
-// weapon damage converted into shooter-side energy cost for normal projectiles,
-// MGUNs and laser. A bare number is not treated as a percentage. Missing/invalid
-// preserves each weapon type's previous fallback; 0% disables configured drain.
-Common::Ini::Key IniConf::GameWeaponEnergyCost("game.weapon_energy_cost", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: Sprint energy cost per second. Explicit % uses maximum energy;
 // a bare value is an absolute energy amount per second. Zero keeps Sprint free.
 Common::Ini::Key IniConf::GameSprintEnergyCost("game.sprint_energy_cost", Common::Ini::KT_WORD, std::string("0"));
@@ -310,7 +305,7 @@ Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", C
 // recoil/random-spread reduction. Zero disables all three effects; values above
 // one may strengthen braking while weapon modifiers remain capped at 100%.
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenNeoUA: one global recoil envelope shared by Weapon recoil and MGUN recoil.
+// OpenNeoUA: one global presentation envelope shared by Weapon recoil and MGUN visual recoil.
 // Missing values preserve the current instant kick/no-hold/exponential-style return feel.
 Common::Ini::Key IniConf::GameRecoilKickTime("game.recoil_kick_time", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRecoilHoldTime("game.recoil_hold_time", Common::Ini::KT_WORD, std::string("0"));
@@ -654,7 +649,6 @@ void IniConf::Init()
         , &GameSprintForceUp
         , &GameSprintPitchUp
         , &GameSprintRampTime
-        , &GameWeaponEnergyCost
         , &GameSprintEnergyCost
         , &GameSprintEnergyDrainIntervalMs
         , &GameTimeLine
