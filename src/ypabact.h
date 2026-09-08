@@ -542,9 +542,10 @@ public:
     bool CanReceiveConfiguredPush() const;
     void AddAoePush(const vec3d &dir, float distance); // queue smooth weapon knockback
     void ApplyConfiguredPush(const vec3d &dir, float intensity); // shared 0..10 adapter to the mechanical AddAoePush path
-    void ApplyRecoil(const vec3d &dir, float recoil); // OpenNeoUA: shared 0..10 Weapon/MGUN recoil engine
+    void ApplyRecoil(const vec3d &dir, float recoil); // OpenNeoUA: physical Weapon recoil engine
+    void ApplyMgunRecoilFeedback(const vec3d &dir, float recoil); // MGUN: cockpit SHK + external render-only recoil
     void UpdateAoePush(update_msg *arg);
-    void UpdateRecoilPush(update_msg *arg);      // integrate shared recoil push; render envelope is clock-driven
+    void UpdateRecoilPush(update_msg *arg);      // integrate Weapon recoil push; render envelope is clock-driven
     void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner = 0);
     void InheritActiveDebuffFromParent(NC_STACK_ypabact *parent);
     void UpdateActiveDebuff(update_msg *arg);
@@ -942,7 +943,7 @@ public:
     bool _fallDamageConsumed = false;
     bool _handbrakeHeld = false;
     float _heliLandingVisualOffsetY = 0.0f; // OpenNeoUA: render/camera-only smoothing of the vanilla heli ground snap
-    // OpenNeoUA: single render envelope shared by Weapon recoil and MGUN recoil.
+    // OpenNeoUA: single presentation envelope shared by physical Weapon recoil and render-only MGUN recoil.
     // The logical position remains authoritative for attached guns; only the
     // presentation offset returns to zero after kick/hold/return.
     vec3d _recoilVisualStartOffset = vec3d(0.0, 0.0, 0.0);
@@ -953,6 +954,7 @@ public:
     int _recoilVisualKickEndTime = 0;
     int _recoilVisualHoldEndTime = 0;
     int _recoilVisualReturnEndTime = 0;
+    bool _recoilVisualRenderOnly = false; // true only for MGUN visual feedback; never feeds body physics
     int _recoilAiRecoveryEndTime = 0; // OpenNeoUA: short AI tank forward-thrust pause after fake recoil
     int _recoilPlayerRecoveryEndTime = 0; // OpenNeoUA: short player tank forward-input damping after fake recoil
     vec3d _recoilPushVel = vec3d(0.0, 0.0, 0.0);
@@ -1005,7 +1007,7 @@ public:
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
-    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA custom: cockpit-only MGUN SHK scaled from mgun_recoil_cockpit
+    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: cockpit-only MGUN SHK scaled from mgun_recoil_cockpit
     TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: ordered snd_normal playback while model=laser is firing
     TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: same snd_normal path for laser vertical mode

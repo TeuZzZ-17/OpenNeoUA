@@ -1003,9 +1003,12 @@ static constexpr int RECOIL_MAX_PHASE_TIME_MS = 5000;
 static constexpr int RECOIL_COCKPIT_SHAKE_DURATION_MS = 220;
 static constexpr float MGUN_RECOIL_FEEDBACK_DEGREES_PER_UNIT = 1.2f;
 static constexpr float MGUN_RECOIL_FEEDBACK_MAX_DEGREES = 12.0f;
+// External/third-person MGUN body recoil is intentionally softened. Its authored
+// intensity is independent from cockpit SHK, which uses mgun_recoil_cockpit.
+static constexpr float MGUN_EXTERNAL_VISUAL_RECOIL_SCALE = 0.35f;
 // Preserve the smoother multi-axis cockpit vibration used by the earlier SHK
-// implementation. These affect camera shake only; body recoil is shared with
-// normal Weapon recoil and remains independent from the cockpit-only setting.
+// implementation. These affect cockpit camera shake only; MGUN body feedback
+// itself is render-only and never enters movement physics.
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_X = 0.35f;
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_Y = 0.20f;
 static constexpr float MGUN_RECOIL_SHAKE_AXIS_Z = 0.35f;
@@ -1116,11 +1119,19 @@ static bool ypabact_IsPlayerGunRecoilFirstPersonView(const NC_STACK_ypabact *bac
 
 static float ypabact_GetRecoilVisualPitch(const NC_STACK_ypabact *bact)
 {
-    if ( !bact ||
-         ypabact_IsPlayerGunRecoilFirstPersonView(bact) ||
-         (bact->_bact_type != BACT_TYPES_TANK &&
-          bact->_bact_type != BACT_TYPES_GUN) )
+    if ( !bact || ypabact_IsPlayerGunRecoilFirstPersonView(bact) )
         return 0.0f;
+
+    if ( bact->_recoilVisualRenderOnly )
+    {
+        if ( bact->IsCockpitCameraActive() )
+            return 0.0f;
+    }
+    else if ( bact->_bact_type != BACT_TYPES_TANK &&
+              bact->_bact_type != BACT_TYPES_GUN )
+    {
+        return 0.0f;
+    }
 
     float pitch = 0.0f;
     ypabact_EvaluateRecoilVisual(bact, NULL, &pitch);
@@ -1200,6 +1211,17 @@ static bool ypabact_UsesRenderOnlyRecoilTranslation(const NC_STACK_ypabact *unit
 
 static bool ypabact_ShouldRenderRecoilVisualOffset(const NC_STACK_ypabact *unit)
 {
+    if ( !unit )
+        return false;
+
+    if ( unit->_recoilVisualRenderOnly )
+    {
+        // Unified MGUN recoil: the local cockpit receives SHK only. Every
+        // external/third-person representation may show the model kick, but the
+        // logical Vehicle transform and velocity remain untouched.
+        return !unit->IsCockpitCameraActive();
+    }
+
     if ( !ypabact_UsesRenderOnlyRecoilTranslation(unit) )
         return false;
 
@@ -1994,9 +2016,8 @@ static void ypabact_TriggerPlayerMgunRecoilShake(NC_STACK_ypabact *bact)
     if ( recoilDegrees <= 0.0f )
         return;
 
-    // Reuse the existing local SHK carrier, but keep cockpit feedback completely
-    // independent from the physical/body recoil. mgun_recoil_cockpit is the sole
-    // tuning value for this cockpit-only shake.
+    // Reuse the existing local SHK carrier. Cockpit feedback is tuned only by
+    // mgun_recoil_cockpit and remains independent from external model recoil.
     bact->_mgun_recoil_shake.slot = 1;
     bact->_mgun_recoil_shake.mag0 = recoilDegrees * C_PI_180;
     bact->_mgun_recoil_shake.mag1 = 0.0f;
@@ -2663,6 +2684,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _recoilVisualKickEndTime = 0;
     _recoilVisualHoldEndTime = 0;
     _recoilVisualReturnEndTime = 0;
+    _recoilVisualRenderOnly = false;
     _recoilAiRecoveryEndTime = 0;
     _recoilPlayerRecoveryEndTime = 0;
     _recoilPushVel = vec3d(0.0, 0.0, 0.0);
@@ -2907,6 +2929,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _recoilVisualKickEndTime = 0;
     _recoilVisualHoldEndTime = 0;
     _recoilVisualReturnEndTime = 0;
+    _recoilVisualRenderOnly = false;
     _recoilAiRecoveryEndTime = 0;
     _recoilPlayerRecoveryEndTime = 0;
     _recoilPushVel = vec3d(0.0, 0.0, 0.0);
@@ -4656,9 +4679,8 @@ static const float AOE_PUSH_MAX_STEP = 80.0f;
 // 1=100, 4=1600, 6=3600, 10=10000.
 static const float CONFIGURED_PUSH_MAX_INTENSITY = 10.0f;
 static const float CONFIGURED_PUSH_DISTANCE_PER_SQUARED_LEVEL = 100.0f;
-// Weapon recoil and MGUN recoil enter the same normalized mechanical path.
-// 7 world units per level keeps the useful fine control of the former MGUN
-// scale while making 0..10 meaningful for heavy main-weapon recoil too.
+// Mechanical recoil belongs to normal Weapon recoil only. MGUN reuses the
+// same presentation distance scale, but never enters this movement integrator.
 static const float RECOIL_MECHANICAL_TAU = 0.14f;
 static const int RECOIL_AI_TANK_RECOVERY_MS = 220;
 static const int RECOIL_PLAYER_TANK_RECOVERY_MS = 220;
@@ -5018,8 +5040,8 @@ void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
     if ( recoil <= 0.0f )
         return;
 
-    // Landed tanks retain the established rule that recoil is disabled while
-    // airborne. MGUN and normal Weapon recoil now enter this exact same gate.
+    // Landed tanks retain the established Weapon-recoil rule that recoil is
+    // disabled while airborne.
     if ( _bact_type == BACT_TYPES_TANK && !(_status_flg & BACT_STFLAG_LAND) )
         return;
 
@@ -5027,7 +5049,8 @@ void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
     if ( !ypabact_ResolveRecoilDirection(this, dir, &recoilDir) )
         return;
 
-    // One shared presentation envelope for both public authoring paths.
+    // Normal Weapon recoil retains its established physical path.
+    _recoilVisualRenderOnly = false;
     ypabact_StartRecoilVisual(this, recoilDir, recoil);
 
     if ( _bact_type == BACT_TYPES_TANK )
@@ -5049,11 +5072,31 @@ void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
         return;
     }
 
-    // Mechanical recoil uses the same 0..10 -> distance scale for Weapon and
-    // MGUN. The existing stable impulse integrator remains unchanged; only the
-    // source scale/direction are centralized.
+    // Mechanical recoil is Weapon-only. The stable impulse integrator remains
+    // unchanged for normal Weapon recoil.
     _recoilPushVel += recoilDir *
         ((recoil * RECOIL_DISTANCE_PER_UNIT) / RECOIL_MECHANICAL_TAU);
+}
+
+void NC_STACK_ypabact::ApplyMgunRecoilFeedback(const vec3d &dir, float recoil)
+{
+    recoil = ypabact_ClampRecoil(recoil);
+    if ( recoil <= 0.0f )
+        return;
+
+    // Preserve the existing tank presentation gate while removing MGUN from
+    // mechanical recoil entirely. An airborne tank therefore keeps the old
+    // no-recoil presentation, but no Vehicle ever receives MGUN push velocity.
+    if ( _bact_type == BACT_TYPES_TANK && !(_status_flg & BACT_STFLAG_LAND) )
+        return;
+
+    vec3d recoilDir;
+    if ( !ypabact_ResolveRecoilDirection(this, dir, &recoilDir) )
+        return;
+
+    _recoilVisualRenderOnly = true;
+    ypabact_StartRecoilVisual(this, recoilDir,
+                              recoil * MGUN_EXTERNAL_VISUAL_RECOIL_SCALE);
 }
 
 void NC_STACK_ypabact::UpdateAoePush(update_msg *arg)
@@ -16963,6 +17006,7 @@ void NC_STACK_ypabact::Renew()
     _recoilVisualKickEndTime = 0;
     _recoilVisualHoldEndTime = 0;
     _recoilVisualReturnEndTime = 0;
+    _recoilVisualRenderOnly = false;
     _heliLandingVisualOffsetY = 0.0f;
     _recoilAiRecoveryEndTime = 0;
     _recoilPlayerRecoveryEndTime = 0;
@@ -18001,15 +18045,11 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             if ( vehicleTimedMgun )
                 ypabact_StartVehicleFireVP(this, arg->field_10);
 
-            // mgun_recoil keeps its Vehicle-script authoring name, but enters
-            // the exact same 0..10 recoil engine used by Weapon recoil. The
-            // support-plane projection prevents slope/aim pitch from lifting
-            // tanks or mounted guns. Cockpit SHK remains independently authored.
-            float mgunRecoilAmount = _mgun_recoil;
-            if ( ypabact_IsDirectLocalPlayerHandBrakeActive(this) )
-                mgunRecoilAmount *= 1.0f - ypabact_ReadHandBrakeRecoilReduction();
-            if ( mgunRecoilAmount > 0.0f )
-                ApplyRecoil(-_rotation.AxisZ(), mgunRecoilAmount);
+            // Independent MGUN feedback controls. mgun_recoil drives only the
+            // external render-only model kick; mgun_recoil_cockpit drives only
+            // the local cockpit SHK. Neither path changes Vehicle movement.
+            if ( _mgun_recoil > 0.0f )
+                ApplyMgunRecoilFeedback(-_rotation.AxisZ(), _mgun_recoil);
             ypabact_TriggerPlayerMgunRecoilShake(this);
 
             if ( vehicleTimedMgun )
