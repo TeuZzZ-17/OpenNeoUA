@@ -1,6 +1,8 @@
 #ifndef YBACT_H_INCLUDED
 #define YBACT_H_INCLUDED
 
+#include <vector>
+
 #include "nucleas.h"
 #include "system/gfx.h"
 #include "base.h"
@@ -493,6 +495,7 @@ public:
     virtual void Move(move_msg *arg);
     virtual void FightWithBact(bact_arg75 *arg);
     virtual void FightWithSect(bact_arg75 *arg);
+    bool ApplyUnifiedAICombatDistance(float distance, bool *startedRetreat = NULL);
     virtual void Die();
     virtual void SetState(setState_msg *arg);
     virtual size_t LaunchMissile(bact_arg79 *arg);
@@ -772,6 +775,18 @@ public:
     bool UsesLegacyRadiusCollision() const
     { return !HasManualCompoundCollision() || _legacyRadiusDefined; }
 
+    struct TCollisionSphereWorld
+    {
+        vec3d center;
+        float radius = 0.0f;
+        bool legacy = false;
+    };
+
+    void ApplyCompoundCollision(const World::rbcolls &coll, bool radiusDefined);
+    void GetCollisionSpheres(std::vector<TCollisionSphereWorld> &out,
+                             const vec3d &position, const mat3x3 &rotation,
+                             bool useViewerSemantics = false);
+
     virtual float getBACT_collPadding() const
     { return 0.0f; }
 
@@ -892,6 +907,10 @@ public:
     float _adist_bact;
     float _sdist_sector;
     float _sdist_bact;
+    float _ai_attack_range;
+    float _ai_retreat_range;
+    float _ai_reengage_range;
+    bool _unifiedAICombatDistance;
     vec3d _waypoints[32]; //waypoints
     int16_t _current_waypoint;
     int16_t _waypoints_count;
@@ -1077,6 +1096,7 @@ public:
     float _mgun_spread_x;
     float _mgun_spread_y;
     uint8_t _num_weapons;
+    uint8_t _num_weapons_snd_events;
     std::array<uint8_t, 4> _weapon_projectile_counts;
     std::array<uint8_t, 4> _weapon_projectile_count_maxs;
 

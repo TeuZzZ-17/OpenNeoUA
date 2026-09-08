@@ -2141,6 +2141,9 @@ struct ypaworld_arg146
     size_t vehicle_id;
     vec3d pos;
     bool skip_unit_guns = false;
+    // Weapon factory only. true preserves legacy behavior; false builds a
+    // dimensionally valid but completely silent Weapon sound carrier.
+    bool weapon_sound_events_enabled = true;
 };
 
 struct yw_130arg

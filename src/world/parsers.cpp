@@ -2271,6 +2271,61 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "spawn_at_death_immunity_time");
 }
 
+
+static float ParseFiniteCollisionFloat(ScriptParser::Parser &parser,
+                                       const std::string &value)
+{
+    float parsed = parser.stof(value, 0);
+    return std::isfinite(parsed) ? parsed : 0.0f;
+}
+
+static bool ParseCompoundCollisionParameter(
+        ScriptParser::Parser &parser, const std::string &p1,
+        const std::string &p2, rbcolls &coll, int32_t &collID)
+{
+    if ( !StriCmp(p1, "coll_num") )
+    {
+        int count = parser.stol(p2, NULL, 0);
+        count = std::max(0, std::min(count, (int)UNIT_COLL_MAX_COUNT));
+        coll.roboColls.resize(count);
+        if ( collID >= count )
+            collID = count - 1;
+        return true;
+    }
+
+    if ( !StriCmp(p1, "coll_act") )
+    {
+        collID = parser.stol(p2, NULL, 0);
+        collID = std::max(0, std::min(collID, (int)UNIT_COLL_MAX_COUNT - 1));
+        if ( (size_t)collID >= coll.roboColls.size() )
+            coll.roboColls.resize(collID + 1);
+        return true;
+    }
+
+    if ( !StriCmp(p1, "coll_radius") ||
+         !StriCmp(p1, "coll_x") ||
+         !StriCmp(p1, "coll_y") ||
+         !StriCmp(p1, "coll_z") )
+    {
+        if ( collID < 0 || (size_t)collID >= coll.roboColls.size() )
+            return true;
+
+        TRoboColl &sphere = coll.roboColls.at(collID);
+        float value = ParseFiniteCollisionFloat(parser, p2);
+        if ( !StriCmp(p1, "coll_radius") )
+            sphere.robo_coll_radius = std::max(0.0f, value);
+        else if ( !StriCmp(p1, "coll_x") )
+            sphere.coll_pos.x = value;
+        else if ( !StriCmp(p1, "coll_y") )
+            sphere.coll_pos.y = value;
+        else
+            sphere.coll_pos.z = value;
+        return true;
+    }
+
+    return false;
+}
+
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
     TRoboProto *robo = _vhcl->RoboProto;
@@ -2297,26 +2352,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         return &_vhcl->unit_guns.at(_unitGunID);
     };
 
-    auto getColl = [this]() -> TRoboColl *
-    {
-        if ( _collID < 0 || (size_t)_collID >= _vhcl->coll.roboColls.size() )
-            return NULL;
-
-        return &_vhcl->coll.roboColls.at(_collID);
-    };
-
     auto getRoboColl = [this, robo]() -> TRoboColl *
     {
         if ( _collID < 0 || (size_t)_collID >= robo->coll.roboColls.size() )
             return NULL;
 
         return &robo->coll.roboColls.at(_collID);
-    };
-
-    auto parseCollisionFloat = [&parser](const std::string &value) -> float
-    {
-        float parsed = parser.stof(value, 0);
-        return std::isfinite(parsed) ? parsed : 0.0f;
     };
 
     if ( !StriCmp(p1, "end") )
@@ -2419,6 +2460,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
         return ScriptParser::RESULT_SCOPE_END;
     }
+
+    if ( ParseCompoundCollisionParameter(parser, p1, p2, _vhcl->coll, _collID) )
+        return ScriptParser::RESULT_OK;
 
     if ( !StriCmp(p1, "model") )
     {
@@ -2617,6 +2661,21 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "sdist_bact") )
     {
         _vhcl->sdist_bact = parser.stof(p2, 0);
+    }
+    else if ( !StriCmp(p1, "ai_attack_range") )
+    {
+        _vhcl->ai_attack_range = parser.stof(p2, 0);
+        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_ATTACK_DEFINED;
+    }
+    else if ( !StriCmp(p1, "ai_retreat_range") )
+    {
+        _vhcl->ai_retreat_range = parser.stof(p2, 0);
+        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_RETREAT_DEFINED;
+    }
+    else if ( !StriCmp(p1, "ai_reengage_range") )
+    {
+        _vhcl->ai_reengage_range = parser.stof(p2, 0);
+        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_REENGAGE_DEFINED;
     }
     else if ( !StriCmp(p1, "radar") )
     {
@@ -3437,6 +3496,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                                            TGemNotificationEntry::CHANGE_NUM_WEAPONS,
                                            previousValue, _vhcl->num_weapons);
     }
+    else if ( !StriCmp(p1, "num_weapons_snd_events") )
+    {
+        int value = parser.stol(p2, NULL, 0);
+        _vhcl->num_weapons_snd_events =
+            value > 0 ? std::min(value, 255) : 0;
+    }
     else if ( !StriCmp(p1, "num_weapons_2") ||
               !StriCmp(p1, "num_weapons_3") ||
               !StriCmp(p1, "num_weapons_4") )
@@ -3822,56 +3887,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         robo->dock.z = parser.stof(p2, 0);
     }
-    // ---- OpenNeoUA custom: universal compound collision spheres (any vehicle) ----
-    // robo_coll_* below stays untouched for Robo/Host Station; coll_* writes into
-    // the vehicle prototype's own compound-sphere set (bounds-checked).
-    else if ( !StriCmp(p1, "coll_num") )
-    {
-        int cnt = parser.stol(p2, NULL, 0);
-
-        if ( cnt < 0 )
-            cnt = 0;
-        else if ( cnt > (int)UNIT_COLL_MAX_COUNT )
-            cnt = UNIT_COLL_MAX_COUNT;
-
-        _vhcl->coll.roboColls.resize(cnt);
-
-        if ( _collID >= cnt )
-            _collID = cnt - 1;
-    }
-    else if ( !StriCmp(p1, "coll_act") )
-    {
-        _collID = parser.stol(p2, NULL, 0);
-
-        if ( _collID < 0 )
-            _collID = 0;
-
-        if ( _collID >= (int)UNIT_COLL_MAX_COUNT )
-            _collID = UNIT_COLL_MAX_COUNT - 1;
-
-        if ( (size_t)_collID >= _vhcl->coll.roboColls.size() )
-            _vhcl->coll.roboColls.resize(_collID + 1);
-    }
-    else if ( !StriCmp(p1, "coll_radius") )
-    {
-        if (TRoboColl *c = getColl())
-            c->robo_coll_radius = std::max(0.0f, parseCollisionFloat(p2));
-    }
-    else if ( !StriCmp(p1, "coll_x") )
-    {
-        if (TRoboColl *c = getColl())
-            c->coll_pos.x = parseCollisionFloat(p2);
-    }
-    else if ( !StriCmp(p1, "coll_y") )
-    {
-        if (TRoboColl *c = getColl())
-            c->coll_pos.y = parseCollisionFloat(p2);
-    }
-    else if ( !StriCmp(p1, "coll_z") )
-    {
-        if (TRoboColl *c = getColl())
-            c->coll_pos.z = parseCollisionFloat(p2);
-    }
     else if ( !StriCmp(p1, "robo_coll_num") )
     {
         int cnt = parser.stol(p2, NULL, 0);
@@ -3902,22 +3917,22 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "robo_coll_radius") )
     {
         if (TRoboColl *c = getRoboColl())
-            c->robo_coll_radius = std::max(0.0f, parseCollisionFloat(p2));
+            c->robo_coll_radius = std::max(0.0f, ParseFiniteCollisionFloat(parser, p2));
     }
     else if ( !StriCmp(p1, "robo_coll_x") )
     {
         if (TRoboColl *c = getRoboColl())
-            c->coll_pos.x = parseCollisionFloat(p2);
+            c->coll_pos.x = ParseFiniteCollisionFloat(parser, p2);
     }
     else if ( !StriCmp(p1, "robo_coll_y") )
     {
         if (TRoboColl *c = getRoboColl())
-            c->coll_pos.y = parseCollisionFloat(p2);
+            c->coll_pos.y = ParseFiniteCollisionFloat(parser, p2);
     }
     else if ( !StriCmp(p1, "robo_coll_z") )
     {
         if (TRoboColl *c = getRoboColl())
-            c->coll_pos.z = parseCollisionFloat(p2);
+            c->coll_pos.z = ParseFiniteCollisionFloat(parser, p2);
     }
     else if ( !StriCmp(p1, "robo_viewer_x") )
     {
@@ -4233,6 +4248,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
     if (!StriCmp(word, "new_weapon"))
     {
         _isModify = false;
+        _collID = -1;
         _wpnID = parser.stol(opt, NULL, 0);
         _wpn = &_o._weaponProtos[_wpnID];
 
@@ -4372,6 +4388,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
     }
     else if (!StriCmp(word, "modify_weapon"))
     {
+        _collID = -1;
         _wpnID = parser.stol(opt, NULL, 0);
 
         if ( _wpnID < 0 || (size_t)_wpnID >= _o._weaponProtos.size() )
@@ -4396,6 +4413,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
 {
     if ( !StriCmp(p1, "end") )
         return ScriptParser::RESULT_SCOPE_END;
+
+    if ( ParseCompoundCollisionParameter(parser, p1, p2, _wpn->coll, _collID) )
+        return ScriptParser::RESULT_OK;
 
     if ( !StriCmp(p1, "model") )
     {
@@ -4545,6 +4565,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "radius") )
     {
         _wpn->radius = parser.stof(p2, 0);
+        _wpn->radius_defined = true;
     }
     else if ( !StriCmp(p1, "trigger_radius") )
     {

@@ -763,6 +763,31 @@ struct TVhclProto
     float adist_bact = 0.0;
     float sdist_sector = 0.0;
     float sdist_bact = 0.0;
+    // OpenNeoUA: optional atomic combat-distance authoring. The bit mask records
+    // presence, so malformed/partial new sets can fall back to the untouched
+    // adist_*/sdist_* path instead of mixing old and new semantics.
+    float ai_attack_range = 0.0f;
+    float ai_retreat_range = 0.0f;
+    float ai_reengage_range = 0.0f;
+    uint8_t ai_combat_distance_mask = 0;
+    enum : uint8_t
+    {
+        AI_COMBAT_ATTACK_DEFINED = 1 << 0,
+        AI_COMBAT_RETREAT_DEFINED = 1 << 1,
+        AI_COMBAT_REENGAGE_DEFINED = 1 << 2,
+        AI_COMBAT_ALL_DEFINED = AI_COMBAT_ATTACK_DEFINED |
+                                AI_COMBAT_RETREAT_DEFINED |
+                                AI_COMBAT_REENGAGE_DEFINED
+    };
+    bool HasValidUnifiedAICombatDistance() const
+    {
+        return ai_combat_distance_mask == AI_COMBAT_ALL_DEFINED &&
+               std::isfinite(ai_attack_range) && ai_attack_range > 0.0f &&
+               std::isfinite(ai_retreat_range) && ai_retreat_range >= 0.0f &&
+               std::isfinite(ai_reengage_range) &&
+               ai_reengage_range > ai_retreat_range &&
+               ai_reengage_range <= ai_attack_range;
+    }
     int8_t radar = 0;
     float push_resistance = 0.0; // OpenNeoUA custom: target-side resistance to push / aoe_unit_push
     bool has_push_resistance = false; // true only when push_resistance is explicitly authored
@@ -801,6 +826,8 @@ struct TVhclProto
     int16_t num_weapons = 0;
     int16_t num_weapons_min = 0;
     int16_t num_weapons_max = 0;
+    // 0/absent keeps the current unlimited per-projectile Weapon sound package.
+    int16_t num_weapons_snd_events = 0;
     void GetWeaponProjectileCountRange(int sourceSlot, int &minCount, int &maxCount) const;
     float gun_power = 0.0;
     float gun_radius = 0.0;
@@ -1152,6 +1179,11 @@ struct TWeapProto
     // radius is direct projectile collision. AoE has separate unit/building/sector values.
     // vp_scale never affects any gameplay radius.
     float radius = 0.0;
+    // Keep the numeric Weapon default for compatibility/non-collision consumers,
+    // while tracking whether the script actually authored radius. With coll_*,
+    // this is what distinguishes compound-only from compound + legacy sphere.
+    bool radius_defined = false;
+    rbcolls coll;
     // OpenNeoUA custom, model = kamikaze only: true XYZ proximity fuse.
     // Zero means physical contact (effective carrier radius + target radius).
     float trigger_radius = 0.0;

@@ -258,6 +258,8 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislArmorPenetratedGids.clear();
     _mislDirectPushRecipientGids.clear();
     _mislClusterAge = 0;
+    _weaponSoundEventsEnabled = true;
+    _collisionOldRotationValid = false;
     _mislClusterGeneration = 0;
     _mislClusterDone = false;
     _mislClusterChild = false;
@@ -425,6 +427,9 @@ size_t NC_STACK_ypamissile::SetParameters(IDVList &stak)
 
 void NC_STACK_ypamissile::AI_layer1(update_msg *arg)
 {
+    _collisionOldRotation = _rotation;
+    _collisionOldRotationValid = true;
+
     if ( !_mislClusterSoundCarrier.Sounds.empty() )
         SFXEngine::SFXe.UpdateSoundCarrier(&_mislClusterSoundCarrier);
 
@@ -1318,114 +1323,163 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                      bct->_position.y < _mislStartHeight )
                     continue;
 
-                World::rbcolls *v82 = bct->getBACT_collNodes();
-                const bool targetManualCompound = bct->HasManualCompoundCollision();
-                const int targetLegacySlots =
-                    targetManualCompound && bct->UsesLegacyRadiusCollision() ? 1 : 0;
+                std::vector<TCollisionSphereWorld> targetSpheres;
+                bct->GetCollisionSpheres(
+                    targetSpheres, bct->_position, bct->_rotation, false);
+                if ( targetSpheres.empty() )
+                    continue;
 
-                int v7;
-                if ( v82 )
-                    v7 = targetLegacySlots + v82->roboColls.size();
-                else
-                    v7 = 1;
-
-                for (int j = v7 - 1; j >= 0; j--)
+                auto legacyWeaponRadiusForTarget =
+                    [this](NC_STACK_ypabact *target) -> float
                 {
-                    float radius;
-                    vec3d ttmp;
-
-                    if ( v82 && (!targetManualCompound || j >= targetLegacySlots) )
+                    float radius = 0.0f;
+                    switch ( target->_bact_type )
                     {
-                        int sphereIndex = targetManualCompound ? j - targetLegacySlots : j;
-                        World::TRoboColl *v8 = &v82->roboColls[sphereIndex];
-                        radius = v8->robo_coll_radius;
-
-                        ttmp = bct->_position + bct->_rotation.Transpose().Transform(v8->coll_pos);
+                    case BACT_TYPES_BACT:
+                        radius = _mislRadiusHeli;
+                        break;
+                    case BACT_TYPES_TANK:
+                    case BACT_TYPES_CAR:
+                        radius = _mislRadiusTank;
+                        break;
+                    case BACT_TYPES_FLYER:
+                    case BACT_TYPES_UFO:
+                        radius = _mislRadiusFlyer;
+                        break;
+                    case BACT_TYPES_ROBO:
+                        radius = _mislRadiusRobo;
+                        break;
+                    default:
+                        radius = _radius;
+                        break;
                     }
-                    else
-                    {
-                        ttmp = bct->_position;
-                        radius = bct->_radius;
-                    }
 
-                    if ( !v82 || radius >= 0.01 )
+                    return radius == 0.0f ? _radius : radius;
+                };
+
+                bool collided = false;
+                bool penetrated = false;
+
+                if ( HasManualCompoundCollision() )
+                {
+                    std::vector<TCollisionSphereWorld> oldWeaponSpheres;
+                    std::vector<TCollisionSphereWorld> newWeaponSpheres;
+                    const mat3x3 &oldRotation =
+                        _collisionOldRotationValid ? _collisionOldRotation : _rotation;
+
+                    GetCollisionSpheres(
+                        oldWeaponSpheres, _old_pos, oldRotation, false);
+                    GetCollisionSpheres(
+                        newWeaponSpheres, _position, _rotation, false);
+
+                    const size_t sphereCount =
+                        std::min(oldWeaponSpheres.size(), newWeaponSpheres.size());
+
+                    for (size_t wi = 0; wi < sphereCount && !collided; ++wi)
                     {
-                        vec3d to_enemy = ttmp - _old_pos;
+                        const float weaponRadius =
+                            newWeaponSpheres[wi].legacy
+                                ? legacyWeaponRadiusForTarget(bct)
+                                : newWeaponSpheres[wi].radius;
+
+                        if ( weaponRadius <= 0.0f )
+                            continue;
+
+                        for (const TCollisionSphereWorld &targetSphere :
+                             targetSpheres)
+                        {
+                            const float radiusSum =
+                                weaponRadius + targetSphere.radius;
+                            const float distanceSq =
+                                ypamissile_SegmentSegmentDistanceSq(
+                                    oldWeaponSpheres[wi].center,
+                                    newWeaponSpheres[wi].center,
+                                    targetSphere.center,
+                                    targetSphere.center);
+
+                            if ( distanceSq > radiusSum * radiusSum )
+                                continue;
+
+                            if ( applyDirectDamage &&
+                                 ShouldArmorPenetrateTarget(bct) )
+                            {
+                                ApplyDirectHitToBact(bct);
+                                RememberArmorPenetratedTarget(bct);
+                                _mislArmorPenetrationRemaining--;
+                                ApplyArmorPenetrationUnitImpactFX();
+                                penetrated = true;
+                                collided = true;
+                                break;
+                            }
+
+                            collisionSumRadius += targetSphere.radius;
+                            collisionCount++;
+                            collisionSumPosition += bct->_position;
+
+                            if ( hitTarget && !*hitTarget )
+                                *hitTarget = bct;
+
+                            if ( applyDirectDamage )
+                                ApplyDirectHitToBact(bct);
+
+                            collided = true;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    const float weaponRadius =
+                        legacyWeaponRadiusForTarget(bct);
+
+                    for (auto it = targetSpheres.rbegin();
+                         it != targetSpheres.rend() && !collided; ++it)
+                    {
+                        const TCollisionSphereWorld &targetSphere = *it;
+                        vec3d to_enemy = targetSphere.center - _old_pos;
                         vec3d dist_vect = _position - _old_pos;
 
-                        if ( to_enemy.dot( _rotation.AxisZ() )>= 0.3 )
+                        if ( to_enemy.dot(_rotation.AxisZ()) < 0.3 )
+                            continue;
+
+                        const float dist_vect_len = dist_vect.normalise();
+                        const vec3d vp = dist_vect * to_enemy;
+                        const float vp_len = vp.length();
+                        const float to_enemy_len = to_enemy.length();
+
+                        if ( targetSphere.radius + weaponRadius > vp_len &&
+                             sqrt(POW2(dist_vect_len) + POW2(vp_len)) >
+                                 fabs(to_enemy_len - weaponRadius) )
                         {
-                            float dist_vect_len = dist_vect.normalise();
-
-                            vec3d vp = dist_vect * to_enemy;
-
-                            float wpn_radius = 0.0f;
-
-                            switch ( bct->_bact_type )
+                            if ( applyDirectDamage &&
+                                 ShouldArmorPenetrateTarget(bct) )
                             {
-                            case BACT_TYPES_BACT:
-                                wpn_radius = _mislRadiusHeli;
-                                break;
-
-                            case BACT_TYPES_TANK:
-                            case BACT_TYPES_CAR:
-                                wpn_radius = _mislRadiusTank;
-                                break;
-
-                            case BACT_TYPES_FLYER:
-                            case BACT_TYPES_UFO:
-                                wpn_radius = _mislRadiusFlyer;
-                                break;
-
-                            case BACT_TYPES_ROBO:
-                                wpn_radius = _mislRadiusRobo;
-                                break;
-
-                            default:
-                                wpn_radius = _radius;
+                                ApplyDirectHitToBact(bct);
+                                RememberArmorPenetratedTarget(bct);
+                                _mislArmorPenetrationRemaining--;
+                                ApplyArmorPenetrationUnitImpactFX();
+                                penetrated = true;
+                                collided = true;
                                 break;
                             }
 
-                            if ( wpn_radius == 0.0f )
-                                wpn_radius = _radius;
+                            collisionSumRadius += targetSphere.radius;
+                            collisionCount++;
+                            collisionSumPosition += bct->_position;
 
-                            float vp_len = vp.length();
-                            float to_enemy_len = to_enemy.length();
+                            if ( hitTarget && !*hitTarget )
+                                *hitTarget = bct;
 
-                            if ( radius + wpn_radius > vp_len )
-                            {
-                                /*  Tube collision test, not cylinder!
-                                    Will hit only when distance ~ wpn_radius */
-                                if ( sqrt( POW2(dist_vect_len) + POW2(vp_len) ) > fabs(to_enemy_len - wpn_radius) )
-                                {
-                                    if ( applyDirectDamage && ShouldArmorPenetrateTarget(bct) )
-                                    {
-                                        ApplyDirectHitToBact(bct);
-                                        RememberArmorPenetratedTarget(bct);
-                                        _mislArmorPenetrationRemaining--;
-                                        ApplyArmorPenetrationUnitImpactFX();
-                                        break;
-                                    }
+                            if ( applyDirectDamage )
+                                ApplyDirectHitToBact(bct);
 
-                                    collisionSumRadius += radius;
-                                    collisionCount++;
-                                    collisionSumPosition += bct->_position;
-
-                                    if ( hitTarget && !*hitTarget )
-                                        *hitTarget = bct;
-
-                                    if ( applyDirectDamage )
-                                    {
-                                        ApplyDirectHitToBact(bct);
-                                    }
-
-                                    break;
-                                }
-                            }
+                            collided = true;
                         }
                     }
                 }
 
+                if ( penetrated )
+                    continue;
             }
         }
     }
@@ -1722,7 +1776,8 @@ const char *NC_STACK_ypamissile::GetAreaPushSkipReason(NC_STACK_ypabact *bct) co
     return NULL;
 }
 
-bool NC_STACK_ypamissile::CanCollideWithWeapon(NC_STACK_ypamissile *other) const
+bool NC_STACK_ypamissile::CanCollideWithWeapon(
+        NC_STACK_ypamissile *other)
 {
     if ( !System::IniConf::GameWeaponWeaponCollision.Get<bool>() )
         return false;
@@ -1739,24 +1794,77 @@ bool NC_STACK_ypamissile::CanCollideWithWeapon(NC_STACK_ypamissile *other) const
     if ( _mislClusterAge < 150 || other->_mislClusterAge < 150 )
         return false;
 
-    if ( other->_mislEmitter == _mislEmitter && (_mislClusterAge < 300 || other->_mislClusterAge < 300) )
+    if ( other->_mislEmitter == _mislEmitter &&
+         (_mislClusterAge < 300 || other->_mislClusterAge < 300) )
         return false;
 
-    if ( _status == BACT_STATUS_DEAD || other->_status == BACT_STATUS_DEAD )
+    if ( _status == BACT_STATUS_DEAD ||
+         other->_status == BACT_STATUS_DEAD )
         return false;
 
-    if ( (_status_flg | other->_status_flg) & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2) )
+    if ( (_status_flg | other->_status_flg) &
+         (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2) )
         return false;
 
     if ( !_world || other->getBACT_pWorld() != _world )
         return false;
 
-    float radiusSum = _radius + other->_radius;
-    if ( radiusSum <= 0.0f )
-        return false;
+    // Exact legacy branch: when neither Weapon uses coll_*, keep the original
+    // centre-line swept test and generic Weapon radius unchanged.
+    if ( !HasManualCompoundCollision() &&
+         !other->HasManualCompoundCollision() )
+    {
+        const float radiusSum = _radius + other->_radius;
+        if ( radiusSum <= 0.0f )
+            return false;
 
-    float distSq = ypamissile_SegmentSegmentDistanceSq(_old_pos, _position, other->_old_pos, other->_position);
-    return distSq <= radiusSum * radiusSum;
+        const float distSq = ypamissile_SegmentSegmentDistanceSq(
+            _old_pos, _position, other->_old_pos, other->_position);
+        return distSq <= radiusSum * radiusSum;
+    }
+
+    std::vector<TCollisionSphereWorld> selfOld;
+    std::vector<TCollisionSphereWorld> selfNow;
+    std::vector<TCollisionSphereWorld> otherOld;
+    std::vector<TCollisionSphereWorld> otherNow;
+
+    const mat3x3 &selfOldRotation =
+        _collisionOldRotationValid ? _collisionOldRotation : _rotation;
+    const mat3x3 &otherOldRotation =
+        other->_collisionOldRotationValid
+            ? other->_collisionOldRotation
+            : other->_rotation;
+
+    GetCollisionSpheres(
+        selfOld, _old_pos, selfOldRotation, false);
+    GetCollisionSpheres(
+        selfNow, _position, _rotation, false);
+    other->GetCollisionSpheres(
+        otherOld, other->_old_pos, otherOldRotation, false);
+    other->GetCollisionSpheres(
+        otherNow, other->_position, other->_rotation, false);
+
+    const size_t selfCount = std::min(selfOld.size(), selfNow.size());
+    const size_t otherCount = std::min(otherOld.size(), otherNow.size());
+
+    for (size_t i = 0; i < selfCount; ++i)
+    {
+        for (size_t j = 0; j < otherCount; ++j)
+        {
+            const float radiusSum =
+                selfNow[i].radius + otherNow[j].radius;
+            if ( radiusSum <= 0.0f )
+                continue;
+
+            const float distSq = ypamissile_SegmentSegmentDistanceSq(
+                selfOld[i].center, selfNow[i].center,
+                otherOld[j].center, otherNow[j].center);
+            if ( distSq <= radiusSum * radiusSum )
+                return true;
+        }
+    }
+
+    return false;
 }
 
 void NC_STACK_ypamissile::DetonateWeaponCollision(NC_STACK_ypamissile *other)
@@ -3106,6 +3214,8 @@ void NC_STACK_ypamissile::Renew()
     _mislArmorPenetratedGids.clear();
     _mislDirectPushRecipientGids.clear();
     _mislClusterAge = 0;
+    _weaponSoundEventsEnabled = true;
+    _collisionOldRotationValid = false;
     _mislClusterGeneration = 0;
     _mislClusterDone = false;
     _mislClusterChild = false;
