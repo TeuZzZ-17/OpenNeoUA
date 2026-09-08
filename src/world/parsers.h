@@ -230,7 +230,7 @@ class WeaponProtoParser : public ScriptParser::DataHandler, public FxParser
 {
 friend FxParser;
 public:
-    WeaponProtoParser(NC_STACK_ypaworld *o) : _o(*o), _wpn(NULL), _wpnID(-1), _isModify(false) {} ;
+    WeaponProtoParser(NC_STACK_ypaworld *o) : _o(*o), _wpn(NULL), _wpnID(-1), _isModify(false), _collID(-1) {} ;
     virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
 protected:
@@ -240,6 +240,7 @@ protected:
     TWeapProto *_wpn;
     int32_t _wpnID;
     bool _isModify;
+    int32_t _collID;
 };
 
 class BuildProtoParser : public ScriptParser::DataHandler

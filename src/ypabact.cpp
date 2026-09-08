@@ -2650,6 +2650,10 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _adist_bact = 0.0;
     _sdist_sector = 0.0;
     _sdist_bact = 0.0;
+    _ai_attack_range = 0.0f;
+    _ai_retreat_range = 0.0f;
+    _ai_reengage_range = 0.0f;
+    _unifiedAICombatDistance = false;
     _current_waypoint = 0;
     _waypoints_count = 0;
     _m_cmdID = 0;
@@ -2777,6 +2781,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_spread_x = 0.0;
     _mgun_spread_y = 0.0;
     _num_weapons = 0;
+    _num_weapons_snd_events = 0;
     _weapon_projectile_counts = {0, 0, 0, 0};
     _weapon_projectile_count_maxs = {0, 0, 0, 0};
     _weapon_time = 0;
@@ -7080,6 +7085,52 @@ void NC_STACK_ypabact::Move(move_msg *arg)
         _soundcarrier.Sounds[0].Pitch += (_soundcarrier.Sounds[0].PSample->SampleRate + _soundcarrier.Sounds[0].Pitch) * v43;
 }
 
+bool NC_STACK_ypabact::ApplyUnifiedAICombatDistance(float distance, bool *startedRetreat)
+{
+    if ( startedRetreat )
+        *startedRetreat = false;
+
+    if ( !_unifiedAICombatDistance || !std::isfinite(distance) )
+        return false;
+
+    if ( _status_flg & BACT_STFLAG_APPROACH )
+    {
+        _status_flg &= ~BACT_STFLAG_ATTACK;
+
+        if ( distance >= _ai_reengage_range )
+        {
+            _status_flg &= ~BACT_STFLAG_APPROACH;
+            if ( distance <= _ai_attack_range )
+                _status_flg |= BACT_STFLAG_ATTACK;
+        }
+        else
+        {
+            _AI_time2 = _clock;
+            _AI_time1 = _clock;
+        }
+
+        return true;
+    }
+
+    if ( distance < _ai_retreat_range )
+    {
+        _status_flg &= ~BACT_STFLAG_ATTACK;
+        _status_flg |= BACT_STFLAG_APPROACH;
+        _AI_time2 = _clock;
+        _AI_time1 = _clock;
+        if ( startedRetreat )
+            *startedRetreat = true;
+        return true;
+    }
+
+    if ( distance <= _ai_attack_range )
+        _status_flg |= BACT_STFLAG_ATTACK;
+    else
+        _status_flg &= ~BACT_STFLAG_ATTACK;
+
+    return true;
+}
+
 void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
 {
     constexpr float CurSectrLen = 1.1 * World::CVSectorLength;
@@ -7129,6 +7180,35 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             _status_flg |= BACT_STFLAG_ATTACK;
             _target_vec = *foePos - _position;
         }
+        else if ( _unifiedAICombatDistance )
+        {
+            const bool atMovementBoundary =
+                _position.x < CurSectrLen || _position.z > -CurSectrLen ||
+                _position.x > _wrldSize.x - CurSectrLen ||
+                _position.z < _wrldSize.y + CurSectrLen;
+
+            if ( atMovementBoundary )
+            {
+                // Preserve the existing world-bound escape: do not repeatedly
+                // re-enter APPROACH while there is no room to increase range.
+                _status_flg &= ~BACT_STFLAG_APPROACH;
+                if ( foeDistance >= _ai_retreat_range &&
+                     foeDistance <= _ai_attack_range )
+                    _status_flg |= BACT_STFLAG_ATTACK;
+                else
+                    _status_flg &= ~BACT_STFLAG_ATTACK;
+            }
+            else
+            {
+                bool startedRetreat = false;
+                ApplyUnifiedAICombatDistance(foeDistance, &startedRetreat);
+                if ( startedRetreat )
+                {
+                    _target_vec.x = -_fly_dir.x;
+                    _target_vec.z = -_fly_dir.z;
+                }
+            }
+        }
         else if ( _status_flg & BACT_STFLAG_APPROACH )
         {
             _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -7156,12 +7236,6 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             {
                 _status_flg &= ~BACT_STFLAG_ATTACK;
 
-                /*if ( bact->field_3D1 == 2 || (arg->g_time & 1 && bact->field_3D1 == 3) )
-                {
-                    bact->target_vec.x = bact->fly_dir.x;
-                    bact->target_vec.z = bact->fly_dir.z;
-                }
-                else*/
                 {
                     _target_vec.x = -_fly_dir.x;
                     _target_vec.z = -_fly_dir.z;
@@ -7454,6 +7528,30 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
             _status_flg &= ~BACT_STFLAG_APPROACH;
             _status_flg |= BACT_STFLAG_ATTACK;
         }
+        else if ( _unifiedAICombatDistance )
+        {
+            const bool atMovementBoundary =
+                _position.x < CurSectrLen || _position.z > -CurSectrLen ||
+                _position.x > _wrldSize.x - CurSectrLen ||
+                _position.z < _wrldSize.y + CurSectrLen;
+
+            if ( atMovementBoundary )
+            {
+                _status_flg &= ~BACT_STFLAG_APPROACH;
+                if ( cellDistance >= _ai_retreat_range &&
+                     cellDistance <= _ai_attack_range )
+                    _status_flg |= BACT_STFLAG_ATTACK;
+                else
+                    _status_flg &= ~BACT_STFLAG_ATTACK;
+            }
+            else
+            {
+                bool startedRetreat = false;
+                ApplyUnifiedAICombatDistance(cellDistance, &startedRetreat);
+                if ( startedRetreat )
+                    _target_vec = -_fly_dir;
+            }
+        }
         else if ( _status_flg & BACT_STFLAG_APPROACH )
         {
             _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -7479,13 +7577,6 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
         {
             _status_flg &= ~BACT_STFLAG_ATTACK;
 
-            /*if ( bact->field_3D1 == 2 || (arg->g_time & 1 && bact->field_3D1 == 3) )
-            {
-                bact->target_vec.x = bact->fly_dir.x;
-                bact->target_vec.z = bact->fly_dir.z;
-                bact->target_vec.y = bact->fly_dir.y;
-            }
-            else*/
             {
                 _target_vec = -_fly_dir;
             }
@@ -13765,6 +13856,12 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     int v13 = ypabact_RollWeaponProjectileCountForSourceSlot(
         this, selectedWeaponSourceSlot);
 
+    const int soundEventProjectileLimit =
+        _num_weapons_snd_events > 0
+            ? std::min((int)_num_weapons_snd_events, v13)
+            : v13;
+    int soundEnabledProjectiles = 0;
+
     // Cockpit aiming preserves the vanilla base direction for a multi-projectile salvo.
     // fire_x still distributes the physical spawn points left/right, but it must
     // not steer the whole salvo from the legacy alternating signed muzzle offset
@@ -13841,6 +13938,8 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         ypaworld_arg146 arg147;
         arg147.vehicle_id = selectedWeapon;
         arg147.pos = _position + _rotation.Transpose().Transform( vec3d(v37, arg->start_point.y, arg->start_point.z) );
+        arg147.weapon_sound_events_enabled =
+            soundEnabledProjectiles < soundEventProjectileLimit;
 
         if ( multiTarget )
         {
@@ -13906,6 +14005,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             ResetProgressiveWeaponFireRate();
             return 0;
         }
+
+        if ( wobj->WeaponSoundEventsEnabled() )
+            soundEnabledProjectiles++;
 
         if ( i == 0 )
             ypabact_StartVehicleFireVPForWeapon(this, selectedWeapon, arg->g_time);
@@ -14098,7 +14200,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             wpnMsg.launcher = _gid;
             wpnMsg.type = selectedWeapon;
             wpnMsg.pos = arg147.pos;
-            wpnMsg.flags = 0;
+            wpnMsg.flags = wobj->WeaponSoundEventsEnabled()
+                ? 0
+                : UAMSG_NEWWEAPON_FLAG_SILENT_SOUND_EVENTS;
             wpnMsg.dir = wobj->_fly_dir * wobj->_fly_dir_length;
             wpnMsg.targetType = wobj->_primTtype;
 
@@ -15816,6 +15920,61 @@ bool NC_STACK_ypabact::CollectPlasmaFrom(NC_STACK_ypabact *source)
     return true;
 }
 
+void NC_STACK_ypabact::ApplyCompoundCollision(const World::rbcolls &coll,
+                                                  bool radiusDefined)
+{
+    _collNodes = coll;
+    _manualCompoundCollision = !_collNodes.roboColls.empty();
+    _legacyRadiusDefined = radiusDefined;
+}
+
+void NC_STACK_ypabact::GetCollisionSpheres(
+        std::vector<TCollisionSphereWorld> &out,
+        const vec3d &position, const mat3x3 &rotation,
+        bool useViewerSemantics)
+{
+    out.clear();
+
+    World::rbcolls *colls = getBACT_collNodes();
+    const bool manual = HasManualCompoundCollision();
+    vec3d origin = position;
+
+    if ( useViewerSemantics && colls && getBACT_viewer() )
+        origin.y += _viewer_overeof - _overeof;
+
+    const float legacyRadius =
+        useViewerSemantics && getBACT_viewer() ? _viewer_radius : _radius;
+
+    if ( manual )
+    {
+        if ( UsesLegacyRadiusCollision() && legacyRadius > 0.01f )
+            out.push_back({origin, legacyRadius, true});
+    }
+    else if ( !colls )
+    {
+        if ( legacyRadius > 0.01f )
+            out.push_back({origin, legacyRadius, true});
+        return;
+    }
+
+    if ( !colls )
+        return;
+
+    const mat3x3 rotationT = rotation.Transpose();
+    for (const World::TRoboColl &sphere : colls->roboColls)
+    {
+        if ( sphere.robo_coll_radius <= 0.01f ||
+             !std::isfinite(sphere.robo_coll_radius) )
+            continue;
+
+        out.push_back({
+            origin + rotationT.Transform(sphere.coll_pos),
+            sphere.robo_coll_radius,
+            false
+        });
+    }
+}
+
 bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
                                                 vec3d *selfCenter,
                                                 vec3d *otherCenter,
@@ -15824,98 +15983,36 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
     if ( !other || other == this )
         return false;
 
-    World::rbcolls *selfColls = getBACT_collNodes();
-    World::rbcolls *otherColls = other->getBACT_collNodes();
-    const bool selfManual = HasManualCompoundCollision();
-    const bool otherManual = other->HasManualCompoundCollision();
-    const bool selfLegacy = UsesLegacyRadiusCollision();
-    const bool otherLegacy = other->UsesLegacyRadiusCollision();
     vec3d selfOrigin = _position;
     vec3d otherOrigin = other->_position;
-
-    if ( selfColls && getBACT_viewer() )
+    if ( getBACT_collNodes() && getBACT_viewer() )
         selfOrigin.y += _viewer_overeof - _overeof;
-    if ( otherColls && other->getBACT_viewer() )
+    if ( other->getBACT_collNodes() && other->getBACT_viewer() )
         otherOrigin.y += other->_viewer_overeof - other->_overeof;
 
-    float broad = GetCollisionBroadRadius() + other->GetCollisionBroadRadius();
+    const float broad = GetCollisionBroadRadius() + other->GetCollisionBroadRadius();
     if ( broad <= 0.01f || (selfOrigin - otherOrigin).square() > broad * broad )
         return false;
 
-    const int selfLegacySlots = selfManual && selfLegacy ? 1 : 0;
-    const int otherLegacySlots = otherManual && otherLegacy ? 1 : 0;
-    int selfCount = selfManual ? selfLegacySlots + (int)selfColls->roboColls.size()
-                              : (selfColls ? (int)selfColls->roboColls.size() : 1);
-    int otherCount = otherManual ? otherLegacySlots + (int)otherColls->roboColls.size()
-                                 : (otherColls ? (int)otherColls->roboColls.size() : 1);
-    mat3x3 selfRotT = _rotation.Transpose();
-    mat3x3 otherRotT = other->_rotation.Transpose();
+    std::vector<TCollisionSphereWorld> selfSpheres;
+    std::vector<TCollisionSphereWorld> otherSpheres;
+    GetCollisionSpheres(selfSpheres, _position, _rotation, true);
+    other->GetCollisionSpheres(otherSpheres, other->_position, other->_rotation, true);
+
     float bestPenetration = 0.0f;
     vec3d bestSelf;
     vec3d bestOther;
 
-    for (int i = 0; i < selfCount; i++)
+    for (const TCollisionSphereWorld &a : selfSpheres)
     {
-        vec3d a = selfOrigin;
-        float ar = getBACT_viewer() ? _viewer_radius : _radius;
-
-        if ( selfManual )
+        for (const TCollisionSphereWorld &b : otherSpheres)
         {
-            if ( i >= selfLegacySlots )
-            {
-                const World::TRoboColl &sphere = selfColls->roboColls[i - selfLegacySlots];
-                if ( sphere.robo_coll_radius <= 0.01f )
-                    continue;
-                a += selfRotT.Transform(sphere.coll_pos);
-                ar = sphere.robo_coll_radius;
-            }
-        }
-        else if ( selfColls )
-        {
-            const World::TRoboColl &sphere = selfColls->roboColls[i];
-            if ( sphere.robo_coll_radius <= 0.01f )
-                continue;
-            a += selfRotT.Transform(sphere.coll_pos);
-            ar = sphere.robo_coll_radius;
-        }
-
-        if ( ar <= 0.01f )
-            continue;
-
-        for (int j = 0; j < otherCount; j++)
-        {
-            vec3d b = otherOrigin;
-            float br = other->getBACT_viewer() ? other->_viewer_radius : other->_radius;
-
-            if ( otherManual )
-            {
-                if ( j >= otherLegacySlots )
-                {
-                    const World::TRoboColl &sphere = otherColls->roboColls[j - otherLegacySlots];
-                    if ( sphere.robo_coll_radius <= 0.01f )
-                        continue;
-                    b += otherRotT.Transform(sphere.coll_pos);
-                    br = sphere.robo_coll_radius;
-                }
-            }
-            else if ( otherColls )
-            {
-                const World::TRoboColl &sphere = otherColls->roboColls[j];
-                if ( sphere.robo_coll_radius <= 0.01f )
-                    continue;
-                b += otherRotT.Transform(sphere.coll_pos);
-                br = sphere.robo_coll_radius;
-            }
-
-            if ( br <= 0.01f )
-                continue;
-
-            float overlap = ar + br - (b - a).length();
+            const float overlap = a.radius + b.radius - (b.center - a.center).length();
             if ( overlap > bestPenetration )
             {
                 bestPenetration = overlap;
-                bestSelf = a;
-                bestOther = b;
+                bestSelf = a.center;
+                bestOther = b.center;
             }
         }
     }

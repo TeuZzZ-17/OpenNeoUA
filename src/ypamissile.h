@@ -146,6 +146,10 @@ public:
 
     vec3d CalcForceVector();
     bool TubeCollisionTest(bool applyDirectDamage = true, NC_STACK_ypabact **hitTarget = NULL);
+    void SetWeaponSoundEventsEnabled(bool enabled)
+    { _weaponSoundEventsEnabled = enabled; }
+    bool WeaponSoundEventsEnabled() const
+    { return _weaponSoundEventsEnabled; }
 
 protected:
     bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
@@ -157,7 +161,7 @@ protected:
                                NC_STACK_ypabact *directionTarget = NULL);
     const char *GetAreaDamageSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const;
     const char *GetAreaPushSkipReason(NC_STACK_ypabact *bct) const;
-    bool CanCollideWithWeapon(NC_STACK_ypamissile *other) const;
+    bool CanCollideWithWeapon(NC_STACK_ypamissile *other);
     void DetonateWeaponCollision(NC_STACK_ypamissile *other);
     bool IsDirectHitUnit(NC_STACK_ypabact *bct) const;
     void RememberDirectHitUnit(NC_STACK_ypabact *bct);
@@ -248,6 +252,12 @@ protected:
     int _mislDirectPush          = 0; // configured intensity 0..10
     int _mislArmorPenetrationRemaining = 0;
     int _mislClusterAge          = 0;
+    // One authoritative lifetime flag for the complete Weapon sound package.
+    // Factory sets it before BACT_STATUS_NORMAL can start SND_NORMAL.
+    bool _weaponSoundEventsEnabled = true;
+    // Minimal previous transform state needed to sweep local compound spheres.
+    mat3x3 _collisionOldRotation;
+    bool _collisionOldRotationValid = false;
     int _mislClusterGeneration   = 0;
     bool _mislClusterDone        = false;
     bool _mislClusterChild       = false;
