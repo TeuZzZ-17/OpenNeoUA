@@ -13,6 +13,40 @@ notices remain applicable.
 
 **License** GPLv2
 
+# OpenNeoUA Parameter Guide
+
+OpenNeoUA extends Urban Assault with a growing collection of optional,
+data-driven parameters that can be used to customize gameplay, AI, vehicles,
+weapons, visual effects, user interfaces, level behavior and many other engine
+systems.
+
+These extensions are one of the main ways OpenNeoUA can go beyond the original
+game while remaining compatible with existing Urban Assault data. Most
+OpenNeoUA-specific features are optional and are designed to preserve vanilla
+behavior when their parameters are not used.
+
+The repository includes the:
+
+**`OpenNeoUA_Parameter_Guide.ini`**
+
+This file serves as the public reference for OpenNeoUA-specific parameters. It
+contains example values, descriptions, supported ranges, fallback behavior,
+visual asset priorities, configuration notes and explanations of how many of
+the extended systems interact with the original engine.
+
+The guide is intended both for experienced Urban Assault modders and for users
+who are discovering OpenNeoUA's extended scripting capabilities for the first
+time.
+
+OpenNeoUA is under continuous development, and new parameters and systems are
+added regularly. The Parameter Guide will be updated as soon as reasonably
+possible after new functionality is introduced. Because development can move
+faster than documentation, some of the newest parameters or recently changed
+behavior may not yet be present in the guide.
+
+For the latest implementation details, the current OpenNeoUA source code and
+runtime behavior remain authoritative.
+
 # Building OpenNeoUA on Modern Windows (64-bit MSYS2):
 
 1. Download and install MSYS2:
