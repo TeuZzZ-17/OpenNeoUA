@@ -19,6 +19,7 @@
 #include "font.h"
 #include "gui/uacommon.h"
 #include "system/inivals.h"
+#include "system/gametime.h"
 #include "system/system.h"
 #include "world/spin.h"
 #include "crashdiag.h"
@@ -182,8 +183,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     _debugAoeRings.clear();
     ResetPlasmaCurrencyRuntime();
     _timeStamp = 0;
-    _gameplayRenderTimeBase = 0;
-    _gameplayRenderTimeBaseSet = false;
+    System::GameClock.Reset(_timeStamp);
     _msgTimestampHSReturn = 0;
     _msgTimestampEnemySector = 0;
     _msgTimestampGates = 0;
@@ -209,7 +209,9 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
     _makingWaypointsMode = false;
     _gamePaused = false;
     _gamePausedTimeStamp = 0;
+    _debugGameplaySlowMotion = false;
     _debugGameplayFrozen = false;
+    _debugHostStationCheat = false;
     _debugGlobalInvulnerability = false;
     _joyIgnoreX = 1;
     _joyIgnoreY = 1;
@@ -8892,7 +8894,9 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
     {
         _showCollDebug = false;
         _hideHudForScreenshots = false;
+        _debugGameplaySlowMotion = false;
         _debugGameplayFrozen = false;
+        _debugHostStationCheat = false;
         _debugGlobalInvulnerability = false;
     }
     else

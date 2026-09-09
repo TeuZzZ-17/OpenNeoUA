@@ -2489,6 +2489,8 @@ public:
     virtual int getYW_destroyFX();
     virtual NC_STACK_windp *getYW_pNET();
     virtual int getYW_invulnerable();
+    bool IsDebugGameplaySlowMotionEnabled() const { return _debugGameplaySlowMotion; }
+    bool IsDebugHostStationCheatEnabled() const { return _debugHostStationCheat; }
     bool IsDebugGlobalInvulnerabilityEnabled() const { return _debugGlobalInvulnerability; }
     float GetUfoSpyUiRadius() const;
     bool IsUfoSpyUiControlContext() const;
@@ -2505,6 +2507,7 @@ protected:
 
     void CameraPrepareRender(TGameRecorder *rcrd, NC_STACK_ypabact *bact, TInputState *inpt);
     bool IsAnyInput(TInputState *struc);
+    void HandleDebugTimeHotkeys(TInputState *inpt, bool openUADebug);
 
 
     void GameShellUiOpenNetwork(); // On main menu "Multiplayer" press
@@ -2953,10 +2956,7 @@ public:
     std::string BuildNewGemNotificationLogText();
     void StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo);
     bool HasActiveRoboDeathTimeScale() const;
-    int32_t GetGameplayRenderTimeStamp() const
-    {
-        return _gameplayRenderTimeBaseSet ? _gameplayRenderTimeBase + _timeStamp : _timeStamp;
-    }
+    int32_t GetGameplayRenderTimeStamp() const;
     bool IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) const;
@@ -3247,7 +3247,9 @@ public:
 
     bool _gamePaused = false;
     uint32_t _gamePausedTimeStamp = 0;
+    bool _debugGameplaySlowMotion = false;
     bool _debugGameplayFrozen = false;
+    bool _debugHostStationCheat = false;
     bool _debugGlobalInvulnerability = false;
     // Detailed UFO Spy UI (HP/shield/status bars) is opt-in at runtime.
     // The lightweight faction arrows inside spy_ui_radius stay available even
@@ -3441,14 +3443,10 @@ public:
     std::vector<TMapGem> _techUpgrades; // tech upgrades in level
     int32_t _upgradeId = 0;
     uint32_t _upgradeTimeStamp = 0;
-    // Shared fractional accumulator for every gameplay time-scale trigger.
-    double _gameplayTimeScaleRemainder = 0.0;
-    uint32_t _roboDeathTimeScaleEndTick = 0;
+    int32_t _roboDeathTimeScaleEndTime = 0;
     int32_t _kamikazeFireTimeScaleDrainGid = 0;
     double _kamikazeFireTimeScaleHpDrainRemainder = 0.0;
     bool _kamikazeFireInputWasHeld = false;
-    int32_t _gameplayRenderTimeBase = 0;
-    bool _gameplayRenderTimeBaseSet = false;
     int32_t _upgradeVehicleId = 0;
     int32_t _upgradeWeaponId = 0;
     int32_t _upgradeBuildId = 0;

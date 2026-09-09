@@ -1601,6 +1601,9 @@ bool NC_STACK_yparobo::IsPlayerDirectlyControllingThisRobo() const
 
 int NC_STACK_yparobo::CalcPlayerMobileMoveEnergyCost(update_msg *arg) const
 {
+    if ( _world && _world->IsDebugHostStationCheatEnabled() && IsPlayerRobo() )
+        return 0;
+
     if ( !arg || !arg->target_Sect )
         return 0;
 

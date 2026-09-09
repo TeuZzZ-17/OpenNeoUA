@@ -871,6 +871,28 @@ void CTsmpl::playback_scale(float scale)
     }
 }
 
+void CTsmpl::pause(bool paused)
+{
+    if ( SDL_LockMutex(_mutex) == 0 )
+    {
+        if ( paused )
+        {
+            if ( _status == SMPL_STATUS_PLAYING )
+            {
+                alCheck(alSourcePause(_source));
+                _status = SMPL_STATUS_PAUSED;
+            }
+        }
+        else if ( _status == SMPL_STATUS_PAUSED )
+        {
+            alCheck(alSourcePlay(_source));
+            _status = SMPL_STATUS_PLAYING;
+        }
+
+        SDL_UnlockMutex(_mutex);
+    }
+}
+
 void CTsmpl::play()
 {
     if ( SDL_LockMutex(_mutex) == 0)

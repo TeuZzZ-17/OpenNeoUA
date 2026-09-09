@@ -139,7 +139,7 @@ int SFXEngine::init()
     dword_546F0C = 0;
     currentTime = 0;
     timeScale = 1.0f;
-    timeScaleRemainder = 0.0;
+    forceAllTimeScaled = false;
     dword_546F14 = 0;
     globalShkFadeIn = 0;
     globalShkFadeOut = 0;
@@ -236,24 +236,41 @@ void SFXEngine::setMasterVolume(int vol)
 //    wrapper_setVolume(digDriver, vol);
 }
 
-void SFXEngine::SetTimeScale(float scale)
+void SFXEngine::SetTimeScale(float scale, bool forceAll)
 {
-    if ( !isfinite(scale) || scale <= 0.0f )
+    if ( !isfinite(scale) || scale < 0.0f )
         scale = 1.0f;
 
-    scale = std::max(0.05f, std::min(scale, 1.0f));
+    if ( scale > 0.0f )
+        scale = std::max(0.05f, std::min(scale, 1.0f));
 
-    if ( fabs(timeScale - scale) < 0.0001f )
-        return;
+    const bool frozen = scale == 0.0f;
+    const bool changed = fabs(timeScale - scale) >= 0.0001f ||
+                         forceAllTimeScaled != forceAll;
 
     timeScale = scale;
-    timeScaleRemainder = 0.0;
+    forceAllTimeScaled = forceAll;
 
-    // Music uses the same global time dilation as gameplay sounds. Menu and
-    // replay explicitly restore 1.0 before advancing their audio frame.
+    if ( !changed )
+        return;
+
+    // A true global freeze pauses the OpenAL sources themselves. Merely
+    // clamping pitch cannot represent zero time and allowed sound playback to
+    // leak through F6. Existing stopped sources are unaffected.
+    for (int i = 0; i < audio_channels; i++)
+    {
+        if ( snd_channels[i].hSample )
+            snd_channels[i].hSample->pause(frozen);
+    }
+
     if ( musPlayer )
-        musPlayer->playback_scale(timeScale);
+    {
+        musPlayer->pause(frozen);
+        if ( !frozen )
+            musPlayer->playback_scale(timeScale);
+    }
 }
+
 
 void SFXEngine::setReverseStereo(bool rev)
 {
@@ -381,6 +398,8 @@ void SFXEngine::PlayMusicTrack()
     if (digDriver && musPlayer && musOn  && musTrack > 0)
     {
         musPlayer->play();
+        if ( timeScale == 0.0f )
+            musPlayer->pause(true);
     }
 }
 
@@ -928,7 +947,7 @@ void SFXEngine::sb_0x424c74__sub2__sub1(TSoundSource *smpl)
     // Global gameplay time dilation changes normal playback rates. Selected
     // one-shot UI/voice sources may opt out without changing the rest of the
     // audio mix or the global gameplay time domain.
-    const float sourceTimeScale = smpl->IgnoreTimeScale ? 1.0f : timeScale;
+    const float sourceTimeScale = (smpl->IgnoreTimeScale && !forceAllTimeScaled) ? 1.0f : timeScale;
     v14 = (int)floor((double)v14 * (double)sourceTimeScale + 0.5);
 
     if ( v14 < 2000 )
@@ -1043,6 +1062,8 @@ void SFXEngine::sound_eos_clbk(void *_smpl)
                         v3->ResultPan,
                         v10->Loop,
                         0);
+                    if ( SFXe.timeScale == 0.0f )
+                        smpl->pause(true);
                 }
             }
             else
@@ -1115,6 +1136,9 @@ void SFXEngine::sb_0x424c74__sub2__sub0(int id, TSoundSource *smpl)
             (smpl->IsLoop() ? 0 : 1),
             (((smpl->PSample->SampleRate + smpl->Pitch) * (int)(currentTime - smpl->StartTime) >> 10) * SFX_SampleFrameSize(smpl->PSample->Format)) % smpl->PSample->bufsz);
     }
+
+    if ( timeScale == 0.0f )
+        v3->pause(true);
 }
 
 void SFXEngine::sb_0x424c74__sub2()
@@ -1213,6 +1237,8 @@ void SFXEngine::UpdateMusic()
                 musWait = false;
                 musPlayer->stop();
                 musPlayer->play();
+                if ( timeScale == 0.0f )
+                    musPlayer->pause(true);
             }
         }
         else
@@ -1252,10 +1278,10 @@ const mat3x3 &SFXEngine::sb_0x424c74()
 
 void SFXEngine::sub_423EFC(int a1, const vec3d &a2, const vec3d &a3, const mat3x3 &a4)
 {
-    const double scaledExact = (double)std::max(a1, 0) * (double)timeScale + timeScaleRemainder;
-    const size_t scaledDelta = (size_t)floor(scaledExact);
-    timeScaleRemainder = scaledExact - (double)scaledDelta;
-    currentTime += scaledDelta;
+    // a1 is already the canonical master-game-clock delta. Do not apply a
+    // second scale here: sound lifetimes, shake and palette FX must advance in
+    // exactly the same time domain as physics/rendering.
+    currentTime += (size_t)std::max(a1, 0);
 
     stru_547018 = a2;
     stru_547024 = a3;

@@ -495,9 +495,9 @@ int StatusIconBuildBlinkRenderList(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact
         return desiredCount;
     }
 
-    // Status-icon transitions belong to the gameplay time domain, so the Host
-    // Station death slowdown affects them together with AI, physics and other
-    // gameplay timers. The GEM notification lifetime remains explicitly real-time.
+    // Status-icon transitions and GEM notification lifetime both belong to the
+    // master gameplay clock, so global F5/F6 can never leave UI animation
+    // advancing on a separate real-time domain.
     const uint32_t now = yw->_timeStamp;
     StatusIconPrepareBlinkStates(yw, now);
 
@@ -17119,6 +17119,9 @@ int NC_STACK_ypaworld::ypaworld_func64__sub21__sub3()
         v18 = (POW2(v15) / 230.4);
     }
 
+    if ( IsDebugHostStationCheatEnabled() )
+        v18 = 0;
+
     int a4 = robo->getROBO_battBeam();
 
     _updateMessage.energy = v18;
@@ -17522,6 +17525,13 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub7()
     {
         _updateMessage.energy = dround(sub_4498F4() * _buildProtos[bzda.field_3DC[bzda.field_8F4]].Energy);
     }
+
+    // New Debug F12 keeps the normal authored prices visible in the Genesis
+    // UI, but the actual player Host Station command is free. Zero the shared
+    // action message here so affordability checks and the runtime use the same
+    // authoritative cost instead of maintaining a parallel cheat path.
+    if ( IsDebugHostStationCheatEnabled() )
+        _updateMessage.energy = 0;
 }
 
 int sub_4D3C80(NC_STACK_ypaworld *yw)
