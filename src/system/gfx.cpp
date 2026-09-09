@@ -19,6 +19,7 @@
 #include "../log.h"
 #include "../font.h"
 #include "inivals.h"
+#include "gametime.h"
 #include "glfuncs.h"
 
 #include <algorithm>
@@ -38,6 +39,28 @@ SDL_PixelFormat *GFXEngine::_pixfmt = NULL;
 GLint GFXEngine::_glPixfmt, GFXEngine::_glPixtype;
 bool GFXEngine::_staticInited = false;
 
+
+static int32_t GameplayAwareShaderTime()
+{
+    return System::GameClock.IsActive() ? System::GameClock.VisualTime()
+                                        : (int32_t)SDL_GetTicks();
+}
+
+static int GameplayAwareShaderRandom()
+{
+    if ( !System::GameClock.IsActive() )
+        return rand();
+
+    // Visual noise is part of the rendered game domain too. Quantize to a
+    // nominal ~60 Hz game-time tick so F5 slows changes and F6 freezes them.
+    uint32_t x = (uint32_t)(System::GameClock.VisualTime() / 16);
+    x ^= x >> 16;
+    x *= 0x7feb352dU;
+    x ^= x >> 15;
+    x *= 0x846ca68bU;
+    x ^= x >> 16;
+    return (int)(x & 0x7fffffffU);
+}
 static int NormalizeFrameRateLimit(int value)
 {
     static const int validLimits[] = {60, 75, 90, 120, 144, 165, 200, 240};
@@ -5795,13 +5818,13 @@ void GFXEngine::DrawFBO()
         Glext::GLUniform3f(postProg->InvLoc, _invClr.x, _invClr.y, _invClr.z);
 
     if (postProg->RandLoc >= 0)
-        Glext::GLUniform1i(postProg->RandLoc, rand());
+        Glext::GLUniform1i(postProg->RandLoc, GameplayAwareShaderRandom());
 
     if (postProg->ScrSizeLoc >= 0)
         Glext::GLUniform2i(postProg->ScrSizeLoc, scrSz.x, scrSz.y);
 
     if (postProg->MillisecsLoc >= 0)
-        Glext::GLUniform1i(postProg->MillisecsLoc, SDL_GetTicks());
+        Glext::GLUniform1i(postProg->MillisecsLoc, GameplayAwareShaderTime());
 
     if (_atmosphereActive && postProg == &_atmosphereShaderProg)
     {
@@ -5934,13 +5957,13 @@ void GFXEngine::DrawVhsEffect()
     SetRenderStates(0);
 
     if (_vhsFilterProg.RandLoc >= 0)
-        Glext::GLUniform1i(_vhsFilterProg.RandLoc, rand());
+        Glext::GLUniform1i(_vhsFilterProg.RandLoc, GameplayAwareShaderRandom());
 
     if (_vhsFilterProg.ScrSizeLoc >= 0)
         Glext::GLUniform2i(_vhsFilterProg.ScrSizeLoc, scrSz.x, scrSz.y);
 
     if (_vhsFilterProg.MillisecsLoc >= 0)
-        Glext::GLUniform1i(_vhsFilterProg.MillisecsLoc, SDL_GetTicks());
+        Glext::GLUniform1i(_vhsFilterProg.MillisecsLoc, GameplayAwareShaderTime());
 
     if (_vhsFilterProg.StrengthLoc >= 0)
         Glext::GLUniform1f(_vhsFilterProg.StrengthLoc, _vhsFilterStrength);

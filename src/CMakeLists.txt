@@ -60,6 +60,7 @@ set(SOURCES
     skeleton.cpp
     sklt.cpp
     system/fsmgr.cpp
+    system/gametime.cpp
     system/gfx.cpp
     system/glfuncs.cpp
     system/inivals.cpp
