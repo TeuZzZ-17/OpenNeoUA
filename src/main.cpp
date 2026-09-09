@@ -521,7 +521,12 @@ int ProcessNextFrame()
         System::SetReleativeMouse(false);
 
     CrashDiag::SetPhase("GuiTimers");
-    Gui::Root::Instance.TimersUpdate(input_states.Period);
+    // In-game/replay GUI timers belong to the master virtual clock and are
+    // advanced inside the respective world frame after time dilation is known.
+    // Menus remain on platform time.
+    if ( GameScreenMode != GAME_SCREEN_MODE_GAME &&
+         GameScreenMode != GAME_SCREEN_MODE_REPLAY )
+        Gui::Root::Instance.TimersUpdate(input_states.Period);
 
     int result = 1;
     if ( GameScreenMode == GAME_SCREEN_MODE_MENU )

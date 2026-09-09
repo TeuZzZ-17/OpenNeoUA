@@ -23,9 +23,11 @@
 #include "wav.h"
 #include "yw_net.h"
 #include "gui/uacommon.h"
+#include "gui/root.h"
 #include "gui/uamsgbox.h"
 #include "env.h"
 #include "system/inivals.h"
+#include "system/gametime.h"
 #include "system/system.h"
 #include "locale/locale.h"
 #include "utils.h"
@@ -63,6 +65,7 @@ uint32_t bact_id = 0x10000;
 static constexpr uint32_t GEM_NEW_UI_DEFAULT_DURATION_MS = 8000;
 static constexpr uint32_t GAMEPLAY_TIME_SCALE_MAX_DURATION_MS = 600000;
 static constexpr float GAMEPLAY_MIN_TIME_SCALE = 0.05f;
+static constexpr float DEBUG_GAMEPLAY_TIME_SCALE = 0.20f;
 static constexpr float ROBO_DEATH_TIME_SCALE_MAX_DISTANCE_LIMIT = 1000000.0f;
 static constexpr uint32_t PLASMA_CURRENCY_HUD_PULSE_MS = 350;
 
@@ -315,11 +318,34 @@ static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw)
     if ( yw_GetActiveKamikazeFireTimeScale(yw, &fireScale, NULL) )
         scale = std::min(scale, fireScale);
 
+    // New Debug F5 shares the same single gameplay-time scale as the authored
+    // slow-motion effects. Taking the minimum preserves whichever active
+    // effect is already slower instead of introducing a parallel time system.
+    if ( yw->IsDebugGameplaySlowMotionEnabled() )
+        scale = std::min(scale, DEBUG_GAMEPLAY_TIME_SCALE);
+
     return scale;
 }
 
+static void yw_ApplyDebugHostStationResources(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->IsDebugHostStationCheatEnabled() )
+        return;
+
+    NC_STACK_yparobo *robo = dynamic_cast<NC_STACK_yparobo *>(yw->getYW_userHostStation());
+    if ( !robo || robo->_energy_max <= 0 )
+        return;
+
+    // These are the three player Host Station HUD batteries: main Energy,
+    // Genesis/Creation and Move/Teleport. Keep them at their canonical max;
+    // no shadow resource pool is introduced for the debug cheat.
+    robo->_energy = robo->_energy_max;
+    robo->setROBO_battVehicle(robo->_energy_max);
+    robo->setROBO_battBeam(robo->_energy_max);
+}
+
 static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
-                                                   int32_t unscaledFrameTime)
+                                                   int32_t frameTime)
 {
     if ( !yw )
         return;
@@ -334,9 +360,10 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
         return;
     }
 
-    // Debug freeze pauses the irreversible sequence; it must not cancel the
-    // latch. Releasing FIRE likewise has no effect after activation.
-    if ( unscaledFrameTime <= 0 )
+    // HP drain belongs to the same master game clock as the Kamikaze motion
+    // and FX. F5 slows it and F6 pauses it; releasing FIRE still has no effect
+    // after activation.
+    if ( frameTime <= 0 )
         return;
 
     NC_STACK_ypabact *unit = yw->FindLiveBactByGid(yw->_kamikazeFireTimeScaleDrainGid);
@@ -348,7 +375,7 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
     }
 
     const double rawDrain = (double)drainPerSecond *
-                            ((double)unscaledFrameTime / 1000.0);
+                            ((double)frameTime / 1000.0);
     yw->_kamikazeFireTimeScaleHpDrainRemainder += rawDrain;
 
     const int energyDrain = (int)yw->_kamikazeFireTimeScaleHpDrainRemainder;
@@ -370,33 +397,6 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
     }
 
     unit->_energy -= energyDrain;
-}
-
-static int32_t yw_GetScaledGameplayFrameTime(NC_STACK_ypaworld *yw,
-                                              int32_t frameTime,
-                                              float scale)
-{
-    if ( !yw || scale >= 1.0f )
-    {
-        if ( yw )
-            yw->_gameplayTimeScaleRemainder = 0.0;
-        return frameTime;
-    }
-
-    const double scaledExact = (double)frameTime * scale +
-                               yw->_gameplayTimeScaleRemainder;
-    int32_t scaledFrameTime = (int32_t)floor(scaledExact);
-    yw->_gameplayTimeScaleRemainder = scaledExact - scaledFrameTime;
-
-    // Several legacy paths require a positive integral delta. Preserve that
-    // invariant at extremely high frame rates.
-    if ( scaledFrameTime < 1 )
-    {
-        scaledFrameTime = 1;
-        yw->_gameplayTimeScaleRemainder = 0.0;
-    }
-
-    return scaledFrameTime;
 }
 
 // method 169
@@ -1828,6 +1828,45 @@ static void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
     }
 }
 
+void NC_STACK_ypaworld::HandleDebugTimeHotkeys(TInputState *inpt, bool openUADebug)
+{
+    if ( !inpt || !openUADebug || _isNetGame )
+        return;
+
+    // Network synchronization intentionally remains on platform time; a local
+    // debug time warp would desynchronize peers. F5/F6 therefore retain their
+    // normal bindings in netplay instead of partially slowing one client.
+
+    // Time-control hotkeys are handled before any gameplay/UI/render update so
+    // the master game clock owns the entire frame, including the frame where
+    // the toggle changes state.
+    if ( inpt->KbdLastHit == Input::KC_F5 )
+    {
+        inpt->HotKeyID = -1;
+        _debugGameplaySlowMotion = !_debugGameplaySlowMotion;
+
+        yw_arg159 infoMsg;
+        infoMsg.txt = _debugGameplaySlowMotion ? "Slow Motion 20%" : "Slow Motion OFF";
+        infoMsg.unit = NULL;
+        infoMsg.Priority = 100;
+        infoMsg.MsgID = 0;
+        ypaworld_func159(&infoMsg);
+    }
+
+    if ( inpt->KbdLastHit == Input::KC_F6 )
+    {
+        inpt->HotKeyID = -1;
+        _debugGameplayFrozen = !_debugGameplayFrozen;
+
+        yw_arg159 infoMsg;
+        infoMsg.txt = _debugGameplayFrozen ? "Game Time Frozen" : "Game Time Resumed";
+        infoMsg.unit = NULL;
+        infoMsg.Priority = 100;
+        infoMsg.MsgID = 0;
+        ypaworld_func159(&infoMsg);
+    }
+}
+
 size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 {
     CrashDiag::SetPhase("WorldPreprocess");
@@ -1862,13 +1901,45 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             arg->TimeStamp += arg->DTime;
         }
 
+        bool openUADebug = System::IniConf::IsGameNewDebugEnabled();
+        if ( !openUADebug )
+        {
+            _debugGameplaySlowMotion = false;
+            _debugGameplayFrozen = false;
+            _debugHostStationCheat = false;
+            _debugGlobalInvulnerability = false;
+        }
+
+        HandleDebugTimeHotkeys(arg->field_8, openUADebug);
+
         const int32_t unscaledFrameTime = arg->DTime;
+        const int32_t realFrameTimeStamp = arg->TimeStamp;
+
         yw_UpdateKamikazeFireLatch(this, arg->field_8);
         const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this);
+        const bool gameplayFrozen = !_isNetGame && openUADebug && _debugGameplayFrozen;
+        const bool forceAllTimeScaled = !_isNetGame && openUADebug &&
+                                        (_debugGameplaySlowMotion || _debugGameplayFrozen);
 
-        // Host Station death and Kamikaze FIRE share the single global gameplay-time scale.
-        // GEM unlock notifications remain entirely on real/UI time.
-        SFXEngine::SFXe.SetTimeScale(gameplayTimeScale);
+        // One master clock now owns every local in-game time consumer.  From
+        // this point on, DTime, input Period and TimeStamp are the virtual game
+        // domain; platform/network time stays outside this scope.
+        arg->DTime = System::GameClock.BeginFrame(realFrameTimeStamp, unscaledFrameTime,
+                                                   _timeStamp, gameplayTimeScale,
+                                                   gameplayFrozen, forceAllTimeScaled);
+        _timeStamp = System::GameClock.Time();
+        arg->TimeStamp = System::GameClock.VisualTime();
+        if ( arg->field_8 )
+            arg->field_8->Period = arg->DTime;
+
+        Gui::Root::Instance.TimersUpdate(arg->DTime);
+
+        // Audio pitch and sound-effect clocks consume the same master time.
+        // Debug F5/F6 also override per-source opt-outs so nothing audible can
+        // silently continue at real speed while the world is globally dilated.
+        SFXEngine::SFXe.SetTimeScale(gameplayFrozen ? 0.0f : gameplayTimeScale,
+                                     forceAllTimeScaled);
+        yw_UpdateKamikazeFireTimeScaleHpDrain(this, arg->DTime);
 
         if ( _userUnit )
         {
@@ -1957,13 +2028,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
         }
 
-        bool openUADebug = System::IniConf::IsGameNewDebugEnabled();
-        if ( !openUADebug )
-        {
-            _debugGameplayFrozen = false;
-            _debugGlobalInvulnerability = false;
-        }
-        else if ( arg->field_8 )
+        if ( openUADebug && arg->field_8 )
         {
             // F7 and F8 intentionally share the same selected-vehicle resolver.
             // Attached non-vehicle objects resolve to their carrier, matching the
@@ -2093,14 +2158,17 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
             }
 
+            // F12: player Host Station economy cheat. The three Host batteries
+            // stay full and user-issued Host actions are charged zero energy.
             if ( arg->field_8->KbdLastHit == Input::KC_F12 )
             {
-                _debugGameplayFrozen = !_debugGameplayFrozen;
+                _debugHostStationCheat = !_debugHostStationCheat;
+                yw_ApplyDebugHostStationResources(this);
 
                 yw_arg159 infoMsg;
-                infoMsg.txt = _debugGameplayFrozen ?
-                              "Game Time Frozen" :
-                              "Game Time Resumed";
+                infoMsg.txt = _debugHostStationCheat ?
+                              "Host Station Cheat ON" :
+                              "Host Station Cheat OFF";
                 infoMsg.unit = NULL;
                 infoMsg.Priority = 100;
                 infoMsg.MsgID = 0;
@@ -2108,29 +2176,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
         }
 
-        bool gameplayFrozen = openUADebug && _debugGameplayFrozen;
-
-        yw_UpdateKamikazeFireTimeScaleHpDrain(this,
-                                               gameplayFrozen ? 0 : unscaledFrameTime);
-
-        if ( !gameplayFrozen )
-            arg->DTime = yw_GetScaledGameplayFrameTime(this, arg->DTime,
-                                                         gameplayTimeScale);
-        else
-            _gameplayTimeScaleRemainder = 0.0;
-
-        if ( !gameplayFrozen )
-            _timeStamp += arg->DTime;
-
-        // Keep render animation phase identical to the platform timestamp when
-        // gameplay runs at 1.0, then advance it only through the scaled world
-        // clock during timed slowdown events. This avoids both a phase change in normal
-        // play and a real-time animation leak while slowed.
-        if ( !_gameplayRenderTimeBaseSet )
-        {
-            _gameplayRenderTimeBase = arg->TimeStamp - _timeStamp;
-            _gameplayRenderTimeBaseSet = true;
-        }
+        yw_ApplyDebugHostStationResources(this);
 
         _frameTime = arg->DTime;
         _framesElapsed++;
@@ -2236,10 +2282,14 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             // Do user commands before any unit state can be changed. Spectator Mode
             // keeps the original faction under AI control, so do not consume the
             // observer UFO's class-level hotkeys as Robo/squad commands here.
-            if (_userRobo && !IsSpectatorControlled())
+            if (!gameplayFrozen && _userRobo && !IsSpectatorControlled())
             {
                 if (_userRobo->_bact_type == BACT_TYPES_ROBO)
+                {
+                    if ( _debugHostStationCheat )
+                        _updateMessage.energy = 0;
                     ((NC_STACK_yparobo *)_userRobo)->HandleUserCommands(&_updateMessage);
+                }
             }
 
             CrashDiag::UpdateWorldState(_levelInfo.LevelID,
@@ -2249,32 +2299,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                                         _viewerBact ? _viewerBact->_gid : 0);
             CrashDiag::SetPhase("WorldUnitUpdate");
 
-            if ( gameplayFrozen )
-            {
-                auto updateFrozenUserUnit = [&](NC_STACK_ypabact *unit)
-                {
-                    if ( !unit ||
-                         unit == _userRobo ||
-                         unit->_status == BACT_STATUS_DEAD ||
-                         unit->_bact_type == BACT_TYPES_NOPE )
-                    {
-                        return;
-                    }
-
-                    CrashDiag::SetActiveBact(unit, unit->_gid, unit->_bact_type,
-                                                unit->_owner, unit->_status,
-                                                unit->_status_flg, unit->_energy);
-                    unit->Update(&_updateMessage);
-                    CrashDiag::ClearActiveBact();
-                    _updateMessage.units_count++;
-                };
-
-                updateFrozenUserUnit(_userUnit);
-
-                if ( _viewerBact != _userUnit && _viewerBact && _viewerBact->getBACT_inputting() )
-                    updateFrozenUserUnit(_viewerBact);
-            }
-            else
+            if ( !gameplayFrozen )
             {
                 for ( NC_STACK_ypabact *unit : SnapshotBacts(_unitsList) )
                 {
@@ -2292,6 +2317,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
 
             CrashDiag::ClearActiveBact();
+            yw_ApplyDebugHostStationResources(this);
             CrashDiag::UpdateWorldState(_levelInfo.LevelID,
                                         _updateMessage.units_count,
                                         _userRobo ? _userRobo->_gid : 0,
@@ -2457,6 +2483,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             if ( !_helpURL.empty() )
                 _helpURL.clear();
 
+            // ProcessNextFrame owns the platform timestamp. All in-game code
+            // above saw the virtual timestamp; restore the external clock now.
+            arg->TimeStamp = realFrameTimeStamp;
+
             //exit(1);
         }
     }
@@ -2514,9 +2544,14 @@ bool NC_STACK_ypaworld::HasActiveNewGemNotification() const
            GetNewGemNotificationElapsedTime() < durationMs;
 }
 
+int32_t NC_STACK_ypaworld::GetGameplayRenderTimeStamp() const
+{
+    return System::GameClock.IsActive() ? System::GameClock.VisualTime() : _timeStamp;
+}
+
 uint32_t NC_STACK_ypaworld::GetNewGemNotificationElapsedTime() const
 {
-    return SDL_GetTicks() - _upgradeTimeStamp;
+    return (uint32_t)_timeStamp - _upgradeTimeStamp;
 }
 
 void NC_STACK_ypaworld::DismissNewGemNotification()
@@ -2524,7 +2559,7 @@ void NC_STACK_ypaworld::DismissNewGemNotification()
     if ( !HasActiveNewGemNotification() )
         return;
 
-    _upgradeTimeStamp = SDL_GetTicks() - GetGemUnlockDuration();
+    _upgradeTimeStamp = (uint32_t)_timeStamp - GetGemUnlockDuration();
 }
 
 void NC_STACK_ypaworld::StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo)
@@ -2549,23 +2584,22 @@ void NC_STACK_ypaworld::StartRoboDeathTimeScale(const NC_STACK_ypabact *destroye
             return;
     }
 
-    const uint32_t now = SDL_GetTicks();
-    const uint32_t requestedEnd = now + profile.durationMs;
+    const int32_t now = _timeStamp;
+    const int32_t requestedEnd = now + (int32_t)profile.durationMs;
 
     // Repeated qualifying Host Station deaths refresh/extend the one shared
-    // event instead of creating parallel timers. The trigger is requested only
-    // by a real Host Station death, regardless of the damage source; simply
-    // activating a superbomb never reaches this function. Wrap-safe signed
-    // comparisons match SDL ticks.
-    if ( !HasActiveRoboDeathTimeScale() ||
-         (int32_t)(requestedEnd - _roboDeathTimeScaleEndTick) > 0 )
-        _roboDeathTimeScaleEndTick = requestedEnd;
+    // event instead of creating parallel timers. The controller itself lives
+    // in the master gameplay-time domain too: F5 stretches its duration and
+    // F6 freezes it together with the world instead of letting a wall clock
+    // expire the effect behind a paused/slowed simulation.
+    if ( !HasActiveRoboDeathTimeScale() || requestedEnd > _roboDeathTimeScaleEndTime )
+        _roboDeathTimeScaleEndTime = requestedEnd;
 }
 
 bool NC_STACK_ypaworld::HasActiveRoboDeathTimeScale() const
 {
-    return _roboDeathTimeScaleEndTick != 0 &&
-           (int32_t)(_roboDeathTimeScaleEndTick - SDL_GetTicks()) > 0;
+    return _roboDeathTimeScaleEndTime != 0 &&
+           _roboDeathTimeScaleEndTime > _timeStamp;
 }
 
 bool NC_STACK_ypaworld::IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const
@@ -3459,7 +3493,7 @@ void sub_47C29C(NC_STACK_ypaworld *yw, cellArea *cell, int a3)
     bool newUiCapture = System::IniConf::GameGemUnlockNewUI.Get<bool>();
 
     yw->_upgradeId = a3;
-    yw->_upgradeTimeStamp = newUiCapture ? SDL_GetTicks() : yw->_timeStamp;
+    yw->_upgradeTimeStamp = yw->_timeStamp;
     yw->_upgradeVehicleId = a3a;
     yw->_upgradeWeaponId = 0;
     yw->_upgradeBuildId = a4;
@@ -3574,7 +3608,7 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
     bool newUiCapture = System::IniConf::GameGemUnlockNewUI.Get<bool>();
 
     _upgradeId = gemid;
-    _upgradeTimeStamp = newUiCapture ? SDL_GetTicks() : _timeStamp;
+    _upgradeTimeStamp = _timeStamp;
 
     if ( newUiCapture )
         BeginGemNotificationCapture();
@@ -5157,6 +5191,9 @@ void NC_STACK_ypaworld::DeleteLevel()
 void NC_STACK_ypaworld::BeginLevelTeardown()
 {
     _levelTeardownInProgress = true;
+    _debugGameplaySlowMotion = false;
+    _debugGameplayFrozen = false;
+    _debugHostStationCheat = false;
     _debugGlobalInvulnerability = false;
     ResetPlasmaCurrencyRuntime();
     StopAmbientLevelSound();
@@ -5214,13 +5251,11 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _playerInHSGun = false;
     _upgradeId = 0;
     _upgradeTimeStamp = 0;
-    _gameplayTimeScaleRemainder = 0.0;
-    _roboDeathTimeScaleEndTick = 0;
+    _roboDeathTimeScaleEndTime = 0;
     _kamikazeFireTimeScaleDrainGid = 0;
     _kamikazeFireTimeScaleHpDrainRemainder = 0.0;
     _kamikazeFireInputWasHeld = false;
-    _gameplayRenderTimeBase = 0;
-    _gameplayRenderTimeBaseSet = false;
+    System::GameClock.Reset(_timeStamp);
     _upgradeVehicleId = 0;
     _upgradeWeaponId = 0;
     _upgradeBuildId = 0;
@@ -10034,8 +10069,7 @@ size_t NC_STACK_ypaworld::ypaworld_func162(const std::string &fname)
     repl->filename = fname;
     _debugAoeRings.clear();
     _timeStamp = 0;
-    _gameplayRenderTimeBase = 0;
-    _gameplayRenderTimeBaseSet = false;
+    System::GameClock.Reset(_timeStamp);
 
     if ( !recorder_open_replay(repl) )
         return 0;
@@ -10108,13 +10142,41 @@ void NC_STACK_ypaworld::ypaworld_func163(base_64arg *arg)
     TGameRecorder *repl = _replayPlayer;
     uint32_t v33 = profiler_begin();
 
+    const int32_t unscaledFrameTime = arg->DTime;
+    const int32_t realFrameTimeStamp = arg->TimeStamp;
+    const bool openUADebug = System::IniConf::IsGameNewDebugEnabled();
+    if ( !openUADebug )
+    {
+        _debugGameplaySlowMotion = false;
+        _debugGameplayFrozen = false;
+    }
+
+    HandleDebugTimeHotkeys(arg->field_8, openUADebug);
+
+    const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this);
+    const bool gameplayFrozen = !_isNetGame && openUADebug && _debugGameplayFrozen;
+    const bool forceAllTimeScaled = !_isNetGame && openUADebug &&
+                                    (_debugGameplaySlowMotion || _debugGameplayFrozen);
+
+    arg->DTime = System::GameClock.BeginFrame(realFrameTimeStamp, unscaledFrameTime,
+                                               _timeStamp, gameplayTimeScale,
+                                               gameplayFrozen, forceAllTimeScaled);
+    _timeStamp = System::GameClock.Time();
+    arg->TimeStamp = System::GameClock.VisualTime();
+    if ( arg->field_8 )
+        arg->field_8->Period = arg->DTime;
+
+    Gui::Root::Instance.TimersUpdate(arg->DTime);
+    SFXEngine::SFXe.SetTimeScale(gameplayFrozen ? 0.0f : gameplayTimeScale,
+                                 forceAllTimeScaled);
+
     _framesElapsed++;
     _updateMessage.user_action = World::DOACTION_0;
-    _updateMessage.gTime = arg->TimeStamp;
+    _updateMessage.gTime = _timeStamp;
     _updateMessage.frameTime = arg->DTime;
     _updateMessage.units_count = 0;
     _updateMessage.inpt = arg->field_8;
-    _FPS = 1024 / arg->DTime;
+    _FPS = unscaledFrameTime > 0 ? 1024 / unscaledFrameTime : 0;
 
     _profileVals[PFID_FPS] = _FPS;
 
@@ -10129,14 +10191,19 @@ void NC_STACK_ypaworld::ypaworld_func163(base_64arg *arg)
     _guiVisor.field_0 = 0;
     _guiVisor.field_4 = 0;
 
-    if ( repl->field_7C != 1 )
+    if ( repl->field_7C != 1 && !gameplayFrozen )
+    {
         ypaworld_func163__sub1(repl, arg->DTime);
+        // Replay interpolation may snap the canonical recorded timestamp to a
+        // frame boundary. Keep the master clock synchronized without changing
+        // its scaled visual phase.
+        System::GameClock.SyncGameTime(_timeStamp);
+    }
 
     CameraPrepareRender(repl, _userUnit, arg->field_8);
 
     vec3d a3a = _userUnit->_fly_dir * _userUnit->_fly_dir_length;
 
-    SFXEngine::SFXe.SetTimeScale(1.0f);
     SFXEngine::SFXe.sub_423EFC(arg->DTime, _userUnit->_position, a3a, _userUnit->_rotation);
     UpdateAmbientLevelSound();
 
@@ -10176,6 +10243,8 @@ void NC_STACK_ypaworld::ypaworld_func163(base_64arg *arg)
     _profileVals[PFID_POLYGONS] = _polysDraw;
 
     ProfileCalcValues();
+
+    arg->TimeStamp = realFrameTimeStamp;
 }
 
 

@@ -293,7 +293,7 @@ public:
     void SetMusicTrack(int trackID, int minDelay, int maxDelay);
     void StopMusicTrack(bool reset = true);
     void PlayMusicTrack();
-    void SetTimeScale(float scale);
+    void SetTimeScale(float scale, bool forceAllTimeScaled = false);
 
     void UpdateSoundCarrier(TSndCarrier *smpls);
     const mat3x3 &sb_0x424c74(); //Update sounds and return shake matrix
@@ -351,7 +351,7 @@ public:
     int dword_546F0C;
     size_t currentTime;
     float timeScale;
-    double timeScaleRemainder;
+    bool forceAllTimeScaled;
     int dword_546F14;
     int globalShkFadeIn;
     int globalShkFadeOut;
