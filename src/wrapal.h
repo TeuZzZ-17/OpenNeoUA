@@ -47,6 +47,7 @@ public:
     void reset();
     void playback_rate(int newfreq);
     void playback_scale(float scale);
+    void pause(bool paused);
     void pan(int pan);
 
     void EOS_callback( void (*func)(void *) );
