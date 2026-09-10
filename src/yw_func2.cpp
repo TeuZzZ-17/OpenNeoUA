@@ -3608,6 +3608,14 @@ static std::string db_float_display(float value)
     return out;
 }
 
+static std::string db_optional_float_display(float value)
+{
+    if ( !std::isfinite(value) || value <= 0.0f )
+        return Locale::Text::OpenUA(Locale::OUA_DB_NONE);
+
+    return db_float_display(value);
+}
+
 static bool db_static_gun_support_active(const World::TVhclProto &p)
 {
     return p.model_id == BACT_TYPES_GUN &&
@@ -4583,8 +4591,8 @@ void UserData::PopulateDetailPane()
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_MODEL_FORMAT), db_trunc(db_weapon_model_display_name(p), 18)));
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_ATK_FORMAT), p.energy / 100));
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_AOE_ATK_FORMAT), db_weapon_aoe_atk_display(p)));
-        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_PUSH_FORMAT), db_optional_int_display(p.push)));
-        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_AOE_PUSH_FORMAT), db_optional_int_display(p.aoe_unit_push)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_PUSH_FORMAT), db_optional_float_display(p.push)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_AOE_PUSH_FORMAT), db_optional_float_display(p.aoe_unit_push)));
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_WEAPON_RECOIL_FORMAT),
                             p.recoil > 0.0 ? db_float_display(p.recoil) : Locale::Text::OpenUA(Locale::OUA_DB_NONE)));
         db_add_weapon_energy_lines(&statLines, DB_STATS_LINES, p);

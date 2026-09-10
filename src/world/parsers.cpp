@@ -157,14 +157,6 @@ static float ClampPushIntensity(float value)
     return std::min(value, 10.0f);
 }
 
-static int ClampPushIntensity(long value)
-{
-    if ( value <= 0 )
-        return 0;
-
-    return (int)std::min(value, 10L);
-}
-
 static int NonNegativeFiniteMilliseconds(ScriptParser::Parser &parser,
                                          const std::string &value)
 {
@@ -4304,8 +4296,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->aoe_building_energy = 0;
         _wpn->aoe_sector_energy = 0;
         _wpn->aoe_falloff = 0;
-        _wpn->aoe_unit_push = 0;
-        _wpn->push = 0;
+        _wpn->aoe_unit_push = 0.0f;
+        _wpn->push = 0.0f;
         _wpn->armor_penetration_targets = 0;
         _wpn->recoil = 0.0;
         _wpn->mass = 50.0;
@@ -4518,11 +4510,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "aoe_unit_push") )
     {
-        _wpn->aoe_unit_push = ClampPushIntensity(parser.stol(p2, NULL, 0));
+        _wpn->aoe_unit_push = ClampPushIntensity(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "push") )
     {
-        _wpn->push = ClampPushIntensity(parser.stol(p2, NULL, 0));
+        _wpn->push = ClampPushIntensity(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "armor_penetration_targets") )
     {
