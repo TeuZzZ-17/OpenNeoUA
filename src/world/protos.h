@@ -648,6 +648,9 @@ struct TVhclProto
     bool mgun_set = false;
     int16_t num_mguns = 1;
     int mgun_shot_time = 0;
+    // OpenNeoUA custom: optional player-only override for vehicle-level MGUN
+    // cadence. Zero/unset inherits mgun_shot_time, preserving old data exactly.
+    int mgun_shot_time_user = 0;
     // OpenNeoUA: external/third-person MGUN visual recoil intensity 0..10.
     // Render-only: never changes Vehicle position, velocity or movement input.
     float mgun_recoil = 0.0f;
