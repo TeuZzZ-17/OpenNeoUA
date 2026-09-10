@@ -1112,11 +1112,11 @@ struct TWeapProto
     int aoe_building_energy = 0;
     int aoe_sector_energy = 0;
     int aoe_falloff = 0;
-    int aoe_unit_push = 0; // OpenNeoUA custom: radial push intensity, clamped to 0..10
+    float aoe_unit_push = 0.0f; // OpenNeoUA custom: radial push intensity, continuous 0..10
     // OpenNeoUA custom: 0..10 direct-hit single-target knockback. Same dispatcher as aoe_unit_push,
     // but only for the primary/direct-hit unit. If both push and aoe_unit_push are set,
     // the direct-hit unit receives only push; nearby units receive aoe_unit_push.
-    int push = 0;
+    float push = 0.0f;
     int armor_penetration_targets = 0; // OpenNeoUA custom: direct-hit unit penetrations before final impact
     float recoil = 0.0; // OpenNeoUA: physical Weapon recoil intensity 0..10
 //    int field_87C = 0;
