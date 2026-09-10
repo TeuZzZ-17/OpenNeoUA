@@ -3246,6 +3246,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun_shot_time = parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "mgun_shot_time_user") )
+    {
+        _vhcl->mgun_shot_time_user = parser.stol(p2, NULL, 0);
+        if ( _vhcl->mgun_shot_time_user < 0 )
+            _vhcl->mgun_shot_time_user = 0;
+    }
     else if ( !StriCmp(p1, "mgun_name") )
     {
         _vhcl->mgun_name = p2;
@@ -4083,6 +4089,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_set = false;
         _vhcl->num_mguns = 1;
         _vhcl->mgun_shot_time = 0;
+        _vhcl->mgun_shot_time_user = 0;
         _vhcl->mgun_recoil = 0.0f;
         _vhcl->mgun_recoil_cockpit = 0.0f;
         _vhcl->mgun_tracer = TWeaponTracerConfig();

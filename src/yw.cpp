@@ -4277,6 +4277,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_set = vhcl.mgun_set;
         bacto->_num_mguns = vhcl.num_mguns > 0 ? vhcl.num_mguns : 1;
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
+        bacto->_mgun_shot_time_user = vhcl.mgun_shot_time_user;
         bacto->_mgun_recoil = vhcl.mgun_recoil;
         bacto->_mgun_recoil_cockpit = vhcl.mgun_recoil_cockpit;
         bacto->_mgun_tracer = vhcl.mgun_tracer;
