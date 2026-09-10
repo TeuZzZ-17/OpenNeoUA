@@ -110,8 +110,8 @@ public:
     virtual void SetRadiusRobo(float);
     virtual void SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
                                float sectorRadius, int sectorEnergy, int falloff);
-    virtual void SetAoeUnitPush(int push); // public intensity 0..10
-    virtual void SetDirectPush(int push);  // public intensity 0..10
+    virtual void SetAoeUnitPush(float push); // public continuous intensity 0..10
+    virtual void SetDirectPush(float push);  // public continuous intensity 0..10
     virtual void SetArmorPenetrationTargets(int targets);
     virtual void SetStartHeight(float);
     // OpenNeoUA Arc Grenade: dedicated ballistic launch/runtime. The launch
@@ -248,8 +248,8 @@ protected:
     float _mislAoeSectorRadius   = 0.0;
     int _mislAoeSectorEnergy     = 0;
     int _mislAoeFalloff          = 0;
-    int _mislAoeUnitPush         = 0; // configured intensity 0..10
-    int _mislDirectPush          = 0; // configured intensity 0..10
+    float _mislAoeUnitPush       = 0.0f; // configured continuous intensity 0..10
+    float _mislDirectPush        = 0.0f; // configured continuous intensity 0..10
     int _mislArmorPenetrationRemaining = 0;
     int _mislClusterAge          = 0;
     // One authoritative lifetime flag for the complete Weapon sound package.
