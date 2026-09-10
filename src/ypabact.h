@@ -665,6 +665,7 @@ public:
     float GetMinigunRange() const;
     bool UsesVehicleMinigunTiming() const { return !_mgun_set && _mgun_shot_time > 0; }
     int GetMinigunShotTime(int frameDeltaMs) const;
+    float GetRecoilForwardControlScale(const vec3d &forwardDir) const;
     float GetMinigunPower() const { return _mgun_power_set ? _mgun_power : _gun_power; }
     float GetMinigunAngle() const { return _mgun_angle_set ? _mgun_angle : _gun_angle; }
 
@@ -956,7 +957,7 @@ public:
     int _recoilVisualReturnEndTime = 0;
     bool _recoilVisualRenderOnly = false; // true only for MGUN visual feedback; never feeds body physics
     int _recoilAiRecoveryEndTime = 0; // OpenNeoUA: short AI tank forward-thrust pause after fake recoil
-    int _recoilPlayerRecoveryEndTime = 0; // OpenNeoUA: short player tank forward-input damping after fake recoil
+    int _recoilPlayerRecoveryEndTime = 0; // OpenNeoUA: short player tank window for dynamic recoil-vs-thrust composition
     vec3d _recoilPushVel = vec3d(0.0, 0.0, 0.0);
     vec3d _aoePushVel = vec3d(0.0, 0.0, 0.0);
 
@@ -1071,6 +1072,7 @@ public:
     bool _mgun_set;
     int _num_mguns;
     int _mgun_shot_time;
+    int _mgun_shot_time_user;
     float _mgun_recoil;
     float _mgun_recoil_cockpit;
     World::TWeaponTracerConfig _mgun_tracer;

@@ -59,8 +59,6 @@ static bool ypatank_IsPlayerRecoilRecoveryActive(const NC_STACK_ypatank *tank)
            (tank->_oflags & (BACT_OFLAG_VIEWER | BACT_OFLAG_USERINPT));
 }
 
-static const float YPATANK_PLAYER_RECOIL_FORWARD_SCALE = 0.20f;
-
 static bool ypatank_ShouldPlayCrashlandSound(const NC_STACK_ypatank *tank, float speed, float minSpeed)
 {
     // The crash-land sample belongs to the vehicle prototype, not to the
@@ -1055,21 +1053,24 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         bool playerRecoilRecovery = ypatank_IsPlayerRecoilRecoveryActive(this);
         if ( playerRecoilRecovery && v88 > 0.0f )
         {
-            // OpenNeoUA shared mechanical recoil: when the player fires a tank while
-            // holding forward, the simulated backward recoil is immediately
-            // contradicted by full forward traction, creating a slingshot.
-            // Briefly damp only forward recovery; steering, braking, reverse,
-            // aiming and firing stay responsive.
-            v88 *= YPATANK_PLAYER_RECOIL_FORWARD_SCALE;
+            // OpenNeoUA dynamic tank recoil: never erase the tank's existing
+            // forward velocity just because a shot fired. Instead, compose the
+            // active backward recoil with engine thrust. The shared recoil push
+            // already moves the body backwards after Move(); here we only reduce
+            // the forward drive in proportion to the opposing recoil component.
+            // recoil=0.5 therefore barely trims thrust, while high/stacked recoil
+            // can remove it completely and allow the kick to stop/reverse the tank.
+            const float recoilForwardScale =
+                GetRecoilForwardControlScale(_rotation.AxisZ());
+
+            v88 *= recoilForwardScale;
 
             if ( _thraction > 0.0f )
-                _thraction *= YPATANK_PLAYER_RECOIL_FORWARD_SCALE;
-
-            vec2d flyXZ = _fly_dir.XZ();
-            vec2d forwardXZ = _rotation.AxisZ().XZ();
-            if ( _fly_dir_length > 0.0f && flyXZ.length() > 0.001f && forwardXZ.length() > 0.001f &&
-                 flyXZ.dot(forwardXZ) > 0.0f )
-                _fly_dir_length *= YPATANK_PLAYER_RECOIL_FORWARD_SCALE;
+            {
+                const float recoilLimitedTraction = _force * recoilForwardScale;
+                if ( _thraction > recoilLimitedTraction )
+                    _thraction = recoilLimitedTraction;
+            }
         }
 
         float v75 = fabs(v88);

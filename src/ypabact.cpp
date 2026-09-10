@@ -2757,6 +2757,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_set = false;
     _num_mguns = 1;
     _mgun_shot_time = 0;
+    _mgun_shot_time_user = 0;
     _mgun_recoil = 0.0f;
     _mgun_recoil_cockpit = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
@@ -3781,7 +3782,14 @@ float NC_STACK_ypabact::GetMinigunRange() const
 
 int NC_STACK_ypabact::GetMinigunShotTime(int frameDeltaMs) const
 {
-    int shotTime = GetEffectiveShotTime(_mgun_shot_time, true);
+    // Vehicle-level MGUN cadence mirrors Weapon shot_time_user semantics:
+    // player control may opt into its own timing, while AI and old data keep
+    // using mgun_shot_time. A zero/unset override is a strict fallback.
+    int baseShotTime = _mgun_shot_time;
+    if ( getBACT_inputting() && _mgun_shot_time_user > 0 )
+        baseShotTime = _mgun_shot_time_user;
+
+    int shotTime = GetEffectiveShotTime(baseShotTime, true);
 
     if ( shotTime < frameDeltaMs )
         shotTime = frameDeltaMs;
@@ -5114,6 +5122,36 @@ void NC_STACK_ypabact::UpdateRecoilPush(update_msg *arg)
 
     ypabact_UpdateFakePushVel(this, &_recoilPushVel, arg,
                               RECOIL_MECHANICAL_TAU, true);
+}
+
+float NC_STACK_ypabact::GetRecoilForwardControlScale(const vec3d &forwardDir) const
+{
+    // Convert only the component of the still-active mechanical recoil that
+    // opposes forward travel into a 0..1 engine-thrust scale. This deliberately
+    // does not touch vehicle velocity: the normal movement integrator keeps its
+    // inertia, while UpdateRecoilPush() contributes the actual backward motion.
+    // Low recoil therefore causes only a small deceleration; sufficiently large
+    // recoil can suppress forward thrust and let the physical kick win.
+    vec3d forward = forwardDir;
+    forward.y = 0.0f;
+    const float forwardLen = forward.length();
+    if ( !std::isfinite(forwardLen) || forwardLen <= 0.001f )
+        return 1.0f;
+    forward /= forwardLen;
+
+    vec3d recoilVel = _recoilPushVel;
+    recoilVel.y = 0.0f;
+    const float opposingSpeed = -recoilVel.dot(forward);
+    if ( !std::isfinite(opposingSpeed) || opposingSpeed <= 0.0f )
+        return 1.0f;
+
+    const float maxConfiguredRecoilSpeed =
+        (RECOIL_MAX_INTENSITY * RECOIL_DISTANCE_PER_UNIT) / RECOIL_MECHANICAL_TAU;
+    if ( maxConfiguredRecoilSpeed <= 0.001f )
+        return 1.0f;
+
+    const float load = std::max(0.0f, std::min(opposingSpeed / maxConfiguredRecoilSpeed, 1.0f));
+    return 1.0f - load;
 }
 
 static bool ypabact_GetPlasmaFactionTint(NC_STACK_ypabact *bact,
@@ -16912,6 +16950,7 @@ void NC_STACK_ypabact::Renew()
     _mgun_set = false;
     _num_mguns = 1;
     _mgun_shot_time = 0;
+    _mgun_shot_time_user = 0;
     _mgun_recoil = 0.0f;
     _mgun_recoil_cockpit = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
