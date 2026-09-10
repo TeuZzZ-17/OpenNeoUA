@@ -253,7 +253,7 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislLifeTime = 5000;
     _mislDelayTime = 0;
     _mislType = MISL_BOMB;
-    _mislAoeUnitPush = 0;
+    _mislAoeUnitPush = 0.0f;
     _mislArmorPenetrationRemaining = 0;
     _mislArmorPenetratedGids.clear();
     _mislDirectPushRecipientGids.clear();
@@ -1680,7 +1680,7 @@ bool NC_STACK_ypamissile::ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *ap
     if ( !ypamissile_GetDirectPushDir(this, pushDirectionTarget, fallbackDir, &pushDir) )
         return false;
 
-    float pushStrength = (float)_mislDirectPush * ypamissile_GetTargetPushMultiplier(bct);
+    float pushStrength = _mislDirectPush * ypamissile_GetTargetPushMultiplier(bct);
     if ( pushStrength <= 0.0f )
         return false;
 
@@ -2174,7 +2174,7 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                         appliedPushDir = vec3d(1.0f, 0.0f, 0.0f);
 
                     appliedPushStrength =
-                        (float)_mislAoeUnitPush *
+                        _mislAoeUnitPush *
                         World::AoePushFalloffFactor(distance, _mislAoeUnitRadius,
                                                     _mislAoeFalloff != 0);
 
@@ -3208,8 +3208,8 @@ void NC_STACK_ypamissile::Renew()
     _mislFlags  = 0;
     _mislDelayTime = 0;
     _mislAoeFalloff = 0;
-    _mislAoeUnitPush = 0;
-    _mislDirectPush = 0;
+    _mislAoeUnitPush = 0.0f;
+    _mislDirectPush = 0.0f;
     _mislArmorPenetrationRemaining = 0;
     _mislArmorPenetratedGids.clear();
     _mislDirectPushRecipientGids.clear();
@@ -3751,14 +3751,14 @@ void NC_STACK_ypamissile::SetAreaDamage(float unitRadius, int unitEnergy, float 
     _mislAoeFalloff = falloff ? 1 : 0;
 }
 
-void NC_STACK_ypamissile::SetAoeUnitPush(int push)
+void NC_STACK_ypamissile::SetAoeUnitPush(float push)
 {
-    _mislAoeUnitPush = std::max(0, std::min(push, 10));
+    _mislAoeUnitPush = isfinite(push) ? std::max(0.0f, std::min(push, 10.0f)) : 0.0f;
 }
 
-void NC_STACK_ypamissile::SetDirectPush(int push)
+void NC_STACK_ypamissile::SetDirectPush(float push)
 {
-    _mislDirectPush = std::max(0, std::min(push, 10));
+    _mislDirectPush = isfinite(push) ? std::max(0.0f, std::min(push, 10.0f)) : 0.0f;
 }
 
 void NC_STACK_ypamissile::SetArmorPenetrationTargets(int targets)
