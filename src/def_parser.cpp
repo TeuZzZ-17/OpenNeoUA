@@ -202,7 +202,7 @@ long Parser::stol(const std::string& str, std::size_t* __idx, int __base)
         return std::stol(str, __idx, __base);
     }
     catch(const std::out_of_range &err) {
-        std::string errmsg = fmt::sprintf("Idiotic modify detected in %s, line %d:\n%s\nvalue %s overflow integer: %d - %d:\n",
+        std::string errmsg = fmt::sprintf("Invalid value detected in %s, line %d:\n%s\nvalue %s overflow integer: %d - %d:\n",
                      _Name.c_str(), _line, _lastLine.c_str(), str.c_str(), std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max());
 
         ypa_log_out(errmsg.c_str());
@@ -214,7 +214,7 @@ long Parser::stol(const std::string& str, std::size_t* __idx, int __base)
         return std::numeric_limits<int32_t>::max();
     }
     catch(...) {
-        std::string errmsg = fmt::sprintf("Idiotic modify detected in %s, line %d:\n%s\ninvalid long value: %s\n",
+        std::string errmsg = fmt::sprintf("Invalid value detected in %s, line %d:\n%s\ninvalid long value: %s\n",
                      _Name.c_str(), _line, _lastLine.c_str(), str.c_str());
 
         ypa_log_out(errmsg.c_str());
@@ -231,7 +231,7 @@ int Parser::stoi(const std::string& str, std::size_t* __idx, int __base)
         return std::stoi(str, __idx, __base);
     }
     catch(const std::out_of_range &err) {
-        std::string errmsg = fmt::sprintf("Idiotic modify detected in %s, line %d:\n%s\nvalue %s overflow integer: %d - %d:\n",
+        std::string errmsg = fmt::sprintf("Invalid value detected in %s, line %d:\n%s\nvalue %s overflow integer: %d - %d:\n",
                      _Name.c_str(), _line, _lastLine.c_str(), str.c_str(), std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max());
 
         ypa_log_out(errmsg.c_str());
@@ -243,7 +243,7 @@ int Parser::stoi(const std::string& str, std::size_t* __idx, int __base)
         return std::numeric_limits<int32_t>::max();
     }
     catch(...) {
-        std::string errmsg = fmt::sprintf("Idiotic modify detected in %s, line %d:\n%s\ninvalid integer value: %s\n",
+        std::string errmsg = fmt::sprintf("Invalid value detected in %s, line %d:\n%s\ninvalid integer value: %s\n",
                      _Name.c_str(), _line, _lastLine.c_str(), str.c_str());
 
         ypa_log_out(errmsg.c_str());
@@ -260,7 +260,7 @@ float Parser::stof(const std::string& str, std::size_t* __idx)
         return std::stof(str, __idx);
     }
     catch(...) {
-        std::string errmsg = fmt::sprintf("Idiotic modify detected in %s, line %d:\n%s\ninvalid float value: %s\n",
+        std::string errmsg = fmt::sprintf("Invalid value detected in %s, line %d:\n%s\ninvalid float value: %s\n",
                      _Name.c_str(), _line, _lastLine.c_str(), str.c_str());
 
         ypa_log_out(errmsg.c_str());
@@ -277,7 +277,7 @@ double Parser::stod(const std::string& str, std::size_t* __idx)
         return std::stod(str, __idx);
     }
     catch(...) {
-        std::string errmsg = fmt::sprintf("Idiotic modify detected in %s, line %d:\n%s\ninvalid double value: %s\n",
+        std::string errmsg = fmt::sprintf("Invalid value detected in %s, line %d:\n%s\ninvalid double value: %s\n",
                      _Name.c_str(), _line, _lastLine.c_str(), str.c_str());
 
         ypa_log_out(errmsg.c_str());

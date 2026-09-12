@@ -4904,7 +4904,6 @@ void sub_4F6114(NC_STACK_ypaworld *yw, int a2, CmdStream *cmdbuf, int a3, int a4
                 {
                     v37 += a2;
 
-                    //pcur -= 2; //HACKY rewrite
                     cmdbuf->pop_back();
                     cmdbuf->pop_back();
                     FontUA::store_s16(cmdbuf, v37);
@@ -8247,8 +8246,6 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
         FontUA::set_ypos(cur, 0);
 
         cur->insert(cur->end(), a8.begin(), a8.end());
-
-        //pcur += a8.size();
     }
 }
 
@@ -12512,11 +12509,11 @@ void NC_STACK_ypaworld::ypaworld_func64__sub7(TInputState *inpt)
                     _guiDragElement->x = v13;
 
                     int16_t tmp = v13 - (_screenSize.x / 2);
-                    _guiDragElement->cmdCommands[5] = (tmp >>  8) & 0xFF ; //HACKY UPDATE!
+                    _guiDragElement->cmdCommands[5] = (tmp >>  8) & 0xFF ;
                     _guiDragElement->cmdCommands[6] = tmp & 0xFF ;
 
                     tmp = v15 - (_screenSize.y / 2);
-                    _guiDragElement->cmdCommands[9] = (tmp >>  8) & 0xFF ; //HACKY UPDATE!
+                    _guiDragElement->cmdCommands[9] = (tmp >>  8) & 0xFF ;
                     _guiDragElement->cmdCommands[10] = tmp & 0xFF ;
                 }
             }
