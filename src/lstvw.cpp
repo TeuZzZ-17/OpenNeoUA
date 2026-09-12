@@ -720,8 +720,6 @@ void GuiList::InputHandle(NC_STACK_ypaworld *yw, TInputState *struc)
 
     yw->_guiDragDefaultMouse = (listFlags & (GLIST_FLAG_IN_RESIZING | GLIST_FLAG_IN_SCROLLING | GLIST_FLAG_IN_SELECT)) && (v6->flag & TClickBoxInf::FLAG_LM_HOLD);
 
-    //printf("%x %x %d, \n", (int)&dialogBox , (int)struc->winp131arg.selected_btn , struc->winp131arg.selected_btnID);
-
     if ( this == struc->ClickInf.selected_btn && struc->ClickInf.selected_btnID >= 8 )
         listFlags &= ~GLIST_FLAG_NO_SCROLL;
 

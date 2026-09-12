@@ -3285,12 +3285,10 @@ void UserData::sub_46C914()
             it++;
 
         EnvMode = ENVMODE_SINGLEPLAY;
-printf("%s, %d\n",__FILE__, __LINE__);
         p_YW->LoadSettings(fmt::sprintf("%s/user.txt", it->name),
                            it->name,
                            World::SDF_ALL,
                            true);
-printf("%s, %d\n",__FILE__, __LINE__);
         UserName = it->name;
         userNameDir = it->name;
 
@@ -4995,7 +4993,7 @@ void UserData::GameShellUiHandleInput()
         }
         if ( Input->KbdLastHit == Input::KC_RETURN )
         {
-            printf("Line = %d\n", __LINE__);
+            
             switch ( confirmMode )
             {
             case 1:
@@ -5308,7 +5306,7 @@ void UserData::GameShellUiHandleInput()
                 }
                 else if ( Input->KbdLastHit == Input::KC_RETURN )
                 {
-                                printf("Line = %d\n", __LINE__);
+                                
 
                     InputConfig[inpListActiveElement].SetFlags = (TInputConf::IF_FIRST | TInputConf::IF_SECOND);
                     keyCatchMode = true;
@@ -5480,7 +5478,7 @@ void UserData::GameShellUiHandleInput()
     {
         if ( Input->KbdLastHit == Input::KC_RETURN )
         {
-                        printf("Line = %d\n", __LINE__);
+                        
 
             if ( video_listvw.IsClosed() && d3d_listvw.IsClosed() )
             {
@@ -5858,7 +5856,7 @@ void UserData::GameShellUiHandleInput()
                 }
                 else if ( Input->KbdLastHit == Input::KC_RETURN )
                 {
-                                printf("Line = %d\n", __LINE__);
+                                
 
                     switch ( diskScreenMode )
                     {
@@ -6205,7 +6203,7 @@ void UserData::GameShellUiHandleInput()
 
         if ( Input->KbdLastHit == Input::KC_RETURN )
         {
-                        printf("Line = %d\n", __LINE__);
+                        
 
             sub_46B0E0();
         }
@@ -6272,7 +6270,7 @@ void UserData::GameShellUiHandleInput()
     {
         if ( Input->KbdLastHit == Input::KC_RETURN || Input->KbdLastHit == Input::KC_ESCAPE )
         {
-                        printf("Line = %d\n", __LINE__);
+                        
 
             EnvMode = ENVMODE_TITLE;
 

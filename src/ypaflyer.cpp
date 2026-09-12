@@ -350,8 +350,6 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             break;
         }
 
-        //printf(" %f %f %f\n", bact->field_639.x, bact->field_639.y, bact->field_639.z);
-
         ypaworld_arg136 arg136;
         arg136.isect = 0;
         arg136.flags = 0;
@@ -584,8 +582,6 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
         bact_arg75 arg75;
         arg75.fperiod = a2a;
         arg75.g_time = _clock;
-
-        //printf("%d %d \n", bact->field_3DF, bact->field_3DE);
 
         if ( _secndTtype == BACT_TGT_TYPE_UNIT )
         {

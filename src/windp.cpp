@@ -241,7 +241,7 @@ bool NC_STACK_windp::Host(const std::string &gameName, int playerNum)
 size_t NC_STACK_windp::EnumSessions(IDVPair *stak)
 {
     //ask sessions
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -263,21 +263,21 @@ std::string NC_STACK_windp::GetCurrentSessionName()
 size_t NC_STACK_windp::JoinSession(const std::string &sessName)
 {
     //join session
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
 size_t NC_STACK_windp::CreateSession(windp_openSessionMsg *osm)
 {
     //open session
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
 size_t NC_STACK_windp::GetSessionData(IDVPair *stak)
 {
     //get session
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -289,7 +289,7 @@ size_t NC_STACK_windp::CloseSession(IDVPair *stak)
         if (zhost)
             zhost->CloseSession(0);
     }
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -304,21 +304,21 @@ size_t NC_STACK_windp::GetSessionStatus()
 size_t NC_STACK_windp::SetSessionName(const char *sessName)
 {
     //set session name
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
 size_t NC_STACK_windp::CreatePlayer(windp_createPlayerMsg *cp)
 {
     //create player
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
 size_t NC_STACK_windp::DeletePlayer(const char *playerName)
 {
     //destroy player
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -541,14 +541,14 @@ size_t NC_STACK_windp::FlushBroadcastBuffer()
 size_t NC_STACK_windp::GetCaps(IDVPair *stak)
 {
     // get caps info
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
 size_t NC_STACK_windp::LockSession(int *arg)
 {
     // lock session
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -571,7 +571,7 @@ size_t NC_STACK_windp::Reset(IDVPair *stak)
     zcli = NULL;
     zhost = NULL;
     // reset
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -607,7 +607,7 @@ bool NC_STACK_windp::GetRemoteStart(windp_arg87 *arg)
 size_t NC_STACK_windp::GetLocalName(IDVPair *stak)
 {
     //ask local machine
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -620,14 +620,14 @@ void NC_STACK_windp::SetVersion(const std::string &ver)
 size_t NC_STACK_windp::GetProvType()
 {
     // get provider type
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return connType;
 }
 
 size_t NC_STACK_windp::GetStats(int *stak)
 {
     // diagnos
-    printf("%s\n", __PRETTY_FUNCTION__);
+    
     return 0;
 }
 
@@ -1120,7 +1120,7 @@ void UserData::yw_JoinNetGame()
                 if ( p_YW->_netDriver->GetProvType() == 4 )
                     GFX::Engine.windd_func320(NULL);
 
-                //sb_0x46bb54__sub0(p_ypaworld, get_lang_string(p_ypaworld->string_pointers_p2, 2400, "YPA ERROR MESSAGE"), get_lang_string(p_ypaworld->string_pointers_p2, 2401, "SESSION NOT LONGER AVAILABLE"));
+
                 fmt::printf("%s: %s\n", Locale::Text::Advanced(Locale::ADV_ERRHEAD), Locale::Text::Advanced(Locale::ADV_ERRNOSESS));
 
                 if ( p_YW->_netDriver->GetProvType() == 4 )
@@ -1279,7 +1279,7 @@ void UserData::JoinLobbyLessGame()
                 if ( p_YW->_netDriver->GetProvType() == 4 )
                     GFX::Engine.windd_func320(NULL);
 
-                //sb_0x46bb54__sub0(p_ypaworld, get_lang_string(p_ypaworld->string_pointers_p2, 2400, "YPA ERROR MESSAGE"), get_lang_string(p_ypaworld->string_pointers_p2, 2401, "SESSION NOT LONGER AVAILABLE"));
+
                 fmt::printf("%s: %s\n", Locale::Text::Advanced(Locale::ADV_ERRHEAD), Locale::Text::Advanced(Locale::ADV_ERRNOSESS));
 
                 if ( p_YW->_netDriver->GetProvType() == 4 )

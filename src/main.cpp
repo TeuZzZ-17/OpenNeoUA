@@ -941,14 +941,6 @@ int main(int argc, char *argv[])
                 SDL_Delay(1);
         }
 
-//        fps++;
-//        if (SDL_GetTicks() > fpstick)
-//        {
-//            printf("fps %d\n", fps);
-//            fpstick = SDL_GetTicks() + 1000;
-//            fps = 0;
-//        }
-
     }
 
     CrashDiag::DisarmWatchdog();
