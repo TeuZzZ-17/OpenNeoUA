@@ -603,6 +603,9 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
     if ( saveInvisibleState )
         fil->printf("    invisible_unrevealed = %s\n", bct->IsInvisibleUnrevealed() ? "yes" : "no");
 
+    if ( bct->_deflect_charges_max > 0 )
+        fil->printf("    deflect_charges = %d\n", bct->_deflect_charges);
+
     if ( bct->_primTtype == BACT_TGT_TYPE_UNIT )
         fil->printf("    primary        = %d_%d_%2.2f_%2.2f_%d\n", bct->_primTtype, bct->_primT.pbact->_gid, bct->_primTpos.x, bct->_primTpos.z, bct->_primT_cmdID);
     else

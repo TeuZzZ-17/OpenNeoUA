@@ -1215,11 +1215,95 @@ void NC_STACK_ypamissile::TrySpawnChainProjectile(NC_STACK_ypabact *currentHit, 
         setBACT_yourLastSeconds(_mislChainPendingDelay + 100);
 }
 
-bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypabact **hitTarget)
+void NC_STACK_ypamissile::DeflectFromUnitCollision(const vec3d &targetCenter, float targetRadius,
+                                                     const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
+                                                     float weaponRadius)
+{
+    vec3d sweep = newWeaponCenter - oldWeaponCenter;
+    vec3d closest = newWeaponCenter;
+    const float sweepLenSq = sweep.dot(sweep);
+    if ( sweepLenSq > 0.000001f )
+    {
+        float t = (targetCenter - oldWeaponCenter).dot(sweep) / sweepLenSq;
+        t = std::max(0.0f, std::min(t, 1.0f));
+        closest = oldWeaponCenter + sweep * t;
+    }
+
+    vec3d outward = closest - targetCenter;
+    if ( outward.normalise() <= 0.001f )
+    {
+        outward = -_fly_dir;
+        if ( outward.normalise() <= 0.001f )
+            outward = vec3d::OY(-1.0);
+    }
+
+    vec3d tangent = (fabs(outward.y) < 0.9f ? vec3d::OY(1.0) : vec3d::OX(1.0)) * outward;
+    if ( tangent.normalise() <= 0.001f )
+        tangent = vec3d::OZ(1.0) * outward;
+    if ( tangent.normalise() <= 0.001f )
+        tangent = vec3d::OX(1.0);
+
+    vec3d bitangent = outward * tangent;
+    if ( bitangent.normalise() <= 0.001f )
+        bitangent = vec3d::OZ(1.0);
+
+    const float cosTheta = (float)rand() / (float)RAND_MAX;
+    const float sinTheta = sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
+    const float phi = ((float)rand() / (float)RAND_MAX) * 2.0f * C_PI;
+
+    vec3d newDir = outward * cosTheta +
+                   tangent * (cos(phi) * sinTheta) +
+                   bitangent * (sin(phi) * sinTheta);
+    if ( newDir.normalise() <= 0.001f )
+        newDir = outward;
+
+    // Move the colliding projectile sphere just outside the armor before the
+    // next frame. This prevents one physical impact from spending
+    // several Deflect charges.
+    const float separation = std::max(0.0f, targetRadius) +
+                             std::max(0.0f, weaponRadius) + 1.0f;
+    const vec3d separatedWeaponCenter = targetCenter + outward * separation;
+    _position += separatedWeaponCenter - newWeaponCenter;
+    _old_pos = _position;
+
+    const float speed = _fly_dir_length;
+    _fly_dir = newDir;
+    _fly_dir_length = speed;
+    _target_vec = newDir;
+
+    setTarget_msg directTarget = {};
+    directTarget.tgt_type = BACT_TGT_TYPE_DRCT;
+    directTarget.tgt_pos = newDir;
+    directTarget.priority = 0;
+    SetTarget(&directTarget);
+
+    if ( _mislType == MISL_ARC_GRENADE )
+        _arcGrenadeVelocity = newDir * speed;
+
+    // Artillery normally follows a fixed parametric path. Once armor physically
+    // deflects it, leave that path and continue as the same live projectile.
+    if ( _isArtilleryShellProjectile )
+    {
+        _mislLifeTime = std::max(0, _mislLifeTime - _artilleryShellElapsed);
+        _isArtilleryShellProjectile = false;
+    }
+
+    _rotation.SetZ(newDir);
+    vec3d x = vec3d::OY(-1.0) * newDir;
+    if ( x.normalise() > 0.001f )
+    {
+        _rotation.SetX(x);
+        _rotation.SetY(newDir * x);
+    }
+}
+
+bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypabact **hitTarget, bool *deflected)
 {
     _mislDirectHitUnits.clear();
     if ( hitTarget )
         *hitTarget = NULL;
+    if ( deflected )
+        *deflected = false;
 
     vec3d collisionSumPosition(0.0, 0.0, 0.0);
     int collisionCount = 0;
@@ -1410,8 +1494,29 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                             if ( distanceSq > radiusSum * radiusSum )
                                 continue;
 
-                            if ( applyDirectDamage &&
-                                 ShouldArmorPenetrateTarget(bct) )
+                            const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
+                            if ( collisionCount == 0 && bct->HasDeflectCharges() )
+                            {
+                                // Armor penetration is a hard counter: it destroys all
+                                // remaining Deflect charges and keeps penetrating normally.
+                                if ( armorPenetrates )
+                                {
+                                    bct->ClearDeflectCharges();
+                                }
+                                else
+                                {
+                                    bct->ConsumeDeflectCharge();
+                                    DeflectFromUnitCollision(targetSphere.center, targetSphere.radius,
+                                                             oldWeaponSpheres[wi].center,
+                                                             newWeaponSpheres[wi].center,
+                                                             weaponRadius);
+                                    if ( deflected )
+                                        *deflected = true;
+                                    return false;
+                                }
+                            }
+
+                            if ( applyDirectDamage && armorPenetrates )
                             {
                                 ApplyDirectHitToBact(bct);
                                 RememberArmorPenetratedTarget(bct);
@@ -1461,8 +1566,25 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                              sqrt(POW2(dist_vect_len) + POW2(vp_len)) >
                                  fabs(to_enemy_len - weaponRadius) )
                         {
-                            if ( applyDirectDamage &&
-                                 ShouldArmorPenetrateTarget(bct) )
+                            const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
+                            if ( collisionCount == 0 && bct->HasDeflectCharges() )
+                            {
+                                if ( armorPenetrates )
+                                {
+                                    bct->ClearDeflectCharges();
+                                }
+                                else
+                                {
+                                    bct->ConsumeDeflectCharge();
+                                    DeflectFromUnitCollision(targetSphere.center, targetSphere.radius,
+                                                             _old_pos, _position, weaponRadius);
+                                    if ( deflected )
+                                        *deflected = true;
+                                    return false;
+                                }
+                            }
+
+                            if ( applyDirectDamage && armorPenetrates )
                             {
                                 ApplyDirectHitToBact(bct);
                                 RememberArmorPenetratedTarget(bct);
@@ -2166,6 +2288,15 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
 
                 damagedUnits.push_back(bct);
 
+                int areaEnergy = 0;
+                if ( doAoeDamage && !dmgSkip && !IsDirectHitUnit(bct) )
+                {
+                    areaEnergy = ypamissile_ScaleAoeEnergy(
+                        _mislAoeUnitEnergy,
+                        ypamissile_AoeFalloffFactor(distance, _mislAoeUnitRadius,
+                                                    _mislAoeFalloff != 0));
+                }
+
                 bool hasAoePush = false;
                 bool wasAlive = false;
                 vec3d appliedPushDir(0.0, 0.0, 0.0);
@@ -2192,15 +2323,20 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                     hasAoePush = appliedPushStrength > 0.0f;
                 }
 
+                // A conventional projectile explosion spends one Deflect charge and blocks
+                // every unit-side effect from that single blast event. Persistent
+                // fields and scripted damage use other call paths and are untouched.
+                if ( bct->HasDeflectCharges() && (areaEnergy > 0 || hasAoePush) )
+                {
+                    bct->ConsumeDeflectCharge();
+                    continue;
+                }
+
                 // AoE damage skips direct-hit units (they already received direct damage)
                 // and anything the strict damage filter rejected. AoE push has its
                 // own eligibility filter but follows the same AI-friendly policy.
-                if ( doAoeDamage && !dmgSkip && !IsDirectHitUnit(bct) )
-                {
-                    int areaEnergy = ypamissile_ScaleAoeEnergy(_mislAoeUnitEnergy, ypamissile_AoeFalloffFactor(distance, _mislAoeUnitRadius, _mislAoeFalloff != 0));
-                    if ( areaEnergy > 0 )
-                        ApplyDamageToBact(bct, areaEnergy);
-                }
+                if ( areaEnergy > 0 )
+                    ApplyDamageToBact(bct, areaEnergy);
 
                 if ( hasAoePush )
                 {
@@ -2705,7 +2841,8 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 return;
 
             NC_STACK_ypabact *hitTarget = NULL;
-            if ( TubeCollisionTest(_mislDelayTime <= 0, &hitTarget) )
+            bool deflected = false;
+            if ( TubeCollisionTest(_mislDelayTime <= 0, &hitTarget, &deflected) )
             {
                 ResetViewing();
 
@@ -2732,6 +2869,9 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
                 return;
             }
+
+            if ( deflected )
+                return;
 
             ypaworld_arg136 arg136;
             arg136.stPos = _old_pos;
@@ -3091,7 +3231,10 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
     // double damage. If no unit is intersected, the shell simply detonates at its
     // authored landing/airburst point as before.
     NC_STACK_ypabact *directHit = NULL;
-    TubeCollisionTest(true, &directHit);
+    bool deflected = false;
+    TubeCollisionTest(true, &directHit, &deflected);
+    if ( deflected )
+        return;
 
     // Ground-burst artillery shells land on a point previously snapped to world
     // collision geometry. Reacquire that same real surface at impact time so

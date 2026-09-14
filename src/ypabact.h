@@ -559,6 +559,10 @@ public:
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual void ModifyEnergy(bact_arg84 *arg);
     bool IsInvulnerableToDamage() const;
+    bool HasDeflectCharges() const { return _deflect_charges > 0; }
+    int GetDeflectChargesRemaining() const { return _deflect_charges; }
+    bool ConsumeDeflectCharge();
+    void ClearDeflectCharges() { _deflect_charges = 0; }
     // OpenNeoUA: derived from the existing transient 0..4 kill marks. These helpers
     // are the single gameplay/UI source of truth and never mutate prototypes.
     bool CanUseSessionKillMarks() const;
@@ -884,6 +888,8 @@ public:
     int _playerSprintPitchExtra = 0;
     int _energy;
     int _energy_max;
+    int _deflect_charges;
+    int _deflect_charges_max;
     bool _invulnerable;
     int _reload_const;
 //    int16_t field_3CE;
