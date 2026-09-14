@@ -581,6 +581,11 @@ public:
     {
         return _buff.deflect_max_energy <= 0 || energy <= _buff.deflect_max_energy;
     }
+    float GetBuffDeflectEndDamageMultiplier() const
+    {
+        const float reduction = std::max(0.0f, std::min(_buff.deflect_end_damage_reduction, 1.0f));
+        return 1.0f - reduction;
+    }
     bool ConsumeBuffDeflectCharge();
     void ClearBuffDeflectCharges() { _buff.deflect_charges = 0; }
     void SpawnBuffDeflectVisual(const vec3d &pos, const mat3x3 &rot);
@@ -1141,6 +1146,8 @@ public:
     int _progressive_weapon_id = -1;
     float _progressive_weapon_level = 0.0f; // 0 = shot_time/shot_time_user, 1 = ramp_up_max_shot_time
     bool _progressive_weapon_requested = false;
+    double _progressive_weapon_overheat_elapsed_ms = 0.0;
+    double _progressive_weapon_overheat_hp_drain_remainder = 0.0;
     vec3d _fire_pos;
     int8_t _fire_x_mode;
     float _fire_x_start;
