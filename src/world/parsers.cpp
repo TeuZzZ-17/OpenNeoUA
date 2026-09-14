@@ -2659,6 +2659,22 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             ? (int)std::min<long>(value, std::numeric_limits<int>::max())
             : 0;
     }
+    else if ( !StriCmp(p1, "buff_deflect_end_damage_reduction") )
+    {
+        TAuthoredScalar value;
+        _vhcl->buff.deflect_end_damage_reduction = 0.0f;
+
+        if ( ParseAuthoredScalar(p2, value) && value.percent && value.value >= 0.0f )
+        {
+            _vhcl->buff.deflect_end_damage_reduction =
+                std::min(value.value, 100.0f) / 100.0f;
+        }
+        else
+        {
+            ypa_log_out("WARNING: vehicle %d buff_deflect_end_damage_reduction='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Using 0%%.\n",
+                        _vhclID, p2.c_str());
+        }
+    }
     else if ( !StriCmp(p1, "buff_deflect_vp") )
     {
         const long vp = parser.stol(p2, NULL, 0);
@@ -4436,6 +4452,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->shot_time_user = 1000;
         _wpn->ramp_up_time = 0;
         _wpn->ramp_up_max_shot_time = 0;
+        _wpn->ramp_up_overheat_time = 0;
+        _wpn->ramp_up_overheat_hp_drain.Clear();
         _wpn->salve_delay = 0;
         _wpn->salve_shots = 0;
         _wpn->multi_target = 0;
@@ -5006,6 +5024,14 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "ramp_up_max_shot_time") )
     {
         _wpn->ramp_up_max_shot_time = NonNegativeFiniteMilliseconds(parser, p2);
+    }
+    else if ( !StriCmp(p1, "ramp_up_overheat_time") )
+    {
+        _wpn->ramp_up_overheat_time = NonNegativeFiniteMilliseconds(parser, p2);
+    }
+    else if ( !StriCmp(p1, "ramp_up_overheat_hp_drain") )
+    {
+        ParseAbsoluteOrPercent(p2, _wpn->ramp_up_overheat_hp_drain, 100.0f);
     }
     else if ( !StriCmp(p1, "shk_launch_player_slot") )
     {

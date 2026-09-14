@@ -408,6 +408,7 @@ struct TVehicleBuffConfig
 
     int deflect_charges = 0;
     int deflect_max_energy = 0;
+    float deflect_end_damage_reduction = 0.0f;
     int16_t deflect_vp = 0;
     std::string deflect_3ds;
     std::string deflect_base;
@@ -1164,6 +1165,10 @@ struct TWeapProto
     // Releasing FIRE or entering a structural firing pause/reset restores the base cadence.
     int ramp_up_time = 0;
     int ramp_up_max_shot_time = 0;
+    // Optional self-overheat once the progressive cadence has remained at its
+    // authored maximum long enough. The drain accepts fixed HP/sec or max-HP %/sec.
+    int ramp_up_overheat_time = 0;
+    TAbsoluteOrPercent ramp_up_overheat_hp_drain;
     int salve_shots = 0;
     int salve_delay = 0;
     // OpenNeoUA: generic multi-target count for compatible homing weapon models.

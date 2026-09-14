@@ -154,8 +154,8 @@ public:
 protected:
     bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
     int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
-    int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy);
-    void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true);
+    int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier = 1.0f);
+    void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true, float damageMultiplier = 1.0f);
     void DeflectFromUnitCollision(NC_STACK_ypabact *target,
                                   const vec3d &targetCenter, float targetRadius,
                                   const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
@@ -279,6 +279,7 @@ protected:
     float _mislChainPendingOriginRadius = 0.0;
     bool _mislAttachedToTarget   = false;
     int32_t _mislAttachTargetGid = 0;
+    float _mislAttachedDamageMultiplier = 1.0f;
     vec3d _mislAttachOffset;
     vec3d _mislLastAttachedPosition;
     TSndCarrier _mislClusterSoundCarrier;
