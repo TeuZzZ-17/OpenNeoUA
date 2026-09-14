@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 
 #include "includes.h"
 
@@ -19,6 +20,22 @@
 
 namespace
 {
+static bool BaseTintMeshIsSectorTerrain(const GFX::TMesh &mesh)
+{
+    // Vanilla UA sector surfaces embedded in LEGO/building BASEs consistently
+    // use BODEN1..BODEN5. Match the material source, not vertex height: flat
+    // foundations/ramps are building geometry and must still receive tint.
+    if ( !mesh.Mat.TexSource )
+        return false;
+
+    std::string name = mesh.Mat.TexSource->getRsrc_name();
+    const size_t slash = name.find_last_of("/\\");
+    if ( slash != std::string::npos )
+        name.erase(0, slash + 1);
+
+    return name.size() >= 5 && !StriCmp(name.substr(0, 5), "BODEN");
+}
+
 class SetLooseBaseObjectScope
 {
 public:
@@ -38,7 +55,6 @@ private:
     bool _active = false;
 };
 }
-
 
 size_t NC_STACK_base::Init(IDVList &stak)
 {
@@ -541,19 +557,18 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
 
         float distance = skel132.tform.getTranslate().length();
 
-        for(GFX::TMesh &msh : Meshes)
+        auto queueMesh = [&](GFX::TMesh &msh, bool applyTint)
         {
-            if ( inst && inst->skipGeometry )
-                break;
-
             arg->adeCount += msh.Indixes.size() / 3;
             GFX::TRenderNode& rend = GFX::Engine.AllocRenderNode();
             rend = GFX::TRenderNode( GFX::TRenderNode::TYPE_MESH );
 
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
-            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object visual target hue/alpha
-            rend.Colorize = arg->colorizeTint;
+            rend.ColorMul = applyTint
+                ? arg->tint
+                : GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            rend.Colorize = applyTint && arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags;
 
@@ -588,6 +603,16 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
             rend.FogLength = _renderMsg.fadeLength;
 
             GFX::GFXEngine::Instance.QueueRenderMesh(&rend);
+        };
+
+        for(GFX::TMesh &msh : Meshes)
+        {
+            if ( inst && inst->skipGeometry )
+                break;
+
+            const bool applyTint =
+                !arg->excludeSectorTerrainFromTint || !BaseTintMeshIsSectorTerrain(msh);
+            queueMesh(msh, applyTint);
         }
 
         if (inst)
@@ -599,6 +624,10 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
             }
         }
     }
+
+    const bool rootOnlyTerrainExclusion = arg->excludeSectorTerrainFromTint;
+    if ( rootOnlyTerrainExclusion )
+        arg->excludeSectorTerrainFromTint = false;
 
     if (!inst || inst->Bas != this)
     {
@@ -616,6 +645,9 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
                 isVisible = 1;
         }
     }
+
+    if ( rootOnlyTerrainExclusion )
+        arg->excludeSectorTerrainFromTint = true;
 
     return isVisible;
 }
@@ -656,16 +688,15 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
 
         float distance = skel132.tform.Transform( _transform.Pos ).length();
 
-        for(GFX::TMesh &msh : Meshes)
+        auto renderMesh = [&](GFX::TMesh &msh, bool applyTint)
         {
-            if ( inst && inst->skipGeometry )
-                break;
-
             GFX::TRenderNode rend( GFX::TRenderNode::TYPE_MESH );
             rend.Distance = distance;
             rend.Color = msh.Mat.Color;
-            rend.ColorMul = arg->tint; // OpenNeoUA custom: per-object visual target hue/alpha
-            rend.Colorize = arg->colorizeTint;
+            rend.ColorMul = applyTint
+                ? arg->tint
+                : GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            rend.Colorize = applyTint && arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags | arg->flags;
 
@@ -677,6 +708,16 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             rend.FogLength = _renderMsg.fadeLength;
 
             GFX::GFXEngine::Instance.RenderNode(&rend);
+        };
+
+        for(GFX::TMesh &msh : Meshes)
+        {
+            if ( inst && inst->skipGeometry )
+                break;
+
+            const bool applyTint =
+                !arg->excludeSectorTerrainFromTint || !BaseTintMeshIsSectorTerrain(msh);
+            renderMesh(msh, applyTint);
         }
 
         if (inst)
@@ -688,6 +729,10 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             }
         }
     }
+
+    const bool rootOnlyTerrainExclusion = arg->excludeSectorTerrainFromTint;
+    if ( rootOnlyTerrainExclusion )
+        arg->excludeSectorTerrainFromTint = false;
 
     if (!inst || inst->Bas != this)
     {
@@ -705,6 +750,9 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
                 v12 = 1;
         }
     }
+
+    if ( rootOnlyTerrainExclusion )
+        arg->excludeSectorTerrainFromTint = true;
 
     return v12;
 }

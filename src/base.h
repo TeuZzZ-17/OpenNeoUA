@@ -93,6 +93,10 @@ struct baseRender_msg
     float particleLifetimeScale = 1.0f;
     // OpenNeoUA custom: decoration particle alpha must also fade additive RGB.
     bool particleTintAlphaAffectsAdditive = false;
+    // Building-sector BASEs include the terrain material in the same visual.
+    // When enabled, keep the canonical BODEN*.ILBM sector surface neutral while
+    // tinting the rest of the root building BASE, including flat foundations.
+    bool excludeSectorTerrainFromTint = false;
 };
 
 
@@ -224,6 +228,7 @@ public:
 
     void FreeVBO();
     void MakeVBO();
+
 
 protected:
     int ReadIFFTagSTRC(IFFile *mfile);
