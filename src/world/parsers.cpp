@@ -2610,12 +2610,87 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->shield = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "deflect_charges") )
+    else if ( !StriCmp(p1, "buff_allow") )
+    {
+        _vhcl->buff.allow = StrGetBool(p2);
+    }
+    else if ( !StriCmp(p1, "buff_name") )
+    {
+        _vhcl->buff.name = p2;
+    }
+    else if ( !StriCmp(p1, "buff_icon") )
+    {
+        _vhcl->buff.icon = p2;
+    }
+    else if ( !StriCmp(p1, "buff_invisible") )
+    {
+        _vhcl->buff.invisible = StrGetBool(p2);
+    }
+    else if ( !StriCmp(p1, "buff_invisible_reveal_vp") )
+    {
+        const long vp = parser.stol(p2, NULL, 0);
+        _vhcl->buff.invisible_reveal_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
+            ? (int16_t)vp
+            : 0;
+    }
+    else if ( !StriCmp(p1, "buff_invisible_reveal_3ds") )
+    {
+        _vhcl->buff.invisible_reveal_3ds = p2;
+    }
+    else if ( !StriCmp(p1, "buff_invisible_reveal_base") )
+    {
+        _vhcl->buff.invisible_reveal_base = p2;
+    }
+    else if ( !StriCmp(p1, "buff_invulnerable") )
+    {
+        _vhcl->buff.invulnerable = StrGetBool(p2);
+    }
+    else if ( !StriCmp(p1, "buff_deflect_charges") )
     {
         const long value = parser.stol(p2, NULL, 0);
-        _vhcl->deflect_charges = value > 0
+        _vhcl->buff.deflect_charges = value > 0
             ? (int)std::min<long>(value, std::numeric_limits<int>::max())
             : 0;
+    }
+    else if ( !StriCmp(p1, "buff_deflect_max_energy") )
+    {
+        const long value = parser.stol(p2, NULL, 0);
+        _vhcl->buff.deflect_max_energy = value > 0
+            ? (int)std::min<long>(value, std::numeric_limits<int>::max())
+            : 0;
+    }
+    else if ( !StriCmp(p1, "buff_deflect_vp") )
+    {
+        const long vp = parser.stol(p2, NULL, 0);
+        _vhcl->buff.deflect_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
+            ? (int16_t)vp
+            : 0;
+    }
+    else if ( !StriCmp(p1, "buff_deflect_3ds") )
+    {
+        _vhcl->buff.deflect_3ds = p2;
+    }
+    else if ( !StriCmp(p1, "buff_deflect_base") )
+    {
+        _vhcl->buff.deflect_base = p2;
+    }
+    else if ( !StriCmp(p1, "buff_glow_intensity") )
+    {
+        const float value = parser.stof(p2, 0);
+        _vhcl->buff.glow_intensity = std::isfinite(value)
+            ? std::max(0.0f, std::min(value, 1.0f))
+            : 0.0f;
+    }
+    else if ( ParseTintParam(parser, "buff_glow_tint", p1, p2,
+                             _vhcl->buff.glow_tint, true) )
+    {
+    }
+    else if ( !StriCmp(p1, "buff_glow_pulse_seconds") )
+    {
+        const float value = parser.stof(p2, 0);
+        _vhcl->buff.glow_pulse_seconds = std::isfinite(value) && value > 0.0f
+            ? std::min(value, 60.0f)
+            : 0.0f;
     }
     else if ( !StriCmp(p1, "mass") )
     {
@@ -3028,6 +3103,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->proximity_defense_enable = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
+    else if ( !StriCmp(p1, "proximity_defense_icon") )
+    {
+        _vhcl->proximity_defense_icon = p2;
+    }
     else if ( !StriCmp(p1, "proximity_defense_weapon") )
     {
         int weaponId = parser.stol(p2, NULL, 0);
@@ -3116,10 +3195,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( ParseVPSpinParam(parser, "visual", p1, p2, _vhcl->visual_spin) )
     {
-    }
-    else if ( !StriCmp(p1, "invulnerable") )
-    {
-        _vhcl->invulnerable = StrGetBool(p2);
     }
     else if ( !StriCmp(p1, "type_icon") )
     {
@@ -4042,24 +4117,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->hidden = StrGetBool(p2);
     }
-    else if ( !StriCmp(p1, "invisible") )
-    {
-        // OpenNeoUA custom: vehicle-only total-stealth-until-first-attack flag.
-        // Deliberately separate from the legacy "hidden"/"unhide_radar" system.
-        _vhcl->invisible = StrGetBool(p2);
-    }
-    else if ( !StriCmp(p1, "invisible_reveal_vp") )
-    {
-        _vhcl->invisible_reveal_vp = (int16_t)parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "invisible_reveal_3ds") )
-    {
-        _vhcl->invisible_reveal_3ds = p2;
-    }
-    else if ( !StriCmp(p1, "invisible_reveal_base") )
-    {
-        _vhcl->invisible_reveal_base = p2;
-    }
     else if ( !StriCmp(p1, "unhide_radar") )
     {
         _vhcl->unhideRadar = parser.stol(p2, NULL, 0);
@@ -4187,6 +4244,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->spawn_at_death_instant = 0;
         _vhcl->spawn_at_death_immunity_time = 0;
         _vhcl->proximity_defense_enable = 0;
+        _vhcl->proximity_defense_icon.clear();
         _vhcl->proximity_defense_weapon = 0;
         _vhcl->proximity_defense_trigger_radius = 0.0;
         _vhcl->proximity_defense_interval = 1000;
@@ -4205,6 +4263,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->proximity_defense_vertical_angle_max = 45.0;
         _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
+        _vhcl->buff = TVehicleBuffConfig();
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
         _vhcl->mimic_energy_cost_min = 0;

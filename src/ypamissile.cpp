@@ -1215,7 +1215,8 @@ void NC_STACK_ypamissile::TrySpawnChainProjectile(NC_STACK_ypabact *currentHit, 
         setBACT_yourLastSeconds(_mislChainPendingDelay + 100);
 }
 
-void NC_STACK_ypamissile::DeflectFromUnitCollision(const vec3d &targetCenter, float targetRadius,
+void NC_STACK_ypamissile::DeflectFromUnitCollision(NC_STACK_ypabact *target,
+                                                     const vec3d &targetCenter, float targetRadius,
                                                      const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
                                                      float weaponRadius)
 {
@@ -1259,7 +1260,7 @@ void NC_STACK_ypamissile::DeflectFromUnitCollision(const vec3d &targetCenter, fl
 
     // Move the colliding projectile sphere just outside the armor before the
     // next frame. This prevents one physical impact from spending
-    // several Deflect charges.
+    // several Buff charges.
     const float separation = std::max(0.0f, targetRadius) +
                              std::max(0.0f, weaponRadius) + 1.0f;
     const vec3d separatedWeaponCenter = targetCenter + outward * separation;
@@ -1294,6 +1295,12 @@ void NC_STACK_ypamissile::DeflectFromUnitCollision(const vec3d &targetCenter, fl
     {
         _rotation.SetX(x);
         _rotation.SetY(newDir * x);
+    }
+
+    if ( target )
+    {
+        const vec3d impactPos = targetCenter + outward * std::max(0.0f, targetRadius);
+        target->SpawnBuffDeflectVisual(impactPos, _rotation);
     }
 }
 
@@ -1495,18 +1502,18 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                 continue;
 
                             const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
-                            if ( collisionCount == 0 && bct->HasDeflectCharges() )
+                            if ( collisionCount == 0 && bct->HasDeflectBuff() )
                             {
-                                // Armor penetration is a hard counter: it destroys all
-                                // remaining Deflect charges and keeps penetrating normally.
-                                if ( armorPenetrates )
+                                // Armor penetration and over-threshold impacts break the
+                                // whole Deflect Buff stack and continue through normal hit logic.
+                                if ( armorPenetrates || !bct->CanBuffDeflectEnergy(_energy) )
                                 {
-                                    bct->ClearDeflectCharges();
+                                    bct->ClearBuffDeflectCharges();
                                 }
                                 else
                                 {
-                                    bct->ConsumeDeflectCharge();
-                                    DeflectFromUnitCollision(targetSphere.center, targetSphere.radius,
+                                    bct->ConsumeBuffDeflectCharge();
+                                    DeflectFromUnitCollision(bct, targetSphere.center, targetSphere.radius,
                                                              oldWeaponSpheres[wi].center,
                                                              newWeaponSpheres[wi].center,
                                                              weaponRadius);
@@ -1567,16 +1574,16 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                  fabs(to_enemy_len - weaponRadius) )
                         {
                             const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
-                            if ( collisionCount == 0 && bct->HasDeflectCharges() )
+                            if ( collisionCount == 0 && bct->HasDeflectBuff() )
                             {
-                                if ( armorPenetrates )
+                                if ( armorPenetrates || !bct->CanBuffDeflectEnergy(_energy) )
                                 {
-                                    bct->ClearDeflectCharges();
+                                    bct->ClearBuffDeflectCharges();
                                 }
                                 else
                                 {
-                                    bct->ConsumeDeflectCharge();
-                                    DeflectFromUnitCollision(targetSphere.center, targetSphere.radius,
+                                    bct->ConsumeBuffDeflectCharge();
+                                    DeflectFromUnitCollision(bct, targetSphere.center, targetSphere.radius,
                                                              _old_pos, _position, weaponRadius);
                                     if ( deflected )
                                         *deflected = true;
@@ -1735,7 +1742,11 @@ void NC_STACK_ypamissile::ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool apply
     if ( !bct )
         return;
 
-    bct->_status_flg &= ~BACT_STFLAG_LAND;
+    // Ground vehicles keep their support state on projectile impact. Clearing LAND
+    // here can make their next support reacquisition choose a roof when they overlap
+    // large structures, producing an apparent vertical teleport.
+    if ( bct->_bact_type != BACT_TYPES_TANK && bct->_bact_type != BACT_TYPES_CAR )
+        bct->_status_flg &= ~BACT_STFLAG_LAND;
     RememberDirectHitUnit(bct);
 
     NC_STACK_ypabact *pushRecipient = ypamissile_ResolveDirectPushRecipient(bct);
@@ -2324,12 +2335,21 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                 }
 
                 // A conventional projectile explosion spends one Deflect charge and blocks
-                // every unit-side effect from that single blast event. Persistent
-                // fields and scripted damage use other call paths and are untouched.
-                if ( bct->HasDeflectCharges() && (areaEnergy > 0 || hasAoePush) )
+                // every unit-side effect from that single blast event. If the local AOE
+                // energy exceeds the configured Buff threshold, the blast breaks all charges
+                // and continues normally. Persistent fields and scripted damage use other
+                // call paths and are untouched.
+                if ( bct->HasDeflectBuff() && (areaEnergy > 0 || hasAoePush) )
                 {
-                    bct->ConsumeDeflectCharge();
-                    continue;
+                    if ( areaEnergy > 0 && !bct->CanBuffDeflectEnergy(areaEnergy) )
+                    {
+                        bct->ClearBuffDeflectCharges();
+                    }
+                    else
+                    {
+                        bct->ConsumeBuffDeflectCharge();
+                        continue;
+                    }
                 }
 
                 // AoE damage skips direct-hit units (they already received direct damage)

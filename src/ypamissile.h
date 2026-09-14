@@ -156,7 +156,8 @@ protected:
     int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
     int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy);
     void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true);
-    void DeflectFromUnitCollision(const vec3d &targetCenter, float targetRadius,
+    void DeflectFromUnitCollision(NC_STACK_ypabact *target,
+                                  const vec3d &targetCenter, float targetRadius,
                                   const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
                                   float weaponRadius);
     bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = NULL,
