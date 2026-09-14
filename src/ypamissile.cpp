@@ -279,6 +279,7 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _suicideViewerHostGid = 0;
     _mislAttachedToTarget = false;
     _mislAttachTargetGid = 0;
+    _mislAttachedDamageMultiplier = 1.0f;
     _mislAttachOffset = vec3d(0.0, 0.0, 0.0);
     _mislLastAttachedPosition = vec3d(0.0, 0.0, 0.0);
     _mislClusterSoundCarrier.Clear();
@@ -1306,6 +1307,9 @@ void NC_STACK_ypamissile::DeflectFromUnitCollision(NC_STACK_ypabact *target,
 
 bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypabact **hitTarget, bool *deflected)
 {
+    if ( !applyDirectDamage )
+        _mislAttachedDamageMultiplier = 1.0f;
+
     _mislDirectHitUnits.clear();
     if ( hitTarget )
         *hitTarget = NULL;
@@ -1502,12 +1506,17 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                 continue;
 
                             const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
+                            float deflectEndDamageMultiplier = 1.0f;
                             if ( collisionCount == 0 && bct->HasDeflectBuff() )
                             {
-                                // Armor penetration and over-threshold impacts break the
-                                // whole Deflect Buff stack and continue through normal hit logic.
-                                if ( armorPenetrates || !bct->CanBuffDeflectEnergy(_energy) )
+                                // Armor penetration breaks Deflect outright. An over-threshold
+                                // impact also breaks it, but only that ending hit receives the
+                                // configured damage reduction before normal hit logic continues.
+                                const bool deflectOverloaded = !bct->CanBuffDeflectEnergy(_energy);
+                                if ( armorPenetrates || deflectOverloaded )
                                 {
+                                    if ( deflectOverloaded )
+                                        deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
                                     bct->ClearBuffDeflectCharges();
                                 }
                                 else
@@ -1525,7 +1534,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
 
                             if ( applyDirectDamage && armorPenetrates )
                             {
-                                ApplyDirectHitToBact(bct);
+                                ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
                                 RememberArmorPenetratedTarget(bct);
                                 _mislArmorPenetrationRemaining--;
                                 ApplyArmorPenetrationUnitImpactFX();
@@ -1542,7 +1551,9 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                 *hitTarget = bct;
 
                             if ( applyDirectDamage )
-                                ApplyDirectHitToBact(bct);
+                                ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
+                            else
+                                _mislAttachedDamageMultiplier = deflectEndDamageMultiplier;
 
                             collided = true;
                             break;
@@ -1574,10 +1585,14 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                  fabs(to_enemy_len - weaponRadius) )
                         {
                             const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
+                            float deflectEndDamageMultiplier = 1.0f;
                             if ( collisionCount == 0 && bct->HasDeflectBuff() )
                             {
-                                if ( armorPenetrates || !bct->CanBuffDeflectEnergy(_energy) )
+                                const bool deflectOverloaded = !bct->CanBuffDeflectEnergy(_energy);
+                                if ( armorPenetrates || deflectOverloaded )
                                 {
+                                    if ( deflectOverloaded )
+                                        deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
                                     bct->ClearBuffDeflectCharges();
                                 }
                                 else
@@ -1593,7 +1608,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
 
                             if ( applyDirectDamage && armorPenetrates )
                             {
-                                ApplyDirectHitToBact(bct);
+                                ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
                                 RememberArmorPenetratedTarget(bct);
                                 _mislArmorPenetrationRemaining--;
                                 ApplyArmorPenetrationUnitImpactFX();
@@ -1610,7 +1625,9 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                 *hitTarget = bct;
 
                             if ( applyDirectDamage )
-                                ApplyDirectHitToBact(bct);
+                                ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
+                            else
+                                _mislAttachedDamageMultiplier = deflectEndDamageMultiplier;
 
                             collided = true;
                         }
@@ -1690,7 +1707,7 @@ int NC_STACK_ypamissile::CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy
     return ceil(shieldedDamage / divisor);
 }
 
-int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy)
+int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier)
 {
     if ( !bct )
         return 0;
@@ -1721,15 +1738,21 @@ int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy
     }
 
     int damage = CalcDamageForBact(bct, baseEnergy);
-
     if ( !damage )
         return 0;
 
-    bact_arg84 arg84;
-    arg84.energy = -damage;
-    arg84.unit = _mislEmitter;
+    const float clampedDamageMultiplier =
+        std::max(0.0f, std::min(std::isfinite(damageMultiplier) ? damageMultiplier : 1.0f, 1.0f));
+    if ( clampedDamageMultiplier < 1.0f )
+        damage = (int)std::ceil((float)damage * clampedDamageMultiplier);
 
-    bct->ModifyEnergy(&arg84);
+    if ( damage > 0 )
+    {
+        bact_arg84 arg84;
+        arg84.energy = -damage;
+        arg84.unit = _mislEmitter;
+        bct->ModifyEnergy(&arg84);
+    }
 
     if ( wproto && wproto->debuff.allow && !preAppliedDebuff && bct->_energy > 0 && bct->_status != BACT_STATUS_DEAD )
         bct->ApplyDebuff(wproto->debuff, _mislEmitter);
@@ -1737,16 +1760,12 @@ int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy
     return damage;
 }
 
-void NC_STACK_ypamissile::ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage)
+void NC_STACK_ypamissile::ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage, float damageMultiplier)
 {
     if ( !bct )
         return;
 
-    // Ground vehicles keep their support state on projectile impact. Clearing LAND
-    // here can make their next support reacquisition choose a roof when they overlap
-    // large structures, producing an apparent vertical teleport.
-    if ( bct->_bact_type != BACT_TYPES_TANK && bct->_bact_type != BACT_TYPES_CAR )
-        bct->_status_flg &= ~BACT_STFLAG_LAND;
+    bct->_status_flg &= ~BACT_STFLAG_LAND;
     RememberDirectHitUnit(bct);
 
     NC_STACK_ypabact *pushRecipient = ypamissile_ResolveDirectPushRecipient(bct);
@@ -1757,7 +1776,7 @@ void NC_STACK_ypamissile::ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool apply
                          ApplyDirectPushToBact(pushRecipient, &pushDir, &pushStrength,
                                                false, bct);
 
-    int appliedDamage = applyDamage ? ApplyDamageToBact(bct, _energy) : 0;
+    int appliedDamage = applyDamage ? ApplyDamageToBact(bct, _energy, damageMultiplier) : 0;
     if ( hasDirectPush )
     {
         bool diedNow = pushRecipient == bct && applyDamage && wasAlive &&
@@ -2339,10 +2358,12 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                 // energy exceeds the configured Buff threshold, the blast breaks all charges
                 // and continues normally. Persistent fields and scripted damage use other
                 // call paths and are untouched.
+                float deflectEndDamageMultiplier = 1.0f;
                 if ( bct->HasDeflectBuff() && (areaEnergy > 0 || hasAoePush) )
                 {
                     if ( areaEnergy > 0 && !bct->CanBuffDeflectEnergy(areaEnergy) )
                     {
+                        deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
                         bct->ClearBuffDeflectCharges();
                     }
                     else
@@ -2356,7 +2377,7 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                 // and anything the strict damage filter rejected. AoE push has its
                 // own eligibility filter but follows the same AI-friendly policy.
                 if ( areaEnergy > 0 )
-                    ApplyDamageToBact(bct, areaEnergy);
+                    ApplyDamageToBact(bct, areaEnergy, deflectEndDamageMultiplier);
 
                 if ( hasAoePush )
                 {
@@ -2541,9 +2562,9 @@ void NC_STACK_ypamissile::ApplyAttachedDirectHitDamage()
     NC_STACK_ypabact *target = FindAttachedTarget();
 
     if ( target )
-    {
-        ApplyDirectHitToBact(target);
-    }
+        ApplyDirectHitToBact(target, true, _mislAttachedDamageMultiplier);
+
+    _mislAttachedDamageMultiplier = 1.0f;
 }
 
 vec3d NC_STACK_ypamissile::CalcForceVector()
@@ -3408,6 +3429,7 @@ void NC_STACK_ypamissile::Renew()
     _suicideViewerHostGid = 0;
     _mislAttachedToTarget = false;
     _mislAttachTargetGid = 0;
+    _mislAttachedDamageMultiplier = 1.0f;
     _mislAttachOffset = vec3d(0.0, 0.0, 0.0);
     _mislLastAttachedPosition = vec3d(0.0, 0.0, 0.0);
     SFXEngine::SFXe.StopCarrier(&_mislClusterSoundCarrier);

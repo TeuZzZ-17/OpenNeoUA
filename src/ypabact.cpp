@@ -678,49 +678,6 @@ static bool ypabact_IsTintableVisualBase(NC_STACK_ypabact *bact, NC_STACK_base *
            base == bact->_vp_dead || base == bact->_vp_megadeth || base == bact->_vp_genesis;
 }
 
-static float ypabact_GetBuffGlowStrength(const NC_STACK_ypabact *bact)
-{
-    if ( !bact || bact->_energy <= 0 || !bact->HasActiveBuff() ||
-         !std::isfinite(bact->_buff.glow_intensity) || bact->_buff.glow_intensity <= 0.0f )
-        return 0.0f;
-
-    float pulse = 1.0f;
-    if ( std::isfinite(bact->_buff.glow_pulse_seconds) &&
-         bact->_buff.glow_pulse_seconds > 0.0f )
-    {
-        const double periodMs = (double)bact->_buff.glow_pulse_seconds * 1000.0;
-        const double phase = fmod((double)std::max(bact->_clock, 0), periodMs) / periodMs;
-        const float wave = (float)(0.5 - 0.5 * cos(phase * C_2PI));
-        // Keep a faint baseline glow instead of switching fully off at the low point.
-        pulse = 0.25f + wave * 0.75f;
-    }
-
-    const float alpha = std::isfinite(bact->_buff.glow_tint.a)
-        ? std::max(0.0f, std::min(bact->_buff.glow_tint.a, 1.0f))
-        : 1.0f;
-    return std::max(0.0f, std::min(bact->_buff.glow_intensity * pulse * alpha, 1.0f));
-}
-
-static void ypabact_ApplyBuffGlowToBodyTint(const NC_STACK_ypabact *bact,
-                                             GFX::TGLColor *tint)
-{
-    if ( !bact || !tint )
-        return;
-
-    const float strength = ypabact_GetBuffGlowStrength(bact);
-    if ( strength <= 0.0f )
-        return;
-
-    // Use the normal Vehicle tint path, which is shared by every rendered body
-    // state and is already proven by visual_tint/debuff_target_tint. A value of
-    // 0.20 therefore produces a clearly visible pulse instead of relying on a
-    // second transparent geometry pass whose material blending can hide it.
-    const float gain = strength * 2.0f;
-    tint->r *= 1.0f + bact->_buff.glow_tint.r * gain;
-    tint->g *= 1.0f + bact->_buff.glow_tint.g * gain;
-    tint->b *= 1.0f + bact->_buff.glow_tint.b * gain;
-}
-
 static bool ypabact_ShouldApplyVPRotation(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
     if ( bact->_vp_rotation.x == 0.0 &&
@@ -4882,26 +4839,17 @@ static bool ypabact_ResolveRecoilDirection(NC_STACK_ypabact *unit,
 
 static bool ypabact_SnapAoePushGroundUnit(NC_STACK_ypabact *unit)
 {
-    if ( !unit || !unit->getBACT_pWorld() )
-        return false;
-
-    // Probe only below the actor. The old full-height column ray could select an
-    // unrelated roof above/around a ground vehicle and visibly teleport it there.
-    const float supportOffset = unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof;
-    const float probeReach = std::max(2000.0f,
-        std::fabs(unit->_height) * 6.0f + std::fabs(supportOffset) * 4.0f + 1000.0f);
-
     ypaworld_arg136 ground;
-    ground.stPos = unit->_position - vec3d::OY(10.0f);
-    ground.vect = vec3d::OY(probeReach);
+    ground.stPos = unit->_position.X0Z() - vec3d::OY(30000.0);
+    ground.vect = vec3d::OY(50000.0);
     ground.flags = 0;
 
     unit->getBACT_pWorld()->ypaworld_func136(&ground);
 
-    if ( !ground.isect || !std::isfinite(ground.isectPos.y) )
+    if ( !ground.isect )
         return false;
 
-    unit->_position.y = ground.isectPos.y - supportOffset;
+    unit->_position.y = ground.isectPos.y - (unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof);
     unit->_status_flg |= BACT_STFLAG_LAND;
     return true;
 }
@@ -5102,8 +5050,7 @@ void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
 
     vec3d pushDir = dir;
 
-    if ( ypabact_ShouldFlattenAirKnockback(this) ||
-         _bact_type == BACT_TYPES_TANK || _bact_type == BACT_TYPES_CAR )
+    if ( ypabact_ShouldFlattenAirKnockback(this) )
     {
         if ( !ypabact_NormalizeXZ(&pushDir) )
             return;
@@ -5321,6 +5268,25 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             arg->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
         arg->colorizeTint = applyTint && effectiveTint.ColorizesRGB();
 
+        // Primitive shared Buff glow. It is render-only: brighten the existing
+        // model tint with a smooth pulse without adding world lights or mutating
+        // authored materials. Zero intensity keeps the exact previous render path.
+        if ( tintBase && _energy > 0 && HasActiveBuff() && _buff.glow_intensity > 0.0f )
+        {
+            float pulse = 1.0f;
+            if ( _buff.glow_pulse_seconds > 0.0f )
+            {
+                const double periodMs = (double)_buff.glow_pulse_seconds * 1000.0;
+                const double phase = fmod((double)std::max(_clock, 0), periodMs) / periodMs;
+                pulse = (float)(0.5 - 0.5 * cos(phase * C_2PI));
+            }
+
+            const float strength = _buff.glow_intensity * pulse * _buff.glow_tint.a;
+            arg->tint.r *= 1.0f + strength * _buff.glow_tint.r;
+            arg->tint.g *= 1.0f + strength * _buff.glow_tint.g;
+            arg->tint.b *= 1.0f + strength * _buff.glow_tint.b;
+        }
+
         if ( missileMain )
         {
             arg->particleTint = tintToGL(_vp_trail_tint);
@@ -5349,12 +5315,6 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             arg->particleSpin = vec3d(0.0, 0.0, 0.0);
             arg->particleLifetimeScale = 1.0f;
         }
-
-        // Buff glow is a render-only luminance multiplier on the body. Apply it
-        // after particle controls are derived so trails/particles keep their
-        // authored tint and zero intensity leaves the vanilla path unchanged.
-        if ( tintBase )
-            ypabact_ApplyBuffGlowToBodyTint(this, &arg->tint);
     };
 
     if ( _current_vp )
@@ -14917,6 +14877,8 @@ void NC_STACK_ypabact::ResetProgressiveWeaponFireRate()
     _progressive_weapon_id = -1;
     _progressive_weapon_level = 0.0f;
     _progressive_weapon_requested = false;
+    _progressive_weapon_overheat_elapsed_ms = 0.0;
+    _progressive_weapon_overheat_hp_drain_remainder = 0.0;
 }
 
 void NC_STACK_ypabact::RegisterProgressiveWeaponFireRequest(int weaponId)
@@ -14988,8 +14950,73 @@ void NC_STACK_ypabact::UpdateProgressiveWeaponFireRate(update_msg *arg)
         return;
     }
 
+    const float previousLevel = std::max(0.0f, std::min(_progressive_weapon_level, 1.0f));
     _progressive_weapon_level = std::min(1.0f,
-        _progressive_weapon_level + (float)arg->frameTime / (float)proto.ramp_up_time);
+        previousLevel + (float)arg->frameTime / (float)proto.ramp_up_time);
+
+    // Count only the part of this frame actually spent at the authored maximum
+    // cadence. This keeps the overheat delay independent of frame rate.
+    double timeAtMaxMs = 0.0;
+    if ( previousLevel >= 1.0f )
+    {
+        timeAtMaxMs = (double)arg->frameTime;
+    }
+    else if ( _progressive_weapon_level >= 1.0f )
+    {
+        const double timeToMaxMs =
+            (1.0 - (double)previousLevel) * (double)proto.ramp_up_time;
+        timeAtMaxMs = std::max(0.0, (double)arg->frameTime - timeToMaxMs);
+    }
+
+    const World::TAbsoluteOrPercent &overheatDrain = proto.ramp_up_overheat_hp_drain;
+    const bool overheatConfigured =
+        proto.ramp_up_overheat_time > 0 &&
+        overheatDrain.defined && std::isfinite(overheatDrain.value) &&
+        overheatDrain.value > 0.0f;
+
+    if ( overheatConfigured && timeAtMaxMs > 0.0 )
+    {
+        const double delayMs = (double)proto.ramp_up_overheat_time;
+        double damageTimeMs = 0.0;
+
+        if ( _progressive_weapon_overheat_elapsed_ms >= delayMs )
+        {
+            damageTimeMs = timeAtMaxMs;
+        }
+        else
+        {
+            const double remainingDelayMs =
+                delayMs - _progressive_weapon_overheat_elapsed_ms;
+            if ( timeAtMaxMs > remainingDelayMs )
+                damageTimeMs = timeAtMaxMs - remainingDelayMs;
+
+            _progressive_weapon_overheat_elapsed_ms = std::min(
+                delayMs, _progressive_weapon_overheat_elapsed_ms + timeAtMaxMs);
+        }
+
+        if ( damageTimeMs > 0.0 && _energy > 0 && _energy_max > 0 )
+        {
+            double drainPerSecond = overheatDrain.percent
+                ? (double)_energy_max * (double)overheatDrain.value / 100.0
+                : (double)overheatDrain.value;
+
+            if ( std::isfinite(drainPerSecond) && drainPerSecond > 0.0 )
+            {
+                _progressive_weapon_overheat_hp_drain_remainder +=
+                    drainPerSecond * damageTimeMs / 1000.0;
+
+                const int energyDrain = (int)std::min(
+                    _progressive_weapon_overheat_hp_drain_remainder,
+                    (double)std::numeric_limits<int>::max());
+                if ( energyDrain > 0 )
+                {
+                    _progressive_weapon_overheat_hp_drain_remainder -= energyDrain;
+                    _energy = energyDrain >= _energy ? 0 : _energy - energyDrain;
+                }
+            }
+        }
+    }
+
     _progressive_weapon_requested = false;
 }
 
