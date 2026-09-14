@@ -3312,10 +3312,24 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "mgun_decal_size") )
     {
-        size_t parsed = 0;
-        const float size = parser.stof(p2, &parsed);
-        _vhcl->mgun_decal.ground_decal_size =
-            parsed == p2.size() && std::isfinite(size) && size > 0.0f ? size : 0.0f;
+        float sizeMin = 0.0f;
+        float sizeMax = 0.0f;
+        if ( World::ParseFloatRangeValue(p2, sizeMin, sizeMax) &&
+             std::isfinite(sizeMin) && std::isfinite(sizeMax) &&
+             sizeMin > 0.0f && sizeMax > 0.0f )
+        {
+            // Keep the legacy scalar populated for old/shared decal paths,
+            // while the runtime uses the authored range when available.
+            _vhcl->mgun_decal.ground_decal_size = sizeMin;
+            _vhcl->mgun_decal.ground_decal_size_min = sizeMin;
+            _vhcl->mgun_decal.ground_decal_size_max = sizeMax;
+        }
+        else
+        {
+            _vhcl->mgun_decal.ground_decal_size = 0.0f;
+            _vhcl->mgun_decal.ground_decal_size_min = 0.0f;
+            _vhcl->mgun_decal.ground_decal_size_max = 0.0f;
+        }
     }
     else if ( ParseTintParam(parser, "mgun_decal_tint", p1, p2,
                              _vhcl->mgun_decal.ground_decal_tint, true) )
