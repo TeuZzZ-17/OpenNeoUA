@@ -3914,9 +3914,9 @@ static std::vector<std::string> db_vehicle_specialties(
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MOBILE_GUN_PLATFORM));
     if ( p.is_mimic )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MIMIC));
-    if ( p.invisible )
+    if ( p.buff.allow && p.buff.invisible )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVISIBILITY));
-    if ( p.invulnerable )
+    if ( p.buff.allow && p.buff.invulnerable )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVULNERABLE));
     if ( db_vehicle_has_kamikaze(p, weapons, vehicles) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_KAMIKAZE));

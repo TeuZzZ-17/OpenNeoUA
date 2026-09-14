@@ -559,10 +559,31 @@ public:
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual void ModifyEnergy(bact_arg84 *arg);
     bool IsInvulnerableToDamage() const;
-    bool HasDeflectCharges() const { return _deflect_charges > 0; }
-    int GetDeflectChargesRemaining() const { return _deflect_charges; }
-    bool ConsumeDeflectCharge();
-    void ClearDeflectCharges() { _deflect_charges = 0; }
+    bool HasActiveBuff() const
+    {
+        if ( !_buff.allow )
+            return false;
+
+        const bool hasGameplayFeature = _buff_deflect_charges_max > 0 ||
+                                        _buff.invisible || _buff.invulnerable;
+        if ( hasGameplayFeature )
+        {
+            return _buff.deflect_charges > 0 ||
+                   (_buff.invisible && _invisibleUnrevealed) ||
+                   _buff.invulnerable;
+        }
+
+        return !_buff.name.empty() || !_buff.icon.empty() || _buff.glow_intensity > 0.0f;
+    }
+    bool HasDeflectBuff() const { return _buff.allow && _buff.deflect_charges > 0; }
+    int GetBuffDeflectChargesRemaining() const { return _buff.deflect_charges; }
+    bool CanBuffDeflectEnergy(int energy) const
+    {
+        return _buff.deflect_max_energy <= 0 || energy <= _buff.deflect_max_energy;
+    }
+    bool ConsumeBuffDeflectCharge();
+    void ClearBuffDeflectCharges() { _buff.deflect_charges = 0; }
+    void SpawnBuffDeflectVisual(const vec3d &pos, const mat3x3 &rot);
     // OpenNeoUA: derived from the existing transient 0..4 kill marks. These helpers
     // are the single gameplay/UI source of truth and never mutate prototypes.
     bool CanUseSessionKillMarks() const;
@@ -640,7 +661,7 @@ public:
     virtual bool IsHiddenFor(uint8_t owner) const;
     bool ShouldHideFromStrategicUI() const;
 
-    // OpenNeoUA custom: vehicle-only "invisible" stealth-until-first-attack.
+    // OpenNeoUA Buff invisibility: stealth-until-first-attack.
     // IsInvisibleUnrevealed()  -> true while the unit is still cloaked (no render,
     //                             radar/map/UI, sound, decoration FX, AI targeting).
     // CanBeSeenByAIOrRadar()   -> convenience inverse used by AI/radar candidate filters.
@@ -888,8 +909,8 @@ public:
     int _playerSprintPitchExtra = 0;
     int _energy;
     int _energy_max;
-    int _deflect_charges;
-    int _deflect_charges_max;
+    World::TVehicleBuffConfig _buff;
+    int _buff_deflect_charges_max;
     bool _invulnerable;
     int _reload_const;
 //    int16_t field_3CE;
@@ -1295,13 +1316,12 @@ public:
     bool _hidden = false;
     int8_t _unhideRadar = 0;
 
-    // OpenNeoUA custom: per-instance "invisible" stealth state. Seeded from the vehicle
-    // prototype's `invisible` flag at spawn; cleared permanently by the first real
-    // attack via RevealInvisibleOnAttack(). Gameplay/physics/control stay active while set.
+    // OpenNeoUA Buff: per-instance invisibility state. Seeded by buff_invisible and
+    // cleared permanently by the first real attack. Gameplay/physics/control stay active.
     bool _invisibleUnrevealed = false;
-    int16_t _invisible_reveal_vp = 0;
-    std::string _invisible_reveal_3ds;
-    std::string _invisible_reveal_base;
+    int16_t _buff_invisible_reveal_vp = 0;
+    std::string _buff_invisible_reveal_3ds;
+    std::string _buff_invisible_reveal_base;
 
 protected:
     NC_STACK_ypaworld *_world;
