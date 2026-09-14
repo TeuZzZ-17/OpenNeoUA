@@ -2610,6 +2610,13 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->shield = parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "deflect_charges") )
+    {
+        const long value = parser.stol(p2, NULL, 0);
+        _vhcl->deflect_charges = value > 0
+            ? (int)std::min<long>(value, std::numeric_limits<int>::max())
+            : 0;
+    }
     else if ( !StriCmp(p1, "mass") )
     {
         _vhcl->mass = parser.stof(p2, 0);

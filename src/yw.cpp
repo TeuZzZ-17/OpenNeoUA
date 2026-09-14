@@ -4220,6 +4220,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
     {
         bacto->_energy = vhcl.energy;
         bacto->_energy_max = vhcl.energy;
+        bacto->_deflect_charges = vhcl.deflect_charges;
+        bacto->_deflect_charges_max = vhcl.deflect_charges;
         bacto->_invulnerable = vhcl.invulnerable;
         bacto->_shield = vhcl.shield;
         bacto->_mass = vhcl.mass;

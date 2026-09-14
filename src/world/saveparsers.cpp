@@ -269,6 +269,11 @@ bool SaveBact::SaveBactParser(ScriptParser::Parser &parser, NC_STACK_ypabact *b,
     {
         b->_invisibleUnrevealed = StrGetBool(p2);
     }
+    else if ( !StriCmp(p1, "deflect_charges") )
+    {
+        const int remaining = parser.stoi(p2);
+        b->_deflect_charges = std::max(0, std::min(remaining, b->_deflect_charges_max));
+    }
     else if ( !StriCmp(p1, "ident") )
     {
         b->_gid = parser.stoi(p2);
