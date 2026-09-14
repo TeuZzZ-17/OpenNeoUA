@@ -8032,6 +8032,10 @@ static void ypabact_ApplyConfiguredDeathPush(NC_STACK_ypabact *source)
     if ( !isfinite(radiusSq) )
         return;
 
+    // F10 debug: keep the exact push_at_death_radius visible for ~3 seconds
+    // after the source unit dies. Debug-only; it has no gameplay effect.
+    world->DebugAddDeathPushSphere(origin, radius);
+
     const int sectorRadius = (int)(radius / World::CVSectorLength) + 2;
     const Common::Point center = World::PositionToSectorID(origin);
     std::unordered_set<NC_STACK_ypabact *> visited;

@@ -172,6 +172,42 @@ static uint32_t GroundDecalNextRandom(uint32_t *seed)
     return *seed;
 }
 
+static float GroundDecalResolvedSize(const NC_STACK_ypaworld *world,
+                                     const ypaworld_arg136 &hit,
+                                     const World::TChainFXConfig &config)
+{
+    float minSize = config.ground_decal_size_min;
+    float maxSize = config.ground_decal_size_max;
+
+    // Legacy/general ground decals only author ground_decal_size.
+    if ( !std::isfinite(minSize) || !std::isfinite(maxSize) ||
+         minSize <= 0.0f || maxSize <= 0.0f )
+    {
+        minSize = config.ground_decal_size;
+        maxSize = config.ground_decal_size;
+    }
+
+    if ( !std::isfinite(minSize) || !std::isfinite(maxSize) ||
+         minSize <= 0.0f || maxSize <= 0.0f )
+        return 0.0f;
+
+    if ( maxSize < minSize )
+        std::swap(minSize, maxSize);
+    if ( minSize == maxSize )
+        return minSize;
+
+    // Deterministic per-impact roll: does not consume the global gameplay RNG.
+    uint32_t seed = 0x6d2b79f5u;
+    seed = GroundDecalMixSeed(seed, (uint32_t)world->_timeStamp);
+    seed = GroundDecalMixSeed(seed, (uint32_t)(int32_t)std::lround(hit.isectPos.x));
+    seed = GroundDecalMixSeed(seed, (uint32_t)(int32_t)std::lround(hit.isectPos.y));
+    seed = GroundDecalMixSeed(seed, (uint32_t)(int32_t)std::lround(hit.isectPos.z));
+    seed = GroundDecalMixSeed(seed, (uint32_t)hit.polyID);
+    const float random = (float)(GroundDecalNextRandom(&seed) & 0x00ffffffu) /
+                         16777216.0f;
+    return minSize + (maxSize - minSize) * random;
+}
+
 static void GroundDecalBuildShape(int points,
                                   float jaggedness,
                                   uint32_t seed,
@@ -843,11 +879,14 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
          config.mode != World::TChainFXConfig::MODE_GROUND_DECAL ||
          config.trigger != World::TChainFXConfig::TRIGGER_IMPACT_WORLD ||
          config.ground_decal_points < 3 || config.ground_decal_points > 32 ||
-         !std::isfinite(config.ground_decal_size) || config.ground_decal_size <= 0.0f ||
          !std::isfinite(config.ground_decal_jaggedness) ||
          config.ground_decal_jaggedness < 0.0f || config.ground_decal_jaggedness > 1.0f ||
          config.duration <= 0 || config.ground_decal_tint.a <= 0.0f ||
          !hit.isect || !GroundDecalFinitePoint(hit.isectPos) )
+        return false;
+
+    const float decalSize = GroundDecalResolvedSize(this, hit, config);
+    if ( !std::isfinite(decalSize) || decalSize <= 0.0f )
         return false;
 
     const float angle = GroundDecalRotation(this, hit,
@@ -883,7 +922,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     vertices.reserve((size_t)maxTriangles * 3);
     indices.reserve((size_t)maxTriangles * 3);
 
-    if ( !GroundDecalBuildGeometry(this, hit, config.ground_decal_size, angle,
+    if ( !GroundDecalBuildGeometry(this, hit, decalSize, angle,
                                    config.ground_decal_points,
                                    config.ground_decal_jaggedness,
                                    buildFade,
@@ -908,7 +947,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     _groundDecals.emplace_back();
     TGroundDecal &decal = _groundDecals.back();
     decal.pos = hit.isectPos;
-    decal.radius = config.ground_decal_size * 0.70710678118f;
+    decal.radius = decalSize * 0.70710678118f;
     decal.startTime = _timeStamp;
     decal.duration = config.duration;
     decal.fadeOut = std::min(std::max(config.fade_out, 0), decal.duration);
