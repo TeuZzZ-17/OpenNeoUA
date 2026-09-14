@@ -18397,9 +18397,6 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
         }
     }
 
-    if ( gui_lstvw.IsOpen() )
-        inpt->Sliders[1] = 0;
-
     if ( _mouseGrabbed ) // If grabbed mouse
     {
         // Piu-piu mazafaka

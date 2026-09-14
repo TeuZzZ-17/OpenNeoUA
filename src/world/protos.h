@@ -1289,6 +1289,9 @@ struct TBuildingProto
     uint8_t TypeIcon = 0;
     std::string Name;
     int Energy = 0;
+    // OpenNeoUA custom: render-only target hue/alpha for this building prototype.
+    // Neutral by default, so missing tint keeps exact vanilla rendering.
+    TVisualTint tint;
     TDecorationFXConfig DecorationFX;
     TVhclSound SndFX;
     std::vector<TGun> Guns;

@@ -2426,6 +2426,49 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 {
     cellArea *pcell = sct->p_cell;
 
+    // Buildings share the same render-message tint path as Vehicle/Weapon VPs.
+    // Keep it strictly per draw because the BASE models and render message are
+    // shared; leaking these values would tint unrelated sectors or actors.
+    auto renderBuilding = [bs77](NC_STACK_base *base,
+                                 NC_STACK_base::Instance *instance,
+                                 const World::TVisualTint &tint)
+    {
+        if ( !base )
+            return;
+
+        const GFX::TGLColor oldTint = bs77->tint;
+        const GFX::TGLColor oldParticleTint = bs77->particleTint;
+        const bool oldColorizeTint = bs77->colorizeTint;
+        const bool oldParticleColorizeTint = bs77->particleColorizeTint;
+        const bool oldExcludeSectorTerrainFromTint = bs77->excludeSectorTerrainFromTint;
+
+        if ( !tint.IsNeutral() )
+        {
+            const GFX::TGLColor renderTint(tint.r, tint.g, tint.b, tint.a);
+            bs77->tint = renderTint;
+            bs77->particleTint = renderTint;
+            bs77->colorizeTint = tint.ColorizesRGB();
+            bs77->particleColorizeTint = tint.ColorizesRGB();
+            bs77->excludeSectorTerrainFromTint = true;
+        }
+        else
+        {
+            bs77->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            bs77->particleTint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            bs77->colorizeTint = false;
+            bs77->particleColorizeTint = false;
+            bs77->excludeSectorTerrainFromTint = false;
+        }
+
+        base->Render(bs77, instance);
+
+        bs77->tint = oldTint;
+        bs77->particleTint = oldParticleTint;
+        bs77->colorizeTint = oldColorizeTint;
+        bs77->particleColorizeTint = oldParticleColorizeTint;
+        bs77->excludeSectorTerrainFromTint = oldExcludeSectorTerrainFromTint;
+    };
+
     // The legacy sector proxy is centered on the terrain. At high altitude,
     // looking upward can move that proxy completely outside the camera frustum
     // even though the player cockpit body or a tall RAND border wall is still
@@ -2437,6 +2480,8 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
     if ( renderSectorContents || scanBorderWalls )
     {
         int v22 = 0;
+        World::TVisualTint buildingTint;
+        bool hasBuildingVisual = pcell->PurposeType != cellArea::PT_NONE;
 
         vec3d scel;
         if ( pcell->PurposeType == cellArea::PT_CONSTRUCTING )
@@ -2448,11 +2493,23 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 
                 scel = vec3d::OY((float)bldProc.Time / (float)bldProc.EndTime);
 
-                pcell->type_id = _buildProtos[ bldProc.BuildID ].SecType;
+                const World::TBuildingProto &proto = _buildProtos[ bldProc.BuildID ];
+                pcell->type_id = proto.SecType;
                 pcell->SectorType = _secTypeArray[ pcell->type_id ].SectorType;
+                buildingTint = proto.tint;
 
                 v22 = 1;
             }
+            else
+            {
+                hasBuildingVisual = false;
+            }
+        }
+        else if ( hasBuildingVisual )
+        {
+            // sb_0x456384 stores this before special systems repurpose
+            // PurposeIndex for a gate/gem/super-item index.
+            buildingTint = pcell->BuildingTint;
         }
 
         int v17, v20;
@@ -2488,7 +2545,7 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 
                     NC_STACK_base::CheckOpts( &pcell->BldVPOpts.At(xx, zz), bld );
 
-                    bld->Render(bs77, pcell->BldVPOpts.At(xx, zz));
+                    renderBuilding(bld, pcell->BldVPOpts.At(xx, zz), buildingTint);
 
                     bld->SetStatic(true);
                 }
@@ -2547,7 +2604,8 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 
                     NC_STACK_base::CheckOpts( &pcell->BldVPOpts.At(xx, zz), bld );
 
-                    bld->Render(bs77, pcell->BldVPOpts.At(xx, zz));
+                    renderBuilding(bld, pcell->BldVPOpts.At(xx, zz),
+                                   hasBuildingVisual ? buildingTint : World::TVisualTint());
 
                     if ( transformBorderWall )
                     {
@@ -4444,6 +4502,7 @@ void NC_STACK_ypaworld::sb_0x456384(const Common::Point &cellId, int ownerid2, i
         cell.PurposeType = cellArea::PT_BUILDINGS;
         cell.SectorType = sectp->SectorType;
         cell.PurposeIndex = blg_id;
+        cell.BuildingTint = bld->tint;
         cell.DecorationFX = bld->DecorationFX;
         cell.DecorationFXNextTime = 0;
         cell.DecorationFXPersistentId = 0;
@@ -4592,6 +4651,258 @@ void NC_STACK_ypaworld::sb_0x456384(const Common::Point &cellId, int ownerid2, i
     }
 }
 
+
+
+static bool yw_IsBuildingTerrainCollisionPolygon(const UAskeleton::Data *skel,
+                                                  const UAskeleton::Polygon &poly,
+                                                  float terrainHalfExtent)
+{
+    if ( !skel || poly.num_vertices < 3 )
+        return false;
+
+    float minX =  1.0e30f;
+    float maxX = -1.0e30f;
+    float minZ =  1.0e30f;
+    float maxZ = -1.0e30f;
+    float maxAbsY = 0.0f;
+
+    for (int i = 0; i < poly.num_vertices; ++i)
+    {
+        const int vertexID = poly.v[i];
+        if ( vertexID < 0 || (size_t)vertexID >= skel->POO.size() )
+            return false;
+
+        const UAskeleton::Vertex &v = skel->POO[vertexID];
+        minX = std::min(minX, (float)v.x);
+        maxX = std::max(maxX, (float)v.x);
+        minZ = std::min(minZ, (float)v.z);
+        maxZ = std::max(maxZ, (float)v.z);
+        maxAbsY = std::max(maxAbsY, std::fabs((float)v.y));
+    }
+
+    // Vanilla LEGO collision skeletons use one full-size, flat Y=0 polygon for
+    // the sector surface (300x300 for a 3x3 LEGO slot, 900x900 for compact
+    // single-LEGO sectors). Exclude exactly that polygon from the building
+    // volume; foundations/ramps that merely touch Y=0 remain building geometry.
+    constexpr float kGroundEpsilon = 0.5f;
+    return maxAbsY <= kGroundEpsilon &&
+           minX <= -terrainHalfExtent + kGroundEpsilon &&
+           maxX >=  terrainHalfExtent - kGroundEpsilon &&
+           minZ <= -terrainHalfExtent + kGroundEpsilon &&
+           maxZ >=  terrainHalfExtent - kGroundEpsilon;
+}
+
+static bool yw_PointCoveredByBuildingCollision(NC_STACK_skeleton *collision,
+                                             const vec3d &localPoint,
+                                             float terrainHalfExtent)
+{
+    if ( !collision )
+        return false;
+
+    UAskeleton::Data *skel = collision->GetSkelet();
+    if ( !skel || skel->polygons.empty() )
+        return false;
+
+    bool hasBuildingGeometry = false;
+    float minX =  1.0e30f;
+    float maxX = -1.0e30f;
+    float minY =  1.0e30f;
+    float maxY = -1.0e30f;
+    float minZ =  1.0e30f;
+    float maxZ = -1.0e30f;
+
+    for (const UAskeleton::Polygon &poly : skel->polygons)
+    {
+        if ( yw_IsBuildingTerrainCollisionPolygon(skel, poly, terrainHalfExtent) )
+            continue;
+
+        hasBuildingGeometry = true;
+        for (int i = 0; i < poly.num_vertices; ++i)
+        {
+            const int vertexID = poly.v[i];
+            if ( vertexID < 0 || (size_t)vertexID >= skel->POO.size() )
+                continue;
+
+            const UAskeleton::Vertex &v = skel->POO[vertexID];
+            minX = std::min(minX, (float)v.x);
+            maxX = std::max(maxX, (float)v.x);
+            minY = std::min(minY, (float)v.y);
+            maxY = std::max(maxY, (float)v.y);
+            minZ = std::min(minZ, (float)v.z);
+            maxZ = std::max(maxZ, (float)v.z);
+        }
+    }
+
+    if ( !hasBuildingGeometry )
+        return false;
+
+    constexpr float kBoundsEpsilon = 0.25f;
+    if ( localPoint.x < minX - kBoundsEpsilon || localPoint.x > maxX + kBoundsEpsilon ||
+         localPoint.y < minY - kBoundsEpsilon || localPoint.y > maxY + kBoundsEpsilon ||
+         localPoint.z < minZ - kBoundsEpsilon || localPoint.z > maxZ + kBoundsEpsilon )
+        return false;
+
+    // Building collision skeletons are not guaranteed to be closed solids.
+    // The Stoudson/Superitem pyramid is a concrete vanilla example: a unit on
+    // the ground in its central footprint has no horizontal +X wall crossing,
+    // even though several roof tiers are directly above it.  Therefore the
+    // primary test is "is authored building collision geometry overhead at
+    // this X/Z and above this point?".  UA uses negative Y as up, so a smaller
+    // local Y is above the unit.  Aircraft above the roof naturally fail this
+    // test, and points outside the footprint have no polygon hit.
+    vec3d verticalPoint = localPoint;
+    verticalPoint.x += 0.03125f;
+    verticalPoint.z += 0.0625f;
+
+    constexpr float kPlaneEpsilon = 0.00001f;
+    constexpr float kSurfaceEpsilon = 0.25f;
+
+    for (size_t i = 0; i < skel->polygons.size(); ++i)
+    {
+        const UAskeleton::Polygon &poly = skel->polygons[i];
+        if ( yw_IsBuildingTerrainCollisionPolygon(skel, poly, terrainHalfExtent) ||
+             std::fabs(poly.B) <= kPlaneEpsilon )
+            continue;
+
+        const float y = -(poly.A * verticalPoint.x + poly.C * verticalPoint.z + poly.D) / poly.B;
+        if ( y > verticalPoint.y + kSurfaceEpsilon )
+            continue;
+
+        const vec3d hitPoint(verticalPoint.x, y, verticalPoint.z);
+        if ( sub_44D36C(hitPoint, (int)i, collision) )
+            return true;
+    }
+
+    // Fallback for authored structures that have enclosing walls but no usable
+    // roof/overhead polygon.  Closed collision shells still get the legacy
+    // parity test, while the vertical test above covers open/non-manifold LEGO
+    // skeletons such as the Superitem pyramid.
+    vec3d rayPoint = localPoint;
+    rayPoint.y += 0.03125f;
+    rayPoint.z += 0.0625f;
+
+    std::vector<float> hitX;
+    hitX.reserve(8);
+
+    constexpr float kDuplicateHitEpsilon = 0.05f;
+
+    for (size_t i = 0; i < skel->polygons.size(); ++i)
+    {
+        const UAskeleton::Polygon &poly = skel->polygons[i];
+        if ( yw_IsBuildingTerrainCollisionPolygon(skel, poly, terrainHalfExtent) ||
+             std::fabs(poly.A) <= kPlaneEpsilon )
+            continue;
+
+        const float x = -(poly.B * rayPoint.y + poly.C * rayPoint.z + poly.D) / poly.A;
+        if ( x <= rayPoint.x + kPlaneEpsilon )
+            continue;
+
+        const vec3d hitPoint(x, rayPoint.y, rayPoint.z);
+        if ( !sub_44D36C(hitPoint, (int)i, collision) )
+            continue;
+
+        bool duplicate = false;
+        for (float oldX : hitX)
+        {
+            if ( std::fabs(oldX - x) <= kDuplicateHitEpsilon )
+            {
+                duplicate = true;
+                break;
+            }
+        }
+
+        if ( !duplicate )
+            hitX.push_back(x);
+    }
+
+    return (hitX.size() & 1u) != 0;
+}
+
+void NC_STACK_ypaworld::DestroyUnitsCoveredByBuilding(cellArea *cell, uint8_t buildingID)
+{
+    if ( !cell || buildingID >= _buildProtos.size() )
+        return;
+
+    const World::TBuildingProto &proto = _buildProtos[buildingID];
+    if ( (size_t)proto.SecType >= _secTypeArray.size() )
+        return;
+
+    TSectorDesc &sector = _secTypeArray[proto.SecType];
+    const int slotCount = sector.SectorType == 1 ? 1 : 3;
+    const int slotOffset = sector.SectorType == 1 ? 0 : -1;
+    const float terrainHalfExtent = sector.SectorType == 1 ? 450.0f : 150.0f;
+
+    auto pointCovered = [&](const vec3d &worldPoint) -> bool
+    {
+        for (int y = 0; y < slotCount; ++y)
+        {
+            for (int x = 0; x < slotCount; ++x)
+            {
+                TSubSectorDesc *subSector = sector.SubSectors.At(x, y);
+                if ( !subSector )
+                    continue;
+
+                const int legoID = subSector->HPModels[0];
+                if ( legoID < 0 || (size_t)legoID >= _legoArray.size() )
+                    continue;
+
+                NC_STACK_skeleton *collision = _legoArray[legoID].CollisionSkelet;
+                if ( !collision )
+                    continue;
+
+                vec3d legoPos = cell->CenterPos +
+                        vec3d((slotOffset + x) * 300.0f, 0.0f,
+                              (slotOffset + y) * 300.0f);
+                legoPos.y = cell->height;
+
+                if ( yw_PointCoveredByBuildingCollision(collision,
+                                                     worldPoint - legoPos,
+                                                     terrainHalfExtent) )
+                    return true;
+            }
+        }
+
+        return false;
+    };
+
+    // Snapshot/safe iterator is required because ModifyEnergy may immediately
+    // remove a killed actor from the sector list.
+    for (NC_STACK_ypabact *unit : cell->unitsList.safe_iter())
+    {
+        if ( !unit || unit->_status == BACT_STATUS_DEAD ||
+             (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
+             unit->_bact_type == BACT_TYPES_MISSLE )
+            continue;
+
+        bool covered = pointCovered(unit->_position);
+
+        if ( !covered )
+        {
+            std::vector<NC_STACK_ypabact::TCollisionSphereWorld> spheres;
+            unit->GetCollisionSpheres(spheres, unit->_position, unit->_rotation, false);
+
+            for (const NC_STACK_ypabact::TCollisionSphereWorld &sphere : spheres)
+            {
+                // Test authored collision-node centers, not their broad radius.
+                // This catches large/compound units actually entering the future
+                // building while avoiding helicopters or vehicles merely near it.
+                if ( pointCovered(sphere.center) )
+                {
+                    covered = true;
+                    break;
+                }
+            }
+        }
+
+        if ( !covered )
+            continue;
+
+        bact_arg84 kill;
+        kill.energy = -22000000;
+        kill.unit = NULL;
+        unit->ModifyEnergy(&kill);
+    }
+}
 
 void NC_STACK_ypaworld::DestroyAllGunsInSector(cellArea *cell)
 {
@@ -4794,6 +5105,11 @@ void NC_STACK_ypaworld::BuildingConstructUpdate(int dtime)
             cellArea &rCell = _cells( bldProc.CellID );
             rCell.PurposeType = cellArea::PT_NONE;
             rCell.PurposeIndex = 0;
+
+            // Resolve only actors that would actually be enclosed by the new
+            // building collision volume. Do this before sb_0x456384 creates
+            // attached building guns/modules so those new actors are untouched.
+            DestroyUnitsCoveredByBuilding(&rCell, bldProc.BuildID);
 
             sb_0x456384(bldProc.CellID, bldProc.Owner, bldProc.BuildID, 0);
 
