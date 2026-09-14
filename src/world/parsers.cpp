@@ -4454,6 +4454,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->ramp_up_max_shot_time = 0;
         _wpn->ramp_up_overheat_time = 0;
         _wpn->ramp_up_overheat_hp_drain.Clear();
+        _wpn->ramp_up_overheat_icon.clear();
         _wpn->salve_delay = 0;
         _wpn->salve_shots = 0;
         _wpn->multi_target = 0;
@@ -5032,6 +5033,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "ramp_up_overheat_hp_drain") )
     {
         ParseAbsoluteOrPercent(p2, _wpn->ramp_up_overheat_hp_drain, 100.0f);
+    }
+    else if ( !StriCmp(p1, "ramp_up_overheat_icon") )
+    {
+        _wpn->ramp_up_overheat_icon = p2;
     }
     else if ( !StriCmp(p1, "shk_launch_player_slot") )
     {

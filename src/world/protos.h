@@ -1169,6 +1169,7 @@ struct TWeapProto
     // authored maximum long enough. The drain accepts fixed HP/sec or max-HP %/sec.
     int ramp_up_overheat_time = 0;
     TAbsoluteOrPercent ramp_up_overheat_hp_drain;
+    std::string ramp_up_overheat_icon;
     int salve_shots = 0;
     int salve_delay = 0;
     // OpenNeoUA: generic multi-target count for compatible homing weapon models.
