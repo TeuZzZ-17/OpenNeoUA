@@ -5536,6 +5536,9 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         _bld->Energy = parser.stol(p2, NULL, 0);
     }
+    else if ( ParseTintParam(parser, "tint", p1, p2, _bld->tint, true) )
+    {
+    }
     else if ( ParseDecorationFXParam(parser, p1, p2, _bld->DecorationFX) )
     {
     }

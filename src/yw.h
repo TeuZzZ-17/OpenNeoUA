@@ -1232,6 +1232,10 @@ struct cellArea
     int32_t energy_power = 0; // Cell electric power
     Common::PlaneArray<int16_t, 3, 3> buildings_health = Common::PlaneArray<int16_t, 3, 3>::ArrayInit(0);
     Common::PlaneArray<NC_STACK_base::Instance *, 3, 3> BldVPOpts = Common::PlaneArray<NC_STACK_base::Instance *, 3, 3>::ArrayInit(NULL);
+    // Runtime copy of the building prototype tint. This survives purpose remaps
+    // used by gates, tech upgrades and super-items while remaining neutral for
+    // ordinary sectors.
+    World::TVisualTint BuildingTint;
     World::TDecorationFXConfig DecorationFX;
     int32_t DecorationFXNextTime = 0;
     int32_t DecorationFXPersistentId = 0;
@@ -2639,6 +2643,7 @@ public:
     void CellSetOwner(cellArea *cell, uint8_t owner);
 
     void DestroyAllGunsInSector(cellArea *cell);
+    void DestroyUnitsCoveredByBuilding(cellArea *cell, uint8_t buildingID);
     bool BuildingConstructBegin(cellArea *cell, uint8_t buildingID, int owner, int cTime);
     void BuildingConstructUpdate(int dtime);
     void BuildingDecorationFXUpdate();
