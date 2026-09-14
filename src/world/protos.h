@@ -391,6 +391,32 @@ struct TDamagedFXConfig
     bool trail_only = false;
 };
 
+// OpenNeoUA custom: primitive per-Vehicle Buff profile. Generic presentation and
+// positive-state flags live here; feature-specific settings use their own namespace.
+// Deflect is the first dedicated gameplay module carried by this shared profile.
+struct TVehicleBuffConfig
+{
+    bool allow = false;
+    std::string name;
+    std::string icon;
+
+    bool invisible = false;
+    int16_t invisible_reveal_vp = 0;
+    std::string invisible_reveal_3ds;
+    std::string invisible_reveal_base;
+    bool invulnerable = false;
+
+    int deflect_charges = 0;
+    int deflect_max_energy = 0;
+    int16_t deflect_vp = 0;
+    std::string deflect_3ds;
+    std::string deflect_base;
+
+    float glow_intensity = 0.0f;
+    TVisualTint glow_tint;
+    float glow_pulse_seconds = 0.0f;
+};
+
 struct TWeaponDebuffConfig
 {
     bool allow = false;
@@ -733,6 +759,7 @@ struct TVhclProto
     int spawn_at_death_instant = 0;
     int spawn_at_death_immunity_time = 0;
     int proximity_defense_enable = 0;
+    std::string proximity_defense_icon;
     int proximity_defense_weapon = 0;
     float proximity_defense_trigger_radius = 0.0;
     int proximity_defense_interval = 1000;
@@ -761,16 +788,15 @@ struct TVhclProto
     int16_t field_1D6D = 0;
     int16_t field_1D6F = 0;
     int shield = 0;
-    // OpenNeoUA custom: number of disposable Deflect charges.
-    // Zero/absent preserves vanilla damage handling.
-    int deflect_charges = 0;
+    // OpenNeoUA custom: reusable positive-status profile. Generic Buff state and
+    // feature-specific modules share this one per-Vehicle source of truth.
+    TVehicleBuffConfig buff;
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
     int mimic_energy_cost_min = 0;
     int mimic_energy_cost_max = 0;
     int GetProductionCost() const { return mimic_energy_cost > 0 ? mimic_energy_cost : energy; }
     int RollMimicProductionCost();
-    bool invulnerable = false;
     int field_1D79 = 0;
     float adist_sector = 0.0;
     float adist_bact = 0.0;
@@ -900,15 +926,6 @@ struct TVhclProto
 
     bool hidden = false;
     int8_t unhideRadar = 0;
-
-    // OpenNeoUA custom: vehicle-only "invisible" stealth. When true every new instance
-    // spawns fully cloaked (no render/radar/UI/sound/AI-target) until its first real
-    // attack, after which it is permanently revealed. Independent from the legacy
-    // owner-based `hidden`/`unhide_radar` system above. Default off.
-    bool invisible = false;
-    int16_t invisible_reveal_vp = 0;
-    std::string invisible_reveal_3ds;
-    std::string invisible_reveal_base;
 
     TRoboProto *RoboProto = NULL;
     std::vector<TRoboGun> unit_guns;

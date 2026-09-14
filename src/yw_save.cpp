@@ -393,8 +393,12 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
                 fil->printf("    fire_x_slots   = %d\n", proto.fire_x_slots);
             if (proto.hidden)
                 fil->printf("    ;#!hidden      = %s\n", (proto.hidden ? "yes" : "no") );
-            if (proto.invisible)
-                fil->printf("    ;#!invisible      = %s\n", (proto.invisible ? "yes" : "no") );
+            if ( proto.buff.allow )
+                fil->printf("    ;#!buff_allow     = yes\n");
+            if ( proto.buff.allow && proto.buff.invisible )
+                fil->printf("    ;#!buff_invisible = yes\n");
+            if ( proto.buff.allow && proto.buff.invulnerable )
+                fil->printf("    ;#!buff_invulnerable = yes\n");
             if (proto.unhideRadar > 0)
                 fil->printf("    ;#!unhide_radar      = %d\n", proto.unhideRadar);
             fil->printf("end\n\n");
@@ -539,7 +543,9 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
     {
         uint8_t protoId = bct->_mimic_disguise_vehicleID ? bct->_mimic_disguise_vehicleID : bct->_vehicleID;
         if ( (size_t)protoId < world->GetVhclProtos().size() )
-            saveInvisibleState = saveInvisibleState || world->GetVhclProtos().at(protoId).invisible;
+            saveInvisibleState = saveInvisibleState ||
+                                 (world->GetVhclProtos().at(protoId).buff.allow &&
+                                  world->GetVhclProtos().at(protoId).buff.invisible);
     }
 
     if ( bct->getBACT_viewer() )
@@ -603,8 +609,8 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
     if ( saveInvisibleState )
         fil->printf("    invisible_unrevealed = %s\n", bct->IsInvisibleUnrevealed() ? "yes" : "no");
 
-    if ( bct->_deflect_charges_max > 0 )
-        fil->printf("    deflect_charges = %d\n", bct->_deflect_charges);
+    if ( bct->_buff_deflect_charges_max > 0 )
+        fil->printf("    buff_deflect_charges = %d\n", bct->_buff.deflect_charges);
 
     if ( bct->_primTtype == BACT_TGT_TYPE_UNIT )
         fil->printf("    primary        = %d_%d_%2.2f_%2.2f_%d\n", bct->_primTtype, bct->_primT.pbact->_gid, bct->_primTpos.x, bct->_primTpos.z, bct->_primT_cmdID);

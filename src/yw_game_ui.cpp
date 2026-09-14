@@ -202,26 +202,6 @@ const std::string &StatusIconPowerPath()
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconPower);
 }
 
-const std::string &StatusIconKamikazePath()
-{
-    return StatusIconConfiguredPath(System::IniConf::UiStatusIconKamikaze);
-}
-
-const std::string &StatusIconInvisiblePath()
-{
-    return StatusIconConfiguredPath(System::IniConf::UiStatusIconInvisible);
-}
-
-const std::string &StatusIconDeflectPath()
-{
-    return StatusIconConfiguredPath(System::IniConf::UiStatusIconDeflect);
-}
-
-const std::string &StatusIconProximityDefensePath()
-{
-    return StatusIconConfiguredPath(System::IniConf::UiStatusIconProximityDefense);
-}
-
 const std::string &StatusIconSprintPath()
 {
     return StatusIconConfiguredPath(System::IniConf::UiStatusIconSprint);
@@ -842,8 +822,8 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
     if ( bact->_damaged_fx_active )
         StatusIconAdd(icons, iconCount, StatusIconDamagedPath());
 
-    if ( bact->HasDeflectCharges() )
-        StatusIconAdd(icons, iconCount, StatusIconDeflectPath());
+    if ( bact->HasActiveBuff() )
+        StatusIconAdd(icons, iconCount, bact->_buff.icon);
 
     // Tank Sprint may still be finishing its force/pitch ramp-down after the
     // vehicle has already come to a complete stop. At that point the gameplay
@@ -880,14 +860,8 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
         if ( yw && yw->IsValidMobilePowerGenerator(bact) )
             StatusIconAdd(icons, iconCount, StatusIconPowerPath());
 
-        if ( bact->IsKamikazeArmed() )
-            StatusIconAdd(icons, iconCount, StatusIconKamikazePath());
-
-        if ( bact->IsInvisibleUnrevealed() )
-            StatusIconAdd(icons, iconCount, StatusIconInvisiblePath());
-
         if ( bact->CanUseProximityDefense() || bact->CanUseProximityDefenseAtDeath() )
-            StatusIconAdd(icons, iconCount, StatusIconProximityDefensePath());
+            StatusIconAdd(icons, iconCount, vhcl->proximity_defense_icon);
     }
 
     // Regen/Drain icons and global unit FX consume the same world-side state.
