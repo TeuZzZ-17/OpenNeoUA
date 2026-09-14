@@ -599,6 +599,7 @@ public:
     void RegisterProgressiveWeaponFireRequest(int weaponId);
     void UpdateProgressiveWeaponFireRate(update_msg *arg);
     int GetProgressiveWeaponShotTime(const World::TWeapProto &proto, int fallbackShotTime);
+    const std::string &GetProgressiveWeaponOverheatIcon();
     void ResetProgressiveWeaponFireRate();
     void PrepareSuicideControlHandoff();
     void ArmSuicideHandoffFireRelease() { _suicide_handoff_wait_fire_release = true; }
@@ -1146,6 +1147,7 @@ public:
     int _progressive_weapon_id = -1;
     float _progressive_weapon_level = 0.0f; // 0 = shot_time/shot_time_user, 1 = ramp_up_max_shot_time
     bool _progressive_weapon_requested = false;
+    bool _progressive_weapon_overheat_active = false;
     double _progressive_weapon_overheat_elapsed_ms = 0.0;
     double _progressive_weapon_overheat_hp_drain_remainder = 0.0;
     vec3d _fire_pos;
