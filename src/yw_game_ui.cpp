@@ -825,6 +825,8 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
     if ( bact->HasActiveBuff() )
         StatusIconAdd(icons, iconCount, bact->_buff.icon);
 
+    StatusIconAdd(icons, iconCount, bact->GetProgressiveWeaponOverheatIcon());
+
     // Tank Sprint may still be finishing its force/pitch ramp-down after the
     // vehicle has already come to a complete stop. At that point the gameplay
     // state remains untouched, but the Sprint icon is no longer desired, so
