@@ -145,7 +145,7 @@ public:
     virtual float GetStartHeight();
 
     vec3d CalcForceVector();
-    bool TubeCollisionTest(bool applyDirectDamage = true, NC_STACK_ypabact **hitTarget = NULL);
+    bool TubeCollisionTest(bool applyDirectDamage = true, NC_STACK_ypabact **hitTarget = NULL, bool *deflected = NULL);
     void SetWeaponSoundEventsEnabled(bool enabled)
     { _weaponSoundEventsEnabled = enabled; }
     bool WeaponSoundEventsEnabled() const
@@ -156,6 +156,9 @@ protected:
     int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
     int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy);
     void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true);
+    void DeflectFromUnitCollision(const vec3d &targetCenter, float targetRadius,
+                                  const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
+                                  float weaponRadius);
     bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = NULL,
                                float *appliedStrength = NULL, bool enqueue = true,
                                NC_STACK_ypabact *directionTarget = NULL);

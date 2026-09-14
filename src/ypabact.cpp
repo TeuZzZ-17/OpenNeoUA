@@ -2651,6 +2651,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _pitch_max = 0.0;
     _energy = 0;
     _energy_max = 0;
+    _deflect_charges = 0;
+    _deflect_charges_max = 0;
     _invulnerable = false;
     _reload_const = 0;
     _shield = 0;
@@ -11559,6 +11561,11 @@ static void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapPr
     if ( !shooter || !target )
         return;
 
+    // Laser contact is a hard counter to Deflect. Break all remaining charges
+    // immediately, then keep the normal laser damage/debuff path unchanged.
+    if ( target->HasDeflectCharges() && ypabact_CanApplyLaserDamage(shooter) )
+        target->ClearDeflectCharges();
+
     if ( beam.next_damage_time > 0 && shooter->_clock < beam.next_damage_time )
         return;
 
@@ -15086,6 +15093,15 @@ int NC_STACK_ypabact::CalcShieldedCustomDamage(int rawDamage) const
     return damage > 0 ? damage : 0;
 }
 
+bool NC_STACK_ypabact::ConsumeDeflectCharge()
+{
+    if ( _deflect_charges <= 0 )
+        return false;
+
+    --_deflect_charges;
+    return true;
+}
+
 bool NC_STACK_ypabact::IsInvulnerableToDamage() const
 {
     if ( _invulnerable )
@@ -16937,6 +16953,8 @@ void NC_STACK_ypabact::Renew()
 
     _commandID = 0;
     _mimic_disguise_vehicleID = 0;
+    _deflect_charges = 0;
+    _deflect_charges_max = 0;
 //    bact->field_3D1 = 1;
     _killer = NULL;
     _sessionKillMarks = 0;
@@ -18309,7 +18327,10 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                                         v86.unit = this;
                                                         v86.energy = -energ;
 
-                                                        if ( energ )
+                                                        // Deflect stops MGUN damage without
+                                                        // spending a charge. The ray still hits normally,
+                                                        // so tracer/impact presentation stays unchanged.
+                                                        if ( energ && !cellUnit->HasDeflectCharges() )
                                                             cellUnit->ModifyEnergy(&v86);
                                                     }
 
