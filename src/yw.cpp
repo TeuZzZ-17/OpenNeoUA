@@ -1204,11 +1204,12 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
          _vhclProtos[targetID].Index != targetID ||
          _vhclProtos[targetID].model_id != BACT_TYPES_UFO ||
          !_vhclProtos[targetID].hidden ||
-         !_vhclProtos[targetID].invulnerable )
+         !_vhclProtos[targetID].buff.allow ||
+         !_vhclProtos[targetID].buff.invulnerable )
     {
         _vhclProtos[targetID] = previous;
         _spectatorVehicleProtoID = -1;
-        ypa_log_out("WARNING: spectator vehicle file %s must define a valid model = ufo with hidden = yes and invulnerable = 1. Spectator mode disabled for this level.\n", spectatorScript.c_str());
+        ypa_log_out("WARNING: spectator vehicle file %s must define a valid model = ufo with hidden = yes, buff_allow = 1 and buff_invulnerable = 1. Spectator mode disabled for this level.\n", spectatorScript.c_str());
         return false;
     }
 
@@ -4220,9 +4221,9 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
     {
         bacto->_energy = vhcl.energy;
         bacto->_energy_max = vhcl.energy;
-        bacto->_deflect_charges = vhcl.deflect_charges;
-        bacto->_deflect_charges_max = vhcl.deflect_charges;
-        bacto->_invulnerable = vhcl.invulnerable;
+        bacto->_buff = vhcl.buff;
+        bacto->_buff_deflect_charges_max = vhcl.buff.allow ? vhcl.buff.deflect_charges : 0;
+        bacto->_invulnerable = vhcl.buff.allow && vhcl.buff.invulnerable;
         bacto->_shield = vhcl.shield;
         bacto->_mass = vhcl.mass;
         bacto->_base_force = vhcl.force;
@@ -4447,12 +4448,12 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_hidden = vhcl.hidden;
         bacto->_unhideRadar = vhcl.unhideRadar;
 
-        // OpenNeoUA custom: seed the per-instance invisible/stealth state from the proto.
-        // A unit with `invisible = 1` spawns cloaked and stays so until its first attack.
-        bacto->_invisibleUnrevealed = vhcl.invisible;
-        bacto->_invisible_reveal_vp = vhcl.invisible_reveal_vp;
-        bacto->_invisible_reveal_3ds = vhcl.invisible_reveal_3ds;
-        bacto->_invisible_reveal_base = vhcl.invisible_reveal_base;
+        // Buff invisibility is seeded once at spawn and remains active until the
+        // first real attack reveals the unit. Missing/disabled Buff stays vanilla.
+        bacto->_invisibleUnrevealed = vhcl.buff.allow && vhcl.buff.invisible;
+        bacto->_buff_invisible_reveal_vp = vhcl.buff.invisible_reveal_vp;
+        bacto->_buff_invisible_reveal_3ds = vhcl.buff.invisible_reveal_3ds;
+        bacto->_buff_invisible_reveal_base = vhcl.buff.invisible_reveal_base;
 
         for (int i = 0; vhcl.scale_fx_pXX[ i ]; i++ )
         {

@@ -678,6 +678,49 @@ static bool ypabact_IsTintableVisualBase(NC_STACK_ypabact *bact, NC_STACK_base *
            base == bact->_vp_dead || base == bact->_vp_megadeth || base == bact->_vp_genesis;
 }
 
+static float ypabact_GetBuffGlowStrength(const NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->_energy <= 0 || !bact->HasActiveBuff() ||
+         !std::isfinite(bact->_buff.glow_intensity) || bact->_buff.glow_intensity <= 0.0f )
+        return 0.0f;
+
+    float pulse = 1.0f;
+    if ( std::isfinite(bact->_buff.glow_pulse_seconds) &&
+         bact->_buff.glow_pulse_seconds > 0.0f )
+    {
+        const double periodMs = (double)bact->_buff.glow_pulse_seconds * 1000.0;
+        const double phase = fmod((double)std::max(bact->_clock, 0), periodMs) / periodMs;
+        const float wave = (float)(0.5 - 0.5 * cos(phase * C_2PI));
+        // Keep a faint baseline glow instead of switching fully off at the low point.
+        pulse = 0.25f + wave * 0.75f;
+    }
+
+    const float alpha = std::isfinite(bact->_buff.glow_tint.a)
+        ? std::max(0.0f, std::min(bact->_buff.glow_tint.a, 1.0f))
+        : 1.0f;
+    return std::max(0.0f, std::min(bact->_buff.glow_intensity * pulse * alpha, 1.0f));
+}
+
+static void ypabact_ApplyBuffGlowToBodyTint(const NC_STACK_ypabact *bact,
+                                             GFX::TGLColor *tint)
+{
+    if ( !bact || !tint )
+        return;
+
+    const float strength = ypabact_GetBuffGlowStrength(bact);
+    if ( strength <= 0.0f )
+        return;
+
+    // Use the normal Vehicle tint path, which is shared by every rendered body
+    // state and is already proven by visual_tint/debuff_target_tint. A value of
+    // 0.20 therefore produces a clearly visible pulse instead of relying on a
+    // second transparent geometry pass whose material blending can hide it.
+    const float gain = strength * 2.0f;
+    tint->r *= 1.0f + bact->_buff.glow_tint.r * gain;
+    tint->g *= 1.0f + bact->_buff.glow_tint.g * gain;
+    tint->b *= 1.0f + bact->_buff.glow_tint.b * gain;
+}
+
 static bool ypabact_ShouldApplyVPRotation(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
     if ( bact->_vp_rotation.x == 0.0 &&
@@ -2651,8 +2694,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _pitch_max = 0.0;
     _energy = 0;
     _energy_max = 0;
-    _deflect_charges = 0;
-    _deflect_charges_max = 0;
+    _buff = World::TVehicleBuffConfig();
+    _buff_deflect_charges_max = 0;
     _invulnerable = false;
     _reload_const = 0;
     _shield = 0;
@@ -4839,17 +4882,26 @@ static bool ypabact_ResolveRecoilDirection(NC_STACK_ypabact *unit,
 
 static bool ypabact_SnapAoePushGroundUnit(NC_STACK_ypabact *unit)
 {
+    if ( !unit || !unit->getBACT_pWorld() )
+        return false;
+
+    // Probe only below the actor. The old full-height column ray could select an
+    // unrelated roof above/around a ground vehicle and visibly teleport it there.
+    const float supportOffset = unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof;
+    const float probeReach = std::max(2000.0f,
+        std::fabs(unit->_height) * 6.0f + std::fabs(supportOffset) * 4.0f + 1000.0f);
+
     ypaworld_arg136 ground;
-    ground.stPos = unit->_position.X0Z() - vec3d::OY(30000.0);
-    ground.vect = vec3d::OY(50000.0);
+    ground.stPos = unit->_position - vec3d::OY(10.0f);
+    ground.vect = vec3d::OY(probeReach);
     ground.flags = 0;
 
     unit->getBACT_pWorld()->ypaworld_func136(&ground);
 
-    if ( !ground.isect )
+    if ( !ground.isect || !std::isfinite(ground.isectPos.y) )
         return false;
 
-    unit->_position.y = ground.isectPos.y - (unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof);
+    unit->_position.y = ground.isectPos.y - supportOffset;
     unit->_status_flg |= BACT_STFLAG_LAND;
     return true;
 }
@@ -5050,7 +5102,8 @@ void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
 
     vec3d pushDir = dir;
 
-    if ( ypabact_ShouldFlattenAirKnockback(this) )
+    if ( ypabact_ShouldFlattenAirKnockback(this) ||
+         _bact_type == BACT_TYPES_TANK || _bact_type == BACT_TYPES_CAR )
     {
         if ( !ypabact_NormalizeXZ(&pushDir) )
             return;
@@ -5296,6 +5349,12 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             arg->particleSpin = vec3d(0.0, 0.0, 0.0);
             arg->particleLifetimeScale = 1.0f;
         }
+
+        // Buff glow is a render-only luminance multiplier on the body. Apply it
+        // after particle controls are derived so trails/particles keep their
+        // authored tint and zero intensity leaves the vanilla path unchanged.
+        if ( tintBase )
+            ypabact_ApplyBuffGlowToBodyTint(this, &arg->tint);
     };
 
     if ( _current_vp )
@@ -11561,10 +11620,10 @@ static void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapPr
     if ( !shooter || !target )
         return;
 
-    // Laser contact is a hard counter to Deflect. Break all remaining charges
-    // immediately, then keep the normal laser damage/debuff path unchanged.
-    if ( target->HasDeflectCharges() && ypabact_CanApplyLaserDamage(shooter) )
-        target->ClearDeflectCharges();
+    // Laser contact is a hard counter to the Deflect Buff. Break all remaining
+    // Buff charges, then keep the normal laser damage/debuff path unchanged.
+    if ( target->HasDeflectBuff() && ypabact_CanApplyLaserDamage(shooter) )
+        target->ClearBuffDeflectCharges();
 
     if ( beam.next_damage_time > 0 && shooter->_clock < beam.next_damage_time )
         return;
@@ -15093,13 +15152,23 @@ int NC_STACK_ypabact::CalcShieldedCustomDamage(int rawDamage) const
     return damage > 0 ? damage : 0;
 }
 
-bool NC_STACK_ypabact::ConsumeDeflectCharge()
+bool NC_STACK_ypabact::ConsumeBuffDeflectCharge()
 {
-    if ( _deflect_charges <= 0 )
+    if ( !HasDeflectBuff() )
         return false;
 
-    --_deflect_charges;
+    --_buff.deflect_charges;
     return true;
+}
+
+void NC_STACK_ypabact::SpawnBuffDeflectVisual(const vec3d &pos, const mat3x3 &rot)
+{
+    if ( !_world || !_buff.allow )
+        return;
+
+    // Deflect event visual uses the shared transient loader: 3DS -> BASE -> VP.
+    _world->SpawnTransientVisual(_buff.deflect_vp, _buff.deflect_3ds, _buff.deflect_base,
+                                 pos, rot, 1000);
 }
 
 bool NC_STACK_ypabact::IsInvulnerableToDamage() const
@@ -16953,8 +17022,8 @@ void NC_STACK_ypabact::Renew()
 
     _commandID = 0;
     _mimic_disguise_vehicleID = 0;
-    _deflect_charges = 0;
-    _deflect_charges_max = 0;
+    _buff = World::TVehicleBuffConfig();
+    _buff_deflect_charges_max = 0;
 //    bact->field_3D1 = 1;
     _killer = NULL;
     _sessionKillMarks = 0;
@@ -18327,10 +18396,10 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                                         v86.unit = this;
                                                         v86.energy = -energ;
 
-                                                        // Deflect stops MGUN damage without
+                                                        // The Deflect Buff stops MGUN damage without
                                                         // spending a charge. The ray still hits normally,
                                                         // so tracer/impact presentation stays unchanged.
-                                                        if ( energ && !cellUnit->HasDeflectCharges() )
+                                                        if ( energ && !cellUnit->HasDeflectBuff() )
                                                             cellUnit->ModifyEnergy(&v86);
                                                     }
 
@@ -21243,10 +21312,10 @@ bool NC_STACK_ypabact::IsHiddenFor(uint8_t owner) const
     return false;
 }
 
-// OpenNeoUA custom: permanently reveal an "invisible" stealth unit the moment it makes a
+// OpenNeoUA Buff: permanently reveal a buff_invisible unit when it makes a
 // real attack. Attached unit-gun children fire on behalf of their carrier, so a
 // child attack reveals the carrier (which in turn reveals all its attached children).
-// No-op for units that were never invisible or are already revealed.
+// No-op for units without active Buff invisibility or units already revealed.
 void NC_STACK_ypabact::RevealInvisibleOnAttack()
 {
     // Attached unit-guns/modules: redirect the reveal to the carrying unit.
@@ -21261,14 +21330,14 @@ void NC_STACK_ypabact::RevealInvisibleOnAttack()
 
     _invisibleUnrevealed = false;
 
-    if ( _invisible_reveal_vp > 0 || !_invisible_reveal_3ds.empty() ||
-         !_invisible_reveal_base.empty() )
+    if ( _buff_invisible_reveal_vp > 0 || !_buff_invisible_reveal_3ds.empty() ||
+         !_buff_invisible_reveal_base.empty() )
     {
         NC_STACK_ypaworld *world = getBACT_pWorld();
         if ( world )
-            world->SpawnTransientVisual(_invisible_reveal_vp,
-                                        _invisible_reveal_3ds,
-                                        _invisible_reveal_base,
+            world->SpawnTransientVisual(_buff_invisible_reveal_vp,
+                                        _buff_invisible_reveal_3ds,
+                                        _buff_invisible_reveal_base,
                                         _position, _rotation, 1000);
     }
 
