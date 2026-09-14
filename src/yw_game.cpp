@@ -9663,11 +9663,22 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         }
     }
 
-    // --- TRANSIENT AoE IMPACT RINGS (lifetime is maintained independently of rendering) ---
+    // --- TRANSIENT DEBUG RADII (lifetime is maintained independently of rendering) ---
     for (const DebugAoeRing &ring : _debugAoeRings)
     {
-        if ((ring.pos - camPos).length() <= RING_MAX_DIST)
+        if ((ring.pos - camPos).length() > RING_MAX_DIST)
+            continue;
+
+        if ( ring.sphere3d )
+        {
+            drawRing(ring.pos, ring.radius, 0, ring.r, ring.g, ring.b);
+            drawRing(ring.pos, ring.radius, 1, ring.r, ring.g, ring.b);
+            drawRing(ring.pos, ring.radius, 2, ring.r, ring.g, ring.b);
+        }
+        else
+        {
             drawFlatRing(ring.pos, ring.radius, ring.r, ring.g, ring.b);
+        }
     }
 
     FontUA::reset_tileset(&labels, 15);
@@ -9702,8 +9713,30 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
     ring.r = r;
     ring.g = g;
     ring.b = b;
+    ring.sphere3d = false;
     ring.createdStamp = _timeStamp;
     ring.expireStamp = _timeStamp + 1536; // ~1.5s (1024 ticks = 1s)
+
+    _debugAoeRings.push_back(ring);
+    if ( _debugAoeRings.size() > 256 )
+        _debugAoeRings.erase(_debugAoeRings.begin());
+}
+
+void NC_STACK_ypaworld::DebugAddDeathPushSphere(const vec3d &pos, float radius)
+{
+    // F10 only: preserve the exact death-push volume after the source unit disappears.
+    if ( !_showCollDebug || radius < 0.01f )
+        return;
+
+    DebugAoeRing ring;
+    ring.pos = pos;
+    ring.radius = radius;
+    ring.r = 185;
+    ring.g = 80;
+    ring.b = 255;
+    ring.sphere3d = true;
+    ring.createdStamp = _timeStamp;
+    ring.expireStamp = _timeStamp + 3072; // ~3.0s (1024 ticks = 1s)
 
     _debugAoeRings.push_back(ring);
     if ( _debugAoeRings.size() > 256 )

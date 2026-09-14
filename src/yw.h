@@ -2654,6 +2654,7 @@ public:
     void debug_draw_coll_spheres();
     void ExpireDebugAoeRings();
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
+    void DebugAddDeathPushSphere(const vec3d &pos, float radius);
 
     // OpenNeoUA custom: artillery shell bombardment markers + manual map-click control.
     void AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, const std::string &markerPath, bool pending, int lingerMs);
@@ -3362,12 +3363,13 @@ public:
     struct DebugAoeRing
     {
         vec3d   pos;
-        float   radius      = 0.0f;
-        uint8_t r           = 255;
-        uint8_t g           = 255;
-        uint8_t b           = 255;
+        float   radius       = 0.0f;
+        uint8_t r            = 255;
+        uint8_t g            = 255;
+        uint8_t b            = 255;
+        bool    sphere3d     = false;
         int32_t createdStamp = 0;
-        int32_t expireStamp = 0;
+        int32_t expireStamp  = 0;
     };
     std::vector<DebugAoeRing> _debugAoeRings;
 

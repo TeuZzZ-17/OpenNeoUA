@@ -283,6 +283,10 @@ struct TChainFXConfig
     int ground_decal_points = 12;
     float ground_decal_jaggedness = 0.35f;
     float ground_decal_size = 0.0f;
+    // Optional authored min/max range. When unset, ground_decal_size keeps the
+    // legacy fixed-size behaviour. MGUN decals opt in via "mgun_decal_size = min_max".
+    float ground_decal_size_min = 0.0f;
+    float ground_decal_size_max = 0.0f;
     TVisualTint ground_decal_tint;
     bool ground_decal_random_rotation = false;
     float ground_decal_edge_fade = 0.0f;
