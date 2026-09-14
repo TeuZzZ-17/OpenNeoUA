@@ -427,6 +427,7 @@ Common::Ini::Key IniConf::UiStatusIconRadar("ui.status_icon_radar", Common::Ini:
 Common::Ini::Key IniConf::UiStatusIconPower("ui.status_icon_power", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconKamikaze("ui.status_icon_kamikaze", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconInvisible("ui.status_icon_invisible", Common::Ini::KT_STRING);
+Common::Ini::Key IniConf::UiStatusIconDeflect("ui.status_icon_deflect", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconProximityDefense("ui.status_icon_proximity_defense", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconSprint("ui.status_icon_sprint", Common::Ini::KT_STRING);
 Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Common::Ini::KT_STRING);
@@ -741,6 +742,7 @@ void IniConf::Init()
         , &UiStatusIconPower
         , &UiStatusIconKamikaze
         , &UiStatusIconInvisible
+        , &UiStatusIconDeflect
         , &UiStatusIconProximityDefense
         , &UiStatusIconSprint
         , &UiStatusIconHandbrake

@@ -761,6 +761,9 @@ struct TVhclProto
     int16_t field_1D6D = 0;
     int16_t field_1D6F = 0;
     int shield = 0;
+    // OpenNeoUA custom: number of disposable Deflect charges.
+    // Zero/absent preserves vanilla damage handling.
+    int deflect_charges = 0;
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
     int mimic_energy_cost_min = 0;
