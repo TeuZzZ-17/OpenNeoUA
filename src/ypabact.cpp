@@ -14877,6 +14877,7 @@ void NC_STACK_ypabact::ResetProgressiveWeaponFireRate()
     _progressive_weapon_id = -1;
     _progressive_weapon_level = 0.0f;
     _progressive_weapon_requested = false;
+    _progressive_weapon_overheat_active = false;
     _progressive_weapon_overheat_elapsed_ms = 0.0;
     _progressive_weapon_overheat_hp_drain_remainder = 0.0;
 }
@@ -14924,6 +14925,19 @@ int NC_STACK_ypabact::GetProgressiveWeaponShotTime(const World::TWeapProto &prot
     return std::max(1, (int)floor(interpolated + 0.5));
 }
 
+const std::string &NC_STACK_ypabact::GetProgressiveWeaponOverheatIcon()
+{
+    static const std::string emptyIcon;
+
+    if ( !_progressive_weapon_overheat_active || _progressive_weapon_id < 0 ||
+         !_world || !ypabact_IsValidWeaponId(this, _progressive_weapon_id) )
+    {
+        return emptyIcon;
+    }
+
+    return _world->GetWeaponsProtos().at(_progressive_weapon_id).ramp_up_overheat_icon;
+}
+
 void NC_STACK_ypabact::UpdateProgressiveWeaponFireRate(update_msg *arg)
 {
     if ( !arg || arg->frameTime <= 0 || _progressive_weapon_id < 0 || !_world ||
@@ -14949,6 +14963,8 @@ void NC_STACK_ypabact::UpdateProgressiveWeaponFireRate(update_msg *arg)
         ResetProgressiveWeaponFireRate();
         return;
     }
+
+    _progressive_weapon_overheat_active = false;
 
     const float previousLevel = std::max(0.0f, std::min(_progressive_weapon_level, 1.0f));
     _progressive_weapon_level = std::min(1.0f,
@@ -14993,6 +15009,10 @@ void NC_STACK_ypabact::UpdateProgressiveWeaponFireRate(update_msg *arg)
             _progressive_weapon_overheat_elapsed_ms = std::min(
                 delayMs, _progressive_weapon_overheat_elapsed_ms + timeAtMaxMs);
         }
+
+        // Show the icon only while this frame is actually inside the
+        // self-damage phase, not while the overheat delay is still counting.
+        _progressive_weapon_overheat_active = damageTimeMs > 0.0;
 
         if ( damageTimeMs > 0.0 && _energy > 0 && _energy_max > 0 )
         {
