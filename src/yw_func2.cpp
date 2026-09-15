@@ -3944,7 +3944,7 @@ static std::vector<std::string> db_vehicle_specialties(
 
     if ( p.spawn_units )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_SPAWNER));
-    if ( p.spawn_at_death_units )
+    if ( p.at_death_spawn_units )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_SPAWN_ON_DEATH));
     if ( p.power > 0 )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MOBILE_POWER_GENERATOR));
