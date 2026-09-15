@@ -283,6 +283,9 @@ protected:
     vec3d _mislAttachOffset;
     vec3d _mislLastAttachedPosition;
     TSndCarrier _mislClusterSoundCarrier;
+    // Stationary copy of SND_HIT used only while armor penetration keeps the
+    // projectile moving, preventing missile velocity from Doppler-shifting impact audio.
+    TSndCarrier _mislArmorPenetrationSoundCarrier;
     std::vector<int32_t> _mislChainHitGids;
     std::vector<int32_t> _mislArmorPenetratedGids;
     std::vector<int32_t> _mislDirectPushRecipientGids;

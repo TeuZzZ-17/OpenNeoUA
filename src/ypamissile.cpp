@@ -283,6 +283,7 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislAttachOffset = vec3d(0.0, 0.0, 0.0);
     _mislLastAttachedPosition = vec3d(0.0, 0.0, 0.0);
     _mislClusterSoundCarrier.Clear();
+    _mislArmorPenetrationSoundCarrier.Clear();
     _weaponTracer = World::TWeaponTracerConfig();
     _weaponTracerStarted = false;
     _weaponTracerVisualSeed = 0;
@@ -337,6 +338,8 @@ size_t NC_STACK_ypamissile::Deinit()
 {
     SFXEngine::SFXe.StopCarrier(&_mislClusterSoundCarrier);
     _mislClusterSoundCarrier.Clear();
+    SFXEngine::SFXe.StopCarrier(&_mislArmorPenetrationSoundCarrier);
+    _mislArmorPenetrationSoundCarrier.Clear();
 
     return NC_STACK_ypabact::Deinit();
 }
@@ -433,6 +436,9 @@ void NC_STACK_ypamissile::AI_layer1(update_msg *arg)
 
     if ( !_mislClusterSoundCarrier.Sounds.empty() )
         SFXEngine::SFXe.UpdateSoundCarrier(&_mislClusterSoundCarrier);
+
+    if ( !_mislArmorPenetrationSoundCarrier.Sounds.empty() )
+        SFXEngine::SFXe.UpdateSoundCarrier(&_mislArmorPenetrationSoundCarrier);
 
     UpdatePendingChainJump(arg);
 
@@ -1819,7 +1825,44 @@ void NC_STACK_ypamissile::RememberArmorPenetratedTarget(NC_STACK_ypabact *bct)
 
 void NC_STACK_ypamissile::ApplyArmorPenetrationUnitImpactFX()
 {
-    SFXEngine::SFXe.startSound(&_soundcarrier, World::TWeapProto::SND_HIT);
+    if ( World::TWeapProto::SND_HIT < _soundcarrier.Sounds.size() )
+    {
+        // A penetrating projectile stays in motion. Playing SND_HIT from the
+        // missile carrier would therefore apply Doppler to an impact sound that
+        // is stationary in the world. Mirror the configured hit source on a
+        // zero-velocity carrier fixed at the penetration point.
+        if ( _mislArmorPenetrationSoundCarrier.Sounds.empty() )
+        {
+            _mislArmorPenetrationSoundCarrier.Resize(1);
+
+            TSoundSource &src = _soundcarrier.Sounds[World::TWeapProto::SND_HIT];
+            TSoundSource &snd = _mislArmorPenetrationSoundCarrier.Sounds[0];
+
+            snd.PSample = src.PSample;
+            snd.PPFx = src.PPFx;
+            snd.PShkFx = src.PShkFx;
+            snd.PFragments = src.PFragments;
+            snd.Volume = src.Volume;
+            snd.Radius = src.Radius;
+            snd.FadeDuration = src.FadeDuration;
+            snd.CopyPitchConfig(src);
+            snd.AllowExtendedRate = src.AllowExtendedRate;
+            snd.PriorityBias = src.PriorityBias;
+            snd.IgnoreTimeScale = src.IgnoreTimeScale;
+            snd.SetLoop(src.IsLoop());
+            snd.SetFragmented(src.IsFragmented());
+            snd.SetPFx(src.IsPFx());
+            snd.SetShk(src.IsShk());
+        }
+
+        _mislArmorPenetrationSoundCarrier.Position = _position;
+        _mislArmorPenetrationSoundCarrier.Vector = vec3d(0.0, 0.0, 0.0);
+
+        SFXEngine::SFXe.ForceStopSource(&_mislArmorPenetrationSoundCarrier, 0);
+        SFXEngine::SFXe.startSound(&_mislArmorPenetrationSoundCarrier, 0);
+        SFXEngine::SFXe.UpdateSoundCarrier(&_mislArmorPenetrationSoundCarrier);
+    }
+
     StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE);
     StartDestFXByType(World::DestFX::FX_DEATH);
 }
@@ -3481,6 +3524,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
         FreezeProjectileVisualMotion();
         SetVP(_vp_dead);
 
+        SFXEngine::SFXe.StopCarrier(&_mislArmorPenetrationSoundCarrier);
         SFXEngine::SFXe.startSound(&_soundcarrier, 2);
 
         StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE);
@@ -3512,6 +3556,7 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
         FreezeProjectileVisualMotion();
         SetVP(_vp_megadeth);
 
+        SFXEngine::SFXe.StopCarrier(&_mislArmorPenetrationSoundCarrier);
         SFXEngine::SFXe.startSound(&_soundcarrier, 2);
 
         StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD);
