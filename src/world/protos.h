@@ -375,7 +375,7 @@ struct TVhclSound
 };
 
 constexpr size_t ROBO_GUN_MAX_COUNT = 20;
-constexpr size_t UNIT_COLL_MAX_COUNT = 32;  // OpenNeoUA: max compound collision spheres per vehicle
+constexpr size_t UNIT_COLL_MAX_COUNT = 256; // OpenNeoUA: parser safety cap for compound collision spheres
 
 struct TDamagedFXConfig
 {
@@ -753,12 +753,12 @@ struct TVhclProto
     int spawn_max_active = 0;
     int spawn_count = 1;
     int spawn_instant = 0;
-    int spawn_at_death_units = 0;
-    int16_t spawn_at_death_vehicle = 0;
-    int spawn_at_death_count = 1;
-    float spawn_at_death_random_pos = 0.0;
-    int spawn_at_death_instant = 0;
-    int spawn_at_death_immunity_time = 0;
+    int at_death_spawn_units = 0;
+    int16_t at_death_spawn_vehicle = 0;
+    int at_death_spawn_count = 1;
+    float at_death_spawn_random_pos = 0.0;
+    int at_death_spawn_instant = 0;
+    int at_death_spawn_immunity_time = 0;
     int proximity_defense_enable = 0;
     std::string proximity_defense_icon;
     int proximity_defense_weapon = 0;
@@ -831,9 +831,12 @@ struct TVhclProto
     int8_t radar = 0;
     float push_resistance = 0.0; // OpenNeoUA custom: target-side resistance to push / aoe_unit_push
     bool has_push_resistance = false; // true only when push_resistance is explicitly authored
-    float push_at_death_force = 0.0f; // OpenNeoUA custom: 0..10 radial push intensity emitted on actual vehicle death
-    float push_at_death_radius = 0.0f;
-    int push_at_death_falloff = 0;
+    float at_death_push_force = 0.0f; // OpenNeoUA custom: 0..10 radial push intensity emitted on actual vehicle death
+    float at_death_push_radius = 0.0f; // 3D radius used only by the at-death push effect
+    int at_death_push_falloff = 0; // Linear distance falloff used only by the at-death push effect
+    int at_death_energy_drain = 0; // Absolute energy removed from nearby units on death; 0 disables it
+    float at_death_energy_drain_radius = 0.0f; // 3D radius used only by the at-death energy drain
+    int at_death_energy_drain_falloff = 0; // Linear distance falloff used only by the at-death energy drain
     float mass = 0.0;
     float force = 0.0;
     float airconst = 0.0;

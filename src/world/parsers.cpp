@@ -2264,12 +2264,18 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "job_fightgun") ||
            !StriCmp(p1, "job_conquer") ||
            !StriCmp(p1, "job_reconnoitre") ||
-           !StriCmp(p1, "spawn_at_death_units") ||
-           !StriCmp(p1, "spawn_at_death_vehicle") ||
-           !StriCmp(p1, "spawn_at_death_count") ||
-           !StriCmp(p1, "spawn_at_death_random_pos") ||
-           !StriCmp(p1, "spawn_at_death_instant") ||
-           !StriCmp(p1, "spawn_at_death_immunity_time");
+           !StriCmp(p1, "at_death_spawn_units") ||
+           !StriCmp(p1, "at_death_spawn_vehicle") ||
+           !StriCmp(p1, "at_death_spawn_count") ||
+           !StriCmp(p1, "at_death_spawn_random_pos") ||
+           !StriCmp(p1, "at_death_spawn_instant") ||
+           !StriCmp(p1, "at_death_spawn_immunity_time") ||
+           !StriCmp(p1, "at_death_push_force") ||
+           !StriCmp(p1, "at_death_push_radius") ||
+           !StriCmp(p1, "at_death_push_falloff") ||
+           !StriCmp(p1, "at_death_energy_drain") ||
+           !StriCmp(p1, "at_death_energy_drain_radius") ||
+           !StriCmp(p1, "at_death_energy_drain_falloff");
 }
 
 
@@ -2545,7 +2551,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         else if ( !StriCmp(p2, "mimic") )
         {
             // OpenNeoUA custom: runtime shell that copies one vehicle enabled by the
-            // current level, then keeps this proto's spawn_at_death_* reveal data.
+            // current level, then keeps this proto's at_death_spawn_* reveal data.
             _vhcl->model_id = BACT_TYPES_TANK;
             _vhcl->combat_class = VEHICLE_COMBAT_CLASS_UNKNOWN;
             _vhcl->is_mimic = 1;
@@ -2785,17 +2791,30 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->push_resistance = Clamp01(parser.stof(p2, 0));
         _vhcl->has_push_resistance = true;
     }
-    else if ( !StriCmp(p1, "push_at_death_force") )
+    else if ( !StriCmp(p1, "at_death_push_force") )
     {
-        _vhcl->push_at_death_force = ClampPushIntensity(parser.stof(p2, 0));
+        _vhcl->at_death_push_force = ClampPushIntensity(parser.stof(p2, 0));
     }
-    else if ( !StriCmp(p1, "push_at_death_radius") )
+    else if ( !StriCmp(p1, "at_death_push_radius") )
     {
-        _vhcl->push_at_death_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _vhcl->at_death_push_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     }
-    else if ( !StriCmp(p1, "push_at_death_falloff") )
+    else if ( !StriCmp(p1, "at_death_push_falloff") )
     {
-        _vhcl->push_at_death_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
+        _vhcl->at_death_push_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
+    }
+    else if ( !StriCmp(p1, "at_death_energy_drain") )
+    {
+        int drain = parser.stol(p2, NULL, 0);
+        _vhcl->at_death_energy_drain = drain > 0 ? drain : 0;
+    }
+    else if ( !StriCmp(p1, "at_death_energy_drain_radius") )
+    {
+        _vhcl->at_death_energy_drain_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    }
+    else if ( !StriCmp(p1, "at_death_energy_drain_falloff") )
+    {
+        _vhcl->at_death_energy_drain_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
@@ -3069,16 +3088,16 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->spawn_instant = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "spawn_at_death_units") )
+    else if ( !StriCmp(p1, "at_death_spawn_units") )
     {
-        _vhcl->spawn_at_death_units = parser.stol(p2, NULL, 0) ? 1 : 0;
+        _vhcl->at_death_spawn_units = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "spawn_at_death_vehicle") )
+    else if ( !StriCmp(p1, "at_death_spawn_vehicle") )
     {
         int vehicleId = parser.stol(p2, NULL, 0);
-        _vhcl->spawn_at_death_vehicle = vehicleId > 0 ? vehicleId : 0;
+        _vhcl->at_death_spawn_vehicle = vehicleId > 0 ? vehicleId : 0;
     }
-    else if ( !StriCmp(p1, "spawn_at_death_count") )
+    else if ( !StriCmp(p1, "at_death_spawn_count") )
     {
         int count = parser.stol(p2, NULL, 0);
 
@@ -3087,21 +3106,21 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         else if ( count > 8 )
             count = 8;
 
-        _vhcl->spawn_at_death_count = count;
+        _vhcl->at_death_spawn_count = count;
     }
-    else if ( !StriCmp(p1, "spawn_at_death_random_pos") )
+    else if ( !StriCmp(p1, "at_death_spawn_random_pos") )
     {
         float radius = parser.stof(p2, 0);
-        _vhcl->spawn_at_death_random_pos = radius > 0.0 ? radius : 0.0;
+        _vhcl->at_death_spawn_random_pos = radius > 0.0 ? radius : 0.0;
     }
-    else if ( !StriCmp(p1, "spawn_at_death_instant") )
+    else if ( !StriCmp(p1, "at_death_spawn_instant") )
     {
-        _vhcl->spawn_at_death_instant = parser.stol(p2, NULL, 0) ? 1 : 0;
+        _vhcl->at_death_spawn_instant = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "spawn_at_death_immunity_time") )
+    else if ( !StriCmp(p1, "at_death_spawn_immunity_time") )
     {
         int time = parser.stol(p2, NULL, 0);
-        _vhcl->spawn_at_death_immunity_time = time > 0 ? time : 0;
+        _vhcl->at_death_spawn_immunity_time = time > 0 ? time : 0;
     }
     else if ( !StriCmp(p1, "snd_mimic_sample") )
     {
@@ -4253,12 +4272,12 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->spawn_max_active = 0;
         _vhcl->spawn_count = 1;
         _vhcl->spawn_instant = 0;
-        _vhcl->spawn_at_death_units = 0;
-        _vhcl->spawn_at_death_vehicle = 0;
-        _vhcl->spawn_at_death_count = 1;
-        _vhcl->spawn_at_death_random_pos = 0.0;
-        _vhcl->spawn_at_death_instant = 0;
-        _vhcl->spawn_at_death_immunity_time = 0;
+        _vhcl->at_death_spawn_units = 0;
+        _vhcl->at_death_spawn_vehicle = 0;
+        _vhcl->at_death_spawn_count = 1;
+        _vhcl->at_death_spawn_random_pos = 0.0;
+        _vhcl->at_death_spawn_instant = 0;
+        _vhcl->at_death_spawn_immunity_time = 0;
         _vhcl->proximity_defense_enable = 0;
         _vhcl->proximity_defense_icon.clear();
         _vhcl->proximity_defense_weapon = 0;
@@ -4292,9 +4311,12 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->kill_after_shot = 0;
         _vhcl->push_resistance = 0.0;
         _vhcl->has_push_resistance = false;
-        _vhcl->push_at_death_force = 0.0f;
-        _vhcl->push_at_death_radius = 0.0f;
-        _vhcl->push_at_death_falloff = 0;
+        _vhcl->at_death_push_force = 0.0f;
+        _vhcl->at_death_push_radius = 0.0f;
+        _vhcl->at_death_push_falloff = 0;
+        _vhcl->at_death_energy_drain = 0;
+        _vhcl->at_death_energy_drain_radius = 0.0f;
+        _vhcl->at_death_energy_drain_falloff = 0;
         _vhcl->mass = 400.0;
         _vhcl->force = 5000.0;
         _vhcl->airconst = 80.0;

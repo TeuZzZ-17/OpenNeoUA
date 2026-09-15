@@ -2656,7 +2656,7 @@ public:
     void debug_draw_coll_spheres();
     void ExpireDebugAoeRings();
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
-    void DebugAddDeathPushSphere(const vec3d &pos, float radius);
+    void DebugAddAtDeathSphere(const vec3d &pos, float radius);
 
     // OpenNeoUA custom: artillery shell bombardment markers + manual map-click control.
     void AddArtilleryShellMarker(const vec3d &pos, float radius, int owner, uint32_t sourceGid, const std::string &markerPath, bool pending, int lingerMs);

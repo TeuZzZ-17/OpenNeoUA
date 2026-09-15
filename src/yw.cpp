@@ -4388,22 +4388,27 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_spawn_count = vhcl.spawn_count > 0 ? vhcl.spawn_count : 1;
         bacto->_spawn_instant = vhcl.spawn_instant ? 1 : 0;
         bacto->_spawn_last_time = 0;
-        bacto->_spawn_at_death_units = deathProto.spawn_at_death_units;
-        bacto->_spawn_at_death_vehicle = deathProto.spawn_at_death_vehicle;
-        bacto->_spawn_at_death_count = deathProto.spawn_at_death_count > 0 ? deathProto.spawn_at_death_count : 1;
-        if ( bacto->_spawn_at_death_count > 8 )
-            bacto->_spawn_at_death_count = 8;
-        bacto->_spawn_at_death_random_pos = deathProto.spawn_at_death_random_pos > 0.0 ? deathProto.spawn_at_death_random_pos : 0.0;
-        bacto->_spawn_at_death_instant = deathProto.spawn_at_death_instant ? 1 : 0;
-        bacto->_spawn_at_death_immunity_time = deathProto.spawn_at_death_immunity_time > 0 ? deathProto.spawn_at_death_immunity_time : 0;
-        bacto->_spawn_at_death_done = false;
-        bacto->_spawn_at_death_protection_end_time = 0;
-        bacto->_spawn_at_death_restore_vulnerable = false;
-        bacto->_push_at_death_force = deathProto.push_at_death_force > 0.0f
-            ? deathProto.push_at_death_force : 0.0f;
-        bacto->_push_at_death_radius = deathProto.push_at_death_radius > 0.0f
-            ? deathProto.push_at_death_radius : 0.0f;
-        bacto->_push_at_death_falloff = deathProto.push_at_death_falloff ? 1 : 0;
+        bacto->_at_death_spawn_units = deathProto.at_death_spawn_units;
+        bacto->_at_death_spawn_vehicle = deathProto.at_death_spawn_vehicle;
+        bacto->_at_death_spawn_count = deathProto.at_death_spawn_count > 0 ? deathProto.at_death_spawn_count : 1;
+        if ( bacto->_at_death_spawn_count > 8 )
+            bacto->_at_death_spawn_count = 8;
+        bacto->_at_death_spawn_random_pos = deathProto.at_death_spawn_random_pos > 0.0 ? deathProto.at_death_spawn_random_pos : 0.0;
+        bacto->_at_death_spawn_instant = deathProto.at_death_spawn_instant ? 1 : 0;
+        bacto->_at_death_spawn_immunity_time = deathProto.at_death_spawn_immunity_time > 0 ? deathProto.at_death_spawn_immunity_time : 0;
+        bacto->_at_death_spawn_done = false;
+        bacto->_at_death_spawn_protection_end_time = 0;
+        bacto->_at_death_spawn_restore_vulnerable = false;
+        bacto->_at_death_push_force = deathProto.at_death_push_force > 0.0f
+            ? deathProto.at_death_push_force : 0.0f;
+        bacto->_at_death_push_radius = deathProto.at_death_push_radius > 0.0f
+            ? deathProto.at_death_push_radius : 0.0f;
+        bacto->_at_death_push_falloff = deathProto.at_death_push_falloff ? 1 : 0;
+        bacto->_at_death_energy_drain = deathProto.at_death_energy_drain > 0
+            ? deathProto.at_death_energy_drain : 0;
+        bacto->_at_death_energy_drain_radius = deathProto.at_death_energy_drain_radius > 0.0f
+            ? deathProto.at_death_energy_drain_radius : 0.0f;
+        bacto->_at_death_energy_drain_falloff = deathProto.at_death_energy_drain_falloff ? 1 : 0;
         bacto->_carrier_spawn_root_gid = 0;
         bacto->_carrier_spawn_root_vehicle = 0;
         bacto->_carrier_spawned_gids.clear();
