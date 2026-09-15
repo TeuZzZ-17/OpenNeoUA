@@ -2435,16 +2435,16 @@ static bool ypabact_IsSpawnAtDeathPositionValid(NC_STACK_ypabact *parent, const 
 
 static bool ypabact_FindSpawnAtDeathPosition(NC_STACK_ypabact *parent, vec3d *outPos)
 {
-    int attempts = parent->_spawn_at_death_random_pos > 0.0 ? 8 : 1;
+    int attempts = parent->_at_death_spawn_random_pos > 0.0 ? 8 : 1;
 
     for (int i = 0; i < attempts; i++)
     {
         vec3d pos = parent->_position;
 
-        if ( parent->_spawn_at_death_random_pos > 0.0 )
+        if ( parent->_at_death_spawn_random_pos > 0.0 )
         {
             float angle = ((float)rand() / (float)RAND_MAX) * (2.0 * C_PI);
-            float dist = ((float)rand() / (float)RAND_MAX) * parent->_spawn_at_death_random_pos;
+            float dist = ((float)rand() / (float)RAND_MAX) * parent->_at_death_spawn_random_pos;
 
             pos.x += cos(angle) * dist;
             pos.z += sin(angle) * dist;
@@ -2457,7 +2457,7 @@ static bool ypabact_FindSpawnAtDeathPosition(NC_STACK_ypabact *parent, vec3d *ou
         }
     }
 
-    if ( parent->_spawn_at_death_random_pos > 0.0 && ypabact_IsSpawnAtDeathPositionValid(parent, parent->_position) )
+    if ( parent->_at_death_spawn_random_pos > 0.0 && ypabact_IsSpawnAtDeathPositionValid(parent, parent->_position) )
     {
         *outPos = parent->_position;
         return true;
@@ -2471,24 +2471,24 @@ static void ypabact_EnableSpawnAtDeathProtection(NC_STACK_ypabact *unit, int imm
     if ( !unit || immunityTime <= 0 )
         return;
 
-    unit->_spawn_at_death_protection_end_time = unit->_clock + immunityTime;
-    unit->_spawn_at_death_restore_vulnerable = !unit->_invulnerable;
+    unit->_at_death_spawn_protection_end_time = unit->_clock + immunityTime;
+    unit->_at_death_spawn_restore_vulnerable = !unit->_invulnerable;
     unit->_invulnerable = true;
 }
 
 static void ypabact_UpdateSpawnAtDeathProtection(NC_STACK_ypabact *unit)
 {
-    if ( !unit || unit->_spawn_at_death_protection_end_time <= 0 )
+    if ( !unit || unit->_at_death_spawn_protection_end_time <= 0 )
         return;
 
-    if ( unit->_clock < unit->_spawn_at_death_protection_end_time )
+    if ( unit->_clock < unit->_at_death_spawn_protection_end_time )
         return;
 
-    if ( unit->_spawn_at_death_restore_vulnerable )
+    if ( unit->_at_death_spawn_restore_vulnerable )
         unit->_invulnerable = false;
 
-    unit->_spawn_at_death_protection_end_time = 0;
-    unit->_spawn_at_death_restore_vulnerable = false;
+    unit->_at_death_spawn_protection_end_time = 0;
+    unit->_at_death_spawn_restore_vulnerable = false;
 }
 
 static NC_STACK_yparobo *ypabact_GetSpawnAtDeathOwnerRobo(NC_STACK_ypabact *parent)
@@ -2512,7 +2512,7 @@ static NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent
         return NULL;
 
     ypaworld_arg146 arg146;
-    arg146.vehicle_id = parent->_spawn_at_death_vehicle;
+    arg146.vehicle_id = parent->_at_death_spawn_vehicle;
     arg146.pos = pos;
 
     NC_STACK_ypabact *unit = world->ypaworld_func146(&arg146);
@@ -2523,7 +2523,7 @@ static NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent
     unit->_carrier_spawn_root_gid = 0;
     unit->_carrier_spawn_root_vehicle = 0;
     unit->_aggr = parent->_aggr;
-    ypabact_EnableSpawnAtDeathProtection(unit, parent->_spawn_at_death_immunity_time);
+    ypabact_EnableSpawnAtDeathProtection(unit, parent->_at_death_spawn_immunity_time);
 
     if ( unit->_spawn_units )
         unit->_spawn_last_time = unit->_clock > 0 ? unit->_clock : 1;
@@ -2544,7 +2544,7 @@ static NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent
     target.tgt_pos = pos;
     unit->SetTarget(&target);
 
-    if ( !parent->_spawn_at_death_instant )
+    if ( !parent->_at_death_spawn_instant )
     {
         setState_msg state;
         state.setFlags = 0;
@@ -2575,28 +2575,28 @@ static void ypabact_AttachSpawnAtDeathLeader(NC_STACK_ypabact *parent, NC_STACK_
 static void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
 {
     if ( !parent ||
-         parent->_spawn_at_death_done ||
-         !parent->_spawn_at_death_units ||
+         parent->_at_death_spawn_done ||
+         !parent->_at_death_spawn_units ||
          parent->_bact_type == BACT_TYPES_MISSLE ||
          parent->_energy > 0 ||
          (parent->_status_flg & BACT_STFLAG_CLEAN) )
         return;
 
-    parent->_spawn_at_death_done = true;
+    parent->_at_death_spawn_done = true;
 
     NC_STACK_ypaworld *world = parent->getBACT_pWorld();
     if ( !world || world->_isNetGame )
         return;
 
     const std::vector<World::TVhclProto> &protos = world->GetVhclProtos();
-    if ( parent->_spawn_at_death_vehicle <= 0 || (size_t)parent->_spawn_at_death_vehicle >= protos.size() )
+    if ( parent->_at_death_spawn_vehicle <= 0 || (size_t)parent->_at_death_spawn_vehicle >= protos.size() )
         return;
 
-    const World::TVhclProto &proto = protos[parent->_spawn_at_death_vehicle];
+    const World::TVhclProto &proto = protos[parent->_at_death_spawn_vehicle];
     if ( proto.model_id == BACT_TYPES_NOPE )
         return;
 
-    int spawnCount = parent->_spawn_at_death_count > 0 ? parent->_spawn_at_death_count : 1;
+    int spawnCount = parent->_at_death_spawn_count > 0 ? parent->_at_death_spawn_count : 1;
     if ( spawnCount > 8 )
         spawnCount = 8;
 
@@ -2840,18 +2840,21 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _spawn_count = 1;
     _spawn_instant = 0;
     _spawn_last_time = 0;
-    _spawn_at_death_units = 0;
-    _spawn_at_death_vehicle = 0;
-    _spawn_at_death_count = 1;
-    _spawn_at_death_random_pos = 0.0;
-    _spawn_at_death_instant = 0;
-    _spawn_at_death_immunity_time = 0;
-    _spawn_at_death_done = false;
-    _spawn_at_death_protection_end_time = 0;
-    _spawn_at_death_restore_vulnerable = false;
-    _push_at_death_force = 0.0f;
-    _push_at_death_radius = 0.0f;
-    _push_at_death_falloff = 0;
+    _at_death_spawn_units = 0;
+    _at_death_spawn_vehicle = 0;
+    _at_death_spawn_count = 1;
+    _at_death_spawn_random_pos = 0.0;
+    _at_death_spawn_instant = 0;
+    _at_death_spawn_immunity_time = 0;
+    _at_death_spawn_done = false;
+    _at_death_spawn_protection_end_time = 0;
+    _at_death_spawn_restore_vulnerable = false;
+    _at_death_push_force = 0.0f;
+    _at_death_push_radius = 0.0f;
+    _at_death_push_falloff = 0;
+    _at_death_energy_drain = 0;
+    _at_death_energy_drain_radius = 0.0f;
+    _at_death_energy_drain_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -3036,18 +3039,21 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _spawn_count = 1;
     _spawn_instant = 0;
     _spawn_last_time = 0;
-    _spawn_at_death_units = 0;
-    _spawn_at_death_vehicle = 0;
-    _spawn_at_death_count = 1;
-    _spawn_at_death_random_pos = 0.0;
-    _spawn_at_death_instant = 0;
-    _spawn_at_death_immunity_time = 0;
-    _spawn_at_death_done = false;
-    _spawn_at_death_protection_end_time = 0;
-    _spawn_at_death_restore_vulnerable = false;
-    _push_at_death_force = 0.0f;
-    _push_at_death_radius = 0.0f;
-    _push_at_death_falloff = 0;
+    _at_death_spawn_units = 0;
+    _at_death_spawn_vehicle = 0;
+    _at_death_spawn_count = 1;
+    _at_death_spawn_random_pos = 0.0;
+    _at_death_spawn_instant = 0;
+    _at_death_spawn_immunity_time = 0;
+    _at_death_spawn_done = false;
+    _at_death_spawn_protection_end_time = 0;
+    _at_death_spawn_restore_vulnerable = false;
+    _at_death_push_force = 0.0f;
+    _at_death_push_radius = 0.0f;
+    _at_death_push_falloff = 0;
+    _at_death_energy_drain = 0;
+    _at_death_energy_drain_radius = 0.0f;
+    _at_death_energy_drain_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -8024,12 +8030,12 @@ void NC_STACK_ypabact::CopyWaypointsStuff( NC_STACK_ypabact *bact)
     }
 }
 
-static bool ypabact_IsDeathPushTarget(const NC_STACK_ypabact *source,
-                                      const NC_STACK_ypabact *target)
+static bool ypabact_IsAtDeathEffectTarget(const NC_STACK_ypabact *source,
+                                           const NC_STACK_ypabact *target)
 {
     return source && target && source != target &&
+           target->_bact_type != BACT_TYPES_MISSLE &&
            target->_energy > 0 && target->_energy_max > 0 &&
-           target->CanReceiveConfiguredPush() &&
            target->_status != BACT_STATUS_DEAD &&
            target->_status != BACT_STATUS_CREATE &&
            target->_status != BACT_STATUS_BEAM &&
@@ -8037,27 +8043,33 @@ static bool ypabact_IsDeathPushTarget(const NC_STACK_ypabact *source,
                                     BACT_STFLAG_CLEAN | BACT_STFLAG_NORENDER));
 }
 
-static void ypabact_ApplyConfiguredDeathPush(NC_STACK_ypabact *source)
+static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
 {
     NC_STACK_ypaworld *world = source ? source->getBACT_pWorld() : NULL;
-    if ( !world || world->_isNetGame ||
-         source->_push_at_death_force <= 0.0f ||
-         source->_push_at_death_radius <= 0.0f )
-    {
+    const bool hasPush = source && source->_at_death_push_force > 0.0f &&
+                         source->_at_death_push_radius > 0.0f;
+    const bool hasEnergyDrain = source && source->_at_death_energy_drain > 0 &&
+                                source->_at_death_energy_drain_radius > 0.0f;
+    if ( !world || world->_isNetGame || (!hasPush && !hasEnergyDrain) )
         return;
-    }
 
     const vec3d origin = source->_position;
-    const float radius = source->_push_at_death_radius;
-    const float radiusSq = radius * radius;
-    if ( !isfinite(radiusSq) )
+    const float pushRadius = hasPush ? source->_at_death_push_radius : 0.0f;
+    const float energyDrainRadius = hasEnergyDrain ? source->_at_death_energy_drain_radius : 0.0f;
+    const float searchRadius = std::max(pushRadius, energyDrainRadius);
+    const float searchRadiusSq = searchRadius * searchRadius;
+    if ( !isfinite(searchRadiusSq) )
         return;
 
-    // F10 debug: keep the exact push_at_death_radius visible for ~3 seconds
-    // after the source unit dies. Debug-only; it has no gameplay effect.
-    world->DebugAddDeathPushSphere(origin, radius);
+    // F10 debug: preserve each configured at-death effect volume after the source disappears.
+    if ( hasPush )
+        world->DebugAddAtDeathSphere(origin, pushRadius);
+    if ( hasEnergyDrain )
+        world->DebugAddAtDeathSphere(origin, energyDrainRadius);
 
-    const int sectorRadius = (int)(radius / World::CVSectorLength) + 2;
+    const float pushRadiusSq = pushRadius * pushRadius;
+    const float energyDrainRadiusSq = energyDrainRadius * energyDrainRadius;
+    const int sectorRadius = (int)(searchRadius / World::CVSectorLength) + 2;
     const Common::Point center = World::PositionToSectorID(origin);
     std::unordered_set<NC_STACK_ypabact *> visited;
 
@@ -8071,30 +8083,56 @@ static void ypabact_ApplyConfiguredDeathPush(NC_STACK_ypabact *source)
 
             for ( NC_STACK_ypabact *target : world->SectorAt(cellId).unitsList.safe_iter() )
             {
-                if ( !ypabact_IsDeathPushTarget(source, target) ||
+                if ( !ypabact_IsAtDeathEffectTarget(source, target) ||
                      !visited.insert(target).second )
                 {
                     continue;
                 }
 
-                vec3d delta = target->_position - origin;
+                const vec3d delta = target->_position - origin;
                 const float distanceSq = delta.dot(delta);
-                if ( !isfinite(distanceSq) || distanceSq <= 0.001f ||
-                     distanceSq > radiusSq )
-                {
+                if ( !isfinite(distanceSq) || distanceSq > searchRadiusSq )
                     continue;
+
+                const float distance = distanceSq > 0.0f ? sqrtf(distanceSq) : 0.0f;
+
+                if ( hasEnergyDrain && distanceSq <= energyDrainRadiusSq &&
+                     !target->IsInvulnerableToDamage() )
+                {
+                    const float energyDrainFalloff = World::AoePushFalloffFactor(
+                        distance, energyDrainRadius,
+                        source->_at_death_energy_drain_falloff != 0);
+                    const int drain = (int)ceilf(
+                        (float)source->_at_death_energy_drain * energyDrainFalloff);
+                    if ( drain > 0 )
+                    {
+                        const int previousEnergy = target->_energy;
+                        target->_energy = std::max(0, previousEnergy - drain);
+                        if ( previousEnergy > 0 && target->_energy <= 0 )
+                        {
+                            target->_killer = source;
+                            if ( source->_owner > World::OWNER_0 &&
+                                 source->_owner != target->_owner )
+                            {
+                                target->_killer_owner = source->_owner;
+                            }
+                        }
+                    }
                 }
 
-                const float distance = sqrtf(distanceSq);
-                const float falloff = World::AoePushFalloffFactor(
-                    distance, radius, source->_push_at_death_falloff != 0);
-                const float appliedForce =
-                    source->_push_at_death_force *
-                    falloff *
-                    target->GetPushResistanceMultiplier();
+                if ( hasPush && distanceSq <= pushRadiusSq &&
+                     target->CanReceiveConfiguredPush() && distance > 0.001f )
+                {
+                    const float pushFalloff = World::AoePushFalloffFactor(
+                        distance, pushRadius, source->_at_death_push_falloff != 0);
+                    const float appliedForce =
+                        source->_at_death_push_force *
+                        pushFalloff *
+                        target->GetPushResistanceMultiplier();
 
-                if ( appliedForce > 0.0f )
-                    target->ApplyConfiguredPush(delta / distance, appliedForce);
+                    if ( appliedForce > 0.0f )
+                        target->ApplyConfiguredPush(delta / distance, appliedForce);
+                }
             }
         }
     }
@@ -8395,7 +8433,7 @@ void NC_STACK_ypabact::Die()
     _secndTtype = BACT_TGT_TYPE_NONE;
     _primTtype = BACT_TGT_TYPE_NONE;
 
-    ypabact_ApplyConfiguredDeathPush(this);
+    ypabact_ApplyConfiguredAtDeathEffects(this);
     ypabact_FireProximityDefenseAtDeath(this);
     ypabact_TrySpawnAtDeath(this);
 
@@ -17140,18 +17178,21 @@ void NC_STACK_ypabact::Renew()
     _spawn_count = 1;
     _spawn_instant = 0;
     _spawn_last_time = 0;
-    _spawn_at_death_units = 0;
-    _spawn_at_death_vehicle = 0;
-    _spawn_at_death_count = 1;
-    _spawn_at_death_random_pos = 0.0;
-    _spawn_at_death_instant = 0;
-    _spawn_at_death_immunity_time = 0;
-    _spawn_at_death_done = false;
-    _spawn_at_death_protection_end_time = 0;
-    _spawn_at_death_restore_vulnerable = false;
-    _push_at_death_force = 0.0f;
-    _push_at_death_radius = 0.0f;
-    _push_at_death_falloff = 0;
+    _at_death_spawn_units = 0;
+    _at_death_spawn_vehicle = 0;
+    _at_death_spawn_count = 1;
+    _at_death_spawn_random_pos = 0.0;
+    _at_death_spawn_instant = 0;
+    _at_death_spawn_immunity_time = 0;
+    _at_death_spawn_done = false;
+    _at_death_spawn_protection_end_time = 0;
+    _at_death_spawn_restore_vulnerable = false;
+    _at_death_push_force = 0.0f;
+    _at_death_push_radius = 0.0f;
+    _at_death_push_falloff = 0;
+    _at_death_energy_drain = 0;
+    _at_death_energy_drain_radius = 0.0f;
+    _at_death_energy_drain_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
