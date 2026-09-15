@@ -561,7 +561,10 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                     return;
                 }
 
-                SDL_SetSurfaceBlendMode(tmp, _solidFont ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+                SDL_SetSurfaceBlendMode(tmp,
+                    txt->opacity == 255 && _solidFont ? SDL_BLENDMODE_NONE : SDL_BLENDMODE_BLEND);
+                if ( txt->opacity != 255 )
+                    SDL_SetSurfaceAlphaMod(tmp, txt->opacity);
 
                 SDL_Rect want;
                 want.w = tmp->w;
@@ -593,6 +596,9 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                     SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND);
                 }
 
+                if ( txt->opacity != 255 )
+                    SDL_SetSurfaceAlphaMod(tmp, txt->opacity);
+
                 want.w = tmp->w;
                 want.h = tmp->h;
                 want.x = p1 + 1;
@@ -616,6 +622,7 @@ void GFXEngine::AddScreenText(const std::string &string, int p1, int p2, int p3,
     entry.p3 = p3;
     entry.p4 = p4;
     entry.flag = flag;
+    entry.opacity = (flag & 0x20) ? 255 : _screenTextOpacity;
 
     _font.entries.push_back(std::move(entry));
 }

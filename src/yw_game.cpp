@@ -6594,7 +6594,10 @@ int ypaworld_func64__sub4(NC_STACK_ypaworld *yw, base_64arg *arg)
 
             FontUA::set_end(&v10);
 
+            GFX::Engine.SetScreenTextOpacity((uint8_t)System::IniConf::GetUiOpacity(
+                System::IniConf::UiTextOpacity, System::IniConf::UiTextDefaultOpacity));
             GFX::Engine.ProcessDrawSeq(v10);
+            GFX::Engine.SetScreenTextOpacity(255);
         }
 
         SFXEngine::SFXe.sb_0x424c74();

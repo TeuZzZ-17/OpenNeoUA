@@ -12,6 +12,7 @@ public:
     static void Init();
     static bool ReadFromNucleusIni();
     static bool ReadFromIni(const std::string &fname);
+    static int GetUiOpacity(Common::Ini::Key &key, int fallback);
 
     static Common::Ini::Key GfxDither;
     static Common::Ini::Key GfxFilter;
@@ -359,10 +360,18 @@ public:
     static constexpr int UiGenesisListDefaultWidth = 180;
     static constexpr int UiGenesisListDefaultHeight = 220;
     static constexpr int UiGenesisListDefaultOpacity = 200;
+    static constexpr int UiMapDefaultOpacity = 0;
+    static constexpr int UiSquadronManagerDefaultOpacity = 128;
+    static constexpr int UiHudBarsDefaultOpacity = 255;
+    static constexpr int UiTextDefaultOpacity = 255;
     static Common::Ini::Key UiGenesisListX; // OpenNeoUA: Genesis/Creation list X position; default 0
     static Common::Ini::Key UiGenesisListWidth; // OpenNeoUA: Genesis/Creation list width; default 180
     static Common::Ini::Key UiGenesisListHeight; // OpenNeoUA: Genesis/Creation list maximum height in pixels; default 220
     static Common::Ini::Key UiGenesisListOpacity; // OpenNeoUA: Genesis/Creation list background opacity 0..255; default 200
+    static Common::Ini::Key UiMapOpacity; // OpenNeoUA: in-mission strategic Map background opacity 0..255
+    static Common::Ini::Key UiSquadronManagerOpacity; // OpenNeoUA: in-mission Squadron Manager background opacity 0..255
+    static Common::Ini::Key UiHudBarsOpacity; // OpenNeoUA: in-mission fixed top/bottom HUD graphics opacity 0..255
+    static Common::Ini::Key UiTextOpacity; // OpenNeoUA: in-mission gameplay text/numbers opacity 0..255
 
 private:
     static Common::Ini::PKeyList _varList;
