@@ -9592,14 +9592,19 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
 
-        // Purple = per-vehicle push_at_death_radius. This is a true 3D sphere
-        // because the runtime distance test is also spherical.
-        if ( unit->_push_at_death_force > 0.0f &&
-             unit->_push_at_death_radius > 0.01f )
+        // Purple = configured per-vehicle at-death effect volumes.
+        // These are true 3D spheres because the runtime tests are also spherical.
+        if ( unit->_at_death_push_force > 0.0f && unit->_at_death_push_radius > 0.01f )
         {
-            drawRing(pos, unit->_push_at_death_radius, 0, 185, 80, 255);
-            drawRing(pos, unit->_push_at_death_radius, 1, 185, 80, 255);
-            drawRing(pos, unit->_push_at_death_radius, 2, 185, 80, 255);
+            drawRing(pos, unit->_at_death_push_radius, 0, 185, 80, 255);
+            drawRing(pos, unit->_at_death_push_radius, 1, 185, 80, 255);
+            drawRing(pos, unit->_at_death_push_radius, 2, 185, 80, 255);
+        }
+        if ( unit->_at_death_energy_drain > 0 && unit->_at_death_energy_drain_radius > 0.01f )
+        {
+            drawRing(pos, unit->_at_death_energy_drain_radius, 0, 185, 80, 255);
+            drawRing(pos, unit->_at_death_energy_drain_radius, 1, 185, 80, 255);
+            drawRing(pos, unit->_at_death_energy_drain_radius, 2, 185, 80, 255);
         }
 
         // --- GAMEPLAY RANGE RADII (single horizontal ring, distinct colors) ---
@@ -9725,9 +9730,9 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
         _debugAoeRings.erase(_debugAoeRings.begin());
 }
 
-void NC_STACK_ypaworld::DebugAddDeathPushSphere(const vec3d &pos, float radius)
+void NC_STACK_ypaworld::DebugAddAtDeathSphere(const vec3d &pos, float radius)
 {
-    // F10 only: preserve the exact death-push volume after the source unit disappears.
+    // F10 only: preserve the exact at-death effect volume after the source disappears.
     if ( !_showCollDebug || radius < 0.01f )
         return;
 
