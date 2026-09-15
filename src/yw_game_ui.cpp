@@ -59,6 +59,53 @@ static constexpr int BZDA_GEM_PRESS_CREATE = 0x800;
 namespace
 {
 
+static uint8_t yw_GetConfiguredUiOpacity(Common::Ini::Key &key, int fallback)
+{
+    return (uint8_t)System::IniConf::GetUiOpacity(key, fallback);
+}
+
+static bool yw_GetMapOpacityOverride(uint8_t *opacity)
+{
+    if ( !opacity || !System::IniConf::UiMapOpacity.WasSet )
+        return false;
+
+    const int value = System::IniConf::UiMapOpacity.Get<int32_t>();
+    if ( value < 0 || value > 255 )
+        return false;
+
+    *opacity = (uint8_t)value;
+    return true;
+}
+
+static uint8_t yw_GetMapOpacity()
+{
+    uint8_t opacity = 0;
+    return yw_GetMapOpacityOverride(&opacity) ? opacity : 0;
+}
+
+static uint8_t yw_GetSquadronManagerOpacity()
+{
+    return yw_GetConfiguredUiOpacity(System::IniConf::UiSquadronManagerOpacity,
+                                     System::IniConf::UiSquadronManagerDefaultOpacity);
+}
+
+static uint8_t yw_GetHudBarsOpacity()
+{
+    return yw_GetConfiguredUiOpacity(System::IniConf::UiHudBarsOpacity,
+                                     System::IniConf::UiHudBarsDefaultOpacity);
+}
+
+static uint8_t yw_GetGameplayTextOpacity()
+{
+    return yw_GetConfiguredUiOpacity(System::IniConf::UiTextOpacity,
+                                     System::IniConf::UiTextDefaultOpacity);
+}
+
+static uint8_t yw_MultiplyOpacity(uint8_t baseOpacity, uint8_t multiplier)
+{
+    return (uint8_t)(((uint32_t)baseOpacity * multiplier + 127U) / 255U);
+}
+
 constexpr int STATUS_ICON_MAX_COUNT = 8;
 constexpr int STATUS_ICON_SIZE = 16;
 constexpr int STATUS_ICON_SPACING = 2;
@@ -1323,7 +1370,7 @@ void create_squad_man(NC_STACK_ypaworld *yw)
     // Use the original titlebar close glyph: its built-in backing tile fits
     // the legacy window frame better than the map toolbar PNG.
     args.factionCloseVisual = false;
-    args.backgroundOpacity = 128;
+    args.backgroundOpacity = yw_GetSquadronManagerOpacity();
     args.wheelScroll = true;
 
     if ( squadron_manager.Init(yw, args) )
@@ -1569,7 +1616,33 @@ static const char *yw_MapToolbarIconName(int buttonId)
     case 5: return "energy";
     case 6: return "lock";
     case 9: return "marker";
+    case 18: return "zoom_in";
+    case 19: return "zoom_out";
     default: return NULL;
+    }
+}
+
+static constexpr uint32_t kMapToolbarZoomFlashMs = 160;
+
+static bool yw_IsMapToolbarZoomFlashActive(int buttonId)
+{
+    const uint32_t now = SDL_GetTicks();
+    switch ( buttonId )
+    {
+    case 18: return robo_map.zoomInFlashUntil > now;
+    case 19: return robo_map.zoomOutFlashUntil > now;
+    default: return false;
+    }
+}
+
+static void yw_FlashMapToolbarZoomButton(int buttonId)
+{
+    const uint32_t until = SDL_GetTicks() + kMapToolbarZoomFlashMs;
+    switch ( buttonId )
+    {
+    case 18: robo_map.zoomInFlashUntil = until; break;
+    case 19: robo_map.zoomOutFlashUntil = until; break;
+    default: break;
     }
 }
 
@@ -1711,7 +1784,8 @@ static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool act
         return;
 
     if ( buttonId != 0 && buttonId != 3 && buttonId != 4
-            && buttonId != 5 && buttonId != 6 && buttonId != 9 )
+            && buttonId != 5 && buttonId != 6 && buttonId != 9
+            && buttonId != 18 && buttonId != 19 )
         return;
 
     const ButtonBox &box = robo_map.buttons[buttonId];
@@ -1735,6 +1809,9 @@ static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool act
     // The old coloured corner frame was too visually aggressive and could
     // dominate the actual controls. Faction identity now lives inside the external
     // artwork itself; no extra lines are drawn around toolbar icons.
+    if ( buttonId == 18 || buttonId == 19 )
+        active = active || yw_IsMapToolbarZoomFlashActive(buttonId);
+
     if ( yw_RenderFactionToolbarIcon(yw, robo_map.x, robo_map.y,
                                     buttonId, active, box) )
         return;
@@ -1804,6 +1881,15 @@ static void yw_DrawMapToolbarGlyph(NC_STACK_ypaworld *yw, int buttonId, bool act
         yw_DrawMapToolbarLine(cx, cy + radius - 1, cx, cy + radius + 2);
         break;
     }
+
+    case 18: // zoom in
+    case 19: // zoom out
+    {
+        yw_DrawMapToolbarStroke(x0, cy, x1, cy, 3);
+        if ( buttonId == 18 )
+            yw_DrawMapToolbarStroke(cx, y0, cx, y1, 3);
+        break;
+    }
     }
 }
 
@@ -1823,6 +1909,8 @@ static void yw_RenderMapTitleToolbar(NC_STACK_ypaworld *yw)
     yw_DrawMapToolbarGlyph(yw, 5, (robo_map.field_1EC & 4) != 0);
     yw_DrawMapToolbarGlyph(yw, 6, robo_map.field_1ED == 1);
     yw_DrawMapToolbarGlyph(yw, 9, robo_map.markerMode);
+    yw_DrawMapToolbarGlyph(yw, 18, false);
+    yw_DrawMapToolbarGlyph(yw, 19, false);
 
     // The close control represents the currently open Map window.  Use the
     // illuminated faction variant for the entire lifetime of the window; when
@@ -3928,8 +4016,10 @@ void sb_0x4f8f64__sub3__sub1(NC_STACK_ypaworld *yw, const std::string &labl, int
         FontUA::set_center_xpos(cur, robo_map.field_200 + v9);
         FontUA::set_center_ypos(cur, robo_map.field_204 + v10);
 
+        FontUA::set_opacity(cur, yw_GetGameplayTextOpacity());
         for ( uint8_t c : labl )
             FontUA::store_s8(cur, c);
+        FontUA::set_opacity(cur, 255);
     }
 }
 
@@ -4394,10 +4484,54 @@ static SDL_Color yw_GetMapTitleBackgroundColor(NC_STACK_ypaworld *yw)
     return color;
 }
 
+static void yw_RenderMapBackground(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || robo_map.IsClosed() )
+        return;
+
+    const uint8_t opacity = yw_GetMapOpacity();
+    if ( opacity == 0 )
+        return;
+
+    SDL_Surface *surface = GFX::Engine.Screen();
+    if ( !surface || !surface->format )
+        return;
+
+    const int width = robo_map.w;
+    const int height = robo_map.h - robo_map.field_23C;
+    if ( width <= 0 || height <= 0 )
+        return;
+
+    SDL_Color color = yw_GetMapTitleBackgroundColor(yw);
+    color.a = opacity;
+
+    // Fill the complete map body below the titlebar. The legacy map/frame is
+    // rendered afterwards, so borders, scrollbars, grid and icons keep their
+    // original opacity while the empty side and bottom strips match the map.
+    SDL_Rect rect = {
+        robo_map.x,
+        robo_map.y + robo_map.field_23C,
+        width,
+        height
+    };
+
+    SDL_FillRect(surface, &rect,
+                 SDL_MapRGBA(surface->format, color.r, color.g, color.b, color.a));
+}
+
 static void yw_RenderNeutralMapLeftBorder(NC_STACK_ypaworld *yw)
 {
     if ( !yw || robo_map.IsClosed() || robo_map.field_244 <= 0 )
         return;
+
+    uint8_t mapOpacity = 0;
+    if ( yw_GetMapOpacityOverride(&mapOpacity) )
+    {
+        // The configurable background already fills this strip. Skipping the
+        // legacy opaque pass keeps it at exactly the same opacity as the rest
+        // of the map body, including the explicit 0 (fully transparent) case.
+        return;
+    }
 
     // Align the neutral body strip with the title and lower frame. The
     // renderer works on integral pixels, so one pixel is the smallest correction.
@@ -4517,7 +4651,7 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
 
     const int closeW = std::max(18, yw->_fontDefCloseW);
     const int toolW = std::max(18, std::min(24, yw->_fontH));
-    const int toolbarIds[] = {3, 4, 5, 6, 9};
+    const int toolbarIds[] = {3, 4, 5, 6, 9, 18, 19};
     const int toolCount = (int)(sizeof(toolbarIds) / sizeof(toolbarIds[0]));
     const int toolStart = std::max(0, robo_map.w - closeW - toolCount * toolW);
     const int toolbarOffsetX = 1;
@@ -5284,11 +5418,12 @@ void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
     robo_map.h = 2 * yw->_screenSize.y / 3;
     robo_map.field_1EE = 4;
     robo_map.field_1EC = 7;
-    robo_map.buttons.resize(18);
+    robo_map.buttons.resize(20);
 
     robo_map.cmdCommands.reserve(512);
     robo_map.cmdInclude = {&robo_map.t1_cmdbuf_1, &robo_map.t1_cmdbuf_2, &robo_map.t1_cmdbuf_3};
 
+    robo_map.preDraw = yw_RenderMapBackground;
     robo_map.postDraw = sb_0x4f8f64;
 
     if ( yw->_userRobo )
@@ -5309,6 +5444,8 @@ void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
     robo_map.field_1E8 = 0;
     robo_map.markerMode = true;
     robo_map.markerDragIndex = -1;
+    robo_map.zoomInFlashUntil = 0;
+    robo_map.zoomOutFlashUntil = 0;
     robo_map.maximized = false;
     robo_map.restoreRectValid = false;
     robo_map.customMarkers.clear();
@@ -6444,9 +6581,11 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
 
     FontUA::add_xpos(cur, -squadron_manager.field_2CC);
 
+    // The Genesis opacity controls the row background only. Vehicle/building
+    // icons remain at their original opacity, while names and prices continue
+    // through the independent gameplay text-opacity path.
     if ( backgroundOpacity != 255 )
-        FontUA::set_opacity(cur, backgroundOpacity);
-
+        FontUA::set_opacity(cur, 255);
     FormateColumnItem(yw, cur, 1, v24);
 
     if ( backgroundOpacity != 255 )
@@ -7038,6 +7177,7 @@ void ypaworld_func64__sub7__sub2__sub1(NC_STACK_ypaworld *yw)
     sub_4C3A54(yw);
 
     bzda.cmdCommands.clear();
+    FontUA::set_opacity(&bzda.cmdCommands, yw_GetHudBarsOpacity());
 
     if ( bzda.field_1D4 & 1 )
     {
@@ -7092,6 +7232,7 @@ void ypaworld_func64__sub7__sub2__sub1(NC_STACK_ypaworld *yw)
             ypaworld_func64__sub7__sub2__sub1__sub0(yw, &bzda.cmdCommands);
     }
 
+    FontUA::set_opacity(&bzda.cmdCommands, 255);
     FontUA::set_end(&bzda.cmdCommands);
 
     if ( gui_lstvw.IsOpen() )
@@ -8191,6 +8332,7 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
     if ( !v25 && a7 > 0.0 )
         v25 = 1;
 
+    FontUA::set_opacity(cur, yw_GetHudBarsOpacity());
     FontUA::select_tileset(cur, 30);
     FontUA::set_center_xpos(cur, x);
     FontUA::set_center_ypos(cur, y);
@@ -8224,6 +8366,7 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
 
     if ( !a8.empty() )
     {
+        FontUA::set_opacity(cur, yw_GetGameplayTextOpacity());
         FontUA::select_tileset(cur, 31);
 
         FontUA::set_center_xpos(cur, x + up_panel.field_1DC + 4);
@@ -8231,6 +8374,8 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
 
         cur->insert(cur->end(), a8.begin(), a8.end());
     }
+
+    FontUA::set_opacity(cur, 255);
 }
 
 void ypaworld_func64__sub7__sub7__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, int a3, int a4, int a5, int a6, float a7)
@@ -8520,7 +8665,8 @@ static void yw_RenderPlasmaCurrencyHud(NC_STACK_ypaworld *yw, CmdStream *cur)
 
     SDL_Color color = yw_GetFactionUiTextColor(yw);
     FontUA::select_tileset(cur, PLASMA_CURRENCY_HUD_FONT);
-    FontUA::set_opacity(cur, yw->GetPlasmaCurrencyHudOpacity());
+    FontUA::set_opacity(cur, yw_MultiplyOpacity(yw->GetPlasmaCurrencyHudOpacity(),
+                                               yw_GetGameplayTextOpacity()));
     FontUA::set_txtColor(cur, color.r, color.g, color.b);
     FontUA::set_center_ypos(cur, layout.textY);
 
@@ -8548,7 +8694,8 @@ static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw)
     {
         StatusIconRenderBitmap(yw, icon, layout.iconLeft, layout.iconTop,
                                layout.iconSize,
-                               yw->GetPlasmaCurrencyHudOpacity());
+                               yw_MultiplyOpacity(yw->GetPlasmaCurrencyHudOpacity(),
+                                                  yw_GetHudBarsOpacity()));
     }
 }
 
@@ -10423,7 +10570,7 @@ static void yw_RenderPlasmaCurrencyPopups(NC_STACK_ypaworld *yw, CmdStream *cur)
         SDL_Color color = yw_GetFactionUiTextColor(yw);
         color.a = opacity;
         FontUA::select_tileset(cur, 15);
-        FontUA::set_opacity(cur, opacity);
+        FontUA::set_opacity(cur, yw_MultiplyOpacity(opacity, yw_GetGameplayTextOpacity()));
         FontUA::set_txtColor(cur, color.r, color.g, color.b);
         FontUA::set_center_xpos(cur, contentLeft - yw->_screenSize.x / 2);
         FontUA::set_center_ypos(cur, contentTop - yw->_screenSize.y / 2);
@@ -11355,11 +11502,13 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             // The shared Zoom In/Out pair is contextual. While the tactical
             // map is open it belongs exclusively to the map, anywhere on screen.
             sub_4C1970(yw, 1);
+            yw_FlashMapToolbarZoomButton(18);
             inpt->HotKeyID = -1;
             break;
 
         case 17:
             sub_4C1970(yw, 2);
+            yw_FlashMapToolbarZoomButton(19);
             inpt->HotKeyID = -1;
             break;
 
@@ -11596,7 +11745,9 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                 }
             }
 
-            if ( winpt->selected_btnID > 1 && winpt->selected_btnID <= 9 )
+            if ( (winpt->selected_btnID > 1 && winpt->selected_btnID <= 9)
+                 || winpt->selected_btnID == 18
+                 || winpt->selected_btnID == 19 )
             {
                 if ( winpt->flag & TClickBoxInf::FLAG_BTN_DOWN )
                 {
@@ -11638,6 +11789,16 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                         robo_map.field_1EC |= 1;
 
                     sub_4C1970(yw, 0);
+                    break;
+
+                case 18:
+                    sub_4C1970(yw, 1);
+                    yw_FlashMapToolbarZoomButton(18);
+                    break;
+
+                case 19:
+                    sub_4C1970(yw, 2);
+                    yw_FlashMapToolbarZoomButton(19);
                     break;
 
                 case 4:
@@ -11732,6 +11893,14 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 
             case 6:
                 yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_LOCKVIEWER, 53);
+                break;
+
+            case 18:
+                yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_ZOOMIN, 16);
+                break;
+
+            case 19:
+                yw->SetShowingTooltipWithHotkey(Locale::TIP_MAP_ZOOMOUT, 17);
                 break;
 
             default:
@@ -11911,7 +12080,6 @@ void sub_4DA8DC(NC_STACK_ypaworld *yw, CmdStream *cur, int a4, int a3, const std
 
     FontUA::next_line(cur);
 }
-
 
 
 void ypaworld_func64__sub7__sub6__sub3(NC_STACK_ypaworld *yw, int a2, int a4)

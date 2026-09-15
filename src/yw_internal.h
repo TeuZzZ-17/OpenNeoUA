@@ -286,6 +286,8 @@ public:
     int restoreH = 0;
     std::vector<vec2d> customMarkers;
     int markerDragIndex = -1;
+    uint32_t zoomInFlashUntil = 0;
+    uint32_t zoomOutFlashUntil = 0;
 
     CmdStream t1_cmdbuf_1;
     CmdStream t1_cmdbuf_2;

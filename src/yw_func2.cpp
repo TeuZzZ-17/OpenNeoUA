@@ -441,6 +441,18 @@ static int IntFromString(std::string s, int fallback, int minValue, int maxValue
     }
 }
 
+static int UiOpacityPercentFromByte(int value)
+{
+    value = std::max(0, std::min(255, value));
+    return (value * 100 + 127) / 255;
+}
+
+static int UiOpacityByteFromPercent(int value)
+{
+    value = std::max(0, std::min(100, value));
+    return (value * 255 + 50) / 100;
+}
+
 static std::string HundredStorageValue(int value)
 {
     const bool negative = value < 0;
@@ -2098,6 +2110,13 @@ void UserData::AtmosphereOptionsLoad()
         atmosphereValues[ATMOPT_RENDER_SECTORS] = p_YW->getYW_visSectors();
     }
 
+    atmosphereValues[ATMOPT_INTERFACE_INTENSITY] =
+        UiOpacityPercentFromByte(System::IniConf::GetUiOpacity(
+            System::IniConf::UiHudBarsOpacity, System::IniConf::UiHudBarsDefaultOpacity));
+    atmosphereValues[ATMOPT_TEXT_OPACITY] =
+        UiOpacityPercentFromByte(System::IniConf::GetUiOpacity(
+            System::IniConf::UiTextOpacity, System::IniConf::UiTextDefaultOpacity));
+
     atmosphereSavedValues = atmosphereValues;
 
     for (int i = 0; i < ATMOPT_COUNT; ++i)
@@ -2128,6 +2147,8 @@ void UserData::UpdateAtmosphereOptionTexts()
             case ATMOPT_FOG_STRENGTH:
             case ATMOPT_DARK_STRENGTH:
             case ATMOPT_VHS_STRENGTH:
+            case ATMOPT_INTERFACE_INTENSITY:
+            case ATMOPT_TEXT_OPACITY:
                 text = std::to_string(atmosphereValues[i]) + "%";
                 break;
             case ATMOPT_EXPOSURE:
@@ -2217,6 +2238,13 @@ void UserData::AtmosphereOptionsApplyLive()
     System::IniConf::GfxRenderSectors.Value =
         std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
 
+    // These two controls affect only the active in-mission UI render path.
+    // Menus, briefing screens and shell UI remain at their authored opacity.
+    System::IniConf::UiHudBarsOpacity.Value =
+        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]);
+    System::IniConf::UiTextOpacity.Value =
+        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]);
+
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
     GFX::Engine.ReloadHorizonConfig();
@@ -2234,7 +2262,7 @@ void UserData::AtmosphereOptionsSave()
     if (!SavePaletteThemeToNucleusIni())
         ypa_log_out("WARNING: Could not save gfx.visual_filter to nucleus.ini\n");
 
-    const std::array<std::pair<const char *, std::string>, 16> values =
+    const std::array<std::pair<const char *, std::string>, 18> values =
     {{
         {"gfx.visual_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
         {"gfx.atmosphere_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH])},
@@ -2251,7 +2279,9 @@ void UserData::AtmosphereOptionsSave()
         {"game.world_ui_max_distance", std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE])},
         {"gfx.vhs_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH])},
         {"gfx.particles.limit", std::to_string(atmosphereValues[ATMOPT_PARTICLE_LIMIT])},
-        {"gfx.render_sectors", std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS])}
+        {"gfx.render_sectors", std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS])},
+        {"ui.hud_bars_opacity", std::to_string(UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]))},
+        {"ui.text_opacity", std::to_string(UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]))}
     }};
 
     for (const auto &entry : values)
@@ -2280,6 +2310,10 @@ void UserData::AtmosphereOptionsSave()
         std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
     if (p_YW)
         p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+    System::IniConf::UiHudBarsOpacity.Value =
+        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]);
+    System::IniConf::UiTextOpacity.Value =
+        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2344,6 +2378,10 @@ void UserData::AtmosphereOptionsCancel()
         std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
     if (p_YW)
         p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+    System::IniConf::UiHudBarsOpacity.Value =
+        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]);
+    System::IniConf::UiTextOpacity.Value =
+        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2369,7 +2407,9 @@ void UserData::AtmosphereOptionsReset()
         5700,
         60,
         YW_PARTICLE_LIMIT_UI_DEFAULT,
-        YW_RENDER_SECTORS_UI_DEFAULT
+        YW_RENDER_SECTORS_UI_DEFAULT,
+        100,
+        100
     }};
 
     confPaletteTheme = "Black_Wadi.pal";
