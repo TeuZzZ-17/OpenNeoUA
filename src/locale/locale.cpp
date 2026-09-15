@@ -438,6 +438,8 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_PLASMA_OBTAINED:             fallback = "Plasma Obtained"; break;
         case OUA_PARTICLE_LIMIT:              fallback = "Particle Limit"; break;
         case OUA_RENDER_SECTORS:              fallback = "Render Sectors"; break;
+        case OUA_INTERFACE_INTENSITY:          fallback = "Interface Intensity"; break;
+        case OUA_TEXT_OPACITY:                 fallback = "Text Opacity"; break;
         default: break;
     }
 

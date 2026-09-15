@@ -100,6 +100,10 @@ Common::Ini::Key IniConf::UiGenesisListX("ui.genesis_list_x", Common::Ini::KT_DI
 Common::Ini::Key IniConf::UiGenesisListWidth("ui.genesis_list_width", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultWidth);
 Common::Ini::Key IniConf::UiGenesisListHeight("ui.genesis_list_height", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultHeight);
 Common::Ini::Key IniConf::UiGenesisListOpacity("ui.genesis_list_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultOpacity);
+Common::Ini::Key IniConf::UiMapOpacity("ui.map_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiMapDefaultOpacity);
+Common::Ini::Key IniConf::UiSquadronManagerOpacity("ui.squadron_manager_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiSquadronManagerDefaultOpacity);
+Common::Ini::Key IniConf::UiHudBarsOpacity("ui.hud_bars_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiHudBarsDefaultOpacity);
+Common::Ini::Key IniConf::UiTextOpacity("ui.text_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiTextDefaultOpacity);
 
 
 // Input Engine
@@ -781,6 +785,10 @@ void IniConf::Init()
         , &UiGenesisListWidth
         , &UiGenesisListHeight
         , &UiGenesisListOpacity
+        , &UiMapOpacity
+        , &UiSquadronManagerOpacity
+        , &UiHudBarsOpacity
+        , &UiTextOpacity
     };
 }
 
@@ -792,6 +800,12 @@ bool IniConf::ReadFromNucleusIni()
 bool IniConf::ReadFromIni(const std::string &fname)
 {
     return Common::Ini::ParseIniFile(fname, &_varList);
+}
+
+int IniConf::GetUiOpacity(Common::Ini::Key &key, int fallback)
+{
+    const int value = key.Get<int32_t>();
+    return value >= 0 && value <= 255 ? value : fallback;
 }
 
 bool IniConf::IsGameNewDebugEnabled()

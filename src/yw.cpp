@@ -2402,6 +2402,9 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             {
                 uint32_t v62 = profiler_begin();
 
+                GFX::Engine.SetScreenTextOpacity((uint8_t)System::IniConf::GetUiOpacity(
+                    System::IniConf::UiTextOpacity, System::IniConf::UiTextDefaultOpacity));
+
                 if ( _userUnit->_cellId ) // if cell is not 0,0
                 {
                     CrashDiag::SetPhase("WorldRender3D");
@@ -2429,6 +2432,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 // so the overlap can be cleared without globally hiding HUD.
                 yw_FinalizePriorityGameplayUi(this);
 
+                GFX::Engine.SetScreenTextOpacity(255);
                 GFX::Engine.EndVirtualUI();
 
                 GFX::Engine.EndFrame();
@@ -7914,13 +7918,22 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     int sliderWidth = (int)(usableWidth * 0.49f);
     int valueWidth = usableWidth - labelWidth - sliderWidth;
     int rowHeight = _fontH + vertMenuSpace;
+    const int pageHeight = _screenSize.y - scaledFontHeight;
+    const int maxButtonY = pageHeight - _fontH - buttonsSpace;
 
-    // Keep the two additional rows clear of the fixed bottom buttons even at
-    // classic low resolutions (for example 640x480).
+    // This page is taller than the legacy video page. Compact row spacing only
+    // when needed, then move the action buttons just far enough down to clear
+    // the final slider while keeping the familiar legacy placement when it fits.
     const int maxRowHeight =
-        (bottomButtonsY - buttonsSpace - _fontH) / (UserData::ATMOPT_COUNT + 1);
+        (maxButtonY - buttonsSpace - _fontH) / (UserData::ATMOPT_COUNT + 1);
     if (maxRowHeight >= _fontH)
         rowHeight = std::min(rowHeight, maxRowHeight);
+
+    const int lastOptionBottom =
+        (UserData::ATMOPT_COUNT + 1) * rowHeight + _fontH;
+    const int buttonY = std::min(
+        maxButtonY,
+        std::max(bottomButtonsY, lastOptionBottom + buttonsSpace));
 
     _GameShell->atmosphere_button = Nucleus::CInit<NC_STACK_button>({
         {NC_STACK_button::BTN_ATT_X, (int32_t)posLeftPaddingX},
@@ -7951,13 +7964,15 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         Locale::Text::OpenUA(Locale::OUA_WORLD_UI_MAX_DISTANCE),
         Locale::Text::OpenUA(Locale::OUA_VHS_STRENGTH),
         Locale::Text::OpenUA(Locale::OUA_PARTICLE_LIMIT),
-        Locale::Text::OpenUA(Locale::OUA_RENDER_SECTORS)
+        Locale::Text::OpenUA(Locale::OUA_RENDER_SECTORS),
+        Locale::Text::OpenUA(Locale::OUA_INTERFACE_INTENSITY),
+        Locale::Text::OpenUA(Locale::OUA_TEXT_OPACITY)
     }};
 
     const std::array<int, UserData::ATMOPT_COUNT> mins =
-    {{0, 0, 25, 50, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 3}};
+    {{0, 0, 25, 50, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 3, 0, 0}};
     const std::array<int, UserData::ATMOPT_COUNT> maxs =
-    {{100, 100, 200, 200, 200, 100, 10000, 10000, 100, 10000, 10000, 100, 20000, 100, YW_PARTICLE_LIMIT_UI_MAX, YW_RENDER_SECTORS_MAX}};
+    {{100, 100, 200, 200, 200, 100, 10000, 10000, 100, 10000, 10000, 100, 20000, 100, YW_PARTICLE_LIMIT_UI_MAX, YW_RENDER_SECTORS_MAX, 100, 100}};
 
     NC_STACK_button::button_64_arg btn;
     btn.caption2.clear();
@@ -8098,8 +8113,6 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     }
 
     int buttonWidth = (menuWidth - 2 * buttonsSpace) / 3;
-    const int buttonY = bottomButtonsY;
-
     btn.tileset_down = 19;
     btn.tileset_up = 18;
     btn.field_3A = 30;

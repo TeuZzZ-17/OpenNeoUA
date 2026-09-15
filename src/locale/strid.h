@@ -273,6 +273,10 @@ enum OPENUA_STRING
     OUA_PARTICLE_LIMIT,
     OUA_RENDER_SECTORS,
 
+    // In-mission UI opacity controls. Appended to preserve existing IDs.
+    OUA_INTERFACE_INTENSITY,
+    OUA_TEXT_OPACITY,
+
     OUA_STRING_MAX
 };
 
