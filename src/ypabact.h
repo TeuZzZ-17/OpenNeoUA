@@ -1299,6 +1299,8 @@ public:
     World::rbcolls _collNodes;
     bool _manualCompoundCollision = false;
     bool _legacyRadiusDefined = false;
+    // Cached local-space extent for authored compound spheres. -1 means no usable sphere.
+    float _manualCompoundBroadRadius = -1.0f;
     float _heading_speed;
     NC_STACK_ypabact *_killer;
     int16_t _killer_owner;
