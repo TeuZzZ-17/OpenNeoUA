@@ -3115,14 +3115,42 @@ void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
 }
 
 
+static const uint8_t yw_EmbeddedMapMarkerPcm[] = {
+#include "resources/map_marker_pcm.inc"
+};
+
+static NC_STACK_sample *yw_CreateEmbeddedMapMarkerSample()
+{
+    NC_STACK_sample *sample = Nucleus::CInit<NC_STACK_sample>({
+        {NC_STACK_rsrc::RSRC_ATT_NAME, std::string("openua:embedded_map_marker")},
+        {NC_STACK_rsrc::RSRC_ATT_TRYSHARED, (int32_t)0},
+        {NC_STACK_sample::SMPL_ATT_LEN, (int32_t)sizeof(yw_EmbeddedMapMarkerPcm)},
+        {NC_STACK_sample::SMPL_ATT_TYPE, (int32_t)1},
+        {NC_STACK_sample::SMPL_ATT_BUFFER, (void *)const_cast<uint8_t *>(yw_EmbeddedMapMarkerPcm)}
+    });
+
+    if ( !sample )
+        return NULL;
+
+    TSampleData *sampleData = sample->GetSampleData();
+    if ( !sampleData )
+    {
+        sample->Delete();
+        return NULL;
+    }
+
+    sampleData->SampleRate = 48000;
+    sampleData->Format = AL_FORMAT_STEREO16;
+    return sample;
+}
+
 void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
 {
     if ( !_GameShell )
         return;
 
     const std::string path = System::IniConf::UiMapMarkerSound.Get<std::string>();
-    if ( path.empty() )
-        return;
+    const std::string cacheKey = path.empty() ? std::string("embedded:default") : std::string("file:") + path;
 
     const size_t soundId = World::SOUND_ID_MAP_MARKER;
     if ( soundId >= _GameShell->samples1.size() || soundId >= _GameShell->samples1_info.Sounds.size() )
@@ -3131,7 +3159,7 @@ void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
     NC_STACK_sample *&sample = _GameShell->samples1[soundId];
     TSoundSource &source = _GameShell->samples1_info.Sounds[soundId];
 
-    if ( _mapMarkerSoundAttemptedPath != path )
+    if ( _mapMarkerSoundAttemptedPath != cacheKey )
     {
         if ( sample )
         {
@@ -3142,19 +3170,35 @@ void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
             source.PSample = NULL;
         }
 
-        _mapMarkerSoundAttemptedPath = path;
-        std::string previousRsrc = Common::Env.SetPrefix("rsrc", "data:");
-        NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, path}});
-        Common::Env.SetPrefix("rsrc", previousRsrc);
+        _mapMarkerSoundAttemptedPath = cacheKey;
 
-        if ( !wav )
+        if ( !path.empty() )
         {
-            ypa_log_out("Warning: Could not load map marker sample %s. Marker audio disabled.\n", path.c_str());
-            return;
+            std::string previousRsrc = Common::Env.SetPrefix("rsrc", "data:");
+            NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, path}});
+            Common::Env.SetPrefix("rsrc", previousRsrc);
+
+            if ( wav )
+            {
+                sample = wav;
+            }
+            else
+            {
+                ypa_log_out("Warning: Could not load map marker sample %s. Using embedded marker sound.\n", path.c_str());
+            }
         }
 
-        sample = wav;
-        source.PSample = wav->GetSampleData();
+        if ( !sample )
+        {
+            sample = yw_CreateEmbeddedMapMarkerSample();
+            if ( !sample )
+            {
+                ypa_log_out("Warning: Could not initialize embedded map marker sample. Marker audio disabled.\n");
+                return;
+            }
+        }
+
+        source.PSample = sample->GetSampleData();
     }
 
     if ( !sample )
@@ -10561,9 +10605,9 @@ void NC_STACK_ypaworld::UpdateGameShell()
     _GameShell->confMaxFps = System::IniConf::GfxMaxFps.Get<int32_t>();
     _GameShell->confMoviePlayer = System::IniConf::GfxMoviePlayer.Get<bool>();
     _GameShell->confMenuFont = _GameShell->menuFont;
-    // Cockpit is the only exposed/default first-person view. Legacy POV remains internal
-    // and is intentionally never restored from a previous session.
-    _GameShell->cockpitCameraRuntimeMode = true;
+    // Nucleus.ini controls whether first-person play uses the modern cockpit
+    // camera. Missing/disabled keeps the original Urban Assault viewer.
+    _GameShell->cockpitCameraRuntimeMode = System::IniConf::GameCockpitCamera.Get<bool>();
     _GameShell->confInterfaceStyle = _GameShell->interfaceStyle;
     GFX::Engine.SetVirtualUIStyle(_GameShell->interfaceStyle);
 

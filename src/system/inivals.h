@@ -45,7 +45,7 @@ public:
     static Common::Ini::Key GfxHorizonDarkLength;
     static Common::Ini::Key GfxHorizonDarkStrength;
     static Common::Ini::Key GfxHorizonDarkColor;
-    static Common::Ini::Key GfxRenderSectors;
+    static Common::Ini::Key GfxRenderSectors; // OpenNeoUA: render-sector window; default 55, explicit nucleus.ini value overrides it
     static Common::Ini::Key GfxSkyHeight;
     static Common::Ini::Key GfxSkyRender;
     static Common::Ini::Key GfxHideMapBorderWalls; // OpenNeoUA: visual-only map boundary wall toggle; default false
@@ -221,7 +221,8 @@ public:
     static Common::Ini::Key GameDebug;
     static Common::Ini::Key GameNewDebug;
     static Common::Ini::Key GameCrashDiagnostics;
-    static Common::Ini::Key GameBriefingModelRender;
+    static Common::Ini::Key GameBriefingTextRender;
+    static Common::Ini::Key GameCockpitCamera;
     static bool IsGameNewDebugEnabled();
 
     static Common::Ini::Key GameNewAI;
@@ -347,7 +348,7 @@ public:
     static Common::Ini::Key NetWaitStart;
     static Common::Ini::Key NetKickoff;
 
-    static Common::Ini::Key GfxParticlesLimit;
+    static Common::Ini::Key GfxParticlesLimit; // OpenNeoUA: maximum active particles; default 9000, matching Advanced Graphics Reset Defaults
     static Common::Ini::Key GfxGroundDecalLimit;
     static Common::Ini::Key MenuWindowed;
 
@@ -355,21 +356,21 @@ public:
 
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
-    static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional sound played once after successful map marker deployment
+    static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional marker sound override; missing/unloadable uses the embedded default
     static constexpr int UiGenesisListDefaultX = 0;
     static constexpr int UiGenesisListDefaultWidth = 180;
     static constexpr int UiGenesisListDefaultHeight = 220;
-    static constexpr int UiGenesisListDefaultOpacity = 200;
-    static constexpr int UiMapDefaultOpacity = 0;
-    static constexpr int UiSquadronManagerDefaultOpacity = 128;
+    static constexpr int UiGenesisListDefaultOpacity = 220;
+    static constexpr int UiMapDefaultOpacity = 70;
+    static constexpr int UiSquadronManagerDefaultOpacity = 180;
     static constexpr int UiHudBarsDefaultOpacity = 255;
     static constexpr int UiTextDefaultOpacity = 255;
     static Common::Ini::Key UiGenesisListX; // OpenNeoUA: Genesis/Creation list X position; default 0
     static Common::Ini::Key UiGenesisListWidth; // OpenNeoUA: Genesis/Creation list width; default 180
     static Common::Ini::Key UiGenesisListHeight; // OpenNeoUA: Genesis/Creation list maximum height in pixels; default 220
-    static Common::Ini::Key UiGenesisListOpacity; // OpenNeoUA: Genesis/Creation list background opacity 0..255; default 200
-    static Common::Ini::Key UiMapOpacity; // OpenNeoUA: in-mission strategic Map background opacity 0..255
-    static Common::Ini::Key UiSquadronManagerOpacity; // OpenNeoUA: in-mission Squadron Manager background opacity 0..255
+    static Common::Ini::Key UiGenesisListOpacity; // OpenNeoUA: Genesis/Creation list background opacity 0..255; default 220
+    static Common::Ini::Key UiMapOpacity; // OpenNeoUA: in-mission strategic Map background opacity 0..255; default 70
+    static Common::Ini::Key UiSquadronManagerOpacity; // OpenNeoUA: in-mission Squadron Manager background opacity 0..255; default 180
     static Common::Ini::Key UiHudBarsOpacity; // OpenNeoUA: in-mission fixed top/bottom HUD graphics opacity 0..255
     static Common::Ini::Key UiTextOpacity; // OpenNeoUA: in-mission gameplay text/numbers opacity 0..255
 
