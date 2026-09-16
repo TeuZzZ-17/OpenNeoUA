@@ -2898,6 +2898,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _isUnitGunChild = false;
     _isDummy = false;
     _collNodes = World::rbcolls();
+    _manualCompoundBroadRadius = -1.0f;
     _heading_speed = 0.0;
     _killer = NULL;
     _killer_owner = 0;
@@ -3098,6 +3099,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _isUnitGunChild = false;
     _isDummy = false;
     _collNodes = World::rbcolls();
+    _manualCompoundBroadRadius = -1.0f;
     _adist_sector = 800.0;
     _adist_bact = 650.0;
     _sdist_sector = 200.0;
@@ -4769,29 +4771,40 @@ static bool ypabact_IsGroundRecoilSurfaceUnit(const NC_STACK_ypabact *unit)
            unit->_bact_type == BACT_TYPES_CAR;
 }
 
-static bool ypabact_GetRecoilSupportNormal(NC_STACK_ypabact *unit, vec3d *normal)
+static bool ypabact_ProbeLocalRecoilSupport(NC_STACK_ypabact *unit,
+                                             ypaworld_arg136 *support)
 {
-    if ( !unit || !normal || !ypabact_IsGroundRecoilSurfaceUnit(unit) )
+    if ( !unit || !support || !ypabact_IsGroundRecoilSurfaceUnit(unit) )
         return false;
 
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
     if ( !world )
         return false;
 
-    // Probe locally through the actor's support instead of using its current
-    // rotation. Gun pitch is an aiming transform, so using AxisY there would
-    // incorrectly turn upward/downward aiming into vertical body recoil.
-    const float probeReach = std::max(2000.0f, std::fabs(unit->_height) * 6.0f + 1000.0f);
-    ypaworld_arg136 support;
-    // Start only a few units above the actor and trace downward. This selects
-    // the supporting surface beneath the unit instead of an unrelated ceiling
-    // or bridge that could exist farther above it.
-    support.stPos = unit->_position - vec3d::OY(10.0f);
-    support.vect = vec3d::OY(probeReach);
-    support.flags = 0;
-    world->ypaworld_func136(&support);
+    // Recoil must stay attached to the surface immediately below the actor.
+    // Probe world-down rather than actor AxisY because gun pitch is an aiming
+    // transform. Starting near the body also excludes roofs/bridges above it.
+    const float probeReach =
+        std::max(2000.0f, std::fabs(unit->_height) * 6.0f + 1000.0f);
+    support->stPos = unit->_position - vec3d::OY(10.0f);
+    support->vect = vec3d::OY(probeReach);
+    support->flags = 0;
+    world->ypaworld_func136(support);
 
-    if ( !support.isect || !support.skel || support.polyID < 0 ||
+    // +Y is down in UA. A valid support hit must therefore be at or below the
+    // actor origin, never on an overhead surface crossed by the short lead-in.
+    return support->isect && std::isfinite(support->isectPos.y) &&
+           support->isectPos.y >= unit->_position.y - 0.25f;
+}
+
+static bool ypabact_GetRecoilSupportNormal(NC_STACK_ypabact *unit, vec3d *normal)
+{
+    if ( !normal )
+        return false;
+
+    ypaworld_arg136 support;
+    if ( !ypabact_ProbeLocalRecoilSupport(unit, &support) ||
+         !support.skel || support.polyID < 0 ||
          (size_t)support.polyID >= support.skel->polygons.size() )
         return false;
 
@@ -4856,6 +4869,18 @@ static bool ypabact_SnapAoePushGroundUnit(NC_STACK_ypabact *unit)
         return false;
 
     unit->_position.y = ground.isectPos.y - (unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof);
+    unit->_status_flg |= BACT_STFLAG_LAND;
+    return true;
+}
+
+static bool ypabact_SnapRecoilGroundUnit(NC_STACK_ypabact *unit)
+{
+    ypaworld_arg136 ground;
+    if ( !ypabact_ProbeLocalRecoilSupport(unit, &ground) )
+        return false;
+
+    unit->_position.y = ground.isectPos.y -
+        (unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof);
     unit->_status_flg |= BACT_STFLAG_LAND;
     return true;
 }
@@ -4925,7 +4950,7 @@ static bool ypabact_ConstrainRecoilStepToLevelBox(NC_STACK_ypabact *unit,
 }
 
 static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, update_msg *arg,
-                                      float tau, bool confineToLevelBox)
+                                      float tau, bool recoilMotion)
 {
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
     if ( !world )
@@ -4968,7 +4993,7 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
         vec3d moveStep = step;
         bool blockedX = false;
         bool blockedZ = false;
-        if ( confineToLevelBox &&
+        if ( recoilMotion &&
              ypabact_ConstrainRecoilStepToLevelBox(unit, step, &moveStep, &blockedX, &blockedZ) )
         {
             // Remove only the outward component. A recoil vector parallel to
@@ -4997,10 +5022,16 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
 
         unit->_position += moveStep;
 
-        if ( groundAligned && !ypabact_SnapAoePushGroundUnit(unit) )
+        if ( groundAligned )
         {
-            *pushVel = vec3d(0.0, 0.0, 0.0);
-            break;
+            const bool snapped = recoilMotion
+                ? ypabact_SnapRecoilGroundUnit(unit)
+                : ypabact_SnapAoePushGroundUnit(unit);
+            if ( !snapped )
+            {
+                *pushVel = vec3d(0.0, 0.0, 0.0);
+                break;
+            }
         }
 
     }
@@ -16105,6 +16136,19 @@ void NC_STACK_ypabact::ApplyCompoundCollision(const World::rbcolls &coll,
     _collNodes = coll;
     _manualCompoundCollision = !_collNodes.roboColls.empty();
     _legacyRadiusDefined = radiusDefined;
+
+    // Sphere layout is immutable at runtime, so avoid rescanning every sphere
+    // for each broad-phase query. Padding remains dynamic and is added later.
+    _manualCompoundBroadRadius = -1.0f;
+    for (const World::TRoboColl &sphere : _collNodes.roboColls)
+    {
+        if ( sphere.robo_coll_radius <= 0.01f )
+            continue;
+
+        const float extent = sphere.coll_pos.length() + sphere.robo_coll_radius;
+        if ( extent > _manualCompoundBroadRadius )
+            _manualCompoundBroadRadius = extent;
+    }
 }
 
 void NC_STACK_ypabact::GetCollisionSpheres(
@@ -16123,6 +16167,15 @@ void NC_STACK_ypabact::GetCollisionSpheres(
 
     const float legacyRadius =
         useViewerSemantics && getBACT_viewer() ? _viewer_radius : _radius;
+
+    size_t reserveCount = colls ? colls->roboColls.size() : 0;
+    if ( (manual && UsesLegacyRadiusCollision() && legacyRadius > 0.01f) ||
+         (!manual && !colls && legacyRadius > 0.01f) )
+    {
+        reserveCount++;
+    }
+    if ( out.capacity() < reserveCount )
+        out.reserve(reserveCount);
 
     if ( manual )
     {
@@ -16186,7 +16239,15 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
     {
         for (const TCollisionSphereWorld &b : otherSpheres)
         {
-            const float overlap = a.radius + b.radius - (b.center - a.center).length();
+            const float radiusSum = a.radius + b.radius;
+            const vec3d delta = b.center - a.center;
+            const float distanceSq = delta.square();
+            if ( distanceSq >= radiusSum * radiusSum )
+                continue;
+
+            // Only overlapping sphere pairs need the square root required for
+            // the exact penetration depth used by the existing response.
+            const float overlap = radiusSum - sqrtf(distanceSq);
             if ( overlap > bestPenetration )
             {
                 bestPenetration = overlap;
@@ -16310,13 +16371,25 @@ float NC_STACK_ypabact::GetCollisionBroadRadius()
     if ( !colls )
         return broadRadius;
 
-    float padding = getBACT_collPadding();
+    const float padding = getBACT_collPadding();
+    if ( HasManualCompoundCollision() )
+    {
+        if ( _manualCompoundBroadRadius >= 0.0f )
+        {
+            const float compoundRadius = _manualCompoundBroadRadius + padding;
+            if ( compoundRadius > broadRadius )
+                broadRadius = compoundRadius;
+        }
+        return broadRadius;
+    }
+
+    // Robo keeps its native collision set, so preserve the existing dynamic path.
     for (const World::TRoboColl &sphere : colls->roboColls)
     {
         if ( sphere.robo_coll_radius <= 0.01 )
             continue;
 
-        float extent = sphere.coll_pos.length() + sphere.robo_coll_radius + padding;
+        const float extent = sphere.coll_pos.length() + sphere.robo_coll_radius + padding;
         if ( extent > broadRadius )
             broadRadius = extent;
     }
@@ -16440,6 +16513,8 @@ size_t NC_STACK_ypabact::CollisionWithBact(int arg)
         const int targetCount = targetColls ? (int)targetColls->roboColls.size() : 1;
         if ( targetColls )
             sawVanillaTargetColls = true;
+        const mat3x3 targetRotationT =
+            targetColls ? bnode->_rotation.Transpose() : mat3x3::Ident();
 
         for (int i = targetCount - 1; i >= 0; i--)
         {
@@ -16453,11 +16528,15 @@ size_t NC_STACK_ypabact::CollisionWithBact(int arg)
                 if ( targetRadius < 0.01f )
                     continue;
 
-                targetPosition += bnode->_rotation.Transpose().Transform(sphere.coll_pos);
+                targetPosition += targetRotationT.Transform(sphere.coll_pos);
             }
 
-            if ( (_position - targetPosition).length() > trad + targetRadius )
+            const float collisionRadius = trad + targetRadius;
+            if ( collisionRadius <= 0.0f ||
+                 (_position - targetPosition).square() > collisionRadius * collisionRadius )
+            {
                 continue;
+            }
 
             if ( plasma )
             {
@@ -18404,6 +18483,8 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                 const bool targetManualCompound = cellUnit->HasManualCompoundCollision();
                                 const int targetLegacySlots =
                                     targetManualCompound && cellUnit->UsesLegacyRadiusCollision() ? 1 : 0;
+                                const mat3x3 targetRotationT =
+                                    v93 ? cellUnit->_rotation.Transpose() : mat3x3::Ident();
 
                                 int v109;
                                 if ( v93 )
@@ -18421,7 +18502,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                     if ( v93 && (!targetManualCompound || j >= targetLegacySlots) )
                                     {
                                         int sphereIndex = targetManualCompound ? j - targetLegacySlots : j;
-                                        v77 = cellUnit->_position + cellUnit->_rotation.Transpose().Transform( v93->roboColls[sphereIndex].coll_pos );
+                                        v77 = cellUnit->_position + targetRotationT.Transform( v93->roboColls[sphereIndex].coll_pos );
 
                                         v27 = v93->roboColls[sphereIndex].robo_coll_radius;
                                     }
@@ -18441,16 +18522,17 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                         if ( v63.dot( shotDir ) >= 0.3 )
                                         {
                                             vec3d v33 = shotDir * v63;
+                                            const float v111Sq = v63.square();
+                                            const float v110Sq = v33.square();
+                                            const float v37 = v27 + _gun_radius;
 
-                                            float v111 = v63.length();
-                                            float v110 = v33.length();
-
-                                            float v37 = v27 + _gun_radius;
-
-                                            if ( v37 > v110 )
+                                            if ( v37 > 0.0f && v37 * v37 > v110Sq )
                                             {
-                                                if ( sqrt( POW2(v110) + POW2(minigunTraceRange) ) > v111 )
+                                                if ( v110Sq + POW2(minigunTraceRange) > v111Sq )
                                                 {
+                                                    // The exact distance is only needed after the cheap
+                                                    // squared tests accept this collision sphere.
+                                                    const float v111 = sqrtf(v111Sq);
                                                     float unitEntryDistance = v111;
                                                     if ( !ypabact_GetRaySphereEntryDistance(
                                                              shotPos, shotDir, v77, v37,
