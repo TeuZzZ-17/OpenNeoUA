@@ -1337,7 +1337,9 @@ IFFile *IFFile::RsrcOpenIFFileVanilla(const std::string &filename, const std::st
 
 FSMgr::FileHandle IFFile::UAOpenFileVanilla(const std::string &filename, const std::string &mode)
 {
-    std::string tmpBuf = uaSetDirectoryResolvedReadPath(filename);
+    // Keep IFF/ILBM/SKLT reads on the same Data-first path used by the rest
+    // of OpenNeoUA, while preserving organized SET and legacy root fallbacks.
+    std::string tmpBuf = uaDataFirstResolvedReadPath(filename);
 
     if ( !FSMgr::iDir::fileExist(tmpBuf) )
         return FSMgr::FileHandle();
