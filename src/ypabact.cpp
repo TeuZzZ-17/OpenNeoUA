@@ -1269,9 +1269,9 @@ bool NC_STACK_ypabact::IsCockpitCameraAvailable() const
 
 bool NC_STACK_ypabact::IsCockpitCameraActive() const
 {
-    // Alternative View temporarily supersedes the normal cockpit camera without
-    // changing the user's saved/default cockpit preference. Turning Alternative View
-    // off therefore returns to the exact camera mode that was active before.
+    // Alternative View temporarily supersedes the configured first-person camera
+    // without changing the Nucleus.ini cockpit setting. Turning Alternative View off
+    // therefore returns to the exact camera mode that was active before.
     return !_alternativeViewActive &&
            IsCockpitCameraAvailable() &&
            _world &&
@@ -1339,7 +1339,7 @@ void NC_STACK_ypabact::ToggleCockpitCameraMode()
         return;
 
     // Intentionally retained as an internal legacy POV/cockpit switch. OpenNeoUA no longer
-    // exposes or persists this action; normal player sessions always start in cockpit.
+    // exposes or persists this action; Nucleus.ini selects the session default.
     // The two views are intentionally mutually exclusive. Do not leave an
     // Alternative View camera state latched behind a manual cockpit-camera change.
     ResetAlternativeView();

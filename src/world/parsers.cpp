@@ -7827,9 +7827,9 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
     }
     else if ( !StriCmp(p1, "default_view") )
     {
-        // Retired profile key: keep old user.txt files loadable without restoring
-        // POV as a saved default. OpenNeoUA always starts first-person play in cockpit.
-        _o._GameShell->cockpitCameraRuntimeMode = true;
+        // Retired profile key: keep old user.txt files loadable without letting
+        // profile data override the global Nucleus.ini cockpit setting.
+        _o._GameShell->cockpitCameraRuntimeMode = System::IniConf::GameCockpitCamera.Get<bool>();
     }
     else if ( !StriCmp(p1, "interface_style") )
     {
