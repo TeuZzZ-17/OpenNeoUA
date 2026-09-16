@@ -817,10 +817,9 @@ public:
     bool confSpectatorMode;
     bool confPlayAsOtherFactions;
     bool confHideMapBorderWalls = false;
-    // OpenNeoUA: cockpit is the only exposed/default first-person view. The legacy POV path remains
-    // implemented internally, but has no Options selector, input binding or persisted default. This
-    // session-only flag always starts in cockpit mode and may only be changed by internal code.
-    bool cockpitCameraRuntimeMode = true;
+    // OpenNeoUA: optional modern cockpit camera. The original first-person viewer remains
+    // the default; Nucleus.ini may opt into cockpit mode for the current session.
+    bool cockpitCameraRuntimeMode = false;
 
     // OpenNeoUA: modern graphics options shown in the Options menu.
     int confBlending;             // gfx.blending  0=Default 1=Additive 2=Sharp
