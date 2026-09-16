@@ -3027,6 +3027,11 @@ int NC_STACK_ypaworld::GetVehicleProductionLimitRemaining(int owner, int vehicle
          (size_t)vehicleId >= _vhclProtos.size() )
         return -1;
 
+    // max_active_at_once is a player campaign/GEM progression limit. AI owners
+    // must remain free to produce units regardless of the selected player faction.
+    if ( !_userRobo || owner != _userRobo->_owner )
+        return -1;
+
     const int effectiveMax = _vhclProtos[vehicleId].max_active_at_once;
     if ( effectiveMax <= 0 )
         return -1;
