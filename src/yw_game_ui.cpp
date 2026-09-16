@@ -64,23 +64,10 @@ static uint8_t yw_GetConfiguredUiOpacity(Common::Ini::Key &key, int fallback)
     return (uint8_t)System::IniConf::GetUiOpacity(key, fallback);
 }
 
-static bool yw_GetMapOpacityOverride(uint8_t *opacity)
-{
-    if ( !opacity || !System::IniConf::UiMapOpacity.WasSet )
-        return false;
-
-    const int value = System::IniConf::UiMapOpacity.Get<int32_t>();
-    if ( value < 0 || value > 255 )
-        return false;
-
-    *opacity = (uint8_t)value;
-    return true;
-}
-
 static uint8_t yw_GetMapOpacity()
 {
-    uint8_t opacity = 0;
-    return yw_GetMapOpacityOverride(&opacity) ? opacity : 0;
+    return yw_GetConfiguredUiOpacity(System::IniConf::UiMapOpacity,
+                                     System::IniConf::UiMapDefaultOpacity);
 }
 
 static uint8_t yw_GetSquadronManagerOpacity()
@@ -4519,37 +4506,8 @@ static void yw_RenderMapBackground(NC_STACK_ypaworld *yw)
                  SDL_MapRGBA(surface->format, color.r, color.g, color.b, color.a));
 }
 
-static void yw_RenderNeutralMapLeftBorder(NC_STACK_ypaworld *yw)
-{
-    if ( !yw || robo_map.IsClosed() || robo_map.field_244 <= 0 )
-        return;
-
-    uint8_t mapOpacity = 0;
-    if ( yw_GetMapOpacityOverride(&mapOpacity) )
-    {
-        // The configurable background already fills this strip. Skipping the
-        // legacy opaque pass keeps it at exactly the same opacity as the rest
-        // of the map body, including the explicit 0 (fully transparent) case.
-        return;
-    }
-
-    // Align the neutral body strip with the title and lower frame. The
-    // renderer works on integral pixels, so one pixel is the smallest correction.
-    const int left = robo_map.x - yw->_screenSize.x / 2 + 1;
-    const int top = robo_map.y + robo_map.field_23C - yw->_screenSize.y / 2;
-    const int bottom = robo_map.y + robo_map.h - robo_map.field_240
-                       - yw->_screenSize.y / 2 - 1;
-    if ( bottom < top )
-        return;
-
-    GFX::Engine.raster_func217(yw_GetMapTitleBackgroundColor(yw));
-    for ( int x = 0; x < robo_map.field_244; x++ )
-        GFX::Engine.raster_func201(Common::Line(left + x, top, left + x, bottom));
-}
-
 void sb_0x4f8f64(NC_STACK_ypaworld *yw)
 {
-    yw_RenderNeutralMapLeftBorder(yw);
     yw_RenderLegacyStrategicMap(yw);
     yw_RenderCustomMapMarkers(yw);
     yw_RenderMapTitleToolbar(yw);
@@ -5627,7 +5585,7 @@ int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
     args.thinScrollbar = true;
     args.fillThinScrollbarGap = true;
     args.wheelScroll = true;
-    // Genesis background opacity is data-driven. The OpenNeoUA runtime default is 200
+    // Genesis background opacity is data-driven. The OpenNeoUA runtime default is 220
     // when the nucleus.ini key is absent; explicit values still override it.
     int genesisListOpacity = System::IniConf::UiGenesisListOpacity.Get<int32_t>();
     genesisListOpacity = std::max(0, std::min(255, genesisListOpacity));

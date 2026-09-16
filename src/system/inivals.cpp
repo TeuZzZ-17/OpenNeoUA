@@ -40,7 +40,7 @@ Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::
 Common::Ini::Key IniConf::GfxHorizonDarkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string("2000"));
 Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("0.65"));
 Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0_0_0"));
-Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string("55"));
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyRender("gfx.sky_render", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxHideMapBorderWalls("gfx.hide_map_border_walls", Common::Ini::KT_BOOL, false);
@@ -244,9 +244,12 @@ Common::Ini::Key IniConf::NetVersionCheck("net.versioncheck", Common::Ini::KT_BO
 Common::Ini::Key IniConf::GameDebug("game.debug", Common::Ini::KT_BOOL);
 Common::Ini::Key IniConf::GameNewDebug("game.new.debug", Common::Ini::KT_WORD, std::string("no"));
 Common::Ini::Key IniConf::GameCrashDiagnostics("game.crash_diagnostics", Common::Ini::KT_BOOL, false);
-// OpenNeoUA custom: choose the original VP model preview or the text-only briefing preview.
-// The default keeps the current text mode for vanilla-safe behavior.
-Common::Ini::Key IniConf::GameBriefingModelRender("game.briefing_model_render", Common::Ini::KT_BOOL, false);
+// OpenNeoUA custom: optionally replace the original briefing model preview with text.
+// Missing parameter keeps the original Urban Assault model preview.
+Common::Ini::Key IniConf::GameBriefingTextRender("game.briefing_text_render", Common::Ini::KT_BOOL, false);
+// OpenNeoUA custom: opt-in modern cockpit camera. Disabled by default so
+// first-person control keeps the original Urban Assault viewer behavior.
+Common::Ini::Key IniConf::GameCockpitCamera("game.cockpit_camera", Common::Ini::KT_BOOL, false);
 
 // Yparobo keys
 Common::Ini::Key IniConf::GameNewAI("game.newai",    Common::Ini::KT_BOOL, true);
@@ -446,7 +449,7 @@ Common::Ini::Key IniConf::NetWaitStart("net.waitstart", Common::Ini::KT_DIGIT, (
 Common::Ini::Key IniConf::NetKickoff("net.kickoff", Common::Ini::KT_DIGIT, (int32_t)20000);
 
 // Graphics particles
-Common::Ini::Key IniConf::GfxParticlesLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)5000);
+Common::Ini::Key IniConf::GfxParticlesLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)9000);
 // OpenNeoUA custom: bounded world-side terrain decals. Zero disables the system;
 // the generated mesh uses a fixed internal triangle cap.
 Common::Ini::Key IniConf::GfxGroundDecalLimit("gfx.ground_decal_limit", Common::Ini::KT_DIGIT, (int32_t)256);
@@ -640,7 +643,8 @@ void IniConf::Init()
         , &GameDebug
         , &GameNewDebug
         , &GameCrashDiagnostics
-        , &GameBriefingModelRender
+        , &GameBriefingTextRender
+        , &GameCockpitCamera
 
         , &GameNewAI
         , &GameFixedTickTankGroundPoseMult
