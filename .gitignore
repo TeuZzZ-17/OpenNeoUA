@@ -70,3 +70,20 @@
 !/README.md
 !/License.txt
 !/OpenNeoUA_Parameter_Guide.ini
+
+# ============================================================
+# FONTS
+# Solo font redistribuibili usati da OpenNeoUA.
+# Tutti gli altri file della cartella restano ignorati.
+# ============================================================
+
+!/Fonts/
+/Fonts/*
+
+!/Fonts/LiberationMono-Regular.ttf
+!/Fonts/LiberationSans-Regular.ttf
+!/Fonts/LiberationSerif-Regular.ttf
+!/Fonts/PressStart2P.ttf
+!/Fonts/textar.ttf
+!/Fonts/Xolonium-Bold.otf
+!/Fonts/Xolonium-Regular.otf
