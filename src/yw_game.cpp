@@ -8754,6 +8754,112 @@ void NC_STACK_ypaworld::debug_count_units()
         _dbgTotalRoboCountMax = _dbgTotalRoboCount;
 }
 
+void NC_STACK_ypaworld::DebugResetDpsMeter()
+{
+    _debugDpsSamples.clear();
+    _debugDpsSourceGid = 0;
+    _debugDpsPeakRaw = 0;
+    _debugDpsSessionDamageRaw = 0;
+    _debugDpsSessionStartStamp = 0;
+    _debugDpsLastDamageStamp = 0;
+}
+
+void NC_STACK_ypaworld::DebugUpdateDpsSource()
+{
+    if ( !_debugDpsEnabled || !_userUnit || IsSpectatorControlled() )
+        return;
+
+    // Weapon Cam can temporarily make a projectile the user unit. Keep the
+    // last real controlled vehicle as the DPS source until control returns.
+    if ( _userUnit->_bact_type == BACT_TYPES_MISSLE )
+        return;
+
+    // A level/replay transition can move the gameplay clock backwards. Never
+    // carry a previous level's damage samples into the new one.
+    if ( !_debugDpsSamples.empty() && _timeStamp < _debugDpsSamples.back().stamp )
+    {
+        _debugDpsSamples.clear();
+        _debugDpsPeakRaw = 0;
+        _debugDpsSessionDamageRaw = 0;
+        _debugDpsSessionStartStamp = 0;
+        _debugDpsLastDamageStamp = 0;
+    }
+
+    const uint32_t gid = _userUnit->_gid;
+    if ( gid != _debugDpsSourceGid )
+    {
+        _debugDpsSourceGid = gid;
+        _debugDpsSamples.clear();
+        _debugDpsPeakRaw = 0;
+        _debugDpsSessionDamageRaw = 0;
+        _debugDpsSessionStartStamp = 0;
+        _debugDpsLastDamageStamp = 0;
+    }
+}
+
+void NC_STACK_ypaworld::DebugRecordDpsDamage(NC_STACK_ypabact *attacker,
+                                              NC_STACK_ypabact *target,
+                                              int rawDamage)
+{
+    if ( !_debugDpsEnabled || _isNetGame || !attacker || !target || rawDamage <= 0 )
+        return;
+
+    if ( !_debugDpsSourceGid || attacker->_gid != _debugDpsSourceGid )
+        return;
+
+    // Friendly units are valid debug dummies: F7/F9 can keep them alive while
+    // the meter measures the damage this controlled unit would deal. Ignore only
+    // true self-damage so suicide/kill-after-shot mechanics do not pollute DPS.
+    if ( attacker == target )
+        return;
+
+    const int32_t now = _timeStamp;
+
+    // Start a new AVG/PEAK firing session after three seconds without damage.
+    // The rolling 1-second samples remain independent from this longer session.
+    if ( _debugDpsLastDamageStamp <= 0 ||
+         now < _debugDpsLastDamageStamp ||
+         now - _debugDpsLastDamageStamp >= 3000 )
+    {
+        _debugDpsPeakRaw = 0;
+        _debugDpsSessionDamageRaw = 0;
+        _debugDpsSessionStartStamp = now;
+    }
+
+    if ( _debugDpsSessionStartStamp <= 0 )
+        _debugDpsSessionStartStamp = now;
+
+    _debugDpsSessionDamageRaw =
+        std::min<int64_t>(_debugDpsSessionDamageRaw + (int64_t)rawDamage,
+                          std::numeric_limits<int64_t>::max());
+    _debugDpsLastDamageStamp = now;
+
+    const int32_t cutoff = now - 1000;
+    _debugDpsSamples.erase(
+        std::remove_if(_debugDpsSamples.begin(), _debugDpsSamples.end(),
+                       [cutoff](const DebugDpsSample &sample)
+                       {
+                           return sample.stamp < cutoff;
+                       }),
+        _debugDpsSamples.end());
+
+    // Aggregate hits generated in the same frame. This keeps MGUN and shotgun
+    // weapons cheap to profile even when they create many damage events.
+    if ( !_debugDpsSamples.empty() && _debugDpsSamples.back().stamp == now )
+    {
+        const int64_t sum = (int64_t)_debugDpsSamples.back().rawDamage + rawDamage;
+        _debugDpsSamples.back().rawDamage =
+            (int32_t)std::min<int64_t>(sum, std::numeric_limits<int32_t>::max());
+    }
+    else
+    {
+        DebugDpsSample sample;
+        sample.stamp = now;
+        sample.rawDamage = rawDamage;
+        _debugDpsSamples.push_back(sample);
+    }
+}
+
 void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
 {
     if ( _showDebugMode != 0 )
@@ -9208,6 +9314,97 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
             _showDebugMode = 0;
     }
 
+    if ( _debugDpsEnabled )
+    {
+        const int32_t cutoff = _timeStamp - 1000;
+        _debugDpsSamples.erase(
+            std::remove_if(_debugDpsSamples.begin(), _debugDpsSamples.end(),
+                           [cutoff](const DebugDpsSample &sample)
+                           {
+                               return sample.stamp < cutoff;
+                           }),
+            _debugDpsSamples.end());
+
+        int64_t rawDamage = 0;
+        for ( const DebugDpsSample &sample : _debugDpsSamples )
+            rawDamage += sample.rawDamage;
+
+        // DPS PEAK is the best rolling 1-second value reached during the current
+        // firing burst. DPS AVG covers the whole burst from its first recorded hit.
+        // Three seconds without damage starts a new burst for both values.
+        if ( _debugDpsLastDamageStamp > 0 &&
+             _timeStamp >= _debugDpsLastDamageStamp &&
+             _timeStamp - _debugDpsLastDamageStamp >= 3000 )
+        {
+            _debugDpsPeakRaw = 0;
+            _debugDpsSessionDamageRaw = 0;
+            _debugDpsSessionStartStamp = 0;
+            _debugDpsLastDamageStamp = 0;
+        }
+        else if ( rawDamage > _debugDpsPeakRaw )
+        {
+            _debugDpsPeakRaw = rawDamage;
+        }
+
+        // Player-facing combat values use the same /100 scale as the DMG row.
+        const double dps = (double)rawDamage / 100.0;
+        const double peakDps = (double)_debugDpsPeakRaw / 100.0;
+
+        double avgDps = 0.0;
+        if ( _debugDpsSessionStartStamp > 0 &&
+             _timeStamp >= _debugDpsSessionStartStamp &&
+             _debugDpsSessionDamageRaw > 0 )
+        {
+            // Clamp the first second to one full second so the first hit does not
+            // create an artificial huge AVG value from a near-zero denominator.
+            const int32_t elapsedMs =
+                std::max<int32_t>(1000, _timeStamp - _debugDpsSessionStartStamp);
+            avgDps = ((double)_debugDpsSessionDamageRaw / 100.0) *
+                     (1000.0 / (double)elapsedMs);
+        }
+
+        const std::string dpsText = fmt::sprintf("DPS: %.1f", dps);
+        const std::string avgText = fmt::sprintf("DPS AVG: %.1f", avgDps);
+        const std::string peakText = fmt::sprintf("DPS PEAK: %.1f", peakDps);
+
+        CmdStream dpsDraw;
+        dpsDraw.reserve(256);
+        FontUA::select_tileset(&dpsDraw, 15);
+
+        // Keep the diagnostics in the upper-centre area, below the top HUD bars.
+        // Use a screen-relative anchor so the placement remains consistent across resolutions.
+        const int32_t dpsBlockCenterY = std::max<int32_t>(3 * _fontH, (_screenSize.y * 17) / 100);
+        const int16_t dpsBlockCenterOffset =
+            (int16_t)(dpsBlockCenterY - (_screenSize.y / 2));
+
+        FontUA::set_txtColor(&dpsDraw, 90, 255, 170);
+        FontUA::set_xpos(&dpsDraw, 0);
+        FontUA::set_center_ypos(&dpsDraw, dpsBlockCenterOffset - _fontH);
+        if ( _guiTiles[15] )
+            FontUA::FormateCenteredSkipableItem(_guiTiles[15], &dpsDraw, dpsText, _screenSize.x);
+        else
+            FontUA::add_txt(&dpsDraw, _screenSize.x, 1, dpsText);
+
+        FontUA::set_txtColor(&dpsDraw, 110, 210, 255);
+        FontUA::set_xpos(&dpsDraw, 0);
+        FontUA::set_center_ypos(&dpsDraw, dpsBlockCenterOffset);
+        if ( _guiTiles[15] )
+            FontUA::FormateCenteredSkipableItem(_guiTiles[15], &dpsDraw, avgText, _screenSize.x);
+        else
+            FontUA::add_txt(&dpsDraw, _screenSize.x, 1, avgText);
+
+        FontUA::set_txtColor(&dpsDraw, 255, 80, 80);
+        FontUA::set_xpos(&dpsDraw, 0);
+        FontUA::set_center_ypos(&dpsDraw, dpsBlockCenterOffset + _fontH);
+        if ( _guiTiles[15] )
+            FontUA::FormateCenteredSkipableItem(_guiTiles[15], &dpsDraw, peakText, _screenSize.x);
+        else
+            FontUA::add_txt(&dpsDraw, _screenSize.x, 1, peakText);
+
+        FontUA::set_end(&dpsDraw);
+        GFX::Engine.ProcessDrawSeq(dpsDraw);
+    }
+
     bool openUADebug = System::IniConf::IsGameNewDebugEnabled();
     if ( !openUADebug )
     {
@@ -9217,6 +9414,8 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
         _debugGameplayFrozen = false;
         _debugHostStationCheat = false;
         _debugGlobalInvulnerability = false;
+        _debugDpsEnabled = false;
+        DebugResetDpsMeter();
     }
     else
     {

@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <title>Chevron Only White</title>
-  <desc>Three white chevrons only, no lower beam or base.</desc>
-  <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter">
-    <path d="M24 18 L64 46 L104 18"/>
-    <path d="M24 44 L64 72 L104 44"/>
-    <path d="M24 70 L64 98 L104 70"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <title>Map Marker - Compact Hollow</title>
+  <desc>Very light, compact, mostly hollow map marker for in-game world rendering. Small silhouette, thin outline, empty inside.</desc>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Smaller outer silhouette kept well inside the canvas so it renders less invasive in-game -->
+    <path d="M12 5.1
+             C9.35 5.1 7.7 6.75 7.7 9.05
+             C7.7 11.9 10.2 14.5 12 15.55
+             C13.8 14.5 16.3 11.9 16.3 9.05
+             C16.3 6.75 14.65 5.1 12 5.1 Z"
+          stroke-width="1.15"/>
+    <!-- Very small, hollow inner ring: readable but visually light -->
+    <circle cx="12" cy="9.15" r="1.55" stroke-width="0.95"/>
   </g>
 </svg>
