@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <title>Chevron Only White</title>
+  <desc>Three white chevrons only, no lower beam or base.</desc>
+  <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M24 18 L64 46 L104 18"/>
+    <path d="M24 44 L64 72 L104 44"/>
+    <path d="M24 70 L64 98 L104 70"/>
+  </g>
+</svg>
