@@ -2497,6 +2497,7 @@ public:
     bool IsDebugGameplaySlowMotionEnabled() const { return _debugGameplaySlowMotion; }
     bool IsDebugHostStationCheatEnabled() const { return _debugHostStationCheat; }
     bool IsDebugGlobalInvulnerabilityEnabled() const { return _debugGlobalInvulnerability; }
+    bool IsDebugDpsEnabled() const { return _debugDpsEnabled; }
     float GetUfoSpyUiRadius() const;
     bool IsUfoSpyUiControlContext() const;
     bool IsUfoSpyUiEnabled() const { return _ufoSpyUiEnabled; }
@@ -2653,6 +2654,9 @@ public:
     void debug_info_draw(TInputState *inpt);
     void debug_count_units();
     void debug_draw_coll_spheres();
+    void DebugRecordDpsDamage(NC_STACK_ypabact *attacker, NC_STACK_ypabact *target, int rawDamage);
+    void DebugResetDpsMeter();
+    void DebugUpdateDpsSource();
     void ExpireDebugAoeRings();
     void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
     void DebugAddAtDeathSphere(const vec3d &pos, float radius);
@@ -3358,6 +3362,19 @@ public:
     int8_t _showDebugMode = 0; // debug info draw modes
     bool _showCollDebug = false; // F10: draw collision sphere overlay
     bool _hideHudForScreenshots = false; // F11: hide gameplay HUD/screenshots UI
+    bool _debugDpsEnabled = false; // F4: rolling effective DPS meter for the controlled player unit
+    uint32_t _debugDpsSourceGid = 0;
+    int64_t _debugDpsPeakRaw = 0; // Highest rolling 1-second DPS reached during the current firing burst.
+    int64_t _debugDpsSessionDamageRaw = 0; // Total recorded damage in the current firing burst.
+    int32_t _debugDpsSessionStartStamp = 0; // First recorded damage time for DPS AVG.
+    int32_t _debugDpsLastDamageStamp = 0; // Resets DPS AVG/PEAK after a short period without recorded damage.
+
+    struct DebugDpsSample
+    {
+        int32_t stamp = 0;
+        int32_t rawDamage = 0;
+    };
+    std::vector<DebugDpsSample> _debugDpsSamples;
 
     // F10 debug: transient AoE impact rings. Recorded on weapon detonation,
     // fade out after a short time. Only populated while _showCollDebug is on.
