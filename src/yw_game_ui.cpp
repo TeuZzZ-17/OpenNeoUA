@@ -1261,6 +1261,7 @@ static void yw_RenderWorldSelectionDrag(NC_STACK_ypaworld *yw);
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw);
 static void yw_RenderAttackOrderFeedback(NC_STACK_ypaworld *yw);
 static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw);
+static void yw_RenderCustomWorldMapMarkers(NC_STACK_ypaworld *yw);
 static void yw_PreDrawSquadronManager(NC_STACK_ypaworld *yw);
 static void yw_PostDrawSquadronManager(NC_STACK_ypaworld *yw);
 static void yw_UpdateSquadronManagerTitleButtons(NC_STACK_ypaworld *yw);
@@ -6296,6 +6297,7 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
         yw_RenderMoveOrderFeedback(yw);
         yw_RenderAttackOrderFeedback(yw);
         yw_RenderRoboRelocationMarker(yw);
+        yw_RenderCustomWorldMapMarkers(yw);
         sb_0x4d7c08__sub0__sub4(yw);
 
         if ( yw->_userUnit->_status != BACT_STATUS_DEAD )
@@ -10261,10 +10263,10 @@ static float yw_GetWorldUiMaxDistance()
 
 static bool yw_ShouldHideControlledUnitWorldUi(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
-    // The directly controlled unit already has its cockpit/HUD presentation.
-    // Hiding only its world-space overlays prevents the same information from
-    // clipping into close cockpit cameras without affecting other units.
-    return yw && bact && !yw->IsSpectatorControlled() && bact == yw->_userUnit;
+    // In cockpit view, hide only the world-space overlay that belongs to the
+    // directly controlled player unit. All other units and world UI remain visible.
+    return yw && bact && yw->_userUnit && !yw->IsSpectatorControlled() &&
+           yw->_userUnit->IsCockpitCameraActive() && bact == yw->_userUnit;
 }
 
 static bool yw_IsActiveSquadronSelectionUnit(NC_STACK_ypaworld *yw,
@@ -10836,7 +10838,8 @@ enum YwOrderTemplateId
 {
     YW_ORDER_TEMPLATE_MOVE = 0,
     YW_ORDER_TEMPLATE_ATTACK,
-    YW_ORDER_TEMPLATE_ROBO_MOVE
+    YW_ORDER_TEMPLATE_ROBO_MOVE,
+    YW_ORDER_TEMPLATE_MAP_MARKER
 };
 
 static std::string yw_OrderTemplateCanonicalPath(YwOrderTemplateId templateId)
@@ -10848,6 +10851,9 @@ static std::string yw_OrderTemplateCanonicalPath(YwOrderTemplateId templateId)
 
     case YW_ORDER_TEMPLATE_ROBO_MOVE:
         return "Interface/Actions/MoveOrder/robo_move_order.svg";
+
+    case YW_ORDER_TEMPLATE_MAP_MARKER:
+        return "Interface/Actions/MapMarker/map_marker.svg";
 
     case YW_ORDER_TEMPLATE_MOVE:
     default:
@@ -10929,6 +10935,36 @@ static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
     const int radius = 7 + (int)((yw->_timeStamp % 240) * 7 / 240);
     yw_RenderOrderTemplateAt(yw, point, radius, worldUiOpacity,
                              YW_ORDER_TEMPLATE_ROBO_MOVE);
+}
+
+static void yw_RenderCustomWorldMapMarkers(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !robo_map.markerMode || robo_map.customMarkers.empty() ||
+         yw->IsSpectatorControlled() )
+        return;
+
+    // Reuse the same world-space SVG projection and faction tint used by
+    // Move/Attack feedback. Personal map markers are persistent annotations,
+    // so they deliberately ignore game.world_ui_max_distance.
+    const uint32_t phase = yw->_timeStamp % 900;
+    const uint32_t triangle = phase <= 450 ? phase : 900 - phase;
+    const float bob = 90.0f + (float)triangle * 30.0f / 450.0f;
+    const int radius = 8 + (int)(triangle * 2 / 450);
+
+    for ( const vec2d &marker : robo_map.customMarkers )
+    {
+        const Common::Point cellId = World::PositionToSectorID(marker);
+        if ( !yw->IsGamePlaySector(cellId) )
+            continue;
+
+        vec3d worldPos(marker.x, yw->_cells(cellId).height - bob, marker.y);
+        Common::Point point;
+        if ( !yw_ProjectWorldSelectionPoint(yw, worldPos, &point) )
+            continue;
+
+        yw_RenderOrderTemplateAt(yw, point, radius, 255,
+                                 YW_ORDER_TEMPLATE_MAP_MARKER);
+    }
 }
 
 static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
@@ -14300,28 +14336,169 @@ static std::string yw_BuildInfoWeaponDamageText(NC_STACK_ypabact *bact,
     return txt2;
 }
 
-static float yw_GetInfoDamageWireX(NC_STACK_ypaworld *yw, float vanillaX,
+static int yw_GetInfoHudTextWidth(NC_STACK_ypaworld *yw,
+                                  const std::string &text)
+{
+    if ( !yw || text.empty() )
+        return 0;
+
+    const int screenWidth = GFX::Engine.MeasureScreenTextWidth(text);
+    if ( screenWidth > 0 )
+        return screenWidth;
+
+    return yw->_guiTiles[15] ? yw->_guiTiles[15]->GetWidth(text) : 0;
+}
+
+static int yw_GetInfoWeaponEffectIcons(NC_STACK_ypaworld *yw,
+                                       World::TVhclProto *vhcl,
+                                       World::TWeapProto *weap,
+                                       int iconSize,
+                                       std::array<NC_STACK_bitmap *, 2> *bitmaps)
+{
+    if ( bitmaps )
+        bitmaps->fill(NULL);
+
+    if ( !yw || !weap )
+        return 0;
+
+    StatusIconList paths;
+    int pathCount = 0;
+
+    if ( weap->debuff.allow )
+        StatusIconAdd(paths, pathCount, StatusIconTrimPath(weap->debuff.icon));
+
+    int iconCount = 0;
+    for (int i = 0; i < pathCount && iconCount < 2; ++i)
+    {
+        NC_STACK_bitmap *bitmap = StatusIconLoad(paths[i], iconSize, iconSize);
+        if ( !bitmap || !bitmap->GetBitmap() )
+            continue;
+
+        if ( bitmaps )
+            (*bitmaps)[iconCount] = bitmap;
+        ++iconCount;
+    }
+
+    return iconCount;
+}
+
+static int yw_GetInfoWeaponIconSize(NC_STACK_ypaworld *yw)
+{
+    if ( !yw )
+        return 14;
+
+    return std::max(12, std::min(20, yw->_fontH));
+}
+
+static int yw_GetInfoWeaponRightContentWidth(NC_STACK_ypaworld *yw,
+                                             World::TVhclProto *vhcl,
+                                             World::TWeapProto *weap,
+                                             const std::string &damageText,
+                                             int *iconCountOut = NULL)
+{
+    constexpr int iconSpacing = 2;
+    constexpr int iconTextGap = 4;
+
+    const int iconSize = yw_GetInfoWeaponIconSize(yw);
+    const int iconCount = yw_GetInfoWeaponEffectIcons(
+        yw, vhcl, weap, iconSize, NULL);
+
+    if ( iconCountOut )
+        *iconCountOut = iconCount;
+
+    const int textWidth = yw_GetInfoHudTextWidth(yw, damageText);
+    const int iconBlockWidth = iconCount > 0
+        ? iconCount * iconSize + (iconCount - 1) * iconSpacing
+        : 0;
+
+    return textWidth + iconBlockWidth +
+           ((iconCount > 0 && !damageText.empty()) ? iconTextGap : 0);
+}
+
+static float yw_GetInfoDamageWireX(NC_STACK_ypaworld *yw, sklt_wis *wis,
+                                   float vanillaX,
+                                   World::TVhclProto *vhcl,
+                                   World::TWeapProto *weap,
                                    const std::string &damageText)
 {
-    // Seven characters fit the authored HUD without touching the wireframe.
-    // Longer DMG strings keep the vanilla font and move only the wireframe
-    // slightly left. The offset is deliberately conservative so the wireframe
-    // does not crowd the DMG label. It is recomputed from vanillaX every frame
-    // and clamped, so the movement never accumulates or escapes the panel.
-    constexpr size_t safeCharacters = 7;
-    constexpr int pixelsPerExtraCharacter = 8;
-    constexpr int maxShiftPixels = 24;
-
-    if ( !yw || yw->_screenSize.x <= 0 || damageText.size() <= safeCharacters )
+    if ( !yw || !wis || !yw->_guiTiles[51] || yw->_screenSize.x <= 0 )
         return vanillaX;
 
-    const size_t extraCharacters = damageText.size() - safeCharacters;
-    const int shiftPixels = std::min(
-        maxShiftPixels,
-        static_cast<int>(extraCharacters) * pixelsPerExtraCharacter);
+    const int rightContentWidth = yw_GetInfoWeaponRightContentWidth(
+        yw, vhcl, weap, damageText);
+    const int labelBarGap = std::max(2, yw->_guiTiles[51]->map[1].w / 2);
+    const int wireAreaWidth = yw->_guiTiles[51]->map[7].w * wis->field_9E;
 
-    return vanillaX - (2.0f * static_cast<float>(shiftPixels)
-                       / static_cast<float>(yw->_screenSize.x));
+    // sub_4E4F80() keeps DMG and the right-aligned damage text on fixed authored
+    // edges. Derive the wireframe position from those same edges instead of
+    // nudging the vanilla centre by an estimated text overflow. This keeps the
+    // wireframe geometrically centred in the space that is actually free.
+    const int rowCenter = (yw->_screenSize.x / 2) * vanillaX;
+    const int rowWidth = wis->field_96 + labelBarGap + wireAreaWidth +
+                         wis->field_9A;
+    const int rowLeft = rowCenter - rowWidth / 2;
+    const int wireLeft = rowLeft + wis->field_96 + labelBarGap;
+    const int authoredWireRight = wireLeft + wireAreaWidth;
+    const int rowRight = rowLeft + rowWidth;
+
+    // Long damage strings and the optional Debuff icon grow left from the fixed
+    // right edge. They are allowed to reduce the free wireframe area, but never
+    // move its right boundary outside the original authored Weapon slot.
+    const int contentLeft = rowRight - rightContentWidth;
+    const int wireRight = std::min(authoredWireRight, contentLeft);
+
+    constexpr int minWireAreaPixels = 8;
+    const int safeWireRight = std::max(wireLeft + minWireAreaPixels, wireRight);
+    const int wireCenter = wireLeft + (safeWireRight - wireLeft) / 2;
+
+    return 2.0f * static_cast<float>(wireCenter) /
+           static_cast<float>(yw->_screenSize.x);
+}
+
+static void yw_RenderInfoWeaponEffectIcons(NC_STACK_ypaworld *yw, sklt_wis *wis,
+                                           World::TVhclProto *vhcl,
+                                           World::TWeapProto *weap,
+                                           const std::string &damageText,
+                                           float xpos, float ypos)
+{
+    if ( !yw || !wis || !weap )
+        return;
+
+    constexpr int iconSpacing = 2;
+    constexpr int iconTextGap = 4;
+
+    const int iconSize = yw_GetInfoWeaponIconSize(yw);
+    std::array<NC_STACK_bitmap *, 2> bitmaps;
+    const int iconCount = yw_GetInfoWeaponEffectIcons(
+        yw, vhcl, weap, iconSize, &bitmaps);
+    if ( iconCount <= 0 )
+        return;
+
+    const int textWidth = yw_GetInfoHudTextWidth(yw, damageText);
+    const int iconBlockWidth = iconCount * iconSize +
+                               (iconCount - 1) * iconSpacing;
+    const int labelBarGap = std::max(2, yw->_guiTiles[51]->map[1].w / 2);
+    const int wireAreaWidth = yw->_guiTiles[51]->map[7].w * wis->field_9E;
+
+    int rightEdge = (yw->_screenSize.x / 2) * xpos;
+    rightEdge -= (wis->field_9A + wis->field_96 + labelBarGap +
+                  wireAreaWidth) / 2;
+    rightEdge += wis->field_96 + labelBarGap + wireAreaWidth +
+                 wis->field_9A;
+
+    const int iconBlockRight = rightEdge - textWidth -
+                               (damageText.empty() ? 0 : iconTextGap);
+    const int iconLeft = iconBlockRight - iconBlockWidth;
+    const int centerY = (yw->_screenSize.y / 2) * ypos;
+    const int screenLeft = iconLeft + yw->_screenSize.x / 2;
+    const int screenTop = centerY + yw->_screenSize.y / 2 - iconSize / 2;
+
+    for (int i = 0; i < iconCount; ++i)
+    {
+        StatusIconRenderBitmap(yw, bitmaps[i],
+                               screenLeft + i * (iconSize + iconSpacing),
+                               screenTop, iconSize, 255);
+    }
 }
 
 void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, World::TWeapProto *weap, float xpos, float ypos)
@@ -14523,7 +14700,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
         const std::string mgunDamageText = yw_BuildInfoMgunDamageText(
             bact, vhcl, mgunEffectivePower);
         const float mgunWireX = yw_GetInfoDamageWireX(
-            yw, xpos, mgunDamageText);
+            yw, wis, xpos, NULL, NULL, mgunDamageText);
 
         yw_RenderInfoWeaponLikeWire(yw, wis, vhcl->mgun_wireframe,
                                     &vhcl->wireframe_tint, mgunWireX,
@@ -14546,7 +14723,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
         const std::string weaponDamageText = yw_BuildInfoWeaponDamageText(
             bact, vhcl, weap, weaponEffectiveEnergy);
         const float weaponWireX = yw_GetInfoDamageWireX(
-            yw, xpos, weaponDamageText);
+            yw, wis, xpos, vhcl, weap, weaponDamageText);
 
         yw_RenderInfoWeaponWire(yw, wis, weap, weaponWireX,
                                 ypos - wis->field_92 * 9.0);
@@ -14561,8 +14738,11 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
                                      ypos - wis->field_92 * 5.0);
         }
 
+        const float weaponDamageY = ypos - wis->field_92 * 9.0;
         yw_RenderInfoWeaponInf(yw, wis, cur, bact, vhcl, weap, xpos,
-                               ypos - wis->field_92 * 9.0);
+                               weaponDamageY);
+        yw_RenderInfoWeaponEffectIcons(yw, wis, vhcl, weap, weaponDamageText,
+                                       xpos, weaponDamageY);
     }
 }
 
@@ -16453,8 +16633,7 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
 {
     const bool activeSquadronSelection =
         yw_IsActiveSquadronSelectionUnit(yw, bact);
-    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) &&
-         !activeSquadronSelection )
+    if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
         return;
 
     // OpenNeoUA invisible: never draw the targeting cursor/box over a cloaked stealth unit.
