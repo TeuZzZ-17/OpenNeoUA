@@ -1909,6 +1909,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             _debugGameplayFrozen = false;
             _debugHostStationCheat = false;
             _debugGlobalInvulnerability = false;
+            _debugDpsEnabled = false;
+            DebugResetDpsMeter();
         }
 
         HandleDebugTimeHotkeys(arg->field_8, openUADebug);
@@ -2031,6 +2033,40 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
         if ( openUADebug && arg->field_8 )
         {
+            // F4: rolling DPS meter for the currently controlled player unit.
+            // F4 is also the vanilla return-to-Host hotkey, so New Debug owns
+            // and consumes it only while game.new.debug is enabled.
+            if ( arg->field_8->KbdLastHit == Input::KC_F4 )
+            {
+                arg->field_8->HotKeyID = -1;
+
+                if ( _isNetGame )
+                {
+                    _debugDpsEnabled = false;
+                    DebugResetDpsMeter();
+
+                    yw_arg159 infoMsg;
+                    infoMsg.txt = "DPS Debug unavailable in netgame";
+                    infoMsg.unit = NULL;
+                    infoMsg.Priority = 100;
+                    infoMsg.MsgID = 0;
+                    ypaworld_func159(&infoMsg);
+                }
+                else
+                {
+                    _debugDpsEnabled = !_debugDpsEnabled;
+                    DebugResetDpsMeter();
+                    DebugUpdateDpsSource();
+
+                    yw_arg159 infoMsg;
+                    infoMsg.txt = _debugDpsEnabled ? "DPS Debug ON" : "DPS Debug OFF";
+                    infoMsg.unit = NULL;
+                    infoMsg.Priority = 100;
+                    infoMsg.MsgID = 0;
+                    ypaworld_func159(&infoMsg);
+                }
+            }
+
             // F7 and F8 intentionally share the same selected-vehicle resolver.
             // Attached non-vehicle objects resolve to their carrier, matching the
             // existing F8 debug behavior without introducing a second selection path.
@@ -2178,6 +2214,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
 
         yw_ApplyDebugHostStationResources(this);
+        if ( _debugDpsEnabled )
+            DebugUpdateDpsSource();
 
         _frameTime = arg->DTime;
         _framesElapsed++;
