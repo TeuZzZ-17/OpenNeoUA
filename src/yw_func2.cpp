@@ -1257,7 +1257,7 @@ void  UserData::sb_0x46ca74()
         InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_NONE);
         InputConfig[World::INPUT_BIND_SPRINT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
         InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
-        InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
+        InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_SPACE);
         InputConfig[World::INPUT_BIND_MAP_FOCUS] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 53, Input::KC_E);
         InputConfig[World::INPUT_BIND_ZOOMIN] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 16, Input::KC_NUMPLUS);
         InputConfig[World::INPUT_BIND_ZOOMOUT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 17, Input::KC_NUMMINUS);
@@ -1912,8 +1912,9 @@ void UserData::ShowOptionsMenu()
 }
 
 // OpenNeoUA: restore only the controls exposed on the main Options page.
-// Atmosphere/Visibility keeps its independent reset button. Values are staged
-// exactly like ordinary UI edits: Back cancels them; OK persists them through
+// Advanced Graphics Settings uses the OpenNeoUA graphics profile as its default
+// path. Values are staged exactly like ordinary UI edits: Back cancels them;
+// Save Settings persists them through
 // the existing USER.TXT/OpenNeoUA.ini paths.
 void UserData::ResetOptionsToDefaults()
 {
@@ -2050,7 +2051,7 @@ void UserData::ResetOptionsToDefaults()
 }
 
 
-void UserData::AtmosphereOptionsLoad()
+void UserData::AtmosphereOptionsLoad(bool saveSnapshot)
 {
     atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxVisualFilterStrength.Get<std::string>(), 25);
@@ -2098,7 +2099,8 @@ void UserData::AtmosphereOptionsLoad()
         atmosphereValues[ATMOPT_RENDER_SECTORS] = p_YW->getYW_visSectors();
     }
 
-    atmosphereSavedValues = atmosphereValues;
+    if (saveSnapshot)
+        atmosphereSavedValues = atmosphereValues;
 
     for (int i = 0; i < ATMOPT_COUNT; ++i)
     {
@@ -2162,6 +2164,7 @@ void UserData::AtmosphereOptionsApplyLive()
     if (!changed)
         return;
 
+    MarkAtmosphereGraphicProfileCustom();
     UpdateAtmosphereOptionTexts();
 
     // Keep the framebuffer and world-only atmosphere path active internally.
@@ -2287,6 +2290,7 @@ void UserData::AtmosphereOptionsSave()
     GFX::Engine.SetVhsFilterEnabled(true);
 
     atmosphereSavedValues = atmosphereValues;
+    atmosphereSavedGraphicProfileName = atmosphereGraphicProfileName;
     _settingsChangeOptions &= ~SETTINGS_CHANGE_PALETTE_THEME;
     atmospherePageActive = false;
     atmosphere_button->HideScreen();
@@ -2351,47 +2355,17 @@ void UserData::AtmosphereOptionsCancel()
     GFX::Engine.SetVhsFilterEnabled(true);
 
     confPaletteTheme = paletteTheme;
+    System::IniConf::GfxVisualFilter.Value = PaletteThemeStorageValue(confPaletteTheme);
+    GFX::Engine.SetVisualFilter(PaletteThemeStorageValue(confPaletteTheme));
     _settingsChangeOptions &= ~SETTINGS_CHANGE_PALETTE_THEME;
     UpdatePaletteThemeText();
+
+    atmosphereGraphicProfileName = atmosphereSavedGraphicProfileName;
+    UpdateGraphicProfileText();
 
     atmospherePageActive = false;
     atmosphere_button->HideScreen();
     video_button->ShowScreen();
-}
-
-void UserData::AtmosphereOptionsReset()
-{
-    atmosphereValues =
-    {{
-        25, 50, 170, 95, 80, 60,
-        4000, 2000, 80,
-        2000, 2000, 65,
-        5700,
-        60,
-        YW_PARTICLE_LIMIT_UI_DEFAULT,
-        YW_RENDER_SECTORS_UI_DEFAULT
-    }};
-
-    confPaletteTheme = "Black_Wadi.pal";
-    _settingsChangeOptions |= SETTINGS_CHANGE_PALETTE_THEME;
-    UpdatePaletteThemeText();
-
-    for (int i = 0; i < ATMOPT_COUNT; ++i)
-    {
-        NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400 + i);
-        if (slider)
-        {
-            slider->value = (int16_t)atmosphereValues[i];
-            atmosphere_button->Refresh(1400 + i);
-        }
-    }
-
-    UpdateAtmosphereOptionTexts();
-
-    // Nudge the live path by temporarily changing the cached first value.
-    int first = atmosphereValues[0];
-    atmosphereValues[0] = first == 100 ? 99 : first + 1;
-    AtmosphereOptionsApplyLive();
 }
 
 void UserData::ShowAtmosphereOptionsMenu()
@@ -2400,9 +2374,12 @@ void UserData::ShowAtmosphereOptionsMenu()
         return;
 
     RefreshPaletteThemes();
+    RefreshGraphicProfiles();
     confPaletteTheme = paletteTheme;
     AtmosphereOptionsLoad();
     UpdatePaletteThemeText();
+    DetectMatchingGraphicProfile();
+    atmosphereSavedGraphicProfileName = atmosphereGraphicProfileName;
     atmospherePageActive = true;
     video_button->HideScreen();
     atmosphere_button->ShowScreen();
@@ -2873,6 +2850,258 @@ void  UserData::UpdateSelected3DDevFromList()
     video_button->SetText(1172, name);
 }
 
+void UserData::RefreshGraphicProfiles()
+{
+    const std::string currentName = atmosphereGraphicProfileName;
+    atmosphereGraphicProfiles.clear();
+
+    // Presets are discovered at runtime. Adding/removing a .txt file requires
+    // no code change and unknown keys inside a profile are safely ignored.
+    FSMgr::DirIter dir = uaOpenDir("data:Scripts/Graphic_Profiles");
+    FSMgr::iNode *node = NULL;
+
+    while (dir.getNext(&node))
+    {
+        if (!node || node->getType() != FSMgr::iNode::NTYPE_FILE)
+            continue;
+
+        const std::string fileName = node->getName();
+        if (fileName.size() < 4 || StriCmp(fileName.substr(fileName.size() - 4), ".txt"))
+            continue;
+
+        TGraphicProfile profile;
+        profile.Name = fileName.substr(0, fileName.size() - 4);
+        profile.Path = node->getVPath();
+        atmosphereGraphicProfiles.push_back(profile);
+    }
+
+    std::sort(atmosphereGraphicProfiles.begin(), atmosphereGraphicProfiles.end(),
+        [](const TGraphicProfile &a, const TGraphicProfile &b)
+        {
+            return StriCmp(a.Name, b.Name) < 0;
+        });
+
+    if (!currentName.empty())
+    {
+        bool found = false;
+        for (const TGraphicProfile &profile : atmosphereGraphicProfiles)
+        {
+            if (!StriCmp(profile.Name, currentName))
+            {
+                atmosphereGraphicProfileName = profile.Name;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+            atmosphereGraphicProfileName.clear();
+    }
+}
+
+void UserData::DetectMatchingGraphicProfile()
+{
+    atmosphereGraphicProfileName.clear();
+
+    // Auto-identification is intentionally strict: a profile is named only when
+    // it defines every control currently exposed by this page and all values
+    // match. Partial or hand-edited configurations therefore remain Custom.
+    for (const TGraphicProfile &profile : atmosphereGraphicProfiles)
+    {
+        Common::Ini::Key visualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Standard"));
+        Common::Ini::Key visualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key atmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key exposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key contrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key saturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key vignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key fogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key fogLength("gfx.horizon_fog_length", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key fogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key darkStart("gfx.horizon_dark_start", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key darkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key darkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key worldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key vhsStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key particleLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)0);
+        Common::Ini::Key renderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
+
+        Common::Ini::PKeyList keys =
+        {
+            &visualFilter, &visualFilterStrength, &atmosphereStrength,
+            &exposure, &contrast, &saturation, &vignette,
+            &fogStart, &fogLength, &fogStrength,
+            &darkStart, &darkLength, &darkStrength,
+            &worldUiMaxDistance, &vhsStrength, &particleLimit, &renderSectors
+        };
+
+        if (!Common::Ini::ParseIniFileOverlay(profile.Path, &keys))
+            continue;
+
+        bool complete = true;
+        for (Common::Ini::Key *key : keys)
+        {
+            if (!key->WasSet)
+            {
+                complete = false;
+                break;
+            }
+        }
+        if (!complete)
+            continue;
+
+        if (StriCmp(NormalizePaletteThemeName(visualFilter.Get<std::string>()), confPaletteTheme))
+            continue;
+
+        std::array<int, ATMOPT_COUNT> profileValues =
+        {{
+            VisualFilterStrengthPercentFromString(visualFilterStrength.Get<std::string>(), -1),
+            VisualFilterStrengthPercentFromString(atmosphereStrength.Get<std::string>(), -1),
+            FloatHundredFromString(exposure.Get<std::string>(), -1, 25, 200),
+            FloatHundredFromString(contrast.Get<std::string>(), -1, 50, 200),
+            FloatHundredFromString(saturation.Get<std::string>(), -1, 0, 200),
+            VisualFilterStrengthPercentFromString(vignette.Get<std::string>(), -1),
+            IntFromString(fogStart.Get<std::string>(), -1, 0, 10000),
+            IntFromString(fogLength.Get<std::string>(), -1, 0, 10000),
+            VisualFilterStrengthPercentFromString(fogStrength.Get<std::string>(), -1),
+            IntFromString(darkStart.Get<std::string>(), -1, 0, 10000),
+            IntFromString(darkLength.Get<std::string>(), -1, 0, 10000),
+            VisualFilterStrengthPercentFromString(darkStrength.Get<std::string>(), -1),
+            IntFromString(worldUiMaxDistance.Get<std::string>(), -1, 100, 20000),
+            VisualFilterStrengthPercentFromString(vhsStrength.Get<std::string>(), -1),
+            std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, particleLimit.Get<int32_t>())),
+            IntFromString(renderSectors.Get<std::string>(), -1, 3, YW_RENDER_SECTORS_MAX)
+        }};
+
+        if (profileValues == atmosphereValues)
+        {
+            atmosphereGraphicProfileName = profile.Name;
+            break;
+        }
+    }
+
+    UpdateGraphicProfileText();
+}
+
+void UserData::UpdateGraphicProfileText()
+{
+    if (!atmosphere_button)
+        return;
+
+    atmosphere_button->SetText(1389,
+        atmosphereGraphicProfileName.empty()
+            ? Locale::Text::OpenUA(Locale::OUA_CUSTOM)
+            : atmosphereGraphicProfileName);
+}
+
+void UserData::MarkAtmosphereGraphicProfileCustom()
+{
+    if (atmosphereGraphicProfileName.empty())
+        return;
+
+    atmosphereGraphicProfileName.clear();
+    UpdateGraphicProfileText();
+}
+
+bool UserData::ApplyGraphicProfile(const TGraphicProfile &profile)
+{
+    Common::Ini::PKeyList keys =
+    {
+        &System::IniConf::GfxVisualFilter,
+        &System::IniConf::GfxVisualFilterStrength,
+        &System::IniConf::GfxAtmosphereStrength,
+        &System::IniConf::GfxAtmosphereExposure,
+        &System::IniConf::GfxAtmosphereContrast,
+        &System::IniConf::GfxAtmosphereSaturation,
+        &System::IniConf::GfxAtmosphereVignette,
+        &System::IniConf::GfxHorizonFogStart,
+        &System::IniConf::GfxHorizonFogLength,
+        &System::IniConf::GfxHorizonFogStrength,
+        &System::IniConf::GfxHorizonDarkStart,
+        &System::IniConf::GfxHorizonDarkLength,
+        &System::IniConf::GfxHorizonDarkStrength,
+        &System::IniConf::GameWorldUiMaxDistance,
+        &System::IniConf::GfxVhsFilterStrength,
+        &System::IniConf::GfxParticlesLimit,
+        &System::IniConf::GfxRenderSectors
+    };
+
+    if (!Common::Ini::ParseIniFileOverlay(profile.Path, &keys))
+    {
+        ypa_log_out("WARNING: Could not load graphics profile %s\n", profile.Path.c_str());
+        return false;
+    }
+
+    // gfx.visual_filter is the only non-slider value on this page. If a profile
+    // references a missing PAL, fall back to Standard without blocking the rest.
+    const std::string requestedTheme =
+        NormalizePaletteThemeName(System::IniConf::GfxVisualFilter.Get<std::string>());
+    bool themeFound = requestedTheme.empty();
+    for (const std::string &theme : paletteThemes)
+    {
+        if (!StriCmp(theme, requestedTheme))
+        {
+            themeFound = true;
+            break;
+        }
+    }
+
+    if (!themeFound)
+        ypa_log_out("WARNING: Graphics profile %s references missing visual filter %s; using Standard.\n",
+                    profile.Name.c_str(), requestedTheme.c_str());
+
+    confPaletteTheme = themeFound ? requestedTheme : std::string();
+    System::IniConf::GfxVisualFilter.Value = PaletteThemeStorageValue(confPaletteTheme);
+
+    // Reuse the existing menu conversion/clamping path. The saved snapshot is
+    // deliberately untouched so Back still restores the pre-preset settings.
+    AtmosphereOptionsLoad(false);
+    UpdatePaletteThemeText();
+
+    // Infrastructure switches stay enabled by the same safe internal defaults
+    // used by manual Advanced Graphics Settings editing.
+    System::IniConf::GfxAtmosphereFx.Value = true;
+    System::IniConf::GfxHorizonFogEnable.Value = true;
+    System::IniConf::GfxHorizonDarkEnable.Value = true;
+
+    GFX::Engine.SetVisualFilter(PaletteThemeStorageValue(confPaletteTheme));
+    GFX::Engine.SetVisualFilterStrength(
+        atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
+    GFX::Engine.ApplyAtmosphereFromConfig();
+    GFX::Engine.ReloadHorizonConfig();
+    GFX::Engine.SetVhsFilterEnabled(true);
+
+    atmosphereGraphicProfileName = profile.Name;
+    _settingsChangeOptions |= SETTINGS_CHANGE_PALETTE_THEME;
+    UpdateGraphicProfileText();
+    return true;
+}
+
+void UserData::CycleGraphicProfile()
+{
+    RefreshGraphicProfiles();
+    if (atmosphereGraphicProfiles.empty())
+    {
+        MarkAtmosphereGraphicProfileCustom();
+        return;
+    }
+
+    size_t next = 0;
+    if (!atmosphereGraphicProfileName.empty())
+    {
+        for (size_t i = 0; i < atmosphereGraphicProfiles.size(); ++i)
+        {
+            if (!StriCmp(atmosphereGraphicProfiles[i].Name, atmosphereGraphicProfileName))
+            {
+                next = (i + 1) % atmosphereGraphicProfiles.size();
+                break;
+            }
+        }
+    }
+
+    ApplyGraphicProfile(atmosphereGraphicProfiles[next]);
+}
+
 void UserData::RefreshPaletteThemes()
 {
     paletteThemes.clear();
@@ -2940,6 +3169,8 @@ void UserData::CyclePaletteTheme()
 
     confPaletteTheme = paletteThemes[next];
     _settingsChangeOptions |= SETTINGS_CHANGE_PALETTE_THEME;
+    if (atmospherePageActive)
+        MarkAtmosphereGraphicProfileCustom();
     UpdatePaletteThemeText();
 }
 
@@ -5316,10 +5547,10 @@ void UserData::GameShellUiHandleInput()
 
                 if (atmosphereResult.code == 1450)
                     AtmosphereOptionsSave();
-                else if (atmosphereResult.code == 1451)
-                    AtmosphereOptionsReset();
                 else if (atmosphereResult.code == 1452)
                     AtmosphereOptionsCancel();
+                else if (atmosphereResult.code == 1449)
+                    CycleGraphicProfile();
                 else if (atmosphereResult.code == 1136)
                     CyclePaletteTheme();
             }
@@ -5452,7 +5683,7 @@ void UserData::GameShellUiHandleInput()
             _settingsChangeOptions |= SETTINGS_CHANGE_AMBIENT_VOLUME;
         }
         // OpenNeoUA: modern graphics options
-        else if ( r.code == 1320 ) // Atmosphere & Visibility page
+        else if ( r.code == 1320 ) // Advanced Graphics Settings page
         {
             ShowAtmosphereOptionsMenu();
         }

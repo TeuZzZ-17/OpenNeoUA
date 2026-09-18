@@ -379,7 +379,6 @@ bool InputParser::IsScope(ScriptParser::Parser &parser, const std::string &word,
         _isNewInputScope = true;
         _legacyCameraZoomInSeen = false;
         _legacyCameraZoomOutSeen = false;
-        _ufoSpyUiToggleSeen = false;
         _mapFocusSeen = false;
         _legacyCameraZoomInKey = Input::KC_NONE;
         _legacyCameraZoomOutKey = Input::KC_NONE;
@@ -500,36 +499,18 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
                 }
             }
 
-            // UFO Spy UI Toggle is newer than older user.txt profiles. Preserve
-            // the new U default only when that key is not already owned by a
-            // custom binding in an older profile. Explicit slot 52 entries,
-            // including nop, always remain authoritative.
-            if ( !_ufoSpyUiToggleSeen )
+            // UFO Spy Mode used U as its provisional default in older OpenNeoUA
+            // profiles. Space is now the contextual default shown in Input Settings.
+            // Only the known old U default is migrated; every other custom key stays
+            // authoritative. The binding is polled directly, so sharing Space with
+            // Host Station / normal-unit actions is intentional and safe.
+            UserData::TInputConf &ufoSpyToggle =
+                _o._GameShell->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI];
+            if ( ufoSpyToggle.PKeyCode == Input::KC_U )
             {
-                UserData::TInputConf &ufoSpyToggle =
-                    _o._GameShell->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI];
-                bool uAlreadyUsed = false;
-
-                for ( size_t i = 1; i < _o._GameShell->InputConfig.size(); ++i )
-                {
-                    if ( i == World::INPUT_BIND_TOGGLE_UFO_SPY_UI ||
-                         UserData::IsInputBindingRetired((int)i) )
-                        continue;
-
-                    const UserData::TInputConf &cfg = _o._GameShell->InputConfig[i];
-                    if ( cfg.PKeyCode == Input::KC_U || cfg.NKeyCode == Input::KC_U )
-                    {
-                        uAlreadyUsed = true;
-                        break;
-                    }
-                }
-
-                if ( uAlreadyUsed && ufoSpyToggle.PKeyCode == Input::KC_U )
-                {
-                    ufoSpyToggle.PKeyCode = Input::KC_NONE;
-                    Input::Engine.SetHotKey(ufoSpyToggle.KeyID, "nop");
-                    migrated = true;
-                }
+                ufoSpyToggle.PKeyCode = Input::KC_SPACE;
+                _o.ReloadInput(World::INPUT_BIND_TOGGLE_UFO_SPY_UI);
+                migrated = true;
             }
 
             // Map Focus is newer than older user.txt profiles. Preserve the
@@ -815,9 +796,7 @@ int InputParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
                 return ScriptParser::RESULT_OK;
             }
 
-            if ( cfgIdex == 52 )
-                _ufoSpyUiToggleSeen = true;
-            else if ( cfgIdex == 53 )
+            if ( cfgIdex == 53 )
                 _mapFocusSeen = true;
 
             int gsIndex = UserData::InputIndexFromConfig(World::INPUT_BIND_TYPE_HOTKEY, cfgIdex);
@@ -2604,6 +2583,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         {
             _vhcl->model_id = BACT_TYPES_UFO;
             _vhcl->combat_class = VEHICLE_COMBAT_CLASS_UFO;
+
+            // UFO control does not use the generic handbrake. Avoid loading its
+            // global sample for this class; Space/Stop is owned by Spy UI instead.
+            _vhcl->sndFX[TVhclProto::SND_HANDBRAKE].MainSample.Name.clear();
         }
         else if ( !StriCmp(p2, "car") )
         {
@@ -3093,6 +3076,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->spy_ui_radius =
             std::isfinite(radius) && radius > 0.0f ? radius : 0.0f;
     }
+    else if ( !StriCmp(p1, "spy_ui_radius_sound") )
+    {
+        // Optional one-shot used by both enable and disable transitions.
+        _vhcl->sndFX[TVhclProto::SND_SPY_UI].MainSample.Name = p2;
+    }
     else if ( !StriCmp(p1, "zoom_steps") )
     {
         // -1 means the parameter is absent/invalid and preserves the current
@@ -3102,6 +3090,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->zoom_steps = parsed == p2.size() && steps >= 0
             ? (int)std::min<long>(steps, 10)
             : -1;
+    }
+    else if ( !StriCmp(p1, "zoom_step_sound") )
+    {
+        // Optional one-shot played whenever an actual UFO optical zoom step is applied.
+        _vhcl->sndFX[TVhclProto::SND_ZOOM_STEP].MainSample.Name = p2;
     }
     else if ( !StriCmp(p1, "damaged_force_malus") )
     {
