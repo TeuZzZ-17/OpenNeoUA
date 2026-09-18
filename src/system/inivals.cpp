@@ -40,7 +40,6 @@ Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::
 Common::Ini::Key IniConf::GfxHorizonDarkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string("2000"));
 Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("0.65"));
 Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0_0_0"));
-Common::Ini::Key IniConf::GfxRenderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string("55"));
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyRender("gfx.sky_render", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxHideMapBorderWalls("gfx.hide_map_border_walls", Common::Ini::KT_BOOL, false);
@@ -491,7 +490,6 @@ void IniConf::Init()
         , &GfxHorizonDarkLength
         , &GfxHorizonDarkStrength
         , &GfxHorizonDarkColor
-        , &GfxRenderSectors
         , &GfxSkyHeight
         , &GfxSkyRender
         , &GfxHideMapBorderWalls
@@ -805,11 +803,21 @@ bool IniConf::ReadFromNucleusIni()
     // the Advanced Graphics Settings page. If the profile is unavailable,
     // Classic provides a safe fallback. A user's OpenNeoUA.ini remains the
     // higher-priority layer, so existing saved/custom values still win.
-    if (!Common::Ini::ParseIniFileOverlay(
-            "Data/Scripts/Graphic_Profiles/OpenNeoUA.txt", &_varList))
+    bool graphicsProfileLoaded = Common::Ini::ParseIniFileOverlay(
+        "Data/Scripts/Graphic_Profiles/OpenNeoUA.cfg", &_varList);
+
+    // Compatibility with profiles created before .cfg became the native extension.
+    if (!graphicsProfileLoaded)
+        graphicsProfileLoaded = Common::Ini::ParseIniFileOverlay(
+            "Data/Scripts/Graphic_Profiles/OpenNeoUA.txt", &_varList);
+
+    if (!graphicsProfileLoaded)
     {
-        Common::Ini::ParseIniFileOverlay(
-            "Data/Scripts/Graphic_Profiles/Classic.txt", &_varList);
+        graphicsProfileLoaded = Common::Ini::ParseIniFileOverlay(
+            "Data/Scripts/Graphic_Profiles/Classic.cfg", &_varList);
+        if (!graphicsProfileLoaded)
+            Common::Ini::ParseIniFileOverlay(
+                "Data/Scripts/Graphic_Profiles/Classic.txt", &_varList);
     }
 
     // OpenNeoUA custom settings are the user layer above Nucleus + the default profile.
