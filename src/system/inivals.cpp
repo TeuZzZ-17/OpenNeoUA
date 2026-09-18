@@ -93,6 +93,9 @@ Common::Ini::Key IniConf::GfxVBO("gfx.vbo", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std::string("Default"));
 // OpenNeoUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
+// OpenNeoUA: the weapon-name panel did not exist in the vanilla HUD. Keep it
+// opt-in so missing/disabled configuration preserves the original interface.
+Common::Ini::Key IniConf::UiWeaponName("ui.weapon_name", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::UiMapMarkerSound("ui.map_marker_sound", Common::Ini::KT_STRING, std::string());
 // OpenNeoUA Genesis/Creation list geometry defaults. Numeric parsing keeps invalid
 // authored values on the declared defaults automatically.
@@ -784,6 +787,7 @@ void IniConf::Init()
 
         , &UiMenuFont
         , &UiRetroInterface
+        , &UiWeaponName
         , &UiMapMarkerSound
         , &UiGenesisListX
         , &UiGenesisListWidth
