@@ -697,8 +697,6 @@ public:
         ATMOPT_VHS_STRENGTH,
         ATMOPT_PARTICLE_LIMIT,
         ATMOPT_RENDER_SECTORS,
-        ATMOPT_INTERFACE_INTENSITY,
-        ATMOPT_TEXT_OPACITY,
         ATMOPT_COUNT
     };
 
@@ -818,7 +816,7 @@ public:
     bool confPlayAsOtherFactions;
     bool confHideMapBorderWalls = false;
     // OpenNeoUA: optional modern cockpit camera. The original first-person viewer remains
-    // the default; Nucleus.ini may opt into cockpit mode for the current session.
+    // the default; OpenNeoUA.ini may opt into cockpit mode for the current session.
     bool cockpitCameraRuntimeMode = false;
 
     // OpenNeoUA: modern graphics options shown in the Options menu.
@@ -826,7 +824,7 @@ public:
     int confMaxFps;               // gfx.maxfps, validated against the Options FPS list
     bool confMoviePlayer;         // gfx.movie_player
 
-    // OpenNeoUA: profile-saved virtual UI magnification style. Nucleus.ini
+    // OpenNeoUA: profile-saved virtual UI magnification style. OpenNeoUA.ini
     // supplies the fallback for new/legacy profiles; a saved profile overrides it.
     GFX::VirtualUIStyle interfaceStyle = GFX::VirtualUIStyle::RETRO;
     GFX::VirtualUIStyle confInterfaceStyle = GFX::VirtualUIStyle::RETRO;
@@ -1090,13 +1088,11 @@ public:
     void RefreshMenuFonts();
     void CycleMenuFont();
     void UpdateMenuFontText();
-    bool SavePaletteThemeToNucleusIni();
     // OpenNeoUA: modern graphics options helpers
     void UpdateGfxOptionTexts();   // refresh Blending/Atmosphere-Strength captions
     bool SaveKeyToNucleusIni(const std::string &key, const std::string &value);
-    bool RemoveKeyFromNucleusIni(const std::string &key);
-    bool SavePlayerRoboAIBehaviorToNucleusIni();
-    bool SaveSpectatorModeToNucleusIni();
+    bool SaveKeyToOpenNeoUAIni(const std::string &key, const std::string &value);
+    bool RemoveKeyFromOpenNeoUAIni(const std::string &key);
     void sub_46A7F8();
     void ShowAbout();
     void ShowDatabaseMenu();

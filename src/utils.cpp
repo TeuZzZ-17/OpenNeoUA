@@ -317,6 +317,31 @@ std::string uaDataFirstNucleusIniPath()
     return "nucleus.ini";
 }
 
+
+std::string uaDataFirstOpenNeoUAIniPath()
+{
+    const char *candidates[] = {
+        "Data/OpenNeoUA.ini",
+        "Data/OPENNEOUA.INI",
+        "Data/openneoua.ini",
+        "OpenNeoUA.ini",
+        "OPENNEOUA.INI",
+        "openneoua.ini"
+    };
+
+    for (const char *candidate : candidates)
+    {
+        if (uaFileExistsDirect(candidate))
+            return correctSeparatorAndExt(candidate);
+    }
+
+    // Keep a newly created OpenNeoUA.ini beside the Data-first Nucleus layout.
+    if (uaDirExistsDirect("Data"))
+        return correctSeparatorAndExt("Data/OpenNeoUA.ini");
+
+    return "OpenNeoUA.ini";
+}
+
 std::string uaDataFirstResolvedReadPath(const std::string &path)
 {
     return uaResolvePath(path, false, false);

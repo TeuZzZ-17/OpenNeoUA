@@ -76,23 +76,6 @@ static uint8_t yw_GetSquadronManagerOpacity()
                                      System::IniConf::UiSquadronManagerDefaultOpacity);
 }
 
-static uint8_t yw_GetHudBarsOpacity()
-{
-    return yw_GetConfiguredUiOpacity(System::IniConf::UiHudBarsOpacity,
-                                     System::IniConf::UiHudBarsDefaultOpacity);
-}
-
-static uint8_t yw_GetGameplayTextOpacity()
-{
-    return yw_GetConfiguredUiOpacity(System::IniConf::UiTextOpacity,
-                                     System::IniConf::UiTextDefaultOpacity);
-}
-
-static uint8_t yw_MultiplyOpacity(uint8_t baseOpacity, uint8_t multiplier)
-{
-    return (uint8_t)(((uint32_t)baseOpacity * multiplier + 127U) / 255U);
-}
-
 constexpr int STATUS_ICON_MAX_COUNT = 8;
 constexpr int STATUS_ICON_SIZE = 16;
 constexpr int STATUS_ICON_SPACING = 2;
@@ -4004,10 +3987,8 @@ void sb_0x4f8f64__sub3__sub1(NC_STACK_ypaworld *yw, const std::string &labl, int
         FontUA::set_center_xpos(cur, robo_map.field_200 + v9);
         FontUA::set_center_ypos(cur, robo_map.field_204 + v10);
 
-        FontUA::set_opacity(cur, yw_GetGameplayTextOpacity());
         for ( uint8_t c : labl )
             FontUA::store_s8(cur, c);
-        FontUA::set_opacity(cur, 255);
     }
 }
 
@@ -6542,8 +6523,7 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
     FontUA::add_xpos(cur, -squadron_manager.field_2CC);
 
     // The Genesis opacity controls the row background only. Vehicle/building
-    // icons remain at their original opacity, while names and prices continue
-    // through the independent gameplay text-opacity path.
+    // icons, names and prices remain at their original opacity.
     if ( backgroundOpacity != 255 )
         FontUA::set_opacity(cur, 255);
     FormateColumnItem(yw, cur, 1, v24);
@@ -7137,7 +7117,6 @@ void ypaworld_func64__sub7__sub2__sub1(NC_STACK_ypaworld *yw)
     sub_4C3A54(yw);
 
     bzda.cmdCommands.clear();
-    FontUA::set_opacity(&bzda.cmdCommands, yw_GetHudBarsOpacity());
 
     if ( bzda.field_1D4 & 1 )
     {
@@ -8292,7 +8271,6 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
     if ( !v25 && a7 > 0.0 )
         v25 = 1;
 
-    FontUA::set_opacity(cur, yw_GetHudBarsOpacity());
     FontUA::select_tileset(cur, 30);
     FontUA::set_center_xpos(cur, x);
     FontUA::set_center_ypos(cur, y);
@@ -8326,7 +8304,6 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
 
     if ( !a8.empty() )
     {
-        FontUA::set_opacity(cur, yw_GetGameplayTextOpacity());
         FontUA::select_tileset(cur, 31);
 
         FontUA::set_center_xpos(cur, x + up_panel.field_1DC + 4);
@@ -8334,8 +8311,6 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
 
         cur->insert(cur->end(), a8.begin(), a8.end());
     }
-
-    FontUA::set_opacity(cur, 255);
 }
 
 void ypaworld_func64__sub7__sub7__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, int a3, int a4, int a5, int a6, float a7)
@@ -8625,8 +8600,7 @@ static void yw_RenderPlasmaCurrencyHud(NC_STACK_ypaworld *yw, CmdStream *cur)
 
     SDL_Color color = yw_GetFactionUiTextColor(yw);
     FontUA::select_tileset(cur, PLASMA_CURRENCY_HUD_FONT);
-    FontUA::set_opacity(cur, yw_MultiplyOpacity(yw->GetPlasmaCurrencyHudOpacity(),
-                                               yw_GetGameplayTextOpacity()));
+    FontUA::set_opacity(cur, yw->GetPlasmaCurrencyHudOpacity());
     FontUA::set_txtColor(cur, color.r, color.g, color.b);
     FontUA::set_center_ypos(cur, layout.textY);
 
@@ -8653,9 +8627,7 @@ static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw)
     if ( icon && icon->GetBitmap() )
     {
         StatusIconRenderBitmap(yw, icon, layout.iconLeft, layout.iconTop,
-                               layout.iconSize,
-                               yw_MultiplyOpacity(yw->GetPlasmaCurrencyHudOpacity(),
-                                                  yw_GetHudBarsOpacity()));
+                               layout.iconSize, yw->GetPlasmaCurrencyHudOpacity());
     }
 }
 
@@ -10530,7 +10502,7 @@ static void yw_RenderPlasmaCurrencyPopups(NC_STACK_ypaworld *yw, CmdStream *cur)
         SDL_Color color = yw_GetFactionUiTextColor(yw);
         color.a = opacity;
         FontUA::select_tileset(cur, 15);
-        FontUA::set_opacity(cur, yw_MultiplyOpacity(opacity, yw_GetGameplayTextOpacity()));
+        FontUA::set_opacity(cur, opacity);
         FontUA::set_txtColor(cur, color.r, color.g, color.b);
         FontUA::set_center_xpos(cur, contentLeft - yw->_screenSize.x / 2);
         FontUA::set_center_ypos(cur, contentTop - yw->_screenSize.y / 2);

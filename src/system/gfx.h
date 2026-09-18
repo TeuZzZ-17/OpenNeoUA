@@ -475,7 +475,6 @@ struct ScreenText
     int p3;
     int p4;
     int flag;
-    uint8_t opacity = 255;
 };
 
 struct ScreenFont
@@ -767,8 +766,6 @@ public:
 
     int LoadFontByDescr(const std::string &fontname);
     int MeasureScreenTextWidth(const std::string &text) const;
-    void SetScreenTextOpacity(uint8_t opacity) { _screenTextOpacity = opacity; }
-    uint8_t GetScreenTextOpacity() const { return _screenTextOpacity; }
     void matrixAspectCorrection(mat3x3 &inout, bool invert);
     void getAspectCorrection(float &cW, float &cH, bool invert);
     void viewZoomCorrection(float &x, float &y, bool invert = false) const;
@@ -910,7 +907,6 @@ public:
     int _sceneBeginned;
 
     ScreenFont _font;
-    uint8_t _screenTextOpacity = 255;
 
     float _corrW, _corrIW;
     float _corrH, _corrIH;

@@ -2440,9 +2440,6 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             {
                 uint32_t v62 = profiler_begin();
 
-                GFX::Engine.SetScreenTextOpacity((uint8_t)System::IniConf::GetUiOpacity(
-                    System::IniConf::UiTextOpacity, System::IniConf::UiTextDefaultOpacity));
-
                 if ( _userUnit->_cellId ) // if cell is not 0,0
                 {
                     CrashDiag::SetPhase("WorldRender3D");
@@ -2470,7 +2467,6 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 // so the overlap can be cleared without globally hiding HUD.
                 yw_FinalizePriorityGameplayUi(this);
 
-                GFX::Engine.SetScreenTextOpacity(255);
                 GFX::Engine.EndVirtualUI();
 
                 GFX::Engine.EndFrame();
@@ -8051,15 +8047,13 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         Locale::Text::OpenUA(Locale::OUA_WORLD_UI_MAX_DISTANCE),
         Locale::Text::OpenUA(Locale::OUA_VHS_STRENGTH),
         Locale::Text::OpenUA(Locale::OUA_PARTICLE_LIMIT),
-        Locale::Text::OpenUA(Locale::OUA_RENDER_SECTORS),
-        Locale::Text::OpenUA(Locale::OUA_INTERFACE_INTENSITY),
-        Locale::Text::OpenUA(Locale::OUA_TEXT_OPACITY)
+        Locale::Text::OpenUA(Locale::OUA_RENDER_SECTORS)
     }};
 
     const std::array<int, UserData::ATMOPT_COUNT> mins =
-    {{0, 0, 25, 50, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 3, 0, 0}};
+    {{0, 0, 25, 50, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 3}};
     const std::array<int, UserData::ATMOPT_COUNT> maxs =
-    {{100, 100, 200, 200, 200, 100, 10000, 10000, 100, 10000, 10000, 100, 20000, 100, YW_PARTICLE_LIMIT_UI_MAX, YW_RENDER_SECTORS_MAX, 100, 100}};
+    {{100, 100, 200, 200, 200, 100, 10000, 10000, 100, 10000, 10000, 100, 20000, 100, YW_PARTICLE_LIMIT_UI_MAX, YW_RENDER_SECTORS_MAX}};
 
     NC_STACK_button::button_64_arg btn;
     btn.caption2.clear();
