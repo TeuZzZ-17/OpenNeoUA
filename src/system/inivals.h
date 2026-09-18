@@ -348,7 +348,7 @@ public:
     static Common::Ini::Key NetWaitStart;
     static Common::Ini::Key NetKickoff;
 
-    static Common::Ini::Key GfxParticlesLimit; // OpenNeoUA: maximum active particles; default 9000, matching Advanced Graphics Reset Defaults
+    static Common::Ini::Key GfxParticlesLimit; // OpenNeoUA: maximum active particles; default 9000, matching the OpenNeoUA graphics profile
     static Common::Ini::Key GfxGroundDecalLimit;
     static Common::Ini::Key MenuWindowed;
 
@@ -357,7 +357,7 @@ public:
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
     static Common::Ini::Key UiWeaponName; // OpenNeoUA: optional Weapon-name panel; default false preserves vanilla HUD
-    static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional marker sound override; missing/unloadable uses the embedded default
+    static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional Data-relative WAV played when a Map Marker is placed; empty/unloadable = silent
     static constexpr int UiGenesisListDefaultX = 0;
     static constexpr int UiGenesisListDefaultWidth = 180;
     static constexpr int UiGenesisListDefaultHeight = 220;

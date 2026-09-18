@@ -1260,7 +1260,7 @@ static std::string yw_SuperItemProfileKey(const std::string &id)
 
 bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles)
 {
-    static const std::string profilePath = "data:scripts/super_item_profiles/super_item_profiles.txt";
+    static const std::string profilePath = "data:scripts/superitem_profiles/superitem_profiles.txt";
     if ( !uaFileExist(profilePath) )
     {
         _superItemProfiles.clear();
@@ -1276,7 +1276,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     if ( !ScriptParser::ParseFile(profilePath, parsers,
                                   ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
     {
-        ypa_log_out("WARNING: Data/Scripts/Super_Item_Profiles/Super_Item_Profiles.txt is invalid; keeping the previously loaded profile set.\n");
+        ypa_log_out("WARNING: Data/Scripts/Superitem_Profiles/Superitem_Profiles.txt is invalid; keeping the previously loaded profile set.\n");
         return false;
     }
 
@@ -1377,7 +1377,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     {
         _superItemProfiles.swap(parsedProfiles);
     }
-    ypa_log_out("Loaded %u SuperItem profile(s) from Data/Scripts/Super_Item_Profiles/Super_Item_Profiles.txt.\n",
+    ypa_log_out("Loaded %u SuperItem profile(s) from Data/Scripts/Superitem_Profiles/Superitem_Profiles.txt.\n",
                 (unsigned)_superItemProfiles.size());
     return true;
 }
@@ -1800,13 +1800,20 @@ bool NC_STACK_ypaworld::IsUfoSpyUiControlContext() const
 
 static void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
 {
-    if ( !yw || !inpt || !yw->IsUfoSpyUiControlContext() )
+    if ( !yw || !inpt )
         return;
 
     const UserData::TInputConf &bind =
         yw->_GameShell->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI];
-    const bool primaryPressed =
-        bind.Type == World::INPUT_BIND_TYPE_HOTKEY && inpt->HotKeyID == bind.KeyID;
+    const bool primaryDown =
+        bind.PKeyCode > Input::KC_NONE && bind.PKeyCode < Input::KC_MAX &&
+        Input::Engine.GetKeyState(bind.PKeyCode);
+    const bool primaryPressed = primaryDown && !yw->_ufoSpyBindingIsDown;
+    yw->_ufoSpyBindingIsDown = primaryDown;
+
+    if ( !yw->IsUfoSpyUiControlContext() )
+        return;
+
     const bool fixedShortcutPressed =
         yw->_mouseGrabbed &&
         World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_TOGGLE_UFO_SPY_UI);
@@ -1815,6 +1822,16 @@ static void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
         return;
 
     yw->_ufoSpyUiEnabled = !yw->_ufoSpyUiEnabled;
+
+    // The optional authored sound is shared by ON and OFF so one parameter
+    // describes the complete toggle interaction. Empty/missing = silent.
+    const size_t soundId = World::TVhclProto::SND_SPY_UI;
+    if ( yw->_userUnit && yw->_userUnit->_soundcarrier.Sounds.size() > soundId )
+    {
+        TSoundSource &sound = yw->_userUnit->_soundcarrier.Sounds[soundId];
+        if ( sound.PSample )
+            SFXEngine::SFXe.startSound(&yw->_userUnit->_soundcarrier, soundId);
+    }
 
     if ( primaryPressed )
         inpt->HotKeyID = -1;
@@ -3149,43 +3166,12 @@ void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
 }
 
 
-static const uint8_t yw_EmbeddedMapMarkerPcm[] = {
-#include "resources/map_marker_pcm.inc"
-};
-
-static NC_STACK_sample *yw_CreateEmbeddedMapMarkerSample()
-{
-    NC_STACK_sample *sample = Nucleus::CInit<NC_STACK_sample>({
-        {NC_STACK_rsrc::RSRC_ATT_NAME, std::string("openua:embedded_map_marker")},
-        {NC_STACK_rsrc::RSRC_ATT_TRYSHARED, (int32_t)0},
-        {NC_STACK_sample::SMPL_ATT_LEN, (int32_t)sizeof(yw_EmbeddedMapMarkerPcm)},
-        {NC_STACK_sample::SMPL_ATT_TYPE, (int32_t)1},
-        {NC_STACK_sample::SMPL_ATT_BUFFER, (void *)const_cast<uint8_t *>(yw_EmbeddedMapMarkerPcm)}
-    });
-
-    if ( !sample )
-        return NULL;
-
-    TSampleData *sampleData = sample->GetSampleData();
-    if ( !sampleData )
-    {
-        sample->Delete();
-        return NULL;
-    }
-
-    sampleData->SampleRate = 48000;
-    sampleData->Format = AL_FORMAT_STEREO16;
-    return sample;
-}
-
 void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
 {
     if ( !_GameShell )
         return;
 
     const std::string path = System::IniConf::UiMapMarkerSound.Get<std::string>();
-    const std::string cacheKey = path.empty() ? std::string("embedded:default") : std::string("file:") + path;
-
     const size_t soundId = World::SOUND_ID_MAP_MARKER;
     if ( soundId >= _GameShell->samples1.size() || soundId >= _GameShell->samples1_info.Sounds.size() )
         return;
@@ -3193,7 +3179,25 @@ void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
     NC_STACK_sample *&sample = _GameShell->samples1[soundId];
     TSoundSource &source = _GameShell->samples1_info.Sounds[soundId];
 
-    if ( _mapMarkerSoundAttemptedPath != cacheKey )
+    // Map Marker audio is fully data-driven. An empty path means silent markers.
+    // Cache the attempted path so an unloadable file logs only once instead of
+    // retrying on every marker placement.
+    if ( path.empty() )
+    {
+        if ( sample && !_mapMarkerSoundAttemptedPath.empty() )
+        {
+            SFXEngine::SFXe.sub_424000(&_GameShell->samples1_info, soundId);
+            SFXEngine::SFXe.ForceStopSource(&_GameShell->samples1_info, soundId);
+            sample->Delete();
+            sample = NULL;
+            source.PSample = NULL;
+        }
+
+        _mapMarkerSoundAttemptedPath.clear();
+        return;
+    }
+
+    if ( _mapMarkerSoundAttemptedPath != path )
     {
         if ( sample )
         {
@@ -3204,34 +3208,19 @@ void NC_STACK_ypaworld::PlayConfiguredMapMarkerSound()
             source.PSample = NULL;
         }
 
-        _mapMarkerSoundAttemptedPath = cacheKey;
+        _mapMarkerSoundAttemptedPath = path;
 
-        if ( !path.empty() )
+        std::string previousRsrc = Common::Env.SetPrefix("rsrc", "data:");
+        NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, path}});
+        Common::Env.SetPrefix("rsrc", previousRsrc);
+
+        if ( !wav )
         {
-            std::string previousRsrc = Common::Env.SetPrefix("rsrc", "data:");
-            NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, path}});
-            Common::Env.SetPrefix("rsrc", previousRsrc);
-
-            if ( wav )
-            {
-                sample = wav;
-            }
-            else
-            {
-                ypa_log_out("Warning: Could not load map marker sample %s. Using embedded marker sound.\n", path.c_str());
-            }
+            ypa_log_out("Warning: Could not load map marker sample %s. Marker audio disabled.\n", path.c_str());
+            return;
         }
 
-        if ( !sample )
-        {
-            sample = yw_CreateEmbeddedMapMarkerSample();
-            if ( !sample )
-            {
-                ypa_log_out("Warning: Could not initialize embedded map marker sample. Marker audio disabled.\n");
-                return;
-            }
-        }
-
+        sample = wav;
         source.PSample = sample->GetSampleData();
     }
 
@@ -5673,7 +5662,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_COCKPIT_CAMERA] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 47, Input::KC_NONE);
     usr->InputConfig[World::INPUT_BIND_SPRINT]      = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 48, Input::KC_LSHIFT);
     usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
-    usr->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_U);
+    usr->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_SPACE);
     usr->InputConfig[World::INPUT_BIND_MAP_FOCUS] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 53, Input::KC_E);
 
     // OpenNeoUA: keep the legacy IDs/type slots reserved for compatibility, but
@@ -5782,6 +5771,52 @@ void TMapRegionsNet::UnloadImages()
 }
 
 
+static NC_STACK_bitmap *yw_LoadDatabaseBackground()
+{
+    // Database backgrounds are loose Data assets so modders can replace them
+    // without editing world.ini. Use the same image loader already used by the
+    // shell, preserving all currently supported image formats.
+    static const char *extensions[] = {
+        "png", "PNG",
+        "ilbm", "ILBM",
+        "jpg", "JPG",
+        "jpeg", "JPEG",
+        "webp", "WEBP",
+        "bmp", "BMP",
+        "tiff", "TIFF",
+        "gif", "GIF",
+        "pcx", "PCX",
+        "svg", "SVG"
+    };
+
+    const std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:levels/bg");
+
+    for ( const char *ext : extensions )
+    {
+        const std::string fileName = std::string("database.") + ext;
+        const std::string dataPath = std::string("data:levels/bg/") + fileName;
+        if ( !uaFileExist(dataPath) )
+            continue;
+
+        NC_STACK_bitmap *image = Utils::ProxyLoadImage({
+            {NC_STACK_rsrc::RSRC_ATT_NAME, fileName},
+            {NC_STACK_bitmap::BMD_ATT_CONVCOLOR, (int32_t)1}
+        });
+
+        if ( image )
+        {
+            Common::Env.SetPrefix("rsrc", oldRsrc);
+            ypa_log_out("OpenNeoUA Database background: %s\n", dataPath.c_str());
+            return image;
+        }
+
+        ypa_log_out("Warning: Could not load Database background %s; trying another supported format.\n", dataPath.c_str());
+    }
+
+    Common::Env.SetPrefix("rsrc", oldRsrc);
+    return NULL;
+}
+
 void sb_0x4e75e8__sub1(NC_STACK_ypaworld *yw, int mode)
 {
     int v37 = 1;
@@ -5829,9 +5864,14 @@ void sb_0x4e75e8__sub1(NC_STACK_ypaworld *yw, int mode)
         case ENVMODE_ABOUT:
         case ENVMODE_SELPLAYER:
         case ENVMODE_HELP:
-        case ENVMODE_DATABASE:
             menu_map  = yw->_globalMapRegions.menu_map[v38].PicName;
             rollover_map = yw->_globalMapRegions.settings_map[v38].PicName;
+            break;
+        case ENVMODE_DATABASE:
+            menu_map  = yw->_globalMapRegions.menu_map[v38].PicName;
+            ilbm_rollover_map = yw_LoadDatabaseBackground();
+            if ( !ilbm_rollover_map )
+                rollover_map = yw->_globalMapRegions.settings_map[v38].PicName;
             break;
         case ENVMODE_TUTORIAL:
             menu_map  = yw->_globalMapRegions.tut_background_map[v38].PicName;
@@ -5861,7 +5901,7 @@ void sb_0x4e75e8__sub1(NC_STACK_ypaworld *yw, int mode)
             }
         }
 
-        if ( !rollover_map.empty() )
+        if ( !rollover_map.empty() && !ilbm_rollover_map )
         {
             ilbm_rollover_map = Utils::ProxyLoadImage({
                 {NC_STACK_rsrc::RSRC_ATT_NAME, rollover_map},
@@ -8008,12 +8048,12 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     // when needed, then move the action buttons just far enough down to clear
     // the final slider while keeping the familiar legacy placement when it fits.
     const int maxRowHeight =
-        (maxButtonY - buttonsSpace - _fontH) / (UserData::ATMOPT_COUNT + 1);
+        (maxButtonY - buttonsSpace - _fontH) / (UserData::ATMOPT_COUNT + 2);
     if (maxRowHeight >= _fontH)
         rowHeight = std::min(rowHeight, maxRowHeight);
 
     const int lastOptionBottom =
-        (UserData::ATMOPT_COUNT + 1) * rowHeight + _fontH;
+        (UserData::ATMOPT_COUNT + 2) * rowHeight + _fontH;
     const int buttonY = std::min(
         maxButtonY,
         std::max(bottomButtonsY, lastOptionBottom + buttonsSpace));
@@ -8070,7 +8110,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     btn.xpos = 0;
     btn.ypos = 0;
     btn.width = usableWidth;
-    btn.caption = Locale::Text::OpenUA(Locale::OUA_ATMOSPHERE_VISIBILITY);
+    btn.caption = Locale::Text::OpenUA(Locale::OUA_ADVANCED_GRAPHICS_SETTINGS);
     btn.downCode = 0;
     btn.upCode = 0;
     btn.button_id = 1390;
@@ -8078,13 +8118,55 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     if (!_GameShell->atmosphere_button->Add(&btn))
         return false;
 
-    // Global visual-filter selector, persisted with the sliders in Nucleus.ini.
+    // Data-driven graphics preset selector. Profile names come from
+    // Data/Scripts/Graphic_Profiles/*.txt; Custom is an in-memory UI state.
     btn.tileset_down = 16;
     btn.tileset_up = 16;
     btn.field_3A = 16;
     btn.button_type = NC_STACK_button::TYPE_CAPTION;
     btn.xpos = 0;
     btn.ypos = rowHeight;
+    btn.width = labelWidth;
+    btn.caption = Locale::Text::OpenUA(Locale::OUA_GRAPHIC_PRESET);
+    btn.caption2.clear();
+    btn.downCode = 0;
+    btn.upCode = 0;
+    btn.pressedCode = 0;
+    btn.button_id = 1388;
+    btn.flags = NC_STACK_button::FLAG_TEXT;
+    btn.txt_r = _iniColors[60].r;
+    btn.txt_g = _iniColors[60].g;
+    btn.txt_b = _iniColors[60].b;
+    if (!_GameShell->atmosphere_button->Add(&btn))
+        return false;
+
+    btn.tileset_down = 19;
+    btn.tileset_up = 18;
+    btn.field_3A = 30;
+    btn.button_type = NC_STACK_button::TYPE_BUTTON;
+    btn.xpos = labelWidth + buttonsSpace;
+    btn.ypos = rowHeight;
+    btn.width = sliderWidth + valueWidth + buttonsSpace;
+    btn.caption = Locale::Text::OpenUA(Locale::OUA_CUSTOM);
+    btn.caption2.clear();
+    btn.downCode = 0;
+    btn.upCode = 1449;
+    btn.pressedCode = 0;
+    btn.button_id = 1389;
+    btn.flags = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
+    btn.txt_r = _iniColors[68].r;
+    btn.txt_g = _iniColors[68].g;
+    btn.txt_b = _iniColors[68].b;
+    if (!_GameShell->atmosphere_button->Add(&btn))
+        return false;
+
+    // Global visual-filter selector, persisted with the sliders in OpenNeoUA.ini.
+    btn.tileset_down = 16;
+    btn.tileset_up = 16;
+    btn.field_3A = 16;
+    btn.button_type = NC_STACK_button::TYPE_CAPTION;
+    btn.xpos = 0;
+    btn.ypos = 2 * rowHeight;
     btn.width = labelWidth;
     btn.caption = Locale::Text::OpenUA(Locale::OUA_VISUAL_FILTER);
     btn.caption2.clear();
@@ -8104,7 +8186,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     btn.field_3A = 30;
     btn.button_type = NC_STACK_button::TYPE_BUTTON;
     btn.xpos = labelWidth + buttonsSpace;
-    btn.ypos = rowHeight;
+    btn.ypos = 2 * rowHeight;
     btn.width = sliderWidth + valueWidth + buttonsSpace;
     btn.caption = Locale::Text::OpenUA(Locale::OUA_STANDARD);
     btn.caption2.clear();
@@ -8121,7 +8203,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
 
     for (int i = 0; i < UserData::ATMOPT_COUNT; ++i)
     {
-        int y = (i + 2) * rowHeight;
+        int y = (i + 3) * rowHeight;
 
         btn.tileset_down = 16;
         btn.tileset_up = 16;
@@ -8193,7 +8275,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
             return false;
     }
 
-    int buttonWidth = (menuWidth - 2 * buttonsSpace) / 3;
+    int buttonWidth = (menuWidth - buttonsSpace) / 2;
     btn.tileset_down = 19;
     btn.tileset_up = 18;
     btn.field_3A = 30;
@@ -8216,13 +8298,6 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
     btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
     btn.upCode = 1452;
     btn.button_id = 1452;
-    if (!_GameShell->atmosphere_button->Add(&btn))
-        return false;
-
-    btn.xpos = 2 * (buttonWidth + buttonsSpace);
-    btn.caption = Locale::Text::Common(Locale::CMN_RESETDEF);
-    btn.upCode = 1451;
-    btn.button_id = 1451;
     if (!_GameShell->atmosphere_button->Add(&btn))
         return false;
 
@@ -11255,10 +11330,16 @@ bool NC_STACK_ypaworld::ReloadInput(size_t id)
 
     if ( kconf.Type == World::INPUT_BIND_TYPE_HOTKEY )
     {
-        // Sprint is polled directly so it can use Left Shift without stealing
-        // legacy generic Shift hotkeys such as the existing message controls.
-        if ( id == World::INPUT_BIND_SPRINT )
+        // Sprint and UFO Spy Mode are polled directly. This allows their
+        // contextual defaults to coexist with legacy actions that use the same
+        // physical key without stealing a global HotKeyID slot.
+        if ( id == World::INPUT_BIND_SPRINT ||
+             id == World::INPUT_BIND_TOGGLE_UFO_SPY_UI )
+        {
+            if ( id == World::INPUT_BIND_TOGGLE_UFO_SPY_UI )
+                Input::Engine.SetHotKey(kconf.KeyID, "nop");
             return true;
+        }
 
         if ( !Input::Engine.SetHotKey(kconf.KeyID, keyConfStr) )
             ypa_log_out("input.engine: WARNING: Hotkey[%d] (%s) not accepted.\n", kconf.KeyID, keyConfStr.c_str());

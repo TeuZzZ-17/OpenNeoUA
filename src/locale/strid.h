@@ -175,7 +175,7 @@ enum OPENUA_STRING
     // Appended to preserve all existing OpenNeoUA string IDs.
     OUA_RENDER_DISTANCE,
 
-    // Atmosphere & Visibility controls. Appended to preserve existing IDs.
+    // Legacy advanced-graphics title/control IDs. Preserved for compatibility.
     OUA_ATMOSPHERE_VISIBILITY,
     OUA_VISUAL_FILTER_STRENGTH,
     OUA_ATMOSPHERE_STRENGTH,
@@ -269,9 +269,17 @@ enum OPENUA_STRING
     // Weapon HUD magazine/salve label owned by OpenNeoUA.
     OUA_HUD_MAG,
 
-    // Atmosphere & Visibility runtime limits. Appended to preserve existing IDs.
+    // Advanced Graphics Settings runtime limits. Appended to preserve existing IDs.
     OUA_PARTICLE_LIMIT,
     OUA_RENDER_SECTORS,
+
+    // Data-driven graphics preset selector. Appended to preserve existing IDs.
+    OUA_GRAPHIC_PRESET,
+    OUA_CUSTOM,
+
+    // Advanced graphics page title. Appended so older OpenNeoUA.lng files
+    // cannot override the new title through the legacy title ID.
+    OUA_ADVANCED_GRAPHICS_SETTINGS,
 
     OUA_STRING_MAX
 };

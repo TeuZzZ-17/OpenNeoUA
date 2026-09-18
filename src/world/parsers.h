@@ -55,7 +55,6 @@ protected:
     bool _isNewInputScope = false;
     bool _legacyCameraZoomInSeen = false;
     bool _legacyCameraZoomOutSeen = false;
-    bool _ufoSpyUiToggleSeen = false;
     bool _mapFocusSeen = false;
     int _legacyCameraZoomInKey = 0;
     int _legacyCameraZoomOutKey = 0;

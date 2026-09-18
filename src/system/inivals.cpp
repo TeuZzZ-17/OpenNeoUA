@@ -801,8 +801,18 @@ bool IniConf::ReadFromNucleusIni()
     if ( !Common::Ini::ParseIniFile(uaDataFirstNucleusIniPath(), &_varList) )
         return false;
 
-    // OpenNeoUA custom settings are a second layer. Missing OpenNeoUA.ini keeps
-    // the Nucleus/runtime values unchanged; matching keys override Nucleus.
+    // The editable OpenNeoUA graphics profile is the default baseline for
+    // the Advanced Graphics Settings page. If the profile is unavailable,
+    // Classic provides a safe fallback. A user's OpenNeoUA.ini remains the
+    // higher-priority layer, so existing saved/custom values still win.
+    if (!Common::Ini::ParseIniFileOverlay(
+            "Data/Scripts/Graphic_Profiles/OpenNeoUA.txt", &_varList))
+    {
+        Common::Ini::ParseIniFileOverlay(
+            "Data/Scripts/Graphic_Profiles/Classic.txt", &_varList);
+    }
+
+    // OpenNeoUA custom settings are the user layer above Nucleus + the default profile.
     Common::Ini::ParseIniFileOverlay(uaDataFirstOpenNeoUAIniPath(), &_varList);
 
     // Command-line/global overrides must remain the final authority.

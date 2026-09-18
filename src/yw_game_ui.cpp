@@ -18546,6 +18546,16 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
     inpt->Buttons.UnSet(31);
     inpt->HandBrakePressed = inpt->Buttons.Is(3);
 
+    // model = ufo never owns the generic Stop/Hand Brake action. Spy Mode has
+    // its own remappable binding (Space by default), while other classes keep
+    // the existing brake behavior unchanged.
+    const bool controlledUfo = _userUnit && _userUnit->_bact_type == BACT_TYPES_UFO;
+    if ( controlledUfo )
+    {
+        inpt->Buttons.UnSet(3);
+        inpt->HandBrakePressed = false;
+    }
+
     const bool cycleTargetPressed = inpt->Buttons.Is(6);
     if ( cycleTargetPressed && !_cycleTargetBtnIsDown && _userUnit )
         _userUnit->RequestHomingTargetCycle();
@@ -18576,7 +18586,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
     }
 
     // The fixed secondary shortcut comes from the shared input definition.
-    // On an eligible UFO the same MMB edge belongs to Toggle UFO Spy UI, so do
+    // On an eligible UFO the same MMB edge belongs to UFO Spy Mode, so do
     // not also route the held button into Switch Weapon. Everywhere else the
     // existing MMB weapon shortcut remains unchanged.
     const bool ufoSpyOwnsFixedShortcut =
@@ -18846,6 +18856,14 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
             inpt->Buttons.Set(3);
             inpt->HandBrakePressed = true;
         }
+    }
+
+    if ( _userUnit && _userUnit->_bact_type == BACT_TYPES_UFO )
+    {
+        // Synthetic joystick auto-brake must not reintroduce the removed UFO
+        // handbrake after the explicit input was consumed above.
+        inpt->Buttons.UnSet(3);
+        inpt->HandBrakePressed = false;
     }
 }
 

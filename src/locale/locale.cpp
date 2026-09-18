@@ -403,7 +403,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_SWITCH_WEAPON:        fallback = "Switch Weapon"; break;
         case OUA_CYCLE_TARGET:         fallback = "Cycle Target"; break;
         case OUA_ALTERNATIVE_VIEW:       fallback = "Alternative View"; break;
-        case OUA_TOGGLE_UFO_SPY_UI:     fallback = "Toggle UFO Spy UI"; break;
+        case OUA_TOGGLE_UFO_SPY_UI:     fallback = "UFO Spy Mode On/Off"; break;
         case OUA_PLACE_MAP_MARKER:     fallback = "Map: Place Map Marker"; break;
         case OUA_KEY_CONFLICT_FORMAT:  fallback = "%s is already used by %s."; break;
         case OUA_KEY_CONFLICT_REASSIGN: fallback = "OK reassigns it. Cancel keeps bindings."; break;
@@ -438,6 +438,9 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_PLASMA_OBTAINED:             fallback = "Plasma Obtained"; break;
         case OUA_PARTICLE_LIMIT:              fallback = "Particle Limit"; break;
         case OUA_RENDER_SECTORS:              fallback = "Render Sectors"; break;
+        case OUA_GRAPHIC_PRESET:              fallback = "Preset"; break;
+        case OUA_CUSTOM:                      fallback = "Custom"; break;
+        case OUA_ADVANCED_GRAPHICS_SETTINGS:  fallback = "Advanced Graphics Settings"; break;
         default: break;
     }
 
