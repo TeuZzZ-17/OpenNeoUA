@@ -129,8 +129,8 @@ enum RFLAGS
 // OpenNeoUA extended projection limits.
 //
 // The world far plane is unlocked natively instead of exposing another
-// low-level INI knob. 65536 safely covers gfx.render_sectors up to 99
-// (derived model visibility reaches 60000) while the sky keeps a larger pass.
+// low-level INI knob. 65536 safely covers the automatic horizon-derived
+// sector window up to its internal maximum while the sky keeps a larger pass.
 constexpr float WORLD_FAR_CLIP = 65536.0f;
 constexpr float SKY_FAR_CLIP = 262144.0f;
 

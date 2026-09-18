@@ -441,6 +441,22 @@ static int IntFromString(std::string s, int fallback, int minValue, int maxValue
     }
 }
 
+static int SkyHorizonDistanceToSlider(int32_t distance)
+{
+    distance = std::max<int32_t>(YW_SKY_HORIZON_DISTANCE_MIN,
+                                 std::min<int32_t>(YW_SKY_HORIZON_DISTANCE_MAX, distance));
+    return (distance + YW_SKY_HORIZON_DISTANCE_UI_STEP / 2) /
+           YW_SKY_HORIZON_DISTANCE_UI_STEP;
+}
+
+static int32_t SkyHorizonSliderToDistance(int sliderValue)
+{
+    const int32_t minStep = YW_SKY_HORIZON_DISTANCE_MIN / YW_SKY_HORIZON_DISTANCE_UI_STEP;
+    const int32_t maxStep = YW_SKY_HORIZON_DISTANCE_MAX / YW_SKY_HORIZON_DISTANCE_UI_STEP;
+    sliderValue = std::max<int32_t>(minStep, std::min<int32_t>(maxStep, sliderValue));
+    return sliderValue * YW_SKY_HORIZON_DISTANCE_UI_STEP;
+}
+
 static std::string HundredStorageValue(int value)
 {
     const bool negative = value < 0;
@@ -1040,7 +1056,13 @@ int yw_loadSky(NC_STACK_ypaworld *yw, const std::string &skyname)
 
     Common::Env.SetPrefix("rsrc", tmprsrc);
 
-    sky->SetStatic(true); // Don't rotate sky
+    // Keep the full sky transform active. Static BASE rendering intentionally
+    // ignores local scale, which would make gfx.skydistance visually ineffective.
+    // The sky has no runtime local rotation, so using the full transform preserves
+    // its fixed world orientation while allowing Sky Horizon Distance to resize it.
+    sky->SetStatic(false);
+    yw->_skyBaseScale = sky->GetScale();
+    yw->_skyAppliedHorizonDistance = -1;
     sky->SetVizLimit(yw->_skyVizLimit);
     sky->SetFadeLength(yw->_skyFadeLength);
     sky->ComputeStaticFog();
@@ -2066,6 +2088,16 @@ void UserData::AtmosphereOptionsLoad(bool saveSnapshot)
     atmosphereValues[ATMOPT_VIGNETTE] =
         VisualFilterStrengthPercentFromString(System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 60);
 
+    atmosphereValues[ATMOPT_SKY_HORIZON_DISTANCE] =
+        SkyHorizonDistanceToSlider(System::IniConf::GfxSkyDistance.Get<int32_t>());
+
+    const int32_t currentSkyHeight = p_YW ? p_YW->getYW_skyHeight() : YW_SKY_HEIGHT_DEFAULT;
+    atmosphereValues[ATMOPT_SKY_HEIGHT] =
+        IntFromString(System::IniConf::GfxSkyHeight.Get<std::string>(),
+                      currentSkyHeight, YW_SKY_HEIGHT_MIN, YW_SKY_HEIGHT_MAX);
+    if (p_YW)
+        p_YW->setYW_skyHeight(atmosphereValues[ATMOPT_SKY_HEIGHT]);
+
     atmosphereValues[ATMOPT_FOG_START] =
         IntFromString(System::IniConf::GfxHorizonFogStart.Get<std::string>(), 4000, 0, 10000);
     atmosphereValues[ATMOPT_FOG_LENGTH] =
@@ -2089,15 +2121,8 @@ void UserData::AtmosphereOptionsLoad(bool saveSnapshot)
     atmosphereValues[ATMOPT_PARTICLE_LIMIT] =
         std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, System::IniConf::GfxParticlesLimit.Get<int32_t>()));
 
-    const int32_t currentRenderSectors = p_YW ? p_YW->getYW_visSectors() : 9;
-    atmosphereValues[ATMOPT_RENDER_SECTORS] =
-        IntFromString(System::IniConf::GfxRenderSectors.Get<std::string>(), currentRenderSectors, 3, YW_RENDER_SECTORS_MAX);
     if (p_YW)
-    {
-        // Reuse the runtime's canonical normalization (odd centered window, 3..max).
-        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
-        atmosphereValues[ATMOPT_RENDER_SECTORS] = p_YW->getYW_visSectors();
-    }
+        p_YW->UpdateSkyHorizonRenderSectors();
 
     if (saveSnapshot)
         atmosphereSavedValues = atmosphereValues;
@@ -2136,6 +2161,9 @@ void UserData::UpdateAtmosphereOptionTexts()
             case ATMOPT_CONTRAST:
             case ATMOPT_SATURATION:
                 text = HundredStorageValue(atmosphereValues[i]);
+                break;
+            case ATMOPT_SKY_HORIZON_DISTANCE:
+                text = std::to_string(SkyHorizonSliderToDistance(atmosphereValues[i]));
                 break;
             default:
                 text = std::to_string(atmosphereValues[i]);
@@ -2179,6 +2207,18 @@ void UserData::AtmosphereOptionsApplyLive()
     System::IniConf::GfxAtmosphereVignette.Value =
         VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VIGNETTE]);
 
+    // The legacy gfx.skydistance key is now the live radius of the
+    // player-centered sky horizon. The renderer reads it every frame.
+    System::IniConf::GfxSkyDistance.Value =
+        SkyHorizonSliderToDistance(atmosphereValues[ATMOPT_SKY_HORIZON_DISTANCE]);
+    System::IniConf::GfxSkyHeight.Value =
+        std::to_string(atmosphereValues[ATMOPT_SKY_HEIGHT]);
+    if (p_YW)
+    {
+        p_YW->UpdateSkyHorizonRenderSectors();
+        p_YW->setYW_skyHeight(atmosphereValues[ATMOPT_SKY_HEIGHT]);
+    }
+
     System::IniConf::GfxHorizonFogEnable.Value = true;
     System::IniConf::GfxHorizonFogStart.Value = std::to_string(atmosphereValues[ATMOPT_FOG_START]);
     System::IniConf::GfxHorizonFogLength.Value = std::to_string(atmosphereValues[ATMOPT_FOG_LENGTH]);
@@ -2201,24 +2241,6 @@ void UserData::AtmosphereOptionsApplyLive()
     System::IniConf::GfxParticlesLimit.Value =
         (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
 
-    // Reuse the existing renderer setter so UI and runtime share one normalization path.
-    if (p_YW)
-    {
-        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
-        const int normalizedRenderSectors = p_YW->getYW_visSectors();
-        if (normalizedRenderSectors != atmosphereValues[ATMOPT_RENDER_SECTORS])
-        {
-            atmosphereValues[ATMOPT_RENDER_SECTORS] = normalizedRenderSectors;
-            if (NC_STACK_button::Slider *slider = atmosphere_button->GetSliderData(1400 + ATMOPT_RENDER_SECTORS))
-            {
-                slider->value = (int16_t)normalizedRenderSectors;
-                atmosphere_button->Refresh(1400 + ATMOPT_RENDER_SECTORS);
-            }
-            UpdateAtmosphereOptionTexts();
-        }
-    }
-    System::IniConf::GfxRenderSectors.Value =
-        std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2237,7 +2259,7 @@ void UserData::AtmosphereOptionsSave()
     if (!SaveKeyToOpenNeoUAIni("gfx.visual_filter", PaletteThemeStorageValue(paletteTheme)))
         ypa_log_out("WARNING: Could not save gfx.visual_filter to OpenNeoUA.ini\n");
 
-    const std::array<std::pair<const char *, std::string>, 16> values =
+    const std::array<std::pair<const char *, std::string>, 17> values =
     {{
         {"gfx.visual_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
         {"gfx.atmosphere_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH])},
@@ -2245,6 +2267,8 @@ void UserData::AtmosphereOptionsSave()
         {"gfx.atmosphere_contrast", HundredStorageValue(atmosphereValues[ATMOPT_CONTRAST])},
         {"gfx.atmosphere_saturation", HundredStorageValue(atmosphereValues[ATMOPT_SATURATION])},
         {"gfx.atmosphere_vignette", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VIGNETTE])},
+        {"gfx.skydistance", std::to_string(SkyHorizonSliderToDistance(atmosphereValues[ATMOPT_SKY_HORIZON_DISTANCE]))},
+        {"gfx.sky_height", std::to_string(atmosphereValues[ATMOPT_SKY_HEIGHT])},
         {"gfx.horizon_fog_start", std::to_string(atmosphereValues[ATMOPT_FOG_START])},
         {"gfx.horizon_fog_length", std::to_string(atmosphereValues[ATMOPT_FOG_LENGTH])},
         {"gfx.horizon_fog_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_FOG_STRENGTH])},
@@ -2253,8 +2277,7 @@ void UserData::AtmosphereOptionsSave()
         {"gfx.horizon_dark_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_DARK_STRENGTH])},
         {"game.world_ui_max_distance", std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE])},
         {"gfx.vhs_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH])},
-        {"gfx.particles.limit", std::to_string(atmosphereValues[ATMOPT_PARTICLE_LIMIT])},
-        {"gfx.render_sectors", std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS])}
+        {"gfx.particles.limit", std::to_string(atmosphereValues[ATMOPT_PARTICLE_LIMIT])}
     }};
 
     for (const auto &entry : values)
@@ -2268,6 +2291,8 @@ void UserData::AtmosphereOptionsSave()
     // backward compatibility for users who deliberately add the keys again.
     RemoveKeyFromOpenNeoUAIni("gfx.color_effects");
     RemoveKeyFromOpenNeoUAIni("gfx.atmosphere_fx");
+    // Retired: sector count is now derived automatically from gfx.skydistance.
+    RemoveKeyFromOpenNeoUAIni("gfx.render_sectors");
 
     System::IniConf::GfxAtmosphereFx.Value = true;
     System::IniConf::GfxHorizonFogEnable.Value = true;
@@ -2279,10 +2304,15 @@ void UserData::AtmosphereOptionsSave()
     // opened the page and pressed Save without moving a slider.
     System::IniConf::GfxParticlesLimit.Value =
         (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
-    System::IniConf::GfxRenderSectors.Value =
-        std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+    System::IniConf::GfxSkyDistance.Value =
+        SkyHorizonSliderToDistance(atmosphereValues[ATMOPT_SKY_HORIZON_DISTANCE]);
+    System::IniConf::GfxSkyHeight.Value =
+        std::to_string(atmosphereValues[ATMOPT_SKY_HEIGHT]);
     if (p_YW)
-        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
+    {
+        p_YW->UpdateSkyHorizonRenderSectors();
+        p_YW->setYW_skyHeight(atmosphereValues[ATMOPT_SKY_HEIGHT]);
+    }
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2330,6 +2360,15 @@ void UserData::AtmosphereOptionsCancel()
     System::IniConf::GfxAtmosphereSaturation.Value = HundredStorageValue(atmosphereValues[ATMOPT_SATURATION]);
     System::IniConf::GfxAtmosphereVignette.Value =
         VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VIGNETTE]);
+    System::IniConf::GfxSkyDistance.Value =
+        SkyHorizonSliderToDistance(atmosphereValues[ATMOPT_SKY_HORIZON_DISTANCE]);
+    System::IniConf::GfxSkyHeight.Value =
+        std::to_string(atmosphereValues[ATMOPT_SKY_HEIGHT]);
+    if (p_YW)
+    {
+        p_YW->UpdateSkyHorizonRenderSectors();
+        p_YW->setYW_skyHeight(atmosphereValues[ATMOPT_SKY_HEIGHT]);
+    }
     System::IniConf::GfxHorizonFogStart.Value = std::to_string(atmosphereValues[ATMOPT_FOG_START]);
     System::IniConf::GfxHorizonFogLength.Value = std::to_string(atmosphereValues[ATMOPT_FOG_LENGTH]);
     System::IniConf::GfxHorizonFogStrength.Value =
@@ -2344,10 +2383,6 @@ void UserData::AtmosphereOptionsCancel()
         VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH]);
     System::IniConf::GfxParticlesLimit.Value =
         (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
-    System::IniConf::GfxRenderSectors.Value =
-        std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
-    if (p_YW)
-        p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2855,8 +2890,8 @@ void UserData::RefreshGraphicProfiles()
     const std::string currentName = atmosphereGraphicProfileName;
     atmosphereGraphicProfiles.clear();
 
-    // Presets are discovered at runtime. Adding/removing a .txt file requires
-    // no code change and unknown keys inside a profile are safely ignored.
+    // Presets are discovered at runtime. .cfg is the native OpenNeoUA profile
+    // extension; .txt remains accepted for compatibility with older mods.
     FSMgr::DirIter dir = uaOpenDir("data:Scripts/Graphic_Profiles");
     FSMgr::iNode *node = NULL;
 
@@ -2866,13 +2901,34 @@ void UserData::RefreshGraphicProfiles()
             continue;
 
         const std::string fileName = node->getName();
-        if (fileName.size() < 4 || StriCmp(fileName.substr(fileName.size() - 4), ".txt"))
+        const size_t dot = fileName.find_last_of('.');
+        if (dot == std::string::npos)
+            continue;
+
+        const std::string extension = fileName.substr(dot);
+        const bool isCfg = !StriCmp(extension, ".cfg");
+        const bool isLegacyTxt = !StriCmp(extension, ".txt");
+        if (!isCfg && !isLegacyTxt)
             continue;
 
         TGraphicProfile profile;
-        profile.Name = fileName.substr(0, fileName.size() - 4);
+        profile.Name = fileName.substr(0, dot);
         profile.Path = node->getVPath();
-        atmosphereGraphicProfiles.push_back(profile);
+
+        bool handled = false;
+        for (TGraphicProfile &existing : atmosphereGraphicProfiles)
+        {
+            if (StriCmp(existing.Name, profile.Name))
+                continue;
+
+            handled = true;
+            if (isCfg)
+                existing = profile;
+            break;
+        }
+
+        if (!handled)
+            atmosphereGraphicProfiles.push_back(profile);
     }
 
     std::sort(atmosphereGraphicProfiles.begin(), atmosphereGraphicProfiles.end(),
@@ -2915,6 +2971,9 @@ void UserData::DetectMatchingGraphicProfile()
         Common::Ini::Key contrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key saturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key vignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key skyDistance("gfx.skydistance", Common::Ini::KT_DIGIT,
+                                     (int32_t)YW_SKY_HORIZON_DISTANCE_REFERENCE);
+        Common::Ini::Key skyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key fogStart("gfx.horizon_fog_start", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key fogLength("gfx.horizon_fog_length", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key fogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string());
@@ -2924,15 +2983,14 @@ void UserData::DetectMatchingGraphicProfile()
         Common::Ini::Key worldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key vhsStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key particleLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)0);
-        Common::Ini::Key renderSectors("gfx.render_sectors", Common::Ini::KT_WORD, std::string());
 
         Common::Ini::PKeyList keys =
         {
             &visualFilter, &visualFilterStrength, &atmosphereStrength,
-            &exposure, &contrast, &saturation, &vignette,
+            &exposure, &contrast, &saturation, &vignette, &skyDistance, &skyHeight,
             &fogStart, &fogLength, &fogStrength,
             &darkStart, &darkLength, &darkStrength,
-            &worldUiMaxDistance, &vhsStrength, &particleLimit, &renderSectors
+            &worldUiMaxDistance, &vhsStrength, &particleLimit
         };
 
         if (!Common::Ini::ParseIniFileOverlay(profile.Path, &keys))
@@ -2961,6 +3019,9 @@ void UserData::DetectMatchingGraphicProfile()
             FloatHundredFromString(contrast.Get<std::string>(), -1, 50, 200),
             FloatHundredFromString(saturation.Get<std::string>(), -1, 0, 200),
             VisualFilterStrengthPercentFromString(vignette.Get<std::string>(), -1),
+            SkyHorizonDistanceToSlider(skyDistance.Get<int32_t>()),
+            IntFromString(skyHeight.Get<std::string>(), YW_SKY_HEIGHT_DEFAULT,
+                          YW_SKY_HEIGHT_MIN, YW_SKY_HEIGHT_MAX),
             IntFromString(fogStart.Get<std::string>(), -1, 0, 10000),
             IntFromString(fogLength.Get<std::string>(), -1, 0, 10000),
             VisualFilterStrengthPercentFromString(fogStrength.Get<std::string>(), -1),
@@ -2969,8 +3030,7 @@ void UserData::DetectMatchingGraphicProfile()
             VisualFilterStrengthPercentFromString(darkStrength.Get<std::string>(), -1),
             IntFromString(worldUiMaxDistance.Get<std::string>(), -1, 100, 20000),
             VisualFilterStrengthPercentFromString(vhsStrength.Get<std::string>(), -1),
-            std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, particleLimit.Get<int32_t>())),
-            IntFromString(renderSectors.Get<std::string>(), -1, 3, YW_RENDER_SECTORS_MAX)
+            std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, particleLimit.Get<int32_t>()))
         }};
 
         if (profileValues == atmosphereValues)
@@ -3014,6 +3074,8 @@ bool UserData::ApplyGraphicProfile(const TGraphicProfile &profile)
         &System::IniConf::GfxAtmosphereContrast,
         &System::IniConf::GfxAtmosphereSaturation,
         &System::IniConf::GfxAtmosphereVignette,
+        &System::IniConf::GfxSkyDistance,
+        &System::IniConf::GfxSkyHeight,
         &System::IniConf::GfxHorizonFogStart,
         &System::IniConf::GfxHorizonFogLength,
         &System::IniConf::GfxHorizonFogStrength,
@@ -3022,8 +3084,7 @@ bool UserData::ApplyGraphicProfile(const TGraphicProfile &profile)
         &System::IniConf::GfxHorizonDarkStrength,
         &System::IniConf::GameWorldUiMaxDistance,
         &System::IniConf::GfxVhsFilterStrength,
-        &System::IniConf::GfxParticlesLimit,
-        &System::IniConf::GfxRenderSectors
+        &System::IniConf::GfxParticlesLimit
     };
 
     if (!Common::Ini::ParseIniFileOverlay(profile.Path, &keys))

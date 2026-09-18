@@ -1883,9 +1883,30 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
 
         for (size_t nodeIndex = 0; nodeIndex < _renderSkyBoxList.size(); nodeIndex++)
             RenderNode(_renderSkyBoxList[nodeIndex]);
+
+        // The visible sky uses a much longer projection than world geometry, so
+        // its depth values cannot safely be compared with the world's depth.
+        // Render the same dome a second time with the normal world projection,
+        // colour writes disabled and Z-write enabled. This restores the original
+        // Urban Assault behaviour: the player-centered sky acts as a continuous
+        // horizon mask, so already-prepared sectors are revealed smoothly instead
+        // of popping in one whole sector at a time.
+        SetProjectionMatrix(_frustum);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+        for (size_t nodeIndex = 0; nodeIndex < _renderSkyBoxList.size(); nodeIndex++)
+        {
+            TRenderNode *node = _renderSkyBoxList[nodeIndex];
+            const uint32_t originalFlags = node->Flags;
+            node->Flags &= ~RFLAGS_DISABLE_ZWRITE;
+            RenderNode(node);
+            node->Flags = originalFlags;
+        }
+
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         _renderSkyBoxList.clear();
 
-        // Every non-sky queue must continue with the normal world projection.
+        // Every non-sky queue continues with the same normal world projection.
         SetProjectionMatrix(_frustum);
     }
 

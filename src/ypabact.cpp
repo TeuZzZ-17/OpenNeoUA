@@ -8206,10 +8206,41 @@ static NC_STACK_ypabact *ypabact_ResolveSessionKillCreditedUnit(NC_STACK_ypabact
     return NULL;
 }
 
+static bool ypabact_HasGroundVehicleDeathSupport(NC_STACK_ypabact *unit)
+{
+    if ( !unit || !unit->getBACT_pWorld() )
+        return false;
+
+    if ( unit->_bact_type != BACT_TYPES_TANK &&
+         unit->_bact_type != BACT_TYPES_CAR )
+        return false;
+
+    // Do not trust BACT_STFLAG_LAND alone here. During jumps or violent
+    // impulses it can remain stale until the next ground-controller update.
+    // Probe only the small support zone directly below the vehicle body.
+    const float bodyToGround =
+        unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof;
+    const float supportReach =
+        std::max(100.0f, std::fabs(bodyToGround) + 50.0f);
+
+    ypaworld_arg136 support;
+    support.stPos = unit->_position;
+    support.vect = vec3d::OY(supportReach);
+    support.flags = 0;
+    unit->getBACT_pWorld()->ypaworld_func136(&support);
+
+    return support.isect &&
+           std::isfinite(support.isectPos.y) &&
+           support.isectPos.y >= unit->_position.y - 0.25f;
+}
+
 void NC_STACK_ypabact::Die()
 {
     if ( _status_flg & BACT_STFLAG_DEATH1 )
         return;
+
+    if ( _bact_type == BACT_TYPES_TANK || _bact_type == BACT_TYPES_CAR )
+        _suppressGroundDecalAfterAirDeath = !ypabact_HasGroundVehicleDeathSupport(this);
 
     ResetAlternativeView();
 
@@ -8542,6 +8573,9 @@ void NC_STACK_ypabact::SetState(setState_msg *arg)
 
     if ( (_bact_type == BACT_TYPES_TANK || _bact_type == BACT_TYPES_CAR) && arg->newStatus == BACT_STATUS_DEAD )
     {
+        if ( !(_status_flg & BACT_STFLAG_DEATH1) )
+            _suppressGroundDecalAfterAirDeath = !ypabact_HasGroundVehicleDeathSupport(this);
+
         setState_msg newarg;
         newarg.unsetFlags = 0;
         newarg.newStatus = BACT_STATUS_NOPE;
@@ -17212,6 +17246,7 @@ void NC_STACK_ypabact::Renew()
 
     _commandID = 0;
     _mimic_disguise_vehicleID = 0;
+    _suppressGroundDecalAfterAirDeath = false;
     _buff = World::TVehicleBuffConfig();
     _buff_deflect_charges_max = 0;
 //    bact->field_3D1 = 1;
@@ -19962,6 +19997,22 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
                       (trigger == World::TChainFXConfig::TRIGGER_CRASH ||
                        trigger == World::TChainFXConfig::TRIGGER_DESTROYED) )
             {
+                // A destroyed Ground Decal is meaningful only when the vehicle
+                // is actually on the ground. Never project an airborne death
+                // straight down onto unrelated terrain.
+                if ( trigger == World::TChainFXConfig::TRIGGER_DESTROYED &&
+                     !(_status_flg & BACT_STFLAG_LAND) &&
+                     _bact_type != BACT_TYPES_TANK &&
+                     _bact_type != BACT_TYPES_CAR )
+                    continue;
+
+                // Tank and Car keep the stricter rule requested for ground
+                // vehicles: if their death started in the air, no Ground Decal
+                // is created later by the crash/death2 stage either.
+                if ( (_bact_type == BACT_TYPES_TANK || _bact_type == BACT_TYPES_CAR) &&
+                     _suppressGroundDecalAfterAirDeath )
+                    continue;
+
                 // Vehicle decals are anchored to the real terrain below the
                 // vehicle, never to its model origin in mid-air. Reacquire the
                 // hit for each decal because decal geometry preparation can

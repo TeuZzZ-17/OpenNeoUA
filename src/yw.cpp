@@ -868,14 +868,10 @@ static int32_t yw_RenderSectorsToNormalVizLimit(int32_t sectors)
 {
     const int32_t normalized = yw_ClampRenderSectors(sectors);
 
-    // _renderSectors is a centered sector-window width, while maxZ is a
-    // camera-space radial clip. Using only the window radius leaves almost no
-    // allowance for the camera position inside its sector, tall/large assets,
-    // SEN2 bounds and spectator-camera offsets; outer sectors can therefore be
-    // prepared but rejected by the CPU far clip. Use the full requested window
-    // width as a conservative internal visibility budget and cap it just below
-    // the native world projection far plane. gfx.render_sectors remains the
-    // only public control: the sector window still decides what can be drawn.
+    // _renderSectors is an internal centered sector-window width derived from
+    // Sky Horizon Distance. Keep a conservative camera-space visibility budget
+    // so outer safety sectors are prepared correctly even with camera offsets,
+    // tall assets and large bounds.
     const int32_t requested =
         (int32_t)((normalized + 1) * World::CVSectorLength);
     const int32_t safeMaximum =
@@ -889,12 +885,13 @@ static void yw_ApplyNucleusViewDistanceOverrides(NC_STACK_ypaworld *yw)
     int32_t v = 0;
     bool b = false;
 
-    if (yw_ParseOptionalInt(System::IniConf::GfxRenderSectors.Get<std::string>(), &v))
-        yw->setYW_visSectors(v);
     if (yw_ParseOptionalInt(System::IniConf::GfxSkyHeight.Get<std::string>(), &v))
         yw->_skyHeight = v;
     if (yw_ParseOptionalBool(System::IniConf::GfxSkyRender.Get<std::string>(), &b))
         yw->_skyRender = b;
+
+    // Sky Horizon Distance is the single public draw-distance control.
+    yw->UpdateSkyHorizonRenderSectors();
 
     yw->SetHideMapBorderWalls(System::IniConf::GfxHideMapBorderWalls.Get<bool>());
 }
@@ -1161,11 +1158,13 @@ bool ParseAssignFile(const std::string &file)
 
 bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
 {
-    static const std::string spectatorScript = "data:scripts/spectator_vehicle.txt";
+    std::string spectatorScript = "data:scripts/spectator_vehicle.cfg";
+    if ( !uaFileExist(spectatorScript) )
+        spectatorScript = "data:scripts/spectator_vehicle.txt";
 
     if ( !uaFileExist(spectatorScript) )
     {
-        ypa_log_out("WARNING: spectator vehicle file %s is missing. Spectator mode disabled for this level.\n", spectatorScript.c_str());
+        ypa_log_out("WARNING: spectator vehicle file Data/Scripts/spectator_vehicle.cfg is missing. Spectator mode disabled for this level.\n");
         _spectatorVehicleProtoID = -1;
         return false;
     }
@@ -1260,7 +1259,10 @@ static std::string yw_SuperItemProfileKey(const std::string &id)
 
 bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles)
 {
-    static const std::string profilePath = "data:scripts/superitem_profiles/superitem_profiles.txt";
+    std::string profilePath = "data:scripts/superitem_profiles/superitem_profiles.cfg";
+    if ( !uaFileExist(profilePath) )
+        profilePath = "data:scripts/superitem_profiles/superitem_profiles.txt";
+
     if ( !uaFileExist(profilePath) )
     {
         _superItemProfiles.clear();
@@ -1276,7 +1278,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     if ( !ScriptParser::ParseFile(profilePath, parsers,
                                   ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
     {
-        ypa_log_out("WARNING: Data/Scripts/Superitem_Profiles/Superitem_Profiles.txt is invalid; keeping the previously loaded profile set.\n");
+        ypa_log_out("WARNING: SuperItem profile file %s is invalid; keeping the previously loaded profile set.\n", profilePath.c_str());
         return false;
     }
 
@@ -1377,8 +1379,8 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
     {
         _superItemProfiles.swap(parsedProfiles);
     }
-    ypa_log_out("Loaded %u SuperItem profile(s) from Data/Scripts/Superitem_Profiles/Superitem_Profiles.txt.\n",
-                (unsigned)_superItemProfiles.size());
+    ypa_log_out("Loaded %u SuperItem profile(s) from %s.\n",
+                (unsigned)_superItemProfiles.size(), profilePath.c_str());
     return true;
 }
 
@@ -8078,6 +8080,8 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         Locale::Text::OpenUA(Locale::OUA_CONTRAST),
         Locale::Text::OpenUA(Locale::OUA_SATURATION),
         Locale::Text::OpenUA(Locale::OUA_VIGNETTE),
+        Locale::Text::OpenUA(Locale::OUA_SKY_HORIZON_DISTANCE),
+        Locale::Text::OpenUA(Locale::OUA_SKY_HEIGHT),
         Locale::Text::OpenUA(Locale::OUA_FOG_START),
         Locale::Text::OpenUA(Locale::OUA_FOG_LENGTH),
         Locale::Text::OpenUA(Locale::OUA_FOG_STRENGTH),
@@ -8086,14 +8090,20 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         Locale::Text::OpenUA(Locale::OUA_DARK_STRENGTH),
         Locale::Text::OpenUA(Locale::OUA_WORLD_UI_MAX_DISTANCE),
         Locale::Text::OpenUA(Locale::OUA_VHS_STRENGTH),
-        Locale::Text::OpenUA(Locale::OUA_PARTICLE_LIMIT),
-        Locale::Text::OpenUA(Locale::OUA_RENDER_SECTORS)
+        Locale::Text::OpenUA(Locale::OUA_PARTICLE_LIMIT)
     }};
 
     const std::array<int, UserData::ATMOPT_COUNT> mins =
-    {{0, 0, 25, 50, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 3}};
+    {{0, 0, 25, 50, 0, 0,
+      YW_SKY_HORIZON_DISTANCE_MIN / YW_SKY_HORIZON_DISTANCE_UI_STEP,
+      YW_SKY_HEIGHT_MIN,
+      0, 0, 0, 0, 0, 0, 100, 0, 0}};
     const std::array<int, UserData::ATMOPT_COUNT> maxs =
-    {{100, 100, 200, 200, 200, 100, 10000, 10000, 100, 10000, 10000, 100, 20000, 100, YW_PARTICLE_LIMIT_UI_MAX, YW_RENDER_SECTORS_MAX}};
+    {{100, 100, 200, 200, 200, 100,
+      YW_SKY_HORIZON_DISTANCE_MAX / YW_SKY_HORIZON_DISTANCE_UI_STEP,
+      YW_SKY_HEIGHT_MAX,
+      10000, 10000, 100, 10000, 10000, 100, 20000, 100,
+      YW_PARTICLE_LIMIT_UI_MAX}};
 
     NC_STACK_button::button_64_arg btn;
     btn.caption2.clear();
@@ -8119,7 +8129,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         return false;
 
     // Data-driven graphics preset selector. Profile names come from
-    // Data/Scripts/Graphic_Profiles/*.txt; Custom is an in-memory UI state.
+    // Data/Scripts/Graphic_Profiles/*.cfg; .txt remains a compatibility fallback; Custom is an in-memory UI state.
     btn.tileset_down = 16;
     btn.tileset_up = 16;
     btn.field_3A = 16;
@@ -11726,11 +11736,40 @@ void NC_STACK_ypaworld::setYW_skyHeight(int hght)
 void NC_STACK_ypaworld::setYW_skyRender(int dorender)
 {
     _skyRender = dorender;
+    UpdateSkyHorizonRenderSectors();
 }
 
 void NC_STACK_ypaworld::setYW_doEnergyRecalc(int doRecalc)
 {
     _doEnergyRecalc = doRecalc;
+}
+
+int32_t NC_STACK_ypaworld::GetSkyHorizonDistance() const
+{
+    const int32_t configured = System::IniConf::GfxSkyDistance.Get<int32_t>();
+    return std::max<int32_t>(YW_SKY_HORIZON_DISTANCE_MIN,
+                             std::min<int32_t>(YW_SKY_HORIZON_DISTANCE_MAX, configured));
+}
+
+void NC_STACK_ypaworld::UpdateSkyHorizonRenderSectors()
+{
+    if ( !_skyRender )
+    {
+        setYW_visSectors(YW_RENDER_SECTORS_MAX);
+        return;
+    }
+
+    const float sectorLength = World::CVSectorLength;
+
+    // RenderGame uses a diamond-shaped (Manhattan-distance) sector window.
+    // Convert the circular sky radius to the worst-case diagonal Manhattan
+    // radius, then keep two additional hidden sector layers behind the dome.
+    const int32_t horizonRadius = (int32_t)std::ceil(
+        ((float)GetSkyHorizonDistance() / sectorLength) * 1.41421356237f);
+    const int32_t safeRadius =
+        horizonRadius + YW_SKY_HORIZON_SECTOR_MARGIN;
+
+    setYW_visSectors(safeRadius * 2 + 1);
 }
 
 void NC_STACK_ypaworld::setYW_visSectors(int visSectors)

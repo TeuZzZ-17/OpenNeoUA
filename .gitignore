@@ -27,9 +27,11 @@
 
 !/Scripts/
 /Scripts/*
-!/Scripts/Atmospheric_FX_Profiles/
-!/Scripts/Spectator_vehicle.txt
-!/Scripts/Super_Item_Profiles.txt
+!/Scripts/FX_Profiles/
+!/Scripts/Graphic_Profiles/
+!/Scripts/SuperItem_Profiles/
+!/Scripts/Spectator_vehicle.cfg
+!/Scripts/Super_Item_Profiles.cfg
 
 # ============================================================
 # LOCALE
