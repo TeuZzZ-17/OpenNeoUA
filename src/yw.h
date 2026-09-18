@@ -48,7 +48,7 @@
 // remains odd-sized internally, so an input value of 50 is normalized to 49.
 #define YW_RENDER_SECTORS_MAX   99
 
-// Atmosphere & Visibility UI bounds/defaults for existing runtime controls.
+// Advanced Graphics Settings UI bounds/defaults for existing runtime controls.
 // These do not change the underlying INI parser; they define only the public menu range.
 constexpr int32_t YW_PARTICLE_LIMIT_UI_MAX = 20000;
 constexpr int32_t YW_PARTICLE_LIMIT_UI_DEFAULT = 9000;
@@ -700,6 +700,12 @@ public:
         ATMOPT_COUNT
     };
 
+    struct TGraphicProfile
+    {
+        std::string Name;
+        std::string Path;
+    };
+
     struct TInputConf
     {
         uint8_t Type = 0;
@@ -769,6 +775,9 @@ public:
     bool atmospherePageActive = false;
     std::array<int, ATMOPT_COUNT> atmosphereValues = {};
     std::array<int, ATMOPT_COUNT> atmosphereSavedValues = {};
+    std::vector<TGraphicProfile> atmosphereGraphicProfiles;
+    std::string atmosphereGraphicProfileName;
+    std::string atmosphereSavedGraphicProfileName;
     GuiList video_listvw;
     int game_default_res;
 
@@ -1061,12 +1070,17 @@ public:
     void ShowOptionsMenu();
     void ResetOptionsToDefaults();
     void ShowAtmosphereOptionsMenu();
-    void AtmosphereOptionsLoad();
+    void AtmosphereOptionsLoad(bool saveSnapshot = true);
     void AtmosphereOptionsApplyLive();
     void AtmosphereOptionsSave();
     void AtmosphereOptionsCancel();
-    void AtmosphereOptionsReset();
     void UpdateAtmosphereOptionTexts();
+    void RefreshGraphicProfiles();
+    void DetectMatchingGraphicProfile();
+    void CycleGraphicProfile();
+    bool ApplyGraphicProfile(const TGraphicProfile &profile);
+    void UpdateGraphicProfileText();
+    void MarkAtmosphereGraphicProfileCustom();
     void GameShellUiOpenNetwork();
     int ypaworld_func158__sub0__sub7();
     void ShowConfirmDialog(int a2, const std::string &txt1, const std::string &txt2, int a5);
@@ -3277,6 +3291,7 @@ public:
     bool _fireBtnDownHappen = false; // true happen on down, single
     bool _weaponSwitchBtnIsDown = false; // edge-triggered manual weapon selection
     bool _cycleTargetBtnIsDown = false;   // edge-triggered homing target cycle
+    bool _ufoSpyBindingIsDown = false;     // edge latch for the remappable UFO Spy Mode binding
     bool _guiLoaded = false;
 
     std::array<TileMap *, 92> _guiTiles = Common::ArrayInit<TileMap *, 92>(NULL);

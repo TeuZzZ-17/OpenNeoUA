@@ -644,8 +644,10 @@ struct TVhclProto
         SND_AIREXPLODE = 12,
         SND_HANDBRAKE = 13,
         SND_PICKUP = 14,
+        SND_SPY_UI = 15,
+        SND_ZOOM_STEP = 16,
 
-        SND_MAX     = 15
+        SND_MAX     = 17
     };
 
     inline static bool IsLoopingSnd(int i)

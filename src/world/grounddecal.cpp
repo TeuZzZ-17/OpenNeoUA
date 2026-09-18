@@ -17,7 +17,7 @@ namespace
 
 constexpr int GROUND_DECAL_DEFAULT_LIMIT = 256;
 constexpr int GROUND_DECAL_MAX_TRIANGLES = 128;
-constexpr int GROUND_DECAL_HARD_LIMIT = 1024;
+constexpr int GROUND_DECAL_HARD_LIMIT = 10000;
 constexpr int GROUND_DECAL_SHAPE_POINTS = 12;
 constexpr float GROUND_DECAL_SHAPE_JAGGEDNESS = 0.35f;
 constexpr float GROUND_DECAL_SURFACE_BIAS = 1.5f;
