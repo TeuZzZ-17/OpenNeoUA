@@ -3095,6 +3095,7 @@ public:
         int32_t duration = 0;
         int32_t fadeIn = 0;
         int32_t fadeOut = 0;
+        bool permanent = false;
         World::TVisualTint tint;
         GFX::TMesh mesh;
 
