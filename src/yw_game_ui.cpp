@@ -14129,7 +14129,7 @@ void yw_RenderInfoVehicleName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *c
 void yw_RenderInfoWeaponName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur,
                              const std::string &name, float xpos, float ypos)
 {
-    if ( name.empty() )
+    if ( !System::IniConf::UiWeaponName.Get<bool>() || name.empty() )
         return;
 
     yw_RenderInfoVehicleName(yw, wis, cur, name, xpos, ypos);
