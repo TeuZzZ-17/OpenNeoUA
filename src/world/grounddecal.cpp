@@ -955,8 +955,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     const int maxTriangles = GROUND_DECAL_MAX_TRIANGLES;
     const bool supportedTrigger =
         config.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD ||
-        config.trigger == World::TChainFXConfig::TRIGGER_CRASH ||
-        config.trigger == World::TChainFXConfig::TRIGGER_DESTROYED;
+        config.trigger == World::TChainFXConfig::TRIGGER_CRASH;
     if ( _isNetGame || limit <= 0 || maxTriangles <= 0 ||
          config.mode != World::TChainFXConfig::MODE_GROUND_DECAL ||
          !supportedTrigger ||

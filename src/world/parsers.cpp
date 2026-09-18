@@ -1954,6 +1954,16 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             if ( badTrigger || badMode )
                 return ScriptParser::RESULT_OK;
 
+            if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL && !hasTrigger )
+            {
+                if ( context == CHAIN_FX_VEHICLE )
+                    trigger = World::TChainFXConfig::TRIGGER_CRASH;
+                else if ( context == CHAIN_FX_WEAPON )
+                    trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
+
+                hasTrigger = trigger != World::TChainFXConfig::TRIGGER_NONE;
+            }
+
             if ( !hasTrigger )
             {
                 ypa_log_out("WARNING: begin_chain_fx without trigger ignored for %s prototype\n",
@@ -2005,12 +2015,16 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     (context == CHAIN_FX_WEAPON &&
                      trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD) ||
                     (context == CHAIN_FX_VEHICLE &&
-                     (trigger == World::TChainFXConfig::TRIGGER_CRASH ||
-                      trigger == World::TChainFXConfig::TRIGGER_DESTROYED));
+                     trigger == World::TChainFXConfig::TRIGGER_CRASH);
 
                 if ( !validGroundDecalTrigger )
                 {
-                    ypa_log_out("WARNING: begin_chain_fx ground_decal requires weapon trigger impact_world or vehicle trigger crash/destroyed; block ignored\n");
+                    if ( context == CHAIN_FX_WEAPON )
+                        ypa_log_out("WARNING: Weapon begin_chain_fx ground_decal supports only trigger = impact_world; block ignored\n");
+                    else if ( context == CHAIN_FX_VEHICLE )
+                        ypa_log_out("WARNING: Vehicle begin_chain_fx ground_decal supports only trigger = crash; block ignored\n");
+                    else
+                        ypa_log_out("WARNING: begin_chain_fx ground_decal is not supported for this prototype; block ignored\n");
                 }
                 else if ( !std::isfinite(groundDecalSizeMin) || !std::isfinite(groundDecalSizeMax) ||
                           groundDecalSizeMin <= 0.0f || groundDecalSizeMax <= 0.0f ||
