@@ -1059,7 +1059,6 @@ public:
     std::vector<World::DestFX> _destroyFX;    // dest_fx
     std::vector<World::DestFX> _extDestroyFX; // ext_dest_fx
     std::vector<World::TChainFXConfig> _chainFX;
-    bool _suppressGroundDecalAfterAirDeath = false;
     float _radius;
     float _viewer_radius;
     float _overeof;
