@@ -58,7 +58,7 @@ static constexpr int MENU_MSGBOX_INPUT_KEY_CONFLICT = 2;
 
 // OpenNeoUA main Options-page reset profile. These are intentionally the values
 // exposed by the Reset Defaults button, not necessarily the parser/runtime
-// fallback defaults used when a Nucleus.ini key is absent. Keeping the two
+// fallback defaults used when an OpenNeoUA.ini key is absent. Keeping the two
 // concepts separate preserves vanilla-safe missing-key behaviour.
 //
 // MAINTENANCE: every new control added to this main Options page must also be
@@ -439,18 +439,6 @@ static int IntFromString(std::string s, int fallback, int minValue, int maxValue
     {
         return fallback;
     }
-}
-
-static int UiOpacityPercentFromByte(int value)
-{
-    value = std::max(0, std::min(255, value));
-    return (value * 100 + 127) / 255;
-}
-
-static int UiOpacityByteFromPercent(int value)
-{
-    value = std::max(0, std::min(100, value));
-    return (value * 255 + 50) / 100;
 }
 
 static std::string HundredStorageValue(int value)
@@ -1617,8 +1605,8 @@ void UserData::sb_0x46aa8c()
         ambientSoundVolume = confAmbientSoundVolume;
         System::IniConf::GameAmbientSoundVolume.Value = std::to_string(ambientSoundVolume);
 
-        if ( !SaveKeyToNucleusIni("game.ambient_sound_volume", std::to_string(ambientSoundVolume)) )
-            ypa_log_out("WARNING: Could not save game.ambient_sound_volume to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("game.ambient_sound_volume", std::to_string(ambientSoundVolume)) )
+            ypa_log_out("WARNING: Could not save game.ambient_sound_volume to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & 0x80 )
@@ -1686,39 +1674,39 @@ void UserData::sb_0x46aa8c()
         // Apply immediately so the change is visible without restarting.
         GFX::Engine.SetVisualFilter(PaletteThemeStorageValue(paletteTheme));
 
-        if ( !SavePaletteThemeToNucleusIni() )
-            ypa_log_out("WARNING: Could not save gfx.visual_filter to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("gfx.visual_filter", PaletteThemeStorageValue(paletteTheme)) )
+            ypa_log_out("WARNING: Could not save gfx.visual_filter to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_PLAYER_ROBO_AI_BEHAVIOR )
     {
         System::IniConf::GameRoboPlayerAIBehavior.Value = confPlayerRoboAIBehavior;
 
-        if ( !SavePlayerRoboAIBehaviorToNucleusIni() )
-            ypa_log_out("WARNING: Could not save game.robo_player_ai_behavior to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("game.robo_player_ai_behavior", confPlayerRoboAIBehavior ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save game.robo_player_ai_behavior to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_SPECTATOR_MODE )
     {
         System::IniConf::GameSpectatorMode.Value = confSpectatorMode;
 
-        if ( !SaveSpectatorModeToNucleusIni() )
-            ypa_log_out("WARNING: Could not save game.spectator_mode to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("game.spectator_mode", confSpectatorMode ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save game.spectator_mode to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS )
     {
         System::IniConf::GamePlayAsOtherFactions.Value = confPlayAsOtherFactions;
 
-        if ( !SaveKeyToNucleusIni("game.play_as_other_factions", confPlayAsOtherFactions ? "yes" : "no") )
-            ypa_log_out("WARNING: Could not save game.play_as_other_factions to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("game.play_as_other_factions", confPlayAsOtherFactions ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save game.play_as_other_factions to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_BLENDING )
     {
         System::IniConf::GfxBlending.Value = (int32_t)confBlending;
-        if ( !SaveKeyToNucleusIni("gfx.blending", std::to_string(confBlending)) )
-            ypa_log_out("WARNING: Could not save gfx.blending to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("gfx.blending", std::to_string(confBlending)) )
+            ypa_log_out("WARNING: Could not save gfx.blending to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_MAXFPS )
@@ -1726,8 +1714,8 @@ void UserData::sb_0x46aa8c()
         confMaxFps = NormalizeFrameRateLimit(confMaxFps);
         System::IniConf::GfxMaxFps.Value = (int32_t)confMaxFps;
         GFX::Engine.fpsLimitter(confMaxFps);
-        if ( !SaveKeyToNucleusIni("gfx.maxfps", std::to_string(confMaxFps)) )
-            ypa_log_out("WARNING: Could not save gfx.maxfps to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("gfx.maxfps", std::to_string(confMaxFps)) )
+            ypa_log_out("WARNING: Could not save gfx.maxfps to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_MOVIE_PLAYER )
@@ -1739,7 +1727,7 @@ void UserData::sb_0x46aa8c()
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_MENU_FONT )
     {
-        // OpenNeoUA: persist menu font with the same nucleus.ini writer used by
+        // OpenNeoUA: persist menu font in the OpenNeoUA.ini custom layer used by
         // gfx.blending, but store it as a safe single token because font display
         // names contain spaces. Example on disk:
         //   ui.menu_font = Liberation_Mono_Regular
@@ -1748,10 +1736,10 @@ void UserData::sb_0x46aa8c()
         const std::string storedMenuFont = System::MenuFontStorageValue(menuFont);
         System::IniConf::UiMenuFont.Value = storedMenuFont;
 
-        if ( !SaveKeyToNucleusIni("ui.menu_font", storedMenuFont) )
-            ypa_log_out("WARNING: Could not save ui.menu_font to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("ui.menu_font", storedMenuFont) )
+            ypa_log_out("WARNING: Could not save ui.menu_font to OpenNeoUA.ini\n");
         else
-            ypa_log_out("OpenNeoUA: saved ui.menu_font = %s (%s)\n", menuFont.c_str(), storedMenuFont.c_str());
+            ypa_log_out("OpenNeoUA: saved ui.menu_font = %s (%s) to OpenNeoUA.ini\n", menuFont.c_str(), storedMenuFont.c_str());
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS )
@@ -1759,8 +1747,8 @@ void UserData::sb_0x46aa8c()
         System::IniConf::GfxHideMapBorderWalls.Value = confHideMapBorderWalls;
         yw->SetHideMapBorderWalls(confHideMapBorderWalls);
 
-        if ( !SaveKeyToNucleusIni("gfx.hide_map_border_walls", confHideMapBorderWalls ? "yes" : "no") )
-            ypa_log_out("WARNING: Could not save gfx.hide_map_border_walls to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("gfx.hide_map_border_walls", confHideMapBorderWalls ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save gfx.hide_map_border_walls to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_INTERFACE_STYLE )
@@ -1770,8 +1758,8 @@ void UserData::sb_0x46aa8c()
 
         const bool retroInterface = interfaceStyle == GFX::VirtualUIStyle::RETRO;
         System::IniConf::UiRetroInterface.Value = retroInterface;
-        if ( !SaveKeyToNucleusIni("ui.retro_interface", retroInterface ? "yes" : "no") )
-            ypa_log_out("WARNING: Could not save ui.retro_interface to nucleus.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("ui.retro_interface", retroInterface ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save ui.retro_interface to OpenNeoUA.ini\n");
     }
 
     if ( forceChange )
@@ -1926,7 +1914,7 @@ void UserData::ShowOptionsMenu()
 // OpenNeoUA: restore only the controls exposed on the main Options page.
 // Atmosphere/Visibility keeps its independent reset button. Values are staged
 // exactly like ordinary UI edits: Back cancels them; OK persists them through
-// the existing USER.TXT/Nucleus.ini paths.
+// the existing USER.TXT/OpenNeoUA.ini paths.
 void UserData::ResetOptionsToDefaults()
 {
     const std::vector<GFX::GfxMode> &modes = GFX::GFXEngine::Instance.GetAvailableModes();
@@ -2110,13 +2098,6 @@ void UserData::AtmosphereOptionsLoad()
         atmosphereValues[ATMOPT_RENDER_SECTORS] = p_YW->getYW_visSectors();
     }
 
-    atmosphereValues[ATMOPT_INTERFACE_INTENSITY] =
-        UiOpacityPercentFromByte(System::IniConf::GetUiOpacity(
-            System::IniConf::UiHudBarsOpacity, System::IniConf::UiHudBarsDefaultOpacity));
-    atmosphereValues[ATMOPT_TEXT_OPACITY] =
-        UiOpacityPercentFromByte(System::IniConf::GetUiOpacity(
-            System::IniConf::UiTextOpacity, System::IniConf::UiTextDefaultOpacity));
-
     atmosphereSavedValues = atmosphereValues;
 
     for (int i = 0; i < ATMOPT_COUNT; ++i)
@@ -2147,8 +2128,6 @@ void UserData::UpdateAtmosphereOptionTexts()
             case ATMOPT_FOG_STRENGTH:
             case ATMOPT_DARK_STRENGTH:
             case ATMOPT_VHS_STRENGTH:
-            case ATMOPT_INTERFACE_INTENSITY:
-            case ATMOPT_TEXT_OPACITY:
                 text = std::to_string(atmosphereValues[i]) + "%";
                 break;
             case ATMOPT_EXPOSURE:
@@ -2238,13 +2217,6 @@ void UserData::AtmosphereOptionsApplyLive()
     System::IniConf::GfxRenderSectors.Value =
         std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
 
-    // These two controls affect only the active in-mission UI render path.
-    // Menus, briefing screens and shell UI remain at their authored opacity.
-    System::IniConf::UiHudBarsOpacity.Value =
-        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]);
-    System::IniConf::UiTextOpacity.Value =
-        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]);
-
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
     GFX::Engine.ReloadHorizonConfig();
@@ -2259,10 +2231,10 @@ void UserData::AtmosphereOptionsSave()
     System::IniConf::GfxVisualFilter.Value = PaletteThemeStorageValue(paletteTheme);
     SavePaletteThemeCache(paletteTheme);
     GFX::Engine.SetVisualFilter(PaletteThemeStorageValue(paletteTheme));
-    if (!SavePaletteThemeToNucleusIni())
-        ypa_log_out("WARNING: Could not save gfx.visual_filter to nucleus.ini\n");
+    if (!SaveKeyToOpenNeoUAIni("gfx.visual_filter", PaletteThemeStorageValue(paletteTheme)))
+        ypa_log_out("WARNING: Could not save gfx.visual_filter to OpenNeoUA.ini\n");
 
-    const std::array<std::pair<const char *, std::string>, 18> values =
+    const std::array<std::pair<const char *, std::string>, 16> values =
     {{
         {"gfx.visual_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
         {"gfx.atmosphere_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH])},
@@ -2279,28 +2251,26 @@ void UserData::AtmosphereOptionsSave()
         {"game.world_ui_max_distance", std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE])},
         {"gfx.vhs_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH])},
         {"gfx.particles.limit", std::to_string(atmosphereValues[ATMOPT_PARTICLE_LIMIT])},
-        {"gfx.render_sectors", std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS])},
-        {"ui.hud_bars_opacity", std::to_string(UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]))},
-        {"ui.text_opacity", std::to_string(UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]))}
+        {"gfx.render_sectors", std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS])}
     }};
 
     for (const auto &entry : values)
     {
-        if (!SaveKeyToNucleusIni(entry.first, entry.second))
-            ypa_log_out("WARNING: Could not save %s to nucleus.ini\n", entry.first);
+        if (!SaveKeyToOpenNeoUAIni(entry.first, entry.second))
+            ypa_log_out("WARNING: Could not save %s to OpenNeoUA.ini\n", entry.first);
     }
 
     // These are infrastructure switches now enabled by safe internal defaults.
-    // Removing them keeps Nucleus.ini focused on artistic values while preserving
+    // Removing them keeps OpenNeoUA.ini focused on artistic values while preserving
     // backward compatibility for users who deliberately add the keys again.
-    RemoveKeyFromNucleusIni("gfx.color_effects");
-    RemoveKeyFromNucleusIni("gfx.atmosphere_fx");
+    RemoveKeyFromOpenNeoUAIni("gfx.color_effects");
+    RemoveKeyFromOpenNeoUAIni("gfx.atmosphere_fx");
 
     System::IniConf::GfxAtmosphereFx.Value = true;
     System::IniConf::GfxHorizonFogEnable.Value = true;
     System::IniConf::GfxHorizonDarkEnable.Value = true;
-    SaveKeyToNucleusIni("gfx.horizon_fog_enable", "yes");
-    SaveKeyToNucleusIni("gfx.horizon_dark_enable", "yes");
+    SaveKeyToOpenNeoUAIni("gfx.horizon_fog_enable", "yes");
+    SaveKeyToOpenNeoUAIni("gfx.horizon_dark_enable", "yes");
 
     // Force the final saved state into the current session even when the user
     // opened the page and pressed Save without moving a slider.
@@ -2310,10 +2280,6 @@ void UserData::AtmosphereOptionsSave()
         std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
     if (p_YW)
         p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
-    System::IniConf::UiHudBarsOpacity.Value =
-        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]);
-    System::IniConf::UiTextOpacity.Value =
-        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2378,10 +2344,6 @@ void UserData::AtmosphereOptionsCancel()
         std::to_string(atmosphereValues[ATMOPT_RENDER_SECTORS]);
     if (p_YW)
         p_YW->setYW_visSectors(atmosphereValues[ATMOPT_RENDER_SECTORS]);
-    System::IniConf::UiHudBarsOpacity.Value =
-        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_INTERFACE_INTENSITY]);
-    System::IniConf::UiTextOpacity.Value =
-        (int32_t)UiOpacityByteFromPercent(atmosphereValues[ATMOPT_TEXT_OPACITY]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2407,9 +2369,7 @@ void UserData::AtmosphereOptionsReset()
         5700,
         60,
         YW_PARTICLE_LIMIT_UI_DEFAULT,
-        YW_RENDER_SECTORS_UI_DEFAULT,
-        100,
-        100
+        YW_RENDER_SECTORS_UI_DEFAULT
     }};
 
     confPaletteTheme = "Black_Wadi.pal";
@@ -2938,7 +2898,7 @@ void UserData::RefreshPaletteThemes()
     std::sort(paletteThemes.begin() + 1, paletteThemes.end(),
         [](const std::string &a, const std::string &b) { return StriCmp(a, b) < 0; });
 
-    // gfx.visual_filter is global: Nucleus.ini remains authoritative across
+    // gfx.visual_filter is global: OpenNeoUA.ini remains authoritative across
     // restarts and player-profile creation/switching.
     std::string currentTheme =
         NormalizePaletteThemeName(System::IniConf::GfxVisualFilter.Get<std::string>());
@@ -2996,7 +2956,7 @@ void UserData::RefreshMenuFonts()
     // Use the committed in-memory value first. After OK this is updated by the
     // same Options commit path as gfx.blending, so reopening Options in the same
     // session shows the saved choice immediately. On first startup menuFont is
-    // empty, so we read the parsed nucleus.ini value.
+    // empty, so we read the parsed OpenNeoUA.ini value.
     std::string currentFont = NormalizeMenuFontName(menuFont.empty() ? System::GetConfiguredMenuFontName() : menuFont);
     bool found = !StriCmp(currentFont, "Default");
 
@@ -3049,64 +3009,9 @@ void UserData::CycleMenuFont()
     UpdateMenuFontText();
 }
 
-bool UserData::SavePaletteThemeToNucleusIni()
+namespace
 {
-    // OpenNeoUA: the Atmosphere selector persists the modern visual filter name.
-    const std::string key = "gfx.visual_filter";
-    const std::string newLine = key + " = " + PaletteThemeStorageValue(paletteTheme);
-
-    std::vector<std::string> lines;
-    bool replaced = false;
-    const std::string nucleusIni = uaDataFirstNucleusIniPath();
-
-    FSMgr::FileHandle *in = uaOpenFileAlloc(nucleusIni, "r");
-    if (in)
-    {
-        std::string line;
-        while (in->ReadLine(&line))
-        {
-            while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-                line.pop_back();
-
-            std::string test = line;
-            size_t comment = test.find_first_of(";");
-            if (comment != std::string::npos)
-                test.erase(comment);
-
-            Stok tokens(test, "= \t");
-            std::string token;
-            if (tokens.GetNext(&token) && !StriCmp(token, key))
-            {
-                lines.push_back(newLine);
-                replaced = true;
-            }
-            else
-            {
-                lines.push_back(line);
-            }
-        }
-
-        delete in;
-    }
-
-    if (!replaced)
-        lines.push_back(newLine);
-
-    FSMgr::FileHandle *out = uaOpenFileAlloc(nucleusIni, "w");
-    if (!out)
-        return false;
-
-    for (const std::string &line : lines)
-        out->puts(line + "\n");
-
-    delete out;
-    return true;
-}
-
-// OpenNeoUA: generic "key = value" writer for nucleus.ini. Replaces the line for `key`
-// if present, otherwise appends it. ALL other lines (including hidden/legacy settings)
-// are preserved verbatim, so saving Options never erases unrelated settings.
-bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &value)
+bool SaveIniKey(const std::string &iniPath, const std::string &key, const std::string &value)
 {
     std::string saveValue = value;
     if (!StriCmp(key, "gfx.visual_filter_strength"))
@@ -3116,9 +3021,8 @@ bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &va
 
     std::vector<std::string> lines;
     bool replaced = false;
-    const std::string nucleusIni = uaDataFirstNucleusIniPath();
 
-    FSMgr::FileHandle *in = uaOpenFileAlloc(nucleusIni, "r");
+    FSMgr::FileHandle *in = uaOpenFileAlloc(iniPath, "r");
     if (in)
     {
         std::string line;
@@ -3152,7 +3056,7 @@ bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &va
     if (!replaced)
         lines.push_back(newLine);
 
-    FSMgr::FileHandle *out = uaOpenFileAlloc(nucleusIni, "w");
+    FSMgr::FileHandle *out = uaOpenFileAlloc(iniPath, "w");
     if (!out)
         return false;
 
@@ -3163,11 +3067,9 @@ bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &va
     return true;
 }
 
-
-bool UserData::RemoveKeyFromNucleusIni(const std::string &key)
+bool RemoveIniKey(const std::string &iniPath, const std::string &key)
 {
-    const std::string nucleusIni = uaDataFirstNucleusIniPath();
-    FSMgr::FileHandle *in = uaOpenFileAlloc(nucleusIni, "r");
+    FSMgr::FileHandle *in = uaOpenFileAlloc(iniPath, "r");
     if (!in)
         return true;
 
@@ -3192,7 +3094,7 @@ bool UserData::RemoveKeyFromNucleusIni(const std::string &key)
     }
     delete in;
 
-    FSMgr::FileHandle *out = uaOpenFileAlloc(nucleusIni, "w");
+    FSMgr::FileHandle *out = uaOpenFileAlloc(iniPath, "w");
     if (!out)
         return false;
 
@@ -3201,118 +3103,30 @@ bool UserData::RemoveKeyFromNucleusIni(const std::string &key)
     delete out;
     return true;
 }
+}
+
+// Vanilla settings still persist in Nucleus.ini.
+bool UserData::SaveKeyToNucleusIni(const std::string &key, const std::string &value)
+{
+    return SaveIniKey(uaDataFirstNucleusIniPath(), key, value);
+}
+
+// OpenNeoUA-only settings persist in the separate custom layer.
+bool UserData::SaveKeyToOpenNeoUAIni(const std::string &key, const std::string &value)
+{
+    return SaveIniKey(uaDataFirstOpenNeoUAIniPath(), key, value);
+}
+
+bool UserData::RemoveKeyFromOpenNeoUAIni(const std::string &key)
+{
+    return RemoveIniKey(uaDataFirstOpenNeoUAIniPath(), key);
+}
 
 // OpenNeoUA: refresh the captions of the modern graphics cycle-buttons.
 void UserData::UpdateGfxOptionTexts()
 {
     video_button->SetText(1183, BlendingLabel(confBlending));
     video_button->SetText(1187, std::to_string(NormalizeFrameRateLimit(confMaxFps)));
-}
-
-bool UserData::SavePlayerRoboAIBehaviorToNucleusIni()
-{
-    const std::string key = "game.robo_player_ai_behavior";
-    const std::string newLine = key + std::string(" = ") + (System::IniConf::GameRoboPlayerAIBehavior.Get<bool>() ? "yes" : "no");
-
-    std::vector<std::string> lines;
-    bool replaced = false;
-    const std::string nucleusIni = uaDataFirstNucleusIniPath();
-
-    FSMgr::FileHandle *in = uaOpenFileAlloc(nucleusIni, "r");
-    if (in)
-    {
-        std::string line;
-        while (in->ReadLine(&line))
-        {
-            while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-                line.pop_back();
-
-            std::string test = line;
-            size_t comment = test.find_first_of(";");
-            if (comment != std::string::npos)
-                test.erase(comment);
-
-            Stok tokens(test, "= \t");
-            std::string token;
-            if (tokens.GetNext(&token) && !StriCmp(token, key))
-            {
-                lines.push_back(newLine);
-                replaced = true;
-            }
-            else
-            {
-                lines.push_back(line);
-            }
-        }
-
-        delete in;
-    }
-
-    if (!replaced)
-        lines.push_back(newLine);
-
-    FSMgr::FileHandle *out = uaOpenFileAlloc(nucleusIni, "w");
-    if (!out)
-        return false;
-
-    for (const std::string &line : lines)
-        out->puts(line + "\n");
-
-    delete out;
-    return true;
-}
-
-bool UserData::SaveSpectatorModeToNucleusIni()
-{
-    const std::string key = "game.spectator_mode";
-    const std::string newLine = key + std::string(" = ") + (System::IniConf::GameSpectatorMode.Get<bool>() ? "yes" : "no");
-
-    std::vector<std::string> lines;
-    bool replaced = false;
-    const std::string nucleusIni = uaDataFirstNucleusIniPath();
-
-    FSMgr::FileHandle *in = uaOpenFileAlloc(nucleusIni, "r");
-    if (in)
-    {
-        std::string line;
-        while (in->ReadLine(&line))
-        {
-            while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-                line.pop_back();
-
-            std::string test = line;
-            size_t comment = test.find_first_of(";");
-            if (comment != std::string::npos)
-                test.erase(comment);
-
-            Stok tokens(test, "= \t");
-            std::string token;
-            if (tokens.GetNext(&token) && !StriCmp(token, key))
-            {
-                lines.push_back(newLine);
-                replaced = true;
-            }
-            else
-            {
-                lines.push_back(line);
-            }
-        }
-
-        delete in;
-    }
-
-    if (!replaced)
-        lines.push_back(newLine);
-
-    FSMgr::FileHandle *out = uaOpenFileAlloc(nucleusIni, "w");
-    if (!out)
-        return false;
-
-    for (const std::string &line : lines)
-        out->puts(line + "\n");
-
-    delete out;
-    return true;
 }
 
 void UserData::sub_46C914()
