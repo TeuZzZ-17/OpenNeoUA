@@ -75,7 +75,7 @@ Common::Ini::Key IniConf::GfxColorEffPower5("gfx.color_eff_pwr[5]", Common::Ini:
 Common::Ini::Key IniConf::GfxColorEffPower6("gfx.color_eff_pwr[6]", Common::Ini::KT_DIGIT, (int32_t)100);
 Common::Ini::Key IniConf::GfxColorEffPower7("gfx.color_eff_pwr[7]", Common::Ini::KT_DIGIT, (int32_t)100);
 // OpenNeoUA custom palette slots. Slots 8..16 have no hardcoded color: they exist
-// only when nucleus.ini defines an RGB value in the R_G_B form.
+// only when OpenNeoUA.ini defines an RGB value in the R_G_B form.
 Common::Ini::Key IniConf::GfxColorEff8("gfx.color_eff[8]", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxColorEff9("gfx.color_eff[9]", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxColorEff10("gfx.color_eff[10]", Common::Ini::KT_WORD, std::string());
@@ -105,8 +105,6 @@ Common::Ini::Key IniConf::UiGenesisListHeight("ui.genesis_list_height", Common::
 Common::Ini::Key IniConf::UiGenesisListOpacity("ui.genesis_list_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultOpacity);
 Common::Ini::Key IniConf::UiMapOpacity("ui.map_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiMapDefaultOpacity);
 Common::Ini::Key IniConf::UiSquadronManagerOpacity("ui.squadron_manager_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiSquadronManagerDefaultOpacity);
-Common::Ini::Key IniConf::UiHudBarsOpacity("ui.hud_bars_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiHudBarsDefaultOpacity);
-Common::Ini::Key IniConf::UiTextOpacity("ui.text_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiTextDefaultOpacity);
 
 
 // Input Engine
@@ -271,7 +269,7 @@ Common::Ini::Key IniConf::GamePlayerMaxAltitudeAboveGround("game.player_max_alti
 // terrain. Missing, zero, negative or invalid preserves vanilla AI behavior.
 Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_above_ground", Common::Ini::KT_WORD, std::string("0.0"));
 // OpenNeoUA custom: the player Sprint exists only when all three Sprint values are
-// explicitly present in Nucleus.ini. Missing any one of them disables Sprint.
+// explicitly present in OpenNeoUA.ini. Missing any one of them disables Sprint.
 Common::Ini::Key IniConf::GameSprintForceUp("game.sprint_force_up", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintPitchUp("game.sprint_pitch_up", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameSprintRampTime("game.sprint_ramp_time", Common::Ini::KT_WORD, std::string("0"));
@@ -389,7 +387,7 @@ Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_
 // gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
 // All numeric values use KT_WORD so
 // malformed user input can be validated safely by World::EnergyFX instead of
-// throwing while Nucleus.ini is parsed. VP/interval/count default to zero, so
+// throwing while the Nucleus/OpenNeoUA configuration is parsed. VP/interval/count default to zero, so
 // an absent or incomplete profile is fully disabled.
 Common::Ini::Key IniConf::GfxRegenFXVP("gfx.regen_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFX3DS("gfx.regen_fx_3ds", Common::Ini::KT_WORD, std::string(""));
@@ -795,14 +793,21 @@ void IniConf::Init()
         , &UiGenesisListOpacity
         , &UiMapOpacity
         , &UiSquadronManagerOpacity
-        , &UiHudBarsOpacity
-        , &UiTextOpacity
     };
 }
 
 bool IniConf::ReadFromNucleusIni()
 {
-    return Common::Ini::ParseIniFile(uaDataFirstNucleusIniPath(), &_varList);
+    if ( !Common::Ini::ParseIniFile(uaDataFirstNucleusIniPath(), &_varList) )
+        return false;
+
+    // OpenNeoUA custom settings are a second layer. Missing OpenNeoUA.ini keeps
+    // the Nucleus/runtime values unchanged; matching keys override Nucleus.
+    Common::Ini::ParseIniFileOverlay(uaDataFirstOpenNeoUAIniPath(), &_varList);
+
+    // Command-line/global overrides must remain the final authority.
+    Common::Ini::ApplyPredefinedIniKeys(&_varList);
+    return true;
 }
 
 bool IniConf::ReadFromIni(const std::string &fname)

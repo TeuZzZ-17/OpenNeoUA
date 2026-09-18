@@ -95,7 +95,7 @@ static bool ParseBool(const std::string &str, bool *out)
 
 static void WarnInvalidValue(const Key &key, const std::string &value)
 {
-    ypa_log_out("WARNING: invalid Nucleus.ini value [%s=%s]; using the default value.\n",
+    ypa_log_out("WARNING: invalid INI value [%s=%s]; using the default value.\n",
                 key.Name.c_str(), value.empty() ? "<missing>" : value.c_str());
 }
 
@@ -181,7 +181,8 @@ void ParseLine(std::string line, std::vector<T> *lst)
     }
 }
 
-bool ParseIniFile(std::string iniFile, KeyList *lst)
+template <typename T>
+bool ParseIniFileImpl(std::string iniFile, std::vector<T> *lst, bool resetKeys)
 {
     if ( iniFile.empty() )
         return false;
@@ -191,42 +192,53 @@ bool ParseIniFile(std::string iniFile, KeyList *lst)
     if ( !fil )
         return false;
 
-    ResetKeys(lst);
+    if ( resetKeys )
+        ResetKeys(lst);
 
     std::string buf;
     while ( fil->ReadLine(&buf) )
         ParseLine(buf, lst);
 
     delete fil;
+    return true;
+}
 
-    for( const std::string &str : Env._predefinedIniKeys )
-        ParseLine(str, lst);
-
+bool ParseIniFile(std::string iniFile, KeyList *lst)
+{
+    if ( !ParseIniFileImpl(iniFile, lst, true) )
+        return false;
+    ApplyPredefinedIniKeys(lst);
     return true;
 }
 
 bool ParseIniFile(std::string iniFile, PKeyList *lst)
 {
-    if ( iniFile.empty() )
+    if ( !ParseIniFileImpl(iniFile, lst, true) )
         return false;
-
-    FSMgr::FileHandle *fil = FSMgr::iDir::openFileAlloc(iniFile, "r");
-
-    if ( !fil )
-        return false;
-
-    ResetKeys(lst);
-
-    std::string buf;
-    while ( fil->ReadLine(&buf) )
-        ParseLine(buf, lst);
-
-    delete fil;
-
-    for( const std::string &str : Env._predefinedIniKeys )
-        ParseLine<Key *>(str, lst);
-
+    ApplyPredefinedIniKeys(lst);
     return true;
+}
+
+bool ParseIniFileOverlay(std::string iniFile, KeyList *lst)
+{
+    return ParseIniFileImpl(iniFile, lst, false);
+}
+
+bool ParseIniFileOverlay(std::string iniFile, PKeyList *lst)
+{
+    return ParseIniFileImpl(iniFile, lst, false);
+}
+
+void ApplyPredefinedIniKeys(KeyList *lst)
+{
+    for ( const std::string &str : Env._predefinedIniKeys )
+        ParseLine(str, lst);
+}
+
+void ApplyPredefinedIniKeys(PKeyList *lst)
+{
+    for ( const std::string &str : Env._predefinedIniKeys )
+        ParseLine<Key *>(str, lst);
 }
 
 }
