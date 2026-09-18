@@ -1925,17 +1925,26 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     vec3d offset;
     int duration = 0;
     bool groundDecalDurationValid = false;
+    bool groundDecalPermanent = false;
     int fadeIn = 0;
     int fadeOut = 0;
     std::vector<World::TChainFXVisual> visuals;
     int physicalVehicle = 0;
     std::string groundDecalTexture;
-    int groundDecalPoints = 12;
-    int groundDecalJaggedness = 35;
     float groundDecalSize = 0.0f;
+    float groundDecalSizeMin = 0.0f;
+    float groundDecalSizeMax = 0.0f;
+    float groundDecalStretchX = 1.0f;
+    float groundDecalStretchXMin = 1.0f;
+    float groundDecalStretchXMax = 1.0f;
+    float groundDecalStretchZ = 1.0f;
+    float groundDecalStretchZMin = 1.0f;
+    float groundDecalStretchZMax = 1.0f;
     TVisualTint groundDecalTint;
     bool groundDecalRandomRotation = false;
     float groundDecalEdgeFade = 0.0f;
+    int groundDecalEdgeFadeMin = -1;
+    int groundDecalEdgeFadeMax = -1;
     World::TChainFXConfig::Trigger trigger = World::TChainFXConfig::TRIGGER_NONE;
     bool hasTrigger = false;
     bool badTrigger = false;
@@ -2013,14 +2022,24 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             }
             else if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL )
             {
-                if ( context != CHAIN_FX_WEAPON ||
-                     trigger != World::TChainFXConfig::TRIGGER_IMPACT_WORLD )
+                const bool validGroundDecalTrigger =
+                    (context == CHAIN_FX_WEAPON &&
+                     trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD) ||
+                    (context == CHAIN_FX_VEHICLE &&
+                     (trigger == World::TChainFXConfig::TRIGGER_CRASH ||
+                      trigger == World::TChainFXConfig::TRIGGER_DESTROYED));
+
+                if ( !validGroundDecalTrigger )
                 {
-                    ypa_log_out("WARNING: begin_chain_fx ground_decal requires weapon trigger impact_world; block ignored\n");
+                    ypa_log_out("WARNING: begin_chain_fx ground_decal requires weapon trigger impact_world or vehicle trigger crash/destroyed; block ignored\n");
                 }
-                else if ( groundDecalPoints < 3 || groundDecalPoints > 32 ||
-                          !std::isfinite(groundDecalSize) || groundDecalSize <= 0.0f ||
-                          !groundDecalDurationValid || duration <= 0 ||
+                else if ( !std::isfinite(groundDecalSizeMin) || !std::isfinite(groundDecalSizeMax) ||
+                          groundDecalSizeMin <= 0.0f || groundDecalSizeMax <= 0.0f ||
+                          !std::isfinite(groundDecalStretchXMin) || !std::isfinite(groundDecalStretchXMax) ||
+                          groundDecalStretchXMin <= 0.0f || groundDecalStretchXMax <= 0.0f ||
+                          !std::isfinite(groundDecalStretchZMin) || !std::isfinite(groundDecalStretchZMax) ||
+                          groundDecalStretchZMin <= 0.0f || groundDecalStretchZMax <= 0.0f ||
+                          !groundDecalDurationValid || (!groundDecalPermanent && duration <= 0) ||
                           groundDecalTint.a <= 0.0f )
                 {
                     ypa_log_out("WARNING: incomplete or disabled begin_chain_fx ground_decal block ignored\n");
@@ -2031,15 +2050,24 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.mode = mode;
                     chain.trigger = trigger;
                     chain.duration = duration;
-                    chain.fade_out = std::min(fadeOut, duration);
-                    chain.fade_in = std::min(fadeIn, duration - chain.fade_out);
+                    chain.ground_decal_permanent = groundDecalPermanent;
+                    chain.fade_out = groundDecalPermanent ? 0 : std::min(fadeOut, duration);
+                    chain.fade_in = groundDecalPermanent ? fadeIn : std::min(fadeIn, duration - chain.fade_out);
                     chain.ground_decal_texture = groundDecalTexture;
-                    chain.ground_decal_points = groundDecalPoints;
-                    chain.ground_decal_jaggedness = (float)groundDecalJaggedness / 100.0f;
                     chain.ground_decal_size = groundDecalSize;
+                    chain.ground_decal_size_min = groundDecalSizeMin;
+                    chain.ground_decal_size_max = groundDecalSizeMax;
+                    chain.ground_decal_stretch_x = groundDecalStretchX;
+                    chain.ground_decal_stretch_x_min = groundDecalStretchXMin;
+                    chain.ground_decal_stretch_x_max = groundDecalStretchXMax;
+                    chain.ground_decal_stretch_z = groundDecalStretchZ;
+                    chain.ground_decal_stretch_z_min = groundDecalStretchZMin;
+                    chain.ground_decal_stretch_z_max = groundDecalStretchZMax;
                     chain.ground_decal_tint = groundDecalTint;
                     chain.ground_decal_random_rotation = groundDecalRandomRotation;
                     chain.ground_decal_edge_fade = groundDecalEdgeFade;
+                    chain.ground_decal_edge_fade_min = groundDecalEdgeFadeMin;
+                    chain.ground_decal_edge_fade_max = groundDecalEdgeFadeMax;
                     out->push_back(chain);
                 }
             }
@@ -2059,12 +2087,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 if ( context == CHAIN_FX_SUPERITEM && mode != World::TChainFXConfig::MODE_VISUAL )
                 {
                     ypa_log_out("WARNING: SuperItem begin_chain_fx supports only visual mode; block ignored\n");
-                    badMode = true;
-                }
-                else if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL &&
-                          context != CHAIN_FX_WEAPON )
-                {
-                    ypa_log_out("WARNING: begin_chain_fx ground_decal is weapon-only; block ignored\n");
                     badMode = true;
                 }
             }
@@ -2109,9 +2131,19 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "duration") )
         {
-            size_t parsed = 0;
-            duration = parser.stol(p2, &parsed, 0);
-            groundDecalDurationValid = parsed == p2.size() && duration > 0;
+            if ( !StriCmp(p2, "permanent") )
+            {
+                duration = 0;
+                groundDecalPermanent = true;
+                groundDecalDurationValid = true;
+            }
+            else
+            {
+                size_t parsed = 0;
+                duration = parser.stol(p2, &parsed, 0);
+                groundDecalPermanent = false;
+                groundDecalDurationValid = parsed == p2.size() && duration > 0;
+            }
         }
         else if ( !StriCmp(p1, "fade_in") )
             fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
@@ -2177,20 +2209,60 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "texture") )
             groundDecalTexture = p2;
-        else if ( ParseBoundedIntegerParam("points", p1, p2,
-                                           3, 32, 12, groundDecalPoints) )
-        {
-        }
-        else if ( ParseBoundedIntegerParam("jaggedness", p1, p2,
-                                           0, 100, 35, groundDecalJaggedness) )
-        {
-        }
         else if ( !StriCmp(p1, "size") )
         {
-            size_t parsed = 0;
-            const float value = parser.stof(p2, &parsed);
-            groundDecalSize = parsed == p2.size() && std::isfinite(value) && value > 0.0f
-                            ? value : 0.0f;
+            if ( World::ParseFloatRangeValue(p2, groundDecalSizeMin, groundDecalSizeMax) &&
+                 std::isfinite(groundDecalSizeMin) && std::isfinite(groundDecalSizeMax) &&
+                 groundDecalSizeMin > 0.0f && groundDecalSizeMax > 0.0f )
+            {
+                groundDecalSize = groundDecalSizeMin;
+            }
+            else
+            {
+                groundDecalSize = 0.0f;
+                groundDecalSizeMin = 0.0f;
+                groundDecalSizeMax = 0.0f;
+            }
+        }
+        else if ( !StriCmp(p1, "stretch_x") )
+        {
+            float stretchMin = 1.0f;
+            float stretchMax = 1.0f;
+            if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
+                 std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
+                 stretchMin > 0.0f && stretchMax > 0.0f )
+            {
+                groundDecalStretchX = stretchMin;
+                groundDecalStretchXMin = stretchMin;
+                groundDecalStretchXMax = stretchMax;
+            }
+            else
+            {
+                groundDecalStretchX = 1.0f;
+                groundDecalStretchXMin = 1.0f;
+                groundDecalStretchXMax = 1.0f;
+                ypa_log_out("WARNING: invalid ground decal stretch_x '%s', using 1.0\n", p2.c_str());
+            }
+        }
+        else if ( !StriCmp(p1, "stretch_z") )
+        {
+            float stretchMin = 1.0f;
+            float stretchMax = 1.0f;
+            if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
+                 std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
+                 stretchMin > 0.0f && stretchMax > 0.0f )
+            {
+                groundDecalStretchZ = stretchMin;
+                groundDecalStretchZMin = stretchMin;
+                groundDecalStretchZMax = stretchMax;
+            }
+            else
+            {
+                groundDecalStretchZ = 1.0f;
+                groundDecalStretchZMin = 1.0f;
+                groundDecalStretchZMax = 1.0f;
+                ypa_log_out("WARNING: invalid ground decal stretch_z '%s', using 1.0\n", p2.c_str());
+            }
         }
         else if ( ParseTintParam(parser, "tint", p1, p2,
                                  groundDecalTint, true) )
@@ -2200,10 +2272,35 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             groundDecalRandomRotation = p2 == "1";
         else if ( !StriCmp(p1, "edge_fade") )
         {
-            size_t parsed = 0;
-            const float value = parser.stof(p2, &parsed);
-            groundDecalEdgeFade = parsed == p2.size() && std::isfinite(value)
-                                ? std::max(0.0f, std::min(value, 10.0f)) : 0.0f;
+            if ( p2.find('_') != std::string::npos )
+            {
+                // Ranged edge fade uses whole 0..10 steps so textured decals
+                // reuse a small bounded set of baked fade textures.
+                int fadeMin = 0;
+                int fadeMax = 0;
+                if ( World::ParseIntRangeValue(p2, fadeMin, fadeMax) )
+                {
+                    groundDecalEdgeFadeMin = std::max(0, std::min(fadeMin, 10));
+                    groundDecalEdgeFadeMax = std::max(0, std::min(fadeMax, 10));
+                    groundDecalEdgeFade = (float)groundDecalEdgeFadeMin;
+                }
+                else
+                {
+                    groundDecalEdgeFade = 0.0f;
+                    groundDecalEdgeFadeMin = -1;
+                    groundDecalEdgeFadeMax = -1;
+                    ypa_log_out("WARNING: invalid edge_fade range '%s', using 0\n", p2.c_str());
+                }
+            }
+            else
+            {
+                size_t parsed = 0;
+                const float value = parser.stof(p2, &parsed);
+                groundDecalEdgeFade = parsed == p2.size() && std::isfinite(value)
+                                    ? std::max(0.0f, std::min(value, 10.0f)) : 0.0f;
+                groundDecalEdgeFadeMin = -1;
+                groundDecalEdgeFadeMax = -1;
+            }
         }
         else
         {
@@ -3416,17 +3513,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "mgun_decal_texture") )
         _vhcl->mgun_decal.ground_decal_texture = p2;
-    else if ( ParseBoundedIntegerParam("mgun_decal_points", p1, p2,
-                                       3, 32, 12, _vhcl->mgun_decal.ground_decal_points) )
-    {
-    }
-    else if ( !StriCmp(p1, "mgun_decal_jaggedness") )
-    {
-        int jaggedness = 35;
-        ParseBoundedIntegerParam("mgun_decal_jaggedness", p1, p2,
-                                 0, 100, 35, jaggedness);
-        _vhcl->mgun_decal.ground_decal_jaggedness = (float)jaggedness / 100.0f;
-    }
     else if ( !StriCmp(p1, "mgun_decal_size") )
     {
         float sizeMin = 0.0f;
@@ -3448,6 +3534,46 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             _vhcl->mgun_decal.ground_decal_size_max = 0.0f;
         }
     }
+    else if ( !StriCmp(p1, "mgun_decal_stretch_x") )
+    {
+        float stretchMin = 1.0f;
+        float stretchMax = 1.0f;
+        if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
+             std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
+             stretchMin > 0.0f && stretchMax > 0.0f )
+        {
+            _vhcl->mgun_decal.ground_decal_stretch_x = stretchMin;
+            _vhcl->mgun_decal.ground_decal_stretch_x_min = stretchMin;
+            _vhcl->mgun_decal.ground_decal_stretch_x_max = stretchMax;
+        }
+        else
+        {
+            _vhcl->mgun_decal.ground_decal_stretch_x = 1.0f;
+            _vhcl->mgun_decal.ground_decal_stretch_x_min = 1.0f;
+            _vhcl->mgun_decal.ground_decal_stretch_x_max = 1.0f;
+            ypa_log_out("WARNING: invalid mgun_decal_stretch_x '%s', using 1.0\n", p2.c_str());
+        }
+    }
+    else if ( !StriCmp(p1, "mgun_decal_stretch_z") )
+    {
+        float stretchMin = 1.0f;
+        float stretchMax = 1.0f;
+        if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
+             std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
+             stretchMin > 0.0f && stretchMax > 0.0f )
+        {
+            _vhcl->mgun_decal.ground_decal_stretch_z = stretchMin;
+            _vhcl->mgun_decal.ground_decal_stretch_z_min = stretchMin;
+            _vhcl->mgun_decal.ground_decal_stretch_z_max = stretchMax;
+        }
+        else
+        {
+            _vhcl->mgun_decal.ground_decal_stretch_z = 1.0f;
+            _vhcl->mgun_decal.ground_decal_stretch_z_min = 1.0f;
+            _vhcl->mgun_decal.ground_decal_stretch_z_max = 1.0f;
+            ypa_log_out("WARNING: invalid mgun_decal_stretch_z '%s', using 1.0\n", p2.c_str());
+        }
+    }
     else if ( ParseTintParam(parser, "mgun_decal_tint", p1, p2,
                              _vhcl->mgun_decal.ground_decal_tint, true) )
     {
@@ -3456,14 +3582,51 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->mgun_decal.ground_decal_random_rotation = p2 == "1";
     else if ( !StriCmp(p1, "mgun_decal_edge_fade") )
     {
-        size_t parsed = 0;
-        const float value = parser.stof(p2, &parsed);
-        _vhcl->mgun_decal.ground_decal_edge_fade =
-            parsed == p2.size() && std::isfinite(value)
-            ? std::max(0.0f, std::min(value, 10.0f)) : 0.0f;
+        if ( p2.find('_') != std::string::npos )
+        {
+            int fadeMin = 0;
+            int fadeMax = 0;
+            if ( World::ParseIntRangeValue(p2, fadeMin, fadeMax) )
+            {
+                _vhcl->mgun_decal.ground_decal_edge_fade_min =
+                    std::max(0, std::min(fadeMin, 10));
+                _vhcl->mgun_decal.ground_decal_edge_fade_max =
+                    std::max(0, std::min(fadeMax, 10));
+                _vhcl->mgun_decal.ground_decal_edge_fade =
+                    (float)_vhcl->mgun_decal.ground_decal_edge_fade_min;
+            }
+            else
+            {
+                _vhcl->mgun_decal.ground_decal_edge_fade = 0.0f;
+                _vhcl->mgun_decal.ground_decal_edge_fade_min = -1;
+                _vhcl->mgun_decal.ground_decal_edge_fade_max = -1;
+                ypa_log_out("WARNING: invalid mgun_decal_edge_fade range '%s', using 0\n", p2.c_str());
+            }
+        }
+        else
+        {
+            size_t parsed = 0;
+            const float value = parser.stof(p2, &parsed);
+            _vhcl->mgun_decal.ground_decal_edge_fade =
+                parsed == p2.size() && std::isfinite(value)
+                ? std::max(0.0f, std::min(value, 10.0f)) : 0.0f;
+            _vhcl->mgun_decal.ground_decal_edge_fade_min = -1;
+            _vhcl->mgun_decal.ground_decal_edge_fade_max = -1;
+        }
     }
     else if ( !StriCmp(p1, "mgun_decal_duration") )
-        _vhcl->mgun_decal.duration = NonNegativeFiniteMilliseconds(parser, p2);
+    {
+        if ( !StriCmp(p2, "permanent") )
+        {
+            _vhcl->mgun_decal.duration = 0;
+            _vhcl->mgun_decal.ground_decal_permanent = true;
+        }
+        else
+        {
+            _vhcl->mgun_decal.duration = NonNegativeFiniteMilliseconds(parser, p2);
+            _vhcl->mgun_decal.ground_decal_permanent = false;
+        }
+    }
     else if ( !StriCmp(p1, "mgun_decal_fade_in") )
         _vhcl->mgun_decal.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "mgun_decal_fade_out") )

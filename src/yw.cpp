@@ -10519,11 +10519,11 @@ size_t NC_STACK_ypaworld::ypaworld_func166(const std::string &langname)
     // OpenNeoUA-owned strings are always a separate overlay and cannot overwrite
     // IDs belonging to the original game catalogue.
     const bool openUALoaded =
-        Locale::Text::OpenUALngFileLoad("locale:New_Language.lng") ||
-        Locale::Text::OpenUALngFileLoad("locale:new_language.lng");
+        Locale::Text::OpenUALngFileLoad("locale:OpenNeoUA.lng") ||
+        Locale::Text::OpenUALngFileLoad("locale:openeoua.lng");
 
     if (!openUALoaded)
-        ypa_log_out("Warning: Locale/New_Language.lng not found or contains no valid OpenNeoUA strings.\n");
+        ypa_log_out("Warning: Locale/OpenNeoUA.lng not found or contains no valid OpenNeoUA strings.\n");
 
     if (!baseLoaded)
     {

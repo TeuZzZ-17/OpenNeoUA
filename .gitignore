@@ -37,7 +37,7 @@
 
 !/Locale/
 /Locale/*
-!/Locale/New_Language.lng
+!/Locale/OpenNeoUA.lng
 
 # ============================================================
 # ENV
