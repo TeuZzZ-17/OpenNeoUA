@@ -437,10 +437,11 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_COMPLETE_MISSION:            fallback = "Complete Mission"; break;
         case OUA_PLASMA_OBTAINED:             fallback = "Plasma Obtained"; break;
         case OUA_PARTICLE_LIMIT:              fallback = "Particle Limit"; break;
-        case OUA_RENDER_SECTORS:              fallback = "Render Sectors"; break;
         case OUA_GRAPHIC_PRESET:              fallback = "Preset"; break;
         case OUA_CUSTOM:                      fallback = "Custom"; break;
         case OUA_ADVANCED_GRAPHICS_SETTINGS:  fallback = "Advanced Graphics Settings"; break;
+        case OUA_SKY_HORIZON_DISTANCE:           fallback = "Sky Horizon Distance"; break;
+        case OUA_SKY_HEIGHT:                       fallback = "Sky Height"; break;
         default: break;
     }
 

@@ -269,9 +269,10 @@ enum OPENUA_STRING
     // Weapon HUD magazine/salve label owned by OpenNeoUA.
     OUA_HUD_MAG,
 
-    // Advanced Graphics Settings runtime limits. Appended to preserve existing IDs.
+    // Advanced Graphics Settings runtime limits. Keep the retired Render Sectors
+    // slot reserved so every later OpenNeoUA language ID remains stable.
     OUA_PARTICLE_LIMIT,
-    OUA_RENDER_SECTORS,
+    OUA_RESERVED_RENDER_SECTORS,
 
     // Data-driven graphics preset selector. Appended to preserve existing IDs.
     OUA_GRAPHIC_PRESET,
@@ -280,6 +281,9 @@ enum OPENUA_STRING
     // Advanced graphics page title. Appended so older OpenNeoUA.lng files
     // cannot override the new title through the legacy title ID.
     OUA_ADVANCED_GRAPHICS_SETTINGS,
+
+    // Player-centered sky-dome radius / world horizon control.
+    OUA_SKY_HORIZON_DISTANCE,
 
     OUA_STRING_MAX
 };
