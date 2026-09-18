@@ -356,6 +356,7 @@ public:
 
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
+    static Common::Ini::Key UiWeaponName; // OpenNeoUA: optional Weapon-name panel; default false preserves vanilla HUD
     static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional marker sound override; missing/unloadable uses the embedded default
     static constexpr int UiGenesisListDefaultX = 0;
     static constexpr int UiGenesisListDefaultWidth = 180;
