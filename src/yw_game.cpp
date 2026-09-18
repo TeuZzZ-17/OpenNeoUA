@@ -2632,9 +2632,28 @@ void NC_STACK_ypaworld::yw_renderSky(baseRender_msg *rndr_params)
         float v6 = rndr_params->maxZ;
         uint32_t flags = rndr_params->flags;
 
+        const int32_t horizonDistance = GetSkyHorizonDistance();
+        if ( _skyAppliedHorizonDistance != horizonDistance )
+        {
+            const float scale =
+                (float)horizonDistance / (float)YW_SKY_HORIZON_DISTANCE_REFERENCE;
+            _skyObject->SetScale(_skyBaseScale * scale,
+                                 NC_STACK_base::UF_X |
+                                 NC_STACK_base::UF_Y |
+                                 NC_STACK_base::UF_Z);
+            _skyAppliedHorizonDistance = horizonDistance;
+        }
+
+        // The sky remains centered on the controlled viewer exactly like the
+        // original game; only its radius changes with gfx.skydistance.
         _skyObject->SetPosition( _viewerBact->_position + vec3d::OY(_skyHeight) );
 
         rndr_params->maxZ = GFX::SKY_FAR_CLIP;
+
+        // The visible sky uses the extended sky projection and therefore must
+        // not write incompatible depth values. Rasterize() follows it with an
+        // invisible world-projection depth pass of the same dome, restoring the
+        // continuous vanilla-style horizon mask without sacrificing modern sky range.
         rndr_params->flags = GFX::RFLAGS_SKY
                            | GFX::RFLAGS_COMPUTED_COLOR
                            | GFX::RFLAGS_DISABLE_ZWRITE;
@@ -2655,10 +2674,9 @@ bool NC_STACK_ypaworld::IsVisibleMapPos(vec2d pos)
         return false;
 
     Common::Point dist = _viewerBact->_cellId.AbsDistance( pt );
-    if ( dist.x + dist.y <= (_renderSectors - 1) / 2 )
-        return true;
+    const int visibleRadius = (_renderSectors - 1) / 2;
 
-    return false;
+    return dist.x + dist.y <= visibleRadius;
 }
 
 void NC_STACK_ypaworld::RenderSuperWave(vec2d pos, vec2d fromPos, baseRender_msg *arg)
@@ -4354,6 +4372,16 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     else
         rndrs.maxZ = (float)_normalVizLimit + 400.0;
 
+    const bool skyHorizonActive = _skyRender && _skyObject;
+    const int32_t skyHorizonDistance = GetSkyHorizonDistance();
+
+    // Keep CPU-side object preparation one sector beyond the visible horizon.
+    // The sky depth mask performs the continuous final reveal; this budget only
+    // prevents distant objects from being prepared unnecessarily early.
+    if ( skyHorizonActive )
+        rndrs.maxZ = std::min(rndrs.maxZ,
+                              (float)skyHorizonDistance + World::CVSectorLength);
+
     int v6 = _renderSectors - 1;
 
     for (int j = 0; j < v6; j++)
@@ -4365,10 +4393,16 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
         }
     }
 
-    int v29 = v6 / 2;
-    for (int i = 0; i <= v29; i++)
+    const int v29 = v6 / 2;
+
+    // _renderSectors is already calculated from Sky Horizon Distance with
+    // hidden safety sectors behind the dome. Do not clamp it again here:
+    // doing so exposes black gaps between the terrain and the sky.
+    const int renderRadius = v29;
+
+    for (int i = 0; i <= renderRadius; i++)
     {
-        int v28 = v29 - i;
+        int v28 = renderRadius - i;
 
         for (int j = -i; j <= i; j++)
         {

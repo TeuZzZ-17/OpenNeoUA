@@ -44,15 +44,34 @@
 
 
 
-// Maximum value accepted by gfx.render_sectors. The centered render window
-// remains odd-sized internally, so an input value of 50 is normalized to 49.
+// Internal maximum for the automatically calculated centered sector window.
+// The window remains odd-sized and is derived from gfx.skydistance.
 #define YW_RENDER_SECTORS_MAX   99
 
 // Advanced Graphics Settings UI bounds/defaults for existing runtime controls.
-// These do not change the underlying INI parser; they define only the public menu range.
 constexpr int32_t YW_PARTICLE_LIMIT_UI_MAX = 20000;
 constexpr int32_t YW_PARTICLE_LIMIT_UI_DEFAULT = 9000;
-constexpr int32_t YW_RENDER_SECTORS_UI_DEFAULT = 55;
+
+// Keep extra world sectors behind the visible sky horizon. This prevents the
+// terrain edge from becoming visible when the viewer is high, near a sector
+// boundary or looking diagonally across the map.
+constexpr int32_t YW_SKY_HORIZON_SECTOR_MARGIN = 2;
+
+// gfx.skydistance is the horizontal radius of the player-centered sky horizon.
+// 3000 matches the legacy OpenUA reference scale; the menu stores this control
+// in 100-world-unit steps so it can cover modern long-view configurations
+// without exceeding the legacy 16-bit slider value.
+constexpr int32_t YW_SKY_HORIZON_DISTANCE_MIN = 1200;
+constexpr int32_t YW_SKY_HORIZON_DISTANCE_MAX = 60000;
+constexpr int32_t YW_SKY_HORIZON_DISTANCE_REFERENCE = 3000;
+constexpr int32_t YW_SKY_HORIZON_DISTANCE_UI_STEP = 100;
+
+// Vertical sky-dome offset exposed by Advanced Graphics Settings.
+// -550 is the original world default; the wider range is intentionally kept
+// editable for custom sky assets while remaining well inside int16 slider limits.
+constexpr int32_t YW_SKY_HEIGHT_MIN = -3000;
+constexpr int32_t YW_SKY_HEIGHT_MAX = 3000;
+constexpr int32_t YW_SKY_HEIGHT_DEFAULT = -550;
 
 class NC_STACK_ypaworld;
 class NC_STACK_button;
@@ -687,6 +706,8 @@ public:
         ATMOPT_CONTRAST,
         ATMOPT_SATURATION,
         ATMOPT_VIGNETTE,
+        ATMOPT_SKY_HORIZON_DISTANCE,
+        ATMOPT_SKY_HEIGHT,
         ATMOPT_FOG_START,
         ATMOPT_FOG_LENGTH,
         ATMOPT_FOG_STRENGTH,
@@ -696,7 +717,6 @@ public:
         ATMOPT_WORLD_UI_MAX_DISTANCE,
         ATMOPT_VHS_STRENGTH,
         ATMOPT_PARTICLE_LIMIT,
-        ATMOPT_RENDER_SECTORS,
         ATMOPT_COUNT
     };
 
@@ -2459,6 +2479,8 @@ public:
     virtual void setYW_skyRender(int);
     virtual void setYW_doEnergyRecalc(int);
     virtual void setYW_visSectors(int);
+    int32_t GetSkyHorizonDistance() const;
+    void UpdateSkyHorizonRenderSectors();
     virtual void setYW_userHostStation(NC_STACK_ypabact *);
     virtual void setYW_userVehicle(NC_STACK_ypabact *);
     virtual void setYW_screenW(int);
@@ -3237,8 +3259,10 @@ public:
     int32_t _spectatorVehicleProtoID = -1;
 
     NC_STACK_base *_skyObject  = NULL;
+    vec3d _skyBaseScale = vec3d(1.0, 1.0, 1.0);
+    int32_t _skyAppliedHorizonDistance = -1;
 
-    int32_t _renderSectors = 0; // Render distance in sectors
+    int32_t _renderSectors = 0; // Internal sector window derived from Sky Horizon Distance
 
     NC_STACK_base *_beeBox = NULL;
     NC_STACK_skeleton *_colsubSkeleton  = NULL;
