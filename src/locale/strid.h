@@ -38,7 +38,7 @@ enum LOCALE_BLOCK
 
 
 // OpenNeoUA-owned strings live in a separate range and are loaded from
-// Locale/New_Language.lng. IDs below this range belong to the original
+// Locale/OpenNeoUA.lng. IDs below this range belong to the original
 // Urban Assault LANGUAGE.DLL catalogue.
 constexpr int OPENUA_STRING_BASE = 3000;
 constexpr int OPENUA_STRING_LIMIT = 4000;
