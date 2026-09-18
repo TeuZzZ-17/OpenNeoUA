@@ -18,6 +18,8 @@ namespace
 constexpr int GROUND_DECAL_DEFAULT_LIMIT = 256;
 constexpr int GROUND_DECAL_MAX_TRIANGLES = 128;
 constexpr int GROUND_DECAL_HARD_LIMIT = 1024;
+constexpr int GROUND_DECAL_SHAPE_POINTS = 12;
+constexpr float GROUND_DECAL_SHAPE_JAGGEDNESS = 0.35f;
 constexpr float GROUND_DECAL_SURFACE_BIAS = 1.5f;
 constexpr float GROUND_DECAL_MIN_NORMAL_Y = 0.05f;
 constexpr float GROUND_DECAL_FLAT_TERRAIN_EPSILON = 2.0f;
@@ -172,40 +174,100 @@ static uint32_t GroundDecalNextRandom(uint32_t *seed)
     return *seed;
 }
 
-static float GroundDecalResolvedSize(const NC_STACK_ypaworld *world,
-                                     const ypaworld_arg136 &hit,
-                                     const World::TChainFXConfig &config)
+// Visual-only deterministic random. Separate salts keep each authored range
+// independent without consuming the global gameplay RNG.
+static float GroundDecalRandomUnit(const NC_STACK_ypaworld *world,
+                                   const ypaworld_arg136 &hit,
+                                   uint32_t salt)
 {
-    float minSize = config.ground_decal_size_min;
-    float maxSize = config.ground_decal_size_max;
-
-    // Legacy/general ground decals only author ground_decal_size.
-    if ( !std::isfinite(minSize) || !std::isfinite(maxSize) ||
-         minSize <= 0.0f || maxSize <= 0.0f )
-    {
-        minSize = config.ground_decal_size;
-        maxSize = config.ground_decal_size;
-    }
-
-    if ( !std::isfinite(minSize) || !std::isfinite(maxSize) ||
-         minSize <= 0.0f || maxSize <= 0.0f )
-        return 0.0f;
-
-    if ( maxSize < minSize )
-        std::swap(minSize, maxSize);
-    if ( minSize == maxSize )
-        return minSize;
-
-    // Deterministic per-impact roll: does not consume the global gameplay RNG.
-    uint32_t seed = 0x6d2b79f5u;
+    uint32_t seed = 0x9e3779b9u;
+    seed = GroundDecalMixSeed(seed, salt);
     seed = GroundDecalMixSeed(seed, (uint32_t)world->_timeStamp);
     seed = GroundDecalMixSeed(seed, (uint32_t)(int32_t)std::lround(hit.isectPos.x));
     seed = GroundDecalMixSeed(seed, (uint32_t)(int32_t)std::lround(hit.isectPos.y));
     seed = GroundDecalMixSeed(seed, (uint32_t)(int32_t)std::lround(hit.isectPos.z));
     seed = GroundDecalMixSeed(seed, (uint32_t)hit.polyID);
-    const float random = (float)(GroundDecalNextRandom(&seed) & 0x00ffffffu) /
-                         16777216.0f;
-    return minSize + (maxSize - minSize) * random;
+    return (float)(GroundDecalNextRandom(&seed) & 0x00ffffffu) / 16777216.0f;
+}
+
+static int GroundDecalResolvedIntegerRange(const NC_STACK_ypaworld *world,
+                                            const ypaworld_arg136 &hit,
+                                            int fallback,
+                                            int minValue,
+                                            int maxValue,
+                                            int allowedMin,
+                                            int allowedMax,
+                                            uint32_t salt)
+{
+    if ( minValue < allowedMin || maxValue > allowedMax || maxValue < minValue )
+        return fallback;
+
+    if ( minValue == maxValue )
+        return minValue;
+
+    const float random = GroundDecalRandomUnit(world, hit, salt);
+    const int span = maxValue - minValue + 1;
+    return minValue + std::min((int)(random * (float)span), span - 1);
+}
+
+static float GroundDecalResolvedFloatRange(const NC_STACK_ypaworld *world,
+                                            const ypaworld_arg136 &hit,
+                                            float fallback,
+                                            float minValue,
+                                            float maxValue,
+                                            uint32_t salt)
+{
+    if ( !std::isfinite(minValue) || !std::isfinite(maxValue) ||
+         minValue <= 0.0f || maxValue <= 0.0f )
+    {
+        minValue = fallback;
+        maxValue = fallback;
+    }
+
+    if ( !std::isfinite(minValue) || !std::isfinite(maxValue) ||
+         minValue <= 0.0f || maxValue <= 0.0f )
+        return 0.0f;
+
+    if ( maxValue < minValue )
+        std::swap(minValue, maxValue);
+    if ( minValue == maxValue )
+        return minValue;
+
+    const float random = GroundDecalRandomUnit(world, hit, salt);
+    return minValue + (maxValue - minValue) * random;
+}
+
+static float GroundDecalResolvedSize(const NC_STACK_ypaworld *world,
+                                     const ypaworld_arg136 &hit,
+                                     const World::TChainFXConfig &config)
+{
+    return GroundDecalResolvedFloatRange(world, hit,
+                                         config.ground_decal_size,
+                                         config.ground_decal_size_min,
+                                         config.ground_decal_size_max,
+                                         0x53495a45u);
+}
+
+static float GroundDecalResolvedStretchX(const NC_STACK_ypaworld *world,
+                                         const ypaworld_arg136 &hit,
+                                         const World::TChainFXConfig &config)
+{
+    return GroundDecalResolvedFloatRange(world, hit,
+                                         config.ground_decal_stretch_x,
+                                         config.ground_decal_stretch_x_min,
+                                         config.ground_decal_stretch_x_max,
+                                         0x53545258u);
+}
+
+static float GroundDecalResolvedStretchZ(const NC_STACK_ypaworld *world,
+                                         const ypaworld_arg136 &hit,
+                                         const World::TChainFXConfig &config)
+{
+    return GroundDecalResolvedFloatRange(world, hit,
+                                         config.ground_decal_stretch_z,
+                                         config.ground_decal_stretch_z_min,
+                                         config.ground_decal_stretch_z_max,
+                                         0x5354525au);
 }
 
 static void GroundDecalBuildShape(int points,
@@ -361,17 +423,23 @@ static GFX::TGLColor GroundDecalProceduralColor(
 
 static TGroundDecalClipVertex GroundDecalMakeClipVertex(const vec3d &point,
                                                         const vec3d &center,
-                                                        float size,
+                                                        float sizeX,
+                                                        float sizeZ,
                                                         float cosine,
                                                         float sine)
 {
     const float dx = point.x - center.x;
     const float dz = point.z - center.z;
 
+    // Stretch is applied in decal-local space. random_rotation then rotates
+    // the complete stretched decal instead of locking elongation to world X/Z.
+    const float localX = dx * cosine + dz * sine;
+    const float localZ = -dx * sine + dz * cosine;
+
     TGroundDecalClipVertex out;
     out.pos = point;
-    out.u = 0.5f + (dx * cosine + dz * sine) / size;
-    out.v = 0.5f + (-dx * sine + dz * cosine) / size;
+    out.u = 0.5f + localX / sizeX;
+    out.v = 0.5f + localZ / sizeZ;
     return out;
 }
 
@@ -493,7 +561,8 @@ static bool GroundDecalAppendClippedTriangle(const vec3d &a,
                                              const vec3d &c,
                                              const vec3d &normal,
                                              const vec3d &center,
-                                             float size,
+                                             float sizeX,
+                                             float sizeZ,
                                              float cosine,
                                              float sine,
                                              const std::vector<TGroundDecalShapePoint> &shape,
@@ -505,9 +574,9 @@ static bool GroundDecalAppendClippedTriangle(const vec3d &a,
 {
     std::vector<TGroundDecalClipVertex> source;
     source.reserve(3);
-    source.push_back(GroundDecalMakeClipVertex(a, center, size, cosine, sine));
-    source.push_back(GroundDecalMakeClipVertex(b, center, size, cosine, sine));
-    source.push_back(GroundDecalMakeClipVertex(c, center, size, cosine, sine));
+    source.push_back(GroundDecalMakeClipVertex(a, center, sizeX, sizeZ, cosine, sine));
+    source.push_back(GroundDecalMakeClipVertex(b, center, sizeX, sizeZ, cosine, sine));
+    source.push_back(GroundDecalMakeClipVertex(c, center, sizeX, sizeZ, cosine, sine));
 
     const TGroundDecalShapePoint shapeCenter;
     bool appended = false;
@@ -534,7 +603,8 @@ static bool GroundDecalAppendClippedTriangle(const vec3d &a,
 static bool GroundDecalAppendPolygon(const std::vector<vec3d> &points,
                                      const vec3d &normal,
                                      const vec3d &center,
-                                     float size,
+                                     float sizeX,
+                                     float sizeZ,
                                      float cosine,
                                      float sine,
                                      const std::vector<TGroundDecalShapePoint> &shape,
@@ -548,7 +618,7 @@ static bool GroundDecalAppendPolygon(const std::vector<vec3d> &points,
     for (size_t i = 1; i + 1 < points.size(); ++i)
     {
         if ( GroundDecalAppendClippedTriangle(points[0], points[i], points[i + 1],
-                                              normal, center, size, cosine, sine,
+                                              normal, center, sizeX, sizeZ, cosine, sine,
                                               shape, edgeFade, maxTriangles, vertices, indices,
                                               limitExceeded) )
             appended = true;
@@ -572,7 +642,8 @@ static int GroundDecalMicroZ(float worldZ)
 
 static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
                                      const ypaworld_arg136 &hit,
-                                     float size,
+                                     float sizeX,
+                                     float sizeZ,
                                      float angle,
                                      int shapePoints,
                                      float jaggedness,
@@ -581,7 +652,9 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
                                      std::vector<GFX::TVertex> *vertices,
                                      std::vector<GFX::IndexType> *indices)
 {
-    if ( !hit.skel || hit.polyID < 0 ||
+    if ( !std::isfinite(sizeX) || !std::isfinite(sizeZ) ||
+         sizeX <= 0.0f || sizeZ <= 0.0f ||
+         !hit.skel || hit.polyID < 0 ||
          (size_t)hit.polyID >= hit.skel->polygons.size() )
         return false;
 
@@ -626,25 +699,30 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
     const float sine = std::sin(angle);
     bool limitExceeded = false;
 
-    GroundDecalAppendPolygon(centralPoints, centralNormal, hit.isectPos, size,
-                             cosine, sine, shape, edgeFade, maxTriangles,
+    GroundDecalAppendPolygon(centralPoints, centralNormal, hit.isectPos,
+                             sizeX, sizeZ, cosine, sine, shape, edgeFade, maxTriangles,
                              vertices, indices, &limitExceeded);
     if ( limitExceeded )
         return false;
 
-    const float halfSize = size * 0.5f;
-    const float horizontalExtent = halfSize * (std::fabs(cosine) + std::fabs(sine));
+    const float halfSizeX = sizeX * 0.5f;
+    const float halfSizeZ = sizeZ * 0.5f;
+    const float horizontalExtentX = std::fabs(cosine) * halfSizeX +
+                                    std::fabs(sine) * halfSizeZ;
+    const float horizontalExtentZ = std::fabs(sine) * halfSizeX +
+                                    std::fabs(cosine) * halfSizeZ;
     const float mapExtent = 1200.0f * (float)std::max(world->_mapSize.x,
                                                       world->_mapSize.y);
-    if ( !std::isfinite(horizontalExtent) || horizontalExtent <= 0.0f ||
+    if ( !std::isfinite(horizontalExtentX) || !std::isfinite(horizontalExtentZ) ||
+         horizontalExtentX <= 0.0f || horizontalExtentZ <= 0.0f ||
          !std::isfinite(mapExtent) || mapExtent <= 0.0f ||
-         horizontalExtent > mapExtent )
+         horizontalExtentX > mapExtent || horizontalExtentZ > mapExtent )
         return false;
 
-    int minMicroX = GroundDecalMicroX(hit.isectPos.x - horizontalExtent) - 1;
-    int maxMicroX = GroundDecalMicroX(hit.isectPos.x + horizontalExtent) + 1;
-    int minMicroZ = GroundDecalMicroZ(hit.isectPos.z + horizontalExtent) - 1;
-    int maxMicroZ = GroundDecalMicroZ(hit.isectPos.z - horizontalExtent) + 1;
+    int minMicroX = GroundDecalMicroX(hit.isectPos.x - horizontalExtentX) - 1;
+    int maxMicroX = GroundDecalMicroX(hit.isectPos.x + horizontalExtentX) + 1;
+    int minMicroZ = GroundDecalMicroZ(hit.isectPos.z + horizontalExtentZ) - 1;
+    int maxMicroZ = GroundDecalMicroZ(hit.isectPos.z - horizontalExtentZ) + 1;
 
     minMicroX = std::max(minMicroX, 1);
     minMicroZ = std::max(minMicroZ, 1);
@@ -736,8 +814,8 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
                                                   normal, centralNormal) )
                     continue;
 
-                GroundDecalAppendPolygon(points, normal, hit.isectPos, size,
-                                         cosine, sine, shape, edgeFade, maxTriangles,
+                GroundDecalAppendPolygon(points, normal, hit.isectPos,
+                                         sizeX, sizeZ, cosine, sine, shape, edgeFade, maxTriangles,
                                          vertices, indices, &limitExceeded);
                 if ( limitExceeded )
                     return false;
@@ -875,25 +953,52 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
 {
     const int limit = GroundDecalLimit();
     const int maxTriangles = GROUND_DECAL_MAX_TRIANGLES;
+    const bool supportedTrigger =
+        config.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD ||
+        config.trigger == World::TChainFXConfig::TRIGGER_CRASH ||
+        config.trigger == World::TChainFXConfig::TRIGGER_DESTROYED;
     if ( _isNetGame || limit <= 0 || maxTriangles <= 0 ||
          config.mode != World::TChainFXConfig::MODE_GROUND_DECAL ||
-         config.trigger != World::TChainFXConfig::TRIGGER_IMPACT_WORLD ||
-         config.ground_decal_points < 3 || config.ground_decal_points > 32 ||
-         !std::isfinite(config.ground_decal_jaggedness) ||
-         config.ground_decal_jaggedness < 0.0f || config.ground_decal_jaggedness > 1.0f ||
-         config.duration <= 0 || config.ground_decal_tint.a <= 0.0f ||
+         !supportedTrigger ||
+         (!config.ground_decal_permanent && config.duration <= 0) ||
+         config.ground_decal_tint.a <= 0.0f ||
          !hit.isect || !GroundDecalFinitePoint(hit.isectPos) )
         return false;
 
+    const int decalPoints = GROUND_DECAL_SHAPE_POINTS;
+    const float decalJaggedness = GROUND_DECAL_SHAPE_JAGGEDNESS;
+
     const float decalSize = GroundDecalResolvedSize(this, hit, config);
-    if ( !std::isfinite(decalSize) || decalSize <= 0.0f )
+    const float decalStretchX = GroundDecalResolvedStretchX(this, hit, config);
+    const float decalStretchZ = GroundDecalResolvedStretchZ(this, hit, config);
+    const float decalSizeX = decalSize * decalStretchX;
+    const float decalSizeZ = decalSize * decalStretchZ;
+
+    float edgeFade = std::isfinite(config.ground_decal_edge_fade)
+                       ? std::max(0.0f, std::min(config.ground_decal_edge_fade, 10.0f))
+                       : 0.0f;
+    if ( config.ground_decal_edge_fade_min >= 0 &&
+         config.ground_decal_edge_fade_max >= 0 )
+    {
+        edgeFade = (float)GroundDecalResolvedIntegerRange(
+            this, hit, (int)std::lround(edgeFade),
+            config.ground_decal_edge_fade_min,
+            config.ground_decal_edge_fade_max,
+            0, 10, 0x45444745u);
+    }
+    if ( decalPoints < 3 || decalPoints > 32 ||
+         !std::isfinite(decalJaggedness) ||
+         decalJaggedness < 0.0f || decalJaggedness > 1.0f ||
+         !std::isfinite(decalSize) || decalSize <= 0.0f ||
+         !std::isfinite(decalStretchX) || decalStretchX <= 0.0f ||
+         !std::isfinite(decalStretchZ) || decalStretchZ <= 0.0f ||
+         !std::isfinite(decalSizeX) || decalSizeX <= 0.0f ||
+         !std::isfinite(decalSizeZ) || decalSizeZ <= 0.0f ||
+         !std::isfinite(edgeFade) || edgeFade < 0.0f || edgeFade > 10.0f )
         return false;
 
     const float angle = GroundDecalRotation(this, hit,
                                             config.ground_decal_random_rotation);
-    const float edgeFade = std::isfinite(config.ground_decal_edge_fade)
-                             ? std::max(0.0f, std::min(config.ground_decal_edge_fade, 10.0f))
-                             : 0.0f;
     float buildFade = edgeFade;
     NC_STACK_bitmap *texture = NULL;
     // Textured decals carry the edge fade inside the baked texture copy, so
@@ -922,9 +1027,9 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     vertices.reserve((size_t)maxTriangles * 3);
     indices.reserve((size_t)maxTriangles * 3);
 
-    if ( !GroundDecalBuildGeometry(this, hit, decalSize, angle,
-                                   config.ground_decal_points,
-                                   config.ground_decal_jaggedness,
+    if ( !GroundDecalBuildGeometry(this, hit, decalSizeX, decalSizeZ, angle,
+                                   decalPoints,
+                                   decalJaggedness,
                                    buildFade,
                                    maxTriangles, &vertices, &indices) )
         return false;
@@ -947,11 +1052,21 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     _groundDecals.emplace_back();
     TGroundDecal &decal = _groundDecals.back();
     decal.pos = hit.isectPos;
-    decal.radius = decalSize * 0.70710678118f;
+    decal.radius = 0.5f * std::sqrt(decalSizeX * decalSizeX +
+                                    decalSizeZ * decalSizeZ);
     decal.startTime = _timeStamp;
     decal.duration = config.duration;
-    decal.fadeOut = std::min(std::max(config.fade_out, 0), decal.duration);
-    decal.fadeIn = std::min(std::max(config.fade_in, 0), decal.duration - decal.fadeOut);
+    decal.permanent = config.ground_decal_permanent;
+    if ( decal.permanent )
+    {
+        decal.fadeOut = 0;
+        decal.fadeIn = std::max(config.fade_in, 0);
+    }
+    else
+    {
+        decal.fadeOut = std::min(std::max(config.fade_out, 0), decal.duration);
+        decal.fadeIn = std::min(std::max(config.fade_in, 0), decal.duration - decal.fadeOut);
+    }
     decal.tint = config.ground_decal_tint;
     decal.tint.Clamp();
     decal.mesh.Vertexes = std::move(vertices);
@@ -987,7 +1102,7 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
     for (auto it = _groundDecals.begin(); it != _groundDecals.end(); )
     {
         const int32_t age = std::max(0, _timeStamp - it->startTime);
-        if ( age >= it->duration )
+        if ( !it->permanent && age >= it->duration )
         {
             it = _groundDecals.erase(it);
             continue;
@@ -1001,10 +1116,14 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
 
         if ( distance <= (float)_normalVizLimit + it->radius )
         {
-            const float fade = World::ComputeVPFadeEnvelope((double)age,
-                                                             (double)it->duration,
-                                                             (double)it->fadeIn,
-                                                             (double)it->fadeOut);
+            const float fade = it->permanent
+                ? (it->fadeIn > 0
+                   ? std::min(1.0f, (float)age / (float)it->fadeIn)
+                   : 1.0f)
+                : World::ComputeVPFadeEnvelope((double)age,
+                                               (double)it->duration,
+                                               (double)it->fadeIn,
+                                               (double)it->fadeOut);
             GFX::TRenderNode &render = GFX::Engine.AllocRenderNode();
             render = GFX::TRenderNode(GFX::TRenderNode::TYPE_MESH);
             render.Mesh = &it->mesh;

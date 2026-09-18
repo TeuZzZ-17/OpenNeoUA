@@ -19928,9 +19928,21 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
     if ( !_world || _chainFX.empty() )
         return false;
 
-    // Persistent terrain decals consume every real local world collision.
-    // Existing visual/physical Chain FX keep their historical visibility gate.
-    if ( !worldHit && !_world->ypaworld_func145(this) )
+    bool hasGroundDecal = false;
+    for (const World::TChainFXConfig &fx : _chainFX)
+    {
+        if ( fx.trigger == trigger && fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
+        {
+            hasGroundDecal = true;
+            break;
+        }
+    }
+
+    // Persistent terrain decals are generated even when the source is outside
+    // the normal FX visibility range. Existing visual/physical Chain FX keep
+    // their historical visibility gate.
+    const bool sourceVisible = worldHit || _world->ypaworld_func145(this);
+    if ( !worldHit && !hasGroundDecal && !sourceVisible )
         return false;
 
     bool spawned = false;
@@ -19941,17 +19953,38 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
 
         if ( fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
         {
-            if ( worldHit && trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
-                 _world->SpawnGroundDecal(fx, *worldHit) )
-                spawned = true;
+            if ( worldHit && trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD )
+            {
+                if ( _world->SpawnGroundDecal(fx, *worldHit) )
+                    spawned = true;
+            }
+            else if ( !worldHit &&
+                      (trigger == World::TChainFXConfig::TRIGGER_CRASH ||
+                       trigger == World::TChainFXConfig::TRIGGER_DESTROYED) )
+            {
+                // Vehicle decals are anchored to the real terrain below the
+                // vehicle, never to its model origin in mid-air. Reacquire the
+                // hit for each decal because decal geometry preparation can
+                // reuse temporary world-collision skeleton data.
+                ypaworld_arg136 projectedGroundHit;
+                projectedGroundHit.stPos = vec3d(_position.x, -30000.0, _position.z);
+                projectedGroundHit.vect = vec3d(0.0, 50000.0, 0.0);
+                projectedGroundHit.flags = 0;
+                _world->ypaworld_func136(&projectedGroundHit);
+
+                if ( projectedGroundHit.isect &&
+                     _world->SpawnGroundDecal(fx, projectedGroundHit) )
+                    spawned = true;
+            }
 
             continue;
         }
 
         // A real world collision is supplied in an immediate first pass so the
         // temporary collision skeleton can be copied safely. Existing visual
-        // and physical Chain FX remain on their normal SetState pass.
-        if ( worldHit )
+        // and physical Chain FX remain on their normal SetState pass and keep
+        // the normal visibility check.
+        if ( worldHit || !sourceVisible )
             continue;
 
         if ( fx.mode == World::TChainFXConfig::MODE_VISUAL )
