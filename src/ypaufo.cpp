@@ -493,7 +493,9 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
 
 void NC_STACK_ypaufo::User_layer(update_msg *arg)
 {
-    UpdateHandBrakeInput(arg->inpt->HandBrakePressed);
+    // UFOs never enter or retain the generic handbrake state used by
+    // tanks/cars/other supported classes. Spy Mode has its own input binding.
+    ReleaseHandBrake();
 
     float v88 = arg->frameTime / 1000.0;
 
@@ -556,6 +558,8 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
             }
         }
 
+        const float oldPlayerViewZoom = _playerViewZoom;
+
         if (zoomSteps > 0)
         {
             for (int i = 0; i < zoomSteps; i++)
@@ -571,6 +575,17 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
             _playerViewZoom = GFX::VIEW_ZOOM_MIN;
         else if (_playerViewZoom > maxPlayerViewZoom)
             _playerViewZoom = maxPlayerViewZoom;
+
+        if (_playerViewZoom != oldPlayerViewZoom)
+        {
+            const size_t soundId = World::TVhclProto::SND_ZOOM_STEP;
+            if (_soundcarrier.Sounds.size() > soundId)
+            {
+                TSoundSource &sound = _soundcarrier.Sounds[soundId];
+                if (sound.PSample)
+                    SFXEngine::SFXe.startSound(&_soundcarrier, soundId);
+            }
+        }
     }
 
     _old_pos = _position;
@@ -699,16 +714,6 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
             }
         }
 
-        if ( arg->inpt->Buttons.Is(3) )
-        {
-            HandBrake(arg);
-            if ( GetHandBrakePower() > 0.0f )
-            {
-                _thraction = 0;
-                _ufoBoost = _mass * 9.80665;
-            }
-        }
-
         bact_arg79 arg79;
 
         arg79.tgType = BACT_TGT_TYPE_DRCT;
@@ -739,8 +744,6 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
             arg79.start_point.y = _fire_pos.y;
             arg79.start_point.z = _fire_pos.z;
             arg79.flags = (arg->inpt->Buttons.Is(5) ? 1 : 0);
-            if ( (_oflags & BACT_OFLAG_VIEWER) && arg->inpt->HandBrakePressed )
-                arg79.flags |= BACT_ARG79_FLAG_RECOIL_BRAKE_HELD;
 
             LaunchMissile(&arg79);
         }
