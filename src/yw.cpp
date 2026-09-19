@@ -1385,26 +1385,6 @@ bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfi
 }
 
 
-static bool yw_IsSafeAtmosphericFXProfilePath(std::string path)
-{
-    std::replace(path.begin(), path.end(), '\\', '/');
-    if ( path.empty() || path.front() == '/' || path.find(':') != std::string::npos )
-        return false;
-
-    size_t start = 0;
-    while ( start <= path.size() )
-    {
-        size_t end = path.find('/', start);
-        std::string component = path.substr(start, end == std::string::npos ? std::string::npos : end - start);
-        if ( component == ".." )
-            return false;
-        if ( end == std::string::npos )
-            break;
-        start = end + 1;
-    }
-    return true;
-}
-
 bool NC_STACK_ypaworld::LoadAtmosphericFXProfilePath(const std::string &authoredPath,
                                                       World::TAtmosphericFXProfile &outProfile)
 {
@@ -1413,14 +1393,14 @@ bool NC_STACK_ypaworld::LoadAtmosphericFXProfilePath(const std::string &authored
     if ( authoredPath.empty() )
         return false;
 
-    if ( !yw_IsSafeAtmosphericFXProfilePath(authoredPath) )
+    std::string profilePath;
+    if ( !uaNormalizeDataAssetPath(authoredPath, &profilePath, true) )
     {
-        ypa_log_out("WARNING: Atmospheric FX profile path '%s' must be relative to Data and cannot contain '..' or a virtual prefix.\n",
+        ypa_log_out("WARNING: Atmospheric FX profile path '%s' is not a valid Data path.\n",
                     authoredPath.c_str());
         return false;
     }
 
-    const std::string profilePath = "data:" + authoredPath;
     if ( !uaFileExist(profilePath) )
     {
         ypa_log_out("WARNING: Atmospheric FX profile '%s' was not found.\n",
@@ -1506,7 +1486,7 @@ bool NC_STACK_ypaworld::LoadAtmosphericFXProfile(const TLevelDescription &mapp)
 
     _atmosphericFXProfile = std::move(parsedProfile);
     StartAtmosphericFXLoopSound();
-    ypa_log_out("OpenNeoUA: loaded Atmospheric FX profile Data/%s for this level.\n",
+    ypa_log_out("OpenNeoUA: loaded Atmospheric FX profile %s for this level.\n",
                 mapp.AtmosphericFXProfilePath.c_str());
     return true;
 }
@@ -4269,6 +4249,35 @@ size_t NC_STACK_ypaworld::ypaworld_func145(NC_STACK_ypabact *bact)
 }
 
 
+static bool yw_HasPersistentVehicleVisualGeometry(NC_STACK_base *base)
+{
+    if ( !base )
+        return false;
+
+    if ( base->GetSkeleton() )
+    {
+        if ( !base->Meshes.empty() )
+            return true;
+
+        if ( AdeList *ades = base->GetAdeList() )
+        {
+            for (NC_STACK_ade *ade : *ades)
+            {
+                if ( ade && !ade->IsParticle() )
+                    return true;
+            }
+        }
+    }
+
+    for (NC_STACK_base *kid : base->GetKidList())
+    {
+        if ( yw_HasPersistentVehicleVisualGeometry(kid) )
+            return true;
+    }
+
+    return false;
+}
+
 NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 {
     if ( vhcl_id->vehicle_id <= 0 || (size_t)vhcl_id->vehicle_id >= _vhclProtos.size() )
@@ -4412,7 +4421,19 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_kill_after_shot = vhcl.kill_after_shot;
         bacto->_vp_normal = ResolveVisualModel(vhcl.vp_normal, vhcl.visual_3ds.normal, vhcl.visual_base.normal);
         bacto->_vp_fire = ResolveVisualModel(vhcl.vp_fire, vhcl.visual_3ds.fire, vhcl.visual_base.fire);
-        bacto->_vp_dead = ResolveVisualModel(vhcl.vp_dead, vhcl.visual_3ds.dead, vhcl.visual_base.dead);
+
+        NC_STACK_base *deadVisual =
+            ResolveVisualModel(vhcl.vp_dead, vhcl.visual_3ds.dead, vhcl.visual_base.dead);
+
+        // Some legacy or incomplete Vehicle definitions use a dead VP that has
+        // no persistent model geometry. The actor still falls physically, but
+        // becomes invisible until DEATH2/plasma. Keep the normal model as the
+        // DEATH1 corpse fallback only in that case; dedicated dead meshes remain
+        // untouched.
+        if ( !yw_HasPersistentVehicleVisualGeometry(deadVisual) )
+            deadVisual = bacto->_vp_normal;
+
+        bacto->_vp_dead = deadVisual;
         bacto->_vp_wait = ResolveVisualModel(vhcl.vp_wait, vhcl.visual_3ds.wait, vhcl.visual_base.wait);
         bacto->_vp_megadeth = ResolveVisualModel(vhcl.vp_megadeth, vhcl.visual_3ds.megadeth, vhcl.visual_base.megadeth);
         bacto->_vp_genesis = ResolveVisualModel(vhcl.vp_genesis, vhcl.visual_3ds.genesis, vhcl.visual_base.genesis);

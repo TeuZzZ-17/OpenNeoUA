@@ -14,32 +14,8 @@ const float WEAPON_TRACER_PI = 3.14159265358979323846f;
 
 static bool NormalizeExternalBasePath(const std::string &path, std::string *normalized)
 {
-    if ( path.empty() || !normalized )
+    if ( !uaNormalizeDataAssetPath(path, normalized, true) )
         return false;
-
-    *normalized = path;
-    std::replace(normalized->begin(), normalized->end(), '\\', '/');
-
-    // External BASE entries are authored relative to Data. Reject absolute,
-    // drive-qualified and traversal paths before they reach the native loader.
-    if ( normalized->empty() || normalized->front() == '/' ||
-         normalized->find(':') != std::string::npos )
-        return false;
-
-    size_t segmentStart = 0;
-    while ( segmentStart <= normalized->size() )
-    {
-        const size_t separator = normalized->find('/', segmentStart);
-        const size_t segmentEnd = separator == std::string::npos
-                                ? normalized->size() : separator;
-        const std::string segment = normalized->substr(segmentStart,
-                                                       segmentEnd - segmentStart);
-        if ( segment.empty() || segment == "." || segment == ".." )
-            return false;
-        if ( separator == std::string::npos )
-            break;
-        segmentStart = separator + 1;
-    }
 
     const size_t extension = normalized->rfind('.');
     return extension != std::string::npos &&
@@ -722,27 +698,40 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalMesh(
     if ( path.empty() )
         return NULL;
 
-    const auto cached = _sharedExternalMeshes.find(path);
+    std::string normalizedPath;
+    if ( !uaNormalizeDataAssetPath(path, &normalizedPath, true) )
+    {
+        const auto cached = _sharedExternalMeshes.find(path);
+        if ( cached == _sharedExternalMeshes.end() )
+        {
+            _sharedExternalMeshes[path] = NULL;
+            ypa_log_out("External mesh '%s' is not a valid Data path.\n",
+                        path.c_str());
+        }
+        return NULL;
+    }
+
+    const auto cached = _sharedExternalMeshes.find(normalizedPath);
     if ( cached != _sharedExternalMeshes.end() )
         return cached->second;
 
-    NC_STACK_base *meshObject = Utils::ProxyLoadBase(path);
+    NC_STACK_base *meshObject = Utils::ProxyLoadBase(normalizedPath);
     if ( !meshObject || meshObject->Meshes.empty() )
     {
         if ( meshObject )
             meshObject->Delete();
 
         // Cache failures too so a bad authored path does not trigger disk I/O
-        // for every visual request. Callers decide whether a failed mesh means
-        // invisible output (tracer/laser mesh) or a legacy VP fallback.
-        _sharedExternalMeshes[path] = NULL;
+        // for every visual request. Legacy relative paths are normalized to
+        // their canonical Data/... form before reaching this point.
+        _sharedExternalMeshes[normalizedPath] = NULL;
         ypa_log_out("External mesh '%s' could not be loaded.\n",
-                    path.c_str());
+                    normalizedPath.c_str());
         return NULL;
     }
 
     meshObject->MakeVBO();
-    _sharedExternalMeshes[path] = meshObject;
+    _sharedExternalMeshes[normalizedPath] = meshObject;
     return meshObject;
 }
 
@@ -769,7 +758,7 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalBase(
         if ( cached == _sharedExternalBases.end() )
         {
             _sharedExternalBases[path] = NULL;
-            ypa_log_out("External BASE '%s' is not a valid Data-relative .BASE path.\n",
+            ypa_log_out("External BASE '%s' is not a valid Data .BASE path.\n",
                         path.c_str());
         }
         return NULL;
@@ -779,13 +768,17 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalBase(
     if ( cached != _sharedExternalBases.end() )
         return cached->second;
 
-    // ProxyLoadBase reaches NC_STACK_base::LoadBaseFromFile for .BASE files.
-    // BASE loading predates the Data-first helper used by External Mesh, so
-    // adapt the authored Data-relative path here, then try the active SET's
-    // existing rsrc namespace (Runtime Loose plus native shared resources).
-    NC_STACK_base *baseObject = Utils::ProxyLoadBase("Data/" + normalizedPath);
+    // Data/... is the canonical authored form. Older Data-relative paths are
+    // normalized above, so the native loader never receives Data/Data/...
+    NC_STACK_base *baseObject = Utils::ProxyLoadBase(normalizedPath);
     if ( !baseObject )
-        baseObject = Utils::ProxyLoadBase("rsrc:" + normalizedPath);
+    {
+        const std::string legacyRelative =
+            normalizedPath.size() > 5 && !StriCmp(normalizedPath.substr(0, 5), "Data/")
+                ? normalizedPath.substr(5)
+                : normalizedPath;
+        baseObject = Utils::ProxyLoadBase("rsrc:" + legacyRelative);
+    }
     if ( !baseObject )
     {
         // Cache failures too: a missing file or dependency is resolved once per
