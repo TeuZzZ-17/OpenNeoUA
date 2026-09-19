@@ -146,6 +146,59 @@ static float ypamissile_SegmentSegmentDistanceSq(const vec3d &p1, const vec3d &q
     return delta.dot(delta);
 }
 
+static bool ypamissile_GetCompoundImpactPoint(const vec3d &oldWeaponCenter,
+                                               const vec3d &newWeaponCenter,
+                                               float weaponRadius,
+                                               const vec3d &targetCenter,
+                                               float targetRadius,
+                                               vec3d *impactPosition,
+                                               float *travelFraction)
+{
+    if ( !impactPosition || targetRadius <= 0.0f )
+        return false;
+
+    const float combinedRadius =
+        std::max(0.0f, weaponRadius) + targetRadius;
+    const vec3d motion = newWeaponCenter - oldWeaponCenter;
+    const vec3d relativeStart = oldWeaponCenter - targetCenter;
+
+    const float a = motion.dot(motion);
+    const float c =
+        relativeStart.dot(relativeStart) - combinedRadius * combinedRadius;
+
+    float t = 0.0f;
+    if ( c > 0.0f )
+    {
+        if ( a <= 0.000001f )
+            return false;
+
+        const float b = relativeStart.dot(motion);
+        const float discriminant = b * b - a * c;
+        if ( discriminant < 0.0f )
+            return false;
+
+        t = (-b - sqrtf(std::max(0.0f, discriminant))) / a;
+        if ( t < 0.0f || t > 1.0f )
+            return false;
+    }
+
+    const vec3d weaponCenterAtImpact = oldWeaponCenter + motion * t;
+    vec3d outward = weaponCenterAtImpact - targetCenter;
+
+    if ( outward.normalise() <= 0.001f )
+    {
+        outward = -motion;
+        if ( outward.normalise() <= 0.001f )
+            outward = vec3d::OY(1.0);
+    }
+
+    *impactPosition = targetCenter + outward * targetRadius;
+    if ( travelFraction )
+        *travelFraction = t;
+
+    return true;
+}
+
 static float ypamissile_AoeFalloffFactor(float distance, float radius, bool falloff)
 {
     if ( radius <= 0.0 || distance > radius )
@@ -1326,6 +1379,13 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
     int collisionCount = 0;
     float collisionSumRadius = 0.0;
 
+    // Exact terminal contact is used only for compound-only vs compound-only.
+    // A legacy radius on either projectile or target keeps the upstream placement.
+    vec3d compoundImpactPosition(0.0, 0.0, 0.0);
+    float compoundImpactTravel = 2.0f;
+    bool hasCompoundImpactPosition = false;
+    bool preserveLegacyImpactPosition = false;
+
     bool a5 = _mislEmitter->getBACT_inputting();
 
     if ( !a5 )
@@ -1440,6 +1500,12 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                 if ( targetSpheres.empty() )
                     continue;
 
+                const bool useCompoundImpactPosition =
+                    HasManualCompoundCollision() &&
+                    !UsesLegacyRadiusCollision() &&
+                    bct->HasManualCompoundCollision() &&
+                    !bct->UsesLegacyRadiusCollision();
+
                 auto legacyWeaponRadiusForTarget =
                     [this](NC_STACK_ypabact *target) -> float
                 {
@@ -1511,6 +1577,19 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                             if ( distanceSq > radiusSum * radiusSum )
                                 continue;
 
+                            vec3d compoundHitPosition;
+                            float compoundHitTravel = 2.0f;
+                            const bool hasCompoundHitPosition =
+                                useCompoundImpactPosition &&
+                                ypamissile_GetCompoundImpactPoint(
+                                    oldWeaponSpheres[wi].center,
+                                    newWeaponSpheres[wi].center,
+                                    weaponRadius,
+                                    targetSphere.center,
+                                    targetSphere.radius,
+                                    &compoundHitPosition,
+                                    &compoundHitTravel);
+
                             const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
                             float deflectEndDamageMultiplier = 1.0f;
                             if ( collisionCount == 0 && bct->HasDeflectBuff() )
@@ -1543,7 +1622,8 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                                 ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
                                 RememberArmorPenetratedTarget(bct);
                                 _mislArmorPenetrationRemaining--;
-                                ApplyArmorPenetrationUnitImpactFX();
+                                ApplyArmorPenetrationUnitImpactFX(
+                                    hasCompoundHitPosition ? &compoundHitPosition : NULL);
                                 penetrated = true;
                                 collided = true;
                                 break;
@@ -1552,6 +1632,24 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                             collisionSumRadius += targetSphere.radius;
                             collisionCount++;
                             collisionSumPosition += bct->_position;
+
+                            if ( useCompoundImpactPosition &&
+                                 hasCompoundHitPosition )
+                            {
+                                if ( !hasCompoundImpactPosition ||
+                                     compoundHitTravel < compoundImpactTravel )
+                                {
+                                    compoundImpactPosition = compoundHitPosition;
+                                    compoundImpactTravel = compoundHitTravel;
+                                    hasCompoundImpactPosition = true;
+                                }
+                            }
+                            else
+                            {
+                                // Exact contact is optional for the modern path.
+                                // If it cannot be resolved, keep the safe legacy placement.
+                                preserveLegacyImpactPosition = true;
+                            }
 
                             if ( hitTarget && !*hitTarget )
                                 *hitTarget = bct;
@@ -1575,68 +1673,110 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                          it != targetSpheres.rend() && !collided; ++it)
                     {
                         const TCollisionSphereWorld &targetSphere = *it;
-                        vec3d to_enemy = targetSphere.center - _old_pos;
-                        vec3d dist_vect = _position - _old_pos;
+                        vec3d compoundHitPosition;
+                        float compoundHitTravel = 2.0f;
+                        bool hasCompoundHitPosition = false;
+                        bool hitDetected = false;
 
-                        if ( to_enemy.dot(_rotation.AxisZ()) < 0.3 )
+                        if ( useCompoundImpactPosition )
+                        {
+                            // Precise surface contact is used only when both projectile
+                            // and target are compound-only. Any legacy radius on either
+                            // side keeps the original vanilla impact path below.
+                            hasCompoundHitPosition =
+                                ypamissile_GetCompoundImpactPoint(
+                                    _old_pos, _position, weaponRadius,
+                                    targetSphere.center, targetSphere.radius,
+                                    &compoundHitPosition, &compoundHitTravel);
+                            hitDetected = hasCompoundHitPosition;
+                        }
+                        else
+                        {
+                            // Preserve the original vanilla radius-vs-radius collision test.
+                            vec3d to_enemy = targetSphere.center - _old_pos;
+                            vec3d dist_vect = _position - _old_pos;
+
+                            if ( to_enemy.dot(_rotation.AxisZ()) < 0.3 )
+                                continue;
+
+                            const float dist_vect_len = dist_vect.normalise();
+                            const vec3d vp = dist_vect * to_enemy;
+                            const float vp_len = vp.length();
+                            const float to_enemy_len = to_enemy.length();
+
+                            hitDetected =
+                                targetSphere.radius + weaponRadius > vp_len &&
+                                sqrt(POW2(dist_vect_len) + POW2(vp_len)) >
+                                    fabs(to_enemy_len - weaponRadius);
+                        }
+
+                        if ( !hitDetected )
                             continue;
 
-                        const float dist_vect_len = dist_vect.normalise();
-                        const vec3d vp = dist_vect * to_enemy;
-                        const float vp_len = vp.length();
-                        const float to_enemy_len = to_enemy.length();
-
-                        if ( targetSphere.radius + weaponRadius > vp_len &&
-                             sqrt(POW2(dist_vect_len) + POW2(vp_len)) >
-                                 fabs(to_enemy_len - weaponRadius) )
+                        const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
+                        float deflectEndDamageMultiplier = 1.0f;
+                        if ( collisionCount == 0 && bct->HasDeflectBuff() )
                         {
-                            const bool armorPenetrates = ShouldArmorPenetrateTarget(bct);
-                            float deflectEndDamageMultiplier = 1.0f;
-                            if ( collisionCount == 0 && bct->HasDeflectBuff() )
+                            const bool deflectOverloaded = !bct->CanBuffDeflectEnergy(_energy);
+                            if ( armorPenetrates || deflectOverloaded )
                             {
-                                const bool deflectOverloaded = !bct->CanBuffDeflectEnergy(_energy);
-                                if ( armorPenetrates || deflectOverloaded )
-                                {
-                                    if ( deflectOverloaded )
-                                        deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
-                                    bct->ClearBuffDeflectCharges();
-                                }
-                                else
-                                {
-                                    bct->ConsumeBuffDeflectCharge();
-                                    DeflectFromUnitCollision(bct, targetSphere.center, targetSphere.radius,
-                                                             _old_pos, _position, weaponRadius);
-                                    if ( deflected )
-                                        *deflected = true;
-                                    return false;
-                                }
+                                if ( deflectOverloaded )
+                                    deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
+                                bct->ClearBuffDeflectCharges();
                             }
-
-                            if ( applyDirectDamage && armorPenetrates )
-                            {
-                                ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
-                                RememberArmorPenetratedTarget(bct);
-                                _mislArmorPenetrationRemaining--;
-                                ApplyArmorPenetrationUnitImpactFX();
-                                penetrated = true;
-                                collided = true;
-                                break;
-                            }
-
-                            collisionSumRadius += targetSphere.radius;
-                            collisionCount++;
-                            collisionSumPosition += bct->_position;
-
-                            if ( hitTarget && !*hitTarget )
-                                *hitTarget = bct;
-
-                            if ( applyDirectDamage )
-                                ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
                             else
-                                _mislAttachedDamageMultiplier = deflectEndDamageMultiplier;
-
-                            collided = true;
+                            {
+                                bct->ConsumeBuffDeflectCharge();
+                                DeflectFromUnitCollision(bct, targetSphere.center, targetSphere.radius,
+                                                         _old_pos, _position, weaponRadius);
+                                if ( deflected )
+                                    *deflected = true;
+                                return false;
+                            }
                         }
+
+                        if ( applyDirectDamage && armorPenetrates )
+                        {
+                            ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
+                            RememberArmorPenetratedTarget(bct);
+                            _mislArmorPenetrationRemaining--;
+                            ApplyArmorPenetrationUnitImpactFX(
+                                hasCompoundHitPosition ? &compoundHitPosition : NULL);
+                            penetrated = true;
+                            collided = true;
+                            break;
+                        }
+
+                        collisionSumRadius += targetSphere.radius;
+                        collisionCount++;
+                        collisionSumPosition += bct->_position;
+
+                        if ( useCompoundImpactPosition )
+                        {
+                            // Compound-only vs compound-only accepts the resolved surface
+                            // contact and keeps the terminal impact at that exact point.
+                            if ( !hasCompoundImpactPosition ||
+                                 compoundHitTravel < compoundImpactTravel )
+                            {
+                                compoundImpactPosition = compoundHitPosition;
+                                compoundImpactTravel = compoundHitTravel;
+                                hasCompoundImpactPosition = true;
+                            }
+                        }
+                        else
+                        {
+                            preserveLegacyImpactPosition = true;
+                        }
+
+                        if ( hitTarget && !*hitTarget )
+                            *hitTarget = bct;
+
+                        if ( applyDirectDamage )
+                            ApplyDirectHitToBact(bct, true, deflectEndDamageMultiplier);
+                        else
+                            _mislAttachedDamageMultiplier = deflectEndDamageMultiplier;
+
+                        collided = true;
                     }
                 }
 
@@ -1648,20 +1788,29 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
 
     if ( collisionCount > 0 )
     {
-        // Set new position between collided objects
-        _position = collisionSumPosition / (float)collisionCount;
-
-        collisionSumRadius /= (float)collisionCount;
-
-        if ( collisionSumRadius >= 50.0 )
+        if ( hasCompoundImpactPosition && !preserveLegacyImpactPosition )
         {
-            vec3d posDelta = _position - _old_pos;
-            float deltaLen = posDelta.length();
+            // Compound-only collision uses the actual surface point. This is
+            // intentionally separate from the legacy radius placement below.
+            _position = compoundImpactPosition;
+        }
+        else
+        {
+            // Preserve the upstream placement whenever either side uses a legacy radius.
+            _position = collisionSumPosition / (float)collisionCount;
 
-            if ( deltaLen < 1.0 )
-                deltaLen = 1.0;
+            collisionSumRadius /= (float)collisionCount;
 
-            _position -= (posDelta / deltaLen) * collisionSumRadius;
+            if ( collisionSumRadius >= 50.0 )
+            {
+                vec3d posDelta = _position - _old_pos;
+                float deltaLen = posDelta.length();
+
+                if ( deltaLen < 1.0 )
+                    deltaLen = 1.0;
+
+                _position -= (posDelta / deltaLen) * collisionSumRadius;
+            }
         }
     }
 
@@ -1823,8 +1972,13 @@ void NC_STACK_ypamissile::RememberArmorPenetratedTarget(NC_STACK_ypabact *bct)
     _mislArmorPenetratedGids.push_back(bct->_gid);
 }
 
-void NC_STACK_ypamissile::ApplyArmorPenetrationUnitImpactFX()
+void NC_STACK_ypamissile::ApplyArmorPenetrationUnitImpactFX(
+        const vec3d *impactPosition)
 {
+    const vec3d savedPosition = _position;
+    if ( impactPosition )
+        _position = *impactPosition;
+
     if ( World::TWeapProto::SND_HIT < _soundcarrier.Sounds.size() )
     {
         // A penetrating projectile stays in motion. Playing SND_HIT from the
@@ -1865,6 +2019,9 @@ void NC_STACK_ypamissile::ApplyArmorPenetrationUnitImpactFX()
 
     StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE);
     StartDestFXByType(World::DestFX::FX_DEATH);
+
+    if ( impactPosition )
+        _position = savedPosition;
 }
 
 bool NC_STACK_ypamissile::ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir,
