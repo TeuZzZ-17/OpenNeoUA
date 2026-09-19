@@ -317,10 +317,15 @@ Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini
 Common::Ini::Key IniConf::GameRecoilKickTime("game.recoil_kick_time", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRecoilHoldTime("game.recoil_hold_time", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRecoilReturnTime("game.recoil_return_time", Common::Ini::KT_WORD, std::string("420"));
-// OpenNeoUA: explicit %-only per-session unit stat bonus derived from the existing
-// 0..4 kill marks. Bare values are not interpreted as percentages. Runtime clamps
-// the configured per-mark value and never mutates shared prototypes.
-Common::Ini::Key IniConf::GameUnitKillStatBonus("game.unit_kill_stat_bonus", Common::Ini::KT_WORD, std::string("0"));
+// OpenNeoUA: session Elite progression. The maximum stat bonus is distributed
+// linearly across the configured medal count; glow uses the same progression.
+// Defaults preserve the existing four-medal presentation while keeping gameplay
+// and Elite glow disabled until explicitly configured.
+Common::Ini::Key IniConf::GameEliteUnitMaxStatBonus("game.elite_unit_max_stat_bonus", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameEliteUnitMaxMedals("game.elite_unit_max_medals", Common::Ini::KT_WORD, std::string("4"));
+Common::Ini::Key IniConf::GameEliteUnitMaxGlowIntensity("game.elite_unit_max_glow_intensity", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameEliteUnitGlowTint("game.elite_unit_glow_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GameEliteUnitGlowPulseSeconds("game.elite_unit_glow_pulse_seconds", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
 Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
@@ -673,7 +678,11 @@ void IniConf::Init()
         , &GameRecoilKickTime
         , &GameRecoilHoldTime
         , &GameRecoilReturnTime
-        , &GameUnitKillStatBonus
+        , &GameEliteUnitMaxStatBonus
+        , &GameEliteUnitMaxMedals
+        , &GameEliteUnitMaxGlowIntensity
+        , &GameEliteUnitGlowTint
+        , &GameEliteUnitGlowPulseSeconds
         , &GameHandBrakeSound
         , &GameGemUnlockNewUI
         , &GameGemUnlockSound

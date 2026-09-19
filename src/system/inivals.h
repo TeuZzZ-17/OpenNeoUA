@@ -253,7 +253,11 @@ public:
     static Common::Ini::Key GameRecoilKickTime;
     static Common::Ini::Key GameRecoilHoldTime;
     static Common::Ini::Key GameRecoilReturnTime;
-    static Common::Ini::Key GameUnitKillStatBonus;
+    static Common::Ini::Key GameEliteUnitMaxStatBonus;
+    static Common::Ini::Key GameEliteUnitMaxMedals;
+    static Common::Ini::Key GameEliteUnitMaxGlowIntensity;
+    static Common::Ini::Key GameEliteUnitGlowTint;
+    static Common::Ini::Key GameEliteUnitGlowPulseSeconds;
     static Common::Ini::Key GameHandBrakeSound;
     static Common::Ini::Key GameGemUnlockNewUI;
     static Common::Ini::Key GameGemUnlockSound;

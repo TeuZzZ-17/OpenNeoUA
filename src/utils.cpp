@@ -155,6 +155,55 @@ static std::string uaJoinPath(const std::string &base, const std::string &rest)
     return base + "/" + rest;
 }
 
+bool uaNormalizeDataAssetPath(const std::string &path, std::string *normalized,
+                              bool allowLegacyRelative)
+{
+    if (!normalized || path.empty())
+        return false;
+
+    std::string value = path;
+    std::replace(value.begin(), value.end(), '\\', '/');
+
+    // Script-authored external paths must stay inside Data. Virtual prefixes,
+    // absolute paths, drive-qualified paths and traversal are not accepted.
+    if (value.empty() || value.front() == '/' || value.find(':') != std::string::npos)
+        return false;
+
+    const size_t firstSlash = value.find('/');
+    const std::string first = firstSlash == std::string::npos
+                                ? value : value.substr(0, firstSlash);
+
+    if (!StriCmp(first, "Data"))
+    {
+        if (firstSlash == std::string::npos || firstSlash + 1 >= value.size())
+            return false;
+        value = "Data/" + value.substr(firstSlash + 1);
+    }
+    else
+    {
+        if (!allowLegacyRelative)
+            return false;
+        value = "Data/" + value;
+    }
+
+    size_t start = 0;
+    while (start <= value.size())
+    {
+        const size_t end = value.find('/', start);
+        const size_t count = end == std::string::npos ? value.size() - start
+                                                       : end - start;
+        const std::string component = value.substr(start, count);
+        if (component.empty() || component == "." || component == "..")
+            return false;
+        if (end == std::string::npos)
+            break;
+        start = end + 1;
+    }
+
+    *normalized = value;
+    return true;
+}
+
 static bool uaStandaloneRootDir(const std::string &first, std::string *canonical)
 {
     static const char *dirs[] = {"3DS", "Env", "Fonts", "Levels", "Locale", "Music", "Res", "Save"};
