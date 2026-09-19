@@ -2165,6 +2165,75 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
                     memcpy(pixel, &value, 4);
             }
         }
+
+        // ENERGY.FON uses one-pixel-wide fill strips at x=74..81. In the
+        // vanilla H_E_P atlas their first two rows are colour-key transparent,
+        // because the cyan background bar underneath normally hides that gap.
+        // With a faction tint the uncovered cap becomes visible above the value
+        // text. For the tinted runtime copy only, extend each fill strip upward
+        // by copying its first real coloured pixel into those two transparent
+        // rows. Resistance never enters this path and stays pixel-perfect vanilla.
+        if (tilesetId == 30 && hasColorKey && copy->w > 81 && copy->h > 4)
+        {
+            auto readPixel = [copy, bytesPerPixel](int x, int y) -> uint32_t
+            {
+                uint8_t *pixel = (uint8_t *)copy->pixels + y * copy->pitch +
+                                 x * bytesPerPixel;
+                uint32_t value = 0;
+
+                if (bytesPerPixel == 2)
+                    memcpy(&value, pixel, 2);
+                else if (bytesPerPixel == 3)
+                {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                    value = pixel[0] << 16 | pixel[1] << 8 | pixel[2];
+#else
+                    value = pixel[0] | pixel[1] << 8 | pixel[2] << 16;
+#endif
+                }
+                else
+                    memcpy(&value, pixel, 4);
+
+                return value;
+            };
+
+            auto writePixel = [copy, bytesPerPixel](int x, int y, uint32_t value)
+            {
+                uint8_t *pixel = (uint8_t *)copy->pixels + y * copy->pitch +
+                                 x * bytesPerPixel;
+
+                if (bytesPerPixel == 2)
+                    memcpy(pixel, &value, 2);
+                else if (bytesPerPixel == 3)
+                {
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+                    pixel[0] = (value >> 16) & 0xff;
+                    pixel[1] = (value >> 8) & 0xff;
+                    pixel[2] = value & 0xff;
+#else
+                    pixel[0] = value & 0xff;
+                    pixel[1] = (value >> 8) & 0xff;
+                    pixel[2] = (value >> 16) & 0xff;
+#endif
+                }
+                else
+                    memcpy(pixel, &value, 4);
+            };
+
+            for (int x = 74; x <= 81; ++x)
+            {
+                const uint32_t fillPixel = readPixel(x, 4);
+                if (fillPixel == sourceColorKey)
+                    continue;
+
+                for (int y = 2; y <= 3; ++y)
+                {
+                    if (readPixel(x, y) == sourceColorKey)
+                        writePixel(x, y, fillPixel);
+                }
+            }
+        }
+
         SDL_UnlockSurface(copy);
     }
 
