@@ -4484,8 +4484,23 @@ static void yw_RenderMapBackground(NC_STACK_ypaworld *yw)
         height
     };
 
-    SDL_FillRect(surface, &rect,
-                 SDL_MapRGBA(surface->format, color.r, color.g, color.b, color.a));
+    if ( GFX::Engine.IsVirtualUIPass() )
+    {
+        // The virtual UI surface already contains any lower-priority window.
+        // Blend the map background over those pixels instead of replacing them,
+        // so translucent map areas still reveal the window underneath.
+        const float inv255 = 1.0f / 255.0f;
+        GFX::Engine.DrawVirtualUISolidRect(
+            (float)rect.x, (float)rect.y,
+            (float)(rect.x + rect.w), (float)(rect.y + rect.h),
+            GFX::TGLColor(color.r * inv255, color.g * inv255,
+                          color.b * inv255, color.a * inv255));
+    }
+    else
+    {
+        SDL_FillRect(surface, &rect,
+                     SDL_MapRGBA(surface->format, color.r, color.g, color.b, color.a));
+    }
 }
 
 void sb_0x4f8f64(NC_STACK_ypaworld *yw)
