@@ -2104,13 +2104,20 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             };
 
             // F7: toggle runtime invulnerability on the selected allied vehicle.
-            // F7 is also the vanilla next-commander hotkey, so consume that
-            // binding only while New Debug owns the key.
+            // When the mouse is not currently pointing at another unit, use the
+            // vehicle directly controlled by the player instead. F7 is also the
+            // vanilla next-commander hotkey, so consume that binding only while
+            // New Debug owns the key.
             if ( arg->field_8->KbdLastHit == Input::KC_F7 )
             {
                 arg->field_8->HotKeyID = -1;
 
-                NC_STACK_ypabact *selectedVehicle = resolveDebugSelectedVehicle();
+                NC_STACK_ypabact *selectedVehicle = NULL;
+                if ( _guiActFlags & 0x20 )
+                    selectedVehicle = resolveDebugSelectedVehicle();
+                else if ( isDebugVehicleTarget(_userUnit) )
+                    selectedVehicle = _userUnit;
+
                 const bool validAlliedVehicle = selectedVehicle && _userRobo &&
                                                 selectedVehicle->_owner == _userRobo->_owner;
                 if ( validAlliedVehicle )
