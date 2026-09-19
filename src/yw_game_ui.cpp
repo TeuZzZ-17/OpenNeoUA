@@ -16009,7 +16009,6 @@ static bool yw_GetWorldSelectionXAnchor(NC_STACK_ypaworld *yw,
 
 static void yw_DrawWorldKillMarks(int centerX, int tipY, uint8_t marks, SDL_Color color)
 {
-    marks = std::min<uint8_t>(marks, 4);
     if ( marks == 0 )
         return;
 
