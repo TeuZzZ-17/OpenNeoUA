@@ -1979,11 +1979,10 @@ void GFXEngine::ClearUiAccentCache()
 
 bool GFXEngine::IsUiAccentTileset(uint8_t id)
 {
-    // H_E_P (30) and the lower action-bar atlases H_IBN/H_IBP/H_IBD
-    // (21-23) are selected from authored faction PNGs and must not receive
-    // the runtime accent remap used by the rest of the gameplay UI.
+    // Gameplay UI atlases use one vanilla source image. Non-Resistance factions
+    // receive their owner colour at runtime, so no faction-specific copies are needed.
     return id == 0 || id == 2 || id == 3 || id == 5 || id == 8 ||
-           (id >= 9 && id <= 15) || id == 24 || id == 25;
+           (id >= 9 && id <= 15) || (id >= 21 && id <= 25) || id == 30;
 }
 
 bool GFXEngine::IsUiAccentNeutralHighlightTileset(uint8_t id)
@@ -1992,6 +1991,13 @@ bool GFXEngine::IsUiAccentNeutralHighlightTileset(uint8_t id)
     // and 15) must keep their authored white highlights for legible resource
     // numbers and labels, especially with the Taerkasten yellow theme.
     return id >= 9 && id <= 14;
+}
+
+bool GFXEngine::IsFullFactionUiAtlas(uint8_t id)
+{
+    // These four atlases previously needed separate recoloured PNG files.
+    // Recolour their complete visible artwork while keeping transparency intact.
+    return (id >= 21 && id <= 23) || id == 30;
 }
 
 SDL_Color GFXEngine::RemapUiAccentColor(const SDL_Color &source, const SDL_Color &accent,
@@ -2034,6 +2040,23 @@ SDL_Color GFXEngine::RemapUiAccentColor(const SDL_Color &source, const SDL_Color
     return themed;
 }
 
+SDL_Color GFXEngine::RemapFullFactionUiColor(const SDL_Color &source,
+                                              const SDL_Color &accent)
+{
+    const int sourceValue = std::max(source.r, std::max(source.g, source.b));
+    if (sourceValue <= 1)
+        return source;
+
+    const int accentValue = std::max(1, (int)std::max(accent.r,
+                                                      std::max(accent.g, accent.b)));
+
+    SDL_Color themed = source;
+    themed.r = (uint8_t)std::min(255, accent.r * sourceValue / accentValue);
+    themed.g = (uint8_t)std::min(255, accent.g * sourceValue / accentValue);
+    themed.b = (uint8_t)std::min(255, accent.b * sourceValue / accentValue);
+    return themed;
+}
+
 SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color &accent,
                                            uint8_t tilesetId)
 {
@@ -2059,6 +2082,12 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
     if (!copy)
         return source;
 
+    Uint32 sourceColorKey = 0;
+    const bool hasColorKey = SDL_GetColorKey(source, &sourceColorKey) == 0;
+    if (hasColorKey)
+        SDL_SetColorKey(copy, SDL_TRUE, sourceColorKey);
+
+    const bool fullFactionAtlas = IsFullFactionUiAtlas(tilesetId);
     const int bytesPerPixel = copy->format->BytesPerPixel;
     if (bytesPerPixel >= 2 && bytesPerPixel <= 4 && SDL_LockSurface(copy) == 0)
     {
@@ -2083,21 +2112,33 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
                 else
                     memcpy(&value, pixel, 4);
 
+                if (hasColorKey && value == sourceColorKey)
+                    continue;
+
                 SDL_Color original;
                 SDL_GetRGBA(value, copy->format, &original.r, &original.g,
                             &original.b, &original.a);
-                // Keep the dark frame/track ramp neutral for every faction.
-                // The normal accent remap still colours the authored scrollbar
-                // highlights, arrows and knob. In particular, do not tint the
-                // whole 11..13 map-control atlases for Ghorkov: that special
-                // case also coloured the outer map frame red.
-                const bool tintAllMapControls = tilesetId == 10;
-                const bool includeNeutralHighlights =
-                    IsUiAccentNeutralHighlightTileset(tilesetId);
-                const int neutralThreshold = tilesetId == 10 ? 90 : 180;
-                SDL_Color themed = RemapUiAccentColor(
-                    original, accent, includeNeutralHighlights, neutralThreshold,
-                    tintAllMapControls);
+
+                SDL_Color themed;
+                if (fullFactionAtlas)
+                {
+                    themed = RemapFullFactionUiColor(original, accent);
+                }
+                else
+                {
+                    // Keep the dark frame/track ramp neutral for every faction.
+                    // The normal accent remap still colours the authored scrollbar
+                    // highlights, arrows and knob. In particular, do not tint the
+                    // whole 11..13 map-control atlases for Ghorkov: that special
+                    // case also coloured the outer map frame red.
+                    const bool tintAllMapControls = tilesetId == 10;
+                    const bool includeNeutralHighlights =
+                        IsUiAccentNeutralHighlightTileset(tilesetId);
+                    const int neutralThreshold = tilesetId == 10 ? 90 : 180;
+                    themed = RemapUiAccentColor(
+                        original, accent, includeNeutralHighlights, neutralThreshold,
+                        tintAllMapControls);
+                }
                 if (themed.r == original.r && themed.g == original.g &&
                     themed.b == original.b)
                 {

@@ -6268,8 +6268,6 @@ void yw_FinalizePriorityGameplayUi(NC_STACK_ypaworld *yw)
 
 void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 {
-    yw->UpdateFactionGameplayUiAtlases();
-
     SDL_Color uiAccentColor;
     const SDL_Color *uiAccent = yw_GetFactionUiAccent(yw, &uiAccentColor);
 

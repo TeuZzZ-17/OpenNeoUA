@@ -935,10 +935,13 @@ public:
                                     uint8_t tilesetId);
     static bool IsUiAccentTileset(uint8_t id);
     static bool IsUiAccentNeutralHighlightTileset(uint8_t id);
+    static bool IsFullFactionUiAtlas(uint8_t id);
     static SDL_Color RemapUiAccentColor(const SDL_Color &source, const SDL_Color &accent,
                                         bool includeNeutralHighlights = false,
                                         int neutralThreshold = 180,
                                         bool tintAllNonDark = false);
+    static SDL_Color RemapFullFactionUiColor(const SDL_Color &source,
+                                              const SDL_Color &accent);
 
 protected:
     // Display class
