@@ -589,12 +589,14 @@ public:
     bool ConsumeBuffDeflectCharge();
     void ClearBuffDeflectCharges() { _buff.deflect_charges = 0; }
     void SpawnBuffDeflectVisual(const vec3d &pos, const mat3x3 &rot);
-    // OpenNeoUA: derived from the existing transient 0..4 kill marks. These helpers
-    // are the single gameplay/UI source of truth and never mutate prototypes.
+    // OpenNeoUA: transient single-player Elite medals. These helpers are the
+    // single gameplay/UI source of truth and never mutate shared prototypes.
     bool CanUseSessionKillMarks() const;
     uint8_t GetSessionKillMarks() const;
-    float GetKillStatBonusPercent() const;
-    float GetKillStatMultiplier() const;
+    float GetEliteMedalProgress() const;
+    float GetEliteStatBonusPercent() const;
+    float GetEliteStatMultiplier() const;
+    float GetEliteGlowIntensity() const;
     int GetEffectiveShotTime(int baseShotTime, bool minigun = false) const;
     void RegisterProgressiveWeaponFireRequest(int weaponId);
     void UpdateProgressiveWeaponFireRate(update_msg *arg);
@@ -1304,8 +1306,8 @@ public:
     float _heading_speed;
     NC_STACK_ypabact *_killer;
     int16_t _killer_owner;
-    // OpenNeoUA custom: transient single-player kill marks (0..4).
-    // Intentionally not serialized or synchronized over the network.
+    // OpenNeoUA custom: transient single-player Elite medals. Runtime cap comes
+    // from game.elite_unit_max_medals; never serialized or network-synchronized.
     uint8_t _sessionKillMarks = 0;
     int16_t _reb_count;
     int _atk_ret;

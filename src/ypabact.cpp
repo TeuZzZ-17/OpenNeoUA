@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
+#include <cstdlib>
 #include <stack>
 #include <map>
 #include <functional>
@@ -534,27 +535,117 @@ static float ypabact_ReadHandBrakeRecoilReduction()
     return std::min(1.0f, ypabact_ReadHandBrakePower());
 }
 
-static float ypabact_ReadUnitKillStatBonusPerMarkPercent()
+struct ypabact_TEliteUnitConfig
 {
-    static const float percent = []()
-    {
-        if ( !System::IniConf::GameUnitKillStatBonus.WasSet )
-            return 0.0f;
+    float maxStatBonusPercent = 0.0f;
+    uint8_t maxMedals = 4;
+    float maxGlowIntensity = 0.0f;
+    World::TVisualTint glowTint;
+    float glowPulseSeconds = 0.0f;
+};
 
-        World::TAuthoredScalar parsed;
-        if ( !World::ParseAuthoredScalar(System::IniConf::GameUnitKillStatBonus.Get<std::string>(), parsed) ||
-             !parsed.percent || !std::isfinite(parsed.value) || parsed.value <= 0.0f )
+static bool ypabact_ParseEliteUnitTint(const std::string &text, World::TVisualTint *out)
+{
+    if ( !out )
+        return false;
+
+    int components[4] = {255, 255, 255, 255};
+    size_t start = 0;
+
+    for (int i = 0; i < 4; i++)
+    {
+        const size_t end = text.find('_', start);
+        if ( (i < 3 && end == std::string::npos) ||
+             (i == 3 && end != std::string::npos) )
+            return false;
+
+        const std::string part = text.substr(start,
+            end == std::string::npos ? std::string::npos : end - start);
+        if ( part.empty() )
+            return false;
+
+        char *tail = NULL;
+        const long value = std::strtol(part.c_str(), &tail, 10);
+        if ( tail == part.c_str() )
+            return false;
+        while ( *tail == ' ' || *tail == '\t' )
+            ++tail;
+        if ( *tail != '\0' )
+            return false;
+
+        components[i] = std::max(0L, std::min(value, 255L));
+        if ( end != std::string::npos )
+            start = end + 1;
+    }
+
+    out->r = (float)components[0] / 255.0f;
+    out->g = (float)components[1] / 255.0f;
+    out->b = (float)components[2] / 255.0f;
+    out->a = (float)components[3] / 255.0f;
+    return true;
+}
+
+static const ypabact_TEliteUnitConfig &ypabact_GetEliteUnitConfig()
+{
+    static const ypabact_TEliteUnitConfig config = []()
+    {
+        ypabact_TEliteUnitConfig result;
+
+        World::TAuthoredScalar statBonus;
+        if ( World::ParseAuthoredScalar(
+                 System::IniConf::GameEliteUnitMaxStatBonus.Get<std::string>(), statBonus) &&
+             statBonus.percent && std::isfinite(statBonus.value) && statBonus.value > 0.0f )
         {
-            return 0.0f;
+            result.maxStatBonusPercent = std::min(statBonus.value, 100.0f);
         }
 
-        // Four existing marks at the maximum configured value produce at most
-        // +100%. Requiring an explicit '%' avoids silently preserving the old
-        // suffix-implied percentage grammar under the new canonical key.
-        return std::min(parsed.value, 25.0f);
+        const std::string medalsText =
+            System::IniConf::GameEliteUnitMaxMedals.Get<std::string>();
+        char *medalsTail = NULL;
+        const long medals = std::strtol(medalsText.c_str(), &medalsTail, 10);
+        if ( medalsTail != medalsText.c_str() )
+        {
+            while ( *medalsTail == ' ' || *medalsTail == '\t' )
+                ++medalsTail;
+            if ( *medalsTail == '\0' && medals > 0 )
+                result.maxMedals = (uint8_t)std::min(medals, 255L);
+        }
+
+        char *glowTail = NULL;
+        const std::string glowText =
+            System::IniConf::GameEliteUnitMaxGlowIntensity.Get<std::string>();
+        const float glow = std::strtof(glowText.c_str(), &glowTail);
+        if ( glowTail != glowText.c_str() && std::isfinite(glow) )
+        {
+            while ( *glowTail == ' ' || *glowTail == '\t' )
+                ++glowTail;
+            if ( *glowTail == '\0' )
+                result.maxGlowIntensity = std::max(0.0f, std::min(glow, 1.0f));
+        }
+
+        World::TVisualTint tint;
+        if ( ypabact_ParseEliteUnitTint(
+                 System::IniConf::GameEliteUnitGlowTint.Get<std::string>(), &tint) )
+        {
+            result.glowTint = tint;
+        }
+
+        char *pulseTail = NULL;
+        const std::string pulseText =
+            System::IniConf::GameEliteUnitGlowPulseSeconds.Get<std::string>();
+        const float pulse = std::strtof(pulseText.c_str(), &pulseTail);
+        if ( pulseTail != pulseText.c_str() && std::isfinite(pulse) )
+        {
+            while ( *pulseTail == ' ' || *pulseTail == '\t' )
+                ++pulseTail;
+            if ( *pulseTail == '\0' && pulse > 0.0f )
+                result.glowPulseSeconds = std::min(pulse, 60.0f);
+        }
+
+        return result;
     }();
 
-    return percent;
+    return config;
 }
 
 static bool ypabact_IsDirectLocalPlayerHandBrakeActive(NC_STACK_ypabact *bact)
@@ -1867,11 +1958,11 @@ static void ypabact_ApplyDamagedRuntime(NC_STACK_ypabact *bact, bool active)
         maxrotMult *= ypabact_DebuffMalusToMult(bact->_active_debuff.maxrot_malus);
     }
 
-    // Kill-mark bonuses use the same non-compounding runtime multiplier chain
+    // Elite medal bonuses use the same non-compounding runtime multiplier chain
     // as damaged/debuff effects. The immutable per-instance bases remain intact.
-    const float killStatMult = bact->GetKillStatMultiplier();
-    forceMult *= killStatMult;
-    maxrotMult *= killStatMult;
+    const float eliteStatMult = bact->GetEliteStatMultiplier();
+    forceMult *= eliteStatMult;
+    maxrotMult *= eliteStatMult;
 
     bact->_force = bact->_base_force * forceMult;
     bact->_maxrot = bact->_base_maxrot * maxrotMult;
@@ -5305,23 +5396,38 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             arg->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
         arg->colorizeTint = applyTint && effectiveTint.ColorizesRGB();
 
-        // Primitive shared Buff glow. It is render-only: brighten the existing
-        // model tint with a smooth pulse without adding world lights or mutating
-        // authored materials. Zero intensity keeps the exact previous render path.
-        if ( tintBase && _energy > 0 && HasActiveBuff() && _buff.glow_intensity > 0.0f )
+        // Shared render-only glow path used by both Buff and Elite presentation.
+        // It brightens the existing model tint without adding world lights or
+        // mutating authored materials. Zero intensity preserves the old path.
+        auto applyGlow = [&](float intensity, const World::TVisualTint &tint,
+                             float pulseSeconds)
         {
+            if ( intensity <= 0.0f )
+                return;
+
             float pulse = 1.0f;
-            if ( _buff.glow_pulse_seconds > 0.0f )
+            if ( pulseSeconds > 0.0f )
             {
-                const double periodMs = (double)_buff.glow_pulse_seconds * 1000.0;
+                const double periodMs = (double)pulseSeconds * 1000.0;
                 const double phase = fmod((double)std::max(_clock, 0), periodMs) / periodMs;
                 pulse = (float)(0.5 - 0.5 * cos(phase * C_2PI));
             }
 
-            const float strength = _buff.glow_intensity * pulse * _buff.glow_tint.a;
-            arg->tint.r *= 1.0f + strength * _buff.glow_tint.r;
-            arg->tint.g *= 1.0f + strength * _buff.glow_tint.g;
-            arg->tint.b *= 1.0f + strength * _buff.glow_tint.b;
+            const float strength = intensity * pulse * tint.a;
+            arg->tint.r *= 1.0f + strength * tint.r;
+            arg->tint.g *= 1.0f + strength * tint.g;
+            arg->tint.b *= 1.0f + strength * tint.b;
+        };
+
+        if ( tintBase && _energy > 0 )
+        {
+            if ( HasActiveBuff() )
+                applyGlow(_buff.glow_intensity, _buff.glow_tint,
+                          _buff.glow_pulse_seconds);
+
+            const ypabact_TEliteUnitConfig &eliteConfig = ypabact_GetEliteUnitConfig();
+            applyGlow(GetEliteGlowIntensity(), eliteConfig.glowTint,
+                      eliteConfig.glowPulseSeconds);
         }
 
         if ( missileMain )
@@ -8259,9 +8365,10 @@ void NC_STACK_ypabact::Die()
          creditedKiller->_bact_type != BACT_TYPES_MISSLE &&
          creditedKiller->CanUseSessionKillMarks() )
     {
+        const uint8_t maxMedals = ypabact_GetEliteUnitConfig().maxMedals;
         if ( _bact_type == BACT_TYPES_ROBO )
-            creditedKiller->_sessionKillMarks = 4;
-        else if ( creditedKiller->_sessionKillMarks < 4 )
+            creditedKiller->_sessionKillMarks = maxMedals;
+        else if ( creditedKiller->_sessionKillMarks < maxMedals )
             creditedKiller->_sessionKillMarks++;
     }
 
@@ -14930,21 +15037,32 @@ uint8_t NC_STACK_ypabact::GetSessionKillMarks() const
     if ( !_world || _world->_isNetGame || !CanUseSessionKillMarks() )
         return 0;
 
-    return std::min<uint8_t>(_sessionKillMarks, 4);
+    return std::min<uint8_t>(_sessionKillMarks, ypabact_GetEliteUnitConfig().maxMedals);
 }
 
-float NC_STACK_ypabact::GetKillStatBonusPercent() const
+float NC_STACK_ypabact::GetEliteMedalProgress() const
 {
-    const uint8_t marks = GetSessionKillMarks();
-    if ( marks == 0 )
+    const ypabact_TEliteUnitConfig &config = ypabact_GetEliteUnitConfig();
+    const uint8_t medals = GetSessionKillMarks();
+    if ( medals == 0 || config.maxMedals == 0 )
         return 0.0f;
 
-    return marks * ypabact_ReadUnitKillStatBonusPerMarkPercent();
+    return std::min(1.0f, (float)medals / (float)config.maxMedals);
 }
 
-float NC_STACK_ypabact::GetKillStatMultiplier() const
+float NC_STACK_ypabact::GetEliteStatBonusPercent() const
 {
-    return 1.0f + GetKillStatBonusPercent() / 100.0f;
+    return ypabact_GetEliteUnitConfig().maxStatBonusPercent * GetEliteMedalProgress();
+}
+
+float NC_STACK_ypabact::GetEliteStatMultiplier() const
+{
+    return 1.0f + GetEliteStatBonusPercent() / 100.0f;
+}
+
+float NC_STACK_ypabact::GetEliteGlowIntensity() const
+{
+    return ypabact_GetEliteUnitConfig().maxGlowIntensity * GetEliteMedalProgress();
 }
 
 static int ypabact_GetProgressiveWeaponBaseShotTime(const NC_STACK_ypabact *bact,
@@ -15140,12 +15258,12 @@ int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime, bool minigun) const
 
     float multiplier = 1.0f;
 
-    // The kill bonus increases fire rate, therefore its linear stat multiplier
+    // The Elite bonus increases fire rate, therefore its linear stat multiplier
     // divides the selected cooldown. This one helper is used after choosing the
     // exact shot_time/user or shared mgun_shot_time field and never mutates a proto.
-    const float killStatMultiplier = GetKillStatMultiplier();
-    if ( killStatMultiplier > 0.0f )
-        multiplier /= killStatMultiplier;
+    const float eliteStatMultiplier = GetEliteStatMultiplier();
+    if ( eliteStatMultiplier > 0.0f )
+        multiplier /= eliteStatMultiplier;
 
     // Damaged fire-rate maluses reuse the same damaged-state gate as the
     // existing force/maxrot/sound penalties. Authoring follows the established
@@ -15196,7 +15314,7 @@ int NC_STACK_ypabact::GetEffectiveOutgoingDamage(int baseDamage) const
     if ( baseDamage == 0 )
         return 0;
 
-    float multiplier = GetKillStatMultiplier();
+    float multiplier = GetEliteStatMultiplier();
 
     if ( multiplier == 1.0f )
         return baseDamage;
@@ -15222,14 +15340,14 @@ float NC_STACK_ypabact::GetEffectiveShieldWithAdditionalMalus(float additionalMa
     if ( mult < 0.0f )
         mult = 0.0f;
 
-    const float killBonusPercent = GetKillStatBonusPercent();
+    const float eliteBonusPercent = GetEliteStatBonusPercent();
     const float baseEffectiveShield = shield * mult;
-    float effectiveShield = baseEffectiveShield * GetKillStatMultiplier();
+    float effectiveShield = baseEffectiveShield * GetEliteStatMultiplier();
 
-    // Shield 100 is complete immunity in the existing damage formula. A medal
+    // Shield 100 is complete immunity in the existing damage formula. An Elite
     // bonus may improve defense but must not turn a previously vulnerable unit
     // invulnerable. Units already at 100+ before the medal remain unchanged.
-    if ( killBonusPercent > 0.0f && baseEffectiveShield < 100.0f &&
+    if ( eliteBonusPercent > 0.0f && baseEffectiveShield < 100.0f &&
          effectiveShield >= 100.0f )
         effectiveShield = 99.0f;
 

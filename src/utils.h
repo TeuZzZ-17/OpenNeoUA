@@ -137,6 +137,10 @@ std::string uaSetDirectoryOrganizedPath(const std::string &path);
 std::string uaSetDirectoryResolvedReadPath(const std::string &path, bool directory = false);
 std::string uaDataFirstResolvedReadPath(const std::string &path);
 std::string uaDataFirstResolvedWritePath(const std::string &path);
+// Canonical OpenNeoUA external paths begin with Data/. Legacy Data-relative
+// paths can still be normalized for backward compatibility.
+bool uaNormalizeDataAssetPath(const std::string &path, std::string *normalized,
+                              bool allowLegacyRelative = true);
 std::vector<std::string> uaDataFirstRootDirCandidates(const std::string &dirname);
 
 inline double clp_asin(double x)
