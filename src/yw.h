@@ -2622,7 +2622,6 @@ public:
     int yw_RestoreVehicleData();
     void EnableLevelPasses();
     int load_fonts_and_icons();
-    void UpdateFactionGameplayUiAtlases();
     int yw_LoadSet(int setID);
 
     void FreeLegos();
@@ -3319,7 +3318,6 @@ public:
     bool _guiLoaded = false;
 
     std::array<TileMap *, 92> _guiTiles = Common::ArrayInit<TileMap *, 92>(NULL);
-    int32_t _factionGameplayUiOwner = -1;
 
     GuiBaseList _guiActive;
 
