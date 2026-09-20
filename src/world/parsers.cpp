@@ -4714,6 +4714,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->aoe_unit_push = 0.0f;
         _wpn->push = 0.0f;
         _wpn->armor_penetration_targets = 0;
+        _wpn->armor_penetration_icon.clear();
         _wpn->recoil = 0.0;
         _wpn->mass = 50.0;
         _wpn->force = 5000.0;
@@ -4940,6 +4941,19 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "armor_penetration_targets") )
     {
         _wpn->armor_penetration_targets = std::max(parser.stol(p2, NULL, 0), 0L);
+    }
+    else if ( !StriCmp(p1, "armor_penetration_icon") )
+    {
+        std::string normalizedPath;
+        if ( uaNormalizeDataAssetPath(p2, &normalizedPath, true) &&
+             normalizedPath.size() > 5 )
+        {
+            // StatusIconLoad already resolves from the Data root. Keep its
+            // internal value Data-relative after validating the authored path.
+            _wpn->armor_penetration_icon = normalizedPath.substr(5);
+        }
+        else
+            _wpn->armor_penetration_icon.clear();
     }
     else if ( !StriCmp(p1, "recoil") )
     {
