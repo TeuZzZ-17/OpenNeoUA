@@ -14399,6 +14399,13 @@ static int yw_GetInfoWeaponEffectIcons(NC_STACK_ypaworld *yw,
     StatusIconList paths;
     int pathCount = 0;
 
+    // Weapon capability icons share the same DMG-row renderer as Debuff icons.
+    // Keep the Debuff last so it remains closest to the damage value when both
+    // are configured.
+    if ( weap->armor_penetration_targets > 0 )
+        StatusIconAdd(paths, pathCount,
+                      StatusIconTrimPath(weap->armor_penetration_icon));
+
     if ( weap->debuff.valid )
         StatusIconAdd(paths, pathCount, StatusIconTrimPath(weap->debuff.icon));
 

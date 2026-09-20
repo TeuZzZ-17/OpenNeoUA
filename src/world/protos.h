@@ -1168,6 +1168,7 @@ struct TWeapProto
     // the direct-hit unit receives only push; nearby units receive aoe_unit_push.
     float push = 0.0f;
     int armor_penetration_targets = 0; // OpenNeoUA custom: direct-hit unit penetrations before final impact
+    std::string armor_penetration_icon; // OpenNeoUA custom: optional HUD capability icon
     float recoil = 0.0; // OpenNeoUA: physical Weapon recoil intensity 0..10
 //    int field_87C = 0;
     int life_time = 0;
