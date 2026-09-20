@@ -17102,13 +17102,43 @@ void sb_0x4d7c08__sub0__sub2(NC_STACK_ypaworld *yw)
 
     int v25 = 2 * yw->_screenSize.x / 3;
     int v2 = yw->_screenSize.x - v25;
+    const int startY = up_panel.field_1CC + (yw->_fontH / 2);
 
     FontUA::select_tileset(&buf, 15);
     FontUA::set_xpos(&buf, v25);
-    FontUA::set_ypos(&buf, up_panel.field_1CC + (yw->_fontH / 2));
+    FontUA::set_ypos(&buf, startY);
 
     sb_0x4d7c08__sub0__sub2__sub0(yw, &buf, v2);
     sb_0x4d7c08__sub0__sub2__sub1(yw, &buf, yw->_gameplayStats, v2);
+
+    FontUA::set_end(&buf);
+
+    SDL_Color uiAccentColor;
+    GFX::Engine.ProcessDrawSeq(buf, NULL,
+                              yw_GetFactionUiAccent(yw, &uiAccentColor));
+
+    // Super-item text carries gameplay ownership information. Render it outside
+    // the player's UI-accent remap so the displayed colour stays the real owner colour.
+    CmdStream superItemBuf;
+    superItemBuf.reserve(512);
+
+    int superItemY = startY;
+    if ( yw->_isNetGame )
+    {
+        int ownerRows = 0;
+        for (int i = 0; i < World::CVFractionsCount; ++i)
+        {
+            if ( (1 << i) & yw->_levelInfo.OwnerMask )
+                ++ownerRows;
+        }
+
+        // Unit count row + faction score rows + the existing blank separator.
+        superItemY += (ownerRows + 2) * yw->_guiTiles[15]->h;
+    }
+
+    FontUA::select_tileset(&superItemBuf, 15);
+    FontUA::set_xpos(&superItemBuf, v25);
+    FontUA::set_ypos(&superItemBuf, superItemY);
 
     for (const TMapSuperItem &sitem : yw->_levelInfo.SuperItems)
     {
@@ -17132,29 +17162,33 @@ void sb_0x4d7c08__sub0__sub2(NC_STACK_ypaworld *yw)
             }
             else if ( sitem.State == TMapSuperItem::STATE_TRIGGED )
             {
-                timeStr = fmt::sprintf("%s: %s", typeStr,  Locale::Text::Advanced(Locale::ADV_TRIGGERED) );
+                timeStr = fmt::sprintf("%s: %s", typeStr, Locale::Text::Advanced(Locale::ADV_TRIGGERED));
 
                 v23 = 1;
             }
 
             if ( v23 )
             {
-                FontUA::set_xpos(&buf, v25);
+                const uint32_t owner = sitem.ActivateOwner <= World::OWNER_7
+                                     ? sitem.ActivateOwner
+                                     : World::OWNER_0;
 
-                FontUA::set_txtColor(&buf, yw->_iniColors[sitem.ActivateOwner].r, yw->_iniColors[sitem.ActivateOwner].g, yw->_iniColors[sitem.ActivateOwner].b);
+                FontUA::set_xpos(&superItemBuf, v25);
+                FontUA::set_txtColor(&superItemBuf,
+                                     yw->_iniColors[owner].r,
+                                     yw->_iniColors[owner].g,
+                                     yw->_iniColors[owner].b);
 
-                FontUA::FormateClippedText(yw->_guiTiles[15], &buf, timeStr.c_str(), yw->_screenSize.x - v25, 32);
+                FontUA::FormateClippedText(yw->_guiTiles[15], &superItemBuf, timeStr.c_str(),
+                                           yw->_screenSize.x - v25, 32);
 
-                FontUA::next_line(&buf);
+                FontUA::next_line(&superItemBuf);
             }
         }
     }
 
-    FontUA::set_end(&buf);
-
-    SDL_Color uiAccentColor;
-    GFX::Engine.ProcessDrawSeq(buf, NULL,
-                              yw_GetFactionUiAccent(yw, &uiAccentColor));
+    FontUA::set_end(&superItemBuf);
+    GFX::Engine.ProcessDrawSeq(superItemBuf);
 }
 
 
