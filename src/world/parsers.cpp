@@ -911,6 +911,7 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
         return ScriptParser::RESULT_UNKNOWN;
 
     stok.GetNext(&val);
+    const std::string soundEvent = val;
 
     TVhclSound *sndfx = GetSndFxByName(val);
     if (!sndfx)
@@ -931,7 +932,20 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
             else if ( !StriCmp(val, "volume") )
                 sndfx->volume = parser.stol(p2, NULL, 0);
             else if ( !StriCmp(val, "pitch") )
-                ParseSoundPitchRange(p2, *sndfx);
+            {
+                if ( !StriCmp(soundEvent, "genesis") && !StriCmp(p2, "auto") )
+                {
+                    // Automatic Genesis pitch is opt-in. Missing pitch keeps the normal default.
+                    sndfx->auto_pitch = true;
+                    sndfx->SetPitchRange(0, 0);
+                }
+                else
+                {
+                    // An explicit numeric value or range overrides a previous "auto".
+                    sndfx->auto_pitch = false;
+                    ParseSoundPitchRange(p2, *sndfx);
+                }
+            }
             else if ( !StriCmp(val, "radius") )
                 sndfx->radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
             else if ( !StriCmp(val, "ext") )

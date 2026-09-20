@@ -370,6 +370,7 @@ struct TVhclSound
     int16_t volume = 0;
     int pitch_min = 0;
     int pitch_max = 0;
+    bool auto_pitch = false;
     float radius = 0.0f;
     TSndFXParam sndPrm;
     TSndFxPosParam sndPrm_shk;
