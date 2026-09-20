@@ -1198,17 +1198,25 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
 
     bool parsed = ScriptParser::ParseFile(spectatorScript, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
     Common::Env.SetPrefix("rsrc", oldRsrc);
+    if ( parsed )
+    {
+        World::TVhclProto &spectatorProto = _vhclProtos[targetID];
+        spectatorProto.buff = World::TVehicleBuffConfig();
+        auto buffIt = _buffProfiles.find(spectatorProto.buff_id);
+        if ( buffIt != _buffProfiles.end() )
+            spectatorProto.buff = buffIt->second;
+    }
 
     if ( !parsed ||
          _vhclProtos[targetID].Index != targetID ||
          _vhclProtos[targetID].model_id != BACT_TYPES_UFO ||
          !_vhclProtos[targetID].hidden ||
-         !_vhclProtos[targetID].buff.allow ||
+         !_vhclProtos[targetID].buff.valid ||
          !_vhclProtos[targetID].buff.invulnerable )
     {
         _vhclProtos[targetID] = previous;
         _spectatorVehicleProtoID = -1;
-        ypa_log_out("WARNING: spectator vehicle file %s must define a valid model = ufo with hidden = yes, buff_allow = 1 and buff_invulnerable = 1. Spectator mode disabled for this level.\n", spectatorScript.c_str());
+        ypa_log_out("WARNING: spectator vehicle file %s must define a valid model = ufo with hidden = yes and a buff_id linked to a Buff profile with buff_invulnerable = 1. Spectator mode disabled for this level.\n", spectatorScript.c_str());
         return false;
     }
 
@@ -1223,6 +1231,8 @@ bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
     std::string buf = Common::Env.SetPrefix("rsrc", "data:");
 
     ScriptParser::HandlersList parsers {
+        new World::Parsers::BuffProfileParser(&_buffProfiles),
+        new World::Parsers::DebuffProfileParser(&_debuffProfiles),
         new World::Parsers::VhclProtoParser(this),
         new World::Parsers::WeaponProtoParser(this),
         new World::Parsers::BuildProtoParser(this)
@@ -1231,11 +1241,82 @@ bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
     bool res = ScriptParser::ParseFile(filename, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
     Common::Env.SetPrefix("rsrc", buf);
 
+    if ( res )
+        ResolveStatusProfileLinks();
+
     return res;
+}
+
+void NC_STACK_ypaworld::ResolveStatusProfileLinks()
+{
+    for (World::TVhclProto &proto : _vhclProtos)
+    {
+        if ( proto.buff_id < 0 )
+        {
+            if ( proto.buff.valid )
+                proto.buff = World::TVehicleBuffConfig();
+            continue;
+        }
+
+        auto it = _buffProfiles.find(proto.buff_id);
+        if ( it == _buffProfiles.end() )
+        {
+            if ( proto.buff.valid )
+                proto.buff = World::TVehicleBuffConfig();
+            ypa_log_out("WARNING: vehicle %d references missing buff_id %d; Buff disabled.\n",
+                        proto.Index, proto.buff_id);
+            continue;
+        }
+
+        if ( proto.buff.valid &&
+             proto.buff.profile_id == it->second.profile_id &&
+             proto.buff.revision == it->second.revision )
+            continue;
+
+        proto.buff = it->second;
+    }
+
+    for (size_t i = 0; i < _weaponProtos.size(); ++i)
+    {
+        World::TWeapProto &proto = _weaponProtos[i];
+        if ( proto.debuff_id < 0 )
+        {
+            if ( proto.debuff.valid )
+            {
+                proto.debuff.tick_snd.ClearSounds();
+                proto.debuff = World::TWeaponDebuffConfig();
+            }
+            continue;
+        }
+
+        auto it = _debuffProfiles.find(proto.debuff_id);
+        if ( it == _debuffProfiles.end() )
+        {
+            if ( proto.debuff.valid )
+            {
+                proto.debuff.tick_snd.ClearSounds();
+                proto.debuff = World::TWeaponDebuffConfig();
+            }
+            ypa_log_out("WARNING: weapon %u references missing debuff_id %d; Debuff disabled.\n",
+                        (unsigned)i, proto.debuff_id);
+            continue;
+        }
+
+        if ( proto.debuff.valid &&
+             proto.debuff.profile_id == it->second.profile_id &&
+             proto.debuff.revision == it->second.revision )
+            continue;
+
+        if ( proto.debuff.valid )
+            proto.debuff.tick_snd.ClearSounds();
+        proto.debuff = it->second;
+    }
 }
 
 bool NC_STACK_ypaworld::ProtosInit()
 {
+    _buffProfiles.clear();
+    _debuffProfiles.clear();
     _vhclProtos.resize(NUM_VHCL_PROTO);
     _weaponProtos.resize(NUM_WEAPON_PROTO);
     _buildProtos.resize(NUM_BUILD_PROTO);
@@ -1249,138 +1330,144 @@ bool NC_STACK_ypaworld::ProtosInit()
     return true;
 }
 
-static std::string yw_SuperItemProfileKey(const std::string &id)
+static std::string yw_SuperItemProfilePathName(const std::string &path)
 {
-    std::string key = id;
-    std::transform(key.begin(), key.end(), key.begin(),
-                   [](unsigned char ch) { return (char)std::tolower(ch); });
-    return key;
+    std::string name = path;
+    std::replace(name.begin(), name.end(), '\\', '/');
+    const size_t slash = name.find_last_of('/');
+    if ( slash != std::string::npos )
+        name = name.substr(slash + 1);
+    const size_t dot = name.find_last_of('.');
+    if ( dot != std::string::npos )
+        name.resize(dot);
+    return name;
 }
 
-bool NC_STACK_ypaworld::LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles)
+bool NC_STACK_ypaworld::LoadSuperItemProfilePath(const std::string &authoredPath,
+                                                  World::TSuperItemProfile &outProfile)
 {
-    std::string profilePath = "data:scripts/superitem_profiles/superitem_profiles.cfg";
-    if ( !uaFileExist(profilePath) )
-        profilePath = "data:scripts/superitem_profiles/superitem_profiles.txt";
+    outProfile = World::TSuperItemProfile();
+
+    if ( authoredPath.empty() )
+        return false;
+
+    std::string profilePath;
+    if ( !uaNormalizeDataAssetPath(authoredPath, &profilePath, false) )
+    {
+        ypa_log_out("WARNING: SuperItem profile path '%s' is not a valid explicit Data path.\n",
+                    authoredPath.c_str());
+        return false;
+    }
 
     if ( !uaFileExist(profilePath) )
     {
-        _superItemProfiles.clear();
+        ypa_log_out("WARNING: SuperItem profile '%s' was not found.\n",
+                    authoredPath.c_str());
         return false;
     }
 
     std::vector<World::TSuperItemProfile> parsedProfiles;
-
     ScriptParser::HandlersList parsers {
+        new World::Parsers::BuffProfileParser(&_buffProfiles),
+        new World::Parsers::DebuffProfileParser(&_debuffProfiles),
         new World::Parsers::SuperItemProfileParser(&parsedProfiles)
     };
 
     if ( !ScriptParser::ParseFile(profilePath, parsers,
                                   ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
     {
-        ypa_log_out("WARNING: SuperItem profile file %s is invalid; keeping the previously loaded profile set.\n", profilePath.c_str());
+        ypa_log_out("WARNING: SuperItem profile file '%s' is invalid.\n",
+                    authoredPath.c_str());
         return false;
     }
 
-    std::map<std::string, std::vector<size_t>> profilesById;
-    for (size_t i = 0; i < parsedProfiles.size(); ++i)
-    {
-        World::TSuperItemProfile &profile = parsedProfiles[i];
-        profile.valid = true;
+    // A directly loaded SuperItem file may also define new_buff/new_debuff
+    // blocks, so refresh prototype links only after the whole file was parsed.
+    ResolveStatusProfileLinks();
 
-        if ( profile.id.empty() )
+    if ( parsedProfiles.size() != 1 )
+    {
+        ypa_log_out("WARNING: SuperItem profile file '%s' must contain exactly one begin_superitem_profile block; found %u.\n",
+                    authoredPath.c_str(), (unsigned)parsedProfiles.size());
+        return false;
+    }
+
+    World::TSuperItemProfile profile = parsedProfiles.front();
+    profile.valid = true;
+
+    // The file path is now the profile identity. id remains optional metadata
+    // used for the in-game display name; absent id falls back to the file name.
+    if ( profile.id.empty() )
+        profile.id = yw_SuperItemProfilePathName(profilePath);
+
+    profile.debuff = World::TWeaponDebuffConfig();
+    if ( profile.debuff_id >= 0 )
+    {
+        auto debuffIt = _debuffProfiles.find(profile.debuff_id);
+        if ( debuffIt != _debuffProfiles.end() )
+            profile.debuff = debuffIt->second;
+        else
+            ypa_log_out("WARNING: SuperItem profile '%s' references missing debuff_id %d; Debuff disabled.\n",
+                        profile.id.c_str(), profile.debuff_id);
+    }
+
+    if ( profile.wave_vp <= 0 && profile.wave_3ds.empty() && profile.wave_base.empty() )
+    {
+        ypa_log_out("WARNING: SuperItem profile '%s' has no wave_vp, wave_base or wave_3ds; using vanilla fallback.\n",
+                    profile.id.c_str());
+        return false;
+    }
+
+    const bool hasWaveSpeedTrio =
+        profile.has_wave_start_speed &&
+        profile.has_wave_speed_ramp_time &&
+        profile.has_wave_end_speed;
+    const bool waveSpeedTrioValid =
+        hasWaveSpeedTrio &&
+        std::isfinite(profile.wave_start_speed) && profile.wave_start_speed >= 0.0f &&
+        std::isfinite(profile.wave_speed_ramp_time) && profile.wave_speed_ramp_time >= 0.0f &&
+        std::isfinite(profile.wave_end_speed) && profile.wave_end_speed > 0.0f;
+
+    if ( !waveSpeedTrioValid )
+    {
+        ypa_log_out("WARNING: SuperItem profile '%s' requires valid wave_start_speed, wave_speed_ramp_time and wave_end_speed; using vanilla fallback.\n",
+                    profile.id.c_str());
+        return false;
+    }
+
+    for (auto chainIt = profile.detonate_chain_fx.begin();
+         chainIt != profile.detonate_chain_fx.end(); )
+    {
+        World::TChainFXConfig &chain = *chainIt;
+        chain.visuals.erase(
+            std::remove_if(chain.visuals.begin(), chain.visuals.end(),
+                           [](const World::TChainFXVisual &visual) {
+                               return visual.vp <= 0 && visual.mesh3ds.empty() && visual.basePath.empty();
+                           }),
+            chain.visuals.end());
+
+        if ( chain.mode != World::TChainFXConfig::MODE_VISUAL ||
+             chain.trigger != World::TChainFXConfig::TRIGGER_DETONATE ||
+             chain.duration <= 0 || chain.visuals.empty() ||
+             !std::isfinite(chain.start_size) || !std::isfinite(chain.end_size) ||
+             !std::isfinite(chain.offset.x) || !std::isfinite(chain.offset.y) ||
+             !std::isfinite(chain.offset.z) )
         {
-            profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile #%u has no id and will be ignored.\n", (unsigned)i);
+            ypa_log_out("WARNING: invalid detonation Chain FX ignored in SuperItem profile '%s'.\n",
+                        profile.id.c_str());
+            chainIt = profile.detonate_chain_fx.erase(chainIt);
         }
         else
-            profilesById[yw_SuperItemProfileKey(profile.id)].push_back(i);
-
-        if ( profile.wave_vp <= 0 && profile.wave_3ds.empty() && profile.wave_base.empty() )
-        {
-            profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' has no wave_vp, wave_base or wave_3ds; using vanilla fallback.\n",
-                        profile.id.empty() ? "<missing>" : profile.id.c_str());
-        }
-
-        const bool hasWaveSpeedTrio =
-            profile.has_wave_start_speed &&
-            profile.has_wave_speed_ramp_time &&
-            profile.has_wave_end_speed;
-        const bool waveSpeedTrioValid =
-            hasWaveSpeedTrio &&
-            std::isfinite(profile.wave_start_speed) && profile.wave_start_speed >= 0.0f &&
-            std::isfinite(profile.wave_speed_ramp_time) && profile.wave_speed_ramp_time >= 0.0f &&
-            std::isfinite(profile.wave_end_speed) && profile.wave_end_speed > 0.0f;
-
-        if ( !waveSpeedTrioValid )
-        {
-            profile.valid = false;
-            ypa_log_out("WARNING: SuperItem profile '%s' requires valid wave_start_speed, wave_speed_ramp_time and wave_end_speed; using vanilla fallback.\n",
-                        profile.id.empty() ? "<missing>" : profile.id.c_str());
-        }
-
-        for (auto chainIt = profile.detonate_chain_fx.begin();
-             chainIt != profile.detonate_chain_fx.end(); )
-        {
-            World::TChainFXConfig &chain = *chainIt;
-            chain.visuals.erase(
-                std::remove_if(chain.visuals.begin(), chain.visuals.end(),
-                               [](const World::TChainFXVisual &visual) {
-                                   return visual.vp <= 0 && visual.mesh3ds.empty() && visual.basePath.empty();
-                               }),
-                chain.visuals.end());
-
-            if ( chain.mode != World::TChainFXConfig::MODE_VISUAL ||
-                 chain.trigger != World::TChainFXConfig::TRIGGER_DETONATE ||
-                 chain.duration <= 0 || chain.visuals.empty() ||
-                 !std::isfinite(chain.start_size) || !std::isfinite(chain.end_size) ||
-                 !std::isfinite(chain.offset.x) || !std::isfinite(chain.offset.y) ||
-                 !std::isfinite(chain.offset.z) )
-            {
-                ypa_log_out("WARNING: invalid detonation Chain FX ignored in SuperItem profile '%s'.\n",
-                            profile.id.empty() ? "<missing>" : profile.id.c_str());
-                chainIt = profile.detonate_chain_fx.erase(chainIt);
-            }
-            else
-                ++chainIt;
-        }
+            ++chainIt;
     }
 
-    for (const auto &entry : profilesById)
-    {
-        if ( entry.second.size() < 2 )
-            continue;
-
-        ypa_log_out("WARNING: duplicate SuperItem profile id '%s'; all conflicting profiles will use vanilla fallback.\n",
-                    entry.first.c_str());
-        for (size_t index : entry.second)
-        {
-            parsedProfiles[index].duplicate = true;
-            parsedProfiles[index].valid = false;
-        }
-    }
-
-    for (World::TSuperItemProfile &profile : parsedProfiles)
-    {
-        if ( !profile.valid )
-            continue;
-        profile.debuff.tick_snd.LoadSamples();
-        profile.detonate_snd.LoadSamples();
-        profile.wave_snd.LoadSamples();
-    }
-
-    if ( retiredProfiles )
-    {
-        retiredProfiles->swap(_superItemProfiles);
-        _superItemProfiles.swap(parsedProfiles);
-    }
-    else
-    {
-        _superItemProfiles.swap(parsedProfiles);
-    }
-    ypa_log_out("Loaded %u SuperItem profile(s) from %s.\n",
-                (unsigned)_superItemProfiles.size(), profilePath.c_str());
+    // Keep loaded sample ownership out of temporary profiles. TVhclSound owns
+    // raw sample objects, so moving a profile after LoadSamples() would copy the
+    // owning MainSample pointer and leave the destination with a dangling sample.
+    // InitSuperItems() loads sounds only after every profile is in stable storage.
+    outProfile = std::move(profile);
+    ypa_log_out("Loaded SuperItem profile '%s' from %s.\n",
+                outProfile.id.c_str(), profilePath.c_str());
     return true;
 }
 
@@ -1587,7 +1674,6 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
         return 0;
     }
 
-    LoadSuperItemProfiles();
 
     _screenSize = GFX::Engine.GetScreenSize();
 
@@ -1695,6 +1781,8 @@ size_t NC_STACK_ypaworld::Deinit()
         profile.wave_snd.ClearSounds();
     }
     _superItemProfiles.clear();
+    _buffProfiles.clear();
+    _debuffProfiles.clear();
     _debugAoeRings.clear();
     ClearMinigunTracers();
     ClearProceduralEnergyFX();
@@ -3690,6 +3778,8 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
         std::string tmp = Common::Env.SetPrefix("rsrc", "data:");
 
         ScriptParser::HandlersList parsers {
+            new World::Parsers::BuffProfileParser(&_buffProfiles),
+            new World::Parsers::DebuffProfileParser(&_debuffProfiles),
             new World::Parsers::VhclProtoParser(this),
             new World::Parsers::WeaponProtoParser(this),
             new World::Parsers::BuildProtoParser(this)
@@ -3697,6 +3787,8 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
 
         parseSuccessful = ScriptParser::ParseStringList(gem.ActionsList, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
         Common::Env.SetPrefix("rsrc", tmp);
+        if ( parseSuccessful )
+            ResolveStatusProfileLinks();
     }
 
     if ( newUiCapture )
@@ -4311,8 +4403,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_energy = vhcl.energy;
         bacto->_energy_max = vhcl.energy;
         bacto->_buff = vhcl.buff;
-        bacto->_buff_deflect_charges_max = vhcl.buff.allow ? vhcl.buff.deflect_charges : 0;
-        bacto->_invulnerable = vhcl.buff.allow && vhcl.buff.invulnerable;
+        bacto->_buff_deflect_charges_max = vhcl.buff.valid ? vhcl.buff.deflect_charges : 0;
+        bacto->_invulnerable = vhcl.buff.valid && vhcl.buff.invulnerable;
         bacto->_shield = vhcl.shield;
         bacto->_mass = vhcl.mass;
         bacto->_base_force = vhcl.force;
@@ -4556,7 +4648,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
         // Buff invisibility is seeded once at spawn and remains active until the
         // first real attack reveals the unit. Missing/disabled Buff stays vanilla.
-        bacto->_invisibleUnrevealed = vhcl.buff.allow && vhcl.buff.invisible;
+        bacto->_invisibleUnrevealed = vhcl.buff.valid && vhcl.buff.invisible;
         bacto->_buff_invisible_reveal_vp = vhcl.buff.invisible_reveal_vp;
         bacto->_buff_invisible_reveal_3ds = vhcl.buff.invisible_reveal_3ds;
         bacto->_buff_invisible_reveal_base = vhcl.buff.invisible_reveal_base;
@@ -4849,7 +4941,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
 
     // Debuff tick audio is a separate status-effect system, not one of the
     // projectile Weapon SND_NORMAL/SND_LAUNCH/SND_HIT packages.
-    if ( wproto.debuff.allow )
+    if ( wproto.debuff.valid )
         wproto.debuff.tick_snd.LoadSamples();
 
     wobj->SetParameters(wproto.initParams);
@@ -10883,7 +10975,10 @@ int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
     World::Parsers::SaveBact::ResetHierarchyState();
 
     if ( parsed )
+    {
+        ResolveStatusProfileLinks();
         RestoreCustomSuperItemRuntimeAfterLoad();
+    }
     return parsed;
 }
 
@@ -11245,12 +11340,17 @@ int NC_STACK_ypaworld::ParseSettingsFile(const std::string &fname, uint32_t sdfM
 
     if ( sdfMask & World::SDF_PROTO )
     {
+        parsers += new World::Parsers::BuffProfileParser(&_buffProfiles);
+        parsers += new World::Parsers::DebuffProfileParser(&_debuffProfiles);
         parsers += new World::Parsers::VhclProtoParser(this);
         parsers += new World::Parsers::WeaponProtoParser(this);
         parsers += new World::Parsers::BuildProtoParser(this);
     }
 
-    return ScriptParser::ParseFile(fname, parsers, 0);
+    const bool parsed = ScriptParser::ParseFile(fname, parsers, 0);
+    if ( parsed && (sdfMask & World::SDF_PROTO) )
+        ResolveStatusProfileLinks();
+    return parsed;
 }
 
 // Load user settings (Global save)

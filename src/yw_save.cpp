@@ -393,12 +393,8 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
                 fil->printf("    fire_x_slots   = %d\n", proto.fire_x_slots);
             if (proto.hidden)
                 fil->printf("    ;#!hidden      = %s\n", (proto.hidden ? "yes" : "no") );
-            if ( proto.buff.allow )
-                fil->printf("    ;#!buff_allow     = yes\n");
-            if ( proto.buff.allow && proto.buff.invisible )
-                fil->printf("    ;#!buff_invisible = yes\n");
-            if ( proto.buff.allow && proto.buff.invulnerable )
-                fil->printf("    ;#!buff_invulnerable = yes\n");
+            if ( proto.buff_id >= 0 )
+                fil->printf("    ;#!buff_id         = %d\n", proto.buff_id);
             if (proto.unhideRadar > 0)
                 fil->printf("    ;#!unhide_radar      = %d\n", proto.unhideRadar);
             fil->printf("end\n\n");
@@ -424,6 +420,8 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
             fil->printf("    shot_time      = %d\n", proto.shot_time);
             fil->printf("    shot_time_user = %d\n", proto.shot_time_user);
             fil->printf("    energy         = %d\n", proto.energy);
+            if ( proto.debuff_id >= 0 )
+                fil->printf("    ;#!debuff_id       = %d\n", proto.debuff_id);
             fil->printf("end\n\n");
         }
 
@@ -544,7 +542,7 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
         uint8_t protoId = bct->_mimic_disguise_vehicleID ? bct->_mimic_disguise_vehicleID : bct->_vehicleID;
         if ( (size_t)protoId < world->GetVhclProtos().size() )
             saveInvisibleState = saveInvisibleState ||
-                                 (world->GetVhclProtos().at(protoId).buff.allow &&
+                                 (world->GetVhclProtos().at(protoId).buff.valid &&
                                   world->GetVhclProtos().at(protoId).buff.invisible);
     }
 

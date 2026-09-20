@@ -403,7 +403,11 @@ struct TDamagedFXConfig
 // Deflect is the first dedicated gameplay module carried by this shared profile.
 struct TVehicleBuffConfig
 {
-    bool allow = false;
+    // Internal runtime marker. It is set only when a Vehicle resolves a valid
+    // buff_id to a new_buff profile; it is not an authored script parameter.
+    bool valid = false;
+    int32_t profile_id = -1;
+    uint32_t revision = 0;
     std::string name;
     std::string icon;
 
@@ -427,7 +431,11 @@ struct TVehicleBuffConfig
 
 struct TWeaponDebuffConfig
 {
-    bool allow = false;
+    // Internal runtime marker. It is set only when a Weapon/SuperItem resolves
+    // a valid debuff_id to a new_debuff profile; it is not script-authored.
+    bool valid = false;
+    int32_t profile_id = -1;
+    uint32_t revision = 0;
     bool allow_on_host_station = false;
     bool inherit_to_children = false;
     std::string name;
@@ -472,14 +480,13 @@ struct TWeaponDebuffConfig
 
 struct TSuperItemProfile
 {
-    std::string id;
+    std::string id; // Optional display name; profile_path is the runtime identity.
     bool valid = false;
-    bool duplicate = false;
 
     int wave_vp = 0;
     std::string wave_3ds;
     std::string wave_base;
-    std::string fallout_fx_profile; // Data-relative profile activated locally behind the propagated wave
+    std::string fallout_fx_profile; // Explicit Data\... FX profile activated locally behind the propagated wave
     vec3d wave_axis_scale = vec3d(1.0, 1.0, 1.0);
     TVisualTint wave_tint;
     float wave_start_speed = 0.0f;
@@ -497,6 +504,7 @@ struct TSuperItemProfile
 
     int wave_unit_damage = 0;
     int wave_building_total_destruction = 0; // explicit authored percentage 0..100
+    int debuff_id = -1;
     TWeaponDebuffConfig debuff;
     TVhclSound detonate_snd;
     TVhclSound wave_snd;
@@ -798,8 +806,9 @@ struct TVhclProto
     int16_t field_1D6D = 0;
     int16_t field_1D6F = 0;
     int shield = 0;
-    // OpenNeoUA custom: reusable positive-status profile. Generic Buff state and
-    // feature-specific modules share this one per-Vehicle source of truth.
+    // OpenNeoUA custom: data-driven Buff link. buff_id resolves a reusable
+    // new_buff profile into this runtime copy; -1 means no Buff.
+    int buff_id = -1;
     TVehicleBuffConfig buff;
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
@@ -1132,6 +1141,9 @@ struct TWeapProto
     // the generic shk_launch shake for the directly controlled player weapon and
     // is fired once per successful LaunchMissile() call, regardless of num_weapons.
     TSndFxPosParam shk_launch_player;
+    // OpenNeoUA custom: data-driven Debuff link. debuff_id resolves a reusable
+    // new_debuff profile into this runtime copy; -1 means no Debuff.
+    int debuff_id = -1;
     TWeaponDebuffConfig debuff;
     TWeaponClusterConfig cluster;
     // OpenNeoUA UI helper: combines the carrier num_weapons range with

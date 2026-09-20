@@ -4184,7 +4184,7 @@ void NC_STACK_ypabact::ClearActiveDebuff()
 
 void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner)
 {
-    if ( !debuff.allow || debuff.duration <= 0 )
+    if ( !debuff.valid || debuff.duration <= 0 )
         return;
 
     const bool hostStation = _bact_type == BACT_TYPES_ROBO;
@@ -11797,7 +11797,7 @@ static void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapPr
         dmg.unit = shooter;
         target->ModifyEnergy(&dmg);
 
-        if ( wproto.debuff.allow && target->_energy > 0 && target->_status != BACT_STATUS_DEAD )
+        if ( wproto.debuff.valid && target->_energy > 0 && target->_status != BACT_STATUS_DEAD )
             target->ApplyDebuff(wproto.debuff, shooter);
     }
 
@@ -15421,7 +15421,7 @@ bool NC_STACK_ypabact::ConsumeBuffDeflectCharge()
 
 void NC_STACK_ypabact::SpawnBuffDeflectVisual(const vec3d &pos, const mat3x3 &rot)
 {
-    if ( !_world || !_buff.allow )
+    if ( !_world || !_buff.valid )
         return;
 
     // Deflect event visual uses the shared transient loader: 3DS -> BASE -> VP.
