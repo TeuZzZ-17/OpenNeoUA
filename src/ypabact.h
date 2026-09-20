@@ -561,7 +561,7 @@ public:
     bool IsInvulnerableToDamage() const;
     bool HasActiveBuff() const
     {
-        if ( !_buff.allow )
+        if ( !_buff.valid )
             return false;
 
         const bool hasGameplayFeature = _buff_deflect_charges_max > 0 ||
@@ -575,7 +575,7 @@ public:
 
         return !_buff.name.empty() || !_buff.icon.empty() || _buff.glow_intensity > 0.0f;
     }
-    bool HasDeflectBuff() const { return _buff.allow && _buff.deflect_charges > 0; }
+    bool HasDeflectBuff() const { return _buff.valid && _buff.deflect_charges > 0; }
     int GetBuffDeflectChargesRemaining() const { return _buff.deflect_charges; }
     bool CanBuffDeflectEnergy(int energy) const
     {

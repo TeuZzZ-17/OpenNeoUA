@@ -2628,7 +2628,10 @@ int NC_STACK_ypaworld::sub_4DA41C(TLevelDescription *mapp, const std::string &fn
         new World::Parsers::LevelSuperItemsParser(this),
     };
 
-    return ScriptParser::ParseFile(fname, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    const bool parsed = ScriptParser::ParseFile(fname, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    if ( parsed )
+        ResolveStatusProfileLinks();
+    return parsed;
 }
 
 

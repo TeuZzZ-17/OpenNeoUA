@@ -1042,14 +1042,94 @@ static bool ParseVPScaleParam(ScriptParser::Parser &parser,
     return false;
 }
 
+static bool ParseBuffParam(ScriptParser::Parser &parser,
+                           const std::string &p1,
+                           const std::string &p2,
+                           TVehicleBuffConfig &buff)
+{
+    if ( !StriCmp(p1, "buff_name") )
+        buff.name = p2;
+    else if ( !StriCmp(p1, "buff_icon") )
+        buff.icon = p2;
+    else if ( !StriCmp(p1, "buff_invisible") )
+        buff.invisible = StrGetBool(p2);
+    else if ( !StriCmp(p1, "buff_invisible_reveal_vp") )
+    {
+        const long vp = parser.stol(p2, NULL, 0);
+        buff.invisible_reveal_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
+            ? (int16_t)vp
+            : 0;
+    }
+    else if ( !StriCmp(p1, "buff_invisible_reveal_3ds") )
+        buff.invisible_reveal_3ds = p2;
+    else if ( !StriCmp(p1, "buff_invisible_reveal_base") )
+        buff.invisible_reveal_base = p2;
+    else if ( !StriCmp(p1, "buff_invulnerable") )
+        buff.invulnerable = StrGetBool(p2);
+    else if ( !StriCmp(p1, "buff_deflect_charges") )
+    {
+        const long value = parser.stol(p2, NULL, 0);
+        buff.deflect_charges = value > 0
+            ? (int)std::min<long>(value, std::numeric_limits<int>::max())
+            : 0;
+    }
+    else if ( !StriCmp(p1, "buff_deflect_max_energy") )
+    {
+        const long value = parser.stol(p2, NULL, 0);
+        buff.deflect_max_energy = value > 0
+            ? (int)std::min<long>(value, std::numeric_limits<int>::max())
+            : 0;
+    }
+    else if ( !StriCmp(p1, "buff_deflect_end_damage_reduction") )
+    {
+        TAuthoredScalar value;
+        buff.deflect_end_damage_reduction = 0.0f;
+
+        if ( ParseAuthoredScalar(p2, value) && value.percent && value.value >= 0.0f )
+            buff.deflect_end_damage_reduction = std::min(value.value, 100.0f) / 100.0f;
+        else
+            ypa_log_out("WARNING: buff_deflect_end_damage_reduction='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Using 0%%.\n",
+                        p2.c_str());
+    }
+    else if ( !StriCmp(p1, "buff_deflect_vp") )
+    {
+        const long vp = parser.stol(p2, NULL, 0);
+        buff.deflect_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
+            ? (int16_t)vp
+            : 0;
+    }
+    else if ( !StriCmp(p1, "buff_deflect_3ds") )
+        buff.deflect_3ds = p2;
+    else if ( !StriCmp(p1, "buff_deflect_base") )
+        buff.deflect_base = p2;
+    else if ( !StriCmp(p1, "buff_glow_intensity") )
+    {
+        const float value = parser.stof(p2, 0);
+        buff.glow_intensity = std::isfinite(value)
+            ? std::max(0.0f, std::min(value, 1.0f))
+            : 0.0f;
+    }
+    else if ( ParseTintParam(parser, "buff_glow_tint", p1, p2, buff.glow_tint, true) )
+        return true;
+    else if ( !StriCmp(p1, "buff_glow_pulse_seconds") )
+    {
+        const float value = parser.stof(p2, 0);
+        buff.glow_pulse_seconds = std::isfinite(value) && value > 0.0f
+            ? std::min(value, 60.0f)
+            : 0.0f;
+    }
+    else
+        return false;
+
+    return true;
+}
+
 static bool ParseDebuffParam(ScriptParser::Parser &parser,
                              const std::string &p1,
                              const std::string &p2,
                              TWeaponDebuffConfig &debuff)
 {
-    if ( !StriCmp(p1, "debuff_allow") )
-        debuff.allow = parser.stol(p2, NULL, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_allow_on_host_station") )
+    if ( !StriCmp(p1, "debuff_allow_on_host_station") )
         debuff.allow_on_host_station = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_inherit_to_children") )
         debuff.inherit_to_children = parser.stol(p2, NULL, 0) != 0;
@@ -1146,6 +1226,126 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         return false;
 
     return true;
+}
+
+bool BuffProfileParser::IsScope(ScriptParser::Parser &parser,
+                                const std::string &word,
+                                const std::string &opt)
+{
+    if ( StriCmp(word, "new_buff") )
+        return false;
+
+    _profile = NULL;
+    _profileID = -1;
+
+    if ( opt.empty() )
+    {
+        ypa_log_out("WARNING: new_buff requires a numeric id; profile ignored.\n");
+        return true;
+    }
+
+    const long value = parser.stol(opt, NULL, 0);
+    if ( value < 0 || value > std::numeric_limits<int32_t>::max() )
+    {
+        ypa_log_out("WARNING: new_buff id '%s' is invalid; profile ignored.\n", opt.c_str());
+        return true;
+    }
+
+    _profileID = (int32_t)value;
+    uint32_t revision = 1;
+    auto oldProfile = _profiles.find(_profileID);
+    if ( oldProfile != _profiles.end() )
+    {
+        revision = oldProfile->second.revision + 1;
+        ypa_log_out("WARNING: new_buff %d is defined more than once; replacing the previous profile.\n", _profileID);
+    }
+
+    TVehicleBuffConfig profile;
+    profile.valid = true;
+    profile.profile_id = _profileID;
+    profile.revision = revision;
+    _profiles[_profileID] = profile;
+    _profile = &_profiles[_profileID];
+    return true;
+}
+
+int BuffProfileParser::Handle(ScriptParser::Parser &parser,
+                              const std::string &p1,
+                              const std::string &p2)
+{
+    if ( !StriCmp(p1, "end") )
+    {
+        _profile = NULL;
+        _profileID = -1;
+        return ScriptParser::RESULT_SCOPE_END;
+    }
+
+    if ( !_profile )
+        return ScriptParser::RESULT_OK;
+
+    return ParseBuffParam(parser, p1, p2, *_profile)
+        ? ScriptParser::RESULT_OK
+        : ScriptParser::RESULT_UNKNOWN;
+}
+
+bool DebuffProfileParser::IsScope(ScriptParser::Parser &parser,
+                                  const std::string &word,
+                                  const std::string &opt)
+{
+    if ( StriCmp(word, "new_debuff") )
+        return false;
+
+    _profile = NULL;
+    _profileID = -1;
+
+    if ( opt.empty() )
+    {
+        ypa_log_out("WARNING: new_debuff requires a numeric id; profile ignored.\n");
+        return true;
+    }
+
+    const long value = parser.stol(opt, NULL, 0);
+    if ( value < 0 || value > std::numeric_limits<int32_t>::max() )
+    {
+        ypa_log_out("WARNING: new_debuff id '%s' is invalid; profile ignored.\n", opt.c_str());
+        return true;
+    }
+
+    _profileID = (int32_t)value;
+    uint32_t revision = 1;
+    auto oldProfile = _profiles.find(_profileID);
+    if ( oldProfile != _profiles.end() )
+    {
+        revision = oldProfile->second.revision + 1;
+        ypa_log_out("WARNING: new_debuff %d is defined more than once; replacing the previous profile.\n", _profileID);
+    }
+
+    TWeaponDebuffConfig profile;
+    profile.valid = true;
+    profile.profile_id = _profileID;
+    profile.revision = revision;
+    _profiles[_profileID] = profile;
+    _profile = &_profiles[_profileID];
+    return true;
+}
+
+int DebuffProfileParser::Handle(ScriptParser::Parser &parser,
+                                const std::string &p1,
+                                const std::string &p2)
+{
+    if ( !StriCmp(p1, "end") )
+    {
+        _profile = NULL;
+        _profileID = -1;
+        return ScriptParser::RESULT_SCOPE_END;
+    }
+
+    if ( !_profile )
+        return ScriptParser::RESULT_OK;
+
+    return ParseDebuffParam(parser, p1, p2, *_profile)
+        ? ScriptParser::RESULT_OK
+        : ScriptParser::RESULT_UNKNOWN;
 }
 
 static bool ParseVPSpinParam(ScriptParser::Parser &parser,
@@ -2710,103 +2910,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->shield = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "buff_allow") )
-    {
-        _vhcl->buff.allow = StrGetBool(p2);
-    }
-    else if ( !StriCmp(p1, "buff_name") )
-    {
-        _vhcl->buff.name = p2;
-    }
-    else if ( !StriCmp(p1, "buff_icon") )
-    {
-        _vhcl->buff.icon = p2;
-    }
-    else if ( !StriCmp(p1, "buff_invisible") )
-    {
-        _vhcl->buff.invisible = StrGetBool(p2);
-    }
-    else if ( !StriCmp(p1, "buff_invisible_reveal_vp") )
-    {
-        const long vp = parser.stol(p2, NULL, 0);
-        _vhcl->buff.invisible_reveal_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
-            ? (int16_t)vp
-            : 0;
-    }
-    else if ( !StriCmp(p1, "buff_invisible_reveal_3ds") )
-    {
-        _vhcl->buff.invisible_reveal_3ds = p2;
-    }
-    else if ( !StriCmp(p1, "buff_invisible_reveal_base") )
-    {
-        _vhcl->buff.invisible_reveal_base = p2;
-    }
-    else if ( !StriCmp(p1, "buff_invulnerable") )
-    {
-        _vhcl->buff.invulnerable = StrGetBool(p2);
-    }
-    else if ( !StriCmp(p1, "buff_deflect_charges") )
+    else if ( !StriCmp(p1, "buff_id") )
     {
         const long value = parser.stol(p2, NULL, 0);
-        _vhcl->buff.deflect_charges = value > 0
-            ? (int)std::min<long>(value, std::numeric_limits<int>::max())
-            : 0;
-    }
-    else if ( !StriCmp(p1, "buff_deflect_max_energy") )
-    {
-        const long value = parser.stol(p2, NULL, 0);
-        _vhcl->buff.deflect_max_energy = value > 0
-            ? (int)std::min<long>(value, std::numeric_limits<int>::max())
-            : 0;
-    }
-    else if ( !StriCmp(p1, "buff_deflect_end_damage_reduction") )
-    {
-        TAuthoredScalar value;
-        _vhcl->buff.deflect_end_damage_reduction = 0.0f;
-
-        if ( ParseAuthoredScalar(p2, value) && value.percent && value.value >= 0.0f )
-        {
-            _vhcl->buff.deflect_end_damage_reduction =
-                std::min(value.value, 100.0f) / 100.0f;
-        }
-        else
-        {
-            ypa_log_out("WARNING: vehicle %d buff_deflect_end_damage_reduction='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Using 0%%.\n",
-                        _vhclID, p2.c_str());
-        }
-    }
-    else if ( !StriCmp(p1, "buff_deflect_vp") )
-    {
-        const long vp = parser.stol(p2, NULL, 0);
-        _vhcl->buff.deflect_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
-            ? (int16_t)vp
-            : 0;
-    }
-    else if ( !StriCmp(p1, "buff_deflect_3ds") )
-    {
-        _vhcl->buff.deflect_3ds = p2;
-    }
-    else if ( !StriCmp(p1, "buff_deflect_base") )
-    {
-        _vhcl->buff.deflect_base = p2;
-    }
-    else if ( !StriCmp(p1, "buff_glow_intensity") )
-    {
-        const float value = parser.stof(p2, 0);
-        _vhcl->buff.glow_intensity = std::isfinite(value)
-            ? std::max(0.0f, std::min(value, 1.0f))
-            : 0.0f;
-    }
-    else if ( ParseTintParam(parser, "buff_glow_tint", p1, p2,
-                             _vhcl->buff.glow_tint, true) )
-    {
-    }
-    else if ( !StriCmp(p1, "buff_glow_pulse_seconds") )
-    {
-        const float value = parser.stof(p2, 0);
-        _vhcl->buff.glow_pulse_seconds = std::isfinite(value) && value > 0.0f
-            ? std::min(value, 60.0f)
-            : 0.0f;
+        _vhcl->buff_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
     }
     else if ( !StriCmp(p1, "mass") )
     {
@@ -4468,6 +4577,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->proximity_defense_vertical_angle_max = 45.0;
         _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
+        _vhcl->buff_id = -1;
         _vhcl->buff = TVehicleBuffConfig();
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
@@ -4690,6 +4800,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->tracer = TWeaponTracerConfig();
         _wpn->laser_mesh = TWeapProto::TLaserMeshConfig();
         _wpn->type_icon = 65;
+        _wpn->debuff_id = -1;
         _wpn->debuff = TWeaponDebuffConfig();
         _wpn->cluster = TWeaponClusterConfig();
         _wpn->cluster.snd.volume = 120;
@@ -4832,8 +4943,13 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->recoil = ClampRecoilMultiplier(parser.stof(p2, 0));
     }
-    else if ( ParseDebuffParam(parser, p1, p2, _wpn->debuff) )
-    {}
+    else if ( !StriCmp(p1, "debuff_id") )
+    {
+        const long value = parser.stol(p2, NULL, 0);
+        _wpn->debuff_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
+    }
     else if ( !StriCmp(p1, "energy_heli") )
     {
         _wpn->energy_heli = parser.stof(p2, 0);
@@ -6660,8 +6776,14 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
             _profile->wave_building_total_destruction =
                 (int)std::lround(std::min(value.value, 100.0f));
     }
-    else if ( ParseDebuffParam(parser, p1, p2, _profile->debuff) )
-    {}
+    else if ( !StriCmp(p1, "debuff_id") )
+    {
+        const long value = parser.stol(p2, NULL, 0);
+        _profile->debuff_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
+        _profile->debuff = TWeaponDebuffConfig();
+    }
     else if ( ParseSuperItemSoundEventParam(parser, "detonate", p1, p2,
                                              _profile->detonate_snd) )
     {}
@@ -7781,9 +7903,9 @@ int LevelSuperItemsParser::Handle(ScriptParser::Parser &parser, const std::strin
     {
         _s->TimerValue = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "profile") )
+    else if ( !StriCmp(p1, "profile_path") )
     {
-        _s->ProfileId = p2;
+        _s->ProfilePath = p2;
     }
     else
         return ScriptParser::RESULT_UNKNOWN;

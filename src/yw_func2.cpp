@@ -3970,12 +3970,7 @@ static std::vector<std::string> db_weapon_specialties(const World::TWeapProto &p
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_CHAIN_WEAPON));
     if ( p.armor_penetration_targets > 0 )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_ARMOR_PENETRATION));
-    if ( p.debuff.allow || (p.debuff.damage.defined && p.debuff.damage.value > 0.0f) ||
-         p.debuff.duration > 0 && (!p.debuff.name.empty() || p.debuff.mindcontrol ||
-         p.debuff.stun || p.debuff.force_malus != 0.0f || p.debuff.maxrot_malus != 0.0f ||
-         p.debuff.shield_malus != 0.0f || p.debuff.mgun_shot_time_malus != 0.0f ||
-         p.debuff.shot_time_malus != 0.0f || p.debuff.snd_pitch_multiplier != 1.0f ||
-         !p.debuff.vps.empty() || !p.debuff.mesh3ds.empty()) )
+    if ( p.debuff.valid )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_DEBUFF));
     if ( p.multi_target > 1 &&
          (p._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE ||
@@ -4060,9 +4055,9 @@ static std::vector<std::string> db_vehicle_specialties(
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MOBILE_GUN_PLATFORM));
     if ( p.is_mimic )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_MIMIC));
-    if ( p.buff.allow && p.buff.invisible )
+    if ( p.buff.valid && p.buff.invisible )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVISIBILITY));
-    if ( p.buff.allow && p.buff.invulnerable )
+    if ( p.buff.valid && p.buff.invulnerable )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_INVULNERABLE));
     if ( db_vehicle_has_kamikaze(p, weapons, vehicles) )
         items.push_back(Locale::Text::OpenUA(Locale::OUA_DB_KAMIKAZE));

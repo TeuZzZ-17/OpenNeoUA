@@ -1616,7 +1616,7 @@ struct TMapSuperItem
     int32_t LastSec = 0;
     int32_t CurrentRadius = 0; // Current radius of the propagation wave
     int32_t LastRadius = 0;
-    std::string ProfileId;
+    std::string ProfilePath;
     int32_t CustomProfileIndex = -1;
     int32_t WaveTransientVPId = 0;
     bool WavePalEffectStarted = false;
@@ -2578,6 +2578,7 @@ public:
 //protected:
     void sub_4491A0(const std::string &movie_fname);
     bool LoadProtosScript(const std::string &filename);
+    void ResolveStatusProfileLinks();
     bool LoadSpectatorVehicleProto();
     bool sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const std::string &fname);
     void ypaworld_func158__sub4__sub1();
@@ -2827,7 +2828,7 @@ public:
     void CellCheckHealth(cellArea *cell, int a5, NC_STACK_ypabact *a6);
     void InitBuddies();
     void InitSuperItems();
-    bool LoadSuperItemProfiles(std::vector<World::TSuperItemProfile> *retiredProfiles = NULL);
+    bool LoadSuperItemProfilePath(const std::string &profilePath, World::TSuperItemProfile &outProfile);
     bool LoadAtmosphericFXProfile(const TLevelDescription &mapp);
     bool LoadAtmosphericFXProfilePath(const std::string &profilePath, World::TAtmosphericFXProfile &outProfile);
     void ClearAtmosphericFXRuntime();
@@ -3206,6 +3207,8 @@ public:
     std::vector<World::TWeapProto> _weaponProtos;
     std::vector<World::TBuildingProto> _buildProtos;
     std::vector<World::TRoboProto> _roboProtos;
+    std::map<int32_t, World::TVehicleBuffConfig> _buffProfiles;
+    std::map<int32_t, World::TWeaponDebuffConfig> _debuffProfiles;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
     World::TAtmosphericFXProfile _atmosphericFXProfile;
 

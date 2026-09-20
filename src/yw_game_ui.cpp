@@ -3341,7 +3341,9 @@ void sb_0x4f8f64__sub1(NC_STACK_ypaworld *yw)
             int wh = yw->_screenSize.x / 2;
             int hh = yw->_screenSize.y / 2;
 
-            GFX::Engine.raster_func217( yw->GetColor(12) );
+            SDL_Color selectionColor = yw->GetColor(12);
+            yw_GetFactionUiAccent(yw, &selectionColor);
+            GFX::Engine.raster_func217(selectionColor);
 
             GFX::Engine.raster_func201( {dword_516510 - wh,
                                          dword_516514 - hh,
@@ -14349,7 +14351,7 @@ static int yw_GetInfoWeaponEffectIcons(NC_STACK_ypaworld *yw,
     StatusIconList paths;
     int pathCount = 0;
 
-    if ( weap->debuff.allow )
+    if ( weap->debuff.valid )
         StatusIconAdd(paths, pathCount, StatusIconTrimPath(weap->debuff.icon));
 
     int iconCount = 0;

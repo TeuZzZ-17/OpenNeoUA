@@ -1981,8 +1981,9 @@ bool GFXEngine::IsUiAccentTileset(uint8_t id)
 {
     // Gameplay UI atlases use one vanilla source image. Non-Resistance factions
     // receive their owner colour at runtime, so no faction-specific copies are needed.
-    return id == 0 || id == 2 || id == 3 || id == 5 || id == 8 ||
-           (id >= 9 && id <= 15) || (id >= 21 && id <= 25) || id == 30;
+    return id == 0 || id == 2 || id == 3 || id == 4 || id == 5 || id == 6 || id == 8 ||
+           (id >= 9 && id <= 15) || (id >= 21 && id <= 25) || id == 30 ||
+           (id >= 40 && id <= 44);
 }
 
 bool GFXEngine::IsUiAccentNeutralHighlightTileset(uint8_t id)
@@ -2089,11 +2090,21 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
 
     const bool fullFactionAtlas = IsFullFactionUiAtlas(tilesetId);
     const int bytesPerPixel = copy->format->BytesPerPixel;
+    if (SDL_LockSurface(source) != 0)
+    {
+        SDL_FreeSurface(copy);
+        return source;
+    }
     if (bytesPerPixel >= 2 && bytesPerPixel <= 4 && SDL_LockSurface(copy) == 0)
     {
         for (int y = 0; y < copy->h; ++y)
         {
             uint8_t *row = (uint8_t *)copy->pixels + y * copy->pitch;
+            // SDL_ConvertSurface turns colour-key pixels into zero-alpha pixels.
+            // DrawFill tests the packed colour key, so preserve the source bytes
+            // before remapping: transparent glyph pixels must not erase the UI below.
+            memcpy(row, (uint8_t *)source->pixels + y * source->pitch,
+                   source->w * bytesPerPixel);
             for (int x = 0; x < copy->w; ++x)
             {
                 uint8_t *pixel = row + x * bytesPerPixel;
@@ -2147,6 +2158,9 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
 
                 value = SDL_MapRGBA(copy->format, themed.r, themed.g,
                                     themed.b, original.a);
+                // A visible yellow accent must not become the transparent key.
+                if (hasColorKey && value == sourceColorKey)
+                    value ^= 1u << copy->format->Bshift;
                 if (bytesPerPixel == 2)
                     memcpy(pixel, &value, 2);
                 else if (bytesPerPixel == 3)
@@ -2163,79 +2177,19 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
                 }
                 else
                     memcpy(pixel, &value, 4);
-            }
-        }
-
-        // ENERGY.FON uses one-pixel-wide fill strips at x=74..81. In the
-        // vanilla H_E_P atlas their first two rows are colour-key transparent,
-        // because the cyan background bar underneath normally hides that gap.
-        // With a faction tint the uncovered cap becomes visible above the value
-        // text. For the tinted runtime copy only, extend each fill strip upward
-        // by copying its first real coloured pixel into those two transparent
-        // rows. Resistance never enters this path and stays pixel-perfect vanilla.
-        if (tilesetId == 30 && hasColorKey && copy->w > 81 && copy->h > 4)
-        {
-            auto readPixel = [copy, bytesPerPixel](int x, int y) -> uint32_t
-            {
-                uint8_t *pixel = (uint8_t *)copy->pixels + y * copy->pitch +
-                                 x * bytesPerPixel;
-                uint32_t value = 0;
-
-                if (bytesPerPixel == 2)
-                    memcpy(&value, pixel, 2);
-                else if (bytesPerPixel == 3)
-                {
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-                    value = pixel[0] << 16 | pixel[1] << 8 | pixel[2];
-#else
-                    value = pixel[0] | pixel[1] << 8 | pixel[2] << 16;
-#endif
-                }
-                else
-                    memcpy(&value, pixel, 4);
-
-                return value;
-            };
-
-            auto writePixel = [copy, bytesPerPixel](int x, int y, uint32_t value)
-            {
-                uint8_t *pixel = (uint8_t *)copy->pixels + y * copy->pitch +
-                                 x * bytesPerPixel;
-
-                if (bytesPerPixel == 2)
-                    memcpy(pixel, &value, 2);
-                else if (bytesPerPixel == 3)
-                {
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-                    pixel[0] = (value >> 16) & 0xff;
-                    pixel[1] = (value >> 8) & 0xff;
-                    pixel[2] = value & 0xff;
-#else
-                    pixel[0] = value & 0xff;
-                    pixel[1] = (value >> 8) & 0xff;
-                    pixel[2] = (value >> 16) & 0xff;
-#endif
-                }
-                else
-                    memcpy(pixel, &value, 4);
-            };
-
-            for (int x = 74; x <= 81; ++x)
-            {
-                const uint32_t fillPixel = readPixel(x, 4);
-                if (fillPixel == sourceColorKey)
-                    continue;
-
-                for (int y = 2; y <= 3; ++y)
-                {
-                    if (readPixel(x, y) == sourceColorKey)
-                        writePixel(x, y, fillPixel);
-                }
             }
         }
 
         SDL_UnlockSurface(copy);
     }
+    else
+    {
+        SDL_UnlockSurface(source);
+        SDL_FreeSurface(copy);
+        return source;
+    }
+
+    SDL_UnlockSurface(source);
 
     _uiAccentSurfaces[cacheKey] = copy;
     return copy;
@@ -2334,7 +2288,12 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
                 srcR.right = chrr.x + x_off + 1;
 
             SDL_Surface *source = tile->img->GetSwTex();
-            if (uiAccent && IsUiAccentTileset(tileId))
+            // TYPE_NS also contains unit icons and health bars. Only its frame
+            // glyphs belong to the UI theme; the other symbols keep their colours.
+            const bool squadFrameGlyph = tileId == 28 &&
+                (v13 == '?' || v13 == '$' || v13 == '%' || v13 == '&' ||
+                 v13 == '/' || v13 == '=' || v13 == '{' || v13 == '}');
+            if (uiAccent && (IsUiAccentTileset(tileId) || squadFrameGlyph))
                 source = GetUiAccentSurface(source, *uiAccent, tileId);
             if (opacity == 255)
                 DrawFill(source, srcR, Screen(), dstR);

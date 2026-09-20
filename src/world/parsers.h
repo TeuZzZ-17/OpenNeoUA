@@ -114,6 +114,32 @@ protected:
     TSuperItemProfile *_profile = NULL;
 };
 
+class BuffProfileParser : public ScriptParser::DataHandler
+{
+public:
+    BuffProfileParser(std::map<int32_t, TVehicleBuffConfig> *profiles)
+    : _profiles(*profiles) {};
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+protected:
+    std::map<int32_t, TVehicleBuffConfig> &_profiles;
+    TVehicleBuffConfig *_profile = NULL;
+    int32_t _profileID = -1;
+};
+
+class DebuffProfileParser : public ScriptParser::DataHandler
+{
+public:
+    DebuffProfileParser(std::map<int32_t, TWeaponDebuffConfig> *profiles)
+    : _profiles(*profiles) {};
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+protected:
+    std::map<int32_t, TWeaponDebuffConfig> &_profiles;
+    TWeaponDebuffConfig *_profile = NULL;
+    int32_t _profileID = -1;
+};
+
 class AtmosphericFXProfileParser : public ScriptParser::DataHandler
 {
 public:
