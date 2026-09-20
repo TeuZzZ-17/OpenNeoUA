@@ -69,6 +69,40 @@ static constexpr float DEBUG_GAMEPLAY_TIME_SCALE = 0.20f;
 static constexpr float ROBO_DEATH_TIME_SCALE_MAX_DISTANCE_LIMIT = 1000000.0f;
 static constexpr uint32_t PLASMA_CURRENCY_HUD_PULSE_MS = 350;
 
+// OpenNeoUA: when a Vehicle does not author snd_genesis_pitch, derive a fixed
+// Genesis pitch from its energy. The calibration follows the supplied reference
+// points exactly and stays monotonic between and beyond them.
+static int yw_GetAutomaticGenesisPitch(int energy)
+{
+    struct GenesisPitchPoint
+    {
+        int energy;
+        int pitch;
+    };
+
+    static constexpr GenesisPitchPoint points[] = {
+        {  9500,  -100 },
+        { 18000,  -800 },
+        { 28000, -2000 },
+    };
+
+    const GenesisPitchPoint *low = &points[0];
+    const GenesisPitchPoint *high = &points[1];
+
+    if ( energy > points[1].energy )
+    {
+        low = &points[1];
+        high = &points[2];
+    }
+
+    const double span = (double)(high->energy - low->energy);
+    const double t = ((double)energy - (double)low->energy) / span;
+    const double pitch = (double)low->pitch +
+                         t * (double)(high->pitch - low->pitch);
+
+    return (int)std::lround(pitch);
+}
+
 struct TimedGameplayScaleProfile
 {
     float scale = 1.0f;
@@ -4682,7 +4716,17 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
             TSoundSource *smpl_inf = &bacto->_soundcarrier.Sounds[ i ];
 
             smpl_inf->Volume = vhcl.sndFX[i].volume;
-            vhcl.sndFX[i].ConfigureSoundSourcePitch(*smpl_inf);
+
+            if ( i == World::TVhclProto::SND_GENESIS && vhcl.sndFX[i].auto_pitch )
+            {
+                const int genesisPitch = yw_GetAutomaticGenesisPitch(vhcl.energy);
+                smpl_inf->ConfigurePitchRange(genesisPitch, genesisPitch);
+            }
+            else
+            {
+                vhcl.sndFX[i].ConfigureSoundSourcePitch(*smpl_inf);
+            }
+
             smpl_inf->Radius = vhcl.sndFX[i].radius;
             smpl_inf->PriorityBias = (i == World::TVhclProto::SND_COCKPIT) ? 4096 : 0;
 
