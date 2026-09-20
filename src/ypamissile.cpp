@@ -2732,6 +2732,17 @@ void NC_STACK_ypamissile::AttachDelayedDetonationToTarget(NC_STACK_ypabact *targ
     _mislFlags |= FLAG_MISL_COUNTDELAY;
     _fly_dir_length = 0.0;
     _mislDirectPushRecipientGids.clear();
+
+    // delay_time_debuff_id belongs to the successful attachment event, not to
+    // the later explosion. Reuse the normal Debuff runtime so duration,
+    // refresh, Host Station rules and all future Debuff behavior stay shared.
+    if ( _world && _vehicleID >= 0 &&
+         (size_t)_vehicleID < _world->GetWeaponsProtos().size() )
+    {
+        World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vehicleID);
+        if ( wproto.delay_time_debuff.valid )
+            target->ApplyDebuff(wproto.delay_time_debuff, _mislEmitter);
+    }
 }
 
 NC_STACK_ypabact *NC_STACK_ypamissile::FindAttachedTarget()

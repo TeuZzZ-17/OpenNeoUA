@@ -4802,6 +4802,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->type_icon = 65;
         _wpn->debuff_id = -1;
         _wpn->debuff = TWeaponDebuffConfig();
+        _wpn->delay_time_debuff_id = 0;
+        _wpn->delay_time_debuff = TWeaponDebuffConfig();
         _wpn->cluster = TWeaponClusterConfig();
         _wpn->cluster.snd.volume = 120;
         _wpn->cluster.snd.sndPrm.mag0 = 1.0;
@@ -5317,6 +5319,13 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "delay_time") )
     {
         _wpn->delay_time = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "delay_time_debuff_id") )
+    {
+        const long value = parser.stol(p2, NULL, 0);
+        _wpn->delay_time_debuff_id = value > 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : 0;
     }
     else if ( !StriCmp(p1, "shot_time") )
     {

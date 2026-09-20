@@ -365,6 +365,19 @@ bool StatusIconIsNonRoboGun(NC_STACK_ypabact *bact)
     return !gun->IsRoboGun();
 }
 
+NC_STACK_ypabact *StatusIconGetRoboGunHostStation(NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->_bact_type != BACT_TYPES_GUN || StatusIconIsNonRoboGun(bact) )
+        return NULL;
+
+    NC_STACK_ypabact *host = bact->_host_station;
+    if ( !host || host == bact || host->_bact_type != BACT_TYPES_ROBO ||
+         host->getBACT_pWorld() != bact->getBACT_pWorld() )
+        return NULL;
+
+    return host;
+}
+
 bool StatusIconCanUseVehicleCapabilityUnit(NC_STACK_ypabact *bact)
 {
     return bact &&
@@ -917,6 +930,16 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
     if ( markerCenterX )
         *markerCenterX = barLeft + barWidth / 2 - yw->_screenSize.x / 2;
 
+    // A Host Station and its integrated Guns are one gameplay entity for
+    // status presentation. Keep the Gun's normal world HP UI, but do not draw
+    // a second Buff/Debuff/status row above it.
+    if ( bact && bact->_bact_type == BACT_TYPES_GUN &&
+         !StatusIconIsNonRoboGun(bact) )
+    {
+        g_statusIconBlinkStates.erase(bact);
+        return;
+    }
+
     StatusIconList desiredIcons;
     int desiredCount = StatusIconCollect(yw, bact, vhcl, desiredIcons);
 
@@ -1118,7 +1141,6 @@ bool StatusIconCanRenderCockpitUnit(NC_STACK_ypabact *bact)
 {
     if ( !bact ||
          bact->_owner == World::OWNER_0 ||
-         bact->_energy_max <= 0 ||
          bact->_vehicleID < 0 ||
          bact->_bact_type == BACT_TYPES_MISSLE ||
          bact->_bact_type == BACT_TYPES_ROBO ||
@@ -1129,9 +1151,19 @@ bool StatusIconCanRenderCockpitUnit(NC_STACK_ypabact *bact)
         return false;
 
     if ( bact->_bact_type == BACT_TYPES_GUN )
-        return StatusIconIsNonRoboGun(bact);
+    {
+        if ( StatusIconIsNonRoboGun(bact) )
+            return bact->_energy_max > 0;
 
-    return true;
+        NC_STACK_ypabact *host = StatusIconGetRoboGunHostStation(bact);
+        return host && host->_owner != World::OWNER_0 && host->_energy_max > 0 &&
+               host->_status != BACT_STATUS_DEAD &&
+               host->_status != BACT_STATUS_CREATE &&
+               host->_status != BACT_STATUS_BEAM &&
+               !(host->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER));
+    }
+
+    return bact->_energy_max > 0;
 }
 
 void StatusIconRenderCockpit(NC_STACK_ypaworld *yw, sklt_wis *wis, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, float hudX, float hudY)
@@ -1147,11 +1179,27 @@ void StatusIconRenderCockpit(NC_STACK_ypaworld *yw, sklt_wis *wis, NC_STACK_ypab
     if ( !StatusIconCanRenderCockpitUnit(bact) || !vhcl )
         return;
 
+    NC_STACK_ypabact *statusBact = bact;
+    World::TVhclProto *statusVhcl = vhcl;
+
+    // First-person control of an integrated Host Station Gun shows the Host
+    // Station's status state instead of creating a separate Gun status state.
+    NC_STACK_ypabact *host = StatusIconGetRoboGunHostStation(bact);
+    if ( host )
+    {
+        const int hostProtoId = ResolveUnitDisplayVehicleProtoId(yw, host);
+        if ( hostProtoId < 0 || (size_t)hostProtoId >= yw->_vhclProtos.size() )
+            return;
+
+        statusBact = host;
+        statusVhcl = &yw->_vhclProtos[hostProtoId];
+    }
+
     StatusIconList desiredIcons;
-    int desiredCount = StatusIconCollect(yw, bact, vhcl, desiredIcons);
+    int desiredCount = StatusIconCollect(yw, statusBact, statusVhcl, desiredIcons);
 
     StatusIconBlinkRenderList icons;
-    int iconCount = StatusIconBuildBlinkRenderList(yw, bact, desiredIcons, desiredCount, icons);
+    int iconCount = StatusIconBuildBlinkRenderList(yw, statusBact, desiredIcons, desiredCount, icons);
     if ( iconCount <= 0 )
         return;
 
