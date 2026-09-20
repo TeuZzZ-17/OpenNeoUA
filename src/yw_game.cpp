@@ -3,9 +3,11 @@
 #include <math.h>
 #include <stdio.h>
 #include <algorithm>
+#include <cctype>
 #include <vector>
 #include <functional>
 #include <limits>
+#include <map>
 #include <set>
 #include "env.h"
 #include "includes.h"
@@ -1447,12 +1449,25 @@ void NC_STACK_ypaworld::InitGates()
 void NC_STACK_ypaworld::InitSuperItems()
 {
     ClearSuperItemRuntime();
+
+    // SuperItem profiles are level-owned now: each begin_item loads the file
+    // referenced by profile_path instead of resolving a global profile id.
+    for (World::TSuperItemProfile &profile : _superItemProfiles)
+    {
+        profile.debuff.tick_snd.ClearSounds();
+        profile.detonate_snd.ClearSounds();
+        profile.wave_snd.ClearSounds();
+    }
+    _superItemProfiles.clear();
+
     _superItemSoundCarriers.resize(_levelInfo.SuperItems.size());
     _superItemWaveSoundCarriers.resize(_levelInfo.SuperItems.size());
     _superItemFalloutAtmosphericFXProfiles.resize(_levelInfo.SuperItems.size());
     _superItemFalloutSoundCarriers.resize(_levelInfo.SuperItems.size());
     _superItemFalloutSoundSamples.assign(_levelInfo.SuperItems.size(), NULL);
     _superItemFalloutActive.assign(_levelInfo.SuperItems.size(), 0);
+
+    std::map<std::string, int32_t> loadedProfilePaths;
 
     for ( size_t i = 0; i < _levelInfo.SuperItems.size(); i++ )
     {
@@ -1492,37 +1507,41 @@ void NC_STACK_ypaworld::InitSuperItems()
         sitem.CustomHitBuildingSlots.clear();
 
         if ( _isNetGame || sitem.Type != TMapSuperItem::TYPE_BOMB ||
-             sitem.ProfileId.empty() )
+             sitem.ProfilePath.empty() )
             continue;
+
+        std::string normalizedProfilePath;
+        if ( !uaNormalizeDataAssetPath(sitem.ProfilePath, &normalizedProfilePath, false) )
+        {
+            ypa_log_out("WARNING: SuperItem #%u profile_path '%s' is not a valid explicit Data path; using vanilla fallback.\n",
+                        (unsigned)i, sitem.ProfilePath.c_str());
+            continue;
+        }
+
+        std::string profilePathKey = normalizedProfilePath;
+        std::transform(profilePathKey.begin(), profilePathKey.end(), profilePathKey.begin(),
+                       [](unsigned char ch) { return (char)std::tolower(ch); });
 
         int32_t resolvedProfile = -1;
-        int matches = 0;
-        for (size_t profileIndex = 0; profileIndex < _superItemProfiles.size(); ++profileIndex)
+        const auto loadedIt = loadedProfilePaths.find(profilePathKey);
+        if ( loadedIt != loadedProfilePaths.end() )
+            resolvedProfile = loadedIt->second;
+        else
         {
-            if ( !StriCmp(_superItemProfiles[profileIndex].id, sitem.ProfileId) )
+            World::TSuperItemProfile loadedProfile;
+            if ( !LoadSuperItemProfilePath(normalizedProfilePath, loadedProfile) )
             {
-                resolvedProfile = (int32_t)profileIndex;
-                ++matches;
+                ypa_log_out("WARNING: SuperItem #%u profile_path '%s' could not be loaded; using vanilla fallback.\n",
+                            (unsigned)i, sitem.ProfilePath.c_str());
+                continue;
             }
-        }
 
-        if ( matches != 1 )
-        {
-            ypa_log_out("WARNING: SuperItem #%u profile '%s' is missing or ambiguous; using vanilla fallback.\n",
-                        (unsigned)i, sitem.ProfileId.c_str());
-            resolvedProfile = -1;
+            _superItemProfiles.push_back(std::move(loadedProfile));
+            resolvedProfile = (int32_t)_superItemProfiles.size() - 1;
+            loadedProfilePaths[profilePathKey] = resolvedProfile;
         }
-
-        if ( resolvedProfile < 0 || (size_t)resolvedProfile >= _superItemProfiles.size() )
-            continue;
 
         const World::TSuperItemProfile &profile = _superItemProfiles[resolvedProfile];
-        if ( !profile.valid || profile.duplicate )
-        {
-            ypa_log_out("WARNING: SuperItem #%u profile '%s' is invalid; using vanilla fallback.\n",
-                        (unsigned)i, profile.id.c_str());
-            continue;
-        }
 
         NC_STACK_base *waveVisual = NULL;
         if ( !profile.wave_3ds.empty() )
@@ -1552,7 +1571,7 @@ void NC_STACK_ypaworld::InitSuperItems()
             {
                 _superItemFalloutAtmosphericFXProfiles[i] = std::move(falloutProfile);
                 _superItemFalloutSoundCarriers[i].reset(new TSndCarrier());
-                ypa_log_out("OpenNeoUA: SuperItem #%u loaded fallout Atmospheric FX Data/%s.\n",
+                ypa_log_out("OpenNeoUA: SuperItem #%u loaded fallout Atmospheric FX profile '%s'.\n",
                             (unsigned)i, profile.fallout_fx_profile.c_str());
             }
             else
@@ -1561,6 +1580,20 @@ void NC_STACK_ypaworld::InitSuperItems()
                             (unsigned)i, profile.fallout_fx_profile.c_str());
             }
         }
+    }
+
+    // Load profile-owned sounds only after _superItemProfiles has reached its
+    // final layout. TVhclSound owns raw sample pointers and must not be moved
+    // after LoadSamples(), otherwise temporary/vector moves can duplicate the
+    // owning pointer and cause a use-after-free or double delete.
+    for (World::TSuperItemProfile &profile : _superItemProfiles)
+    {
+        if ( !profile.valid )
+            continue;
+        if ( profile.debuff.valid )
+            profile.debuff.tick_snd.LoadSamples();
+        profile.detonate_snd.LoadSamples();
+        profile.wave_snd.LoadSamples();
     }
 }
 
@@ -1624,7 +1657,7 @@ const World::TSuperItemProfile *NC_STACK_ypaworld::GetSuperItemProfile(const TMa
         return NULL;
 
     const World::TSuperItemProfile &profile = _superItemProfiles[sitem.CustomProfileIndex];
-    return profile.valid && !profile.duplicate ? &profile : NULL;
+    return profile.valid ? &profile : NULL;
 }
 
 bool NC_STACK_ypaworld::IsCustomSuperItem(const TMapSuperItem &sitem) const
@@ -7148,7 +7181,7 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
                 sitem.CustomHitUnitGids.push_back(targetGid);
             }
 
-            if ( canReceiveDamageAndDebuff && profile.debuff.allow &&
+            if ( canReceiveDamageAndDebuff && profile.debuff.valid &&
                  target->_energy > 0 && target->_status != BACT_STATUS_DEAD &&
                  !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
                 target->ApplyDebuff(profile.debuff, source, (int16_t)sitem.ActivateOwner);
@@ -7479,7 +7512,10 @@ int NC_STACK_ypaworld::yw_RestoreVehicleData()
         new World::Parsers::BuildProtoParser(this)
     };
 
-    return ScriptParser::ParseFile(buf, parsers, 0);
+    const bool parsed = ScriptParser::ParseFile(buf, parsers, 0);
+    if ( parsed )
+        ResolveStatusProfileLinks();
+    return parsed;
 }
 
 void NC_STACK_ypaworld::EnableLevelPasses()
