@@ -1276,40 +1276,52 @@ void NC_STACK_ypaworld::ResolveStatusProfileLinks()
         proto.buff = it->second;
     }
 
+    auto resolveWeaponDebuff = [this](size_t weaponId, int32_t profileId,
+                                      int32_t firstValidId, const char *parameterName,
+                                      World::TWeaponDebuffConfig &resolved)
+    {
+        if ( profileId < firstValidId )
+        {
+            if ( resolved.valid )
+            {
+                resolved.tick_snd.ClearSounds();
+                resolved = World::TWeaponDebuffConfig();
+            }
+            return;
+        }
+
+        auto it = _debuffProfiles.find(profileId);
+        if ( it == _debuffProfiles.end() )
+        {
+            if ( resolved.valid )
+            {
+                resolved.tick_snd.ClearSounds();
+                resolved = World::TWeaponDebuffConfig();
+            }
+            ypa_log_out("WARNING: weapon %u references missing %s %d; Debuff disabled.\n",
+                        (unsigned)weaponId, parameterName, profileId);
+            return;
+        }
+
+        if ( resolved.valid &&
+             resolved.profile_id == it->second.profile_id &&
+             resolved.revision == it->second.revision )
+            return;
+
+        if ( resolved.valid )
+            resolved.tick_snd.ClearSounds();
+        resolved = it->second;
+    };
+
     for (size_t i = 0; i < _weaponProtos.size(); ++i)
     {
         World::TWeapProto &proto = _weaponProtos[i];
-        if ( proto.debuff_id < 0 )
-        {
-            if ( proto.debuff.valid )
-            {
-                proto.debuff.tick_snd.ClearSounds();
-                proto.debuff = World::TWeaponDebuffConfig();
-            }
-            continue;
-        }
 
-        auto it = _debuffProfiles.find(proto.debuff_id);
-        if ( it == _debuffProfiles.end() )
-        {
-            if ( proto.debuff.valid )
-            {
-                proto.debuff.tick_snd.ClearSounds();
-                proto.debuff = World::TWeaponDebuffConfig();
-            }
-            ypa_log_out("WARNING: weapon %u references missing debuff_id %d; Debuff disabled.\n",
-                        (unsigned)i, proto.debuff_id);
-            continue;
-        }
-
-        if ( proto.debuff.valid &&
-             proto.debuff.profile_id == it->second.profile_id &&
-             proto.debuff.revision == it->second.revision )
-            continue;
-
-        if ( proto.debuff.valid )
-            proto.debuff.tick_snd.ClearSounds();
-        proto.debuff = it->second;
+        // debuff_id keeps its legacy rule where ID 0 is valid. The delayed
+        // attachment parameter is explicitly opt-in, so 0 means disabled.
+        resolveWeaponDebuff(i, proto.debuff_id, 0, "debuff_id", proto.debuff);
+        resolveWeaponDebuff(i, proto.delay_time_debuff_id, 1,
+                            "delay_time_debuff_id", proto.delay_time_debuff);
     }
 }
 
@@ -4943,6 +4955,8 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     // projectile Weapon SND_NORMAL/SND_LAUNCH/SND_HIT packages.
     if ( wproto.debuff.valid )
         wproto.debuff.tick_snd.LoadSamples();
+    if ( wproto.delay_time_debuff.valid )
+        wproto.delay_time_debuff.tick_snd.LoadSamples();
 
     wobj->SetParameters(wproto.initParams);
 

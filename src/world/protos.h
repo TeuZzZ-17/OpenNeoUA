@@ -1179,6 +1179,10 @@ struct TWeapProto
     int life_time_nt = 0;
     int drive_time = 0;
     int delay_time = 0;
+    // OpenNeoUA custom: optional Debuff applied immediately when a delayed
+    // projectile successfully attaches to a unit. 0 means disabled.
+    int delay_time_debuff_id = 0;
+    TWeaponDebuffConfig delay_time_debuff;
     float adistSector = 0;
     float adistBact = 0;
     int shot_time = 0;

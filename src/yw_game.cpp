@@ -7642,6 +7642,7 @@ void NC_STACK_ypaworld::ProtosFreeSounds()
             fx.ClearSounds();
 
         wep.debuff.tick_snd.ClearSounds();
+        wep.delay_time_debuff.tick_snd.ClearSounds();
     }
 
     for (World::TBuildingProto &proto : _buildProtos)
