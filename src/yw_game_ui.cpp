@@ -10678,10 +10678,6 @@ static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
 
     std::vector<NC_STACK_ypabact *> selected;
     selected.reserve(32);
-    float maxDistance = yw_GetWorldUiMaxDistance();
-    if (maxDistance <= 0.0f)
-        maxDistance = 5700.0f;
-    const float maxDistanceSquared = maxDistance * maxDistance;
 
     auto collect = [&](NC_STACK_ypabact *bact)
     {
@@ -10691,9 +10687,7 @@ static void yw_SelectWorldUnitsInDrag(NC_STACK_ypaworld *yw)
             return;
         }
 
-        float distanceX = bact->_position.x - yw->_viewerPosition.x;
-        float distanceZ = bact->_position.z - yw->_viewerPosition.z;
-        if ( distanceX * distanceX + distanceZ * distanceZ > maxDistanceSquared )
+        if ( yw_GetWorldUiOpacity(yw, bact->_position) == 0 )
             return;
 
         Common::Point point;
@@ -10956,10 +10950,9 @@ static void yw_RenderRoboRelocationMarker(NC_STACK_ypaworld *yw)
     if ( !robo->GetPlayerRoboRelocationTarget(&target, &teleport) )
         return;
 
-    // A Host Station relocation is also an explicit player order. Keep its
-    // marker visible beyond game.world_ui_max_distance like squad move and
-    // attack feedback.
-    const uint8_t worldUiOpacity = 255;
+    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, target);
+    if ( worldUiOpacity == 0 )
+        return;
 
     Common::Point point;
     if ( !yw_ProjectWorldSelectionPoint(yw, target, &point) )
@@ -10978,9 +10971,9 @@ static void yw_RenderCustomWorldMapMarkers(NC_STACK_ypaworld *yw)
          yw->IsSpectatorControlled() )
         return;
 
-    // Reuse the same world-space SVG projection and faction tint used by
-    // Move/Attack feedback. Personal map markers are persistent annotations,
-    // so they deliberately ignore game.world_ui_max_distance.
+    // Reuse the same world-space SVG projection and faction tint as the rest
+    // of the world UI, but keep map markers visible at any distance: they are
+    // long-range navigation references, not local tactical hints.
     const uint32_t phase = yw->_timeStamp % 900;
     const uint32_t triangle = phase <= 450 ? phase : 900 - phase;
     const float bob = 90.0f + (float)triangle * 30.0f / 450.0f;
@@ -10993,6 +10986,7 @@ static void yw_RenderCustomWorldMapMarkers(NC_STACK_ypaworld *yw)
             continue;
 
         vec3d worldPos(marker.x, yw->_cells(cellId).height - bob, marker.y);
+
         Common::Point point;
         if ( !yw_ProjectWorldSelectionPoint(yw, worldPos, &point) )
             continue;
@@ -11016,10 +11010,10 @@ static void yw_RenderMoveOrderFeedback(NC_STACK_ypaworld *yw)
         return;
     }
 
-    // Explicit player orders are tactical feedback, not ambient world UI.
-    // Keep them fully visible even beyond game.world_ui_max_distance so a
-    // remotely controlled vehicle can still see the order given to its squad.
-    const uint8_t worldUiOpacity = 255;
+    const uint8_t worldUiOpacity =
+        yw_GetWorldUiOpacity(yw, yw->_moveOrderFeedbackPos);
+    if ( worldUiOpacity == 0 )
+        return;
 
     Common::Point point;
     if ( !yw_ProjectWorldSelectionPoint(yw, yw->_moveOrderFeedbackPos, &point) )
@@ -11384,7 +11378,9 @@ static void yw_RenderAttackOrderTargetMarker(
     const int baseRadius = 9 + (int)(triangle * 6 / 120);
     const int baseSize = baseRadius * 2 + 8;
     const int size = std::max(8, dround(baseSize * ATTACK_MARKER_SCALE));
-    const uint8_t worldUiOpacity = 255;
+    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, target->_position);
+    if ( worldUiOpacity == 0 )
+        return;
     const SDL_Color tint = yw_GetUiOwnerTintColor(
         yw, std::max(yw_GetOrderIconOwner(yw), static_cast<int>(World::OWNER_RESIST)));
 
@@ -15665,6 +15661,10 @@ void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, 
         {
             if ( !yw->_GameShell->netPlayers[bact->_owner].Name.empty() )
             {
+                const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+                if ( worldUiOpacity == 0 )
+                    return;
+
                 float v5 = bact->_position.x - yw->_viewerPosition.x;
                 float v6 = bact->_position.y - yw->_viewerPosition.y;
                 float v10 = bact->_position.z - yw->_viewerPosition.z;
@@ -15710,8 +15710,10 @@ void sb_0x4d7c08__sub0__sub4__sub0__sub0(NC_STACK_ypaworld *yw, CmdStream *cur, 
                                     FontUA::set_center_ypos(cur, v15 - (yw->_screenSize.y / 2) );
 
                                     FontUA::set_txtColor(cur, yw->_iniColors[ bact->_owner ].r, yw->_iniColors[ bact->_owner ].g, yw->_iniColors[ bact->_owner ].b);
+                                    FontUA::set_opacity(cur, worldUiOpacity);
 
                                     FontUA::FormateClippedText(yw->_guiTiles[15], cur,  yw->_GameShell->netPlayers[bact->_owner].Name, v28, 32);
+                                    FontUA::set_opacity(cur, 255);
                                 }
                             }
                         }
@@ -15753,6 +15755,10 @@ static uint8_t yw_GetUfoSpyWorldOpacity(NC_STACK_ypaworld *yw,
         return 0;
     }
 
+    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
+    if ( worldUiOpacity == 0 )
+        return 0;
+
     const float spyRadius = yw->GetUfoSpyUiRadius();
     if ( spyRadius <= 0.0f )
         return 0;
@@ -15779,12 +15785,13 @@ static uint8_t yw_GetUfoSpyWorldOpacity(NC_STACK_ypaworld *yw,
     // of allowing enemy markers to pop at the edge of the scanned area.
     const float fadeStart = yw_GetWorldUiFadeStart(spyRadius);
     if ( horizontalDistance <= fadeStart )
-        return 255;
+        return worldUiOpacity;
 
     float ratio = (spyRadius - horizontalDistance) / (spyRadius - fadeStart);
     ratio = std::max(0.0f, std::min(1.0f, ratio));
     ratio = ratio * ratio * (3.0f - 2.0f * ratio);
-    return (uint8_t)dround(ratio * 255.0f);
+    const uint8_t spyOpacity = (uint8_t)dround(ratio * 255.0f);
+    return std::min(worldUiOpacity, spyOpacity);
 }
 
 static bool yw_ShouldRenderUfoSpyWorldArrow(NC_STACK_ypaworld *yw,
@@ -15809,11 +15816,7 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
-    const uint8_t normalWorldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
-    const uint8_t ufoSpyOpacity = yw_IsUfoSpyHudActive(yw)
-                                    ? yw_GetUfoSpyWorldOpacity(yw, bact)
-                                    : 0;
-    const uint8_t worldUiOpacity = std::max(normalWorldUiOpacity, ufoSpyOpacity);
+    const uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, bact->_position);
     if (worldUiOpacity == 0)
         return;
 
@@ -16397,6 +16400,9 @@ static bool yw_ProjectHUDMissileLockTarget(NC_STACK_ypaworld *yw, NC_STACK_ypaba
     if ( !yw->_userUnit || !target || target->IsDestroyed() || target->_status == BACT_STATUS_DEAD )
         return false;
 
+    if ( yw_GetWorldUiOpacity(yw, target->_position) == 0 )
+        return false;
+
     vec3d targetPos = target->_position - yw->_userUnit->_position;
 
     mat3x3 corrected = yw->_userUnit->_rotation;
@@ -16631,11 +16637,17 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
         if ( !hideWireframes && !hideAlternativeViewHudWireframes && yw->_guiVisor.field_4 )
         {
             bool locked = yw->_guiVisor.field_18 != NULL;
-            yw_RenderHUDWeaponLockMarker(yw, wis, wpn_wure, wpn_wure2, locked,
-                    yw->_guiVisor.field_8, yw->_guiVisor.field_C,
-                    yw->_guiVisor.field_10, yw->_guiVisor.field_14, v86);
+            const bool lockedTargetVisible = !locked ||
+                yw_GetWorldUiOpacity(yw, yw->_guiVisor.field_18->_position) > 0;
 
-            if ( locked && yw->_hudMissileMultiLockTargets.size() > 1 )
+            if ( lockedTargetVisible )
+            {
+                yw_RenderHUDWeaponLockMarker(yw, wis, wpn_wure, wpn_wure2, locked,
+                        yw->_guiVisor.field_8, yw->_guiVisor.field_C,
+                        yw->_guiVisor.field_10, yw->_guiVisor.field_14, v86);
+            }
+
+            if ( locked && lockedTargetVisible && yw->_hudMissileMultiLockTargets.size() > 1 )
             {
                 bool primaryInMultiLock = false;
                 for (NC_STACK_ypabact *target : yw->_hudMissileMultiLockTargets)
@@ -16681,10 +16693,7 @@ static void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_y
     if ( bact && bact->IsInvisibleUnrevealed() )
         return;
 
-    const uint8_t ufoSpyOpacity = yw_GetUfoSpyWorldOpacity(yw, bact);
-    uint8_t worldUiOpacity = activeSquadronSelection
-        ? 255
-        : std::max(yw_GetWorldUiOpacity(yw, renderPosition), ufoSpyOpacity);
+    uint8_t worldUiOpacity = yw_GetWorldUiOpacity(yw, renderPosition);
     worldUiOpacity = (uint8_t)(((uint32_t)worldUiOpacity * visibilityOpacity + 127U) / 255U);
     if (worldUiOpacity == 0)
         return;

@@ -4950,16 +4950,24 @@ static bool ypabact_ResolveRecoilDirection(NC_STACK_ypabact *unit,
 static bool ypabact_SnapAoePushGroundUnit(NC_STACK_ypabact *unit)
 {
     ypaworld_arg136 ground;
-    ground.stPos = unit->_position.X0Z() - vec3d::OY(30000.0);
-    ground.vect = vec3d::OY(50000.0);
-    ground.flags = 0;
+    if ( !ypabact_ProbeLocalRecoilSupport(unit, &ground) )
+    {
+        // Keep the old long-range fallback for steep drops, but never accept a
+        // surface above the unit. Otherwise an overhead roof becomes the first
+        // world hit and the pushed vehicle is snapped onto the building top.
+        ground.stPos = unit->_position.X0Z() - vec3d::OY(30000.0);
+        ground.vect = vec3d::OY(50000.0);
+        ground.flags = 0;
+        unit->getBACT_pWorld()->ypaworld_func136(&ground);
 
-    unit->getBACT_pWorld()->ypaworld_func136(&ground);
+        if ( !ground.isect || !std::isfinite(ground.isectPos.y) ||
+             ground.isectPos.y < unit->_position.y - 0.25f )
+            return false;
+    }
 
-    if ( !ground.isect )
-        return false;
-
-    unit->_position.y = ground.isectPos.y - (unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof);
+    // Snap only to support at or below the actor, never to geometry overhead.
+    unit->_position.y = ground.isectPos.y -
+        (unit->getBACT_viewer() ? unit->_viewer_overeof : unit->_overeof);
     unit->_status_flg |= BACT_STFLAG_LAND;
     return true;
 }

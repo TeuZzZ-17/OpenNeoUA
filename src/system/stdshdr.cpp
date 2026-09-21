@@ -26,11 +26,11 @@ in vec4 smoothColor;\
 flat in vec4 flatColor;\
 in vec2 texCoords;\
 in vec3 viewPosition;\
-float smoothFogFactor(float distanceValue, float startValue, float lengthValue, float strengthValue)\
+float horizonFogFactor(float distanceValue, float startValue, float lengthValue, float strengthValue)\
 {\
     if (lengthValue <= 0.0 || strengthValue <= 0.0) return 0.0;\
     float t = clamp((distanceValue - startValue) / lengthValue, 0.0, 1.0);\
-    return (t * t * (3.0 - 2.0 * t)) * strengthValue;\
+    return (AlphaFog.x == 2.0 ? t : t * t * (3.0 - 2.0 * t)) * strengthValue;\
 }\
 void main()\
 {\
@@ -53,12 +53,12 @@ void main()\
 \
     if (AlphaFog.x != 0.0)\
     {\
-        float radialDistance = length(viewPosition.xz);\
-        float atmosphere = smoothFogFactor(radialDistance, AlphaFog.y, AlphaFog.z, AlphaFog.w);\
+        float fadeDistance = AlphaFog.x == 2.0 ? viewPosition.z : length(viewPosition.xz);\
+        float atmosphere = horizonFogFactor(fadeDistance, AlphaFog.y, AlphaFog.z, AlphaFog.w);\
         gl_FragColor.rgb = mix(gl_FragColor.rgb, AtmosphereColor.rgb, atmosphere);\
         if (Fog.x != 0.0)\
         {\
-            float darkness = smoothFogFactor(radialDistance, Fog.y, Fog.z, Fog.w);\
+            float darkness = horizonFogFactor(fadeDistance, Fog.y, Fog.z, Fog.w);\
             gl_FragColor.rgb = mix(gl_FragColor.rgb, FogColor.rgb, darkness);\
         }\
     }\

@@ -8267,21 +8267,23 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         Locale::Text::OpenUA(Locale::OUA_DARK_LENGTH),
         Locale::Text::OpenUA(Locale::OUA_DARK_STRENGTH),
         Locale::Text::OpenUA(Locale::OUA_WORLD_UI_MAX_DISTANCE),
-        Locale::Text::OpenUA(Locale::OUA_VHS_STRENGTH),
-        Locale::Text::OpenUA(Locale::OUA_PARTICLE_LIMIT)
+        Locale::Text::OpenUA(Locale::OUA_VIDEO_FILTER_INTENSITY),
+        Locale::Text::OpenUA(Locale::OUA_PARTICLE_LIMIT),
+        Locale::Text::OpenUA(Locale::OUA_VIDEO_FILTER_MODE),
+        Locale::Text::OpenUA(Locale::OUA_HORIZON_FADE_MODE)
     }};
 
     const std::array<int, UserData::ATMOPT_COUNT> mins =
     {{0, 0, 25, 50, 0, 0,
       YW_SKY_HORIZON_DISTANCE_MIN / YW_SKY_HORIZON_DISTANCE_UI_STEP,
       YW_SKY_HEIGHT_MIN,
-      0, 0, 0, 0, 0, 0, 100, 0, 0}};
+      0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0}};
     const std::array<int, UserData::ATMOPT_COUNT> maxs =
     {{100, 100, 200, 200, 200, 100,
       YW_SKY_HORIZON_DISTANCE_MAX / YW_SKY_HORIZON_DISTANCE_UI_STEP,
       YW_SKY_HEIGHT_MAX,
       10000, 10000, 100, 10000, 10000, 100, 20000, 100,
-      YW_PARTICLE_LIMIT_UI_MAX}};
+      YW_PARTICLE_LIMIT_UI_MAX, 1, 1}};
 
     NC_STACK_button::button_64_arg btn;
     btn.caption2.clear();

@@ -287,6 +287,37 @@ static int CycleFrameRateLimit(int value)
     return 60;
 }
 
+static int NormalizeGraphicsMode(int value)
+{
+    return value == 1 ? 1 : 0;
+}
+
+static int NormalizeVideoFilterMode(int value)
+{
+    return NormalizeGraphicsMode(value);
+}
+
+static std::string VideoFilterModeDisplayName(int value)
+{
+    return Locale::Text::OpenUA(
+        NormalizeVideoFilterMode(value) == 1
+            ? Locale::OUA_VIDEO_FILTER_ORIGINAL
+            : Locale::OUA_VIDEO_FILTER_VHS);
+}
+
+static int NormalizeHorizonFadeMode(int value)
+{
+    return NormalizeGraphicsMode(value);
+}
+
+static std::string HorizonFadeModeDisplayName(int value)
+{
+    return Locale::Text::OpenUA(
+        NormalizeHorizonFadeMode(value) == 1
+            ? Locale::OUA_HORIZON_FADE_CLASSIC
+            : Locale::OUA_HORIZON_FADE_SMOOTH);
+}
+
 // OpenNeoUA: the "Atmosphere" dropdown now selects a modern fullscreen visual filter from
 // Data/Filters/*.pal (see GFXEngine::SetVisualFilter), NOT the legacy SET palette-theme.
 // The existing paletteTheme* members/functions are reused as the filter selector to keep
@@ -2121,6 +2152,11 @@ void UserData::AtmosphereOptionsLoad(bool saveSnapshot)
     atmosphereValues[ATMOPT_PARTICLE_LIMIT] =
         std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, System::IniConf::GfxParticlesLimit.Get<int32_t>()));
 
+    atmosphereValues[ATMOPT_VIDEO_FILTER_MODE] =
+        NormalizeVideoFilterMode(System::IniConf::GfxVideoFilterMode.Get<int32_t>());
+    atmosphereValues[ATMOPT_HORIZON_FADE_MODE] =
+        NormalizeHorizonFadeMode(System::IniConf::GfxHorizonFadeMode.Get<int32_t>());
+
     if (p_YW)
         p_YW->UpdateSkyHorizonRenderSectors();
 
@@ -2157,6 +2193,12 @@ void UserData::UpdateAtmosphereOptionTexts()
             case ATMOPT_VHS_STRENGTH:
                 text = std::to_string(atmosphereValues[i]) + "%";
                 break;
+            case ATMOPT_VIDEO_FILTER_MODE:
+                text = VideoFilterModeDisplayName(atmosphereValues[i]);
+                break;
+            case ATMOPT_HORIZON_FADE_MODE:
+                text = HorizonFadeModeDisplayName(atmosphereValues[i]);
+                break;
             case ATMOPT_EXPOSURE:
             case ATMOPT_CONTRAST:
             case ATMOPT_SATURATION:
@@ -2192,7 +2234,6 @@ void UserData::AtmosphereOptionsApplyLive()
     if (!changed)
         return;
 
-    MarkAtmosphereGraphicProfileCustom();
     UpdateAtmosphereOptionTexts();
 
     // Keep the framebuffer and world-only atmosphere path active internally.
@@ -2240,12 +2281,18 @@ void UserData::AtmosphereOptionsApplyLive()
     // Particle spawns read this key directly, so the new limit applies live.
     System::IniConf::GfxParticlesLimit.Value =
         (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
+    System::IniConf::GfxVideoFilterMode.Value =
+        (int32_t)NormalizeVideoFilterMode(atmosphereValues[ATMOPT_VIDEO_FILTER_MODE]);
+    System::IniConf::GfxHorizonFadeMode.Value =
+        (int32_t)NormalizeHorizonFadeMode(atmosphereValues[ATMOPT_HORIZON_FADE_MODE]);
 
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
     GFX::Engine.ReloadHorizonConfig();
     GFX::Engine.SetVhsFilterEnabled(true);
+
+    DetectMatchingGraphicProfile();
 }
 
 void UserData::AtmosphereOptionsSave()
@@ -2259,7 +2306,7 @@ void UserData::AtmosphereOptionsSave()
     if (!SaveKeyToOpenNeoUAIni("gfx.visual_filter", PaletteThemeStorageValue(paletteTheme)))
         ypa_log_out("WARNING: Could not save gfx.visual_filter to OpenNeoUA.ini\n");
 
-    const std::array<std::pair<const char *, std::string>, 17> values =
+    const std::array<std::pair<const char *, std::string>, 19> values =
     {{
         {"gfx.visual_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
         {"gfx.atmosphere_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH])},
@@ -2277,7 +2324,9 @@ void UserData::AtmosphereOptionsSave()
         {"gfx.horizon_dark_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_DARK_STRENGTH])},
         {"game.world_ui_max_distance", std::to_string(atmosphereValues[ATMOPT_WORLD_UI_MAX_DISTANCE])},
         {"gfx.vhs_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH])},
-        {"gfx.particles.limit", std::to_string(atmosphereValues[ATMOPT_PARTICLE_LIMIT])}
+        {"gfx.particles.limit", std::to_string(atmosphereValues[ATMOPT_PARTICLE_LIMIT])},
+        {"gfx.video_filter_mode", std::to_string(NormalizeVideoFilterMode(atmosphereValues[ATMOPT_VIDEO_FILTER_MODE]))},
+        {"gfx.horizon_fade_mode", std::to_string(NormalizeHorizonFadeMode(atmosphereValues[ATMOPT_HORIZON_FADE_MODE]))}
     }};
 
     for (const auto &entry : values)
@@ -2304,6 +2353,10 @@ void UserData::AtmosphereOptionsSave()
     // opened the page and pressed Save without moving a slider.
     System::IniConf::GfxParticlesLimit.Value =
         (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
+    System::IniConf::GfxVideoFilterMode.Value =
+        (int32_t)NormalizeVideoFilterMode(atmosphereValues[ATMOPT_VIDEO_FILTER_MODE]);
+    System::IniConf::GfxHorizonFadeMode.Value =
+        (int32_t)NormalizeHorizonFadeMode(atmosphereValues[ATMOPT_HORIZON_FADE_MODE]);
     System::IniConf::GfxSkyDistance.Value =
         SkyHorizonSliderToDistance(atmosphereValues[ATMOPT_SKY_HORIZON_DISTANCE]);
     System::IniConf::GfxSkyHeight.Value =
@@ -2383,6 +2436,10 @@ void UserData::AtmosphereOptionsCancel()
         VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VHS_STRENGTH]);
     System::IniConf::GfxParticlesLimit.Value =
         (int32_t)atmosphereValues[ATMOPT_PARTICLE_LIMIT];
+    System::IniConf::GfxVideoFilterMode.Value =
+        (int32_t)NormalizeVideoFilterMode(atmosphereValues[ATMOPT_VIDEO_FILTER_MODE]);
+    System::IniConf::GfxHorizonFadeMode.Value =
+        (int32_t)NormalizeHorizonFadeMode(atmosphereValues[ATMOPT_HORIZON_FADE_MODE]);
 
     GFX::Engine.SetVisualFilterStrength(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH] / 100.0f);
     GFX::Engine.ApplyAtmosphereFromConfig();
@@ -2983,6 +3040,8 @@ void UserData::DetectMatchingGraphicProfile()
         Common::Ini::Key worldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key vhsStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key particleLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)0);
+        Common::Ini::Key videoFilterMode("gfx.video_filter_mode", Common::Ini::KT_DIGIT, (int32_t)0);
+        Common::Ini::Key horizonFadeMode("gfx.horizon_fade_mode", Common::Ini::KT_DIGIT, (int32_t)0);
 
         Common::Ini::PKeyList keys =
         {
@@ -2990,7 +3049,7 @@ void UserData::DetectMatchingGraphicProfile()
             &exposure, &contrast, &saturation, &vignette, &skyDistance, &skyHeight,
             &fogStart, &fogLength, &fogStrength,
             &darkStart, &darkLength, &darkStrength,
-            &worldUiMaxDistance, &vhsStrength, &particleLimit
+            &worldUiMaxDistance, &vhsStrength, &particleLimit, &videoFilterMode, &horizonFadeMode
         };
 
         if (!Common::Ini::ParseIniFileOverlay(profile.Path, &keys))
@@ -3030,7 +3089,9 @@ void UserData::DetectMatchingGraphicProfile()
             VisualFilterStrengthPercentFromString(darkStrength.Get<std::string>(), -1),
             IntFromString(worldUiMaxDistance.Get<std::string>(), -1, 100, 20000),
             VisualFilterStrengthPercentFromString(vhsStrength.Get<std::string>(), -1),
-            std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, particleLimit.Get<int32_t>()))
+            std::max<int32_t>(0, std::min<int32_t>(YW_PARTICLE_LIMIT_UI_MAX, particleLimit.Get<int32_t>())),
+            NormalizeVideoFilterMode(videoFilterMode.Get<int32_t>()),
+            NormalizeHorizonFadeMode(horizonFadeMode.Get<int32_t>())
         }};
 
         if (profileValues == atmosphereValues)
@@ -3087,11 +3148,23 @@ bool UserData::ApplyGraphicProfile(const TGraphicProfile &profile)
         &System::IniConf::GfxParticlesLimit
     };
 
+    Common::Ini::Key videoFilterMode("gfx.video_filter_mode", Common::Ini::KT_DIGIT, (int32_t)0);
+    Common::Ini::Key horizonFadeMode("gfx.horizon_fade_mode", Common::Ini::KT_DIGIT, (int32_t)0);
+    keys.push_back(&videoFilterMode);
+    keys.push_back(&horizonFadeMode);
+
+    // Profiles written before these mode keys existed must start in their
+    // safe defaults instead of inheriting the previous profile selection.
     if (!Common::Ini::ParseIniFileOverlay(profile.Path, &keys))
     {
         ypa_log_out("WARNING: Could not load graphics profile %s\n", profile.Path.c_str());
         return false;
     }
+
+    System::IniConf::GfxVideoFilterMode.Value =
+        (int32_t)NormalizeVideoFilterMode(videoFilterMode.Get<int32_t>());
+    System::IniConf::GfxHorizonFadeMode.Value =
+        (int32_t)NormalizeHorizonFadeMode(horizonFadeMode.Get<int32_t>());
 
     // gfx.visual_filter is the only non-slider value on this page. If a profile
     // references a missing PAL, fall back to Standard without blocking the rest.
@@ -3231,7 +3304,9 @@ void UserData::CyclePaletteTheme()
     confPaletteTheme = paletteThemes[next];
     _settingsChangeOptions |= SETTINGS_CHANGE_PALETTE_THEME;
     if (atmospherePageActive)
-        MarkAtmosphereGraphicProfileCustom();
+        DetectMatchingGraphicProfile();
+    else
+        UpdateGraphicProfileText();
     UpdatePaletteThemeText();
 }
 

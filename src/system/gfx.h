@@ -397,7 +397,7 @@ struct GfxStates
     float FogLength = 600.0;
     float FogStrength = 1.0;
     TGLColor FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
-    bool AFog = false;
+    int32_t AFog = 0; // 0: off, 1: radial smooth fade, 2: classic camera-depth fade
     float AFogStart = 3496.0;
     float AFogLength = 600.0;
     float AFogStrength = 1.0;
@@ -1047,6 +1047,8 @@ protected:
     uint32_t _vhsCopyTex = 0;
     uint32_t _vhsOutTex = 0;
     Common::Point _vhsCopyTexSize;
+    Common::Point _vhsOutTexSize;
+    bool _originalVideoFilter = false;
     bool _vhsFboReady = false;
     TVhsFilterProg _vhsFilterProg;
     TVhsBlendProg _vhsBlendProg;
