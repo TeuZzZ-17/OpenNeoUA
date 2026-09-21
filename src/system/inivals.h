@@ -65,6 +65,8 @@ public:
     static Common::Ini::Key GfxVhsFilterShader;
     static Common::Ini::Key GfxVhsFilterShaderVbo;
     static Common::Ini::Key GfxVhsFilterStrength;
+    static Common::Ini::Key GfxVideoFilterMode;
+    static Common::Ini::Key GfxHorizonFadeMode;
     static Common::Ini::Key GfxDisplay;
     static Common::Ini::Key GfxDisplay2;
 

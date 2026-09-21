@@ -250,14 +250,18 @@ Data\Sets\Set3\
 
 OpenNeoUA supports the organized `Data\Sets\Set_` layout while retaining compatibility with the legacy SET locations.
 
-# Third-Party Derived Interface Assets Notice
+## Intellectual Property and Original Game Data
 
-Urban Assault, its original artwork, interface elements, names, trademarks, and all associated intellectual-property rights remain the property of their respective copyright and trademark holders.
+OpenNeoUA is an independent, community-developed, non-commercial open-source project based on the publicly available `UA_source` / OpenUA code lineage. It is not affiliated with, sponsored by, endorsed by, or officially approved by Microsoft, TerraTools, or any other current or former rights holder of Urban Assault.
 
-OpenNeoUA is an independent, free, non-commercial fan project. It is not affiliated with, endorsed by, sponsored by, or officially approved by Microsoft, TerraTools, or any other current or former rights holder.
+Urban Assault, including its name, trademarks, original game data, artwork, interface artwork, audio, music, models, textures, levels, cinematics, and other original game content, remains the property of its respective rights holders.
 
-No ownership is claimed over the underlying original Urban Assault artwork. No claim is made beyond any original modifications or contributions that may be protectable under applicable law.
+OpenNeoUA is intended to provide an engine implementation and original project-specific additions. The repository is not intended to distribute the proprietary data files of the original Urban Assault game. A user must supply a lawfully obtained copy of the original game data where such data is required for operation.
 
-Users remain responsible for complying with applicable copyright law and should use OpenNeoUA together with a lawfully obtained copy of Urban Assault.
+The GNU General Public License version 2 applies only to source code and other material in this repository that is actually distributed under that license. The GPL does not grant any rights in third-party trademarks, copyrighted game assets, or other material owned by third parties.
 
-The GPL licence applies to the OpenNeoUA source code only.
+Files contributed specifically to OpenNeoUA may have their own authorship or licensing status where stated. Inclusion of a compatibility reference, filename, format name, game name, screenshot, description, or technical identifier does not imply ownership of the corresponding third-party intellectual property.
+
+No ownership is claimed over Urban Assault or over proprietary material belonging to Microsoft, TerraTools, or any other rights holder.
+
+If you are a rights holder and believe that material has been included in this repository in error, please contact the repository owner so the material can be reviewed and, where appropriate, removed.

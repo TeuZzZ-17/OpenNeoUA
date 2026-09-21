@@ -285,6 +285,17 @@ enum OPENUA_STRING
     // Player-centered sky-dome radius / world horizon control.
     OUA_SKY_HORIZON_DISTANCE,
 
+    // Video post-process controls. Appended to preserve existing IDs.
+    OUA_VIDEO_FILTER_MODE,
+    OUA_VIDEO_FILTER_INTENSITY,
+    OUA_VIDEO_FILTER_VHS,
+    OUA_VIDEO_FILTER_ORIGINAL,
+
+    // Horizon distance fade mode. Appended to preserve existing IDs.
+    OUA_HORIZON_FADE_MODE,
+    OUA_HORIZON_FADE_SMOOTH,
+    OUA_HORIZON_FADE_CLASSIC,
+
     OUA_STRING_MAX
 };
 
