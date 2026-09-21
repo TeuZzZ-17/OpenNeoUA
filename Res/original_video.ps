@@ -1,0 +1,28 @@
+#version 120
+
+uniform sampler2D texture;
+uniform ivec2 screenSize;
+
+// Reduce the final frame into the existing 240-line effect target. The blend
+// pass enlarges it with bilinear filtering and applies the user's intensity.
+// Preserve the authored colors: no VHS noise, wobble, tint or exposure curve.
+void main()
+{
+    vec2 uv = gl_TexCoord[0].xy;
+    vec2 sourceSize = max(vec2(screenSize), vec2(1.0));
+    float height = min(sourceSize.y, 240.0);
+    vec2 videoSize = vec2(max(1.0, floor(sourceSize.x * height / sourceSize.y + 0.5)), height);
+    vec4 color = vec4(0.0);
+    // Area samples suppress fine texture aliasing before the actual reduction.
+    // Clamp every tap to pixel centers so the outer edge cannot wrap or darken.
+    vec2 halfPixel = 0.5 / sourceSize;
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 4; ++x)
+        {
+            vec2 offset = (vec2(float(x), float(y)) - 1.5) / (4.0 * videoSize);
+            color += texture2D(texture, clamp(uv + offset, halfPixel, 1.0 - halfPixel));
+        }
+    }
+    gl_FragColor = color / 16.0;
+}

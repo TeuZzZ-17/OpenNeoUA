@@ -93,6 +93,7 @@ std::vector<TGFXDeviceInfo> GFXEngine::_devices
 
 struct HorizonFogConfig
 {
+    bool ClassicFade = false;
     bool FogEnable = true;
     bool FogStartOverride = false;
     bool FogLengthOverride = false;
@@ -238,6 +239,7 @@ static bool ParseColorEffectRgb(std::string s, vec3d *out)
 static void HorizonLoadConfigFromIni()
 {
     HorizonFogConfig cfg;
+    cfg.ClassicFade = System::IniConf::GfxHorizonFadeMode.Get<int32_t>() == 1;
 
     cfg.FogEnable = System::IniConf::GfxHorizonFogEnable.Get<bool>();
     cfg.FogStartOverride = HorizonParseFloat(System::IniConf::GfxHorizonFogStart.Get<std::string>(), &cfg.FogStart);
@@ -344,8 +346,10 @@ static float HorizonFogFactor(const vec3d &viewPos, float start, float length)
     if (length <= 0.0f)
         return 0.0f;
 
-    // Horizon Atmosphere V2 uses horizontal radial distance around the viewer,
-    // not a flat camera-Z plane. Smoothstep removes the visible start/end seam.
+    // Classic restores the original linear camera-depth fade. Smooth mode
+    // retains the radial horizon blend used by existing OpenNeoUA profiles.
+    if (gHorizonFogConfig.ClassicFade)
+        return HorizonClamp01(((float)viewPos.z - start) / length);
     const float radialDistance = (float)sqrt(viewPos.x * viewPos.x +
                                              viewPos.z * viewPos.z);
     float t = HorizonClamp01((radialDistance - start) / length);
@@ -1141,7 +1145,7 @@ void GFXEngine::SetRenderStates(int setAll)
         {
             if (newStates->AFog)
             {
-                _vboStatesBlock.AFog = 1.0;
+                _vboStatesBlock.AFog = (float)newStates->AFog;
                 _vboStatesBlock.AFogStart = newStates->AFogStart;
                 _vboStatesBlock.AFogLength = newStates->AFogLength;
                 _vboStatesBlock.AFogStrength = newStates->AFogStrength;
@@ -1724,7 +1728,8 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
         const bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
 
         _states.Fog = false;
-        _states.AFog = atmosphereFog || darkFog; // also selects radial Atmosphere V2 mode
+        _states.AFog = (atmosphereFog || darkFog)
+                     ? (gHorizonFogConfig.ClassicFade ? 2 : 1) : 0;
 
         if (_states.AFog)
         {
@@ -2665,7 +2670,7 @@ void GFXEngine::EndFrame()
             glBindTexture(GL_TEXTURE_2D, 0);
 
             Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsOutFbo);
-            glViewport(0, 0, scrSz.x, scrSz.y);
+            glViewport(0, 0, _vhsOutTexSize.x, _vhsOutTexSize.y);
             glClearColor(0, 0, 0, 0);
             glClear(GL_COLOR_BUFFER_BIT);
             DrawVhsEffect();
@@ -3869,6 +3874,7 @@ void GFXEngine::Deinit()
     _vhsCopyTex = 0;
     _vhsOutTex = 0;
     _vhsCopyTexSize = Common::Point();
+    _vhsOutTexSize = Common::Point();
     _vhsFilterActive = false;
 }
 
@@ -4587,6 +4593,7 @@ static std::string VhsBlendShaderText(bool vbo)
 
 void GFXEngine::SetVhsFilterEnabled(bool enabled)
 {
+    _originalVideoFilter = System::IniConf::GfxVideoFilterMode.Get<int32_t>() == 1;
     _vhsFilterStrength = ParseVhsFilterStrength(System::IniConf::GfxVhsFilterStrength.Get<std::string>(), 0.60f);
 
     if (!enabled)
@@ -4659,6 +4666,10 @@ bool GFXEngine::LoadVhsFilterShader()
                            ? System::IniConf::GfxVhsFilterShaderVbo.Get<std::string>()
                            : System::IniConf::GfxVhsFilterShader.Get<std::string>());
 
+    // Both modes share the existing final-frame effect and strength blend.
+    if (_originalVideoFilter)
+        shaderPath = _vbo ? "res/original_video_vbo.ps" : "res/original_video.ps";
+
     if (_vhsFilterProg.ID && !StriCmp(shaderPath, _vhsFilterShaderPath))
         return true;
 
@@ -4711,7 +4722,7 @@ bool GFXEngine::LoadVhsFilterShader()
         BindVBOParameters(_vhsBlendProg);
     }
 
-    if (_vhsFilterProg.StrengthLoc < 0)
+    if (_vhsFilterProg.StrengthLoc < 0 && !_originalVideoFilter)
     {
         ypa_log_out("WARNING: VHS filter shader [%s] loaded but does not expose uniform vhsStrength; strength control is unavailable for this shader.\n",
                     shaderPath.c_str());
@@ -5961,6 +5972,14 @@ void GFXEngine::DrawFBO()
 
 bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
 {
+    Common::Point outputSize = scrSz;
+    if (_originalVideoFilter && scrSz.y > 240)
+    {
+        // Original tutorial footage has 240 lines. Keep the display aspect
+        // ratio and never upscale an already smaller source during reduction.
+        outputSize.y = 240;
+        outputSize.x = std::max(1, (int)std::lround((double)scrSz.x * 240.0 / scrSz.y));
+    }
     if (!_vhsCopyTex)
     {
         glGenTextures(1, &_vhsCopyTex);
@@ -5974,7 +5993,7 @@ bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
     if (!_vhsOutTex)
         glGenTextures(1, &_vhsOutTex);
 
-    if (_vhsCopyTexSize == scrSz && _vhsFboReady)
+    if (_vhsCopyTexSize == scrSz && _vhsOutTexSize == outputSize && _vhsFboReady)
         return true;
 
     glBindTexture(GL_TEXTURE_2D, _vhsCopyTex);
@@ -5990,7 +6009,7 @@ bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, outputSize.x, outputSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsFbo);
@@ -6015,6 +6034,7 @@ bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
     }
 
     _vhsCopyTexSize = scrSz;
+    _vhsOutTexSize = outputSize;
     _vhsFboReady = true;
     return true;
 }
@@ -6030,7 +6050,7 @@ void GFXEngine::DrawVhsEffect()
     if (!EnsureVhsFilterTexture(scrSz))
         return;
 
-    glViewport(0, 0, scrSz.x, scrSz.y);
+    glViewport(0, 0, _vhsOutTexSize.x, _vhsOutTexSize.y);
 
     SetProjectionMatrix( mat4x4f() );
     SetModelViewMatrix( mat4x4f() );

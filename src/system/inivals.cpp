@@ -62,6 +62,8 @@ Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Commo
 Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs_vbo.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.60"));
+Common::Ini::Key IniConf::GfxVideoFilterMode("gfx.video_filter_mode", Common::Ini::KT_DIGIT, (int32_t)0);
+Common::Ini::Key IniConf::GfxHorizonFadeMode("gfx.horizon_fade_mode", Common::Ini::KT_DIGIT, (int32_t)0);
 Common::Ini::Key IniConf::GfxDisplay("gfx.display", Common::Ini::KT_WORD);
 Common::Ini::Key IniConf::GfxDisplay2("gfx.display2", Common::Ini::KT_WORD);
 
@@ -789,6 +791,8 @@ void IniConf::Init()
         , &GfxVhsFilterShader
         , &GfxVhsFilterShaderVbo
         , &GfxVhsFilterStrength
+        , &GfxVideoFilterMode
+        , &GfxHorizonFadeMode
 
         , &UiMenuFont
         , &UiRetroInterface

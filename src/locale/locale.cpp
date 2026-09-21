@@ -442,6 +442,13 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_ADVANCED_GRAPHICS_SETTINGS:  fallback = "Advanced Graphics Settings"; break;
         case OUA_SKY_HORIZON_DISTANCE:           fallback = "Sky Horizon Distance"; break;
         case OUA_SKY_HEIGHT:                       fallback = "Sky Height"; break;
+        case OUA_VIDEO_FILTER_MODE:               fallback = "Video Filter Mode"; break;
+        case OUA_VIDEO_FILTER_INTENSITY:          fallback = "Video Filter Intensity"; break;
+        case OUA_VIDEO_FILTER_VHS:                fallback = "VHS"; break;
+        case OUA_VIDEO_FILTER_ORIGINAL:           fallback = "Original"; break;
+        case OUA_HORIZON_FADE_MODE:               fallback = "Distance Fade"; break;
+        case OUA_HORIZON_FADE_SMOOTH:             fallback = "Smooth"; break;
+        case OUA_HORIZON_FADE_CLASSIC:            fallback = "Classic"; break;
         default: break;
     }
 
