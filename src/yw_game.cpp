@@ -9860,21 +9860,6 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
 
-        // Purple = configured per-vehicle at-death effect volumes.
-        // These are true 3D spheres because the runtime tests are also spherical.
-        if ( unit->_at_death_push_force > 0.0f && unit->_at_death_push_radius > 0.01f )
-        {
-            drawRing(pos, unit->_at_death_push_radius, 0, 185, 80, 255);
-            drawRing(pos, unit->_at_death_push_radius, 1, 185, 80, 255);
-            drawRing(pos, unit->_at_death_push_radius, 2, 185, 80, 255);
-        }
-        if ( unit->_at_death_energy_drain > 0 && unit->_at_death_energy_drain_radius > 0.01f )
-        {
-            drawRing(pos, unit->_at_death_energy_drain_radius, 0, 185, 80, 255);
-            drawRing(pos, unit->_at_death_energy_drain_radius, 1, 185, 80, 255);
-            drawRing(pos, unit->_at_death_energy_drain_radius, 2, 185, 80, 255);
-        }
-
         // --- GAMEPLAY RANGE RADII (single horizontal ring, distinct colors) ---
         // Drawn flat to keep the overlay readable. Each only appears if its value is set.
 
