@@ -9809,7 +9809,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         if (dist > RING_MAX_DIST)
             continue;
 
-        bool isSelfControlled = (unit == _userUnit || unit == _viewerBact || unit->getBACT_inputting());
+        bool isCurrentControlled = yw_DebugIsCurrentControlledBact(this, unit);
         vec3d pos = unit->_position;
         World::rbcolls *colls = unit->getBACT_collNodes();
         bool legacyRadiusCollisionEnabled = unit->UsesLegacyRadiusCollision();
@@ -9817,8 +9817,9 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         // Red legacy radius. Manual coll_* suppresses the default radius only
         // when the script did not explicitly author radius. Native Robo volumes
         // and explicitly authored hybrid radius + coll_* keep the red sphere.
-        // The self radius remains hidden to avoid cockpit cross lines.
-        if (!isSelfControlled && legacyRadiusCollisionEnabled)
+        // Hide collision geometry for the unit currently controlled by the player
+        // so its own hitbox does not obstruct the cockpit/debug view.
+        if (!isCurrentControlled && legacyRadiusCollisionEnabled)
         {
             float R = unit->_radius;
             if (R > 0.01f)
@@ -9839,7 +9840,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         // Compound collision spheres: green for vehicles, blue for weapons.
         // Compound slot/radius/offset labels are intentionally omitted;
         // only the legacy radius keeps a numeric label.
-        if (colls)
+        if (!isCurrentControlled && colls)
         {
             mat3x3 rotT = unit->_rotation.Transpose();
             bool isWeapon = unit->_bact_type == BACT_TYPES_MISSLE;
