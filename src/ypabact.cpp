@@ -4197,6 +4197,12 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     if ( !hostStation && debuff.mindcontrol && !ypabact_CanBeMindcontrolled(this, source) )
         return;
 
+    // A Debuff re-applied while already active is a refresh. It must never
+    // delay or interrupt what the Debuff is already doing: damage ticks and
+    // sound keep running even while the target is under continuous fire.
+    const bool refreshActive = _active_debuff.active;
+    const int pendingTickTime = _active_debuff.next_tick_time;
+
     const bool canMindcontrol = !hostStation && debuff.mindcontrol;
     const float stunMotionLevel = hostStation ? 0.0f :
         std::max(0.0f, std::min(debuff.stun_motion_level, 1.0f));
@@ -4214,6 +4220,14 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     _active_debuff.tick_time = debuff.tick_time > 0 ? debuff.tick_time : 1000;
     _active_debuff.expire_time = _clock + debuff.duration;
     _active_debuff.next_tick_time = _clock + _active_debuff.tick_time;
+
+    // A refresh must never postpone a tick already scheduled: fast repeated
+    // hits would keep pushing the damage tick away and the Debuff would never
+    // deal its defined damage while the target is being hit. Keep the earliest
+    // pending tick so the defined cadence always runs.
+    if ( refreshActive && pendingTickTime < _active_debuff.next_tick_time )
+        _active_debuff.next_tick_time = pendingTickTime;
+
     _active_debuff.stun = applyStun;
     _active_debuff.stun_motion_level = stunMotionLevel;
     _active_debuff.stun_unit_fire = hostStation ? true : debuff.stun_unit_fire;
@@ -4260,38 +4274,54 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     if ( _debuff_soundcarrier.Sounds.empty() )
         _debuff_soundcarrier.Resize(1);
 
-    SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
-
     TSoundSource &snd = _debuff_soundcarrier.Sounds[0];
-    snd.PSample = _active_debuff.snd_sample;
-    snd.Volume = _active_debuff.snd_volume;
-    debuff.tick_snd.ConfigureSoundSourcePitch(snd);
-    snd.Radius = debuff.tick_snd.radius;
-    snd.PriorityBias = 0;
-    const bool loopDebuffSound = !debuff.has_tick_time && snd.PSample;
-    snd.SetLoop(loopDebuffSound);
-    snd.SetFragmented(false);
 
-    if ( debuff.tick_snd.sndPrm.slot )
-    {
-        snd.PPFx = &debuff.tick_snd.sndPrm;
-        snd.SetPFx(true);
-    }
-    else
-    {
-        snd.PPFx = NULL;
-        snd.SetPFx(false);
-    }
+    const bool loopDebuffSound = !debuff.has_tick_time && _active_debuff.snd_sample;
 
-    if ( debuff.tick_snd.sndPrm_shk.slot )
+    // A refresh must not interrupt a Debuff sound already playing with the same
+    // setup: repeated hits would restart it every time and its defined sound
+    // would never really play. Only a real setup change rebuilds the carrier.
+    TSndFXParam *sndPFx = debuff.tick_snd.sndPrm.slot ? &debuff.tick_snd.sndPrm : NULL;
+    TSndFxPosParam *sndShkFx = debuff.tick_snd.sndPrm_shk.slot ? &debuff.tick_snd.sndPrm_shk : NULL;
+    const bool soundRunning = snd.IsEnabled() || snd.IsPFxEnabled() || snd.IsShkEnabled();
+    const bool keepRunningSound = refreshActive && soundRunning &&
+                                  snd.PSample == _active_debuff.snd_sample &&
+                                  snd.IsLoop() == loopDebuffSound &&
+                                  snd.PPFx == sndPFx && snd.PShkFx == sndShkFx;
+
+    if ( !keepRunningSound )
     {
-        snd.PShkFx = &debuff.tick_snd.sndPrm_shk;
-        snd.SetShk(true);
-    }
-    else
-    {
-        snd.PShkFx = NULL;
-        snd.SetShk(false);
+        SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
+
+        snd.PSample = _active_debuff.snd_sample;
+        snd.Volume = _active_debuff.snd_volume;
+        debuff.tick_snd.ConfigureSoundSourcePitch(snd);
+        snd.Radius = debuff.tick_snd.radius;
+        snd.PriorityBias = 0;
+        snd.SetLoop(loopDebuffSound);
+        snd.SetFragmented(false);
+
+        if ( sndPFx )
+        {
+            snd.PPFx = sndPFx;
+            snd.SetPFx(true);
+        }
+        else
+        {
+            snd.PPFx = NULL;
+            snd.SetPFx(false);
+        }
+
+        if ( sndShkFx )
+        {
+            snd.PShkFx = sndShkFx;
+            snd.SetShk(true);
+        }
+        else
+        {
+            snd.PShkFx = NULL;
+            snd.SetShk(false);
+        }
     }
 
     if ( loopDebuffSound )
@@ -4415,6 +4445,9 @@ void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
         arg84.energy = -tickDamage;
         arg84.unit = source;
         arg84.killerOwner = _active_debuff.source_owner;
+        // The tick deals exactly the damage defined by the Debuff profile:
+        // attacker-side damage multipliers belong to hits, not to status ticks.
+        arg84.bypassAttackerDamageModifiers = true;
         ModifyEnergy(&arg84);
     }
 
