@@ -5416,6 +5416,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int maxTargets = parser.stol(p2, NULL, 0);
         _wpn->multi_target = maxTargets > 0 ? maxTargets : 0;
     }
+    else if ( !StriCmp(p1, "homing_time") )
+    {
+        _wpn->homing_time = ParsePositiveIntOrZero(p2);
+    }
     // ---- OpenNeoUA custom: model = laser parameters ----
     else if ( !StriCmp(p1, "laser_energy_tick_time") )
     {

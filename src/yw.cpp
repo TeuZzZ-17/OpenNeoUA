@@ -2202,7 +2202,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
             // F7 and F8 intentionally share the same selected-vehicle resolver.
             // Attached non-vehicle objects resolve to their carrier, matching the
-            // existing F8 debug behavior without introducing a second selection path.
+            // existing F7 debug behavior without introducing a second selection path.
             auto isDebugVehicleTarget = [](const NC_STACK_ypabact *unit)
             {
                 if ( !unit ||
@@ -2237,12 +2237,12 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 return isDebugVehicleTarget(selectedVehicle) ? selectedVehicle : NULL;
             };
 
-            // F7: toggle runtime invulnerability on the selected allied vehicle.
+            // F8: toggle runtime invulnerability on the selected allied vehicle.
             // When the mouse is not currently pointing at another unit, use the
-            // vehicle directly controlled by the player instead. F7 is also the
-            // vanilla next-commander hotkey, so consume that binding only while
+            // vehicle directly controlled by the player instead. F8 is also the
+            // vanilla last-message hotkey, so consume that binding only while
             // New Debug owns the key.
-            if ( arg->field_8->KbdLastHit == Input::KC_F7 )
+            if ( arg->field_8->KbdLastHit == Input::KC_F8 )
             {
                 arg->field_8->HotKeyID = -1;
 
@@ -2285,10 +2285,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
             }
 
-            // F8: one-shot destruction of the selected vehicle. F8 is also
-            // the vanilla last-message hotkey, so consume that binding only
+            // F7: one-shot destruction of the selected vehicle. F7 is also
+            // the vanilla next-commander hotkey, so consume that binding only
             // while the OpenNeoUA debug mode is active.
-            if ( arg->field_8->KbdLastHit == Input::KC_F8 )
+            if ( arg->field_8->KbdLastHit == Input::KC_F7 )
             {
                 arg->field_8->HotKeyID = -1;
 
@@ -2306,7 +2306,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     // Match the normal lethal-damage transition for tanks and
                     // cars: their death state is DEATH2, which emits the
                     // begin_chain_fx trigger "crash". Keep this as a direct
-                    // internal transition so F8 remains a forced debug kill
+                    // internal transition so F7 remains a forced debug kill
                     // even while global invulnerability (F9) is enabled.
                     if ( selectedVehicle->_bact_type == BACT_TYPES_TANK ||
                          selectedVehicle->_bact_type == BACT_TYPES_CAR )
@@ -4920,6 +4920,9 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetLifeTime(wproto.RollLifeTime());
     wobj->SetDelay(wproto.delay_time);
     wobj->SetDriveTime(wproto.drive_time);
+    wobj->SetHomingTime(
+        wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || wproto.IsHomingBomb()
+            ? wproto.homing_time : 0);
     wobj->SetMissileType(missileType);
     wobj->SetPowerHeli(wproto.energy_heli * 1000.0);
     wobj->SetPowerTank(wproto.energy_tank * 1000.0);
