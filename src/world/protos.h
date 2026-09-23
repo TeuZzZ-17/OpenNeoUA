@@ -458,7 +458,7 @@ struct TWeaponDebuffConfig
     TVisualTint target_tint;
     std::vector<int16_t> vps;
     std::string mesh3ds;
-    float scale = 1.0;
+    float visual_scale = 1.0;
     TVisualTint tint;
     TAbsoluteOrPercent random_max_offset;
     TVisualTint vp_trail_tint;
