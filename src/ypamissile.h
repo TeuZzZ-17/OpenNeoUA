@@ -99,6 +99,7 @@ public:
     virtual void SetLifeTime(int);
     virtual void SetDelay(int);
     virtual void SetDriveTime(int);
+    void SetHomingTime(int time);
     virtual void SetIgnoreBuilds(int);
     virtual void SetPowerHeli(int);
     virtual void SetPowerTank(int);
@@ -167,6 +168,7 @@ protected:
     const char *GetAreaPushSkipReason(NC_STACK_ypabact *bct) const;
     bool CanCollideWithWeapon(NC_STACK_ypamissile *other);
     void DetonateWeaponCollision(NC_STACK_ypamissile *other);
+    size_t SetStateInternal(setState_msg *arg, bool allowConfiguredEffects);
     bool IsDirectHitUnit(NC_STACK_ypabact *bct) const;
     void RememberDirectHitUnit(NC_STACK_ypabact *bct);
     bool IsDirectPushRecipient(NC_STACK_ypabact *bct) const;
@@ -228,6 +230,7 @@ protected:
     NC_STACK_ypabact *_mislEmitter = NULL;
     int _mislLifeTime   = 0;
     int _mislDriveTime  = 0;
+    int _mislHomingTimeRemaining = -1; // -1: disabled; 0: guidance has expired
     int _mislDelayTime  = 0;
     int _mislFlags      = 0;
     float _mislStartHeight  = 0.0;

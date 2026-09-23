@@ -847,8 +847,11 @@ public:
 
     void sub_4843BC(NC_STACK_ypabact *bact2, int a3);
     void sub_493480(NC_STACK_ypabact *bact2, int mode);
-    void StartDestFX(const World::DestFX &fx);
-    bool StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg136 *worldHit = NULL);
+    void StartDestFX(const World::DestFX &fx, const vec3d *impactPos = NULL,
+                     const mat3x3 *impactRot = NULL);
+    bool StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg136 *worldHit = NULL,
+                               const std::vector<World::TChainFXConfig> *fxOverride = NULL,
+                               const vec3d *impactPos = NULL, const mat3x3 *impactRot = NULL);
 
     void DoTargetWaypoint();
     void FixSectorFall();

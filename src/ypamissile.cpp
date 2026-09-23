@@ -304,6 +304,7 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislSpecificEnergy.fill(1.0f);
     _mislSpecificEnergyDefined.fill(false);
     _mislLifeTime = 5000;
+    _mislHomingTimeRemaining = -1;
     _mislDelayTime = 0;
     _mislType = MISL_BOMB;
     _mislAoeUnitPush = 0.0f;
@@ -2234,24 +2235,21 @@ void NC_STACK_ypamissile::DetonateWeaponCollision(NC_STACK_ypamissile *other)
     if ( !other || other == this || _status == BACT_STATUS_DEAD )
         return;
 
+    // Either projectile may own the missile camera. Return both viewers
+    // before marking the projectiles dead.
+    other->ResetViewing();
+    ResetViewing();
+
+    setState_msg deathState;
+    deathState.unsetFlags = 0;
+    deathState.setFlags = 0;
+    deathState.newStatus = BACT_STATUS_DEAD;
+
+    // Projectile contact has no payload impact or physical destruction FX.
     if ( other->_status != BACT_STATUS_DEAD )
-    {
-        other->Impact();
+        other->SetStateInternal(&deathState, false);
 
-        setState_msg otherState;
-        otherState.unsetFlags = 0;
-        otherState.setFlags = 0;
-        otherState.newStatus = BACT_STATUS_DEAD;
-        other->SetState(&otherState);
-    }
-
-    Impact();
-
-    setState_msg selfState;
-    selfState.unsetFlags = 0;
-    selfState.setFlags = 0;
-    selfState.newStatus = BACT_STATUS_DEAD;
-    SetState(&selfState);
+    SetStateInternal(&deathState, false);
 }
 
 bool NC_STACK_ypamissile::IsDirectHitUnit(NC_STACK_ypabact *bct) const
@@ -2966,7 +2964,7 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
     float v40 = _target_vec.length();
 
-    if ( v40 > 0.1 )
+    if ( _mislHomingTimeRemaining != 0 && v40 > 0.1 )
     {
         if ( _primTtype != BACT_TGT_TYPE_DRCT )
             _target_dir = _target_vec / v40;
@@ -2981,6 +2979,14 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
     if ( _status == BACT_STATUS_NORMAL )
     {
         _mislClusterAge += arg->frameTime;
+
+        if ( _mislHomingTimeRemaining > 0 )
+        {
+            if ( arg->frameTime >= _mislHomingTimeRemaining )
+                _mislHomingTimeRemaining = 0;
+            else
+                _mislHomingTimeRemaining -= arg->frameTime;
+        }
 
         if ( TryClusterSplit() )
             return;
@@ -3044,8 +3050,8 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             {
             case MISL_BOMB:
                 arg74.field_0 = v38;
-                arg74.flag = 1;
-                if ( ypamissile_HasHomingBombTarget(this) )
+                arg74.flag = _mislHomingTimeRemaining == 0 ? 2 : 1;
+                if ( arg74.flag != 2 && ypamissile_HasHomingBombTarget(this) )
                 {
                     if ( _force > 0.0 )
                     {
@@ -3069,8 +3075,9 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
             case MISL_TARGETED:
                 arg74.field_0 = v38;
-                arg74.flag = 0;
-                arg74.vec = CalcForceVector();
+                arg74.flag = _mislHomingTimeRemaining == 0 ? 2 : 0;
+                if ( arg74.flag != 2 )
+                    arg74.vec = CalcForceVector();
                 Move(&arg74);
                 break;
 
@@ -3096,13 +3103,13 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             bool deflected = false;
             if ( TubeCollisionTest(_mislDelayTime <= 0, &hitTarget, &deflected) )
             {
-                ResetViewing();
-
                 if ( hitTarget && hitTarget->_bact_type == BACT_TYPES_MISSLE )
                 {
                     DetonateWeaponCollision(dynamic_cast<NC_STACK_ypamissile *>(hitTarget));
                     return;
                 }
+
+                ResetViewing();
 
                 if ( _mislDelayTime > 0 )
                 {
@@ -3488,6 +3495,12 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
     if ( deflected )
         return;
 
+    if ( directHit && directHit->_bact_type == BACT_TYPES_MISSLE )
+    {
+        DetonateWeaponCollision(dynamic_cast<NC_STACK_ypamissile *>(directHit));
+        return;
+    }
+
     // Ground-burst artillery shells land on a point previously snapped to world
     // collision geometry. Reacquire that same real surface at impact time so
     // ground decals receive valid, short-lived skeleton/poly data; airbursts
@@ -3560,34 +3573,39 @@ void NC_STACK_ypamissile::Move(move_msg *arg)
 {
     _old_pos = _position;
 
-    float v8;
-
-    if ( _status != BACT_STATUS_DEAD && _mislType != MISL_BOMB )
-        v8 = _mass * 9.80665;
-    else
-        v8 = _mass * 39.2266;
-
-    vec3d v26(0.0, 0.0, 0.0);
-
-    if ( !(arg->flag & 1) )
-        v26 = arg->vec * _thraction;
-
-    vec3d vec1 = vec3d(0.0, v8, 0.0) + v26 - _fly_dir * (_fly_dir_length * _airconst);
-
-    float v33 = vec1.normalise();
-
-    if ( v33 > 0.0 )
+    // An expired homing timer keeps the current velocity while the shared
+    // movement, collision and lifetime paths continue to run.
+    if ( arg->flag != 2 )
     {
-        vec3d v36 = _fly_dir * _fly_dir_length + vec1 * (v33 / _mass * arg->field_0);
+        float v8;
 
-        float v32 = v36.length();
+        if ( _status != BACT_STATUS_DEAD && _mislType != MISL_BOMB )
+            v8 = _mass * 9.80665;
+        else
+            v8 = _mass * 39.2266;
 
-        if ( v32 > 0.0 )
-            v36 /= v32;
+        vec3d v26(0.0, 0.0, 0.0);
 
-        _fly_dir = v36;
+        if ( !(arg->flag & 1) )
+            v26 = arg->vec * _thraction;
 
-        _fly_dir_length = v32;
+        vec3d vec1 = vec3d(0.0, v8, 0.0) + v26 - _fly_dir * (_fly_dir_length * _airconst);
+
+        float v33 = vec1.normalise();
+
+        if ( v33 > 0.0 )
+        {
+            vec3d v36 = _fly_dir * _fly_dir_length + vec1 * (v33 / _mass * arg->field_0);
+
+            float v32 = v36.length();
+
+            if ( v32 > 0.0 )
+                v36 /= v32;
+
+            _fly_dir = v36;
+
+            _fly_dir_length = v32;
+        }
     }
 
     _position += _fly_dir * (_fly_dir_length * arg->field_0 * 6.0);
@@ -3612,6 +3630,7 @@ void NC_STACK_ypamissile::Renew()
 
     _mislFlags  = 0;
     _mislDelayTime = 0;
+    _mislHomingTimeRemaining = -1;
     _mislAoeFalloff = 0;
     _mislAoeUnitPush = 0.0f;
     _mislDirectPush = 0.0f;
@@ -3674,6 +3693,11 @@ void NC_STACK_ypamissile::Renew()
 
 size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
 {
+    return SetStateInternal(arg, true);
+}
+
+size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg, bool allowConfiguredEffects)
+{
     SFXEngine::SFXe.sub_424000(&_soundcarrier, 2);
     SFXEngine::SFXe.sub_424000(&_soundcarrier, 0);
     SFXEngine::SFXe.sub_424000(&_soundcarrier, 1);
@@ -3695,8 +3719,23 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg)
         SFXEngine::SFXe.StopCarrier(&_mislArmorPenetrationSoundCarrier);
         SFXEngine::SFXe.startSound(&_soundcarrier, 2);
 
-        StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE);
-        StartDestFXByType(World::DestFX::FX_DEATH);
+        if ( allowConfiguredEffects )
+        {
+            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE);
+            StartDestFXByType(World::DestFX::FX_DEATH);
+        }
+        else
+        {
+            std::vector<World::TChainFXConfig> visualFX;
+            for (const World::TChainFXConfig &fx : _chainFX)
+            {
+                if ( fx.trigger == World::TChainFXConfig::TRIGGER_DETONATE &&
+                     fx.mode == World::TChainFXConfig::MODE_VISUAL )
+                    visualFX.push_back(fx);
+            }
+            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE,
+                                  NULL, &visualFX);
+        }
 
         _fly_dir_length = 0;
     }
@@ -4097,6 +4136,11 @@ void NC_STACK_ypamissile::SetDelay(int delay)
 void NC_STACK_ypamissile::SetDriveTime(int time)
 {
     _mislDriveTime = time;
+}
+
+void NC_STACK_ypamissile::SetHomingTime(int time)
+{
+    _mislHomingTimeRemaining = time > 0 ? time : -1;
 }
 
 void NC_STACK_ypamissile::SetIgnoreBuilds(int ign)
