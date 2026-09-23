@@ -1917,7 +1917,7 @@ static void ypabact_SpawnDebuffFXEvent(NC_STACK_ypabact *bact, int lifetime)
         return;
 
     const vec3d effectScale =
-        ypabact_BuildUniformStatusFXScale(bact->_active_debuff.scale);
+        ypabact_BuildUniformStatusFXScale(bact->_active_debuff.visual_scale);
     const World::TVisualTint *trailTint = bact->_active_debuff.has_vp_trail_tint
         ? &bact->_active_debuff.vp_trail_tint : NULL;
 
@@ -4240,7 +4240,7 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     _active_debuff.target_tint = debuff.target_tint;
     _active_debuff.vps = debuff.vps;
     _active_debuff.mesh3ds = debuff.mesh3ds;
-    _active_debuff.scale = debuff.scale;
+    _active_debuff.visual_scale = debuff.visual_scale;
     _active_debuff.tint = debuff.tint;
     _active_debuff.random_max_offset = debuff.random_max_offset;
     _active_debuff.vp_trail_tint = debuff.vp_trail_tint;
