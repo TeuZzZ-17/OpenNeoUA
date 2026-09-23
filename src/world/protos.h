@@ -1205,6 +1205,7 @@ struct TWeapProto
     // OpenNeoUA: generic multi-target count for compatible homing weapon models.
     // Consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
     int multi_target = 0;
+    int homing_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
     // OpenNeoUA custom: shared continuous beam parameters for model = laser.
     // vertical_laser_enable selects the downward-fire mode. "energy" is static base damage per tick; the class
     // multipliers below (energy_heli/tank/flyer/robo) are applied like normal weapons.
