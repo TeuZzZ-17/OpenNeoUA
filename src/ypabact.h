@@ -97,7 +97,7 @@ struct TActiveDebuffState
     World::TVisualTint target_tint;
     std::vector<int16_t> vps;
     std::string mesh3ds;
-    float scale = 1.0f;
+    float visual_scale = 1.0f;
     World::TVisualTint tint;
     World::TAbsoluteOrPercent random_max_offset;
     World::TVisualTint vp_trail_tint;
@@ -134,7 +134,7 @@ struct TActiveDebuffState
         target_tint = World::TVisualTint();
         vps.clear();
         mesh3ds.clear();
-        scale = 1.0f;
+        visual_scale = 1.0f;
         tint = World::TVisualTint();
         random_max_offset.Clear();
         vp_trail_tint = World::TVisualTint();

@@ -1192,8 +1192,8 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
     }
     else if ( !StriCmp(p1, "debuff_3ds") )
         debuff.mesh3ds = p2;
-    else if ( !StriCmp(p1, "debuff_scale") )
-        debuff.scale = ParseVPScaleValue(parser, p2);
+    else if ( !StriCmp(p1, "debuff_visual_scale") )
+        debuff.visual_scale = ParseVPScaleValue(parser, p2);
     else if ( ParseTintParam(parser, "debuff_tint", p1, p2, debuff.tint) )
         return true;
     else if ( !StriCmp(p1, "debuff_random_max_offset") )
