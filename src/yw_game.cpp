@@ -8875,7 +8875,7 @@ void NC_STACK_ypaworld::DebugRecordDpsDamage(NC_STACK_ypabact *attacker,
     if ( !_debugDpsSourceGid || attacker->_gid != _debugDpsSourceGid )
         return;
 
-    // Friendly units are valid debug dummies: F7/F9 can keep them alive while
+    // Friendly units are valid debug dummies: F8/F9 can keep them alive while
     // the meter measures the damage this controlled unit would deal. Ignore only
     // true self-damage so suicide/kill-after-shot mechanics do not pollute DPS.
     if ( attacker == target )

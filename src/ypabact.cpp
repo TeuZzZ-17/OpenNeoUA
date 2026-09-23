@@ -11788,9 +11788,15 @@ static void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapPr
     if ( !shooter || !target )
         return;
 
+    // AI laser contact may remain visible, but only player-controlled lasers
+    // can affect units belonging to the shooter's faction.
+    const bool aiFriendlyContact = !playerControlled &&
+        shooter->_owner != World::OWNER_0 && target->_owner == shooter->_owner;
+
     // Laser contact is a hard counter to the Deflect Buff. Break all remaining
     // Buff charges, then keep the normal laser damage/debuff path unchanged.
-    if ( target->HasDeflectBuff() && ypabact_CanApplyLaserDamage(shooter) )
+    if ( !aiFriendlyContact && target->HasDeflectBuff() &&
+         ypabact_CanApplyLaserDamage(shooter) )
         target->ClearBuffDeflectCharges();
 
     if ( beam.next_damage_time > 0 && shooter->_clock < beam.next_damage_time )
@@ -11798,7 +11804,7 @@ static void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapPr
 
     int applyNow = ypabact_LaserTickDamage(shooter, wproto, target, beam.energy_ticks, damageMult);
 
-    if ( applyNow > 0 && ypabact_CanApplyLaserDamage(shooter) )
+    if ( applyNow > 0 && !aiFriendlyContact && ypabact_CanApplyLaserDamage(shooter) )
     {
         bact_arg84 dmg;
         dmg.energy = -applyNow;
@@ -12311,11 +12317,7 @@ static bool ypabact_PrepareLaserSoundSource(TSoundSource &snd, World::TVhclSound
 static bool ypabact_LaserSoundHasContent(World::TVhclSound &fx)
 {
     fx.LoadSamples();
-
-    if ( fx.MainSample.Sample || fx.sndPrm.slot || fx.sndPrm_shk.slot )
-        return true;
-
-    return false;
+    return fx.MainSample.Sample || fx.sndPrm.slot || fx.sndPrm_shk.slot;
 }
 
 static void ypabact_UpdateLaserNormalSound(NC_STACK_ypabact *bact,
@@ -12329,13 +12331,20 @@ static void ypabact_UpdateLaserNormalSound(NC_STACK_ypabact *bact,
 
     World::TVhclSound &normalFx = wproto.sndFXes[World::TWeapProto::SND_NORMAL];
 
-    if ( carrier->Sounds.empty() )
-        carrier->Resize(1);
-
-    TSoundSource &snd = carrier->Sounds[0];
-    if ( !ypabact_LaserSoundHasContent(normalFx) )
+    if ( carrier->Sounds.size() != 2 )
     {
-        if ( snd.IsEnabled() || snd.IsPFxEnabled() || snd.IsShkEnabled() )
+        if ( !carrier->Sounds.empty() )
+            SFXEngine::SFXe.StopCarrier(carrier);
+        carrier->Resize(2);
+    }
+
+    normalFx.LoadSamples();
+    TSoundSource &snd = carrier->Sounds[0];
+    TSoundSource &sustained = carrier->Sounds[1];
+    if ( !normalFx.MainSample.Sample && !normalFx.sndPrm.slot &&
+         !normalFx.sndPrm_shk.slot )
+    {
+        if ( snd.IsEnabled() || sustained.IsPFxEnabled() || sustained.IsShkEnabled() )
             SFXEngine::SFXe.StopCarrier(carrier);
         return;
     }
@@ -12343,20 +12352,37 @@ static void ypabact_UpdateLaserNormalSound(NC_STACK_ypabact *bact,
     carrier->Position = position;
     carrier->Vector = direction;
 
-    // Laser snd_normal is intentionally serialized rather than hardware-looped:
-    // while FIRE remains held, a new play starts only after the previous one-shot
-    // (and its optional FX) has finished, so successive samples never overlap.
-    if ( !snd.IsEnabled() && !snd.IsPFxEnabled() && !snd.IsShkEnabled() )
+    // Keep the normal sample serialized independently of sustained PAL/SHK.
+    if ( normalFx.MainSample.Sample && !snd.IsEnabled() )
     {
         if ( ypabact_PrepareLaserSoundSource(snd, normalFx) )
+        {
+            snd.PPFx = NULL;
+            snd.PShkFx = NULL;
+            snd.SetPFx(false);
+            snd.SetShk(false);
             SFXEngine::SFXe.startSound(carrier, 0);
+        }
     }
     else
     {
-        // Keep authored gain/spatial settings live without replacing PSample while
-        // the active sample is still playing.
         snd.Volume = normalFx.volume;
         snd.Radius = normalFx.radius;
+    }
+
+    // A looped, sample-free source holds mag0 until the laser stops; the sound
+    // engine ignores authored normal PAL/SHK times for this source.
+    if ( (normalFx.sndPrm.slot || normalFx.sndPrm_shk.slot) &&
+         !sustained.IsPFxEnabled() && !sustained.IsShkEnabled() )
+    {
+        sustained.PSample = NULL;
+        sustained.PPFx = normalFx.sndPrm.slot ? &normalFx.sndPrm : NULL;
+        sustained.PShkFx = normalFx.sndPrm_shk.slot ? &normalFx.sndPrm_shk : NULL;
+        sustained.SetPFx(sustained.PPFx != NULL);
+        sustained.SetShk(sustained.PShkFx != NULL);
+        sustained.SetLoop(true);
+        sustained.FadeDuration = 0.0;
+        SFXEngine::SFXe.startSound(carrier, 1);
     }
 
     SFXEngine::SFXe.UpdateSoundCarrier(carrier);
@@ -12535,7 +12561,8 @@ static vec3d ypabact_LaserSourceOrigin(NC_STACK_ypabact *bact)
 }
 
 static bool ypabact_LaserWorldHit(NC_STACK_ypabact *shooter, const vec3d &origin,
-                                      const vec3d &dir, float range, vec3d *outHitPoint)
+                                      const vec3d &dir, float range, vec3d *outHitPoint,
+                                      ypaworld_arg136 *outHit = NULL)
 {
     if ( !shooter || !shooter->getBACT_pWorld() || range <= 1.0f )
         return false;
@@ -12575,6 +12602,8 @@ static bool ypabact_LaserWorldHit(NC_STACK_ypabact *shooter, const vec3d &origin
             {
                 if ( outHitPoint )
                     *outHitPoint = ray.isectPos;
+                if ( outHit )
+                    *outHit = ray;
 
                 return true;
             }
@@ -12612,6 +12641,59 @@ static mat3x3 ypabact_LaserRotationFromDir(const vec3d &beamDir, const mat3x3 &f
     rot.SetY(y);
     rot.SetZ(z);
     return rot;
+}
+
+static void ypabact_SpawnLaserImpactChainFX(
+    NC_STACK_ypabact *shooter, World::TWeapProto &wproto,
+    const NC_STACK_ypabact::TLaserBeamRuntime &beam, const vec3d &dir,
+    bool worldContact, std::vector<vec3d> &spawnedPoints)
+{
+    if ( !shooter || wproto.chain_fx.empty() )
+        return;
+
+    bool relevant = false;
+    for (const World::TChainFXConfig &fx : wproto.chain_fx)
+        if ( fx.trigger == World::TChainFXConfig::TRIGGER_DETONATE ||
+             (worldContact && fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD) )
+            relevant = true;
+    if ( !relevant )
+        return;
+
+    for (const vec3d &point : spawnedPoints)
+        if ( (point - beam.end).length() < 1.0f )
+            return;
+    spawnedPoints.push_back(beam.end);
+
+    mat3x3 rotation = ypabact_LaserRotationFromDir(dir, shooter->_rotation);
+    if ( worldContact )
+    {
+        // Decals need the short-lived collision polygon, not just beam.end.
+        bool needsWorldHit = false;
+        for (const World::TChainFXConfig &fx : wproto.chain_fx)
+            if ( fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
+                 fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
+                needsWorldHit = true;
+
+        ypaworld_arg136 collision;
+        const ypaworld_arg136 *hit = NULL;
+        if ( needsWorldHit )
+        {
+            vec3d confirmed;
+            const float reach = (beam.end - beam.start).length() + 1.0f;
+            if ( ypabact_LaserWorldHit(shooter, beam.start, dir, reach,
+                                      &confirmed, &collision) &&
+                 (confirmed - beam.end).length() < 2.0f )
+                hit = &collision;
+        }
+
+        shooter->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
+                                       hit, &wproto.chain_fx, &beam.end, &rotation);
+    }
+
+    // Laser contact is the projectile-equivalent detonation event. The same
+    // authored trigger works for unit and world hits without a new parser name.
+    shooter->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE,
+                                   NULL, &wproto.chain_fx, &beam.end, &rotation);
 }
 
 static float ypabact_LaserClampVisualSpacing(float spacing)
@@ -12801,7 +12883,10 @@ void NC_STACK_ypabact::StopLaser()
     if ( !_laser_soundcarrier.Sounds.empty() &&
          (_laser_soundcarrier.Sounds[0].IsEnabled() ||
           _laser_soundcarrier.Sounds[0].IsPFxEnabled() ||
-          _laser_soundcarrier.Sounds[0].IsShkEnabled()) )
+          _laser_soundcarrier.Sounds[0].IsShkEnabled() ||
+          (_laser_soundcarrier.Sounds.size() > 1 &&
+           (_laser_soundcarrier.Sounds[1].IsPFxEnabled() ||
+            _laser_soundcarrier.Sounds[1].IsShkEnabled()))) )
         SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     if ( !_laser_hit_soundcarrier.Sounds.empty() &&
          _laser_hit_soundcarrier.Sounds[0].IsEnabled() )
@@ -12875,6 +12960,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
     NC_STACK_ypabact *primaryChainGroupTarget = NULL;
     std::vector<NC_STACK_ypabact *> directHitTargets;
     directHitTargets.reserve(requests.size());
+    std::vector<vec3d> chainFXPoints;
 
     bool spawnBeamVPs = (_laser_next_beam_vp_time <= 0 || _clock >= _laser_next_beam_vp_time);
 
@@ -13027,6 +13113,8 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             // ---- Throttled impact/contact FX ----
             if ( _clock >= beam.next_fx_time )
             {
+                ypabact_SpawnLaserImpactChainFX(this, wproto, beam, dir,
+                                                false, chainFXPoints);
                 ypabact_SpawnWeaponImpactVisual(_world, wproto, false, beam.end,
                                                    ypabact_LaserRotationFromDir(dir, _rotation), 90);
                 beam.next_fx_time = _clock + 160;
@@ -13080,6 +13168,8 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             // vp_dead so old test weapons still show something instead of nothing.
             if ( useWorldHit && _clock >= beam.next_fx_time )
             {
+                ypabact_SpawnLaserImpactChainFX(this, wproto, beam, dir,
+                                                true, chainFXPoints);
                 ypabact_SpawnWeaponImpactVisual(_world, wproto, true, beam.end,
                                                    ypabact_LaserRotationFromDir(dir, _rotation), 90);
                 beam.next_fx_time = _clock + 160;
@@ -13150,6 +13240,8 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
                 if ( _clock >= beam.next_fx_time )
                 {
+                    ypabact_SpawnLaserImpactChainFX(this, wproto, beam, dir,
+                                                    false, chainFXPoints);
                     ypabact_SpawnWeaponImpactVisual(_world, wproto, false, beam.end,
                                                        ypabact_LaserRotationFromDir(dir, _rotation), 90);
                     beam.next_fx_time = _clock + 160;
@@ -13268,7 +13360,8 @@ static NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shoot
                                                         const vec3d &start, const vec3d &down,
                                                         float range, bool beamWasActive,
                                                         bool spawnBeamVPs, bool playerControlled,
-                                                        float damageMult)
+                                                        float damageMult,
+                                                        std::vector<vec3d> &chainFXPoints)
 {
     NC_STACK_ypaworld *world = shooter ? shooter->getBACT_pWorld() : NULL;
     if ( !world )
@@ -13322,6 +13415,8 @@ static NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shoot
 
         if ( shooter->_clock >= beam.next_fx_time )
         {
+            ypabact_SpawnLaserImpactChainFX(shooter, wproto, beam, down,
+                                            false, chainFXPoints);
             ypabact_SpawnWeaponImpactVisual(world, wproto, false, beam.end,
                                                ypabact_LaserRotationFromDir(down, shooter->_rotation), 90);
             beam.next_fx_time = shooter->_clock + 160;
@@ -13381,6 +13476,8 @@ static NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shoot
 
         if ( useWorldHit && shooter->_clock >= beam.next_fx_time )
         {
+            ypabact_SpawnLaserImpactChainFX(shooter, wproto, beam, down,
+                                            true, chainFXPoints);
             ypabact_SpawnWeaponImpactVisual(world, wproto, true, beam.end,
                                                ypabact_LaserRotationFromDir(down, shooter->_rotation), 90);
             beam.next_fx_time = shooter->_clock + 160;
@@ -13408,7 +13505,10 @@ void NC_STACK_ypabact::StopVerticalLaser()
     if ( !_vertical_laser_soundcarrier.Sounds.empty() &&
          (_vertical_laser_soundcarrier.Sounds[0].IsEnabled() ||
           _vertical_laser_soundcarrier.Sounds[0].IsPFxEnabled() ||
-          _vertical_laser_soundcarrier.Sounds[0].IsShkEnabled()) )
+          _vertical_laser_soundcarrier.Sounds[0].IsShkEnabled() ||
+          (_vertical_laser_soundcarrier.Sounds.size() > 1 &&
+           (_vertical_laser_soundcarrier.Sounds[1].IsPFxEnabled() ||
+            _vertical_laser_soundcarrier.Sounds[1].IsShkEnabled()))) )
     {
         SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
     }
@@ -13474,6 +13574,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
     size_t activeBeamCount = 0;
     std::vector<NC_STACK_ypabact *> directHitTargets;
     directHitTargets.reserve((size_t)wproto.laser_beam_count + 1);
+    std::vector<vec3d> chainFXPoints;
 
     // Vertical Laser shares the same aggressive player targeting as the normal
     // Laser. vertical_laser_ai_trigger_radius remains AI-only: player acquisition uses
@@ -13519,7 +13620,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
         ypabact_UpdateVerticalLaserBeam(this, wproto, _vertical_laser_beams[0],
                                         _vertical_laser_request_start, primaryDir, range,
                                         wasActive && oldBeamCount > 0,
-                                        spawnBeamVPs, playerControlled, 1.0f);
+                                        spawnBeamVPs, playerControlled, 1.0f, chainFXPoints);
     activeBeamCount = 1;
 
     NC_STACK_ypabact *primaryChainGroupTarget = NULL;
@@ -13586,7 +13687,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
                 ypabact_UpdateVerticalLaserBeam(this, wproto, _vertical_laser_beams[activeBeamCount],
                                                 _vertical_laser_request_start, extraDir, range,
                                                 wasActive && activeBeamCount < oldBeamCount,
-                                                spawnBeamVPs, playerControlled, 1.0f);
+                                                spawnBeamVPs, playerControlled, 1.0f, chainFXPoints);
 
             selectedTargets.push_back(extraTarget);
             if ( hitTarget && hitTarget->_owner != World::OWNER_0 &&
@@ -13661,6 +13762,8 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
 
                 if ( _clock >= chainBeam.next_fx_time )
                 {
+                    ypabact_SpawnLaserImpactChainFX(this, wproto, chainBeam,
+                                                    chainDir, false, chainFXPoints);
                     ypabact_SpawnWeaponImpactVisual(_world, wproto, false, chainBeam.end,
                                                        ypabact_LaserRotationFromDir(chainDir, _rotation), 90);
                     chainBeam.next_fx_time = _clock + 160;
@@ -19983,16 +20086,17 @@ static bool ypabact_GetCompoundFXGeometry(NC_STACK_ypabact *bact,
     return true;
 }
 
-void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx)
+void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx,
+                                  const vec3d *impactPos, const mat3x3 *impactRot)
 {
     ypaworld_arg146 arg146;
 
     vec3d compoundCenter;
     float compoundRadius = 0.0f;
     const bool hasCompoundFXGeometry =
-        ypabact_GetCompoundFXGeometry(this, &compoundCenter, &compoundRadius);
+        !impactPos && ypabact_GetCompoundFXGeometry(this, &compoundCenter, &compoundRadius);
 
-    arg146.pos = _position;
+    arg146.pos = impactPos ? *impactPos : _position;
     float effectRadius = _radius;
 
     if ( hasCompoundFXGeometry )
@@ -20003,7 +20107,9 @@ void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx)
 
     arg146.vehicle_id = fx.ModelID;
 
-    if ( (hasCompoundFXGeometry && effectRadius > 0.01f) ||
+    if ( impactPos && impactRot )
+        arg146.pos += impactRot->Transform(fx.Pos);
+    else if ( (hasCompoundFXGeometry && effectRadius > 0.01f) ||
          (!hasCompoundFXGeometry && _radius > 31.0) )
     {
         float len = fx.Pos.length();
@@ -20029,7 +20135,7 @@ void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx)
 
         bah->SetStateInternal(&v18);
 
-        bah->_fly_dir = _rotation.Transform(fx.Pos);
+        bah->_fly_dir = (impactRot ? *impactRot : _rotation).Transform(fx.Pos);
 
         if ( fx.Accel )
             bah->_fly_dir += _fly_dir * _fly_dir_length;
@@ -20073,13 +20179,17 @@ void NC_STACK_ypabact::StartDestFXByType(uint8_t type)
     }
 }
 
-bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg136 *worldHit)
+bool NC_STACK_ypabact::StartChainFXByTrigger(
+    uint8_t trigger, const ypaworld_arg136 *worldHit,
+    const std::vector<World::TChainFXConfig> *fxOverride,
+    const vec3d *impactPos, const mat3x3 *impactRot)
 {
-    if ( !_world || _chainFX.empty() )
+    const std::vector<World::TChainFXConfig> &chainFX = fxOverride ? *fxOverride : _chainFX;
+    if ( !_world || chainFX.empty() )
         return false;
 
     bool hasGroundDecal = false;
-    for (const World::TChainFXConfig &fx : _chainFX)
+    for (const World::TChainFXConfig &fx : chainFX)
     {
         if ( fx.trigger == trigger && fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
         {
@@ -20091,12 +20201,12 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
     // Persistent terrain decals are generated even when the source is outside
     // the normal FX visibility range. Existing visual/physical Chain FX keep
     // their historical visibility gate.
-    const bool sourceVisible = worldHit || _world->ypaworld_func145(this);
+    const bool sourceVisible = impactPos || worldHit || _world->ypaworld_func145(this);
     if ( !worldHit && !hasGroundDecal && !sourceVisible )
         return false;
 
     bool spawned = false;
-    for (const World::TChainFXConfig &fx : _chainFX)
+    for (const World::TChainFXConfig &fx : chainFX)
     {
         if ( fx.trigger != trigger )
             continue;
@@ -20135,20 +20245,20 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
         // temporary collision skeleton can be copied safely. Existing visual
         // and physical Chain FX remain on their normal SetState pass and keep
         // the normal visibility check.
-        if ( worldHit || !sourceVisible )
+        if ( (worldHit && !impactPos) || !sourceVisible )
             continue;
 
         if ( fx.mode == World::TChainFXConfig::MODE_VISUAL )
         {
-            vec3d visualPos = _position;
-            mat3x3 visualRot = _rotation;
+            vec3d visualPos = impactPos ? *impactPos : _position;
+            mat3x3 visualRot = impactRot ? *impactRot : _rotation;
             vec3d compoundCenter;
-            if ( ypabact_GetCompoundFXGeometry(this, &compoundCenter, NULL) )
+            if ( !impactPos && ypabact_GetCompoundFXGeometry(this, &compoundCenter, NULL) )
                 visualPos += _rotation.Transpose().Transform(compoundCenter);
 
             vec3d visualOffset;
             mat3x3 visualRotationDelta;
-            if ( GetProjectileVisualMotionDelta(&visualOffset, &visualRotationDelta) )
+            if ( !impactPos && GetProjectileVisualMotionDelta(&visualOffset, &visualRotationDelta) )
             {
                 visualPos += visualOffset;
                 visualRot = (_rotation.Transpose() * visualRotationDelta).Transpose();
@@ -20161,7 +20271,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg
             World::DestFX tempFx;
             tempFx.ModelID = fx.physical_vehicle;
             tempFx.Pos = fx.offset;
-            StartDestFX(tempFx);
+            StartDestFX(tempFx, impactPos, impactRot);
         }
 
         spawned = true;
