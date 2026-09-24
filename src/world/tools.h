@@ -248,6 +248,29 @@ inline int RandomIntRangeInclusive(int minValue, int maxValue)
     return minValue + (int)((range + 1) * randomPart);
 }
 
+// Shared inclusive double roll for authored value/min_max ranges. Fixed values
+// return directly, so effects without an authored range never consume the
+// shared rand() stream.
+inline double RandomFloatRangeInclusive(double minValue, double maxValue)
+{
+    if ( maxValue < minValue )
+        std::swap(minValue, maxValue);
+
+    if ( minValue == maxValue )
+        return minValue;
+
+    const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
+    return minValue + randomPart * (maxValue - minValue);
+}
+
+// Per-axis draw for authored vec3 value/min_max ranges (Chain FX offsets).
+inline vec3d RandomVec3RangeInclusive(const vec3d &minValue, const vec3d &maxValue)
+{
+    return vec3d(RandomFloatRangeInclusive(minValue.x, maxValue.x),
+                 RandomFloatRangeInclusive(minValue.y, maxValue.y),
+                 RandomFloatRangeInclusive(minValue.z, maxValue.z));
+}
+
 // Shared yaw/pitch direction used by Proximity Defense and Weapon Cluster.
 // Authored angle ranges are sampled uniformly. Callers may instead request the
 // existing evenly-spaced full-circle distribution by supplying a valid shot
