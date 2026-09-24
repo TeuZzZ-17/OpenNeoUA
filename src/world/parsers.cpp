@@ -2105,6 +2105,28 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
     return World::TChainFXConfig::MODE_VISUAL;
 }
 
+// Chain FX offsets use the shared fixed value / min_max syntax. Invalid text
+// falls back to a fixed 0 so the block stays vanilla-safe and loadable.
+static void ParseChainFXOffsetAxis(const std::string &axisName,
+                                   const std::string &value,
+                                   double &minValue,
+                                   double &maxValue)
+{
+    float parsedMin = 0.0f;
+    float parsedMax = 0.0f;
+    if ( World::ParseFloatRangeValue(value, parsedMin, parsedMax) )
+    {
+        minValue = parsedMin;
+        maxValue = parsedMax;
+        return;
+    }
+
+    minValue = 0.0;
+    maxValue = 0.0;
+    ypa_log_out("WARNING: invalid begin_chain_fx offset_%s '%s', using 0\n",
+                axisName.c_str(), value.c_str());
+}
+
 static int ParseChainFXBlock(ScriptParser::Parser &parser,
                              std::vector<World::TChainFXConfig> *out,
                              ChainFXParseContext context)
@@ -2115,7 +2137,10 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     float endSize = 0.0;
     bool hasMidSize = false;
     bool hasEndSize = false;
-    vec3d offset;
+    // Offset accepts a fixed value or a min_max range rolled at each spawn.
+    vec3d offsetMin = vec3d(0.0, 0.0, 0.0);
+    vec3d offsetMax = vec3d(0.0, 0.0, 0.0);
+    vec3d spin = vec3d(0.0, 0.0, 0.0);
     int duration = 0;
     bool groundDecalDurationValid = false;
     bool groundDecalPermanent = false;
@@ -2195,7 +2220,9 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
-                    chain.offset = offset;
+                    chain.offset_min = offsetMin;
+                    chain.offset_max = offsetMax;
+                    chain.spin = spin;
                     chain.start_size = startSize;
                     chain.mid_size = midSize;
                     chain.end_size = endSize;
@@ -2214,7 +2241,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
-                    chain.offset = offset;
+                    chain.offset_min = offsetMin;
+                    chain.offset_max = offsetMax;
                     chain.physical_vehicle = physicalVehicle;
                     out->push_back(chain);
                 }
@@ -2357,11 +2385,14 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         else if ( !StriCmp(p1, "fade_out") )
             fadeOut = NonNegativeFiniteMilliseconds(parser, p2);
         else if ( !StriCmp(p1, "offset_x") )
-            offset.x = parser.stof(p2, 0);
+            ParseChainFXOffsetAxis("x", p2, offsetMin.x, offsetMax.x);
         else if ( !StriCmp(p1, "offset_y") )
-            offset.y = parser.stof(p2, 0);
+            ParseChainFXOffsetAxis("y", p2, offsetMin.y, offsetMax.y);
         else if ( !StriCmp(p1, "offset_z") )
-            offset.z = parser.stof(p2, 0);
+            ParseChainFXOffsetAxis("z", p2, offsetMin.z, offsetMax.z);
+        else if ( ParseVPSpinParam(parser, "visual", p1, p2, spin) )
+        {
+        }
         else if ( !StriCmp(p1, "vp_model") )
         {
             World::TChainFXVisual visual;

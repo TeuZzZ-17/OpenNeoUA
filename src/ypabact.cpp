@@ -20303,7 +20303,8 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
         {
             World::DestFX tempFx;
             tempFx.ModelID = fx.physical_vehicle;
-            tempFx.Pos = fx.offset;
+            // Offset min_max is rolled fresh for every activation of the Chain FX.
+            tempFx.Pos = World::RandomVec3RangeInclusive(fx.offset_min, fx.offset_max);
             StartDestFX(tempFx, impactPos, impactRot);
         }
 

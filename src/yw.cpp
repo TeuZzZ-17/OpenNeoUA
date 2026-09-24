@@ -1496,8 +1496,12 @@ bool NC_STACK_ypaworld::LoadSuperItemProfilePath(const std::string &authoredPath
              chain.trigger != World::TChainFXConfig::TRIGGER_DETONATE ||
              chain.duration <= 0 || chain.visuals.empty() ||
              !std::isfinite(chain.start_size) || !std::isfinite(chain.end_size) ||
-             !std::isfinite(chain.offset.x) || !std::isfinite(chain.offset.y) ||
-             !std::isfinite(chain.offset.z) )
+             !std::isfinite(chain.offset_min.x) || !std::isfinite(chain.offset_min.y) ||
+             !std::isfinite(chain.offset_min.z) ||
+             !std::isfinite(chain.offset_max.x) || !std::isfinite(chain.offset_max.y) ||
+             !std::isfinite(chain.offset_max.z) ||
+             !std::isfinite(chain.spin.x) || !std::isfinite(chain.spin.y) ||
+             !std::isfinite(chain.spin.z) )
         {
             ypa_log_out("WARNING: invalid detonation Chain FX ignored in SuperItem profile '%s'.\n",
                         profile.id.c_str());
