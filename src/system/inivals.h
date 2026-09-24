@@ -294,6 +294,12 @@ public:
     static Common::Ini::Key GfxWorldNewHpBarLowTint;
     static Common::Ini::Key GfxWorldNewHpBarEmptyTint;
 
+    // OpenNeoUA: optional procedural world Shield bar drawn under the unit HP
+    // bar. When enabled it replaces the classic world Shield row for that frame,
+    // in both HP styles; disabled/absent keeps the vanilla Shield row.
+    static Common::Ini::Key GfxWorldNewShieldBarEnable;
+    static Common::Ini::Key GfxWorldNewShieldBarTint;
+
     // OpenNeoUA: global opt-in visual profiles for units currently under the same
     // regen/drain conditions used by the automatic Status Icons. A missing or
     // incomplete profile is disabled and never changes energy gameplay.
