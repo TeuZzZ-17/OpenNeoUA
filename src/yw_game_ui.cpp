@@ -972,6 +972,10 @@ struct YWProceduralStatusBarConfig
     GFX::TGLColor hpFullTint = GFX::TGLColor(0.0f, 217.0f / 255.0f, 81.0f / 255.0f, 1.0f);
     GFX::TGLColor hpLowTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 1.0f);
     GFX::TGLColor hpEmptyTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 0.0f);
+    bool shieldEnabled = false;
+    // Same teal as the classic Shield squares in MAPMISC, so the world Shield
+    // bar matches the cockpit Shield display.
+    GFX::TGLColor shieldTint = GFX::TGLColor(0.0f, 137.0f / 255.0f, 170.0f / 255.0f, 1.0f);
 };
 
 static GFX::TGLColor yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TGLColor &fallback)
@@ -1009,6 +1013,8 @@ static const YWProceduralStatusBarConfig &yw_GetProceduralStatusBarConfig()
         out.hpFullTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewHpBarFullTint, out.hpFullTint);
         out.hpLowTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewHpBarLowTint, out.hpLowTint);
         out.hpEmptyTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewHpBarEmptyTint, out.hpEmptyTint);
+        out.shieldEnabled = System::IniConf::GfxWorldNewShieldBarEnable.Get<bool>();
+        out.shieldTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewShieldBarTint, out.shieldTint);
         return out;
     }();
     return config;
@@ -1024,6 +1030,18 @@ static GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &lowTint,
                          lowTint.g + (fullTint.g - lowTint.g) * ratio,
                          lowTint.b + (fullTint.b - lowTint.b) * ratio,
                          (lowTint.a + (fullTint.a - lowTint.a) * ratio) * opacityMul);
+}
+
+// Vertical strip painted by the procedural HP bar inside its tile cell: half
+// the cell height, vertically centered. Shared by layout code so the bars that
+// stack under the HP row always use the same geometry.
+static void yw_GetProceduralHpStripRect(int top, int cellHeight, int *outTop, int *outHeight)
+{
+    const int renderHeight = std::max(1, cellHeight / 2);
+    if ( outTop )
+        *outTop = top + (cellHeight - renderHeight) / 2;
+    if ( outHeight )
+        *outHeight = renderHeight;
 }
 
 static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int value,
@@ -1048,8 +1066,9 @@ static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int val
 
     // Keep the V2 50% vertical thickness, but render the bar as one continuous
     // filled strip instead of reproducing the old MAPMISC segmented glyphs.
-    const int renderHeight = std::max(1, cellHeight / 2);
-    const int renderTop = top + (cellHeight - renderHeight) / 2;
+    int renderTop = 0;
+    int renderHeight = 0;
+    yw_GetProceduralHpStripRect(top, cellHeight, &renderTop, &renderHeight);
     const float barLeft = (float)left;
     const float barRight = (float)(left + squareCount * cellWidth);
     const float barBottom = (float)(renderTop + renderHeight);
@@ -1066,6 +1085,69 @@ static bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int val
     return true;
 }
 
+// OpenNeoUA custom: world Shield bar (gfx.world_new_shield_bar_enable).
+// Deliberately thinner and shorter than the HP bar so it reads as a secondary
+// strip, and centered under it. It replaces the classic world Shield row only
+// while it is enabled; the cockpit Shield is not affected.
+static void yw_GetWorldShieldBarRect(int hpLeft, int hpTop, int hpWidth,
+                                     int cellHeight, bool proceduralHp,
+                                     int *outLeft, int *outTop,
+                                     int *outWidth, int *outHeight)
+{
+    int hpBottom = hpTop + cellHeight;
+    if ( proceduralHp )
+    {
+        int stripTop = 0;
+        int stripHeight = 0;
+        yw_GetProceduralHpStripRect(hpTop, cellHeight, &stripTop, &stripHeight);
+        hpBottom = stripTop + stripHeight;
+    }
+
+    const int barWidth = std::max(1, (hpWidth * 3) / 4);
+    const int barHeight = std::max(1, cellHeight / 4);
+
+    if ( outLeft )
+        *outLeft = hpLeft + (hpWidth - barWidth) / 2;
+    if ( outTop )
+        *outTop = hpBottom + 1;
+    if ( outWidth )
+        *outWidth = barWidth;
+    if ( outHeight )
+        *outHeight = barHeight;
+}
+
+// Single tint fill plus a translucent track of the same color, so the missing
+// part stays readable without adding a second color parameter.
+static void yw_RenderProceduralShieldBar(int left, int top, int width, int height,
+                                         int value, int maxValue, uint8_t opacity)
+{
+    const YWProceduralStatusBarConfig &config = yw_GetProceduralStatusBarConfig();
+    if ( !config.shieldEnabled || width <= 0 || height <= 0 || maxValue <= 0 )
+        return;
+
+    value = std::max(0, std::min(value, maxValue));
+    const float ratio = (float)value / (float)maxValue;
+    const float opacityMul = opacity / 255.0f;
+
+    // Keep the empty track clearly readable without competing with the fill.
+    constexpr float trackAlpha = 0.4f;
+
+    GFX::TGLColor trackTint = config.shieldTint;
+    trackTint.a *= trackAlpha * opacityMul;
+    GFX::TGLColor fillTint = config.shieldTint;
+    fillTint.a *= opacityMul;
+
+    const float barLeft = (float)left;
+    const float barRight = (float)(left + width);
+    const float barBottom = (float)(top + height);
+    const float fillRight = barLeft + (barRight - barLeft) * ratio;
+
+    GFX::Engine.DrawVirtualUISolidRect(barLeft, (float)top, barRight, barBottom, trackTint);
+
+    if ( fillRight > barLeft )
+        GFX::Engine.DrawVirtualUISolidRect(barLeft, (float)top, fillRight, barBottom, fillTint);
+}
+
 static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile, uint8_t opacity = 255)
 {
     if ( !yw || !cur || squareCount <= 0 || maxValue <= 0 )
@@ -1077,9 +1159,10 @@ static void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int le
         value = maxValue;
 
     const bool isHpBar = filledTile == 2 && emptyTile == 6;
-    // The procedural path covers HP only. With the new world HP bar enabled, the world-space
-    // Shield row is intentionally omitted; the personal cockpit Shield remains
-    // on the classic MAPMISC squares through sub_4E4F80().
+    // The procedural path covers HP only. The world Shield row is left out when
+    // the new world HP bar or the new world Shield bar is active (see
+    // yw_RenderUnitLifeBar); the personal cockpit Shield remains on the classic
+    // MAPMISC squares through sub_4E4F80().
     if ( isHpBar &&
          yw_RenderProceduralHpBar(left, top, squareCount, value, maxValue,
                                    yw->_guiTiles[50]->map[0].w, yw->_guiTiles[50]->h,
@@ -15876,9 +15959,28 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                 v41 -= (yw->_guiTiles[50]->h / 2) + (yw->_screenSize.y / 16);
 
                 int barHeight = yw->_guiTiles[50]->h;
-                const bool hideWorldShield = yw_GetProceduralStatusBarConfig().hpEnabled;
+                const YWProceduralStatusBarConfig &statusBarConfig = yw_GetProceduralStatusBarConfig();
+                const bool hideWorldShield = statusBarConfig.hpEnabled;
+                const bool newWorldShieldBar = statusBarConfig.shieldEnabled;
                 int shieldTop = v41;
                 int lifeTop = hideWorldShield ? shieldTop : shieldTop - barHeight - 1;
+
+                // Optional world Shield bar, always directly under the HP bar.
+                // It replaces the classic Shield row only while it is enabled.
+                int shieldBarLeft = 0;
+                int shieldBarTop = 0;
+                int shieldBarWidth = 0;
+                int shieldBarHeight = 0;
+                if ( newWorldShieldBar )
+                    yw_GetWorldShieldBarRect(v42, lifeTop, v43, barHeight, hideWorldShield,
+                                             &shieldBarLeft, &shieldBarTop,
+                                             &shieldBarWidth, &shieldBarHeight);
+
+                // Bottom edge of the stacked unit UI: HP row plus whichever
+                // Shield row/bar is actually drawn. Nothing else may enter it.
+                int uiStackBottom = shieldTop + barHeight;
+                if ( newWorldShieldBar )
+                    uiStackBottom = std::max(uiStackBottom, shieldBarTop + shieldBarHeight);
 
                 // Selection owns the small strip immediately above the vanilla
                 // faction arrow. Keep the X fixed there and, only if needed,
@@ -15898,12 +16000,14 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                                                  selectionHalfArm;
                         const int maxDetailedUiBottom = selectionTop -
                                                         kWorldSelectionXUiGap;
-                        const int detailedUiBottom = shieldTop + barHeight;
+                        const int detailedUiBottom = uiStackBottom;
                         if ( detailedUiBottom > maxDetailedUiBottom )
                         {
                             const int lift = detailedUiBottom - maxDetailedUiBottom;
                             shieldTop -= lift;
                             lifeTop -= lift;
+                            shieldBarTop -= lift;
+                            uiStackBottom -= lift;
                         }
                     }
                 }
@@ -15912,11 +16016,16 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                 {
                     if ( v42 + v43 < yw->_screenSize.x && lifeTop >= 0 )
                     {
-                        if ( barHeight + shieldTop < yw->_screenSize.y )
+                        if ( uiStackBottom < yw->_screenSize.y )
                         {
                             FontUA::set_opacity(cur, worldUiOpacity);
                             yw_RenderUnitSquareBar(yw, cur, v42, lifeTop, v13, bact->_energy, bact->_energy_max, 2, 6, worldUiOpacity);
-                            if ( !hideWorldShield )
+                            if ( newWorldShieldBar )
+                                yw_RenderProceduralShieldBar(shieldBarLeft, shieldBarTop,
+                                                             shieldBarWidth, shieldBarHeight,
+                                                             (int)bact->GetEffectiveShield(), 100,
+                                                             worldUiOpacity);
+                            else if ( !hideWorldShield )
                                 yw_RenderUnitSquareBar(yw, cur, v42, shieldTop, v13, (int)bact->GetEffectiveShield(), 100, 1, 5, worldUiOpacity);
 
                             int statusAnchorTop = lifeTop;
