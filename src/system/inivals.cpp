@@ -389,6 +389,12 @@ Common::Ini::Key IniConf::GfxWorldNewHpBarFullTint("gfx.world_new_hp_bar_full_ti
 Common::Ini::Key IniConf::GfxWorldNewHpBarLowTint("gfx.world_new_hp_bar_low_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
 Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255_0_0_0"));
 
+// OpenNeoUA custom: optional procedural world Shield bar under the unit HP bar.
+// Single RGBA tint: the missing part is drawn as a semi-transparent track of
+// the same color. Disabled/absent preserves the classic world Shield row.
+Common::Ini::Key IniConf::GfxWorldNewShieldBarEnable("gfx.world_new_shield_bar_enable", Common::Ini::KT_BOOL, false);
+Common::Ini::Key IniConf::GfxWorldNewShieldBarTint("gfx.world_new_shield_bar_tint", Common::Ini::KT_WORD, std::string("0_137_170_255"));
+
 // OpenNeoUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
 // gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
 // All numeric values use KT_WORD so
@@ -714,6 +720,8 @@ void IniConf::Init()
         , &GfxWorldNewHpBarFullTint
         , &GfxWorldNewHpBarLowTint
         , &GfxWorldNewHpBarEmptyTint
+        , &GfxWorldNewShieldBarEnable
+        , &GfxWorldNewShieldBarTint
         , &GfxRegenFXVP
         , &GfxRegenFX3DS
         , &GfxRegenFXBase
