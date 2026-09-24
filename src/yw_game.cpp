@@ -3060,11 +3060,14 @@ void NC_STACK_ypaworld::SpawnChainFX(const World::TChainFXConfig &config, const 
     if ( bases.empty() )
         return;
 
-    vec3d spawnPos = pos + rot.Transform(config.offset);
+    // Offset min_max is rolled fresh for every activation of the Chain FX.
+    vec3d spawnPos = pos + rot.Transform(World::RandomVec3RangeInclusive(config.offset_min,
+                                                                        config.offset_max));
     _transientVPs.emplace_back(bases.front(), spawnPos, rot, config.duration);
 
     TTransientVP &fx = _transientVPs.back();
     fx.chainFX = true;
+    fx.spin = config.spin;
     fx.chainBases = std::move(bases);
     fx.chainTints = std::move(tints);
     fx.chainIndex = 0;

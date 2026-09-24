@@ -269,7 +269,12 @@ struct TChainFXConfig
 
     uint8_t mode = MODE_VISUAL;
     uint8_t trigger = TRIGGER_NONE;
-    vec3d offset;
+    // Offset accepts a fixed value or a min_max range: equal ends mean fixed.
+    // The range is rolled fresh at every Chain FX activation.
+    vec3d offset_min = vec3d(0.0, 0.0, 0.0);
+    vec3d offset_max = vec3d(0.0, 0.0, 0.0);
+    // Shared 0-10 spin strength applied to every visual of the chain.
+    vec3d spin = vec3d(0.0, 0.0, 0.0);
     float start_size = 1.0;
     float mid_size = 0.0;
     float end_size = 0.0;
