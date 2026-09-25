@@ -685,7 +685,14 @@ void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc
         }
         else if (brf->ViewingObject.ObjType == TBriefObject::TYPE_VEHICLE)
         {
-            float radius = yw->_vhclProtos[brf->ViewingObject.ID].radius;
+            const World::TVhclProto &proto = yw->_vhclProtos[brf->ViewingObject.ID];
+
+            // Briefing framing size. The legacy radius keeps the vanilla look
+            // for scripts that still author it: as soon as one usable coll_*
+            // sphere exists, the real half-size of the collision volume is the
+            // size source.
+            const float compoundHalfSize = World::CompoundCollisionHalfSize(proto.coll);
+            const float radius = compoundHalfSize > 0.0f ? compoundHalfSize : proto.radius;
 
             v17 = radius * 7.0;
             v16 = radius * 32.0;
@@ -1312,6 +1319,7 @@ void  UserData::sb_0x46ca74()
         InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
         InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_SPACE);
         InputConfig[World::INPUT_BIND_MAP_FOCUS] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 53, Input::KC_E);
+        InputConfig[World::INPUT_BIND_HIDE_VEHICLE] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 54, Input::KC_C);
         InputConfig[World::INPUT_BIND_ZOOMIN] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 16, Input::KC_NUMPLUS);
         InputConfig[World::INPUT_BIND_ZOOMOUT] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 17, Input::KC_NUMMINUS);
 
@@ -7817,7 +7825,7 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         World::INPUT_BIND_DRIVE_SPEED,World::INPUT_BIND_GUN_HEIGHT,
     };
 
-    static const std::array<int, 54> HOTKEY
+    static const std::array<int, 55> HOTKEY
     {
         World::INPUT_BIND_ORDER,      World::INPUT_BIND_ATTACK,
         World::INPUT_BIND_NEW,        World::INPUT_BIND_ADD,
@@ -7857,7 +7865,8 @@ int UserData::InputIndexFromConfig(uint32_t type, uint32_t index)
         // profile slots. New remappable hotkeys continue at 52.
         -1,                           -1,
         World::INPUT_BIND_TOGGLE_UFO_SPY_UI,
-        World::INPUT_BIND_MAP_FOCUS
+        World::INPUT_BIND_MAP_FOCUS,
+        World::INPUT_BIND_HIDE_VEHICLE
     };
 
     if ( type == World::INPUT_BIND_TYPE_BUTTON && index < BUTTON.size())

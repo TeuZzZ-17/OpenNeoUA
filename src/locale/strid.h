@@ -296,6 +296,10 @@ enum OPENUA_STRING
     OUA_HORIZON_FADE_SMOOTH,
     OUA_HORIZON_FADE_CLASSIC,
 
+    // Input Settings label for the cockpit camera vehicle silhouette toggle.
+    // Appended so existing IDs stay stable.
+    OUA_HIDE_VEHICLE_SILHOUETTE,
+
     OUA_STRING_MAX
 };
 

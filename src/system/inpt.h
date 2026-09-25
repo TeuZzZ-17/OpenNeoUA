@@ -405,7 +405,9 @@ public:
     // Slots 50-51 are retained only to import user.txt files produced by the
     // short-lived separate Camera Zoom bindings. They are cleared by the
     // input parser and are not exposed as current actions.
-    std::array<int16_t, 54>       _hotKeys;
+    // One entry per World::INPUT_BIND hotkey slot: this table must stay at least
+    // as large as World::INPUT_BIND_MAX or a newer binding cannot be persisted.
+    std::array<int16_t, 55>       _hotKeys;
 
     static std::array<KeyInfo, KC_MAX>      KeyMatrix;
     static std::array<std::string, KC_MAX>  KeyTitle;

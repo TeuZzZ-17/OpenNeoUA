@@ -1382,7 +1382,18 @@ bool NC_STACK_ypabact::IsPlayerFirstPersonCameraActive() const
 
 bool NC_STACK_ypabact::ShouldRenderCockpitCameraBody() const
 {
-    return IsCockpitCameraActive();
+    return IsCockpitCameraActive() && !IsCockpitCameraSilhouetteHidden();
+}
+
+bool NC_STACK_ypabact::IsCockpitCameraSilhouetteHidden() const
+{
+    // Attachments render as separate units, so the owning body is resolved first
+    // and the whole vehicle disappears together with its gun children.
+    const NC_STACK_ypabact *owner = this;
+    if ( (_isUnitGunChild || _isDummy) && _parent && _parent != this )
+        owner = _parent;
+
+    return owner->IsCockpitCameraActive() && owner->_cockpit_camera_hide_vehicle;
 }
 
 vec3d NC_STACK_ypabact::GetBodyPosition() const
@@ -2837,6 +2848,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _viewer_overeof = 0.0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     _cockpit_gun_camera_recoil = 0.0f;
+    _cockpit_camera_hide_vehicle = false;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _clock = 0;
@@ -3074,6 +3086,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _viewer_overeof = 40.0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     _cockpit_gun_camera_recoil = 0.0f;
+    _cockpit_camera_hide_vehicle = false;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _energy = 10000;
@@ -5505,7 +5518,8 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     {
         if ( !(_status_flg & BACT_STFLAG_NORENDER) )
         {
-            if ( !(_oflags & BACT_OFLAG_VIEWER) || _oflags & BACT_OFLAG_ALWAYSREND || ShouldRenderCockpitCameraBody() )
+            if ( !IsCockpitCameraSilhouetteHidden() &&
+                 (!(_oflags & BACT_OFLAG_VIEWER) || _oflags & BACT_OFLAG_ALWAYSREND || ShouldRenderCockpitCameraBody()) )
             {
                 _current_vp->Bas->TForm().Pos = _tForm.Pos;
                 if ( ypabact_IsMainVPBase(this, _current_vp->Bas) &&
@@ -16464,18 +16478,10 @@ void NC_STACK_ypabact::ApplyCompoundCollision(const World::rbcolls &coll,
     _manualCompoundCollision = !_collNodes.roboColls.empty();
     _legacyRadiusDefined = radiusDefined;
 
-    // Sphere layout is immutable at runtime, so avoid rescanning every sphere
-    // for each broad-phase query. Padding remains dynamic and is added later.
-    _manualCompoundBroadRadius = -1.0f;
-    for (const World::TRoboColl &sphere : _collNodes.roboColls)
-    {
-        if ( sphere.robo_coll_radius <= 0.01f )
-            continue;
-
-        const float extent = sphere.coll_pos.length() + sphere.robo_coll_radius;
-        if ( extent > _manualCompoundBroadRadius )
-            _manualCompoundBroadRadius = extent;
-    }
+    // Sphere layout is immutable at runtime, so resolve the enclosing extent
+    // once instead of rescanning every sphere for each broad-phase query.
+    // Padding remains dynamic and is added later.
+    _manualCompoundBroadRadius = World::CompoundCollisionExtent(_collNodes);
 }
 
 void NC_STACK_ypabact::GetCollisionSpheres(
@@ -17572,6 +17578,7 @@ void NC_STACK_ypabact::Renew()
     _vehicle_fire_vp_end_time = 0;
     _cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     _cockpit_gun_camera_recoil = 0.0f;
+    _cockpit_camera_hide_vehicle = false;
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _spawn_units = 0;
