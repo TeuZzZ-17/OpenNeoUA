@@ -947,7 +947,7 @@ public:
     float _adist_bact;
     float _sdist_sector;
     float _sdist_bact;
-    float _ai_attack_range;
+    float _ai_engage_range;
     float _ai_retreat_range;
     float _ai_reengage_range;
     bool _unifiedAICombatDistance;

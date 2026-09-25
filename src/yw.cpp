@@ -1884,6 +1884,8 @@ void sub_445230(NC_STACK_ypaworld *yw)
 
     if (yw->_viewerBact == yw->_userUnit && yw->_userUnit
             && yw->_userUnit->_bact_type == BACT_TYPES_UFO
+            && yw->_userUnit->_status != BACT_STATUS_DEAD
+            && !(yw->_userUnit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2))
             && yw->_userUnit->getBACT_inputting())
     {
         GFX::Engine.setViewZoom(yw->_userUnit->GetPlayerViewZoom());
@@ -1893,6 +1895,10 @@ void sub_445230(NC_STACK_ypaworld *yw)
 float NC_STACK_ypaworld::GetUfoSpyUiRadius() const
 {
     if ( !_userUnit || _userUnit->_bact_type != BACT_TYPES_UFO )
+        return 0.0f;
+
+    if ( _userUnit->_status == BACT_STATUS_DEAD ||
+         (_userUnit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
         return 0.0f;
 
     const size_t vehicleId = _userUnit->_vehicleID;
@@ -4483,7 +4489,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_adist_bact = vhcl.adist_bact;
         bacto->_sdist_sector = vhcl.sdist_sector;
         bacto->_sdist_bact = vhcl.sdist_bact;
-        bacto->_ai_attack_range = vhcl.ai_attack_range;
+        bacto->_ai_engage_range = vhcl.ai_engage_range;
         bacto->_ai_retreat_range = vhcl.ai_retreat_range;
         bacto->_ai_reengage_range = vhcl.ai_reengage_range;
         bacto->_unifiedAICombatDistance = vhcl.HasValidUnifiedAICombatDistance();

@@ -505,7 +505,11 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
     // The Spectator vehicle remains a real model = ufo. Observer-specific
     // restrictions belong to the world/gameplay layer; class-level UFO features
     // such as optical zoom are intentionally shared with it.
-    if (_world && !_world->IsRoboMapOpen()
+    const bool ufoPlayerSystemsAvailable =
+        _status != BACT_STATUS_DEAD &&
+        !(_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
+
+    if (_world && ufoPlayerSystemsAvailable && !_world->IsRoboMapOpen()
             && _world->_userUnit == this && getBACT_inputting())
     {
         int zoomSteps = 0;
