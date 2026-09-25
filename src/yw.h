@@ -393,8 +393,11 @@ enum INPUT_BIND
     // OpenNeoUA: remappable Tactical Map focus/lock toggle. Appended so existing
     // profile binding IDs remain stable.
     INPUT_BIND_MAP_FOCUS = 53,
+    // OpenNeoUA: remappable cockpit camera vehicle silhouette toggle. Appended so
+    // existing profile binding IDs remain stable.
+    INPUT_BIND_HIDE_VEHICLE = 54,
 
-    INPUT_BIND_MAX        = 54,
+    INPUT_BIND_MAX        = 55,
 };
 
 // OpenNeoUA: fixed secondary shortcuts that intentionally coexist with the
@@ -3320,6 +3323,7 @@ public:
     bool _weaponSwitchBtnIsDown = false; // edge-triggered manual weapon selection
     bool _cycleTargetBtnIsDown = false;   // edge-triggered homing target cycle
     bool _ufoSpyBindingIsDown = false;     // edge latch for the remappable UFO Spy Mode binding
+    bool _hideVehicleBindingIsDown = false; // edge latch for the remappable Hide Vehicle binding
     bool _guiLoaded = false;
 
     std::array<TileMap *, 92> _guiTiles = Common::ArrayInit<TileMap *, 92>(NULL);

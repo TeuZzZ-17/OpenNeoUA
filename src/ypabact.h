@@ -683,6 +683,7 @@ public:
     bool IsCockpitCameraActive() const;
     bool IsPlayerFirstPersonCameraActive() const;
     bool ShouldRenderCockpitCameraBody() const;
+    bool IsCockpitCameraSilhouetteHidden() const;
     vec3d GetBodyPosition() const;
     vec3d GetCockpitCameraPosition() const;
     vec3d GetCockpitCameraViewPosition() const;
@@ -1070,6 +1071,7 @@ public:
     float _viewer_overeof;
     vec3d _cockpit_camera_offset;
     float _cockpit_gun_camera_recoil;
+    bool _cockpit_camera_hide_vehicle;
 //    float pos_x_cntr;
 //
 //    float pos_y_cntr;
