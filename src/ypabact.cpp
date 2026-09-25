@@ -2762,7 +2762,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _adist_bact = 0.0;
     _sdist_sector = 0.0;
     _sdist_bact = 0.0;
-    _ai_attack_range = 0.0f;
+    _ai_engage_range = 0.0f;
     _ai_retreat_range = 0.0f;
     _ai_reengage_range = 0.0f;
     _unifiedAICombatDistance = false;
@@ -7387,7 +7387,7 @@ bool NC_STACK_ypabact::ApplyUnifiedAICombatDistance(float distance, bool *starte
         if ( distance >= _ai_reengage_range )
         {
             _status_flg &= ~BACT_STFLAG_APPROACH;
-            if ( distance <= _ai_attack_range )
+            if ( distance <= _ai_engage_range )
                 _status_flg |= BACT_STFLAG_ATTACK;
         }
         else
@@ -7410,7 +7410,7 @@ bool NC_STACK_ypabact::ApplyUnifiedAICombatDistance(float distance, bool *starte
         return true;
     }
 
-    if ( distance <= _ai_attack_range )
+    if ( distance <= _ai_engage_range )
         _status_flg |= BACT_STFLAG_ATTACK;
     else
         _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -7480,7 +7480,7 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
                 // re-enter APPROACH while there is no room to increase range.
                 _status_flg &= ~BACT_STFLAG_APPROACH;
                 if ( foeDistance >= _ai_retreat_range &&
-                     foeDistance <= _ai_attack_range )
+                     foeDistance <= _ai_engage_range )
                     _status_flg |= BACT_STFLAG_ATTACK;
                 else
                     _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -7826,7 +7826,7 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
             {
                 _status_flg &= ~BACT_STFLAG_APPROACH;
                 if ( cellDistance >= _ai_retreat_range &&
-                     cellDistance <= _ai_attack_range )
+                     cellDistance <= _ai_engage_range )
                     _status_flg |= BACT_STFLAG_ATTACK;
                 else
                     _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -8324,9 +8324,10 @@ static NC_STACK_ypabact *ypabact_ResolveSessionKillCreditedUnit(NC_STACK_ypabact
     NC_STACK_ypabact *candidate = victim->_killer;
     std::unordered_set<NC_STACK_ypabact *> visited;
 
-    // Normalize attached components and follow a bounded chain through dying
-    // damage sources. This preserves the original attacker for simultaneous
-    // chain kills instead of awarding only the first directly destroyed unit.
+    // Normalize attached components and Host Station Robo-Guns, then follow a
+    // bounded chain through dying damage sources. This preserves the original
+    // attacker for simultaneous chain kills instead of awarding only the first
+    // directly destroyed unit.
     while ( candidate && candidate != victim && visited.insert(candidate).second )
     {
         if ( (candidate->_isUnitGunChild || candidate->_isDummy) &&
@@ -8334,6 +8335,20 @@ static NC_STACK_ypabact *ypabact_ResolveSessionKillCreditedUnit(NC_STACK_ypabact
         {
             candidate = candidate->_parent;
             continue;
+        }
+
+        // Robo-Guns are weapons of the Host Station, not independent Elite
+        // units. Normalize their kills to the owning Robo so Host Stations can
+        // never gain medals, glow or stat bonuses through attached turrets.
+        if ( candidate->_bact_type == BACT_TYPES_GUN )
+        {
+            NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>(candidate);
+            if ( gun && gun->IsRoboGun() && candidate->_host_station &&
+                 candidate->_host_station != candidate )
+            {
+                candidate = candidate->_host_station;
+                continue;
+            }
         }
 
         const bool candidateIsDying =
@@ -20297,15 +20312,21 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
                 visualRot = (_rotation.Transpose() * visualRotationDelta).Transpose();
             }
 
-            _world->SpawnChainFX(fx, visualPos, visualRot);
+            const int count = World::RandomIntRangeInclusive(fx.count_min, fx.count_max);
+            for (int i = 0; i < count; ++i)
+                _world->SpawnChainFX(fx, visualPos, visualRot);
         }
         else if ( fx.mode == World::TChainFXConfig::MODE_PHYSICAL )
         {
-            World::DestFX tempFx;
-            tempFx.ModelID = fx.physical_vehicle;
-            // Offset min_max is rolled fresh for every activation of the Chain FX.
-            tempFx.Pos = World::RandomVec3RangeInclusive(fx.offset_min, fx.offset_max);
-            StartDestFX(tempFx, impactPos, impactRot);
+            const int count = World::RandomIntRangeInclusive(fx.count_min, fx.count_max);
+            for (int i = 0; i < count; ++i)
+            {
+                World::DestFX tempFx;
+                tempFx.ModelID = fx.physical_vehicle;
+                // Offset min_max is rolled independently for every generated instance.
+                tempFx.Pos = World::RandomVec3RangeInclusive(fx.offset_min, fx.offset_max);
+                StartDestFX(tempFx, impactPos, impactRot);
+            }
         }
 
         spawned = true;
