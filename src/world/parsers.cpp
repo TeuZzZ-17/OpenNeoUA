@@ -2137,7 +2137,9 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     float endSize = 0.0;
     bool hasMidSize = false;
     bool hasEndSize = false;
-    // Offset accepts a fixed value or a min_max range rolled at each spawn.
+    int countMin = 1;
+    int countMax = 1;
+    // Offset accepts a fixed value or a min_max range rolled for each instance.
     vec3d offsetMin = vec3d(0.0, 0.0, 0.0);
     vec3d offsetMax = vec3d(0.0, 0.0, 0.0);
     vec3d spin = vec3d(0.0, 0.0, 0.0);
@@ -2220,6 +2222,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
+                    chain.count_min = countMin;
+                    chain.count_max = countMax;
                     chain.offset_min = offsetMin;
                     chain.offset_max = offsetMax;
                     chain.spin = spin;
@@ -2241,6 +2245,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
+                    chain.count_min = countMin;
+                    chain.count_max = countMax;
                     chain.offset_min = offsetMin;
                     chain.offset_max = offsetMax;
                     chain.physical_vehicle = physicalVehicle;
@@ -2384,6 +2390,21 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
         else if ( !StriCmp(p1, "fade_out") )
             fadeOut = NonNegativeFiniteMilliseconds(parser, p2);
+        else if ( !StriCmp(p1, "count") )
+        {
+            if ( context == CHAIN_FX_SUPERITEM )
+            {
+                countMin = 1;
+                countMax = 1;
+                ypa_log_out("WARNING: SuperItem begin_chain_fx does not support count; using 1\n");
+            }
+            else if ( !World::ParsePositiveIntRangeValue(p2, 32, countMin, countMax) )
+            {
+                countMin = 1;
+                countMax = 1;
+                ypa_log_out("WARNING: invalid begin_chain_fx count '%s', using 1\n", p2.c_str());
+            }
+        }
         else if ( !StriCmp(p1, "offset_x") )
             ParseChainFXOffsetAxis("x", p2, offsetMin.x, offsetMax.x);
         else if ( !StriCmp(p1, "offset_y") )
@@ -3015,10 +3036,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->sdist_bact = parser.stof(p2, 0);
     }
-    else if ( !StriCmp(p1, "ai_attack_range") )
+    // ai_attack_range remains accepted only for compatibility with older OpenNeoUA scripts.
+    else if ( !StriCmp(p1, "ai_engage_range") || !StriCmp(p1, "ai_attack_range") )
     {
-        _vhcl->ai_attack_range = parser.stof(p2, 0);
-        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_ATTACK_DEFINED;
+        _vhcl->ai_engage_range = parser.stof(p2, 0);
+        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_ENGAGE_DEFINED;
     }
     else if ( !StriCmp(p1, "ai_retreat_range") )
     {
