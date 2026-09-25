@@ -1196,17 +1196,7 @@ void NC_STACK_yparobo::wallow(update_msg *arg)
 {
     _position.y = sin(arg->gTime * C_PI / 3000.0) * 25.0 + _roboYPos;
 
-    for (World::TRoboGun &gun : _roboGuns)
-    {
-        if (gun.gun_obj)
-        {
-            bact_arg80 v11;
-            v11.pos = _position + _rotation.Transpose().Transform(gun.pos);
-            v11.field_C = 4;
-
-            gun.gun_obj->SetPosition(&v11);
-        }
-    }
+    PositionRoboGuns();
 }
 
 void NC_STACK_yparobo::yparobo_func70__sub2__sub0()
@@ -1690,6 +1680,21 @@ void NC_STACK_yparobo::ResetPlayerMobileMove()
     _playerRoboAIBehaviorMoveEnergyRemainder = 0.0;
     _playerRoboAIBehaviorTotalDistance = 0.0;
     _playerRoboAIBehaviorLastDistance = 0.0;
+}
+
+void NC_STACK_yparobo::PositionRoboGuns()
+{
+    for (World::TRoboGun &gun : _roboGuns)
+    {
+        if (gun.gun_obj)
+        {
+            bact_arg80 arg80;
+            arg80.pos = _position + _rotation.Transpose().Transform( gun.pos );
+            arg80.field_C = 4;
+
+            gun.gun_obj->SetPosition(&arg80);
+        }
+    }
 }
 
 bool NC_STACK_yparobo::ShouldUsePlayerRoboResourceTrend() const
@@ -5597,17 +5602,7 @@ void NC_STACK_yparobo::Move(move_msg *arg)
 
     CorrectPositionInLevelBox(NULL);
 
-    for (World::TRoboGun &gun : _roboGuns)
-    {
-        if (gun.gun_obj)
-        {
-            bact_arg80 arg80;
-            arg80.pos = _position + _rotation.Transpose().Transform( gun.pos );
-            arg80.field_C = 4;
-
-            gun.gun_obj->SetPosition(&arg80);
-        }
-    }
+    PositionRoboGuns();
 
     _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
@@ -6787,8 +6782,16 @@ void NC_STACK_yparobo::ypabact_func65__sub0()
     }
     else
     {
+        // Manual Host Station movement already brought the Robo physically
+        // into the open Beam Gate sector. Keep its real position and start the
+        // finish sequence there: no forced centering, no Y snap and no hidden
+        // teleport. Vanilla teleport mode keeps the original sector-center snap.
+        const bool manualPlayerRobo =
+            _playerRoboAIBehavior && IsPlayerRobo() && _world &&
+            this == _world->getYW_userHostStation();
 
-        _position = World::SectorIDToCenterPos3( _cellId );
+        if ( !manualPlayerRobo )
+            _position = World::SectorIDToCenterPos3( _cellId );
 
         for (NC_STACK_ypabact* &unit : _kidList )
         {

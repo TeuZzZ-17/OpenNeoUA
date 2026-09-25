@@ -276,6 +276,7 @@ protected:
     bool ShouldUsePlayerRoboResourceTrend() const;
     void ResetPlayerMobileCockpitPitch();
     void ApplyPlayerMobileMovePitch(float speedPitchScale);
+    void PositionRoboGuns();
     void wallow(update_msg *arg);
     void searchEnemyRobo();
     void usersRoboEnergyCheck();
@@ -483,7 +484,6 @@ public:
     float _playerRoboAIBehaviorMoveEnergyRemainder;
     float _playerRoboAIBehaviorTotalDistance;
     float _playerRoboAIBehaviorLastDistance;
-
     std::array<robo_t1, 16> _roboAttackers;
     int _roboAttackersTime;
     int _roboAttackersClearTime; //FIX IT
