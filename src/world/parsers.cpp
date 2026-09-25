@@ -3954,6 +3954,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->cockpit_gun_camera_recoil = ParseBoundedPositiveFiniteOrZero(
             parser, p2, 5.0f);
     }
+    else if ( !StriCmp(p1, "cockpit_camera_hide_vehicle") )
+    {
+        _vhcl->cockpit_camera_hide_vehicle = parser.stol(p2, NULL, 0) ? 1 : 0;
+    }
     else if ( !StriCmp(p1, "gun_radius") )
     {
         _vhcl->gun_radius = parser.stof(p2, 0);
@@ -4676,6 +4680,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->vwr_overeof = 30.0;
         _vhcl->cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
         _vhcl->cockpit_gun_camera_recoil = 0.0f;
+        _vhcl->cockpit_camera_hide_vehicle = false;
         _vhcl->gun_power = 4000.0;
         _vhcl->gun_radius = 5.0;
         _vhcl->max_pitch = -1.0;

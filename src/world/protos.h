@@ -351,6 +351,70 @@ struct rbcolls
     }
 };
 
+// Radius of the sphere that encloses the whole coll_* set around the unit
+// origin. Returns -1 when the set has no usable sphere, so callers can tell
+// "no compound collision" apart from a real zero-sized value.
+// Spheres below the 0.01 radius threshold are ignored, matching the runtime
+// collision code. Keep this as the single owner of the extent formula.
+inline float CompoundCollisionExtent(const rbcolls &coll)
+{
+    float extent = -1.0f;
+    for (const TRoboColl &sphere : coll.roboColls)
+    {
+        if ( sphere.robo_coll_radius <= 0.01f )
+            continue;
+
+        const float sphereExtent = sphere.coll_pos.length() + sphere.robo_coll_radius;
+        if ( sphereExtent > extent )
+            extent = sphereExtent;
+    }
+    return extent;
+}
+
+// Half of the largest dimension of the box that contains the whole coll_* set.
+// This is the real physical half-size of the unit and is the modern replacement
+// for the legacy radius key. Unlike CompoundCollisionExtent it is measured
+// around the collision volume itself, so a body that sits far from its unit
+// origin (Host Stations) is not overestimated. Returns -1 when the set has no
+// usable sphere.
+inline float CompoundCollisionHalfSize(const rbcolls &coll)
+{
+    bool hasSphere = false;
+    double minv[3] = {0.0, 0.0, 0.0};
+    double maxv[3] = {0.0, 0.0, 0.0};
+
+    for (const TRoboColl &sphere : coll.roboColls)
+    {
+        if ( sphere.robo_coll_radius <= 0.01f )
+            continue;
+
+        // vec3d stores doubles, so keep the box math in double too.
+        const double r = sphere.robo_coll_radius;
+        const double pos[3] = {sphere.coll_pos.x, sphere.coll_pos.y, sphere.coll_pos.z};
+
+        for (int i = 0; i < 3; i++)
+        {
+            if ( !hasSphere || pos[i] - r < minv[i] )
+                minv[i] = pos[i] - r;
+            if ( !hasSphere || pos[i] + r > maxv[i] )
+                maxv[i] = pos[i] + r;
+        }
+        hasSphere = true;
+    }
+
+    if ( !hasSphere )
+        return -1.0f;
+
+    double halfSize = 0.0;
+    for (int i = 0; i < 3; i++)
+    {
+        const double axisHalfSize = (maxv[i] - minv[i]) * 0.5;
+        if ( axisHalfSize > halfSize )
+            halfSize = axisHalfSize;
+    }
+    return (float)halfSize;
+}
+
 struct TVhclSound
 {
     struct TSndSample
@@ -882,6 +946,10 @@ struct TVhclProto
     vec3d cockpit_camera_offset = vec3d(0.0, 0.0, 0.0);
     // Player-only gun cockpit recoil multiplier. 0/absent keeps the current cockpit camera stable.
     float cockpit_gun_camera_recoil = 0.0f;
+    // OpenNeoUA: hides this vehicle's own silhouette in cockpit camera view.
+    // 0/absent keeps the body visible like the original cockpit view; the in-game
+    // Hide Vehicle key flips the live copy on the player's unit without saving.
+    bool cockpit_camera_hide_vehicle = false;
     float gun_angle = 0.0;
     float fire_x = 0.0;
     float fire_y = 0.0;

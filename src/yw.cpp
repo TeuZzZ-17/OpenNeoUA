@@ -1972,6 +1972,38 @@ static void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
     }
 }
 
+// OpenNeoUA: cockpit camera vehicle silhouette toggle. The binding is polled
+// directly like Sprint/UFO Spy Mode, so it never claims a global HotKeyID slot
+// and cannot fire a second hotkey through the shared input expression system.
+static void yw_UpdateHideVehicleToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
+{
+    if ( !yw || !inpt || !yw->_GameShell )
+        return;
+
+    const UserData::TInputConf &bind =
+        yw->_GameShell->InputConfig[World::INPUT_BIND_HIDE_VEHICLE];
+    const bool keyDown =
+        bind.Type == World::INPUT_BIND_TYPE_HOTKEY &&
+        bind.PKeyCode > Input::KC_NONE && bind.PKeyCode < Input::KC_MAX &&
+        Input::Engine.GetKeyState(bind.PKeyCode);
+    const bool keyPressed = keyDown && !yw->_hideVehicleBindingIsDown;
+    yw->_hideVehicleBindingIsDown = keyDown;
+
+    if ( !keyPressed )
+        return;
+
+    // The silhouette is only drawn in cockpit camera view, so the toggle is only
+    // meaningful there. Anywhere else the key stays inert instead of silently
+    // changing a state the player cannot see.
+    if ( !yw->_userUnit || !yw->_userUnit->IsCockpitCameraActive() )
+        return;
+
+    // Flip the live copy on the unit the player is flying only. The authored
+    // Vehicles.cfg value is untouched, so a restart restores it, and taking a
+    // new vehicle starts again from that vehicle's own setting.
+    yw->_userUnit->_cockpit_camera_hide_vehicle = !yw->_userUnit->_cockpit_camera_hide_vehicle;
+}
+
 void NC_STACK_ypaworld::HandleDebugTimeHotkeys(TInputState *inpt, bool openUADebug)
 {
     if ( !inpt || !openUADebug || _isNetGame )
@@ -2149,6 +2181,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
 
             yw_UpdateUfoSpyUiToggle(this, arg->field_8);
+            yw_UpdateHideVehicleToggle(this, arg->field_8);
 
             TClickBoxInf *winp = &arg->field_8->ClickInf;
 
@@ -4551,6 +4584,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_fire_x_advanced = vhcl.fire_x_advanced;
         bacto->_cockpit_camera_offset = vhcl.cockpit_camera_offset;
         bacto->_cockpit_gun_camera_recoil = vhcl.cockpit_gun_camera_recoil;
+        bacto->_cockpit_camera_hide_vehicle = vhcl.cockpit_camera_hide_vehicle;
         bacto->_gun_angle = vhcl.gun_angle;
         bacto->_gun_angle_user = vhcl.gun_angle;
         int primaryMin = 1;
@@ -5857,6 +5891,7 @@ bool NC_STACK_ypaworld::InitGameShell(UserData *usr)
     usr->InputConfig[World::INPUT_BIND_PLACE_MAP_MARKER] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 49, Input::KC_R);
     usr->InputConfig[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 52, Input::KC_SPACE);
     usr->InputConfig[World::INPUT_BIND_MAP_FOCUS] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 53, Input::KC_E);
+    usr->InputConfig[World::INPUT_BIND_HIDE_VEHICLE] = UserData::TInputConf(World::INPUT_BIND_TYPE_HOTKEY, 54, Input::KC_C);
 
     // OpenNeoUA: keep the legacy IDs/type slots reserved for compatibility, but
     // these retired controls are no longer bindable or active.
@@ -9816,6 +9851,7 @@ bool NC_STACK_ypaworld::OpenGameShell()
     _GameShell->InputConfigTitle[World::INPUT_BIND_PLACE_MAP_MARKER] = Locale::Text::OpenUA(Locale::OUA_PLACE_MAP_MARKER);
     _GameShell->InputConfigTitle[World::INPUT_BIND_TOGGLE_UFO_SPY_UI] = Locale::Text::OpenUA(Locale::OUA_TOGGLE_UFO_SPY_UI);
     _GameShell->InputConfigTitle[World::INPUT_BIND_MAP_FOCUS] = Locale::Text::Inputs(Locale::INPUTS_LOCKVW);
+    _GameShell->InputConfigTitle[World::INPUT_BIND_HIDE_VEHICLE] = Locale::Text::OpenUA(Locale::OUA_HIDE_VEHICLE_SILHOUETTE);
 
     // Display only active bindings and sort them by their localized title.
     // Runtime IDs remain unchanged for profile compatibility.
@@ -11541,13 +11577,17 @@ bool NC_STACK_ypaworld::ReloadInput(size_t id)
 
     if ( kconf.Type == World::INPUT_BIND_TYPE_HOTKEY )
     {
-        // Sprint and UFO Spy Mode are polled directly. This allows their
+        // Sprint and the runtime toggles are polled directly. This allows their
         // contextual defaults to coexist with legacy actions that use the same
         // physical key without stealing a global HotKeyID slot.
         if ( id == World::INPUT_BIND_SPRINT ||
-             id == World::INPUT_BIND_TOGGLE_UFO_SPY_UI )
+             id == World::INPUT_BIND_TOGGLE_UFO_SPY_UI ||
+             id == World::INPUT_BIND_HIDE_VEHICLE )
         {
-            if ( id == World::INPUT_BIND_TOGGLE_UFO_SPY_UI )
+            // The toggles keep their HotKeyID slot free so the key cannot fire a
+            // second, unhandled hotkey while the direct poll already owns it.
+            if ( id == World::INPUT_BIND_TOGGLE_UFO_SPY_UI ||
+                 id == World::INPUT_BIND_HIDE_VEHICLE )
                 Input::Engine.SetHotKey(kconf.KeyID, "nop");
             return true;
         }
