@@ -449,6 +449,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_HORIZON_FADE_MODE:               fallback = "Distance Fade"; break;
         case OUA_HORIZON_FADE_SMOOTH:             fallback = "Smooth"; break;
         case OUA_HORIZON_FADE_CLASSIC:            fallback = "Classic"; break;
+        case OUA_HIDE_VEHICLE_SILHOUETTE:         fallback = "Hide Vehicle Silhouette On/Off"; break;
         default: break;
     }
 
