@@ -300,6 +300,11 @@ enum OPENUA_STRING
     // Appended so existing IDs stay stable.
     OUA_HIDE_VEHICLE_SILHOUETTE,
 
+    // Genesis list order selector. Appended so existing IDs stay stable.
+    OUA_GENESIS_LIST_ORDER,
+    OUA_GENESIS_ORDER_CLASSIC,
+    OUA_GENESIS_ORDER_ENERGY,
+
     OUA_STRING_MAX
 };
 

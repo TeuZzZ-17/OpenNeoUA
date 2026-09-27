@@ -1182,6 +1182,14 @@ void NC_STACK_ypaflyer::User_layer(update_msg *arg)
 
 void NC_STACK_ypaflyer::Move(move_msg *arg)
 {
+    if ( _inlinePhysicalFX && _status == BACT_STATUS_DEAD )
+    {
+        // Inline fragments use the common dead fall with a fixed authored pitch.
+        NC_STACK_ypabact::Move(arg);
+        _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
+        return;
+    }
+
     _old_pos = _position;
 
     float v46;

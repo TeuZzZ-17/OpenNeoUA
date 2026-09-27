@@ -7,6 +7,7 @@
 #include "../skeleton.h"
 
 #include <cmath>
+#include <memory>
 #include <map>
 #include <string>
 
@@ -211,6 +212,8 @@ struct TChainFXVisual
     TVisualTint tint;
 };
 
+struct TChainFXPhysical;
+
 struct TAtmosphericFXProfile
 {
     bool valid = false;
@@ -261,8 +264,8 @@ struct TChainFXConfig
     enum Trigger
     {
         TRIGGER_NONE = 0,
+        TRIGGER_AIR_DESTROYED,
         TRIGGER_DESTROYED,
-        TRIGGER_CRASH,
         TRIGGER_DETONATE,
         TRIGGER_IMPACT_WORLD
     };
@@ -289,6 +292,9 @@ struct TChainFXConfig
     bool ground_decal_permanent = false;
     std::vector<TChainFXVisual> visuals;
     int physical_vehicle = 0;
+    std::shared_ptr<TChainFXPhysical> physical_inline;
+    vec3d launch_min = vec3d(0.0, 0.0, 0.0);
+    vec3d launch_max = vec3d(0.0, 0.0, 0.0);
     std::string ground_decal_texture;
     float ground_decal_size = 0.0f;
     // Optional authored min/max range. When unset, ground_decal_size keeps the
@@ -455,6 +461,28 @@ struct TVhclSound
     void ClearSounds();
 };
 
+// Owned by one Chain FX block and shared by its transient fragments. This keeps
+// loaded samples and palette/shake parameters alive without a Vehicle ID.
+struct TChainFXPhysical
+{
+    int16_t vp_model = 0;
+    int16_t vp_impact = 0;
+    std::string base_model;
+    std::string mesh3ds;
+    TVisualTint tint;
+    float visual_scale = 1.0f;
+    float mass = 0.0f;
+    float airconst = 500.0f;
+    float force = 0.0f;
+    float maxrot = 0.0f;
+    float radius = 0.0f;
+    int impact_damage = 0; // One-shot shielded damage dealt on the fragment's first unit impact
+    float impact_damage_radius = 0.0f; // 0 = direct target only; positive = additional 3D area damage
+    int lifetime_min = 30000; // Maximum flight lifetime in ms; fixed value uses the same min/max
+    int lifetime_max = 30000; // Inclusive per-fragment lifetime range
+    std::array<TVhclSound, 8> sounds;
+};
+
 constexpr size_t ROBO_GUN_MAX_COUNT = 20;
 constexpr size_t UNIT_COLL_MAX_COUNT = 256; // OpenNeoUA: parser safety cap for compound collision spheres
 
@@ -463,6 +491,7 @@ struct TDamagedFXConfig
     std::vector<int16_t> vps;
     std::vector<std::string> meshes3ds;
     float scale = 1.0;
+    float scale_max = 1.0;
     TAbsoluteOrPercent threshold;
     int count_min = 0;
     int count_max = 0;
@@ -851,7 +880,6 @@ struct TVhclProto
     int at_death_spawn_instant = 0;
     int at_death_spawn_immunity_time = 0;
     int proximity_defense_enable = 0;
-    std::string proximity_defense_icon;
     int proximity_defense_weapon = 0;
     float proximity_defense_trigger_radius = 0.0;
     int proximity_defense_interval = 1000;
@@ -888,7 +916,18 @@ struct TVhclProto
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
     int mimic_energy_cost_min = 0;
     int mimic_energy_cost_max = 0;
-    int GetProductionCost() const { return mimic_energy_cost > 0 ? mimic_energy_cost : energy; }
+    int production_cost = 0; // OpenNeoUA: displayed Genesis price; 0 keeps vanilla energy-as-cost
+    int GetProductionCost() const
+    {
+        // Explicit price wins over mimic and energy. Stored as shown in the
+        // list, converted to the internal energy scale (display x 50).
+        if ( production_cost > 0 )
+        {
+            const long long internal = (long long)production_cost * 50LL;
+            return internal > 2000000000LL ? 2000000000 : (int)internal;
+        }
+        return mimic_energy_cost > 0 ? mimic_energy_cost : energy;
+    }
     int RollMimicProductionCost();
     int field_1D79 = 0;
     float adist_sector = 0.0;
@@ -926,6 +965,9 @@ struct TVhclProto
     float at_death_push_force = 0.0f; // OpenNeoUA custom: 0..10 radial push intensity emitted on actual vehicle death
     float at_death_push_radius = 0.0f; // 3D radius used only by the at-death push effect
     int at_death_push_falloff = 0; // Linear distance falloff used only by the at-death push effect
+    int at_death_damage = 0; // Shielded unit damage emitted on actual vehicle death; 0 disables it
+    float at_death_damage_radius = 0.0f; // 3D radius used only by the at-death damage effect
+    int at_death_damage_falloff = 0; // Linear distance falloff used only by the at-death damage effect
     int at_death_energy_drain = 0; // Absolute energy removed from nearby units on death; 0 disables it
     float at_death_energy_drain_radius = 0.0f; // 3D radius used only by the at-death energy drain
     int at_death_energy_drain_falloff = 0; // Linear distance falloff used only by the at-death energy drain
@@ -1272,6 +1314,8 @@ struct TWeapProto
     // Releasing FIRE or entering a structural firing pause/reset restores the base cadence.
     int ramp_up_time = 0;
     int ramp_up_max_shot_time = 0;
+    float ramp_up_max_weapon_spread_x = 0.0f;
+    float ramp_up_max_weapon_spread_y = 0.0f;
     // Optional self-overheat once the progressive cadence has remained at its
     // authored maximum long enough. The drain accepts fixed HP/sec or max-HP %/sec.
     int ramp_up_overheat_time = 0;
@@ -1427,6 +1471,18 @@ struct TBuildingProto
     uint8_t TypeIcon = 0;
     std::string Name;
     int Energy = 0;
+    int production_cost = 0; // OpenNeoUA: displayed Genesis price; 0 keeps vanilla Energy-as-cost
+    int GetProductionCost() const
+    {
+        // Explicit price wins over Energy. Stored as shown in the list,
+        // converted to the internal energy scale (display x 100).
+        if ( production_cost > 0 )
+        {
+            const long long internal = (long long)production_cost * 100LL;
+            return internal > 2000000000LL ? 2000000000 : (int)internal;
+        }
+        return Energy;
+    }
     // OpenNeoUA custom: render-only target hue/alpha for this building prototype.
     // Neutral by default, so missing tint keeps exact vanilla rendering.
     TVisualTint tint;
