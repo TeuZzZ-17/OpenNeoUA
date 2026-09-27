@@ -2119,13 +2119,19 @@ const char *NC_STACK_ypamissile::GetAreaDamageSkipReason(NC_STACK_ypabact *bct, 
     return NULL;
 }
 
-// Push eligibility filter for normal direct/AoE push. Static guns and final
-// DEATH2 wrecks are excluded here; owner policy is applied by the collision/AoE
-// call sites so player-controlled legacy behavior remains unchanged.
+// Push eligibility filter for normal direct/AoE push. Physical Chain FX,
+// static guns and final DEATH2 wrecks are excluded here. Owner policy is
+// applied by the collision/AoE call sites so player-controlled legacy behavior
+// remains unchanged.
 const char *NC_STACK_ypamissile::GetAreaPushSkipReason(NC_STACK_ypabact *bct) const
 {
     if ( !bct || bct == this || bct == _mislEmitter )
         return "self";
+
+    // Physical Chain FX already receive their launch velocity when they spawn.
+    // Weapon push must not add a second impulse to those fragments.
+    if ( bct->_inlinePhysicalFX )
+        return "physical_fragment";
 
     // OpenNeoUA custom: all flak/turret actors use model = gun / BACT_TYPES_GUN.
     // They are static defenses and should never be knocked away by weapon push.
