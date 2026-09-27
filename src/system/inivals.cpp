@@ -104,6 +104,9 @@ Common::Ini::Key IniConf::UiGenesisListX("ui.genesis_list_x", Common::Ini::KT_DI
 Common::Ini::Key IniConf::UiGenesisListWidth("ui.genesis_list_width", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultWidth);
 Common::Ini::Key IniConf::UiGenesisListHeight("ui.genesis_list_height", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultHeight);
 Common::Ini::Key IniConf::UiGenesisListOpacity("ui.genesis_list_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiGenesisListDefaultOpacity);
+// OpenNeoUA: Genesis list order. Code default classic keeps vanilla sorting;
+// OpenNeoUA.ini is the global user override. Unknown values fall back to classic.
+Common::Ini::Key IniConf::UiGenesisListOrder("ui.genesis_list_order", Common::Ini::KT_STRING, std::string("classic"));
 Common::Ini::Key IniConf::UiMapOpacity("ui.map_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiMapDefaultOpacity);
 Common::Ini::Key IniConf::UiSquadronManagerOpacity("ui.squadron_manager_opacity", Common::Ini::KT_DIGIT, (int32_t)IniConf::UiSquadronManagerDefaultOpacity);
 
@@ -810,6 +813,7 @@ void IniConf::Init()
         , &UiGenesisListWidth
         , &UiGenesisListHeight
         , &UiGenesisListOpacity
+        , &UiGenesisListOrder
         , &UiMapOpacity
         , &UiSquadronManagerOpacity
     };

@@ -1650,7 +1650,7 @@ void yw_setInitScriptLoc(NC_STACK_ypaworld *yw)
     bool ok = false;
     FSMgr::FileHandle *fil = NULL;
 
-    // Optional legacy override. Modern layouts use data:scripts/startup.scr.
+    // Optional legacy override. Modern layouts use Data/Scripts/Startup.cfg.
     if ( uaFileExist("env:startup.def") )
         fil = uaOpenFileAlloc("env:startup.def", "r");
 
@@ -1672,7 +1672,13 @@ void yw_setInitScriptLoc(NC_STACK_ypaworld *yw)
     }
 
     if (!ok)
-        yw->_initScriptFilePath = "data:scripts/startup.scr";
+    {
+        // Prefer the modern Game Config, but keep original vanilla Data folders usable.
+        if ( uaFileExist("data:scripts/Startup.cfg") )
+            yw->_initScriptFilePath = "data:scripts/Startup.cfg";
+        else
+            yw->_initScriptFilePath = "data:scripts/startup.scr";
+    }
 }
 
 size_t NC_STACK_ypaworld::Init(IDVList &stak)
@@ -2348,7 +2354,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
                     // Match the normal lethal-damage transition for tanks and
                     // cars: their death state is DEATH2, which emits the
-                    // begin_chain_fx trigger "crash". Keep this as a direct
+                    // begin_chain_fx trigger "destroyed". Keep this as a direct
                     // internal transition so F7 remains a forced debug kill
                     // even while global invulnerability (F9) is enabled.
                     if ( selectedVehicle->_bact_type == BACT_TYPES_TANK ||
@@ -4466,6 +4472,126 @@ static bool yw_HasPersistentVehicleVisualGeometry(NC_STACK_base *base)
     return false;
 }
 
+NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
+    const World::TChainFXConfig &config, const vec3d &pos,
+    const mat3x3 &rot, const vec3d &launch, int16_t owner)
+{
+    const std::shared_ptr<World::TChainFXPhysical> &physical = config.physical_inline;
+    if ( !physical )
+        return NULL;
+
+    vec3d velocity = rot.Transform(launch);
+    const double initialSpeed = velocity.length();
+    if ( !std::isfinite(initialSpeed) )
+        return NULL;
+    if ( initialSpeed > 0.001 )
+    {
+        const double impulse = (double)physical->force / (double)physical->mass;
+        if ( !std::isfinite(impulse) )
+            return NULL;
+        velocity += velocity / initialSpeed * impulse;
+    }
+    const double finalSpeed = velocity.length();
+    if ( !std::isfinite(finalSpeed) )
+        return NULL;
+
+    NC_STACK_base *model = NULL;
+    if ( !physical->mesh3ds.empty() )
+        model = GetSharedExternalMesh(physical->mesh3ds);
+    if ( !model && !physical->base_model.empty() )
+        model = GetSharedExternalBase(physical->base_model);
+    if ( !model && physical->vp_model > 0 &&
+         (size_t)physical->vp_model < _vhclModels.size() )
+        model = _vhclModels[physical->vp_model];
+    if ( !model )
+        return NULL;
+
+    NC_STACK_ypabact *fragment = yw_createUnit(BACT_TYPES_FLYER);
+    if ( !fragment )
+        return NULL;
+
+    fragment->_inlinePhysicalFX = physical;
+    fragment->_inlinePhysicalImpactDamageSpent = false;
+    fragment->_inlinePhysicalLifetimeMs = World::RandomIntRangeInclusive(
+        physical->lifetime_min, physical->lifetime_max);
+    fragment->_owner = owner;
+    fragment->_vehicleID = 0;
+    fragment->_mass = physical->mass;
+    fragment->_base_force = physical->force;
+    fragment->_force = physical->force;
+    fragment->_base_maxrot = physical->maxrot;
+    fragment->_maxrot = physical->maxrot;
+    fragment->_airconst = physical->airconst;
+    fragment->_airconst_static = physical->airconst;
+    fragment->_radius = physical->radius;
+    fragment->_viewer_radius = physical->radius;
+    // Inline fragments remain visual/world-physics only unless gameplay impact
+    // damage is explicitly authored. This keeps existing fragments unchanged.
+    fragment->setBACT_bactCollisions(physical->impact_damage > 0);
+    fragment->_vp_normal = model;
+    fragment->_vp_dead = model;
+    fragment->_vp_megadeth = physical->vp_impact > 0 &&
+                             (size_t)physical->vp_impact < _vhclModels.size() ?
+        _vhclModels[physical->vp_impact] : NULL;
+    fragment->_vp_genesis = NULL;
+    fragment->_vp_scale = vec3d(physical->visual_scale,
+                                 physical->visual_scale,
+                                 physical->visual_scale);
+    fragment->_vp_tint = physical->tint;
+    fragment->_rotation = rot;
+
+    SFXEngine::SFXe.StopCarrier(&fragment->_soundcarrier);
+    fragment->_soundcarrier.Clear();
+    fragment->_soundcarrier.Resize(World::TVhclProto::SND_MAX);
+    fragment->_soundFlags = 0;
+    const int events[] = {World::TVhclProto::SND_NORMAL,
+                          World::TVhclProto::SND_GODOWN,
+                          World::TVhclProto::SND_EXPLODE};
+    for (int event : events)
+    {
+        World::TVhclSound &definition = physical->sounds[event];
+        definition.LoadSamples();
+        TSoundSource &sound = fragment->_soundcarrier.Sounds[event];
+        sound.Volume = definition.volume;
+        definition.ConfigureSoundSourcePitch(sound);
+        sound.Radius = definition.radius;
+        sound.SetLoop(World::TVhclProto::IsLoopingSnd(event));
+        sound.PSample = definition.MainSample.Sample ?
+            definition.MainSample.Sample->GetSampleData() : NULL;
+        sound.PPFx = definition.sndPrm.slot ? &definition.sndPrm : NULL;
+        sound.SetPFx(sound.PPFx != NULL);
+        sound.PShkFx = definition.sndPrm_shk.slot ? &definition.sndPrm_shk : NULL;
+        sound.SetShk(sound.PShkFx != NULL);
+        sound.PFragments = definition.extS.empty() ? NULL : &definition.extS;
+        sound.SetFragmented(sound.PFragments != NULL);
+    }
+    fragment->_volume = fragment->_soundcarrier.Sounds[World::TVhclProto::SND_NORMAL].Volume;
+
+    bact_arg80 position;
+    position.pos = pos;
+    position.field_C = 0;
+    fragment->SetPosition(&position);
+    ypaworld_func134(fragment);
+
+    setState_msg state;
+    state.newStatus = BACT_STATUS_DEAD;
+    state.setFlags = 0;
+    state.unsetFlags = 0;
+    fragment->SetStateInternal(&state);
+    fragment->_status_flg |= BACT_STFLAG_DEATH1;
+    fragment->_dead_time = fragment->_clock;
+    SFXEngine::SFXe.startSound(&fragment->_soundcarrier,
+                               World::TVhclProto::SND_NORMAL);
+    fragment->_soundFlags |= 1;
+
+    if ( finalSpeed > 0.001 )
+    {
+        fragment->_fly_dir_length = finalSpeed;
+        fragment->_fly_dir = velocity / finalSpeed;
+    }
+    return fragment;
+}
+
 NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 {
     if ( vhcl_id->vehicle_id <= 0 || (size_t)vhcl_id->vehicle_id >= _vhclProtos.size() )
@@ -4683,6 +4809,11 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_at_death_push_radius = deathProto.at_death_push_radius > 0.0f
             ? deathProto.at_death_push_radius : 0.0f;
         bacto->_at_death_push_falloff = deathProto.at_death_push_falloff ? 1 : 0;
+        bacto->_at_death_damage = deathProto.at_death_damage > 0
+            ? deathProto.at_death_damage : 0;
+        bacto->_at_death_damage_radius = deathProto.at_death_damage_radius > 0.0f
+            ? deathProto.at_death_damage_radius : 0.0f;
+        bacto->_at_death_damage_falloff = deathProto.at_death_damage_falloff ? 1 : 0;
         bacto->_at_death_energy_drain = deathProto.at_death_energy_drain > 0
             ? deathProto.at_death_energy_drain : 0;
         bacto->_at_death_energy_drain_radius = deathProto.at_death_energy_drain_radius > 0.0f
@@ -6921,7 +7052,7 @@ bool NC_STACK_ypaworld::CreateInputControls()
                                                             btn_64arg.xpos = inputActionButtonStep;
                                                             btn_64arg.ypos = bottomButtonsY;
                                                             btn_64arg.width = inputActionButtonWidth;
-                                                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
+                                                            btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
                                                             btn_64arg.upCode = 1054;
                                                             btn_64arg.button_id = 1054;
                                                             btn_64arg.caption2.clear();
@@ -7237,8 +7368,8 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                             btn_64arg.upCode = 1107;
                                             btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                             btn_64arg.downCode = 1106;
-                                            btn_64arg.xpos = 0; // OpenNeoUA repack: Sky -> left column, row 9
-                                            btn_64arg.ypos = 9 * (vertMenuSpace + _fontH);
+                                            btn_64arg.xpos = 0; // OpenNeoUA repack: Sky -> left column, row 10
+                                            btn_64arg.ypos = 10 * (vertMenuSpace + _fontH);
                                             btn_64arg.pressedCode = 0;
                                             btn_64arg.flags = 0;
                                             btn_64arg.button_id = 1160;
@@ -7307,7 +7438,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                             btn_64arg.upCode = 1131;
                                                             btn_64arg.button_id = 1166;
                                                             btn_64arg.xpos = 0; // OpenNeoUA repack: Windowed -> former VHS Filter position
-                                                            btn_64arg.ypos = 8 * (vertMenuSpace + _fontH);
+                                                            btn_64arg.ypos = 9 * (vertMenuSpace + _fontH);
 
                                                             if ( _GameShell->video_button->Add(&btn_64arg) )
                                                             {
@@ -7316,7 +7447,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                 btn_64arg.field_3A = 16;
                                                                 btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                                 btn_64arg.xpos = checkBoxWidth + buttonsSpace;
-                                                                btn_64arg.ypos = 8 * (vertMenuSpace + _fontH);
+                                                                btn_64arg.ypos = 9 * (vertMenuSpace + _fontH);
                                                                 btn_64arg.width = v120;
                                                                 btn_64arg.caption = Locale::Text::Advanced(Locale::ADV_WINDOWEDMODE);
                                                                 btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
@@ -7362,8 +7493,8 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                             btn_64arg.tileset_up = 16;
                                                                             btn_64arg.field_3A = 16;
                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-                                                                            btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenNeoUA repack: Music label -> left column, row 10
-                                                                            btn_64arg.ypos = 10 * (vertMenuSpace + _fontH);
+                                                                            btn_64arg.xpos = checkBoxWidth + buttonsSpace; // OpenNeoUA repack: Music label -> left column, row 11
+                                                                            btn_64arg.ypos = 11 * (vertMenuSpace + _fontH);
                                                                             btn_64arg.width = v120;
                                                                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_ENCDAUD);
                                                                             btn_64arg.caption2.clear();
@@ -7387,7 +7518,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                 btn_64arg.caption2 = "g";
                                                                                 btn_64arg.upCode = 1129;
                                                                                 btn_64arg.button_id = 1164;
-                                                                                btn_64arg.xpos = 0; // OpenNeoUA repack: Music checkbox -> left column, row 10
+                                                                                btn_64arg.xpos = 0; // OpenNeoUA repack: Music checkbox -> left column, row 11
 
                                                                                 if ( _GameShell->video_button->Add(&btn_64arg) )
                                                                                 {
@@ -7428,8 +7559,8 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                             btn_64arg.tileset_down = 19;
                                                                                             btn_64arg.tileset_up = 18;
                                                                                             btn_64arg.field_3A = 30;
-                                                                                            btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + v120; // OpenNeoUA repack: Host Station AI -> right column, row 10
-                                                                                            btn_64arg.ypos = 10 * (vertMenuSpace + _fontH);
+                                                                                            btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + v120; // OpenNeoUA repack: Host Station AI -> right column, row 11
+                                                                                            btn_64arg.ypos = 11 * (vertMenuSpace + _fontH);
                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                                                                             btn_64arg.pressedCode = 0;
                                                                                             btn_64arg.flags = 0;
@@ -7469,8 +7600,8 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                             btn_64arg.tileset_down = 19;
                                                                                             btn_64arg.tileset_up = 18;
                                                                                             btn_64arg.field_3A = 30;
-                                                                                            btn_64arg.xpos = 0; // OpenNeoUA repack: Spectator Mode -> left column, row 11
-                                                                                            btn_64arg.ypos = 11 * (vertMenuSpace + _fontH);
+                                                                                            btn_64arg.xpos = 0; // OpenNeoUA repack: Spectator Mode -> left column, row 12
+                                                                                            btn_64arg.ypos = 12 * (vertMenuSpace + _fontH);
                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                                                                             btn_64arg.pressedCode = 0;
                                                                                             btn_64arg.flags = 0;
@@ -7508,13 +7639,13 @@ bool NC_STACK_ypaworld::CreateVideoControls()
 
                                                                                             // OpenNeoUA: profile-saved Retro Interface checkbox.
                                                                                             // Checked = Retro/nearest; unchecked = Smooth/linear.
-                                                                                            // It shares row 12 with Spectator Mode and uses the free right column.
+                                                                                            // It shares row 13 with Spectator Mode and uses the free right column.
                                                                                             btn_64arg.width = checkBoxWidth;
                                                                                             btn_64arg.tileset_down = 19;
                                                                                             btn_64arg.tileset_up = 18;
                                                                                             btn_64arg.field_3A = 30;
                                                                                                     btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + v120;
-                                                                                                    btn_64arg.ypos = 11 * (vertMenuSpace + _fontH);
+                                                                                                    btn_64arg.ypos = 12 * (vertMenuSpace + _fontH);
                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
                                                                                             btn_64arg.pressedCode = 0;
                                                                                             btn_64arg.flags = 0;
@@ -7591,7 +7722,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                     btn_64arg.field_3A = 16;
                                                                                                     btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                                                                     btn_64arg.xpos = 0;
-                                                                                                btn_64arg.ypos = 12 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Explosion Effects row 12
+                                                                                                btn_64arg.ypos = 13 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Explosion Effects row 13
                                                                                                     btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
                                                                                                     btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_DESTRFX);
                                                                                                     btn_64arg.caption2.clear();
@@ -7644,7 +7775,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                             {
                                                                                                                 btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                                                                                 btn_64arg.xpos = 0;
-                                                                                                                btn_64arg.ypos = 13 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Sound Volume row 13
+                                                                                                                btn_64arg.ypos = 14 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Sound Volume row 14
                                                                                                                 btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
                                                                                                                 btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_FXVOL);
                                                                                                                 btn_64arg.caption2.clear();
@@ -7697,7 +7828,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                                             btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
                                                                                                                             btn_64arg.xpos = 0;
                                                                                                                             btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
-                                                                                                                            btn_64arg.ypos = 14 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Music Volume row 14
+                                                                                                                            btn_64arg.ypos = 15 * (vertMenuSpace + _fontH); // OpenNeoUA repack: Music Volume row 15
                                                                                                                             btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_CDVOL);
                                                                                                                             btn_64arg.caption2.clear();
                                                                                                                             btn_64arg.downCode = 0;
@@ -7783,7 +7914,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                                                                                                                                 btn_64arg.xpos = optionsActionButtonStep;
                                                                                                                                                 btn_64arg.ypos = bottomButtonsY;
                                                                                                                                                 btn_64arg.width = optionsActionButtonWidth;
-                                                                                                                                                btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
+                                                                                                                                                btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
                                                                                                                                                 btn_64arg.upCode = 1125;
                                                                                                                                                 btn_64arg.caption2.clear();
                                                                                                                                                 btn_64arg.downCode = 0;
@@ -7849,7 +7980,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.field_3A = 16;
         btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
         btn_64arg.xpos = 0;
-        btn_64arg.ypos = 15 * (vertMenuSpace + _fontH);
+        btn_64arg.ypos = 16 * (vertMenuSpace + _fontH);
         btn_64arg.width = (dword_5A50B2 - 5 * buttonsSpace) * 0.3;
         btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_AMBIENT_VOLUME);
         btn_64arg.caption2.clear();
@@ -7940,7 +8071,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         return false;
     }
 
-    // --- Enable Play As checkbox (row 8, free right column) ---
+    // --- Enable Play As checkbox (row 9, free right column) ---
     // Disabled by default: the briefing keeps the original Resistance-only
     // presentation until the player explicitly enables the optional selector.
     {
@@ -7952,7 +8083,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.field_3A = 30;
         btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
         btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + playAsColumnWidth;
-        btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
+        btn_64arg.ypos = 9 * (_fontH + vertMenuSpace);
         btn_64arg.width = checkBoxWidth;
         btn_64arg.caption = "g";
         btn_64arg.caption2 = "g";
@@ -7973,7 +8104,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.field_3A = 16;
         btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
         btn_64arg.xpos = 4 * buttonsSpace + playAsColumnWidth + 2 * checkBoxWidth;
-        btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
+        btn_64arg.ypos = 9 * (_fontH + vertMenuSpace);
         btn_64arg.width = playAsColumnWidth;
         btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_ENABLE_PLAY_AS);
         btn_64arg.caption2.clear();
@@ -8101,7 +8232,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.field_3A = 30;
         btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
         btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + gv120;
-        btn_64arg.ypos = 9 * (_fontH + vertMenuSpace);
+        btn_64arg.ypos = 10 * (_fontH + vertMenuSpace);
         btn_64arg.width = checkBoxWidth;
         btn_64arg.caption = "g";
         btn_64arg.caption2 = "g";
@@ -8192,9 +8323,60 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         }
     }
 
+    // --- Genesis List Order cycle-button (row 7, below FPS Limit) ---
+    {
+        btn_64arg.tileset_down = 16;
+        btn_64arg.tileset_up = 16;
+        btn_64arg.field_3A = 16;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+        btn_64arg.xpos = 0;
+        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
+        btn_64arg.width = v98;
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_GENESIS_LIST_ORDER);
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 0;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 2;
+        btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
+        btn_64arg.txt_r = _iniColors[60].r;
+        btn_64arg.txt_g = _iniColors[60].g;
+        btn_64arg.txt_b = _iniColors[60].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Genesis List Order label\n");
+            return false;
+        }
+
+        btn_64arg.tileset_down = 19;
+        btn_64arg.tileset_up = 18;
+        btn_64arg.field_3A = 30;
+        btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
+        btn_64arg.xpos = buttonsSpace + v294 * 0.4;
+        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
+        btn_64arg.width = v294 * 0.6;
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_GENESIS_ORDER_ENERGY);
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 1313;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 1188;
+        btn_64arg.flags = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
+        btn_64arg.txt_r = _iniColors[68].r;
+        btn_64arg.txt_g = _iniColors[68].g;
+        btn_64arg.txt_b = _iniColors[68].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Genesis List Order button\n");
+            return false;
+        }
+    }
+
     // ===== end OpenNeoUA modern graphics options ==================================
 
-    // OpenNeoUA: visual-only map boundary wall toggle (left column, row 7).
+    // OpenNeoUA: visual-only map boundary wall toggle (left column, row 8).
     // Unchecked by default: vanilla RAND boundary walls remain visible.
     {
         const int availableWidth = dword_5A50B2 - 6 * buttonsSpace - 2 * checkBoxWidth;
@@ -8205,7 +8387,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.field_3A = 30;
         btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
         btn_64arg.xpos = 0;
-        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
+        btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
         btn_64arg.width = checkBoxWidth;
         btn_64arg.caption = "g";
         btn_64arg.caption2 = "g";
@@ -8226,7 +8408,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         btn_64arg.field_3A = 16;
         btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
         btn_64arg.xpos = checkBoxWidth + buttonsSpace;
-        btn_64arg.ypos = 7 * (_fontH + vertMenuSpace);
+        btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
         btn_64arg.width = columnWidth;
         btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_HIDE_MAP_BORDER_WALLS);
         btn_64arg.caption2.clear();
@@ -8533,7 +8715,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         return false;
 
     btn.xpos = buttonWidth + buttonsSpace;
-    btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
+    btn.caption = Locale::Text::Common(Locale::CMN_CANCEL);
     btn.upCode = 1452;
     btn.button_id = 1452;
     if (!_GameShell->atmosphere_button->Add(&btn))
@@ -8736,7 +8918,7 @@ bool NC_STACK_ypaworld::CreateDiskControls()
                                                 btn_64arg.ypos = diskActionButtonY;
                                                 btn_64arg.width = diskActionButtonWidth;
                                                 btn_64arg.xpos = 3 * (buttonsSpace + diskActionButtonWidth);
-                                                btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
+                                                btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
                                                 btn_64arg.button_id = 1106;
                                                 btn_64arg.caption2.clear();
                                                 btn_64arg.upCode = 1165;
@@ -8905,7 +9087,7 @@ bool NC_STACK_ypaworld::CreateLocaleControls()
                             btn_64arg.xpos = bottomCenteredSecondBtnPosX;
                             btn_64arg.ypos = bottomButtonsY;
                             btn_64arg.width = button1LineWidth;
-                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
+                            btn_64arg.caption = Locale::Text::Common(Locale::CMN_CANCEL);
                             btn_64arg.caption2.clear();
                             btn_64arg.downCode = 0;
                             btn_64arg.pressedCode = 0;
@@ -9506,7 +9688,7 @@ bool NC_STACK_ypaworld::CreateNetworkControls()
                                                             btn_64arg.xpos = bottomCenteredSecondBtnPosX;
                                                             btn_64arg.ypos = bottomButtonsY + _fontH;
                                                             btn_64arg.width = button1LineWidth;
-                                                            btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);
+                                                            btn_64arg.caption = Locale::Text::Netdlg(Locale::NETDLG_BACK);
                                                             btn_64arg.caption2.clear();
                                                             btn_64arg.upCode = 1202;
                                                             btn_64arg.pressedCode = 0;
@@ -10970,10 +11152,13 @@ void NC_STACK_ypaworld::UpdateGameShell()
     v16.field_4 = _GameShell->confHideMapBorderWalls ? 1 : 2;
     _GameShell->video_button->SetState(&v16);
 
+    _GameShell->confGenesisListOrder = System::IniConf::UiGenesisListOrder.Get<std::string>();
+
     _GameShell->video_button->SetText(1156, _GameShell->p_YW->_gfxMode.name);
     _GameShell->UpdatePaletteThemeText();
     _GameShell->UpdateGfxOptionTexts();
     _GameShell->UpdateMenuFontText();
+    _GameShell->UpdateGenesisListOrderText();
 
     tmp = _GameShell->video_button->GetSliderData(1159);
     tmp->value = _GameShell->fxnumber;

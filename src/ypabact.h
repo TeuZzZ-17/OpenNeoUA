@@ -906,6 +906,9 @@ public:
     int _bact_type;
     uint32_t _gid = 0; // global bact id
     uint8_t _vehicleID; // vehicle id, from scr files
+    std::shared_ptr<World::TChainFXPhysical> _inlinePhysicalFX;
+    bool _inlinePhysicalImpactDamageSpent = false;
+    int _inlinePhysicalLifetimeMs = 0;
     uint8_t _mimic_disguise_vehicleID; // OpenNeoUA: copied proto for model = mimic runtime behavior
     uint8_t _bflags;
     uint32_t _commandID = 0;
@@ -1202,6 +1205,9 @@ public:
     float _at_death_push_force;
     float _at_death_push_radius;
     int _at_death_push_falloff;
+    int _at_death_damage;
+    float _at_death_damage_radius;
+    int _at_death_damage_falloff;
     int _at_death_energy_drain;
     float _at_death_energy_drain_radius;
     int _at_death_energy_drain_falloff;

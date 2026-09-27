@@ -379,6 +379,7 @@ public:
     static Common::Ini::Key UiGenesisListWidth; // OpenNeoUA: Genesis/Creation list width; default 180
     static Common::Ini::Key UiGenesisListHeight; // OpenNeoUA: Genesis/Creation list maximum height in pixels; default 220
     static Common::Ini::Key UiGenesisListOpacity; // OpenNeoUA: Genesis/Creation list background opacity 0..255; default 220
+    static Common::Ini::Key UiGenesisListOrder; // OpenNeoUA: Genesis list order classic/energy; code default classic preserves vanilla
     static Common::Ini::Key UiMapOpacity; // OpenNeoUA: in-mission strategic Map background opacity 0..255; default 70
     static Common::Ini::Key UiSquadronManagerOpacity; // OpenNeoUA: in-mission Squadron Manager background opacity 0..255; default 180
 

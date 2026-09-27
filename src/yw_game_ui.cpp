@@ -891,9 +891,6 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
 
         if ( yw && yw->IsValidMobilePowerGenerator(bact) )
             StatusIconAdd(icons, iconCount, StatusIconPowerPath());
-
-        if ( bact->CanUseProximityDefense() || bact->CanUseProximityDefenseAtDeath() )
-            StatusIconAdd(icons, iconCount, vhcl->proximity_defense_icon);
     }
 
     // Regen/Drain icons and global unit FX consume the same world-side state.
@@ -6764,7 +6761,7 @@ void gui_update_create_btn__sub0(NC_STACK_ypaworld *yw)
             int v9 = bzda.field_4DC[ v3 ].d;
             const World::TBuildingProto &v10 = yw->_buildProtos[v9];
 
-            int v18 = dround(yw->sub_4498F4() * v10.Energy / 100.0);
+            int v18 = dround(yw->sub_4498F4() * v10.GetProductionCost() / 100.0);
 
             std::string v13 = yw->ResolveGameplayBuildingName(v10, yw->_isNetGame);
 
@@ -12996,6 +12993,13 @@ void ypaworld_func64__sub8(NC_STACK_ypaworld *yw)
 
 
 
+// OpenNeoUA: Genesis list order switch. Only an explicit energy value
+// selects the Energy order; missing or unknown values keep vanilla.
+static bool yw_IsGenesisEnergyOrder()
+{
+    return !StriCmp(System::IniConf::UiGenesisListOrder.Get<std::string>(), "energy");
+}
+
 int sub_4C3C88(const void *a1, const void *a2)
 {
     uint8_t aa1 = *(const uint8_t *)a1;
@@ -13003,6 +13007,22 @@ int sub_4C3C88(const void *a1, const void *a2)
 
     const World::TVhclProto &v4 = dword_5BAA60->_vhclProtos[aa1];
     const World::TVhclProto &v5 = dword_5BAA60->_vhclProtos[aa2];
+
+    // OpenNeoUA: Genesis list order follows ui.genesis_list_order.
+    // Energy sorts by final production cost only; missing or unknown
+    // values keep the vanilla type-grouped order.
+    if ( yw_IsGenesisEnergyOrder() )
+    {
+        const int cost1 = v4.GetProductionCost();
+        const int cost2 = v5.GetProductionCost();
+
+        if ( cost1 < cost2 )
+            return -1;
+        else if ( cost1 > cost2 )
+            return 1;
+
+        return 0;
+    }
 
     int v7, v8;
 
@@ -13145,6 +13165,20 @@ int sub_4C3D6C(const void *a1, const void *a2)
 
     World::TBuildingProto *v3 = &dword_5BAA60->_buildProtos[aa1];
     World::TBuildingProto *v4 = &dword_5BAA60->_buildProtos[aa2];
+
+    // OpenNeoUA: same ui.genesis_list_order switch as the vehicle list.
+    if ( yw_IsGenesisEnergyOrder() )
+    {
+        const int cost1 = v3->GetProductionCost();
+        const int cost2 = v4->GetProductionCost();
+
+        if ( cost1 < cost2 )
+            return -1;
+        else if ( cost1 > cost2 )
+            return 1;
+
+        return 0;
+    }
 
     int v6, v8;
 
@@ -18002,7 +18036,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub7()
     }
     else if ( bzda.field_1D0 == 16 && bzda.field_8F4 != -1 )
     {
-        _updateMessage.energy = dround(sub_4498F4() * _buildProtos[bzda.field_3DC[bzda.field_8F4]].Energy);
+        _updateMessage.energy = dround(sub_4498F4() * _buildProtos[bzda.field_3DC[bzda.field_8F4]].GetProductionCost());
     }
 
     // New Debug F12 keeps the normal authored prices visible in the Genesis

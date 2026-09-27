@@ -4,6 +4,7 @@
 #include "yw_internal.h"
 #include "yw.h"
 #include "yparobo.h"
+#include "system/inivals.h"
 
 
 int yw_write_callSign(NC_STACK_ypaworld *yw, const char *filename, const char *callsign)
@@ -348,6 +349,8 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
 
             fil->printf("    shield         = %d\n", proto.shield);
             fil->printf("    energy         = %d\n", proto.energy);
+            if ( proto.production_cost > 0 )
+                fil->printf("    production_cost = %d\n", proto.production_cost);
             fil->printf("    max_active_at_once = %d\n", proto.max_active_at_once);
             if ( proto.mimic_energy_cost_min > 0 && proto.mimic_energy_cost_max > 0 )
             {

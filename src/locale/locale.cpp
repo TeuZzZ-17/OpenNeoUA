@@ -429,6 +429,9 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_GEM_CAR_DAMAGE_UPGRADE:      fallback = "Car Damage Upgrade"; break;
         case OUA_GEM_GUN_DAMAGE_UPGRADE:      fallback = "Gun Damage Upgrade"; break;
         case OUA_HIDE_MAP_BORDER_WALLS:        fallback = "Hide Map Border Walls"; break;
+        case OUA_GENESIS_LIST_ORDER:          fallback = "Genesis List Order:"; break;
+        case OUA_GENESIS_ORDER_CLASSIC:       fallback = "Classic"; break;
+        case OUA_GENESIS_ORDER_ENERGY:        fallback = "Energy"; break;
         case OUA_GEM_CRUISER_DAMAGE_UPGRADE:  fallback = "Cruiser Damage Upgrade"; break;
         case OUA_GEM_MAX_UNITS_UPGRADE:       fallback = "MAX UNITS UPGRADE"; break;
         case OUA_QUIT_MISSION:                fallback = "Quit Mission"; break;
