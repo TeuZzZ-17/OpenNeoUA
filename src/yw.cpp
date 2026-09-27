@@ -2354,7 +2354,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
                     // Match the normal lethal-damage transition for tanks and
                     // cars: their death state is DEATH2, which emits the
-                    // begin_chain_fx trigger "destroyed". Keep this as a direct
+                    // begin_fx trigger "destroyed". Keep this as a direct
                     // internal transition so F7 remains a forced debug kill
                     // even while global invulnerability (F9) is enabled.
                     if ( selectedVehicle->_bact_type == BACT_TYPES_TANK ||

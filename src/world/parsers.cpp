@@ -2126,7 +2126,7 @@ static void ParseChainFXRangeAxis(const std::string &key,
 
     minValue = 0.0;
     maxValue = 0.0;
-    ypa_log_out("WARNING: invalid begin_chain_fx %s '%s', using 0\n",
+    ypa_log_out("WARNING: invalid begin_fx %s '%s', using 0\n",
                 key.c_str(), value.c_str());
 }
 
@@ -2244,7 +2244,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
 
             if ( !hasTrigger )
             {
-                ypa_log_out("WARNING: begin_chain_fx without trigger ignored for %s prototype\n",
+                ypa_log_out("WARNING: begin_fx without trigger ignored for %s prototype\n",
                             ChainFXContextName(context));
                 return ScriptParser::RESULT_OK;
             }
@@ -2291,7 +2291,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 }
                 else if ( hasPhysicalVehicleKey || hasOffset )
                 {
-                    ypa_log_out("WARNING: begin_chain_fx physical mixes legacy and inline keys; block ignored\n");
+                    ypa_log_out("WARNING: begin_fx physical mixes legacy and inline keys; block ignored\n");
                 }
                 else if ( !invalidInlinePhysical &&
                           physical->mass > 0.0f && physical->radius > 0.0f &&
@@ -2310,7 +2310,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 }
                 else
                 {
-                    ypa_log_out("WARNING: incomplete or invalid begin_chain_fx physical fragment ignored\n");
+                    ypa_log_out("WARNING: incomplete or invalid begin_fx physical fragment ignored\n");
                 }
             }
             else if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL )
@@ -2324,11 +2324,11 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 if ( !validGroundDecalTrigger )
                 {
                     if ( context == CHAIN_FX_WEAPON )
-                        ypa_log_out("WARNING: Weapon begin_chain_fx ground_decal supports only trigger = impact_world; block ignored\n");
+                        ypa_log_out("WARNING: Weapon begin_fx ground_decal supports only trigger = impact_world; block ignored\n");
                     else if ( context == CHAIN_FX_VEHICLE )
-                        ypa_log_out("WARNING: Vehicle begin_chain_fx ground_decal supports only trigger = destroyed; block ignored\n");
+                        ypa_log_out("WARNING: Vehicle begin_fx ground_decal supports only trigger = destroyed; block ignored\n");
                     else
-                        ypa_log_out("WARNING: begin_chain_fx ground_decal is not supported for this prototype; block ignored\n");
+                        ypa_log_out("WARNING: begin_fx ground_decal is not supported for this prototype; block ignored\n");
                 }
                 else if ( !std::isfinite(groundDecalSizeMin) || !std::isfinite(groundDecalSizeMax) ||
                           groundDecalSizeMin <= 0.0f || groundDecalSizeMax <= 0.0f ||
@@ -2339,7 +2339,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                           !groundDecalDurationValid || (!groundDecalPermanent && duration <= 0) ||
                           groundDecalTint.a <= 0.0f )
                 {
-                    ypa_log_out("WARNING: incomplete or disabled begin_chain_fx ground_decal block ignored\n");
+                    ypa_log_out("WARNING: incomplete or disabled begin_fx ground_decal block ignored\n");
                 }
                 else
                 {
@@ -2383,13 +2383,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 mode = ParseChainFXMode(p2);
                 if ( context == CHAIN_FX_SUPERITEM && mode != World::TChainFXConfig::MODE_VISUAL )
                 {
-                    ypa_log_out("WARNING: SuperItem begin_chain_fx supports only visual mode; block ignored\n");
+                    ypa_log_out("WARNING: SuperItem begin_fx supports only visual mode; block ignored\n");
                     badMode = true;
                 }
             }
             else
             {
-                ypa_log_out("WARNING: Unknown begin_chain_fx mode '%s' ignored\n", p2.c_str());
+                ypa_log_out("WARNING: Unknown begin_fx mode '%s' ignored\n", p2.c_str());
                 badMode = true;
             }
         }
@@ -2399,7 +2399,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             hasTrigger = true;
             if ( trigger == World::TChainFXConfig::TRIGGER_NONE )
             {
-                ypa_log_out("WARNING: Unknown or unsupported begin_chain_fx trigger '%s' ignored\n", p2.c_str());
+                ypa_log_out("WARNING: Unknown or unsupported begin_fx trigger '%s' ignored\n", p2.c_str());
                 badTrigger = true;
             }
         }
@@ -2416,7 +2416,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             }
             else
             {
-                ypa_log_out("WARNING: Invalid begin_chain_fx mid_size '%s'; using linear start_size -> end_size fallback\n",
+                ypa_log_out("WARNING: Invalid begin_fx mid_size '%s'; using linear start_size -> end_size fallback\n",
                             p2.c_str());
                 hasMidSize = false;
             }
@@ -2452,13 +2452,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             {
                 countMin = 1;
                 countMax = 1;
-                ypa_log_out("WARNING: SuperItem begin_chain_fx does not support count; using 1\n");
+                ypa_log_out("WARNING: SuperItem begin_fx does not support count; using 1\n");
             }
             else if ( !World::ParsePositiveIntRangeValue(p2, 32, countMin, countMax) )
             {
                 countMin = 1;
                 countMax = 1;
-                ypa_log_out("WARNING: invalid begin_chain_fx count '%s', using 1\n", p2.c_str());
+                ypa_log_out("WARNING: invalid begin_fx count '%s', using 1\n", p2.c_str());
             }
         }
         else if ( !StriCmp(p1, "offset_x") )
@@ -2545,7 +2545,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             }
             if ( visuals.empty() )
             {
-                ypa_log_out("WARNING: begin_chain_fx visual_tint without preceding vp_model/base_model/3ds_model ignored\n");
+                ypa_log_out("WARNING: begin_fx visual_tint without preceding vp_model/base_model/3ds_model ignored\n");
                 continue;
             }
 
@@ -2592,7 +2592,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             {
                 physical->lifetime_min = 30000;
                 physical->lifetime_max = 30000;
-                ypa_log_out("WARNING: invalid begin_chain_fx physical lifetime '%s'; using 30000 ms\n",
+                ypa_log_out("WARNING: invalid begin_fx physical lifetime '%s'; using 30000 ms\n",
                             p2.c_str());
             }
         }
@@ -2611,7 +2611,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             {
                 if ( !StriCmp(p1, "mass") || !StriCmp(p1, "radius") )
                     invalidInlinePhysical = true;
-                ypa_log_out("WARNING: invalid begin_chain_fx physical %s '%s'\n",
+                ypa_log_out("WARNING: invalid begin_fx physical %s '%s'\n",
                             p1.c_str(), p2.c_str());
             }
             else if ( !StriCmp(p1, "mass") )
@@ -2636,7 +2636,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 std::string normalized;
                 if ( !uaNormalizeDataAssetPath(p2, &normalized, true) )
                 {
-                    ypa_log_out("WARNING: invalid begin_chain_fx sound path '%s'; sample ignored\n",
+                    ypa_log_out("WARNING: invalid begin_fx sound path '%s'; sample ignored\n",
                                 p2.c_str());
                     continue;
                 }
@@ -2652,7 +2652,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             hasPhysicalVehicleKey = true;
             if ( context == CHAIN_FX_SUPERITEM )
             {
-                ypa_log_out("WARNING: SuperItem begin_chain_fx does not support physical_vehicle; block ignored\n");
+                ypa_log_out("WARNING: SuperItem begin_fx does not support physical_vehicle; block ignored\n");
                 badMode = true;
             }
             else
@@ -2757,7 +2757,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         {
             if ( context == CHAIN_FX_SUPERITEM )
             {
-                ypa_log_out("WARNING: Unknown SuperItem begin_chain_fx parameter '%s'; block ignored\n", p1.c_str());
+                ypa_log_out("WARNING: Unknown SuperItem begin_fx parameter '%s'; block ignored\n", p1.c_str());
                 badMode = true;
                 continue;
             }
@@ -4459,7 +4459,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             }
         }
     }
-    else if ( !StriCmp(p1, "begin_chain_fx") )
+    else if ( !StriCmp(p1, "begin_fx") )
     {
         return ParseVehicleChainFXBlock(parser, _vhcl);
     }
@@ -6169,7 +6169,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         // assets are handled by the UI loader with the canonical classic SVG fallback.
         _wpn->artillery_shell_marker_path = p2;
     }
-    else if ( !StriCmp(p1, "begin_chain_fx") )
+    else if ( !StriCmp(p1, "begin_fx") )
     {
         return ParseWeaponChainFXBlock(parser, _wpn);
     }
@@ -7027,7 +7027,7 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
     if ( !StriCmp(p1, "end") )
         return ScriptParser::RESULT_SCOPE_END;
 
-    if ( !StriCmp(p1, "begin_chain_fx") )
+    if ( !StriCmp(p1, "begin_fx") )
         return ParseSuperItemChainFXBlock(parser, _profile);
 
     if ( !StriCmp(p1, "id") )
