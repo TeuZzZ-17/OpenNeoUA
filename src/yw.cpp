@@ -4814,11 +4814,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_at_death_damage_radius = deathProto.at_death_damage_radius > 0.0f
             ? deathProto.at_death_damage_radius : 0.0f;
         bacto->_at_death_damage_falloff = deathProto.at_death_damage_falloff ? 1 : 0;
-        bacto->_at_death_energy_drain = deathProto.at_death_energy_drain > 0
-            ? deathProto.at_death_energy_drain : 0;
-        bacto->_at_death_energy_drain_radius = deathProto.at_death_energy_drain_radius > 0.0f
-            ? deathProto.at_death_energy_drain_radius : 0.0f;
-        bacto->_at_death_energy_drain_falloff = deathProto.at_death_energy_drain_falloff ? 1 : 0;
         bacto->_carrier_spawn_root_gid = 0;
         bacto->_carrier_spawn_root_vehicle = 0;
         bacto->_carrier_spawned_gids.clear();

@@ -2958,9 +2958,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _at_death_damage = 0;
     _at_death_damage_radius = 0.0f;
     _at_death_damage_falloff = 0;
-    _at_death_energy_drain = 0;
-    _at_death_energy_drain_radius = 0.0f;
-    _at_death_energy_drain_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -3162,9 +3159,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _at_death_damage = 0;
     _at_death_damage_radius = 0.0f;
     _at_death_damage_falloff = 0;
-    _at_death_energy_drain = 0;
-    _at_death_energy_drain_radius = 0.0f;
-    _at_death_energy_drain_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -8332,16 +8326,13 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
                          source->_at_death_push_radius > 0.0f;
     const bool hasDamage = source && source->_at_death_damage > 0 &&
                            source->_at_death_damage_radius > 0.0f;
-    const bool hasEnergyDrain = source && source->_at_death_energy_drain > 0 &&
-                                source->_at_death_energy_drain_radius > 0.0f;
-    if ( !world || world->_isNetGame || (!hasPush && !hasDamage && !hasEnergyDrain) )
+    if ( !world || world->_isNetGame || (!hasPush && !hasDamage) )
         return;
 
     const vec3d origin = source->_position;
     const float pushRadius = hasPush ? source->_at_death_push_radius : 0.0f;
     const float damageRadius = hasDamage ? source->_at_death_damage_radius : 0.0f;
-    const float energyDrainRadius = hasEnergyDrain ? source->_at_death_energy_drain_radius : 0.0f;
-    const float searchRadius = std::max(pushRadius, std::max(damageRadius, energyDrainRadius));
+    const float searchRadius = std::max(pushRadius, damageRadius);
     const float searchRadiusSq = searchRadius * searchRadius;
     if ( !isfinite(searchRadiusSq) )
         return;
@@ -8351,12 +8342,9 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
         world->DebugAddAtDeathSphere(origin, pushRadius);
     if ( hasDamage )
         world->DebugAddAtDeathSphere(origin, damageRadius);
-    if ( hasEnergyDrain )
-        world->DebugAddAtDeathSphere(origin, energyDrainRadius);
 
     const float pushRadiusSq = pushRadius * pushRadius;
     const float damageRadiusSq = damageRadius * damageRadius;
-    const float energyDrainRadiusSq = energyDrainRadius * energyDrainRadius;
     const int sectorRadius = (int)(searchRadius / World::CVSectorLength) + 2;
     const Common::Point center = World::PositionToSectorID(origin);
     std::unordered_set<NC_STACK_ypabact *> visited;
@@ -8396,30 +8384,6 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
 
                 if ( target->_energy <= 0 || target->_status == BACT_STATUS_DEAD )
                     continue;
-
-                if ( hasEnergyDrain && distanceSq <= energyDrainRadiusSq &&
-                     !target->IsInvulnerableToDamage() )
-                {
-                    const float energyDrainFalloff = World::AoePushFalloffFactor(
-                        distance, energyDrainRadius,
-                        source->_at_death_energy_drain_falloff != 0);
-                    const int drain = (int)ceilf(
-                        (float)source->_at_death_energy_drain * energyDrainFalloff);
-                    if ( drain > 0 )
-                    {
-                        const int previousEnergy = target->_energy;
-                        target->_energy = std::max(0, previousEnergy - drain);
-                        if ( previousEnergy > 0 && target->_energy <= 0 )
-                        {
-                            target->_killer = source;
-                            if ( source->_owner > World::OWNER_0 &&
-                                 source->_owner != target->_owner )
-                            {
-                                target->_killer_owner = source->_owner;
-                            }
-                        }
-                    }
-                }
 
                 if ( hasPush && distanceSq <= pushRadiusSq &&
                      target->CanReceiveConfiguredPush() && distance > 0.001f )
@@ -17742,9 +17706,6 @@ void NC_STACK_ypabact::Renew()
     _at_death_damage = 0;
     _at_death_damage_radius = 0.0f;
     _at_death_damage_falloff = 0;
-    _at_death_energy_drain = 0;
-    _at_death_energy_drain_radius = 0.0f;
-    _at_death_energy_drain_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
