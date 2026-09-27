@@ -1208,9 +1208,6 @@ public:
     int _at_death_damage;
     float _at_death_damage_radius;
     int _at_death_damage_falloff;
-    int _at_death_energy_drain;
-    float _at_death_energy_drain_radius;
-    int _at_death_energy_drain_falloff;
     int _carrier_spawn_root_gid;
     int _carrier_spawn_root_vehicle;
     std::vector<int32_t> _carrier_spawned_gids;
