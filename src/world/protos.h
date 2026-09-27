@@ -968,9 +968,6 @@ struct TVhclProto
     int at_death_damage = 0; // Shielded unit damage emitted on actual vehicle death; 0 disables it
     float at_death_damage_radius = 0.0f; // 3D radius used only by the at-death damage effect
     int at_death_damage_falloff = 0; // Linear distance falloff used only by the at-death damage effect
-    int at_death_energy_drain = 0; // Absolute energy removed from nearby units on death; 0 disables it
-    float at_death_energy_drain_radius = 0.0f; // 3D radius used only by the at-death energy drain
-    int at_death_energy_drain_falloff = 0; // Linear distance falloff used only by the at-death energy drain
     float mass = 0.0;
     float force = 0.0;
     float airconst = 0.0;

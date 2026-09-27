@@ -2823,10 +2823,7 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "at_death_push_falloff") ||
            !StriCmp(p1, "at_death_damage") ||
            !StriCmp(p1, "at_death_damage_radius") ||
-           !StriCmp(p1, "at_death_damage_falloff") ||
-           !StriCmp(p1, "at_death_energy_drain") ||
-           !StriCmp(p1, "at_death_energy_drain_radius") ||
-           !StriCmp(p1, "at_death_energy_drain_falloff");
+           !StriCmp(p1, "at_death_damage_falloff");
 }
 
 
@@ -3286,19 +3283,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "at_death_damage_falloff") )
     {
         _vhcl->at_death_damage_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "at_death_energy_drain") )
-    {
-        int drain = parser.stol(p2, NULL, 0);
-        _vhcl->at_death_energy_drain = drain > 0 ? drain : 0;
-    }
-    else if ( !StriCmp(p1, "at_death_energy_drain_radius") )
-    {
-        _vhcl->at_death_energy_drain_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "at_death_energy_drain_falloff") )
-    {
-        _vhcl->at_death_energy_drain_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
@@ -4890,9 +4874,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->at_death_damage = 0;
         _vhcl->at_death_damage_radius = 0.0f;
         _vhcl->at_death_damage_falloff = 0;
-        _vhcl->at_death_energy_drain = 0;
-        _vhcl->at_death_energy_drain_radius = 0.0f;
-        _vhcl->at_death_energy_drain_falloff = 0;
         _vhcl->mass = 400.0;
         _vhcl->force = 5000.0;
         _vhcl->airconst = 80.0;
