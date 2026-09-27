@@ -857,6 +857,7 @@ public:
     int confBlending;             // gfx.blending  0=Default 1=Additive 2=Sharp
     int confMaxFps;               // gfx.maxfps, validated against the Options FPS list
     bool confMoviePlayer;         // gfx.movie_player
+    std::string confGenesisListOrder; // ui.genesis_list_order classic/energy, normalized
 
     // OpenNeoUA: profile-saved virtual UI magnification style. OpenNeoUA.ini
     // supplies the fallback for new/legacy profiles; a saved profile overrides it.
@@ -1129,6 +1130,7 @@ public:
     void UpdateMenuFontText();
     // OpenNeoUA: modern graphics options helpers
     void UpdateGfxOptionTexts();   // refresh Blending/Atmosphere-Strength captions
+    void UpdateGenesisListOrderText(); // refresh Genesis List Order caption
     bool SaveKeyToNucleusIni(const std::string &key, const std::string &value);
     bool SaveKeyToOpenNeoUAIni(const std::string &key, const std::string &value);
     bool RemoveKeyFromOpenNeoUAIni(const std::string &key);
@@ -2675,6 +2677,9 @@ public:
 
 
     NC_STACK_ypabact *yw_createUnit(int model_id);
+    NC_STACK_ypabact *SpawnInlinePhysicalFX(const World::TChainFXConfig &config,
+                                            const vec3d &pos, const mat3x3 &rot,
+                                            const vec3d &launch, int16_t owner);
     void sb_0x456384(const Common::Point &cellId, int ownerid2, int blg_id, int a7);
     void SetupPowerStationInfo(cellArea *cell, int power, int buildingId);
     void ResetAccumMap();

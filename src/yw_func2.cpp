@@ -77,6 +77,9 @@ static constexpr bool OPTIONS_RESET_SPECTATOR = false;
 static constexpr bool OPTIONS_RESET_PLAY_AS = false;
 static constexpr bool OPTIONS_RESET_RETRO_INTERFACE = true;
 static constexpr bool OPTIONS_RESET_HIDE_MAP_BORDER_WALLS = false;
+// OpenNeoUA reset profile intentionally selects the Energy order;
+// a missing ui.genesis_list_order key still falls back to classic.
+static constexpr const char *OPTIONS_RESET_GENESIS_LIST_ORDER = "energy";
 static constexpr int OPTIONS_RESET_FX_NUMBER = 16;
 static constexpr int OPTIONS_RESET_SOUND_VOLUME = 127;
 static constexpr int OPTIONS_RESET_MUSIC_VOLUME = 60;
@@ -259,6 +262,25 @@ static std::string BlendingLabel(int v)
 }
 
 static int CycleBlending(int v)   { return (v == 0) ? 1 : (v == 1) ? 2 : 0; }
+
+// OpenNeoUA: Genesis list order is stored as classic/energy text.
+// Anything else normalizes to classic so vanilla sorting is preserved.
+static std::string NormalizeGenesisListOrder(const std::string &v)
+{
+    return !StriCmp(v, "energy") ? "energy" : "classic";
+}
+
+static std::string CycleGenesisListOrder(const std::string &v)
+{
+    return NormalizeGenesisListOrder(v) == "energy" ? "classic" : "energy";
+}
+
+static std::string GenesisListOrderLabel(const std::string &v)
+{
+    return Locale::Text::OpenUA(NormalizeGenesisListOrder(v) == "energy"
+        ? Locale::OUA_GENESIS_ORDER_ENERGY
+        : Locale::OUA_GENESIS_ORDER_CLASSIC);
+}
 
 static int NormalizeFrameRateLimit(int value)
 {
@@ -1803,6 +1825,16 @@ void UserData::sb_0x46aa8c()
             ypa_log_out("OpenNeoUA: saved ui.menu_font = %s (%s) to OpenNeoUA.ini\n", menuFont.c_str(), storedMenuFont.c_str());
     }
 
+    // Genesis order is a global OpenNeoUA setting, not a per-profile value.
+    // Pressing OK always writes the normalized value so an empty legacy entry
+    // is repaired and the choice cannot be replaced by USER.TXT on restart.
+    confGenesisListOrder = NormalizeGenesisListOrder(confGenesisListOrder);
+    // any-lite moves from non-const lvalues; pass a copy so the value saved
+    // below is the same one installed in the runtime configuration.
+    System::IniConf::UiGenesisListOrder.Value = std::string(confGenesisListOrder);
+    if ( !SaveKeyToOpenNeoUAIni("ui.genesis_list_order", confGenesisListOrder) )
+        ypa_log_out("WARNING: Could not save ui.genesis_list_order to OpenNeoUA.ini\n");
+
     if ( _settingsChangeOptions & SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS )
     {
         System::IniConf::GfxHideMapBorderWalls.Value = confHideMapBorderWalls;
@@ -1924,11 +1956,13 @@ void UserData::ShowOptionsMenu()
     confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
+    confGenesisListOrder = NormalizeGenesisListOrder(System::IniConf::UiGenesisListOrder.Get<std::string>());
     ambientSoundVolume = p_YW->GetAmbientSoundGlobalVolume();
     confAmbientSoundVolume = ambientSoundVolume;
     UpdatePaletteThemeText();
     UpdateMenuFontText();
     UpdateGfxOptionTexts();
+    UpdateGenesisListOrderText();
 
     NC_STACK_button::button_66arg state;
     state.butID = 1174;
@@ -2021,6 +2055,7 @@ void UserData::ResetOptionsToDefaults()
 
     confBlending = OPTIONS_RESET_BLENDING;
     confMaxFps = NormalizeFrameRateLimit(OPTIONS_RESET_MAX_FPS);
+    confGenesisListOrder = OPTIONS_RESET_GENESIS_LIST_ORDER;
     confMoviePlayer = OPTIONS_RESET_MOVIE_PLAYER;
     confMenuFont = OPTIONS_RESET_MENU_FONT;
     confPlayerRoboAIBehavior = OPTIONS_RESET_PLAYER_ROBO_AI;
@@ -2109,6 +2144,7 @@ void UserData::ResetOptionsToDefaults()
 
     UpdateGfxOptionTexts();
     UpdateMenuFontText();
+    UpdateGenesisListOrderText();
 }
 
 
@@ -2805,6 +2841,7 @@ void UserData::sub_46A3C0()
     confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
+    confGenesisListOrder = NormalizeGenesisListOrder(System::IniConf::UiGenesisListOrder.Get<std::string>());
     confAmbientSoundVolume = ambientSoundVolume;
 
     int gfxId = GFX::GFXEngine::Instance.GetGfxModeIndex(p_YW->_gfxMode);
@@ -2886,6 +2923,7 @@ void UserData::sub_46A3C0()
     video_button->SetState(&v10);
     UpdateGfxOptionTexts();
     UpdateMenuFontText();
+    UpdateGenesisListOrderText();
 
     NC_STACK_button::Slider *tmp = video_button->GetSliderData(1159);
     tmp->value = fxnumber;
@@ -3502,6 +3540,12 @@ void UserData::UpdateGfxOptionTexts()
 {
     video_button->SetText(1183, BlendingLabel(confBlending));
     video_button->SetText(1187, std::to_string(NormalizeFrameRateLimit(confMaxFps)));
+}
+
+// OpenNeoUA: refresh the Genesis List Order cycle-button caption.
+void UserData::UpdateGenesisListOrderText()
+{
+    video_button->SetText(1188, GenesisListOrderLabel(confGenesisListOrder));
 }
 
 void UserData::sub_46C914()
@@ -5843,6 +5887,11 @@ void UserData::GameShellUiHandleInput()
             confMaxFps = CycleFrameRateLimit(confMaxFps);
             video_button->SetText(1187, std::to_string(confMaxFps));
             _settingsChangeOptions |= SETTINGS_CHANGE_MAXFPS;
+        }
+        else if ( r.code == 1313 ) // Genesis List Order cycle
+        {
+            confGenesisListOrder = CycleGenesisListOrder(confGenesisListOrder);
+            video_button->SetText(1188, GenesisListOrderLabel(confGenesisListOrder));
         }
         else if ( r.code == 1307 ) // Intro Movies checkbox (checked)
         {

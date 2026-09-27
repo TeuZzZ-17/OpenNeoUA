@@ -2955,6 +2955,9 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _at_death_push_force = 0.0f;
     _at_death_push_radius = 0.0f;
     _at_death_push_falloff = 0;
+    _at_death_damage = 0;
+    _at_death_damage_radius = 0.0f;
+    _at_death_damage_falloff = 0;
     _at_death_energy_drain = 0;
     _at_death_energy_drain_radius = 0.0f;
     _at_death_energy_drain_falloff = 0;
@@ -3156,6 +3159,9 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _at_death_push_force = 0.0f;
     _at_death_push_radius = 0.0f;
     _at_death_push_falloff = 0;
+    _at_death_damage = 0;
+    _at_death_damage_radius = 0.0f;
+    _at_death_damage_falloff = 0;
     _at_death_energy_drain = 0;
     _at_death_energy_drain_radius = 0.0f;
     _at_death_energy_drain_falloff = 0;
@@ -4521,7 +4527,9 @@ static void ypabact_SpawnSingleDamagedFX(NC_STACK_ypabact *bact,
     vec3d localOffset;
     bool rotateOffset = ypabact_BuildAttachedFXOffset(
         bact, bact->_damaged_fx.random_max_offset, &localOffset);
-    const vec3d effectScale = ypabact_BuildUniformStatusFXScale(bact->_damaged_fx.scale);
+    const float randomScale = (float)World::RandomFloatRangeInclusive(
+        bact->_damaged_fx.scale, bact->_damaged_fx.scale_max);
+    const vec3d effectScale = ypabact_BuildUniformStatusFXScale(randomScale);
 
     if ( !visual.mesh3ds.empty() )
         world->SpawnAttachedStatusTransientMesh(visual.mesh3ds, bact, localOffset, 1000,
@@ -8222,8 +8230,8 @@ void NC_STACK_ypabact::CopyWaypointsStuff( NC_STACK_ypabact *bact)
     }
 }
 
-static bool ypabact_IsAtDeathEffectTarget(const NC_STACK_ypabact *source,
-                                           const NC_STACK_ypabact *target)
+static bool ypabact_IsConfiguredAreaEffectTarget(const NC_STACK_ypabact *source,
+                                                  const NC_STACK_ypabact *target)
 {
     return source && target && source != target &&
            target->_bact_type != BACT_TYPES_MISSLE &&
@@ -8235,20 +8243,105 @@ static bool ypabact_IsAtDeathEffectTarget(const NC_STACK_ypabact *source,
                                     BACT_STFLAG_CLEAN | BACT_STFLAG_NORENDER));
 }
 
+static void ypabact_ApplyConfiguredDamage(NC_STACK_ypabact *source,
+                                          NC_STACK_ypabact *target,
+                                          int rawDamage)
+{
+    if ( !source || !target || rawDamage <= 0 ||
+         !ypabact_IsConfiguredAreaEffectTarget(source, target) )
+        return;
+
+    const int damage = target->CalcShieldedCustomDamage(rawDamage);
+    if ( damage <= 0 )
+        return;
+
+    bact_arg84 damageArg;
+    damageArg.energy = -damage;
+    damageArg.unit = source;
+    damageArg.killerOwner = source->_owner;
+    damageArg.bypassAttackerDamageModifiers = true;
+    target->ModifyEnergy(&damageArg);
+}
+
+static void ypabact_ApplyInlinePhysicalImpactDamage(NC_STACK_ypabact *fragment,
+                                                     NC_STACK_ypabact *directTarget)
+{
+    NC_STACK_ypaworld *world = fragment ? fragment->getBACT_pWorld() : NULL;
+    if ( !fragment || !directTarget || !world ||
+         world->_isNetGame || !fragment->_inlinePhysicalFX ||
+         fragment->_inlinePhysicalImpactDamageSpent ||
+         fragment->_inlinePhysicalFX->impact_damage <= 0 ||
+         !ypabact_IsConfiguredAreaEffectTarget(fragment, directTarget) )
+    {
+        return;
+    }
+
+    // A physical fragment can deal gameplay damage only once. It may continue
+    // bouncing visually afterwards, but repeated contact cannot become a damage loop.
+    fragment->_inlinePhysicalImpactDamageSpent = true;
+
+    const int rawDamage = fragment->_inlinePhysicalFX->impact_damage;
+    ypabact_ApplyConfiguredDamage(fragment, directTarget, rawDamage);
+
+    const float radius = fragment->_inlinePhysicalFX->impact_damage_radius;
+    if ( !(radius > 0.0f) || !std::isfinite(radius) )
+        return;
+
+    const vec3d origin = fragment->_position;
+    const float radiusSq = radius * radius;
+    if ( !std::isfinite(radiusSq) )
+        return;
+
+    const int sectorRadius = (int)(radius / World::CVSectorLength) + 2;
+    const Common::Point center = World::PositionToSectorID(origin);
+    std::unordered_set<NC_STACK_ypabact *> visited;
+    visited.insert(directTarget);
+
+    for ( int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++ )
+    {
+        for ( int x = center.x - sectorRadius; x <= center.x + sectorRadius; x++ )
+        {
+            const Common::Point cellId(x, y);
+            if ( !world->IsSector(cellId) )
+                continue;
+
+            for ( NC_STACK_ypabact *target :
+                  world->SectorAt(cellId).unitsList.safe_iter() )
+            {
+                if ( !ypabact_IsConfiguredAreaEffectTarget(fragment, target) ||
+                     !visited.insert(target).second )
+                {
+                    continue;
+                }
+
+                const vec3d delta = target->_position - origin;
+                const float distanceSq = delta.dot(delta);
+                if ( !std::isfinite(distanceSq) || distanceSq > radiusSq )
+                    continue;
+
+                ypabact_ApplyConfiguredDamage(fragment, target, rawDamage);
+            }
+        }
+    }
+}
+
 static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
 {
     NC_STACK_ypaworld *world = source ? source->getBACT_pWorld() : NULL;
     const bool hasPush = source && source->_at_death_push_force > 0.0f &&
                          source->_at_death_push_radius > 0.0f;
+    const bool hasDamage = source && source->_at_death_damage > 0 &&
+                           source->_at_death_damage_radius > 0.0f;
     const bool hasEnergyDrain = source && source->_at_death_energy_drain > 0 &&
                                 source->_at_death_energy_drain_radius > 0.0f;
-    if ( !world || world->_isNetGame || (!hasPush && !hasEnergyDrain) )
+    if ( !world || world->_isNetGame || (!hasPush && !hasDamage && !hasEnergyDrain) )
         return;
 
     const vec3d origin = source->_position;
     const float pushRadius = hasPush ? source->_at_death_push_radius : 0.0f;
+    const float damageRadius = hasDamage ? source->_at_death_damage_radius : 0.0f;
     const float energyDrainRadius = hasEnergyDrain ? source->_at_death_energy_drain_radius : 0.0f;
-    const float searchRadius = std::max(pushRadius, energyDrainRadius);
+    const float searchRadius = std::max(pushRadius, std::max(damageRadius, energyDrainRadius));
     const float searchRadiusSq = searchRadius * searchRadius;
     if ( !isfinite(searchRadiusSq) )
         return;
@@ -8256,10 +8349,13 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
     // F10 debug: preserve each configured at-death effect volume after the source disappears.
     if ( hasPush )
         world->DebugAddAtDeathSphere(origin, pushRadius);
+    if ( hasDamage )
+        world->DebugAddAtDeathSphere(origin, damageRadius);
     if ( hasEnergyDrain )
         world->DebugAddAtDeathSphere(origin, energyDrainRadius);
 
     const float pushRadiusSq = pushRadius * pushRadius;
+    const float damageRadiusSq = damageRadius * damageRadius;
     const float energyDrainRadiusSq = energyDrainRadius * energyDrainRadius;
     const int sectorRadius = (int)(searchRadius / World::CVSectorLength) + 2;
     const Common::Point center = World::PositionToSectorID(origin);
@@ -8275,7 +8371,7 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
 
             for ( NC_STACK_ypabact *target : world->SectorAt(cellId).unitsList.safe_iter() )
             {
-                if ( !ypabact_IsAtDeathEffectTarget(source, target) ||
+                if ( !ypabact_IsConfiguredAreaEffectTarget(source, target) ||
                      !visited.insert(target).second )
                 {
                     continue;
@@ -8287,6 +8383,19 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
                     continue;
 
                 const float distance = distanceSq > 0.0f ? sqrtf(distanceSq) : 0.0f;
+
+                if ( hasDamage && distanceSq <= damageRadiusSq )
+                {
+                    const float damageFalloff = World::AoePushFalloffFactor(
+                        distance, damageRadius, source->_at_death_damage_falloff != 0);
+                    const int rawDamage = (int)ceilf(
+                        (float)source->_at_death_damage * damageFalloff);
+                    if ( rawDamage > 0 )
+                        ypabact_ApplyConfiguredDamage(source, target, rawDamage);
+                }
+
+                if ( target->_energy <= 0 || target->_status == BACT_STATUS_DEAD )
+                    continue;
 
                 if ( hasEnergyDrain && distanceSq <= energyDrainRadiusSq &&
                      !target->IsInvulnerableToDamage() )
@@ -14518,8 +14627,20 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         // Hand Brake affects only the random component. Arc and cone were already
         // applied above and intentionally keep their authored pattern unchanged.
         const float handBrakeSpreadScale = ypabact_GetHandBrakeRandomSpreadScale(this);
-        const float effectiveSpreadX = _weapon_spread_x * handBrakeSpreadScale;
-        const float effectiveSpreadY = _weapon_spread_y * handBrakeSpreadScale;
+        float spreadX = _weapon_spread_x;
+        float spreadY = _weapon_spread_y;
+        if ( _progressive_weapon_id == selectedWeapon )
+        {
+            const float level = std::max(0.0f, std::min(_progressive_weapon_level, 1.0f));
+            if ( wproto.ramp_up_max_weapon_spread_x > 0.0f &&
+                 spreadX > wproto.ramp_up_max_weapon_spread_x )
+                spreadX += (wproto.ramp_up_max_weapon_spread_x - spreadX) * level;
+            if ( wproto.ramp_up_max_weapon_spread_y > 0.0f &&
+                 spreadY > wproto.ramp_up_max_weapon_spread_y )
+                spreadY += (wproto.ramp_up_max_weapon_spread_y - spreadY) * level;
+        }
+        const float effectiveSpreadX = spreadX * handBrakeSpreadScale;
+        const float effectiveSpreadY = spreadY * handBrakeSpreadScale;
         if ( effectiveSpreadX > 0.0f || effectiveSpreadY > 0.0f )
             wobj->_fly_dir = World::ApplyDirectionalSpread(_rotation, wobj->_fly_dir,
                                                            effectiveSpreadX, effectiveSpreadY);
@@ -15944,7 +16065,9 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
         if ( !(_status_flg & BACT_STFLAG_LAND) )
         {
-            if ( arg->field_one & 1 )
+            if ( _inlinePhysicalFX )
+                _airconst = _airconst_static;
+            else if ( arg->field_one & 1 )
                 _airconst = 0;
             else
                 _airconst = 500.0;
@@ -16732,8 +16855,13 @@ float NC_STACK_ypabact::GetCollisionBroadRadius()
 
 void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int frameTime)
 {
-    if ( !other || other == this || !_world || other->_world != _world ||
-         IsDestroyed() || other->IsDestroyed() )
+    if ( !other || other == this || !_world || other->_world != _world )
+        return;
+
+    if ( _inlinePhysicalFX )
+        ypabact_ApplyInlinePhysicalImpactDamage(this, other);
+
+    if ( IsDestroyed() || other->IsDestroyed() )
         return;
 
     // Both actors can evaluate the same overlap in the same update. Keep one
@@ -17502,6 +17630,14 @@ void NC_STACK_ypabact::ypabact_func95(IDVPair *arg)
 void NC_STACK_ypabact::Renew()
 {
     ClearPlayerSprintPitchExtra();
+    if ( _inlinePhysicalFX )
+    {
+        SFXEngine::SFXe.StopCarrier(&_soundcarrier);
+        _soundcarrier.Clear();
+        _inlinePhysicalFX.reset();
+    }
+    _inlinePhysicalImpactDamageSpent = false;
+    _inlinePhysicalLifetimeMs = 0;
 
     _oflags = BACT_OFLAG_EXACTCOLL;
     _status_flg = 0;
@@ -17603,6 +17739,9 @@ void NC_STACK_ypabact::Renew()
     _at_death_push_force = 0.0f;
     _at_death_push_radius = 0.0f;
     _at_death_push_falloff = 0;
+    _at_death_damage = 0;
+    _at_death_damage_radius = 0.0f;
+    _at_death_damage_falloff = 0;
     _at_death_energy_drain = 0;
     _at_death_energy_drain_radius = 0.0f;
     _at_death_energy_drain_falloff = 0;
@@ -20274,7 +20413,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
                     spawned = true;
             }
             else if ( !worldHit &&
-                      trigger == World::TChainFXConfig::TRIGGER_CRASH )
+                      trigger == World::TChainFXConfig::TRIGGER_DESTROYED )
             {
                 if ( !ypabact_HasGroundDecalSupport(this) )
                     continue;
@@ -20328,6 +20467,16 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
             const int count = World::RandomIntRangeInclusive(fx.count_min, fx.count_max);
             for (int i = 0; i < count; ++i)
             {
+                if ( fx.physical_inline )
+                {
+                    const vec3d launch = World::RandomVec3RangeInclusive(fx.launch_min,
+                                                                          fx.launch_max);
+                    const vec3d pos = impactPos ? *impactPos : _position;
+                    const mat3x3 &rot = impactRot ? *impactRot : _rotation;
+                    _world->SpawnInlinePhysicalFX(fx, pos, rot, launch, _owner);
+                    continue;
+                }
+
                 World::DestFX tempFx;
                 tempFx.ModelID = fx.physical_vehicle;
                 // Offset min_max is rolled independently for every generated instance.
@@ -20722,7 +20871,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
 
         _soundFlags |= 0x80;
 
-        StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DESTROYED);
+        StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_AIR_DESTROYED);
         StartDestFXByType(World::DestFX::FX_DEATH);
 
         result = 1;
@@ -20973,7 +21122,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
 
             SFXEngine::SFXe.startSound(&_soundcarrier, 4);
 
-            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_CRASH);
+            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DESTROYED);
             StartDestFXByType(World::DestFX::FX_MEGADETH);
 
             _fly_dir_length = 0;
@@ -21042,7 +21191,11 @@ void sb_0x4874c4(NC_STACK_ypabact *bact, int a2, int a3, float a4)
 
 void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 {
-    if ( _status_flg & BACT_STFLAG_LAND || (_clock - _dead_time > 5000 && _status_flg & BACT_STFLAG_DEATH1 ) )
+    const int deadLifetimeMs = _inlinePhysicalFX ?
+        (_inlinePhysicalLifetimeMs > 0 ? _inlinePhysicalLifetimeMs : 30000) : 5000;
+
+    if ( _status_flg & BACT_STFLAG_LAND ||
+         (_clock - _dead_time > deadLifetimeMs && _status_flg & BACT_STFLAG_DEATH1 ) )
     {
         if ( !(_status_flg & BACT_STFLAG_DEATH2) )
         {
@@ -21121,6 +21274,9 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
     }
     else
     {
+        if ( _inlinePhysicalFX && _maxrot > 0.0f )
+            _rotation = mat3x3::RotateY(_maxrot * arg->frameTime * 0.001f) * _rotation;
+
         bact_arg86 arg86;
         arg86.field_one = 3;
         arg86.field_two = arg->frameTime;

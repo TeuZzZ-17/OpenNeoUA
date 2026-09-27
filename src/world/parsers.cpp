@@ -2081,11 +2081,14 @@ static World::TChainFXConfig::Trigger ParseChainFXTrigger(const std::string &nam
     }
     else
     {
+        // OpenNeoUA: destroyed = killed on the ground, air_destroyed = killed
+        // in flight. The old crash/destroyed words are gone without aliases:
+        // unknown triggers warn and the block is ignored.
+        if ( !StriCmp(name, "air_destroyed") )
+            return World::TChainFXConfig::TRIGGER_AIR_DESTROYED;
+
         if ( !StriCmp(name, "destroyed") )
             return World::TChainFXConfig::TRIGGER_DESTROYED;
-
-        if ( !StriCmp(name, "crash") )
-            return World::TChainFXConfig::TRIGGER_CRASH;
     }
 
     return World::TChainFXConfig::TRIGGER_NONE;
@@ -2107,10 +2110,10 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
 
 // Chain FX offsets use the shared fixed value / min_max syntax. Invalid text
 // falls back to a fixed 0 so the block stays vanilla-safe and loadable.
-static void ParseChainFXOffsetAxis(const std::string &axisName,
-                                   const std::string &value,
-                                   double &minValue,
-                                   double &maxValue)
+static void ParseChainFXRangeAxis(const std::string &key,
+                                  const std::string &value,
+                                  double &minValue,
+                                  double &maxValue)
 {
     float parsedMin = 0.0f;
     float parsedMax = 0.0f;
@@ -2123,9 +2126,35 @@ static void ParseChainFXOffsetAxis(const std::string &axisName,
 
     minValue = 0.0;
     maxValue = 0.0;
-    ypa_log_out("WARNING: invalid begin_chain_fx offset_%s '%s', using 0\n",
-                axisName.c_str(), value.c_str());
+    ypa_log_out("WARNING: invalid begin_chain_fx %s '%s', using 0\n",
+                key.c_str(), value.c_str());
 }
+
+class ChainFXPhysicalSoundParser : public FxParser
+{
+public:
+    explicit ChainFXPhysicalSoundParser(World::TChainFXPhysical &physical) : _physical(physical) {}
+
+    int Parse(ScriptParser::Parser &parser, const std::string &key, const std::string &value)
+    {
+        return ParseSndFX(parser, key, value);
+    }
+
+protected:
+    TVhclSound *GetSndFxByName(const std::string &name) override
+    {
+        if ( !StriCmp(name, "normal") )
+            return &_physical.sounds[TVhclProto::SND_NORMAL];
+        if ( !StriCmp(name, "goingdown") )
+            return &_physical.sounds[TVhclProto::SND_GODOWN];
+        if ( !StriCmp(name, "explode") )
+            return &_physical.sounds[TVhclProto::SND_EXPLODE];
+        return NULL;
+    }
+
+private:
+    World::TChainFXPhysical &_physical;
+};
 
 static int ParseChainFXBlock(ScriptParser::Parser &parser,
                              std::vector<World::TChainFXConfig> *out,
@@ -2142,6 +2171,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     // Offset accepts a fixed value or a min_max range rolled for each instance.
     vec3d offsetMin = vec3d(0.0, 0.0, 0.0);
     vec3d offsetMax = vec3d(0.0, 0.0, 0.0);
+    vec3d launchMin = vec3d(0.0, 0.0, 0.0);
+    vec3d launchMax = vec3d(0.0, 0.0, 0.0);
     vec3d spin = vec3d(0.0, 0.0, 0.0);
     int duration = 0;
     bool groundDecalDurationValid = false;
@@ -2150,6 +2181,12 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     int fadeOut = 0;
     std::vector<World::TChainFXVisual> visuals;
     int physicalVehicle = 0;
+    bool hasPhysicalVehicleKey = false;
+    std::shared_ptr<World::TChainFXPhysical> physical(new World::TChainFXPhysical());
+    ChainFXPhysicalSoundParser physicalSounds(*physical);
+    bool hasInlinePhysicalKey = false;
+    bool hasOffset = false;
+    bool invalidInlinePhysical = false;
     std::string groundDecalTexture;
     float groundDecalSize = 0.0f;
     float groundDecalSizeMin = 0.0f;
@@ -2198,7 +2235,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL && !hasTrigger )
             {
                 if ( context == CHAIN_FX_VEHICLE )
-                    trigger = World::TChainFXConfig::TRIGGER_CRASH;
+                    trigger = World::TChainFXConfig::TRIGGER_DESTROYED;
                 else if ( context == CHAIN_FX_WEAPON )
                     trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
 
@@ -2240,7 +2277,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             }
             else if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
             {
-                if ( physicalVehicle > 0 )
+                if ( physicalVehicle > 0 && !hasInlinePhysicalKey )
                 {
                     World::TChainFXConfig chain;
                     chain.mode = mode;
@@ -2252,9 +2289,28 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.physical_vehicle = physicalVehicle;
                     out->push_back(chain);
                 }
+                else if ( hasPhysicalVehicleKey || hasOffset )
+                {
+                    ypa_log_out("WARNING: begin_chain_fx physical mixes legacy and inline keys; block ignored\n");
+                }
+                else if ( !invalidInlinePhysical &&
+                          physical->mass > 0.0f && physical->radius > 0.0f &&
+                          (physical->vp_model > 0 || !physical->mesh3ds.empty() ||
+                           !physical->base_model.empty()) )
+                {
+                    World::TChainFXConfig chain;
+                    chain.mode = mode;
+                    chain.trigger = trigger;
+                    chain.count_min = countMin;
+                    chain.count_max = countMax;
+                    chain.launch_min = launchMin;
+                    chain.launch_max = launchMax;
+                    chain.physical_inline = physical;
+                    out->push_back(chain);
+                }
                 else
                 {
-                    ypa_log_out("WARNING: begin_chain_fx physical mode without physical_vehicle ignored\n");
+                    ypa_log_out("WARNING: incomplete or invalid begin_chain_fx physical fragment ignored\n");
                 }
             }
             else if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL )
@@ -2263,14 +2319,14 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     (context == CHAIN_FX_WEAPON &&
                      trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD) ||
                     (context == CHAIN_FX_VEHICLE &&
-                     trigger == World::TChainFXConfig::TRIGGER_CRASH);
+                     trigger == World::TChainFXConfig::TRIGGER_DESTROYED);
 
                 if ( !validGroundDecalTrigger )
                 {
                     if ( context == CHAIN_FX_WEAPON )
                         ypa_log_out("WARNING: Weapon begin_chain_fx ground_decal supports only trigger = impact_world; block ignored\n");
                     else if ( context == CHAIN_FX_VEHICLE )
-                        ypa_log_out("WARNING: Vehicle begin_chain_fx ground_decal supports only trigger = crash; block ignored\n");
+                        ypa_log_out("WARNING: Vehicle begin_chain_fx ground_decal supports only trigger = destroyed; block ignored\n");
                     else
                         ypa_log_out("WARNING: begin_chain_fx ground_decal is not supported for this prototype; block ignored\n");
                 }
@@ -2406,22 +2462,54 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             }
         }
         else if ( !StriCmp(p1, "offset_x") )
-            ParseChainFXOffsetAxis("x", p2, offsetMin.x, offsetMax.x);
+        {
+            hasOffset = true;
+            ParseChainFXRangeAxis("offset_x", p2, offsetMin.x, offsetMax.x);
+        }
         else if ( !StriCmp(p1, "offset_y") )
-            ParseChainFXOffsetAxis("y", p2, offsetMin.y, offsetMax.y);
+        {
+            hasOffset = true;
+            ParseChainFXRangeAxis("offset_y", p2, offsetMin.y, offsetMax.y);
+        }
         else if ( !StriCmp(p1, "offset_z") )
-            ParseChainFXOffsetAxis("z", p2, offsetMin.z, offsetMax.z);
+        {
+            hasOffset = true;
+            ParseChainFXRangeAxis("offset_z", p2, offsetMin.z, offsetMax.z);
+        }
+        else if ( !StriCmp(p1, "launch_x") )
+        {
+            hasInlinePhysicalKey = true;
+            ParseChainFXRangeAxis("launch_x", p2, launchMin.x, launchMax.x);
+        }
+        else if ( !StriCmp(p1, "launch_y") )
+        {
+            hasInlinePhysicalKey = true;
+            ParseChainFXRangeAxis("launch_y", p2, launchMin.y, launchMax.y);
+        }
+        else if ( !StriCmp(p1, "launch_z") )
+        {
+            hasInlinePhysicalKey = true;
+            ParseChainFXRangeAxis("launch_z", p2, launchMin.z, launchMax.z);
+        }
         else if ( ParseVPSpinParam(parser, "visual", p1, p2, spin) )
         {
         }
         else if ( !StriCmp(p1, "vp_model") )
         {
+            hasInlinePhysicalKey = true;
+            const long model = parser.stol(p2, NULL, 0);
+            if ( model >= 0 && model <= std::numeric_limits<int16_t>::max() )
+                physical->vp_model = (int16_t)model;
+            else if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
+                invalidInlinePhysical = true;
             World::TChainFXVisual visual;
-            visual.vp = parser.stol(p2, NULL, 0);
+            visual.vp = model;
             visuals.push_back(visual);
         }
         else if ( !StriCmp(p1, "3ds_model") )
         {
+            hasInlinePhysicalKey = true;
+            physical->mesh3ds = p2;
             if ( !visuals.empty() &&
                  (visuals.back().vp > 0 || !visuals.back().basePath.empty()) &&
                  visuals.back().mesh3ds.empty() )
@@ -2435,6 +2523,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "base_model") )
         {
+            hasInlinePhysicalKey = true;
+            physical->base_model = p2;
             if ( !visuals.empty() && visuals.back().vp > 0 &&
                  visuals.back().mesh3ds.empty() && visuals.back().basePath.empty() )
                 visuals.back().basePath = p2;
@@ -2447,6 +2537,12 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "visual_tint") )
         {
+            if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
+            {
+                hasInlinePhysicalKey = true;
+                ParseTintParam(parser, "visual_tint", p1, p2, physical->tint, true);
+                continue;
+            }
             if ( visuals.empty() )
             {
                 ypa_log_out("WARNING: begin_chain_fx visual_tint without preceding vp_model/base_model/3ds_model ignored\n");
@@ -2456,8 +2552,104 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             ParseTintParam(parser, "visual_tint", p1, p2, visuals.back().tint);
             visuals.back().has_tint = true;
         }
+        else if ( !StriCmp(p1, "vp_impact") )
+        {
+            hasInlinePhysicalKey = true;
+            const long model = parser.stol(p2, NULL, 0);
+            if ( model >= 0 && model <= std::numeric_limits<int16_t>::max() )
+                physical->vp_impact = (int16_t)model;
+            else
+                physical->vp_impact = 0;
+        }
+        else if ( !StriCmp(p1, "visual_scale") )
+        {
+            hasInlinePhysicalKey = true;
+            physical->visual_scale = ParseVPScaleValue(parser, p2);
+        }
+        else if ( !StriCmp(p1, "impact_damage") )
+        {
+            hasInlinePhysicalKey = true;
+            const int damage = parser.stol(p2, NULL, 0);
+            physical->impact_damage = damage > 0 ? damage : 0;
+        }
+        else if ( !StriCmp(p1, "impact_damage_radius") )
+        {
+            hasInlinePhysicalKey = true;
+            physical->impact_damage_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        }
+        else if ( !StriCmp(p1, "lifetime") )
+        {
+            hasInlinePhysicalKey = true;
+            int lifetimeMin = 0;
+            int lifetimeMax = 0;
+            if ( World::ParseIntRangeValue(p2, lifetimeMin, lifetimeMax) &&
+                 lifetimeMin > 0 && lifetimeMax > 0 )
+            {
+                physical->lifetime_min = lifetimeMin;
+                physical->lifetime_max = lifetimeMax;
+            }
+            else
+            {
+                physical->lifetime_min = 30000;
+                physical->lifetime_max = 30000;
+                ypa_log_out("WARNING: invalid begin_chain_fx physical lifetime '%s'; using 30000 ms\n",
+                            p2.c_str());
+            }
+        }
+        else if ( !StriCmp(p1, "mass") || !StriCmp(p1, "airconst") ||
+                  !StriCmp(p1, "force") || !StriCmp(p1, "maxrot") ||
+                  !StriCmp(p1, "radius") )
+        {
+            hasInlinePhysicalKey = true;
+            size_t parsed = 0;
+            const float value = parser.stof(p2, &parsed);
+            const bool valid = parsed == p2.size() && std::isfinite(value) &&
+                               (value > 0.0f ||
+                                ((!StriCmp(p1, "airconst") || !StriCmp(p1, "force") ||
+                                  !StriCmp(p1, "maxrot")) && value == 0.0f));
+            if ( !valid )
+            {
+                if ( !StriCmp(p1, "mass") || !StriCmp(p1, "radius") )
+                    invalidInlinePhysical = true;
+                ypa_log_out("WARNING: invalid begin_chain_fx physical %s '%s'\n",
+                            p1.c_str(), p2.c_str());
+            }
+            else if ( !StriCmp(p1, "mass") )
+                physical->mass = value;
+            else if ( !StriCmp(p1, "airconst") )
+                physical->airconst = value;
+            else if ( !StriCmp(p1, "force") )
+                physical->force = value;
+            else if ( !StriCmp(p1, "maxrot") )
+                physical->maxrot = value;
+            else
+                physical->radius = value;
+        }
+        else if ( p1.compare(0, 4, "snd_") == 0 ||
+                  p1.compare(0, 4, "pal_") == 0 ||
+                  p1.compare(0, 4, "shk_") == 0 )
+        {
+            hasInlinePhysicalKey = true;
+            std::string soundValue = p2;
+            if ( p1.size() >= 7 && p1.compare(p1.size() - 7, 7, "_sample") == 0 )
+            {
+                std::string normalized;
+                if ( !uaNormalizeDataAssetPath(p2, &normalized, true) )
+                {
+                    ypa_log_out("WARNING: invalid begin_chain_fx sound path '%s'; sample ignored\n",
+                                p2.c_str());
+                    continue;
+                }
+                // The existing sound loader already uses data: as its root.
+                soundValue = normalized.substr(5);
+            }
+            const int result = physicalSounds.Parse(parser, p1, soundValue);
+            if ( result != ScriptParser::RESULT_OK )
+                return result;
+        }
         else if ( !StriCmp(p1, "physical_vehicle") )
         {
+            hasPhysicalVehicleKey = true;
             if ( context == CHAIN_FX_SUPERITEM )
             {
                 ypa_log_out("WARNING: SuperItem begin_chain_fx does not support physical_vehicle; block ignored\n");
@@ -2629,6 +2821,9 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "at_death_push_force") ||
            !StriCmp(p1, "at_death_push_radius") ||
            !StriCmp(p1, "at_death_push_falloff") ||
+           !StriCmp(p1, "at_death_damage") ||
+           !StriCmp(p1, "at_death_damage_radius") ||
+           !StriCmp(p1, "at_death_damage_falloff") ||
            !StriCmp(p1, "at_death_energy_drain") ||
            !StriCmp(p1, "at_death_energy_drain_radius") ||
            !StriCmp(p1, "at_death_energy_drain_falloff");
@@ -2955,6 +3150,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->energy = parser.stol(p2, NULL, 0);
     }
+    else if ( !StriCmp(p1, "production_cost") )
+    {
+        // Displayed Genesis price. Zero or invalid keeps vanilla energy-as-cost.
+        const long value = parser.stol(p2, NULL, 0);
+        _vhcl->production_cost = value > 0 ? (int)value : 0;
+    }
     else if ( !StriCmp(p1, "mimic_energy_cost") )
     {
         int minCost = 0;
@@ -3073,6 +3274,19 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->at_death_push_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
+    else if ( !StriCmp(p1, "at_death_damage") )
+    {
+        const int damage = parser.stol(p2, NULL, 0);
+        _vhcl->at_death_damage = damage > 0 ? damage : 0;
+    }
+    else if ( !StriCmp(p1, "at_death_damage_radius") )
+    {
+        _vhcl->at_death_damage_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    }
+    else if ( !StriCmp(p1, "at_death_damage_falloff") )
+    {
+        _vhcl->at_death_damage_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
+    }
     else if ( !StriCmp(p1, "at_death_energy_drain") )
     {
         int drain = parser.stol(p2, NULL, 0);
@@ -3176,7 +3390,19 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "damaged_fx_scale") )
     {
-        _vhcl->damaged_fx.scale = ParseVPScaleValue(parser, p2);
+        float scaleMin = 1.0f;
+        float scaleMax = 1.0f;
+        if ( ParseScriptFloatRange(p2, scaleMin, scaleMax) &&
+             scaleMin > 0.0f && scaleMax > 0.0f )
+        {
+            _vhcl->damaged_fx.scale = scaleMin;
+            _vhcl->damaged_fx.scale_max = scaleMax;
+        }
+        else
+        {
+            _vhcl->damaged_fx.scale = 1.0f;
+            _vhcl->damaged_fx.scale_max = 1.0f;
+        }
     }
     else if ( !StriCmp(p1, "damaged_fx_threshold") )
     {
@@ -3417,10 +3643,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "proximity_defense_enable") )
     {
         _vhcl->proximity_defense_enable = parser.stol(p2, NULL, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "proximity_defense_icon") )
-    {
-        _vhcl->proximity_defense_icon = p2;
     }
     else if ( !StriCmp(p1, "proximity_defense_weapon") )
     {
@@ -4629,7 +4851,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->at_death_spawn_instant = 0;
         _vhcl->at_death_spawn_immunity_time = 0;
         _vhcl->proximity_defense_enable = 0;
-        _vhcl->proximity_defense_icon.clear();
         _vhcl->proximity_defense_weapon = 0;
         _vhcl->proximity_defense_trigger_radius = 0.0;
         _vhcl->proximity_defense_interval = 1000;
@@ -4654,6 +4875,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mimic_energy_cost = 0;
         _vhcl->mimic_energy_cost_min = 0;
         _vhcl->mimic_energy_cost_max = 0;
+        _vhcl->production_cost = 0;
         _vhcl->adist_sector = 800.0;
         _vhcl->adist_bact = 650.0;
         _vhcl->sdist_sector = 200.0;
@@ -4665,6 +4887,9 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->at_death_push_force = 0.0f;
         _vhcl->at_death_push_radius = 0.0f;
         _vhcl->at_death_push_falloff = 0;
+        _vhcl->at_death_damage = 0;
+        _vhcl->at_death_damage_radius = 0.0f;
+        _vhcl->at_death_damage_falloff = 0;
         _vhcl->at_death_energy_drain = 0;
         _vhcl->at_death_energy_drain_radius = 0.0f;
         _vhcl->at_death_energy_drain_falloff = 0;
@@ -4827,6 +5052,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->shot_time_user = 1000;
         _wpn->ramp_up_time = 0;
         _wpn->ramp_up_max_shot_time = 0;
+        _wpn->ramp_up_max_weapon_spread_x = 0.0f;
+        _wpn->ramp_up_max_weapon_spread_y = 0.0f;
         _wpn->ramp_up_overheat_time = 0;
         _wpn->ramp_up_overheat_hp_drain.Clear();
         _wpn->ramp_up_overheat_icon.clear();
@@ -5428,6 +5655,16 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "ramp_up_max_shot_time") )
     {
         _wpn->ramp_up_max_shot_time = NonNegativeFiniteMilliseconds(parser, p2);
+    }
+    else if ( !StriCmp(p1, "ramp_up_max_weapon_spread_x") )
+    {
+        _wpn->ramp_up_max_weapon_spread_x =
+            NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    }
+    else if ( !StriCmp(p1, "ramp_up_max_weapon_spread_y") )
+    {
+        _wpn->ramp_up_max_weapon_spread_y =
+            NonNegativeFiniteOrZero(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "ramp_up_overheat_time") )
     {
@@ -6053,6 +6290,12 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     else if ( !StriCmp(p1, "energy") )
     {
         _bld->Energy = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "production_cost") )
+    {
+        // Displayed Genesis price. Zero or invalid keeps vanilla Energy-as-cost.
+        const long value = parser.stol(p2, NULL, 0);
+        _bld->production_cost = value > 0 ? (int)value : 0;
     }
     else if ( ParseTintParam(parser, "tint", p1, p2, _bld->tint, true) )
     {
@@ -8230,6 +8473,11 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
         _o._GameShell->interfaceStyle = style;
         _o._GameShell->confInterfaceStyle = style;
         GFX::Engine.SetVirtualUIStyle(style);
+    }
+    else if ( !StriCmp(p1, "genesis_list_order") )
+    {
+        // Retired profile key: keep old user.txt files loadable, but do not let
+        // profile data override the global ui.genesis_list_order setting.
     }
     else if ( !StriCmp(p1, "palette_theme") )
     {
