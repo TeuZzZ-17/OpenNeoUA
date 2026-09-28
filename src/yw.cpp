@@ -4443,38 +4443,10 @@ size_t NC_STACK_ypaworld::ypaworld_func145(NC_STACK_ypabact *bact)
 }
 
 
-static bool yw_HasPersistentVehicleVisualGeometry(NC_STACK_base *base)
-{
-    if ( !base )
-        return false;
-
-    if ( base->GetSkeleton() )
-    {
-        if ( !base->Meshes.empty() )
-            return true;
-
-        if ( AdeList *ades = base->GetAdeList() )
-        {
-            for (NC_STACK_ade *ade : *ades)
-            {
-                if ( ade && !ade->IsParticle() )
-                    return true;
-            }
-        }
-    }
-
-    for (NC_STACK_base *kid : base->GetKidList())
-    {
-        if ( yw_HasPersistentVehicleVisualGeometry(kid) )
-            return true;
-    }
-
-    return false;
-}
-
 NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
     const World::TChainFXConfig &config, const vec3d &pos,
-    const mat3x3 &rot, const vec3d &launch, int16_t owner)
+    const mat3x3 &rot, const vec3d &launch, int16_t owner,
+    NC_STACK_ypabact *deadWreck)
 {
     const std::shared_ptr<World::TChainFXPhysical> &physical = config.physical_inline;
     if ( !physical )
@@ -4589,6 +4561,20 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
         fragment->_fly_dir_length = finalSpeed;
         fragment->_fly_dir = velocity / finalSpeed;
     }
+
+    // OpenNeoUA vp_dead_follow: bind the dying unit's wreck to this fragment so
+    // both share one exact trajectory until the fragment impacts. The guards keep
+    // live shooters (weapon impact/detonate triggers) and already-landed wrecks
+    // (DEATH2 phase) unbound, and with count > 1 only the first fragment binds.
+    if ( physical->vp_dead_follow && deadWreck &&
+         deadWreck != fragment && !deadWreck->_deadFollowLeader &&
+         deadWreck->_status == BACT_STATUS_DEAD &&
+         !(deadWreck->_status_flg & BACT_STFLAG_DEATH2) )
+    {
+        fragment->_deadFollowWreck = deadWreck;
+        deadWreck->_deadFollowLeader = fragment;
+    }
+
     return fragment;
 }
 
@@ -4737,18 +4723,9 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_vp_normal = ResolveVisualModel(vhcl.vp_normal, vhcl.visual_3ds.normal, vhcl.visual_base.normal);
         bacto->_vp_fire = ResolveVisualModel(vhcl.vp_fire, vhcl.visual_3ds.fire, vhcl.visual_base.fire);
 
-        NC_STACK_base *deadVisual =
-            ResolveVisualModel(vhcl.vp_dead, vhcl.visual_3ds.dead, vhcl.visual_base.dead);
-
-        // Some legacy or incomplete Vehicle definitions use a dead VP that has
-        // no persistent model geometry. The actor still falls physically, but
-        // becomes invisible until DEATH2/plasma. Keep the normal model as the
-        // DEATH1 corpse fallback only in that case; dedicated dead meshes remain
-        // untouched.
-        if ( !yw_HasPersistentVehicleVisualGeometry(deadVisual) )
-            deadVisual = bacto->_vp_normal;
-
-        bacto->_vp_dead = deadVisual;
+        // vp_dead is used exactly as authored: effect and invisible dead VPs
+        // must not be replaced by the normal model.
+        bacto->_vp_dead = ResolveVisualModel(vhcl.vp_dead, vhcl.visual_3ds.dead, vhcl.visual_base.dead);
         bacto->_vp_wait = ResolveVisualModel(vhcl.vp_wait, vhcl.visual_3ds.wait, vhcl.visual_base.wait);
         bacto->_vp_megadeth = ResolveVisualModel(vhcl.vp_megadeth, vhcl.visual_3ds.megadeth, vhcl.visual_base.megadeth);
         bacto->_vp_genesis = ResolveVisualModel(vhcl.vp_genesis, vhcl.visual_3ds.genesis, vhcl.visual_base.genesis);

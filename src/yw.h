@@ -2679,7 +2679,8 @@ public:
     NC_STACK_ypabact *yw_createUnit(int model_id);
     NC_STACK_ypabact *SpawnInlinePhysicalFX(const World::TChainFXConfig &config,
                                             const vec3d &pos, const mat3x3 &rot,
-                                            const vec3d &launch, int16_t owner);
+                                            const vec3d &launch, int16_t owner,
+                                            NC_STACK_ypabact *deadWreck = NULL);
     void sb_0x456384(const Common::Point &cellId, int ownerid2, int blg_id, int a7);
     void SetupPowerStationInfo(cellArea *cell, int power, int buildingId);
     void ResetAccumMap();
