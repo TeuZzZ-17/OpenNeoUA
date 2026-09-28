@@ -3379,6 +3379,10 @@ size_t NC_STACK_ypabact::Deinit()
 
     _kidRef.Detach();
 
+    // OpenNeoUA vp_dead_follow: a removed unit must never leave its trajectory
+    // partner pointing at freed memory.
+    ClearDeadFollowLink();
+
     CleanupUnitGuns(true);
 
     while (!_kidList.empty())
@@ -16112,7 +16116,9 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                         {
                             applyFallDamageForContact();
 
-                            if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
+                            if ( _inlinePhysicalFX ||
+                                 _energy <= 0 ||
+                                 (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
                             {
                                 setState_msg arg78;
                                 arg78.setFlags = BACT_STFLAG_DEATH2;
@@ -16205,7 +16211,9 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                         {
                             applyFallDamageForContact();
 
-                            if ( _energy <= 0 || (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
+                            if ( _inlinePhysicalFX ||
+                                 _energy <= 0 ||
+                                 (GetVP() == _vp_dead && _status == BACT_STATUS_DEAD) )
                             {
                                 setState_msg arg78;
                                 arg78.setFlags = BACT_STFLAG_DEATH2;
@@ -17601,6 +17609,7 @@ void NC_STACK_ypabact::Renew()
         _inlinePhysicalFX.reset();
     }
     _inlinePhysicalImpactDamageSpent = false;
+    _inlinePhysicalExplodeFXStarted = false;
     _inlinePhysicalLifetimeMs = 0;
 
     _oflags = BACT_OFLAG_EXACTCOLL;
@@ -20434,7 +20443,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
                                                                           fx.launch_max);
                     const vec3d pos = impactPos ? *impactPos : _position;
                     const mat3x3 &rot = impactRot ? *impactRot : _rotation;
-                    _world->SpawnInlinePhysicalFX(fx, pos, rot, launch, _owner);
+                    _world->SpawnInlinePhysicalFX(fx, pos, rot, launch, _owner, this);
                     continue;
                 }
 
@@ -21036,6 +21045,17 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
     {
         _status = BACT_STATUS_DEAD;
 
+        // Inline Physical FX use DEATH2 as their terminal impact/lifetime event.
+        // Trigger the authored explode sound, palette and shake once even if the
+        // impact VP is already active, so audio/feedback is not coupled to rendering.
+        if ( _inlinePhysicalFX && !_inlinePhysicalExplodeFXStarted )
+        {
+            _inlinePhysicalExplodeFXStarted = true;
+            _soundcarrier.Position = _position;
+            _soundcarrier.Vector = _fly_dir * _fly_dir_length;
+            SFXEngine::SFXe.startSound(&_soundcarrier, World::TVhclProto::SND_EXPLODE);
+        }
+
         if ( _vp_active != 3 )
         {
             SetVP(_vp_megadeth);
@@ -21059,7 +21079,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
 
             if ( _soundFlags & 1 )
             {
-                _soundFlags &= ~2;
+                _soundFlags &= ~1;
                 SFXEngine::SFXe.sub_424000(&_soundcarrier, 0);
             }
 
@@ -21081,7 +21101,8 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
                 SFXEngine::SFXe.sub_424000(&_soundcarrier, 7);
             }
 
-            SFXEngine::SFXe.startSound(&_soundcarrier, 4);
+            if ( !_inlinePhysicalFX )
+                SFXEngine::SFXe.startSound(&_soundcarrier, World::TVhclProto::SND_EXPLODE);
 
             StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DESTROYED);
             StartDestFXByType(World::DestFX::FX_MEGADETH);
@@ -21150,8 +21171,55 @@ void sb_0x4874c4(NC_STACK_ypabact *bact, int a2, int a3, float a4)
     bact->_vp_extra[0].rotate = mat3x3::RotateY(bact->_maxrot * 2.0 * (float)a3 * 0.001) * bact->_vp_extra[0].rotate;
 }
 
+// OpenNeoUA vp_dead_follow: mirrors the guiding fragment's trajectory onto its
+// wreck. The render transform is copied too, so the wreck stays in sync even
+// when unit update order puts the fragment last in the frame.
+static void ypabact_CopyDeadFollowTransform(NC_STACK_ypabact *dst, NC_STACK_ypabact *src)
+{
+    dst->_old_pos = dst->_position;
+    dst->_position = src->_position;
+    dst->_rotation = src->_rotation;
+    dst->_fly_dir = src->_fly_dir;
+    dst->_fly_dir_length = src->_fly_dir_length;
+
+    dst->_tForm.Pos = dst->GetBodyPosition();
+    if ( dst->_status_flg & BACT_STFLAG_SCALE )
+        dst->_tForm.SclRot = dst->_rotation.Transpose() * mat3x3::Scale(dst->_scale);
+    else
+        dst->_tForm.SclRot = dst->_rotation.Transpose();
+}
+
+void NC_STACK_ypabact::ClearDeadFollowLink()
+{
+    if ( _deadFollowWreck )
+    {
+        _deadFollowWreck->_deadFollowLeader = NULL;
+        _deadFollowWreck = NULL;
+    }
+
+    if ( _deadFollowLeader )
+    {
+        _deadFollowLeader->_deadFollowWreck = NULL;
+        _deadFollowLeader = NULL;
+    }
+}
+
 void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 {
+    // OpenNeoUA vp_dead_follow: a wreck bound to a guiding fragment only mirrors
+    // that fragment's trajectory. Its own fall physics and death timeout stay
+    // frozen until the link breaks (fragment impact/DEATH2 or removal).
+    if ( _deadFollowLeader )
+    {
+        if ( !(_deadFollowLeader->_status_flg & (BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER)) )
+            return;
+
+        // The fragment ends here: leave the wreck at this exact spot and let its
+        // own death finish (DEATH2 -> plasma) run from the impact point.
+        ClearDeadFollowLink();
+        _status_flg |= BACT_STFLAG_LAND;
+    }
+
     const int deadLifetimeMs = _inlinePhysicalFX ?
         (_inlinePhysicalLifetimeMs > 0 ? _inlinePhysicalLifetimeMs : 30000) : 5000;
 
@@ -21243,6 +21311,12 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
         arg86.field_two = arg->frameTime;
 
         CrashOrLand(&arg86);
+
+        // OpenNeoUA vp_dead_follow: after the fragment's own fall step, drag the
+        // bound wreck onto the same trajectory. Skipped after Release() moves the
+        // fragment out of the world.
+        if ( _deadFollowWreck && !(_status_flg & BACT_STFLAG_NORENDER) )
+            ypabact_CopyDeadFollowTransform(_deadFollowWreck, this);
     }
 }
 

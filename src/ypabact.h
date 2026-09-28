@@ -741,6 +741,10 @@ public:
     virtual void setBACT_landingOnWait(bool);
     virtual void setBACT_yourLastSeconds(int);
     virtual void SetVP(NC_STACK_base *vp);
+
+    // OpenNeoUA vp_dead_follow: clears the fragment/wreck trajectory binding on
+    // both ends so a removed unit never leaves a dangling pointer behind.
+    void ClearDeadFollowLink();
     virtual void setBACT_aggression(int);
     virtual void setBACT_extraViewer(bool);
     virtual void setBACT_alwaysRender(bool);
@@ -908,7 +912,13 @@ public:
     uint8_t _vehicleID; // vehicle id, from scr files
     std::shared_ptr<World::TChainFXPhysical> _inlinePhysicalFX;
     bool _inlinePhysicalImpactDamageSpent = false;
+    bool _inlinePhysicalExplodeFXStarted = false;
     int _inlinePhysicalLifetimeMs = 0;
+    // OpenNeoUA vp_dead_follow: fragment/wreck trajectory binding.
+    // _deadFollowWreck is set on the guiding fragment, _deadFollowLeader on the
+    // wreck that mirrors its trajectory. Both links are always cleared together.
+    NC_STACK_ypabact *_deadFollowWreck = NULL;
+    NC_STACK_ypabact *_deadFollowLeader = NULL;
     uint8_t _mimic_disguise_vehicleID; // OpenNeoUA: copied proto for model = mimic runtime behavior
     uint8_t _bflags;
     uint32_t _commandID = 0;
