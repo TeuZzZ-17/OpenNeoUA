@@ -2183,6 +2183,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     int physicalVehicle = 0;
     bool hasPhysicalVehicleKey = false;
     std::shared_ptr<World::TChainFXPhysical> physical(new World::TChainFXPhysical());
+    for (World::TVhclSound &sound : physical->sounds)
+        InitStatusSoundFXDefaults(sound, 120);
     ChainFXPhysicalSoundParser physicalSounds(*physical);
     bool hasInlinePhysicalKey = false;
     bool hasOffset = false;
@@ -2595,6 +2597,11 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 ypa_log_out("WARNING: invalid begin_fx physical lifetime '%s'; using 30000 ms\n",
                             p2.c_str());
             }
+        }
+        else if ( !StriCmp(p1, "vp_dead_follow") )
+        {
+            hasInlinePhysicalKey = true;
+            physical->vp_dead_follow = parser.stol(p2, NULL, 0) != 0;
         }
         else if ( !StriCmp(p1, "mass") || !StriCmp(p1, "airconst") ||
                   !StriCmp(p1, "force") || !StriCmp(p1, "maxrot") ||
