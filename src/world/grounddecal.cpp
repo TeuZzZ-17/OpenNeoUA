@@ -446,7 +446,8 @@ static TGroundDecalClipVertex GroundDecalMakeClipVertex(const vec3d &point,
 static void GroundDecalClipConvexEdge(
     std::vector<TGroundDecalClipVertex> *polygon,
     const TGroundDecalShapePoint &edgeStart,
-    const TGroundDecalShapePoint &edgeEnd)
+    const TGroundDecalShapePoint &edgeEnd,
+    float epsilon = 0.000001f)
 {
     if ( polygon->empty() )
         return;
@@ -460,19 +461,19 @@ static void GroundDecalClipConvexEdge(
     float previousSide = GroundDecalCross2D(edgeX, edgeY,
                                             previous.u - edgeStart.u,
                                             previous.v - edgeStart.v);
-    bool previousInside = previousSide >= -0.000001f;
+    bool previousInside = previousSide >= -epsilon;
 
     for (const TGroundDecalClipVertex &current : *polygon)
     {
         const float currentSide = GroundDecalCross2D(edgeX, edgeY,
                                                      current.u - edgeStart.u,
                                                      current.v - edgeStart.v);
-        const bool currentInside = currentSide >= -0.000001f;
+        const bool currentInside = currentSide >= -epsilon;
 
         if ( currentInside != previousInside )
         {
             const float denominator = previousSide - currentSide;
-            if ( std::fabs(denominator) > 0.000001f )
+            if ( std::fabs(denominator) > epsilon )
             {
                 float amount = previousSide / denominator;
                 amount = std::max(0.0f, std::min(amount, 1.0f));
@@ -494,6 +495,89 @@ static void GroundDecalClipConvexEdge(
     }
 
     polygon->swap(output);
+}
+
+static double GroundDecalUVArea(const std::vector<TGroundDecalClipVertex> &polygon)
+{
+    double area = 0.0;
+    for (size_t i = 0; i < polygon.size(); ++i)
+    {
+        const TGroundDecalClipVertex &a = polygon[i];
+        const TGroundDecalClipVertex &b = polygon[(i + 1) % polygon.size()];
+        area += (double)a.u * b.v - (double)a.v * b.u;
+    }
+    return std::fabs(area) * 0.5;
+}
+
+static bool GroundDecalCoversShape(const std::vector<TGroundDecalShapePoint> &shape,
+                                  const std::vector<GFX::TVertex> &vertices,
+                                  const std::vector<GFX::IndexType> &indices)
+{
+    // Subtract the emitted triangles from the footprint. Summing triangle areas
+    // would let overlapping receivers hide a missing region elsewhere.
+    typedef std::vector<TGroundDecalClipVertex> TPolygon;
+    std::vector<TPolygon> uncovered;
+    for (size_t i = 0; i < shape.size(); ++i)
+    {
+        TPolygon wedge(3);
+        wedge[0].u = wedge[0].v = 0.5f;
+        wedge[1].u = shape[i].u;
+        wedge[1].v = shape[i].v;
+        wedge[2].u = shape[(i + 1) % shape.size()].u;
+        wedge[2].v = shape[(i + 1) % shape.size()].v;
+        uncovered.push_back(std::move(wedge));
+    }
+
+    // Float clipping leaves tiny seam slivers; ignore only UV roundoff, using
+    // the same precision as the footprint clipping above.
+    const double areaEpsilon = 0.000001;
+    for (size_t i = 0; i + 2 < indices.size() && !uncovered.empty(); i += 3)
+    {
+        TGroundDecalShapePoint triangle[3];
+        for (int j = 0; j < 3; ++j)
+        {
+            const tUtV &uv = vertices[indices[i + j]].TexCoord;
+            triangle[j].u = uv.tu;
+            triangle[j].v = uv.tv;
+        }
+        const float signedArea = GroundDecalCross2D(triangle[1].u - triangle[0].u,
+                                                    triangle[1].v - triangle[0].v,
+                                                    triangle[2].u - triangle[0].u,
+                                                    triangle[2].v - triangle[0].v);
+        if ( std::fabs(signedArea) * 0.5 <= areaEpsilon )
+            continue;
+        if ( signedArea < 0.0f )
+            std::swap(triangle[1], triangle[2]);
+
+        std::vector<TPolygon> remaining;
+        for (const TPolygon &piece : uncovered)
+        {
+            TPolygon intersection = piece;
+            for (int edge = 0; edge < 3 && !intersection.empty(); ++edge)
+                GroundDecalClipConvexEdge(&intersection, triangle[edge],
+                                          triangle[(edge + 1) % 3], 0.0f);
+            if ( GroundDecalUVArea(intersection) <= areaEpsilon )
+            {
+                remaining.push_back(piece);
+                continue;
+            }
+
+            TPolygon inside = piece;
+            for (int edge = 0; edge < 3 && !inside.empty(); ++edge)
+            {
+                TPolygon outside = inside;
+                GroundDecalClipConvexEdge(&outside, triangle[(edge + 1) % 3],
+                                          triangle[edge], 0.0f);
+                if ( GroundDecalUVArea(outside) > areaEpsilon )
+                    remaining.push_back(std::move(outside));
+                GroundDecalClipConvexEdge(&inside, triangle[edge],
+                                          triangle[(edge + 1) % 3], 0.0f);
+            }
+        }
+        uncovered.swap(remaining);
+    }
+
+    return uncovered.empty();
 }
 
 static bool GroundDecalAppendClippedRegion(
@@ -823,7 +907,7 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
         }
     }
 
-    return !indices->empty();
+    return !indices->empty() && GroundDecalCoversShape(shape, *vertices, *indices);
 }
 
 static NC_STACK_bitmap *GroundDecalTexture(NC_STACK_ypaworld *world,

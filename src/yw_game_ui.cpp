@@ -8774,6 +8774,72 @@ static void yw_RenderPlasmaCurrencyHudIcon(NC_STACK_ypaworld *yw)
     }
 }
 
+void NC_STACK_ypaworld::RenderPlasmaCurrencyBank()
+{
+    if ( !IsPlasmaCurrencyEnabled() || !_guiTiles[15] )
+        return;
+
+    SDL_Surface *screen = GFX::Engine.Screen();
+    if ( !screen )
+        return;
+
+    TileMap *font = _guiTiles[15];
+    std::string amount = std::to_string(_plasmaCurrencyBank);
+    for ( int i = (int)amount.size() - 3; i > 0; i -= 3 )
+        amount.insert((size_t)i, " ");
+
+    // Compact badge in the top-right corner: it stays clear of the selectable map.
+    const int pad = std::max(4, font->h / 3);
+    const int height = font->h + pad * 2;
+    const int iconSize = height - 4;
+    const int textWidth = std::max(GFX::Engine.MeasureScreenTextWidth(amount),
+                                   GFX::Engine.MeasureScreenTextWidth("0 000")) + 2;
+    const int notch = height / 3;
+    const int width = std::min(_screenSize.x / 4, iconSize + textWidth + pad * 4 + notch);
+    const int margin = std::max(pad, _screenSize.x / 80);
+    const int left = _screenSize.x - margin - width;
+    const int top = margin;
+
+    SDL_Rect oldClip;
+    SDL_GetClipRect(screen, &oldClip);
+    SDL_SetClipRect(screen, nullptr);
+
+    const Uint32 border = SDL_MapRGB(screen->format, 47, 92, 104);
+    const Uint32 body = SDL_MapRGB(screen->format, 7, 18, 23);
+    const Uint32 glow = SDL_MapRGB(screen->format, 83, 184, 210);
+
+    // Body with a chamfered lower-left corner, built from one-pixel rows.
+    for ( int y = 0; y < height; y++ )
+    {
+        const int cut = (y >= height - notch) ? (notch - (height - 1 - y)) : 0;
+        SDL_Rect row = {left + cut, top + y, width - cut, 1};
+        const bool edge = (y == 0 || y == height - 1);
+        SDL_FillRect(screen, &row, edge ? border : body);
+        SDL_Rect side = {left + cut, top + y, 1, 1};
+        SDL_FillRect(screen, &side, border);
+        SDL_Rect right = {left + width - 1, top + y, 1, 1};
+        SDL_FillRect(screen, &right, border);
+    }
+    SDL_Rect strip = {left + notch, top + height - 2, width - notch - 1, 1};
+    SDL_FillRect(screen, &strip, glow);
+
+    NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(this), iconSize, iconSize);
+    if ( icon )
+        StatusIconRenderBitmap(this, icon, left + pad, top + (height - iconSize) / 2, iconSize);
+
+    const int textLeft = left + pad * 2 + iconSize;
+    const int available = width - (textLeft - left) - pad;
+    CmdStream text;
+    FontUA::select_tileset(&text, 15);
+    FontUA::set_xpos(&text, textLeft);
+    FontUA::set_ypos(&text, top + pad);
+    FontUA::set_txtColor(&text, 217, 241, 245);
+    FontUA::FormateClippedText(font, &text, amount, available, ' ');
+    FontUA::set_end(&text);
+    GFX::Engine.ProcessDrawSeq(text);
+    SDL_SetClipRect(screen, &oldClip);
+}
+
 void ypaworld_func64__sub7__sub7__sub0(NC_STACK_ypaworld *yw)
 {
     up_panel.cmdCommands.clear();
