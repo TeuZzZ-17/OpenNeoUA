@@ -258,6 +258,9 @@ bool UserParser::IsScope(ScriptParser::Parser &parser, const std::string &word, 
     if (StriCmp(word, "new_user"))
         return false;
 
+    // Profiles and older saves without this field start with an empty reserve.
+    _o._plasmaCurrencyBank = 0;
+
     if (!_o._GameShell->remoteMode)
     {
         if ( !ReadUserNameFile("callsign.def") )
@@ -276,6 +279,10 @@ int UserParser::Handle(ScriptParser::Parser &parser, const std::string &p1, cons
     }
     else if ( !StriCmp(p1, "netname") )
     {
+    }
+    else if ( !StriCmp(p1, "plasma_bank") )
+    {
+        _o._plasmaCurrencyBank = NC_STACK_ypaworld::ParsePlasmaCurrencyAmount(p2);
     }
     else if ( !StriCmp(p1, "maxroboenergy") )
     {

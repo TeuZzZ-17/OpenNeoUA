@@ -3051,6 +3051,11 @@ public:
 
     bool IsPlasmaCurrencyEnabled() const;
     uint64_t GetPlasmaCurrency() const { return _plasmaCurrency; }
+    uint64_t GetPlasmaCurrencyBank() const { return _plasmaCurrencyBank; }
+    static uint64_t ParsePlasmaCurrencyAmount(const std::string &value);
+    void RestorePlasmaCurrency(uint64_t amount);
+    void CommitPlasmaCurrency();
+    void RenderPlasmaCurrencyBank();
     uint64_t GetPlasmaCurrencyHudValue() const;
     uint8_t GetPlasmaCurrencyHudOpacity() const;
     uint64_t AddPlasmaCurrency(uint64_t amount, const vec3d &worldPos);
@@ -3689,6 +3694,7 @@ public:
 
     int8_t _playerOwner = 0;
 
+    uint64_t _plasmaCurrencyBank = 0;
     uint64_t _plasmaCurrency = 0;
     uint64_t _plasmaCurrencyHudStartValue = 0;
     uint64_t _plasmaCurrencyHudTargetValue = 0;

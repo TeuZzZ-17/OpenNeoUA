@@ -1022,13 +1022,42 @@ uint64_t NC_STACK_ypaworld::AddPlasmaCurrency(uint64_t amount, const vec3d &worl
     return delta;
 }
 
-void NC_STACK_ypaworld::ResetPlasmaCurrencyRuntime()
+uint64_t NC_STACK_ypaworld::ParsePlasmaCurrencyAmount(const std::string &value)
 {
-    _plasmaCurrency = 0;
-    _plasmaCurrencyHudStartValue = 0;
-    _plasmaCurrencyHudTargetValue = 0;
+    uint64_t amount = 0;
+    for ( const char digit : value )
+    {
+        if ( digit < '0' || digit > '9' ||
+             amount > (std::numeric_limits<uint64_t>::max() - (digit - '0')) / 10 )
+            return 0;
+        amount = amount * 10 + (digit - '0');
+    }
+    return amount;
+}
+
+void NC_STACK_ypaworld::RestorePlasmaCurrency(uint64_t amount)
+{
+    // Loading a save restores the counter without emitting pickup events.
+    _plasmaCurrency = amount;
+    _plasmaCurrencyHudStartValue = amount;
+    _plasmaCurrencyHudTargetValue = amount;
     _plasmaCurrencyHudPulseStartTime = 0;
     _plasmaCurrencyPopups.clear();
+}
+
+void NC_STACK_ypaworld::ResetPlasmaCurrencyRuntime()
+{
+    RestorePlasmaCurrency(0);
+}
+
+void NC_STACK_ypaworld::CommitPlasmaCurrency()
+{
+    if ( _levelInfo.State != TLevelInfo::STATE_COMPLETED || !IsPlasmaCurrencyEnabled() )
+        return;
+
+    const uint64_t available = std::numeric_limits<uint64_t>::max() - _plasmaCurrencyBank;
+    _plasmaCurrencyBank += std::min(_plasmaCurrency, available);
+    ResetPlasmaCurrencyRuntime();
 }
 
 static bool yw_IsUsableGameplayName(const std::string &name)
@@ -5443,6 +5472,8 @@ void NC_STACK_ypaworld::ypaworld_func150(yw_arg150 *arg)
 
 void NC_STACK_ypaworld::DeleteLevel()
 {
+    // Only victory banks this run, before the existing profile save and teardown.
+    CommitPlasmaCurrency();
     _missionMapStatusSnapshotValid = false;
     if ( _levelInfo.State == TLevelInfo::STATE_COMPLETED && !_isNetGame )
     {
@@ -11451,7 +11482,7 @@ size_t NC_STACK_ypaworld::SaveGame(const std::string &saveFile)
                 {
                     if ( yw_write_kwfactor(this, fil) )
                     {
-                        if ( yw_write_globals(this, fil) )
+                        if ( yw_write_globals(this, fil, isfin_save) )
                         {
                             if ( yw_write_superbomb(this, fil) )
                                 write_ok = true;

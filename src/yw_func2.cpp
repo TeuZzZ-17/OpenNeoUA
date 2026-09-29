@@ -1510,6 +1510,8 @@ void UserData::sb_0x46cdf8()
         p_YW->_maxReloadConst = 0;
 
         p_YW->_playersStats.fill(World::TPlayerStatus());
+        p_YW->_plasmaCurrencyBank = 0;
+        p_YW->ResetPlasmaCurrencyRuntime();
 
         diskScreenMode = 0;
 

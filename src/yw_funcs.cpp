@@ -1883,14 +1883,18 @@ bool NC_STACK_ypaworld::RestartCompletedMission()
         return false;
 
     const int32_t levelID = _missionMapStatusSnapshotLevel;
+    const uint64_t plasmaBank = _plasmaCurrencyBank;
 
     // Reuse the mission-start rollback already used by the abort/net paths so
     // buddies, upgrades, player totals and first-contact state return to their
     // exact pre-run values. Map-region statuses are not part of settings.tmp,
     // so restore only that one missing progression surface from our snapshot.
-    if ( !LoadSettings("settings.tmp", _GameShell->UserName,
+    const bool restored = LoadSettings("settings.tmp", _GameShell->UserName,
                        (World::SDF_BUDDY | World::SDF_PROTO | World::SDF_USER),
-                       false) )
+                       false);
+    // Restarting from the victory screen keeps Plasma already earned by winning.
+    _plasmaCurrencyBank = plasmaBank;
+    if ( !restored )
     {
         ypa_log_out("Restart Mission: unable to restore pre-mission settings.\n");
         return false;
@@ -2151,6 +2155,7 @@ void NC_STACK_ypaworld::DrawMapRegions()
         }
         const std::string &v13 = Locale::Text::ToD(_tipOfDayId, " ");
         splashScreen_OutText(this, v13, _screenSize.x / 20, _screenSize.x / 20);
+        RenderPlasmaCurrencyBank();
     }
 }
 
