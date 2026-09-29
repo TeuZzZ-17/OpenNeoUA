@@ -4212,24 +4212,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                                            TGemNotificationEntry::CHANGE_NUM_WEAPONS,
                                            previousValue, _vhcl->num_weapons);
     }
-    else if ( !StriCmp(p1, "weapon_energy_cost") )
-    {
-        TAuthoredScalar value;
-        _vhcl->weapon_energy_cost = 0.0f;
-        _vhcl->weapon_energy_cost_defined = false;
-
-        if ( ParseAuthoredScalar(p2, value) && value.percent &&
-             std::isfinite(value.value) && value.value >= 0.0f )
-        {
-            _vhcl->weapon_energy_cost = std::min(value.value, 100.0f);
-            _vhcl->weapon_energy_cost_defined = true;
-        }
-        else
-        {
-            ypa_log_out("WARNING: vehicle %d weapon_energy_cost='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Falling back to legacy weapon energy drain.\n",
-                        _vhclID, p2.c_str());
-        }
-    }
     else if ( !StriCmp(p1, "mgun_fire_energy_cost") )
     {
         TAuthoredScalar value;
@@ -5642,6 +5624,24 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "shot_time_user") )
     {
         _wpn->shot_time_user = parser.stol(p2, NULL, 0);
+    }
+    else if ( !StriCmp(p1, "weapon_energy_cost") )
+    {
+        TAuthoredScalar value;
+        _wpn->weapon_energy_cost = 0.0f;
+        _wpn->weapon_energy_cost_defined = false;
+
+        if ( ParseAuthoredScalar(p2, value) && value.percent &&
+             std::isfinite(value.value) && value.value >= 0.0f )
+        {
+            _wpn->weapon_energy_cost = std::min(value.value, 100.0f);
+            _wpn->weapon_energy_cost_defined = true;
+        }
+        else
+        {
+            ypa_log_out("WARNING: weapon %d weapon_energy_cost='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Falling back to legacy weapon energy drain.\n",
+                        _wpnID, p2.c_str());
+        }
     }
     else if ( !StriCmp(p1, "ramp_up_time") )
     {
