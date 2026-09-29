@@ -685,6 +685,8 @@ int SaveGlobalsParser::Handle(ScriptParser::Parser &parser, const std::string &p
 
     if ( !StriCmp(p1, "time") )
         _o._timeStamp = parser.stoi(p2);
+    else if ( !StriCmp(p1, "plasma_currency") )
+        _o.RestorePlasmaCurrency(NC_STACK_ypaworld::ParsePlasmaCurrencyAmount(p2));
     else if ( !StriCmp(p1, "kamikaze_fire_latched_gid") )
     {
         const int32_t gid = parser.stoi(p2);

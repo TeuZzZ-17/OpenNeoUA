@@ -37,6 +37,8 @@ int yw_write_user(FSMgr::FileHandle *fil, UserData *usr)
         yw_write_callSign(yw, "callsign.def", usr->netPlayerName.c_str());
 
     fil->printf("new_user\n");
+    if ( yw->GetPlasmaCurrencyBank() != 0 )
+        fil->printf("    plasma_bank = %" PRIu64 "\n", yw->GetPlasmaCurrencyBank());
 
     for (int i = 0; i < 8; i++)
     {
@@ -861,10 +863,13 @@ int yw_write_kwfactor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
     return 1;
 }
 
-int yw_write_globals(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
+int yw_write_globals(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, bool isFinalSave)
 {
     fil->printf("\nbegin_globals\n");
     fil->printf("    time = %d\n", yw->_timeStamp);
+    // A .fin is the starting world for a new visit, not an unfinished run.
+    if ( !isFinalSave && yw->GetPlasmaCurrency() != 0 )
+        fil->printf("    plasma_currency = %" PRIu64 "\n", yw->GetPlasmaCurrency());
     if ( yw->_kamikazeFireTimeScaleDrainGid > 0 )
         fil->printf("    kamikaze_fire_latched_gid = %d\n",
                     yw->_kamikazeFireTimeScaleDrainGid);

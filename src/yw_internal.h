@@ -354,7 +354,7 @@ void yw_write_energymap(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
 int yw_write_units(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
 int yw_write_wunderinfo(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
 int yw_write_kwfactor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
-int yw_write_globals(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
+int yw_write_globals(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, bool isFinalSave = false);
 int yw_write_superbomb(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
 int yw_write_history(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
 int yw_write_masks(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil);
