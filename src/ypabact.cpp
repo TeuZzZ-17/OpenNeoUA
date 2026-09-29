@@ -2905,8 +2905,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_spread_x = 0.0;
     _mgun_spread_y = 0.0;
     _num_weapons = 0;
-    _weapon_energy_cost = 0.0f;
-    _weapon_energy_cost_defined = false;
     _mgun_fire_energy_cost = 0.0f;
     _mgun_fire_energy_cost_defined = false;
     _num_weapons_snd_events = 0;
@@ -14538,16 +14536,16 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
         wobj->_owner = _owner;
 
-        if ( _weapon_energy_cost_defined )
+        if ( wproto.weapon_energy_cost_defined )
         {
-            // Per-Vehicle authored cost: charge once after the first projectile
+            // Per-Weapon authored cost: charge once after the first projectile
             // of this firing event was successfully created. num_weapons, random
             // projectile count, multi-target distribution and extra weapon slots
             // never multiply the authored cost.
             if ( !weaponEnergyCostApplied )
             {
                 _energy -= ypabact_GetAuthoredPercentEnergyCost(
-                    _energy_max, _weapon_energy_cost);
+                    _energy_max, wproto.weapon_energy_cost);
                 weaponEnergyCostApplied = true;
             }
         }

@@ -1008,12 +1008,6 @@ struct TVhclProto
     int16_t num_weapons_min = 0;
     int16_t num_weapons_max = 0;
     // OpenNeoUA custom: optional per-Vehicle percentage of maximum energy charged
-    // once per successful normal Weapon firing event, regardless of num_weapons.
-    // Presence is tracked separately so 0% can explicitly disable the legacy
-    // per-projectile weapon drain while missing/invalid preserves vanilla behavior.
-    float weapon_energy_cost = 0.0f;
-    bool weapon_energy_cost_defined = false;
-    // OpenNeoUA custom: optional per-Vehicle percentage of maximum energy charged
     // once per effective MGUN firing pulse. Presence is tracked separately so
     // 0% explicitly disables the legacy continuous MGUN drain while
     // missing/invalid preserves vanilla behavior.
@@ -1308,6 +1302,12 @@ struct TWeapProto
     float adistBact = 0;
     int shot_time = 0;
     int shot_time_user = 0;
+    // OpenNeoUA custom: optional per-Weapon percentage of maximum energy charged
+    // once per successful normal Weapon firing event, regardless of num_weapons.
+    // Presence is tracked separately so 0% can explicitly disable the legacy
+    // per-projectile weapon drain while missing/invalid preserves vanilla behavior.
+    float weapon_energy_cost = 0.0f;
+    bool weapon_energy_cost_defined = false;
     // OpenNeoUA custom: optional ramp-up cadence for normal/main Weapons.
     // shot_time/shot_time_user remain the canonical starting cadence; while uninterrupted
     // normal Weapon fire is held, ramp_up_time interpolates toward ramp_up_max_shot_time.
