@@ -1151,8 +1151,6 @@ public:
     float _mgun_spread_x;
     float _mgun_spread_y;
     uint8_t _num_weapons;
-    float _weapon_energy_cost;
-    bool _weapon_energy_cost_defined;
     float _mgun_fire_energy_cost;
     bool _mgun_fire_energy_cost_defined;
     uint8_t _num_weapons_snd_events;
