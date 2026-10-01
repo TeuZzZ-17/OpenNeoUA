@@ -1186,31 +1186,12 @@ void listLocaleDir(UserData *usr, const char *dirname)
     // call it LANGUAGE.DLL or ENGLISH.DLL, but both map to one ENGLISH entry.
     usr->default_lang_dll = nullptr;
 
-    bool englishCatalogueFound = false;
-    FSMgr::DirIter dir = uaOpenDir(dirname);
-    if (dir)
-    {
-        FSMgr::iNode *node = nullptr;
-        while (dir.getNext(&node))
-        {
-            if (!node || node->getType() != FSMgr::iNode::NTYPE_FILE)
-                continue;
-
-            std::string filename = node->getName();
-            std::transform(filename.begin(), filename.end(), filename.begin(),
-                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-            if (filename == "language.dll" || filename == "english.dll")
-            {
-                englishCatalogueFound = true;
-                break;
-            }
-        }
-    }
-    else
-    {
-        ypa_log_out("Unknown Locale-Directory %s\n", dirname);
-    }
+    // Resolve individual files so repository Locale additions do not hide a legacy catalogue.
+    const std::string prefix = dirname;
+    const bool englishCatalogueFound = uaFileExist(prefix + "language.dll") ||
+                                       uaFileExist(prefix + "english.dll");
+    if (!englishCatalogueFound)
+        ypa_log_out("No English language catalogue found in %s\n", dirname);
 
     if (englishCatalogueFound)
     {

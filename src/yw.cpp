@@ -1301,7 +1301,8 @@ bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
         new World::Parsers::BuildProtoParser(this)
     };
 
-    bool res = ScriptParser::ParseFile(filename, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    bool res = ScriptParser::ParseFile(filename, parsers,
+        ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_SKIP_MISSING_INCLUDES);
     Common::Env.SetPrefix("rsrc", buf);
 
     if ( res )

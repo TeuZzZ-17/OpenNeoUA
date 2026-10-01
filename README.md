@@ -2,7 +2,7 @@
 
 OpenNeoUA is an independent, open-source and non-commercial evolution of the `UA_source`/OpenUA engine for **Urban Assault**. It modernizes real engine limitations while preserving vanilla data, levels, scripts, saves and the original game feeling. A legitimate copy of the original game data is still required to play.
 
-he project is derived from the upstream [Marisa-Chan/UA_source](https://github.com/Marisa-Chan/UA_source) lineage and keeps that provenance visible. Microsoft, TerraTools and the other rights holders are not affiliated with or endorsing this project. Existing credits and notices remain applicable.
+The project is derived from the upstream [Marisa-Chan/UA_source](https://github.com/Marisa-Chan/UA_source) lineage and keeps that provenance visible. Microsoft, TerraTools and the other rights holders are not affiliated with or endorsing this project. Existing credits and notices remain applicable.
 
 **License:** GPLv2
 
@@ -50,168 +50,128 @@ OpenNeoUA is currently distributed as source code. On Windows, the executable mu
    pacman -S --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_image mingw-w64-x86_64-SDL2_ttf mingw-w64-x86_64-SDL2_net mingw-w64-x86_64-openal mingw-w64-x86_64-libvorbis mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-lua
    ```
 
-## 2. Download and build OpenNeoUA
+## 2. Assemble the original game data and OpenNeoUA
 
-5. Download the OpenNeoUA source code ZIP from:
+5. Obtain a legitimate, clean and unmodified installation of **Urban Assault**. Use a separate folder for OpenNeoUA so your original installation remains untouched. This repository does not supply the proprietary original game scripts or assets.
 
-   https://github.com/TeuZzZ-17/OpenNeoUA
-
-6. Extract the project folder. For example:
-
-   ```text
-   C:\Users\YourName\Desktop\OpenNeoUA
-   ```
-
-7. **Important: do not compile from the standard MSYS terminal.**
-
-   Close the standard MSYS terminal and open **MSYS2 MinGW x64 / MinGW 64-bit**.
-
-   You can also start it directly with:
-
-   ```text
-   C:\msys64\mingw64.exe
-   ```
-
-   Before continuing, verify that the terminal prompt contains:
-
-   ```text
-   MINGW64
-   ```
-
-   and not:
-
-   ```text
-   MSYS
-   ```
-
-8. In the **MINGW64** terminal, go to the extracted OpenNeoUA folder. Example:
-
-   ```bash
-   cd /c/Users/YourName/Desktop/OpenNeoUA
-   ```
-
-9. Configure the project:
-
-   ```bash
-   cmake -B build -S src
-   ```
-
-10. Compile OpenNeoUA:
-
-   ```bash
-   cmake --build build -j12
-   ```
-
-   `-j12` uses up to 12 parallel build jobs. You may use a different value if appropriate for your CPU.
-
-11. If compilation succeeds, the executable will be created here:
-
-   ```text
-   build\OpenNeoUA.exe
-   ```
-
-## 3. Prepare the Urban Assault installation
-
-12. Obtain a legitimate, clean and unmodified installation of the original **Urban Assault**.
-
-   Using a separate copy of the original game for OpenNeoUA is strongly recommended so that the original installation remains untouched.
-
-13. Open the original game's `Data` folder.
-
-   Example:
+6. Create a destination folder, for example:
 
    ```text
    C:\Games\Urban Assault\Data\
    ```
 
-14. Copy the **complete contents of the extracted OpenNeoUA project folder** into the original Urban Assault `Data` folder.
+7. Copy the **contents** of the original `Microsoft Urban Assault\DATA\` folder directly into that destination `Data` folder. Do not copy the `DATA` folder itself inside it: there must be no `Data\Data\` nesting.
 
-   In other words:
+8. Copy the original game's other folders and configuration into the same destination `Data` folder: `LEVELS`, `LOCALE`, `ENV`, `SAVE`, `HELP`, `MUSIC` and `NUCLEUS.INI`, where supplied by your installation. Keep their contents and names. The engine supports this Data-first layout and also retains compatibility with the original locations beside the executable.
 
-   ```text
-   OpenNeoUA project contents
-           ↓
-   Urban Assault\Data\
-   ```
+   For example, the original `Microsoft Urban Assault\LEVELS\` becomes `Urban Assault\Data\LEVELS\`, and the original `Microsoft Urban Assault\NUCLEUS.INI` becomes `Urban Assault\Data\NUCLEUS.INI`.
 
-   Allow Windows to merge folders and replace OpenNeoUA files when the same destination file already exists.
+   If the original installation supplies `DUNGEON.TTF`, copy that font into `Data\Fonts\` to make the original menu font available to the engine.
 
-   Copy the repository contents as they are provided by the current OpenNeoUA version. The exact set of folders and files may change over time as the engine evolves and new systems or resources are added.
+9. Download the OpenNeoUA source ZIP from [the OpenNeoUA repository](https://github.com/TeuZzZ-17/OpenNeoUA). Extract it and copy the **contents** of the extracted project folder into `Urban Assault\Data\`. Merge folders and replace matching files with the repository version. Do not place the enclosing `OpenNeoUA-main` folder inside `Data`.
 
-   The original Urban Assault data must remain present. OpenNeoUA does **not** redistribute the complete original game data.
+   Copy the original data first and the repository contents second. Both sets of files are required. The repository adds engine files and configuration; it does not replace the original game data.
 
-15. Copy the newly compiled executable:
+10. Before building, check these example paths:
 
-   ```text
-   OpenNeoUA\build\OpenNeoUA.exe
-   ```
+    ```text
+    Urban Assault\Data\src\CMakeLists.txt
+    Urban Assault\Data\Scripts\Startup.cfg
+    Urban Assault\Data\Scripts\STARTUP.SCR
+    Urban Assault\Data\Scripts\FEINDE.SCR
+    Urban Assault\Data\Scripts\ROBOS.SCR
+    Urban Assault\Data\LEVELS\
+    Urban Assault\Data\LOCALE\
+    ```
 
-   into the **main Urban Assault folder**, one level above `Data`.
+    `Startup.cfg` loads the original `startup.scr` manifest first, preserving its original include order, then loads OpenNeoUA/mod definitions when available. The original manifest supplies vanilla vehicles, weapons, buildings, host stations, effects and sounds. Do not remove the original `.scr` files.
 
-   Example:
+    `Weapons.cfg`, `Buildings.cfg`, `Effects.cfg` and `Vehicles.cfg` are not supplied by this repository. They are optional additions supplied separately by a mod installation. Missing prototype includes are logged and skipped; errors inside existing scripts still fail loading. Skipping a missing file cannot replace required original definitions or assets.
 
-   ```text
-   C:\Games\Urban Assault\OpenNeoUA.exe
-   ```
+## 3. Build OpenNeoUA
 
-   Do **not** place the runtime executable inside `Data`.
+11. Close the standard MSYS terminal and open **MSYS2 MinGW x64 / MinGW 64-bit** (`C:\msys64\mingw64.exe`). Verify that the prompt contains `MINGW64`.
+
+12. In that terminal, go to your assembled `Data` folder:
+
+    ```bash
+    cd "/c/Games/Urban Assault/Data"
+    ```
+
+    Adjust the path to your installation. Keep the quotes if the path contains spaces.
+
+13. Configure and build:
+
+    ```bash
+    cmake -B build -S src
+    cmake --build build -j12
+    ```
+
+    `-j12` uses up to 12 parallel build jobs; adjust it for your CPU. These commands run inside `Data`, so a successful build produces:
+
+    ```text
+    Urban Assault\Data\build\OpenNeoUA.exe
+    ```
+
+14. Copy that executable into the **main Urban Assault folder**, one level above `Data`:
+
+    ```text
+    C:\Games\Urban Assault\OpenNeoUA.exe
+    ```
 
 ## 4. Install the Windows runtime DLLs
 
-16. Open:
+15. Open `C:\msys64\mingw64\bin` and copy all `.dll` files into the main Urban Assault folder beside `OpenNeoUA.exe`.
 
-   ```text
-   C:\msys64\mingw64\bin
-   ```
+    Copying all DLLs is the simple installation method and includes direct and indirect dependencies. Keep the runtime executable and its DLLs together in the main folder.
 
-17. Copy **all `.dll` files** from that folder into the same main Urban Assault folder that contains `OpenNeoUA.exe`.
+    ```text
+    Urban Assault\
+    ├── OpenNeoUA.exe
+    ├── [runtime DLL files]
+    └── Data\
+        ├── [original Urban Assault data and support folders]
+        └── [current OpenNeoUA repository contents, merged here]
+    ```
 
-   Do not copy the DLLs into `Data`.
+    The last two lines describe merged contents, not two extra folders to create. For example, original and repository scripts share `Data\Scripts\`.
 
-   The installation should follow this general structure:
+## 5. Run and verify OpenNeoUA
 
-   ```text
-   Urban Assault\
-   ├── OpenNeoUA.exe
-   ├── [runtime DLL files]
-   │
-   └── Data\
-       ├── [original Urban Assault data]
-       └── [current OpenNeoUA repository contents]
-   ```
+16. Launch `OpenNeoUA.exe` from Windows Explorer. If you use a shortcut, set its **Start in** folder to the main Urban Assault folder containing that executable. From a terminal, change to that folder before launching.
 
-   This layout is intentionally shown only at a high level. The exact files and subfolders used by OpenNeoUA may change over time as development continues. Always use the structure provided by the current repository version rather than relying on an old fixed folder list.
+17. Create/select a profile and start a campaign mission or tutorial. Reaching the menu alone does not verify that the original prototype scripts and level assets loaded correctly.
 
-   Copying all DLL files is intentionally the simple installation method. It avoids forcing users to resolve the executable's direct and indirect runtime dependencies one file at a time.
+    Once the game starts from Explorer with DLLs beside it, the installation can run outside MSYS2. Launch `OpenNeoUA.exe` to use this engine.
 
-## 5. Run OpenNeoUA
+## Development status and troubleshooting
 
-18. Launch:
+OpenNeoUA is under continuous development. Bugs and crashes may occur, especially when original data is missing, mixed with incompatible mod files, or copied into the wrong folders. A successful build does not guarantee a complete game installation.
 
-   ```text
-   OpenNeoUA.exe
-   ```
+If startup or a level fails, read:
 
-   from Windows Explorer.
+```text
+Urban Assault\Data\Env\ypa_log.txt
+```
 
-   Do not launch the original Urban Assault executable if you want to run the OpenNeoUA engine.
+In a legacy layout, the log may instead be in `Urban Assault\Env\ypa_log.txt`. Keep a copy of the log before restarting: it is rewritten when the engine starts. When reporting a problem, include the log, engine version, failing level and your folder layout.
 
-19. Once `OpenNeoUA.exe` starts correctly from Windows Explorer, the installation is portable outside the MSYS2 terminal environment, provided the required DLLs remain next to the executable.
+- `missing include ...; skipped` identifies a file absent from a prototype manifest. Missing optional mod `.cfg` files can be normal on a vanilla installation. Missing original `.scr` files mean the original data needs to be restored.
+- `PARSE ERROR` or `include ... failed` identifies an existing script that could not be loaded correctly. Check the reported file and line.
+- `no host robo for squad` means a squad's host station was not created. Check earlier errors, `Data\Scripts\Startup.cfg`, the original `STARTUP.SCR` and its included files, and the level's required models. The warning alone does not establish the cause of a crash.
+- Missing files under `Levels`, `Locale` or the SET folders indicate incomplete or incorrectly placed original data. Recheck steps 7–10 and avoid `Data\Data` or `Data\OpenNeoUA-main` nesting.
 
 ## Installation layout and future versions
 
-OpenNeoUA is under active development. New folders, resources or runtime files may be added, renamed or reorganized in future versions.
-
-For this reason, the folder examples in this README are illustrative rather than a permanent specification of every file that OpenNeoUA will ever use.
-
-The important rule is:
+The installation rule is:
 
 ```text
-OpenNeoUA.exe + runtime DLLs  → main Urban Assault folder
-OpenNeoUA repository contents → Urban Assault\Data\
+OpenNeoUA.exe + runtime DLLs                      → Urban Assault\
+Original DATA contents + original support folders
+    + current OpenNeoUA repository contents      → Urban Assault\Data\
 ```
 
-When installing a newer version, always follow the structure shipped by that version of the repository and merge its contents into `Data` unless the current documentation explicitly says otherwise.
+New resources may be added as development continues. When updating, merge the new repository contents into `Data`, rebuild, and copy the newly built executable to the main folder. Preserve your original data and back up custom configuration/mod files before replacing matching files.
 
 ### Source files
 
