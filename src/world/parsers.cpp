@@ -8462,6 +8462,7 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
     }
     else if ( !StriCmp(p1, "interface_style") )
     {
+        _o._GameShell->hasModernSettings = true;
         const GFX::VirtualUIStyle style = !StriCmp(p2, "smooth")
                                               ? GFX::VirtualUIStyle::SMOOTH
                                               : GFX::VirtualUIStyle::RETRO;
@@ -8476,6 +8477,7 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
     }
     else if ( !StriCmp(p1, "palette_theme") )
     {
+        _o._GameShell->hasModernSettings = true;
         std::string theme = p2;
         if (!StriCmp(theme, "Original"))
             theme.clear();
@@ -8498,6 +8500,7 @@ int VideoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
     }
     else if ( !StriCmp(p1, "gfxmode") )
     {
+        _o._GameShell->hasModernSettings = true;
         Stok stok(p2, " _");
         std::string resW, resH, resWin;
 

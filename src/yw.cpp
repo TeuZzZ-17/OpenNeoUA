@@ -11666,6 +11666,9 @@ size_t NC_STACK_ypaworld::LoadSettings(const std::string &fileName, const std::s
 
     _GameShell->savedDataFlags = 0;
 
+    if ( (sdfMask & World::SDF_ALL) == World::SDF_ALL )
+        _GameShell->hasModernSettings = false;
+
     if ( sdfMask & World::SDF_BUDDY )
         _levelInfo.Buddies.clear();
     if ( !ParseSettingsFile(fmt::sprintf("save:%s", fileName), sdfMask) )
@@ -11675,10 +11678,7 @@ size_t NC_STACK_ypaworld::LoadSettings(const std::string &fileName, const std::s
     }
 
     if (playIntro && !_GameShell->remoteMode)
-    {
         SetGameShellVideoMode( _GameShell->IsWindowedFlag() );
-        PlayIntroMovie();
-    }
 
     if ( updateGameShell && !_GameShell->HasInited && !OpenGameShell() ) // Init menus
     {
@@ -11690,6 +11690,25 @@ size_t NC_STACK_ypaworld::LoadSettings(const std::string &fileName, const std::s
     if ( (sdfMask & World::SDF_SCORE) && (_GameShell->savedDataFlags & World::SDF_SCORE) )
     {
         _GameShell->UserName = userName;
+    }
+
+    // Retail profiles have no engine-written video keys. Reuse the menu resets
+    // once; their normal save writes interface_style, preserving future edits.
+    if ( updateGameShell && (sdfMask & World::SDF_ALL) == World::SDF_ALL &&
+         !_GameShell->hasModernSettings )
+    {
+        ypa_log_out("OpenNeoUA: initializing current Options and input defaults for original profile %s.\n", userName.c_str());
+        _GameShell->InputConfigRestoreDefault();
+        _GameShell->sub_46D2B4();
+        _GameShell->ShowOptionsMenu();
+        _GameShell->ResetOptionsToDefaults();
+        _GameShell->sb_0x46aa8c();
+        _GameShell->hasModernSettings = true;
+    }
+
+    if (playIntro && !_GameShell->remoteMode)
+    {
+        PlayIntroMovie();
     }
 
     const bool persistInputMigration = _GameShell->inputDefaultsMigrated;
