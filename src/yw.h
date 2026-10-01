@@ -1016,6 +1016,7 @@ public:
     std::array<std::string, World::INPUT_BIND_MAX> InputConfigTitle;
     std::vector<int> inputDisplayOrder;
     bool inputDefaultsMigrated = false;
+    bool hasModernSettings = false;
 
     /* SGM save exist
        0 - not checked

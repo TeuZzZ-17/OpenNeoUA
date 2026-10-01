@@ -76,6 +76,7 @@ OpenNeoUA is currently distributed as source code. On Windows, the executable mu
 
     ```text
     Urban Assault\Data\src\CMakeLists.txt
+    Urban Assault\Data\World.ini
     Urban Assault\Data\Scripts\Startup.cfg
     Urban Assault\Data\Scripts\STARTUP.SCR
     Urban Assault\Data\Scripts\FEINDE.SCR
@@ -141,6 +142,8 @@ OpenNeoUA is currently distributed as source code. On Windows, the executable mu
 16. Launch `OpenNeoUA.exe` from Windows Explorer. If you use a shortcut, set its **Start in** folder to the main Urban Assault folder containing that executable. From a terminal, change to that folder before launching.
 
 17. Create/select a profile and start a campaign mission or tutorial. Reaching the menu alone does not verify that the original prototype scripts and level assets loaded correctly.
+
+    On first loading an original retail profile, OpenNeoUA applies and saves its current Options-page and input defaults automatically. Subsequent launches preserve your changes. Existing engine profiles with saved extended video settings are preserved. Advanced graphics start from the shipped OpenNeoUA graphics profile, with `OpenNeoUA.ini` providing the higher-priority settings.
 
     Once the game starts from Explorer with DLLs beside it, the installation can run outside MSYS2. Launch `OpenNeoUA.exe` to use this engine.
 
