@@ -70,7 +70,7 @@ static constexpr int OPTIONS_RESET_WIDTH = 800;
 static constexpr int OPTIONS_RESET_HEIGHT = 600;
 static constexpr int OPTIONS_RESET_BLENDING = 1;          // Additive
 static constexpr int OPTIONS_RESET_MAX_FPS = 240;
-static constexpr const char *OPTIONS_RESET_MENU_FONT = "Xolonium_Regular";
+static constexpr const char *OPTIONS_RESET_MENU_FONT = "Xolonium Regular";
 static constexpr bool OPTIONS_RESET_MOVIE_PLAYER = true;  // Intro Movies
 static constexpr bool OPTIONS_RESET_PLAYER_ROBO_AI = true;
 static constexpr bool OPTIONS_RESET_SPECTATOR = false;
@@ -377,7 +377,7 @@ static std::string NormalizeMenuFontName(std::string fontName)
     if (!StriCmp(fontName, "Default"))
         return std::string("Default");
 
-    return fontName;
+    return System::MenuFontDisplayValue(fontName);
 }
 
 static std::string MenuFontDisplayName(const std::string &fontName)
