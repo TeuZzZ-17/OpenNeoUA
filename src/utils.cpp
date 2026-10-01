@@ -206,7 +206,7 @@ bool uaNormalizeDataAssetPath(const std::string &path, std::string *normalized,
 
 static bool uaStandaloneRootDir(const std::string &first, std::string *canonical)
 {
-    static const char *dirs[] = {"3DS", "Env", "Fonts", "Levels", "Locale", "Music", "Res", "Save"};
+    static const char *dirs[] = {"3DS", "Env", "Fonts", "Help", "Levels", "Locale", "Music", "Res", "Save"};
 
     for (const char *dir : dirs)
     {

@@ -8707,7 +8707,8 @@ int ShellParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
         {
             if ( !StriCmp(s, p2) )
                 slct = &s;
-            if ( !StriCmp(s, "language") )
+            // Retail profiles use LANGUAGE; the supported catalogue is listed as ENGLISH.
+            if ( !StriCmp(s, "english") )
                 deflt = &s;
         }
 
