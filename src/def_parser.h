@@ -15,7 +15,8 @@ class Parser;
 enum FLAGS
 {
     FLAG_NO_SCOPE_SKIP  = 1,
-    FLAG_NO_INCLUDE	    = 2
+    FLAG_NO_INCLUDE	    = 2,
+    FLAG_SKIP_MISSING_INCLUDES = 4
 };
 
 enum RESULTS

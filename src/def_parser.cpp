@@ -90,10 +90,17 @@ int Parser::ParseRoutine(const std::string &filename, HandlersList &callbacks, i
         }
         else if ( !(flags & FLAG_NO_INCLUDE) && !StriCmp(p1, "include") )
         {
+            // Prototype manifests can reference files supplied by a separate game/mod installation.
+            if ( !p2.empty() && (flags & FLAG_SKIP_MISSING_INCLUDES) && !uaFileExist(p2) )
+            {
+                ypa_log_out("WARNING: script %s line #%d missing include %s; skipped.\n", filename.c_str(), _line, p2.c_str());
+                continue;
+            }
+
             Parser include(p2);
             if ( !include.ParseFile(p2, callbacks, flags) )
             {
-                ypa_log_out("ERROR: script %s line #%d include %s failed!\n", filename.c_str(), _line, p1.c_str());
+                ypa_log_out("ERROR: script %s line #%d include %s failed!\n", filename.c_str(), _line, p2.c_str());
                 return RESULT_BAD_DATA;
             }
         }
