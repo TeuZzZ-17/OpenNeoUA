@@ -16628,7 +16628,7 @@ static bool yw_ProjectHUDMissileLockTarget(NC_STACK_ypaworld *yw, NC_STACK_ypaba
 }
 
 static void yw_RenderHUDWeaponLockMarker(NC_STACK_ypaworld *yw, sklt_wis *wis, UAskeleton::Data *wpn_wure, UAskeleton::Data *wpn_wure2,
-        bool locked, float fromX, float fromY, float toX, float toY, float hudAppearProgress)
+        bool locked, float fromX, float fromY, float toX, float toY, float hudAppearProgress, const World::TVhclProto *vhcl)
 {
     float lockProgress[2];
     wis_color_func func;
@@ -16715,10 +16715,19 @@ static void yw_RenderHUDWeaponLockMarker(NC_STACK_ypaworld *yw, sklt_wis *wis, U
 
         UAskeleton::Data *sklt;
 
+        // OpenNeoUA custom: a lock marker can stay visible while aiming only.
         if ( i & 1 )
+        {
+            if ( locked && vhcl && vhcl->wpn_wireframe_1_hide_lock )
+                continue;
             sklt = wpn_wure;
+        }
         else
+        {
+            if ( locked && vhcl && vhcl->wpn_wireframe_2_hide_lock )
+                continue;
             sklt = wpn_wure2;
+        }
 
         if ( sklt )
         {
@@ -16853,7 +16862,7 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
             {
                 yw_RenderHUDWeaponLockMarker(yw, wis, wpn_wure, wpn_wure2, locked,
                         yw->_guiVisor.field_8, yw->_guiVisor.field_C,
-                        yw->_guiVisor.field_10, yw->_guiVisor.field_14, v86);
+                        yw->_guiVisor.field_10, yw->_guiVisor.field_14, v86, vhcl);
             }
 
             if ( locked && lockedTargetVisible && yw->_hudMissileMultiLockTargets.size() > 1 )
@@ -16881,7 +16890,7 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
                         {
                             yw_RenderHUDWeaponLockMarker(yw, wis, wpn_wure, wpn_wure2, true,
                                     yw->_guiVisor.field_8, yw->_guiVisor.field_C,
-                                    targetX, targetY, v86);
+                                    targetX, targetY, v86, vhcl);
                         }
                     }
                 }
