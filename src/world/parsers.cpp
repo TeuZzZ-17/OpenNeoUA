@@ -4415,6 +4415,18 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
         _vhcl->wpn_wireframe_2 = Nucleus::CInit<NC_STACK_sklt>( {{NC_STACK_rsrc::RSRC_ATT_NAME, std::string(p2)}} );
     }
+    else if ( !StriCmp(p1, "wpn_wireframe_1_hide_lock") )
+    {
+        size_t parsed = 0;
+        const long enabled = parser.stol(p2, &parsed, 0);
+        _vhcl->wpn_wireframe_1_hide_lock = parsed == p2.size() && enabled == 1;
+    }
+    else if ( !StriCmp(p1, "wpn_wireframe_2_hide_lock") )
+    {
+        size_t parsed = 0;
+        const long enabled = parser.stol(p2, &parsed, 0);
+        _vhcl->wpn_wireframe_2_hide_lock = parsed == p2.size() && enabled == 1;
+    }
     else if ( !StriCmp(p1, "vo_type") )
     {
         _vhcl->vo_type = parser.stol(p2, NULL, 16);

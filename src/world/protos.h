@@ -1058,6 +1058,9 @@ struct TVhclProto
     NC_STACK_skeleton *mgun_wireframe = NULL;
     NC_STACK_skeleton *wpn_wireframe_1 = NULL;
     NC_STACK_skeleton *wpn_wireframe_2 = NULL;
+    // OpenNeoUA custom: hide one lock marker while locked (shown when aiming only).
+    bool wpn_wireframe_1_hide_lock = false;
+    bool wpn_wireframe_2_hide_lock = false;
     IDVList initParams;
 
     bool hidden = false;

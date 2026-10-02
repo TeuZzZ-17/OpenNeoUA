@@ -2279,9 +2279,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 }
             }
 
-            // F7 and F8 intentionally share the same selected-vehicle resolver.
-            // Attached non-vehicle objects resolve to their carrier, matching the
-            // existing F7 debug behavior without introducing a second selection path.
+            // F7 destroys vehicles and guns, F8 only handles vehicles.
+            // Attached non-vehicle, non-gun objects resolve to their carrier,
+            // matching the existing F7 debug behavior without introducing a
+            // second selection path.
             auto isDebugVehicleTarget = [](const NC_STACK_ypabact *unit)
             {
                 if ( !unit ||
@@ -2314,6 +2315,34 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     selectedVehicle = selectedVehicle->_parent;
 
                 return isDebugVehicleTarget(selectedVehicle) ? selectedVehicle : NULL;
+            };
+
+            // F7 target: any live vehicle plus any live gun, of any gun kind.
+            // A gun under the mouse is destroyed directly instead of promoting
+            // to its carrier, otherwise guns on buildings or vehicles could
+            // never be selected on their own.
+            auto isDebugF7Target = [&](const NC_STACK_ypabact *unit)
+            {
+                if ( isDebugVehicleTarget(unit) )
+                    return true;
+
+                if ( !unit ||
+                     (unit->_status != BACT_STATUS_NORMAL && unit->_status != BACT_STATUS_IDLE) ||
+                     unit->_energy <= 0 ||
+                     (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) )
+                    return false;
+
+                return unit->_bact_type == BACT_TYPES_GUN;
+            };
+
+            auto resolveDebugF7Target = [&]() -> NC_STACK_ypabact *
+            {
+                NC_STACK_ypabact *selectedTarget = _bactOnMouse;
+                if ( selectedTarget && !isDebugF7Target(selectedTarget) &&
+                     selectedTarget->_parent && selectedTarget->_parent != selectedTarget->_host_station )
+                    selectedTarget = selectedTarget->_parent;
+
+                return isDebugF7Target(selectedTarget) ? selectedTarget : NULL;
             };
 
             // F8: toggle runtime invulnerability on the selected allied vehicle.
@@ -2364,14 +2393,14 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
             }
 
-            // F7: one-shot destruction of the selected vehicle. F7 is also
+            // F7: one-shot destruction of the selected vehicle or gun. F7 is also
             // the vanilla next-commander hotkey, so consume that binding only
             // while the OpenNeoUA debug mode is active.
             if ( arg->field_8->KbdLastHit == Input::KC_F7 )
             {
                 arg->field_8->HotKeyID = -1;
 
-                NC_STACK_ypabact *selectedVehicle = resolveDebugSelectedVehicle();
+                NC_STACK_ypabact *selectedVehicle = resolveDebugF7Target();
                 const bool destroyed = selectedVehicle != NULL;
                 if ( destroyed )
                 {
@@ -2384,9 +2413,11 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
                     // Match the normal lethal-damage transition for tanks and
                     // cars: their death state is DEATH2, which emits the
-                    // begin_fx trigger "destroyed". Keep this as a direct
-                    // internal transition so F7 remains a forced debug kill
-                    // even while global invulnerability (F9) is enabled.
+                    // begin_fx trigger "destroyed". Vehicles and guns of any
+                    // other kind use DEAD, same as normal lethal damage.
+                    // Keep this as a direct internal transition so F7 remains
+                    // a forced debug kill even while global invulnerability
+                    // (F9) is enabled.
                     if ( selectedVehicle->_bact_type == BACT_TYPES_TANK ||
                          selectedVehicle->_bact_type == BACT_TYPES_CAR )
                     {
@@ -2406,8 +2437,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
                 yw_arg159 infoMsg;
                 infoMsg.txt = destroyed ?
-                              "Vehicle Destroyed" :
-                              "No Vehicle Selected";
+                              "Target Destroyed" :
+                              "No Vehicle or Gun Selected";
                 infoMsg.unit = NULL;
                 infoMsg.Priority = 100;
                 infoMsg.MsgID = 0;
