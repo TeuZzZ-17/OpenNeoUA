@@ -1391,6 +1391,7 @@ void NC_STACK_ypaworld::ResolveStatusProfileLinks()
 
 bool NC_STACK_ypaworld::ProtosInit()
 {
+    _speechEventVariants.clear();
     _buffProfiles.clear();
     _debuffProfiles.clear();
     _vhclProtos.resize(NUM_VHCL_PROTO);
