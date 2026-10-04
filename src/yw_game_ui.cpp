@@ -13744,23 +13744,20 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
                 unit = _userRobo;
 
             int vo_type = msgvals.type;
-            World::Speech::Faction faction = World::Speech::Faction::None;
             bool classVoice = false;
 
             if ( msgvals.v1 == 1 )
             {
                 uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
                 World::TVhclProto &vhclProto = _vhclProtos[protoId];
-                faction = World::Speech::ResolveFaction(vhclProto.speech_faction, unit->_owner);
-                classVoice = vhclProto.speech_class != World::Speech::Class::None;
+                classVoice = !vhclProto.speech_class.empty();
                 const int speechEvent = World::Speech::EventIndexFromMsgID(msgID);
 
                 if ( speechEvent >= 0 )
                 {
                     const std::string paths[] = {
                         vhclProto.speech_events[speechEvent],
-                        World::Speech::PackEventPath(vhclProto.speech_voicepack, vhclProto.speech_class, faction, speechEvent),
-                        World::Speech::ClassEventPath(vhclProto.speech_class, speechEvent)
+                        World::Speech::PackEventPath(vhclProto.speech_voicepack, vhclProto.speech_class, vhclProto.speech_faction, speechEvent)
                     };
                     for (const std::string &path : paths)
                     {
@@ -13778,8 +13775,9 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
                 }
 
                 vo_type = vhclProto.vo_type;
-                if ( vhclProto.speech_class != World::Speech::Class::None )
-                    vo_type = World::Speech::LegacyVoiceType(vhclProto.speech_class);
+                const int legacyClass = World::Speech::LegacyVoiceType(vhclProto.speech_class);
+                if ( legacyClass )
+                    vo_type = legacyClass;
 
                 if ( !vo_type )
                     vo_type = 11;
