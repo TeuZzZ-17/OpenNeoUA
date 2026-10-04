@@ -905,9 +905,9 @@ struct TVhclProto
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFX;
     int vo_type = 0;
-    // An explicit event overrides the class pack. Unconfigured data keeps vanilla.
-    Speech::Class speech_class = Speech::Class::None;
-    Speech::Faction speech_faction = Speech::Faction::None;
+    // An explicit event overrides the faction pack. Unconfigured data keeps vanilla.
+    std::string speech_class;
+    std::string speech_faction;
     std::string speech_voicepack;
     std::array<std::string, Speech::EventCount> speech_events;
     float max_pitch = 0.0;
