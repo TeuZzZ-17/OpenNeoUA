@@ -996,10 +996,10 @@ struct TVhclProto
     // Hide Vehicle key flips the live copy on the player's unit without saving.
     bool cockpit_camera_hide_vehicle = false;
     float gun_angle = 0.0;
-    // Independent positive percentages of vanilla down/up reticle travel.
-    // -1 marks an absent key: keep vanilla on that side. MGUN is unaffected.
-    float scope_max_down = -1.0f;
-    float scope_max_up = -1.0f;
+    // Inclusive reference range: -100 = full vanilla down travel, 100 = up.
+    // Absent keeps vanilla. Reticle travel and MGUN remain unchanged.
+    std::array<float, 2> scope_angle_min_max{{-100.0f, 100.0f}};
+    bool scope_angle_min_max_set = false;
     float fire_x = 0.0;
     float fire_y = 0.0;
     float fire_z = 0.0;
