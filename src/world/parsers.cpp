@@ -4451,11 +4451,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "speech_class") )
     {
-        _vhcl->speech_class = Speech::ParseClass(p2);
+        _vhcl->speech_class = Speech::ParsePackName(p2);
     }
     else if ( !StriCmp(p1, "speech_faction") )
     {
-        _vhcl->speech_faction = Speech::ParseFaction(p2);
+        _vhcl->speech_faction = Speech::ParsePackName(p2);
     }
     else if ( !StriCmp(p1, "speech_voicepack") )
     {
@@ -4475,7 +4475,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         if ( p2.empty() )
             return ScriptParser::RESULT_BAD_DATA;
 
-        // Zero restores the class lookup without breaking old mods.
+        // Zero restores automatic event lookup inside the configured pack.
         _vhcl->speech_events[event] = p2 == "0" ? "" : p2;
     }
     else if ( !StriCmp(p1, "max_pitch") )
