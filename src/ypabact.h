@@ -760,6 +760,11 @@ public:
     void GetCurrentWeaponProjectileCountRange(int *outMin, int *outMax);
     bool RequestHomingTargetCycle();
     bool CycleControlledWeapon();
+    static constexpr float USER_GROUND_AIM_MIN = -0.3f;
+    static constexpr float USER_GROUND_AIM_MAX = 0.8f;
+    vec3d GetUserWeaponAimDirection() const;
+    bool IsPrimaryWeaponElevationAllowed(const vec3d &direction) const;
+    bool IsPlayerPrimaryWeaponElevationAllowed() const;
 
     virtual TF::TForm3D *getBACT_pTransform()
     { return &_tForm; }
