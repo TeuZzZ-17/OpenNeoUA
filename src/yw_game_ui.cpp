@@ -255,47 +255,6 @@ static const std::string &StatusIconPlasmaPath(const NC_STACK_ypaworld *yw)
 }
 
 
-const char *SpeechEventKeyFromMsgID(int msgID)
-{
-    switch ( msgID )
-    {
-    case 14:
-        return "unit_ready";
-    case 1:
-        return "unit_idle";
-    case 15:
-        return "order_ack_friendly";
-    case 16:
-        return "order_ack_enemy";
-    case 17:
-        return "unit_control_entered";
-    case 22:
-        return "enemy_sector_entered";
-    case 10:
-        return "unit_recovered";
-    case 7:
-        return "enemy_unit_spotted";
-    case 6:
-        return "enemy_host_found";
-    case 18:
-        return "request_support";
-    case 9:
-        return "unit_retreating";
-    case 8:
-        return "unit_lost";
-    case 19:
-        return "enemy_unit_engaged";
-    case 5:
-        return "enemy_unit_destroyed";
-    case 11:
-        return "enemy_host_destroyed";
-    case 45:
-        return "powerstation_captured";
-    default:
-        return NULL;
-    }
-}
-
 void SpeechEventLogOnce(std::map<std::string, bool> &cache, const std::string &key, const char *fmt, const std::string &path)
 {
     if ( cache[key] )
@@ -305,55 +264,43 @@ void SpeechEventLogOnce(std::map<std::string, bool> &cache, const std::string &k
     ypa_log_out(fmt, path.c_str());
 }
 
-std::string SpeechEventFindFile(const std::string &path)
+std::string SpeechEventFindFile(std::map<std::string, World::Speech::Variants> &cache,
+                                const std::string &path)
 {
-    if ( path.empty() )
-        return "";
-
-    std::string normalizedPath = path;
-    if ( normalizedPath.compare(0, 5, "rsrc:") == 0 )
-        normalizedPath.erase(0, 5);
-
-    std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
-
-    std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
-    auto exists = [](const std::string &candidate) {
-        return uaFileExist("rsrc:" + candidate);
-    };
-
-    if ( normalizedPath.size() >= 4 && normalizedPath.substr(normalizedPath.size() - 4) == ".wav" )
+    std::string authored = path;
+    if ( authored.compare(0, 5, "rsrc:") == 0 ) authored.erase(0, 5);
+    std::string normalized;
+    if ( !uaNormalizeDataAssetPath(authored, &normalized, true) ) return "";
+    const std::string relative = normalized.substr(5);
+    auto cached = cache.find(normalized);
+    if ( cached == cache.end() )
     {
-        const bool found = exists(normalizedPath);
+        World::Speech::Variants variants;
+        const std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+        if ( relative.size() >= 4 && !StriCmp(relative.substr(relative.size() - 4), ".wav") )
+        {
+            if ( uaFileExist("rsrc:" + relative) ) variants.Files.push_back(relative);
+        }
+        else
+        {
+            const size_t slash = relative.find_last_of('/');
+            const std::string directory = slash == std::string::npos ? "" : relative.substr(0, slash + 1);
+            const std::string stem = slash == std::string::npos ? relative : relative.substr(slash + 1);
+            FSMgr::DirIter files = uaOpenDir("rsrc:" + directory);
+            for (FSMgr::iNode *file = files.getNext(); file; file = files.getNext())
+            {
+                if ( file->getType() == FSMgr::iNode::NTYPE_FILE &&
+                     World::Speech::IsVariantFilename(file->getName(), stem) )
+                    variants.Files.push_back(directory + file->getName());
+            }
+            std::sort(variants.Files.begin(), variants.Files.end());
+            if ( variants.Files.empty() && uaFileExist("rsrc:" + relative + ".wav") )
+                variants.Files.push_back(relative + ".wav");
+        }
         Common::Env.SetPrefix("rsrc", oldRsrc);
-        return found ? normalizedPath : "";
+        cached = cache.emplace(normalized, std::move(variants)).first;
     }
-
-    std::vector<std::string> variants;
-    for (int i = 1; i <= 99; i++)
-    {
-        std::string filename = fmt::sprintf("%s_%02d.wav", normalizedPath, i);
-
-        if ( exists(filename) )
-            variants.push_back(filename);
-    }
-
-    if ( !variants.empty() )
-    {
-        std::string filename = variants.at(rand() % variants.size());
-        Common::Env.SetPrefix("rsrc", oldRsrc);
-        return filename;
-    }
-
-    std::string filename = normalizedPath + ".wav";
-
-    if ( exists(filename) )
-    {
-        Common::Env.SetPrefix("rsrc", oldRsrc);
-        return filename;
-    }
-
-    Common::Env.SetPrefix("rsrc", oldRsrc);
-    return "";
+    return World::Speech::ChooseVariant(cached->second, static_cast<unsigned int>(rand()));
 }
 
 bool StatusIconIsNonRoboGun(NC_STACK_ypabact *bact)
@@ -13388,8 +13335,12 @@ bool NC_STACK_ypaworld::VoiceMessagePlayResourceFile(const std::string &filename
 
     Common::Env.SetPrefix("rsrc", oldRsrc);
 
-    if ( !v23 )
+    if ( !v23 || !v23->GetSampleData() || !v23->GetSampleData()->Data ||
+         v23->GetSampleData()->bufsz <= 0 || v23->GetSampleData()->SampleRate <= 0 )
+    {
+        if ( v23 ) v23->Delete();
         return false;
+    }
 
     _voiceMessage.Reset();
 
@@ -13793,38 +13744,42 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
                 unit = _userRobo;
 
             int vo_type = msgvals.type;
+            World::Speech::Faction faction = World::Speech::Faction::None;
+            bool classVoice = false;
 
             if ( msgvals.v1 == 1 )
             {
                 uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
                 World::TVhclProto &vhclProto = _vhclProtos[protoId];
-                const char *speechEventKey = SpeechEventKeyFromMsgID(msgID);
+                faction = World::Speech::ResolveFaction(vhclProto.speech_faction, unit->_owner);
+                classVoice = vhclProto.speech_class != World::Speech::Class::None;
+                const int speechEvent = World::Speech::EventIndexFromMsgID(msgID);
 
-                if ( speechEventKey )
+                if ( speechEvent >= 0 )
                 {
-                    auto speechEvent = vhclProto.speech_events.find(speechEventKey);
-
-                    if ( speechEvent != vhclProto.speech_events.end() && !speechEvent->second.empty() )
+                    const std::string paths[] = {
+                        vhclProto.speech_events[speechEvent],
+                        World::Speech::PackEventPath(vhclProto.speech_voicepack, vhclProto.speech_class, faction, speechEvent),
+                        World::Speech::ClassEventPath(vhclProto.speech_class, speechEvent)
+                    };
+                    for (const std::string &path : paths)
                     {
-                        std::string speechFile = SpeechEventFindFile(speechEvent->second);
-
+                        if ( path.empty() ) continue;
+                        const std::string speechFile = SpeechEventFindFile(_speechEventVariants, path);
                         if ( !speechFile.empty() && VoiceMessagePlayResourceFile(speechFile, unit, priority, ignoreTimeScale) )
                         {
-                            SpeechEventLogOnce(g_speechEventLoggedUsed,
-                                               speechFile,
-                                               "Speech event: using %s\n",
-                                               speechFile);
+                            SpeechEventLogOnce(g_speechEventLoggedUsed, speechFile,
+                                               "Speech event: using %s\n", speechFile);
                             return;
                         }
-
-                        SpeechEventLogOnce(g_speechEventLoggedFallback,
-                                           speechEvent->second,
-                                           "Speech event: missing or failed to load %s, falling back to vanilla voice\n",
-                                           speechEvent->second);
+                        SpeechEventLogOnce(g_speechEventLoggedFallback, path,
+                                           "Speech event: missing or failed to load %s, trying the next voice source\n", path);
                     }
                 }
 
                 vo_type = vhclProto.vo_type;
+                if ( vhclProto.speech_class != World::Speech::Class::None )
+                    vo_type = World::Speech::LegacyVoiceType(vhclProto.speech_class);
 
                 if ( !vo_type )
                     vo_type = 11;
@@ -13835,7 +13790,14 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
             if ( msgvals.num > 1 )
                 v16 = rand() % msgvals.num + 1;
 
-            VoiceMessagePlayFile(fmt::sprintf("%x%x%x%x%x.wav", msgvals.v1, vo_type, msgvals.v3, msgvals.v4, v16), unit, priority, ignoreTimeScale);
+            if ( !VoiceMessagePlayFile(fmt::sprintf("%x%x%x%x%x.wav", msgvals.v1, vo_type, msgvals.v3, msgvals.v4, v16), unit, priority, ignoreTimeScale) &&
+                 classVoice && vo_type != 11 )
+            {
+                // Original UFO/scout code A has no combat lines. Modern classes
+                // can recover through the corresponding generic event; legacy
+                // data without speech_class keeps its original behavior.
+                VoiceMessagePlayFile(fmt::sprintf("1b%x%x%x.wav", msgvals.v3, msgvals.v4, v16), unit, priority, ignoreTimeScale);
+            }
         }
     }
 }
@@ -16665,6 +16627,12 @@ static void yw_RenderHUDWeaponLockMarker(NC_STACK_ypaworld *yw, sklt_wis *wis, U
             func = sub_4E3B80;
         else
             func = NULL;
+    }
+
+    if ( yw->_userUnit && !yw->_userUnit->IsPlayerPrimaryWeaponElevationAllowed() )
+    {
+        primaryColor = SDL_Color{255, 0, 0, 255};
+        secondaryColor = primaryColor;
     }
 
     int cl1r = primaryColor.r;

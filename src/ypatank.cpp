@@ -1144,11 +1144,11 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
 
         _gun_angle_user += v90 * arg->inpt->Sliders[5];
 
-        if ( _gun_angle_user < -0.3 )
-            _gun_angle_user = -0.3;
+        if ( _gun_angle_user < USER_GROUND_AIM_MIN )
+            _gun_angle_user = USER_GROUND_AIM_MIN;
 
-        if ( _gun_angle_user > 0.8 )
-            _gun_angle_user = 0.8;
+        if ( _gun_angle_user > USER_GROUND_AIM_MAX )
+            _gun_angle_user = USER_GROUND_AIM_MAX;
 
 
         _gun_leftright = _gun_leftright - v90 * arg->inpt->Sliders[15];
@@ -1159,14 +1159,7 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
         if ( _gun_leftright > 0.8 )
             _gun_leftright = 0.8;
 
-        vec3d v67;
-        v67 = _rotation.AxisZ();
-
-        float corW, corH;
-        GFX::Engine.getAspectCorrection(corW, corH, true);
-
-        v67 -= _rotation.AxisY() * (_gun_angle_user * corH);
-        v67 -= _rotation.AxisX() * (_gun_leftright * corW);
+        vec3d v67 = GetUserWeaponAimDirection();
 
         float v89 = v67.length();
 
@@ -1977,6 +1970,11 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
             return 0;
         v43 = 2;
     }
+
+    // Only the primary Weapon uses this window. Keep the existing MGUN
+    // fallback and independent AI minigun firing conditions unchanged.
+    if ( v22 && !IsPrimaryWeaponElevationAllowed(v34) )
+        return 0;
 
     if ( v22 && v22->IsArcGrenade() )
     {

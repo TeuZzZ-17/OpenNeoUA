@@ -3645,6 +3645,7 @@ public:
     int32_t _maxReloadConst = 0;
 
     TSingleVoiceMessage _voiceMessage;
+    std::map<std::string, World::Speech::Variants> _speechEventVariants;
 
     bool _joyIgnoreX = false;
     bool _joyIgnoreY = false;

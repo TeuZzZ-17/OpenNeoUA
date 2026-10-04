@@ -4190,6 +4190,24 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->gun_angle = parser.stof(p2, 0);
     }
+    else if ( !StriCmp(p1, "scope_max_down") || !StriCmp(p1, "scope_max_up") )
+    {
+        float minimum = 0.0f, maximum = 0.0f;
+        const bool valid = p2.size() > 1 && p2.back() == '%' &&
+            p2.find('_') == std::string::npos &&
+            World::ParseFloatRangeValue(p2.substr(0, p2.size() - 1), minimum, maximum) &&
+            minimum >= 0.0f && minimum <= 100.0f;
+        if ( !valid )
+        {
+            ypa_log_out("ERROR: vehicle %d %s='%s' must be a percentage from 0%% to 100%%.\n",
+                        _vhclID, p1.c_str(), p2.c_str());
+            return ScriptParser::RESULT_BAD_DATA;
+        }
+        if ( !StriCmp(p1, "scope_max_down") )
+            _vhcl->scope_max_down = minimum;
+        else
+            _vhcl->scope_max_up = minimum;
+    }
     else if ( !StriCmp(p1, "num_weapons") )
     {
         int previousValue = _vhcl->num_weapons;
@@ -4431,15 +4449,34 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vo_type = parser.stol(p2, NULL, 16);
     }
+    else if ( !StriCmp(p1, "speech_class") )
+    {
+        _vhcl->speech_class = Speech::ParseClass(p2);
+    }
+    else if ( !StriCmp(p1, "speech_faction") )
+    {
+        _vhcl->speech_faction = Speech::ParseFaction(p2);
+    }
+    else if ( !StriCmp(p1, "speech_voicepack") )
+    {
+        if ( p2.empty() )
+            return ScriptParser::RESULT_BAD_DATA;
+        _vhcl->speech_voicepack = p2 == "0" ? "" : p2;
+    }
     else if ( p1.size() > 13 && !StriCmp(p1.substr(0, 13), "speech_event_") )
     {
-        std::string eventKey = p1.substr(13);
-        if ( eventKey.empty() || p2.empty() )
+        const int event = Speech::EventIndexFromKey(p1.substr(13));
+        if ( event < 0 )
+        {
+            ypa_log_out("Warning: unsupported speech event %s on vehicle %d, ignored\n",
+                        p1.c_str(), _vhclID);
+            return ScriptParser::RESULT_OK;
+        }
+        if ( p2.empty() )
             return ScriptParser::RESULT_BAD_DATA;
 
-        std::transform(eventKey.begin(), eventKey.end(), eventKey.begin(),
-                       [](unsigned char ch) { return (char)std::tolower(ch); });
-        _vhcl->speech_events[eventKey] = p2;
+        // Zero restores the class lookup without breaking old mods.
+        _vhcl->speech_events[event] = p2 == "0" ? "" : p2;
     }
     else if ( !StriCmp(p1, "max_pitch") )
     {

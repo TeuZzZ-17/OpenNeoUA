@@ -86,6 +86,7 @@ set(SOURCES
     world/nparticle.cpp
     world/protos.cpp
     world/saveparsers.cpp
+    world/speech.cpp
     world/tools.cpp
     wrapal.cpp
     yw.cpp

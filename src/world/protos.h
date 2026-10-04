@@ -5,6 +5,7 @@
 #include "../nucleas.h"
 #include "../sample.h"
 #include "../skeleton.h"
+#include "speech.h"
 
 #include <cmath>
 #include <memory>
@@ -904,9 +905,11 @@ struct TVhclProto
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
     std::array<TVhclSound, SND_MAX> sndFX;
     int vo_type = 0;
-    // OpenNeoUA custom: sparse per-vehicle speech event path stems.
-    // Missing or invalid entries fall back to the vanilla vo_type voice.
-    std::map<std::string, std::string> speech_events;
+    // An explicit event overrides the class pack. Unconfigured data keeps vanilla.
+    Speech::Class speech_class = Speech::Class::None;
+    Speech::Faction speech_faction = Speech::Faction::None;
+    std::string speech_voicepack;
+    std::array<std::string, Speech::EventCount> speech_events;
     float max_pitch = 0.0;
     int16_t field_1D6D = 0;
     int16_t field_1D6F = 0;
@@ -993,6 +996,10 @@ struct TVhclProto
     // Hide Vehicle key flips the live copy on the player's unit without saving.
     bool cockpit_camera_hide_vehicle = false;
     float gun_angle = 0.0;
+    // Independent positive percentages of vanilla down/up reticle travel.
+    // -1 marks an absent key: keep vanilla on that side. MGUN is unaffected.
+    float scope_max_down = -1.0f;
+    float scope_max_up = -1.0f;
     float fire_x = 0.0;
     float fire_y = 0.0;
     float fire_z = 0.0;

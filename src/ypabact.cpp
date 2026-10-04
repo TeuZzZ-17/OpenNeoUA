@@ -10412,6 +10412,9 @@ bool NC_STACK_ypabact::RequestHomingTargetCycle()
     if ( !(_oflags & BACT_OFLAG_USERINPT) || !_world || _status == BACT_STATUS_DEAD )
         return false;
 
+    if ( !IsPlayerPrimaryWeaponElevationAllowed() )
+        return false;
+
     int weaponId = GetCurrentWeaponId();
     if ( !ypabact_IsValidWeaponId(this, weaponId) )
         return false;
@@ -11402,6 +11405,10 @@ static bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, con
 {
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
     if ( !world || weaponId <= 0 || (size_t)weaponId >= world->GetWeaponsProtos().size() )
+        return false;
+
+    // Artillery bypasses LaunchMissile(), but still belongs to the primary Weapon.
+    if ( !unit->IsPrimaryWeaponElevationAllowed(targetCenter - unit->_position) )
         return false;
 
     // Per-shell landing point: barrage_radius is the single canonical bombardment
@@ -14184,8 +14191,54 @@ static int ypabact_GetAuthoredPercentEnergyCost(int energyMax, float percent)
         : 0;
 }
 
+vec3d NC_STACK_ypabact::GetUserWeaponAimDirection() const
+{
+    float corW, corH;
+    GFX::Engine.getAspectCorrection(corW, corH, true);
+    vec3d direction = _rotation.AxisZ() - _rotation.AxisY() * (_gun_angle_user * corH);
+    if ( _bact_type == BACT_TYPES_TANK )
+        direction -= _rotation.AxisX() * (_gun_leftright * corW);
+    return direction;
+}
+
+bool NC_STACK_ypabact::IsPrimaryWeaponElevationAllowed(const vec3d &direction) const
+{
+    if ( !IsGroundUnit() || !_world || _vehicleID >= _world->GetVhclProtos().size() )
+        return true;
+
+    const World::TVhclProto &proto = _world->GetVhclProtos().at(_vehicleID);
+    if ( proto.scope_max_down < 0.0f && proto.scope_max_up < 0.0f )
+        return true;
+
+    // World Y points down. Hull-local pitch follows the reticle's vertical
+    // travel independently of its lateral position, on slopes and under roll.
+    const vec3d local = _rotation.Transform(direction == vec3d() ? _rotation.AxisZ() : direction);
+    if ( !std::isfinite(local.x) || !std::isfinite(local.y) || !std::isfinite(local.z) )
+        return false;
+    float corW, corH;
+    GFX::Engine.getAspectCorrection(corW, corH, true);
+    const double pitch = std::atan2(-local.y, local.z);
+    const double endpointTolerance = 0.0000001; // Inclusive bounds despite floating-point roundoff.
+    const double downPitch = std::atan(proto.scope_max_down * 0.01 * USER_GROUND_AIM_MIN * corH);
+    const double upPitch = std::atan(proto.scope_max_up * 0.01 * USER_GROUND_AIM_MAX * corH);
+    return (proto.scope_max_down < 0.0f || pitch >= downPitch - endpointTolerance) &&
+           (proto.scope_max_up < 0.0f || pitch <= upPitch + endpointTolerance);
+}
+
+bool NC_STACK_ypabact::IsPlayerPrimaryWeaponElevationAllowed() const
+{
+    return IsPrimaryWeaponElevationAllowed(GetUserWeaponAimDirection());
+}
+
 size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 {
+    // Gate before laser requests, cadence, energy, visuals or projectile creation.
+    // Player permission follows the reticle; AI permission follows its target aim.
+    if ( !((_oflags & BACT_OFLAG_USERINPT)
+            ? IsPlayerPrimaryWeaponElevationAllowed()
+            : IsPrimaryWeaponElevationAllowed(arg->direction)) )
+        return 0;
+
     if ( IsActiveDebuffStunFireBlocked() )
         return 0;
 
@@ -19245,6 +19298,23 @@ void NC_STACK_ypabact::sub_4843BC(NC_STACK_ypabact *bact2, int a3)
 
 size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
 {
+    // Release every primary lock outside the same limits used for firing.
+    if ( !IsPlayerPrimaryWeaponElevationAllowed() )
+    {
+        _userHomingPrimaryTargetGid = 0;
+        _userHomingTargetCycleRequested = false;
+        if ( _secndTtype != BACT_TGT_TYPE_NONE )
+        {
+            setTarget_msg clearTarget = {};
+            clearTarget.tgt_type = BACT_TGT_TYPE_NONE;
+            clearTarget.priority = 1;
+            SetTarget(&clearTarget);
+        }
+        sub_4843BC(NULL, 0);
+        arg->ret_bact = NULL;
+        return 0;
+    }
+
     NC_STACK_ypabact *targeto = 0;
     float v56 = 0.0;
 

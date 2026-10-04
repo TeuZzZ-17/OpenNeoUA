@@ -419,11 +419,11 @@ void NC_STACK_ypacar::User_layer(update_msg *arg)
 
         _gun_angle_user += v78 * arg->inpt->Sliders[5];
 
-        if ( _gun_angle_user < -0.3 )
-            _gun_angle_user = -0.3;
+        if ( _gun_angle_user < USER_GROUND_AIM_MIN )
+            _gun_angle_user = USER_GROUND_AIM_MIN;
 
-        if ( _gun_angle_user > 0.8 )
-            _gun_angle_user = 0.8;
+        if ( _gun_angle_user > USER_GROUND_AIM_MAX )
+            _gun_angle_user = USER_GROUND_AIM_MAX;
 
         bact_arg79 arg79;
         arg79.tgType = BACT_TGT_TYPE_DRCT;
@@ -451,7 +451,7 @@ void NC_STACK_ypacar::User_layer(update_msg *arg)
             else
             {
                 arg79.weapon = _weapon;
-                arg79.direction = _rotation.AxisZ() - _rotation.AxisY() * _gun_angle_user * corH;
+                arg79.direction = GetUserWeaponAimDirection();
                 arg79.g_time = _clock;
 
                 if ( _clock % 2 )
