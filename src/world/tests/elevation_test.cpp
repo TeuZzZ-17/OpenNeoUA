@@ -12,6 +12,15 @@
 #undef main
 
 namespace {
+struct TestWorld : NC_STACK_ypaworld {
+    cellArea targetCell;
+    size_t GetSectorInfo(yw_130arg *arg) override {
+        arg->pcell = &targetCell;
+        arg->CellId = Common::Point(0, 0);
+        return 1;
+    }
+    void ypaworld_func149(ypaworld_arg136 *arg) override { arg->isect = false; }
+};
 int checks = 0, failures = 0;
 void Check(bool value, const char *name) {
     ++checks;
@@ -39,7 +48,7 @@ template<class Actor> void Configure(Actor &actor, NC_STACK_ypaworld &world, int
 }
 }
 int main() {
-    NC_STACK_ypaworld world;
+    TestWorld world;
     world._vhclProtos.resize(256);
     Check(Parse(world, {"new_vehicle 1", "model = tank", "end"}), "vanilla parser fixture");
     TestActor<NC_STACK_ypatank> tank;
@@ -51,9 +60,9 @@ int main() {
     Configure(flyer, world, BACT_TYPES_FLYER);
     Configure(gun, world, BACT_TYPES_GUN);
     auto &proto = world._vhclProtos[1];
-    Check(proto.scope_max_down == -1 && proto.scope_max_up == -1, "absent sides preserve vanilla");
+    Check(!proto.scope_angle_min_max_set, "absent scope preserves vanilla");
     Check(tank.IsPrimaryWeaponElevationAllowed(Aim(-150)) && tank.IsPrimaryWeaponElevationAllowed(Aim(150)), "absent preserves actual vanilla AI beyond reticle travel");
-    Check(Parse(world, {"modify_vehicle 1", "scope_max_up = 75%", "scope_max_down = 50%", "end"}), "modify parser independent of parameter order");
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -50_75", "end"}), "single interval parser");
     for (auto *actor : {static_cast<NC_STACK_ypabact*>(&tank), static_cast<NC_STACK_ypabact*>(&car)}) {
         Check(actor->IsPrimaryWeaponElevationAllowed(Aim(-50)), "inclusive lower boundary");
         Check(actor->IsPrimaryWeaponElevationAllowed(Aim(75)), "inclusive upper boundary");
@@ -102,40 +111,41 @@ int main() {
     tank._gun_angle_user = -0.1501f;
     Check(!tank.IsPlayerPrimaryWeaponElevationAllowed(), "below half-down with lateral reticle");
     tank._gun_angle_user = 0.6f;
-    Check(tank.IsPlayerPrimaryWeaponElevationAllowed(), "75 percent up boundary with lateral reticle");
+    Check(tank.IsPlayerPrimaryWeaponElevationAllowed(), "75 reference up boundary with lateral reticle");
     tank._gun_angle_user = 0.6001f;
-    Check(!tank.IsPlayerPrimaryWeaponElevationAllowed(), "above 75 percent up with lateral reticle");
+    Check(!tank.IsPlayerPrimaryWeaponElevationAllowed(), "above 75 reference up with lateral reticle");
     tank._gun_leftright = 0.0f;
     Check(flyer.IsPrimaryWeaponElevationAllowed(Aim(80)) && gun.IsPrimaryWeaponElevationAllowed(Aim(-80)), "air and mounted guns excluded");
-    for (const char *bad : {"nan%", "inf%", "-1%", "101%", "10junk%", "10_20%", "bad%", "50", "%", "20%%"}) {
-        for (const char *key : {"scope_max_down", "scope_max_up"}) {
-            const float down = proto.scope_max_down, up = proto.scope_max_up;
-            Engine::StringList lines{"modify_vehicle 1", std::string(key)+" = "+bad, "end"};
-            Check(!Parse(world, lines) && proto.scope_max_down == down && proto.scope_max_up == up,
-                  "invalid percentage rejected without fallback or state changes");
-        }
+    for (const char *bad : {"nan_20", "-20_inf", "-101_20", "-20_101", "10junk_20",
+                            "10_20_30", "bad", "50", "0%_20%", "25_-10", "_20", "20_"}) {
+        const auto range = proto.scope_angle_min_max;
+        const bool wasSet = proto.scope_angle_min_max_set;
+        Check(!Parse(world, {"modify_vehicle 1", std::string("scope_angle_min_max = ")+bad, "end"}) &&
+              proto.scope_angle_min_max == range && proto.scope_angle_min_max_set == wasSet,
+              "invalid interval rejected without fallback or state changes");
     }
-    Check(Parse(world, {"modify_vehicle 1", "scope_max_down = 0%", "scope_max_up = 0%", "end"}) &&
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = 0_0", "end"}) &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(0)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(1)) &&
-          !tank.IsPrimaryWeaponElevationAllowed(Aim(-1)), "zero on both sides permits hull-parallel aim only");
-    Check(Parse(world, {"new_vehicle 1", "model = tank", "scope_max_down = 0%", "end"}) &&
-          !tank.IsPrimaryWeaponElevationAllowed(Aim(-1)) && tank.IsPrimaryWeaponElevationAllowed(Aim(150)),
-          "down-only leaves upper side fully vanilla");
-    Check(Parse(world, {"new_vehicle 1", "model = tank", "scope_max_up = 0%", "end"}) &&
-          tank.IsPrimaryWeaponElevationAllowed(Aim(-150)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(1)),
-          "up-only leaves lower side fully vanilla");
+          !tank.IsPrimaryWeaponElevationAllowed(Aim(-1)), "zero interval permits hull-parallel aim only");
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = 20_80", "end"}) &&
+          tank.IsPrimaryWeaponElevationAllowed(Aim(20)) && tank.IsPrimaryWeaponElevationAllowed(Aim(80)) &&
+          !tank.IsPrimaryWeaponElevationAllowed(Aim(0)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(-20)),
+          "positive interval excludes hull-parallel and downward aim");
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -80_-20", "end"}) &&
+          tank.IsPrimaryWeaponElevationAllowed(Aim(-80)) && tank.IsPrimaryWeaponElevationAllowed(Aim(-20)) &&
+          !tank.IsPrimaryWeaponElevationAllowed(Aim(0)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(20)),
+          "negative interval excludes hull-parallel and upward aim");
     Check(Parse(world, {"new_vehicle 1", "model = tank", "end"}) &&
-          proto.scope_max_down == -1 && proto.scope_max_up == -1, "new_vehicle clears previous configuration");
-    Check(Parse(world, {"new_vehicle 1", "model = tank", "scope_max_down = 100%", "scope_max_up = 100%", "end"}) &&
+          !proto.scope_angle_min_max_set, "new_vehicle clears previous scope configuration");
+    Check(Parse(world, {"new_vehicle 1", "model = tank", "scope_angle_min_max = -100_100", "end"}) &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(-100)) && tank.IsPrimaryWeaponElevationAllowed(Aim(100)) &&
           !tank.IsPrimaryWeaponElevationAllowed(Aim(-100.01)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(100.01)),
-          "explicit 100 percent covers full vanilla reticle travel");
-    Check(Parse(world, {"modify_vehicle 1", "scope_max_down = 50.5%", "scope_max_up = 75.25%", "end"}) &&
-          proto.scope_max_down == 50.5f && proto.scope_max_up == 75.25f &&
+          "explicit full interval covers entire unchanged vanilla reticle travel");
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -50.5_75.25", "end"}) &&
+          proto.scope_angle_min_max[0] == -50.5f && proto.scope_angle_min_max[1] == 75.25f &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(-50.5)) && tank.IsPrimaryWeaponElevationAllowed(Aim(75.25)),
-          "fractional positive percentages parse and include endpoints");
-    proto.scope_max_down = 50;
-    proto.scope_max_up = 75;
+          "fractional reference interval includes endpoints");
+    proto.scope_angle_min_max = {{-50, 75}};
     tank._gun_angle_user = 0.8;
     tank._gun_leftright = 0.8;
     const vec3d actual = tank.GetUserWeaponAimDirection();
@@ -178,6 +188,57 @@ int main() {
                   world._guiVisor.field_C == -offset,
                   "disabled primary lock preserves independent MG reticle");
         }
+    }
+    world.GetWeaponsProtos().resize(2);
+    world.GetWeaponsProtos()[1]._weaponFlags = World::TWeapProto::WEAPON_FLAGS_MISSILE;
+    proto.scope_angle_min_max = {{-10, 10}};
+    flyer._status = BACT_STATUS_NORMAL;
+    flyer._status_flg = 0;
+    flyer._owner = 2;
+    flyer._energy = flyer._energy_max = 1000;
+    flyer._cellRef = world.targetCell.unitsList.push_back(&flyer);
+    for (auto *actor : {static_cast<NC_STACK_ypabact*>(&tank), static_cast<NC_STACK_ypabact*>(&car)}) {
+        actor->_rotation = mat3x3::Ident();
+        actor->_gun_leftright = actor->_gun_angle_user = 0;
+        actor->_owner = 1;
+        actor->_old_pos = actor->_position;
+        actor->_weapon = actor->_current_weapon_id = 1;
+        actor->_oflags = BACT_OFLAG_USERINPT;
+        bact_arg106 targeting{};
+        targeting.field_0 = 5;
+        targeting.field_4 = actor->GetUserWeaponAimDirection();
+        flyer._position = actor->_position + Aim(20) * 400;
+        Check(actor->UserTargeting(&targeting) == 0 && world._guiVisor.field_18 == NULL,
+              "valid reticle cannot acquire an out-of-scope enemy");
+        flyer._position = actor->_position + Aim(5) * 400;
+        Check(actor->UserTargeting(&targeting) == 1 && targeting.ret_bact == &flyer &&
+              world._guiVisor.field_18 == &flyer, "in-scope enemy still acquires normal lock");
+        flyer._position = actor->_position + Aim(20) * 400;
+        Check(actor->UserTargeting(&targeting) == 0 && actor->_secndTtype == BACT_TGT_TYPE_NONE &&
+              world._guiVisor.field_18 == NULL, "moving enemy releases lock after leaving scope");
+        actor->_oflags = 0;
+        bact_arg101 ai{};
+        ai.unkn = 2;
+        ai.weapon = 1;
+        for (double reference : {-20.0, 20.0}) {
+            ai.pos = actor->_position + Aim(reference) * 400;
+            Check(actor->CheckFireAI(&ai) == 0, "AI primary respects both scope limits");
+            ai.weapon = 0;
+            Check(actor->CheckFireAI(&ai) == 1, "AI MG fallback ignores scope and keeps normal firing checks");
+            ai.weapon = 1;
+        }
+        ai.pos = actor->_position + Aim(5) * 400;
+        Check(actor->CheckFireAI(&ai) == 1, "AI primary still approves an in-scope enemy");
+        actor->_oflags = BACT_OFLAG_USERINPT;
+        flyer._position = actor->_position + Aim(20) * 400;
+        bact_arg79 blocked{};
+        blocked.tgType = BACT_TGT_TYPE_UNIT;
+        blocked.target.pbact = &flyer;
+        blocked.direction = Aim(0);
+        const int energy = actor->_energy;
+        const auto missiles = actor->_missiles_list.size();
+        Check(actor->LaunchMissile(&blocked) == 0 && actor->_energy == energy &&
+              actor->_missiles_list.size() == missiles, "target direction cannot bypass valid player reticle scope");
     }
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);
     return failures ? 1 : 0;

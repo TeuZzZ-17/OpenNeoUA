@@ -4190,23 +4190,23 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->gun_angle = parser.stof(p2, 0);
     }
-    else if ( !StriCmp(p1, "scope_max_down") || !StriCmp(p1, "scope_max_up") )
+    else if ( !StriCmp(p1, "scope_angle_min_max") )
     {
-        float minimum = 0.0f, maximum = 0.0f;
-        const bool valid = p2.size() > 1 && p2.back() == '%' &&
-            p2.find('_') == std::string::npos &&
-            World::ParseFloatRangeValue(p2.substr(0, p2.size() - 1), minimum, maximum) &&
-            minimum >= 0.0f && minimum <= 100.0f;
+        float minimum = 0.0f, maximum = 0.0f, unused = 0.0f;
+        const size_t separator = p2.find('_');
+        const bool valid = separator != std::string::npos &&
+            p2.find('_', separator + 1) == std::string::npos &&
+            World::ParseFloatRangeValue(p2.substr(0, separator), minimum, unused) &&
+            World::ParseFloatRangeValue(p2.substr(separator + 1), maximum, unused) &&
+            minimum >= -100.0f && maximum <= 100.0f && minimum <= maximum;
         if ( !valid )
         {
-            ypa_log_out("ERROR: vehicle %d %s='%s' must be a percentage from 0%% to 100%%.\n",
+            ypa_log_out("ERROR: vehicle %d %s='%s' must be min_max references with -100 <= min <= max <= 100.\n",
                         _vhclID, p1.c_str(), p2.c_str());
             return ScriptParser::RESULT_BAD_DATA;
         }
-        if ( !StriCmp(p1, "scope_max_down") )
-            _vhcl->scope_max_down = minimum;
-        else
-            _vhcl->scope_max_up = minimum;
+        _vhcl->scope_angle_min_max = {{minimum, maximum}};
+        _vhcl->scope_angle_min_max_set = true;
     }
     else if ( !StriCmp(p1, "num_weapons") )
     {

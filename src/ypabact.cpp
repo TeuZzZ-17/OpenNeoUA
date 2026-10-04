@@ -2335,6 +2335,9 @@ static bool ypabact_IsLaserAimTarget(NC_STACK_ypabact *shooter, NC_STACK_ypabact
     if ( !shooter )
         return true;
 
+    if ( !shooter->IsPrimaryWeaponElevationAllowed(unit->_position - shooter->_position) )
+        return false;
+
     if ( unit->_owner == World::OWNER_0 || unit->_owner == shooter->_owner )
         return false;
 
@@ -9917,6 +9920,9 @@ static bool ypabact_IsValidMissileMultiTarget(NC_STACK_ypabact *launcher, NC_STA
     if ( !launcher || !target || launcher == target || target->_isDummy || !launcher->getBACT_pWorld() )
         return false;
 
+    if ( !launcher->IsPrimaryWeaponElevationAllowed(target->_position - launcher->_position) )
+        return false;
+
     if ( target->IsInvisibleUnrevealed() )
         return false;
 
@@ -12257,6 +12263,9 @@ static bool ypabact_IsLaserSecondaryTargetCandidate(NC_STACK_ypabact *shooter, N
     if ( !shooter || unit->_owner == World::OWNER_0 )
         return false;
 
+    if ( !shooter->IsPrimaryWeaponElevationAllowed(unit->_position - shooter->_position) )
+        return false;
+
     if ( friendly )
         return ypabact_IsLaserFriendlyToShooter(shooter, unit);
 
@@ -14207,22 +14216,24 @@ bool NC_STACK_ypabact::IsPrimaryWeaponElevationAllowed(const vec3d &direction) c
         return true;
 
     const World::TVhclProto &proto = _world->GetVhclProtos().at(_vehicleID);
-    if ( proto.scope_max_down < 0.0f && proto.scope_max_up < 0.0f )
+    if ( !proto.scope_angle_min_max_set )
         return true;
 
-    // World Y points down. Hull-local pitch follows the reticle's vertical
-    // travel independently of its lateral position, on slopes and under roll.
+    // World Y points down. Compare hull-local vertical aim with the same
+    // vanilla reticle offsets for the player and AI, independent of lateral aim.
     const vec3d local = _rotation.Transform(direction == vec3d() ? _rotation.AxisZ() : direction);
     if ( !std::isfinite(local.x) || !std::isfinite(local.y) || !std::isfinite(local.z) )
         return false;
     float corW, corH;
     GFX::Engine.getAspectCorrection(corW, corH, true);
     const double pitch = std::atan2(-local.y, local.z);
-    const double endpointTolerance = 0.0000001; // Inclusive bounds despite floating-point roundoff.
-    const double downPitch = std::atan(proto.scope_max_down * 0.01 * USER_GROUND_AIM_MIN * corH);
-    const double upPitch = std::atan(proto.scope_max_up * 0.01 * USER_GROUND_AIM_MAX * corH);
-    return (proto.scope_max_down < 0.0f || pitch >= downPitch - endpointTolerance) &&
-           (proto.scope_max_up < 0.0f || pitch <= upPitch + endpointTolerance);
+    const auto referencePitch = [corH](float reference) {
+        const double travel = reference < 0.0f ? -USER_GROUND_AIM_MIN : USER_GROUND_AIM_MAX;
+        return std::atan(reference * 0.01 * travel * corH);
+    };
+    constexpr double EndpointTolerance = 0.0000001; // Inclusive bounds despite roundoff.
+    return pitch >= referencePitch(proto.scope_angle_min_max[0]) - EndpointTolerance &&
+           pitch <= referencePitch(proto.scope_angle_min_max[1]) + EndpointTolerance;
 }
 
 bool NC_STACK_ypabact::IsPlayerPrimaryWeaponElevationAllowed() const
@@ -14233,10 +14244,13 @@ bool NC_STACK_ypabact::IsPlayerPrimaryWeaponElevationAllowed() const
 size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 {
     // Gate before laser requests, cadence, energy, visuals or projectile creation.
-    // Player permission follows the reticle; AI permission follows its target aim.
-    if ( !((_oflags & BACT_OFLAG_USERINPT)
-            ? IsPlayerPrimaryWeaponElevationAllowed()
-            : IsPrimaryWeaponElevationAllowed(arg->direction)) )
+    // Player aim and the actual target must both be inside the same scope.
+    if ( (_oflags & BACT_OFLAG_USERINPT) && !IsPlayerPrimaryWeaponElevationAllowed() )
+        return 0;
+    const vec3d scopeAim = arg->tgType == BACT_TGT_TYPE_UNIT && arg->target.pbact
+        ? arg->target.pbact->_position - _position
+        : (arg->tgType == BACT_TGT_TYPE_CELL ? arg->tgt_pos - _position : arg->direction);
+    if ( !IsPrimaryWeaponElevationAllowed(scopeAim) )
         return 0;
 
     if ( IsActiveDebuffStunFireBlocked() )
@@ -18020,6 +18034,9 @@ static bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponI
          !ypabact_IsValidWeaponId(bact, weaponId) )
         return false;
 
+    if ( !bact->IsPrimaryWeaponElevationAllowed(arg->pos - bact->_position) )
+        return false;
+
     const World::TWeapProto &wproto =
         bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId);
 
@@ -19378,6 +19395,8 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
                     {
                         if ( bct != this )
                         {
+                            if ( !IsPrimaryWeaponElevationAllowed(bct->_position - _position) )
+                                continue;
                             if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_status != BACT_STATUS_DEAD )
                             {
                                 if ( bct->IsInvisibleUnrevealed() )
@@ -19516,6 +19535,14 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
         return 1;
     }
 
+    if ( _secndTtype == BACT_TGT_TYPE_UNIT && _secndT.pbact &&
+         !IsPrimaryWeaponElevationAllowed(_secndT.pbact->_position - _position) )
+    {
+        setTarget_msg clearTarget = {};
+        clearTarget.tgt_type = BACT_TGT_TYPE_NONE;
+        clearTarget.priority = 1;
+        SetTarget(&clearTarget);
+    }
     sub_4843BC(NULL, a3a);
     if ( (_oflags & BACT_OFLAG_USERINPT) && _world )
         _world->_hudMissileMultiLockTargets.clear();
