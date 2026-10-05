@@ -38,6 +38,10 @@ public:
     virtual size_t SetPosition(bact_arg80 *arg);
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual size_t CollisionWithBact(int arg);
+    void HandleShapeUnitCollision(NC_STACK_ypabact *other, const vec3d &normal);
+    void HandleShapeWorldCollision(const Collision::Contact &contact) override;
+    size_t HandleShapeUnitContact(const Collision::Contact &contact, int frameTime) override;
+    void BeginWorldCollisionAvoidance(const vec3d &normal);
     virtual void Recoil(bact_arg88 *arg);
     virtual void Renew();
     virtual size_t CheckFireAI(bact_arg101 *arg);
@@ -72,6 +76,7 @@ public:
     static constexpr const char * __ClassName = "ypatank.class";
 
 protected:
+    void BeginUnitCollisionAvoidance(float angle, bool right, bool mustPass);
     uint8_t _tankFlags;
     int     _tankWaitCount;
     vec3d   _tankCollisionVector;

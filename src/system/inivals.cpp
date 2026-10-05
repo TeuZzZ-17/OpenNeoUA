@@ -317,7 +317,7 @@ Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", C
 // recoil/random-spread reduction. Zero disables all three effects; values above
 // one may strengthen braking while weapon modifiers remain capped at 100%.
 Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenNeoUA: one global presentation envelope shared by Weapon recoil and MGUN visual recoil.
+// OpenNeoUA: global presentation envelope for Weapon recoil.
 // Missing values preserve the current instant kick/no-hold/exponential-style return feel.
 Common::Ini::Key IniConf::GameRecoilKickTime("game.recoil_kick_time", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRecoilHoldTime("game.recoil_hold_time", Common::Ini::KT_WORD, std::string("0"));

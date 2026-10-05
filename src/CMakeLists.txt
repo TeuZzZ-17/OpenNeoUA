@@ -80,6 +80,7 @@ set(SOURCES
     world/blacksecttint.cpp
     world/energyfx.cpp
     world/grounddecal.cpp
+    world/collision_shape.cpp
     world/weapontracer.cpp
     world/luaevents.cpp
     world/parsers.cpp
@@ -109,6 +110,7 @@ set(SOURCES
 
 find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
+add_subdirectory(third_party/bullet)
 
 pkg_search_module(SDL2 REQUIRED sdl2)
 link_directories(${SDL2_LIBRARY_DIRS})
@@ -178,6 +180,7 @@ target_link_libraries(
 
     PkgConfig::FFMPEG
     Threads::Threads
+    OpenNeoUACollision
 )
 
 if(WIN32)

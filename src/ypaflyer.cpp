@@ -1103,7 +1103,8 @@ void NC_STACK_ypaflyer::User_layer(update_msg *arg)
                 arg137.field_30 = 0;
                 arg137.collisions = v43;
 
-                _world->ypaworld_func137(&arg137);
+                if (HasCollisionShape()) GetShapeWorldContact(&arg137);
+                else _world->ypaworld_func137(&arg137);
 
                 if ( arg137.coll_count )
                 {
@@ -1191,6 +1192,7 @@ void NC_STACK_ypaflyer::Move(move_msg *arg)
     }
 
     _old_pos = _position;
+    const mat3x3 shapeOldRotation = _rotation;
 
     float v46;
 
@@ -1236,6 +1238,8 @@ void NC_STACK_ypaflyer::Move(move_msg *arg)
         _position += _fly_dir * _fly_dir_length * arg->field_0 * 6.0;
 
     CorrectPositionInLevelBox(NULL);
+
+    ResolveShapeMovement(_old_pos, shapeOldRotation);
 
     _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;

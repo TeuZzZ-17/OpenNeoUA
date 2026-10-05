@@ -127,6 +127,10 @@ std::string correctSeparatorAndExt(std::string str)
     std::replace(str.begin(), str.end(), '/', '\\');
 
     size_t pos = str.rfind('.');
+    // New profiles keep their explicit extension; legacy asset names retain
+    // the existing DOS three-character mapping below.
+    if (pos != std::string::npos && !StriCmp(str.substr(pos), ".collision"))
+        return str;
     if (pos != std::string::npos && (str.length() - pos - 1) > 3)
         str.resize(pos + 3 + 1);
     return str;

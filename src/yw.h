@@ -2336,6 +2336,7 @@ friend class World::Parsers::SaveSuperBombParser;
 friend class World::Parsers::SaveLuaScriptParser;
 
 public:
+    std::unique_ptr<Collision::Scene> _collisionScene;
     enum
     {
         NUM_BUILD_PROTO = 128,
