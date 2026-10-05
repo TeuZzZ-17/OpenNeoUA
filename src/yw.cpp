@@ -4559,6 +4559,9 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
     fragment->_airconst_static = physical->airconst;
     fragment->_radius = physical->radius;
     fragment->_viewer_radius = physical->radius;
+    // Dead-flight terrain contact still uses the legacy vertical clearance. Keep
+    // its old minimum, but let larger authored fragment radii increase it.
+    fragment->_overeof = std::max(fragment->_overeof, physical->radius);
     // Inline fragments remain visual/world-physics only unless gameplay impact
     // damage is explicitly authored. This keeps existing fragments unchanged.
     fragment->setBACT_bactCollisions(physical->impact_damage > 0);
@@ -4603,6 +4606,30 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
 
     bact_arg80 position;
     position.pos = pos;
+
+    // A ground-destruction fragment can inherit a source position that already
+    // touches the terrain. Give it only the clearance needed to start its authored
+    // launch instead of letting the first dead-flight collision end it immediately.
+    if ( config.trigger == World::TChainFXConfig::TRIGGER_DESTROYED )
+    {
+        const float clearance = std::max(fragment->_overeof, fragment->_radius);
+        const float probeDistance = std::max(50.0f, clearance * 2.0f);
+
+        ypaworld_arg136 ground = {};
+        ground.stPos = position.pos - vec3d::OY(probeDistance);
+        ground.vect = vec3d::OY(probeDistance * 2.0f);
+        ground.flags = 0;
+        ypaworld_func136(&ground);
+
+        if ( ground.isect )
+        {
+            const float safeY = ground.isectPos.y - clearance - 1.0f;
+            if ( position.pos.y > safeY &&
+                 fabs(position.pos.y - ground.isectPos.y) <= probeDistance )
+                position.pos.y = safeY;
+        }
+    }
+
     position.field_C = 0;
     fragment->SetPosition(&position);
     ypaworld_func134(fragment);
