@@ -1091,19 +1091,6 @@ static constexpr int RECOIL_DEFAULT_HOLD_TIME_MS = 0;
 // The old 0.14 s exponential offset has ~95% returned after 0.42 s.
 static constexpr int RECOIL_DEFAULT_RETURN_TIME_MS = 420;
 static constexpr int RECOIL_MAX_PHASE_TIME_MS = 5000;
-static constexpr int RECOIL_COCKPIT_SHAKE_DURATION_MS = 220;
-static constexpr float MGUN_RECOIL_FEEDBACK_DEGREES_PER_UNIT = 1.2f;
-static constexpr float MGUN_RECOIL_FEEDBACK_MAX_DEGREES = 12.0f;
-// External/third-person MGUN body recoil is intentionally softened. Its authored
-// intensity is independent from cockpit SHK, which uses mgun_recoil_cockpit.
-static constexpr float MGUN_EXTERNAL_VISUAL_RECOIL_SCALE = 0.35f;
-// Preserve the smoother multi-axis cockpit vibration used by the earlier SHK
-// implementation. These affect cockpit camera shake only; MGUN body feedback
-// itself is render-only and never enters movement physics.
-static constexpr float MGUN_RECOIL_SHAKE_AXIS_X = 0.35f;
-static constexpr float MGUN_RECOIL_SHAKE_AXIS_Y = 0.20f;
-static constexpr float MGUN_RECOIL_SHAKE_AXIS_Z = 0.35f;
-
 static int ypabact_ReadRecoilPhaseTimeMs(Common::Ini::Key &key, int dflt)
 {
     float parsed = ypabact_ReadNonNegativeFloatIni(key, (float)dflt);
@@ -1213,16 +1200,9 @@ static float ypabact_GetRecoilVisualPitch(const NC_STACK_ypabact *bact)
     if ( !bact || ypabact_IsPlayerGunRecoilFirstPersonView(bact) )
         return 0.0f;
 
-    if ( bact->_recoilVisualRenderOnly )
-    {
-        if ( bact->IsCockpitCameraActive() )
-            return 0.0f;
-    }
-    else if ( bact->_bact_type != BACT_TYPES_TANK &&
-              bact->_bact_type != BACT_TYPES_GUN )
-    {
+    if ( bact->_bact_type != BACT_TYPES_TANK &&
+         bact->_bact_type != BACT_TYPES_GUN )
         return 0.0f;
-    }
 
     float pitch = 0.0f;
     ypabact_EvaluateRecoilVisual(bact, NULL, &pitch);
@@ -1263,24 +1243,6 @@ static void ypabact_StartRecoilVisual(NC_STACK_ypabact *bact,
     bact->_recoilVisualReturnEndTime = bact->_recoilVisualHoldEndTime + ret;
 }
 
-static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact);
-
-static float ypabact_GetMgunRecoilFeedbackDegrees(const NC_STACK_ypabact *bact)
-{
-    if ( !bact || bact->_mgun_recoil_cockpit <= 0.0f )
-        return 0.0f;
-
-    return std::min(
-        bact->_mgun_recoil_cockpit * MGUN_RECOIL_FEEDBACK_DEGREES_PER_UNIT,
-        MGUN_RECOIL_FEEDBACK_MAX_DEGREES);
-}
-
-static bool ypabact_ShouldUsePlayerMgunRecoilShake(NC_STACK_ypabact *bact)
-{
-    return bact && bact->_mgun_recoil_cockpit > 0.0f &&
-           bact->IsCockpitCameraActive();
-}
-
 static bool ypabact_IsAiTankRecoilUnit(const NC_STACK_ypabact *unit)
 {
     return unit &&
@@ -1304,14 +1266,6 @@ static bool ypabact_ShouldRenderRecoilVisualOffset(const NC_STACK_ypabact *unit)
 {
     if ( !unit )
         return false;
-
-    if ( unit->_recoilVisualRenderOnly )
-    {
-        // Unified MGUN recoil: the local cockpit receives SHK only. Every
-        // external/third-person representation may show the model kick, but the
-        // logical Vehicle transform and velocity remain untouched.
-        return !unit->IsCockpitCameraActive();
-    }
 
     if ( !ypabact_UsesRenderOnlyRecoilTranslation(unit) )
         return false;
@@ -2128,34 +2082,6 @@ static void ypabact_TriggerPlayerLaunchShake(NC_STACK_ypabact *bact,
         &wproto.shk_launch_player);
 }
 
-static void ypabact_TriggerPlayerMgunRecoilShake(NC_STACK_ypabact *bact)
-{
-    if ( !ypabact_ShouldUsePlayerMgunRecoilShake(bact) )
-        return;
-
-    const float recoilDegrees = ypabact_GetMgunRecoilFeedbackDegrees(bact);
-    if ( recoilDegrees <= 0.0f )
-        return;
-
-    // Reuse the existing local SHK carrier. Cockpit feedback is tuned only by
-    // mgun_recoil_cockpit and remains independent from external model recoil.
-    bact->_mgun_recoil_shake.slot = 1;
-    bact->_mgun_recoil_shake.mag0 = recoilDegrees * C_PI_180;
-    bact->_mgun_recoil_shake.mag1 = 0.0f;
-    bact->_mgun_recoil_shake.time = RECOIL_COCKPIT_SHAKE_DURATION_MS;
-    bact->_mgun_recoil_shake.radius = 0.0f;
-    bact->_mgun_recoil_shake.mute = 0.0f;
-    bact->_mgun_recoil_shake.pos = vec3d(
-        MGUN_RECOIL_SHAKE_AXIS_X,
-        MGUN_RECOIL_SHAKE_AXIS_Y,
-        MGUN_RECOIL_SHAKE_AXIS_Z);
-
-    ypabact_TriggerLocalShakeCarrier(
-        bact,
-        &bact->_mgun_recoil_shake_carrier,
-        &bact->_mgun_recoil_shake);
-}
-
 static void ypabact_UpdateMimicSoundCarrier(NC_STACK_ypabact *bact)
 {
     if ( !bact || bact->_mimic_soundcarrier.Sounds.empty() )
@@ -2810,7 +2736,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _recoilVisualKickEndTime = 0;
     _recoilVisualHoldEndTime = 0;
     _recoilVisualReturnEndTime = 0;
-    _recoilVisualRenderOnly = false;
     _recoilAiRecoveryEndTime = 0;
     _recoilPlayerRecoveryEndTime = 0;
     _recoilPushVel = vec3d(0.0, 0.0, 0.0);
@@ -2837,8 +2762,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _debuff_soundcarrier.Clear();
     _player_launch_shake_carrier.Clear();
     _laser_launch_soundcarrier.Clear();
-    _mgun_recoil_shake = TSndFxPosParam();
-    _mgun_recoil_shake_carrier.Clear();
     _mimic_soundcarrier.Clear();
 
     _vp_active = 0;
@@ -2885,8 +2808,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _num_mguns = 1;
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
-    _mgun_recoil = 0.0f;
-    _mgun_recoil_cockpit = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
@@ -3059,7 +2980,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _recoilVisualKickEndTime = 0;
     _recoilVisualHoldEndTime = 0;
     _recoilVisualReturnEndTime = 0;
-    _recoilVisualRenderOnly = false;
     _recoilAiRecoveryEndTime = 0;
     _recoilPlayerRecoveryEndTime = 0;
     _recoilPushVel = vec3d(0.0, 0.0, 0.0);
@@ -3122,8 +3042,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _debuff_soundcarrier.Clear();
     _player_launch_shake_carrier.Clear();
     _laser_launch_soundcarrier.Clear();
-    _mgun_recoil_shake = TSndFxPosParam();
-    _mgun_recoil_shake_carrier.Clear();
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;
@@ -3336,12 +3254,12 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
 
 size_t NC_STACK_ypabact::Deinit()
 {
+    if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _deinitInProgress = true;
     SFXEngine::SFXe.StopCarrier(&_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_player_launch_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_launch_soundcarrier);
-    SFXEngine::SFXe.StopCarrier(&_mgun_recoil_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_laser_hit_soundcarrier);
@@ -4035,6 +3953,9 @@ void NC_STACK_ypabact::Update(update_msg *arg)
             _heliLandingVisualOffsetY = 0.0f;
     }
 
+    ResolveShapeMovement(_position, _rotation);
+    const vec3d shapeOldPosition = _position;
+    const mat3x3 shapeOldRotation = _rotation;
     UpdateActiveDebuff(arg);
     UpdateDamageFX(arg);
     UpdateDecorationFX(arg);
@@ -4056,6 +3977,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateVerticalLaser(arg);
     UpdateAoePush(arg);
     UpdateRecoilPush(arg);
+    ResolveShapeMovement(shapeOldPosition, shapeOldRotation, arg->frameTime);
     UpdateKamikaze(arg);
     UpdateUnitGuns(arg);
 
@@ -4188,7 +4110,6 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
         ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
-        ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
     }
 
     ypabact_UpdateMimicSoundCarrier(this);
@@ -4860,8 +4781,7 @@ static const float AOE_PUSH_MAX_STEP = 80.0f;
 // 1=100, 4=1600, 6=3600, 10=10000.
 static const float CONFIGURED_PUSH_MAX_INTENSITY = 10.0f;
 static const float CONFIGURED_PUSH_DISTANCE_PER_SQUARED_LEVEL = 100.0f;
-// Mechanical recoil belongs to normal Weapon recoil only. MGUN reuses the
-// same presentation distance scale, but never enters this movement integrator.
+// Mechanical recoil belongs to normal Weapon recoil.
 static const float RECOIL_MECHANICAL_TAU = 0.14f;
 static const int RECOIL_AI_TANK_RECOVERY_MS = 220;
 static const int RECOIL_PLAYER_TANK_RECOVERY_MS = 220;
@@ -5268,7 +5188,6 @@ void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
         return;
 
     // Normal Weapon recoil retains its established physical path.
-    _recoilVisualRenderOnly = false;
     ypabact_StartRecoilVisual(this, recoilDir, recoil);
 
     if ( _bact_type == BACT_TYPES_TANK )
@@ -5294,27 +5213,6 @@ void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
     // unchanged for normal Weapon recoil.
     _recoilPushVel += recoilDir *
         ((recoil * RECOIL_DISTANCE_PER_UNIT) / RECOIL_MECHANICAL_TAU);
-}
-
-void NC_STACK_ypabact::ApplyMgunRecoilFeedback(const vec3d &dir, float recoil)
-{
-    recoil = ypabact_ClampRecoil(recoil);
-    if ( recoil <= 0.0f )
-        return;
-
-    // Preserve the existing tank presentation gate while removing MGUN from
-    // mechanical recoil entirely. An airborne tank therefore keeps the old
-    // no-recoil presentation, but no Vehicle ever receives MGUN push velocity.
-    if ( _bact_type == BACT_TYPES_TANK && !(_status_flg & BACT_STFLAG_LAND) )
-        return;
-
-    vec3d recoilDir;
-    if ( !ypabact_ResolveRecoilDirection(this, dir, &recoilDir) )
-        return;
-
-    _recoilVisualRenderOnly = true;
-    ypabact_StartRecoilVisual(this, recoilDir,
-                              recoil * MGUN_EXTERNAL_VISUAL_RECOIL_SCALE);
 }
 
 void NC_STACK_ypabact::UpdateAoePush(update_msg *arg)
@@ -7168,7 +7066,8 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
                 arg137.field_30 = 0;
                 arg137.coll_max = 10;
 
-                if ( HasManualCompoundCollision() )
+                if (HasCollisionShape()) GetShapeWorldContact(&arg137);
+                else if ( HasManualCompoundCollision() )
                 {
                     // Heli player movement must use the same authored body as
                     // unit/hit collisions, rather than the fixed 32-unit probe.
@@ -7304,6 +7203,7 @@ void NC_STACK_ypabact::SetNewMaster(newMaster_msg *arg)
 void NC_STACK_ypabact::Move(move_msg *arg)
 {
     _old_pos = _position;
+    const mat3x3 shapeOldRotation = _rotation;
 
     float weight;
 
@@ -7359,6 +7259,8 @@ void NC_STACK_ypabact::Move(move_msg *arg)
 
     CorrectPositionInLevelBox(NULL);
 
+    ResolveShapeMovement(_old_pos, shapeOldRotation);
+
     _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
 
@@ -7391,6 +7293,92 @@ void NC_STACK_ypabact::Move(move_msg *arg)
 
     if ( _soundcarrier.Sounds[0].PSample )
         _soundcarrier.Sounds[0].Pitch += (_soundcarrier.Sounds[0].PSample->SampleRate + _soundcarrier.Sounds[0].Pitch) * v43;
+}
+
+void NC_STACK_ypabact::ResolveShapeMovement(const vec3d &oldPosition, const mat3x3 &oldRotation, int frameTime)
+{
+    if (_world && _world->_collisionScene)
+        _world->_collisionScene->Resolve(this, oldPosition, oldRotation, frameTime);
+}
+
+void NC_STACK_ypabact::GetShapeWorldContact(ypaworld_arg137 *contacts)
+{
+    contacts->coll_count = 0;
+    Collision::Contact hit;
+    if (!_world || !_world->_collisionScene || contacts->coll_max <= 0 ||
+        !_world->_collisionScene->TakeWorldContact(this, &hit)) return;
+    contacts->collisions[0].pos1 = hit.point;
+    contacts->collisions[0].pos2 = -hit.normal;
+    contacts->coll_count = 1;
+    // The existing landing/recoil code needs the impact speed before CCD
+    // removed its component into the surface.
+    _fly_dir_length = hit.incomingVelocity.length();
+    if (_fly_dir_length > 1e-8) _fly_dir = hit.incomingVelocity / _fly_dir_length;
+}
+
+void NC_STACK_ypabact::HandleShapeWorldCollision(const Collision::Contact &contact)
+{
+    const float speed = contact.incomingVelocity.length();
+    if (speed <= 1e-6) return;
+    if ((_status_flg & BACT_STFLAG_LAND) &&
+        (_bact_type == BACT_TYPES_TANK || _bact_type == BACT_TYPES_CAR))
+    {
+        vec3d normal = contact.normal; normal.y = 0;
+        if (normal.normalise() < 1e-6) return;
+        // Keep the original recoil attenuation, projected onto the tank's
+        // signed drive axis, so a wall impact gives a short backward bounce.
+        const vec3d reflected = contact.incomingVelocity - normal *
+            (2.0 * contact.incomingVelocity.dot(normal));
+        _fly_dir = _rotation.AxisZ();
+        _fly_dir_length = reflected.dot(_fly_dir) * (25.0 / (speed + 10.0));
+        _thraction = 0;
+    }
+    else
+    {
+        _fly_dir = contact.incomingVelocity / speed;
+        _fly_dir_length = speed;
+        bact_arg88 recoil; recoil.pos1 = -contact.normal;
+        Recoil(&recoil);
+    }
+    if (speed > 2.333333333333334f)
+        ypabact_StartSoundOnce(this, 5);
+}
+
+size_t NC_STACK_ypabact::HandleShapeUnitContact(const Collision::Contact &contact, int frameTime)
+{
+    if (!contact.actor || contact.actor->IsDestroyed() ||
+        contact.incomingVelocity.dot(contact.normal) >= -1e-6)
+        return 0;
+    if (!(_status_flg & BACT_STFLAG_BCRASH))
+    {
+        ypabact_StartSoundOnce(this, 6);
+        _status_flg |= BACT_STFLAG_BCRASH;
+        if (getBACT_viewer())
+        {
+            yw_arg180 effect;
+            effect.field_4 = 1.0;
+            effect.field_8 = contact.point.x;
+            effect.field_C = contact.point.z;
+            effect.effects_type = 5;
+            _world->ypaworld_func180(&effect);
+        }
+    }
+    // Reuse the unit rebound before the landing controller consumes the
+    // world contact. The accepted shape position remains outside both bodies.
+    _fly_dir_length = contact.incomingVelocity.length();
+    if (_fly_dir_length > 1e-8) _fly_dir = contact.incomingVelocity / _fly_dir_length;
+    if (fabs(_fly_dir_length) < 0.1) _fly_dir_length = 1.0;
+    bact_arg88 recoil;
+    recoil.pos1 = contact.actor->GetBodyPosition() - GetBodyPosition();
+    if (recoil.pos1.normalise() < 1e-6 || recoil.pos1.dot(_fly_dir) < 0)
+        recoil.pos1 = -contact.normal;
+    const vec3d safe = _position;
+    Recoil(&recoil);
+    _position = safe; // Mixed sphere/shape contacts also keep the accepted pose.
+    _target_vec = _fly_dir;
+    _AI_time1 = _clock;
+    _AI_time2 = _clock;
+    return 1;
 }
 
 bool NC_STACK_ypabact::ApplyUnifiedAICombatDistance(float distance, bool *startedRetreat)
@@ -12063,6 +12051,17 @@ static bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapPr
     NC_STACK_ypabact *best = NULL;
     float bestAlong = range + 1.0f;
     vec3d bestHitPoint;
+    if (world->_collisionScene)
+        for (auto *bct : world->_collisionScene->ShapeTargets(origin, origin + dir * range, std::max(0.0f, wproto.radius)))
+        {
+            if (!ypabact_IsLaserDamageTarget(shooter, bct)) continue;
+            Collision::Contact contact;
+            if (world->_collisionScene->Trace(bct, origin, origin + dir * range, std::max(0.0f, wproto.radius), &contact))
+            {
+                const float along = contact.fraction * range;
+                if (along < bestAlong) { best = bct; bestAlong = along; bestHitPoint = contact.point; }
+            }
+        }
 
     for (int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++)
     {
@@ -12076,7 +12075,7 @@ static bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapPr
 
             for (NC_STACK_ypabact *bct : cell.unitsList)
             {
-                if ( !ypabact_IsLaserDamageTarget(shooter, bct) )
+                if (bct->HasCollisionShape() || !ypabact_IsLaserDamageTarget(shooter, bct))
                     continue;
 
                 float weaponRadius = wproto.radius > 0.0f ? wproto.radius : 1.0f;
@@ -16131,7 +16130,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                     }
                 }
 
-                if ( _oflags & BACT_OFLAG_VIEWER )
+                if ( (_oflags & BACT_OFLAG_VIEWER) || HasCollisionShape() )
                 {
                     ypaworld_arg137 arg137;
                     arg137.pos = _fly_dir * _fly_dir_length * v94 * 6.0 + _position;
@@ -16141,7 +16140,8 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                     arg137.field_30 = 0;
                     arg137.coll_max = 10;
 
-                    _world->ypaworld_func137(&arg137);
+                    if (HasCollisionShape()) GetShapeWorldContact(&arg137);
+                    else _world->ypaworld_func137(&arg137);
 
                     if ( arg137.coll_count )
                     {
@@ -16211,7 +16211,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 
                             if ( v98.y >= 0.6 && v24 )
                             {
-                                _position.y = _old_pos.y;
+                                if (!HasCollisionShape()) _position.y = _old_pos.y;
 
                                 _status_flg |= BACT_STFLAG_LAND;
                                 resetFallDamageContact();
@@ -16247,7 +16247,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                         }
                         else
                         {
-                            _position.y = _old_pos.y;
+                            if (!HasCollisionShape()) _position.y = _old_pos.y;
                             _fly_dir_length = 0;
                             _reb_count = 0;
                             _status_flg |= BACT_STFLAG_LAND;
@@ -16708,6 +16708,17 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
     if ( !other || other == this )
         return false;
 
+    if (HasCollisionShape() || other->HasCollisionShape())
+    {
+        Collision::Contact contact;
+        if (!_world || !_world->_collisionScene ||
+            !_world->_collisionScene->PairContact(this, other, &contact)) return false;
+        if (selfCenter) *selfCenter = contact.point + contact.normal * contact.depth;
+        if (otherCenter) *otherCenter = contact.point - contact.normal;
+        if (penetration) *penetration = contact.depth;
+        return true;
+    }
+
     vec3d selfOrigin = _position;
     vec3d otherOrigin = other->_position;
     if ( getBACT_collNodes() && getBACT_viewer() )
@@ -16764,6 +16775,7 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
 
 bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
 {
+    if (HasCollisionShape()) return false; // The common shape solver includes stationary genesis.
     if ( _status != BACT_STATUS_CREATE || !getBACT_bactCollisions() || !_pSector ||
          IsDestroyed() || !ypabact_IsGenesisSeparationVehicle(this) )
         return false;
@@ -16778,6 +16790,7 @@ bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
 
     for (NC_STACK_ypabact *other : _world->SnapshotBacts(_pSector->unitsList))
     {
+        if (other && other->HasCollisionShape()) continue; // Common solver owns mixed contacts too.
         if ( !other || other == this || !ypabact_IsGenesisSeparationVehicle(other) ||
              other->IsDestroyed() || other->_status == BACT_STATUS_DEAD )
             continue;
@@ -16859,6 +16872,7 @@ bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
 
 float NC_STACK_ypabact::GetCollisionBroadRadius()
 {
+    if (HasCollisionShape()) return _collisionShape->radius;
     float broadRadius = UsesLegacyRadiusCollision() ? _radius : 0.0f;
     World::rbcolls *colls = getBACT_collNodes();
     if ( !colls )
@@ -16956,6 +16970,11 @@ void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int f
 
 size_t NC_STACK_ypabact::CollisionWithBact(int arg)
 {
+    Collision::Contact shapeContact;
+    if (_world && _world->_collisionScene &&
+        _world->_collisionScene->TakeUnitContact(this, &shapeContact))
+        return HandleShapeUnitContact(shapeContact, arg);
+    if (HasCollisionShape()) return 0; // Swept contacts are resolved by Move/shared Update.
     bool isViewer = getBACT_viewer();
     if ( _fly_dir_length == 0.0 || !_pSector )
         return 0;
@@ -16976,6 +16995,8 @@ size_t NC_STACK_ypabact::CollisionWithBact(int arg)
     for ( NC_STACK_ypabact *bnode : _world->SnapshotBacts(_pSector->unitsList) )
     {
         const bool plasma = CanCollectPlasmaFrom(bnode);
+
+        if (bnode && bnode->HasCollisionShape()) continue;
 
         if ( !bnode || bnode == this || bnode->_bact_type == BACT_TYPES_MISSLE ||
              (bnode->IsDestroyed() && !plasma) )
@@ -17117,7 +17138,9 @@ void NC_STACK_ypabact::Recoil(bact_arg88 *arg)
         {
             if ( _fly_dir_length != 0.0 )
             {
-                _position = _old_pos;
+                // CCD already chose a safe pose for the current orientation.
+                // Restoring the old centre can undo its wall clearance.
+                if (!HasCollisionShape()) _position = _old_pos;
 
                 float v4 = _fly_dir.dot(arg->pos1) * 2.0;
 
@@ -17666,6 +17689,9 @@ void NC_STACK_ypabact::ypabact_func95(IDVPair *arg)
 // Reset
 void NC_STACK_ypabact::Renew()
 {
+    if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
+    _collisionShape.reset();
+    _shapeCollisionDamageStamp = -1;
     ClearPlayerSprintPitchExtra();
     if ( _inlinePhysicalFX )
     {
@@ -17732,8 +17758,6 @@ void NC_STACK_ypabact::Renew()
     _num_mguns = 1;
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
-    _mgun_recoil = 0.0f;
-    _mgun_recoil_cockpit = 0.0f;
     _mgun_tracer = World::TWeaponTracerConfig();
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
@@ -17830,7 +17854,6 @@ void NC_STACK_ypabact::Renew()
     _recoilVisualKickEndTime = 0;
     _recoilVisualHoldEndTime = 0;
     _recoilVisualReturnEndTime = 0;
-    _recoilVisualRenderOnly = false;
     _heliLandingVisualOffsetY = 0.0f;
     _recoilAiRecoveryEndTime = 0;
     _recoilPlayerRecoveryEndTime = 0;
@@ -18820,7 +18843,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
     // Preserve the vanilla path exactly when the authored MGUN cost is absent
     // and no local pulse timing is needed. The new parameter reuses the same
-    // effective cadence as the existing MGUN pulse/recoil timing.
+    // effective cadence as the existing MGUN pulse timing.
     if ( _mgun_fire_energy_cost_defined || emitLocalMgunPulse )
     {
         if ( vehicleTimedMgun )
@@ -18871,13 +18894,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             // the old undamaged request rate.
             if ( vehicleTimedMgun )
                 ypabact_StartVehicleFireVP(this, arg->field_10);
-
-            // Independent MGUN feedback controls. mgun_recoil drives only the
-            // external render-only model kick; mgun_recoil_cockpit drives only
-            // the local cockpit SHK. Neither path changes Vehicle movement.
-            if ( _mgun_recoil > 0.0f )
-                ApplyMgunRecoilFeedback(-_rotation.AxisZ(), _mgun_recoil);
-            ypabact_TriggerPlayerMgunRecoilShake(this);
 
             if ( vehicleTimedMgun )
                 ypabact_PlayVehicleMinigunPulse(this);
@@ -18970,151 +18986,170 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             }
         }
 
-        for(size_t i = 0; i < pCells.size(); i++)
+        std::vector<NC_STACK_ypabact *> minigunTargets;
+        for (auto *cell : pCells)
+            for (auto *actor : cell->unitsList) minigunTargets.push_back(actor);
+        if (_world->_collisionScene)
+            for (auto *actor : _world->_collisionScene->ShapeTargets(shotPos, shotPos + shotDir * minigunTraceRange, std::max(0.0f, _gun_radius)))
+                if (std::find(minigunTargets.begin(), minigunTargets.end(), actor) == minigunTargets.end())
+                    minigunTargets.push_back(actor);
+        for (NC_STACK_ypabact *cellUnit : minigunTargets)
         {
-            if ( i <= 0 || pCells[ i ] != pCells[ i - 1 ] )
+            if ( cellUnit != this && cellUnit->_bact_type != BACT_TYPES_MISSLE && cellUnit->_status != BACT_STATUS_DEAD )
             {
-                for ( NC_STACK_ypabact* &cellUnit : pCells[ i ]->unitsList )
+                int v89 = 0;
+                if (cellUnit->_bact_type == BACT_TYPES_GUN)
                 {
-                    if ( cellUnit != this && cellUnit->_bact_type != BACT_TYPES_MISSLE && cellUnit->_status != BACT_STATUS_DEAD )
+                    NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( cellUnit );
+                    v89 = gun->IsRoboGun();
+                }
+
+                if ( cellUnit->_bact_type != BACT_TYPES_GUN || !v89 || cellUnit->GetEffectiveShield() < 100.0f )
+                {
+                    if ( (_oflags & BACT_OFLAG_USERINPT || cellUnit->_owner != _owner) && (!v107 || cellUnit != _host_station) )
                     {
-                        int v89 = 0;
-                        if (cellUnit->_bact_type == BACT_TYPES_GUN)
+
+                        World::rbcolls *v93 = cellUnit->getBACT_collNodes();
+                        const bool targetManualCompound = cellUnit->HasManualCompoundCollision();
+                        const int targetLegacySlots =
+                            targetManualCompound && cellUnit->UsesLegacyRadiusCollision() ? 1 : 0;
+                        const mat3x3 targetRotationT =
+                            v93 ? cellUnit->_rotation.Transpose() : mat3x3::Ident();
+
+                        int v109;
+                        if ( v93 )
+                            v109 = targetLegacySlots + v93->roboColls.size();
+                        else
+                            v109 = 1;
+
+                        Collision::Contact shapeHit;
+                        const bool usesShape = cellUnit->HasCollisionShape();
+                        if (usesShape)
                         {
-                            NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( cellUnit );
-                            v89 = gun->IsRoboGun();
+                            if (!_world->_collisionScene->Trace(cellUnit, shotPos,
+                                  shotPos + shotDir * minigunTraceRange, std::max(0.0f, _gun_radius), &shapeHit)) continue;
+                            v109 = 1;
                         }
+                        int v22 = 0;
 
-                        if ( cellUnit->_bact_type != BACT_TYPES_GUN || !v89 || cellUnit->GetEffectiveShield() < 100.0f )
+                        for (int j = v109 - 1; j >= 0; j-- )
                         {
-                            if ( (_oflags & BACT_OFLAG_USERINPT || cellUnit->_owner != _owner) && (!v107 || cellUnit != _host_station) )
+                            vec3d v77;
+                            float v27;
+
+                            if (usesShape)
+                            { v77 = shotPos + shotDir * (shapeHit.fraction * minigunTraceRange); v27 = std::max(0.001f, _gun_radius); }
+                            else if ( v93 && (!targetManualCompound || j >= targetLegacySlots) )
                             {
+                                int sphereIndex = targetManualCompound ? j - targetLegacySlots : j;
+                                v77 = cellUnit->_position + targetRotationT.Transform( v93->roboColls[sphereIndex].coll_pos );
 
-                                World::rbcolls *v93 = cellUnit->getBACT_collNodes();
-                                const bool targetManualCompound = cellUnit->HasManualCompoundCollision();
-                                const int targetLegacySlots =
-                                    targetManualCompound && cellUnit->UsesLegacyRadiusCollision() ? 1 : 0;
-                                const mat3x3 targetRotationT =
-                                    v93 ? cellUnit->_rotation.Transpose() : mat3x3::Ident();
+                                v27 = v93->roboColls[sphereIndex].robo_coll_radius;
+                            }
+                            else
+                            {
+                                v77 = cellUnit->_position;
 
-                                int v109;
-                                if ( v93 )
-                                    v109 = targetLegacySlots + v93->roboColls.size();
-                                else
-                                    v109 = 1;
+                                v27 = cellUnit->_radius;
+                            }
 
-                                int v22 = 0;
+                            if ( !v93 || v27 >= 0.01 )
+                            {
+                                v121 = v27;
 
-                                for (int j = v109 - 1; j >= 0; j-- )
+                                vec3d v63 = v77 - shotOldPos;
+
+                                if ( usesShape || v63.dot( shotDir ) >= 0.3 )
                                 {
-                                    vec3d v77;
-                                    float v27;
+                                    vec3d v33 = shotDir * v63;
+                                    const float v111Sq = v63.square();
+                                    const float v110Sq = v33.square();
+                                    const float v37 = v27 + _gun_radius;
 
-                                    if ( v93 && (!targetManualCompound || j >= targetLegacySlots) )
+                                    if ( usesShape || (v37 > 0.0f && v37 * v37 > v110Sq) )
                                     {
-                                        int sphereIndex = targetManualCompound ? j - targetLegacySlots : j;
-                                        v77 = cellUnit->_position + targetRotationT.Transform( v93->roboColls[sphereIndex].coll_pos );
-
-                                        v27 = v93->roboColls[sphereIndex].robo_coll_radius;
-                                    }
-                                    else
-                                    {
-                                        v77 = cellUnit->_position;
-
-                                        v27 = cellUnit->_radius;
-                                    }
-
-                                    if ( !v93 || v27 >= 0.01 )
-                                    {
-                                        v121 = v27;
-
-                                        vec3d v63 = v77 - shotOldPos;
-
-                                        if ( v63.dot( shotDir ) >= 0.3 )
+                                        if ( usesShape || v110Sq + POW2(minigunTraceRange) > v111Sq )
                                         {
-                                            vec3d v33 = shotDir * v63;
-                                            const float v111Sq = v63.square();
-                                            const float v110Sq = v33.square();
-                                            const float v37 = v27 + _gun_radius;
+                                            // The exact distance is only needed after the cheap
+                                            // squared tests accept this collision sphere.
+                                            const float v111 = sqrtf(v111Sq);
+                                            float unitEntryDistance = v111;
+                                            if (!usesShape && !ypabact_GetRaySphereEntryDistance(
+                                                     shotPos, shotDir, v77, v37,
+                                                     &unitEntryDistance) )
+                                                continue;
 
-                                            if ( v37 > 0.0f && v37 * v37 > v110Sq )
+                                            if (usesShape) unitEntryDistance = shapeHit.fraction * minigunTraceRange;
+
+                                            // A solid world surface wins when it is reached
+                                            // before the target collision sphere. Preserve the
+                                            // existing MGUN multi-hit behavior for units that are
+                                            // all genuinely in front of that surface.
+                                            if ( minigunWorldHit &&
+                                                 unitEntryDistance >= minigunWorldHitDistance - 0.01f )
+                                                continue;
+
+                                            if ( !v22 )
                                             {
-                                                if ( v110Sq + POW2(minigunTraceRange) > v111Sq )
+                                                int energ;
+                                                if ( cellUnit->getBACT_inputting() || cellUnit->getBACT_viewer() )
                                                 {
-                                                    // The exact distance is only needed after the cheap
-                                                    // squared tests accept this collision sphere.
-                                                    const float v111 = sqrtf(v111Sq);
-                                                    float unitEntryDistance = v111;
-                                                    if ( !ypabact_GetRaySphereEntryDistance(
-                                                             shotPos, shotDir, v77, v37,
-                                                             &unitEntryDistance) )
-                                                        continue;
-
-                                                    // A solid world surface wins when it is reached
-                                                    // before the target collision sphere. Preserve the
-                                                    // existing MGUN multi-hit behavior for units that are
-                                                    // all genuinely in front of that surface.
-                                                    if ( minigunWorldHit &&
-                                                         unitEntryDistance >= minigunWorldHitDistance - 0.01f )
-                                                        continue;
-
-                                                    if ( !v22 )
-                                                    {
-                                                        int energ;
-                                                        if ( cellUnit->getBACT_inputting() || cellUnit->getBACT_viewer() )
-                                                        {
-                                                            float v39 = (mgunPower * arg->field_C) * (100.0 - cellUnit->GetEffectiveShield());
-                                                            energ = (v39 * 0.004);
-                                                        }
-                                                        else
-                                                        {
-
-                                                            float v41 = (mgunPower * arg->field_C) * (100.0 - cellUnit->GetEffectiveShield());
-                                                            energ = v41 / 100;
-                                                        }
-
-                                                        bact_arg84 v86;
-                                                        v86.unit = this;
-                                                        v86.energy = -energ;
-
-                                                        // The Deflect Buff stops MGUN damage without
-                                                        // spending a charge. The ray still hits normally,
-                                                        // so tracer/impact presentation stays unchanged.
-                                                        if ( energ && !cellUnit->HasDeflectBuff() )
-                                                            cellUnit->ModifyEnergy(&v86);
-                                                    }
-
-                                                    v22 = 1;
-
-                                                    vec3d minigunImpactPoint = cellUnit->_position;
-                                                    float minigunImpactDistance = v111;
-                                                    bool hasMinigunSpreadImpactPoint = false;
-
-                                                    if ( spreadX > 0.0f || spreadY > 0.0f )
-                                                    {
-                                                        if ( ypabact_GetMinigunSpreadImpactPoint(shotPos, shotDir, v77, v27, &minigunImpactPoint, &minigunImpactDistance) )
-                                                            hasMinigunSpreadImpactPoint = true;
-                                                    }
-
-                                                    if ( !v108 || v123 > minigunImpactDistance )
-                                                    {
-                                                        v108 = cellUnit;
-                                                        v123 = minigunImpactDistance;
-                                                        v121 = v27;
-                                                        minigunSpreadImpactPoint = hasMinigunSpreadImpactPoint;
-                                                        v66 = minigunImpactPoint;
-                                                    }
+                                                    float v39 = (mgunPower * arg->field_C) * (100.0 - cellUnit->GetEffectiveShield());
+                                                    energ = (v39 * 0.004);
                                                 }
+                                                else
+                                                {
+
+                                                    float v41 = (mgunPower * arg->field_C) * (100.0 - cellUnit->GetEffectiveShield());
+                                                    energ = v41 / 100;
+                                                }
+
+                                                bact_arg84 v86;
+                                                v86.unit = this;
+                                                v86.energy = -energ;
+
+                                                // The Deflect Buff stops MGUN damage without
+                                                // spending a charge. The ray still hits normally,
+                                                // so tracer/impact presentation stays unchanged.
+                                                if ( energ && !cellUnit->HasDeflectBuff() )
+                                                    cellUnit->ModifyEnergy(&v86);
+                                            }
+
+                                            v22 = 1;
+
+                                            vec3d minigunImpactPoint = cellUnit->_position;
+                                            float minigunImpactDistance = v111;
+                                            bool hasMinigunSpreadImpactPoint = false;
+
+                                            if (usesShape)
+                                            {
+                                                minigunImpactPoint = shapeHit.point;
+                                                minigunImpactDistance = unitEntryDistance;
+                                                hasMinigunSpreadImpactPoint = true;
+                                            }
+                                            else if ( spreadX > 0.0f || spreadY > 0.0f )
+                                            {
+                                                if ( ypabact_GetMinigunSpreadImpactPoint(shotPos, shotDir, v77, v27, &minigunImpactPoint, &minigunImpactDistance) )
+                                                    hasMinigunSpreadImpactPoint = true;
+                                            }
+
+                                            if ( !v108 || v123 > minigunImpactDistance )
+                                            {
+                                                v108 = cellUnit;
+                                                v123 = minigunImpactDistance;
+                                                v121 = v27;
+                                                minigunSpreadImpactPoint = hasMinigunSpreadImpactPoint;
+                                                v66 = minigunImpactPoint;
                                             }
                                         }
-
                                     }
-
                                 }
 
-
                             }
+
                         }
+
+
                     }
                 }
             }
@@ -20574,7 +20609,8 @@ void NC_STACK_ypabact::CorrectPositionOnLand()
     arg137.field_30 = 0;
     arg137.collisions = coltmp;
 
-    _world->ypaworld_func137(&arg137);
+    if (HasCollisionShape()) arg137.coll_count = 0;
+                else _world->ypaworld_func137(&arg137);
 
     vec3d tmp(0.0, 0.0, 0.0);
 
@@ -20609,7 +20645,8 @@ void NC_STACK_ypabact::CorrectPositionOnLand()
     arg137.field_30 = 0;
     arg137.collisions = coltmp;
 
-    _world->ypaworld_func137(&arg137);
+    if (HasCollisionShape()) arg137.coll_count = 0;
+                else _world->ypaworld_func137(&arg137);
 
     for (int i = arg137.coll_count - 1; i >= 0; i-- )
     {
@@ -20832,7 +20869,6 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
     ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
-    ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
 }
 
 void NC_STACK_ypabact::ypabact_func117(update_msg *upd)

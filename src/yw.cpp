@@ -4725,8 +4725,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_num_mguns = vhcl.num_mguns > 0 ? vhcl.num_mguns : 1;
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
         bacto->_mgun_shot_time_user = vhcl.mgun_shot_time_user;
-        bacto->_mgun_recoil = vhcl.mgun_recoil;
-        bacto->_mgun_recoil_cockpit = vhcl.mgun_recoil_cockpit;
         bacto->_mgun_tracer = vhcl.mgun_tracer;
         bacto->_mgun_decal_enable = vhcl.mgun_decal_enable;
         bacto->_mgun_decal = vhcl.mgun_decal;
@@ -4806,6 +4804,20 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
             bacto->_vp_tint.Clamp();
         }
         bacto->_vp_rotation = vhcl.visual_rotation;
+        if (!vhcl.collision_shape.empty() &&
+            (bacto->_bact_type == BACT_TYPES_TANK || bacto->_bact_type == BACT_TYPES_CAR ||
+             bacto->_bact_type == BACT_TYPES_BACT || bacto->_bact_type == BACT_TYPES_FLYER ||
+             bacto->_bact_type == BACT_TYPES_UFO))
+        {
+            if (!_collisionScene) _collisionScene.reset(new Collision::Scene(*this));
+            auto shape = _collisionScene->LoadShared(vhcl.collision_shape);
+            if (shape &&
+                (shape->visualScale - vhcl.visual_scale).length() < 1e-5 &&
+                (shape->visualRotation - vhcl.visual_rotation).length() < 1e-5)
+                bacto->_collisionShape = shape;
+            else if (shape)
+                ypa_log_out("WARNING: collision_shape %s does not match the visual scale/rotation; regenerate in Studio. Existing collision retained.\n", vhcl.collision_shape.c_str());
+        }
         bacto->_vp_spin_strength = vhcl.visual_spin;
         bacto->_vp_trail_scale = vec3d(1.0, 1.0, 1.0);
         bacto->_vp_trail_tint = World::TVisualTint();
@@ -5024,6 +5036,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->SetStateInternal(&arg119);
     }
 
+    if (_collisionScene) _collisionScene->UpdateActor(bacto);
     return bacto;
 }
 
@@ -5503,6 +5516,7 @@ void NC_STACK_ypaworld::ypaworld_func150(yw_arg150 *arg)
 
 void NC_STACK_ypaworld::DeleteLevel()
 {
+    _collisionScene.reset();
     // Only victory banks this run, before the existing profile save and teardown.
     CommitPlasmaCurrency();
     _missionMapStatusSnapshotValid = false;

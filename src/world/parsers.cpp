@@ -2897,6 +2897,14 @@ static bool ParseCompoundCollisionParameter(
 
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( !StriCmp(p1, "collision_shape") )
+    {
+        _vhcl->collision_shape.clear();
+        if (p2.empty() || p2 == "0") return ScriptParser::RESULT_OK;
+        if (!uaNormalizeDataAssetPath(p2, &_vhcl->collision_shape, false))
+            ypa_log_out("WARNING: invalid collision_shape %s; existing collision retained.\n", p2.c_str());
+        return ScriptParser::RESULT_OK;
+    }
     TRoboProto *robo = _vhcl->RoboProto;
 
     if (!robo)
@@ -3882,24 +3890,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->mgun_wireframe = Nucleus::CInit<NC_STACK_sklt>(
             {{NC_STACK_rsrc::RSRC_ATT_NAME, std::string(p2)}} );
     }
-    else if ( !StriCmp(p1, "mgun_recoil") )
-    {
-        float intensity = parser.stof(p2, 0);
-        if ( !std::isfinite(intensity) || intensity < 0.0f )
-            intensity = 0.0f;
-        else if ( intensity > 10.0f )
-            intensity = 10.0f;
-        _vhcl->mgun_recoil = intensity;
-    }
-    else if ( !StriCmp(p1, "mgun_recoil_cockpit") )
-    {
-        float intensity = parser.stof(p2, 0);
-        if ( !std::isfinite(intensity) || intensity < 0.0f )
-            intensity = 0.0f;
-        else if ( intensity > 10.0f )
-            intensity = 10.0f;
-        _vhcl->mgun_recoil_cockpit = intensity;
-    }
     else if ( ParseMeshTracerParam(parser, p1, p2, _vhcl->mgun_tracer, "mgun_mesh_tracer_") )
     {
         // Every MGUN path, including model = gun/module + gun_type = mg,
@@ -4813,8 +4803,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->num_mguns = 1;
         _vhcl->mgun_shot_time = 0;
         _vhcl->mgun_shot_time_user = 0;
-        _vhcl->mgun_recoil = 0.0f;
-        _vhcl->mgun_recoil_cockpit = 0.0f;
         _vhcl->mgun_tracer = TWeaponTracerConfig();
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
@@ -4847,6 +4835,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->visual_3ds = TExternalVisualSet();
         _vhcl->visual_base = TExternalVisualSet();
         _vhcl->visual_scale = vec3d(1.0, 1.0, 1.0);
+        _vhcl->collision_shape.clear();
         _vhcl->visual_rotation = vec3d(0.0, 0.0, 0.0);
         _vhcl->visual_spin = vec3d(0.0, 0.0, 0.0);
         _vhcl->visual_tint = TVisualTint();

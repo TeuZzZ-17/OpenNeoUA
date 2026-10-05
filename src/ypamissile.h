@@ -160,7 +160,7 @@ protected:
     void DeflectFromUnitCollision(NC_STACK_ypabact *target,
                                   const vec3d &targetCenter, float targetRadius,
                                   const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
-                                  float weaponRadius);
+                                 float weaponRadius, const vec3d *surfaceNormal = nullptr);
     bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = NULL,
                                float *appliedStrength = NULL, bool enqueue = true,
                                NC_STACK_ypabact *directionTarget = NULL);
