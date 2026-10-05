@@ -9815,7 +9815,21 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         bool isCurrentControlled = yw_DebugIsCurrentControlledBact(this, unit);
         vec3d pos = unit->_position;
         World::rbcolls *colls = unit->getBACT_collNodes();
-        bool legacyRadiusCollisionEnabled = unit->UsesLegacyRadiusCollision();
+        bool legacyRadiusCollisionEnabled = !unit->HasCollisionShape() && unit->UsesLegacyRadiusCollision();
+        if (unit->HasCollisionShape() && !isCurrentControlled)
+        {
+            const mat3x3 rotation = unit->_rotation.Transpose();
+            const vec3d origin = unit->GetBodyPosition();
+            for (const auto &part : unit->_collisionShape->parts)
+                for (const auto &face : part.faces)
+                    for (int edge = 0; edge < 3; ++edge)
+                    {
+                        int x0,y0,x1,y1;
+                        if (project(origin + rotation.Transform(part.vertices[face[edge]]), x0,y0) &&
+                            project(origin + rotation.Transform(part.vertices[face[(edge+1)%3]]), x1,y1))
+                            GFX::GFXEngine::DrawLine(scr, Common::Line(x0,y0,x1,y1), 50,220,220);
+                    }
+        }
 
         // Red legacy radius. Manual coll_* suppresses the default radius only
         // when the script did not explicitly author radius. Native Robo volumes
@@ -9843,7 +9857,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         // Compound collision spheres: green for vehicles, blue for weapons.
         // Compound slot/radius/offset labels are intentionally omitted;
         // only the legacy radius keeps a numeric label.
-        if (!isCurrentControlled && colls)
+        if (!isCurrentControlled && colls && !unit->HasCollisionShape())
         {
             mat3x3 rotT = unit->_rotation.Transpose();
             bool isWeapon = unit->_bact_type == BACT_TYPES_MISSLE;
@@ -9926,6 +9940,16 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
     }
+
+    if (_collisionScene)
+        for (const Collision::Contact &contact : _collisionScene->lastContacts)
+        {
+            if ((contact.point - camPos).length() > RING_MAX_DIST) continue;
+            int x0,y0,x1,y1;
+            if (project(contact.point,x0,y0) &&
+                project(contact.point + contact.normal * std::max(20.0,contact.depth),x1,y1))
+                GFX::GFXEngine::DrawLine(scr,Common::Line(x0,y0,x1,y1),255,220,30);
+        }
 
     // --- TRANSIENT DEBUG RADII (lifetime is maintained independently of rendering) ---
     for (const DebugAoeRing &ring : _debugAoeRings)

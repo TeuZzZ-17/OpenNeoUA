@@ -852,7 +852,8 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
                 arg137.coll_max = 10;
                 arg137.field_30 = 0;
 
-                _world->ypaworld_func137(&arg137);
+                if (HasCollisionShape()) GetShapeWorldContact(&arg137);
+                else _world->ypaworld_func137(&arg137);
 
                 int v49 = 0;
 
@@ -937,6 +938,7 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
 void NC_STACK_ypaufo::Move(move_msg *arg)
 {
     _old_pos = _position;
+    const mat3x3 shapeOldRotation = _rotation;
 
     float v55;
 
@@ -995,6 +997,8 @@ void NC_STACK_ypaufo::Move(move_msg *arg)
         _ufoTogoRisidue = 0;
 
     CorrectPositionInLevelBox(NULL);
+
+    ResolveShapeMovement(_old_pos, shapeOldRotation);
 
     _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;

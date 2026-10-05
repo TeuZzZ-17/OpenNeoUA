@@ -807,11 +807,6 @@ struct TVhclProto
     // OpenNeoUA custom: optional player-only override for vehicle-level MGUN
     // cadence. Zero/unset inherits mgun_shot_time, preserving old data exactly.
     int mgun_shot_time_user = 0;
-    // OpenNeoUA: external/third-person MGUN visual recoil intensity 0..10.
-    // Render-only: never changes Vehicle position, velocity or movement input.
-    float mgun_recoil = 0.0f;
-    // OpenNeoUA: independent cockpit-only MGUN SHK/camera-shake intensity 0..10.
-    float mgun_recoil_cockpit = 0.0f;
     // OpenNeoUA: shared tracer config used by normal Vehicle MGUNs and
     // model = gun/module + gun_type = mg; authoring uses mgun_mesh_tracer_*.
     TWeaponTracerConfig mgun_tracer;
@@ -1081,6 +1076,7 @@ struct TVhclProto
     TVhclSound snd_mimic;                   // OpenNeoUA: model = mimic persistent shell loop
 
     rbcolls coll;                           // OpenNeoUA: universal compound collision spheres (coll_*)
+    std::string collision_shape;            // Optional baked convex vehicle body; absent keeps existing collisions.
 
     ~TVhclProto();
 };
