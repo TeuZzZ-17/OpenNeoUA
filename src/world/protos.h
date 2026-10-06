@@ -44,7 +44,7 @@ enum DecorationFXMode
     DECORATION_FX_PERSISTENT = 1
 };
 
-// OpenNeoUA custom: RGBA visual tint (see visual_tint / wireframe_tint and related params).
+// OpenNeoUA custom: RGBA visual tint (see tint / wireframe_tint and related params).
 // RGB is a target hue: when it differs from white, renderers replace the source hue
 // while preserving source intensity. Alpha remains multiplicative. Neutral default = no change.
 struct TVisualTint
@@ -1227,7 +1227,7 @@ struct TWeapProto
     int16_t vp_fire = 0;
     // OpenNeoUA custom, Weapon-side: when this Weapon is fired, the carrier
     // temporarily uses its own Vehicle fire visual. Missing/0 keeps vanilla behavior.
-    bool weapon_use_vehicle_fire_visual = false;
+    bool weapon_use_vehicle_fire = false;
     int16_t vp_dead = 0;
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
@@ -1342,7 +1342,7 @@ struct TWeapProto
     int   laser_energy_tick_time_user = 150;   // ms between damage ticks for player-controlled fire
     float laser_energy_increment_rate = 0.0;   // extra base damage added after each connected tick
     float laser_max_energy = 0.0;              // max base damage per tick (<=0 => no clamp)
-    float laser_visual_spacing = 40.0;             // visual-only distance between vp_normal beam instances
+    float laser_spacing = 40.0;             // visual-only distance between vp_normal beam instances
     int   laser_chain_allow = 0;               // 1 = primary laser hit may chain to nearby enemy units
     int   laser_chain_max_jumps = 0;           // max unit-to-unit chain segments after the primary hit
     float laser_chain_radius = 0.0;            // search radius around the last chained unit
