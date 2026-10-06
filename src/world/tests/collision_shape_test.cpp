@@ -1100,6 +1100,39 @@ int main(int argc,char **argv) {
     world._timeStamp+=20;
     world._collisionScene->Resolve(&a,a._position,identity,0);
     Check(b._scale_time<0 && a._energy>10,"shape vehicle retains plasma pickup without treating residue as solid");
+    {
+        auto &magnetRadius=System::IniConf::GamePlasmaDeathMagnetRadius;
+        auto &magnetSpeed=System::IniConf::GamePlasmaDeathMagnetSpeed;
+        const auto savedRadius=magnetRadius.Value;
+        const auto savedSpeed=magnetSpeed.Value;
+        const bool savedRadiusWasSet=magnetRadius.WasSet;
+        const bool savedSpeedWasSet=magnetSpeed.WasSet;
+        magnetRadius.Value=std::string("100"); magnetRadius.WasSet=true;
+        magnetSpeed.Value=std::string("1000"); magnetSpeed.WasSet=true;
+
+        a._status=BACT_STATUS_NORMAL; a._status_flg=0;
+        a._position=center; a._energy=10; a._energy_max=1000;
+        a._oflags=BACT_OFLAG_USERINPT|BACT_OFLAG_BACTCOLL;
+        world._userUnit=&a;
+
+        b._status=BACT_STATUS_DEAD; b._status_flg=BACT_STFLAG_DEATH1;
+        b._position=center+vec3d(10,0,0); b._vp_extra[0].pos=b._position;
+        b._vp_extra[0].flags=EVPROTO_FLAG_ACTIVE; b._scale_time=10000; b._energy_max=1000;
+        b.UpdateDeathPlasmaMagnet(20);
+        Check(b._scale_time<0 && a._energy>10,
+              "plasma magnet completes pickup at player centre without collision-shape contact");
+
+        a._energy=10;
+        b._position=center; b._vp_extra[0].pos=center;
+        b._vp_extra[0].flags=EVPROTO_FLAG_ACTIVE; b._scale_time=10000;
+        b.UpdateDeathPlasmaMagnet(20);
+        Check(b._scale_time<0 && a._energy>10,
+              "plasma already at player centre is collected instead of remaining stuck");
+
+        world._userUnit=nullptr;
+        magnetRadius.Value=savedRadius; magnetRadius.WasSet=savedRadiusWasSet;
+        magnetSpeed.Value=savedSpeed; magnetSpeed.WasSet=savedSpeedWasSet;
+    }
     // Terrain uses the actual existing LEGO collision skeleton path.
     TSubSectorDesc subsection;
     for(auto &sector:world._secTypeArray)
