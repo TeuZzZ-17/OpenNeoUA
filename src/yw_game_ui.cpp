@@ -5525,8 +5525,6 @@ void sub_4C32A8(NC_STACK_ypaworld *yw, TMFWinStatus *status)
 
 void sub_4C1970(NC_STACK_ypaworld *yw, int a2)
 {
-    (void)yw;
-
     if ( a2 == 1 )
         robo_map.field_1EE++;
     else if ( a2 == 2 )
@@ -5536,6 +5534,14 @@ void sub_4C1970(NC_STACK_ypaworld *yw, int a2)
         robo_map.field_1EE = 4;
     else if ( robo_map.field_1EE < 1 )
         robo_map.field_1EE = 1;
+
+    // The tactical map uses one live zoom across Host Station/vehicle contexts.
+    // Keep both saved UI states aligned so save/load never revives a stale zoom.
+    if ( yw )
+    {
+        yw->_roboMapStatus.Data[2] = robo_map.field_1EE;
+        yw->_vhclMapStatus.Data[2] = robo_map.field_1EE;
+    }
 
     switch ( robo_map.field_1EE )
     {
@@ -5565,6 +5571,25 @@ void sub_4C1970(NC_STACK_ypaworld *yw, int a2)
         break;
     }
 }
+
+
+int NC_STACK_ypaworld::GetTacticalMapZoomLevel() const
+{
+    return robo_map.field_1EE;
+}
+
+void NC_STACK_ypaworld::SetTacticalMapZoomLevel(int zoomLevel)
+{
+    robo_map.field_1EE = std::max(1, std::min(4, zoomLevel));
+    sub_4C1970(this, 0);
+}
+
+void NC_STACK_ypaworld::SetFreshLevelTacticalMapZoom()
+{
+    // Zoom 3 is the second-closest tactical-map level.
+    SetTacticalMapZoomLevel(3);
+}
+
 
 int sb_0x451034__sub3(NC_STACK_ypaworld *yw)
 {
@@ -17414,7 +17439,6 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
             robo_map.h = yw->_roboMapStatus.Rect.h;
             robo_map.field_1EC = yw->_roboMapStatus.Data[0];
             robo_map.field_1ED = yw->_roboMapStatus.Data[1];
-            robo_map.field_1EE = yw->_roboMapStatus.Data[2];
             robo_map.field_208 = yw->_roboMapStatus.Data[3];
             robo_map.field_20A = yw->_roboMapStatus.Data[4];
             robo_map.field_20C = yw->_roboMapStatus.Data[5];
@@ -17454,7 +17478,6 @@ void ypaworld_func2__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, 
             robo_map.h = yw->_vhclMapStatus.Rect.h;
             robo_map.field_1EC = yw->_vhclMapStatus.Data[0];
             robo_map.field_1ED = yw->_vhclMapStatus.Data[1];
-            robo_map.field_1EE = yw->_vhclMapStatus.Data[2];
             robo_map.field_208 = yw->_vhclMapStatus.Data[3];
             robo_map.field_20A = yw->_vhclMapStatus.Data[4];
             robo_map.field_20C = yw->_vhclMapStatus.Data[5];

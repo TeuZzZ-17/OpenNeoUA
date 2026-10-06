@@ -3902,6 +3902,9 @@ size_t NC_STACK_ypaworld::ypaworld_func179(yw_arg161 *arg)
         return 0;
     }
 
+    // Multiplayer follows the same fresh-level tactical-map zoom as single-player.
+    SetFreshLevelTacticalMapZoom();
+
     _lvlPrimevalTypeMap = _lvlTypeMap;
     _lvlPrimevalOwnMap = _lvlOwnMap;
 

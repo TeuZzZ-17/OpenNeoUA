@@ -2423,6 +2423,9 @@ public:
     virtual size_t ypaworld_func168(NC_STACK_ypabact *pbact);
     virtual size_t LoadGame(const std::string &saveFile);
     virtual size_t SaveGame(const std::string &saveFile);
+    int GetTacticalMapZoomLevel() const;
+    void SetTacticalMapZoomLevel(int zoomLevel);
+    void SetFreshLevelTacticalMapZoom();
     virtual bool SaveSettings(UserData *usr, const std::string &fileName, uint32_t sdfMask);
     virtual size_t LoadSettings(const std::string &fileName, const std::string &userName, uint32_t sdfMask, bool updateGameShell, bool playIntro = false);
     virtual bool ReloadInput(size_t id);
