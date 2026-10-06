@@ -1,0 +1,30 @@
+begin_collision_shape
+version = 1
+source = Firefly
+source_hash = 6b5eef29285262a5928d3b04e71c02d81809bfceb8210c0e615a372cebf42902
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+begin_hull
+vertex = 10_5_20
+vertex = -10_5_20
+vertex = 8.9996087551116943_-5_10
+vertex = 6.9988256692886353_-2.9992169141769409_-18.997651338577271
+vertex = 6.9988256692886353_5_-20
+vertex = -6.9988256692886353_5_-20
+vertex = -6.9988256692886353_-2.9992169141769409_-18.997651338577271
+vertex = -8.9996087551116943_-5_10
+face = 0_1_7
+face = 0_7_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_5
+face = 0_5_1
+face = 1_5_6
+face = 1_6_7
+face = 2_7_6
+face = 2_6_3
+face = 3_6_5
+face = 3_5_4
+end
+end

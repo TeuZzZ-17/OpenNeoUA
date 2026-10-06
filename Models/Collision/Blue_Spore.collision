@@ -1,0 +1,24 @@
+begin_collision_shape
+version = 1
+source = Blue_Spore
+source_hash = 1456fa9fe2fbc29a8bca08c522919b47d6be1ebd7a3ea22d31dd5f85a19d9fb6
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+begin_hull
+vertex = 0_5_0
+vertex = 0_0_5
+vertex = 5_0_0
+vertex = 0_0_-5
+vertex = -5_0_0
+vertex = 0_-5_0
+face = 0_1_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_5
+face = 1_5_2
+face = 2_5_3
+face = 3_5_4
+end
+end

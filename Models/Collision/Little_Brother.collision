@@ -1,0 +1,24 @@
+begin_collision_shape
+version = 1
+source = Little_Brother
+source_hash = f82b675883c22d0d246460fea2eb6070106d6d5a78af7f027f1a8ac715283fbb
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+begin_hull
+vertex = -1_10_3
+vertex = -1_1_12
+vertex = 8_1_3
+vertex = -1_1_-6
+vertex = -10_1_3
+vertex = -1_-8_3
+face = 0_1_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_5
+face = 1_5_2
+face = 2_5_3
+face = 3_5_4
+end
+end
