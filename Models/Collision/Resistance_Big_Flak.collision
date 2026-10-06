@@ -1,0 +1,30 @@
+begin_collision_shape
+version = 1
+source = Resistance_Big_Flak
+source_hash = 1679c8cff2e84ee8b7a059a8a8a3f791abd69e024d89deb44e4e44f89b58575d
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+begin_hull
+vertex = 25_12.000000596046448_50
+vertex = 25_-18.000000596046448_50
+vertex = 25_12.000000596046448_-50
+vertex = -25_12.000000596046448_50
+vertex = -25_-18.000000596046448_50
+vertex = 25_-18.000000596046448_-50
+vertex = -25_12.000000596046448_-50
+vertex = -25_-18.000000596046448_-50
+face = 0_1_5
+face = 0_5_2
+face = 0_2_6
+face = 0_6_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_7
+face = 1_7_5
+face = 2_5_7
+face = 2_7_6
+face = 3_6_7
+face = 3_7_4
+end
+end
