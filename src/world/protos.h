@@ -466,8 +466,10 @@ struct TVhclSound
 // loaded samples and palette/shake parameters alive without a Vehicle ID.
 struct TChainFXPhysical
 {
-    int16_t vp_model = 0;
-    int16_t vp_impact = 0;
+    // VP choices are positional pairs. Each spawned fragment rolls one model
+    // index and uses the impact VP at the same index when one is authored.
+    std::vector<int16_t> vp_models;
+    std::vector<int16_t> vp_impacts;
     std::string base_model;
     std::string mesh3ds;
     TVisualTint tint;

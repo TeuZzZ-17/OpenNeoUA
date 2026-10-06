@@ -69,12 +69,13 @@ inline bool ParseAuthoredScalar(const std::string &text, TAuthoredScalar &out)
     return true;
 }
 
-// Smart list syntax shared by VP-style parameters: "123_456_789". A single
-// positive integer is also valid. Zero/negative/invalid entries are rejected
-// instead of silently creating holes; maxItems <= 0 means no explicit limit.
-inline bool ParsePositiveInt16ListValue(const std::string &text,
-                                        std::vector<int16_t> &out,
-                                        int maxItems = 0)
+// Shared int16 list parser for VP-style parameters such as "123_456_789".
+// Callers choose whether zero is valid; negative and malformed entries are
+// always rejected. maxItems <= 0 means no explicit limit.
+inline bool ParseInt16ListValue(const std::string &text,
+                                std::vector<int16_t> &out,
+                                bool allowZero,
+                                int maxItems = 0)
 {
     out.clear();
     if ( text.empty() )
@@ -96,7 +97,8 @@ inline bool ParsePositiveInt16ListValue(const std::string &text,
         char *parseEnd = NULL;
         const long value = std::strtol(part.c_str(), &parseEnd, 0);
         if ( parseEnd == part.c_str() || errno == ERANGE || *parseEnd != '\0' ||
-             value <= 0 || value > std::numeric_limits<int16_t>::max() )
+             value < (allowZero ? 0 : 1) ||
+             value > std::numeric_limits<int16_t>::max() )
         {
             out.clear();
             return false;
@@ -115,6 +117,25 @@ inline bool ParsePositiveInt16ListValue(const std::string &text,
     }
 
     return !out.empty();
+}
+
+// Smart list syntax shared by VP-style parameters: "123_456_789". A single
+// positive integer is also valid. Zero/negative/invalid entries are rejected
+// instead of silently creating holes.
+inline bool ParsePositiveInt16ListValue(const std::string &text,
+                                        std::vector<int16_t> &out,
+                                        int maxItems = 0)
+{
+    return ParseInt16ListValue(text, out, false, maxItems);
+}
+
+// Variant used by optional VP fields where 0 keeps its existing "disabled"
+// meaning while still allowing an authored underscore-separated list.
+inline bool ParseNonNegativeInt16ListValue(const std::string &text,
+                                           std::vector<int16_t> &out,
+                                           int maxItems = 0)
+{
+    return ParseInt16ListValue(text, out, true, maxItems);
 }
 
 // OpenNeoUA range syntax shared by script/config parameters authored as either
