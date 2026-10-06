@@ -16412,8 +16412,18 @@ void NC_STACK_ypabact::UpdateDeathPlasmaMagnet(int frameTime)
     const vec3d plasmaPos = _vp_extra[0].pos;
     const vec3d offset = player->_position - plasmaPos;
     const float distance = offset.length();
-    if ( !isfinite(distance) || distance <= 0.001f || distance > radius )
+    if ( !isfinite(distance) || distance > radius )
         return;
+
+    // Magnet pickup is gameplay logic, not physical collision. A precise
+    // collision shape can leave the vehicle origin inside empty hull space, so
+    // plasma that reaches the player centre must be collected directly instead
+    // of waiting for a shape contact that may never exist.
+    if ( distance <= 0.001f )
+    {
+        player->CollectPlasmaFrom(this);
+        return;
+    }
 
     const float step = speed * (float)frameTime * 0.001f;
     if ( !isfinite(step) || step <= 0.0f )
@@ -16426,7 +16436,15 @@ void NC_STACK_ypabact::UpdateDeathPlasmaMagnet(int frameTime)
     move.pos = target;
     move.field_C = 2;
     if ( NC_STACK_ypabact::SetPosition(&move) )
+    {
         _vp_extra[0].pos = _position;
+
+        // Complete the magnet interaction in the same frame that the plasma
+        // reaches the player. This keeps pickup independent from legacy,
+        // compound and collision_shape geometry alike.
+        if ( travel >= distance )
+            player->CollectPlasmaFrom(this);
+    }
 }
 
 void CollisionWithBact__sub0(NC_STACK_ypabact *bact, NC_STACK_ypabact *a2)

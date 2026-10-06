@@ -12189,6 +12189,10 @@ size_t NC_STACK_ypaworld::ypaworld_func183(yw_arg161 *arg)
 
     if ( v6 )
     {
+        // Every fresh mission start, including replaying a completed mission,
+        // begins at the second-closest tactical-map zoom.
+        SetFreshLevelTacticalMapZoom();
+
         if ( !SaveGame(fmt::sprintf("save:%s/%d.rst", _GameShell->UserName, _levelInfo.LevelID)) )
             ypa_log_out("Warning: could not create restart file for level %d, user %s.\n", _levelInfo.LevelID, _GameShell->UserName.c_str());
     }

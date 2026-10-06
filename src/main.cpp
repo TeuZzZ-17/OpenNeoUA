@@ -146,12 +146,19 @@ int ProcessGameplayFrame()
     case TLevelInfo::STATE_RESTART:
     {
         CrashDiag::Breadcrumb("LEVEL", "restart level=%d", levelInfo.LevelID);
+        const int tacticalMapZoom = ypaworld->GetTacticalMapZoomLevel();
+
         CrashDiag::SetPhase("RestartDeleteLevel");
         ypaworld->DeleteLevel();
 
         if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.rst", userdata.UserName, levelInfo.LevelID) ) )
         {
             ypa_log_out("Warning, load error\n");
+        }
+        else
+        {
+            // Restart keeps the zoom chosen by the player before restarting.
+            ypaworld->SetTacticalMapZoomLevel(tacticalMapZoom);
         }
 
         Input::Engine.QueryInput(&input_states);
