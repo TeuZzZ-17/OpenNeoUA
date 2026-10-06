@@ -1,0 +1,24 @@
+begin_collision_shape
+version = 1
+source = TAER_HS_FLAK
+source_hash = 2ee4e2edaaad8a07efd1504b625bcb43c946d5dd0d34a9326e27d8754652645f
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+begin_hull
+vertex = 0_50_0
+vertex = 0_0_50
+vertex = 50_0_0
+vertex = 0_0_-50
+vertex = -50_0_0
+vertex = 0_-50_0
+face = 0_1_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_5
+face = 1_5_2
+face = 2_5_3
+face = 3_5_4
+end
+end
