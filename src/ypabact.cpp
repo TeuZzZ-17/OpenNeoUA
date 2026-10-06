@@ -144,7 +144,7 @@ static vec3d ypabact_LaserViewerVisualStart(
         return beamStart;
 
     vec3d dir = span / len;
-    float lead = ypabact_LaserClampVisualSpacing(wproto.laser_visual_spacing) * 0.5f;
+    float lead = ypabact_LaserClampVisualSpacing(wproto.laser_spacing) * 0.5f;
     if ( lead < 16.0f )
         lead = 16.0f;
     if ( lead > len * 0.25f )
@@ -12926,7 +12926,7 @@ static void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::T
 
     // Visual-only density control: damage timing stays controlled only by
     // laser_energy_tick_time, while radius remains the gameplay hit thickness.
-    float spacing = ypabact_LaserClampVisualSpacing(wproto.laser_visual_spacing);
+    float spacing = ypabact_LaserClampVisualSpacing(wproto.laser_spacing);
 
     vec3d visualStart = beamStart;
     if ( bact->getBACT_viewer() || bact->getBACT_inputting() )
@@ -12984,7 +12984,7 @@ static void ypabact_StartVehicleFireVPForWeapon(NC_STACK_ypabact *bact, int weap
         return;
 
     const World::TWeapProto &wproto = world->GetWeaponsProtos().at(weaponId);
-    if ( wproto.weapon_use_vehicle_fire_visual )
+    if ( wproto.weapon_use_vehicle_fire )
         ypabact_StartVehicleFireVP(bact, now);
 }
 

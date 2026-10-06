@@ -36,8 +36,8 @@ version = 1
 source = Tiger_Set1
 source_hash = <SHA-256 of selected source geometry and component identifiers>
 asset_set = 1
-visual_scale = 1_1_1
-visual_rotation = 0_0_0
+scale = 1_1_1
+rotation = 0_0_0
 begin_hull
 vertex = x_y_z
 face = i_j_k

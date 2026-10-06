@@ -1740,8 +1740,8 @@ void UserData::sb_0x46aa8c()
         // Apply immediately so the change is visible without restarting.
         GFX::Engine.SetVisualFilter(PaletteThemeStorageValue(paletteTheme));
 
-        if ( !SaveKeyToOpenNeoUAIni("gfx.visual_filter", PaletteThemeStorageValue(paletteTheme)) )
-            ypa_log_out("WARNING: Could not save gfx.visual_filter to OpenNeoUA.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("gfx.palette_filter", PaletteThemeStorageValue(paletteTheme)) )
+            ypa_log_out("WARNING: Could not save gfx.palette_filter to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_PLAYER_ROBO_AI_BEHAVIOR )
@@ -2330,12 +2330,12 @@ void UserData::AtmosphereOptionsSave()
     System::IniConf::GfxVisualFilter.Value = PaletteThemeStorageValue(paletteTheme);
     SavePaletteThemeCache(paletteTheme);
     GFX::Engine.SetVisualFilter(PaletteThemeStorageValue(paletteTheme));
-    if (!SaveKeyToOpenNeoUAIni("gfx.visual_filter", PaletteThemeStorageValue(paletteTheme)))
-        ypa_log_out("WARNING: Could not save gfx.visual_filter to OpenNeoUA.ini\n");
+    if (!SaveKeyToOpenNeoUAIni("gfx.palette_filter", PaletteThemeStorageValue(paletteTheme)))
+        ypa_log_out("WARNING: Could not save gfx.palette_filter to OpenNeoUA.ini\n");
 
     const std::array<std::pair<const char *, std::string>, 19> values =
     {{
-        {"gfx.visual_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
+        {"gfx.palette_filter_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_VISUAL_FILTER_STRENGTH])},
         {"gfx.atmosphere_strength", VisualFilterStrengthStorageValue(atmosphereValues[ATMOPT_ATMOSPHERE_STRENGTH])},
         {"gfx.atmosphere_exposure", HundredStorageValue(atmosphereValues[ATMOPT_EXPOSURE])},
         {"gfx.atmosphere_contrast", HundredStorageValue(atmosphereValues[ATMOPT_CONTRAST])},
@@ -3050,8 +3050,8 @@ void UserData::DetectMatchingGraphicProfile()
     // match. Partial or hand-edited configurations therefore remain Custom.
     for (const TGraphicProfile &profile : atmosphereGraphicProfiles)
     {
-        Common::Ini::Key visualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Standard"));
-        Common::Ini::Key visualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string());
+        Common::Ini::Key visualFilter("gfx.palette_filter", Common::Ini::KT_WORD, std::string("Standard"));
+        Common::Ini::Key visualFilterStrength("gfx.palette_filter_strength", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key atmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key exposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string());
         Common::Ini::Key contrast("gfx.atmosphere_contrast", Common::Ini::KT_WORD, std::string());
@@ -3195,7 +3195,7 @@ bool UserData::ApplyGraphicProfile(const TGraphicProfile &profile)
     System::IniConf::GfxHorizonFadeMode.Value =
         (int32_t)NormalizeHorizonFadeMode(horizonFadeMode.Get<int32_t>());
 
-    // gfx.visual_filter is the only non-slider value on this page. If a profile
+    // gfx.palette_filter is the only non-slider value on this page. If a profile
     // references a missing PAL, fall back to Standard without blocking the rest.
     const std::string requestedTheme =
         NormalizePaletteThemeName(System::IniConf::GfxVisualFilter.Get<std::string>());
@@ -3290,7 +3290,7 @@ void UserData::RefreshPaletteThemes()
     std::sort(paletteThemes.begin() + 1, paletteThemes.end(),
         [](const std::string &a, const std::string &b) { return StriCmp(a, b) < 0; });
 
-    // gfx.visual_filter is global: OpenNeoUA.ini remains authoritative across
+    // gfx.palette_filter is global: OpenNeoUA.ini remains authoritative across
     // restarts and player-profile creation/switching.
     std::string currentTheme =
         NormalizePaletteThemeName(System::IniConf::GfxVisualFilter.Get<std::string>());
@@ -3410,7 +3410,7 @@ namespace
 bool SaveIniKey(const std::string &iniPath, const std::string &key, const std::string &value)
 {
     std::string saveValue = value;
-    if (!StriCmp(key, "gfx.visual_filter_strength"))
+    if (!StriCmp(key, "gfx.palette_filter_strength"))
         saveValue = VisualFilterStrengthStorageValue(VisualFilterStrengthPercentFromString(value, 25));
 
     const std::string newLine = key + " = " + saveValue;
