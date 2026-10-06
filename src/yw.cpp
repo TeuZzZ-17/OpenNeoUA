@@ -4529,14 +4529,27 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
     if ( !std::isfinite(finalSpeed) )
         return NULL;
 
+    int16_t selectedVP = 0;
+    int16_t selectedImpactVP = 0;
+    if ( !physical->vp_models.empty() )
+    {
+        const int visualIndex = World::RandomIntRangeInclusive(
+            0, (int)physical->vp_models.size() - 1);
+        selectedVP = physical->vp_models[visualIndex];
+        if ( physical->vp_impacts.size() == physical->vp_models.size() )
+            selectedImpactVP = physical->vp_impacts[visualIndex];
+    }
+    else if ( physical->vp_impacts.size() == 1 )
+        selectedImpactVP = physical->vp_impacts[0];
+
     NC_STACK_base *model = NULL;
     if ( !physical->mesh3ds.empty() )
         model = GetSharedExternalMesh(physical->mesh3ds);
     if ( !model && !physical->base_model.empty() )
         model = GetSharedExternalBase(physical->base_model);
-    if ( !model && physical->vp_model > 0 &&
-         (size_t)physical->vp_model < _vhclModels.size() )
-        model = _vhclModels[physical->vp_model];
+    if ( !model && selectedVP > 0 &&
+         (size_t)selectedVP < _vhclModels.size() )
+        model = _vhclModels[selectedVP];
     if ( !model )
         return NULL;
 
@@ -4567,9 +4580,9 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
     fragment->setBACT_bactCollisions(physical->impact_damage > 0);
     fragment->_vp_normal = model;
     fragment->_vp_dead = model;
-    fragment->_vp_megadeth = physical->vp_impact > 0 &&
-                             (size_t)physical->vp_impact < _vhclModels.size() ?
-        _vhclModels[physical->vp_impact] : NULL;
+    fragment->_vp_megadeth = selectedImpactVP > 0 &&
+                             (size_t)selectedImpactVP < _vhclModels.size() ?
+        _vhclModels[selectedImpactVP] : NULL;
     fragment->_vp_genesis = NULL;
     fragment->_vp_scale = vec3d(physical->visual_scale,
                                  physical->visual_scale,

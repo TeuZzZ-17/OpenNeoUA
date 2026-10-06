@@ -2286,6 +2286,14 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             }
             else if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
             {
+                const bool hasPositiveVP = std::find_if(
+                    physical->vp_models.begin(), physical->vp_models.end(),
+                    [](int16_t vp) { return vp > 0; }) != physical->vp_models.end();
+                const bool vpPairsValid =
+                    physical->vp_impacts.empty() ||
+                    physical->vp_impacts.size() == physical->vp_models.size() ||
+                    (physical->vp_models.empty() && physical->vp_impacts.size() == 1);
+
                 if ( physicalVehicle > 0 && !hasInlinePhysicalKey )
                 {
                     World::TChainFXConfig chain;
@@ -2302,9 +2310,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 {
                     ypa_log_out("WARNING: begin_fx physical mixes legacy and inline keys; block ignored\n");
                 }
+                else if ( !vpPairsValid )
+                {
+                    ypa_log_out("WARNING: begin_fx physical vp_model/vp_impact list sizes differ; block ignored\n");
+                }
                 else if ( !invalidInlinePhysical &&
                           physical->mass > 0.0f && physical->radius > 0.0f &&
-                          (physical->vp_model > 0 || !physical->mesh3ds.empty() ||
+                          (hasPositiveVP || !physical->mesh3ds.empty() ||
                            !physical->base_model.empty()) )
                 {
                     World::TChainFXConfig chain;
@@ -2506,11 +2518,21 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         else if ( !StriCmp(p1, "vp_model") )
         {
             hasInlinePhysicalKey = true;
+            if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
+            {
+                if ( p2 == "0" )
+                    physical->vp_models.assign(1, 0);
+                else if ( !World::ParsePositiveInt16ListValue(p2, physical->vp_models, 32) )
+                {
+                    physical->vp_models.clear();
+                    invalidInlinePhysical = true;
+                    ypa_log_out("WARNING: invalid begin_fx physical vp_model list '%s'\n",
+                                p2.c_str());
+                }
+                continue;
+            }
+
             const long model = parser.stol(p2, NULL, 0);
-            if ( model >= 0 && model <= std::numeric_limits<int16_t>::max() )
-                physical->vp_model = (int16_t)model;
-            else if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
-                invalidInlinePhysical = true;
             World::TChainFXVisual visual;
             visual.vp = model;
             visuals.push_back(visual);
@@ -2564,11 +2586,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         else if ( !StriCmp(p1, "vp_impact") )
         {
             hasInlinePhysicalKey = true;
-            const long model = parser.stol(p2, NULL, 0);
-            if ( model >= 0 && model <= std::numeric_limits<int16_t>::max() )
-                physical->vp_impact = (int16_t)model;
-            else
-                physical->vp_impact = 0;
+            if ( !World::ParseNonNegativeInt16ListValue(p2, physical->vp_impacts, 32) )
+            {
+                physical->vp_impacts.clear();
+                invalidInlinePhysical = true;
+                ypa_log_out("WARNING: invalid begin_fx physical vp_impact list '%s'\n",
+                            p2.c_str());
+            }
         }
         else if ( !StriCmp(p1, "visual_scale") )
         {
