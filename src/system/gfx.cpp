@@ -4124,7 +4124,7 @@ bool GFXEngine::LoadPalette(const std::string &palette_ilbm)
     return true;
 }
 
-// OpenNeoUA custom: read gfx.visual_filter_strength ("0.0".."1.0") with a safe default.
+// OpenNeoUA custom: read gfx.palette_filter_strength ("0.0".."1.0") with a safe default.
 // NUCLEUS.INI is the single source of truth; missing/empty/invalid values only fall
 // back in memory and are not rewritten unless the user saves Options.
 static float ParseVisualFilterStrength(std::string s, float fallback)
@@ -4360,7 +4360,7 @@ void GFXEngine::SetVisualFilterStrength(float strength)
     _visualFilterStrength = strength;
 }
 
-// OpenNeoUA custom: apply the visual filter selected in nucleus.ini (gfx.visual_filter).
+// OpenNeoUA custom: apply the visual filter selected in nucleus.ini (gfx.palette_filter).
 void GFXEngine::ApplyVisualFilterFromConfig()
 {
     SetVisualFilter(System::IniConf::GfxVisualFilter.Get<std::string>());

@@ -51,8 +51,8 @@ Common::Ini::Key IniConf::GfxXRes("gfx.xres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxYRes("gfx.yres", Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::GfxPalette("gfx.palette", Common::Ini::KT_WORD);
 // OpenNeoUA custom: modern fullscreen visual filter (replaces the legacy palette-theme remap).
-Common::Ini::Key IniConf::GfxVisualFilter("gfx.visual_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
-Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.visual_filter_strength", Common::Ini::KT_WORD, std::string("0.25"));
+Common::Ini::Key IniConf::GfxVisualFilter("gfx.palette_filter", Common::Ini::KT_WORD, std::string("Black_Wadi.pal"));
+Common::Ini::Key IniConf::GfxVisualFilterStrength("gfx.palette_filter_strength", Common::Ini::KT_WORD, std::string("0.25"));
 Common::Ini::Key IniConf::GfxAtmosphereFx("gfx.atmosphere_fx", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::GfxAtmosphereStrength("gfx.atmosphere_strength", Common::Ini::KT_WORD, std::string("0.50"));
 Common::Ini::Key IniConf::GfxAtmosphereExposure("gfx.atmosphere_exposure", Common::Ini::KT_WORD, std::string("1.70"));

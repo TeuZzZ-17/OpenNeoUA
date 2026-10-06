@@ -71,7 +71,7 @@ template<class Base> void ProbeMove(std::shared_ptr<Collision::Shape> cube,const
 }
 void Write(const Collision::Shape &s,const char *path) {
     std::ofstream f(path); f.precision(17);
-    f<<"begin_collision_shape\nversion = 1\nvisual_scale = 1_1_1\nvisual_rotation = 0_0_0\n";
+    f<<"begin_collision_shape\nversion = 1\nscale = 1_1_1\nrotation = 0_0_0\n";
     for(auto &p:s.parts) {
         f<<"begin_hull\n";
         for(auto &v:p.vertices) f<<"vertex = "<<v.x<<'_'<<v.y<<'_'<<v.z<<'\n';

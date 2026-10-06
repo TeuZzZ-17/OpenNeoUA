@@ -402,8 +402,8 @@ public:
             if (!(input >> number) || (input >> extra) || number < 0 || number > 255) return RESULT_BAD_DATA;
             shape.assetSet = number; return RESULT_OK;
         }
-        if ( key == "visual_scale" && Triple(value, &shape.visualScale) ) return RESULT_OK;
-        if ( key == "visual_rotation" && Triple(value, &shape.visualRotation) ) return RESULT_OK;
+        if ( key == "scale" && Triple(value, &shape.visualScale) ) return RESULT_OK;
+        if ( key == "rotation" && Triple(value, &shape.visualRotation) ) return RESULT_OK;
         return RESULT_BAD_DATA;
     }
 };
