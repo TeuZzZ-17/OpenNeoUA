@@ -9821,14 +9821,19 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             const mat3x3 rotation = unit->_rotation.Transpose();
             const vec3d origin = unit->GetBodyPosition();
             for (const auto &part : unit->_collisionShape->parts)
-                for (const auto &face : part.faces)
-                    for (int edge = 0; edge < 3; ++edge)
-                    {
-                        int x0,y0,x1,y1;
-                        if (project(origin + rotation.Transform(part.vertices[face[edge]]), x0,y0) &&
-                            project(origin + rotation.Transform(part.vertices[face[(edge+1)%3]]), x1,y1))
-                            GFX::GFXEngine::DrawLine(scr, Common::Line(x0,y0,x1,y1), 50,220,220);
-                    }
+            {
+                struct ProjectedVertex { int x = 0, y = 0; bool visible = false; };
+                std::vector<ProjectedVertex> projected(part.vertices.size());
+                for (size_t i = 0; i < part.vertices.size(); ++i)
+                    projected[i].visible = project(origin + rotation.Transform(part.vertices[i]),
+                                                   projected[i].x, projected[i].y);
+                for (const auto &edge : part.debugEdges)
+                {
+                    const auto &from = projected[edge[0]], &to = projected[edge[1]];
+                    if (from.visible && to.visible)
+                        GFX::GFXEngine::DrawLine(scr, Common::Line(from.x,from.y,to.x,to.y), 50,220,220);
+                }
+            }
         }
 
         // Red legacy radius. Manual coll_* suppresses the default radius only

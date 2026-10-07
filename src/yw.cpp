@@ -4847,7 +4847,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         if (!vhcl.collision_shape.empty() &&
             (bacto->_bact_type == BACT_TYPES_TANK || bacto->_bact_type == BACT_TYPES_CAR ||
              bacto->_bact_type == BACT_TYPES_BACT || bacto->_bact_type == BACT_TYPES_FLYER ||
-             bacto->_bact_type == BACT_TYPES_UFO))
+             bacto->_bact_type == BACT_TYPES_UFO || bacto->_bact_type == BACT_TYPES_GUN ||
+             bacto->_bact_type == BACT_TYPES_ROBO))
         {
             if (!_collisionScene) _collisionScene.reset(new Collision::Scene(*this));
             auto shape = _collisionScene->LoadShared(vhcl.collision_shape);

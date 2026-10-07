@@ -7369,7 +7369,8 @@ size_t NC_STACK_ypabact::HandleShapeUnitContact(const Collision::Contact &contac
     if (_fly_dir_length > 1e-8) _fly_dir = contact.incomingVelocity / _fly_dir_length;
     if (fabs(_fly_dir_length) < 0.1) _fly_dir_length = 1.0;
     bact_arg88 recoil;
-    recoil.pos1 = contact.actor->GetBodyPosition() - GetBodyPosition();
+    recoil.pos1 = _bact_type == BACT_TYPES_ROBO ? -contact.normal :
+        contact.actor->GetBodyPosition() - GetBodyPosition();
     if (recoil.pos1.normalise() < 1e-6 || recoil.pos1.dot(_fly_dir) < 0)
         recoil.pos1 = -contact.normal;
     const vec3d safe = _position;

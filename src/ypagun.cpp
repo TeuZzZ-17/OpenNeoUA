@@ -747,6 +747,9 @@ size_t NC_STACK_ypagun::SetPosition(bact_arg80 *arg)
 
     _old_pos = _position;
 
+    if (HasCollisionShape() && _world->_collisionScene)
+        _world->_collisionScene->UpdateActor(this);
+
     int v12 = 2;
     HandleVisChildrens(&v12);
 
