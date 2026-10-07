@@ -7,6 +7,9 @@
 #include "../../ypacar.h"
 #include "../../ypaflyer.h"
 #include "../../ypaufo.h"
+#include "../../ypagun.h"
+#include "../../yparobo.h"
+#include "../../base.h"
 #include "../../skeleton.h"
 #include "../../system/fsmgr.h"
 #include "../../system/inivals.h"
@@ -53,12 +56,19 @@ template<class Base=NC_STACK_ypabact> struct Actor : Base {
 struct Missile : Actor<NC_STACK_ypamissile> {
     void Emitter(NC_STACK_ypabact *actor) { _mislEmitter=actor; _mislRadiusHeli=1000; }
 };
-template<class Base> void ProbeMove(std::shared_ptr<Collision::Shape> cube,const char *name) {
+struct Robo : Actor<NC_STACK_yparobo> {
+    int impactDamage=0;
+    using NC_STACK_yparobo::wallow;
+    using NC_STACK_yparobo::checkCollisions;
+    void ChangeSectorEnergy(yw_arg129 *arg) override { impactDamage=arg->field_10; }
+};
+template<class Base> void ProbeMove(std::shared_ptr<Collision::Shape> cube,const char *name,int type=BACT_TYPES_BACT) {
     TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
     w._collisionScene.reset(new Collision::Scene(w));
     const vec3d centre(2400,0,-2400);
     Actor<> obstacle; obstacle.Bind(w,1,centre,cube);
     Actor<Base> mover; mover.Bind(w,2,centre+vec3d(-100,0,0),cube);
+    mover._bact_type=type;
     mover._wrldSize=vec2d(9600,-9600); mover._mass=1;
     mover._force=100; mover._airconst=0; mover._airconst_static=1;
     mover._soundcarrier.Resize(7);
@@ -905,6 +915,136 @@ void BuildingControlsRegression(std::shared_ptr<Collision::Shape> tiger) {
           "airborne viewer border clearance preserves altitude without the movement clamp ground snap");
     w._collisionScene.reset();
 }
+void RoboPositionRegression() {
+    const vec3d centre(2400,-30,-2400);
+    auto body=Shape({Box(vec3d(0,0,0),30,10,30)});
+    {
+        auto compound=Shape({Box(vec3d(-20,0,0),20,10,30),Box(vec3d(20,0,0),20,10,30)});
+        TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
+        w._collisionScene.reset(new Collision::Scene(w));
+        Robo host; host.Bind(w,707,centre,compound); host._bact_type=BACT_TYPES_ROBO;
+        Actor<NC_STACK_ypatank> tank; tank.Bind(w,708,centre+vec3d(0,5,0),Shape({Box(vec3d(0,0,0),8,13,8)}));
+        tank._bact_type=BACT_TYPES_TANK; tank._status_flg=BACT_STFLAG_LAND;
+        host.ResolveShapeMovement(host._position,host._rotation);
+        Collision::Contact contact;
+        Check(fabs(host._position.y-centre.y)<.001 &&
+              (!w._collisionScene->PairContact(&host,&tank,&contact) || contact.depth<=compound->tolerance+.001),
+              "opposing Robo hull leaves use a consistent horizontal escape direction");
+        w._collisionScene.reset();
+    }
+    {
+        auto tall=Shape({Box(vec3d(0,5,0),10,20,10)});
+        for(const auto &rotation:{mat3x3::Ident(),mat3x3::RotateX(.25),mat3x3::RotateZ(.3)}) {
+            double expected=0;
+            for(const auto &vertex:tall->parts[0].vertices)
+                expected=std::max(expected,rotation.Transpose().Transform(vertex).y);
+            Check(fabs(Collision::DownExtent(*tall,rotation)-expected)<.001,
+                  "Robo lower extent follows the actual rotated hull support");
+        }
+        GroundWorld w; Robo host;
+        host.Bind(w,709,vec3d(2400,-24.9,-2400),tall); host._bact_type=BACT_TYPES_ROBO;
+        host._height=10; host._old_pos=host._position+vec3d(1,0,0);
+        host.checkCollisions(.02);
+        Check(host._target_dir.y<-.7 && (host._status_flg&BACT_STFLAG_UPWRD),
+              "Robo hover controller does not request a height inside its taller shape");
+        host._collisionShape.reset(); host._target_dir=vec3d(0,0,0);
+        host.checkCollisions(.02);
+        Check(host._target_dir.y>.7 && !(host._status_flg&BACT_STFLAG_UPWRD),
+              "profile-free Robo retains its original authored height probe");
+        w._collisionScene.reset();
+    }
+    {
+        TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
+        w._collisionScene.reset(new Collision::Scene(w));
+        Robo host; host.Bind(w,710,centre,body); host._bact_type=BACT_TYPES_ROBO;
+        Actor<NC_STACK_ypatank> tank; tank.Bind(w,711,centre+vec3d(20,5,0),body);
+        tank._bact_type=BACT_TYPES_TANK; tank._status_flg=BACT_STFLAG_LAND;
+        host.ResolveShapeMovement(host._position,host._rotation);
+        Check(fabs(host._position.y-centre.y)<.001,"Robo separates from grounded unit without a vertical teleport");
+        Collision::Contact contact;
+        Check(!w._collisionScene->PairContact(&host,&tank,&contact) || contact.depth<=body->tolerance+.001,
+              "horizontal Robo contact still separates the physical hulls");
+        contact.actor=&tank; contact.normal=vec3d(-1,0,0); contact.incomingVelocity=vec3d(20,0,0);
+        tank._position=host._position+vec3d(20,5,0);
+        host.HandleShapeUnitContact(contact,20);
+        Check(fabs(host._fly_dir.y*host._fly_dir_length)<.001,
+              "Robo side recoil does not convert centre height difference into lift");
+        w._collisionScene.reset();
+    }
+    {
+        TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
+        w._collisionScene.reset(new Collision::Scene(w));
+        Robo host; host.Bind(w,712,centre,body); host._bact_type=BACT_TYPES_ROBO;
+        host._wrldSize=vec2d(9600,-9600); host._pSector=&w._cells.At(0);
+        Actor<> wall; wall.Bind(w,713,centre+vec3d(300,0,0),body);
+        host.ResolveShapeMovement(host._position,host._rotation);
+        const vec3d before=host._position; const mat3x3 rotation=host._rotation;
+        bact_arg80 placement; placement.pos=centre+vec3d(600,0,0); placement.field_C=0;
+        host.SetPosition(&placement);
+        host.ResolveShapeMovement(before,rotation,20);
+        Check((host._position-placement.pos).length()<.001,
+              "native Robo placement does not sweep the teleport across intervening actors");
+        wall._position=placement.pos;
+        w._timeStamp+=20; w._collisionScene->UpdateActor(&wall);
+        host.ResolveShapeMovement(host._position,host._rotation);
+        Collision::Contact contact;
+        Check(!w._collisionScene->PairContact(&host,&wall,&contact) || contact.depth<=body->tolerance+.001,
+              "Robo placement still resolves a real overlap at the destination");
+        w._collisionScene.reset();
+    }
+    {
+        GroundWorld w;
+        Robo host; host.Bind(w,714,vec3d(2400,-3,-2400),body); host._bact_type=BACT_TYPES_ROBO;
+        host._oflags=BACT_OFLAG_EXACTCOLL; host._roboYPos=-3;
+        w._timeStamp=20;
+        host.ResolveShapeMovement(host._position,host._rotation);
+        const vec3d before=host._position; const mat3x3 rotation=host._rotation;
+        update_msg update{}; update.frameTime=20; update.gTime=20;
+        host.wallow(&update);
+        host.ResolveShapeMovement(before,rotation,20);
+        host.UpdateUnitGuns(&update);
+        const double phase=sin(update.gTime*C_PI/3000.0)*25.0;
+        Check(fabs(host._roboYPos+phase-host._position.y)<.001,
+              "Robo idle bob anchors to the accepted shape height after contact");
+        double largestStep=0;
+        for(int frame=1;frame<300;++frame) {
+            w._timeStamp+=20; update.gTime=w._timeStamp;
+            const vec3d old=host._position;
+            host.ResolveShapeMovement(host._position,host._rotation);
+            host.wallow(&update);
+            host.ResolveShapeMovement(old,rotation,20);
+            host.UpdateUnitGuns(&update);
+            largestStep=std::max(largestStep,fabs(host._position.y-old.y));
+        }
+        Check(largestStep<.6,"Robo idle bob stays continuous over a complete contact cycle");
+        w._collisionScene.reset();
+    }
+}
+void RoboRealProfileContacts(const std::shared_ptr<Collision::Shape> &profile) {
+    auto tankShape=Shape({Box(vec3d(0,0,0),25,13,25)});
+    bool heightStable=true, clear=true;
+    double maxStep=0,maxDepth=0;
+    const double height=-Collision::DownExtent(*profile,mat3x3::Ident())-.1;
+    for(int x=-120;x<=120;x+=30) for(int z=-120;z<=120;z+=30) {
+        TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
+        w._collisionScene.reset(new Collision::Scene(w));
+        Robo host; host.Bind(w,720,vec3d(3000,height,-3000),profile); host._bact_type=BACT_TYPES_ROBO;
+        Actor<NC_STACK_ypatank> tank; tank.Bind(w,721,vec3d(3000+x,-13,-3000+z),tankShape);
+        tank._bact_type=BACT_TYPES_TANK; tank._status_flg=BACT_STFLAG_LAND;
+        host.ResolveShapeMovement(host._position,host._rotation);
+        maxStep=std::max(maxStep,fabs(host._position.y-height));
+        heightStable &= fabs(host._position.y-height)<.001;
+        Collision::Contact contact;
+        if(w._collisionScene->PairContact(&host,&tank,&contact)) {
+            maxDepth=std::max(maxDepth,contact.depth);
+            clear &= contact.depth<=profile->tolerance+.001;
+        }
+        w._collisionScene.reset();
+    }
+    std::printf("ROBO_REAL_CONTACTS cases=81 max_y_correction=%g max_depth=%g tolerance=%g\n",maxStep,maxDepth,profile->tolerance);
+    Check(heightStable,"real Robo hull contacts retain controlled height in all 81 placements");
+    Check(clear,"real Robo compound contacts clear opposing hull leaves without a residual trap");
+}
 void BuildingBenchmark(std::shared_ptr<Collision::Shape> profile) {
     for(int count:{10,50,100}) {
         GroundWorld w; w._collisionScene.reset();
@@ -951,6 +1091,90 @@ int main(int argc,char **argv) {
     ProbeMove<NC_STACK_ypacar>(cube,"production car Move inherits swept response");
     ProbeMove<NC_STACK_ypaflyer>(cube,"production flyer Move invokes swept response");
     ProbeMove<NC_STACK_ypaufo>(cube,"production UFO Move invokes swept response");
+    ProbeMove<NC_STACK_yparobo>(cube,"production Robo Move invokes swept response",BACT_TYPES_ROBO);
+    RoboPositionRegression();
+    {
+        TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
+        w._collisionScene.reset(new Collision::Scene(w));
+        const vec3d centre(2400,0,-2400);
+        Robo robo; robo.Bind(w,90,centre,cube); robo._bact_type=BACT_TYPES_ROBO;
+        Actor<NC_STACK_ypagun> gun,sibling;
+        gun.Bind(w,91,centre+vec3d(5,0,0),cube); gun._bact_type=BACT_TYPES_GUN;
+        NC_STACK_base visual;
+        gun._vp_normal=gun._vp_dead=gun._vp_fire=gun._vp_genesis=gun._vp_wait=gun._vp_megadeth=&visual;
+        gun._wrldSize=vec2d(9600,-9600);
+        sibling.Bind(w,92,gun._position,cube); sibling._bact_type=BACT_TYPES_GUN;
+        gun.setGUN_roboGun(1); sibling.setGUN_roboGun(1);
+        gun._parent=sibling._parent=&robo;
+        Collision::Contact contact;
+        Check(!w._collisionScene->PairContact(&robo,&gun,&contact),"native Robo gun excluded from owning host shape");
+        Check(!w._collisionScene->PairContact(&gun,&sibling,&contact),"native Robo sibling guns do not collide");
+        Actor<> follower; follower.Bind(w,93,centre,cube); follower._parent=&robo;
+        Check(w._collisionScene->PairContact(&robo,&follower,&contact),"ordinary Robo squad follower remains a physical target");
+        gun.setGUN_roboGun(0); gun._parent=nullptr;
+        const vec3d anchor=gun._position; const mat3x3 aim=gun._rotation;
+        Check(!w._collisionScene->Resolve(&gun,anchor,aim,20) && gun._position==anchor,
+              "ground gun remains mounted despite overlapping geometry");
+        Check(w._collisionScene->Trace(&gun,anchor+vec3d(0,0,-100),anchor+vec3d(0,0,100),0,&contact),
+              "gun shape participates in production weapon trace");
+        gun._rotation=mat3x3::RotateY(.7); gun._collisionShape=Shape({Box(zero,50,2,2)});
+        w._collisionScene->Forget(&gun); w._collisionScene->UpdateActor(&gun);
+        Check(w._collisionScene->Trace(&gun,anchor+vec3d(0,0,-100),anchor+vec3d(0,0,100),0,&contact),
+              "gun shape follows aiming rotation");
+        gun._rotation=mat3x3::RotateY(1.5707963267948966);
+        w._collisionScene->Resolve(&gun,anchor,aim,20);
+        auto aimedTargets=w._collisionScene->ShapeTargets(anchor+vec3d(-5,0,40),anchor+vec3d(5,0,40));
+        Check(std::find(aimedTargets.begin(),aimedTargets.end(),&gun)!=aimedTargets.end(),
+              "anchored gun broad phase follows current aiming rotation within frame");
+        robo._position=sibling._position=centre+vec3d(0,0,500);
+        w._collisionScene->UpdateActor(&robo); w._collisionScene->UpdateActor(&sibling);
+        follower._position=centre+vec3d(-100,0,0);
+        follower._fly_dir=vec3d(1,0,0); follower._fly_dir_length=200;
+        const vec3d start=follower._position;
+        follower._position=centre+vec3d(100,0,0);
+        w._collisionScene->Resolve(&follower,start,follower._rotation,0);
+        Check(follower._position.x<centre.x-6.7 && follower._position.x>centre.x-10 && gun._position==anchor,
+              "approaching shaped vehicle stops without displacing mounted gun");
+        contact.incomingVelocity=vec3d(10,0,0); contact.normal=vec3d(-1,0,0); contact.point=centre;
+        robo.HandleShapeWorldCollision(contact);
+        Check(robo.impactDamage==900000 && (robo._status_flg & BACT_STFLAG_UPWRD) &&
+              fabs(robo._fly_dir_length-5)<.001 && robo._fly_dir.x<-.99,
+              "Robo shape world response retains native recoil attenuation and building damage");
+        World::TRoboGun mount; mount.gun_obj=&gun; mount.pos=vec3d(30,0,0);
+        robo._roboGuns.push_back(mount);
+        robo._position=centre+vec3d(0,-15,0);
+        robo.UpdateUnitGuns(nullptr);
+        Check(gun._position==robo._position+mount.pos,"native Robo gun follows shared final position correction");
+        auto movedTargets=w._collisionScene->ShapeTargets(gun._position-vec3d(5,0,0),gun._position+vec3d(5,0,0));
+        Check(std::find(movedTargets.begin(),movedTargets.end(),&gun)!=movedTargets.end(),
+              "mounted gun placement updates query bounds within frame");
+        robo._roboGuns.clear();
+        robo._collisionShape.reset();
+        const vec3d legacyPosition=robo._position;
+        Check(!w._collisionScene->Resolve(&robo,legacyPosition,robo._rotation,20) && robo._position==legacyPosition,
+              "profile-free Robo retains native movement solver");
+        w._collisionScene.reset();
+    }
+    for(int type:{BACT_TYPES_GUN,BACT_TYPES_ROBO}) {
+        TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
+        w._collisionScene.reset(new Collision::Scene(w));
+        const vec3d centre(2400,0,-2400);
+        Actor<NC_STACK_ypagun> gun; Actor<NC_STACK_yparobo> host;
+        NC_STACK_ypabact *victim;
+        if(type==BACT_TYPES_GUN) { gun.Bind(w,95,centre,cube); victim=&gun; }
+        else { host.Bind(w,95,centre,cube); victim=&host; }
+        victim->_bact_type=type; victim->_radius=1000;
+        Actor<> emitter; emitter.Bind(w,96,centre+vec3d(0,0,-200)); emitter._owner=2;
+        Missile shot; shot.Bind(w,97,centre+vec3d(0,0,100));
+        shot._bact_type=BACT_TYPES_MISSLE; shot._owner=2; shot.Emitter(&emitter);
+        shot._old_pos=centre+vec3d(0,0,-100);
+        NC_STACK_ypabact *target=nullptr;
+        Check(shot.TubeCollisionTest(false,&target) && target==victim &&
+              fabs(shot._position.z-(centre.z-10))<.1,"gun/Robo production projectile hits shape surface");
+        shot._old_pos=centre+vec3d(100,0,-100); shot._position=centre+vec3d(100,0,100);
+        Check(!shot.TubeCollisionTest(false,&target),"gun/Robo projectile ignores legacy radius outside valid shape");
+        w._collisionScene.reset();
+    }
     Collision::Contact hit;
     Check(!Collision::ContactShapes(*cube,zero,identity,*cube,vec3d(21,0,0),identity,&hit),"separated cubes");
     bool overlap=Collision::ContactShapes(*cube,zero,identity,*cube,vec3d(15,0,0),identity,&hit);
@@ -986,6 +1210,25 @@ int main(int argc,char **argv) {
     Check(!Collision::Load("bad.collision"),"unsupported format fallback");
     Check(!Collision::Load("missing.collision"),"missing profile fallback");
     {
+        TestWorld spawn; spawn._mapSize=Common::Point(8,8); spawn._cells.Resize(spawn._mapSize);
+        NC_STACK_base visual;
+        spawn._vhclProtos.resize(3); spawn._vhclModels.resize(1,&visual);
+        Nucleus::ClassList.push_back(Nucleus::MakeClassDescr<NC_STACK_ypagun>());
+        Nucleus::ClassList.push_back(Nucleus::MakeClassDescr<NC_STACK_yparobo>());
+        for(int type:{BACT_TYPES_GUN,BACT_TYPES_ROBO}) {
+            auto &proto=spawn._vhclProtos[1]; proto.model_id=type;
+            proto.weapon=-1;
+            proto.scale_fx_pXX.fill(0);
+            proto.collision_shape="fixture.collision";
+            ypaworld_arg146 request; request.vehicle_id=1; request.pos=vec3d(2400,0,-2400);
+            auto *actor=spawn.ypaworld_func146(&request);
+            Check(actor && actor->_bact_type==type && actor->HasCollisionShape(),
+                  "production spawn binds gun/Robo collision profile");
+            if(actor) actor->Delete();
+        }
+        spawn._collisionScene.reset();
+    }
+    {
         TestWorld legacy; legacy._mapSize=Common::Point(8,8); legacy._cells.Resize(legacy._mapSize);
         const vec3d origin(1200,0,-1200);
         Actor<> victim,gunner; victim.Bind(legacy,10,origin); victim._radius=10;
@@ -1009,6 +1252,7 @@ int main(int argc,char **argv) {
         Check(authored!=nullptr,error.c_str());
         if(authored) {
             std::printf("AUTHOR_PROFILE %s hulls=%zu source_set=%d\n",argv[4],authored->parts.size(),authored->assetSet);
+            RoboRealProfileContacts(authored);
             BuildingBenchmark(authored);
             PairBenchmark(authored);
         }

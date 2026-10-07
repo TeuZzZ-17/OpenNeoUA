@@ -4,6 +4,7 @@
 #include "../log.h"
 #include "../ypabact.h"
 #include "../ypatank.h"
+#include "../ypagun.h"
 #include "../yw.h"
 #include "../skeleton.h"
 #include "../yw_internal.h"
@@ -84,10 +85,11 @@ std::vector<btVector3> Footprint(const btCollisionObjectWrapper *object)
     outline.pop_back();
     return outline;
 }
-bool HorizontalContact(const btCollisionObjectWrapper *a, const btCollisionObjectWrapper *b, Contact *out)
+bool HorizontalContact(const btCollisionObjectWrapper *a, const btCollisionObjectWrapper *b,
+                       const std::vector<btVector3> &ap, const std::vector<btVector3> &bp,
+                       Contact *out, bool bodyDirection)
 {
     if (!a->getCollisionShape()->isConvex() || !b->getCollisionShape()->isConvex()) return false;
-    const auto ap = Footprint(a), bp = Footprint(b);
     std::vector<btVector3> axes;
     for (const auto *points : {&ap, &bp})
         for (size_t i = 0; i < points->size(); ++i)
@@ -101,7 +103,14 @@ bool HorizontalContact(const btCollisionObjectWrapper *a, const btCollisionObjec
     if (ap.empty()) for (const auto &p : bp) axes.emplace_back(ac.x()-p.x(), 0, ac.z()-p.z());
     if (bp.empty()) for (const auto &p : ap) axes.emplace_back(bc.x()-p.x(), 0, bc.z()-p.z());
     if (axes.empty()) return false;
-    auto support = [](const btCollisionObjectWrapper *object, const btVector3 &axis) {
+    auto support = [](const btCollisionObjectWrapper *object,
+                      const std::vector<btVector3> &outline, const btVector3 &axis) {
+        if (!outline.empty())
+        {
+            btScalar maximum = -BT_LARGE_FLOAT;
+            for (const auto &point : outline) maximum = std::max(maximum, point.dot(axis));
+            return maximum;
+        }
         const auto *shape = static_cast<const btConvexShape *>(object->getCollisionShape());
         const auto &t = object->getWorldTransform();
         return (t * shape->localGetSupportingVertex(t.getBasis().transpose() * axis)).dot(axis);
@@ -111,8 +120,8 @@ bool HorizontalContact(const btCollisionObjectWrapper *a, const btCollisionObjec
     {
         if (axis.length2() < 1e-12) continue;
         axis.normalize();
-        const double amax = support(a, axis), amin = -support(a, -axis);
-        const double bmax = support(b, axis), bmin = -support(b, -axis);
+        const double amax = support(a, ap, axis), amin = -support(a, ap, -axis);
+        const double bmax = support(b, bp, axis), bmin = -support(b, bp, -axis);
         const double positive = bmax - amin, negative = amax - bmin;
         if (positive <= 0 || negative <= 0) return false;
         if (std::min(positive, negative) < depth)
@@ -122,6 +131,18 @@ bool HorizontalContact(const btCollisionObjectWrapper *a, const btCollisionObjec
         }
     }
     out->depth = depth;
+    if (bodyDirection)
+    {
+        btVector3 axis = a->getCollisionObject()->getWorldTransform().getOrigin() -
+                         b->getCollisionObject()->getWorldTransform().getOrigin();
+        axis.setY(0);
+        if (axis.length2()<1e-12) axis=btVector3(1,0,0);
+        axis.normalize();
+        // All touching parts of a Robo use one outward body direction.
+        // Opposing leaf normals can otherwise keep an embedded unit trapped.
+        out->normal=V(axis);
+        out->depth=support(b,bp,axis)+support(a,ap,-axis);
+    }
     return depth < 1e29;
 }
 bool Triple(const std::string &s, vec3d *v)
@@ -205,9 +226,20 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
 {
     const btCollisionObject *self;
     bool horizontal;
+    bool bodyDirection;
     std::set<std::pair<const btCollisionShape *, const btCollisionShape *>> leaves;
+    std::map<std::pair<const btCollisionObject *, const btCollisionShape *>, std::vector<btVector3>> footprints;
     std::vector<Contact> contacts;
-    explicit ContactCollector(const btCollisionObject *obj, bool ground = false) : self(obj), horizontal(ground) {}
+    explicit ContactCollector(const btCollisionObject *obj, bool ground = false, bool body = false)
+        : self(obj), horizontal(ground), bodyDirection(body) {}
+    const std::vector<btVector3> &FootprintFor(const btCollisionObjectWrapper *object)
+    {
+        const auto key = std::make_pair(object->getCollisionObject(), object->getCollisionShape());
+        const auto found = footprints.find(key);
+        if (found != footprints.end()) return found->second;
+        // Leaf poses stay fixed throughout one Bullet contact query.
+        return footprints.emplace(key, Footprint(object)).first->second;
+    }
     btScalar addSingleResult(btManifoldPoint &p, const btCollisionObjectWrapper *a,
                             int, int, const btCollisionObjectWrapper *b, int, int) override
     {
@@ -220,7 +252,8 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
         if (horizontal)
         {
             if (!leaves.insert({a->getCollisionShape(), b->getCollisionShape()}).second) return 0;
-            if (!HorizontalContact(selfIsA ? a : b, selfIsA ? b : a, &c)) return 0;
+            const auto *selfWrap = selfIsA ? a : b, *otherWrap = selfIsA ? b : a;
+            if (!HorizontalContact(selfWrap, otherWrap, FootprintFor(selfWrap), FootprintFor(otherWrap), &c, bodyDirection)) return 0;
         }
         else if (a->getCollisionShape()->getShapeType()==CONVEX_HULL_SHAPE_PROXYTYPE &&
                  b->getCollisionShape()->getShapeType()==CONVEX_HULL_SHAPE_PROXYTYPE)
@@ -232,6 +265,16 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
         return 0;
     }
 };
+void ContactPair(Detector &detector, btCollisionObject &a, btCollisionObject &b,
+                 ContactCollector &result)
+{
+    btVector3 aMin, aMax, bMin, bMax;
+    a.getCollisionShape()->getAabb(a.getWorldTransform(), aMin, aMax);
+    b.getCollisionShape()->getAabb(b.getWorldTransform(), bMin, bMax);
+    // Direct Bullet pair queries bypass the world's broad phase.
+    if (!TestAabbAgainstAabb2(aMin, aMax, bMin, bMax)) return;
+    detector.world.contactPairTest(&a, &b, result);
+}
 struct TerrainCastResult : btCollisionWorld::ClosestConvexResultCallback
 {
     int triangle = -1;
@@ -282,6 +325,19 @@ void CastTerrain(const btConvexShape *shape,const btTransform &from,const btTran
     shape->calculateTemporalAabb(localFrom,linear,angular,1,minimum,maximum);
     static_cast<const btBvhTriangleMeshShape *>(object.getCollisionShape())->processAllTriangles(
         &query,minimum,maximum);
+}
+struct SweepBounds
+{
+    btVector3 minimum, maximum;
+};
+SweepBounds SweptBounds(const btConvexShape *shape, const btTransform &from,
+                       const btTransform &to)
+{
+    btVector3 linear, angular;
+    btTransformUtil::calculateVelocity(from, to, 1, linear, angular);
+    SweepBounds bounds;
+    shape->calculateTemporalAabb(from, linear, angular, 1, bounds.minimum, bounds.maximum);
+    return bounds;
 }
 bool Cast(const btConvexShape *a, const btTransform &a0, const btTransform &a1,
           const btConvexShape *b, const btTransform &b0, const btTransform &b1,
@@ -424,7 +480,7 @@ bool Build(Shape &shape, std::string *error)
     auto data = std::unique_ptr<Shape::Impl>(new Shape::Impl);
     vec3d lo(1e30, 1e30, 1e30), hi(-1e30, -1e30, -1e30);
     shape.radius = 0;
-    for (const Part &part : shape.parts)
+    for (Part &part : shape.parts)
     {
         if ( part.vertices.size() < 4 || part.vertices.size() > MaxVertices || part.faces.size() < 4 || part.faces.size() > MaxVertices * 4 )
             return fail("invalid hull vertices/faces");
@@ -454,13 +510,19 @@ bool Build(Shape &shape, std::string *error)
                 if (normal.dot(v - a) > eps) return fail("part is not convex");
             const btVector3 axis=V(normal);
             if (std::none_of(hull->planes.begin(),hull->planes.end(),[&](const btVector3 &other) {
-                return fabs(axis.dot(other))>1.0-1e-12;
+                // Compare directions directly: float dot products lose the
+                // precision needed to recognise identical oblique planes.
+                return (axis-other).length2()<2e-12 || (axis+other).length2()<2e-12;
             })) hull->planes.push_back(axis);
             volume += fabs((a - center).dot((b - center) * (c - center))) / 6.0;
             for (int i = 0; i < 3; ++i) ++edges[std::minmax(f[i], f[(i + 1) % 3])];
         }
         for (const auto &edge : edges) if (edge.second != 2) return fail("hull is not closed");
         if (volume < 1e-9) return fail("hull has no volume");
+        part.debugEdges.clear();
+        part.debugEdges.reserve(edges.size());
+        for (const auto &edge : edges)
+            part.debugEdges.push_back({{edge.first.first, edge.first.second}});
         hull->setMargin(0);
         for (const vec3d &v : part.vertices) hull->addPoint(V(v), false);
         hull->recalcLocalAabb();
@@ -484,6 +546,16 @@ std::shared_ptr<Shape> Load(const std::string &path, std::string *error)
     }
     return shape;
 }
+double DownExtent(const Shape &shape, const mat3x3 &rotation)
+{
+    if (!shape.impl) return 0;
+    const btTransform pose = Pose(vec3d(0,0,0), rotation);
+    const btVector3 direction = pose.getBasis().transpose() * btVector3(0,1,0);
+    double extent = 0;
+    for (const auto &hull : shape.impl->hulls)
+        extent = std::max(extent, (double)(pose.getBasis() * hull->localGetSupportingVertex(direction)).y());
+    return extent;
+}
 bool ContactShapes(const Shape &a, const vec3d &pa, const mat3x3 &ra,
                    const Shape &b, const vec3d &pb, const mat3x3 &rb, Contact *out)
 {
@@ -493,7 +565,7 @@ bool ContactShapes(const Shape &a, const vec3d &pa, const mat3x3 &ra,
     ca.setCollisionShape(&a.impl->compound); cb.setCollisionShape(&b.impl->compound);
     ca.setWorldTransform(Pose(pa, ra)); cb.setWorldTransform(Pose(pb, rb));
     ContactCollector result(&ca);
-    detector.world.contactPairTest(&ca, &cb, result);
+    ContactPair(detector, ca, cb, result);
     if ( result.contacts.empty() ) return false;
     if (out) *out = *std::max_element(result.contacts.begin(), result.contacts.end(),
                          [](const Contact &x, const Contact &y) { return x.depth < y.depth; });
@@ -522,7 +594,8 @@ bool Vehicle(const NC_STACK_ypabact *a)
 {
     return a && (a->_bact_type == BACT_TYPES_BACT || a->_bact_type == BACT_TYPES_TANK ||
                  a->_bact_type == BACT_TYPES_CAR || a->_bact_type == BACT_TYPES_FLYER ||
-                 a->_bact_type == BACT_TYPES_UFO);
+                 a->_bact_type == BACT_TYPES_UFO ||
+                 (a->_bact_type == BACT_TYPES_ROBO && a->HasCollisionShape()));
 }
 bool Live(const NC_STACK_ypabact *a)
 {
@@ -535,8 +608,12 @@ bool Residue(const NC_STACK_ypabact *a)
 }
 bool Related(const NC_STACK_ypabact *a, const NC_STACK_ypabact *b)
 {
-    const bool attachedA = a->_isUnitGunChild || a->_isDummy;
-    const bool attachedB = b->_isUnitGunChild || b->_isDummy;
+    const auto *gunA = dynamic_cast<const NC_STACK_ypagun *>(a);
+    const auto *gunB = dynamic_cast<const NC_STACK_ypagun *>(b);
+    const bool attachedA = a->_isUnitGunChild || a->_isDummy ||
+        (gunA && (gunA->_gunFlags & NC_STACK_ypagun::GUN_FLAGS_ROBO));
+    const bool attachedB = b->_isUnitGunChild || b->_isDummy ||
+        (gunB && (gunB->_gunFlags & NC_STACK_ypagun::GUN_FLAGS_ROBO));
     return a == b || (attachedA && a->_parent == b) || (attachedB && b->_parent == a) ||
            (attachedA && attachedB && a->_parent && a->_parent == b->_parent);
 }
@@ -544,6 +621,14 @@ bool GroundDrive(const NC_STACK_ypabact *a)
 {
     return a && (a->_status_flg & BACT_STFLAG_LAND) &&
            (a->_bact_type == BACT_TYPES_TANK || a->_bact_type == BACT_TYPES_CAR);
+}
+bool HorizontalPair(const NC_STACK_ypabact *a, const NC_STACK_ypabact *b)
+{
+    // Robo altitude belongs to its hover controller, like grounded support.
+    const auto controlled = [](const NC_STACK_ypabact *actor) {
+        return actor && (GroundDrive(actor) || actor->_bact_type == BACT_TYPES_ROBO);
+    };
+    return controlled(a) && controlled(b);
 }
 void SetVelocity(NC_STACK_ypabact *a, const vec3d &velocity)
 {
@@ -587,6 +672,7 @@ struct Body
     btCollisionObject object;
     std::vector<btConvexShape *> parts;
     std::vector<btTransform> local;
+    std::vector<SweepBounds> sweptParts, currentParts;
     btTransform oldPose = btTransform::getIdentity();
     vec3d resolvedPosition;
     mat3x3 resolvedRotation;
@@ -673,7 +759,8 @@ struct Scene::Impl
             detector.world.addCollisionObject(&body.object);
         }
         Body &body = *slot;
-        if (body.stamp != world._timeStamp)
+        const bool newFrame = body.stamp != world._timeStamp;
+        if (newFrame)
         {
             body.oldPose = body.object.getWorldTransform(); body.stamp = world._timeStamp;
             body.pendingDamage.clear();
@@ -682,7 +769,17 @@ struct Scene::Impl
             body.touchedUnit = false;
             body.clearanceUsed = 0;
         }
-        body.object.setWorldTransform(Pose(a->GetBodyPosition(), a->_rotation));
+        const btTransform pose = Pose(a->GetBodyPosition(), a->_rotation);
+        if (!newFrame && body.object.getWorldTransform() == pose) return;
+        body.object.setWorldTransform(pose);
+        body.sweptParts.resize(body.parts.size());
+        body.currentParts.resize(body.parts.size());
+        for (size_t i = 0; i < body.parts.size(); ++i)
+        {
+            const btTransform current = body.object.getWorldTransform() * body.local[i];
+            body.sweptParts[i] = SweptBounds(body.parts[i], body.oldPose * body.local[i], current);
+            body.parts[i]->getAabb(current, body.currentParts[i].minimum, body.currentParts[i].maximum);
+        }
         btVector3 lo, hi, oldLo, oldHi;
         body.object.getCollisionShape()->getAabb(body.object.getWorldTransform(), lo, hi);
         body.object.getCollisionShape()->getAabb(body.oldPose, oldLo, oldHi);
@@ -864,14 +961,27 @@ void Scene::Forget(NC_STACK_ypabact *a)
     impl->actors.erase(it);
 }
 void Scene::UpdateActor(NC_STACK_ypabact *a) { impl->Frame(); impl->Update(a); }
+void Scene::ResetActorPose(NC_STACK_ypabact *a)
+{
+    Forget(a);
+    UpdateActor(a);
+    const auto it = impl->actors.find(a);
+    if (it == impl->actors.end()) return;
+    Body &body = *it->second;
+    // Explicit placement is a new starting pose, not a swept flight path.
+    body.resolvedPosition = a->_position;
+    body.resolvedRotation = a->_rotation;
+    body.resolvedStamp = impl->world._timeStamp;
+}
 bool Scene::PairContact(NC_STACK_ypabact *a, NC_STACK_ypabact *b, Contact *out)
 {
     if (!Live(a) || !Live(b) || Related(a, b) || (!a->HasCollisionShape() && !b->HasCollisionShape())) return false;
     impl->Frame(); impl->Update(a); impl->Update(b);
     const auto ia = impl->actors.find(a), ib = impl->actors.find(b);
     if (ia == impl->actors.end() || ib == impl->actors.end()) return false;
-    ContactCollector result(&ia->second->object);
-    impl->detector.world.contactPairTest(&ia->second->object, &ib->second->object, result);
+    ContactCollector result(&ia->second->object, HorizontalPair(a, b),
+                            a->_bact_type == BACT_TYPES_ROBO || b->_bact_type == BACT_TYPES_ROBO);
+    ContactPair(impl->detector, ia->second->object, ib->second->object, result);
     if (result.contacts.empty()) return false;
     if (out)
     {
@@ -909,7 +1019,7 @@ bool Scene::Trace(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to,
     initial.setCollisionShape(&initialSphere);
     initial.setWorldTransform(Pose(from, mat3x3::Ident()));
     ContactCollector overlap(&initial);
-    impl->detector.world.contactPairTest(&initial, &object, overlap);
+    ContactPair(impl->detector, initial, object, overlap);
     if (!overlap.contacts.empty())
     {
         if (out) { *out = overlap.contacts.front(); out->fraction = 0; out->actor = target; }
@@ -957,7 +1067,7 @@ bool Scene::TraceProjectile(NC_STACK_ypabact *projectile, NC_STACK_ypabact *targ
         oldTarget.setCollisionShape(&target->_collisionShape->impl->compound);
         oldTarget.setWorldTransform(body.oldPose);
         ContactCollector overlap(&initial);
-        impl->detector.world.contactPairTest(&initial, &oldTarget, overlap);
+        ContactPair(impl->detector, initial, oldTarget, overlap);
         if (!overlap.contacts.empty())
         {
             first = overlap.contacts.front(); first.fraction = 0; first.actor = target; found = true;
@@ -977,6 +1087,12 @@ bool Scene::TraceProjectile(NC_STACK_ypabact *projectile, NC_STACK_ypabact *targ
 bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
                     const mat3x3 &oldRotation, int frameTime)
 {
+    // Guns keep their mount and aim, but their query bounds must follow both.
+    if (Live(a) && a->_bact_type == BACT_TYPES_GUN)
+    {
+        UpdateActor(a);
+        return false;
+    }
     if (!Live(a) || !Vehicle(a) || !Finite(oldPosition) || !Finite(a->_position) ||
         (!a->getBACT_bactCollisions() && !a->HasCollisionShape())) return false;
     if (impl->stamp != impl->world._timeStamp) lastContacts.clear();
@@ -1012,7 +1128,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             auto *other = body->actor;
             if (!other || !a->CanCollectPlasmaFrom(other)) continue;
             ContactCollector contact(&self.object);
-            impl->detector.world.contactPairTest(&self.object, &body->object, contact);
+            ContactPair(impl->detector, self.object, body->object, contact);
             bool touched = !contact.contacts.empty();
             if (!touched)
                 for (size_t i = 0; i < self.parts.size() && !touched; ++i)
@@ -1057,14 +1173,24 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
         }
         Contact first; bool hit = false;
         size_t firstPart = 0;
+        std::vector<SweepBounds> selfBounds;
+        selfBounds.reserve(self.parts.size());
+        for (size_t i = 0; i < self.parts.size(); ++i)
+            selfBounds.push_back(SweptBounds(self.parts[i], slideFrom * self.local[i], slideTo * self.local[i]));
         for (Body *body : nearby)
         {
             if (!allowed(body)) continue;
+            SweepBounds terrainBounds;
+            if (body->terrain)
+                body->object.getCollisionShape()->getAabb(body->object.getWorldTransform(),
+                                                        terrainBounds.minimum, terrainBounds.maximum);
             for (size_t i = 0; i < self.parts.size(); ++i)
             {
                 Contact c; bool castHit = false;
                 if (body->terrain)
                 {
+                    if (!TestAabbAgainstAabb2(selfBounds[i].minimum, selfBounds[i].maximum,
+                                             terrainBounds.minimum, terrainBounds.maximum)) continue;
                     TerrainCastResult result(slideFrom.getOrigin(), slideTo.getOrigin());
                     const btTransform partFrom=slideFrom*self.local[i],partTo=slideTo*self.local[i];
                     // Later parts only need to beat the earliest blocking hit.
@@ -1096,6 +1222,10 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
                 {
                     for (size_t j = 0; j < body->parts.size(); ++j)
                     {
+                        // Reuse each part's complete motion bounds across hull pairs.
+                        const auto &bounds = slide == 0 ? body->sweptParts[j] : body->currentParts[j];
+                        if (!TestAabbAgainstAabb2(selfBounds[i].minimum, selfBounds[i].maximum,
+                                                 bounds.minimum, bounds.maximum)) continue;
                         Contact pair;
                         const btTransform aFrom=slideFrom*self.local[i], aTo=slideTo*self.local[i];
                         const btTransform bFrom=(slide == 0 ? body->oldPose : body->object.getWorldTransform())*body->local[j];
@@ -1115,7 +1245,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
                         }
                     }
                 }
-                if (castHit && GroundDrive(a) && GroundDrive(body->actor))
+                if (castHit && HorizontalPair(a, body->actor))
                 {
                     // A sloped hull face must not turn a grounded vehicle
                     // contact into a vertical impulse or a support correction.
@@ -1172,7 +1302,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             advance=lower;
         }
         a->_position = safePosition + motion * advance;
-        if (GroundDrive(a)) a->_position.y = desiredPosition.y;
+        if (GroundDrive(a) || HorizontalPair(a, first.actor)) a->_position.y = desiredPosition.y;
         a->_rotation = Rotation(fromRotation.slerp(toRotation, advance));
         vec3d velocity = a->_fly_dir * a->_fly_dir_length;
         const double entering = velocity.dot(first.normal);
@@ -1269,8 +1399,9 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
         for (Body *body : nearby)
         {
             if (!allowed(body)) continue;
-            ContactCollector result(&self.object, GroundDrive(a) && GroundDrive(body->actor));
-            impl->detector.world.contactPairTest(&self.object, &body->object, result);
+            ContactCollector result(&self.object, HorizontalPair(a, body->actor),
+                a->_bact_type == BACT_TYPES_ROBO || (body->actor && body->actor->_bact_type == BACT_TYPES_ROBO));
+            ContactPair(impl->detector, self.object, body->object, result);
             for (auto c : result.contacts)
             {
                 c.actor = impl->Actor(body);

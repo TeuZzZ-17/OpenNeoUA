@@ -13,6 +13,31 @@ corrects those actors; it does not integrate a second rigid-body simulation.
 Movement queries respect the existing exact-world and unit-collision flags.
 AoE and proximity triggers keep their separate existing logic.
 
+Gun/flak and Robo prototypes also accept profiles. Guns keep their native
+mounting position and aiming rotation; the shared solver moves an approaching
+vehicle, not the gun. Native Robo guns are excluded from contacts with their
+own host and sibling mounts. Robo movement uses the shared shape sweep instead
+of its legacy physical sphere probes, retaining the height controller, recoil
+attenuation and building-impact damage. Its mounted guns are placed again after
+the shared correction. Without a valid profile the native Robo path is unchanged.
+Robo contacts with other height-controlled bodies separate in XZ; they do not
+lift the host to escape a grounded vehicle. Side recoil uses the actual contact
+normal. Compound Robo overlaps use one outward body direction across touching
+parts, avoiding contradictory leaf corrections around an embedded ground unit.
+Explicit Robo placement resets the swept pose, including native mounts,
+so beam relocation does not collide along the old-to-new teleport path. When a
+shape corrects the native idle bob, its existing height reference follows the
+accepted position instead of requesting the old altitude again next frame.
+The hover probe retains its authored height, but raises its effective clearance
+when the rotated hull's lower support and skin would otherwise reach the ground
+before the native ascent trigger. Profile-free actors retain the original probe.
+
+Motion bounds are reused per convex part and unchanged poses retain their query
+bounds within the frame. Direct contact queries reject disjoint object bounds
+before entering Bullet. F10 projects each authored vertex once and draws each
+authored edge once; its cached edge list is derived from the validated faces and
+does not change the profile format or physical geometry.
+
 Profiles contain a union of convex hulls generated offline by Studio from the
 structural parts of the normal model. They preserve a concavity by splitting it
 into multiple hulls. Turrets stay in their authored pose, rotors and effects are

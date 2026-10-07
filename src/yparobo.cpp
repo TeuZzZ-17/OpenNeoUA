@@ -1001,6 +1001,8 @@ size_t NC_STACK_yparobo::checkCollisions(float a2)
 
     ypaworld_arg136 arg136;
 
+    // A valid shape owns physical contacts; retain the height probe below.
+    if (!HasCollisionShape())
     for (const World::TRoboColl &rcoll : _roboColls.roboColls)
     {
         if ( !v81 || _primTtype )
@@ -1168,7 +1170,15 @@ size_t NC_STACK_yparobo::checkCollisions(float a2)
     _status_flg &= ~BACT_STFLAG_LCRASH;
 
     arg136.stPos = _position;
-    arg136.vect = vec3d::OY( _height * 1.5 ) + _fly_dir.X0Z() * 100.0;
+    double hoverHeight = _height;
+    if (HasCollisionShape())
+    {
+        const double bottom = GetBodyPosition().y - _position.y +
+            Collision::DownExtent(*_collisionShape, _rotation) + _collisionShape->tolerance;
+        // The native 0.66 trigger on a 1.5-height ray must precede body contact.
+        hoverHeight = std::max(hoverHeight, bottom / (0.66 * 1.5));
+    }
+    arg136.vect = vec3d::OY( hoverHeight * 1.5 ) + _fly_dir.X0Z() * 100.0;
     arg136.flags = 0;
 
     _world->ypaworld_func136(&arg136);
@@ -1195,6 +1205,8 @@ size_t NC_STACK_yparobo::checkCollisions(float a2)
 void NC_STACK_yparobo::wallow(update_msg *arg)
 {
     _position.y = sin(arg->gTime * C_PI / 3000.0) * 25.0 + _roboYPos;
+    _shapeWallowPending = HasCollisionShape();
+    _shapeWallowRequestedY = _position.y;
 
     PositionRoboGuns();
 }
@@ -5571,6 +5583,7 @@ void NC_STACK_yparobo::User_layer(update_msg *arg)
 void NC_STACK_yparobo::Move(move_msg *arg)
 {
     _old_pos = _position;
+    const mat3x3 shapeOldRotation = _rotation;
 
     vec3d v63;
     if ( _status == BACT_STATUS_DEAD )
@@ -5602,6 +5615,7 @@ void NC_STACK_yparobo::Move(move_msg *arg)
 
     CorrectPositionInLevelBox(NULL);
 
+    ResolveShapeMovement(_old_pos, shapeOldRotation);
     PositionRoboGuns();
 
     _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
@@ -5614,6 +5628,43 @@ void NC_STACK_yparobo::Move(move_msg *arg)
 
     if ( ShouldUsePlayerMobileMove() )
         ApplyPlayerMobileMovePitch(v60);
+}
+
+void NC_STACK_yparobo::HandleShapeWorldCollision(const Collision::Contact &contact)
+{
+    NC_STACK_ypabact::HandleShapeWorldCollision(contact);
+    _fly_dir_length *= 0.4;
+    _status_flg |= BACT_STFLAG_UPWRD;
+
+    // Native Robo impact damage is horizontal travel per second * 15000.
+    // Move converts velocity to travel with a factor of six.
+    const double damage = contact.incomingVelocity.XZ().length() * 6.0 * 15000.0;
+    yw_130arg sector;
+    sector.pos_x = contact.point.x;
+    sector.pos_z = contact.point.z;
+    if (damage > 0 && _world->GetSectorInfo(&sector) &&
+        (getBACT_inputting() || sector.pcell->PurposeType == cellArea::PT_NONE))
+    {
+        yw_arg129 impact;
+        impact.pos = contact.point;
+        impact.unit = NULL;
+        impact.OwnerID = World::OWNER_RECALC;
+        impact.field_10 = damage;
+        ChangeSectorEnergyFromRoboCollision(&impact);
+    }
+}
+
+void NC_STACK_yparobo::UpdateUnitGuns(update_msg *arg)
+{
+    NC_STACK_ypabact::UpdateUnitGuns(arg);
+    // Shared collision correction runs after Move and idle motion.
+    if (HasCollisionShape() && !IsDestroyed())
+    {
+        if (_shapeWallowPending)
+            _roboYPos += _position.y - _shapeWallowRequestedY;
+        PositionRoboGuns();
+    }
+    _shapeWallowPending = false;
 }
 
 void NC_STACK_yparobo::Die()
@@ -5882,10 +5933,15 @@ size_t NC_STACK_yparobo::SetPosition(bact_arg80 *arg)
             v11.field_C = 4;
 
             gun.gun_obj->SetPosition(&v11);
+            if (HasCollisionShape() && gun.gun_obj->HasCollisionShape() && _world->_collisionScene)
+                _world->_collisionScene->ResetActorPose(gun.gun_obj);
         }
     }
 
     _roboYPos = _position.y;
+    _shapeWallowPending = false;
+    if (HasCollisionShape() && _world->_collisionScene)
+        _world->_collisionScene->ResetActorPose(this);
 
     return 1;
 }
@@ -6142,6 +6198,7 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
 void NC_STACK_yparobo::Renew()
 {
     NC_STACK_ypabact::Renew();
+    _shapeWallowPending = false;
 
     _roboRadarValue = 0;
     _roboEnemyValue = 0;
