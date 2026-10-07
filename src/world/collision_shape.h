@@ -20,6 +20,7 @@ struct Part
 {
     std::vector<vec3d> vertices;
     std::vector<std::array<int, 3>> faces;
+    std::vector<std::array<int, 2>> debugEdges; // Unique authored edges, prepared once when the hull is validated.
 };
 
 // Vertices are baked in actor-local coordinates. Visual scale/rotation are
@@ -42,6 +43,7 @@ public:
 
 bool Build(Shape &shape, std::string *error = nullptr);
 std::shared_ptr<Shape> Load(const std::string &path, std::string *error = nullptr);
+double DownExtent(const Shape &shape, const mat3x3 &rotation);
 
 struct Contact
 {
@@ -62,6 +64,7 @@ public:
     std::shared_ptr<Shape> LoadShared(const std::string &path);
     void Forget(NC_STACK_ypabact *actor);
     void UpdateActor(NC_STACK_ypabact *actor);
+    void ResetActorPose(NC_STACK_ypabact *actor);
     bool TakeWorldContact(NC_STACK_ypabact *actor, Contact *contact);
     bool TakeUnitContact(NC_STACK_ypabact *actor, Contact *contact);
     bool Resolve(NC_STACK_ypabact *actor, const vec3d &oldPosition,

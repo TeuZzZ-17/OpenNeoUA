@@ -74,6 +74,8 @@ public:
     virtual void AI_layer3(update_msg *arg);
     virtual void User_layer(update_msg *arg);
     virtual void Move(move_msg *arg);
+    void HandleShapeWorldCollision(const Collision::Contact &contact) override;
+    void UpdateUnitGuns(update_msg *arg) override;
     virtual void Die();
     virtual size_t SetPosition(bact_arg80 *arg);
     virtual void EnergyInteract(update_msg *arg);
@@ -337,6 +339,8 @@ public:
     float _roboFlotage;
     World::rbcolls _roboColls;
     float _roboYPos;
+    bool _shapeWallowPending = false;
+    double _shapeWallowRequestedY = 0;
 
     uint8_t _roboWFlags;
     int32_t _roboState;

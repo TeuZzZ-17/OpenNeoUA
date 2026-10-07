@@ -877,7 +877,7 @@ public:
     void FixBeyondTheWorld();
     void CleanAttackersTarget();
     void SetUnitGuns(const std::vector<World::TRoboGun> &guns);
-    void UpdateUnitGuns(update_msg *arg);
+    virtual void UpdateUnitGuns(update_msg *arg);
     void CleanupUnitGuns(bool releaseGuns, bool parentDying = false);
     void ClearUnitGunPointer(NC_STACK_ypabact *gun);
     NC_STACK_ypabact *SelectProtectiveUnitGun(NC_STACK_ypabact *attacker);
