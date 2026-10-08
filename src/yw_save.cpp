@@ -608,6 +608,8 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
 
     if ( bct->_isGenesisProduced )
         fil->printf("    genesis_produced = yes\n");
+    if ( bct->_genesisExitPending )
+        fil->printf("    genesis_exit_pending = yes\n");
 
     if ( saveInvisibleState )
         fil->printf("    invisible_unrevealed = %s\n", bct->IsInvisibleUnrevealed() ? "yes" : "no");

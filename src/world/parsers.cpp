@@ -3259,6 +3259,13 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->radius = parser.stof(p2, 0);
         _vhcl->radius_defined = true;
     }
+    else if ( !StriCmp(p1, "briefing_radius") )
+    {
+        _vhcl->briefing_radius = ParseNonNegativeIniFloatOrZero(p2);
+        // The briefing animation multiplies the radius by up to 32.
+        if ( _vhcl->briefing_radius > std::numeric_limits<float>::max() / 32.0f )
+            _vhcl->briefing_radius = 0.0f;
+    }
     else if ( !StriCmp(p1, "overeof") )
     {
         _vhcl->overeof = parser.stof(p2, 0);
@@ -4946,6 +4953,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->height = 150.0;
         _vhcl->radius = 25.0;
         _vhcl->radius_defined = false;
+        _vhcl->briefing_radius = 0.0f;
         _vhcl->overeof = 25.0;
         _vhcl->vwr_radius = 30.0;
         _vhcl->vwr_overeof = 30.0;
