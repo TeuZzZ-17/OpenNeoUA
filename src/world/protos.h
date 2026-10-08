@@ -378,50 +378,6 @@ inline float CompoundCollisionExtent(const rbcolls &coll)
     return extent;
 }
 
-// Half of the largest dimension of the box that contains the whole coll_* set.
-// This is the real physical half-size of the unit and is the modern replacement
-// for the legacy radius key. Unlike CompoundCollisionExtent it is measured
-// around the collision volume itself, so a body that sits far from its unit
-// origin (Host Stations) is not overestimated. Returns -1 when the set has no
-// usable sphere.
-inline float CompoundCollisionHalfSize(const rbcolls &coll)
-{
-    bool hasSphere = false;
-    double minv[3] = {0.0, 0.0, 0.0};
-    double maxv[3] = {0.0, 0.0, 0.0};
-
-    for (const TRoboColl &sphere : coll.roboColls)
-    {
-        if ( sphere.robo_coll_radius <= 0.01f )
-            continue;
-
-        // vec3d stores doubles, so keep the box math in double too.
-        const double r = sphere.robo_coll_radius;
-        const double pos[3] = {sphere.coll_pos.x, sphere.coll_pos.y, sphere.coll_pos.z};
-
-        for (int i = 0; i < 3; i++)
-        {
-            if ( !hasSphere || pos[i] - r < minv[i] )
-                minv[i] = pos[i] - r;
-            if ( !hasSphere || pos[i] + r > maxv[i] )
-                maxv[i] = pos[i] + r;
-        }
-        hasSphere = true;
-    }
-
-    if ( !hasSphere )
-        return -1.0f;
-
-    double halfSize = 0.0;
-    for (int i = 0; i < 3; i++)
-    {
-        const double axisHalfSize = (maxv[i] - minv[i]) * 0.5;
-        if ( axisHalfSize > halfSize )
-            halfSize = axisHalfSize;
-    }
-    return (float)halfSize;
-}
-
 struct TVhclSound
 {
     struct TSndSample
@@ -981,6 +937,8 @@ struct TVhclProto
     // still keeps the vanilla default, but manual coll_* spheres may suppress
     // that default collision unless radius was really present in the script.
     bool radius_defined = false;
+    float briefing_radius = 0.0f; // Optional briefing framing radius; 0 uses the legacy radius.
+    float BriefingRadius() const { return briefing_radius > 0.0f ? briefing_radius : radius; }
     float overeof = 0.0;
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;

@@ -3073,6 +3073,7 @@ static NC_STACK_ypabact *yparobo_TryCreateGenesisUnit(NC_STACK_yparobo *robo,
         return NULL;
 
     NC_STACK_ypabact *unit = world->ypaworld_func146(arg);
+    if (unit) unit->PlaceGenesisAboveTerrain();
     if ( unit && !world->_isNetGame )
     {
         unit->_owner = robo->_owner;
@@ -4133,7 +4134,7 @@ void NC_STACK_yparobo::searchEnemyRobo()
     for (NC_STACK_ypabact* &unit : _world->_unitsList)
     {
         if ( unit->_status != BACT_STATUS_DEAD &&
-             unit != this && unit->_bact_type == BACT_TYPES_ROBO )
+             unit != this && unit->_bact_type == BACT_TYPES_ROBO && !unit->IsIgnoredByAI() )
         {
             if ( unit->_pSector->IsCanSee(_owner) )
             {
@@ -4422,7 +4423,8 @@ void NC_STACK_yparobo::checkDanger()
             {
                 for ( NC_STACK_ypabact* &v7 : _world->SectorAt(pt).unitsList )
                 {
-                    if (v7->_owner != _owner && v7->_status != BACT_STATUS_DEAD && v7->_weapon != -1 && v7->HasMinigun())
+                    if (v7->_owner != _owner && !v7->IsIgnoredByAI() &&
+                        v7->_status != BACT_STATUS_DEAD && v7->_weapon != -1 && v7->HasMinigun())
                     {
                         v11 = 1;
                         v12 = v7->_commandID;
@@ -4661,7 +4663,7 @@ int32_t NC_STACK_yparobo::yparobo_func70__sub6__sub4(const Common::Point &sc)
     {
         for ( NC_STACK_ypabact* &bct : cell.unitsList )
         {
-            if ( bct->_owner != _owner && bct->_owner)
+            if ( bct->_owner != _owner && bct->_owner && !bct->IsIgnoredByAI() )
             {
                 if ( bct->_bact_type != BACT_TYPES_MISSLE)
                 {
@@ -4767,7 +4769,7 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub12()
         {
             if ( node->_bact_type == BACT_TYPES_ROBO)
             {
-                if ( _owner != node->_owner )
+                if ( _owner != node->_owner && !node->IsIgnoredByAI() )
                 {
                     Common::Point dist = _cellId.AbsDistance( node->_cellId );
                     if ( dist.x < 3 && dist.y < 3 )
@@ -4794,7 +4796,7 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub13()
                 {
                     if ( bct->_owner )
                     {
-                        if ( bct->_owner != _owner )
+                        if ( bct->_owner != _owner && !bct->IsIgnoredByAI() )
                         {
                             if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_bact_type != BACT_TYPES_ROBO && bct->_status != BACT_STATUS_DEAD )
                                 return 1;
@@ -4811,7 +4813,7 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub13()
 
 float NC_STACK_yparobo::sub_4F4C6C(NC_STACK_ypabact *bact)
 {
-    if ( bact->_status_flg & BACT_STFLAG_DEATH1 )
+    if ( (bact->_status_flg & BACT_STFLAG_DEATH1) || bact->IsIgnoredByAI() )
         return -1.0;
 
     float v8 = _cellId.LengthTo<float>( bact->_cellId );
@@ -4840,7 +4842,7 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub5(int *a2, Common::Point *pCellId
             if ( node->_owner != _owner  &&  node->_owner  &&  node->_status != BACT_STATUS_DEAD )
             {
                 Common::Point dist = _cellId.AbsDistance( node->_cellId );
-                if ( dist.x <= 2 && dist.y <= 2 )
+                if ( dist.x <= 2 && dist.y <= 2 && !node->IsIgnoredByAI() )
                 {
                     *a2 = node->_commandID;
                     *pCellId = node->_cellId;
@@ -6506,7 +6508,8 @@ size_t NC_STACK_yparobo::yparobo_func132(setTarget_msg *arg)
         {
             if (arg->priority == node->_commandID)
             {
-                if ( node->_status != BACT_STATUS_DEAD )
+                if ( node->_status != BACT_STATUS_DEAD &&
+                     (node->_owner == _owner || !node->IsIgnoredByAI()) )
                 {
                     arg->priority = 0;
                     arg->tgt_type = BACT_TGT_TYPE_UNIT;
@@ -6525,7 +6528,8 @@ size_t NC_STACK_yparobo::yparobo_func132(setTarget_msg *arg)
             {
                 if (arg->priority == subnode->_commandID)
                 {
-                    if ( subnode->_status != BACT_STATUS_DEAD )
+                    if ( subnode->_status != BACT_STATUS_DEAD &&
+                         (subnode->_owner == _owner || !subnode->IsIgnoredByAI()) )
                     {
                         arg->priority = 0;
                         arg->tgt_type = BACT_TGT_TYPE_UNIT;

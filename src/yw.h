@@ -3421,7 +3421,7 @@ public:
     int8_t _showDebugMode = 0; // debug info draw modes
     bool _showCollDebug = false; // F10: draw collision sphere overlay
     bool _hideHudForScreenshots = false; // F11: hide gameplay HUD/screenshots UI
-    bool _debugDpsEnabled = false; // F4: rolling effective DPS meter for the controlled player unit
+    bool _debugDpsEnabled = false; // F3: rolling effective DPS meter for the controlled player unit
     uint32_t _debugDpsSourceGid = 0;
     int64_t _debugDpsPeakRaw = 0; // Highest rolling 1-second DPS reached during the current firing burst.
     int64_t _debugDpsSessionDamageRaw = 0; // Total recorded damage in the current firing burst.

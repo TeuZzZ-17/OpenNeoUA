@@ -1,7 +1,10 @@
 // Production geometry, parser and actor probes. Run without starting a game.
 #include "../collision_shape.h"
 #include "../parsers.h"
+#include "../saveparsers.h"
 #include "../../yw.h"
+#include "../../yw_internal.h"
+#include "../../env.h"
 #include "../../ypamissile.h"
 #include "../../ypatank.h"
 #include "../../ypacar.h"
@@ -49,6 +52,8 @@ template<class Base=NC_STACK_ypabact> struct Actor : Base {
         this->_status=BACT_STATUS_NORMAL; this->_oflags=BACT_OFLAG_BACTCOLL;
         this->_rotation=mat3x3::Ident(); this->_position=pos; this->_old_pos=pos;
         this->_radius=2; this->_collisionShape=shape;
+        this->_vp_genesis=nullptr; // Bind bypasses Init; missing visual models must be explicit in the fixture.
+        this->_vp_normal=nullptr;
         this->_soundcarrier.Resize(7);
         this->_cellRef=w._cells.At(0).unitsList.push_back(this);
     }
@@ -62,11 +67,24 @@ struct Robo : Actor<NC_STACK_yparobo> {
     using NC_STACK_yparobo::checkCollisions;
     void ChangeSectorEnergy(yw_arg129 *arg) override { impactDamage=arg->field_10; }
 };
+struct MovingRobo : Robo {
+    void EnergyInteract(update_msg *) override {}
+    void AI_layer3(update_msg *arg) override {
+        // Exercise native Update/AI movement without mission economy or strategy.
+        const double distance = _target_vec.length();
+        _target_dir = distance > 0 ? _target_vec / distance : vec3d(0,0,0);
+        if (!getBACT_bactCollisions() || !CollisionWithBact(arg->frameTime)) {
+            checkCollisions(arg->frameTime * .001);
+            AI_doMove(arg);
+        }
+    }
+};
 template<class Base> void ProbeMove(std::shared_ptr<Collision::Shape> cube,const char *name,int type=BACT_TYPES_BACT) {
     TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
     w._collisionScene.reset(new Collision::Scene(w));
     const vec3d centre(2400,0,-2400);
     Actor<> obstacle; obstacle.Bind(w,1,centre,cube);
+    if (type==BACT_TYPES_ROBO) obstacle._bact_type=BACT_TYPES_ROBO;
     Actor<Base> mover; mover.Bind(w,2,centre+vec3d(-100,0,0),cube);
     mover._bact_type=type;
     mover._wrldSize=vec2d(9600,-9600); mover._mass=1;
@@ -125,6 +143,36 @@ struct GroundWorld : TestWorld {
         arg->skel=&floorData; arg->polyID=0;
     }
 };
+void RoboUpdateRegression(const std::shared_ptr<Collision::Shape> &profile) {
+    auto *savedDriver = SFXEngine::SFXe.digDriver;
+    if (!savedDriver) SFXEngine::SFXe.digDriver = new waldev();
+    for (int mode : {0,1,2}) {
+        GroundWorld w; w._vhclProtos.resize(256); w._weaponProtos.resize(256);
+        MovingRobo host; host.Bind(w,780,vec3d(3100,-600,-1900),profile);
+        host._bact_type=BACT_TYPES_ROBO; host._owner=4;
+        host._energy=host._energy_max=1500000;
+        host._oflags=BACT_OFLAG_EXACTCOLL|BACT_OFLAG_BACTCOLL;
+        host._wrldSize=vec2d(9600,-9600); host._mass=10000; host._force=40000;
+        host._airconst=host._airconst_static=200; host._height=350;
+        host._roboYPos=-600; host._roboWFlags=0; host._soundcarrier.Resize(17);
+        Actor<> intruder; intruder.Bind(w,781,host._position,Shape({Box(vec3d(0,0,0),20,20,20)}));
+        intruder._energy=1000;
+        if (mode==0) intruder._position.x+=2000;
+        if (mode==2) { intruder._host_station=&host; intruder._status=BACT_STATUS_CREATE; }
+        double maxStep=0;
+        for (int frame=0;frame<3000;++frame) {
+            w._timeStamp+=20; update_msg update{};
+            update.gTime=w._timeStamp; update.frameTime=20;
+            const double oldY=host._position.y;
+            host.Update(&update);
+            maxStep=std::max(maxStep,fabs(host._position.y-oldY));
+        }
+        Check(maxStep<.001 && fabs(host._position.y+600)<.001,
+              "native Robo Update stays at its hover height over 60 seconds with nearby normal/CREATE units");
+        w._collisionScene.reset();
+    }
+    if (!savedDriver) { delete SFXEngine::SFXe.digDriver; SFXEngine::SFXe.digDriver=nullptr; }
+}
 struct BuildingWorld : GroundWorld {
     UAskeleton::Data buildingData;
     NC_STACK_skeleton building;
@@ -915,6 +963,236 @@ void BuildingControlsRegression(std::shared_ptr<Collision::Shape> tiger) {
           "airborne viewer border clearance preserves altitude without the movement clamp ground snap");
     w._collisionScene.reset();
 }
+
+// Birth-time placement probes for Scene::PlaceAboveTerrain.
+// Call after setBaseDir("") and pass the loaded Myko-Scout profile.
+void BirthPlacementRegression(const std::shared_ptr<Collision::Shape> &myko)
+{
+    Check(myko != nullptr, "real Myko-Scout profile loaded for birth placement");
+    if (!myko) return;
+
+    const vec3d centre(3000, 0, -3000);
+    const mat3x3 identity = mat3x3::Ident();
+    const double down = Collision::DownExtent(*myko, identity);
+
+    {
+        GroundWorld world;
+        Actor<> body;
+        body.Bind(world, 801, centre + vec3d(0, 200, 0), myko);
+        body._bact_type = BACT_TYPES_UFO;
+        body._pSector = &world._cells.At(0);
+        body._overeof = 5;
+        Check(world._collisionScene->PlaceAboveTerrain(&body),
+              "Myko below floor is raised from the real flat terrain mesh");
+        const double expected = -std::max(5.0, down) - myko->tolerance;
+        Check(std::fabs(body._position.y - expected) < .01,
+              "Myko shape bottom, rather than smaller overeof, sets floor clearance");
+        std::printf("BIRTH_GROUND_SHAPE y=%.3f expected=%.3f\n",
+                    body._position.y, expected);
+        Check(body._old_pos == body._position,
+              "explicit birth placement updates the actor previous position");
+        const double placedY = body._position.y;
+        world._collisionScene->UpdateActor(&body);
+        world._collisionScene->UpdateActor(&body);
+        Check(std::fabs(body._position.y - placedY) < .001,
+              "scene cache updates do not move a placed Myko on later frames");
+    }
+
+    {
+        GroundWorld world;
+        Actor<> body;
+        body.Bind(world, 802, centre + vec3d(0, 200, 0), myko);
+        body._bact_type = BACT_TYPES_UFO;
+        body._pSector = &world._cells.At(0);
+        body._overeof = 60;
+        Check(world._collisionScene->PlaceAboveTerrain(&body),
+              "Myko below floor is raised when overeof exceeds its shape bottom");
+        const double expected = -std::max(60.0, down) - myko->tolerance;
+        Check(std::fabs(body._position.y - expected) < .01,
+              "larger Myko overeof controls floor clearance");
+        std::printf("BIRTH_GROUND_OVEREOF y=%.3f expected=%.3f\n",
+                    body._position.y, expected);
+    }
+
+    {
+        GroundWorld world;
+        Actor<> body;
+        const vec3d start = centre + vec3d(0, -300, 0);
+        body.Bind(world, 803, start, myko);
+        body._bact_type = BACT_TYPES_UFO;
+        body._pSector = &world._cells.At(0);
+        body._overeof = 20;
+        Check(!world._collisionScene->PlaceAboveTerrain(&body) && body._position == start,
+              "Myko already above its clearance is left unchanged");
+    }
+
+    {
+        GroundWorld world;
+        Actor<> body;
+        const mat3x3 tilt = mat3x3::RotateX(.35);
+        body.Bind(world, 804, centre + vec3d(0, 200, 0), myko);
+        body._bact_type = BACT_TYPES_UFO;
+        body._pSector = &world._cells.At(0);
+        body._rotation = tilt;
+        body._overeof = 5;
+        const double tiltedDown = Collision::DownExtent(*myko, tilt);
+        Check(world._collisionScene->PlaceAboveTerrain(&body),
+              "tilted Myko below floor is raised");
+        const double expected = -std::max(5.0, tiltedDown) - myko->tolerance;
+        Check(std::fabs(body._position.y - expected) < .01,
+              "tilted Myko clearance uses its rotated lower extent");
+    }
+
+    {
+        GroundWorld world;
+        world._cells.At(0).height = 120;
+        world._legoArray[0].CollisionSkelet = nullptr;
+        world._legoArray[0].UseCollisionSkelet = nullptr;
+        world._fillerSide = nullptr;
+        world._fillerCross = nullptr;
+        Actor<> body;
+        body.Bind(world, 805, centre + vec3d(0, 200, 0), myko);
+        body._bact_type = BACT_TYPES_UFO;
+        body._pSector = &world._cells.At(0);
+        body._overeof = 60;
+        Check(world._collisionScene->PlaceAboveTerrain(&body),
+              "missing terrain mesh uses the actor cell height fallback");
+        const double expected = 120 - std::max(60.0, down) - myko->tolerance;
+        Check(std::fabs(body._position.y - expected) < .01,
+              "fallback height retains Myko bottom clearance");
+    }
+
+    {
+        GroundWorld world;
+        Actor<> zeppelin;
+        zeppelin.Bind(world, 806, centre + vec3d(0, 100, 0));
+        zeppelin._bact_type = BACT_TYPES_ZEPP;
+        zeppelin._pSector = &world._cells.At(0);
+        zeppelin._radius = 30;
+        zeppelin._overeof = 45;
+        Check(world._collisionScene->PlaceAboveTerrain(&zeppelin) &&
+              std::fabs(zeppelin._position.y + 45) < .01,
+              "legacy ZEPP uses overeof when it has no authored collision shape");
+    }
+
+    {
+        BuildingWorld world;
+        const vec3d origin = centre + vec3d(141, 0, 0);
+        Actor<> body;
+        body.Bind(world, 807, origin, myko);
+        body._bact_type = BACT_TYPES_UFO;
+        body._pSector = &world._cells(2, 2);
+        body._overeof = 20;
+
+        double minX = std::numeric_limits<double>::infinity();
+        double maxX = -std::numeric_limits<double>::infinity();
+        double minZ = std::numeric_limits<double>::infinity();
+        double maxZ = -std::numeric_limits<double>::infinity();
+        for (const auto &part : myko->parts)
+            for (const auto &vertex : part.vertices)
+            {
+                const vec3d point = body._rotation.Transpose().Transform(vertex);
+                minX = std::min(minX, point.x);
+                maxX = std::max(maxX, point.x);
+                minZ = std::min(minZ, point.z);
+                maxZ = std::max(maxZ, point.z);
+            }
+        const bool centreOutside = origin.x > centre.x + 140;
+        const bool footprintOverlaps = origin.x + minX <= centre.x + 140 &&
+                                       origin.x + maxX >= centre.x - 140 &&
+                                       origin.z + minZ <= centre.z + 140 &&
+                                       origin.z + maxZ >= centre.z - 140;
+        Check(centreOutside && footprintOverlaps,
+              "Myko test origin is outside the roof while its actual footprint crosses the roof edge");
+        Check(world._collisionScene->PlaceAboveTerrain(&body),
+              "Myko overhanging a building roof edge is raised");
+        const double expected = -180 - std::max(20.0, down) - myko->tolerance;
+        Check(std::fabs(body._position.y - expected) < .02,
+              "roof edge under the Myko footprint contributes its roof height");
+        std::printf("BIRTH_ROOF_EDGE center_x=%.3f edge_x=%.3f origin_x=%.3f "
+                    "bounds_x=[%.3f,%.3f] y=%.3f expected=%.3f\n",
+                    centre.x, centre.x + 140, origin.x, minX, maxX,
+                    body._position.y, expected);
+    }
+
+    std::printf("BIRTH_PLACEMENT myko_hulls=%zu radius=%.3f down=%.3f tolerance=%.3f\n",
+                myko->parts.size(), myko->radius, down, myko->tolerance);
+}
+
+struct BirthCommandRobo : Robo
+{
+    using NC_STACK_yparobo::doUserCommands;
+};
+
+void GenesisFactoryBirthPlacementRegression()
+{
+    GroundWorld world;
+    NC_STACK_base visual;
+    world._vhclProtos.resize(68);
+    world._vhclModels.resize(1, &visual);
+    world._weaponProtos.resize(1);
+    Nucleus::ClassList.push_back(Nucleus::MakeClassDescr<NC_STACK_ypaufo>());
+
+    auto &proto = world._vhclProtos[67];
+    proto.model_id = BACT_TYPES_UFO;
+    proto.weapon = -1;
+    proto.energy = 6500;
+    proto.max_active_at_once = 5;
+    proto.overeof = 20;
+    proto.scale_fx_pXX.fill(0);
+    proto.collision_shape = "Models/Collision/Myko-Scout.collision";
+
+    const vec3d start(3000, 200, -3000);
+    BirthCommandRobo host;
+    host.Bind(world, 808, vec3d(1800, 0, -3000));
+    host._bact_type = BACT_TYPES_ROBO;
+    host._owner = 1;
+    host._roboEnergyLife = 100000;
+    host._wrldSize = vec2d(9600, -9600);
+
+    update_msg command{};
+    command.user_action = World::DOACTION_ADD_UNIT1;
+    command.protoID = 67;
+    command.target_point = start;
+    host.doUserCommands(&command);
+
+    NC_STACK_ypabact *unit = host.GetKidList().empty() ? nullptr : host.GetKidList().front();
+    Check(unit != nullptr, "native Host Station unit-add command creates the Myko");
+    if (!unit) return;
+    Check(unit->_bact_type == BACT_TYPES_UFO && unit->HasCollisionShape(),
+          "native Myko factory binds its real collision profile");
+    Check(unit->_status == BACT_STATUS_CREATE && unit->_host_station == &host,
+          "native Host Station command keeps the spawned unit in CREATE under its host");
+    Check(std::fabs(unit->_position.x - start.x) < .001 &&
+          std::fabs(unit->_position.z - start.z) < .001 &&
+          std::fabs(unit->_old_pos.x - start.x) < .001 &&
+          std::fabs(unit->_old_pos.z - start.z) < .001,
+          "terrain placement changes only Y on the factory's requested spawn point");
+    Check(unit->_position.y <= -20.0 - unit->_collisionShape->tolerance + .01,
+          "native Host Station factory raises a below-floor Myko above shape clearance");
+    std::printf("BIRTH_FACTORY start_y=%.3f placed_y=%.3f xz_delta=%.3f,%.3f "
+                "tolerance=%.3f\n",
+                start.y, unit->_position.y, unit->_position.x-start.x,
+                unit->_position.z-start.z, unit->_collisionShape->tolerance);
+    const vec3d placed=unit->_position;
+    double maxStep=0;
+    for (int frame=0;frame<100 && unit->_status==BACT_STATUS_CREATE;++frame) {
+        world._timeStamp+=20;
+        update_msg update{}; update.frameTime=20; update.gTime=world._timeStamp;
+        const vec3d old=unit->_position;
+        const mat3x3 rotation=unit->_rotation;
+        unit->ResolveShapeMovement(old,rotation);
+        unit->CreationTimeUpdate(&update);
+        unit->ResolveShapeMovement(old,rotation,20);
+        maxStep=std::max(maxStep,(unit->_position-old).length());
+    }
+    Check(unit->_status==BACT_STATUS_NORMAL && maxStep<.001 &&
+          (unit->_position-placed).length()<.001,
+          "native CREATE completion retains the safe birth position without vertical corrections");
+    unit->Delete();
+    world._collisionScene.reset();
+}
+
 void RoboPositionRegression() {
     const vec3d centre(2400,-30,-2400);
     auto body=Shape({Box(vec3d(0,0,0),30,10,30)});
@@ -926,6 +1204,7 @@ void RoboPositionRegression() {
         Actor<NC_STACK_ypatank> tank; tank.Bind(w,708,centre+vec3d(0,5,0),Shape({Box(vec3d(0,0,0),8,13,8)}));
         tank._bact_type=BACT_TYPES_TANK; tank._status_flg=BACT_STFLAG_LAND;
         host.ResolveShapeMovement(host._position,host._rotation);
+        tank.ResolveShapeMovement(tank._position,tank._rotation);
         Collision::Contact contact;
         Check(fabs(host._position.y-centre.y)<.001 &&
               (!w._collisionScene->PairContact(&host,&tank,&contact) || contact.depth<=compound->tolerance+.001),
@@ -961,6 +1240,8 @@ void RoboPositionRegression() {
         tank._bact_type=BACT_TYPES_TANK; tank._status_flg=BACT_STFLAG_LAND;
         host.ResolveShapeMovement(host._position,host._rotation);
         Check(fabs(host._position.y-centre.y)<.001,"Robo separates from grounded unit without a vertical teleport");
+        Check((host._position-centre).length()<.001,"ordinary vehicle overlap does not displace the native Robo body");
+        tank.ResolveShapeMovement(tank._position,tank._rotation);
         Collision::Contact contact;
         Check(!w._collisionScene->PairContact(&host,&tank,&contact) || contact.depth<=body->tolerance+.001,
               "horizontal Robo contact still separates the physical hulls");
@@ -977,6 +1258,7 @@ void RoboPositionRegression() {
         Robo host; host.Bind(w,712,centre,body); host._bact_type=BACT_TYPES_ROBO;
         host._wrldSize=vec2d(9600,-9600); host._pSector=&w._cells.At(0);
         Actor<> wall; wall.Bind(w,713,centre+vec3d(300,0,0),body);
+        wall._bact_type=BACT_TYPES_ROBO;
         host.ResolveShapeMovement(host._position,host._rotation);
         const vec3d before=host._position; const mat3x3 rotation=host._rotation;
         bact_arg80 placement; placement.pos=centre+vec3d(600,0,0); placement.field_C=0;
@@ -1032,6 +1314,7 @@ void RoboRealProfileContacts(const std::shared_ptr<Collision::Shape> &profile) {
         Actor<NC_STACK_ypatank> tank; tank.Bind(w,721,vec3d(3000+x,-13,-3000+z),tankShape);
         tank._bact_type=BACT_TYPES_TANK; tank._status_flg=BACT_STFLAG_LAND;
         host.ResolveShapeMovement(host._position,host._rotation);
+        tank.ResolveShapeMovement(tank._position,tank._rotation);
         maxStep=std::max(maxStep,fabs(host._position.y-height));
         heightStable &= fabs(host._position.y-height)<.001;
         Collision::Contact contact;
@@ -1045,6 +1328,1036 @@ void RoboRealProfileContacts(const std::shared_ptr<Collision::Shape> &profile) {
     Check(heightStable,"real Robo hull contacts retain controlled height in all 81 placements");
     Check(clear,"real Robo compound contacts clear opposing hull leaves without a residual trap");
 }
+struct GenesisExitSaveParser : ScriptParser::DataHandler, World::Parsers::SaveBact {
+    explicit GenesisExitSaveParser(NC_STACK_ypabact &actor) : actor(actor) {}
+    int Handle(ScriptParser::Parser &parser, const std::string &key,
+               const std::string &value) override {
+        if (!StriCmp(key, "end")) return ScriptParser::RESULT_SCOPE_END;
+        return SaveBactParser(parser, &actor, key, value)
+            ? ScriptParser::RESULT_OK : ScriptParser::RESULT_UNKNOWN;
+    }
+    bool IsScope(ScriptParser::Parser &, const std::string &word,
+                 const std::string &) override {
+        return !StriCmp(word, "begin_genesis_probe");
+    }
+    NC_STACK_ypabact &actor;
+};
+
+void GenesisExitSaveParserRegression() {
+    auto parse = [](NC_STACK_ypabact &actor, Engine::StringList lines) {
+        ScriptParser::HandlersList handlers{new GenesisExitSaveParser(actor)};
+        return ScriptParser::ParseStringList(lines, handlers, 0);
+    };
+    Actor<> restored;
+    Check(parse(restored, {"begin_genesis_probe", "genesis_exit_pending = yes", "end"}) &&
+          restored._genesisExitPending,
+          "save parser restores genesis exit pending=yes");
+    Check(parse(restored, {"begin_genesis_probe", "genesis_exit_pending = no", "end"}) &&
+          !restored._genesisExitPending,
+          "save parser restores genesis exit pending=no");
+    Actor<> oldSave;
+    Check(parse(oldSave, {"begin_genesis_probe", "mainstate = 1", "end"}) &&
+          !oldSave._genesisExitPending,
+          "old save without genesis exit field keeps default false");
+}
+
+void SetGenesisProbeVisuals(NC_STACK_ypabact &actor, NC_STACK_base &visual) {
+    actor._vp_normal = actor._vp_fire = actor._vp_wait = actor._vp_dead =
+        actor._vp_megadeth = actor._vp_genesis = &visual;
+    actor._soundcarrier.Resize(17);
+}
+
+void InitGenesisProbeHost(Robo &host, GroundWorld &w, NC_STACK_base &visual,
+                          const vec3d &position,
+                          const std::shared_ptr<Collision::Shape> &shape) {
+    host.Bind(w, 790, position, shape);
+    host._bact_type = BACT_TYPES_ROBO;
+    host._status = BACT_STATUS_NORMAL;
+    host._status_flg = 0;
+    host._oflags = BACT_OFLAG_EXACTCOLL | BACT_OFLAG_BACTCOLL;
+    host._mass = 10000; host._force = 40000; host._maxrot = 1;
+    host._airconst = host._airconst_static = 200;
+    host._height = 250; host._overeof = 150; host._radius = 200;
+    host._roboYPos = position.y;
+    host._roboDockPos = vec3d(0, -450, 0);
+    host._roboWFlags |= 1;
+    host._wrldSize = vec2d(9600, -9600);
+    host._energy = host._energy_max = 5000000;
+    host._rotation = mat3x3::Ident(); host._old_pos = position;
+    host._pSector = &w._cells.At(0); host._cellId = Common::Point(0, 0);
+    SetGenesisProbeVisuals(host, visual);
+    static const std::array<vec3d, 6> centers = {
+        vec3d(0,-50,0), vec3d(0,-90,0), vec3d(0,-200,0),
+        vec3d(0,-250,0), vec3d(0,-300,0), vec3d(0,-350,0)
+    };
+    static const std::array<float, 6> radii = {240,100,50,50,50,40};
+    auto *coll = host.getBACT_collNodes();
+    coll->roboColls.clear();
+    for (size_t i = 0; i < centers.size(); ++i) {
+        World::TRoboColl sphere;
+        sphere.coll_pos = centers[i];
+        sphere.field_10 = position + centers[i];
+        sphere.robo_coll_radius = radii[i];
+        coll->roboColls.push_back(sphere);
+    }
+    coll->field_0 = 0;
+}
+
+void SetGenesisProbeUnit(AITank &tank, Robo &host, NC_STACK_base &visual,
+                         int commandId, double timerMs) {
+    tank._host_station = &host;
+    tank._isGenesisProduced = true;
+    tank._energy = tank._energy_max = 1000;
+    tank._status_flg &= ~(BACT_STFLAG_SCALE | BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2);
+    SetGenesisProbeVisuals(tank, visual);
+    setState_msg state{}; state.newStatus = BACT_STATUS_CREATE;
+    tank.SetState(&state);
+    tank._scale_time = timerMs;
+    tank._commandID = commandId;
+}
+
+bool GenesisFootprintOverlap(const NC_STACK_ypabact &a, const Collision::Shape &as,
+                             const NC_STACK_ypabact &b, const Collision::Shape &bs) {
+    double ax = 0, az = 0, bx = 0, bz = 0;
+    for (const auto &part : as.parts) for (const auto &v : part.vertices) {
+        ax = std::max(ax, std::fabs(v.x)); az = std::max(az, std::fabs(v.z));
+    }
+    for (const auto &part : bs.parts) for (const auto &v : part.vertices) {
+        bx = std::max(bx, std::fabs(v.x)); bz = std::max(bz, std::fabs(v.z));
+    }
+    return std::fabs(a._position.x - b._position.x) <= ax + bx &&
+           std::fabs(a._position.z - b._position.z) <= az + bz;
+}
+
+void TickGenesisProbeHost(Robo &host, GroundWorld &w, int dt) {
+    const vec3d old = host._position;
+    const mat3x3 oldRotation = host._rotation;
+    update_msg update{};
+    update.frameTime = dt; update.gTime = w._timeStamp;
+    host.ResolveShapeMovement(old, oldRotation);
+    host.checkCollisions(dt * 0.001f);
+    host.wallow(&update);
+    host.ResolveShapeMovement(old, oldRotation, dt);
+    host.UpdateUnitGuns(&update);
+}
+
+void GenesisHostExitCase(const std::shared_ptr<Collision::Shape> &hostShape,
+                         const std::shared_ptr<Collision::Shape> &tankShape,
+                         bool hostFirst, bool commanderParent) {
+    GroundWorld w;
+    const int dt = 20;
+    const vec3d hostStart(2400, -250, -2400);
+    const vec3d tankStart = hostStart + vec3d(0, 100, 0);
+    const vec3d target = hostStart + vec3d(1600, 0, 0);
+    NC_STACK_base visual;
+    Robo host;
+    InitGenesisProbeHost(host, w, visual, hostStart, hostShape);
+    AITank tank;
+    PrepareAITank(tank, w, 791, tankStart, target, tankShape);
+    tank._pSector = &w._cells.At(0); tank._cellId = Common::Point(0, 0);
+    tank._energy = 1000; tank._status_flg = BACT_STFLAG_LAND; tank._old_pos = tankStart;
+    SetGenesisProbeVisuals(tank, visual);
+    Actor<> commander;
+    if (commanderParent) {
+        commander.Bind(w, 792, vec3d(7200, -13, -7200));
+        commander._wrldSize = vec2d(9600, -9600);
+        commander._pSector = &w._cells.At(0); commander._cellId = Common::Point(0, 0);
+        host.AddSubject(&commander); commander.AddSubject(&tank);
+    } else {
+        host.AddSubject(&tank);
+    }
+    SetGenesisProbeUnit(tank, host, visual, commanderParent ? 792 : 790, 100.0);
+    w._collisionScene->UpdateActor(&host); w._collisionScene->UpdateActor(&tank);
+
+    Collision::Contact geometric;
+    const bool initialOverlap = Collision::ContactShapes(*hostShape, host.GetBodyPosition(), host._rotation,
+        *tankShape, tank.GetBodyPosition(), tank._rotation, &geometric);
+    Check(initialOverlap && tank._host_station == &host,
+          "Genesis Tank begins geometrically overlapping its exact Host Station pointer");
+
+    int createFrames = 0, releaseFrame = -1;
+    double maxCreateStep = 0, maxHostCorrection = 0, maxHostStep = 0;
+    vec3d previousTank = tank._position, previousHost = host._position;
+    auto step = [&](bool advanceWorld) {
+        if (advanceWorld) w._timeStamp += dt;
+        TickGenesisProbeHost(host, w, dt);
+        tank._target_vec = target - tank._position;
+        StepAITank(tank, w, dt, false);
+    };
+    for (int frame = 0; frame < 8 && tank._status == BACT_STATUS_CREATE; ++frame) {
+        if (hostFirst) step(true);
+        else {
+            tank._target_vec = target - tank._position;
+            StepAITank(tank, w, dt, true);
+            TickGenesisProbeHost(host, w, dt);
+        }
+        ++createFrames;
+        maxCreateStep = std::max(maxCreateStep, (tank._position - previousTank).length());
+        maxHostStep = std::max(maxHostStep, std::fabs(host._position.y - previousHost.y));
+        const double wantedY = host._roboYPos + std::sin(w._timeStamp * C_PI / 3000.0) * 25.0;
+        maxHostCorrection = std::max(maxHostCorrection, std::fabs(host._position.y - wantedY));
+        previousTank = tank._position; previousHost = host._position;
+        if (tank._status != BACT_STATUS_CREATE) releaseFrame = frame;
+    }
+    const bool releasedInsidePending = releaseFrame >= 0 &&
+        GenesisFootprintOverlap(host, *hostShape, tank, *tankShape) && tank._genesisExitPending;
+    int exitFrames = 0;
+    for (; exitFrames < 600 && tank._genesisExitPending; ++exitFrames) {
+        if (hostFirst) step(true);
+        else {
+            tank._target_vec = target - tank._position;
+            StepAITank(tank, w, dt, true);
+            TickGenesisProbeHost(host, w, dt);
+        }
+    }
+    const bool outside = !GenesisFootprintOverlap(host, *hostShape, tank, *tankShape);
+    Check(createFrames == 5 && releaseFrame == 4 && releasedInsidePending,
+          "Genesis timer expires normally while own-host overlap remains temporarily non-solid");
+    Check(maxCreateStep < 20.0,
+          "Genesis Tank has no large relocation under either native update order");
+    Check(maxHostCorrection < 1.0 && maxHostStep < 1.0,
+          "Genesis overlap does not kick the Host Station vertically");
+    Check(exitFrames < 600 && !tank._genesisExitPending && outside,
+          "native Tank AI clears own-host grace after leaving the XZ footprint");
+
+    if (!tank._genesisExitPending && outside) {
+        tank._position = host._position; tank._old_pos = tank._position;
+        w._timeStamp += dt; w._collisionScene->UpdateActor(&tank);
+        Collision::Contact before, after;
+        const bool ownHit = w._collisionScene->PairContact(&tank, &host, &before);
+        const vec3d ownStart = tank._position;
+        w._collisionScene->Resolve(&tank, ownStart, tank._rotation, dt);
+        const bool ownStuck = w._collisionScene->PairContact(&tank, &host, &after) &&
+                              after.depth > tankShape->tolerance + .01;
+        Check(ownHit && (tank._position - ownStart).length() > 1.0 && !ownStuck,
+              "re-entry into the former Host Station is solid after grace ends");
+
+        Robo foreignHost;
+        InitGenesisProbeHost(foreignHost, w, visual, tank._position, hostShape);
+        w._collisionScene->UpdateActor(&foreignHost);
+        const bool foreignHit = w._collisionScene->PairContact(&tank, &foreignHost, &before);
+        const vec3d foreignStart = tank._position;
+        w._collisionScene->Resolve(&tank, foreignStart, tank._rotation, dt);
+        const bool foreignStuck = w._collisionScene->PairContact(&tank, &foreignHost, &after) &&
+                                  after.depth > tankShape->tolerance + .01;
+        Check(foreignHit && (tank._position - foreignStart).length() > 1.0 && !foreignStuck,
+              "foreign Host Station remains solid after own-host grace ends");
+        w._collisionScene->Forget(&foreignHost);
+    }
+    w._collisionScene.reset();
+}
+
+void GenesisForeignHostDuringGraceRegression(
+    const std::shared_ptr<Collision::Shape> &hostShape,
+    const std::shared_ptr<Collision::Shape> &tankShape) {
+    GroundWorld w;
+    const vec3d hostStart(2400, -250, -2400);
+    const vec3d tankStart = hostStart + vec3d(0, 100, 0);
+    NC_STACK_base visual;
+    Robo host, foreignHost;
+    InitGenesisProbeHost(host, w, visual, hostStart, hostShape);
+    AITank tank;
+    PrepareAITank(tank, w, 794, tankStart, hostStart + vec3d(1600, 0, 0), tankShape);
+    tank._pSector = &w._cells.At(0); tank._cellId = Common::Point(0, 0);
+    SetGenesisProbeUnit(tank, host, visual, 790, 100.0);
+    host.AddSubject(&tank);
+    w._collisionScene->UpdateActor(&host); w._collisionScene->UpdateActor(&tank);
+    update_msg update{}; update.frameTime = 20; update.gTime = 20;
+    tank.CreationTimeUpdate(&update);
+    InitGenesisProbeHost(foreignHost, w, visual, tank._position, hostShape);
+    w._collisionScene->UpdateActor(&foreignHost);
+    Collision::Contact own, foreign;
+    const bool ownHit = w._collisionScene->PairContact(&tank, &host, &own);
+    const bool foreignHit = w._collisionScene->PairContact(&tank, &foreignHost, &foreign);
+    Check(tank._status == BACT_STATUS_CREATE && tank._genesisExitPending && !ownHit &&
+          foreignHit && foreign.depth > tankShape->tolerance,
+          "Genesis grace excludes its own host but leaves a foreign host solid");
+    w._collisionScene.reset();
+}
+
+void GenesisAboveHostDockRegression(const std::shared_ptr<Collision::Shape> &hostShape,
+                                    const std::shared_ptr<Collision::Shape> &tankShape) {
+    GroundWorld w;
+    const int dt = 20;
+    const vec3d hostStart(2400, -250, -2400);
+    // Y increases downward; the native Resistance 56 dock offset is -450.
+    const vec3d dock = hostStart + vec3d(0, -450, 0);
+    const vec3d target = hostStart + vec3d(1600, 0, 0);
+    NC_STACK_base visual;
+    Robo host;
+    InitGenesisProbeHost(host, w, visual, hostStart, hostShape);
+    AITank tank;
+    PrepareAITank(tank, w, 793, dock, target, tankShape);
+    tank._pSector = &w._cells.At(0); tank._cellId = Common::Point(0, 0);
+    tank._status_flg = 0;
+    SetGenesisProbeUnit(tank, host, visual, 790, 100.0);
+    host.AddSubject(&tank);
+    w._collisionScene->UpdateActor(&host); w._collisionScene->UpdateActor(&tank);
+
+    Collision::Contact contact;
+    const bool shapeContact = Collision::ContactShapes(*hostShape, host.GetBodyPosition(), host._rotation,
+        *tankShape, tank.GetBodyPosition(), tank._rotation, &contact);
+    const bool footprint = GenesisFootprintOverlap(host, *hostShape, tank, *tankShape);
+    Check(!shapeContact && footprint,
+          "above-host dock starts 3D clear while projected XZ footprints overlap");
+    int releaseFrame = -1;
+    for (int frame = 0; frame < 8 && tank._status == BACT_STATUS_CREATE; ++frame) {
+        w._timeStamp += dt;
+        TickGenesisProbeHost(host, w, dt);
+        tank._target_vec = target - tank._position;
+        StepAITank(tank, w, dt, false);
+        if (tank._status != BACT_STATUS_CREATE) releaseFrame = frame;
+    }
+    Collision::Contact atRelease;
+    const bool releaseContact = Collision::ContactShapes(*hostShape, host.GetBodyPosition(), host._rotation,
+        *tankShape, tank.GetBodyPosition(), tank._rotation, &atRelease);
+    Check(releaseFrame == 4 && tank._genesisExitPending &&
+          GenesisFootprintOverlap(host, *hostShape, tank, *tankShape) && !releaseContact,
+          "CREATE timer ends at its normal duration while docked unit keeps exit grace");
+    for (int frame = 0; frame < 160; ++frame) {
+        w._timeStamp += dt;
+        TickGenesisProbeHost(host, w, dt);
+        tank._target_vec = target - tank._position;
+        StepAITank(tank, w, dt, false);
+    }
+    Check(GenesisFootprintOverlap(host, *hostShape, tank, *tankShape) &&
+          tank._genesisExitPending,
+          "vertical dock separation alone does not clear own-host exit grace");
+    for (int frame = 0; frame < 600 && tank._genesisExitPending; ++frame) {
+        w._timeStamp += dt;
+        TickGenesisProbeHost(host, w, dt);
+        tank._target_vec = target - tank._position;
+        StepAITank(tank, w, dt, false);
+    }
+    Check(!tank._genesisExitPending &&
+          !GenesisFootprintOverlap(host, *hostShape, tank, *tankShape),
+          "unit created at the native above-host dock lands and exits the host footprint");
+    w._collisionScene.reset();
+}
+
+void GenesisHostExitRegression(const std::shared_ptr<Collision::Shape> &hostShape,
+                               const std::shared_ptr<Collision::Shape> &tankShape) {
+    for (bool hostFirst : {true, false})
+        for (bool commanderParent : {false, true})
+            GenesisHostExitCase(hostShape, tankShape, hostFirst, commanderParent);
+    GenesisForeignHostDuringGraceRegression(hostShape, tankShape);
+    GenesisAboveHostDockRegression(hostShape, tankShape);
+}
+
+struct GenesisModelSnapshot
+{
+    std::vector<vec3d> vertices;
+    double minY = std::numeric_limits<double>::infinity();
+    double maxY = -std::numeric_limits<double>::infinity();
+};
+
+double GenesisPeakScale()
+{
+    return NC_STACK_ypabact::GenesisScaleBase +
+           NC_STACK_ypabact::GenesisScaleCurve / NC_STACK_ypabact::GenesisScaleCurve;
+}
+
+NC_STACK_base *GenesisSet1Model(NC_STACK_base *vpList, int id)
+{
+    if (!vpList || id < 0 || static_cast<size_t>(id) >= vpList->GetKidList().size())
+        return nullptr;
+    auto it = vpList->GetKidList().begin();
+    std::advance(it, id);
+    return *it;
+}
+
+void GenesisModelVertices(NC_STACK_base *node, const mat3x3 &parentBasis,
+                          const vec3d &parentOffset, GenesisModelSnapshot &out)
+{
+    if (!node) return;
+    const mat3x3 basis = parentBasis * node->TForm().SclRot;
+    const vec3d offset = parentBasis.Transform(node->TForm().Pos) + parentOffset;
+    if (auto *skeleton = node->GetSkeleton())
+        if (auto *data = skeleton->GetSkelet())
+            for (const auto &vertex : data->POO)
+            {
+                const vec3d point = basis.Transform(vertex) + offset;
+                out.vertices.push_back(point);
+                out.minY = std::min(out.minY, point.y);
+                out.maxY = std::max(out.maxY, point.y);
+            }
+    for (auto *child : node->GetKidList())
+        GenesisModelVertices(child, basis, offset, out);
+}
+
+double GenesisVisibleMaxY(const NC_STACK_ypabact &actor,
+                          const GenesisModelSnapshot &model,
+                          double scaleOverride = -1.0)
+{
+    const vec3d scale = scaleOverride >= 0.0 ? vec3d(scaleOverride) : actor._scale;
+    const mat3x3 renderBasis = actor._rotation.Transpose() * mat3x3::Scale(scale);
+    const mat3x3 visualScale = mat3x3::Scale(actor._vp_scale);
+    double maximum = -std::numeric_limits<double>::infinity();
+    for (const auto &vertex : model.vertices)
+        maximum = std::max(maximum, (renderBasis.Transform(visualScale.Transform(vertex))).y);
+    return actor.GetBodyPosition().y + maximum;
+}
+
+double GenesisTFormMaxY(const NC_STACK_ypabact &actor,
+                        const GenesisModelSnapshot &model)
+{
+    const mat3x3 visualScale = mat3x3::Scale(actor._vp_scale);
+    double maximum = -std::numeric_limits<double>::infinity();
+    for (const auto &vertex : model.vertices)
+        maximum = std::max(maximum,
+            (actor._tForm.SclRot.Transform(visualScale.Transform(vertex)) + actor._tForm.Pos).y);
+    return maximum;
+}
+
+struct GenesisProbeUfo : Actor<NC_STACK_ypaufo>
+{
+    bool moveDownDuringAI = false;
+    void AI_layer1(update_msg *arg) override
+    {
+        if (moveDownDuringAI)
+        {
+            _position.y += 200.0;
+            moveDownDuringAI = false;
+        }
+        NC_STACK_ypabact::AI_layer1(arg);
+    }
+};
+
+struct GenesisProbeRobo : Robo
+{
+    using NC_STACK_yparobo::InitForce;
+};
+
+void GenesisBindUfo(GenesisProbeUfo &actor, GroundWorld &world, int gid,
+                    const vec3d &position,
+                    const std::shared_ptr<Collision::Shape> &shape,
+                    NC_STACK_base *genesis, NC_STACK_base *normal,
+                    float energy, float overeof)
+{
+    actor.Bind(world, gid, position, shape);
+    actor._bact_type = BACT_TYPES_UFO;
+    actor._pSector = &world._cells.At(0);
+    actor._cellId = Common::Point(0, 0);
+    actor._wrldSize = vec2d(9600, -9600);
+    actor._mass = 400.0f;
+    actor._energy = actor._energy_max = energy;
+    actor._force = actor._base_force = 27000.0f;
+    actor._height = 500.0f;
+    actor._overeof = overeof;
+    actor._radius = shape ? shape->radius : 30.0f;
+    actor._scale = vec3d(1.0);
+    actor._vp_scale = vec3d(1.0);
+    actor._vp_spin_strength = vec3d(0.0);
+    actor._vp_genesis = genesis;
+    actor._vp_normal = normal;
+}
+
+void GenesisUpdateFrame(NC_STACK_ypabact &actor, GroundWorld &world, int frameTime)
+{
+    world._timeStamp += frameTime;
+    update_msg update{};
+    update.gTime = world._timeStamp;
+    update.frameTime = frameTime;
+    actor.Update(&update);
+}
+
+void GenesisFullAnimationProbe(const char *label,
+                               const std::shared_ptr<Collision::Shape> &shape,
+                               NC_STACK_base *genesis, NC_STACK_base *normal,
+                               const GenesisModelSnapshot &genesisModel,
+                               const GenesisModelSnapshot &normalModel,
+                               float energy, float overeof, int expectedFrames)
+{
+    Check(!genesisModel.vertices.empty() && !normalModel.vertices.empty(),
+          "Set1 Genesis and normal VP contain real skeleton vertices");
+    if (genesisModel.vertices.empty() || normalModel.vertices.empty()) return;
+
+    auto *savedDriver = SFXEngine::SFXe.digDriver;
+    if (!savedDriver) SFXEngine::SFXe.digDriver = new waldev();
+
+    GroundWorld world;
+    world._vhclProtos.resize(256);
+    world._weaponProtos.resize(256);
+    GenesisProbeUfo actor;
+    const vec3d start(3000, 200, -3000);
+    GenesisBindUfo(actor, world, 920, start, shape, genesis, normal, energy, overeof);
+
+    setState_msg create{};
+    create.newStatus = BACT_STATUS_CREATE;
+    actor.SetState(&create);
+    actor._scale_time = energy * 0.2f;
+    Check(actor._status == BACT_STATUS_CREATE,
+          "real-asset unit enters native CREATE through SetState");
+    const double expectedClearance = std::max({double(overeof),
+        shape ? Collision::DownExtent(*shape, mat3x3::Ident()) : 0.0,
+        genesisModel.maxY * GenesisPeakScale()}) +
+        (shape ? shape->tolerance : 0.0);
+    Check(std::fabs(actor._position.y + expectedClearance) < 0.05,
+          "SetState birth placement includes the real Genesis max-scale support");
+    const double firstVisualMaxY = GenesisTFormMaxY(actor, genesisModel);
+    Check((actor._tForm.Pos - actor._position).length() < 0.01 &&
+          (actor._tForm.Pos - actor.GetBodyPosition()).length() < 0.01,
+          "SetState synchronizes the render origin to the placed actor position");
+    Check(firstVisualMaxY <= 0.05,
+          "real Genesis vertices are above the floor in the first pose before Update");
+    std::printf("GENESIS_SETSTATE label=%s body_y=%.4f expected=%.4f create_ms=%.1f vp_y=[%.3f,%.3f] shape=%d\n",
+                label, actor._position.y, -expectedClearance, double(actor._scale_time),
+                genesisModel.minY, genesisModel.maxY, shape ? 1 : 0);
+
+    // A loaded CREATE has no serialized ground-check bit. Recreate that state
+    // after SetState, then let the real actor Update execute its first frame.
+    actor._position.y = start.y;
+    actor._old_pos = actor._position;
+    actor._genesisGroundChecked = false;
+    GenesisUpdateFrame(actor, world, 20);
+    Check(actor._genesisGroundChecked && actor._position.y < 0.0,
+          "first native Update checks a loaded CREATE before it can sink");
+    Check((actor._tForm.Pos - actor.GetBodyPosition()).length() < 0.01 &&
+          GenesisTFormMaxY(actor, genesisModel) <= 0.05,
+          "first native Update renders the corrected Genesis pose above the floor");
+    const auto visibleMaxY = [&](const GenesisModelSnapshot &visible) {
+        const double renderScale = (actor._status_flg & BACT_STFLAG_SCALE) ? -1.0 : 1.0;
+        return GenesisVisibleMaxY(actor, visible, renderScale);
+    };
+    double maxDepth = visibleMaxY(genesisModel);
+    double maxStep = 0.0;
+    int frames = 1;
+    for (; frames < expectedFrames + 8 && actor._status == BACT_STATUS_CREATE; ++frames)
+    {
+        const vec3d old = actor._position;
+        GenesisUpdateFrame(actor, world, 20);
+        maxStep = std::max(maxStep, (actor._position - old).length());
+        const auto &visible = (actor._status_flg & BACT_STFLAG_SCALE) ? genesisModel : normalModel;
+        maxDepth = std::max(maxDepth, visibleMaxY(visible));
+    }
+    Check(actor._status == BACT_STATUS_NORMAL && frames >= expectedFrames - 1 &&
+          frames <= expectedFrames + 2,
+          "real Genesis animation finishes on the native energy-scaled timer");
+    Check(maxDepth <= 0.05,
+          "every sampled real Genesis skeleton vertex stays above the ground during CREATE");
+    Check(maxStep < 0.05,
+          "real CREATE rotation does not produce repeated vertical jumps");
+    std::printf("GENESIS_ANIMATION label=%s frames=%d max_visible_y=%.5f max_step=%.5f end_y=%.4f scale=%.4f\n",
+                label, frames, maxDepth, maxStep, actor._position.y, actor._scale.y);
+
+    // Force a downward movement inside the same native Update after its start
+    // pose is captured; the post-AI CREATE check must restore the floor pose.
+    GroundWorld movedWorld;
+    movedWorld._vhclProtos.resize(256);
+    movedWorld._weaponProtos.resize(256);
+    GenesisProbeUfo moved;
+    GenesisBindUfo(moved, movedWorld, 921, start, shape, genesis, normal, energy, overeof);
+    moved._scale_time = energy * 0.2f;
+    moved.SetState(&create);
+    moved._scale_time = energy * 0.2f;
+    const double safeY = moved._position.y;
+    moved._genesisGroundChecked = true;
+    moved.moveDownDuringAI = true;
+    GenesisUpdateFrame(moved, movedWorld, 20);
+    Check(moved._genesisGroundChecked && std::fabs(moved._position.y - safeY) < 0.05,
+          "native Update rechecks terrain after an external position change during CREATE");
+    std::printf("GENESIS_MOVE label=%s safe_y=%.4f after_y=%.4f\n",
+                label, safeY, moved._position.y);
+
+    if (!savedDriver) SFXEngine::SFXe.digDriver = nullptr;
+    world._collisionScene.reset();
+    movedWorld._collisionScene.reset();
+}
+
+void GenesisTarantulFactoryGrid(NC_STACK_base *vpList,
+                                const std::shared_ptr<Collision::Shape> &mykoShape,
+                                const std::shared_ptr<Collision::Shape> &turantulShape,
+                                const GenesisModelSnapshot &mykoGenesis)
+{
+    if (!mykoShape || !turantulShape) return;
+    GroundWorld world;
+    world._vhclProtos.resize(68);
+    world._weaponProtos.resize(256);
+    for (auto *model : vpList->GetKidList()) world._vhclModels.push_back(model);
+    auto &myko = world._vhclProtos[67];
+    myko.model_id = BACT_TYPES_UFO;
+    myko.weapon = -1;
+    myko.energy = 6500;
+    myko.production_cost = 140;
+    myko.max_active_at_once = 5;
+    myko.mass = 400.0f;
+    myko.force = 27000.0f;
+    myko.maxrot = 1.8f;
+    myko.airconst = 120.0f;
+    myko.height = 500.0f;
+    myko.radius = 30.0f;
+    myko.overeof = 20.0f;
+    myko.vp_normal = 200;
+    myko.vp_genesis = 252;
+    myko.collision_shape = "Data/Models/Collision/Myko-Scout.collision";
+    myko.scale_fx_pXX.fill(0);
+
+    GenesisProbeRobo host;
+    const vec3d hostBase(1800, 0, -3000);
+    host.Bind(world, 930, hostBase, turantulShape);
+    host._bact_type = BACT_TYPES_ROBO;
+    host._owner = 1;
+    host._pSector = &world._cells.At(0);
+    host._wrldSize = vec2d(9600, -9600);
+    host._mass = 5000.0f;
+    host._force = 10000.0f;
+    host._maxrot = 2.0f;
+    host._airconst = host._airconst_static = 100.0f;
+    host._height = 200.0f;
+    host._overeof = 50.0f;
+    host._roboWFlags = 3; // Turantul_I: robo_does_twist + robo_does_flux.
+    host._roboState = 0;
+    host._roboDockPos = vec3d(0, 40, 0);
+    host._roboDockEnerg = 100000;
+    host._roboDockCnt = 0;
+    host._energy = host._energy_max = 5000000;
+    host._vp_normal = GenesisSet1Model(vpList, 116);
+    host._vp_genesis = GenesisSet1Model(vpList, 121);
+
+    GenesisProbeUfo commander;
+    commander.Bind(world, 939, hostBase, nullptr);
+    commander._vehicleID = 67;
+    commander._commandID = 939;
+    commander._owner = 1;
+    commander._bact_type = BACT_TYPES_UFO;
+    commander._energy = commander._energy_max = 6500;
+    const double childClearance = std::max({20.0,
+        Collision::DownExtent(*mykoShape, mat3x3::Ident()),
+        mykoGenesis.maxY * GenesisPeakScale()}) +
+        mykoShape->tolerance;
+    int sample = 0;
+    for (double hostY : {-100.0, 0.0, 120.0, 300.0})
+    {
+        host._position = vec3d(hostBase.x, hostY, hostBase.z);
+        host._old_pos = host._position;
+        host._roboDockTime = 0;
+        host._roboDockEnerg = 100000;
+        host._energy = host._energy_max = 5000000;
+        host.InitForce(&commander);
+        NC_STACK_ypabact *unit = commander.GetKidList().empty() ? nullptr : commander.GetKidList().back();
+        Check(unit && unit->_host_station == &host && unit->_status == BACT_STATUS_CREATE,
+              "native Tarantul InitForce creates a Myko at the configured dock point");
+        if (unit)
+        {
+            Check(unit->HasCollisionShape() &&
+                  std::fabs(unit->_position.x - hostBase.x) < 0.01 &&
+                  std::fabs(unit->_position.z - hostBase.z) < 0.01,
+                  "Tarantul production uses the real Myko hull and preserves dock XZ");
+            Check(unit->_position.y <= -childClearance + 0.05,
+                  "Tarantul dock birth is raised above the floor for every sampled host height");
+            Check((unit->_tForm.Pos - unit->_position).length() < 0.01 &&
+                  (unit->_tForm.Pos - unit->GetBodyPosition()).length() < 0.01 &&
+                  GenesisTFormMaxY(*unit, mykoGenesis) <= 0.05,
+                  "native InitForce factory returns with safe Genesis model transform");
+            std::printf("TARANTUL_DOCK sample=%d host_y=%.1f dock_y=40 spawn_y=%.1f placed_y=%.4f clearance=%.4f\n",
+                        sample, hostY, hostY + 40.0, unit->_position.y, childClearance);
+            unit->Delete();
+        }
+        ++sample;
+    }
+    world._collisionScene.reset();
+}
+
+void GenesisCurrentSectorHeightProbe(const std::shared_ptr<Collision::Shape> &mykoShape,
+                                     NC_STACK_base *mykoGenesis,
+                                     const GenesisModelSnapshot &mykoModel)
+{
+    if (!mykoShape || !mykoGenesis) return;
+    GroundWorld world;
+    world._cells.At(0).height = 120.0f;
+    world._cells(1, 1).height = 700.0f;
+    world._legoArray[0].CollisionSkelet = nullptr;
+    world._legoArray[0].UseCollisionSkelet = nullptr;
+    world._fillerSide = nullptr;
+    world._fillerCross = nullptr;
+    world._collisionScene.reset();
+
+    Actor<> actor;
+    actor.Bind(world, 950, vec3d(3000, 500, -3000), mykoShape);
+    actor._bact_type = BACT_TYPES_UFO;
+    actor._status_flg = 0;
+    actor._position = actor._old_pos = vec3d(3000, 500, -3000);
+    actor._pSector = &world._cells(1, 1); // Deliberately stale relative to GetSectorInfo.
+    actor._collisionShape = mykoShape;
+    actor._overeof = 20.0f;
+    actor._vp_genesis = mykoGenesis;
+    actor._vp_scale = vec3d(1.0);
+    actor.PlaceGenesisAboveTerrain();
+
+    const double clearance = std::max({20.0,
+        Collision::DownExtent(*mykoShape, mat3x3::Ident()),
+        mykoModel.maxY * GenesisPeakScale()}) + mykoShape->tolerance;
+    const double expected = 120.0 - clearance;
+    Check(std::fabs(actor._position.y - expected) < 0.05 &&
+          std::fabs(actor._position.y - (700.0 - clearance)) > 100.0,
+          "terrain placement reads current-sector height instead of stale actor sector");
+    Check((actor._tForm.Pos - actor.GetBodyPosition()).length() < 0.01,
+          "current-sector terrain placement synchronizes first render origin");
+    std::printf("GENESIS_CURRENT_SECTOR cell_height=120 stale_height=700 placed_y=%.4f expected=%.4f\n",
+                actor._position.y, expected);
+}
+
+struct GenesisContactProbeUfo : GenesisProbeUfo
+{
+    vec3d positionAtAI;
+    void AI_layer1(update_msg *arg) override
+    {
+        positionAtAI = _position;
+        GenesisProbeUfo::AI_layer1(arg);
+    }
+};
+
+void GenesisRoofPostContactProbe(const std::shared_ptr<Collision::Shape> &ghorShape,
+                                 NC_STACK_base *ghorGenesis,
+                                 NC_STACK_base *ghorNormal,
+                                 const GenesisModelSnapshot &ghorModel)
+{
+    if (!ghorShape || !ghorGenesis) return;
+    auto *savedDriver = SFXEngine::SFXe.digDriver;
+    if (!savedDriver) SFXEngine::SFXe.digDriver = new waldev();
+
+    BuildingWorld world;
+    world._vhclProtos.resize(256);
+    world._weaponProtos.resize(256);
+    double genesisRadius = 0.0;
+    for (const auto &vertex : ghorModel.vertices)
+        genesisRadius = std::max(genesisRadius, vertex.length() * GenesisPeakScale());
+    const double startX = std::max(3200.0, 3140.0 + genesisRadius + 10.0);
+    GenesisContactProbeUfo ghor;
+    const vec3d start(startX, 200, -3000);
+    GenesisBindUfo(ghor, world, 960, start, ghorShape, ghorGenesis,
+                   ghorNormal, 7000, 36);
+    ghor._oflags |= BACT_OFLAG_EXACTCOLL;
+    setState_msg create{};
+    create.newStatus = BACT_STATUS_CREATE;
+    ghor.SetState(&create);
+    ghor._scale_time = 1400;
+    const double clearance = std::max({36.0,
+        Collision::DownExtent(*ghorShape, mat3x3::Ident()),
+        ghorModel.maxY * GenesisPeakScale()}) + ghorShape->tolerance;
+    const double spawnY = ghor._position.y;
+
+    // A normal unit-sized box immediately to the Ghor's right overlaps its
+    // real collision hull and pushes it toward the roof during initial resolve.
+    auto blockerShape = Shape({Box(vec3d(0), 25, 25, 25)});
+    Actor<> blocker;
+    blocker.Bind(world, 961, vec3d(startX + 40.0, ghor._position.y, start.z), blockerShape);
+    blocker._oflags |= BACT_OFLAG_EXACTCOLL;
+    blocker._mass = 400.0f;
+
+    GenesisUpdateFrame(ghor, world, 20);
+    const double roofY = -180.0; // BuildingWorld's top face is at y=-180.
+    const double aiX = ghor.positionAtAI.x;
+    const double finalVisibleY = GenesisTFormMaxY(ghor, ghorModel);
+    std::printf("GENESIS_ROOF start_x=%.3f genesis_radius=%.3f spawn_y=%.4f ai_x=%.3f final_x=%.3f final_y=%.4f roof_y=%.1f visible_max_y=%.4f blocker_x=%.3f\n",
+                startX, genesisRadius, spawnY, aiX, ghor._position.x,
+                ghor._position.y, roofY, finalVisibleY, blocker._position.x);
+    Check(std::fabs(spawnY + clearance) < 0.05,
+          "Ghor begins above flat ground with its full Genesis footprint outside the roof");
+    Check(aiX < 3140.0 + genesisRadius && aiX < startX - 5.0,
+          "normal blocker pushes the Ghor Genesis footprint onto the roof during initial resolve");
+    Check(ghor._position.y < roofY - clearance + 0.05 && finalVisibleY <= roofY + 0.05,
+          "final post-contact placement raises the Ghor above the newly covered building roof");
+
+    world._collisionScene.reset();
+    if (!savedDriver) { delete SFXEngine::SFXe.digDriver; SFXEngine::SFXe.digDriver = nullptr; }
+}
+
+void GenesisRealVisualTerrainRegression(NC_STACK_base *vpList)
+{
+    GenesisModelSnapshot ghorGenesis, ghorNormal, mykoGenesis, mykoNormal;
+    GenesisModelVertices(GenesisSet1Model(vpList, 199), mat3x3::Ident(), vec3d(0), ghorGenesis);
+    GenesisModelVertices(GenesisSet1Model(vpList, 197), mat3x3::Ident(), vec3d(0), ghorNormal);
+    GenesisModelVertices(GenesisSet1Model(vpList, 252), mat3x3::Ident(), vec3d(0), mykoGenesis);
+    GenesisModelVertices(GenesisSet1Model(vpList, 200), mat3x3::Ident(), vec3d(0), mykoNormal);
+    std::printf("GENESIS_ASSETS ghor=199 vertices=%zu y=[%.3f,%.3f] normal=197 vertices=%zu y=[%.3f,%.3f] myko=252 vertices=%zu y=[%.3f,%.3f] normal=200 vertices=%zu y=[%.3f,%.3f]\n",
+                ghorGenesis.vertices.size(), ghorGenesis.minY, ghorGenesis.maxY,
+                ghorNormal.vertices.size(), ghorNormal.minY, ghorNormal.maxY,
+                mykoGenesis.vertices.size(), mykoGenesis.minY, mykoGenesis.maxY,
+                mykoNormal.vertices.size(), mykoNormal.minY, mykoNormal.maxY);
+    std::string error;
+    auto ghor = Collision::Load("Data/Models/Collision/Ghor-Scout.collision", &error);
+    Check(ghor != nullptr, error.empty() ? "Ghor-Scout real collision profile" : error.c_str());
+    error.clear();
+    auto myko = Collision::Load("Data/Models/Collision/Myko-Scout.collision", &error);
+    Check(myko != nullptr, error.empty() ? "Myko-Scout real collision profile" : error.c_str());
+    error.clear();
+    auto turantul = Collision::Load("Data/Models/Collision/Turantul_I.collision", &error);
+    Check(turantul != nullptr, error.empty() ? "Turantul_I real collision profile" : error.c_str());
+    if (ghor)
+        GenesisFullAnimationProbe("Ghor-Scout", ghor, GenesisSet1Model(vpList, 199),
+                                  GenesisSet1Model(vpList, 197), ghorGenesis,
+                                  ghorNormal, 7000, 36, 70);
+    if (myko)
+        GenesisFullAnimationProbe("Myko-Scout", myko, GenesisSet1Model(vpList, 252),
+                                  GenesisSet1Model(vpList, 200), mykoGenesis,
+                                  mykoNormal, 6500, 20, 65);
+    if (ghor)
+        GenesisFullAnimationProbe("Ghor-Scout legacy-no-shape", {},
+                                  GenesisSet1Model(vpList, 199), GenesisSet1Model(vpList, 197),
+                                  ghorGenesis, ghorNormal, 7000, 36, 70);
+    if (myko && turantul) GenesisTarantulFactoryGrid(vpList, myko, turantul, mykoGenesis);
+    if (myko) GenesisCurrentSectorHeightProbe(myko, GenesisSet1Model(vpList, 252), mykoGenesis);
+    if (ghor) GenesisRoofPostContactProbe(ghor, GenesisSet1Model(vpList,199), GenesisSet1Model(vpList,197), ghorGenesis);
+}
+
+void GenesisMountedGunExitAssociationCase(bool sharedGun, bool commanderParent,
+        const std::shared_ptr<Collision::Shape> &hostShape,
+        const std::shared_ptr<Collision::Shape> &gunShape,
+        const std::shared_ptr<Collision::Shape> &unitShape) {
+    GroundWorld w;
+    NC_STACK_base visual;
+    const vec3d hostPos(2400, -250, -2400);
+    const vec3d gunPos = hostPos + vec3d(20, 0, 0);
+    Robo host;
+    InitGenesisProbeHost(host, w, visual, hostPos, hostShape);
+
+    Actor<NC_STACK_ypagun> gun;
+    gun.Bind(w, sharedGun ? 901 : 900, gunPos, gunShape);
+    gun._bact_type = BACT_TYPES_GUN;
+    gun._radius = 4;
+    gun._wrldSize = vec2d(9600, -9600);
+    gun._host_station = sharedGun ? nullptr : &host;
+    gun._isUnitGunChild = sharedGun;
+    gun.setGUN_roboGun(1);
+    SetGenesisProbeVisuals(gun, visual);
+    host.AddSubject(&gun);
+    if (!sharedGun) {
+        World::TRoboGun mount{};
+        mount.gun_obj = &gun;
+        mount.pos = gunPos - hostPos;
+        host._roboGuns.push_back(mount);
+    }
+
+    AITank unit;
+    PrepareAITank(unit, w, sharedGun ? 903 : 902,
+                  hostPos + vec3d(21.5, 0, 0), hostPos + vec3d(1000, 0, 0), unitShape);
+    unit._pSector = &w._cells.At(0);
+    unit._cellId = Common::Point(0, 0);
+    if (commanderParent) {
+        Actor<> commander;
+        commander.Bind(w, sharedGun ? 905 : 904, hostPos + vec3d(1500, 0, 0));
+        commander._pSector = &w._cells.At(0);
+        commander._cellId = Common::Point(0, 0);
+        host.AddSubject(&commander);
+        commander.AddSubject(&unit);
+        SetGenesisProbeUnit(unit, host, visual, commander._gid, 20);
+
+        Check(unit._parent == &commander && unit._host_station == &host &&
+              unit._genesisExitPending,
+              "Genesis gun regression preserves the exact Host Station under a commander parent");
+        update_msg release{};
+        release.frameTime = 20;
+        release.gTime = w._timeStamp;
+        unit.CreationTimeUpdate(&release);
+        Check(unit._status == BACT_STATUS_NORMAL && unit._genesisExitPending,
+              "CREATE timer expires normally while mounted attachments keep own-host grace active");
+
+        Robo foreignHost;
+        const vec3d foreignPos = hostPos + vec3d(100, 0, 0);
+        InitGenesisProbeHost(foreignHost, w, visual, foreignPos, hostShape);
+        foreignHost._gid = 906;
+        Actor<NC_STACK_ypagun> foreignGun;
+        const vec3d foreignGunPos = foreignPos + vec3d(20, 0, 0);
+        foreignGun.Bind(w, 907, foreignGunPos, gunShape);
+        foreignGun._bact_type = BACT_TYPES_GUN;
+        foreignGun._radius = 4;
+        foreignGun._host_station = &foreignHost;
+        foreignGun.setGUN_roboGun(1);
+        foreignHost.AddSubject(&foreignGun);
+        SetGenesisProbeVisuals(foreignGun, visual);
+
+        // The unit is 3D-clear of the host body but touches its protruding gun.
+        Collision::Contact hostGeometry, gunGeometry;
+        const bool hostOverlap = Collision::ContactShapes(*hostShape, host.GetBodyPosition(), host._rotation,
+            *unitShape, unit.GetBodyPosition(), unit._rotation, &hostGeometry);
+        const bool gunOverlap = Collision::ContactShapes(*gunShape, gun.GetBodyPosition(), gun._rotation,
+            *unitShape, unit.GetBodyPosition(), unit._rotation, &gunGeometry);
+        Collision::Contact gameContact;
+        const bool gunPair = w._collisionScene->PairContact(&unit, &gun, &gameContact);
+        Check(!hostOverlap && gunOverlap && !gunPair && unit._genesisExitPending,
+              "pending Genesis ignores only its own protruding mounted gun despite real geometric overlap");
+        const vec3d moveStart=unit._position;
+        const vec3d expectedMove=moveStart+vec3d(1,0,0);
+        w._timeStamp+=20;
+        unit._position=expectedMove;
+        unit.ResolveShapeMovement(moveStart,unit._rotation,20);
+        Check((unit._position-expectedMove).length()<.001 && unit._genesisExitPending,
+              "native swept movement through an overlapping own-host gun remains free during first exit");
+
+        unit._position = foreignPos;
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        const bool foreignBodyDuringGrace = w._collisionScene->PairContact(&unit, &foreignHost, &gameContact);
+        unit._position = foreignGunPos;
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        const bool foreignGunDuringGrace = w._collisionScene->PairContact(&unit, &foreignGun, &gameContact);
+        Check(foreignBodyDuringGrace && foreignGunDuringGrace && unit._genesisExitPending,
+              "pending grace remains specific to its own host and mounted guns");
+        unit._position = hostPos + vec3d(21.5, 0, 0);
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+
+        unit._position = hostPos + vec3d(13.5, 0, 0);
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        const bool bodyGap = Collision::ContactShapes(*hostShape, host.GetBodyPosition(), host._rotation,
+            *unitShape, unit.GetBodyPosition(), unit._rotation, nullptr);
+        const bool gunGap = Collision::ContactShapes(*gunShape, gun.GetBodyPosition(), gun._rotation,
+            *unitShape, unit.GetBodyPosition(), unit._rotation, nullptr);
+        unit.UpdateGenesisHostExit();
+        Check(!bodyGap && !gunGap && unit._genesisExitPending,
+              "a clear gap between the host body and its gun stays inside the combined exit envelope");
+
+        unit._position = hostPos + vec3d(40, 0, 0);
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        unit.UpdateGenesisHostExit();
+        Check(!unit._genesisExitPending,
+              "leaving the full host and mounted-gun footprint ends Genesis grace");
+
+        unit._position = hostPos;
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        const bool ownHostHit = w._collisionScene->PairContact(&unit, &host, &gameContact);
+        unit._position = gunPos;
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        const bool ownGunHit = w._collisionScene->PairContact(&unit, &gun, &gameContact);
+        Check(ownHostHit && ownGunHit,
+              "former Host Station and its gun are solid again after the first exit");
+
+        unit._position = foreignPos;
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        const bool foreignBodyHit = w._collisionScene->PairContact(&unit, &foreignHost, &gameContact);
+        unit._position = foreignGunPos;
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        const bool foreignGunHit = w._collisionScene->PairContact(&unit, &foreignGun, &gameContact);
+        Check(foreignBodyHit && foreignGunHit,
+              "a different Host Station and its mounted gun remain solid");
+
+        Actor<NC_STACK_ypatank> peer;
+        const vec3d peerPos = hostPos + vec3d(190, 0, 0);
+        peer.Bind(w, 908, peerPos, hostShape);
+        peer._bact_type = BACT_TYPES_TANK;
+        Actor<NC_STACK_ypagun> peerGun;
+        peerGun.Bind(w, 909, peerPos + vec3d(20, 0, 0), gunShape);
+        peerGun._bact_type = BACT_TYPES_GUN;
+        peerGun._isUnitGunChild = true;
+        peerGun._host_station = nullptr;
+        peer.AddSubject(&peerGun);
+        SetGenesisProbeVisuals(peerGun, visual);
+        unit._position = peerGun._position;
+        unit._old_pos = unit._position;
+        w._collisionScene->UpdateActor(&unit);
+        Check(w._collisionScene->PairContact(&unit, &peerGun, &gameContact),
+              "another vehicle's shared unit gun remains solid");
+
+        Missile shot;
+        shot.Bind(w, 910, gunPos - vec3d(0, 0, 30));
+        shot._bact_type = BACT_TYPES_MISSLE;
+        shot._radius = 1;
+        shot._old_pos = gunPos - vec3d(0, 0, 30);
+        shot._position = gunPos + vec3d(0, 0, 30);
+        Check(w._collisionScene->TraceProjectile(&shot, &gun, shot._rotation, &gameContact),
+              "projectile sweep still hits a mounted gun during Genesis grace");
+
+        w._collisionScene.reset();
+    } else {
+        host.AddSubject(&unit);
+        SetGenesisProbeUnit(unit, host, visual, 902, 20);
+        Check(unit._parent == &host && unit._host_station == &host &&
+              unit._genesisExitPending,
+              "Genesis gun regression preserves the exact Host Station under a direct parent");
+        Collision::Contact geometry, gameContact;
+        const bool overlap = Collision::ContactShapes(*gunShape, gun.GetBodyPosition(), gun._rotation,
+            *unitShape, unit.GetBodyPosition(), unit._rotation, &geometry);
+        Check(overlap && !w._collisionScene->PairContact(&unit, &gun, &gameContact),
+              "legacy native Robo gun association is ignored during own-host grace");
+        w._collisionScene.reset();
+    }
+}
+
+void GenesisMountedGunExitLegacySphereCase() {
+    GroundWorld w;
+    w._collisionScene.reset(); // A legacy-only world has no persistent shape index.
+    NC_STACK_base visual;
+    const vec3d hostPos(2400, -250, -2400);
+    Robo host;
+    InitGenesisProbeHost(host, w, visual, hostPos, {});
+
+    Actor<NC_STACK_ypagun> gun;
+    gun.Bind(w, 920, hostPos + vec3d(260, 0, 0));
+    gun._bact_type = BACT_TYPES_GUN;
+    gun._radius = 8;
+    gun._host_station = &host;
+    gun.setGUN_roboGun(1);
+    SetGenesisProbeVisuals(gun, visual);
+    host.AddSubject(&gun);
+
+    Actor<> dummy;
+    dummy.Bind(w, 921, hostPos + vec3d(280, 0, 0));
+    dummy._isDummy = true;
+    dummy._radius = 5;
+    gun.AddSubject(&dummy);
+
+    AITank unit;
+    PrepareAITank(unit, w, 922, hostPos + vec3d(260, 0, 0), hostPos, {});
+    unit._pSector = &w._cells.At(0);
+    unit._cellId = Common::Point(0, 0);
+    unit._radius = 2;
+    host.AddSubject(&unit);
+    SetGenesisProbeUnit(unit, host, visual, 922, 20);
+    update_msg update{};
+    update.frameTime = 20;
+    update.gTime = w._timeStamp;
+    unit.CreationTimeUpdate(&update);
+
+    vec3d selfCenter, otherCenter;
+    float penetration = 0;
+    const bool legacyPairAfterRelease = unit.GetUnitCollisionContact(&gun, &selfCenter, &otherCenter, &penetration);
+    Check(unit._status == BACT_STATUS_NORMAL && unit._genesisExitPending &&
+          !legacyPairAfterRelease,
+          "profile-free legacy collision spheres skip the own mounted Robo gun during grace");
+    unit._genesisExitPending = false;
+    Check(unit.GetUnitCollisionContact(&gun, &selfCenter, &otherCenter, &penetration),
+          "profile-free legacy collision contact remains active after grace");
+    unit._genesisExitPending = true;
+    unit.UpdateGenesisHostExit();
+    Check(unit._genesisExitPending,
+          "legacy sphere footprint keeps grace inside a gap spanning host and attachments");
+    unit._position = hostPos + vec3d(290, 0, 0);
+    unit._old_pos = unit._position;
+    unit.UpdateGenesisHostExit();
+    Check(!unit._genesisExitPending,
+          "legacy sphere footprint releases grace after the nested gun attachment group is cleared");
+    dummy._status=BACT_STATUS_DEAD;
+    unit._radius=10; gun._radius=1;
+    unit._genesisExitPending=true;
+    unit._position=gun._position+vec3d(12,0,0);
+    unit.UpdateGenesisHostExit();
+    Check(unit._genesisExitPending,
+          "legacy exit accounts for the mover-radius contact rule around a smaller mounted gun");
+    unit._position=gun._position+vec3d(30,0,0);
+    unit.UpdateGenesisHostExit();
+    Check(!unit._genesisExitPending,
+          "legacy first-exit grace ends once the native single-radius contact range is cleared");
+    w._collisionScene.reset();
+}
+
+void GenesisMountedGunExitRegression() {
+    auto hostShape = Shape({Box(vec3d(0, 0, 0), 10, 8, 10)});
+    auto gunShape = Shape({Box(vec3d(0, 0, 0), 4, 4, 4)});
+    auto unitShape = Shape({Box(vec3d(0, 0, 0), 2, 2, 2)});
+    GenesisMountedGunExitAssociationCase(false, false, hostShape, gunShape, unitShape);
+    GenesisMountedGunExitAssociationCase(true, true, hostShape, gunShape, unitShape);
+    GenesisMountedGunExitLegacySphereCase();
+    GenesisExitSaveParserRegression();
+}
+
 void BuildingBenchmark(std::shared_ptr<Collision::Shape> profile) {
     for(int count:{10,50,100}) {
         GroundWorld w; w._collisionScene.reset();
@@ -1083,6 +2396,26 @@ void BuildingBenchmark(std::shared_ptr<Collision::Shape> profile) {
 }
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
+    if (argc>1 && std::string(argv[1])=="--host-first-exit") {
+        FSMgr::iDir::setBaseDir("");
+        GenesisMountedGunExitRegression();
+        std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
+        return failures ? 1 : 0;
+    }
+    if (argc>1 && std::string(argv[1])=="--genesis-visual-terrain") {
+        extern int init_classesLists_and_variables();
+        FSMgr::iDir::setBaseDir("..");
+        Common::Env.SetPrefix("data", "Data");
+        Common::Env.SetPrefix("rsrc", "data:set1");
+        Common::Env.SetPrefix("scripts", "data:scripts");
+        init_classesLists_and_variables();
+        auto *set=load_set_base();
+        Check(set && !set->GetKidList().empty(), "native active Set1 visual models load");
+        if (set && !set->GetKidList().empty()) GenesisRealVisualTerrainRegression(set->GetKidList().front());
+        if (set) set->Delete();
+        std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
+        return failures ? 1 : 0;
+    }
     const mat3x3 identity=mat3x3::Ident(); const vec3d zero(0,0,0);
     auto cube=Shape({Box(zero,10,10,10)});
     auto concave=Shape({Box(vec3d(-20,0,0),8,10,10),Box(vec3d(20,0,0),8,10,10)});
@@ -1093,6 +2426,8 @@ int main(int argc,char **argv) {
     ProbeMove<NC_STACK_ypaufo>(cube,"production UFO Move invokes swept response");
     ProbeMove<NC_STACK_yparobo>(cube,"production Robo Move invokes swept response",BACT_TYPES_ROBO);
     RoboPositionRegression();
+    RoboUpdateRegression(cube);
+    GenesisExitSaveParserRegression();
     {
         TestWorld w; w._mapSize=Common::Point(8,8); w._cells.Resize(w._mapSize);
         w._collisionScene.reset(new Collision::Scene(w));
@@ -1241,6 +2576,14 @@ int main(int argc,char **argv) {
               "profile-free production projectile retains legacy class tolerance");
         Check(!legacy._collisionScene,"profile-free world does not create new collision service");
     }
+    if (argc>1 && std::string(argv[1])=="--birth-placement") {
+        std::string error;
+        auto myko=Collision::Load("Models/Collision/Myko-Scout.collision", &error);
+        BirthPlacementRegression(myko);
+        GenesisFactoryBirthPlacementRegression();
+        std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
+        return failures ? 1 : 0;
+    }
     std::vector<std::shared_ptr<Collision::Shape>> pilotProfiles;
     for(int i=1;i<std::min(argc,4);++i) {
         std::string error; auto s=Collision::Load(argv[i],&error); Check(s!=nullptr,error.c_str());
@@ -1253,6 +2596,8 @@ int main(int argc,char **argv) {
         if(authored) {
             std::printf("AUTHOR_PROFILE %s hulls=%zu source_set=%d\n",argv[4],authored->parts.size(),authored->assetSet);
             RoboRealProfileContacts(authored);
+            RoboUpdateRegression(authored);
+            if (!pilotProfiles.empty()) GenesisHostExitRegression(authored, pilotProfiles.front());
             BuildingBenchmark(authored);
             PairBenchmark(authored);
         }
@@ -1324,6 +2669,23 @@ int main(int argc,char **argv) {
     Check(!missile.TubeCollisionTest(false,&target),"world obstruction precedes shape hit"); world.wallFraction=-1;
     auto parse=[&](Engine::StringList lines) { ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(&world)}; return ScriptParser::ParseStringList(lines,handlers,0); };
     Check(parse({"new_vehicle 1","model = heli","end"}) && world._vhclProtos[1].collision_shape.empty(),"absent parameter stays vanilla");
+    Check(world._vhclProtos[1].briefing_radius == 0 && world._vhclProtos[1].BriefingRadius() == 25,
+          "absent briefing radius uses vanilla radius");
+    Check(parse({"modify_vehicle 1","radius = 80","coll_act = 0","coll_radius = 200","end"}) &&
+          world._vhclProtos[1].BriefingRadius() == 80,"briefing fallback ignores compound collision size");
+    Check(parse({"modify_vehicle 1","Briefing_radius = 120","end"}) &&
+          world._vhclProtos[1].BriefingRadius() == 120 && world._vhclProtos[1].radius == 80 &&
+          world._vhclProtos[1].coll.roboColls[0].robo_coll_radius == 200,"briefing override leaves physical radii unchanged");
+    Check(parse({"modify_vehicle 1","energy = 32000","end"}) && world._vhclProtos[1].BriefingRadius() == 120,
+          "unrelated modifier preserves briefing override");
+    for (const char *value : {"0", "-1", "nan", "inf", "invalid", "120junk", "1e38", "1e100"})
+        Check(parse({"modify_vehicle 1",std::string("briefing_radius = ")+value,"end"}) &&
+              world._vhclProtos[1].briefing_radius == 0 && world._vhclProtos[1].BriefingRadius() == 80,
+              "invalid or disabled briefing radius falls back safely");
+    Check(parse({"modify_vehicle 1","briefing_radius = 0.5","end"}) && world._vhclProtos[1].BriefingRadius() == 0.5f,
+          "fractional briefing radius supported");
+    Check(parse({"new_vehicle 1","model = heli","end"}) && world._vhclProtos[1].briefing_radius == 0,
+          "new vehicle resets briefing override");
     Check(parse({"modify_vehicle 1","collision_shape = Data/Models/Collision/Pilot.collision","end"}) && world._vhclProtos[1].collision_shape=="Data/Models/Collision/Pilot.collision","production vehicle parser");
     Check(parse({"modify_vehicle 1","collision_shape = 0","end"}) && world._vhclProtos[1].collision_shape.empty(),"explicit zero stays vanilla");
     Check(parse({"modify_vehicle 1","collision_shape = ../escape.collision","end"}) && world._vhclProtos[1].collision_shape.empty(),"invalid path fallback");

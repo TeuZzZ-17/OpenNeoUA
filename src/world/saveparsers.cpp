@@ -265,6 +265,10 @@ bool SaveBact::SaveBactParser(ScriptParser::Parser &parser, NC_STACK_ypabact *b,
     {
         b->_isGenesisProduced = StrGetBool(p2);
     }
+    else if ( !StriCmp(p1, "genesis_exit_pending") )
+    {
+        b->_genesisExitPending = StrGetBool(p2);
+    }
     else if ( !StriCmp(p1, "invisible_unrevealed") )
     {
         b->_invisibleUnrevealed = StrGetBool(p2);

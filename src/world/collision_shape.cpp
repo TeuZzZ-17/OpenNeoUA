@@ -5,6 +5,7 @@
 #include "../ypabact.h"
 #include "../ypatank.h"
 #include "../ypagun.h"
+#include "../yparobo.h"
 #include "../yw.h"
 #include "../skeleton.h"
 #include "../yw_internal.h"
@@ -608,6 +609,7 @@ bool Residue(const NC_STACK_ypabact *a)
 }
 bool Related(const NC_STACK_ypabact *a, const NC_STACK_ypabact *b)
 {
+    if (a->IgnoresGenesisHostCollision(b) || b->IgnoresGenesisHostCollision(a)) return true;
     const auto *gunA = dynamic_cast<const NC_STACK_ypagun *>(a);
     const auto *gunB = dynamic_cast<const NC_STACK_ypagun *>(b);
     const bool attachedA = a->_isUnitGunChild || a->_isDummy ||
@@ -628,6 +630,8 @@ bool HorizontalPair(const NC_STACK_ypabact *a, const NC_STACK_ypabact *b)
     const auto controlled = [](const NC_STACK_ypabact *actor) {
         return actor && (GroundDrive(actor) || actor->_bact_type == BACT_TYPES_ROBO);
     };
+    if (a && b && (a->_status == BACT_STATUS_CREATE || b->_status == BACT_STATUS_CREATE))
+        return a->_bact_type != BACT_TYPES_GUN && b->_bact_type != BACT_TYPES_GUN;
     return controlled(a) && controlled(b);
 }
 void SetVelocity(NC_STACK_ypabact *a, const vec3d &velocity)
@@ -973,6 +977,134 @@ void Scene::ResetActorPose(NC_STACK_ypabact *a)
     body.resolvedRotation = a->_rotation;
     body.resolvedStamp = impl->world._timeStamp;
 }
+bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
+{
+    if (!a || !Finite(a->_position) ||
+        (a->_bact_type != BACT_TYPES_BACT && a->_bact_type != BACT_TYPES_TANK &&
+         a->_bact_type != BACT_TYPES_CAR && a->_bact_type != BACT_TYPES_FLYER &&
+         a->_bact_type != BACT_TYPES_UFO && a->_bact_type != BACT_TYPES_ZEPP)) return false;
+    const vec3d origin=a->GetBodyPosition();
+    yw_130arg sector;
+    sector.pos_x=origin.x; sector.pos_z=origin.z;
+    if (!impl->world.GetSectorInfo(&sector) || !sector.pcell) return false;
+    btVector3 lo=V(origin), hi=lo;
+    if (a->HasCollisionShape())
+    {
+        const auto pose=Pose(origin, a->_rotation);
+        for (const auto &part : a->_collisionShape->parts)
+            for (const auto &vertex : part.vertices)
+            {
+                const auto point=pose * V(vertex);
+                lo.setMin(point); hi.setMax(point);
+            }
+    }
+    else
+    {
+        const double radius=a->GetCollisionBroadRadius();
+        lo-=btVector3(radius,0,radius); hi+=btVector3(radius,0,radius);
+    }
+    double genesisDown=0, genesisRadius=0;
+    const mat3x3 rotation=a->_rotation.Transpose();
+    const mat3x3 visualScale=mat3x3::Scale(a->_vp_scale);
+    const bool visualTilts=a->_vp_rotation.x != 0 || a->_vp_rotation.z != 0 ||
+                          a->_vp_spin_strength.x != 0 || a->_vp_spin_strength.z != 0;
+    const double scale=NC_STACK_ypabact::GenesisScaleBase+1.0; // At zero remaining time the curve ratio is 1.
+    // CREATE renders a separate model and can grow beyond scale 1. Its yaw
+    // must stay clear for the entire animation, not only at the first frame.
+    const auto modelBounds = [&](const auto &visit, NC_STACK_base *model,
+                                 const mat3x3 &basis, const vec3d &offset, double renderScale) -> void {
+        if (!model) return;
+        if (auto *skeleton=model->GetSkeleton())
+            if (auto *data=skeleton->GetSkelet())
+                for (const auto &vertex : data->POO)
+                {
+                    const vec3d point=visualScale.Transform(basis.Transform(vertex)+offset);
+                    genesisRadius=std::max(genesisRadius, point.length()*renderScale);
+                    const double yawMaximum=visualTilts ? point.length() :
+                        rotation.m11*point.y+
+                        std::hypot(rotation.m10, rotation.m12)*std::hypot(point.x, point.z);
+                    genesisDown=std::max(genesisDown, yawMaximum*renderScale);
+                }
+        for (auto *child : model->GetKidList())
+            visit(visit, child, basis*child->TForm().SclRot,
+                  basis.Transform(child->TForm().Pos)+offset, renderScale);
+    };
+    modelBounds(modelBounds, a->_vp_genesis, mat3x3::Ident(), vec3d(0,0,0), scale);
+    if (a->_vp_normal != a->_vp_genesis)
+        modelBounds(modelBounds, a->_vp_normal, mat3x3::Ident(), vec3d(0,0,0), 1.0);
+    lo.setMin(V(origin)-btVector3(genesisRadius,0,genesisRadius));
+    hi.setMax(V(origin)+btVector3(genesisRadius,0,genesisRadius));
+    // Clip world triangles to the production footprint. A ray through the
+    // centre alone can miss a roof under an edge of the new unit.
+    struct Surface : btTriangleCallback
+    {
+        btTransform pose;
+        btVector3 lo, hi;
+        double y;
+        Surface(const btVector3 &low, const btVector3 &high, double ground)
+            : lo(low), hi(high), y(ground) {}
+        void processTriangle(btVector3 *triangle, int, int) override
+        {
+            std::vector<btVector3> polygon;
+            for (int i=0;i<3;++i) polygon.push_back(pose * triangle[i]);
+            for (int plane=0;plane<4 && !polygon.empty();++plane)
+            {
+                const int axis = plane < 2 ? 0 : 2;
+                const bool lower = (plane % 2) == 0;
+                const btScalar limit = lower ? lo[axis] : hi[axis];
+                auto inside = [&](const btVector3 &v) {
+                    return lower ? v[axis] >= limit : v[axis] <= limit;
+                };
+                std::vector<btVector3> clipped;
+                auto previous = polygon.back();
+                bool previousInside = inside(previous);
+                for (const auto &current : polygon)
+                {
+                    const bool currentInside = inside(current);
+                    if (previousInside != currentInside)
+                        clipped.push_back(previous + (current-previous) *
+                            ((limit-previous[axis]) / (current[axis]-previous[axis])));
+                    if (currentInside) clipped.push_back(current);
+                    previous=current; previousInside=currentInside;
+                }
+                polygon.swap(clipped);
+            }
+            for (const auto &v : polygon) y=std::min(y, double(v.y()));
+        }
+    } surface(lo, hi, sector.pcell->height);
+    const double radius = std::max(genesisRadius, a->HasCollisionShape() ? a->_collisionShape->radius : a->GetCollisionBroadRadius());
+    for (auto *body : impl->Terrain(a->GetBodyPosition(), a->GetBodyPosition(), radius, false))
+    {
+        surface.pose=body->object.getWorldTransform();
+        body->terrain->processAllTriangles(&surface,
+            btVector3(-BT_LARGE_FLOAT,-BT_LARGE_FLOAT,-BT_LARGE_FLOAT),
+            btVector3(BT_LARGE_FLOAT,BT_LARGE_FLOAT,BT_LARGE_FLOAT));
+    }
+    double clearance=std::max(0.0, double(a->_overeof));
+    if (a->HasCollisionShape()) clearance=std::max(clearance, DownExtent(*a->_collisionShape, a->_rotation));
+    clearance=std::max(clearance, genesisDown);
+    const double maximumY=surface.y-clearance-(a->HasCollisionShape() ? a->_collisionShape->tolerance : 0.0);
+    if (a->GetBodyPosition().y <= maximumY) return false;
+    bact_arg80 placement;
+    placement.pos=a->_position;
+    placement.pos.y+=maximumY-a->GetBodyPosition().y;
+    placement.field_C=2; // The factory already checked the playable bounds; only Y changes here.
+    if (!a->SetPosition(&placement)) return false;
+    if (impl->actors.find(a) != impl->actors.end()) ResetActorPose(a);
+    return true;
+}
+bool Scene::ActorFootprint(NC_STACK_ypabact *a, vec2d *minimum, vec2d *maximum)
+{
+    if (!Live(a)) return false;
+    impl->Update(a);
+    const auto actor=impl->actors.find(a);
+    if (actor==impl->actors.end()) return false;
+    btVector3 lo, hi;
+    const auto &object=actor->second->object;
+    object.getCollisionShape()->getAabb(object.getWorldTransform(), lo, hi);
+    *minimum=vec2d(lo.x(), lo.z()); *maximum=vec2d(hi.x(), hi.z());
+    return true;
+}
 bool Scene::PairContact(NC_STACK_ypabact *a, NC_STACK_ypabact *b, Contact *out)
 {
     if (!Live(a) || !Live(b) || Related(a, b) || (!a->HasCollisionShape() && !b->HasCollisionShape())) return false;
@@ -1119,7 +1251,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
     btVector3 lo = start.getOrigin(), hi = lo; lo.setMin(end.getOrigin()); hi.setMax(end.getOrigin());
     auto nearby = impl->Nearby(lo - pad, hi + pad);
     std::vector<Body *> terrain;
-    if (a->HasCollisionShape() && a->getBACT_exactCollisions())
+    if (a->HasCollisionShape() && a->getBACT_exactCollisions() && a->_status != BACT_STATUS_CREATE)
         terrain = impl->Terrain(fromPosition + bodyOffset, a->GetBodyPosition(), radius, a->_status_flg & BACT_STFLAG_LAND);
     nearby.insert(nearby.end(), terrain.begin(), terrain.end());
     if (a->HasCollisionShape() && a->getBACT_bactCollisions())
@@ -1142,7 +1274,10 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
     auto allowed = [&](Body *body) {
         auto *other = impl->Actor(body);
         if (body == &self) return false;
-        if (!other) return a->HasCollisionShape();
+        if (!other) return a->HasCollisionShape() && a->_status != BACT_STATUS_CREATE;
+        // Native Robo movement does not recoil against ordinary vehicle bodies.
+        // Vehicles still resolve their own motion against the moving host shape.
+        if (a->_bact_type == BACT_TYPES_ROBO && other->_bact_type != BACT_TYPES_ROBO) return false;
         return a->getBACT_bactCollisions() && Live(other) && !Related(a, other) &&
                !a->CanCollectPlasmaFrom(other) && (a->HasCollisionShape() || other->HasCollisionShape());
     };
@@ -1164,7 +1299,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             btVector3 low = slideFrom.getOrigin(), high = low;
             low.setMin(slideTo.getOrigin()); high.setMax(slideTo.getOrigin());
             nearby = impl->Nearby(low - pad, high + pad);
-            if (a->HasCollisionShape() && a->getBACT_exactCollisions())
+            if (a->HasCollisionShape() && a->getBACT_exactCollisions() && a->_status != BACT_STATUS_CREATE)
             {
                 auto geometry = impl->Terrain(safePosition + bodyOffset, desiredPosition + bodyOffset, radius, a->_status_flg & BACT_STFLAG_LAND);
                 nearby.insert(nearby.end(), geometry.begin(), geometry.end());
@@ -1388,7 +1523,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
         {
             const btVector3 p = self.object.getWorldTransform().getOrigin();
             nearby = impl->Nearby(p - pad, p + pad);
-            if (a->HasCollisionShape() && a->getBACT_exactCollisions())
+            if (a->HasCollisionShape() && a->getBACT_exactCollisions() && a->_status != BACT_STATUS_CREATE)
             {
                 auto geometry = impl->Terrain(a->GetBodyPosition(), a->GetBodyPosition(), radius, a->_status_flg & BACT_STFLAG_LAND);
                 nearby.insert(nearby.end(), geometry.begin(), geometry.end());
@@ -1474,6 +1609,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             if (Live(a) && Live(other)) a->HandleUnitCollisionContact(other, frameTime);
     }
     impl->Update(a);
+    a->UpdateGenesisHostExit();
     return changed;
 }
 }

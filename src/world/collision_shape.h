@@ -65,6 +65,8 @@ public:
     void Forget(NC_STACK_ypabact *actor);
     void UpdateActor(NC_STACK_ypabact *actor);
     void ResetActorPose(NC_STACK_ypabact *actor);
+    bool PlaceAboveTerrain(NC_STACK_ypabact *actor);
+    bool ActorFootprint(NC_STACK_ypabact *actor, vec2d *minimum, vec2d *maximum);
     bool TakeWorldContact(NC_STACK_ypabact *actor, Contact *contact);
     bool TakeUnitContact(NC_STACK_ypabact *actor, Contact *contact);
     bool Resolve(NC_STACK_ypabact *actor, const vec3d &oldPosition,

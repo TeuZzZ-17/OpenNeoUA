@@ -474,6 +474,8 @@ struct TBactAttacker
 class NC_STACK_ypabact: public NC_STACK_nucleus
 {
 public:
+    static constexpr double GenesisScaleBase = 0.1;
+    static constexpr double GenesisScaleCurve = 0.9;
     enum TA
     {
         TA_CANCEL,
@@ -637,6 +639,9 @@ public:
     void SmoothStabilizeUpright(float frameTime);
     virtual void ypabact_func98(IDVPair *arg);
     virtual void CreationTimeUpdate(update_msg *arg);
+    void PlaceGenesisAboveTerrain();
+    bool IgnoresGenesisHostCollision(const NC_STACK_ypabact *other) const;
+    void UpdateGenesisHostExit();
     virtual size_t IsDestroyed();
     virtual size_t CheckFireAI(bact_arg101 *arg);
     virtual void MarkSectorsForView();
@@ -673,12 +678,13 @@ public:
     // OpenNeoUA Buff invisibility: stealth-until-first-attack.
     // IsInvisibleUnrevealed()  -> true while the unit is still cloaked (no render,
     //                             radar/map/UI, sound, decoration FX, AI targeting).
-    // CanBeSeenByAIOrRadar()   -> convenience inverse used by AI/radar candidate filters.
+    // CanBeSeenByAIOrRadar()   -> shared AI filter for stealth, Spectator and New Debug F8.
     // RevealInvisibleOnAttack()-> permanently reveals this unit (and, for attached
     //                             unit-gun/dummy children, their carrier) the moment it
     //                             performs a real attack. No-op once revealed/normal.
     bool IsInvisibleUnrevealed() const { return _invisibleUnrevealed; }
-    bool CanBeSeenByAIOrRadar() const { return !_invisibleUnrevealed; }
+    bool IsIgnoredByAI() const;
+    bool CanBeSeenByAIOrRadar() const { return !_invisibleUnrevealed && !IsIgnoredByAI(); }
     void RevealInvisibleOnAttack();
     bool IsCockpitCameraAvailable() const;
     bool IsCockpitCameraActive() const;
@@ -938,6 +944,8 @@ public:
     uint32_t _commandID = 0;
     NC_STACK_yparobo *_host_station; // parent robo?
     bool _isGenesisProduced = false;
+    bool _genesisExitPending = false; // Own-host collision starts only after leaving the production footprint.
+    bool _genesisGroundChecked = false; // Derived placement check; rebuilt after loading or renewal.
     NC_STACK_ypabact *_parent;
     World::RefBactList _kidList;
     World::RefBactList::Node _kidRef;
@@ -951,6 +959,7 @@ public:
     World::TVehicleBuffConfig _buff;
     int _buff_deflect_charges_max;
     bool _invulnerable;
+    bool _debugIgnoredByAI = false; // Runtime-only New Debug F8 toggle; never saved.
     int _reload_const;
 //    int16_t field_3CE;
     uint8_t _shield;
