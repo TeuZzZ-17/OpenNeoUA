@@ -709,12 +709,8 @@ void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc
         {
             const World::TVhclProto &proto = yw->_vhclProtos[brf->ViewingObject.ID];
 
-            // Briefing framing size. The legacy radius keeps the vanilla look
-            // for scripts that still author it: as soon as one usable coll_*
-            // sphere exists, the real half-size of the collision volume is the
-            // size source.
-            const float compoundHalfSize = World::CompoundCollisionHalfSize(proto.coll);
-            const float radius = compoundHalfSize > 0.0f ? compoundHalfSize : proto.radius;
+            // Keep briefing framing independent of physical collision volumes.
+            const float radius = proto.BriefingRadius();
 
             v17 = radius * 7.0;
             v16 = radius * 32.0;
