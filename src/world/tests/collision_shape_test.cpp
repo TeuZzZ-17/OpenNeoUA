@@ -1193,6 +1193,79 @@ void GenesisFactoryBirthPlacementRegression()
     world._collisionScene.reset();
 }
 
+void RoboFluxGroundRegression()
+{
+    GroundWorld world;
+    auto hostShape = Shape({Box(vec3d(0,0,0), 20, 10, 20)});
+    auto gunShape = Shape({Box(vec3d(0,0,0), 6, 10, 6)});
+    Robo host;
+    const vec3d origin(2400, -40, -2400);
+    host.Bind(world, 805, origin, hostShape);
+    host._bact_type = BACT_TYPES_ROBO;
+    host._roboWFlags = 1;
+    host._wrldSize = vec2d(9600, -9600);
+    host._mass = 1000; host._airconst = host._airconst_static = 100;
+    host._force = 10000; host._roboFlotage = host._mass * 9.80665;
+    host._height = 100;
+
+    Actor<NC_STACK_ypagun> gun;
+    gun.Bind(world, 806, origin + vec3d(0,35,0), gunShape);
+    gun._bact_type = BACT_TYPES_GUN;
+    gun._wrldSize = vec2d(9600, -9600);
+    World::TRoboGun mount;
+    mount.pos = vec3d(0,35,0);
+    mount.gun_obj = &gun;
+    host._roboGuns.push_back(mount);
+
+    const double clearance = world._collisionScene->RoboGroundPenetration(&host);
+    Check(fabs(clearance - (5.0 + gunShape->tolerance)) < .01,
+          "flux floor includes the lowered attached gun, not only the Robo hull");
+    host._height = 10;
+    host._old_pos = origin + vec3d(1,0,0);
+    host.checkCollisions(.02f);
+    Check(host._target_dir.y < -0.7 && (host._status_flg & BACT_STFLAG_UPWRD),
+          "flux height probe begins rising before the lower gun reaches the floor");
+    host._height = 100;
+    host._old_pos = origin;
+
+    host._fly_dir = vec3d(0,1,0);
+    host._fly_dir_length = 5;
+    move_msg motion{};
+    motion.field_0 = .02f;
+    host.Move(&motion);
+    update_msg update{};
+    update.frameTime = 20;
+    host.UpdateUnitGuns(&update);
+    Check(fabs(world._collisionScene->RoboGroundPenetration(&host)) < .01 &&
+          host._fly_dir.y < 0 && (host._status_flg & BACT_STFLAG_UPWRD),
+          "flux Robo bounces upward without allowing its gun through the ground");
+    Check(fabs(gun._position.y - (host._position.y + 35.0)) < .01,
+          "mounted gun follows the corrected flux position in the same frame");
+
+    host._roboWFlags = 0;
+    host._position = origin;
+    Check(world._collisionScene->RoboGroundPenetration(&host) > 5.0,
+          "ground query is independent of the opt-in flux switch");
+    // A shape-less gun still contributes its legacy physical radius.
+    gun._collisionShape.reset();
+    gun._radius = 12;
+    Check(world._collisionScene->RoboGroundPenetration(&host) >= 7,
+          "legacy mounted gun radius also constrains the Robo ground clearance");
+    host.UpdateUnitGuns(&update);
+    Check(host._position == origin,
+          "flux floor correction does not change opt-out Host Stations");
+
+    host._roboWFlags = 1;
+    host._roboYPos = origin.y;
+    update.gTime = 0;
+    host.wallow(&update);
+    host.UpdateUnitGuns(&update);
+    Check(world._collisionScene->RoboGroundPenetration(&host) < .01 &&
+          host._roboYPos < origin.y,
+          "player-controlled flux wallow also stays above the mounted gun");
+    world._collisionScene.reset();
+}
+
 void RoboPositionRegression() {
     const vec3d centre(2400,-30,-2400);
     auto body=Shape({Box(vec3d(0,0,0),30,10,30)});
@@ -2425,6 +2498,7 @@ int main(int argc,char **argv) {
     ProbeMove<NC_STACK_ypaflyer>(cube,"production flyer Move invokes swept response");
     ProbeMove<NC_STACK_ypaufo>(cube,"production UFO Move invokes swept response");
     ProbeMove<NC_STACK_yparobo>(cube,"production Robo Move invokes swept response",BACT_TYPES_ROBO);
+    RoboFluxGroundRegression();
     RoboPositionRegression();
     RoboUpdateRegression(cube);
     GenesisExitSaveParserRegression();

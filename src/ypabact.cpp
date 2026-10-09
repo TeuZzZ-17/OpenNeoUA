@@ -20525,7 +20525,8 @@ static bool ypabact_GetCompoundFXGeometry(NC_STACK_ypabact *bact,
 }
 
 void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx,
-                                  const vec3d *impactPos, const mat3x3 *impactRot)
+                                  const vec3d *impactPos, const mat3x3 *impactRot,
+                                  bool randomRotation)
 {
     ypaworld_arg146 arg146;
 
@@ -20564,6 +20565,9 @@ void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx,
 
     if ( bah )
     {
+        if ( randomRotation )
+            bah->_rotation = World::RandomFXRotation(bah->_rotation, true);
+
         _world->ypaworld_func134(bah);
 
         setState_msg v18;
@@ -20725,7 +20729,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
                 tempFx.ModelID = fx.physical_vehicle;
                 // Offset min_max is rolled independently for every generated instance.
                 tempFx.Pos = World::RandomVec3RangeInclusive(fx.offset_min, fx.offset_max);
-                StartDestFX(tempFx, impactPos, impactRot);
+                StartDestFX(tempFx, impactPos, impactRot, fx.random_rotation);
             }
         }
 

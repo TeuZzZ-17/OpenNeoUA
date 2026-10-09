@@ -4595,7 +4595,7 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
                                  physical->visual_scale,
                                  physical->visual_scale);
     fragment->_vp_tint = physical->tint;
-    fragment->_rotation = rot;
+    fragment->_rotation = World::RandomFXRotation(rot, config.random_rotation);
 
     SFXEngine::SFXe.StopCarrier(&fragment->_soundcarrier);
     fragment->_soundcarrier.Clear();

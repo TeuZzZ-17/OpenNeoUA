@@ -1171,13 +1171,35 @@ size_t NC_STACK_yparobo::checkCollisions(float a2)
 
     arg136.stPos = _position;
     double hoverHeight = _height;
+    double bottom = 0.0;
     if (HasCollisionShape())
-    {
-        const double bottom = GetBodyPosition().y - _position.y +
+        bottom = GetBodyPosition().y - _position.y +
             Collision::DownExtent(*_collisionShape, _rotation) + _collisionShape->tolerance;
-        // The native 0.66 trigger on a 1.5-height ray must precede body contact.
-        hoverHeight = std::max(hoverHeight, bottom / (0.66 * 1.5));
+
+    if (_roboWFlags & 1)
+    {
+        if (!HasCollisionShape())
+            for (const World::TRoboColl &sphere : _roboColls.roboColls)
+                bottom = std::max(bottom,
+                    _rotation.Transform(sphere.coll_pos).y + sphere.robo_coll_radius);
+
+        // The legacy height probe starts rising before any mounted gun touches
+        // the floor, rather than waiting for the final collision correction.
+        for (const World::TRoboGun &mount : _roboGuns)
+        {
+            NC_STACK_ypabact *gun = mount.gun_obj;
+            if (!gun || gun->IsDestroyed()) continue;
+            const double gunDown = gun->HasCollisionShape()
+                ? Collision::DownExtent(*gun->_collisionShape, gun->_rotation) +
+                    gun->_collisionShape->tolerance
+                : std::max(double(gun->_overeof), double(gun->GetCollisionBroadRadius()));
+            bottom = std::max(bottom,
+                _rotation.Transpose().Transform(mount.pos).y + gunDown);
+        }
     }
+    // The native 0.66 trigger on a 1.5-height ray must precede body contact.
+    if (bottom > 0.0)
+        hoverHeight = std::max(hoverHeight, bottom / (0.66 * 1.5));
     arg136.vect = vec3d::OY( hoverHeight * 1.5 ) + _fly_dir.X0Z() * 100.0;
     arg136.flags = 0;
 
@@ -1208,8 +1230,7 @@ void NC_STACK_yparobo::wallow(update_msg *arg)
     _shapeWallowPending = HasCollisionShape();
     _shapeWallowRequestedY = _position.y;
 
-    PositionRoboGuns();
-}
+    PositionRoboGuns();}
 
 void NC_STACK_yparobo::yparobo_func70__sub2__sub0()
 {
@@ -5618,8 +5639,8 @@ void NC_STACK_yparobo::Move(move_msg *arg)
     CorrectPositionInLevelBox(NULL);
 
     ResolveShapeMovement(_old_pos, shapeOldRotation);
-    PositionRoboGuns();
 
+    PositionRoboGuns();
     _soundcarrier.Sounds[0].Pitch = _soundcarrier.Sounds[0].PitchBase;
     _soundcarrier.Sounds[0].Volume = _volume;
 
@@ -5659,13 +5680,42 @@ void NC_STACK_yparobo::HandleShapeWorldCollision(const Collision::Contact &conta
 void NC_STACK_yparobo::UpdateUnitGuns(update_msg *arg)
 {
     NC_STACK_ypabact::UpdateUnitGuns(arg);
-    // Shared collision correction runs after Move and idle motion.
-    if (HasCollisionShape() && !IsDestroyed())
+
+    // The final collision pass may change the Host pose after Move or wallow.
+    // Keep its mounted guns above the terrain in that final pose as well.
+    if (_shapeWallowPending && HasCollisionShape() && !IsDestroyed())
+        _roboYPos += _position.y - _shapeWallowRequestedY;
+
+    bool lifted = false;
+    if (_status == BACT_STATUS_NORMAL && (_roboWFlags & 1) &&
+        _world && _world->_collisionScene)
     {
-        if (_shapeWallowPending)
-            _roboYPos += _position.y - _shapeWallowRequestedY;
-        PositionRoboGuns();
+        const double penetration = _world->_collisionScene->RoboGroundPenetration(this);
+        if (penetration > 0.0)
+        {
+            _position.y -= penetration;
+            lifted = true;
+            if (_shapeWallowPending)
+            {
+                _roboYPos -= penetration;
+            }
+            else
+            {
+                // Stop the downward drift and let the existing flux controller rise.
+                vec3d velocity = _fly_dir * _fly_dir_length;
+                if (velocity.y >= 0.0)
+                {
+                    velocity.y = -std::max(0.5, std::min(8.0, velocity.y * 0.35));
+                    _fly_dir_length = velocity.normalise();
+                    _fly_dir = velocity;
+                }
+                _status_flg |= BACT_STFLAG_UPWRD;
+            }
+            _world->_collisionScene->UpdateActor(this);
+        }
     }
+    if ((HasCollisionShape() && !IsDestroyed()) || lifted)
+        PositionRoboGuns();
     _shapeWallowPending = false;
 }
 
