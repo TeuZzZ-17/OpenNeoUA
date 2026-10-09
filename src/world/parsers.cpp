@@ -2213,7 +2213,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     float groundDecalStretchZMin = 1.0f;
     float groundDecalStretchZMax = 1.0f;
     TVisualTint groundDecalTint;
-    bool groundDecalRandomRotation = false;
+    bool randomRotation = false;
     float groundDecalEdgeFade = 0.0f;
     int groundDecalEdgeFadeMin = -1;
     int groundDecalEdgeFadeMax = -1;
@@ -2274,6 +2274,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
+                    chain.random_rotation = randomRotation;
                     chain.count_min = countMin;
                     chain.count_max = countMax;
                     chain.offset_min = offsetMin;
@@ -2305,6 +2306,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
+                    chain.random_rotation = randomRotation;
                     chain.count_min = countMin;
                     chain.count_max = countMax;
                     chain.offset_min = offsetMin;
@@ -2328,6 +2330,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
+                    chain.random_rotation = randomRotation;
                     chain.count_min = countMin;
                     chain.count_max = countMax;
                     chain.launch_min = launchMin;
@@ -2373,6 +2376,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     World::TChainFXConfig chain;
                     chain.mode = mode;
                     chain.trigger = trigger;
+                    chain.random_rotation = randomRotation;
                     chain.duration = duration;
                     chain.ground_decal_permanent = groundDecalPermanent;
                     chain.fade_out = groundDecalPermanent ? 0 : std::min(fadeOut, duration);
@@ -2388,7 +2392,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.ground_decal_stretch_z_min = groundDecalStretchZMin;
                     chain.ground_decal_stretch_z_max = groundDecalStretchZMax;
                     chain.ground_decal_tint = groundDecalTint;
-                    chain.ground_decal_random_rotation = groundDecalRandomRotation;
+                    chain.ground_decal_random_rotation = randomRotation;
                     chain.ground_decal_edge_fade = groundDecalEdgeFade;
                     chain.ground_decal_edge_fade_min = groundDecalEdgeFadeMin;
                     chain.ground_decal_edge_fade_max = groundDecalEdgeFadeMax;
@@ -2765,7 +2769,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         {
         }
         else if ( !StriCmp(p1, "random_rotation") )
-            groundDecalRandomRotation = p2 == "1";
+            randomRotation = p2 == "1";
         else if ( !StriCmp(p1, "edge_fade") )
         {
             if ( p2.find('_') != std::string::npos )

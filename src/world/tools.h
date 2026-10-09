@@ -13,6 +13,7 @@
 #include "common/common.h"
 #include "common/plane.h"
 #include "../vectors.h"
+#include "../matrix.h"
 #include "../bitmap.h"
 #include "consts.h"
 
@@ -282,6 +283,19 @@ inline double RandomFloatRangeInclusive(double minValue, double maxValue)
 
     const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
     return minValue + randomPart * (maxValue - minValue);
+}
+
+// Random initial orientation for FX. Disabled effects preserve the RNG stream.
+inline mat3x3 RandomFXRotation(const mat3x3 &rotation, bool enabled)
+{
+    if ( !enabled )
+        return rotation;
+
+    constexpr double FULL_TURN = 6.28318530717958647692;
+    const double x = RandomFloatRangeInclusive(0.0, FULL_TURN);
+    const double y = RandomFloatRangeInclusive(0.0, FULL_TURN);
+    const double z = RandomFloatRangeInclusive(0.0, FULL_TURN);
+    return rotation * mat3x3::RotateX(x) * mat3x3::RotateY(y) * mat3x3::RotateZ(z);
 }
 
 // Per-axis draw for authored vec3 value/min_max ranges (Chain FX offsets).

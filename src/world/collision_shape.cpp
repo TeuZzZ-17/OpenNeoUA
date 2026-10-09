@@ -977,6 +977,51 @@ void Scene::ResetActorPose(NC_STACK_ypabact *a)
     body.resolvedRotation = a->_rotation;
     body.resolvedStamp = impl->world._timeStamp;
 }
+struct TerrainFootprintSurface : btTriangleCallback
+{
+    btTransform pose;
+    btVector3 lo, hi;
+    double y;
+    bool floorOnly;
+    TerrainFootprintSurface(const btVector3 &low, const btVector3 &high,
+                            double ground, bool floorOnly = false)
+        : lo(low), hi(high), y(ground), floorOnly(floorOnly) {}
+    void processTriangle(btVector3 *triangle, int, int) override
+    {
+        std::vector<btVector3> polygon;
+        for (int i=0;i<3;++i) polygon.push_back(pose * triangle[i]);
+        if (floorOnly)
+        {
+            const btVector3 normal = (polygon[1] - polygon[0]).cross(polygon[2] - polygon[0]);
+            if (normal.length2() < 1e-12 || fabs(normal.y()) < normal.length() * 0.45)
+                return; // Walls must not raise a hovering Host Station.
+        }
+        for (int plane=0;plane<4 && !polygon.empty();++plane)
+        {
+            const int axis = plane < 2 ? 0 : 2;
+            const bool lower = (plane % 2) == 0;
+            const btScalar limit = lower ? lo[axis] : hi[axis];
+            auto inside = [&](const btVector3 &v) {
+                return lower ? v[axis] >= limit : v[axis] <= limit;
+            };
+            std::vector<btVector3> clipped;
+            auto previous = polygon.back();
+            bool previousInside = inside(previous);
+            for (const auto &current : polygon)
+            {
+                const bool currentInside = inside(current);
+                if (previousInside != currentInside)
+                    clipped.push_back(previous + (current-previous) *
+                        ((limit-previous[axis]) / (current[axis]-previous[axis])));
+                if (currentInside) clipped.push_back(current);
+                previous=current; previousInside=currentInside;
+            }
+            polygon.swap(clipped);
+        }
+        for (const auto &v : polygon) y=std::min(y, double(v.y()));
+    }
+};
+
 bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
 {
     if (!a || !Finite(a->_position) ||
@@ -1036,42 +1081,7 @@ bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
     hi.setMax(V(origin)+btVector3(genesisRadius,0,genesisRadius));
     // Clip world triangles to the production footprint. A ray through the
     // centre alone can miss a roof under an edge of the new unit.
-    struct Surface : btTriangleCallback
-    {
-        btTransform pose;
-        btVector3 lo, hi;
-        double y;
-        Surface(const btVector3 &low, const btVector3 &high, double ground)
-            : lo(low), hi(high), y(ground) {}
-        void processTriangle(btVector3 *triangle, int, int) override
-        {
-            std::vector<btVector3> polygon;
-            for (int i=0;i<3;++i) polygon.push_back(pose * triangle[i]);
-            for (int plane=0;plane<4 && !polygon.empty();++plane)
-            {
-                const int axis = plane < 2 ? 0 : 2;
-                const bool lower = (plane % 2) == 0;
-                const btScalar limit = lower ? lo[axis] : hi[axis];
-                auto inside = [&](const btVector3 &v) {
-                    return lower ? v[axis] >= limit : v[axis] <= limit;
-                };
-                std::vector<btVector3> clipped;
-                auto previous = polygon.back();
-                bool previousInside = inside(previous);
-                for (const auto &current : polygon)
-                {
-                    const bool currentInside = inside(current);
-                    if (previousInside != currentInside)
-                        clipped.push_back(previous + (current-previous) *
-                            ((limit-previous[axis]) / (current[axis]-previous[axis])));
-                    if (currentInside) clipped.push_back(current);
-                    previous=current; previousInside=currentInside;
-                }
-                polygon.swap(clipped);
-            }
-            for (const auto &v : polygon) y=std::min(y, double(v.y()));
-        }
-    } surface(lo, hi, sector.pcell->height);
+    TerrainFootprintSurface surface(lo, hi, sector.pcell->height);
     const double radius = std::max(genesisRadius, a->HasCollisionShape() ? a->_collisionShape->radius : a->GetCollisionBroadRadius());
     for (auto *body : impl->Terrain(a->GetBodyPosition(), a->GetBodyPosition(), radius, false))
     {
@@ -1093,6 +1103,96 @@ bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
     if (impl->actors.find(a) != impl->actors.end()) ResetActorPose(a);
     return true;
 }
+double Scene::RoboGroundPenetration(NC_STACK_yparobo *robo)
+{
+    if (!robo || !Finite(robo->_position) || robo->_status != BACT_STATUS_NORMAL)
+        return 0.0;
+
+    double penetration = 0.0;
+    const auto checkBody = [&](NC_STACK_ypabact *actor, const vec3d &position,
+                               const mat3x3 &rotation, bool isRobo) {
+        if (!actor || actor->IsDestroyed()) return;
+
+        const vec3d origin = position + (actor->GetBodyPosition() - actor->_position);
+        struct Footprint { btVector3 lo, hi; double tolerance; };
+        std::vector<Footprint> footprints;
+
+        if (actor->HasCollisionShape())
+        {
+            const btTransform pose = Pose(origin, rotation);
+            for (const auto &part : actor->_collisionShape->parts)
+            {
+                if (part.vertices.empty()) continue;
+                btVector3 lo = pose * V(part.vertices.front()), hi = lo;
+                for (const auto &vertex : part.vertices)
+                {
+                    const btVector3 point = pose * V(vertex);
+                    lo.setMin(point); hi.setMax(point);
+                }
+                footprints.push_back({lo, hi, actor->_collisionShape->tolerance});
+            }
+        }
+        else if (isRobo && !robo->_roboColls.roboColls.empty())
+        {
+            for (const auto &sphere : robo->_roboColls.roboColls)
+            {
+                if (sphere.robo_coll_radius <= 0.01) continue;
+                const btVector3 center = V(position + rotation.Transform(sphere.coll_pos));
+                const btVector3 radius(sphere.robo_coll_radius, sphere.robo_coll_radius,
+                                       sphere.robo_coll_radius);
+                footprints.push_back({center-radius, center+radius, 0.0});
+            }
+        }
+
+        if (footprints.empty())
+        {
+            const double radius = std::max(0.0, double(actor->GetCollisionBroadRadius()));
+            const double down = std::max(radius, std::max(0.0, double(actor->_overeof)));
+            const btVector3 center = V(origin);
+            footprints.push_back({center-btVector3(radius, 0, radius),
+                                  center+btVector3(radius, down, radius), 0.0});
+        }
+
+        for (const auto &footprint : footprints)
+        {
+            const double x = (footprint.lo.x()+footprint.hi.x())*.5;
+            const double z = (footprint.lo.z()+footprint.hi.z())*.5;
+            yw_130arg sector;
+            sector.pos_x = x; sector.pos_z = z;
+            if (!impl->world.GetSectorInfo(&sector) || !sector.pcell) continue;
+
+            TerrainFootprintSurface surface(footprint.lo, footprint.hi,
+                                            sector.pcell->height, true);
+            const double radius = std::hypot(double(footprint.hi.x()-footprint.lo.x()),
+                                             double(footprint.hi.z()-footprint.lo.z()))*.5;
+            const vec3d centre(x, origin.y, z);
+            for (auto *tile : impl->Terrain(centre, centre, radius, false))
+            {
+                surface.pose = tile->object.getWorldTransform();
+                // The cached LEGO tiles have translation-only transforms.
+                const btVector3 offset = surface.pose.getOrigin();
+                const btVector3 lo(surface.lo.x()-offset.x(), -BT_LARGE_FLOAT,
+                                   surface.lo.z()-offset.z());
+                const btVector3 hi(surface.hi.x()-offset.x(), BT_LARGE_FLOAT,
+                                   surface.hi.z()-offset.z());
+                tile->terrain->processAllTriangles(&surface, lo, hi);
+            }
+            penetration = std::max(penetration,
+                double(footprint.hi.y()) - surface.y + footprint.tolerance);
+        }
+    };
+
+    checkBody(robo, robo->_position, robo->_rotation, true);
+    for (const World::TRoboGun &mount : robo->_roboGuns)
+    {
+        if (!mount.gun_obj) continue;
+        const vec3d gunPosition = robo->_position +
+            robo->_rotation.Transpose().Transform(mount.pos);
+        checkBody(mount.gun_obj, gunPosition, mount.gun_obj->_rotation, false);
+    }
+    return std::max(0.0, penetration);
+}
+
 bool Scene::ActorFootprint(NC_STACK_ypabact *a, vec2d *minimum, vec2d *maximum)
 {
     if (!Live(a)) return false;
