@@ -10,6 +10,7 @@
 
 class NC_STACK_ypabact;
 class NC_STACK_ypaworld;
+class NC_STACK_yparobo;
 
 namespace Collision
 {
@@ -66,6 +67,7 @@ public:
     void UpdateActor(NC_STACK_ypabact *actor);
     void ResetActorPose(NC_STACK_ypabact *actor);
     bool PlaceAboveTerrain(NC_STACK_ypabact *actor);
+    double RoboGroundPenetration(NC_STACK_yparobo *robo);
     bool ActorFootprint(NC_STACK_ypabact *actor, vec2d *minimum, vec2d *maximum);
     bool TakeWorldContact(NC_STACK_ypabact *actor, Contact *contact);
     bool TakeUnitContact(NC_STACK_ypabact *actor, Contact *contact);
