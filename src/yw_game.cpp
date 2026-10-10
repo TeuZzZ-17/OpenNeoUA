@@ -8880,7 +8880,7 @@ void NC_STACK_ypaworld::DebugRecordDpsDamage(NC_STACK_ypabact *attacker,
     if ( !_debugDpsSourceGid || attacker->_gid != _debugDpsSourceGid )
         return;
 
-    // Friendly units are valid debug dummies: F7/F9 can keep them alive while
+    // Friendly units are valid debug dummies: F6/F8 can keep them alive while
     // the meter measures the damage this controlled unit would deal. Ignore only
     // true self-damage so suicide/kill-after-shot mechanics do not pollute DPS.
     if ( attacker == target )
@@ -9484,6 +9484,7 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
         _showCollDebug = false;
         _hideHudForScreenshots = false;
         _debugGameplaySlowMotion = false;
+        _debugGameplayFastMotion = false;
         _debugGameplayFrozen = false;
         _debugHostStationCheat = false;
         _debugGlobalInvulnerability = false;
@@ -9492,9 +9493,10 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
     }
     else
     {
-        // F10 collision debug overlay: direct key check, no RMB/easy-cheat helper.
-        if ( inpt && inpt->KbdLastHit == Input::KC_F10 )
+        // F9 collision debug overlay: direct key check, no RMB/easy-cheat helper.
+        if ( inpt && inpt->KbdLastHit == Input::KC_F9 )
         {
+            inpt->HotKeyID = -1;
             _showCollDebug = !_showCollDebug;
 
             yw_arg159 infoMsg;
@@ -9507,9 +9509,10 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
             ypaworld_func159(&infoMsg);
         }
 
-        // F11 screenshot mode: hide the gameplay HUD without enabling debug overlays.
-        if ( inpt && inpt->KbdLastHit == Input::KC_F11 )
+        // F10 screenshot mode: hide the gameplay HUD without enabling debug overlays.
+        if ( inpt && inpt->KbdLastHit == Input::KC_F10 )
         {
+            inpt->HotKeyID = -1;
             _hideHudForScreenshots = !_hideHudForScreenshots;
 
             yw_arg159 infoMsg;
@@ -9784,7 +9787,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             return;
         if (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN))
             return;
-        // OpenNeoUA invisible: cloaked stealth units are excluded from the F10 collision/
+        // OpenNeoUA invisible: cloaked stealth units are excluded from the F9 collision/
         // radius debug overlay (radius rings + labels) just like any other UI.
         if (unit->IsInvisibleUnrevealed())
             return;
@@ -9998,7 +10001,7 @@ void NC_STACK_ypaworld::ExpireDebugAoeRings()
 
 void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b)
 {
-    // Only record while the F10 overlay is active, so there is zero cost when off.
+    // Only record while the F9 overlay is active, so there is zero cost when off.
     if ( !_showCollDebug || radius < 0.01f )
         return;
 
@@ -10019,7 +10022,7 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
 
 void NC_STACK_ypaworld::DebugAddAtDeathSphere(const vec3d &pos, float radius)
 {
-    // F10 only: preserve the exact at-death effect volume after the source disappears.
+    // F9 only: preserve the exact at-death effect volume after the source disappears.
     if ( !_showCollDebug || radius < 0.01f )
         return;
 
