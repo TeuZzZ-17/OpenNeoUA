@@ -32,7 +32,7 @@ int32_t GameplayClock::BeginFrame(int32_t realTime, int32_t realDelta,
 
     if ( !std::isfinite(scale) || scale <= 0.0f )
         scale = 1.0f;
-    _scale = std::max(0.05f, std::min(scale, 1.80f));
+    _scale = std::max(0.05f, std::min(scale, 2.0f));
 
     // Re-anchor only when entering the gameplay domain or when a load/seek
     // changed the canonical world timestamp behind the clock.
