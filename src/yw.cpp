@@ -66,7 +66,7 @@ static constexpr uint32_t GEM_NEW_UI_DEFAULT_DURATION_MS = 8000;
 static constexpr uint32_t GAMEPLAY_TIME_SCALE_MAX_DURATION_MS = 600000;
 static constexpr float GAMEPLAY_MIN_TIME_SCALE = 0.05f;
 static constexpr float DEBUG_GAMEPLAY_TIME_SCALE = 0.20f;
-static constexpr float DEBUG_GAMEPLAY_FAST_TIME_SCALE = 1.80f;
+static constexpr float DEBUG_GAMEPLAY_FAST_TIME_SCALE = 2.0f;
 static constexpr float ROBO_DEATH_TIME_SCALE_MAX_DISTANCE_LIMIT = 1000000.0f;
 static constexpr uint32_t PLASMA_CURRENCY_HUD_PULSE_MS = 350;
 
@@ -2147,7 +2147,7 @@ void NC_STACK_ypaworld::HandleDebugTimeHotkeys(TInputState *inpt, bool openUADeb
         _debugGameplayFastMotion = !_debugGameplayFastMotion;
         if ( _debugGameplayFastMotion )
             _debugGameplaySlowMotion = false;
-        message = _debugGameplayFastMotion ? "Fast Motion 180%" : "Fast Motion OFF";
+        message = _debugGameplayFastMotion ? "Fast Motion 200%" : "Fast Motion OFF";
     }
     else
     {

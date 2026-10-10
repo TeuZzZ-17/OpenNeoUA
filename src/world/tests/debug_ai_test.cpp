@@ -122,7 +122,7 @@ int main() {
     Check(!world.IsDebugGameplaySlowMotionEnabled(), "F2 toggles slow motion off");
     input.KbdLastHit = Input::KC_F3;
     world.HandleDebugTimeHotkeys(&input, true);
-    Check(world.IsDebugGameplayFastMotionEnabled() && !world.IsDebugGameplaySlowMotionEnabled(), "F3 enables +80 percent time");
+    Check(world.IsDebugGameplayFastMotionEnabled() && !world.IsDebugGameplaySlowMotionEnabled(), "F3 enables +100 percent time");
     input.KbdLastHit = Input::KC_F2;
     world.HandleDebugTimeHotkeys(&input, true);
     Check(world.IsDebugGameplaySlowMotionEnabled() && !world.IsDebugGameplayFastMotionEnabled(), "slow and fast modes are exclusive");
