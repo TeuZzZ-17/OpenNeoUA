@@ -2539,6 +2539,7 @@ public:
     virtual NC_STACK_windp *getYW_pNET();
     virtual int getYW_invulnerable();
     bool IsDebugGameplaySlowMotionEnabled() const { return _debugGameplaySlowMotion; }
+    bool IsDebugGameplayFastMotionEnabled() const { return _debugGameplayFastMotion; }
     bool IsDebugHostStationCheatEnabled() const { return _debugHostStationCheat; }
     bool IsDebugGlobalInvulnerabilityEnabled() const { return _debugGlobalInvulnerability; }
     bool IsDebugDpsEnabled() const { return _debugDpsEnabled; }
@@ -2558,6 +2559,7 @@ protected:
     void CameraPrepareRender(TGameRecorder *rcrd, NC_STACK_ypabact *bact, TInputState *inpt);
     bool IsAnyInput(TInputState *struc);
     void HandleDebugTimeHotkeys(TInputState *inpt, bool openUADebug);
+    bool DebugSwitchToFactionUnit(NC_STACK_ypabact *target);
 
 
     void GameShellUiOpenNetwork(); // On main menu "Multiplayer" press
@@ -3317,6 +3319,7 @@ public:
     bool _gamePaused = false;
     uint32_t _gamePausedTimeStamp = 0;
     bool _debugGameplaySlowMotion = false;
+    bool _debugGameplayFastMotion = false;
     bool _debugGameplayFrozen = false;
     bool _debugHostStationCheat = false;
     bool _debugGlobalInvulnerability = false;
@@ -3419,9 +3422,9 @@ public:
     update_msg _updateMessage;
 
     int8_t _showDebugMode = 0; // debug info draw modes
-    bool _showCollDebug = false; // F10: draw collision sphere overlay
-    bool _hideHudForScreenshots = false; // F11: hide gameplay HUD/screenshots UI
-    bool _debugDpsEnabled = false; // F3: rolling effective DPS meter for the controlled player unit
+    bool _showCollDebug = false; // F9: draw collision sphere overlay
+    bool _hideHudForScreenshots = false; // F10: hide gameplay HUD/screenshots UI
+    bool _debugDpsEnabled = false; // F1: rolling effective DPS meter for the controlled player unit
     uint32_t _debugDpsSourceGid = 0;
     int64_t _debugDpsPeakRaw = 0; // Highest rolling 1-second DPS reached during the current firing burst.
     int64_t _debugDpsSessionDamageRaw = 0; // Total recorded damage in the current firing burst.
@@ -3435,7 +3438,7 @@ public:
     };
     std::vector<DebugDpsSample> _debugDpsSamples;
 
-    // F10 debug: transient AoE impact rings. Recorded on weapon detonation,
+    // F9 debug: transient AoE impact rings. Recorded on weapon detonation,
     // fade out after a short time. Only populated while _showCollDebug is on.
     struct DebugAoeRing
     {
@@ -3451,7 +3454,7 @@ public:
     std::vector<DebugAoeRing> _debugAoeRings;
 
     // OpenNeoUA custom: active artillery shell bombardment markers for the opened strategic map.
-    // Independent of the F10 overlay; an active zone remains visible only while
+    // Independent of the F9 overlay; an active zone remains visible only while
     // shells aimed at that zone are still in flight. Pending cooldown orders use
     // one replaceable marker per artillery platform.
     struct ArtilleryShellMarker

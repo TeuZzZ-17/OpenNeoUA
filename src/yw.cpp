@@ -66,6 +66,7 @@ static constexpr uint32_t GEM_NEW_UI_DEFAULT_DURATION_MS = 8000;
 static constexpr uint32_t GAMEPLAY_TIME_SCALE_MAX_DURATION_MS = 600000;
 static constexpr float GAMEPLAY_MIN_TIME_SCALE = 0.05f;
 static constexpr float DEBUG_GAMEPLAY_TIME_SCALE = 0.20f;
+static constexpr float DEBUG_GAMEPLAY_FAST_TIME_SCALE = 1.80f;
 static constexpr float ROBO_DEATH_TIME_SCALE_MAX_DISTANCE_LIMIT = 1000000.0f;
 static constexpr uint32_t PLASMA_CURRENCY_HUD_PULSE_MS = 350;
 
@@ -352,9 +353,10 @@ static float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw)
     if ( yw_GetActiveKamikazeFireTimeScale(yw, &fireScale, NULL) )
         scale = std::min(scale, fireScale);
 
-    // New Debug F4 shares the same single gameplay-time scale as the authored
-    // slow-motion effects. Taking the minimum preserves whichever active
-    // effect is already slower instead of introducing a parallel time system.
+    // Debug acceleration uses the same clock. Authored slow-motion effects
+    // still take priority when they are active.
+    if ( yw->IsDebugGameplayFastMotionEnabled() && scale >= 1.0f )
+        scale = DEBUG_GAMEPLAY_FAST_TIME_SCALE;
     if ( yw->IsDebugGameplaySlowMotionEnabled() )
         scale = std::min(scale, DEBUG_GAMEPLAY_TIME_SCALE);
 
@@ -395,7 +397,7 @@ static void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw,
     }
 
     // HP drain belongs to the same master game clock as the Kamikaze motion
-    // and FX. F4 slows it and F5 pauses it; releasing FIRE still has no effect
+    // and FX. F4 slows it and F6 pauses it; releasing FIRE still has no effect
     // after activation.
     if ( frameTime <= 0 )
         return;
@@ -2041,43 +2043,124 @@ static void yw_UpdateHideVehicleToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
     yw->_userUnit->_cockpit_camera_hide_vehicle = !yw->_userUnit->_cockpit_camera_hide_vehicle;
 }
 
+bool NC_STACK_ypaworld::DebugSwitchToFactionUnit(NC_STACK_ypabact *target)
+{
+    if ( _isNetGame || !System::IniConf::IsGameNewDebugEnabled() ||
+         IsSpectatorControlled() || !target || !_userRobo || !_userUnit ||
+         target->_owner == World::OWNER_0 ||
+         target->_owner == _userRobo->_owner ||
+         target->_energy <= 0 ||
+         (target->_status != BACT_STATUS_NORMAL && target->_status != BACT_STATUS_IDLE) ||
+         (target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) ||
+         target->IsArtilleryShellPlatform() )
+        return false;
+
+    NC_STACK_yparobo *newHost = target->_bact_type == BACT_TYPES_ROBO ?
+        dynamic_cast<NC_STACK_yparobo *>(target) : target->_host_station;
+    if ( !newHost )
+    {
+        // Some scripted vehicles are unassigned but their faction still has
+        // a Host Station. Reuse that station rather than fabricating a new one.
+        for ( NC_STACK_ypabact *unit : _unitsList )
+        {
+            if ( unit->_owner == target->_owner && unit->_bact_type == BACT_TYPES_ROBO )
+            {
+                newHost = dynamic_cast<NC_STACK_yparobo *>(unit);
+                if ( newHost && newHost->_energy > 0 &&
+                     (newHost->_status == BACT_STATUS_NORMAL || newHost->_status == BACT_STATUS_IDLE) )
+                    break;
+            }
+            newHost = NULL;
+        }
+    }
+    if ( !newHost || newHost->_owner != target->_owner ||
+         newHost->_energy <= 0 ||
+         (newHost->_status != BACT_STATUS_NORMAL && newHost->_status != BACT_STATUS_IDLE) ||
+         (newHost->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) )
+        return false;
+
+    // The enemy must own a real Host Station: reusing that station also changes
+    // the strategic commands, squad list and owner-dependent UI to this faction.
+    NC_STACK_yparobo *oldHost = dynamic_cast<NC_STACK_yparobo *>(_userRobo);
+    if ( _viewerBact )
+    {
+        _viewerBact->setBACT_viewer(false);
+        _viewerBact->setBACT_inputting(false);
+    }
+    if ( _userUnit && _userUnit != _viewerBact )
+        _userUnit->setBACT_inputting(false);
+    if ( oldHost )
+    {
+        oldHost->setBACT_inputting(false);
+        oldHost->_roboState &= ~NC_STACK_yparobo::ROBOSTATE_PLAYERROBO;
+    }
+
+    newHost->setBACT_inputting(true); // Sets the authoritative user Host and owner.
+    target->setBACT_viewer(true);
+    if ( target != newHost )
+    {
+        newHost->setBACT_inputting(false);
+        target->setBACT_inputting(true);
+    }
+
+    _extraViewEnable = false;
+    _extraViewNumber = -1;
+    _playerInHSGun = false;
+    _activeCmdrID = 0;
+    _cmdrIdToSelect = -1;
+    _activeCmdrRemapIndex = -1;
+    _lastMsgSender = NULL;
+    _bactOnMouse = NULL;
+    _guiActFlags &= ~0x20;
+    ResetPlayerSprint();
+    // Close any stale squad/Genesis selection belonging to the previous side.
+    extern GuiList gui_lstvw;
+    extern GuiList lstvw2;
+    GuiWinClose(&gui_lstvw);
+    GuiWinClose(&lstvw2);
+    sub_4C40AC();
+    return _userUnit == target && _userRobo == newHost;
+}
+
 void NC_STACK_ypaworld::HandleDebugTimeHotkeys(TInputState *inpt, bool openUADebug)
 {
     if ( !inpt || !openUADebug || _isNetGame )
         return;
 
-    // Network synchronization intentionally remains on platform time; a local
-    // debug time warp would desynchronize peers. F4/F5 therefore retain their
-    // normal bindings in netplay instead of partially slowing one client.
+    // All three time controls run before the first gameplay update.
+    // In netplay the original hotkeys remain available unchanged.
+    const int16_t key = inpt->KbdLastHit;
+    if ( key != Input::KC_F2 && key != Input::KC_F3 && key != Input::KC_F4 )
+        return;
 
-    // Time-control hotkeys are handled before any gameplay/UI/render update so
-    // the master game clock owns the entire frame, including the frame where
-    // the toggle changes state.
-    if ( inpt->KbdLastHit == Input::KC_F4 )
+    inpt->HotKeyID = -1;
+    const char *message = NULL;
+    if ( key == Input::KC_F2 )
     {
-        inpt->HotKeyID = -1;
         _debugGameplaySlowMotion = !_debugGameplaySlowMotion;
-
-        yw_arg159 infoMsg;
-        infoMsg.txt = _debugGameplaySlowMotion ? "Slow Motion 20%" : "Slow Motion OFF";
-        infoMsg.unit = NULL;
-        infoMsg.Priority = 100;
-        infoMsg.MsgID = 0;
-        ypaworld_func159(&infoMsg);
+        if ( _debugGameplaySlowMotion )
+            _debugGameplayFastMotion = false;
+        message = _debugGameplaySlowMotion ? "Slow Motion 20%" : "Slow Motion OFF";
     }
-
-    if ( inpt->KbdLastHit == Input::KC_F5 )
+    else if ( key == Input::KC_F3 )
     {
-        inpt->HotKeyID = -1;
-        _debugGameplayFrozen = !_debugGameplayFrozen;
-
-        yw_arg159 infoMsg;
-        infoMsg.txt = _debugGameplayFrozen ? "Game Time Frozen" : "Game Time Resumed";
-        infoMsg.unit = NULL;
-        infoMsg.Priority = 100;
-        infoMsg.MsgID = 0;
-        ypaworld_func159(&infoMsg);
+        _debugGameplayFastMotion = !_debugGameplayFastMotion;
+        if ( _debugGameplayFastMotion )
+            _debugGameplaySlowMotion = false;
+        message = _debugGameplayFastMotion ? "Fast Motion 180%" : "Fast Motion OFF";
     }
+    else
+    {
+        _debugGameplayFrozen = !_debugGameplayFrozen;
+        message = _debugGameplayFrozen ? "Game Time Frozen" : "Game Time Resumed";
+    }
+
+    yw_arg159 infoMsg;
+    infoMsg.txt = message;
+    infoMsg.unit = NULL;
+    infoMsg.Priority = 100;
+    infoMsg.MsgID = 0;
+    ypaworld_func159(&infoMsg);
 }
 
 size_t NC_STACK_ypaworld::Process(base_64arg *arg)
@@ -2118,6 +2201,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         if ( !openUADebug )
         {
             _debugGameplaySlowMotion = false;
+            _debugGameplayFastMotion = false;
             _debugGameplayFrozen = false;
             _debugHostStationCheat = false;
             _debugGlobalInvulnerability = false;
@@ -2134,7 +2218,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this);
         const bool gameplayFrozen = !_isNetGame && openUADebug && _debugGameplayFrozen;
         const bool forceAllTimeScaled = !_isNetGame && openUADebug &&
-                                        (_debugGameplaySlowMotion || _debugGameplayFrozen);
+                                        (_debugGameplaySlowMotion || _debugGameplayFastMotion || _debugGameplayFrozen);
 
         // One master clock now owns every local in-game time consumer.  From
         // this point on, DTime, input Period and TimeStamp are the virtual game
@@ -2150,7 +2234,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         Gui::Root::Instance.TimersUpdate(arg->DTime);
 
         // Audio pitch and sound-effect clocks consume the same master time.
-        // Debug F4/F5 also override per-source opt-outs so nothing audible can
+        // Debug F2/F3/F4 also override per-source opt-outs so nothing audible can
         // silently continue at real speed while the world is globally dilated.
         SFXEngine::SFXe.SetTimeScale(gameplayFrozen ? 0.0f : gameplayTimeScale,
                                      forceAllTimeScaled);
@@ -2246,9 +2330,14 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
 
         if ( openUADebug && arg->field_8 )
         {
-            // F3: rolling DPS meter for the currently controlled player unit.
+            // Overlay toggles run during drawing; consume their bindings before gameplay UI.
+            if ( arg->field_8->KbdLastHit == Input::KC_F9 ||
+                 arg->field_8->KbdLastHit == Input::KC_F10 )
+                arg->field_8->HotKeyID = -1;
+
+            // F1: rolling DPS meter for the currently controlled player unit.
             // Consume the binding only while game.new.debug is enabled.
-            if ( arg->field_8->KbdLastHit == Input::KC_F3 )
+            if ( arg->field_8->KbdLastHit == Input::KC_F1 )
             {
                 arg->field_8->HotKeyID = -1;
 
@@ -2279,9 +2368,9 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 }
             }
 
-            // F6 destroys vehicles and guns; F7/F8 only handle vehicles.
+            // F5 destroys vehicles and guns; F6/F7 only handle vehicles.
             // Attached non-vehicle, non-gun objects resolve to their carrier,
-            // matching the existing F6 debug behavior without introducing a
+            // matching the existing debug behavior without introducing a
             // second selection path.
             auto isDebugVehicleTarget = [](const NC_STACK_ypabact *unit)
             {
@@ -2317,7 +2406,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 return isDebugVehicleTarget(selectedVehicle) ? selectedVehicle : NULL;
             };
 
-            // F6 target: any live vehicle plus any live gun, of any gun kind.
+            // F5 target: any live vehicle plus any live gun, of any gun kind.
             // A gun under the mouse is destroyed directly instead of promoting
             // to its carrier, otherwise guns on buildings or vehicles could
             // never be selected on their own.
@@ -2345,15 +2434,15 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 return isDebugDestroyTarget(selectedTarget) ? selectedTarget : NULL;
             };
 
-            // F7/F8: toggle invulnerability or AI exclusion on an allied vehicle.
+            // F6/F7: toggle invulnerability or AI exclusion on an allied vehicle.
             // When the mouse is not currently pointing at another unit, use the
             // vehicle directly controlled by the player instead.
             // Consume the vanilla binding only while New Debug owns the key.
-            if ( arg->field_8->KbdLastHit == Input::KC_F7 ||
-                 arg->field_8->KbdLastHit == Input::KC_F8 )
+            if ( arg->field_8->KbdLastHit == Input::KC_F6 ||
+                 arg->field_8->KbdLastHit == Input::KC_F7 )
             {
                 arg->field_8->HotKeyID = -1;
-                const bool ignoreAI = arg->field_8->KbdLastHit == Input::KC_F8;
+                const bool ignoreAI = arg->field_8->KbdLastHit == Input::KC_F7;
 
                 NC_STACK_ypabact *selectedVehicle = NULL;
                 if ( _guiActFlags & 0x20 )
@@ -2385,9 +2474,9 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
             }
 
-            // F9: runtime-only global unit invulnerability. Handle it before
+            // F8: runtime-only global unit invulnerability. Handle it before
             // simulation so the toggle applies to damage in the same frame.
-            if ( arg->field_8->KbdLastHit == Input::KC_F9 )
+            if ( arg->field_8->KbdLastHit == Input::KC_F8 )
             {
                 _debugGlobalInvulnerability = !_debugGlobalInvulnerability;
 
@@ -2401,10 +2490,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
             }
 
-            // F6: one-shot destruction of the selected vehicle or gun. Consume
-            // the vanilla next-unit binding only
+            // F5: one-shot destruction of the selected vehicle or gun. Consume
+            // the vanilla binding only
             // while the OpenNeoUA debug mode is active.
-            if ( arg->field_8->KbdLastHit == Input::KC_F6 )
+            if ( arg->field_8->KbdLastHit == Input::KC_F5 )
             {
                 arg->field_8->HotKeyID = -1;
 
@@ -2423,9 +2512,9 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                     // cars: their death state is DEATH2, which emits the
                     // begin_fx trigger "destroyed". Vehicles and guns of any
                     // other kind use DEAD, same as normal lethal damage.
-                    // Keep this as a direct internal transition so F6 remains
+                    // Keep this as a direct internal transition so F5 remains
                     // a forced debug kill even while global invulnerability
-                    // (F9) is enabled.
+                    // (F8) is enabled.
                     if ( selectedVehicle->_bact_type == BACT_TYPES_TANK ||
                          selectedVehicle->_bact_type == BACT_TYPES_CAR )
                     {
@@ -2453,10 +2542,28 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 ypaworld_func159(&infoMsg);
             }
 
-            // F12: player Host Station economy cheat. The three Host batteries
-            // stay full and user-issued Host actions are charged zero energy.
+            // F12: take control of the hovered enemy's faction and unit.
+            // A missing enemy Host Station leaves the player's side unchanged.
             if ( arg->field_8->KbdLastHit == Input::KC_F12 )
             {
+                arg->field_8->HotKeyID = -1;
+                NC_STACK_ypabact *target = (_guiActFlags & 0x20) ? resolveDebugDestroyTarget() : NULL;
+                const bool changed = DebugSwitchToFactionUnit(target);
+
+                yw_arg159 infoMsg;
+                infoMsg.txt = changed ? "Enemy Faction Control Acquired" :
+                              "Select Enemy Unit With Living Host Station";
+                infoMsg.unit = NULL;
+                infoMsg.Priority = 100;
+                infoMsg.MsgID = 0;
+                ypaworld_func159(&infoMsg);
+            }
+
+            // F11: player Host Station economy cheat. The three Host batteries
+            // stay full and user-issued Host actions are charged zero energy.
+            if ( arg->field_8->KbdLastHit == Input::KC_F11 )
+            {
+                arg->field_8->HotKeyID = -1;
                 _debugHostStationCheat = !_debugHostStationCheat;
                 yw_ApplyDebugHostStationResources(this);
 
@@ -2887,7 +2994,7 @@ void NC_STACK_ypaworld::StartRoboDeathTimeScale(const NC_STACK_ypabact *destroye
     // Repeated qualifying Host Station deaths refresh/extend the one shared
     // event instead of creating parallel timers. The controller itself lives
     // in the master gameplay-time domain too: F4 stretches its duration and
-    // F5 freezes it together with the world instead of letting a wall clock
+    // F4 freezes it together with the world instead of letting a wall clock
     // expire the effect behind a paused/slowed simulation.
     if ( !HasActiveRoboDeathTimeScale() || requestedEnd > _roboDeathTimeScaleEndTime )
         _roboDeathTimeScaleEndTime = requestedEnd;
@@ -5726,6 +5833,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
 {
     _levelTeardownInProgress = true;
     _debugGameplaySlowMotion = false;
+    _debugGameplayFastMotion = false;
     _debugGameplayFrozen = false;
     _debugHostStationCheat = false;
     _debugGlobalInvulnerability = false;
@@ -10846,7 +10954,7 @@ void NC_STACK_ypaworld::ypaworld_func163(base_64arg *arg)
     const float gameplayTimeScale = yw_GetActiveGameplayTimeScale(this);
     const bool gameplayFrozen = !_isNetGame && openUADebug && _debugGameplayFrozen;
     const bool forceAllTimeScaled = !_isNetGame && openUADebug &&
-                                    (_debugGameplaySlowMotion || _debugGameplayFrozen);
+                                    (_debugGameplaySlowMotion || _debugGameplayFastMotion || _debugGameplayFrozen);
 
     arg->DTime = System::GameClock.BeginFrame(realFrameTimeStamp, unscaledFrameTime,
                                                _timeStamp, gameplayTimeScale,

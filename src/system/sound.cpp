@@ -242,7 +242,7 @@ void SFXEngine::SetTimeScale(float scale, bool forceAll)
         scale = 1.0f;
 
     if ( scale > 0.0f )
-        scale = std::max(0.05f, std::min(scale, 1.0f));
+        scale = std::max(0.05f, std::min(scale, 1.80f));
 
     const bool frozen = scale == 0.0f;
     const bool changed = fabs(timeScale - scale) >= 0.0001f ||
@@ -954,7 +954,8 @@ void SFXEngine::sb_0x424c74__sub2__sub1(TSoundSource *smpl)
         v14 = 2000;
     else
     {
-        const int maxRate = (baseRate > 44100 || smpl->AllowExtendedRate) ? 192000 : 44100;
+        const int maxRate = (baseRate > 44100 || smpl->AllowExtendedRate ||
+                             (forceAllTimeScaled && timeScale > 1.0f)) ? 192000 : 44100;
 
         if ( v14 > maxRate )
             v14 = maxRate;

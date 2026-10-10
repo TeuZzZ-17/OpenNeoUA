@@ -18103,7 +18103,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21__sub7()
         _updateMessage.energy = dround(sub_4498F4() * _buildProtos[bzda.field_3DC[bzda.field_8F4]].GetProductionCost());
     }
 
-    // New Debug F12 keeps the normal authored prices visible in the Genesis
+    // New Debug Shift+F11 keeps the normal authored prices visible in the Genesis
     // UI, but the actual player Host Station command is free. Zero the shared
     // action message here so affordability checks and the runtime use the same
     // authoritative cost instead of maintaining a parallel cheat path.
