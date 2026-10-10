@@ -678,7 +678,7 @@ public:
     // OpenNeoUA Buff invisibility: stealth-until-first-attack.
     // IsInvisibleUnrevealed()  -> true while the unit is still cloaked (no render,
     //                             radar/map/UI, sound, decoration FX, AI targeting).
-    // CanBeSeenByAIOrRadar()   -> shared AI filter for stealth, Spectator and New Debug F8.
+    // CanBeSeenByAIOrRadar()   -> shared AI filter for stealth, Spectator and New Debug F9.
     // RevealInvisibleOnAttack()-> permanently reveals this unit (and, for attached
     //                             unit-gun/dummy children, their carrier) the moment it
     //                             performs a real attack. No-op once revealed/normal.
@@ -959,7 +959,7 @@ public:
     World::TVehicleBuffConfig _buff;
     int _buff_deflect_charges_max;
     bool _invulnerable;
-    bool _debugIgnoredByAI = false; // Runtime-only New Debug F8 toggle; never saved.
+    bool _debugIgnoredByAI = false; // Runtime-only New Debug F9 toggle; never saved.
     int _reload_const;
 //    int16_t field_3CE;
     uint8_t _shield;
