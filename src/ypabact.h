@@ -522,7 +522,7 @@ public:
     float GetArtilleryShellBarrageRadius(); // OpenNeoUA custom: bombardment zone radius of this unit's artillery shell (0 if none)
     std::string GetArtilleryShellMarkerPath(); // OpenNeoUA custom: SVG marker path authored by the artillery weapon
     float GetArtilleryShellReadinessRatio(); // OpenNeoUA custom: 0..1 cooldown readiness for UI bars
-    void UpdateKamikaze(update_msg *arg);
+    void UpdateKamikaze(update_msg *arg, const vec3d *oldPosition = NULL);
     bool IsKamikazeArmed();
     bool GetKamikazeFireTimeScale(float *outScale, float *outHpDrainPerSecond);
     bool TriggerKamikazeDetonation(NC_STACK_ypabact *directHit);
@@ -1326,6 +1326,7 @@ public:
     TLaserBeamRuntime _vertical_laser_beam;
     std::vector<TLaserBeamRuntime> _vertical_laser_beams;
     bool _kamikaze_triggered;
+    bool _kamikaze_ground_decals_handled = false;
     std::vector<World::TRoboGun> _unitGuns;
     std::string _gunDisplayName;
     mat3x3 _unitGunsParentRotation;

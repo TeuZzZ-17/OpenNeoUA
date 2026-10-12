@@ -27,6 +27,7 @@
 #include "world/energyfx.h"
 #include "world/spin.h"
 #include "world/tools.h"
+#include "world/kamikaze_contact.h"
 
 #include "log.h"
 #include "crashdiag.h"
@@ -2926,6 +2927,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     StopLaser();
     StopVerticalLaser();
     _kamikaze_triggered = false;
+    _kamikaze_ground_decals_handled = false;
     _gunDisplayName.clear();
     _unitGunsParentRotation = mat3x3::Ident();
     _unitGunsSpawned = false;
@@ -3129,6 +3131,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     StopLaser();
     StopVerticalLaser();
     _kamikaze_triggered = false;
+    _kamikaze_ground_decals_handled = false;
     _unitGuns.clear();
     _gunDisplayName.clear();
     _unitGunsParentRotation = mat3x3::Ident();
@@ -3999,6 +4002,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateProximityDefense(arg);
     UpdateArtilleryShell(arg);
     ResolveGenesisCompoundOverlap(arg->frameTime);
+    UpdateKamikaze(arg);
     AI_layer1(arg);
     UpdateProgressiveWeaponFireRate(arg);
 
@@ -4017,7 +4021,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     if (_status == BACT_STATUS_CREATE &&
         (!_genesisGroundChecked || _position != genesisStartPosition))
         PlaceGenesisAboveTerrain();
-    UpdateKamikaze(arg);
+    UpdateKamikaze(arg, &shapeOldPosition);
     UpdateUnitGuns(arg);
     UpdateGenesisHostExit();
 
@@ -6561,7 +6565,8 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
             }
         }
 
-        ApplyAiMaxAltitudeAboveGround();
+        if ( !kamikazeRamming )
+            ApplyAiMaxAltitudeAboveGround();
 
         AI_layer3__sub1(this, arg);
 
@@ -9264,71 +9269,103 @@ static bool ypabact_IsValidKamikazeTarget(NC_STACK_ypabact *unit, NC_STACK_ypaba
 }
 
 static bool ypabact_IsKamikazeContact(const TKamikazeMount &mount,
-                                      NC_STACK_ypabact *target)
+                                      NC_STACK_ypabact *target,
+                                      const vec3d &from, double *fraction)
 {
     NC_STACK_ypabact *carrier = mount.carrier;
     if ( !carrier || !mount.weapon ||
          !ypabact_IsValidKamikazeTarget(carrier, target) )
         return false;
 
-    float detonationDistance = mount.weapon->trigger_radius;
-    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
-    {
-        detonationDistance = carrier->GetCollisionBroadRadius() +
-                             std::max(0.0f, target->_radius);
-    }
-
-    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
+    double radius = mount.weapon->trigger_radius;
+    if ( !std::isfinite(radius) || radius <= 0.0 )
+        radius = carrier->GetCollisionBroadRadius();
+    if ( !std::isfinite(radius) || radius <= 0.0 )
         return false;
 
-    // The fuse is always a real XYZ sphere. Air-to-ground has no XZ exception.
-    return (target->_position - carrier->_position).length() <= detonationDistance;
+    // The target's collision surface enters the fuse, not just its origin.
+    if ( target->HasCollisionShape() )
+    {
+        NC_STACK_ypaworld *world = carrier->getBACT_pWorld();
+        if ( !world->_collisionScene )
+            world->_collisionScene.reset(new Collision::Scene(*world));
+        Collision::Contact contact;
+        if ( !world->_collisionScene->Trace(target, from, carrier->_position, radius, &contact) )
+        {
+            if ( !world->_collisionScene->Trace(target, carrier->_position, carrier->_position, radius, &contact) )
+                return false;
+            contact.fraction = 1.0;
+        }
+        if ( fraction ) *fraction = contact.fraction;
+        return true;
+    }
+
+    std::vector<NC_STACK_ypabact::TCollisionSphereWorld> spheres;
+    target->GetCollisionSpheres(spheres, target->_position, target->_rotation, true);
+    bool found = false;
+    double first = 1.0;
+    for (const auto &sphere : spheres)
+    {
+        double entry;
+        if ( World::KamikazeSphereSweep(from, carrier->_position, sphere.center,
+                                        radius + sphere.radius, &entry) && entry <= first )
+        {
+            first = entry;
+            found = true;
+        }
+    }
+    if ( found && fraction ) *fraction = first;
+    return found;
 }
 
-static NC_STACK_ypabact *ypabact_FindKamikazeContactTarget(const TKamikazeMount &mount)
+static NC_STACK_ypabact *ypabact_FindKamikazeContactTarget(const TKamikazeMount &mount,
+                                                          const vec3d &from,
+                                                          double *fraction)
 {
     NC_STACK_ypabact *carrier = mount.carrier;
     if ( !carrier || !ypabact_IsKamikazeMountArmed(mount) )
         return NULL;
-
-    if ( carrier->_secndTtype == BACT_TGT_TYPE_UNIT &&
-         ypabact_IsKamikazeContact(mount, carrier->_secndT.pbact) )
-        return carrier->_secndT.pbact;
-
-    if ( carrier->_primTtype == BACT_TGT_TYPE_UNIT &&
-         ypabact_IsKamikazeContact(mount, carrier->_primT.pbact) )
-        return carrier->_primT.pbact;
-
-    float fuseRadius = mount.weapon->trigger_radius;
-    if ( !std::isfinite(fuseRadius) || fuseRadius <= 0.0f )
-        fuseRadius = carrier->GetCollisionBroadRadius();
-    if ( fuseRadius < carrier->GetCollisionBroadRadius() )
-        fuseRadius = carrier->GetCollisionBroadRadius();
-
-    int sectorRadius = (int)ceil(fuseRadius / World::CVSectorLength) + 2;
-    if ( sectorRadius < 2 )
-        sectorRadius = 2;
-
-    for (int y = -sectorRadius; y <= sectorRadius; y++)
+    NC_STACK_ypaworld *world = carrier->getBACT_pWorld();
+    NC_STACK_ypabact *firstTarget = NULL;
+    double first = 1.0;
+    const auto consider = [&](NC_STACK_ypabact *target)
     {
-        for (int x = -sectorRadius; x <= sectorRadius; x++)
+        double entry;
+        if ( ypabact_IsKamikazeContact(mount, target, from, &entry) &&
+             (!firstTarget || entry < first) )
         {
-            Common::Point cellId(carrier->_cellId.x + x, carrier->_cellId.y + y);
-
-            if ( !carrier->getBACT_pWorld()->IsGamePlaySector(cellId) )
-                continue;
-
-            cellArea &cell = carrier->getBACT_pWorld()->SectorAt(cellId);
-            for ( NC_STACK_ypabact *target : cell.unitsList )
-            {
-                if ( ypabact_IsKamikazeContact(mount, target) )
-                    return target;
-            }
+            first = entry;
+            firstTarget = target;
         }
-    }
+    };
+    if ( carrier->_secndTtype == BACT_TGT_TYPE_UNIT ) consider(carrier->_secndT.pbact);
+    if ( carrier->_primTtype == BACT_TGT_TYPE_UNIT ) consider(carrier->_primT.pbact);
 
-    return NULL;
+    double fuseRadius = mount.weapon->trigger_radius;
+    if ( !std::isfinite(fuseRadius) || fuseRadius <= 0.0 )
+        fuseRadius = carrier->GetCollisionBroadRadius();
+    fuseRadius = std::max(fuseRadius, (double)carrier->GetCollisionBroadRadius());
+    const int sectorRadius = (int)std::min(std::ceil(fuseRadius / World::CVSectorLength) + 2.0,
+                                          (double)std::max(world->_mapSize.x, world->_mapSize.y));
+    const Common::Point oldCell = World::PositionToSectorID(from);
+    const Common::Point newCell = World::PositionToSectorID(carrier->_position);
+    const int minX = std::max(1, std::min(oldCell.x, newCell.x) - sectorRadius);
+    const int maxX = std::min(world->_mapSize.x - 2, std::max(oldCell.x, newCell.x) + sectorRadius);
+    const int minY = std::max(1, std::min(oldCell.y, newCell.y) - sectorRadius);
+    const int maxY = std::min(world->_mapSize.y - 2, std::max(oldCell.y, newCell.y) + sectorRadius);
+    for (int y = minY; y <= maxY; ++y)
+        for (int x = minX; x <= maxX; ++x)
+            for (NC_STACK_ypabact *target : world->SectorAt(Common::Point(x, y)).unitsList)
+                consider(target);
+    // Large authored hulls can enter the fuse while their origins lie outside
+    // the nearby cells. Reuse the collision scene's spatial index for them.
+    if ( world->_collisionScene )
+        for (NC_STACK_ypabact *target : world->_collisionScene->ShapeTargets(from, carrier->_position, fuseRadius))
+            consider(target);
+    if ( firstTarget && fraction ) *fraction = first;
+    return firstTarget;
 }
+
 
 static bool ypabact_GetKamikazeCellTarget(NC_STACK_ypabact *unit, vec3d *outTarget)
 {
@@ -9389,20 +9426,26 @@ static bool ypabact_GetKamikazeCellTarget(NC_STACK_ypabact *unit, vec3d *outTarg
 }
 
 static bool ypabact_IsKamikazeCellContact(const TKamikazeMount &mount,
-                                          const vec3d &targetPos)
+                                          const vec3d &targetPos,
+                                          const vec3d &from, double *fraction)
 {
     if ( !mount.carrier || !mount.weapon )
         return false;
-
-    float detonationDistance = mount.weapon->trigger_radius;
-    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
-        detonationDistance = mount.carrier->GetCollisionBroadRadius();
-
-    if ( !std::isfinite(detonationDistance) || detonationDistance <= 0.0f )
+    double radius = mount.weapon->trigger_radius;
+    if ( !std::isfinite(radius) || radius <= 0.0 )
+        radius = mount.carrier->GetCollisionBroadRadius();
+    if ( !std::isfinite(radius) || radius <= 0.0 )
         return false;
-
-    return (targetPos - mount.carrier->_position).length() <= detonationDistance;
+    NC_STACK_ypaworld *world = mount.carrier->getBACT_pWorld();
+    if ( !world->_collisionScene )
+        world->_collisionScene.reset(new Collision::Scene(*world));
+    Collision::Contact contact;
+    if ( !world->_collisionScene->TraceSector(targetPos, from, mount.carrier->_position, radius, &contact) )
+        return false;
+    if ( fraction ) *fraction = contact.fraction;
+    return true;
 }
+
 
 static NC_STACK_ypabact *ypabact_GetKamikazeRammingTarget(NC_STACK_ypabact *unit)
 {
@@ -9458,7 +9501,10 @@ static NC_STACK_ypabact *ypabact_GetKamikazeRammingTarget(NC_STACK_ypabact *unit
 
 bool NC_STACK_ypabact::ApplyKamikazeRammingGuidance()
 {
-    if ( _oflags & BACT_OFLAG_USERINPT )
+    TKamikazeMount mount;
+    if ( (_oflags & BACT_OFLAG_USERINPT) || IsActiveDebuffStunning() ||
+         !ypabact_ResolveKamikazeMount(this, &mount) || mount.carrier != this ||
+         !ypabact_IsKamikazeMountArmed(mount) )
         return false;
 
     vec3d targetPos;
@@ -9473,16 +9519,13 @@ bool NC_STACK_ypabact::ApplyKamikazeRammingGuidance()
     }
 
     vec3d desired = targetPos - _position;
-    float desiredLen = desired.length();
+    double desiredLen = desired.length();
     if ( desiredLen <= 0.001 )
         return false;
 
-    // Refresh the destination every frame from the live unit or the normal
-    // best sector attack point. Do not replace _target_dir here: the
-    // class-specific AI may already have adjusted it for walls, buildings or
-    // terrain, and the shared avoidance path must remain authoritative.
+    // Keep closing on the live target without combat standoff. The vehicle
+    // controller still owns obstacle avoidance and its pending maneuvers.
     _target_vec = desired;
-
     _status_flg |= BACT_STFLAG_MOVE | BACT_STFLAG_ATTACK;
     _status_flg &= ~BACT_STFLAG_APPROACH;
 
@@ -14026,6 +14069,21 @@ bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
     payload->_parent = NULL;
     ypabact_GetKamikazePayloadListOwner(mount.payloadSource)->_missiles_list.push_back(payload);
 
+    // Positive trigger_radius gives the kamikaze its own terrain-decal rule.
+    // Check at the explosion position, before blast damage can kill the carrier
+    // or its mounted payload source. The later wreck impact must not repeat it.
+    if ( !_world->IsDebugGlobalInvulnerabilityEnabled() &&
+         std::isfinite(mount.weapon->trigger_radius) && mount.weapon->trigger_radius > 0.0f )
+    {
+        _kamikaze_ground_decals_handled = true;
+        for (const World::TChainFXConfig &fx : _chainFX)
+        {
+            if ( fx.trigger == World::TChainFXConfig::TRIGGER_DESTROYED &&
+                 fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
+                _world->SpawnGroundDecalInSphere(fx, _position, mount.weapon->trigger_radius);
+        }
+    }
+
     payload->DetonateKamikazePayload(directHit);
 
     // Global debug invulnerability protects the carrier while preserving the
@@ -14066,33 +14124,36 @@ bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
     return true;
 }
 
-void NC_STACK_ypabact::UpdateKamikaze(update_msg *)
+void NC_STACK_ypabact::UpdateKamikaze(update_msg *, const vec3d *oldPosition)
 {
     TKamikazeMount mount;
     if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
-         mount.carrier != this ||
-         !ypabact_IsKamikazeMountArmed(mount) )
-    {
+         mount.carrier != this || !ypabact_IsKamikazeMountArmed(mount) )
         return;
-    }
 
-    NC_STACK_ypabact *target = ypabact_FindKamikazeContactTarget(mount);
-    if ( target )
-    {
-        TriggerKamikazeDetonation(target);
-        return;
-    }
-
-    // AI sector orders have no unit direct-hit target. A Kamikaze that is
-    // actively fighting a neutral/enemy CELL therefore uses the same best
-    // sector point as normal combat and detonates when its XYZ fuse reaches it.
+    const vec3d from = oldPosition ? *oldPosition : _position;
+    double unitEntry = 1.0, cellEntry = 1.0;
+    NC_STACK_ypabact *target = ypabact_FindKamikazeContactTarget(mount, from, &unitEntry);
     vec3d cellTarget;
-    if ( ypabact_GetKamikazeCellTarget(this, &cellTarget) &&
-         ypabact_IsKamikazeCellContact(mount, cellTarget) )
+    const bool cellContact = ypabact_GetKamikazeCellTarget(this, &cellTarget) &&
+        ypabact_IsKamikazeCellContact(mount, cellTarget, from, &cellEntry);
+    if ( !target && !cellContact )
+        return;
+
+    const bool useUnit = target && (!cellContact || unitEntry <= cellEntry);
+    const double entry = useUnit ? unitEntry : cellEntry;
+    if ( oldPosition && entry < 1.0 )
     {
-        TriggerKamikazeDetonation(NULL);
+        // Detonate at the first contact reached during this frame's movement,
+        // so a fast carrier cannot fly through the fuse or explode beyond it.
+        bact_arg80 position;
+        position.pos = from + (_position - from) * std::max(0.0, entry);
+        position.field_C = 0;
+        SetPosition(&position);
     }
+    TriggerKamikazeDetonation(useUnit ? target : NULL);
 }
+
 
 static void ypabact_EnsureFireXRandomSeeded(NC_STACK_ypabact *unit)
 {
@@ -17919,6 +17980,7 @@ void NC_STACK_ypabact::Renew()
     StopLaser();
     StopVerticalLaser();
     _kamikaze_triggered = false;
+    _kamikaze_ground_decals_handled = false;
     _newtarget_time = 0;
     _assess_time = 0;
     _scale_pos = 0;
@@ -20709,7 +20771,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
             else if ( !worldHit &&
                       trigger == World::TChainFXConfig::TRIGGER_DESTROYED )
             {
-                if ( !ypabact_HasGroundDecalSupport(this) )
+                if ( _kamikaze_ground_decals_handled || !ypabact_HasGroundDecalSupport(this) )
                     continue;
 
                 // Vehicle crash decals are anchored to the real terrain below

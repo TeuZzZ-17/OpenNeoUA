@@ -2939,6 +2939,7 @@ public:
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
+    bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
     bool SpawnMinigunTracer(const vec3d &origin, const vec3d &direction,

@@ -691,6 +691,8 @@ struct Body
     bool residue = false;
     int stamp = -1;
     uint64_t signature = 0;
+    Common::Point terrainCell;
+    int terrainCollisionType = 0;
 };
 struct Candidates : btBroadphaseAabbCallback
 {
@@ -843,9 +845,11 @@ struct Scene::Impl
             return a.y() < b.y();
         });
     }
-    std::vector<Body *> Terrain(const vec3d &from, const vec3d &to, double radius, bool supported)
+    std::vector<Body *> Terrain(const vec3d &from, const vec3d &to, double radius, bool supported,
+                                const vec3d *slot = nullptr)
     {
         std::vector<Body *> result;
+        const Common::Point slotCell = slot ? World::PositionToSectorID(*slot) : Common::Point(-1, -1);
         std::set<std::tuple<int, int, bool>> visited;
         int x0 = std::max(1, (int)floor((std::min(from.x, to.x) - radius) / 300.0) - 1);
         int x1 = std::min(world.GetMapSize().x * 4 - 2, (int)ceil((std::max(from.x, to.x) + radius) / 300.0) + 1);
@@ -856,6 +860,11 @@ struct Scene::Impl
         {
             TSectorCollision tile = world.sub_44DBF8(cx, cz, x, z, 0);
             if (!tile.CollisionType || !tile.sklt) continue;
+            // A slot damage query must not prepare or hash unrelated buildings.
+            if (slot && (tile.CollisionType != 1 || tile.Cell != slotCell ||
+                (world._cells(tile.Cell).SectorType != 1 &&
+                 (std::fabs(tile.pos.x - slot->x) > .001 || std::fabs(tile.pos.z - slot->z) > .001))))
+                continue;
             // A whole-sector LEGO is returned for all nine interior grid cells.
             // Cache and query that physical building only once.
             const bool whole = tile.CollisionType == 1 && world._cells(tile.Cell).SectorType == 1;
@@ -911,6 +920,8 @@ struct Scene::Impl
                 }
             }
             if (!slot->terrain) continue;
+            slot->terrainCell = tile.Cell;
+            slot->terrainCollisionType = tile.CollisionType;
             slot->object.setWorldTransform(Pose(tile.pos, mat3x3::Ident()));
             result.push_back(slot.get());
         }
@@ -1278,6 +1289,70 @@ bool Scene::Trace(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to,
     if (found && out) { *out = first; out->actor = target; }
     return found;
 }
+bool Scene::TraceSector(const vec3d &target, const vec3d &from, const vec3d &to,
+                         double radius, Contact *out, bool singleSlot)
+{
+    if (!Finite(target) || !Finite(from) || !Finite(to) ||
+        !std::isfinite(radius) || radius <= 0) return false;
+    const Common::Point cell = World::PositionToSectorID(target);
+    if (!impl->world.IsGamePlaySector(cell)) return false;
+    impl->Frame();
+    btSphereShape sphere(radius);
+    btCollisionObject initial;
+    initial.setCollisionShape(&sphere);
+    initial.setWorldTransform(Pose(from, mat3x3::Ident()));
+    Contact first;
+    bool found = false;
+    for (Body *body : impl->Terrain(from, to, radius, false, singleSlot ? &target : nullptr))
+    {
+        // Only the active sector's buildings/floor are this attack's target.
+        // Nearby terrain, fillers and unrelated sectors cannot fire its fuse.
+        if (body->terrainCell != cell || body->terrainCollisionType != 1) continue;
+
+        ContactCollector overlap(&initial);
+        ContactPair(impl->detector, initial, body->object, overlap);
+        if (!overlap.contacts.empty())
+        {
+            if (out)
+            {
+                // Damage falloff needs the nearest reached surface of this slot.
+                const auto closest = std::min_element(overlap.contacts.begin(), overlap.contacts.end(),
+                    [&from](const Contact &a, const Contact &b) {
+                        return (a.point - from).square() < (b.point - from).square();
+                    });
+                *out = *closest;
+                out->fraction = 0;
+            }
+            return true;
+        }
+        TerrainCastResult result(V(from), V(to));
+        CastTerrain(&sphere, Pose(from, mat3x3::Ident()), Pose(to, mat3x3::Ident()), body->object, result);
+        if (result.hasHit() && (!found || result.m_closestHitFraction < first.fraction))
+        {
+            first.fraction = result.m_closestHitFraction;
+            first.point = V(result.m_hitPointWorld);
+            first.normal = V(result.m_hitNormalWorld);
+            found = true;
+        }
+        if (!found)
+        {
+            initial.setWorldTransform(Pose(to, mat3x3::Ident()));
+            ContactCollector endOverlap(&initial);
+            ContactPair(impl->detector, initial, body->object, endOverlap);
+            initial.setWorldTransform(Pose(from, mat3x3::Ident()));
+            if (!endOverlap.contacts.empty())
+            {
+                first = endOverlap.contacts.front();
+                first.fraction = 1;
+                found = true;
+            }
+        }
+    }
+    if (found && out) *out = first;
+    return found;
+}
+
+
 bool Scene::TraceProjectile(NC_STACK_ypabact *projectile, NC_STACK_ypabact *target,
                             const mat3x3 &oldRotation, Contact *out)
 {
