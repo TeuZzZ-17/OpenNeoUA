@@ -385,7 +385,7 @@ static bool ypabact_ReadAbsoluteOrPercentIni(Common::Ini::Key &key,
 
 static bool ypabact_ReadFallDamage(World::TAbsoluteOrPercent *out)
 {
-    return ypabact_ReadAbsoluteOrPercentIni(System::IniConf::GameFallDamage, out, 100.0f);
+    return ypabact_ReadAbsoluteOrPercentIni(System::IniConf::GameFallEnergy, out, 100.0f);
 }
 
 static float ypabact_ReadPlayerMaxAltitudeAboveGround()
@@ -539,51 +539,11 @@ struct ypabact_TEliteUnitConfig
 {
     float maxStatBonusPercent = 0.0f;
     uint8_t maxMedals = 4;
+    uint32_t killsPerMedal = 5;
     float maxGlowIntensity = 0.0f;
     World::TVisualTint glowTint;
     float glowPulseSeconds = 0.0f;
 };
-
-static bool ypabact_ParseEliteUnitTint(const std::string &text, World::TVisualTint *out)
-{
-    if ( !out )
-        return false;
-
-    int components[4] = {255, 255, 255, 255};
-    size_t start = 0;
-
-    for (int i = 0; i < 4; i++)
-    {
-        const size_t end = text.find('_', start);
-        if ( (i < 3 && end == std::string::npos) ||
-             (i == 3 && end != std::string::npos) )
-            return false;
-
-        const std::string part = text.substr(start,
-            end == std::string::npos ? std::string::npos : end - start);
-        if ( part.empty() )
-            return false;
-
-        char *tail = NULL;
-        const long value = std::strtol(part.c_str(), &tail, 10);
-        if ( tail == part.c_str() )
-            return false;
-        while ( *tail == ' ' || *tail == '\t' )
-            ++tail;
-        if ( *tail != '\0' )
-            return false;
-
-        components[i] = std::max(0L, std::min(value, 255L));
-        if ( end != std::string::npos )
-            start = end + 1;
-    }
-
-    out->r = (float)components[0] / 255.0f;
-    out->g = (float)components[1] / 255.0f;
-    out->b = (float)components[2] / 255.0f;
-    out->a = (float)components[3] / 255.0f;
-    return true;
-}
 
 static const ypabact_TEliteUnitConfig &ypabact_GetEliteUnitConfig()
 {
@@ -611,6 +571,16 @@ static const ypabact_TEliteUnitConfig &ypabact_GetEliteUnitConfig()
                 result.maxMedals = (uint8_t)std::min(medals, 255L);
         }
 
+        const std::string killsText = System::IniConf::GameEliteUnitKillsPerMedal.Get<std::string>();
+        char *killsTail = NULL;
+        const long kills = std::strtol(killsText.c_str(), &killsTail, 10);
+        if ( killsTail != killsText.c_str() )
+        {
+            while ( *killsTail == ' ' || *killsTail == '\t' ) ++killsTail;
+            if ( *killsTail == '\0' && kills > 0 )
+                result.killsPerMedal = (uint32_t)std::min(kills, 100000L);
+        }
+
         char *glowTail = NULL;
         const std::string glowText =
             System::IniConf::GameEliteUnitMaxGlowIntensity.Get<std::string>();
@@ -624,7 +594,7 @@ static const ypabact_TEliteUnitConfig &ypabact_GetEliteUnitConfig()
         }
 
         World::TVisualTint tint;
-        if ( ypabact_ParseEliteUnitTint(
+        if ( World::ParseVisualTint(
                  System::IniConf::GameEliteUnitGlowTint.Get<std::string>(), &tint) )
         {
             result.glowTint = tint;
@@ -679,8 +649,8 @@ static bool ypabact_ReadUnitCollisionDamage(Common::Ini::Key &key,
 
 static bool ypabact_IsCustomFallDamageConfigActive()
 {
-    World::TAbsoluteOrPercent damage;
-    return ypabact_ReadFallDamage(&damage);
+    World::TAbsoluteOrPercent energy;
+    return ypabact_ReadFallDamage(&energy);
 }
 
 static void ypabact_ApplyFallDamage(NC_STACK_ypabact *unit)
@@ -688,19 +658,19 @@ static void ypabact_ApplyFallDamage(NC_STACK_ypabact *unit)
     if ( !unit || unit->IsInvulnerableToDamage() )
         return;
 
-    World::TAbsoluteOrPercent damage;
-    if ( !ypabact_ReadFallDamage(&damage) )
+    World::TAbsoluteOrPercent energy;
+    if ( !ypabact_ReadFallDamage(&energy) )
     {
         unit->_energy -= fabs(unit->_fly_dir_length) * 10.0;
         return;
     }
 
-    if ( damage.value <= 0.0f )
+    if ( energy.value <= 0.0f )
         return;
 
-    double rawDamage = damage.percent
-        ? (double)std::max(unit->_energy_max, 0) * (double)damage.value / 100.0
-        : (double)damage.value;
+    double rawDamage = energy.percent
+        ? (double)std::max(unit->_energy_max, 0) * (double)energy.value / 100.0
+        : (double)energy.value;
     if ( rawDamage <= 0.0 )
         return;
 
@@ -1091,6 +1061,14 @@ static constexpr int RECOIL_DEFAULT_HOLD_TIME_MS = 0;
 // The old 0.14 s exponential offset has ~95% returned after 0.42 s.
 static constexpr int RECOIL_DEFAULT_RETURN_TIME_MS = 420;
 static constexpr int RECOIL_MAX_PHASE_TIME_MS = 5000;
+// First-person MGUN shake (mgun_recoil_player): duration of one shake and its
+// strength scale. The three axis weights keep the shake smooth on all axes.
+static constexpr int MGUN_RECOIL_PLAYER_SHAKE_DURATION_MS = 220;
+static constexpr float MGUN_RECOIL_PLAYER_DEGREES_PER_UNIT = 1.2f;
+static constexpr float MGUN_RECOIL_PLAYER_MAX_DEGREES = 12.0f;
+static constexpr float MGUN_RECOIL_PLAYER_SHAKE_AXIS_X = 0.35f;
+static constexpr float MGUN_RECOIL_PLAYER_SHAKE_AXIS_Y = 0.20f;
+static constexpr float MGUN_RECOIL_PLAYER_SHAKE_AXIS_Z = 0.35f;
 static int ypabact_ReadRecoilPhaseTimeMs(Common::Ini::Key &key, int dflt)
 {
     float parsed = ypabact_ReadNonNegativeFloatIni(key, (float)dflt);
@@ -2082,6 +2060,34 @@ static void ypabact_TriggerPlayerLaunchShake(NC_STACK_ypabact *bact,
         &wproto.shk_launch_player);
 }
 
+// One local shake per MGUN shot, only in the player's cockpit view. It reuses the
+// shake carrier path of the weapon launch shake and never moves the vehicle.
+static void ypabact_TriggerPlayerMgunRecoilShake(NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->_mgun_recoil_player <= 0.0f || !bact->IsCockpitCameraActive() )
+        return;
+
+    const float recoilDegrees = std::min(
+        bact->_mgun_recoil_player * MGUN_RECOIL_PLAYER_DEGREES_PER_UNIT,
+        MGUN_RECOIL_PLAYER_MAX_DEGREES);
+
+    bact->_mgun_recoil_shake.slot = 1;
+    bact->_mgun_recoil_shake.mag0 = recoilDegrees * C_PI_180;
+    bact->_mgun_recoil_shake.mag1 = 0.0f;
+    bact->_mgun_recoil_shake.time = MGUN_RECOIL_PLAYER_SHAKE_DURATION_MS;
+    bact->_mgun_recoil_shake.radius = 0.0f;
+    bact->_mgun_recoil_shake.mute = 0.0f;
+    bact->_mgun_recoil_shake.pos = vec3d(
+        MGUN_RECOIL_PLAYER_SHAKE_AXIS_X,
+        MGUN_RECOIL_PLAYER_SHAKE_AXIS_Y,
+        MGUN_RECOIL_PLAYER_SHAKE_AXIS_Z);
+
+    ypabact_TriggerLocalShakeCarrier(
+        bact,
+        &bact->_mgun_recoil_shake_carrier,
+        &bact->_mgun_recoil_shake);
+}
+
 static void ypabact_UpdateMimicSoundCarrier(NC_STACK_ypabact *bact)
 {
     if ( !bact || bact->_mimic_soundcarrier.Sounds.empty() )
@@ -2763,6 +2769,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _active_debuff.Clear();
     _debuff_soundcarrier.Clear();
     _player_launch_shake_carrier.Clear();
+    _mgun_recoil_shake = TSndFxPosParam();
+    _mgun_recoil_shake_carrier.Clear();
     _laser_launch_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
 
@@ -2807,7 +2815,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _weapon_flags = 0;
     _mgun = 0;
     _mgun_set = false;
-    _num_mguns = 1;
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
     _mgun_tracer = World::TWeaponTracerConfig();
@@ -2817,9 +2824,10 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_3ds_megadeth.clear();
     _mgun_base_dead.clear();
     _mgun_base_megadeth.clear();
-    _mgun_power = 0.0;
+    _mgun_energy = 0.0;
     _mgun_angle = 0.0;
-    _mgun_power_set = false;
+    _mgun_energy_set = false;
+    _mgun_recoil_player = 0.0f;
     _mgun_angle_set = false;
     _mgun_sector_damage_accum = 0.0;
     _vehicle_fire_vp_end_time = 0;
@@ -2879,9 +2887,9 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _at_death_push_force = 0.0f;
     _at_death_push_radius = 0.0f;
     _at_death_push_falloff = 0;
-    _at_death_damage = 0;
-    _at_death_damage_radius = 0.0f;
-    _at_death_damage_falloff = 0;
+    _at_death_energy = 0;
+    _at_death_energy_radius = 0.0f;
+    _at_death_energy_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -2930,6 +2938,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _killer = NULL;
     _killer_owner = 0;
     _sessionKillMarks = 0;
+    _sessionKillsTowardMedal = 0;
     _reb_count = 0;
     _atk_ret = 0;
     _lastFrmStamp = 0;
@@ -3045,6 +3054,8 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _fire_x_random_order.clear();
     _debuff_soundcarrier.Clear();
     _player_launch_shake_carrier.Clear();
+    _mgun_recoil_shake = TSndFxPosParam();
+    _mgun_recoil_shake_carrier.Clear();
     _laser_launch_soundcarrier.Clear();
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
@@ -3079,9 +3090,9 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _at_death_push_force = 0.0f;
     _at_death_push_radius = 0.0f;
     _at_death_push_falloff = 0;
-    _at_death_damage = 0;
-    _at_death_damage_radius = 0.0f;
-    _at_death_damage_falloff = 0;
+    _at_death_energy = 0;
+    _at_death_energy_radius = 0.0f;
+    _at_death_energy_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -3263,6 +3274,7 @@ size_t NC_STACK_ypabact::Deinit()
     SFXEngine::SFXe.StopCarrier(&_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_player_launch_shake_carrier);
+    SFXEngine::SFXe.StopCarrier(&_mgun_recoil_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_launch_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
@@ -3302,7 +3314,7 @@ size_t NC_STACK_ypabact::Deinit()
 
     _kidRef.Detach();
 
-    // OpenNeoUA vp_dead_follow: a removed unit must never leave its trajectory
+    // OpenNeoUA follow_vehicle: a removed unit must never leave its trajectory
     // partner pointing at freed memory.
     ClearDeadFollowLink();
 
@@ -3999,7 +4011,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateEnergyStatusFX(arg);
     UpdateLaser(arg); // OpenNeoUA custom: process this frame's laser fire request (must run after AI_layer1 firing)
     UpdateVerticalLaser(arg);
-    UpdateAoePush(arg);
+    UpdateConfiguredPush(arg);
     UpdateRecoilPush(arg);
     ResolveShapeMovement(shapeOldPosition, shapeOldRotation, arg->frameTime);
     if (_status == BACT_STATUS_CREATE &&
@@ -4137,6 +4149,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         }
         ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
         ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
+        ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
         ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
     }
 
@@ -4161,16 +4174,14 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     if ( !ypabact_CanUseGameplayStatusMechanics(this) )
         return;
 
-    if ( !hostStation && debuff.mindcontrol && !ypabact_CanBeMindcontrolled(this, source) )
-        return;
-
     // A Debuff re-applied while already active is a refresh. It must never
     // delay or interrupt what the Debuff is already doing: damage ticks and
     // sound keep running even while the target is under continuous fire.
     const bool refreshActive = _active_debuff.active;
     const int pendingTickTime = _active_debuff.next_tick_time;
 
-    const bool canMindcontrol = !hostStation && debuff.mindcontrol;
+    const bool canMindcontrol = !hostStation && debuff.mindcontrol &&
+                               ypabact_CanBeMindcontrolled(this, source);
     const float stunMotionLevel = hostStation ? 0.0f :
         std::max(0.0f, std::min(debuff.stun_motion_level, 1.0f));
     const bool applyStun = !hostStation && debuff.stun;
@@ -4180,10 +4191,10 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
                                     _active_debuff.stun_motion_level <= 0.0f);
 
     _active_debuff.active = true;
-    _active_debuff.inherit_to_children = debuff.inherit_to_children;
+    _active_debuff.allow_on_children = debuff.allow_on_children;
     _active_debuff.name = debuff.name.empty() ? "debuff" : debuff.name;
     _active_debuff.icon = debuff.icon;
-    _active_debuff.damage = debuff.damage;
+    _active_debuff.energy = debuff.energy;
     _active_debuff.tick_time = debuff.tick_time > 0 ? debuff.tick_time : 1000;
     _active_debuff.expire_time = _clock + debuff.duration;
     _active_debuff.next_tick_time = _clock + _active_debuff.tick_time;
@@ -4311,7 +4322,7 @@ void NC_STACK_ypabact::InheritActiveDebuffFromParent(NC_STACK_ypabact *parent)
          parent->getBACT_pWorld() != world ||
          world->_isNetGame ||
          !parent->_active_debuff.active ||
-         !parent->_active_debuff.inherit_to_children ||
+         !parent->_active_debuff.allow_on_children ||
          parent->_energy <= 0 ||
          parent->_status == BACT_STATUS_DEAD ||
          (parent->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
@@ -4394,11 +4405,11 @@ void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
         source = ypabact_FindLiveBactByGid(_world->_unitsList, _active_debuff.source_gid);
 
     int tickDamage = 0;
-    if ( _active_debuff.damage.defined && _active_debuff.damage.value > 0.0f )
+    if ( _active_debuff.energy.defined && _active_debuff.energy.value > 0.0f )
     {
-        double rawDamage = _active_debuff.damage.percent
-                         ? (double)_energy_max * ((double)_active_debuff.damage.value / 100.0)
-                         : (double)_active_debuff.damage.value;
+        double rawDamage = _active_debuff.energy.percent
+                         ? (double)_energy_max * ((double)_active_debuff.energy.value / 100.0)
+                         : (double)_active_debuff.energy.value;
         if ( std::isfinite(rawDamage) && rawDamage > 0.0 )
         {
             rawDamage = std::min(rawDamage, (double)std::numeric_limits<int>::max());
@@ -4801,9 +4812,9 @@ void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
 // OpenNeoUA mechanical system. The requested value is a world-space travel
 // distance integrated over this time constant, so aircraft, ground vehicles
 // and Host Stations use the same response.
-static const float AOE_PUSH_TAU = 0.30f;
-static const float AOE_PUSH_MAX_DT = 0.05f;
-static const float AOE_PUSH_MAX_STEP = 80.0f;
+static const float blast_PUSH_TAU = 0.30f;
+static const float blast_PUSH_MAX_DT = 0.05f;
+static const float blast_PUSH_MAX_STEP = 80.0f;
 // Public push values remain 0..10. One level starts at 100 world units and the
 // squared curve fills the requested broad range proportionally:
 // 1=100, 4=1600, 6=3600, 10=10000.
@@ -4814,7 +4825,7 @@ static const float RECOIL_MECHANICAL_TAU = 0.14f;
 static const int RECOIL_AI_TANK_RECOVERY_MS = 220;
 static const int RECOIL_PLAYER_TANK_RECOVERY_MS = 220;
 
-static bool ypabact_IsAoePushGroundAlignedUnit(NC_STACK_ypabact *unit)
+static bool ypabact_IsBlastPushGroundAlignedUnit(NC_STACK_ypabact *unit)
 {
     if ( !unit )
         return false;
@@ -4948,7 +4959,7 @@ static bool ypabact_ResolveRecoilDirection(NC_STACK_ypabact *unit,
     return resolveOne(-unit->_rotation.AxisZ(), resolvedDir);
 }
 
-static bool ypabact_SnapAoePushGroundUnit(NC_STACK_ypabact *unit)
+static bool ypabact_SnapBlastPushGroundUnit(NC_STACK_ypabact *unit)
 {
     ypaworld_arg136 ground;
     if ( !ypabact_ProbeLocalRecoilSupport(unit, &ground) )
@@ -5070,8 +5081,8 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
     if ( !isfinite(dtime) || dtime <= 0.0f )
         return;
 
-    if ( dtime > AOE_PUSH_MAX_DT )
-        dtime = AOE_PUSH_MAX_DT;
+    if ( dtime > blast_PUSH_MAX_DT )
+        dtime = blast_PUSH_MAX_DT;
 
     vec3d totalStep = *pushVel * dtime;
     float stepLen = totalStep.length();
@@ -5081,12 +5092,12 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
         return;
     }
 
-    int slices = (int)ceil(stepLen / AOE_PUSH_MAX_STEP);
+    int slices = (int)ceil(stepLen / blast_PUSH_MAX_STEP);
     if ( slices < 1 )
         slices = 1;
 
     vec3d step = totalStep / (float)slices;
-    bool groundAligned = ypabact_IsAoePushGroundAlignedUnit(unit);
+    bool groundAligned = ypabact_IsBlastPushGroundAlignedUnit(unit);
 
     for (int i = 0; i < slices; i++)
     {
@@ -5126,7 +5137,7 @@ static void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, up
         {
             const bool snapped = recoilMotion
                 ? ypabact_SnapRecoilGroundUnit(unit)
-                : ypabact_SnapAoePushGroundUnit(unit);
+                : ypabact_SnapBlastPushGroundUnit(unit);
             if ( !snapped )
             {
                 *pushVel = vec3d(0.0, 0.0, 0.0);
@@ -5174,10 +5185,10 @@ void NC_STACK_ypabact::ApplyConfiguredPush(const vec3d &dir, float intensity)
         pushIntensity * pushIntensity *
         CONFIGURED_PUSH_DISTANCE_PER_SQUARED_LEVEL;
 
-    AddAoePush(dir, mechanicalDistance);
+    QueueConfiguredPush(dir, mechanicalDistance);
 }
 
-void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
+void NC_STACK_ypabact::QueueConfiguredPush(const vec3d &dir, float distance)
 {
     if ( _bact_type == BACT_TYPES_GUN )
         return;
@@ -5197,7 +5208,7 @@ void NC_STACK_ypabact::AddAoePush(const vec3d &dir, float distance)
     if ( !isfinite(dirLen) || dirLen <= 0.001f )
         return;
 
-    _aoePushVel += (pushDir / dirLen) * (distance / AOE_PUSH_TAU);
+    _blastPushVel += (pushDir / dirLen) * (distance / blast_PUSH_TAU);
 }
 
 void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
@@ -5243,9 +5254,9 @@ void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
         ((recoil * RECOIL_DISTANCE_PER_UNIT) / RECOIL_MECHANICAL_TAU);
 }
 
-void NC_STACK_ypabact::UpdateAoePush(update_msg *arg)
+void NC_STACK_ypabact::UpdateConfiguredPush(update_msg *arg)
 {
-    ypabact_UpdateFakePushVel(this, &_aoePushVel, arg, AOE_PUSH_TAU, false);
+    ypabact_UpdateFakePushVel(this, &_blastPushVel, arg, blast_PUSH_TAU, false);
 }
 
 void NC_STACK_ypabact::UpdateRecoilPush(update_msg *arg)
@@ -8286,7 +8297,7 @@ static void ypabact_ApplyInlinePhysicalImpactDamage(NC_STACK_ypabact *fragment,
     if ( !fragment || !directTarget || !world ||
          world->_isNetGame || !fragment->_inlinePhysicalFX ||
          fragment->_inlinePhysicalImpactDamageSpent ||
-         fragment->_inlinePhysicalFX->impact_damage <= 0 ||
+         fragment->_inlinePhysicalFX->impact_energy <= 0 ||
          !ypabact_IsConfiguredAreaEffectTarget(fragment, directTarget) )
     {
         return;
@@ -8296,10 +8307,10 @@ static void ypabact_ApplyInlinePhysicalImpactDamage(NC_STACK_ypabact *fragment,
     // bouncing visually afterwards, but repeated contact cannot become a damage loop.
     fragment->_inlinePhysicalImpactDamageSpent = true;
 
-    const int rawDamage = fragment->_inlinePhysicalFX->impact_damage;
+    const int rawDamage = fragment->_inlinePhysicalFX->impact_energy;
     ypabact_ApplyConfiguredDamage(fragment, directTarget, rawDamage);
 
-    const float radius = fragment->_inlinePhysicalFX->impact_damage_radius;
+    const float radius = fragment->_inlinePhysicalFX->impact_energy_radius;
     if ( !(radius > 0.0f) || !std::isfinite(radius) )
         return;
 
@@ -8346,14 +8357,14 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
     NC_STACK_ypaworld *world = source ? source->getBACT_pWorld() : NULL;
     const bool hasPush = source && source->_at_death_push_force > 0.0f &&
                          source->_at_death_push_radius > 0.0f;
-    const bool hasDamage = source && source->_at_death_damage > 0 &&
-                           source->_at_death_damage_radius > 0.0f;
+    const bool hasDamage = source && source->_at_death_energy > 0 &&
+                           source->_at_death_energy_radius > 0.0f;
     if ( !world || world->_isNetGame || (!hasPush && !hasDamage) )
         return;
 
     const vec3d origin = source->_position;
     const float pushRadius = hasPush ? source->_at_death_push_radius : 0.0f;
-    const float damageRadius = hasDamage ? source->_at_death_damage_radius : 0.0f;
+    const float damageRadius = hasDamage ? source->_at_death_energy_radius : 0.0f;
     const float searchRadius = std::max(pushRadius, damageRadius);
     const float searchRadiusSq = searchRadius * searchRadius;
     if ( !isfinite(searchRadiusSq) )
@@ -8396,10 +8407,10 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
 
                 if ( hasDamage && distanceSq <= damageRadiusSq )
                 {
-                    const float damageFalloff = World::AoePushFalloffFactor(
-                        distance, damageRadius, source->_at_death_damage_falloff != 0);
+                    const float damageFalloff = World::BlastPushFalloffFactor(
+                        distance, damageRadius, source->_at_death_energy_falloff != 0);
                     const int rawDamage = (int)ceilf(
-                        (float)source->_at_death_damage * damageFalloff);
+                        (float)source->_at_death_energy * damageFalloff);
                     if ( rawDamage > 0 )
                         ypabact_ApplyConfiguredDamage(source, target, rawDamage);
                 }
@@ -8410,7 +8421,7 @@ static void ypabact_ApplyConfiguredAtDeathEffects(NC_STACK_ypabact *source)
                 if ( hasPush && distanceSq <= pushRadiusSq &&
                      target->CanReceiveConfiguredPush() && distance > 0.001f )
                 {
-                    const float pushFalloff = World::AoePushFalloffFactor(
+                    const float pushFalloff = World::BlastPushFalloffFactor(
                         distance, pushRadius, source->_at_death_push_falloff != 0);
                     const float appliedForce =
                         source->_at_death_push_force *
@@ -8530,11 +8541,7 @@ void NC_STACK_ypabact::Die()
          creditedKiller->_bact_type != BACT_TYPES_MISSLE &&
          creditedKiller->CanUseSessionKillMarks() )
     {
-        const uint8_t maxMedals = ypabact_GetEliteUnitConfig().maxMedals;
-        if ( _bact_type == BACT_TYPES_ROBO )
-            creditedKiller->_sessionKillMarks = maxMedals;
-        else if ( creditedKiller->_sessionKillMarks < maxMedals )
-            creditedKiller->_sessionKillMarks++;
+        creditedKiller->AwardSessionKill(_bact_type == BACT_TYPES_ROBO);
     }
 
     if ( _isUnitGunChild )
@@ -9633,11 +9640,10 @@ static bool ypabact_GetWeaponEnergyForTarget(const World::TWeapProto &wproto,
         break;
 
     default:
-        // Vanilla uses generic weapon energy for these classes. A newly-authored
-        // fine-grained energy_* may opt them into Smart comparisons.
+        // Classes without an override use the same generic energy as a real hit.
         energy = 1.0f;
-        defined = false;
-        supported = false;
+        defined = true;
+        supported = true;
         break;
     }
 
@@ -9706,13 +9712,13 @@ static int ypabact_SelectSmartAIPrimaryWeaponSlot(NC_STACK_ypabact *bact,
         float energy = 0.0f;
         bool defined = false;
 
-        // Smart rule A: every candidate must explicitly define the energy_*
-        // relevant to the current target. Any missing/invalid comparison data,
-        // or a target class without a class-specific energy_*, falls back to
-        // Random across all valid weapon slots.
+        // Compare the actual weapon energy with the target multiplier. Missing
+        // fine-class keys retain their normal legacy/generic hit semantics.
         if ( !ypabact_GetWeaponEnergyForTarget(wproto, target, &energy, &defined) ||
-             !defined || !isfinite(energy) )
-            return ypabact_SelectRandomPrimaryWeaponSlot(bact, outSourceSlot);
+             !isfinite(energy) )
+            continue;
+
+        energy *= std::max(0, wproto.energy);
 
         if ( bestCount == 0 || energy > bestEnergy )
         {
@@ -9726,6 +9732,8 @@ static int ypabact_SelectSmartAIPrimaryWeaponSlot(NC_STACK_ypabact *bact,
         }
     }
 
+    if ( bestCount == 0 )
+        return ypabact_SelectRandomPrimaryWeaponSlot(bact, outSourceSlot);
     int bestIndex = bestIndices[bestCount > 1 ? rand() % bestCount : 0];
     if ( outSourceSlot )
         *outSourceSlot = sourceSlots[bestIndex];
@@ -13376,7 +13384,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
             NC_STACK_ypabact *from = primaryHitTarget;
             float chainDamageMult = 1.0f;
-            float perJumpMult = wproto.laser_chain_damage_mult > 0.0f ? wproto.laser_chain_damage_mult : 1.0f;
+            float perJumpMult = wproto.laser_chain_energy_mult > 0.0f ? wproto.laser_chain_energy_mult : 1.0f;
 
             for (int jump = 0; jump < wproto.laser_chain_max_jumps; jump++)
             {
@@ -13897,7 +13905,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
 
             NC_STACK_ypabact *from = primaryHitTarget;
             float chainDamageMult = 1.0f;
-            float perJumpMult = wproto.laser_chain_damage_mult > 0.0f ? wproto.laser_chain_damage_mult : 1.0f;
+            float perJumpMult = wproto.laser_chain_energy_mult > 0.0f ? wproto.laser_chain_energy_mult : 1.0f;
 
             for (int jump = 0; jump < wproto.laser_chain_max_jumps; jump++)
             {
@@ -14004,7 +14012,7 @@ bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
 
     payload->SetLauncherBact(mount.payloadSource);
     // The payload exists only long enough to reuse the normal Weapon direct-hit,
-    // Impact/AoE/debuff/push and FX pipeline at the physical carrier position.
+    // Impact/blast/debuff/push and FX pipeline at the physical carrier position.
     payload->SetStartHeight(std::numeric_limits<float>::lowest());
     payload->_owner = _owner;
     payload->_host_station = mount.payloadSource->_host_station
@@ -15391,6 +15399,26 @@ uint8_t NC_STACK_ypabact::GetSessionKillMarks() const
     return std::min<uint8_t>(_sessionKillMarks, ypabact_GetEliteUnitConfig().maxMedals);
 }
 
+void NC_STACK_ypabact::AwardSessionKill(bool hostStation)
+{
+    if ( !_world || _world->_isNetGame || !CanUseSessionKillMarks() )
+        return;
+    const auto &config = ypabact_GetEliteUnitConfig();
+    if ( hostStation )
+    {
+        _sessionKillMarks = config.maxMedals;
+        _sessionKillsTowardMedal = 0;
+    }
+    else if ( _sessionKillMarks < config.maxMedals )
+    {
+        if ( ++_sessionKillsTowardMedal >= config.killsPerMedal )
+        {
+            ++_sessionKillMarks;
+            _sessionKillsTowardMedal = 0;
+        }
+    }
+}
+
 float NC_STACK_ypabact::GetEliteMedalProgress() const
 {
     const ypabact_TEliteUnitConfig &config = ypabact_GetEliteUnitConfig();
@@ -15660,7 +15688,7 @@ int NC_STACK_ypabact::GetEffectiveShotTime(int baseShotTime, bool minigun) const
     return std::max(1, (int)floor(scaled + 0.5));
 }
 
-int NC_STACK_ypabact::GetEffectiveOutgoingDamage(int baseDamage) const
+int NC_STACK_ypabact::GetEffectiveOutgoingEnergy(int baseDamage) const
 {
     if ( baseDamage == 0 )
         return 0;
@@ -15797,10 +15825,10 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
 {
     // OpenNeoUA attacker modifiers share this single final-damage choke point.
     // Clone malus and the per-instance kill-mark bonus are folded into one value,
-    // applied exactly once to direct weapons, missiles, lasers, MGUN and AoE.
+    // applied exactly once to direct weapons, missiles, lasers, MGUN and blast.
     // Healing, environmental bypasses and shared weapon prototypes stay untouched.
     if ( arg->energy < 0 && !arg->bypassAttackerDamageModifiers && arg->unit )
-        arg->energy = arg->unit->GetEffectiveOutgoingDamage(arg->energy);
+        arg->energy = arg->unit->GetEffectiveOutgoingEnergy(arg->energy);
 
     if ( IsInvulnerableToDamage() && arg->energy < 0 )
     {
@@ -16971,8 +16999,8 @@ void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int f
 
     const bool friendlyCollision = _owner == other->_owner;
     Common::Ini::Key &damageKey = friendlyCollision
-                                ? System::IniConf::GameUnitFriendlyCollisionDamage
-                                : System::IniConf::GameUnitEnemyCollisionDamage;
+                                ? System::IniConf::GameUnitFriendlyCollisionEnergy
+                                : System::IniConf::GameUnitEnemyCollisionEnergy;
     World::TAbsoluteOrPercent damageConfig;
     if ( !ypabact_ReadUnitCollisionDamage(damageKey, &damageConfig) ||
          damageConfig.value <= 0.0f )
@@ -17236,7 +17264,7 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &c
             continue;
 
         // OpenNeoUA invisible: a still-cloaked stealth unit is never a voluntary AI target.
-        // (It can still be caught by AoE/crossfire damage, which uses separate predicates.)
+        // (It can still be caught by blast/crossfire damage, which uses separate predicates.)
         if ( !cel_unit->CanBeSeenByAIOrRadar() )
             continue;
 
@@ -17774,6 +17802,7 @@ void NC_STACK_ypabact::Renew()
 //    bact->field_3D1 = 1;
     _killer = NULL;
     _sessionKillMarks = 0;
+    _sessionKillsTowardMedal = 0;
     _brkfr_time = 0;
     _brkfr_time2 = 0;
     _mpos.x = 0;
@@ -17805,7 +17834,6 @@ void NC_STACK_ypabact::Renew()
     _userHomingTargetCycleRequested = false;
     _alternativeViewActive = false;
     _mgun_set = false;
-    _num_mguns = 1;
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
     _mgun_tracer = World::TWeaponTracerConfig();
@@ -17815,9 +17843,10 @@ void NC_STACK_ypabact::Renew()
     _mgun_3ds_megadeth.clear();
     _mgun_base_dead.clear();
     _mgun_base_megadeth.clear();
-    _mgun_power = 0.0;
+    _mgun_energy = 0.0;
     _mgun_angle = 0.0;
-    _mgun_power_set = false;
+    _mgun_energy_set = false;
+    _mgun_recoil_player = 0.0f;
     _mgun_angle_set = false;
     _mgun_sector_damage_accum = 0.0;
     _mgun_soundcarrier.Clear();
@@ -17851,9 +17880,9 @@ void NC_STACK_ypabact::Renew()
     _at_death_push_force = 0.0f;
     _at_death_push_radius = 0.0f;
     _at_death_push_falloff = 0;
-    _at_death_damage = 0;
-    _at_death_damage_radius = 0.0f;
-    _at_death_damage_falloff = 0;
+    _at_death_energy = 0;
+    _at_death_energy_radius = 0.0f;
+    _at_death_energy_falloff = 0;
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
@@ -17908,7 +17937,7 @@ void NC_STACK_ypabact::Renew()
     _recoilAiRecoveryEndTime = 0;
     _recoilPlayerRecoveryEndTime = 0;
     _recoilPushVel = vec3d(0.0, 0.0, 0.0);
-    _aoePushVel = vec3d(0.0, 0.0, 0.0);
+    _blastPushVel = vec3d(0.0, 0.0, 0.0);
     _fallDamageAirborne = false;
     _fallDamageConsumed = false;
     _deinitInProgress = false;
@@ -18966,8 +18995,11 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
     World::TWeapProto *mgunProto = _mgun != -1 ? &_world->GetWeaponsProtos().at(_mgun) : NULL;
     bool vehicleTimedMgun = UsesVehicleMinigunTiming();
-    int mgunShots = _num_mguns > 0 ? _num_mguns : 1;
-    float mgunPower = GetMinigunPower();
+    // With mgun_energy the MGUN fires discrete shots: one hit scan and one
+    // energy hit per mgun_shot_time. Without it the vanilla MGUN keeps its
+    // continuous gun_power damage on every frame.
+    const bool shotEnergyMode = _mgun_energy_set;
+    const float mgunDamage = shotEnergyMode ? _mgun_energy : _gun_power * arg->field_C;
     RevealInvisibleOnAttack();
 
     int v107 = 0;
@@ -18987,7 +19019,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
     // Preserve the vanilla path exactly when the authored MGUN cost is absent
     // and no local pulse timing is needed. The new parameter reuses the same
     // effective cadence as the existing MGUN pulse timing.
-    if ( _mgun_fire_energy_cost_defined || emitLocalMgunPulse )
+    if ( _mgun_fire_energy_cost_defined || emitLocalMgunPulse || shotEnergyMode )
     {
         if ( vehicleTimedMgun )
         {
@@ -19015,33 +19047,47 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                 _energy_max, _mgun_fire_energy_cost);
         }
     }
-    else if ( _bact_type != BACT_TYPES_GUN )
+    else if ( !shotEnergyMode && _bact_type != BACT_TYPES_GUN )
     {
         // Missing/invalid mgun_fire_energy_cost preserves the exact vanilla
         // continuous Vehicle MGUN drain. Vanilla mounted gun units remain exempt.
-        _energy -= mgunPower * arg->field_C / 300.0f;
+        _energy -= mgunDamage / 300.0f;
     }
 
     bool spawnVisual = false;
+    bool shotDue = !shotEnergyMode;
 
-    if ( emitLocalMgunPulse )
+    if ( emitLocalMgunPulse || shotEnergyMode )
     {
         if ( arg->field_10 - _mgun_time > mgunPulseInterval )
         {
             _mgun_time = arg->field_10;
-            spawnVisual = true;
+            shotDue = true;
+            spawnVisual = emitLocalMgunPulse;
 
             // Keep the Vehicle FIRE visual state on the exact same effective
             // cadence that emitted this real MGUN pulse. This prevents damaged
             // shot-time malus from slowing gameplay while the FIRE VP runs at
             // the old undamaged request rate.
-            if ( vehicleTimedMgun )
+            if ( emitLocalMgunPulse && vehicleTimedMgun )
                 ypabact_StartVehicleFireVP(this, arg->field_10);
 
-            if ( vehicleTimedMgun )
+            // One cockpit shake per shot, so the shake follows the fire rate.
+            if ( emitLocalMgunPulse )
+                ypabact_TriggerPlayerMgunRecoilShake(this);
+
+            if ( emitLocalMgunPulse && vehicleTimedMgun )
                 ypabact_PlayVehicleMinigunPulse(this);
         }
     }
+
+    // In shot mode the hit scan, the energy hit and the default energy drain
+    // all happen only when a shot is due.
+    if ( !shotDue )
+        return 1;
+
+    if ( shotEnergyMode && !_mgun_fire_energy_cost_defined && _bact_type != BACT_TYPES_GUN )
+        _energy -= mgunDamage / 300.0f;
 
     // Every FireMinigun() path consumes the MGUN tracer config authored with
     // mgun_mesh_tracer_*. This includes normal Vehicle MGUNs and
@@ -19049,7 +19095,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
     const bool spawnMgunTracer = spawnVisual && _mgun_tracer.enabled &&
                                  !_world->_isNetGame;
 
-    for (int shotId = 0; shotId < mgunShots; shotId++)
+    // One spread ray per shot; the scope keeps the ray variables local.
     {
         bool cockpitAim = IsCockpitCameraActive();
         vec3d shotPos = cockpitAim ? GetCockpitCameraPosition() : GetBodyPosition();
@@ -19100,13 +19146,13 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         vec2d tmp = shotPos.XZ() + shotDir.XZ() * minigunTraceRange;
 
         if ( !_world->GetSectorInfo(&arg130) )
-            continue;
+            return 1;
 
         arg130.pos_x = tmp.x;
         arg130.pos_z = tmp.y;
 
         if ( !_world->GetSectorInfo(&arg130) )
-            continue;
+            return 1;
 
         // Longer configurable traces may cross more than the vanilla
         // start/middle/end sample. Include every sector in the segment's
@@ -19237,13 +19283,13 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                                 int energ;
                                                 if ( cellUnit->getBACT_inputting() || cellUnit->getBACT_viewer() )
                                                 {
-                                                    float v39 = (mgunPower * arg->field_C) * (100.0 - cellUnit->GetEffectiveShield());
+                                                    float v39 = mgunDamage * (100.0 - cellUnit->GetEffectiveShield());
                                                     energ = (v39 * 0.004);
                                                 }
                                                 else
                                                 {
 
-                                                    float v41 = (mgunPower * arg->field_C) * (100.0 - cellUnit->GetEffectiveShield());
+                                                    float v41 = mgunDamage * (100.0 - cellUnit->GetEffectiveShield());
                                                     energ = v41 / 100;
                                                 }
 
@@ -19308,7 +19354,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                   (userHost && userHost->_owner == _owner);
 
             if ( canApplyDamage )
-                ypabact_ApplyMinigunSectorDamage(this, v80, mgunPower * arg->field_C);
+                ypabact_ApplyMinigunSectorDamage(this, v80, mgunDamage);
         }
 
         if ( spawnVisual )
@@ -21017,6 +21063,7 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     ypabact_UpdateStatusSoundCarrier(this, &_debuff_soundcarrier);
     ypabact_UpdateStatusSoundCarrier(this, &_player_launch_shake_carrier);
     ypabact_UpdateStatusSoundCarrier(this, &_laser_launch_soundcarrier);
+    ypabact_UpdateStatusSoundCarrier(this, &_mgun_recoil_shake_carrier);
 }
 
 void NC_STACK_ypabact::ypabact_func117(update_msg *upd)
@@ -21405,9 +21452,9 @@ void NC_STACK_ypabact::ChangeSectorEnergy(yw_arg129 *arg)
         return;
 
     // Sector/building damage bypasses ModifyEnergy, so reuse the same attacker-side
-    // damage helper used by units, missiles, lasers, MGUN and AoE.
+    // damage helper used by units, missiles, lasers, MGUN and blast.
     if ( arg->field_10 > 0 && arg->unit )
-        arg->field_10 = arg->unit->GetEffectiveOutgoingDamage(arg->field_10);
+        arg->field_10 = arg->unit->GetEffectiveOutgoingEnergy(arg->field_10);
 
     arg->OwnerID = World::OWNER_RECALC;
 
@@ -21455,7 +21502,7 @@ void sb_0x4874c4(NC_STACK_ypabact *bact, int a2, int a3, float a4)
     bact->_vp_extra[0].rotate = mat3x3::RotateY(bact->_maxrot * 2.0 * (float)a3 * 0.001) * bact->_vp_extra[0].rotate;
 }
 
-// OpenNeoUA vp_dead_follow: mirrors the guiding fragment's trajectory onto its
+// OpenNeoUA follow_vehicle: mirrors the guiding fragment's trajectory onto its
 // wreck. The render transform is copied too, so the wreck stays in sync even
 // when unit update order puts the fragment last in the frame.
 static void ypabact_CopyDeadFollowTransform(NC_STACK_ypabact *dst, NC_STACK_ypabact *src)
@@ -21490,7 +21537,7 @@ void NC_STACK_ypabact::ClearDeadFollowLink()
 
 void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 {
-    // OpenNeoUA vp_dead_follow: a wreck bound to a guiding fragment only mirrors
+    // OpenNeoUA follow_vehicle: a wreck bound to a guiding fragment only mirrors
     // that fragment's trajectory. Its own fall physics and death timeout stay
     // frozen until the link breaks (fragment impact/DEATH2 or removal).
     if ( _deadFollowLeader )
@@ -21596,7 +21643,7 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 
         CrashOrLand(&arg86);
 
-        // OpenNeoUA vp_dead_follow: after the fragment's own fall step, drag the
+        // OpenNeoUA follow_vehicle: after the fragment's own fall step, drag the
         // bound wreck onto the same trajectory. Skipped after Release() moves the
         // fragment out of the world.
         if ( _deadFollowWreck && !(_status_flg & BACT_STFLAG_NORENDER) )

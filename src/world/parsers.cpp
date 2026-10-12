@@ -1103,15 +1103,15 @@ static bool ParseBuffParam(ScriptParser::Parser &parser,
             ? (int)std::min<long>(value, std::numeric_limits<int>::max())
             : 0;
     }
-    else if ( !StriCmp(p1, "buff_deflect_end_damage_reduction") )
+    else if ( !StriCmp(p1, "buff_deflect_end_energy_reduction") )
     {
         TAuthoredScalar value;
-        buff.deflect_end_damage_reduction = 0.0f;
+        buff.deflect_end_energy_reduction = 0.0f;
 
         if ( ParseAuthoredScalar(p2, value) && value.percent && value.value >= 0.0f )
-            buff.deflect_end_damage_reduction = std::min(value.value, 100.0f) / 100.0f;
+            buff.deflect_end_energy_reduction = std::min(value.value, 100.0f) / 100.0f;
         else
-            ypa_log_out("WARNING: buff_deflect_end_damage_reduction='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Using 0%%.\n",
+            ypa_log_out("WARNING: buff_deflect_end_energy_reduction='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Using 0%%.\n",
                         p2.c_str());
     }
     else if ( !StriCmp(p1, "buff_deflect_vp") )
@@ -1154,12 +1154,12 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
 {
     if ( !StriCmp(p1, "debuff_allow_on_host_station") )
         debuff.allow_on_host_station = parser.stol(p2, NULL, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_inherit_to_children") )
-        debuff.inherit_to_children = parser.stol(p2, NULL, 0) != 0;
+    else if ( !StriCmp(p1, "debuff_allow_on_children") )
+        debuff.allow_on_children = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_name") )
         debuff.name = p2;
-    else if ( !StriCmp(p1, "debuff_damage") )
-        ParseAbsoluteOrPercent(p2, debuff.damage, 100.0f);
+    else if ( !StriCmp(p1, "debuff_energy") )
+        ParseAbsoluteOrPercent(p2, debuff.energy, 100.0f);
     else if ( !StriCmp(p1, "debuff_mindcontrol") )
         debuff.mindcontrol = parser.stol(p2, NULL, 0) != 0;
     else if ( !StriCmp(p1, "debuff_tick_time") )
@@ -2052,14 +2052,6 @@ static bool ParseLaserMeshParam(
 }
 
 
-static bool ParseWireframeTintParam(ScriptParser::Parser &parser,
-                                    const std::string &p1,
-                                    const std::string &p2,
-                                    TVisualTint &tint)
-{
-    return ParseTintParam(parser, "wireframe_tint", p1, p2, tint);
-}
-
 enum ChainFXParseContext
 {
     CHAIN_FX_VEHICLE,
@@ -2610,16 +2602,16 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             hasInlinePhysicalKey = true;
             physical->visual_scale = ParseVPScaleValue(parser, p2);
         }
-        else if ( !StriCmp(p1, "impact_damage") )
+        else if ( !StriCmp(p1, "impact_energy") )
         {
             hasInlinePhysicalKey = true;
             const int damage = parser.stol(p2, NULL, 0);
-            physical->impact_damage = damage > 0 ? damage : 0;
+            physical->impact_energy = damage > 0 ? damage : 0;
         }
-        else if ( !StriCmp(p1, "impact_damage_radius") )
+        else if ( !StriCmp(p1, "impact_energy_radius") )
         {
             hasInlinePhysicalKey = true;
-            physical->impact_damage_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+            physical->impact_energy_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
         }
         else if ( !StriCmp(p1, "lifetime") )
         {
@@ -2640,10 +2632,11 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                             p2.c_str());
             }
         }
-        else if ( !StriCmp(p1, "vp_dead_follow") )
+        else if ( !StriCmp(p1, "follow_vehicle") )
         {
             hasInlinePhysicalKey = true;
-            physical->vp_dead_follow = parser.stol(p2, NULL, 0) != 0;
+            size_t parsed = 0;
+            physical->follow_vehicle = parser.stol(p2, &parsed, 0) == 1 && parsed == p2.size();
         }
         else if ( !StriCmp(p1, "mass") || !StriCmp(p1, "airconst") ||
                   !StriCmp(p1, "force") || !StriCmp(p1, "maxrot") ||
@@ -2870,9 +2863,9 @@ static bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "at_death_push_force") ||
            !StriCmp(p1, "at_death_push_radius") ||
            !StriCmp(p1, "at_death_push_falloff") ||
-           !StriCmp(p1, "at_death_damage") ||
-           !StriCmp(p1, "at_death_damage_radius") ||
-           !StriCmp(p1, "at_death_damage_falloff");
+           !StriCmp(p1, "at_death_energy") ||
+           !StriCmp(p1, "at_death_energy_radius") ||
+           !StriCmp(p1, "at_death_energy_falloff");
 }
 
 
@@ -3263,12 +3256,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->radius = parser.stof(p2, 0);
         _vhcl->radius_defined = true;
     }
-    else if ( !StriCmp(p1, "briefing_radius") )
+    else if ( !StriCmp(p1, "briefing_size") )
     {
-        _vhcl->briefing_radius = ParseNonNegativeIniFloatOrZero(p2);
-        // The briefing animation multiplies the radius by up to 32.
-        if ( _vhcl->briefing_radius > std::numeric_limits<float>::max() / 32.0f )
-            _vhcl->briefing_radius = 0.0f;
+        // Valid sizes are 1-10000. Anything else keeps the vanilla radius framing.
+        const float size = ParseNonNegativeIniFloatOrZero(p2);
+        _vhcl->briefing_size = size >= 1.0f && size <= 10000.0f ? size : 0.0f;
     }
     else if ( !StriCmp(p1, "overeof") )
     {
@@ -3335,18 +3327,18 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->at_death_push_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "at_death_damage") )
+    else if ( !StriCmp(p1, "at_death_energy") )
     {
         const int damage = parser.stol(p2, NULL, 0);
-        _vhcl->at_death_damage = damage > 0 ? damage : 0;
+        _vhcl->at_death_energy = damage > 0 ? damage : 0;
     }
-    else if ( !StriCmp(p1, "at_death_damage_radius") )
+    else if ( !StriCmp(p1, "at_death_energy_radius") )
     {
-        _vhcl->at_death_damage_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        _vhcl->at_death_energy_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     }
-    else if ( !StriCmp(p1, "at_death_damage_falloff") )
+    else if ( !StriCmp(p1, "at_death_energy_falloff") )
     {
-        _vhcl->at_death_damage_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
+        _vhcl->at_death_energy_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
@@ -3772,9 +3764,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( ParseTintParam(parser, "mimic_tint", p1, p2, _vhcl->mimic_tint) )
     {
     }
-    else if ( ParseWireframeTintParam(parser, p1, p2, _vhcl->wireframe_tint) )
-    {
-    }
     else if ( ParseVPRotationParam(parser, "", p1, p2, _vhcl->visual_rotation) )
     {
     }
@@ -3904,11 +3893,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun = parser.stol(p2, NULL, 0);
         _vhcl->mgun_set = true;
-    }
-    else if ( !StriCmp(p1, "num_mguns") )
-    {
-        int numMguns = parser.stol(p2, NULL, 0);
-        _vhcl->num_mguns = numMguns > 0 ? numMguns : 1;
     }
     else if ( !StriCmp(p1, "mgun_shot_time") )
     {
@@ -4090,10 +4074,23 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun_base_megadeth = p2;
     }
-    else if ( !StriCmp(p1, "mgun_power") )
+    else if ( !StriCmp(p1, "mgun_recoil_player") )
     {
-        _vhcl->mgun_power = parser.stof(p2, 0);
-        _vhcl->mgun_power_set = true;
+        // First-person MGUN shake intensity, 0-10. Invalid values disable it.
+        float intensity = parser.stof(p2, 0);
+        if ( !std::isfinite(intensity) || intensity < 0.0f )
+            intensity = 0.0f;
+        else if ( intensity > 10.0f )
+            intensity = 10.0f;
+        _vhcl->mgun_recoil_player = intensity;
+    }
+    else if ( !StriCmp(p1, "mgun_energy") )
+    {
+        // Energy removed by each MGUN shot. Zero or invalid keeps the vanilla
+        // continuous gun_power MGUN.
+        const float mgunEnergy = parser.stof(p2, 0);
+        _vhcl->mgun_energy = std::isfinite(mgunEnergy) && mgunEnergy > 0.0f ? mgunEnergy : 0.0f;
+        _vhcl->mgun_energy_set = _vhcl->mgun_energy > 0.0f;
     }
     else if ( !StriCmp(p1, "mgun_angle") )
     {
@@ -4465,29 +4462,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
         _vhcl->wpn_wireframe_2 = Nucleus::CInit<NC_STACK_sklt>( {{NC_STACK_rsrc::RSRC_ATT_NAME, std::string(p2)}} );
     }
-    else if ( !StriCmp(p1, "wpn_wireframe_1_hide_lock") )
-    {
-        size_t parsed = 0;
-        const long enabled = parser.stol(p2, &parsed, 0);
-        _vhcl->wpn_wireframe_1_hide_lock = parsed == p2.size() && enabled == 1;
-    }
-    else if ( !StriCmp(p1, "wpn_wireframe_2_hide_lock") )
-    {
-        size_t parsed = 0;
-        const long enabled = parser.stol(p2, &parsed, 0);
-        _vhcl->wpn_wireframe_2_hide_lock = parsed == p2.size() && enabled == 1;
-    }
     else if ( !StriCmp(p1, "vo_type") )
     {
         _vhcl->vo_type = parser.stol(p2, NULL, 16);
-    }
-    else if ( !StriCmp(p1, "speech_class") )
-    {
-        _vhcl->speech_class = Speech::ParsePackName(p2);
-    }
-    else if ( !StriCmp(p1, "speech_faction") )
-    {
-        _vhcl->speech_faction = Speech::ParsePackName(p2);
     }
     else if ( !StriCmp(p1, "speech_voicepack") )
     {
@@ -4495,21 +4472,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             return ScriptParser::RESULT_BAD_DATA;
         _vhcl->speech_voicepack = p2 == "0" ? "" : p2;
     }
-    else if ( p1.size() > 13 && !StriCmp(p1.substr(0, 13), "speech_event_") )
-    {
-        const int event = Speech::EventIndexFromKey(p1.substr(13));
-        if ( event < 0 )
-        {
-            ypa_log_out("Warning: unsupported speech event %s on vehicle %d, ignored\n",
-                        p1.c_str(), _vhclID);
-            return ScriptParser::RESULT_OK;
-        }
-        if ( p2.empty() )
-            return ScriptParser::RESULT_BAD_DATA;
 
-        // Zero restores automatic event lookup inside the configured pack.
-        _vhcl->speech_events[event] = p2 == "0" ? "" : p2;
-    }
     else if ( !StriCmp(p1, "max_pitch") )
     {
         _vhcl->max_pitch = parser.stof(p2, 0);
@@ -4842,7 +4805,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->weapon_ai_switch_mode = TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
         _vhcl->mgun = -1;
         _vhcl->mgun_set = false;
-        _vhcl->num_mguns = 1;
         _vhcl->mgun_shot_time = 0;
         _vhcl->mgun_shot_time_user = 0;
         _vhcl->mgun_tracer = TWeaponTracerConfig();
@@ -4852,9 +4814,10 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_decal.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
         _vhcl->mgun_vp_dead = 0;
         _vhcl->mgun_vp_megadeth = 0;
-        _vhcl->mgun_power = 0.0;
+        _vhcl->mgun_energy = 0.0;
         _vhcl->mgun_angle = 0.0;
-        _vhcl->mgun_power_set = false;
+        _vhcl->mgun_energy_set = false;
+        _vhcl->mgun_recoil_player = 0.0f;
         _vhcl->mgun_angle_set = false;
         _vhcl->mgun_3ds_dead.clear();
         _vhcl->mgun_3ds_megadeth.clear();
@@ -4881,7 +4844,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->visual_rotation = vec3d(0.0, 0.0, 0.0);
         _vhcl->visual_spin = vec3d(0.0, 0.0, 0.0);
         _vhcl->visual_tint = TVisualTint();
-        _vhcl->wireframe_tint = TVisualTint();
         _vhcl->damaged_fx = TDamagedFXConfig();
         _vhcl->unit_gun_icon.clear();
         _vhcl->power = 0;
@@ -4947,9 +4909,9 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->at_death_push_force = 0.0f;
         _vhcl->at_death_push_radius = 0.0f;
         _vhcl->at_death_push_falloff = 0;
-        _vhcl->at_death_damage = 0;
-        _vhcl->at_death_damage_radius = 0.0f;
-        _vhcl->at_death_damage_falloff = 0;
+        _vhcl->at_death_energy = 0;
+        _vhcl->at_death_energy_radius = 0.0f;
+        _vhcl->at_death_energy_falloff = 0;
         _vhcl->mass = 400.0;
         _vhcl->force = 5000.0;
         _vhcl->airconst = 80.0;
@@ -4957,7 +4919,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->height = 150.0;
         _vhcl->radius = 25.0;
         _vhcl->radius_defined = false;
-        _vhcl->briefing_radius = 0.0f;
+        _vhcl->briefing_size = 0.0f;
         _vhcl->overeof = 25.0;
         _vhcl->vwr_radius = 30.0;
         _vhcl->vwr_overeof = 30.0;
@@ -5062,11 +5024,9 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->unitID = 4;
         _wpn->name.clear();
         _wpn->energy = 10000;
-        _wpn->aoe_unit_energy = 0;
-        _wpn->aoe_building_energy = 0;
-        _wpn->aoe_sector_energy = 0;
-        _wpn->aoe_falloff = 0;
-        _wpn->aoe_unit_push = 0.0f;
+        _wpn->blast_energy = 0;
+        _wpn->blast_falloff = 0;
+        _wpn->blast_push = 0.0f;
         _wpn->push = 0.0f;
         _wpn->armor_penetration_targets = 0;
         _wpn->armor_penetration_icon.clear();
@@ -5077,9 +5037,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->maxrot = 2.0;
         _wpn->radius = 20.0;
         _wpn->trigger_radius = 0.0;
-        _wpn->aoe_unit_radius = 0.0;
-        _wpn->aoe_building_radius = 0.0;
-        _wpn->aoe_sector_radius = 0.0;
+        _wpn->blast_radius = 0.0;
         _wpn->overeof = 10.0;
         _wpn->vwr_radius = 20.0;
         _wpn->vwr_overeof = 20.0;
@@ -5127,7 +5085,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_chain_allow = 0;
         _wpn->laser_chain_max_jumps = 0;
         _wpn->laser_chain_radius = 0.0;
-        _wpn->laser_chain_damage_mult = 1.0;
+        _wpn->laser_chain_energy_mult = 1.0;
         _wpn->laser_beam_count = 1;
         _wpn->vertical_laser_enable = false;
         _wpn->vertical_laser_ai_trigger_radius = 300.0f;
@@ -5146,6 +5104,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->visual_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->visual_rotation = vec3d(0.0, 0.0, 0.0);
         _wpn->visual_spin = vec3d(0.0, 0.0, 0.0);
+        _wpn->collision_shape.clear();
         _wpn->spiral_speed = 0.0f;
         _wpn->spiral_radius = 0.0f;
         _wpn->chaos_factor = 0.0f;
@@ -5154,7 +5113,6 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_trail_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->vp_trail_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->vp_trail_tint = TVisualTint();
-        _wpn->wireframe_tint = TVisualTint();
         _wpn->tracer = TWeaponTracerConfig();
         _wpn->laser_mesh = TWeapProto::TLaserMeshConfig();
         _wpn->type_icon = 65;
@@ -5231,6 +5189,15 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     if ( ParseCompoundCollisionParameter(parser, p1, p2, _wpn->coll, _collID) )
         return ScriptParser::RESULT_OK;
 
+    if ( !StriCmp(p1, "collision_shape") )
+    {
+        _wpn->collision_shape.clear();
+        if (p2.empty() || p2 == "0") return ScriptParser::RESULT_OK;
+        if (!uaNormalizeDataAssetPath(p2, &_wpn->collision_shape, false))
+            ypa_log_out("WARNING: invalid collision_shape %s; existing collision retained.\n", p2.c_str());
+        return ScriptParser::RESULT_OK;
+    }
+
     if ( !StriCmp(p1, "model") )
     {
         if ( !StriCmp(p2, "grenade") )
@@ -5271,25 +5238,19 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->energy = parser.stol(p2, NULL, 0);
     }
-    else if ( !StriCmp(p1, "aoe_unit_energy") )
+    else if ( !StriCmp(p1, "blast_energy") )
     {
-        _wpn->aoe_unit_energy = parser.stol(p2, NULL, 0);
+        ParseBoundedIntegerParam("blast_energy", p1, p2, 0, 100000000, 0, _wpn->blast_energy);
     }
-    else if ( !StriCmp(p1, "aoe_building_energy") )
+
+
+    else if ( !StriCmp(p1, "blast_falloff") )
     {
-        _wpn->aoe_building_energy = parser.stol(p2, NULL, 0);
+        _wpn->blast_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "aoe_sector_energy") )
+    else if ( !StriCmp(p1, "blast_push") )
     {
-        _wpn->aoe_sector_energy = parser.stol(p2, NULL, 0);
-    }
-    else if ( !StriCmp(p1, "aoe_falloff") )
-    {
-        _wpn->aoe_falloff = parser.stol(p2, NULL, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "aoe_unit_push") )
-    {
-        _wpn->aoe_unit_push = ClampPushIntensity(parser.stof(p2, 0));
+        _wpn->blast_push = ClampPushIntensity(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "push") )
     {
@@ -5417,18 +5378,12 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         ParseAbsoluteOrPercent(p2, _wpn->fire_time_scale_hp_drain, 100.0f);
     }
-    else if ( !StriCmp(p1, "aoe_unit_radius") )
+    else if ( !StriCmp(p1, "blast_radius") )
     {
-        _wpn->aoe_unit_radius = parser.stof(p2, 0);
+        _wpn->blast_radius = ParseBoundedNonNegativeFiniteOrFallback(parser, p2, 12000.0f, 0.0f);
     }
-    else if ( !StriCmp(p1, "aoe_building_radius") )
-    {
-        _wpn->aoe_building_radius = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "aoe_sector_radius") )
-    {
-        _wpn->aoe_sector_radius = parser.stof(p2, 0);
-    }
+
+
     else if ( !StriCmp(p1, "radius_heli") )
     {
         _wpn->radius_heli = parser.stof(p2, 0);
@@ -5644,10 +5599,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float radius = parser.stof(p2, 0);
         _wpn->chain.radius = radius > 0.0 ? radius : 0.0;
     }
-    else if ( !StriCmp(p1, "chain_damage_mult") )
+    else if ( !StriCmp(p1, "chain_energy_mult") )
     {
         float mult = parser.stof(p2, 0);
-        _wpn->chain.damage_mult = mult > 0.0 ? mult : 0.0;
+        _wpn->chain.energy_mult = mult > 0.0 ? mult : 0.0;
     }
     else if ( !StriCmp(p1, "chain_jump_delay") )
     {
@@ -5837,10 +5792,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float radius = parser.stof(p2, 0);
         _wpn->laser_chain_radius = radius > 0.0 ? radius : 0.0;
     }
-    else if ( !StriCmp(p1, "laser_chain_damage_mult") )
+    else if ( !StriCmp(p1, "laser_chain_energy_mult") )
     {
         float mult = parser.stof(p2, 0);
-        _wpn->laser_chain_damage_mult = mult > 0.0 ? mult : 1.0;
+        _wpn->laser_chain_energy_mult = mult > 0.0 ? mult : 1.0;
     }
     else if ( !StriCmp(p1, "laser_beam_count") )
     {
@@ -6064,9 +6019,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
     }
     else if ( ParseTintParam(parser, "tint", p1, p2, _wpn->visual_tint) )
-    {
-    }
-    else if ( ParseWireframeTintParam(parser, p1, p2, _wpn->wireframe_tint) )
     {
     }
     else if ( ParseVPRotationParam(parser, "", p1, p2, _wpn->visual_rotation) )
@@ -7181,10 +7133,10 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->fade_in = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "fade_out") )
         _profile->fade_out = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "wave_unit_damage") )
+    else if ( !StriCmp(p1, "wave_unit_energy") )
     {
         int damage = parser.stol(p2, NULL, 0);
-        _profile->wave_unit_damage = damage > 0 ? damage : 0;
+        _profile->wave_unit_energy = damage > 0 ? damage : 0;
     }
     else if ( !StriCmp(p1, "wave_building_total_destruction") )
     {

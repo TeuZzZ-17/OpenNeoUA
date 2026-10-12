@@ -44,7 +44,7 @@ enum DecorationFXMode
     DECORATION_FX_PERSISTENT = 1
 };
 
-// OpenNeoUA custom: RGBA visual tint (see tint / wireframe_tint and related params).
+// OpenNeoUA custom: RGBA visual tint for models, FX and global owner wireframes.
 // RGB is a target hue: when it differs from white, renderers replace the source hue
 // while preserving source intensity. Alpha remains multiplicative. Neutral default = no change.
 struct TVisualTint
@@ -436,13 +436,13 @@ struct TChainFXPhysical
     float force = 0.0f;
     float maxrot = 0.0f;
     float radius = 0.0f;
-    int impact_damage = 0; // One-shot shielded damage dealt on the fragment's first unit impact
-    float impact_damage_radius = 0.0f; // 0 = direct target only; positive = additional 3D area damage
+    int impact_energy = 0; // One-shot shielded damage dealt on the fragment's first unit impact
+    float impact_energy_radius = 0.0f; // 0 = direct target only; positive = additional 3D area damage
     int lifetime_min = 30000; // Maximum flight lifetime in ms; fixed value uses the same min/max
     int lifetime_max = 30000; // Inclusive per-fragment lifetime range
     // 1 = the destroyed unit's vp_dead wreck follows this fragment's exact
     // trajectory (position and rotation) until the fragment impacts the ground.
-    bool vp_dead_follow = false;
+    bool follow_vehicle = false;
     std::array<TVhclSound, 8> sounds;
 };
 
@@ -485,7 +485,7 @@ struct TVehicleBuffConfig
 
     int deflect_charges = 0;
     int deflect_max_energy = 0;
-    float deflect_end_damage_reduction = 0.0f;
+    float deflect_end_energy_reduction = 0.0f;
     int16_t deflect_vp = 0;
     std::string deflect_3ds;
     std::string deflect_base;
@@ -503,10 +503,10 @@ struct TWeaponDebuffConfig
     int32_t profile_id = -1;
     uint32_t revision = 0;
     bool allow_on_host_station = false;
-    bool inherit_to_children = false;
+    bool allow_on_children = false;
     std::string name;
     std::string icon;
-    TAbsoluteOrPercent damage;
+    TAbsoluteOrPercent energy;
     bool mindcontrol = false;
     int tick_time = 1000;
     bool has_tick_time = false;
@@ -568,7 +568,7 @@ struct TSuperItemProfile
     int fade_in = 0;
     int fade_out = 0;
 
-    int wave_unit_damage = 0;
+    int wave_unit_energy = 0;
     int wave_building_total_destruction = 0; // explicit authored percentage 0..100
     int debuff_id = -1;
     TWeaponDebuffConfig debuff;
@@ -628,7 +628,7 @@ struct TWeaponChainConfig
     bool allow = false;
     int max_jumps = 0;
     float radius = 0.0;
-    float damage_mult = 1.0;
+    float energy_mult = 1.0;
     int jump_delay = 0;
 };
 
@@ -761,7 +761,6 @@ struct TVhclProto
     int field_4 = 0;
     int8_t mgun = 0;
     bool mgun_set = false;
-    int16_t num_mguns = 1;
     int mgun_shot_time = 0;
     // OpenNeoUA custom: optional player-only override for vehicle-level MGUN
     // cadence. Zero/unset inherits mgun_shot_time, preserving old data exactly.
@@ -777,10 +776,11 @@ struct TVhclProto
     std::string mgun_3ds_megadeth;
     std::string mgun_base_dead;
     std::string mgun_base_megadeth;
-    float mgun_power = 0.0;
+    float mgun_energy = 0.0;
     float mgun_angle = 0.0;
     std::string mgun_name;
-    bool mgun_power_set = false;
+    bool mgun_energy_set = false;
+    float mgun_recoil_player = 0.0f;
     bool mgun_angle_set = false;
     float weapon_spread_x = 0.0;
     float weapon_spread_y = 0.0;
@@ -803,7 +803,6 @@ struct TVhclProto
     vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d visual_spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA target hue/alpha
-    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA target hue/alpha
     TDamagedFXConfig damaged_fx;
     TDecorationFXConfig decoration_fx;
     std::string unit_gun_icon;
@@ -860,10 +859,7 @@ struct TVhclProto
     std::array<TVhclSound, SND_MAX> sndFX;
     int vo_type = 0;
     // An explicit event overrides the faction pack. Unconfigured data keeps vanilla.
-    std::string speech_class;
-    std::string speech_faction;
     std::string speech_voicepack;
-    std::array<std::string, Speech::EventCount> speech_events;
     float max_pitch = 0.0;
     int16_t field_1D6D = 0;
     int16_t field_1D6F = 0;
@@ -920,14 +916,14 @@ struct TVhclProto
                ai_reengage_range <= ai_engage_range;
     }
     int8_t radar = 0;
-    float push_resistance = 0.0; // OpenNeoUA custom: target-side resistance to push / aoe_unit_push
+    float push_resistance = 0.0; // OpenNeoUA custom: target-side resistance to push / blast_push
     bool has_push_resistance = false; // true only when push_resistance is explicitly authored
     float at_death_push_force = 0.0f; // OpenNeoUA custom: 0..10 radial push intensity emitted on actual vehicle death
     float at_death_push_radius = 0.0f; // 3D radius used only by the at-death push effect
     int at_death_push_falloff = 0; // Linear distance falloff used only by the at-death push effect
-    int at_death_damage = 0; // Shielded unit damage emitted on actual vehicle death; 0 disables it
-    float at_death_damage_radius = 0.0f; // 3D radius used only by the at-death damage effect
-    int at_death_damage_falloff = 0; // Linear distance falloff used only by the at-death damage effect
+    int at_death_energy = 0; // Shielded unit damage emitted on actual vehicle death; 0 disables it
+    float at_death_energy_radius = 0.0f; // 3D radius used only by the at-death damage effect
+    int at_death_energy_falloff = 0; // Linear distance falloff used only by the at-death damage effect
     float mass = 0.0;
     float force = 0.0;
     float airconst = 0.0;
@@ -938,8 +934,12 @@ struct TVhclProto
     // still keeps the vanilla default, but manual coll_* spheres may suppress
     // that default collision unless radius was really present in the script.
     bool radius_defined = false;
-    float briefing_radius = 0.0f; // Optional briefing framing radius; 0 uses the legacy radius.
-    float BriefingRadius() const { return briefing_radius > 0.0f ? briefing_radius : radius; }
+    // The briefing camera distance is proportional to the framing radius, so the
+    // on-screen size is proportional to 1 / radius. briefing_size = 4000 / radius
+    // makes a larger number mean a larger model.
+    static constexpr float BRIEFING_SIZE_REFERENCE = 4000.0f;
+    float briefing_size = 0.0f; // Optional briefing size; 0 uses the legacy radius.
+    float BriefingRadius() const { return briefing_size > 0.0f ? BRIEFING_SIZE_REFERENCE / briefing_size : radius; }
     float overeof = 0.0;
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
@@ -1022,8 +1022,6 @@ struct TVhclProto
     NC_STACK_skeleton *wpn_wireframe_1 = NULL;
     NC_STACK_skeleton *wpn_wireframe_2 = NULL;
     // OpenNeoUA custom: hide one lock marker while locked (shown when aiming only).
-    bool wpn_wireframe_1_hide_lock = false;
-    bool wpn_wireframe_2_hide_lock = false;
     IDVList initParams;
 
     bool hidden = false;
@@ -1198,6 +1196,10 @@ struct TWeapProto
     vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
     vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d visual_spin = vec3d(0.0, 0.0, 0.0);
+    // Optional baked convex body of the projectile, generated by Studio. It
+    // replaces the weapon's physical spheres for direct unit hits only; absent
+    // keeps the existing collision.
+    std::string collision_shape;
     // OpenNeoUA custom: render-only spiral orbit for every physical projectile
     // class except model = laser (including vertical mode). Speed uses the shared
     // 0..10 revolutions-per-second scale; radius is the lateral orbit distance in
@@ -1213,7 +1215,6 @@ struct TWeapProto
     vec3d vp_trail_scale = vec3d(1.0, 1.0, 1.0);
     vec3d vp_trail_spin = vec3d(0.0, 0.0, 0.0);
     TVisualTint vp_trail_tint; // OpenNeoUA custom: weapon embedded particle/trail tint
-    TVisualTint wireframe_tint; // OpenNeoUA custom: UI wireframe-only RGBA target hue/alpha
     TWeaponTracerConfig tracer; // OpenNeoUA custom: external-mesh projectile tracer
     std::vector<DestFX> dfx;
     std::vector<DestFX> ExtDestroyFX; // ext_dest_fx
@@ -1239,14 +1240,12 @@ struct TWeapProto
 //    int field_870 = 0;
 //    int field_874 = 0;
     int energy = 0;
-    int aoe_unit_energy = 0;
-    int aoe_building_energy = 0;
-    int aoe_sector_energy = 0;
-    int aoe_falloff = 0;
-    float aoe_unit_push = 0.0f; // OpenNeoUA custom: radial push intensity, continuous 0..10
-    // OpenNeoUA custom: 0..10 direct-hit single-target knockback. Same dispatcher as aoe_unit_push,
-    // but only for the primary/direct-hit unit. If both push and aoe_unit_push are set,
-    // the direct-hit unit receives only push; nearby units receive aoe_unit_push.
+    int blast_energy = 0;
+    int blast_falloff = 0;
+    float blast_push = 0.0f; // OpenNeoUA custom: radial push intensity, continuous 0..10
+    // OpenNeoUA custom: 0..10 direct-hit single-target knockback. Same dispatcher as blast_push,
+    // but only for the primary/direct-hit unit. If both push and blast_push are set,
+    // the direct-hit unit receives only push; nearby units receive blast_push.
     float push = 0.0f;
     int armor_penetration_targets = 0; // OpenNeoUA custom: direct-hit unit penetrations before final impact
     std::string armor_penetration_icon; // OpenNeoUA custom: optional HUD capability icon
@@ -1305,7 +1304,7 @@ struct TWeapProto
     int   laser_chain_allow = 0;               // 1 = primary laser hit may chain to nearby enemy units
     int   laser_chain_max_jumps = 0;           // max unit-to-unit chain segments after the primary hit
     float laser_chain_radius = 0.0;            // search radius around the last chained unit
-    float laser_chain_damage_mult = 1.0;       // cumulative damage multiplier per chain jump
+    float laser_chain_energy_mult = 1.0;       // cumulative damage multiplier per chain jump
     int   laser_beam_count = 1;                // total direct shooter-to-target laser beams (<=1 = off)
     bool  vertical_laser_enable = false;          // 1 = model=laser uses the downward vertical-fire mode
     float vertical_laser_ai_trigger_radius = 300.0; // X/Z distance required before AI fires downward
@@ -1343,7 +1342,7 @@ struct TWeapProto
     float airconst = 0.0;
     float maxrot = 0.0;
     float heightStd = 0;
-    // radius is direct projectile collision. AoE has separate unit/building/sector values.
+    // radius is direct projectile collision. blast has separate unit/building/sector values.
     // vp_scale never affects any gameplay radius.
     float radius = 0.0;
     // Keep the numeric Weapon default for compatibility/non-collision consumers,
@@ -1356,9 +1355,7 @@ struct TWeapProto
     float trigger_radius = 0.0;
     float fire_time_scale = 1.0f; // model=kamikaze/player: one FIRE press latches slowdown; 1.0 disables the sequence
     TAbsoluteOrPercent fire_time_scale_hp_drain; // absolute HP/sec or explicit max-HP percentage/sec; zero/absent disables it
-    float aoe_unit_radius = 0.0;
-    float aoe_building_radius = 0.0;
-    float aoe_sector_radius = 0.0;
+    float blast_radius = 0.0;
     float overeof = 0.0;
     float vwr_radius = 0.0;
     float vwr_overeof = 0.0;
@@ -1400,6 +1397,9 @@ struct TWeapProto
     int RollLifeTime() const;
     ~TWeapProto();
 };
+
+bool ParseVisualTint(const std::string &text, TVisualTint *out);
+const TVisualTint &GetOwnerWireframeTint(int owner);
 
 // Resolve the authored gameplay class of a runtime unit. Mimics use their
 // current disguise prototype; invalid/untyped actors fall back to the legacy

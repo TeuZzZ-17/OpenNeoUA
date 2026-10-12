@@ -2707,8 +2707,8 @@ public:
     void DebugRecordDpsDamage(NC_STACK_ypabact *attacker, NC_STACK_ypabact *target, int rawDamage);
     void DebugResetDpsMeter();
     void DebugUpdateDpsSource();
-    void ExpireDebugAoeRings();
-    void DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
+    void ExpireDebugBlastRings();
+    void DebugAddBlastRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
     void DebugAddAtDeathSphere(const vec3d &pos, float radius);
 
     // OpenNeoUA custom: artillery shell bombardment markers + manual map-click control.
@@ -3438,9 +3438,9 @@ public:
     };
     std::vector<DebugDpsSample> _debugDpsSamples;
 
-    // F9 debug: transient AoE impact rings. Recorded on weapon detonation,
+    // F9 debug: transient blast impact rings. Recorded on weapon detonation,
     // fade out after a short time. Only populated while _showCollDebug is on.
-    struct DebugAoeRing
+    struct DebugBlastRing
     {
         vec3d   pos;
         float   radius       = 0.0f;
@@ -3451,7 +3451,7 @@ public:
         int32_t createdStamp = 0;
         int32_t expireStamp  = 0;
     };
-    std::vector<DebugAoeRing> _debugAoeRings;
+    std::vector<DebugBlastRing> _debugBlastRings;
 
     // OpenNeoUA custom: active artillery shell bombardment markers for the opened strategic map.
     // Independent of the F9 overlay; an active zone remains visible only while

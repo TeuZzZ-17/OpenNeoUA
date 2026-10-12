@@ -954,7 +954,7 @@ void NC_STACK_yparobo::ChangeSectorEnergyFromRoboCollision(yw_arg129 *arg)
 
     World::TAuthoredScalar authoredDamage;
     if ( !World::ParseAuthoredScalar(
-             System::IniConf::GameRoboBuildingCollisionDamage.Get<std::string>(),
+             System::IniConf::GameRoboBuildingCollisionEnergy.Get<std::string>(),
              authoredDamage) ||
          !std::isfinite(authoredDamage.value) || authoredDamage.value <= 0.0f )
     {

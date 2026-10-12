@@ -3831,13 +3831,13 @@ static std::string db_weapon_model_display_name(const World::TWeapProto &p)
     }
 }
 
-static std::string db_weapon_aoe_atk_display(const World::TWeapProto &p)
+static std::string db_weapon_blast_energy_display(const World::TWeapProto &p)
 {
-    if ( p.aoe_unit_energy <= 0 )
+    if ( p.blast_energy <= 0 )
         return Locale::Text::OpenUA(Locale::OUA_DB_NONE);
 
     // Keep the same player-facing damage scale used by the normal ATK row.
-    return fmt::sprintf("%d", p.aoe_unit_energy / 100);
+    return fmt::sprintf("%d", p.blast_energy / 100);
 }
 
 static std::string db_optional_int_display(int value)
@@ -4835,9 +4835,9 @@ void UserData::PopulateDetailPane()
         const World::TWeapProto &p = wpns[pid];
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_MODEL_FORMAT), db_trunc(db_weapon_model_display_name(p), 18)));
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_ATK_FORMAT), p.energy / 100));
-        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_AOE_ATK_FORMAT), db_weapon_aoe_atk_display(p)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_BLAST_ENERGY_FORMAT), db_weapon_blast_energy_display(p)));
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_PUSH_FORMAT), db_optional_float_display(p.push)));
-        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_AOE_PUSH_FORMAT), db_optional_float_display(p.aoe_unit_push)));
+        statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_BLAST_PUSH_FORMAT), db_optional_float_display(p.blast_push)));
         statLines.push_back(fmt::sprintf(Locale::Text::OpenUA(Locale::OUA_DB_WEAPON_RECOIL_FORMAT),
                             p.recoil > 0.0 ? db_float_display(p.recoil) : Locale::Text::OpenUA(Locale::OUA_DB_NONE)));
         db_add_weapon_energy_lines(&statLines, DB_STATS_LINES, p);

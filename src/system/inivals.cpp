@@ -296,21 +296,21 @@ Common::Ini::Key IniConf::GameSpectatorMode("game.spectator_mode", Common::Ini::
 // the Resistance campaign keeps its original presentation and start faction.
 Common::Ini::Key IniConf::GamePlayAsOtherFactions("game.play_as_other_factions", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameWeaponWeaponCollision("game.weapon_weapon_collision", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GameRoboBuildingCollisionDamage("game.robo_building_collision_damage", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GameRoboBuildingCollisionEnergy("game.robo_building_collision_energy", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: collision damage when two enemy non-neutral units first touch.
 // Explicit % uses each target's max energy; bare value is absolute raw damage.
 // Effective shield reduces the final damage. Zero/absent preserves no extra damage.
-Common::Ini::Key IniConf::GameUnitEnemyCollisionDamage("game.unit_enemy_collision_damage", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GameUnitEnemyCollisionEnergy("game.unit_enemy_collision_energy", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: same absolute-or-% shield-aware collision damage for allied
 // non-neutral units. Zero/absent preserves no extra damage.
-Common::Ini::Key IniConf::GameUnitFriendlyCollisionDamage("game.unit_friendly_collision_damage", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GameUnitFriendlyCollisionEnergy("game.unit_friendly_collision_energy", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: multiplier for the vanilla power-station sector energy effect.
 // game.powerstation_energy_multiplier = 1.0 keeps existing power-energy behaviour; higher values scale static and mobile recharge/drain.
 Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_energy_multiplier", Common::Ini::KT_WORD, std::string("1.0"));
 // OpenNeoUA custom: when explicitly present, replaces vanilla fall damage. Explicit
 // % uses maximum energy; a bare value is absolute raw damage. Missing/invalid keeps
 // the vanilla fall-damage calculation.
-Common::Ini::Key IniConf::GameFallDamage("game.fall_damage", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GameFallEnergy("game.fall_energy", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: lethal-hit push multiplier, parsed and clamped to 0..10.
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
 // OpenNeoUA: single Hand Brake intensity for braking strength and the normalized
@@ -322,12 +322,22 @@ Common::Ini::Key IniConf::GameHandBrakePower("game.handbrake_power", Common::Ini
 Common::Ini::Key IniConf::GameRecoilKickTime("game.recoil_kick_time", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRecoilHoldTime("game.recoil_hold_time", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameRecoilReturnTime("game.recoil_return_time", Common::Ini::KT_WORD, std::string("420"));
+Common::Ini::Key IniConf::UiWireframeTintOwner0("ui.wireframe_tints_owner_0", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::UiWireframeTintOwner1("ui.wireframe_tints_owner_1", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::UiWireframeTintOwner2("ui.wireframe_tints_owner_2", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::UiWireframeTintOwner3("ui.wireframe_tints_owner_3", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::UiWireframeTintOwner4("ui.wireframe_tints_owner_4", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::UiWireframeTintOwner5("ui.wireframe_tints_owner_5", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::UiWireframeTintOwner6("ui.wireframe_tints_owner_6", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::UiWireframeTintOwner7("ui.wireframe_tints_owner_7", Common::Ini::KT_WORD, std::string("0"));
+
 // OpenNeoUA: session Elite progression. The maximum stat bonus is distributed
 // linearly across the configured medal count; glow uses the same progression.
 // Defaults preserve the existing four-medal presentation while keeping gameplay
 // and Elite glow disabled until explicitly configured.
 Common::Ini::Key IniConf::GameEliteUnitMaxStatBonus("game.elite_unit_max_stat_bonus", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameEliteUnitMaxMedals("game.elite_unit_max_medals", Common::Ini::KT_WORD, std::string("4"));
+Common::Ini::Key IniConf::GameEliteUnitKillsPerMedal("game.elite_unit_kills_per_medal", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GameEliteUnitMaxGlowIntensity("game.elite_unit_max_glow_intensity", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameEliteUnitGlowTint("game.elite_unit_glow_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GameEliteUnitGlowPulseSeconds("game.elite_unit_glow_pulse_seconds", Common::Ini::KT_WORD, std::string("0"));
@@ -679,18 +689,27 @@ void IniConf::Init()
         , &GameSpectatorMode
         , &GamePlayAsOtherFactions
         , &GameWeaponWeaponCollision
-        , &GameRoboBuildingCollisionDamage
-        , &GameUnitEnemyCollisionDamage
-        , &GameUnitFriendlyCollisionDamage
+        , &GameRoboBuildingCollisionEnergy
+        , &GameUnitEnemyCollisionEnergy
+        , &GameUnitFriendlyCollisionEnergy
         , &GamePowerStationEnergyMultiplier
-        , &GameFallDamage
+        , &GameFallEnergy
         , &GamePushAtDeathMultiplier
         , &GameHandBrakePower
         , &GameRecoilKickTime
         , &GameRecoilHoldTime
         , &GameRecoilReturnTime
+        , &UiWireframeTintOwner0
+        , &UiWireframeTintOwner1
+        , &UiWireframeTintOwner2
+        , &UiWireframeTintOwner3
+        , &UiWireframeTintOwner4
+        , &UiWireframeTintOwner5
+        , &UiWireframeTintOwner6
+        , &UiWireframeTintOwner7
         , &GameEliteUnitMaxStatBonus
         , &GameEliteUnitMaxMedals
+        , &GameEliteUnitKillsPerMedal
         , &GameEliteUnitMaxGlowIntensity
         , &GameEliteUnitGlowTint
         , &GameEliteUnitGlowPulseSeconds

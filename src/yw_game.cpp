@@ -182,7 +182,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
 
     _gameplayStats.fill( World::TPlayerStatus() );
 
-    _debugAoeRings.clear();
+    _debugBlastRings.clear();
     ResetPlasmaCurrencyRuntime();
     _timeStamp = 0;
     System::GameClock.Reset(_timeStamp);
@@ -6065,7 +6065,7 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemDetonationPush(int id)
             return;
 
         const float distance = sqrtf(std::max(distanceSq, 0.0f));
-        const float falloff = World::AoePushFalloffFactor(
+        const float falloff = World::BlastPushFalloffFactor(
             distance, profile->push_radius, profile->push_falloff != 0);
         const float appliedForce = profile->push_force *
                                    falloff *
@@ -7166,7 +7166,7 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
 
             if ( canReceiveDamageAndDebuff )
             {
-                int damage = target->CalcShieldedCustomDamage(profile.wave_unit_damage);
+                int damage = target->CalcShieldedCustomDamage(profile.wave_unit_energy);
                 if ( damage > 0 )
                 {
                     bact_arg84 damageArg;
@@ -9526,7 +9526,7 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
         }
     }
 
-    ExpireDebugAoeRings();
+    ExpireDebugBlastRings();
 
     if ( _showCollDebug )
         debug_draw_coll_spheres();
@@ -9962,7 +9962,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         }
 
     // --- TRANSIENT DEBUG RADII (lifetime is maintained independently of rendering) ---
-    for (const DebugAoeRing &ring : _debugAoeRings)
+    for (const DebugBlastRing &ring : _debugBlastRings)
     {
         if ((ring.pos - camPos).length() > RING_MAX_DIST)
             continue;
@@ -9984,28 +9984,28 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
     GFX::Engine.ProcessDrawSeq(labels);
 }
 
-void NC_STACK_ypaworld::ExpireDebugAoeRings()
+void NC_STACK_ypaworld::ExpireDebugBlastRings()
 {
-    for (size_t i = 0; i < _debugAoeRings.size(); )
+    for (size_t i = 0; i < _debugBlastRings.size(); )
     {
-        const DebugAoeRing &ring = _debugAoeRings[i];
+        const DebugBlastRing &ring = _debugBlastRings[i];
         if ( _timeStamp < ring.createdStamp || _timeStamp >= ring.expireStamp )
         {
-            _debugAoeRings[i] = _debugAoeRings.back();
-            _debugAoeRings.pop_back();
+            _debugBlastRings[i] = _debugBlastRings.back();
+            _debugBlastRings.pop_back();
             continue;
         }
         i++;
     }
 }
 
-void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b)
+void NC_STACK_ypaworld::DebugAddBlastRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b)
 {
     // Only record while the F9 overlay is active, so there is zero cost when off.
     if ( !_showCollDebug || radius < 0.01f )
         return;
 
-    DebugAoeRing ring;
+    DebugBlastRing ring;
     ring.pos = pos;
     ring.radius = radius;
     ring.r = r;
@@ -10015,9 +10015,9 @@ void NC_STACK_ypaworld::DebugAddAoeRing(const vec3d &pos, float radius, uint8_t 
     ring.createdStamp = _timeStamp;
     ring.expireStamp = _timeStamp + 1536; // ~1.5s (1024 ticks = 1s)
 
-    _debugAoeRings.push_back(ring);
-    if ( _debugAoeRings.size() > 256 )
-        _debugAoeRings.erase(_debugAoeRings.begin());
+    _debugBlastRings.push_back(ring);
+    if ( _debugBlastRings.size() > 256 )
+        _debugBlastRings.erase(_debugBlastRings.begin());
 }
 
 void NC_STACK_ypaworld::DebugAddAtDeathSphere(const vec3d &pos, float radius)
@@ -10026,7 +10026,7 @@ void NC_STACK_ypaworld::DebugAddAtDeathSphere(const vec3d &pos, float radius)
     if ( !_showCollDebug || radius < 0.01f )
         return;
 
-    DebugAoeRing ring;
+    DebugBlastRing ring;
     ring.pos = pos;
     ring.radius = radius;
     ring.r = 185;
@@ -10036,9 +10036,9 @@ void NC_STACK_ypaworld::DebugAddAtDeathSphere(const vec3d &pos, float radius)
     ring.createdStamp = _timeStamp;
     ring.expireStamp = _timeStamp + 3072; // ~3.0s (1024 ticks = 1s)
 
-    _debugAoeRings.push_back(ring);
-    if ( _debugAoeRings.size() > 256 )
-        _debugAoeRings.erase(_debugAoeRings.begin());
+    _debugBlastRings.push_back(ring);
+    if ( _debugBlastRings.size() > 256 )
+        _debugBlastRings.erase(_debugBlastRings.begin());
 }
 
 // OpenNeoUA custom: register/refresh an artillery shell map zone. A firing cycle keeps

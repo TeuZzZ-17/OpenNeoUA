@@ -1281,7 +1281,76 @@ bool Scene::Trace(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to,
 bool Scene::TraceProjectile(NC_STACK_ypabact *projectile, NC_STACK_ypabact *target,
                             const mat3x3 &oldRotation, Contact *out)
 {
-    if (!projectile || !Live(target) || !target->HasCollisionShape()) return false;
+    if (!projectile || !Live(target)) return false;
+    if (projectile->HasCollisionShape())
+    {
+        // A projectile with its own shape replaces its physical spheres for
+        // unit hits: its hulls sweep against the target's hulls, or against
+        // the target's spheres when the target has no shape.
+        const Shape::Impl &mine = *projectile->_collisionShape->impl;
+        const btTransform from = Pose(projectile->_old_pos, oldRotation);
+        const btTransform to = Pose(projectile->_position, projectile->_rotation);
+        btCollisionObject initial;
+        initial.setCollisionShape(const_cast<btCompoundShape *>(&mine.compound));
+        initial.setWorldTransform(from);
+        Contact best; bool hit = false;
+        auto keepNearest = [&](const Contact &c) {
+            if (!hit || c.fraction < best.fraction) { best = c; best.actor = target; hit = true; }
+        };
+        if (target->HasCollisionShape())
+        {
+            impl->Frame(); impl->Update(target);
+            const Body &body = *impl->actors.at(target);
+            btCollisionObject oldTarget;
+            oldTarget.setCollisionShape(&target->_collisionShape->impl->compound);
+            oldTarget.setWorldTransform(body.oldPose);
+            ContactCollector overlap(&initial);
+            ContactPair(impl->detector, initial, oldTarget, overlap);
+            if (!overlap.contacts.empty())
+            {
+                Contact c = overlap.contacts.front(); c.fraction = 0;
+                keepNearest(c);
+            }
+            else
+                for (const auto &hull : mine.hulls)
+                    for (const auto &part : target->_collisionShape->impl->hulls)
+                    {
+                        Contact c;
+                        if (Cast(hull.get(), from, to, part.get(), body.oldPose,
+                                 body.object.getWorldTransform(), &c)) keepNearest(c);
+                    }
+        }
+        else
+        {
+            std::vector<NC_STACK_ypabact::TCollisionSphereWorld> spheres;
+            target->GetCollisionSpheres(spheres, target->_position, target->_rotation, false);
+            for (const auto &sphere : spheres)
+            {
+                if (sphere.radius <= 0) continue;
+                btSphereShape shape(sphere.radius);
+                const btTransform pose = Pose(sphere.center, mat3x3::Ident());
+                btCollisionObject object;
+                object.setCollisionShape(&shape);
+                object.setWorldTransform(pose);
+                ContactCollector overlap(&initial);
+                ContactPair(impl->detector, initial, object, overlap);
+                if (!overlap.contacts.empty())
+                {
+                    Contact c = overlap.contacts.front(); c.fraction = 0;
+                    keepNearest(c);
+                    continue;
+                }
+                for (const auto &hull : mine.hulls)
+                {
+                    Contact c;
+                    if (Cast(hull.get(), from, to, &shape, pose, pose, &c)) keepNearest(c);
+                }
+            }
+        }
+        if (hit && out) *out = best;
+        return hit;
+    }
+    if (!target->HasCollisionShape()) return false;
     impl->Frame(); impl->Update(target);
     const Body &body = *impl->actors.at(target);
     std::vector<NC_STACK_ypabact::TCollisionSphereWorld> oldSpheres, newSpheres;
