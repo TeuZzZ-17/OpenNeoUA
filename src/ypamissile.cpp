@@ -199,7 +199,7 @@ static bool ypamissile_GetCompoundImpactPoint(const vec3d &oldWeaponCenter,
     return true;
 }
 
-static float ypamissile_AoeFalloffFactor(float distance, float radius, bool falloff)
+static float ypamissile_BlastFalloffFactor(float distance, float radius, bool falloff)
 {
     if ( radius <= 0.0 || distance > radius )
         return 0.0;
@@ -211,7 +211,7 @@ static float ypamissile_AoeFalloffFactor(float distance, float radius, bool fall
     return ypamissile_Clamp01(exp(distance * -2.8 / World::CVSectorLength));
 }
 
-static int ypamissile_ScaleAoeEnergy(int energy, float factor)
+static int ypamissile_ScaleBlastEnergy(int energy, float factor)
 {
     if ( energy <= 0 || factor <= 0.0 )
         return 0;
@@ -307,7 +307,7 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislHomingTimeRemaining = -1;
     _mislDelayTime = 0;
     _mislType = MISL_BOMB;
-    _mislAoeUnitPush = 0.0f;
+    _mislBlastPush = 0.0f;
     _mislArmorPenetrationRemaining = 0;
     _mislArmorPenetratedGids.clear();
     _mislDirectPushRecipientGids.clear();
@@ -1230,7 +1230,7 @@ void NC_STACK_ypamissile::TrySpawnChainProjectile(NC_STACK_ypabact *currentHit, 
     World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vehicleID);
     const World::TWeaponChainConfig &chain = wproto.chain;
 
-    if ( !chain.allow || chain.max_jumps <= 0 || chain.radius <= 0.0 || chain.damage_mult <= 0.0 )
+    if ( !chain.allow || chain.max_jumps <= 0 || chain.radius <= 0.0 || chain.energy_mult <= 0.0 )
         return;
 
     if ( wproto.IsLaser() || wproto.IsArtilleryShell() || wproto.IsKamikaze() )
@@ -1252,7 +1252,7 @@ void NC_STACK_ypamissile::TrySpawnChainProjectile(NC_STACK_ypabact *currentHit, 
     if ( !nextTarget )
         return;
 
-    int childEnergy = (int)((float)currentEnergy * chain.damage_mult);
+    int childEnergy = (int)((float)currentEnergy * chain.energy_mult);
     if ( childEnergy <= 0 )
         return;
 
@@ -1465,6 +1465,20 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                     _collisionOldRotationValid ? _collisionOldRotation : _rotation, &contact))
                 shapeHits[bct] = contact;
         }
+        // A weapon with its own shape tests every nearby unit, shaped or not.
+        if (HasCollisionShape())
+        {
+            for (auto *bct : collisionTargets)
+            {
+                if (bct == this || bct == _mislEmitter || bct->HasCollisionShape() ||
+                    bct->_bact_type == BACT_TYPES_MISSLE)
+                    continue;
+                Collision::Contact contact;
+                if (_world->_collisionScene->TraceProjectile(this, bct,
+                        _collisionOldRotationValid ? _collisionOldRotation : _rotation, &contact))
+                    shapeHits[bct] = contact;
+            }
+        }
         if (!shapeHits.empty())
         {
             // Compare the new contact with legacy sphere contacts as well;
@@ -1478,7 +1492,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                 double fraction = 2;
                 auto entry = shapeHits.find(target);
                 if (entry != shapeHits.end()) fraction = entry->second.fraction;
-                else if (!target->HasCollisionShape())
+                else if (!target->HasCollisionShape() && !HasCollisionShape())
                 {
                     std::vector<TCollisionSphereWorld> spheres;
                     target->GetCollisionSpheres(spheres, target->_position, target->_rotation, false);
@@ -1532,7 +1546,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
 
         // Preserve the legacy/upstream AI friendly-collision rule for normal
         // projectiles. Artillery still detects terminal contact with same-owner
-        // units so its explosion is unchanged; ApplyDamageToBact() suppresses
+        // units so its explosion is unchanged; ApplyEnergyToBact() suppresses
         // only the resulting artillery damage to those units.
         if ( !_isArtilleryShellProjectile && !a5 &&
              bct->_owner == _mislEmitter->_owner )
@@ -1567,7 +1581,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
              bct->_position.y < _mislStartHeight )
             continue;
 
-        if (bct->HasCollisionShape())
+        if (bct->HasCollisionShape() || HasCollisionShape())
         {
             if (collisionCount > 0) break; // Keep the nearer legacy terminal contact.
             auto entry = shapeHits.find(bct);
@@ -1586,7 +1600,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                 const bool overload = !bct->CanBuffDeflectEnergy(_energy);
                 if (armorPenetrates || overload)
                 {
-                    if (overload) multiplier = bct->GetBuffDeflectEndDamageMultiplier();
+                    if (overload) multiplier = bct->GetBuffDeflectEndEnergyMultiplier();
                     bct->ClearBuffDeflectCharges();
                 }
                 else
@@ -1695,7 +1709,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                         if ( armorPenetrates || deflectOverloaded )
                         {
                             if ( deflectOverloaded )
-                                deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
+                                deflectEndDamageMultiplier = bct->GetBuffDeflectEndEnergyMultiplier();
                             bct->ClearBuffDeflectCharges();
                         }
                         else
@@ -1815,7 +1829,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
                     if ( armorPenetrates || deflectOverloaded )
                     {
                         if ( deflectOverloaded )
-                            deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
+                            deflectEndDamageMultiplier = bct->GetBuffDeflectEndEnergyMultiplier();
                         bct->ClearBuffDeflectCharges();
                     }
                     else
@@ -1909,7 +1923,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
     return collisionCount > 0;
 }
 
-int NC_STACK_ypamissile::CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy)
+int NC_STACK_ypamissile::CalcEnergyForBact(NC_STACK_ypabact *bct, int baseEnergy)
 {
     if ( !bct || baseEnergy <= 0 )
         return 0;
@@ -1954,14 +1968,14 @@ int NC_STACK_ypamissile::CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy
     return ceil(shieldedDamage / divisor);
 }
 
-int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier)
+int NC_STACK_ypamissile::ApplyEnergyToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier, bool applyDebuff)
 {
     if ( !bct )
         return 0;
 
     // Artillery keeps its normal terminal collision and explosion, but never
     // damages units owned by the shell's emitter. This central unit-damage
-    // guard covers both the direct-hit and AoE paths without affecting enemy
+    // guard covers both the direct-hit and blast paths without affecting enemy
     // units, buildings, sectors, or other projectile models.
     if ( _isArtilleryShellProjectile && _mislEmitter &&
          bct->_owner == _mislEmitter->_owner )
@@ -1977,14 +1991,14 @@ int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy
         wproto = &_world->GetWeaponsProtos().at(_vehicleID);
 
     bool preAppliedDebuff = false;
-    if ( wproto && wproto->debuff.valid && wproto->debuff.shield_malus > 0.0f &&
+    if ( applyDebuff && wproto && wproto->debuff.valid && wproto->debuff.shield_malus > 0.0f &&
          bct->_energy > 0 && bct->_status != BACT_STATUS_DEAD )
     {
         bct->ApplyDebuff(wproto->debuff, _mislEmitter);
         preAppliedDebuff = true;
     }
 
-    int damage = CalcDamageForBact(bct, baseEnergy);
+    int damage = CalcEnergyForBact(bct, baseEnergy);
     if ( !damage )
         return 0;
 
@@ -2001,7 +2015,7 @@ int NC_STACK_ypamissile::ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy
         bct->ModifyEnergy(&arg84);
     }
 
-    if ( wproto && wproto->debuff.valid && !preAppliedDebuff && bct->_energy > 0 && bct->_status != BACT_STATUS_DEAD )
+    if ( applyDebuff && wproto && wproto->debuff.valid && !preAppliedDebuff && bct->_energy > 0 && bct->_status != BACT_STATUS_DEAD )
         bct->ApplyDebuff(wproto->debuff, _mislEmitter);
 
     return damage;
@@ -2023,7 +2037,7 @@ void NC_STACK_ypamissile::ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool apply
                          ApplyDirectPushToBact(pushRecipient, &pushDir, &pushStrength,
                                                false, bct);
 
-    int appliedDamage = applyDamage ? ApplyDamageToBact(bct, _energy, damageMultiplier) : 0;
+    int appliedDamage = applyDamage ? ApplyEnergyToBact(bct, _energy, damageMultiplier) : 0;
     if ( hasDirectPush )
     {
         bool diedNow = pushRecipient == bct && applyDamage && wasAlive &&
@@ -2150,7 +2164,7 @@ bool NC_STACK_ypamissile::ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *ap
     return true;
 }
 
-const char *NC_STACK_ypamissile::GetAreaDamageSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const
+const char *NC_STACK_ypamissile::GetBlastEnergySkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const
 {
     if ( !bct || bct == this || bct == _mislEmitter )
     {
@@ -2202,7 +2216,7 @@ const char *NC_STACK_ypamissile::GetAreaDamageSkipReason(NC_STACK_ypabact *bct, 
 
     // The bomb start-height rule belongs to the legacy physical bomb path.
     // Artillery has a dedicated ballistic/vertical trajectory and must evaluate
-    // unit AoE around its actual timed impact point instead.
+    // unit blast around its actual timed impact point instead.
     if ( !_isArtilleryShellProjectile && _mislType == MISL_BOMB &&
          bct->_position.y < _mislStartHeight )
         return "bomb_below_start_height";
@@ -2210,9 +2224,9 @@ const char *NC_STACK_ypamissile::GetAreaDamageSkipReason(NC_STACK_ypabact *bct, 
     return NULL;
 }
 
-// Push eligibility filter for normal direct/AoE push. Physical Chain FX,
+// Push eligibility filter for normal direct/blast push. Physical Chain FX,
 // static guns and final DEATH2 wrecks are excluded here. Owner policy is
-// applied by the collision/AoE call sites so player-controlled legacy behavior
+// applied by the collision/blast call sites so player-controlled legacy behavior
 // remains unchanged.
 const char *NC_STACK_ypamissile::GetAreaPushSkipReason(NC_STACK_ypabact *bct) const
 {
@@ -2551,16 +2565,19 @@ void NC_STACK_ypamissile::RememberDirectHitSectorAt(const vec3d &pos)
         _mislDirectHitSectors.push_back(hit);
 }
 
-void NC_STACK_ypamissile::ApplyAreaDamage()
+void NC_STACK_ypamissile::ApplyBlastToUnits()
 {
-    bool doAoeDamage = (_mislAoeUnitEnergy > 0);
-    bool doAoePush   = isfinite(_mislAoeUnitPush) && _mislAoeUnitPush > 0;
+    bool doBlastDamage = (_mislBlastEnergy > 0);
+    bool doBlastPush   = isfinite(_mislBlastPush) && _mislBlastPush > 0;
+    World::TWeapProto *proto = _world && (size_t)_vehicleID < _world->GetWeaponsProtos().size()
+        ? &_world->GetWeaponsProtos().at(_vehicleID) : NULL;
+    const bool hasDebuff = proto && proto->debuff.valid;
 
-    if ( !isfinite(_mislAoeUnitRadius) || _mislAoeUnitRadius <= 0.0 || (!doAoeDamage && !doAoePush) || !_world )
+    if ( !isfinite(_mislBlastRadius) || _mislBlastRadius <= 0.0 || (!doBlastDamage && !doBlastPush && !hasDebuff) || !_world )
         return;
 
     // Artillery retains its normal blast target scan, including same-owner units,
-    // so collision and explosion behavior are unchanged. ApplyDamageToBact()
+    // so collision and explosion behavior are unchanged. ApplyEnergyToBact()
     // suppresses artillery damage to those units; normal weapons retain the
     // existing player/AI friendly-fire policy unchanged.
     bool allowFriendly = _isArtilleryShellProjectile || getBACT_viewer();
@@ -2573,7 +2590,7 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
     if ( !_world->IsSector(impactCell) )
         return;
 
-    int cellRadius = (int)ceil(_mislAoeUnitRadius / World::CVSectorLength) + 1;
+    int cellRadius = (int)ceil(_mislBlastRadius / World::CVSectorLength) + 1;
     std::vector<NC_STACK_ypabact *> damagedUnits;
 
     for ( int dy = -cellRadius; dy <= cellRadius; dy++ )
@@ -2589,23 +2606,24 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
 
             for ( NC_STACK_ypabact *bct : cell.unitsList.safe_iter() )
             {
-                const char *dmgSkip  = GetAreaDamageSkipReason(bct, allowFriendly);
-                const char *pushSkip = doAoePush ? GetAreaPushSkipReason(bct) : "push_disabled";
+                const char *dmgSkip  = GetBlastEnergySkipReason(bct, allowFriendly);
+                const char *pushSkip = doBlastPush ? GetAreaPushSkipReason(bct) : "push_disabled";
 
-                if ( doAoePush && !pushSkip && !allowFriendly && _mislEmitter &&
+                if ( doBlastPush && !pushSkip && !allowFriendly && _mislEmitter &&
                      bct->_owner == _mislEmitter->_owner )
                     pushSkip = "friendly";
 
-                if ( dmgSkip && pushSkip )
-                    continue;
-
-                if ( IsArmorPenetratedTarget(bct) )
+                const bool applyDebuff = hasDebuff && bct && bct != this &&
+                    bct->_bact_type != BACT_TYPES_MISSLE && bct->_energy > 0 &&
+                    bct->_status != BACT_STATUS_DEAD &&
+                    !(bct->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
+                if ( dmgSkip && pushSkip && !applyDebuff )
                     continue;
 
                 vec3d delta = bct->_position - _position;
                 float distance = delta.length();
 
-                if ( distance > _mislAoeUnitRadius )
+                if ( distance > _mislBlastRadius )
                     continue;
 
                 if ( std::find(damagedUnits.begin(), damagedUnits.end(), bct) != damagedUnits.end() )
@@ -2614,21 +2632,21 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                 damagedUnits.push_back(bct);
 
                 int areaEnergy = 0;
-                if ( doAoeDamage && !dmgSkip && !IsDirectHitUnit(bct) )
+                if ( doBlastDamage && !dmgSkip )
                 {
-                    areaEnergy = ypamissile_ScaleAoeEnergy(
-                        _mislAoeUnitEnergy,
-                        ypamissile_AoeFalloffFactor(distance, _mislAoeUnitRadius,
-                                                    _mislAoeFalloff != 0));
+                    areaEnergy = ypamissile_ScaleBlastEnergy(
+                        _mislBlastEnergy,
+                        ypamissile_BlastFalloffFactor(distance, _mislBlastRadius,
+                                                    _mislBlastFalloff != 0));
                 }
 
-                bool hasAoePush = false;
+                bool hasBlastPush = false;
                 bool wasAlive = false;
                 vec3d appliedPushDir(0.0, 0.0, 0.0);
                 float appliedPushStrength = 0.0f;
 
                 const bool validDirectPush = isfinite(_mislDirectPush) && _mislDirectPush > 0;
-                if ( doAoePush && !pushSkip &&
+                if ( doBlastPush && !pushSkip &&
                      !(validDirectPush &&
                        (IsDirectHitUnit(bct) || IsDirectPushRecipient(bct))) )
                 {
@@ -2640,25 +2658,25 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                         appliedPushDir = vec3d(1.0f, 0.0f, 0.0f);
 
                     appliedPushStrength =
-                        _mislAoeUnitPush *
-                        World::AoePushFalloffFactor(distance, _mislAoeUnitRadius,
-                                                    _mislAoeFalloff != 0);
+                        _mislBlastPush *
+                        World::BlastPushFalloffFactor(distance, _mislBlastRadius,
+                                                    _mislBlastFalloff != 0);
 
                     appliedPushStrength *= ypamissile_GetTargetPushMultiplier(bct);
-                    hasAoePush = appliedPushStrength > 0.0f;
+                    hasBlastPush = appliedPushStrength > 0.0f;
                 }
 
                 // A conventional projectile explosion spends one Deflect charge and blocks
-                // every unit-side effect from that single blast event. If the local AOE
+                // every unit-side effect from that single blast event. If the local blast
                 // energy exceeds the configured Buff threshold, the blast breaks all charges
                 // and continues normally. Persistent fields and scripted damage use other
                 // call paths and are untouched.
                 float deflectEndDamageMultiplier = 1.0f;
-                if ( bct->HasDeflectBuff() && (areaEnergy > 0 || hasAoePush) )
+                if ( bct->HasDeflectBuff() && (areaEnergy > 0 || hasBlastPush || applyDebuff) )
                 {
                     if ( areaEnergy > 0 && !bct->CanBuffDeflectEnergy(areaEnergy) )
                     {
-                        deflectEndDamageMultiplier = bct->GetBuffDeflectEndDamageMultiplier();
+                        deflectEndDamageMultiplier = bct->GetBuffDeflectEndEnergyMultiplier();
                         bct->ClearBuffDeflectCharges();
                     }
                     else
@@ -2668,13 +2686,14 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
                     }
                 }
 
-                // AoE damage skips direct-hit units (they already received direct damage)
-                // and anything the strict damage filter rejected. AoE push has its
-                // own eligibility filter but follows the same AI-friendly policy.
+                // A blast also affects the direct target. Debuff coverage is
+                // independent of energy/push and includes allied units.
+                if ( applyDebuff )
+                    bct->ApplyDebuff(proto->debuff, _mislEmitter);
                 if ( areaEnergy > 0 )
-                    ApplyDamageToBact(bct, areaEnergy, deflectEndDamageMultiplier);
+                    ApplyEnergyToBact(bct, areaEnergy, deflectEndDamageMultiplier, false);
 
-                if ( hasAoePush )
+                if ( hasBlastPush )
                 {
                     bool diedNow = wasAlive &&
                                    !(bct->_status_flg & BACT_STFLAG_DEATH2) &&
@@ -2689,9 +2708,9 @@ void NC_STACK_ypamissile::ApplyAreaDamage()
     }
 }
 
-void NC_STACK_ypamissile::ApplyBuildingAreaDamage()
+void NC_STACK_ypamissile::ApplyBlastToBuildings()
 {
-    if ( _mislAoeBuildingRadius <= 0.0 || _mislAoeBuildingEnergy <= 0 || !_world )
+    if ( _mislBlastRadius <= 0.0 || _mislBlastEnergy <= 0 || !_world )
         return;
 
     if ( _mislFlags & FLAG_MISL_IGNOREBUILDS )
@@ -2705,7 +2724,7 @@ void NC_STACK_ypamissile::ApplyBuildingAreaDamage()
     if ( !_world->IsSector(impactCell) )
         return;
 
-    int cellRadius = (int)ceil(_mislAoeBuildingRadius / World::CVSectorLength) + 1;
+    int cellRadius = (int)ceil(_mislBlastRadius / World::CVSectorLength) + 1;
 
     for ( int dy = -cellRadius; dy <= cellRadius; dy++ )
     {
@@ -2726,19 +2745,16 @@ void NC_STACK_ypamissile::ApplyBuildingAreaDamage()
                     if ( GetAreaBuildingSkipReason(cell, bldX, bldY) )
                         continue;
 
-                    if ( IsDirectHitBuilding(cellId, bldX, bldY) )
-                        continue;
-
                     vec3d bldPos = GetBuildingSlotCenter(cell, bldX, bldY);
                     float distance = (bldPos - _position).length();
 
-                    if ( distance > _mislAoeBuildingRadius )
+                    if ( distance > _mislBlastRadius )
                         continue;
 
                     yw_arg129 arg129;
                     arg129.field_0 = 0;
                     arg129.pos = bldPos;
-                    arg129.field_10 = ypamissile_ScaleAoeEnergy(_mislAoeBuildingEnergy, ypamissile_AoeFalloffFactor(distance, _mislAoeBuildingRadius, _mislAoeFalloff != 0));
+                    arg129.field_10 = ypamissile_ScaleBlastEnergy(_mislBlastEnergy, ypamissile_BlastFalloffFactor(distance, _mislBlastRadius, _mislBlastFalloff != 0));
                     if ( arg129.field_10 <= 0 )
                         continue;
 
@@ -2751,9 +2767,9 @@ void NC_STACK_ypamissile::ApplyBuildingAreaDamage()
     }
 }
 
-void NC_STACK_ypamissile::ApplySectorAreaDamage()
+void NC_STACK_ypamissile::ApplyBlastToSectors()
 {
-    if ( _mislAoeSectorRadius <= 0.0 || _mislAoeSectorEnergy <= 0 || !_world )
+    if ( _mislBlastRadius <= 0.0 || _mislBlastEnergy <= 0 || !_world )
         return;
 
     if ( _mislFlags & FLAG_MISL_IGNOREBUILDS )
@@ -2767,7 +2783,7 @@ void NC_STACK_ypamissile::ApplySectorAreaDamage()
     if ( !_world->IsSector(impactCell) )
         return;
 
-    int cellRadius = (int)ceil(_mislAoeSectorRadius / World::CVSectorLength) + 1;
+    int cellRadius = (int)ceil(_mislBlastRadius / World::CVSectorLength) + 1;
 
     for ( int dy = -cellRadius; dy <= cellRadius; dy++ )
     {
@@ -2788,25 +2804,22 @@ void NC_STACK_ypamissile::ApplySectorAreaDamage()
                     if ( GetAreaSectorSkipReason(cell, bldX, bldY) )
                         continue;
 
-                    if ( IsDirectHitSector(cellId, bldX, bldY) )
-                        continue;
-
                     vec3d sectorPos = GetBuildingSlotCenter(cell, bldX, bldY);
                     float distance = (sectorPos - _position).length();
 
-                    if ( distance > _mislAoeSectorRadius )
+                    if ( distance > _mislBlastRadius )
                         continue;
 
                     yw_arg129 arg129;
                     arg129.field_0 = 0;
                     arg129.pos = sectorPos;
-                    arg129.field_10 = ypamissile_ScaleAoeEnergy(_mislAoeSectorEnergy, ypamissile_AoeFalloffFactor(distance, _mislAoeSectorRadius, _mislAoeFalloff != 0));
+                    arg129.field_10 = ypamissile_ScaleBlastEnergy(_mislBlastEnergy, ypamissile_BlastFalloffFactor(distance, _mislBlastRadius, _mislBlastFalloff != 0));
                     if ( arg129.field_10 <= 0 )
                         continue;
 
                     arg129.unit = _mislEmitter;
 
-                    // Sector AoE uses the same path as direct hits on normal sector architecture.
+                    // Sector blast uses the same path as direct hits on normal sector architecture.
                     ChangeSectorEnergy(&arg129);
                 }
             }
@@ -3583,7 +3596,7 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
     // therefore it never reaches the usual TubeCollisionTest(). Reuse that exact
     // direct-hit path on the terminal flight segment before the timed explosion:
     // a physically intersected unit receives `energy`, is remembered as the direct
-    // hit, and Impact() below will then exclude it from aoe_unit_energy to avoid
+    // hit, and Impact() below will then exclude it from blast_energy to avoid
     // double damage. If no unit is intersected, the shell simply detonates at its
     // authored landing/airburst point as before.
     NC_STACK_ypabact *directHit = NULL;
@@ -3626,9 +3639,9 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
                                   &groundHit);
     }
 
-    // Timed impact: reuse the same path a normal bomb uses on contact for AoE
+    // Timed impact: reuse the same path a normal bomb uses on contact for blast
     // damage/push, building/sector damage, VP dead/megadeth and chain FX. The artillery shell
-    // F10 AoE rings are suppressed in Impact() so they do not look like target
+    // F10 blast rings are suppressed in Impact() so they do not look like target
     // markers in the 3D view.
     bool applySectorDamage = (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) ||
                               (_pSector && _pSector->PurposeType == cellArea::PT_NONE)) &&
@@ -3728,8 +3741,8 @@ void NC_STACK_ypamissile::Renew()
     _mislFlags  = 0;
     _mislDelayTime = 0;
     _mislHomingTimeRemaining = -1;
-    _mislAoeFalloff = 0;
-    _mislAoeUnitPush = 0.0f;
+    _mislBlastFalloff = 0;
+    _mislBlastPush = 0.0f;
     _mislDirectPush = 0.0f;
     _mislArmorPenetrationRemaining = 0;
     _mislArmorPenetratedGids.clear();
@@ -3969,10 +3982,10 @@ void NC_STACK_ypamissile::Impact()
        Needs to check all near sectors too if effective radius affect it*/
 
     const bool validDirectPush = isfinite(_mislDirectPush) && _mislDirectPush > 0;
-    const bool validAoePush = isfinite(_mislAoeUnitPush) && _mislAoeUnitPush > 0 &&
-                             isfinite(_mislAoeUnitRadius) &&
-                             _mislAoeUnitRadius > 0.0f;
-    bool modernPushWeapon = validDirectPush || validAoePush;
+    const bool validBlastPush = isfinite(_mislBlastPush) && _mislBlastPush > 0 &&
+                             isfinite(_mislBlastRadius) &&
+                             _mislBlastRadius > 0.0f;
+    bool modernPushWeapon = validDirectPush || validBlastPush;
     bool hasLegacyImpulseTarget = false;
 
     for( NC_STACK_ypabact* &bct : _pSector->unitsList )
@@ -4022,21 +4035,17 @@ void NC_STACK_ypamissile::Impact()
         _world->NetBroadcastMessage(&impMsg, sizeof(impMsg), true);
     }
 
-    ApplyAreaDamage();
-    ApplyBuildingAreaDamage();
-    ApplySectorAreaDamage();
+    ApplyBlastToUnits();
+    ApplyBlastToBuildings();
+    ApplyBlastToSectors();
 
     // A missing, zero or invalid cluster_trigger_time uses the existing
     // impact/detonation path. Positive times are handled only by AI_layer3.
     TryClusterSplit(true);
 
-    // F10 debug overlay: record transient AoE rings at the impact point (no gameplay effect).
+    // F10 shows the one shared blast radius used by all target categories.
     if ( _world && _world->_showCollDebug && !_isArtilleryShellProjectile )
-    {
-        _world->DebugAddAoeRing(_position, _mislAoeUnitRadius,     255, 140, 0);   // unit AoE: orange
-        _world->DebugAddAoeRing(_position, _mislAoeBuildingRadius, 200, 80, 220);  // building AoE: purple
-        _world->DebugAddAoeRing(_position, _mislAoeSectorRadius,    80, 200, 220); // sector AoE: light cyan
-    }
+        _world->DebugAddBlastRing(_position, _mislBlastRadius, 255, 140, 0);
 
     _mislDirectHitUnits.clear();
     _mislDirectPushRecipientGids.clear();
@@ -4152,7 +4161,7 @@ NC_STACK_ypamissile::NC_STACK_ypamissile()
     _mislEnergyTank = 0.;
     _mislEnergyFlyer = 0.;
     _mislEnergyRobo = 0.;
-    _mislAoeFalloff = 0;
+    _mislBlastFalloff = 0;
     _mislClusterGeneration = 0;
     _artilleryShellImpactOnSurface = false;
 }
@@ -4288,21 +4297,16 @@ void NC_STACK_ypamissile::SetRadiusRobo(float rad)
     _mislRadiusRobo = rad;
 }
 
-void NC_STACK_ypamissile::SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
-                                        float sectorRadius, int sectorEnergy, int falloff)
+void NC_STACK_ypamissile::SetBlast(float radius, int energy, int falloff)
 {
-    _mislAoeUnitRadius = unitRadius;
-    _mislAoeUnitEnergy = unitEnergy;
-    _mislAoeBuildingRadius = buildingRadius;
-    _mislAoeBuildingEnergy = buildingEnergy;
-    _mislAoeSectorRadius = sectorRadius;
-    _mislAoeSectorEnergy = sectorEnergy;
-    _mislAoeFalloff = falloff ? 1 : 0;
+    _mislBlastRadius = std::isfinite(radius) ? std::max(0.0f, std::min(radius, 12000.0f)) : 0.0f;
+    _mislBlastEnergy = std::max(0, energy);
+    _mislBlastFalloff = falloff ? 1 : 0;
 }
 
-void NC_STACK_ypamissile::SetAoeUnitPush(float push)
+void NC_STACK_ypamissile::SetBlastPush(float push)
 {
-    _mislAoeUnitPush = isfinite(push) ? std::max(0.0f, std::min(push, 10.0f)) : 0.0f;
+    _mislBlastPush = isfinite(push) ? std::max(0.0f, std::min(push, 10.0f)) : 0.0f;
 }
 
 void NC_STACK_ypamissile::SetDirectPush(float push)

@@ -119,6 +119,17 @@ void ParseLine(std::string line, std::vector<T> *lst)
 
     if ( splt.GetNext(&token) )
     {
+        const std::string ownerTintPrefix = "ui.wireframe_tints_owner_";
+        if ( token.size() > ownerTintPrefix.size() &&
+             !StriCmp(token.substr(0, ownerTintPrefix.size()), ownerTintPrefix) )
+        {
+            const std::string suffix = token.substr(ownerTintPrefix.size());
+            if ( suffix.find_first_not_of("0123456789") == std::string::npos )
+            {
+                const size_t first = suffix.find_first_not_of('0');
+                token = ownerTintPrefix + (first == std::string::npos ? "0" : suffix.substr(first));
+            }
+        }
         for ( T &v : *lst )
         {
             Key &key = Deref(v);

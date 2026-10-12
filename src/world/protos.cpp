@@ -5,12 +5,80 @@
 #include "../wav.h"
 #include "../ypabact.h"
 #include "../yw.h"
+#include "../system/inivals.h"
 
 #include <algorithm>
 #include <cstdlib>
 
 namespace World
 {
+bool ParseVisualTint(const std::string &text, TVisualTint *out)
+{
+    if ( !out )
+        return false;
+
+    int components[4] = {255, 255, 255, 255};
+    size_t start = 0;
+
+    for (int i = 0; i < 4; i++)
+    {
+        const size_t end = text.find('_', start);
+        if ( (i < 3 && end == std::string::npos) ||
+             (i == 3 && end != std::string::npos) )
+            return false;
+
+        const std::string part = text.substr(start,
+            end == std::string::npos ? std::string::npos : end - start);
+        if ( part.empty() )
+            return false;
+
+        char *tail = NULL;
+        const long value = std::strtol(part.c_str(), &tail, 10);
+        if ( tail == part.c_str() )
+            return false;
+        while ( *tail == ' ' || *tail == '\t' )
+            ++tail;
+        if ( *tail != '\0' )
+            return false;
+
+        components[i] = std::max(0L, std::min(value, 255L));
+        if ( end != std::string::npos )
+            start = end + 1;
+    }
+
+    out->r = (float)components[0] / 255.0f;
+    out->g = (float)components[1] / 255.0f;
+    out->b = (float)components[2] / 255.0f;
+    out->a = (float)components[3] / 255.0f;
+    return true;
+}
+
+const TVisualTint &GetOwnerWireframeTint(int owner)
+{
+    static std::array<TVisualTint, 8> tints;
+    static std::array<std::string, 8> previous;
+    static const TVisualTint neutral;
+    if (owner < 0 || owner >= 8) return neutral;
+    Common::Ini::Key *keys[] = {
+        &System::IniConf::UiWireframeTintOwner0,
+        &System::IniConf::UiWireframeTintOwner1,
+        &System::IniConf::UiWireframeTintOwner2,
+        &System::IniConf::UiWireframeTintOwner3,
+        &System::IniConf::UiWireframeTintOwner4,
+        &System::IniConf::UiWireframeTintOwner5,
+        &System::IniConf::UiWireframeTintOwner6,
+        &System::IniConf::UiWireframeTintOwner7
+    };
+    const std::string value = keys[owner]->Get<std::string>();
+    if (previous[owner] != value)
+    {
+        previous[owner] = value;
+        tints[owner] = TVisualTint();
+        ParseVisualTint(value, &tints[owner]);
+    }
+    return tints[owner];
+}
+
 void TWeaponClusterConfig::GetCountRange(int &minCount, int &maxCount) const
 {
     minCount = std::max(1, std::min(count, (int)MAX_COUNT));

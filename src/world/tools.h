@@ -519,8 +519,8 @@ inline vec2d SectorIDToCenterPos2(const Common::Point &sec)
 { return vec2d((float)sec.x * CVSectorLength + CVSectorHalfLength, -((float)sec.y * CVSectorLength + CVSectorHalfLength)); };
 
 // Shared radial push attenuation. This is the same linear shape historically
-// used by aoe_unit_push when aoe_falloff is enabled.
-inline float AoePushFalloffFactor(float distance, float radius, bool falloff)
+// used by blast_push when blast_falloff is enabled.
+inline float BlastPushFalloffFactor(float distance, float radius, bool falloff)
 {
     if ( radius <= 0.0f || distance > radius )
         return 0.0f;
