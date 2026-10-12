@@ -13769,20 +13769,19 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
                 unit = _userRobo;
 
             int vo_type = msgvals.type;
-            bool classVoice = false;
+            bool packVoice = false;
 
             if ( msgvals.v1 == 1 )
             {
                 uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
                 World::TVhclProto &vhclProto = _vhclProtos[protoId];
-                classVoice = !vhclProto.speech_class.empty();
+                packVoice = !vhclProto.speech_voicepack.empty();
                 const int speechEvent = World::Speech::EventIndexFromMsgID(msgID);
 
                 if ( speechEvent >= 0 )
                 {
                     const std::string paths[] = {
-                        vhclProto.speech_events[speechEvent],
-                        World::Speech::PackEventPath(vhclProto.speech_voicepack, vhclProto.speech_class, vhclProto.speech_faction, speechEvent)
+                        World::Speech::PackEventPath(vhclProto.speech_voicepack, speechEvent)
                     };
                     for (const std::string &path : paths)
                     {
@@ -13800,10 +13799,6 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
                 }
 
                 vo_type = vhclProto.vo_type;
-                const int legacyClass = World::Speech::LegacyVoiceType(vhclProto.speech_class);
-                if ( legacyClass )
-                    vo_type = legacyClass;
-
                 if ( !vo_type )
                     vo_type = 11;
             }
@@ -13814,11 +13809,10 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
                 v16 = rand() % msgvals.num + 1;
 
             if ( !VoiceMessagePlayFile(fmt::sprintf("%x%x%x%x%x.wav", msgvals.v1, vo_type, msgvals.v3, msgvals.v4, v16), unit, priority, ignoreTimeScale) &&
-                 classVoice && vo_type != 11 )
+                 packVoice && vo_type != 11 )
             {
-                // Original UFO/scout code A has no combat lines. Modern classes
-                // can recover through the corresponding generic event; legacy
-                // data without speech_class keeps its original behavior.
+                // A configured pack with a missing combat event can use the
+                // existing generic unit voice after its vanilla voice fails.
                 VoiceMessagePlayFile(fmt::sprintf("1b%x%x%x.wav", msgvals.v3, msgvals.v4, v16), unit, priority, ignoreTimeScale);
             }
         }
@@ -14064,7 +14058,7 @@ void yw_RenderVector2D(NC_STACK_ypaworld *yw, UAskeleton::Data *wire, float posX
     }
 }
 
-void yw_RenderInfoVehicleWire(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TVhclProto *vhcl, float a4, float a5, float a6)
+void yw_RenderInfoVehicleWire(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TVhclProto *vhcl, float a4, float a5, float a6, int owner)
 {
     SDL_Color color_25 = yw->GetColor(25);
     SDL_Color color_34 = yw->GetColor(34);
@@ -14095,7 +14089,7 @@ void yw_RenderInfoVehicleWire(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TVhcl
         yw->_hud.cl2_b = color_25.b;
         yw->_hud.cl2_g = color_25.g;
 
-        yw_RenderVector2D(yw, wairufureimu, a4, a5, 1.0, 0.0, 0.0, 1.0, a9, v15, color_34, NULL, func, true, &vhcl->wireframe_tint);
+        yw_RenderVector2D(yw, wairufureimu, a4, a5, 1.0, 0.0, 0.0, 1.0, a9, v15, color_34, NULL, func, true, &World::GetOwnerWireframeTint(owner));
     }
 }
 
@@ -14297,7 +14291,7 @@ void yw_RenderInfoVehicleName(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *c
         FontUA::set_center_xpos(cur, v30);
         FontUA::set_center_ypos(cur, v34);
 
-        // wireframe_tint belongs only to the rendered wireframe graphics.
+        // Owner tint belongs only to the rendered wireframe graphics.
         // Names keep the original high-contrast UI colour so dark tints do not
         // make vehicle or weapon labels unreadable over the 3D world.
         FontUA::set_txtColor(cur, yw->_iniColors[65].r,
@@ -14363,10 +14357,10 @@ static void yw_RenderInfoWeaponLikeWire(NC_STACK_ypaworld *yw, sklt_wis *wis,
                       v10, NULL, func, true, wireframeTint);
 }
 
-void yw_RenderInfoWeaponWire(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TWeapProto *wpn, float xpos, float ypos)
+void yw_RenderInfoWeaponWire(NC_STACK_ypaworld *yw, sklt_wis *wis, World::TWeapProto *wpn, float xpos, float ypos, int owner)
 {
     if ( wpn )
-        yw_RenderInfoWeaponLikeWire(yw, wis, wpn->wireframe, &wpn->wireframe_tint,
+        yw_RenderInfoWeaponLikeWire(yw, wis, wpn->wireframe, &World::GetOwnerWireframeTint(owner),
                                     xpos, ypos);
 }
 
@@ -14713,7 +14707,7 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
     {
         const int displayBaseEnergy = weap->energy;
         const int effectiveEnergy = bact
-            ? bact->GetEffectiveOutgoingDamage(displayBaseEnergy)
+            ? bact->GetEffectiveOutgoingEnergy(displayBaseEnergy)
             : displayBaseEnergy;
 
         // Show the actual current per-instance damage directly in DMG. Kill
@@ -14724,7 +14718,7 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
             bact, vhcl, weap, effectiveEnergy);
 
         sub_4E4F80(yw, wis, cur, xpos, ypos, effectiveEnergy, 100, 7, 7,
-                   Locale::Text::HUD(Locale::HUDSTR_DMG), txt2, 1 | 2);
+                   Locale::Text::HUD(Locale::HUDSTR_EGY), txt2, 1 | 2);
     }
 }
 
@@ -14771,20 +14765,9 @@ static void yw_RenderInfoMgunReloadbar(NC_STACK_ypaworld *yw, sklt_wis *wis,
                Locale::Text::HUD(Locale::HUDSTR_RLD), text);
 }
 
-static std::string yw_BuildInfoMgunDamageText(NC_STACK_ypabact *bact,
-                                                  World::TVhclProto *vhcl,
-                                                  int effectivePower)
+static std::string yw_BuildInfoMgunDamageText(int effectivePower)
 {
-    if ( !vhcl )
-        return std::string();
-
-    std::string text = fmt::sprintf("%d", effectivePower / 100);
-    const int mgunCount = bact ? std::max(1, bact->_num_mguns)
-                               : std::max(1, (int)vhcl->num_mguns);
-    if ( mgunCount > 1 )
-        text += fmt::sprintf(" x%d", mgunCount);
-
-    return text;
+    return fmt::sprintf("%d", effectivePower / 100);
 }
 
 static void yw_RenderInfoMgunDamage(NC_STACK_ypaworld *yw, sklt_wis *wis,
@@ -14796,17 +14779,16 @@ static void yw_RenderInfoMgunDamage(NC_STACK_ypaworld *yw, sklt_wis *wis,
         return;
 
     const int basePower = (int)(bact
-        ? bact->GetMinigunPower()
-        : (vhcl->mgun_power_set ? vhcl->mgun_power : vhcl->gun_power));
+        ? bact->GetMinigunEnergy()
+        : (vhcl->mgun_energy_set ? vhcl->mgun_energy : vhcl->gun_power));
     const int effectivePower = bact
-        ? bact->GetEffectiveOutgoingDamage(basePower)
+        ? bact->GetEffectiveOutgoingEnergy(basePower)
         : basePower;
 
-    const std::string text = yw_BuildInfoMgunDamageText(
-        bact, vhcl, effectivePower);
+    const std::string text = yw_BuildInfoMgunDamageText(effectivePower);
 
     sub_4E4F80(yw, wis, cur, xpos, ypos, effectivePower, 100, 7, 7,
-               Locale::Text::HUD(Locale::HUDSTR_DMG), text, 1 | 2);
+               Locale::Text::HUD(Locale::HUDSTR_EGY), text, 1 | 2);
 }
 
 void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float xpos, float ypos, NC_STACK_ypabact *bact, int vhclid, int flag)
@@ -14870,7 +14852,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
 
     if ( v25 )
         yw_RenderInfoVehicleWire(yw, wis, vhcl, xpos,
-                                 ypos + (hasWeaponMagazine ? wis->field_92 : 0.0f), a6a);
+                                 ypos + (hasWeaponMagazine ? wis->field_92 : 0.0f), a6a, bact ? bact->_owner : (yw->_userRobo ? yw->_userRobo->_owner : 0));
 
     if ( v11 )
         yw_RenderInfoLifebar(yw, wis, cur, bact, vhcl, xpos,   wis->field_92 * 7.0 + ypos  );
@@ -14898,18 +14880,17 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
                                 ypos - wis->field_92 * 12.0);
 
         const int mgunBasePower = (int)(bact
-            ? bact->GetMinigunPower()
-            : (vhcl->mgun_power_set ? vhcl->mgun_power : vhcl->gun_power));
+            ? bact->GetMinigunEnergy()
+            : (vhcl->mgun_energy_set ? vhcl->mgun_energy : vhcl->gun_power));
         const int mgunEffectivePower = bact
-            ? bact->GetEffectiveOutgoingDamage(mgunBasePower)
+            ? bact->GetEffectiveOutgoingEnergy(mgunBasePower)
             : mgunBasePower;
-        const std::string mgunDamageText = yw_BuildInfoMgunDamageText(
-            bact, vhcl, mgunEffectivePower);
+        const std::string mgunDamageText = yw_BuildInfoMgunDamageText(mgunEffectivePower);
         const float mgunWireX = yw_GetInfoDamageWireX(
             yw, wis, xpos, NULL, NULL, mgunDamageText);
 
         yw_RenderInfoWeaponLikeWire(yw, wis, vhcl->mgun_wireframe,
-                                    &vhcl->wireframe_tint, mgunWireX,
+                                    &World::GetOwnerWireframeTint(bact ? bact->_owner : 0), mgunWireX,
                                     ypos - wis->field_92 * 9.0);
         yw_RenderInfoMgunReloadbar(yw, wis, cur, bact, vhcl, xpos,
                                    ypos - wis->field_92 * 7.0);
@@ -14924,7 +14905,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
 
         const int weaponBaseEnergy = weap->energy;
         const int weaponEffectiveEnergy = bact
-            ? bact->GetEffectiveOutgoingDamage(weaponBaseEnergy)
+            ? bact->GetEffectiveOutgoingEnergy(weaponBaseEnergy)
             : weaponBaseEnergy;
         const std::string weaponDamageText = yw_BuildInfoWeaponDamageText(
             bact, vhcl, weap, weaponEffectiveEnergy);
@@ -14932,7 +14913,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
             yw, wis, xpos, vhcl, weap, weaponDamageText);
 
         yw_RenderInfoWeaponWire(yw, wis, weap, weaponWireX,
-                                ypos - wis->field_92 * 9.0);
+                                ypos - wis->field_92 * 9.0, bact ? bact->_owner : (yw->_userRobo ? yw->_userRobo->_owner : 0));
 
         // A Kamikaze payload is not a normally fireable/cooldown weapon, so
         // keep its name/wireframe/DMG visible without inventing a fake RLD.
@@ -15008,39 +14989,6 @@ static std::string yw_GemTargetName(NC_STACK_ypaworld *yw, const TGemNotificatio
     }
 
     return yw->ResolveGameplayWeaponName(entry.TargetProtoId);
-}
-
-static const World::TVisualTint *yw_GemTargetWireframeTint(NC_STACK_ypaworld *yw,
-                                                            const TGemNotificationEntry &entry)
-{
-    if ( entry.TargetKind == TGemNotificationEntry::TARGET_VEHICLE &&
-         entry.TargetProtoId >= 0 && (size_t)entry.TargetProtoId < yw->_vhclProtos.size() )
-        return &yw->_vhclProtos[entry.TargetProtoId].wireframe_tint;
-
-    if ( entry.TargetKind == TGemNotificationEntry::TARGET_WEAPON )
-    {
-        if ( entry.RelatedVehicleId > 0 && (size_t)entry.RelatedVehicleId < yw->_vhclProtos.size() )
-            return &yw->_vhclProtos[entry.RelatedVehicleId].wireframe_tint;
-
-        if ( entry.TargetProtoId >= 0 && (size_t)entry.TargetProtoId < yw->_weaponProtos.size() )
-            return &yw->_weaponProtos[entry.TargetProtoId].wireframe_tint;
-    }
-
-    return NULL;
-}
-
-static SDL_Color yw_GemTargetNameColor(NC_STACK_ypaworld *yw, const TGemNotificationEntry &entry)
-{
-    const World::TVisualTint *tint = yw_GemTargetWireframeTint(yw, entry);
-    if ( !tint || tint->IsNeutral() )
-        return yw->_iniColors[65];
-
-    return SDL_Color{
-        ApplyWireframeTintComponent(255, tint->r),
-        ApplyWireframeTintComponent(255, tint->g),
-        ApplyWireframeTintComponent(255, tint->b),
-        ApplyWireframeTintComponent(255, tint->a),
-    };
 }
 
 static std::string yw_GemCategoryLabel(const TGemNotificationEntry &entry)
@@ -15144,7 +15092,7 @@ static void yw_GemAddUniqueFallbackTarget(NC_STACK_ypaworld *yw,
         return target.Text == name;
     });
     if ( found == targets->end() )
-        targets->emplace_back(name, yw_GemTargetNameColor(yw, entry));
+        targets->emplace_back(name, yw->_iniColors[65]);
 }
 
 static int yw_GemFindPrimaryVehicleForWeapon(NC_STACK_ypaworld *yw, int weaponId)
@@ -15312,7 +15260,7 @@ static void yw_BuildNewGemNotificationLines(NC_STACK_ypaworld *yw,
                 if ( !previousTargetKey.empty() || !showTitle )
                     yw_GemAppendSpacer(lines);
 
-                lines->emplace_back(view.TargetName, yw_GemTargetNameColor(yw, entry));
+                lines->emplace_back(view.TargetName, yw->_iniColors[65]);
                 yw_GemAppendSpacer(lines);
                 previousTargetKey = targetKey;
             }
@@ -16706,17 +16654,12 @@ static void yw_RenderHUDWeaponLockMarker(NC_STACK_ypaworld *yw, sklt_wis *wis, U
 
         UAskeleton::Data *sklt;
 
-        // OpenNeoUA custom: a lock marker can stay visible while aiming only.
         if ( i & 1 )
         {
-            if ( locked && vhcl && vhcl->wpn_wireframe_1_hide_lock )
-                continue;
             sklt = wpn_wure;
         }
         else
         {
-            if ( locked && vhcl && vhcl->wpn_wireframe_2_hide_lock )
-                continue;
             sklt = wpn_wure2;
         }
 

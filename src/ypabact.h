@@ -76,10 +76,10 @@ struct extra_vproto
 struct TActiveDebuffState
 {
     bool active = false;
-    bool inherit_to_children = false;
+    bool allow_on_children = false;
     std::string name;
     std::string icon;
-    World::TAbsoluteOrPercent damage;
+    World::TAbsoluteOrPercent energy;
     int tick_time = 1000;
     int expire_time = 0;
     int next_tick_time = 0;
@@ -113,10 +113,10 @@ struct TActiveDebuffState
     void Clear()
     {
         active = false;
-        inherit_to_children = false;
+        allow_on_children = false;
         name.clear();
         icon.clear();
-        damage.Clear();
+        energy.Clear();
         tick_time = 1000;
         expire_time = 0;
         next_tick_time = 0;
@@ -544,10 +544,10 @@ public:
     void UpdateEnergyStatusFX(update_msg *arg);
     float GetPushResistanceMultiplier() const;
     bool CanReceiveConfiguredPush() const;
-    void AddAoePush(const vec3d &dir, float distance); // queue smooth weapon knockback
-    void ApplyConfiguredPush(const vec3d &dir, float intensity); // shared 0..10 adapter to the mechanical AddAoePush path
+    void QueueConfiguredPush(const vec3d &dir, float distance); // queue smooth weapon knockback
+    void ApplyConfiguredPush(const vec3d &dir, float intensity); // shared 0..10 adapter to the mechanical QueueConfiguredPush path
     void ApplyRecoil(const vec3d &dir, float recoil); // OpenNeoUA: physical Weapon recoil engine
-    void UpdateAoePush(update_msg *arg);
+    void UpdateConfiguredPush(update_msg *arg);
     void UpdateRecoilPush(update_msg *arg);      // integrate Weapon recoil push; render envelope is clock-driven
     void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner = 0);
     void InheritActiveDebuffFromParent(NC_STACK_ypabact *parent);
@@ -584,9 +584,9 @@ public:
     {
         return _buff.deflect_max_energy <= 0 || energy <= _buff.deflect_max_energy;
     }
-    float GetBuffDeflectEndDamageMultiplier() const
+    float GetBuffDeflectEndEnergyMultiplier() const
     {
-        const float reduction = std::max(0.0f, std::min(_buff.deflect_end_damage_reduction, 1.0f));
+        const float reduction = std::max(0.0f, std::min(_buff.deflect_end_energy_reduction, 1.0f));
         return 1.0f - reduction;
     }
     bool ConsumeBuffDeflectCharge();
@@ -596,6 +596,7 @@ public:
     // single gameplay/UI source of truth and never mutate shared prototypes.
     bool CanUseSessionKillMarks() const;
     uint8_t GetSessionKillMarks() const;
+    void AwardSessionKill(bool hostStation);
     float GetEliteMedalProgress() const;
     float GetEliteStatBonusPercent() const;
     float GetEliteStatMultiplier() const;
@@ -608,7 +609,7 @@ public:
     void ResetProgressiveWeaponFireRate();
     void PrepareSuicideControlHandoff();
     void ArmSuicideHandoffFireRelease() { _suicide_handoff_wait_fire_release = true; }
-    int GetEffectiveOutgoingDamage(int baseDamage) const;
+    int GetEffectiveOutgoingEnergy(int baseDamage) const;
     float GetEffectiveShield() const;
     float GetEffectiveShieldWithAdditionalMalus(float additionalMalus) const;
     float CalcShieldedActionEnergyCost(float rawCost) const;
@@ -708,7 +709,8 @@ public:
     bool UsesVehicleMinigunTiming() const { return !_mgun_set && _mgun_shot_time > 0; }
     int GetMinigunShotTime(int frameDeltaMs) const;
     float GetRecoilForwardControlScale(const vec3d &forwardDir) const;
-    float GetMinigunPower() const { return _mgun_power_set ? _mgun_power : _gun_power; }
+    // Energy shown by the HUD: per shot with mgun_energy, otherwise the vanilla gun_power.
+    float GetMinigunEnergy() const { return _mgun_energy_set ? _mgun_energy : _gun_power; }
     float GetMinigunAngle() const { return _mgun_angle_set ? _mgun_angle : _gun_angle; }
 
     NC_STACK_ypabact();
@@ -749,7 +751,7 @@ public:
     virtual void setBACT_yourLastSeconds(int);
     virtual void SetVP(NC_STACK_base *vp);
 
-    // OpenNeoUA vp_dead_follow: clears the fragment/wreck trajectory binding on
+    // OpenNeoUA follow_vehicle: clears the fragment/wreck trajectory binding on
     // both ends so a removed unit never leaves a dangling pointer behind.
     void ClearDeadFollowLink();
     virtual void setBACT_aggression(int);
@@ -934,7 +936,7 @@ public:
     bool _inlinePhysicalImpactDamageSpent = false;
     bool _inlinePhysicalExplodeFXStarted = false;
     int _inlinePhysicalLifetimeMs = 0;
-    // OpenNeoUA vp_dead_follow: fragment/wreck trajectory binding.
+    // OpenNeoUA follow_vehicle: fragment/wreck trajectory binding.
     // _deadFollowWreck is set on the guiding fragment, _deadFollowLeader on the
     // wreck that mirrors its trajectory. Both links are always cleared together.
     NC_STACK_ypabact *_deadFollowWreck = NULL;
@@ -1034,7 +1036,7 @@ public:
     int _recoilAiRecoveryEndTime = 0; // OpenNeoUA: short AI tank forward-thrust pause after fake recoil
     int _recoilPlayerRecoveryEndTime = 0; // OpenNeoUA: short player tank window for dynamic recoil-vs-thrust composition
     vec3d _recoilPushVel = vec3d(0.0, 0.0, 0.0);
-    vec3d _aoePushVel = vec3d(0.0, 0.0, 0.0);
+    vec3d _blastPushVel = vec3d(0.0, 0.0, 0.0);
 
     vec3d _position; //Current pos
     vec3d _old_pos; //Prev pos
@@ -1083,6 +1085,8 @@ public:
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
+    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: first-person MGUN shake, scaled from mgun_recoil_player
+    TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: ordered snd_normal playback while model=laser is firing
     TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: same snd_normal path for laser vertical mode
     TSndCarrier _laser_launch_soundcarrier; // OpenNeoUA custom: one non-overlapping snd_launch event per laser activation
@@ -1144,7 +1148,6 @@ public:
     uint8_t _weapon_flags;
     int _mgun;
     bool _mgun_set;
-    int _num_mguns;
     int _mgun_shot_time;
     int _mgun_shot_time_user;
     World::TWeaponTracerConfig _mgun_tracer;
@@ -1156,9 +1159,10 @@ public:
     std::string _mgun_3ds_megadeth;
     std::string _mgun_base_dead;
     std::string _mgun_base_megadeth;
-    float _mgun_power;
+    float _mgun_energy;
     float _mgun_angle;
-    bool _mgun_power_set;
+    bool _mgun_energy_set;
+    float _mgun_recoil_player;
     bool _mgun_angle_set;
     float _mgun_sector_damage_accum;
     float _weapon_spread_x;
@@ -1231,9 +1235,9 @@ public:
     float _at_death_push_force;
     float _at_death_push_radius;
     int _at_death_push_falloff;
-    int _at_death_damage;
-    float _at_death_damage_radius;
-    int _at_death_damage_falloff;
+    int _at_death_energy;
+    float _at_death_energy_radius;
+    int _at_death_energy_falloff;
     int _carrier_spawn_root_gid;
     int _carrier_spawn_root_vehicle;
     std::vector<int32_t> _carrier_spawned_gids;
@@ -1343,6 +1347,7 @@ public:
     // OpenNeoUA custom: transient single-player Elite medals. Runtime cap comes
     // from game.elite_unit_max_medals; never serialized or network-synchronized.
     uint8_t _sessionKillMarks = 0;
+    uint32_t _sessionKillsTowardMedal = 0;
     int16_t _reb_count;
     int _atk_ret;
     uint32_t _lastFrmStamp;

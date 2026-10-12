@@ -13,6 +13,11 @@ corrects those actors; it does not integrate a second rigid-body simulation.
 Movement queries respect the existing exact-world and unit-collision flags.
 AoE and proximity triggers keep their separate existing logic.
 
+Weapon prototypes (`new_weapon`) accept `collision_shape` too. The projectile's hulls then replace its physical
+spheres for direct unit hits only: they are swept against the target's hulls, or against the target's
+spheres when the target has no profile. Terrain, building and weapon-vs-weapon impacts keep their
+existing logic.
+
 Gun/flak and Robo prototypes also accept profiles. Guns keep their native
 mounting position and aiming rotation; the shared solver moves an approaching
 vehicle, not the gun. Native Robo guns are excluded from contacts with their

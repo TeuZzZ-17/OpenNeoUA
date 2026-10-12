@@ -60,6 +60,7 @@ template<class Base=NC_STACK_ypabact> struct Actor : Base {
 };
 struct Missile : Actor<NC_STACK_ypamissile> {
     void Emitter(NC_STACK_ypabact *actor) { _mislEmitter=actor; _mislRadiusHeli=1000; }
+    void OwnRadiusOnly() { _mislRadiusHeli=0; }
 };
 struct Robo : Actor<NC_STACK_yparobo> {
     int impactDamage=0;
@@ -1211,6 +1212,9 @@ void RoboFluxGroundRegression()
     Actor<NC_STACK_ypagun> gun;
     gun.Bind(world, 806, origin + vec3d(0,35,0), gunShape);
     gun._bact_type = BACT_TYPES_GUN;
+    // Gun placement walks every visual slot; Bind bypasses Init, so give them an empty model.
+    NC_STACK_base visual;
+    gun._vp_normal = gun._vp_dead = gun._vp_fire = gun._vp_genesis = gun._vp_wait = gun._vp_megadeth = &visual;
     gun._wrldSize = vec2d(9600, -9600);
     World::TRoboGun mount;
     mount.pos = vec3d(0,35,0);
@@ -1264,6 +1268,94 @@ void RoboFluxGroundRegression()
           host._roboYPos < origin.y,
           "player-controlled flux wallow also stays above the mounted gun");
     world._collisionScene.reset();
+}
+
+struct MgunTarget : Actor<NC_STACK_ypabact> {
+    int hits = 0;
+    int energy = 0;
+    void ModifyEnergy(bact_arg84 *arg) override { ++hits; energy -= arg->energy; }
+};
+
+// mgun_energy fires one hit scan and one energy hit per mgun_shot_time;
+// without it the vanilla MGUN keeps hitting on every frame with gun_power.
+void MgunShotEnergyRegression()
+{
+    GroundWorld world;
+    Actor<NC_STACK_ypabact> shooter;
+    MgunTarget target;
+    const vec3d origin(300, 30, -300);
+    shooter.Bind(world, 900, origin);
+    target.Bind(world, 901, origin + vec3d(0, 0, -100));
+    target._owner = 2;
+    target._radius = 20;
+    shooter._mgun = -1;
+    shooter._mgun_set = false;
+    shooter._mgun_shot_time = 100;
+    shooter._mgun_angle_set = false;
+    shooter._mgun_spread_x = shooter._mgun_spread_y = 0;
+    shooter._mgun_decal_enable = false;
+    shooter._mgun_fire_energy_cost_defined = false;
+    shooter._gun_radius = 0;
+    shooter._energy = shooter._energy_max = 1000000;
+
+    auto fire = [&](int clock) {
+        bact_arg105 arg{};
+        arg.field_0 = vec3d(0, 0, -1);
+        arg.field_C = 0.02f;
+        arg.field_10 = clock;
+        shooter.FireMinigun(&arg);
+    };
+
+    shooter._mgun_energy_set = true;
+    shooter._mgun_energy = 500;
+    fire(1000);
+    Check(target.hits == 1 && target.energy == 500, "mgun_energy first shot hits once for its full energy");
+    fire(1050);
+    Check(target.hits == 1, "mgun_energy: no hit before mgun_shot_time has passed");
+    fire(1101);
+    Check(target.hits == 2 && target.energy == 1000, "mgun_energy: next shot after mgun_shot_time");
+
+    shooter._mgun_energy_set = false;
+    shooter._gun_power = 10000;
+    target.hits = 0; target.energy = 0;
+    fire(2000); fire(2020); fire(2040);
+    Check(target.hits == 3 && target.energy == 600, "without mgun_energy the vanilla MGUN still hits every frame");
+}
+
+// A weapon with its own collision_shape hits with that body instead of its spheres.
+void WeaponShapeRegression()
+{
+    GroundWorld world;
+    Actor<> emitter; emitter.Bind(world, 700, vec3d(300, 30, -900)); emitter._owner = 1;
+    Missile missile; missile.Bind(world, 702, vec3d(336, 30, -400));
+    missile._bact_type = BACT_TYPES_MISSLE; missile._owner = 1; missile.Emitter(&emitter);
+    missile.OwnRadiusOnly(); // Legacy hits use the missile's own radius (2).
+    // The pass is 36 units beside the target: only a wide weapon body reaches it.
+    auto fly = [&](double x) {
+        missile._old_pos = vec3d(x, 30, -400); missile._position = vec3d(x, 30, -200);
+        NC_STACK_ypabact *hit = nullptr;
+        return missile.TubeCollisionTest(false, &hit) && hit;
+    };
+    {   // Target with spheres only.
+        Actor<> target; target.Bind(world, 701, vec3d(300, 30, -300)); target._owner = 2; target._radius = 8;
+        Check(!fly(336), "legacy weapon radius misses a sphere target 36 units off its path");
+        missile._collisionShape = Shape({Box(vec3d(0,0,0), 40, 10, 40)});
+        Check(fly(336), "weapon shape hits a sphere target inside the shape width");
+        Check(!fly(400), "weapon shape misses a sphere target outside its width");
+        missile._collisionShape.reset();
+        world._collisionScene->Forget(&target);
+    }
+    {   // Shaped target: hull sweep against hull.
+        Actor<> target; target.Bind(world, 703, vec3d(300, 30, -300), Shape({Box(vec3d(0,0,0), 16, 10, 16)}));
+        target._owner = 2;
+        world._collisionScene->UpdateActor(&target);
+        Check(!fly(336), "legacy weapon radius misses a shaped target 36 units off its path");
+        missile._collisionShape = Shape({Box(vec3d(0,0,0), 40, 10, 40)});
+        Check(fly(336), "weapon shape hits a shaped target");
+        Check(!fly(400), "weapon shape misses a shaped target outside its width");
+        missile._collisionShape.reset();
+        world._collisionScene->Forget(&target);
+    }
 }
 
 void RoboPositionRegression() {
@@ -2499,6 +2591,8 @@ int main(int argc,char **argv) {
     ProbeMove<NC_STACK_ypaufo>(cube,"production UFO Move invokes swept response");
     ProbeMove<NC_STACK_yparobo>(cube,"production Robo Move invokes swept response",BACT_TYPES_ROBO);
     RoboFluxGroundRegression();
+    MgunShotEnergyRegression();
+    WeaponShapeRegression();
     RoboPositionRegression();
     RoboUpdateRegression(cube);
     GenesisExitSaveParserRegression();
@@ -2705,7 +2799,7 @@ int main(int argc,char **argv) {
     std::printf("RESOLVE x=%g velocity=%g moved=%d\n",b._position.x,b._fly_dir_length,moved);
     Check(moved && b._position.x < center.x-11.8,"legacy sphere stops against shape across cell boundary");
     Check(b._fly_dir_length<.01,"entering velocity removed");
-    auto &collisionDamage=System::IniConf::GameUnitFriendlyCollisionDamage;
+    auto &collisionDamage=System::IniConf::GameUnitFriendlyCollisionEnergy;
     const auto savedCollisionDamage=collisionDamage.Value;
     const bool savedDamageWasSet=collisionDamage.WasSet;
     collisionDamage.Value=std::string("10"); collisionDamage.WasSet=true;
@@ -2743,22 +2837,22 @@ int main(int argc,char **argv) {
     Check(!missile.TubeCollisionTest(false,&target),"world obstruction precedes shape hit"); world.wallFraction=-1;
     auto parse=[&](Engine::StringList lines) { ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(&world)}; return ScriptParser::ParseStringList(lines,handlers,0); };
     Check(parse({"new_vehicle 1","model = heli","end"}) && world._vhclProtos[1].collision_shape.empty(),"absent parameter stays vanilla");
-    Check(world._vhclProtos[1].briefing_radius == 0 && world._vhclProtos[1].BriefingRadius() == 25,
-          "absent briefing radius uses vanilla radius");
+    Check(world._vhclProtos[1].briefing_size == 0 && world._vhclProtos[1].BriefingRadius() == 25,
+          "absent briefing size uses vanilla radius");
     Check(parse({"modify_vehicle 1","radius = 80","coll_act = 0","coll_radius = 200","end"}) &&
           world._vhclProtos[1].BriefingRadius() == 80,"briefing fallback ignores compound collision size");
-    Check(parse({"modify_vehicle 1","Briefing_radius = 120","end"}) &&
-          world._vhclProtos[1].BriefingRadius() == 120 && world._vhclProtos[1].radius == 80 &&
+    Check(parse({"modify_vehicle 1","Briefing_size = 40","end"}) &&
+          world._vhclProtos[1].BriefingRadius() == 100 && world._vhclProtos[1].radius == 80 &&
           world._vhclProtos[1].coll.roboColls[0].robo_coll_radius == 200,"briefing override leaves physical radii unchanged");
-    Check(parse({"modify_vehicle 1","energy = 32000","end"}) && world._vhclProtos[1].BriefingRadius() == 120,
+    Check(parse({"modify_vehicle 1","energy = 32000","end"}) && world._vhclProtos[1].BriefingRadius() == 100,
           "unrelated modifier preserves briefing override");
-    for (const char *value : {"0", "-1", "nan", "inf", "invalid", "120junk", "1e38", "1e100"})
-        Check(parse({"modify_vehicle 1",std::string("briefing_radius = ")+value,"end"}) &&
-              world._vhclProtos[1].briefing_radius == 0 && world._vhclProtos[1].BriefingRadius() == 80,
-              "invalid or disabled briefing radius falls back safely");
-    Check(parse({"modify_vehicle 1","briefing_radius = 0.5","end"}) && world._vhclProtos[1].BriefingRadius() == 0.5f,
-          "fractional briefing radius supported");
-    Check(parse({"new_vehicle 1","model = heli","end"}) && world._vhclProtos[1].briefing_radius == 0,
+    for (const char *value : {"0", "-1", "nan", "inf", "invalid", "120junk", "0.5", "10001", "1e38", "1e100"})
+        Check(parse({"modify_vehicle 1",std::string("briefing_size = ")+value,"end"}) &&
+              world._vhclProtos[1].briefing_size == 0 && world._vhclProtos[1].BriefingRadius() == 80,
+              "invalid or disabled briefing size falls back safely");
+    Check(parse({"modify_vehicle 1","briefing_size = 2000","end"}) && world._vhclProtos[1].BriefingRadius() == 2.0f,
+          "large briefing size supported");
+    Check(parse({"new_vehicle 1","model = heli","end"}) && world._vhclProtos[1].briefing_size == 0,
           "new vehicle resets briefing override");
     Check(parse({"modify_vehicle 1","collision_shape = Data/Models/Collision/Pilot.collision","end"}) && world._vhclProtos[1].collision_shape=="Data/Models/Collision/Pilot.collision","production vehicle parser");
     Check(parse({"modify_vehicle 1","collision_shape = 0","end"}) && world._vhclProtos[1].collision_shape.empty(),"explicit zero stays vanilla");

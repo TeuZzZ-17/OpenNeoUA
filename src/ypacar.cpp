@@ -176,7 +176,7 @@ void NC_STACK_ypacar::DoKamikaze()
                             // The car self-destruct blast applies energy directly instead of
                             // entering ModifyEnergy. Reuse the shared attacker-side damage helper
                             // so kill bonuses remain identical everywhere.
-                            v67 = GetEffectiveOutgoingDamage(v67);
+                            v67 = GetEffectiveOutgoingEnergy(v67);
 
                             if ( !v19->IsInvulnerableToDamage() )
                             {

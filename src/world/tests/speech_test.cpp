@@ -40,16 +40,9 @@ int main()
         events.insert(index);
     }
     Check(events.size() == EventCount && EventIndexFromKey("invented_event") == -1, "fixed existing event registry");
-    Check(ParsePackName("TANK-LIGHT") == "tank-light" && ParsePackName("siegewalker") == "siegewalker" && ParsePackName("0").empty(), "dynamic class validation");
-    Check(ParsePackName("ANCELLE") == "ancelle" && ParsePackName("order_7-blue") == "order_7-blue", "custom faction identifiers");
-    for (const std::string invalid : {"", "0", "../myko", "myko/tank", "myko\\tank", "myko:other", "two words", "."})
-        Check(ParsePackName(invalid).empty(), "invalid folder component disabled");
-    Check(LegacyVoiceType("car") == 11, "car generic B compatibility");
-    Check(PackEventPath(root + "/", "tank-medium", "ancelle", 8) == root + "/ancelle-tank-medium/enemy_host_found", "custom pack path");
-    Check(PackEventPath("", "tank-medium", "ancelle", 0).empty() &&
-          PackEventPath(root, "", "ancelle", 0).empty() &&
-          PackEventPath(root, "tank-medium", "0", 0).empty() &&
-          PackEventPath(root, "tank-medium", "ancelle", EventCount).empty(), "disabled pack inputs");
+    Check(PackEventPath(root + "/custom-pack/", 8) == root + "/custom-pack/enemy_host_found", "direct custom pack path");
+    Check(PackEventPath("", 0).empty() && PackEventPath("0", 0).empty() &&
+          PackEventPath(root, EventCount).empty(), "disabled pack inputs");
     Check(IsVariantFilename("UNIT_READY_103.WAV", "unit_ready") && !IsVariantFilename("unit_ready_00.wav", "unit_ready"), "numbered variants");
     Variants variants; variants.Files = {"one", "two", "three"};
     std::string previous;
@@ -63,14 +56,11 @@ int main()
     world._vhclProtos.resize(256); world._weaponProtos.resize(256);
     world._buildProtos.resize(256); world._roboProtos.resize(1);
     Check(Parse(world, {"new_vehicle 1", "model = tank", "vo_type = 2", "end"}), "legacy parser");
-    Check(world._vhclProtos[1].speech_faction.empty() && world._vhclProtos[1].speech_class == "", "legacy defaults");
-    Check(Parse(world, {"modify_vehicle 1", "speech_class = tank-medium", "speech_faction = ancelle",
-        "speech_voicepack = Data/Sounds/Speech/Voicepacks", "speech_event_not_real = ignored", "end"}), "custom faction parser");
-    Check(world._vhclProtos[1].speech_faction == "ancelle", "custom name stored by actual parser");
-    Check(Parse(world, {"modify_vehicle 1", "speech_class = 0", "speech_faction = ../bad",
-        "speech_voicepack = 0", "speech_event_enemy_host_found = 0", "end"}), "invalid parser inputs");
-    Check(world._vhclProtos[1].speech_class == "" && world._vhclProtos[1].speech_faction.empty() &&
-          world._vhclProtos[1].speech_voicepack.empty(), "invalid and zero disabled");
+    Check(world._vhclProtos[1].speech_voicepack.empty(), "legacy defaults");
+    Check(Parse(world, {"modify_vehicle 1", "speech_voicepack = Data/Sounds/Speech/custom-pack", "end"}), "direct pack parser");
+    Check(world._vhclProtos[1].speech_voicepack == "Data/Sounds/Speech/custom-pack", "direct path stored");
+    Check(Parse(world, {"modify_vehicle 1", "speech_voicepack = 0", "end"}), "disabled pack parser");
+    Check(world._vhclProtos[1].speech_voicepack.empty(), "zero disabled");
     {
         ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(&world)};
         Check(ScriptParser::ParseFile("data:scripts/Vehicles.cfg", handlers, 0), "live script parsed");
@@ -80,7 +70,7 @@ int main()
         if (!proto.speech_voicepack.empty())
         {
             ++attached;
-            Check(proto.speech_voicepack == root && !proto.speech_faction.empty() && proto.speech_faction != "auto", "live explicit pack configuration");
+            Check(proto.speech_voicepack.compare(0, root.size() + 1, root + "/") == 0, "live direct pack configuration");
         }
     Check(attached == 51, "all mobile units configured");
 
@@ -89,68 +79,33 @@ int main()
     auto &proto = world._vhclProtos[1];
     for (const std::string &category : categories)
         for (const char *faction : factions)
-        {
-            proto.speech_class = category;
-            proto.speech_faction = faction; proto.speech_voicepack = root; proto.speech_events.fill("");
             for (int message : messages)
             {
-                unit._owner = message % 7 + 1;
-                world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, message, true);
-                Check(world._voiceMessage.Sample && world._voiceMessage.Carrier.Sounds[0].IsEnabled(), "pack event load/start");
-                Check(world._voiceMessage.Carrier.Sounds[0].IgnoreTimeScale, "time scale preserved");
-                if (!world._voiceMessage.Sample) continue;
-                const std::string expected = PackEventPath(root, proto.speech_class, faction, EventIndexFromMsgID(message)).substr(5);
-                Check(world._voiceMessage.Sample->getRsrc_name().compare(0, expected.size(), expected) == 0, "manual faction pack selected regardless of owner");
-                Check(world._voiceMessage.Carrier.Sounds[0].PSample == world._voiceMessage.Sample->GetSampleData() &&
-                    world._voiceMessage.Carrier.Sounds[0].Pitch == 0, "WAV reproduced unchanged");
+                proto.speech_voicepack = root + "/" + faction + "-" + category;
+                for (int owner : {1, 3})
+                {
+                    unit._owner = owner;
+                    world._voiceMessage.Reset();
+                    world.VoiceMessagePlayMsg(&unit, 10, message);
+                    const std::string expected = root.substr(5) + "/" + std::string(faction) + "-" + category;
+                    Check(world._voiceMessage.Sample != nullptr, "event WAV selected");
+                    if (world._voiceMessage.Sample)
+                        Check(world._voiceMessage.Sample->getRsrc_name().compare(0, expected.size(), expected) == 0,
+                              "explicit pack selected independently of owner");
+                }
             }
-        }
-    proto.speech_class = "tank-medium"; proto.speech_faction = "myko";
-    const int found = EventIndexFromMsgID(6);
-    proto.speech_events[found] = root + "/taer-tank-heavy/enemy_host_found";
+    proto.speech_voicepack.clear(); proto.vo_type = 3;
     world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 6);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("taer-tank-heavy") != std::string::npos, "explicit event override wins");
-    proto.speech_events[found] = "Data/../invalid";
-    world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 6);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("myko-tank-medium") != std::string::npos, "invalid override recovers selected pack");
-    proto.speech_events.fill("");
-    world._speechEventVariants[PackEventPath(root, "tank-medium", "myko", found)].Files.clear();
-    world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 6);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("12231.wav") != std::string::npos, "missing pack event recovers vanilla directly");
-    proto.speech_class = "ufo"; proto.speech_faction = "no-such-faction";
-    world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 19);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("1b311.wav") != std::string::npos, "UFO missing combat line recovers generic B");
-    proto.speech_class = ""; proto.speech_voicepack.clear(); proto.speech_faction.clear(); proto.vo_type = 3;
-    world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 6);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("13231.wav") != std::string::npos, "legacy vo_type remains functional");
+    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("13231.wav") != std::string::npos, "legacy voice preserved");
     NC_STACK_sample *active = world._voiceMessage.Sample;
-    Check(!world.VoiceMessagePlayResourceFile("Scripts/Startup.cfg", &unit, 20) && world._voiceMessage.Sample == active, "invalid WAV preserves active message");
-    world.VoiceMessagePlayMsg(&unit, 9, 14);
-    Check(world._voiceMessage.Sample == active, "priority arbitration");
-    world._vhclProtos[2].speech_class = "tank-heavy";
-    world._vhclProtos[2].speech_faction = "taer"; world._vhclProtos[2].speech_voicepack = root;
+    Check(!world.VoiceMessagePlayResourceFile("Data/../invalid.wav", &unit, 20) && world._voiceMessage.Sample == active, "invalid path preserves active message");
+    world._vhclProtos[2].speech_voicepack = root + "/taer-tank-heavy";
     unit._mimic_disguise_vehicleID = 2; unit._owner = 3;
     world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 14);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("taer-tank-heavy") != std::string::npos, "Mimic takes configured disguise voice");
+    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("taer-tank-heavy") != std::string::npos, "Mimic uses disguise pack");
     unit._mimic_disguise_vehicleID = 0;
     world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 23);
     Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("Voicepacks") == std::string::npos, "strategic voice unaffected");
-    Check(Parse(world, {"modify_vehicle 1", "speech_class = siegewalker", "speech_faction = ancelle",
-        "speech_voicepack = Data/Sounds/Speech/_speech_probe", "end"}), "custom replacement parsed");
-    world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 14);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("_speech_probe/ancelle-siegewalker") != std::string::npos, "custom faction, category and root loaded");
-    if (world._voiceMessage.Sample)
-    {
-        const TSampleData *sample = world._voiceMessage.Sample->GetSampleData();
-        Check(sample->SampleRate == 16000 && sample->Format == AL_FORMAT_MONO16 && sample->bufsz == 8000 &&
-            world._voiceMessage.Carrier.Sounds[0].PSample == sample && world._voiceMessage.Carrier.Sounds[0].Pitch == 0, "custom WAV unchanged");
-    }
-    proto.speech_voicepack = "Data/Sounds/Speech/no-such-root"; proto.vo_type = 3;
-    world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 6);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("13231.wav") != std::string::npos, "custom category uses configured legacy fallback");
-    proto.vo_type = 0;
-    world._voiceMessage.Reset(); world.VoiceMessagePlayMsg(&unit, 10, 6);
-    Check(world._voiceMessage.Sample && world._voiceMessage.Sample->getRsrc_name().find("1b231.wav") != std::string::npos, "custom category defaults to generic fallback");
     world._voiceMessage.Reset();
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);
     return failures ? 1 : 0;

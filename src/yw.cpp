@@ -1872,7 +1872,7 @@ size_t NC_STACK_ypaworld::Deinit()
     _superItemProfiles.clear();
     _buffProfiles.clear();
     _debuffProfiles.clear();
-    _debugAoeRings.clear();
+    _debugBlastRings.clear();
     ClearMinigunTracers();
     ClearProceduralEnergyFX();
     ClearGroundDecals();
@@ -4691,7 +4691,7 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
     fragment->_overeof = std::max(fragment->_overeof, physical->radius);
     // Inline fragments remain visual/world-physics only unless gameplay impact
     // damage is explicitly authored. This keeps existing fragments unchanged.
-    fragment->setBACT_bactCollisions(physical->impact_damage > 0);
+    fragment->setBACT_bactCollisions(physical->impact_energy > 0);
     fragment->_vp_normal = model;
     fragment->_vp_dead = model;
     fragment->_vp_megadeth = selectedImpactVP > 0 &&
@@ -4778,11 +4778,11 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
         fragment->_fly_dir = velocity / finalSpeed;
     }
 
-    // OpenNeoUA vp_dead_follow: bind the dying unit's wreck to this fragment so
+    // OpenNeoUA follow_vehicle: bind the dying unit's wreck to this fragment so
     // both share one exact trajectory until the fragment impacts. The guards keep
     // live shooters (weapon impact/detonate triggers) and already-landed wrecks
     // (DEATH2 phase) unbound, and with count > 1 only the first fragment binds.
-    if ( physical->vp_dead_follow && deadWreck &&
+    if ( physical->follow_vehicle && deadWreck &&
          deadWreck != fragment && !deadWreck->_deadFollowLeader &&
          deadWreck->_status == BACT_STATUS_DEAD &&
          !(deadWreck->_status_flg & BACT_STFLAG_DEATH2) )
@@ -4876,7 +4876,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
         bacto->_mgun = vhcl.mgun;
         bacto->_mgun_set = vhcl.mgun_set;
-        bacto->_num_mguns = vhcl.num_mguns > 0 ? vhcl.num_mguns : 1;
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
         bacto->_mgun_shot_time_user = vhcl.mgun_shot_time_user;
         bacto->_mgun_tracer = vhcl.mgun_tracer;
@@ -4888,9 +4887,10 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_3ds_megadeth = vhcl.mgun_3ds_megadeth;
         bacto->_mgun_base_dead = vhcl.mgun_base_dead;
         bacto->_mgun_base_megadeth = vhcl.mgun_base_megadeth;
-        bacto->_mgun_power = vhcl.mgun_power;
+        bacto->_mgun_energy = vhcl.mgun_energy;
         bacto->_mgun_angle = vhcl.mgun_angle;
-        bacto->_mgun_power_set = vhcl.mgun_power_set;
+        bacto->_mgun_energy_set = vhcl.mgun_energy_set;
+        bacto->_mgun_recoil_player = vhcl.mgun_recoil_player;
         bacto->_mgun_angle_set = vhcl.mgun_angle_set;
         bacto->_mgun_sector_damage_accum = 0.0;
         bacto->_weapon_spread_x = vhcl.weapon_spread_x;
@@ -5013,11 +5013,11 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_at_death_push_radius = deathProto.at_death_push_radius > 0.0f
             ? deathProto.at_death_push_radius : 0.0f;
         bacto->_at_death_push_falloff = deathProto.at_death_push_falloff ? 1 : 0;
-        bacto->_at_death_damage = deathProto.at_death_damage > 0
-            ? deathProto.at_death_damage : 0;
-        bacto->_at_death_damage_radius = deathProto.at_death_damage_radius > 0.0f
-            ? deathProto.at_death_damage_radius : 0.0f;
-        bacto->_at_death_damage_falloff = deathProto.at_death_damage_falloff ? 1 : 0;
+        bacto->_at_death_energy = deathProto.at_death_energy > 0
+            ? deathProto.at_death_energy : 0;
+        bacto->_at_death_energy_radius = deathProto.at_death_energy_radius > 0.0f
+            ? deathProto.at_death_energy_radius : 0.0f;
+        bacto->_at_death_energy_falloff = deathProto.at_death_energy_falloff ? 1 : 0;
         bacto->_carrier_spawn_root_gid = 0;
         bacto->_carrier_spawn_root_vehicle = 0;
         bacto->_carrier_spawned_gids.clear();
@@ -5242,6 +5242,17 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_vp_tint = wproto.visual_tint;
     wobj->_vp_rotation = wproto.visual_rotation;
     wobj->_vp_spin_strength = wproto.visual_spin;
+    if (!wproto.collision_shape.empty())
+    {
+        if (!_collisionScene) _collisionScene.reset(new Collision::Scene(*this));
+        auto shape = _collisionScene->LoadShared(wproto.collision_shape);
+        if (shape &&
+            (shape->visualScale - wproto.visual_scale).length() < 1e-5 &&
+            (shape->visualRotation - wproto.visual_rotation).length() < 1e-5)
+            wobj->_collisionShape = shape;
+        else if (shape)
+            ypa_log_out("WARNING: collision_shape %s does not match the visual scale/rotation; regenerate in Studio. Existing collision retained.\n", wproto.collision_shape.c_str());
+    }
     const bool supportsProjectileVisualMotion = wproto.SupportsProjectileVisualMotion();
     wobj->_spiral_speed = supportsProjectileVisualMotion ? wproto.spiral_speed : 0.0f;
     wobj->_spiral_radius = supportsProjectileVisualMotion ? wproto.spiral_radius : 0.0f;
@@ -5308,11 +5319,8 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetRadiusTank(wproto.radius_tank);
     wobj->SetRadiusFlyer(wproto.radius_flyer);
     wobj->SetRadiusRobo(wproto.radius_robo);
-    wobj->SetAreaDamage(wproto.aoe_unit_radius, wproto.aoe_unit_energy,
-                         wproto.aoe_building_radius, wproto.aoe_building_energy,
-                         wproto.aoe_sector_radius, wproto.aoe_sector_energy,
-                         wproto.aoe_falloff);
-    wobj->SetAoeUnitPush(wproto.aoe_unit_push);
+    wobj->SetBlast(wproto.blast_radius, wproto.blast_energy, wproto.blast_falloff);
+    wobj->SetBlastPush(wproto.blast_push);
     wobj->SetDirectPush(wproto.push);
     wobj->SetArmorPenetrationTargets(wproto.armor_penetration_targets);
 
@@ -5857,7 +5865,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     ClearGroundDecals();
     _damageHoverTargets.clear();
     _inBuildProcess.clear();
-    _debugAoeRings.clear();
+    _debugBlastRings.clear();
     ClearArtilleryShellMarkers();
     _artilleryShellManualGid = 0;
     _artilleryShellManualRadius = 0.0f;
@@ -10865,7 +10873,7 @@ size_t NC_STACK_ypaworld::ypaworld_func162(const std::string &fname)
     TGameRecorder *repl = _replayPlayer;
 
     repl->filename = fname;
-    _debugAoeRings.clear();
+    _debugBlastRings.clear();
     _timeStamp = 0;
     System::GameClock.Reset(_timeStamp);
 

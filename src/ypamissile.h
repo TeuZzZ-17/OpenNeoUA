@@ -54,7 +54,7 @@ public:
 
     // OpenNeoUA custom artillery shell: arm this projectile as a ballistic barrage shell.
     // Once armed it follows a parametric arc (start->target) at the authored artillery
-    // speed and force-impacts when the computed flight timer expires, reusing Impact()/AoE/FX.
+    // speed and force-impacts when the computed flight timer expires, reusing Impact()/blast/FX.
     int SetupArtilleryShell(const vec3d &startPos, const vec3d &targetPos,
                             float arcHeight, float shellSpeed, bool impactOnSurface);
     int SetupArtilleryShellVerticalBarrage(const vec3d &startPos, const vec3d &targetPos,
@@ -109,9 +109,8 @@ public:
     virtual void SetRadiusTank(float);
     virtual void SetRadiusFlyer(float);
     virtual void SetRadiusRobo(float);
-    virtual void SetAreaDamage(float unitRadius, int unitEnergy, float buildingRadius, int buildingEnergy,
-                               float sectorRadius, int sectorEnergy, int falloff);
-    virtual void SetAoeUnitPush(float push); // public continuous intensity 0..10
+    virtual void SetBlast(float radius, int energy, int falloff);
+    virtual void SetBlastPush(float push); // public continuous intensity 0..10
     virtual void SetDirectPush(float push);  // public continuous intensity 0..10
     virtual void SetArmorPenetrationTargets(int targets);
     virtual void SetStartHeight(float);
@@ -154,8 +153,8 @@ public:
 
 protected:
     bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
-    int CalcDamageForBact(NC_STACK_ypabact *bct, int baseEnergy);
-    int ApplyDamageToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier = 1.0f);
+    int CalcEnergyForBact(NC_STACK_ypabact *bct, int baseEnergy);
+    int ApplyEnergyToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier = 1.0f, bool applyDebuff = true);
     void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true, float damageMultiplier = 1.0f);
     void DeflectFromUnitCollision(NC_STACK_ypabact *target,
                                   const vec3d &targetCenter, float targetRadius,
@@ -164,7 +163,7 @@ protected:
     bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = NULL,
                                float *appliedStrength = NULL, bool enqueue = true,
                                NC_STACK_ypabact *directionTarget = NULL);
-    const char *GetAreaDamageSkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const;
+    const char *GetBlastEnergySkipReason(NC_STACK_ypabact *bct, bool allowFriendly) const;
     const char *GetAreaPushSkipReason(NC_STACK_ypabact *bct) const;
     bool CanCollideWithWeapon(NC_STACK_ypamissile *other);
     void DetonateWeaponCollision(NC_STACK_ypamissile *other);
@@ -186,9 +185,9 @@ protected:
     const char *GetAreaSectorSkipReason(const cellArea &cell, int bldX, int bldY) const;
     bool IsDirectHitSector(const Common::Point &cellId, int bldX, int bldY) const;
     void RememberDirectHitSectorAt(const vec3d &pos);
-    void ApplyAreaDamage();
-    void ApplyBuildingAreaDamage();
-    void ApplySectorAreaDamage();
+    void ApplyBlastToUnits();
+    void ApplyBlastToBuildings();
+    void ApplyBlastToSectors();
     void AttachDelayedDetonationToTarget(NC_STACK_ypabact *target);
     NC_STACK_ypabact *FindAttachedTarget();
     void UpdateAttachedDetonationPosition();
@@ -249,14 +248,10 @@ protected:
     float _mislRadiusTank   = 0.0;
     float _mislRadiusFlyer  = 0.0;
     float _mislRadiusRobo   = 0.0;
-    float _mislAoeUnitRadius    = 0.0;
-    int _mislAoeUnitEnergy      = 0;
-    float _mislAoeBuildingRadius = 0.0;
-    int _mislAoeBuildingEnergy   = 0;
-    float _mislAoeSectorRadius   = 0.0;
-    int _mislAoeSectorEnergy     = 0;
-    int _mislAoeFalloff          = 0;
-    float _mislAoeUnitPush       = 0.0f; // configured continuous intensity 0..10
+    float _mislBlastRadius    = 0.0;
+    int _mislBlastEnergy      = 0;
+    int _mislBlastFalloff          = 0;
+    float _mislBlastPush       = 0.0f; // configured continuous intensity 0..10
     float _mislDirectPush        = 0.0f; // configured continuous intensity 0..10
     int _mislArmorPenetrationRemaining = 0;
     int _mislClusterAge          = 0;

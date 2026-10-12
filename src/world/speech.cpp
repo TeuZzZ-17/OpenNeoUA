@@ -27,10 +27,6 @@ const EventDefinition Events[EventCount] = {
     {11, "enemy_host_destroyed"}, {45, "powerstation_captured"}
 };
 
-const char *LegacyClasses[] = {"", "tank-light", "tank-medium", "tank-heavy",
-    "heli-light", "heli-medium", "heli-heavy", "flyer-light",
-    "flyer-medium", "flyer-heavy", "ufo", "car"};
-
 std::string Lower(const std::string &value)
 {
     std::string result = value;
@@ -63,43 +59,20 @@ const char *EventKey(size_t index)
     return index < EventCount ? Events[index].Key : "";
 }
 
-std::string ParsePackName(const std::string &value)
+std::string PackEventPath(const std::string &root, size_t event)
 {
-    if (value.empty() || value == "0") return "";
-    // A category or faction names one folder component, including custom names.
-    for (unsigned char c : value)
-        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-              (c >= '0' && c <= '9') || c == '-' || c == '_'))
-            return "";
-    return Lower(value);
-}
-
-int LegacyVoiceType(const std::string &voiceClass)
-{
-    // This table selects only the vanilla fallback; it does not limit pack names.
-    const std::string name = ParsePackName(voiceClass);
-    for (size_t i = 1; i < sizeof(LegacyClasses) / sizeof(LegacyClasses[0]); ++i)
-        if (name == LegacyClasses[i]) return static_cast<int>(i);
-    return 0;
-}
-
-std::string PackEventPath(const std::string &root, const std::string &voiceClass, const std::string &faction, size_t event)
-{
-    const std::string category = ParsePackName(voiceClass);
-    const std::string name = ParsePackName(faction);
-    if (root.empty() || category.empty() || name.empty() || event >= EventCount)
+    if (root.empty() || root == "0" || event >= EventCount)
         return "";
-    // The existing file resolver validates and normalizes this Data/... path.
     const size_t end = root.find_last_not_of("/\\");
     if (end == std::string::npos) return "";
-    return root.substr(0, end + 1) + "/" + name + "-" + category + "/" + EventKey(event);
+    return root.substr(0, end + 1) + "/" + EventKey(event);
 }
 
 bool IsVariantFilename(const std::string &filename, const std::string &stem)
 {
     const std::string lower = Lower(filename);
     const std::string prefix = Lower(stem) + "_";
-    if (lower.size() < prefix.size() + 6 || lower.compare(0, prefix.size(), prefix) ||
+    if (lower.size() < prefix.size() + 5 || lower.compare(0, prefix.size(), prefix) ||
         lower.compare(lower.size() - 4, 4, ".wav"))
         return false;
     bool positive = false;
