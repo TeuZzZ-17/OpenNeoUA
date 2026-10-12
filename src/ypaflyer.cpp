@@ -559,9 +559,18 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             }
         }
 
-        bool altitudeLimited = ApplyAiMaxAltitudeAboveGround();
+
+        bool altitudeLimited = !kamikazeRamming && ApplyAiMaxAltitudeAboveGround();
 
         ypaflyer_func70__sub0(a2a);
+        // Smooth pursuit lift is valid only on a clear route. Terrain clearance
+        // and an active dodge retain the native controller's lift and direction.
+        if ( kamikazeRamming && !arg136_3.isect &&
+             !(_status_flg & (BACT_STFLAG_DODGE_LEFT | BACT_STFLAG_DODGE_RIGHT | BACT_STFLAG_UPWRD)) )
+        {
+            const double liftSlope = _target_dir.y > 0.0 ? 0.3 : 1.5;
+            _flyerBoost = _mass * 9.80665 * (1.0 - liftSlope * _target_dir.y);
+        }
         if ( altitudeLimited )
         {
             float descentBoost = _mass * 0.7f * 9.80665f;
