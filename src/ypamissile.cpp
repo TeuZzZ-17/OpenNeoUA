@@ -2708,6 +2708,25 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
     }
 }
 
+float NC_STACK_ypamissile::GetBuildingBlastDistance(const vec3d &buildingCenter) const
+{
+    const float legacyDistance = (buildingCenter - _position).length();
+    if ( !_world || (size_t)_vehicleID >= _world->GetWeaponsProtos().size() ||
+         !_world->GetWeaponsProtos()[_vehicleID].IsKamikaze() )
+        return legacyDistance;
+
+    // Kamikaze detonates near the building surface, which can be far above its
+    // historical ground-level damage point. Query only this building slot.
+    if ( !_world->_collisionScene )
+        _world->_collisionScene.reset(new Collision::Scene(*_world));
+    Collision::Contact contact;
+    if ( !_world->_collisionScene->TraceSector(buildingCenter, _position, _position,
+                                                _mislBlastRadius, &contact, true) )
+        return legacyDistance;
+    return std::min(legacyDistance, (float)(contact.point - _position).length());
+}
+
+
 void NC_STACK_ypamissile::ApplyBlastToBuildings()
 {
     if ( _mislBlastRadius <= 0.0 || _mislBlastEnergy <= 0 || !_world )
@@ -2746,7 +2765,7 @@ void NC_STACK_ypamissile::ApplyBlastToBuildings()
                         continue;
 
                     vec3d bldPos = GetBuildingSlotCenter(cell, bldX, bldY);
-                    float distance = (bldPos - _position).length();
+                    float distance = GetBuildingBlastDistance(bldPos);
 
                     if ( distance > _mislBlastRadius )
                         continue;
@@ -2805,7 +2824,7 @@ void NC_STACK_ypamissile::ApplyBlastToSectors()
                         continue;
 
                     vec3d sectorPos = GetBuildingSlotCenter(cell, bldX, bldY);
-                    float distance = (sectorPos - _position).length();
+                    float distance = GetBuildingBlastDistance(sectorPos);
 
                     if ( distance > _mislBlastRadius )
                         continue;

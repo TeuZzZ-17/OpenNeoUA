@@ -119,6 +119,19 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                 _thraction = _force;
 
 
+                // Finish native obstacle/altitude maneuvers before direct pursuit.
+                if ( kamikazeRamming && !(_ufoFlags & 1) )
+                {
+                    const vec2d direction = _target_dir.XZ();
+                    const vec2d forward = _rotation.AxisZ().XZ();
+                    const double angle = std::atan2(forward.cross(direction), direction.dot(forward));
+                    const double turn = std::max(-(double)_maxrot * v110,
+                                                 std::min((double)_maxrot * v110, angle));
+                    _rotation = mat3x3::RotateY(turn) * _rotation;
+                    const double liftSlope = _target_dir.y > 0.0 ? 0.7 : 3.0;
+                    _ufoBoost = _mass * 9.80665 * (1.0 - liftSlope * _target_dir.y);
+                }
+
                 if ( _ufoFlags & 1 )
                 {
                     _thraction = 0;
@@ -163,7 +176,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                     }
                 }
 
-                if ( ApplyAiMaxAltitudeAboveGround() )
+                if ( !kamikazeRamming && ApplyAiMaxAltitudeAboveGround() )
                 {
                     float descentBoost = _mass * 0.3f * 9.80665f;
                     if ( _ufoBoost > descentBoost )
@@ -212,6 +225,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
 
                     Recoil(&arg88);
                 }
+
 
                 if ( _ufoFlags & 1 )
                 {

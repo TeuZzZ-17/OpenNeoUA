@@ -5,6 +5,7 @@
 #include <tuple>
 #include <vector>
 
+#include "grounddecal_contact.h"
 #include "../env.h"
 #include "../includes.h"
 #include "../loaders.h"
@@ -1031,6 +1032,119 @@ static NC_STACK_bitmap *GroundDecalBakedEdgeFadeTexture(NC_STACK_ypaworld *world
 }
 
 }
+
+bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &config,
+                                                const vec3d &center, float radius)
+{
+    if ( _isNetGame || GroundDecalLimit() <= 0 ||
+         config.mode != World::TChainFXConfig::MODE_GROUND_DECAL ||
+         config.trigger != World::TChainFXConfig::TRIGGER_DESTROYED ||
+         !GroundDecalFinitePoint(center) || !std::isfinite(radius) || radius <= 0.0f ||
+         _mapSize.x <= 0 || _mapSize.y <= 0 )
+        return false;
+
+    // Visit actual terrain polygons throughout the sphere's horizontal bounds.
+    // A vertical ray alone would miss a slope touched by the side of the sphere.
+    const auto microIndex = [](double coordinate, int maximum)
+    {
+        return (int)std::max(1.0, std::min((double)maximum, coordinate));
+    };
+    const int maxX = 4 * _mapSize.x - 2;
+    const int maxZ = 4 * _mapSize.y - 2;
+    const int minMicroX = microIndex(std::floor((center.x - radius + 150.0) / 300.0) - 1, maxX);
+    const int maxMicroX = microIndex(std::floor((center.x + radius + 150.0) / 300.0) + 1, maxX);
+    const int minMicroZ = microIndex(std::floor((-center.z - radius + 150.0) / 300.0) - 1, maxZ);
+    const int maxMicroZ = microIndex(std::floor((-center.z + radius + 150.0) / 300.0) + 1, maxZ);
+    const int centerMicroX = microIndex((center.x + 150.0) / 300.0, maxX);
+    const int centerMicroZ = microIndex((-center.z + 150.0) / 300.0, maxZ);
+    typedef std::tuple<int, int, int, int, const NC_STACK_skeleton *> TLocationKey;
+    std::set<TLocationKey> visited;
+    double bestSquared = (double)radius * radius;
+    ypaworld_arg136 bestHit;
+    TSectorCollision bestLocation;
+
+    for (int microZ = minMicroZ; microZ <= maxMicroZ; ++microZ)
+    {
+        for (int microX = minMicroX; microX <= maxMicroX; ++microX)
+        {
+            TSectorCollision location = sub_44DBF8(centerMicroX, centerMicroZ, microX, microZ, 0);
+            if ( !location.CollisionType || !location.sklt ||
+                 !GroundDecalTerrainLocation(this, location.Cell, location.CollisionType) )
+                continue;
+
+            TLocationKey key(location.CollisionType,
+                             (int)std::lround(location.pos.x),
+                             (int)std::lround(location.pos.y),
+                             (int)std::lround(location.pos.z), location.sklt);
+            if ( !visited.insert(key).second )
+                continue;
+            if ( location.CollisionType != 1 )
+                sub_44E07C(location);
+            UAskeleton::Data *skeleton = location.sklt ? location.sklt->GetSkelet() : NULL;
+            if ( !skeleton )
+                continue;
+
+            for (size_t polygonId = 0; polygonId < skeleton->polygons.size(); ++polygonId)
+            {
+                const UAskeleton::Polygon &polygon = skeleton->polygons[polygonId];
+                if ( polygon.num_vertices < 3 ||
+                     (size_t)polygon.num_vertices > polygon.v.size() )
+                    continue;
+                vec3d normal = polygon.Normal();
+                if ( !GroundDecalFinitePoint(normal) || normal.normalise() <= 0.001f )
+                    continue;
+
+                std::vector<vec3d> points;
+                for (int i = 0; i < polygon.num_vertices; ++i)
+                {
+                    const int vertexId = polygon.v[i];
+                    if ( vertexId < 0 || (size_t)vertexId >= skeleton->POO.size() )
+                        break;
+                    const vec3d point = location.pos + skeleton->POO[vertexId];
+                    if ( !GroundDecalFinitePoint(point) )
+                        break;
+                    points.push_back(point);
+                }
+                if ( points.size() != (size_t)polygon.num_vertices )
+                    continue;
+
+                ypaworld_arg136 hit;
+                hit.hitCell = location.Cell;
+                hit.hitCollisionType = location.CollisionType;
+                if ( !GroundDecalCentralHitIsTerrain(this, hit, points, normal) )
+                    continue;
+
+                for (size_t i = 1; i + 1 < points.size(); ++i)
+                {
+                    const vec3d contact = World::GroundDecalClosestTrianglePoint(
+                        center, points[0], points[i], points[i + 1]);
+                    const vec3d offset = contact - center;
+                    const double squared = offset.dot(offset);
+                    if ( squared > bestSquared ||
+                         !World::GroundDecalSphereTouchesPoint(center, radius, contact) )
+                        continue;
+                    bestSquared = squared;
+                    bestLocation = location;
+                    bestHit = hit;
+                    bestHit.isect = true;
+                    bestHit.isectPos = contact;
+                    bestHit.polyID = (int)polygonId;
+                    bestHit.hitSkelPos = location.pos;
+                }
+            }
+        }
+    }
+
+    if ( !bestHit.isect )
+        return false;
+    // Filler skeletons are shared scratch data. Restore the selected receiver
+    // before the existing decal builder copies its central polygon.
+    if ( bestLocation.CollisionType != 1 )
+        sub_44E07C(bestLocation);
+    bestHit.skel = bestLocation.sklt ? bestLocation.sklt->GetSkelet() : NULL;
+    return SpawnGroundDecal(config, bestHit);
+}
+
 
 bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
                                          const ypaworld_arg136 &hit)

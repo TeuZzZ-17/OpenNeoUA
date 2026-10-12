@@ -76,6 +76,8 @@ public:
     bool PairContact(NC_STACK_ypabact *a, NC_STACK_ypabact *b, Contact *contact);
     bool Trace(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to,
                double radius, Contact *contact);
+    bool TraceSector(const vec3d &target, const vec3d &from, const vec3d &to,
+                     double radius, Contact *contact, bool singleSlot = false);
     bool TraceProjectile(NC_STACK_ypabact *projectile, NC_STACK_ypabact *target,
                          const mat3x3 &oldRotation, Contact *contact);
     std::vector<NC_STACK_ypabact *> ShapeTargets(const vec3d &from, const vec3d &to,

@@ -5048,6 +5048,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_proximity_defense_next_activation_time = 0;
         bacto->_proximity_defense_at_death_done = false;
         bacto->_kamikaze_triggered = false;
+        bacto->_kamikaze_ground_decals_handled = false;
         bacto->SetUnitGuns(vhcl_id->skip_unit_guns ? std::vector<World::TRoboGun>() : vhcl.unit_guns);
 
         bacto->_destroyFX = vhcl.dest_fx;
