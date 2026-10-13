@@ -6,7 +6,7 @@ namespace ZNDNet
 NetSession *ZNDServer::SessionFind(uint64_t _ID)
 {
     if (_ID == 0)
-        return NULL;
+        return nullptr;
 
     if (_ID == sLobby.ID)
         return &sLobby;
@@ -15,7 +15,7 @@ NetSession *ZNDServer::SessionFind(uint64_t _ID)
     if (fnd != sessions.end())
         return fnd->second;
 
-    return NULL;
+    return nullptr;
 }
 
 NetSession *ZNDServer::SessionFind(const std::string &name)
@@ -25,7 +25,7 @@ NetSession *ZNDServer::SessionFind(const std::string &name)
         if (it->second->name == name)
             return it->second;
     }
-    return NULL;
+    return nullptr;
 }
 
 void ZNDServer::SessionDelete(uint64_t ID)
@@ -131,8 +131,7 @@ void ZNDServer::SessionUserLeave(NetUser *usr, uint8_t type)
                 }
                 else
                 {
-                    sold->lead = NULL;
-                    //sold->orphanedTimer = ttime.GetTicks() + TIMEOUT_SESSION;
+                    sold->lead = nullptr;
                     SessionDelete(sold->ID);
                 }
             }

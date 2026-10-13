@@ -1,18 +1,16 @@
 // Focused tests linked to production mount, guidance, fuse and collision code.
-#include "../../yw.h"
-#include "../../ypabact.h"
-#include "../../ypaflyer.h"
-#include "../../ypaufo.h"
-#include "../../ypagun.h"
-#include "../../ypamissile.h"
-#include "../../skeleton.h"
+#include "game/yw.h"
+#include "game/ypabact.h"
+#include "game/ypaflyer.h"
+#include "game/ypaufo.h"
+#include "game/ypagun.h"
+#include "game/ypamissile.h"
+#include "nucleus/skeleton.h"
 #include "../collision_shape.h"
 #include "../kamikaze_contact.h"
 #include <cstdio>
 #include <memory>
 #undef main
-NC_STACK_ypaworld *ypaworld = NULL;
-TInputState input_states;
 namespace {
 int checks=0, failures=0;
 void Check(bool ok,const char *label) { ++checks; if(!ok) { ++failures; std::printf("FAIL %s\n",label); } }
@@ -20,9 +18,9 @@ struct TestWorld : NC_STACK_ypaworld {
     int detonations=0;
     vec3d explosion;
     bool groundProbe=false, wallProbe=false;
-    UAskeleton::Data *probe=NULL;
+    UAskeleton::Data *probe=nullptr;
     NC_STACK_ypamissile *ypaworld_func147(ypaworld_arg146 *arg) override {
-        ++detonations; explosion=arg->pos; return NULL;
+        ++detonations; explosion=arg->pos; return nullptr;
     }
     size_t ypaworld_func145(NC_STACK_ypabact *) override { return 1; }
     void ypaworld_func136(ypaworld_arg136 *arg) override {
@@ -84,8 +82,8 @@ int main() {
     Actor<> carrier, enemy;
     const vec3d anchor(1800,0,-1800);
     carrier.Bind(*w,anchor); enemy.Bind(*w,anchor+vec3d(400,0,0),2); carrier.Target(&enemy);
-    const auto fuse=[&](const char *label,bool expected,const vec3d *old=NULL) {
-        w->detonations=0; carrier.UpdateKamikaze(NULL,old);
+    const auto fuse=[&](const char *label,bool expected,const vec3d *old=nullptr) {
+        w->detonations=0; carrier.UpdateKamikaze(nullptr,old);
         Check((w->detonations==1)==expected,label);
     };
     fuse("legacy enemy surface exact tangency at trigger 360",true);
@@ -145,7 +143,7 @@ int main() {
     const vec3d roofFrom=anchor+vec3d(0,-1500,0); carrier._position=anchor+vec3d(0,-300,0);
     fuse("sector sweep catches roof passed during movement",true,&roofFrom);
     Check(std::fabs(w->explosion.y+960)<.1,"sector explosion placed at first roof contact");
-    w->_legoArray[0].CollisionSkelet=NULL;
+    w->_legoArray[0].CollisionSkelet=nullptr;
 
     carrier._position=anchor; carrier.Target(&enemy); enemy._position=anchor+vec3d(0,500,-1000);
     carrier._status_flg=BACT_STFLAG_ATTACK|BACT_STFLAG_APPROACH|BACT_STFLAG_DODGE_LEFT;
@@ -261,7 +259,7 @@ int main() {
     blast.damage.clear(); damagedCell.PurposeType=cellArea::PT_NONE;
     blast.ApplyBlastToSectors();
     Check(blast.damage.size()==1,"ordinary sector architecture also uses single-slot surface contact");
-    w->_legoArray[0].CollisionSkelet=NULL;
+    w->_legoArray[0].CollisionSkelet=nullptr;
     w->_collisionScene.reset();
     std::printf("CHECKS %d FAILURES %d\n",checks,failures); return failures?1:0;
 }

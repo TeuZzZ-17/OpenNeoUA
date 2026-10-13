@@ -12,9 +12,9 @@
 
 #include "common/common.h"
 #include "common/plane.h"
-#include "../vectors.h"
-#include "../matrix.h"
-#include "../bitmap.h"
+#include "common/vectors.h"
+#include "common/matrix.h"
+#include "nucleus/bitmap.h"
 #include "consts.h"
 
 namespace World {
@@ -45,7 +45,7 @@ inline bool ParseAuthoredScalar(const std::string &text, TAuthoredScalar &out)
         return false;
 
     errno = 0;
-    char *end = NULL;
+    char *end = nullptr;
     float parsed = std::strtof(begin, &end);
     if ( end == begin || errno == ERANGE || !std::isfinite(parsed) )
         return false;
@@ -95,7 +95,7 @@ inline bool ParseInt16ListValue(const std::string &text,
         }
 
         errno = 0;
-        char *parseEnd = NULL;
+        char *parseEnd = nullptr;
         const long value = std::strtol(part.c_str(), &parseEnd, 0);
         if ( parseEnd == part.c_str() || errno == ERANGE || *parseEnd != '\0' ||
              value < (allowZero ? 0 : 1) ||
@@ -151,7 +151,7 @@ inline bool ParseIntRangeValue(const std::string &value, int &minValue, int &max
             return false;
 
         errno = 0;
-        char *end = NULL;
+        char *end = nullptr;
         const char *begin = part.c_str();
         long long parsed = std::strtoll(begin, &end, 0);
         if ( end == begin || errno == ERANGE || *end != '\0' ||
@@ -219,7 +219,7 @@ inline bool ParseFloatRangeValue(const std::string &value, float &minValue, floa
             return false;
 
         errno = 0;
-        char *end = NULL;
+        char *end = nullptr;
         const char *begin = part.c_str();
         float parsed = std::strtof(begin, &end);
         if ( end == begin || errno == ERANGE || *end != '\0' || !std::isfinite(parsed) )

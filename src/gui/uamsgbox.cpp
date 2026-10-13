@@ -1,6 +1,6 @@
 #include "uamsgbox.h"
 #include "../system/sound.h"
-#include "../yw.h"
+#include "game/yw.h"
 
 
 namespace Gui

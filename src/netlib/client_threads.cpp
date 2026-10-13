@@ -19,7 +19,7 @@ int ZNDClient::_RecvThread(void *data)
             inpkt[i]->channel = -1;
         }
 
-        inpkt[ZNDNET_TUNE_MAXPKTS] = NULL;
+        inpkt[ZNDNET_TUNE_MAXPKTS] = nullptr;
 
         while (!_this->threadsEnd)
         {
@@ -30,7 +30,6 @@ int ZNDClient::_RecvThread(void *data)
                 for(int i = 0; i < numrecv; i++)
                 {
                     //InRawPkt *pkt = new InRawPkt(inpkt[i]);
-                    //_this->Recv_PushInRaw(pkt);
                     if ( IPCMP(inpkt[i]->address, _this->cServAddress) )
                         _this->Recv_PushInRaw( new InRawPkt(inpkt[i]) );
                 }
@@ -254,11 +253,11 @@ int ZNDClient::_UpdateThread(void *data)
 
     }
 
-    SDL_WaitThread(_this->recvThread, NULL);
-    SDL_WaitThread(_this->sendThread, NULL);
+    SDL_WaitThread(_this->recvThread, nullptr);
+    SDL_WaitThread(_this->sendThread, nullptr);
 
-    _this->recvThread = NULL;
-    _this->sendThread = NULL;
+    _this->recvThread = nullptr;
+    _this->sendThread = nullptr;
 
     _this->cME.status = NetUser::STATUS_DISCONNECTED;
 

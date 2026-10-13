@@ -37,6 +37,14 @@ def main():
     link_line = commands[-1].replace("\\", "/")
     tail = re.search(r"c\+\+\.exe\s+(.*?)(?: && cd \.|$)", link_line).group(1)
     link_args = shlex.split(tail)
+    # With many objects CMake links through a response file ("@CMakeFiles/OpenNeoUA.rsp") that exists only
+    # while Ninja links; its content (objects + libraries) is read from build.ninja instead.
+    if any(arg.startswith("@") for arg in link_args):
+        text = (build / "build.ninja").read_text(encoding="utf-8").replace("\\", "/")
+        edge = next(line for line in text.splitlines() if line.startswith("build OpenNeoUA.exe:"))
+        inputs = shlex.split(edge.split(":", 1)[1].split(" | ")[0])[1:]
+        libs_line = next(line for line in text[text.index(edge):].splitlines() if line.strip().startswith("LINK_LIBRARIES ="))
+        link_args = inputs + shlex.split(libs_line.split("=", 1)[1])
     objects = [arg for arg in link_args if arg.endswith(".obj") and not (args.replace_ypabact and arg.endswith("/ypabact.cpp.obj"))]
     libraries = [arg for arg in link_args if arg.startswith("-l") or arg.endswith(".a")]
     response = output / f"{name}.rsp"

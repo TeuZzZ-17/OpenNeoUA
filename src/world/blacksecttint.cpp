@@ -1,11 +1,12 @@
+// Wireframe/visual tint of the Black Sect faction.
 #include <cerrno>
 #include <cstdlib>
 #include <string>
 
 #include "blacksecttint.h"
-#include "../ypabact.h"          // NC_STACK_ypabact, BACT_TYPES_*
+#include "game/ypabact.h"          // NC_STACK_ypabact, BACT_TYPES_*
 #include "../system/inivals.h"
-#include "../log.h"
+#include "common/log.h"
 
 namespace World
 {
@@ -17,7 +18,7 @@ static TVisualTint s_tint;
 static bool ParseTintComponent(const char *&pos, int *out)
 {
     errno = 0;
-    char *end = NULL;
+    char *end = nullptr;
     long value = std::strtol(pos, &end, 10);
 
     if ( end == pos || errno == ERANGE )

@@ -1,7 +1,8 @@
+// Situation analyser used by the host station AI.
 #include "analyzer.h"
-#include "../yw.h"
-#include "../yparobo.h"
-#include "../yw_internal.h"
+#include "game/yw.h"
+#include "game/yparobo.h"
+#include "game/yw_internal.h"
 #include "locale/locale.h"
 
 extern bzd bzda;
@@ -158,7 +159,7 @@ bool GameAnalyzer::IsOwnPowerStation(NC_STACK_ypaworld *world)
 
 bool GameAnalyzer::IsOnHighPowerStation(NC_STACK_ypaworld *world)
 {
-    const TPowerStationInfo *maxPwr = NULL;
+    const TPowerStationInfo *maxPwr = nullptr;
     for(const auto it : world->_powerStations)
     {
         if (it.second.pCell)

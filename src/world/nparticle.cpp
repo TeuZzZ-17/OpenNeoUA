@@ -1,10 +1,11 @@
+// ParticleSystem: particle simulation used by effects.
 #include "nparticle.h"
 #include "../system/inivals.h"
-#include "../skeleton.h"
-#include "../ade.h"
-#include "../particle.h"
-#include "../base.h"
-#include "../utils.h"
+#include "nucleus/skeleton.h"
+#include "nucleus/ade.h"
+#include "nucleus/particle.h"
+#include "nucleus/base.h"
+#include "common/utils.h"
 #include "spin.h"
 
 #include <cmath>

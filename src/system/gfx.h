@@ -1,3 +1,4 @@
+// GFXEngine: rendering back end (OpenGL), render nodes, textures, 2D drawing.
 #ifndef ENGINE_GFX_H_INCLUDED
 #define ENGINE_GFX_H_INCLUDED
 
@@ -8,11 +9,11 @@
 #include <inttypes.h>
 
 #include "system.h"
-#include "../ini.h"
-#include "../vectors.h"
-#include "../matrix.h"
-#include "../IFFile.h"
-#include "../nucleas.h"
+#include "common/ini.h"
+#include "common/vectors.h"
+#include "common/matrix.h"
+#include "nucleus/IFFile.h"
+#include "nucleus/nucleas.h"
 #include "common/common.h"
 #include "common/cachestor.h"
 #include "common/line.h"
@@ -28,8 +29,8 @@ struct ResBitmap
 {
     int16_t width = 0;
     int16_t height = 0;
-    UA_PALETTE *palette = NULL;
-    SDL_Surface *swTex = NULL;
+    UA_PALETTE *palette = nullptr;
+    SDL_Surface *swTex = nullptr;
     GLuint hwTex = 0;
 };
 
@@ -38,7 +39,7 @@ typedef std::vector< CmdStream* > CmdIncludes;
 
 struct TileMap
 {
-    NC_STACK_bitmap *img = NULL;
+    NC_STACK_bitmap *img = nullptr;
     std::array<Common::PointRect, 256> map;
     int h = 0;
 
@@ -63,8 +64,8 @@ struct TileMap
 
 struct w3d_a209
 {
-    char *cmdbuf = NULL;
-    char **includ = NULL;
+    char *cmdbuf = nullptr;
+    char **includ = nullptr;
 };
 
 struct tUtV
@@ -181,8 +182,8 @@ struct TBoundBox
 
 struct TRenderParams
 {
-    NC_STACK_bitmap *TexSource = NULL;
-    ResBitmap *Tex = NULL;
+    NC_STACK_bitmap *TexSource = nullptr;
+    ResBitmap *Tex = nullptr;
 
     uint32_t Flags = 0;
     TGLColor Color;
@@ -208,7 +209,7 @@ struct TRenderParams
 
 struct TCoordsCache
 {
-    ResBitmap *Tex = NULL;
+    ResBitmap *Tex = nullptr;
     std::vector<tUtV> Coords;
 
     // OpenGL
@@ -273,12 +274,12 @@ struct TRenderNode
 
     uint8_t Type = TYPE_MESH;
 
-    TMesh *Mesh = NULL;
+    TMesh *Mesh = nullptr;
     TMesh LocalMesh;
 
     int32_t coordsID = -1;
 
-    ResBitmap *Tex = NULL;
+    ResBitmap *Tex = nullptr;
 
     uint32_t Flags = 0;
     TGLColor Color;
@@ -412,7 +413,7 @@ struct GfxStates
 
 struct rstr_arg204
 {
-    ResBitmap *pbitm = NULL;
+    ResBitmap *pbitm = nullptr;
     Common::FRect float4;
     Common::FRect float14;
     uint8_t opacity = 255;
@@ -438,7 +439,7 @@ struct ColorFx
 
 struct displ_arg263
 {
-    ResBitmap *bitm = NULL;
+    ResBitmap *bitm = nullptr;
     int pointer_id = 0;
 };
 
@@ -479,7 +480,7 @@ struct ScreenText
 
 struct ScreenFont
 {
-    TTF_Font *ttfFont = NULL;
+    TTF_Font *ttfFont = nullptr;
     int height = 0;
     uint8_t r = 0, g = 0, b = 0;
 
@@ -698,8 +699,8 @@ public:
     virtual TileMap *raster_func208(int id);
     virtual int raster_func208(TileMap *tiles);
 
-    virtual void ProcessDrawSeq(const CmdStream &cmdline, const CmdIncludes *arr = NULL,
-                                const SDL_Color *uiAccent = NULL);
+    virtual void ProcessDrawSeq(const CmdStream &cmdline, const CmdIncludes *arr = nullptr,
+                                const SDL_Color *uiAccent = nullptr);
 
     virtual void raster_func210(const Common::FRect &arg);
     virtual void raster_func211(const Common::Rect &arg);
@@ -856,8 +857,8 @@ private:
     int CurrentCursorID = -1;
     GfxMode GfxSelectedMode;
 
-    SDL_Surface *ScreenSurface = NULL;
-    SDL_Surface *VirtualUISurface = NULL;
+    SDL_Surface *ScreenSurface = nullptr;
+    SDL_Surface *VirtualUISurface = nullptr;
     GLuint screenTex = 0;
     GLuint virtualUiTex = 0;
 

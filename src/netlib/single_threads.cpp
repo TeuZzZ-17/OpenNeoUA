@@ -19,7 +19,7 @@ int ZNDSingle::_RecvThread(void *data)
             inpkt[i]->channel = -1;
         }
 
-        inpkt[ZNDNET_TUNE_MAXPKTS] = NULL;
+        inpkt[ZNDNET_TUNE_MAXPKTS] = nullptr;
 
         while (!_this->threadsEnd)
         {
@@ -255,11 +255,11 @@ int ZNDSingle::_UpdateThread(void *data)
             SDL_Delay(1 + ZNDNET_TUNE_MAXDELAY - ZNDNET_TUNE_MAXDELAY * pktsRecv / ZNDNET_TUNE_MAXPKTS);
     }
 
-    SDL_WaitThread(_this->recvThread, NULL);
-    SDL_WaitThread(_this->sendThread, NULL);
+    SDL_WaitThread(_this->recvThread, nullptr);
+    SDL_WaitThread(_this->sendThread, nullptr);
 
-    _this->recvThread = NULL;
-    _this->sendThread = NULL;
+    _this->recvThread = nullptr;
+    _this->sendThread = nullptr;
 
     _this->ME.status = NetUser::STATUS_DISCONNECTED;
 

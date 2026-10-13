@@ -1,14 +1,15 @@
+// Model-derived collision shapes (see collision_shape.md).
 #include "collision_shape.h"
-#include "../def_parser.h"
-#include "../utils.h"
-#include "../log.h"
-#include "../ypabact.h"
-#include "../ypatank.h"
-#include "../ypagun.h"
-#include "../yparobo.h"
-#include "../yw.h"
-#include "../skeleton.h"
-#include "../yw_internal.h"
+#include "common/def_parser.h"
+#include "common/utils.h"
+#include "common/log.h"
+#include "game/ypabact.h"
+#include "game/ypatank.h"
+#include "game/ypagun.h"
+#include "game/yparobo.h"
+#include "game/yw.h"
+#include "nucleus/skeleton.h"
+#include "game/yw_internal.h"
 #include <algorithm>
 #include <cmath>
 #include <map>

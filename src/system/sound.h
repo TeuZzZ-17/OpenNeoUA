@@ -1,9 +1,10 @@
+// Sound engine (SFXEngine): carriers, volume/pitch handling, music and sound events.
 #ifndef ENGINE_MILES_H_INCLUDED
 #define ENGINE_MILES_H_INCLUDED
 
 #include <array>
 #include "gfx.h"
-#include "../wrapal.h"
+#include "platform/wrapal.h"
 
 #define AUDIO_CHANNELS   64
 
@@ -26,7 +27,7 @@ struct TSndFxPosParam : TSndFXParam
 
 struct TSampleData
 {
-    void *Data = NULL;
+    void *Data = nullptr;
     int bufsz = 0;
     int field_8 = 0;
     int SampleRate = 0;
@@ -37,7 +38,7 @@ struct TSampleData
 
 struct TSampleParams
 {
-    TSampleData *Sample = NULL;
+    TSampleData *Sample = nullptr;
     uint8_t Loop = 0;
     int16_t Vol = 0;
     int SampleRate = 0;
@@ -67,10 +68,10 @@ struct TSoundSource
     };
 
 
-    TSampleData *PSample = NULL;
-    TSndFXParam *PPFx = NULL;
-    TSndFxPosParam *PShkFx = NULL;
-    std::vector<TSampleParams> *PFragments = NULL;
+    TSampleData *PSample = nullptr;
+    TSndFXParam *PPFx = nullptr;
+    TSndFxPosParam *PShkFx = nullptr;
+    std::vector<TSampleParams> *PFragments = nullptr;
     int16_t Volume = 0;
     // Optional per-event sound attenuation. Temporal fade is global per SFX
     // channel and is applied centrally by SFXEngine.
@@ -90,7 +91,7 @@ struct TSoundSource
     // playback ceiling. Disabled by default so vanilla sounds keep their exact
     // historical rate limit.
     bool AllowExtendedRate = false;
-    TSndCarrier *PCarrier = NULL;
+    TSndCarrier *PCarrier = nullptr;
     int16_t Priority = 0;
     int16_t PriorityBias = 0;
     bool IgnoreTimeScale = false;
@@ -333,8 +334,8 @@ public:
 
         TSoundChannel()
         {
-            hSample = NULL;
-            sndSouce = NULL;
+            hSample = nullptr;
+            sndSouce = nullptr;
         }
     };
 
@@ -344,9 +345,9 @@ public:
     int audio_num_palfx;
     int dword_546E14; // num_shakeFX
     std::array<TSoundChannel, AUDIO_CHANNELS> snd_channels;
-    std::array<TSoundSource *, AUDIO_CHANNELS> soundSources = Common::ArrayInit<TSoundSource *, AUDIO_CHANNELS>(NULL);
-    std::array<TSoundSource *, 8> palFXs = Common::ArrayInit<TSoundSource *, 8>(NULL);
-    std::array<TSoundSource *, 4> ShakeFXs = Common::ArrayInit<TSoundSource *, 4>(NULL);
+    std::array<TSoundSource *, AUDIO_CHANNELS> soundSources = Common::ArrayInit<TSoundSource *, AUDIO_CHANNELS>(nullptr);
+    std::array<TSoundSource *, 8> palFXs = Common::ArrayInit<TSoundSource *, 8>(nullptr);
+    std::array<TSoundSource *, 4> ShakeFXs = Common::ArrayInit<TSoundSource *, 4>(nullptr);
     bool audio_rev_stereo;
     int dword_546F0C;
     size_t currentTime;

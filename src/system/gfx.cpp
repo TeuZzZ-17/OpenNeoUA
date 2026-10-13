@@ -1,3 +1,4 @@
+// GFXEngine: rendering back end (OpenGL), render nodes, textures, 2D drawing.
 #include "../fmtlib/printf.h"
 #include <SDL2/SDL_opengl.h>
 
@@ -9,15 +10,15 @@
 #endif
 
 #include "gfx.h"
-#include "../utils.h"
-#include "../env.h"
+#include "common/utils.h"
+#include "common/env.h"
 #include "common/common.h"
-#include "../ini.h"
+#include "common/ini.h"
 #include "../gui/root.h"
-#include "../bitmap.h"
-#include "../ilbm.h"
-#include "../log.h"
-#include "../font.h"
+#include "nucleus/bitmap.h"
+#include "nucleus/ilbm.h"
+#include "common/log.h"
+#include "gui/font.h"
 #include "inivals.h"
 #include "gametime.h"
 #include "glfuncs.h"
@@ -35,7 +36,7 @@ int GFXEngine::can_destblend;
 int GFXEngine::can_stippling;
 uint32_t GFXEngine::FpsMaxTicks = 1000/60;
 
-SDL_PixelFormat *GFXEngine::_pixfmt = NULL;
+SDL_PixelFormat *GFXEngine::_pixfmt = nullptr;
 GLint GFXEngine::_glPixfmt, GFXEngine::_glPixtype;
 bool GFXEngine::_staticInited = false;
 
@@ -399,7 +400,7 @@ void GFXEngine::StaticInit()
 GFXEngine::GFXEngine()
 {
     for(TileMap *&t : _tiles)
-        t = NULL;
+        t = nullptr;
 
     for(SDL_Color &c : _palette)
         c = {0, 0, 0, 0};
@@ -561,7 +562,7 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
 
                 if (!tmp)
                 {
-                    SDL_SetClipRect(Screen(), NULL);
+                    SDL_SetClipRect(Screen(), nullptr);
                     return;
                 }
 
@@ -574,7 +575,7 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                 want.x = p1 + 2;
                 want.y = v10 + 1;
 
-                SDL_BlitSurface(tmp, NULL, Screen(), &want);
+                SDL_BlitSurface(tmp, nullptr, Screen(), &want);
 
                 clr.a = 255;
                 clr.r = _font.r;
@@ -591,7 +592,7 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                     tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
                     if (!tmp)
                     {
-                        SDL_SetClipRect(Screen(), NULL);
+                        SDL_SetClipRect(Screen(), nullptr);
                         return;
                     }
 
@@ -603,10 +604,10 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                 want.x = p1 + 1;
                 want.y = v10;
 
-                SDL_BlitSurface(tmp, NULL, Screen(), &want);
+                SDL_BlitSurface(tmp, nullptr, Screen(), &want);
                 SDL_FreeSurface(tmp);
 
-                SDL_SetClipRect(Screen(), NULL);
+                SDL_SetClipRect(Screen(), nullptr);
             }
         }
     }
@@ -682,21 +683,17 @@ int GFXEngine::LoadFontByDescr(const std::string &fontname)
     if ( !facename.empty() && !s_height.empty() )//&& s_weight && s_charset )
     {
         height = std::stoi(s_height);
-        //weight = atoi(s_weight);
-        //charset = atoi(s_charset);
     }
     else
     {
         height = 12;
-        //charset = 0;
         facename = "MS Sans Serif";
-        //weight = 400;
     }
 
     if ( _font.ttfFont )
     {
         TTF_CloseFont(_font.ttfFont);
-        _font.ttfFont = NULL;
+        _font.ttfFont = nullptr;
     }
 
     _font.height = height;
@@ -784,7 +781,6 @@ size_t GFXEngine::windd_func0(IDVList &stak)
 
     LoadFontByDescr("MS Sans Serif,12,400,0");
 
-    //win3d->field_54______rsrc_field4 = (bitmap_intern *)getRsrc_pData();
     return 1;
 }
 
@@ -1818,7 +1814,7 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
     }
 
     CommitUBOParameters();
-    glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, NULL);
+    glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, nullptr);
 }
 
 void GFXEngine::RenderNode(TRenderNode *node)
@@ -2227,7 +2223,7 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
     const CmdStream *curStream = &drawSeq;
 
     int w_pixels = Screen()->pitch / bytesPerColor;
-    TileMap *tile = NULL;
+    TileMap *tile = nullptr;
     uint8_t tileId = 0;
     uint8_t opacity = 255;
 
@@ -2565,7 +2561,6 @@ void GFXEngine::EndScene()
 
 size_t GFXEngine::raster_func217(SDL_Color color)
 {
-    //if ( !ColorCmp(color, Color(255, 255, 255, 255) ) )
     _field_4 = color;
 
     return 0;
@@ -2597,7 +2592,7 @@ void GFXEngine::raster_func221(const Common::Rect &arg)
 void GFXEngine::BeginFrame()
 {
     setViewZoom(1.0f);
-    SDL_FillRect(Screen(), NULL, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
+    SDL_FillRect(Screen(), nullptr, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
 
     Common::Point scrSz = System::GetResolution();
     glViewport(0, 0, scrSz.x, scrSz.y);
@@ -2903,13 +2898,13 @@ void GFXEngine::windd_func321(IDVPair *)
 char * GFXEngine::windd_func322__sub0(const char *box_title, const char *box_ok, const char *box_cancel, const char *box_startText, uint32_t timer_time, void (*timer_func)(int, int, int), void *timer_context, int replace, int maxLen)
 {
     dprintf("MAKE ME %s\n","windd_func322__sub0");
-    return NULL;
+    return nullptr;
 }
 
 //Show DLGBox with edit field and get entered value
 void GFXEngine::windd_func322(windd_dlgBox *dlgBox)
 {
-    windd_func320(NULL);
+    windd_func320(nullptr);
 
     dlgBox->result = windd_func322__sub0(
                          dlgBox->title,
@@ -2922,7 +2917,7 @@ void GFXEngine::windd_func322(windd_dlgBox *dlgBox)
                          dlgBox->replace,
                          dlgBox->maxLen);
 
-    windd_func321(NULL);
+    windd_func321(nullptr);
 }
 
 
@@ -3068,7 +3063,7 @@ void GFXEngine::draw2DandFlush()
     }
     Gui::Root::Instance.HwCompose();
 
-    SDL_FillRect(Screen(), NULL, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
+    SDL_FillRect(Screen(), nullptr, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
 
     if (_colorEffects)
         Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _fbo);
@@ -3229,7 +3224,7 @@ SDL_Surface * GFXEngine::ConvertSDLSurface(SDL_Surface *src, const SDL_PixelForm
         SDL_BlendMode blend = SDL_BLENDMODE_NONE;
         SDL_GetSurfaceBlendMode(src, &blend);
         SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_NONE);
-        SDL_BlitSurface(src, NULL, tmp, NULL);
+        SDL_BlitSurface(src, nullptr, tmp, nullptr);
         SDL_SetSurfaceBlendMode(src, blend);
         return tmp;
     }
@@ -3256,7 +3251,7 @@ void GFXEngine::fpsLimitter(int value)
 
 TileMap::TileMap()
 {
-    img = NULL;
+    img = nullptr;
     h = 0;
 }
 
@@ -3474,13 +3469,13 @@ SDL_Cursor *GFXEngine::LoadCursor(const std::string &name)
     UA_PALETTE pal;
 
     if (!fil)
-        return NULL;
+        return nullptr;
 
     fil->readU16L();
     if (fil->readU16L() != 2)
     {
         delete fil;
-        return NULL;
+        return nullptr;
     }
 
     fil->readU16L(); //count
@@ -3611,7 +3606,7 @@ void GFXEngine::Init()
 
         Glext::GLGenBuffers(1, &_vboParams);
         Glext::GLBindBuffer(GL_UNIFORM_BUFFER, _vboParams);
-        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, NULL, GL_STREAM_DRAW);
+        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, nullptr, GL_STREAM_DRAW);
 
         Glext::GLBindBufferBase(GL_UNIFORM_BUFFER, _vboParamsBlockBinding, _vboParams);
     }
@@ -3734,7 +3729,7 @@ void GFXEngine::Init()
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, 640, 480, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, 640, 480, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
 
         Glext::GLGenRenderbuffers(1, &_fbod);
@@ -3793,18 +3788,18 @@ void GFXEngine::Deinit()
     if ( _font.ttfFont )
     {
         TTF_CloseFont(_font.ttfFont);
-        _font.ttfFont = NULL;
+        _font.ttfFont = nullptr;
     }
 
     if (ScreenSurface)
         SDL_FreeSurface(ScreenSurface);
 
-    ScreenSurface = NULL;
+    ScreenSurface = nullptr;
 
     if (VirtualUISurface)
         SDL_FreeSurface(VirtualUISurface);
 
-    VirtualUISurface = NULL;
+    VirtualUISurface = nullptr;
     _virtualUiPass = false;
     _virtualUiPending = false;
     _virtualUiResolution = Common::Point();
@@ -4020,7 +4015,6 @@ void GFXEngine::SetResolution(const Common::Point &res, bool windowed)
 
     EndFrame();
 
-    //cls3D->Delete();
 
     GfxMode picked;
     if ( res )
@@ -4046,7 +4040,7 @@ void GFXEngine::SetResolution(const Common::Point &res, bool windowed)
     if (!picked.windowed)
         System::SetVideoMode(Common::Point(picked.w, picked.h), SDL_WINDOW_FULLSCREEN_DESKTOP, &picked.mode);
     else
-        System::SetVideoMode(Common::Point(picked.w, picked.h), 0, NULL);
+        System::SetVideoMode(Common::Point(picked.w, picked.h), 0, nullptr);
 
     SetResVariables(picked);
     ApplyResolution();
@@ -4219,7 +4213,7 @@ void GFXEngine::SetVisualFilter(const std::string &filterName)
 
     Common::Env.SetPrefix("rsrc", oldRsrc);
 
-    UA_PALETTE *pal = ilbm ? ilbm->getBMD_palette() : NULL;
+    UA_PALETTE *pal = ilbm ? ilbm->getBMD_palette() : nullptr;
     if (!pal)
     {
         ypa_log_out("WARNING: Visual filter [%s] could not be loaded from [data:%s]; filter disabled.\n",
@@ -4475,7 +4469,7 @@ bool GFXEngine::LoadAtmosphereShader()
         if (logLength > 0)
         {
             std::vector<char> logBuffer((size_t)logLength + 1, 0);
-            Glext::GLGetProgramInfoLog(progID, logLength, NULL, logBuffer.data());
+            Glext::GLGetProgramInfoLog(progID, logLength, nullptr, logBuffer.data());
             ypa_log_out("WARNING: Atmospheric pass shader link failed: %s\n", logBuffer.data());
         }
         else
@@ -5561,7 +5555,7 @@ void GFXEngine::BeginVirtualUI(const Common::Point &logicalSize)
         SDL_SetSurfaceBlendMode(VirtualUISurface, SDL_BLENDMODE_BLEND);
     }
 
-    SDL_FillRect(VirtualUISurface, NULL,
+    SDL_FillRect(VirtualUISurface, nullptr,
                  SDL_MapRGBA(VirtualUISurface->format, 0, 0, 0, 0));
 
     _virtualUiSavedClip = _clip;
@@ -5597,7 +5591,7 @@ void GFXEngine::EndVirtualUI()
     _field_554 = _virtualUiSavedField554;
     _field_558 = _virtualUiSavedField558;
 
-    _virtualUiPending = VirtualUISurface != NULL;
+    _virtualUiPending = VirtualUISurface != nullptr;
 }
 
 void GFXEngine::GetGlPixTypeFmt(GLint *format, GLint *type)
@@ -5624,7 +5618,7 @@ void GFXEngine::RecreateScreenSurface()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ScreenSurface->w, ScreenSurface->h, 0, _glPixfmt, _glPixtype, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ScreenSurface->w, ScreenSurface->h, 0, _glPixfmt, _glPixtype, nullptr);
 }
 
 void GFXEngine::DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx)
@@ -5637,7 +5631,7 @@ void GFXEngine::DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx)
         {
             Glext::GLGenBuffers(1, &_stdQuadDataBuf);
             Glext::GLBindBuffer(GL_ARRAY_BUFFER, _stdQuadDataBuf);
-            Glext::GLBufferData(GL_ARRAY_BUFFER, sizeof(TVertex) * vtx.size(), NULL, GL_STREAM_DRAW);
+            Glext::GLBufferData(GL_ARRAY_BUFFER, sizeof(TVertex) * vtx.size(), nullptr, GL_STREAM_DRAW);
         }
 
         if (!_stdQuadIndexBuf)
@@ -5675,7 +5669,7 @@ void GFXEngine::DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx)
         }
 
         CommitUBOParameters();
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
     }
     else
     {
@@ -5837,7 +5831,7 @@ uint32_t GFXEngine::CompileShader(int32_t type, const std::string &string)
         if (tmpvar > 0)
         {
             char *logbuff = new char[tmpvar + 2];
-            Glext::GLGetShaderInfoLog(sh, tmpvar, NULL, logbuff);
+            Glext::GLGetShaderInfoLog(sh, tmpvar, nullptr, logbuff);
             printf("Shader error: %s\n", logbuff);
             log_d3dlog("Shader error: %s\n", logbuff);
             delete[] logbuff;
@@ -6001,7 +5995,7 @@ bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glBindTexture(GL_TEXTURE_2D, _vhsOutTex);
@@ -6009,7 +6003,7 @@ bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, outputSize.x, outputSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, outputSize.x, outputSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsFbo);
@@ -6156,7 +6150,7 @@ void GFXEngine::UpdateFBOSizes()
         _states.Tex = _fboTex;
         SetRenderStates(0);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
         Glext::GLBindRenderbuffer(GL_RENDERBUFFER, _fbod);
         Glext::GLRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, scrSz.x, scrSz.y);
@@ -6350,7 +6344,7 @@ void GFXEngine::MeshMakeVBO(TMesh *mesh)
         Glext::GLBindBuffer(GL_ARRAY_BUFFER, mesh->glDataBuf);
         int32_t vtxDataSz = mesh->Vertexes.size() * sizeof(TVertex);
         int32_t coordDataSz = mesh->Vertexes.size() * sizeof(tUtV);
-        Glext::GLBufferData(GL_ARRAY_BUFFER, vtxDataSz + mesh->CoordsCache.size() * coordDataSz, NULL, GL_STATIC_DRAW);
+        Glext::GLBufferData(GL_ARRAY_BUFFER, vtxDataSz + mesh->CoordsCache.size() * coordDataSz, nullptr, GL_STATIC_DRAW);
 
         int32_t off = 0;
         Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, vtxDataSz, mesh->Vertexes.data());
@@ -6385,11 +6379,6 @@ void GFXEngine::MeshFreeVBO(TMesh *mesh)
             mesh->glIndexBuf = 0;
         }
 
-//        if (mesh->glVao)
-//        {
-//            Glext::GLDeleteVertexArrays(1, &mesh->glVao);
-//            mesh->glVao = 0;
-//        }
     }
 }
 
@@ -6412,7 +6401,7 @@ void GFXEngine::CommitUBOParameters()
         Glext::GLBindBuffer(GL_UNIFORM_BUFFER, _vboParams);
 
         // Orphan ubo
-        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, NULL, GL_STREAM_DRAW);
+        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, nullptr, GL_STREAM_DRAW);
 
         Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, &_vboStatesBlock, GL_STREAM_DRAW);
     }

@@ -1,8 +1,9 @@
+// Events passed to the Lua scripts.
 #ifndef WORLD_LUA_H_INCLUDED
 #define WORLD_LUA_H_INCLUDED
 
 #include "../system/luascript.h"
-#include "../types.h"
+#include "common/types.h"
 
 class NC_STACK_ypaworld;
 class NC_STACK_ypabact;
@@ -65,7 +66,7 @@ protected:
     static int Lua_IterUnitsGet(lua_State *l);
 
 protected:
-    NC_STACK_ypaworld *_wrld = NULL;
+    NC_STACK_ypaworld *_wrld = nullptr;
 };
 
 }

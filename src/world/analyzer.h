@@ -1,3 +1,4 @@
+// Situation analyser used by the host station AI.
 #ifndef SITUATION_ANALYZER_H
 #define SITUATION_ANALYZER_H
 

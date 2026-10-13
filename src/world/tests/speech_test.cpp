@@ -1,6 +1,6 @@
 // Native probe linked to the production engine objects, with SDL_main renamed.
-#include "../../yw.h"
-#include "../../env.h"
+#include "game/yw.h"
+#include "common/env.h"
 #include "../speech.h"
 #include <cstdio>
 #include <set>

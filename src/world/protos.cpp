@@ -1,10 +1,11 @@
+// Prototype helpers (visual tint parsing and defaults for vehicle, weapon, building and robo prototypes).
 #include "protos.h"
-#include "../env.h"
-#include "../utils.h"
-#include "../log.h"
-#include "../wav.h"
-#include "../ypabact.h"
-#include "../yw.h"
+#include "common/env.h"
+#include "common/utils.h"
+#include "common/log.h"
+#include "platform/wav.h"
+#include "game/ypabact.h"
+#include "game/yw.h"
 #include "../system/inivals.h"
 
 #include <algorithm>
@@ -32,7 +33,7 @@ bool ParseVisualTint(const std::string &text, TVisualTint *out)
         if ( part.empty() )
             return false;
 
-        char *tail = NULL;
+        char *tail = nullptr;
         const long value = std::strtol(part.c_str(), &tail, 10);
         if ( tail == part.c_str() )
             return false;
@@ -441,7 +442,7 @@ void TVhclSound::ClearSounds()
 
     for (TSampleParams &fragment : extS)
     {
-        fragment.Sample = NULL;
+        fragment.Sample = nullptr;
         fragment.rlOffset = 0;
         fragment.rlSmplCnt = 0;
     }
@@ -453,37 +454,37 @@ TVhclProto::~TVhclProto()
     if ( wireframe )
     {
         wireframe->Delete();
-        wireframe = NULL;
+        wireframe = nullptr;
     }
 
     if ( hud_wireframe )
     {
         hud_wireframe->Delete();
-        hud_wireframe = NULL;
+        hud_wireframe = nullptr;
     }
 
     if ( mg_wireframe )
     {
         mg_wireframe->Delete();
-        mg_wireframe = NULL;
+        mg_wireframe = nullptr;
     }
 
     if ( mgun_wireframe )
     {
         mgun_wireframe->Delete();
-        mgun_wireframe = NULL;
+        mgun_wireframe = nullptr;
     }
 
     if ( wpn_wireframe_1 )
     {
         wpn_wireframe_1->Delete();
-        wpn_wireframe_1 = NULL;
+        wpn_wireframe_1 = nullptr;
     }
 
     if ( wpn_wireframe_2 )
     {
         wpn_wireframe_2->Delete();
-        wpn_wireframe_2 = NULL;
+        wpn_wireframe_2 = nullptr;
     }
 
     Common::DeleteAndNull(&RoboProto);
@@ -494,7 +495,7 @@ TWeapProto::~TWeapProto()
     if ( wireframe )
     {
         wireframe->Delete();
-        wireframe = NULL;
+        wireframe = nullptr;
     }
 }
 

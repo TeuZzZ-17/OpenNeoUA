@@ -1,3 +1,4 @@
+// Lua scripting bridge.
 #ifndef SYSTEM_LUA_H_INCLUDED
 #define SYSTEM_LUA_H_INCLUDED
 
@@ -42,7 +43,7 @@ protected:
     static int ExportRunScript(lua_State *l);
 
 protected:
-    lua_State* _lua = NULL;
+    lua_State* _lua = nullptr;
 };
 
 }

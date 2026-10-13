@@ -41,7 +41,7 @@ public:
         return _data;
     };
 
-    virtual void copy(void *dst, size_t pos, size_t nbytes)
+    virtual void copy(void *dst, size_t pos, size_t nbytes) override
     {
         if (!dst || pos + nbytes > _datasz)
             return;
@@ -193,7 +193,7 @@ public:
         return _pos;
     }
 
-    virtual void copy(void *_dst, size_t pos, size_t nbytes)
+    virtual void copy(void *_dst, size_t pos, size_t nbytes) override
     {
         if (!_dst || pos + nbytes > _datasz)
             return;

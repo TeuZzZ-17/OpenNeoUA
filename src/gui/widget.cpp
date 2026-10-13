@@ -27,7 +27,7 @@ Widget::~Widget()
 
     for ( auto x : _childs )
     {
-        x->_parent = NULL;
+        x->_parent = nullptr;
         delete x;
     }
 }
@@ -55,7 +55,7 @@ void Widget::RemoveChild(Widget *child)
 {
     _modals.remove(child);
     _childs.remove(child);
-    child->_parent = NULL;
+    child->_parent = nullptr;
 
     child->OnAttachDetach(false);
 }
@@ -181,7 +181,7 @@ Common::Rect Widget::GetWidgetVisibleRect() const
 Widget *Widget::FindChildLPos(const Common::Point &pos)
 {
     if ( !IsEnabled() || !GetSizeRect().IsIn(pos) )
-        return NULL;
+        return nullptr;
 
     Common::Point cliPos = pos;
     bool inCli = true;
@@ -224,7 +224,7 @@ Widget *Widget::FindByMouse(const Common::Point &pos)
 Widget *Widget::FindChildByMouseLPos(const Common::Point &pos)
 {
     if ( !IsEnabled() || !GetSizeRect().IsIn(pos) )
-        return NULL;
+        return nullptr;
 
     if (!_childs.empty())
     {
@@ -245,7 +245,7 @@ Widget *Widget::FindChildByMouseLPos(const Common::Point &pos)
             {
                 if (w->IsEnabled())
                 {
-                    Widget * fnd = NULL;
+                    Widget * fnd = nullptr;
                     if (w->_flags & FLAG_PRIVATE)
                     {
                         if (w->_rect.IsIn(pos))
@@ -268,7 +268,7 @@ Widget *Widget::FindChildByMouseLPos(const Common::Point &pos)
             {
                 if (w->IsEnabled())
                 {
-                    Widget * fnd = NULL;
+                    Widget * fnd = nullptr;
 
                     if (w->_flags & FLAG_PRIVATE)
                     {
@@ -286,7 +286,7 @@ Widget *Widget::FindChildByMouseLPos(const Common::Point &pos)
     }
 
     if (_flags & FLAG_INP_SKIP)
-        return NULL;
+        return nullptr;
 
     return this;
 }
@@ -294,7 +294,7 @@ Widget *Widget::FindChildByMouseLPos(const Common::Point &pos)
 Widget *Widget::FindByID(uint32_t id, bool enabled)
 {
     if (enabled && !IsEnabled())
-        return NULL;
+        return nullptr;
 
     if (_id == id)
         return this;
@@ -305,7 +305,7 @@ Widget *Widget::FindByID(uint32_t id, bool enabled)
         if (t)
             return t;
     }
-    return NULL;
+    return nullptr;
 }
 
 
@@ -344,7 +344,7 @@ Common::Point Widget::GetScreenPos() const
 
 void Widget::SetEnable(bool enable)
 {
-    bool top = IsRooted() && _parent == NULL;
+    bool top = IsRooted() && _parent == nullptr;
     bool chg = enable != ((_flags & FLAG_ENABLED) != 0);
 
     if (enable)

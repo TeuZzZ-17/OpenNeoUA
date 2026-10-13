@@ -12,22 +12,22 @@ public:
 
     void Start(const std::string &name, uint16_t port, const std::string &sname, uint32_t max_players);
 
-    void ShowSession(bool show);
-    void CloseSession(uint32_t closeTime);
+    void ShowSession(bool show) override;
+    void CloseSession(uint32_t closeTime) override;
 
-    void KickUser(uint64_t _ID);
+    void KickUser(uint64_t _ID) override;
 
-    bool GetUsers(UserInfoVect &dst);
-    bool GetUser(UserInfo &dst, const char *name);
-    bool GetUser(UserInfo &dst, uint64_t _ID);
+    bool GetUsers(UserInfoVect &dst) override;
+    bool GetUser(UserInfo &dst, const char *name) override;
+    bool GetUser(UserInfo &dst, uint64_t _ID) override;
 
-    void SendData(uint64_t to, void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR);
-    void BroadcastData(void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR);
+    void SendData(uint64_t to, void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR) override;
+    void BroadcastData(void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR) override;
 
-    uint64_t GetMyID();
-    std::string GetMyName();
+    uint64_t GetMyID() override;
+    std::string GetMyName() override;
 
-    uint64_t GetMySesID();
+    uint64_t GetMySesID() override;
 
 protected:
     static int _RecvThread(void *data);

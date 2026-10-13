@@ -1,5 +1,6 @@
+// Transformation engine (TFEngine): matrices, projection and clipping of 3D data.
 #include "tform.h"
-#include "../nucleas.h"
+#include "nucleus/nucleas.h"
 #include "inivals.h"
 
 

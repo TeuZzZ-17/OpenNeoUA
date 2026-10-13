@@ -7,21 +7,21 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(CMAKE_CXX_STANDARD 14)
 
 set(SOURCES
-    3ds.cpp
-    ade.cpp
-    area.cpp
-    amesh.cpp
-    bitmap.cpp
-    base.cpp
-    bmpAnm.cpp
-    button.cpp
-    crashdiag.cpp
-    crc32.cpp
-    def_parser.cpp
-    embed.cpp
-    env.cpp
+    nucleus/3ds.cpp
+    nucleus/ade.cpp
+    nucleus/area.cpp
+    nucleus/amesh.cpp
+    nucleus/bitmap.cpp
+    nucleus/base.cpp
+    nucleus/bmpAnm.cpp
+    gui/button.cpp
+    common/crashdiag.cpp
+    common/crc32.cpp
+    common/def_parser.cpp
+    nucleus/embed.cpp
+    common/env.cpp
     fmtlib/format.cc
-    font.cpp
+    gui/font.cpp
     gui/root.cpp
     gui/uabutton.cpp
     gui/uacommon.cpp
@@ -30,20 +30,20 @@ set(SOURCES
     gui/uascroll.cpp
     gui/uawindow.cpp
     gui/widget.cpp
-    idev.cpp
-    ilbm.cpp
-    image.cpp
-    ini.cpp
-    itimer.cpp
-    iwimp.cpp
-    log.cpp
-    loaders.cpp
+    platform/idev.cpp
+    nucleus/ilbm.cpp
+    nucleus/image.cpp
+    common/ini.cpp
+    platform/itimer.cpp
+    platform/iwimp.cpp
+    common/log.cpp
+    nucleus/loaders.cpp
     locale/default.cpp
     locale/locale.cpp
-    lstvw.cpp
+    gui/lstvw.cpp
     main.cpp
-    IFFile.cpp
-    network.cpp
+    nucleus/IFFile.cpp
+    platform/network.cpp
     netlib/client.cpp
     netlib/client_threads.cpp
     netlib/server.cpp
@@ -52,13 +52,13 @@ set(SOURCES
     netlib/single.cpp
     netlib/single_threads.cpp
     netlib/zndNet.cpp
-    nucleas.cpp
-    obj3d.cpp
-    particle.cpp
-    rsrc.cpp
-    sample.cpp
-    skeleton.cpp
-    sklt.cpp
+    nucleus/nucleas.cpp
+    nucleus/obj3d.cpp
+    nucleus/particle.cpp
+    nucleus/rsrc.cpp
+    platform/sample.cpp
+    nucleus/skeleton.cpp
+    nucleus/sklt.cpp
     system/fsmgr.cpp
     system/gametime.cpp
     system/gfx.cpp
@@ -71,11 +71,11 @@ set(SOURCES
     system/stdshdr.cpp
     system/system.cpp
     system/tform.cpp
-    utils.cpp
-    wav.cpp
-    windp.cpp
-    winp.cpp
-    wintimer.cpp
+    common/utils.cpp
+    platform/wav.cpp
+    platform/windp.cpp
+    platform/winp.cpp
+    platform/wintimer.cpp
     world/analyzer.cpp
     world/blacksecttint.cpp
     world/energyfx.cpp
@@ -89,23 +89,71 @@ set(SOURCES
     world/saveparsers.cpp
     world/speech.cpp
     world/tools.cpp
-    wrapal.cpp
-    yw.cpp
-    yw_brif.cpp
-    yw_funcs.cpp
-    yw_func2.cpp
-    yw_game.cpp
-    yw_game_ui.cpp
-    yw_net.cpp
-    yw_save.cpp
-    ypabact.cpp
-    ypacar.cpp
-    ypaflyer.cpp
-    ypagun.cpp
-    ypamissile.cpp
-    yparobo.cpp
-    ypatank.cpp
-    ypaufo.cpp
+    platform/wrapal.cpp
+    game/yw.cpp
+    game/yw_shell.cpp
+    game/yw_sprint.cpp
+    game/yw_gem.cpp
+    game/yw_plasma.cpp
+    game/yw_ambient.cpp
+    game/yw_protos.cpp
+    game/yw_attached_fx.cpp
+    game/yw_brif.cpp
+    game/yw_funcs.cpp
+    game/yw_func2.cpp
+    game/yw_database.cpp
+    game/yw_options.cpp
+    game/yw_input_config.cpp
+    game/yw_game.cpp
+    game/yw_spectator.cpp
+    game/yw_superitem.cpp
+    game/yw_building_spawn.cpp
+    game/yw_mobile_power.cpp
+    game/yw_fx.cpp
+    game/yw_render.cpp
+    game/yw_recorder.cpp
+    game/yw_debug.cpp
+    game/yw_artillery_markers.cpp
+    game/yw_game_ui.cpp
+    game/yw_ui_artillery.cpp
+    game/yw_ui_squadron.cpp
+    game/yw_ui_map.cpp
+    game/yw_ui_hud.cpp
+    game/yw_ui_orders.cpp
+    game/yw_ui_voice.cpp
+    game/yw_ui_windows.cpp
+    game/yw_net.cpp
+    game/yw_save.cpp
+    game/ypabact.cpp
+    game/ypabact_ai.cpp
+    game/ypabact_user.cpp
+    game/ypabact_physics.cpp
+    game/ypabact_damage.cpp
+    game/ypabact_fire.cpp
+    game/ypabact_laser.cpp
+    game/ypabact_artillery.cpp
+    game/ypabact_kamikaze.cpp
+    game/ypabact_carrier.cpp
+    game/ypabact_proximity.cpp
+    game/ypabact_projectile.cpp
+    game/ypabact_recoil.cpp
+    game/ypabact_status_fx.cpp
+    game/ypabact_weapons.cpp
+    game/ypabact_camera.cpp
+    game/ypabact_control.cpp
+    game/ypacar.cpp
+    game/ypaflyer.cpp
+    game/ypagun.cpp
+    game/ypamissile.cpp
+    game/ypamissile_tracer.cpp
+    game/ypamissile_chain.cpp
+    game/ypamissile_blast.cpp
+    game/ypamissile_flight.cpp
+    game/yparobo.cpp
+    game/yparobo_player.cpp
+    game/yparobo_ai.cpp
+    game/ypatank.cpp
+    game/ypaufo.cpp
 )
 
 find_package(PkgConfig REQUIRED)

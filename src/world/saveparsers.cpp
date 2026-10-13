@@ -1,11 +1,12 @@
+// Parsers of the save-game files.
 #include <algorithm>
 
 #include "saveparsers.h"
 #include "../fmtlib/core.h"
 #include "../fmtlib/printf.h"
-#include "../yw.h"
-#include "../yparobo.h"
-#include "../log.h"
+#include "game/yw.h"
+#include "game/yparobo.h"
+#include "common/log.h"
 #include "history.h"
 
 
@@ -16,13 +17,13 @@ namespace World
 {
 namespace Parsers
 {
-NC_STACK_yparobo *SaveBact::_lastRobo = NULL;
-NC_STACK_ypabact *SaveBact::_lastCommander = NULL;
+NC_STACK_yparobo *SaveBact::_lastRobo = nullptr;
+NC_STACK_ypabact *SaveBact::_lastCommander = nullptr;
 
 void SaveBact::ResetHierarchyState()
 {
-    _lastRobo = NULL;
-    _lastCommander = NULL;
+    _lastRobo = nullptr;
+    _lastCommander = nullptr;
 }
 
 static bool IsStrictSaveBactField(const std::string &field)
@@ -477,9 +478,9 @@ bool SaveRoboParser::IsScope(ScriptParser::Parser &parser, const std::string &wo
     if ( StriCmp(word, "begin_robo") )
         return false;
 
-    _r = NULL;
-    _lastRobo = NULL;
-    _lastCommander = NULL;
+    _r = nullptr;
+    _lastRobo = nullptr;
+    _lastCommander = nullptr;
 
     ypaworld_arg146 v5;
     v5.pos.x = 600;
@@ -493,7 +494,7 @@ bool SaveRoboParser::IsScope(ScriptParser::Parser &parser, const std::string &wo
         return false;
 
     _lastRobo = _r;
-    _lastCommander = NULL;
+    _lastCommander = nullptr;
 
     _o.ypaworld_func134(_r);
 
@@ -527,8 +528,8 @@ bool SaveSquadParser::IsScope(ScriptParser::Parser &parser, const std::string &w
 {
     if ( !StriCmp(word, "begin_commander") )
     {
-        _c = NULL;
-        _lastCommander = NULL;
+        _c = nullptr;
+        _lastCommander = nullptr;
 
         if ( !_lastRobo )
         {
@@ -552,7 +553,7 @@ bool SaveSquadParser::IsScope(ScriptParser::Parser &parser, const std::string &w
     }
     else if ( !StriCmp(word, "begin_slave") )
     {
-        _c = NULL;
+        _c = nullptr;
 
         if ( !_lastCommander )
         {
@@ -827,10 +828,10 @@ int SaveHistoryParser::Handle(ScriptParser::Parser &parser, const std::string &p
         std::string tmp;
 
         stok.GetNext(&tmp);
-        int w = parser.stol(tmp, NULL, 0);
+        int w = parser.stol(tmp, nullptr, 0);
 
         stok.GetNext(&tmp);
-        int h = parser.stol(tmp, NULL, 0);
+        int h = parser.stol(tmp, nullptr, 0);
 
         std::vector<uint8_t> hh( w * h );
         size_t k = 0;
@@ -851,7 +852,7 @@ int SaveHistoryParser::Handle(ScriptParser::Parser &parser, const std::string &p
         History::Instance decoders;
 
         k = 0;
-        while(k < hh.size() && decoders[ hh.at(k) ] != NULL)
+        while(k < hh.size() && decoders[ hh.at(k) ] != nullptr)
         {
             size_t sz = decoders[ hh.at(k) ]->dataSize + 1;
             _o._history.Write(&hh.at(k), sz);

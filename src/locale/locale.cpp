@@ -9,8 +9,8 @@
 
 #include "world/consts.h"
 #include "system/fsmgr.h"
-#include "log.h"
-#include "utils.h"
+#include "common/log.h"
+#include "common/utils.h"
 
 namespace Locale {
 

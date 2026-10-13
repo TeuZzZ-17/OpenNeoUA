@@ -1,3 +1,4 @@
+// Master in-game clock (game time scale and pause).
 #include <algorithm>
 #include <cmath>
 #include "gametime.h"

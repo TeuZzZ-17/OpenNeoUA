@@ -1,3 +1,4 @@
+// Fixed-size and dynamic bit sets (BitMan, DynamicBitMan) used for flags and masks.
 #ifndef BITMAN_H_INCLUDED
 #define BITMAN_H_INCLUDED
 

@@ -1,6 +1,6 @@
 #include "uacommon.h"
-#include "../utils.h"
-#include "../yw.h"
+#include "common/utils.h"
+#include "game/yw.h"
 #include "../system/inivals.h"
 
 namespace Gui
@@ -9,15 +9,15 @@ namespace Gui
 std::array<TileMap *, UA::TILESET_MAX> UA::_UATiles;
 SDL_Color UA::_UATextColor;
 SDL_Color UA::_UAButtonTextColor;
-TTF_Font *UA::_UATTF = NULL;
+TTF_Font *UA::_UATTF = nullptr;
 int UA::_UAFontH = 0;
-NC_STACK_ypaworld *UA::yw = NULL;
+NC_STACK_ypaworld *UA::yw = nullptr;
 
 
 void UA::Init()
 {
     for (auto &x: _UATiles)
-        x = NULL;
+        x = nullptr;
 }
 
 void UA::Deinit()
@@ -49,10 +49,9 @@ void UA::LoadFont(const std::string &fontstr)
     if ( _UATTF )
     {
         TTF_CloseFont(_UATTF);
-        _UATTF = NULL;
+        _UATTF = nullptr;
     }
 
-    //stack__win3d.font.height = height;
     _UATTF = System::LoadFont(fontname, _UAFontH);
 
     if (!_UATTF)
@@ -143,7 +142,7 @@ void UA::DrawText(SDL_Surface *srf, const std::string &text, int flag, const SDL
     want.x = pp.x + 2;
     want.y = dy + 1;
 
-    SDL_BlitSurface(tmp, NULL, srf, &want);
+    SDL_BlitSurface(tmp, nullptr, srf, &want);
 
     clr = color;
 
@@ -163,11 +162,11 @@ void UA::DrawText(SDL_Surface *srf, const std::string &text, int flag, const SDL
     want.x = pp.x + 1;
     want.y = dy;
 
-    SDL_BlitSurface(tmp, NULL, srf, &want);
+    SDL_BlitSurface(tmp, nullptr, srf, &want);
     SDL_FreeSurface(tmp);
 
 
-    SDL_SetClipRect(srf, NULL);
+    SDL_SetClipRect(srf, nullptr);
 }
 
 }
