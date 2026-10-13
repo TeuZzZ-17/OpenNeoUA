@@ -1,3 +1,4 @@
+// Fixed 2D arrays (PlaneVector, PlaneArray) addressed by x/y.
 #ifndef PLANE_H_INCLUDED
 #define PLANE_H_INCLUDED
 

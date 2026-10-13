@@ -1,3 +1,4 @@
+// Visual profile of the energy status effect (regen/drain).
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -9,9 +10,9 @@
 #include "energyfx.h"
 #include "spin.h"
 #include "tools.h"
-#include "../log.h"
+#include "common/log.h"
 #include "../system/inivals.h"
-#include "../yw.h"
+#include "game/yw.h"
 
 namespace World
 {
@@ -27,7 +28,7 @@ static bool ParseLongStrict(const std::string &value, long *out)
         return false;
 
     errno = 0;
-    char *end = NULL;
+    char *end = nullptr;
     const char *begin = value.c_str();
     long parsed = std::strtol(begin, &end, 10);
 
@@ -50,7 +51,7 @@ static bool ParseFloatStrict(const std::string &value, float *out)
         return false;
 
     errno = 0;
-    char *end = NULL;
+    char *end = nullptr;
     const char *begin = value.c_str();
     float parsed = std::strtof(begin, &end);
 
@@ -130,7 +131,7 @@ static float ReadFloat(Common::Ini::Key &key, float fallback)
 static bool ParseTintComponent(const char *&pos, int *out)
 {
     errno = 0;
-    char *end = NULL;
+    char *end = nullptr;
     long value = std::strtol(pos, &end, 10);
 
     if ( end == pos || errno == ERANGE )

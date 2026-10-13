@@ -156,29 +156,29 @@ public:
     inline bool IsRooted() const { return _rooted != Root::LAYER_UNK; };
 
 public:
-    TFOnPoint    _fOnResize        = NULL;
-    void *       _fOnResizeData    = NULL;
-    TFOnPoint    _fOnMove          = NULL;
-    void *       _fOnMoveData      = NULL;
-    TFOnMouse    _fOnMouseMove     = NULL;
-    void *       _fOnMouseMoveData = NULL;
-    TFOnMouse    _fOnMouseDown     = NULL;
-    void *       _fOnMouseDownData = NULL;
-    TFOnMouse    _fOnMouseUp       = NULL;
-    void *       _fOnMouseUpData   = NULL;
-    TFOnWidget   _fOnMouseEnter    = NULL;
-    void *       _fOnMouseEnterData= NULL;
-    TFOnWidget   _fOnMouseLeave    = NULL;
-    void *       _fOnMouseLeaveData= NULL;
+    TFOnPoint    _fOnResize        = nullptr;
+    void *       _fOnResizeData    = nullptr;
+    TFOnPoint    _fOnMove          = nullptr;
+    void *       _fOnMoveData      = nullptr;
+    TFOnMouse    _fOnMouseMove     = nullptr;
+    void *       _fOnMouseMoveData = nullptr;
+    TFOnMouse    _fOnMouseDown     = nullptr;
+    void *       _fOnMouseDownData = nullptr;
+    TFOnMouse    _fOnMouseUp       = nullptr;
+    void *       _fOnMouseUpData   = nullptr;
+    TFOnWidget   _fOnMouseEnter    = nullptr;
+    void *       _fOnMouseEnterData= nullptr;
+    TFOnWidget   _fOnMouseLeave    = nullptr;
+    void *       _fOnMouseLeaveData= nullptr;
 
-    TFOnBool     _fOnAttachDetach     = NULL;
-    void *       _fOnAttachDetachData = NULL;
+    TFOnBool     _fOnAttachDetach     = nullptr;
+    void *       _fOnAttachDetachData = nullptr;
 
-    TFOnBool     _fOnHideShow      = NULL; // Only for rooted widgets
-    void *       _fOnHideShowData  = NULL;
+    TFOnBool     _fOnHideShow      = nullptr; // Only for rooted widgets
+    void *       _fOnHideShowData  = nullptr;
 
-    TFOnPoint    _fOnParentResize  = NULL;
-    void *       _fOnParentResizeData = NULL;
+    TFOnPoint    _fOnParentResize  = nullptr;
+    void *       _fOnParentResizeData = nullptr;
 
     bool               _modal  = false;
 
@@ -192,13 +192,13 @@ protected:
     uint32_t              _tag = 0;
     bool                _mOver = false;
     uint32_t            _flags = 0;
-    Widget            *_parent = NULL;
+    Widget            *_parent = nullptr;
     uint8_t            _alpha  = 255;
 
 
     // Used only with HW compositing and if it's "paranted" to root
-    SDL_Surface    *_hwSurface = NULL;
-    StreamTex      *_hwTex = NULL;
+    SDL_Surface    *_hwSurface = nullptr;
+    StreamTex      *_hwTex = nullptr;
 private:
     int    _rooted = Root::LAYER_UNK;
 };

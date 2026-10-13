@@ -28,14 +28,14 @@ public:
     UAScroll(Widget *parent, bool vertical = true);
     ~UAScroll();
 
-    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt);
+    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt) override;
 
-    virtual void MouseDown(Common::Point pos, Common::Point scrPos, int button);
-    virtual void MouseUp(Common::Point pos, Common::Point scrPos, int button);
-    virtual void MouseMove(Common::Point pos, Common::Point scrPos, int button);
-    virtual void Resize(Common::Point sz);
+    virtual void MouseDown(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void MouseUp(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void MouseMove(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void Resize(Common::Point sz) override;
 
-    virtual void TimerEvent(uint32_t code, uint32_t timerID);
+    virtual void TimerEvent(uint32_t code, uint32_t timerID) override;
 
     int GetScrollPos()      const { return _scrlPos; };
     int GetScrollCount()    const { return _scrlCount; };

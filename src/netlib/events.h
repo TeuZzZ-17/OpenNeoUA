@@ -84,7 +84,7 @@ public:
         else
         {
             size = 0;
-            data = NULL;
+            data = nullptr;
         }
 
     };

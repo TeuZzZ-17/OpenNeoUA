@@ -1,13 +1,14 @@
+// Sound engine (SFXEngine): carriers, volume/pitch handling, music and sound events.
 #include "../fmtlib/printf.h"
 #include "common/common.h"
-#include "../ini.h"
-#include "../log.h"
+#include "common/ini.h"
+#include "common/log.h"
 #include <math.h>
 #include <cstdlib>
 #include "sound.h"
 #include "common/common.h"
 #include "inivals.h"
-#include "../utils.h"
+#include "common/utils.h"
 #include "../world/tools.h"
 #include <algorithm>
 #include <limits>
@@ -129,7 +130,7 @@ void wrapper_playSound(waldev *driver, walsmpl *hSample, void (*funceos)(void *)
 
 int SFXEngine::init()
 {
-    digDriver = NULL;
+    digDriver = nullptr;
     audio_volume = 0;
     audio_channels = 0;
     audio_num_palfx = 0;
@@ -149,7 +150,7 @@ int SFXEngine::init()
     for (int i = 0; i < 64; i++)
         flt_546F18[i] = 0.0;
 
-    musPlayer = NULL;
+    musPlayer = nullptr;
     musWait = false;
     musOn = false;
     musWaitSTime = 0;
@@ -217,12 +218,11 @@ int SFXEngine::init()
 
 void SFXEngine::deinit()
 {
-    //deinit_redbook();
 
     if (digDriver)
     {
         delete digDriver;
-        digDriver = NULL;
+        digDriver = nullptr;
     }
 }
 
@@ -233,7 +233,6 @@ void SFXEngine::setMasterVolume(int vol)
     for (int i = 0; i < audio_channels; i++)
         snd_channels[i].hSample->setMasterVolume(audio_volume);
 
-//    wrapper_setVolume(digDriver, vol);
 }
 
 void SFXEngine::SetTimeScale(float scale, bool forceAll)
@@ -432,14 +431,14 @@ void SFXEngine::StopCarrier(TSndCarrier *carr)
 
                 snd_channels[i].hSample->stop();
 
-                snd_channels[i].sndSouce = NULL;
+                snd_channels[i].sndSouce = nullptr;
             }
 
             if (soundSources[i] && soundSources[i]->PCarrier == carr )
             {
                 soundSources[i]->SetPlay(false);
                 soundSources[i]->SetEnabled(false);
-                soundSources[i] = NULL;
+                soundSources[i] = nullptr;
             }
         }
     }
@@ -450,7 +449,7 @@ void SFXEngine::StopCarrier(TSndCarrier *carr)
         {
             palFXs[i]->SetPFxEnable(false);
             palFXs[i]->SetPFxPlay(false);
-            palFXs[i] = NULL;
+            palFXs[i] = nullptr;
         }
     }
 
@@ -460,7 +459,7 @@ void SFXEngine::StopCarrier(TSndCarrier *carr)
         {
             ShakeFXs[i]->SetShkEnable(false);
             ShakeFXs[i]->SetShkPlay(false);
-            ShakeFXs[i] = NULL;
+            ShakeFXs[i] = nullptr;
         }
     }
 
@@ -485,14 +484,14 @@ void SFXEngine::StopSource(TSoundSource *snd)
 
                 snd_channels[i].hSample->stop();
 
-                snd_channels[i].sndSouce = NULL;
+                snd_channels[i].sndSouce = nullptr;
             }
 
             if (soundSources[i] == snd )
             {
                 soundSources[i]->SetPlay(false);
                 soundSources[i]->SetEnabled(false);
-                soundSources[i] = NULL;
+                soundSources[i] = nullptr;
             }
         }
     }
@@ -503,7 +502,7 @@ void SFXEngine::StopSource(TSoundSource *snd)
         {
             palFXs[i]->SetPFxEnable(false);
             palFXs[i]->SetPFxPlay(false);
-            palFXs[i] = NULL;
+            palFXs[i] = nullptr;
         }
     }
 
@@ -513,7 +512,7 @@ void SFXEngine::StopSource(TSoundSource *snd)
         {
             ShakeFXs[i]->SetShkEnable(false);
             ShakeFXs[i]->SetShkPlay(false);
-            ShakeFXs[i] = NULL;
+            ShakeFXs[i] = nullptr;
         }
     }
 }
@@ -621,7 +620,7 @@ void SFXEngine::SoundCarrierProcessSounds(TSndCarrier *smpls, float distance)
                     if ( snd.IsPlay() )
                         fragId = snd.CurrentFrag;
                     else
-                        fragId = sub_423B3C(&snd, currentTime - snd.StartTime, NULL);
+                        fragId = sub_423B3C(&snd, currentTime - snd.StartTime, nullptr);
                 }
 
                 bool ok = true;
@@ -875,7 +874,7 @@ void SFXEngine::sb_0x424c74__sub0()
             {
                 v2->SetPlay(false);
 
-                snd_channels[i].sndSouce = NULL;
+                snd_channels[i].sndSouce = nullptr;
 
                 snd_channels[i].hSample->stop();
             }
@@ -1008,7 +1007,7 @@ void SFXEngine::sound_eos_clbk(void *_smpl)
     walsmpl *smpl = static_cast<walsmpl *>(_smpl);
 
     int v2 = 0;
-    TSoundSource *v3 = NULL;
+    TSoundSource *v3 = nullptr;
 
     for (int i = 0; i < SFXe.audio_channels; i++)
     {
@@ -1043,7 +1042,7 @@ void SFXEngine::sound_eos_clbk(void *_smpl)
                         if ( !SFXe.snd_channels[i].sndSouce )
                         {
                             smpl = SFXe.snd_channels[i].hSample;
-                            SFXe.snd_channels[v2].sndSouce = NULL;
+                            SFXe.snd_channels[v2].sndSouce = nullptr;
                             SFXe.snd_channels[i].sndSouce = v3;
                         }
                     }
@@ -1288,9 +1287,9 @@ void SFXEngine::sub_423EFC(int a1, const vec3d &a2, const vec3d &a3, const mat3x
     stru_547024 = a3;
     stru_547030 = a4;
 
-    soundSources.fill(NULL);
-    palFXs.fill(NULL);
-    ShakeFXs.fill(NULL);
+    soundSources.fill(nullptr);
+    palFXs.fill(nullptr);
+    ShakeFXs.fill(nullptr);
 }
 
 void SFXEngine::StopPlayingSounds()
@@ -1307,7 +1306,7 @@ void SFXEngine::StopPlayingSounds()
 
                 snd_channels[i].hSample->stop();
 
-                snd_channels[i].sndSouce = NULL;
+                snd_channels[i].sndSouce = nullptr;
             }
         }
     }
@@ -1318,7 +1317,7 @@ void SFXEngine::StopPlayingSounds()
         {
             soundSources[i]->SetPlay(false);
             soundSources[i]->SetEnabled(false);
-            soundSources[i] = NULL;
+            soundSources[i] = nullptr;
         }
     }
 
@@ -1328,7 +1327,7 @@ void SFXEngine::StopPlayingSounds()
         {
             palFXs[i]->SetPFxEnable(false);
             palFXs[i]->SetPFxPlay(false);
-            palFXs[i] = NULL;
+            palFXs[i] = nullptr;
         }
     }
 
@@ -1338,7 +1337,7 @@ void SFXEngine::StopPlayingSounds()
         {
             ShakeFXs[i]->SetShkEnable(false);
             ShakeFXs[i]->SetShkPlay(false);
-            ShakeFXs[i] = NULL;
+            ShakeFXs[i] = nullptr;
         }
     }
 }

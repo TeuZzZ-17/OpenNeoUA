@@ -1,10 +1,11 @@
+// Prototype structures of vehicles, weapons, buildings and robos (data read from the scripts).
 #ifndef WORLD_PROTOS_H_INCLUDED
 #define WORLD_PROTOS_H_INCLUDED
 
 #include "../system/sound.h"
-#include "../nucleas.h"
-#include "../sample.h"
-#include "../skeleton.h"
+#include "nucleus/nucleas.h"
+#include "platform/sample.h"
+#include "nucleus/skeleton.h"
 #include "speech.h"
 
 #include <cmath>
@@ -384,14 +385,14 @@ struct TVhclSound
     struct TSndSample
     {
         std::string Name;
-        NC_STACK_sample *Sample = NULL;
+        NC_STACK_sample *Sample = nullptr;
 
         void ClearLoaded()
         {
             if (Sample)
             {
                 Sample->Delete();
-                Sample = NULL;
+                Sample = nullptr;
             }
         }
 
@@ -636,7 +637,7 @@ struct TRoboGun
 {
     vec3d pos;
     vec3d dir;
-    NC_STACK_ypabact *gun_obj = NULL;
+    NC_STACK_ypabact *gun_obj = nullptr;
     std::string robo_gun_name;
     std::string icon;
     uint8_t robo_gun_type = 0;
@@ -1014,20 +1015,20 @@ struct TVhclProto
     bool job_fightgun_defined = false;
     bool job_conquer_defined = false;
     bool job_reconnoitre_defined = false;
-    NC_STACK_skeleton *wireframe = NULL;
-    NC_STACK_skeleton *hud_wireframe = NULL;
-    NC_STACK_skeleton *mg_wireframe = NULL;
+    NC_STACK_skeleton *wireframe = nullptr;
+    NC_STACK_skeleton *hud_wireframe = nullptr;
+    NC_STACK_skeleton *mg_wireframe = nullptr;
     // OpenNeoUA custom: optional Weapon-style info wireframe for gun_type = mg.
-    NC_STACK_skeleton *mgun_wireframe = NULL;
-    NC_STACK_skeleton *wpn_wireframe_1 = NULL;
-    NC_STACK_skeleton *wpn_wireframe_2 = NULL;
+    NC_STACK_skeleton *mgun_wireframe = nullptr;
+    NC_STACK_skeleton *wpn_wireframe_1 = nullptr;
+    NC_STACK_skeleton *wpn_wireframe_2 = nullptr;
     // OpenNeoUA custom: hide one lock marker while locked (shown when aiming only).
     IDVList initParams;
 
     bool hidden = false;
     int8_t unhideRadar = 0;
 
-    TRoboProto *RoboProto = NULL;
+    TRoboProto *RoboProto = nullptr;
     std::vector<TRoboGun> unit_guns;
 
     int is_mimic = 0;                       // OpenNeoUA: model = mimic shell/disguise proto
@@ -1237,8 +1238,6 @@ struct TWeapProto
                                          int &maxCount) const;
     TWeaponChainConfig chain;
     TDecorationFXConfig decoration_fx;
-//    int field_870 = 0;
-//    int field_874 = 0;
     int energy = 0;
     int blast_energy = 0;
     int blast_falloff = 0;
@@ -1250,7 +1249,6 @@ struct TWeapProto
     int armor_penetration_targets = 0; // OpenNeoUA custom: direct-hit unit penetrations before final impact
     std::string armor_penetration_icon; // OpenNeoUA custom: optional HUD capability icon
     float recoil = 0.0; // OpenNeoUA: physical Weapon recoil intensity 0..10
-//    int field_87C = 0;
     int life_time = 0;
     // OpenNeoUA: life_time accepts either a fixed value or an inclusive
     // min_max range. life_time remains the stable scalar/lower endpoint for
@@ -1390,7 +1388,7 @@ struct TWeapProto
     float artillery_shell_vertical_spread_z = 0.0;  // vertical_barrage only: random ascent tilt toward +/- world Z, in degrees
     int   artillery_shell_airburst = 1;             // 1 = explode at the target height; 0 = land on the real terrain height at the shell's own impact point
     std::string artillery_shell_marker_path = "artillery_ring_classic.svg"; // SVG path relative to Data/Interface/Map/Markers; invalid/missing falls back to the classic marker
-    NC_STACK_skeleton *wireframe = NULL;
+    NC_STACK_skeleton *wireframe = nullptr;
     IDVList initParams;
     std::vector<TChainFXConfig> chain_fx;
 

@@ -1,3 +1,4 @@
+// Movie playback (FFmpeg).
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -44,16 +45,16 @@ TMovie TMovie::Instance;
 
 struct TMovie::Context
 {
-    AVFormatContext *FormatCtx = NULL;
-    AVCodecContext  *VidCodecCtx = NULL;
-    AVCodecContext  *AudCodecCtx = NULL;
+    AVFormatContext *FormatCtx = nullptr;
+    AVCodecContext  *VidCodecCtx = nullptr;
+    AVCodecContext  *AudCodecCtx = nullptr;
 
 #if LIBAVCODEC_VERSION_MAJOR < 59
-    AVCodec         *VidCodec = NULL;
-    AVCodec         *AudCodec = NULL;
+    AVCodec         *VidCodec = nullptr;
+    AVCodec         *AudCodec = nullptr;
 #else
-    const AVCodec   *VidCodec = NULL;
-    const AVCodec   *AudCodec = NULL;
+    const AVCodec   *VidCodec = nullptr;
+    const AVCodec   *AudCodec = nullptr;
 #endif
 
     int videoStream = -1;
@@ -62,22 +63,22 @@ struct TMovie::Context
     std::list<AVFrame *> vidFrames;
     std::list<AVFrame *> audFrames;
 
-    AVPacket *packet = NULL;
-    AVFrame *vidFrame = NULL;
-    AVFrame *audFrame = NULL;
+    AVPacket *packet = nullptr;
+    AVFrame *vidFrame = nullptr;
+    AVFrame *audFrame = nullptr;
 
     bool playing = false;
     bool fileEOF = false;
 
-    struct SwsContext *sws_ctx = NULL;
+    struct SwsContext *sws_ctx = nullptr;
     GLuint screenTex = 0;
 
     uint8_t *dst_data[4];
     int dst_linesize[4];
 
     bool AudioSetted = false;
-    struct SwrContext *swr_ctx = NULL;
-    uint8_t **adst_data = NULL;
+    struct SwrContext *swr_ctx = nullptr;
+    uint8_t **adst_data = nullptr;
     int adst_linesize = 0;
     int adst_nb_samples = 0;
 };
@@ -144,12 +145,12 @@ bool TMovie::OpenFile(const std::string &fname)
         return false;
 
     // Trying to open video file
-    if (avformat_open_input(&_ctx->FormatCtx, file->getPath().c_str(), NULL, NULL) != 0)
+    if (avformat_open_input(&_ctx->FormatCtx, file->getPath().c_str(), nullptr, nullptr) != 0)
         return false;
 
     _ctx->fileEOF = false;
 
-    if (avformat_find_stream_info(_ctx->FormatCtx, NULL) < 0)
+    if (avformat_find_stream_info(_ctx->FormatCtx, nullptr) < 0)
       return false;
 
     _ctx->videoStream = av_find_best_stream(_ctx->FormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, &_ctx->VidCodec, 0);
@@ -164,7 +165,7 @@ bool TMovie::OpenFile(const std::string &fname)
     avcodec_copy_context(_ctx->VidCodecCtx, _ctx->FormatCtx->streams[_ctx->videoStream]->codec);
 #endif
 
-    if (avcodec_open2(_ctx->VidCodecCtx, _ctx->VidCodec, NULL) < 0)
+    if (avcodec_open2(_ctx->VidCodecCtx, _ctx->VidCodec, nullptr) < 0)
     {
         avcodec_free_context(&_ctx->VidCodecCtx);
         avformat_close_input(&_ctx->FormatCtx);
@@ -182,8 +183,8 @@ bool TMovie::OpenFile(const std::string &fname)
     _ctx->audioStream = av_find_best_stream(_ctx->FormatCtx, AVMEDIA_TYPE_AUDIO, -1, _ctx->videoStream, &_ctx->AudCodec, 0);
     _ctx->AudioSetted = false;
 
-    _ctx->swr_ctx = NULL;
-    _ctx->adst_data = NULL;
+    _ctx->swr_ctx = nullptr;
+    _ctx->adst_data = nullptr;
     _ctx->adst_linesize = 0;
     _ctx->adst_nb_samples = 0;
 
@@ -196,7 +197,7 @@ bool TMovie::OpenFile(const std::string &fname)
         avcodec_copy_context(_ctx->AudCodecCtx, _ctx->FormatCtx->streams[_ctx->audioStream]->codec);
 #endif
 
-        int ret = avcodec_open2(_ctx->AudCodecCtx, _ctx->AudCodec, NULL);
+        int ret = avcodec_open2(_ctx->AudCodecCtx, _ctx->AudCodec, nullptr);
         if (ret < 0)
         {
             avcodec_free_context(&_ctx->AudCodecCtx);
@@ -227,7 +228,7 @@ void TMovie::Close()
     if (_ctx->sws_ctx)
     {
         sws_freeContext(_ctx->sws_ctx);
-        _ctx->sws_ctx = NULL;
+        _ctx->sws_ctx = nullptr;
 
         av_freep(&_ctx->dst_data[0]);
     }
@@ -257,7 +258,7 @@ void TMovie::Close()
     if (_ctx->swr_ctx)
     {
         swr_free(&_ctx->swr_ctx);
-        _ctx->swr_ctx = NULL;
+        _ctx->swr_ctx = nullptr;
     }
 
     if (_ctx->adst_data)
@@ -392,9 +393,9 @@ void TMovie::ProcessFrame(uint32_t tm)
                         frm->height,
                         AV_PIX_FMT_RGB24,
                         SWS_BILINEAR,
-                        NULL,
-                        NULL,
-                        NULL
+                        nullptr,
+                        nullptr,
+                        nullptr
                         );
 
         av_image_alloc(_ctx->dst_data, _ctx->dst_linesize,
@@ -440,7 +441,7 @@ void TMovie::ProcessFrame(uint32_t tm)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frm->width, frm->height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frm->width, frm->height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
     }
 
     pStates.Tex = _ctx->screenTex;
@@ -506,14 +507,14 @@ void TMovie::ProcessAudio()
 #ifndef OLDCHANNEL
                     swr_alloc_set_opts2(&_ctx->swr_ctx, &frm->ch_layout, AV_SAMPLE_FMT_U8, _ctx->AudCodecCtx->sample_rate,
                                                 &_ctx->AudCodecCtx->ch_layout, _ctx->AudCodecCtx->sample_fmt, _ctx->AudCodecCtx->sample_rate,
-                                          0, NULL);
+                                          0, nullptr);
                     swr_init(_ctx->swr_ctx);
                     av_samples_alloc_array_and_samples(&_ctx->adst_data, &_ctx->adst_linesize, Common::MIN(2, channels), frm->nb_samples, AV_SAMPLE_FMT_U8, 0);
                     _ctx->adst_nb_samples = frm->nb_samples;
 #else
-                    _ctx->swr_ctx = swr_alloc_set_opts(NULL, (frm->channels > 1 ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO), AV_SAMPLE_FMT_U8, _ctx->AudCodecCtx->sample_rate,
+                    _ctx->swr_ctx = swr_alloc_set_opts(nullptr, (frm->channels > 1 ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO), AV_SAMPLE_FMT_U8, _ctx->AudCodecCtx->sample_rate,
                                                              _ctx->AudCodecCtx->channel_layout, _ctx->AudCodecCtx->sample_fmt, _ctx->AudCodecCtx->sample_rate,
-                                                       0, NULL);
+                                                       0, nullptr);
                     swr_init(_ctx->swr_ctx);
                     av_samples_alloc_array_and_samples(&_ctx->adst_data, &_ctx->adst_linesize, Common::MIN(2, channels), frm->nb_samples, AV_SAMPLE_FMT_U8, 0);
                     _ctx->adst_nb_samples = frm->nb_samples;
@@ -531,14 +532,14 @@ void TMovie::ProcessAudio()
 #ifndef OLDCHANNEL
                     swr_alloc_set_opts2(&_ctx->swr_ctx, &frm->ch_layout, AV_SAMPLE_FMT_S16, _ctx->AudCodecCtx->sample_rate,
                                               &_ctx->AudCodecCtx->ch_layout, _ctx->AudCodecCtx->sample_fmt, _ctx->AudCodecCtx->sample_rate,
-                                          0, NULL);
+                                          0, nullptr);
                     swr_init(_ctx->swr_ctx);
                     av_samples_alloc_array_and_samples(&_ctx->adst_data, &_ctx->adst_linesize, Common::MIN(2, channels), frm->nb_samples, AV_SAMPLE_FMT_S16, 0);
                     _ctx->adst_nb_samples = frm->nb_samples;
 #else
-                    _ctx->swr_ctx = swr_alloc_set_opts(NULL, (frm->channels > 1 ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO), AV_SAMPLE_FMT_S16, _ctx->AudCodecCtx->sample_rate,
+                    _ctx->swr_ctx = swr_alloc_set_opts(nullptr, (frm->channels > 1 ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO), AV_SAMPLE_FMT_S16, _ctx->AudCodecCtx->sample_rate,
                                                              _ctx->AudCodecCtx->channel_layout, _ctx->AudCodecCtx->sample_fmt, _ctx->AudCodecCtx->sample_rate,
-                                                       0, NULL);
+                                                       0, nullptr);
                     swr_init(_ctx->swr_ctx);
                     av_samples_alloc_array_and_samples(&_ctx->adst_data, &_ctx->adst_linesize, Common::MIN(2, channels), frm->nb_samples, AV_SAMPLE_FMT_S16, 0);
                     _ctx->adst_nb_samples = frm->nb_samples;
@@ -623,7 +624,6 @@ void TMovie::PlayMovie(const std::string &fname, int volume)
 
         if (_ctx->audioStream >= 0)
         {
-            //if (!audFrames.empty() && (SFXEngine::SFXe.AudioStream->DataLeft() < minLeft || nextPA <= curPts) )
             if (!_ctx->audFrames.empty())
                 ProcessAudio();
 

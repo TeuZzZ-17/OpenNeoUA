@@ -4,7 +4,7 @@
 #include <cmath>
 #include <inttypes.h>
 
-#include "../matrix.h"
+#include "common/matrix.h"
 
 namespace World
 {

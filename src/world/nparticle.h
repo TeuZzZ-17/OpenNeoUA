@@ -1,10 +1,11 @@
+// ParticleSystem: particle simulation used by effects.
 #ifndef WORLD_NPARTICLE_H_INCLUDED
 #define WORLD_NPARTICLE_H_INCLUDED
 
 #include <vector>
 #include "../system/tform.h"
 #include "../system/gfx.h"
-#include "../vectors.h"
+#include "common/vectors.h"
 
 class NC_STACK_particle;
 class NC_STACK_skeleton;
@@ -21,7 +22,7 @@ public:
 protected:
     struct Frak
     {
-        NC_STACK_particle *pParticleGen = NULL;
+        NC_STACK_particle *pParticleGen = nullptr;
 
         vec3d Pos;
         vec3d Vec;

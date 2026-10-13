@@ -1,10 +1,10 @@
 // Focused integration probe against the production parser and actor methods.
 // Link production objects with main.cpp's SDL_main renamed; no game session needed.
-#include "../../yw.h"
-#include "../../ypatank.h"
-#include "../../ypacar.h"
-#include "../../ypaflyer.h"
-#include "../../ypagun.h"
+#include "game/yw.h"
+#include "game/ypatank.h"
+#include "game/ypacar.h"
+#include "game/ypaflyer.h"
+#include "game/ypagun.h"
 #include "../parsers.h"
 #include <cmath>
 #include <cstdio>
@@ -174,13 +174,13 @@ int main() {
             bact_arg106 targeting{};
             targeting.field_4 = Aim(0); // Permission must still follow the reticle.
             targeting.ret_bact = &flyer;
-            Check(actor->UserTargeting(&targeting) == 0 && targeting.ret_bact == NULL &&
-                  world._guiVisor.field_18 == NULL && world._hudMissileMultiLockTargets.empty(),
+            Check(actor->UserTargeting(&targeting) == 0 && targeting.ret_bact == nullptr &&
+                  world._guiVisor.field_18 == nullptr && world._hudMissileMultiLockTargets.empty(),
                   "outside either bound releases HUD and multi-target lock");
-            Check(actor->_secndTtype == BACT_TGT_TYPE_NONE && actor->_secndT.pbact == NULL &&
+            Check(actor->_secndTtype == BACT_TGT_TYPE_NONE && actor->_secndT.pbact == nullptr &&
                   actor->_userHomingPrimaryTargetGid == 0 && !actor->_userHomingTargetCycleRequested,
                   "outside bound clears retained and pending lock targets");
-            Check(actor->UserTargeting(&targeting) == 0 && targeting.ret_bact == NULL,
+            Check(actor->UserTargeting(&targeting) == 0 && targeting.ret_bact == nullptr,
                   "outside bound prevents reacquisition on following frame");
             Check(!actor->RequestHomingTargetCycle() && !actor->_userHomingTargetCycleRequested,
                   "outside bound rejects manual target cycling");
@@ -208,14 +208,14 @@ int main() {
         targeting.field_0 = 5;
         targeting.field_4 = actor->GetUserWeaponAimDirection();
         flyer._position = actor->_position + Aim(20) * 400;
-        Check(actor->UserTargeting(&targeting) == 0 && world._guiVisor.field_18 == NULL,
+        Check(actor->UserTargeting(&targeting) == 0 && world._guiVisor.field_18 == nullptr,
               "valid reticle cannot acquire an out-of-scope enemy");
         flyer._position = actor->_position + Aim(5) * 400;
         Check(actor->UserTargeting(&targeting) == 1 && targeting.ret_bact == &flyer &&
               world._guiVisor.field_18 == &flyer, "in-scope enemy still acquires normal lock");
         flyer._position = actor->_position + Aim(20) * 400;
         Check(actor->UserTargeting(&targeting) == 0 && actor->_secndTtype == BACT_TGT_TYPE_NONE &&
-              world._guiVisor.field_18 == NULL, "moving enemy releases lock after leaving scope");
+              world._guiVisor.field_18 == nullptr, "moving enemy releases lock after leaving scope");
         actor->_oflags = 0;
         bact_arg101 ai{};
         ai.unkn = 2;

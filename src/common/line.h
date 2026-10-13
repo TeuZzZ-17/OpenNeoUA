@@ -1,3 +1,4 @@
+// 2D line type (TLine) of the Common namespace.
 #ifndef COMMONLINE_H_INCLUDED
 #define COMMONLINE_H_INCLUDED
 

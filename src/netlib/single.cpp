@@ -43,7 +43,7 @@ Pkt *ZNDSingle::Recv_PreparePacket(InRawPkt *pkt)
     {
         // Incorrect packet
         delete pkt;
-        return NULL;
+        return nullptr;
     }
 
     NetUser *from = users.FindByIP(pkt->addr);
@@ -59,7 +59,7 @@ Pkt *ZNDSingle::Recv_PreparePacket(InRawPkt *pkt)
             AddrSeq ipseq;
             ipseq.set(pkt->addr, pkt->hdr.seqid);
 
-            InPartedPkt *parted = NULL;
+            InPartedPkt *parted = nullptr;
 
             for (PartedList::iterator it = pendingPkt.begin(); it != pendingPkt.end(); it++)
             {
@@ -96,7 +96,7 @@ Pkt *ZNDSingle::Recv_PreparePacket(InRawPkt *pkt)
         delete pkt;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void ZNDSingle::ProcessSystemPkt(Pkt* pkt)
@@ -109,7 +109,7 @@ void ZNDSingle::ProcessSystemPkt(Pkt* pkt)
 
     MemReader rd(pkt->data + 1, pkt->datasz - 1);
 
-    if (pkt->user == NULL)
+    if (pkt->user == nullptr)
     {
         if (pkt->data[0] == SYS_MSG_HANDSHAKE && rd.size() >= 4 &&
             session.open && session.HasSlot())
@@ -163,7 +163,7 @@ void ZNDSingle::ProcessSystemPkt(Pkt* pkt)
 
             NetUser *usr = users.Alloc();
 
-            if (usr == NULL) // No free space
+            if (usr == nullptr) // No free space
             {
                 SrvSendConnErr(pkt->addr, ERR_CONN_FULL);
                 return;
@@ -180,8 +180,6 @@ void ZNDSingle::ProcessSystemPkt(Pkt* pkt)
             usr->sesID = 0;
             usr->net = true;
 
-            //sLobby.users.push_back(usr);
-            //usr->sesID = sLobby.ID;
             SrvSendConnected(usr, false);
             UserToSession(usr, &session);
 
@@ -461,7 +459,7 @@ void ZNDSingle::CloseSession(uint32_t closeTime)
             dat->writeU8(SYS_MSG_SES_CLOSE);
             dat->writeU32(closeTime);
 
-            SrvSessionBroadcast(&session, dat, PKT_FLAG_SYSTEM, 0, NULL);
+            SrvSessionBroadcast(&session, dat, PKT_FLAG_SYSTEM, 0, nullptr);
 
             Events_Push( new Event(EVENT_SESSION_END, closeTime) );
         }

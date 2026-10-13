@@ -1,6 +1,7 @@
+// Lua scripting bridge.
 #include "luascript.h"
 #include "../fmtlib/printf.h"
-#include "../utils.h"
+#include "common/utils.h"
 
 namespace System
 {
@@ -23,7 +24,7 @@ void LuaScript::Register()
 {
     static luaL_Reg Funcs[] =
     { {"RunScript", ExportRunScript}
-    , {NULL, NULL} };
+    , {nullptr, nullptr} };
 
     luaL_newlib(_lua, Funcs);
     lua_setglobal(_lua, "System");
@@ -90,7 +91,7 @@ void LuaScript::RunBuffer(lua_State *l, const std::string &buffer)
 {
     int top = lua_gettop(l);
 
-    if ( luaL_loadbuffer(l, buffer.c_str(), buffer.size(), NULL) != LUA_OK )
+    if ( luaL_loadbuffer(l, buffer.c_str(), buffer.size(), nullptr) != LUA_OK )
     {
         printf("Err on loading script %s\n %s\n", buffer.c_str(), lua_tostring(l, -1));
         return;

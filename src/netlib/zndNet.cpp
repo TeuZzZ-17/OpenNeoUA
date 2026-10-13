@@ -12,15 +12,14 @@ ZNDNet::ZNDNet(const std::string &servstring)
 
     threadsEnd = true;
 
-    updateThread = NULL;
+    updateThread = nullptr;
 
-    recvThread = NULL;
+    recvThread = nullptr;
     recvPktListMutex = SDL_CreateMutex();
 
-    sendThread = NULL;
+    sendThread = nullptr;
     sendPktListMutex = SDL_CreateMutex();
 
-    //confirmPktList.clear();
     confirmQueueMutex = SDL_CreateMutex();
 
     eSyncMutex = SDL_CreateMutex();
@@ -247,7 +246,7 @@ void ZNDNet::Events_Push(Event *evnt)
 Event *ZNDNet::Events_Pop()
 {
     if ( eEventList.empty() )
-        return NULL;
+        return nullptr;
 
     if (SDL_LockMutex(eEventMutex) == 0)
     {
@@ -261,7 +260,7 @@ Event *ZNDNet::Events_Pop()
         return tmp;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void ZNDNet::Events_ClearByType(uint32_t type)
@@ -319,7 +318,7 @@ Event *ZNDNet::Events_PeekByType(uint32_t type)
         }
         SDL_UnlockMutex(eEventMutex);
     }
-    return NULL;
+    return nullptr;
 }
 
 Event *ZNDNet::Events_WaitForMsg(uint32_t type, uint32_t time)
@@ -382,13 +381,13 @@ Event *ZNDNet::Events_WaitForMsg(uint32_t type, uint32_t time)
     }
 
     eEventWaitLock--;
-    return NULL;
+    return nullptr;
 }
 
 Event *ZNDNet::Events_PopSystem()
 {
     if ( eEventList.empty() )
-        return NULL;
+        return nullptr;
 
     if (SDL_LockMutex(eEventMutex) == 0)
     {
@@ -408,7 +407,7 @@ Event *ZNDNet::Events_PopSystem()
         SDL_UnlockMutex(eEventMutex);
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void ZNDNet::Confirm_Clear(const IPaddress &addr)
@@ -464,7 +463,7 @@ void ZNDNet::Pending_Clear()
 RefData *ZNDNet::USRDataGenData(uint64_t from, bool cast, uint64_t to, void *data, uint32_t sz)
 {
     if (!data || !sz)
-        return NULL;
+        return nullptr;
 
     RefDataWStream *rfdat = RefDataWStream::create(32 + sz);
     rfdat->writeU8(USR_MSG_DATA);
@@ -481,8 +480,8 @@ void ZNDNet::Stop()
     if (updateThread)
     {
         threadsEnd = true;
-        SDL_WaitThread(updateThread, NULL);
-        updateThread = NULL;
+        SDL_WaitThread(updateThread, nullptr);
+        updateThread = nullptr;
     }
 }
 
@@ -580,7 +579,7 @@ void ZNDNet::SrvSendConnErr(const IPaddress &addr, uint8_t type)
 RefData *ZNDNet::SrvDataGenUserJoin(NetUser *usr)
 {
     if (!usr)
-        return NULL;
+        return nullptr;
 
     RefDataWStream *dat = RefDataWStream::create();
     dat->writeU8(USR_MSG_SES_USERJOIN);
@@ -608,7 +607,7 @@ void ZNDNet::SrvSendSessionJoin(NetUser *usr, NetSession *ses, bool leader)
 RefData *ZNDNet::SrvDataGenUserList(NetSession *ses)
 {
     if (!ses || ses->lobby)
-        return NULL;
+        return nullptr;
 
     RefDataWStream *dat = RefDataWStream::create();
     dat->writeU8(USR_MSG_SES_USERLIST);
@@ -651,7 +650,7 @@ void ZNDNet::SrvSendDisconnect(NetUser *usr)
 RefData *ZNDNet::SrvDataGenUserLeave(NetUser *usr, uint8_t type)
 {
     if (!usr)
-        return NULL;
+        return nullptr;
 
     RefDataWStream *dat = RefDataWStream::create(16);
     dat->writeU8(USR_MSG_SES_USERLEAVE);
@@ -719,7 +718,7 @@ void ZNDNet::Recv_PushInRaw(InRawPkt *inpkt)
 
 InRawPkt *ZNDNet::Recv_PopInRaw()
 {
-    InRawPkt *ret = NULL;
+    InRawPkt *ret = nullptr;
 
     if (SDL_LockMutex(recvPktListMutex) == 0)
     {

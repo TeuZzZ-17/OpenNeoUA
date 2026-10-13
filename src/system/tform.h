@@ -1,12 +1,13 @@
+// Transformation engine (TFEngine): matrices, projection and clipping of 3D data.
 #ifndef ENGINE_TFORM_H_INCLUDED
 #define ENGINE_TFORM_H_INCLUDED
 
 #include <array>
 #include <inttypes.h>
-#include "../vectors.h"
-#include "../matrix.h"
-#include "../ini.h"
-#include "../IFFile.h"
+#include "common/vectors.h"
+#include "common/matrix.h"
+#include "common/ini.h"
+#include "nucleus/IFFile.h"
 
 
 namespace TF
@@ -40,7 +41,7 @@ public:
     void CalcGlobal();
 
 public:
-    TForm3D *Parent = NULL;
+    TForm3D *Parent = nullptr;
     vec3d Pos;
     vec3d CalcPos;
     vec3d Scale;
@@ -188,7 +189,7 @@ public:
 
 protected:
     std::array<SinCos, 361> SinCos_table;
-    TForm3D *viewPoint = NULL;
+    TForm3D *viewPoint = nullptr;
 };
 
 

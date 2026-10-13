@@ -1,6 +1,7 @@
+// System::IniConf: every setting read from the INI files (name, default, value).
 #include <inttypes.h>
 #include "inivals.h"
-#include "utils.h"
+#include "common/utils.h"
 
 namespace System
 {

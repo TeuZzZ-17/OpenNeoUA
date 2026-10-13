@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include "../vectors.h"
+#include "common/vectors.h"
 
 namespace World
 {

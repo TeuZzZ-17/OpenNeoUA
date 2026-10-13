@@ -26,9 +26,9 @@ public:
     void UnsetBtnFlags(int flags) { _btnFlags &= ~flags; }
     void AsignBtnFlags(int flags) { _btnFlags = flags; }
 
-    virtual void MouseDown(Common::Point pos, Common::Point scrPos, int button);
-    virtual void MouseUp(Common::Point pos, Common::Point scrPos, int button);
-    virtual void MouseMove(Common::Point pos, Common::Point scrPos, int button);
+    virtual void MouseDown(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void MouseUp(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void MouseMove(Common::Point pos, Common::Point scrPos, int button) override;
 
 protected:
     virtual void OnBtnPress();
@@ -38,11 +38,11 @@ public:
     int32_t    Tag          = 0;
 
 
-    TFOnWidget  _fOnPress     = NULL;
-    void *      _fOnPressData = NULL;
+    TFOnWidget  _fOnPress     = nullptr;
+    void *      _fOnPressData = nullptr;
 
-    TFOnWidget  _fOnClick     = NULL;
-    void *      _fOnClickData = NULL;
+    TFOnWidget  _fOnClick     = nullptr;
+    void *      _fOnClickData = nullptr;
 
 protected:
     uint32_t _btnFlags = 0;
@@ -61,9 +61,9 @@ public:
     void SetTileSets(int up, int down, int lock);
     void SetColor(SDL_Color clr);
 
-    virtual void Resize(Common::Point sz);
+    virtual void Resize(Common::Point sz) override;
 
-    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt);
+    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt) override;
 
 protected:
     void Init();
@@ -95,10 +95,10 @@ public:
     void SetTilesDown(const std::string &tiles, int tileset) { _downTiles = tiles; _downTilesSet = tileset;}
     void SetTileSets(int up, int down, int lock);
 
-    virtual void Resize(Common::Point sz);
+    virtual void Resize(Common::Point sz) override;
     using Widget::Resize;
 
-    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt);
+    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt) override;
 
 protected:
     Common::Point FixSizes(Common::Point sz);
@@ -130,9 +130,9 @@ public:
     void SetTileUp(uint8_t tile, int tileset) { _upTile = tile; _upTileSet = tileset;}
     void SetTileDown(uint8_t tile, int tileset) { _downTile = tile; _downTileSet = tileset;}
 
-    virtual void Resize(Common::Point sz);
+    virtual void Resize(Common::Point sz) override;
 
-    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt);
+    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt) override;
 protected:
     void Init(uint8_t upTile, uint8_t downTile, const Common::PointRect &xyw, int upSet, int downSet);
 protected:

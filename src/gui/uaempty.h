@@ -15,8 +15,8 @@ public:
     UAEmpty(Common::PointRect xyw);
     UAEmpty(Widget *parent, const Common::PointRect &xyw);
 
-    virtual void OnAttachDetach(bool attach);
-    virtual void OnParentResize(Common::Point newSz);
+    virtual void OnAttachDetach(bool attach) override;
+    virtual void OnParentResize(Common::Point newSz) override;
 
 protected:
     void Update();

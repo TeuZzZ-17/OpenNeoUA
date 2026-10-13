@@ -1,3 +1,4 @@
+// Built-in GLSL shader sources of the renderer.
 
 #include "gfx.h"
 

@@ -2,8 +2,8 @@
 #define WORLD_GUNROTATION_H
 
 #include <cstdint>
-#include "../matrix.h"
-#include "../utils.h"
+#include "common/matrix.h"
+#include "common/utils.h"
 
 namespace World {
 

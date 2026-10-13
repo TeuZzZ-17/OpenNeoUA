@@ -28,10 +28,10 @@ public:
 
     virtual void SetInform(bool onlyInform);
 
-    virtual void OnAttachDetach(bool attach);
-    virtual void OnParentResize(Common::Point newSz);
+    virtual void OnAttachDetach(bool attach) override;
+    virtual void OnParentResize(Common::Point newSz) override;
 
-    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt);
+    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt) override;
 
     virtual void SetTexts(const std::string &str1, const std::string &str2);
 
@@ -43,7 +43,7 @@ protected:
 
     void Init(uint8_t type);
 
-    virtual void Update();
+    virtual void Update() override;
 
 public:
 
@@ -60,8 +60,8 @@ protected:
     Common::PointRect _txtRect1;
     Common::PointRect _txtRect2;
 
-    UATextButton *_okBtn   = NULL;
-    UATextButton *_cancelBtn  = NULL;
+    UATextButton *_okBtn   = nullptr;
+    UATextButton *_cancelBtn  = nullptr;
 };
 
 

@@ -1,7 +1,8 @@
+// System::IniConf: every setting read from the INI files (name, default, value).
 #ifndef WORLD_INIVALS_H_INCLUDED
 #define WORLD_INIVALS_H_INCLUDED
 
-#include "../ini.h"
+#include "common/ini.h"
 
 namespace System
 {

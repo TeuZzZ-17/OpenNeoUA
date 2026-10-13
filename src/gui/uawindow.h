@@ -28,12 +28,12 @@ public:
     UAWindow(Widget *parent, const std::string &title, Common::PointRect posRect, uint32_t flags = FLAG_WND_CLOSE | FLAG_WND_RESIZEABLE);
     ~UAWindow();
 
-    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt);
+    virtual void Draw(SDL_Surface *surface, const Common::Rect &dirt) override;
 
-    virtual void MouseDown(Common::Point pos, Common::Point scrPos, int button);
-    virtual void MouseUp(Common::Point pos, Common::Point scrPos, int button);
-    virtual void MouseMove(Common::Point pos, Common::Point scrPos, int button);
-    virtual void Resize(Common::Point sz);
+    virtual void MouseDown(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void MouseUp(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void MouseMove(Common::Point pos, Common::Point scrPos, int button) override;
+    virtual void Resize(Common::Point sz) override;
 
 protected:
     static void OnCloseClick(Widget *w, void *); // For button
@@ -47,8 +47,8 @@ protected:
     void Init(const std::string &title, Common::PointRect posRect, uint32_t flags);
 
 public:
-    TFOnWidget   _fOnHelpClick          = NULL;
-    void *       _fOnHelpClickData      = NULL;
+    TFOnWidget   _fOnHelpClick          = nullptr;
+    void *       _fOnHelpClickData      = nullptr;
 
 public:
     std::string   _title;
@@ -57,12 +57,12 @@ public:
     Common::Point _rszPnt;
 
 
-    UAOneTileButton *_helpBtn   = NULL;
-    UAOneTileButton *_closeBtn  = NULL;
-    UAOneTileButton *_maxmBtn   = NULL;
+    UAOneTileButton *_helpBtn   = nullptr;
+    UAOneTileButton *_closeBtn  = nullptr;
+    UAOneTileButton *_maxmBtn   = nullptr;
 
-    UAScroll *_vScroll  = NULL;
-    UAScroll *_hScroll  = NULL;
+    UAScroll *_vScroll  = nullptr;
+    UAScroll *_hScroll  = nullptr;
 
     Common::Rect _titleRect;
 
