@@ -1,11 +1,12 @@
+// Input engine: keyboard, mouse and joystick state and key mapping.
 #include <algorithm>
 #include <cstdint>
 #include "common/common.h"
-#include "../ini.h"
-#include "../log.h"
+#include "common/ini.h"
+#include "common/log.h"
 #include "inpt.h"
 #include "inivals.h"
-#include "winp.h"
+#include "platform/winp.h"
 
 namespace Input{
 
@@ -1112,7 +1113,7 @@ void INPEngine::TClickCheck::GetClick(TClickBoxInf *click, TMousePos &mouse)
 void INPEngine::TClickCheck::CheckClick(TClickBoxInf *arg)
 {
     arg->flag |= TClickBoxInf::FLAG_OK;
-    arg->selected_btn = NULL;
+    arg->selected_btn = nullptr;
     arg->selected_btnID = -1;
 
     GetClick(arg, arg->move);

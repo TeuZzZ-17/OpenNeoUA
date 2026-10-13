@@ -156,9 +156,9 @@ protected:
     WidgetList      _foreground;
     WidgetList      _background;
     WidgetList          _modals;
-    Widget*            _focused = NULL;
-    Widget*             _miceOn = NULL;
-    Widget*           _dragging = NULL;
+    Widget*            _focused = nullptr;
+    Widget*             _miceOn = nullptr;
+    Widget*           _dragging = nullptr;
     Common::Point      _dragPos;
     Common::Point      _micePos;
     int                _buttons = 0;
@@ -174,7 +174,7 @@ protected:
 
     Common::Point      _screenSize;
 
-    SDL_Surface       *_dirtSurface = NULL;
+    SDL_Surface       *_dirtSurface = nullptr;
 };
 
 static constexpr Root &Instance = Root::Instance;

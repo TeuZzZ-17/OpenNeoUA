@@ -1,3 +1,4 @@
+// System: resolution/aspect-ratio types and platform helpers.
 #include <string>
 #include <list>
 #include <algorithm>
@@ -10,7 +11,7 @@
 #include "system.h"
 #include "fsmgr.h"
 #include "inivals.h"
-#include "../utils.h"
+#include "common/utils.h"
 
 
 namespace System
@@ -104,8 +105,8 @@ static TFontLookup FontsLookup[]
 };
 
 
-static SDL_Window *window = NULL;
-static SDL_GLContext cont = NULL;
+static SDL_Window *window = nullptr;
+static SDL_GLContext cont = nullptr;
 static ResRatio winRes(640, 480);
 static bool curRelMouse = false;
 
@@ -188,7 +189,7 @@ static void ScanFontDir(const std::string &path)
     FSMgr::DirIter dir = FSMgr::iDir::readDir(path);
     if (dir)
     {
-        FSMgr::iNode *nod = NULL;
+        FSMgr::iNode *nod = nullptr;
         while(dir.getNext(&nod))
         {
             if (nod && nod->getType() == FSMgr::iNode::NTYPE_FILE)
@@ -338,7 +339,7 @@ TTF_Font *LoadFont(const std::string &fontname, int height)
     for (size_t i = 0; i < tmp2.length(); i++)
         tmp2[i] = std::tolower(tmp2[i]);
 
-    TTF_Font *fnt = NULL;
+    TTF_Font *fnt = nullptr;
 
     std::string filename = FindFont(tmp2);
 
@@ -487,7 +488,7 @@ bool ProcessEvents()
 
         for(SDL_EventFilter &e : EventHandlers)
         {
-            if ( (e)(NULL, &event) == 0 )
+            if ( (e)(nullptr, &event) == 0 )
                 break;
         }
     }

@@ -1,3 +1,4 @@
+// Wireframe/visual tint of the Black Sect faction.
 #ifndef WORLD_BLACKSECTTINT_H_INCLUDED
 #define WORLD_BLACKSECTTINT_H_INCLUDED
 

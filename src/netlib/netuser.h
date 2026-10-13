@@ -57,7 +57,7 @@ struct NetUser
         seqid = 0;
 
         __idx = -1;
-        __master = NULL;
+        __master = nullptr;
 
         net = false;
     };
@@ -95,7 +95,7 @@ public:
     NetUser *Alloc()
     {
         if (freeUsers.empty())
-            return NULL;
+            return nullptr;
 
         NetUser *usr = freeUsers.front();
         freeUsers.pop_front();
@@ -124,7 +124,7 @@ public:
                 return (*it);
         }
 
-        return NULL;
+        return nullptr;
     }
 
     NetUser *FindByID(uint64_t ID)
@@ -135,7 +135,7 @@ public:
                 return (*it);
         }
 
-        return NULL;
+        return nullptr;
     }
 
     NetUser *FindByName(const std::string &name)
@@ -149,7 +149,7 @@ public:
             }
         }
 
-        return NULL;
+        return nullptr;
     }
 
     void Init()

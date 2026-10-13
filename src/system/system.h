@@ -1,3 +1,4 @@
+// System: resolution/aspect-ratio types and platform helpers.
 #ifndef UA_SYSTEM_H_INCLUDED
 #define UA_SYSTEM_H_INCLUDED
 

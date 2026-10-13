@@ -1,12 +1,10 @@
 // Synthetic terrain fixture linked to the production world and decal builder.
-#include "../../yw.h"
-#include "../../skeleton.h"
+#include "game/yw.h"
+#include "nucleus/skeleton.h"
 #include <cstdio>
 #include <memory>
 #undef main
 
-NC_STACK_ypaworld *ypaworld = NULL;
-TInputState input_states;
 
 namespace
 {
@@ -88,8 +86,8 @@ int main()
     world->_isNetGame = false;
     fx.trigger = World::TChainFXConfig::TRIGGER_AIR_DESTROYED;
     Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "only destroyed decal blocks accepted");
-    world->_legoArray[0].CollisionSkelet = NULL;
-    world->_fillerSide = NULL;
+    world->_legoArray[0].CollisionSkelet = nullptr;
+    world->_fillerSide = nullptr;
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);
     return failures ? 1 : 0;
 }

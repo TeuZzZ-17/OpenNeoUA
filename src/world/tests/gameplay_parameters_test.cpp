@@ -1,6 +1,6 @@
 // Include this production unit to exercise its private Smart selector directly.
-#include "../../ypabact.cpp"
-#include "../../ypamissile.h"
+#include "game/ypabact.cpp"
+#include "game/ypamissile.h"
 #include "../parsers.h"
 #include <cstdio>
 #include <fstream>

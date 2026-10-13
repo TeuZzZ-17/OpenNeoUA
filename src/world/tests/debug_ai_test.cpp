@@ -1,7 +1,7 @@
 // Integration probe linked against production actor/world objects.
-#include "../../yw.h"
-#include "../../ypabact.h"
-#include "../../yparobo.h"
+#include "game/yw.h"
+#include "game/ypabact.h"
+#include "game/yparobo.h"
 #include "../../system/inivals.h"
 #include <cstdio>
 #undef main

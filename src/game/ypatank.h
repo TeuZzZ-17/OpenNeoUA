@@ -1,0 +1,91 @@
+// NC_STACK_ypatank: tank (ground unit with turret).
+#ifndef YTANK_H_INCLUDED
+#define YTANK_H_INCLUDED
+
+#include "nucleus/nucleas.h"
+#include "game/ypabact.h"
+
+class NC_STACK_ypatank: public NC_STACK_ypabact
+{
+public:
+    enum FLAG_TANK
+    {
+        FLAG_TANK_TIP     = (1 << 0),
+        FLAG_TANK_ROTWAIT = (1 << 1)
+    };
+
+    enum ALIGN
+    {
+        ALIGN_NONE = 0,
+        ALIGN_DONE = 1,
+        ALIGN_NORMAL = 2,
+    };
+
+    enum
+    {
+        COLL_WALL_L = (1 << 0),
+        COLL_WALL_R = (1 << 1),
+        COLL_HILL_L = (1 << 2),
+        COLL_HILL_R = (1 << 3),
+    };
+public:
+    virtual size_t Init(IDVList &stak) override;
+    virtual size_t Deinit() override;
+    virtual size_t SetParameters(IDVList &stak) override;
+    virtual void AI_layer3(update_msg *arg) override;
+    virtual void User_layer(update_msg *arg) override;
+    virtual void setBACT_inputting(bool inpt) override;
+    virtual void Move(move_msg *arg) override;
+    virtual size_t SetPosition(bact_arg80 *arg) override;
+    virtual void ApplyImpulse(bact_arg83 *arg) override;
+    virtual size_t CollisionWithBact(int arg) override;
+    void HandleShapeUnitCollision(NC_STACK_ypabact *other, const vec3d &normal);
+    void HandleShapeWorldCollision(const Collision::Contact &contact) override;
+    size_t HandleShapeUnitContact(const Collision::Contact &contact, int frameTime) override;
+    void BeginWorldCollisionAvoidance(const vec3d &normal);
+    virtual void Recoil(bact_arg88 *arg) override;
+    virtual void Renew() override;
+    virtual size_t CheckFireAI(bact_arg101 *arg) override;
+    virtual bool TestTargetSector(const NC_STACK_ypabact * cel_unit) const override;
+    virtual void CorrectPositionOnLand() override;
+    virtual int AlignVehicleAI(float dtime, vec3d *pNormal);
+    virtual int AlignVehicleUser(float dtime, const vec3d &oldDir);
+
+    NC_STACK_ypatank();
+    virtual ~NC_STACK_ypatank() {};
+
+    virtual const std::string ClassName() const override {
+        return __ClassName;
+    };
+
+
+    virtual bool IsGroundUnit() const override { return true; };
+
+    enum TANK_ATT
+    {
+        TANK_ATT_TIP = 0x80002000
+    };
+
+    virtual void setTANK_tip(int);
+
+    virtual int getTANK_tip();
+
+
+    vec3d TankTip(vec3d v);
+    //Data
+public:
+    static constexpr const char * __ClassName = "ypatank.class";
+
+protected:
+    void BeginUnitCollisionAvoidance(float angle, bool right, bool mustPass);
+    uint8_t _tankFlags;
+    int     _tankWaitCount;
+    vec3d   _tankCollisionVector;
+    float   _tankCollisionAngle;
+    float   _tankCollisionWay;
+    uint8_t _tankCollisionFlag;
+    bool    _tankExpectTgt;
+};
+
+
+#endif // YTANK_H_INCLUDED

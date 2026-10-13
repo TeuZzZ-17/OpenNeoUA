@@ -1,13 +1,14 @@
+// Script parsers that fill the prototypes (vehicles, weapons, buildings...).
 #ifndef WORLD_PARSERS_H_INCLUDED
 #define WORLD_PARSERS_H_INCLUDED
 
 #include <string>
-#include "../types.h"
-#include "../utils.h"
+#include "common/types.h"
+#include "common/utils.h"
 #include "common/common.h"
 #include "common/plane.h"
 
-#include "../def_parser.h"
+#include "common/def_parser.h"
 
 #include "protos.h"
 
@@ -36,8 +37,8 @@ class UserParser : public ScriptParser::DataHandler
 {
 public:
     UserParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     bool ReadUserNameFile(const std::string &filename);
 
@@ -48,8 +49,8 @@ class InputParser : public ScriptParser::DataHandler
 {
 public:
     InputParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     bool _isNewInputScope = false;
@@ -65,8 +66,8 @@ class ColorParser : public ScriptParser::DataHandler
 {
 public:
     ColorParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "begin_colors"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "begin_colors"); };
 protected:
     NC_STACK_ypaworld &_o;
 };
@@ -75,8 +76,8 @@ class MovieParser : public ScriptParser::DataHandler
 {
 public:
     MovieParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
 };
@@ -85,8 +86,8 @@ class BkgParser : public ScriptParser::DataHandler
 {
 public:
     BkgParser(NC_STACK_ypaworld *o);
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "begin_bg"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "begin_bg"); };
 
 protected:
     TMapRegionsNet &_o;
@@ -96,8 +97,8 @@ class SuperItemParser : public ScriptParser::DataHandler
 {
 public:
     SuperItemParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
 };
@@ -107,11 +108,11 @@ class SuperItemProfileParser : public ScriptParser::DataHandler
 public:
     SuperItemProfileParser(std::vector<TSuperItemProfile> *profiles)
     : _profiles(*profiles) {};
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     std::vector<TSuperItemProfile> &_profiles;
-    TSuperItemProfile *_profile = NULL;
+    TSuperItemProfile *_profile = nullptr;
 };
 
 class BuffProfileParser : public ScriptParser::DataHandler
@@ -119,11 +120,11 @@ class BuffProfileParser : public ScriptParser::DataHandler
 public:
     BuffProfileParser(std::map<int32_t, TVehicleBuffConfig> *profiles)
     : _profiles(*profiles) {};
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     std::map<int32_t, TVehicleBuffConfig> &_profiles;
-    TVehicleBuffConfig *_profile = NULL;
+    TVehicleBuffConfig *_profile = nullptr;
     int32_t _profileID = -1;
 };
 
@@ -132,11 +133,11 @@ class DebuffProfileParser : public ScriptParser::DataHandler
 public:
     DebuffProfileParser(std::map<int32_t, TWeaponDebuffConfig> *profiles)
     : _profiles(*profiles) {};
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     std::map<int32_t, TWeaponDebuffConfig> &_profiles;
-    TWeaponDebuffConfig *_profile = NULL;
+    TWeaponDebuffConfig *_profile = nullptr;
     int32_t _profileID = -1;
 };
 
@@ -145,8 +146,8 @@ class AtmosphericFXProfileParser : public ScriptParser::DataHandler
 public:
     AtmosphericFXProfileParser(TAtmosphericFXProfile *profile)
     : _profile(*profile) {};
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     TAtmosphericFXProfile &_profile;
     bool _seenScope = false;
@@ -157,8 +158,8 @@ class MiscParser : public ScriptParser::DataHandler
 {
 public:
     MiscParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
 };
@@ -169,8 +170,8 @@ class VideoParser : public ScriptParser::DataHandler
 {
 public:
     VideoParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "new_video"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "new_video"); };
 protected:
     NC_STACK_ypaworld &_o;
     bool _initialized = false;
@@ -180,8 +181,8 @@ class SoundParser : public ScriptParser::DataHandler
 {
 public:
     SoundParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "new_sound"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "new_sound"); };
 protected:
     NC_STACK_ypaworld &_o;
 };
@@ -190,8 +191,8 @@ class LevelStatusParser : public ScriptParser::DataHandler
 {
 public:
     LevelStatusParser(NC_STACK_ypaworld *o, bool setFlag) : _o(*o), _levelId(0), _setFlag(setFlag) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     int _levelId;
@@ -202,8 +203,8 @@ class BuddyParser : public ScriptParser::DataHandler
 {
 public:
     BuddyParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
 };
@@ -212,8 +213,8 @@ class ShellParser : public ScriptParser::DataHandler
 {
 public:
     ShellParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "new_shell"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "new_shell"); };
 protected:
     void ParseStatus(ScriptParser::Parser &parser, TMFWinStatus *status, const std::string &p2);
 
@@ -233,11 +234,11 @@ class VhclProtoParser : public ScriptParser::DataHandler, public FxParser
 {
 friend FxParser;
 public:
-    VhclProtoParser(NC_STACK_ypaworld *o, int32_t forcedVhclID = -1) : _o(*o), _vhcl(NULL), _vhclID(-1), _isModify(false), _gunID(-1), _unitGunID(-1), _collID(-1), _forcedVhclID(forcedVhclID) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    VhclProtoParser(NC_STACK_ypaworld *o, int32_t forcedVhclID = -1) : _o(*o), _vhcl(nullptr), _vhclID(-1), _isModify(false), _gunID(-1), _unitGunID(-1), _collID(-1), _forcedVhclID(forcedVhclID) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
-    virtual TVhclSound *GetSndFxByName(const std::string &sndname);
+    virtual TVhclSound *GetSndFxByName(const std::string &sndname) override;
 
     NC_STACK_ypaworld &_o;
     TVhclProto *_vhcl;
@@ -255,11 +256,11 @@ class WeaponProtoParser : public ScriptParser::DataHandler, public FxParser
 {
 friend FxParser;
 public:
-    WeaponProtoParser(NC_STACK_ypaworld *o) : _o(*o), _wpn(NULL), _wpnID(-1), _isModify(false), _collID(-1) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    WeaponProtoParser(NC_STACK_ypaworld *o) : _o(*o), _wpn(nullptr), _wpnID(-1), _isModify(false), _collID(-1) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
-    virtual TVhclSound *GetSndFxByName(const std::string &sndname);
+    virtual TVhclSound *GetSndFxByName(const std::string &sndname) override;
 
     NC_STACK_ypaworld &_o;
     TWeapProto *_wpn;
@@ -271,9 +272,9 @@ protected:
 class BuildProtoParser : public ScriptParser::DataHandler
 {
 public:
-    BuildProtoParser(NC_STACK_ypaworld *o) : _o(*o), _bld(NULL), _bldID(-1), _isModify(false), _gunID(-1) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    BuildProtoParser(NC_STACK_ypaworld *o) : _o(*o), _bld(nullptr), _bldID(-1), _isModify(false), _gunID(-1) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     TBuildingProto *_bld;
@@ -287,8 +288,8 @@ class LevelDataParser : public ScriptParser::DataHandler
 {
 public:
     LevelDataParser(NC_STACK_ypaworld *o, TLevelDescription *p) : _o(*o), _m(*p) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     TLevelDescription &_m;
@@ -298,9 +299,9 @@ protected:
 class MapRobosParser : public ScriptParser::DataHandler
 {
 public:
-    MapRobosParser(TLevelDescription *m) : _m(*m), _r(NULL) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    MapRobosParser(TLevelDescription *m) : _m(*m), _r(nullptr) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     TLevelDescription &_m;
     MapRobo *_r;
@@ -310,8 +311,8 @@ class MapSizesParser : public ScriptParser::DataHandler
 {
 public:
     MapSizesParser(TLevelDescription *m) : _m(*m) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "begin_maps"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "begin_maps"); };
 protected:
     Common::Point ParseSizes(ScriptParser::Parser &parser);
 
@@ -321,9 +322,9 @@ protected:
 class LevelGemParser : public ScriptParser::DataHandler
 {
 public:
-    LevelGemParser(NC_STACK_ypaworld *o) : _o(*o), _g(NULL) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    LevelGemParser(NC_STACK_ypaworld *o) : _o(*o), _g(nullptr) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     TMapGem *_g;
@@ -332,9 +333,9 @@ protected:
 class LevelSquadParser : public ScriptParser::DataHandler
 {
 public:
-    LevelSquadParser(TLevelDescription *m) : _m(*m), _s(NULL) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    LevelSquadParser(TLevelDescription *m) : _m(*m), _s(nullptr) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     TLevelDescription &_m;
     MapSquad *_s;
@@ -343,9 +344,9 @@ protected:
 class LevelGatesParser : public ScriptParser::DataHandler
 {
 public:
-    LevelGatesParser(NC_STACK_ypaworld *o) : _o(*o), _g(NULL) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    LevelGatesParser(NC_STACK_ypaworld *o) : _o(*o), _g(nullptr) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     TMapGate *_g;
@@ -354,9 +355,9 @@ protected:
 class LevelMbMapParser : public ScriptParser::DataHandler
 {
 public:
-    LevelMbMapParser(TLevelDescription *m) : _m(*m), _d(NULL) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    LevelMbMapParser(TLevelDescription *m) : _m(*m), _d(nullptr) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     TLevelDescription &_m;
     TBkgPicInfo *_d;
@@ -372,8 +373,8 @@ class LevelMapsParser : public ScriptParser::DataHandler, public MapAsPlaneBytes
 {
 public:
     LevelMapsParser(NC_STACK_ypaworld *o, TLevelDescription *m) : _o(*o), _m(*m) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     TLevelDescription &_m;
@@ -382,9 +383,9 @@ protected:
 class LevelDebMapParser : public ScriptParser::DataHandler
 {
 public:
-    LevelDebMapParser(TLevelDescription *m) : _m(*m), _d(NULL) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    LevelDebMapParser(TLevelDescription *m) : _m(*m), _d(nullptr) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     TLevelDescription &_m;
     TBkgPicInfo *_d;
@@ -394,8 +395,8 @@ class LevelEnableParser : public ScriptParser::DataHandler
 {
 public:
     LevelEnableParser(NC_STACK_ypaworld *o) : _o(*o), _fraction(0) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     int _fraction;
@@ -404,9 +405,9 @@ protected:
 class LevelSuperItemsParser : public ScriptParser::DataHandler
 {
 public:
-    LevelSuperItemsParser(NC_STACK_ypaworld *o) : _o(*o), _s(NULL) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt);
+    LevelSuperItemsParser(NC_STACK_ypaworld *o) : _o(*o), _s(nullptr) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
     TMapSuperItem *_s;
@@ -416,8 +417,8 @@ class ShellSoundParser : public ScriptParser::DataHandler
 {
 public:
     ShellSoundParser(UserData *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "begin_shellsounds"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "begin_shellsounds"); };
 protected:
     UserData &_o;
 };
@@ -426,8 +427,8 @@ class ShellTracksParser : public ScriptParser::DataHandler
 {
 public:
     ShellTracksParser(UserData *o) : _o(*o) {} ;
-    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2);
-    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) { return !StriCmp(word, "begin_shelltracks"); };
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "begin_shelltracks"); };
 protected:
     UserData &_o;
 };

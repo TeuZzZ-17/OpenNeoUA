@@ -16,17 +16,17 @@ public:
 
     void Start(uint16_t port);
 
-    void ShowSession(bool show) {};
-    void CloseSession(uint32_t closeTime) {};
+    void ShowSession(bool show) override {};
+    void CloseSession(uint32_t closeTime) override {};
 
-    void KickUser(uint64_t _ID) {};
+    void KickUser(uint64_t _ID) override {};
 
-    bool GetUsers(UserInfoVect &dst) {return false;};
-    bool GetUser(UserInfo &dst, const char *name) {return false;};
-    bool GetUser(UserInfo &dst, uint64_t _ID) {return false;};
+    bool GetUsers(UserInfoVect &dst) override {return false;};
+    bool GetUser(UserInfo &dst, const char *name) override {return false;};
+    bool GetUser(UserInfo &dst, uint64_t _ID) override {return false;};
 
-    void SendData(uint64_t to, void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR) {};
-    void BroadcastData(void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR) {};
+    void SendData(uint64_t to, void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR) override {};
+    void BroadcastData(void *data, uint32_t sz, uint8_t flags = 0, uint8_t channel = CHANNEL_USR) override {};
 
 protected:
     Pkt *Recv_PreparePacket(InRawPkt *pkt);

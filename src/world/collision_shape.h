@@ -1,3 +1,4 @@
+// Model-derived collision shapes (see collision_shape.md).
 #ifndef OPENNEOUA_COLLISION_SHAPE_H
 #define OPENNEOUA_COLLISION_SHAPE_H
 
@@ -6,7 +7,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "../matrix.h"
+#include "common/matrix.h"
 
 class NC_STACK_ypabact;
 class NC_STACK_ypaworld;

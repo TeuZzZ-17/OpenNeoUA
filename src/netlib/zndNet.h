@@ -172,7 +172,7 @@ protected:
 
     void SrvSendSessionJoin(NetUser *usr, NetSession *ses, bool leader);
 
-    void SrvSessionBroadcast(NetSession *ses, RefData *dat, uint8_t flags, uint8_t chnl = 0, NetUser *from = NULL);
+    void SrvSessionBroadcast(NetSession *ses, RefData *dat, uint8_t flags, uint8_t chnl = 0, NetUser *from = nullptr);
 
     RefData *SrvDataGenUserJoin(NetUser *usr);
     RefData *SrvDataGenUserList(NetSession *ses);

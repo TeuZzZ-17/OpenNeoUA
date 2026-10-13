@@ -1,6 +1,7 @@
-#include "../yw.h"
-#include "../loaders.h"
-#include "../log.h"
+// Weapon tracer visuals (mesh tracers).
+#include "game/yw.h"
+#include "nucleus/loaders.h"
+#include "common/log.h"
 
 #include <algorithm>
 #include <cmath>
@@ -79,7 +80,7 @@ static float WeaponTracerHashSigned(uint32_t seed, uint32_t key)
 }
 
 static mat3x3 WeaponTracerRotationFromDir(const vec3d &direction,
-                                             const mat3x3 *orientationHint = NULL)
+                                             const mat3x3 *orientationHint = nullptr)
 {
     vec3d z = direction;
     if ( z.normalise() <= 0.001f )
@@ -613,7 +614,7 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
 
     RenderMeshBeamSegment(arg, start, end, renderConfig, _timeStamp,
                           (float)_normalVizLimit, (float)_normalFadeLength,
-                          tailFactor, headFactor, visualSeed, NULL, externalMesh);
+                          tailFactor, headFactor, visualSeed, nullptr, externalMesh);
 }
 
 void NC_STACK_ypaworld::RenderLaserMeshSegment(
@@ -696,7 +697,7 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalMesh(
     const std::string &path)
 {
     if ( path.empty() )
-        return NULL;
+        return nullptr;
 
     std::string normalizedPath;
     if ( !uaNormalizeDataAssetPath(path, &normalizedPath, true) )
@@ -704,11 +705,11 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalMesh(
         const auto cached = _sharedExternalMeshes.find(path);
         if ( cached == _sharedExternalMeshes.end() )
         {
-            _sharedExternalMeshes[path] = NULL;
+            _sharedExternalMeshes[path] = nullptr;
             ypa_log_out("External mesh '%s' is not a valid Data path.\n",
                         path.c_str());
         }
-        return NULL;
+        return nullptr;
     }
 
     const auto cached = _sharedExternalMeshes.find(normalizedPath);
@@ -724,10 +725,10 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalMesh(
         // Cache failures too so a bad authored path does not trigger disk I/O
         // for every visual request. Legacy relative paths are normalized to
         // their canonical Data/... form before reaching this point.
-        _sharedExternalMeshes[normalizedPath] = NULL;
+        _sharedExternalMeshes[normalizedPath] = nullptr;
         ypa_log_out("External mesh '%s' could not be loaded.\n",
                     normalizedPath.c_str());
-        return NULL;
+        return nullptr;
     }
 
     meshObject->MakeVBO();
@@ -749,7 +750,7 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalBase(
     const std::string &path)
 {
     if ( path.empty() )
-        return NULL;
+        return nullptr;
 
     std::string normalizedPath;
     if ( !NormalizeExternalBasePath(path, &normalizedPath) )
@@ -757,11 +758,11 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalBase(
         const auto cached = _sharedExternalBases.find(path);
         if ( cached == _sharedExternalBases.end() )
         {
-            _sharedExternalBases[path] = NULL;
+            _sharedExternalBases[path] = nullptr;
             ypa_log_out("External BASE '%s' is not a valid Data .BASE path.\n",
                         path.c_str());
         }
-        return NULL;
+        return nullptr;
     }
 
     const auto cached = _sharedExternalBases.find(normalizedPath);
@@ -783,10 +784,10 @@ NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalBase(
     {
         // Cache failures too: a missing file or dependency is resolved once per
         // active SET and callers immediately fall back to the legacy VP.
-        _sharedExternalBases[normalizedPath] = NULL;
+        _sharedExternalBases[normalizedPath] = nullptr;
         ypa_log_out("External BASE '%s' could not be loaded; legacy VP fallback used.\n",
                     normalizedPath.c_str());
-        return NULL;
+        return nullptr;
     }
 
     baseObject->MakeVBO();

@@ -1,3 +1,4 @@
+// Movie playback (FFmpeg).
 #ifndef ENGINE_MOVIE_H_INCLUDED
 #define ENGINE_MOVIE_H_INCLUDED
 
@@ -34,7 +35,7 @@ private:
 public:
     static TMovie Instance;
 private:
-    Context *_ctx = NULL;
+    Context *_ctx = nullptr;
 };
 
 static constexpr TMovie &Movie = TMovie::Instance;

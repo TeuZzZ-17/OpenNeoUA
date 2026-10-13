@@ -1,3 +1,4 @@
+// Virtual file system (FSMgr): assigns like data:, save:, loose overrides and case-insensitive lookup.
 #ifndef SFMGR_H_INCLUDED
 #define SFMGR_H_INCLUDED
 
@@ -49,7 +50,7 @@ protected:
     std::string name;
     int type = NTYPE_NONE;
 
-    iDir *parent = NULL;
+    iDir *parent = nullptr;
 };
 
 

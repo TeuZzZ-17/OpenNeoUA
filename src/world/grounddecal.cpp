@@ -1,3 +1,4 @@
+// Ground decals (burn marks, craters) placed by weapons and wrecks.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -6,11 +7,11 @@
 #include <vector>
 
 #include "grounddecal_contact.h"
-#include "../env.h"
-#include "../includes.h"
-#include "../loaders.h"
-#include "../nucleas.h"
-#include "../yw_internal.h"
+#include "common/env.h"
+#include "common/includes.h"
+#include "nucleus/loaders.h"
+#include "nucleus/nucleas.h"
+#include "game/yw_internal.h"
 #include "../system/inivals.h"
 
 namespace
@@ -1004,7 +1005,7 @@ static NC_STACK_bitmap *GroundDecalBakedEdgeFadeTexture(NC_STACK_ypaworld *world
                     // Copy semantics: the fade must be transferred exactly,
                     // never blended with the fresh surface.
                     SDL_SetSurfaceBlendMode(work, SDL_BLENDMODE_NONE);
-                    if ( SDL_BlitSurface(work, NULL, baked->GetSwTex(), NULL) == 0 )
+                    if ( SDL_BlitSurface(work, nullptr, baked->GetSwTex(), nullptr) == 0 )
                     {
                         baked->PrepareTexture(false);
                         result = baked;
@@ -1080,7 +1081,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &co
                 continue;
             if ( location.CollisionType != 1 )
                 sub_44E07C(location);
-            UAskeleton::Data *skeleton = location.sklt ? location.sklt->GetSkelet() : NULL;
+            UAskeleton::Data *skeleton = location.sklt ? location.sklt->GetSkelet() : nullptr;
             if ( !skeleton )
                 continue;
 
@@ -1141,7 +1142,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &co
     // before the existing decal builder copies its central polygon.
     if ( bestLocation.CollisionType != 1 )
         sub_44E07C(bestLocation);
-    bestHit.skel = bestLocation.sklt ? bestLocation.sklt->GetSkelet() : NULL;
+    bestHit.skel = bestLocation.sklt ? bestLocation.sklt->GetSkelet() : nullptr;
     return SpawnGroundDecal(config, bestHit);
 }
 
@@ -1197,7 +1198,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     const float angle = GroundDecalRotation(this, hit,
                                             config.ground_decal_random_rotation);
     float buildFade = edgeFade;
-    NC_STACK_bitmap *texture = NULL;
+    NC_STACK_bitmap *texture = nullptr;
     // Textured decals carry the edge fade inside the baked texture copy, so
     // the falloff is pixel-exact at any terrain tessellation; the vertex mask
     // then stays hard to avoid fading twice. Untextured decals only have the
@@ -1274,7 +1275,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     if ( texture )
         renderFlags |= GFX::RFLAGS_TEXTURED;
     decal.mesh.Mat = GFX::TRenderParams(renderFlags);
-    decal.mesh.Mat.Tex = texture ? texture->GetBitmap() : NULL;
+    decal.mesh.Mat.Tex = texture ? texture->GetBitmap() : nullptr;
     decal.mesh.RecalcBoundBox();
     GFX::Engine.MeshMakeVBO(&decal.mesh);
     return true;

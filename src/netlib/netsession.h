@@ -36,7 +36,7 @@ struct NetSession
         name = _name;
         users.clear();
         password.clear();
-        lead = NULL;
+        lead = nullptr;
         lobby = _lobby;
         max_players = 0;
         closeTimer = 0;
@@ -49,7 +49,7 @@ struct NetSession
         name.clear();
         users.clear();
         password.clear();
-        lead = NULL;
+        lead = nullptr;
         lobby = false;
         max_players = 0;
         orphanedTimer = 0;

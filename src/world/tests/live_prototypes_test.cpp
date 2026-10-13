@@ -1,6 +1,6 @@
 // Native probe for the public prototype loader and shipped Startup.cfg scripts.
-#include "../../yw.h"
-#include "../../env.h"
+#include "game/yw.h"
+#include "common/env.h"
 #include <cstdio>
 #undef main
 

@@ -1,3 +1,5 @@
+// CacheStorage: block-wise array that hands out the next free slot and can be rewound (no reallocation per
+// frame).
 #ifndef CACHESTOR_H_INCLUDED
 #define CACHESTOR_H_INCLUDED
 

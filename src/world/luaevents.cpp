@@ -1,6 +1,7 @@
+// Events passed to the Lua scripts.
 #include "luaevents.h"
-#include "../yw.h"
-#include "../yw_internal.h"
+#include "game/yw.h"
+#include "game/yw_internal.h"
 
 extern int dword_5C8B78;
 extern GuiList exit_menu;
@@ -23,7 +24,7 @@ bool LuaEvents:: UnitIter::IsEnd() const
 NC_STACK_ypabact *LuaEvents:: UnitIter::GetUnit() const
 {
     if (IsEnd())
-        return NULL;
+        return nullptr;
     return *It;
 }
 
@@ -110,7 +111,7 @@ void LuaEvents::RegisterWorld()
     ,   {"GetGates", Lua_WrldGetGates}
     ,   {"ExitTutorialWindow", Lua_WrldExitTutorialWindow}
     ,   {"IsRoboMapOpen", Lua_WrldIsRoboMapOpen}
-    ,   {NULL, NULL} };
+    ,   {nullptr, nullptr} };
 
     luaL_newlib(_lua, WorldFuncs);
     lua_setglobal(_lua, "World");
@@ -132,7 +133,7 @@ void LuaEvents::RegisterBact()
     ,   {"StartIterateKids", Lua_BactStartIterateKids}
     ,   {"GetKids", Lua_BactGetUnits}
     ,   {"GetPSector", Lua_BactGetPSector}
-    ,   {NULL, NULL} };
+    ,   {nullptr, nullptr} };
 
     luaL_newlib(_lua, BactFuncs);
     lua_setglobal(_lua, "Bact");
@@ -200,7 +201,7 @@ void LuaEvents::RegisterUnitIter()
         {"Next", Lua_IterUnitsNext}
     ,   {"Free", Lua_IterUnitsFree}
     ,   {"Get", Lua_IterUnitsGet}
-    ,   {NULL, NULL} };
+    ,   {nullptr, nullptr} };
 
     luaL_newlib(_lua, IterUnits);
     lua_setglobal(_lua, "IterUnits");
@@ -213,7 +214,7 @@ int LuaEvents::Lua_WrldShowMessageID(lua_State *l)
 
     yw_arg159 arg159;
     arg159.Priority = 100;
-    arg159.unit = NULL;
+    arg159.unit = nullptr;
     arg159.MsgID = msgId;
 
     wrld->ypaworld_func159(&arg159);

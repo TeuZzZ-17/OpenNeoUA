@@ -1,15 +1,16 @@
+// Input engine: keyboard, mouse and joystick state and key mapping.
 #ifndef ENGINE_INPUT_H_INCLUDED
 #define ENGINE_INPUT_H_INCLUDED
 
 #include <string>
 #include <functional>
 #include <vector>
-#include "utils.h"
+#include "common/utils.h"
 #include "common/common.h"
 #include "common/bitman.h"
-#include "inp_ff.h"
-#include "itimer.h"
-#include "idev.h"
+#include "platform/inp_ff.h"
+#include "platform/itimer.h"
+#include "platform/idev.h"
 
 
 class ButtonBox
@@ -38,7 +39,7 @@ public:
         RESERVED    = 48
     };
 
-    void *pobject = NULL;
+    void *pobject = nullptr;
     std::vector<ButtonBox> buttons;
 };
 
@@ -70,7 +71,7 @@ struct TClickBoxInf
     };
 
     int flag = 0;
-    ClickBox *selected_btn = NULL;
+    ClickBox *selected_btn = nullptr;
     int32_t selected_btnID = 0;
     TMousePos move;
     TMousePos ldw_pos;
@@ -294,9 +295,9 @@ namespace Input
         TQueryState & operator=(const TQueryState&) = default;
 
         TQueryState(const std::string &clsName,
-                    std::function<void(TInputState *arg)> kbd = NULL,
-                    std::function<void(TClickBoxInf *arg)> pnt = NULL,
-                    std::function<bool()> fcs = NULL)
+                    std::function<void(TInputState *arg)> kbd = nullptr,
+                    std::function<void(TClickBoxInf *arg)> pnt = nullptr,
+                    std::function<bool()> fcs = nullptr)
         : ClassName(clsName)
         , KeyboardQuery(kbd)
         , PointerQuery(pnt)
@@ -315,7 +316,7 @@ struct InputNode
         FLAG_FSLIDE = 1 << 3, // Force slider
     };
 
-    NC_STACK_idev *DriverObj  = NULL;
+    NC_STACK_idev *DriverObj  = nullptr;
     int Flags                 = 0;
     bool IsSlider             = false;
     std::string DriverName;
@@ -369,7 +370,7 @@ public:
 protected:
     static void FreeKNodes(InputNodeList *lst);
     static std::string ParseInputNodeNext(const std::string &inputStr, InputNodeList *lst);
-    static void UpdateList(InputNodeList *lst, bool *btn = NULL, float *slider = NULL);
+    static void UpdateList(InputNodeList *lst, bool *btn = nullptr, float *slider = nullptr);
 
     int16_t CheckHotKey(int16_t key);
 
@@ -397,7 +398,7 @@ protected:
     Common::Point _pointerLogicalResolution;
 
 public:
-    NC_STACK_itimer *_timer    = NULL;
+    NC_STACK_itimer *_timer    = nullptr;
     TQueryState _wimp;
     TQueryState _keyboard;
     std::array<InputNodeList, 32> _buttons;
@@ -434,7 +435,7 @@ public:
         void GetClick(TClickBoxInf *click, TMousePos &mouse);
 
         std::list<ClickBox *> CBoxList;
-        ClickBox *SelectedCbox = NULL;
+        ClickBox *SelectedCbox = nullptr;
         int32_t SelectedButton = -1;
 
     } ClickCheck;

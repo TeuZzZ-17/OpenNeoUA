@@ -2,8 +2,8 @@
 #define WORLD_HISTORY_H_INCLUDED
 
 #include <array>
-#include "../memstream.h"
-#include "../types.h"
+#include "common/memstream.h"
+#include "common/types.h"
 
 
 namespace World
@@ -71,7 +71,7 @@ public:
         TimeStamp = ts;
     };
 
-    virtual Common::ByteArray MakeByteArray() const
+    virtual Common::ByteArray MakeByteArray() const override
     {
         Common::ByteArray tmp;
         tmp.push_back(TYPE_FRAME);
@@ -79,14 +79,14 @@ public:
         return tmp;
     }
 
-    virtual void WriteBytes(void *dst) const
+    virtual void WriteBytes(void *dst) const override
     {
         uint8_t *d = (uint8_t *)dst;
         d[0] = TYPE_FRAME;
         Utils::ByteUL32(&d[1], TimeStamp);
     }
 
-    virtual void ReadBytes(const void *bt)
+    virtual void ReadBytes(const void *bt) override
     {
         TimeStamp = Utils::UL32Byte(bt);
     }
@@ -108,7 +108,7 @@ public:
         owner = ow;
     };
 
-    virtual Common::ByteArray MakeByteArray() const
+    virtual Common::ByteArray MakeByteArray() const override
     {
         Common::ByteArray tmp;
         tmp.push_back(TYPE_CONQ);
@@ -118,7 +118,7 @@ public:
         return tmp;
     }
 
-    virtual void WriteBytes(void *dst) const
+    virtual void WriteBytes(void *dst) const override
     {
         uint8_t *d = (uint8_t *)dst;
         d[0] = TYPE_CONQ;
@@ -127,7 +127,7 @@ public:
         d[3] = owner;
     }
 
-    virtual void ReadBytes(const void *bt)
+    virtual void ReadBytes(const void *bt) override
     {
         const uint8_t *d = (const uint8_t *)bt;
         secX = d[0];
@@ -135,7 +135,7 @@ public:
         owner = d[2];
     }
 
-    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const
+    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const override
     {
         if (owner >= score->size())
             return;
@@ -163,7 +163,7 @@ public:
         posY = y;
     };
 
-    virtual Common::ByteArray MakeByteArray() const
+    virtual Common::ByteArray MakeByteArray() const override
     {
         Common::ByteArray tmp;
         tmp.push_back(TYPE_VHCLKILL);
@@ -174,7 +174,7 @@ public:
         return tmp;
     }
 
-    virtual void WriteBytes(void *dst) const
+    virtual void WriteBytes(void *dst) const override
     {
         uint8_t *d = (uint8_t *)dst;
         d[0] = TYPE_VHCLKILL;
@@ -184,7 +184,7 @@ public:
         d[5] = posY;
     }
 
-    virtual void ReadBytes(const void *bt)
+    virtual void ReadBytes(const void *bt) override
     {
         const uint8_t *d = (const uint8_t *)bt;
         owners = d[0];
@@ -193,7 +193,7 @@ public:
         posY = d[4];
     }
 
-    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const
+    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const override
     {
         uint8_t owner = (owners >> 3) & 7;
         int flags = owners & 0xC0;
@@ -242,7 +242,7 @@ public:
         posY = y;
     };
 
-    virtual Common::ByteArray MakeByteArray() const
+    virtual Common::ByteArray MakeByteArray() const override
     {
         Common::ByteArray tmp;
         tmp.push_back(TYPE_VHCLCREATE);
@@ -253,7 +253,7 @@ public:
         return tmp;
     }
 
-    virtual void WriteBytes(void *dst) const
+    virtual void WriteBytes(void *dst) const override
     {
         uint8_t *d = (uint8_t *)dst;
         d[0] = TYPE_VHCLCREATE;
@@ -263,7 +263,7 @@ public:
         d[5] = posY;
     }
 
-    virtual void ReadBytes(const void *bt)
+    virtual void ReadBytes(const void *bt) override
     {
         const uint8_t *d = (const uint8_t *)bt;
         owner = d[0];
@@ -287,7 +287,7 @@ public:
     Plasma(uint64_t value, uint8_t x, uint8_t y, uint8_t own)
     : Record(TYPE_PLASMA, 11), amount(value), posX(x), posY(y), owner(own) {};
 
-    virtual Common::ByteArray MakeByteArray() const
+    virtual Common::ByteArray MakeByteArray() const override
     {
         Common::ByteArray tmp;
         tmp.push_back(TYPE_PLASMA);
@@ -299,7 +299,7 @@ public:
         return tmp;
     }
 
-    virtual void WriteBytes(void *dst) const
+    virtual void WriteBytes(void *dst) const override
     {
         uint8_t *d = (uint8_t *)dst;
         d[0] = TYPE_PLASMA;
@@ -310,7 +310,7 @@ public:
         d[11] = owner;
     }
 
-    virtual void ReadBytes(const void *bt)
+    virtual void ReadBytes(const void *bt) override
     {
         const uint8_t *d = (const uint8_t *)bt;
         amount = (uint64_t)Utils::UL32Byte(&d[0]) |
@@ -338,7 +338,7 @@ public:
         owner = ow;
     };
 
-    virtual Common::ByteArray MakeByteArray() const
+    virtual Common::ByteArray MakeByteArray() const override
     {
         Common::ByteArray tmp;
         tmp.push_back(TYPE_POWERST);
@@ -348,7 +348,7 @@ public:
         return tmp;
     }
 
-    virtual void WriteBytes(void *dst) const
+    virtual void WriteBytes(void *dst) const override
     {
         uint8_t *d = (uint8_t *)dst;
         d[0] = TYPE_POWERST;
@@ -357,7 +357,7 @@ public:
         d[3] = owner;
     }
 
-    virtual void ReadBytes(const void *bt)
+    virtual void ReadBytes(const void *bt) override
     {
         const uint8_t *d = (const uint8_t *)bt;
         secX = d[0];
@@ -365,7 +365,7 @@ public:
         owner = d[2];
     }
 
-    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const
+    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const override
     {
         if (owner >= score->size())
             return;
@@ -412,7 +412,7 @@ public:
         lastBuild = lastB;
     }
 
-    virtual Common::ByteArray MakeByteArray() const
+    virtual Common::ByteArray MakeByteArray() const override
     {
         Common::ByteArray tmp;
         tmp.push_back(TYPE_UPGRADE);
@@ -427,7 +427,7 @@ public:
         return tmp;
     }
 
-    virtual void WriteBytes(void *dst) const
+    virtual void WriteBytes(void *dst) const override
     {
         uint8_t *d = (uint8_t *)dst;
         d[0] = TYPE_UPGRADE;
@@ -441,7 +441,7 @@ public:
         Utils::ByteUL16(&d[10], lastBuild);
     }
 
-    virtual void ReadBytes(const void *bt)
+    virtual void ReadBytes(const void *bt) override
     {
         const uint8_t *d = (const uint8_t *)bt;
         secX = d[0];
@@ -453,7 +453,7 @@ public:
         lastBuild = Utils::UL16Byte(&d[9]);
     }
 
-    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const
+    virtual void AddScore(std::array<TPlayerStatus, 8> *score) const override
     {
         if (owner >= score->size())
             return;
@@ -470,7 +470,7 @@ class Instance
 public:
     Instance()
     {
-        instances[TYPE_UNK] = NULL;
+        instances[TYPE_UNK] = nullptr;
         instances[TYPE_FRAME] = new Frame;
         instances[TYPE_CONQ] = new Conq;
         instances[TYPE_VHCLKILL] = new VhclKill;
@@ -492,7 +492,7 @@ public:
     Record *operator[](size_t i)
     {
         if (i < 0 || i >= instances.size())
-            return NULL;
+            return nullptr;
         return instances[i];
     }
 

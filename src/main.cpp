@@ -1,39 +1,39 @@
 #define GLOBAL
 #include "system/fsmgr.h"
 #include "system/system.h"
-#include "env.h"
+#include "common/env.h"
 
-#include "includes.h"
+#include "common/includes.h"
 #include "system/gfx.h"
 #include "system/inpt.h"
-#include "winp.h"
-#include "wintimer.h"
+#include "platform/winp.h"
+#include "platform/wintimer.h"
 
-#include "ade.h"
-#include "area.h"
-#include "amesh.h"
-#include "bitmap.h"
-#include "bmpAnm.h"
-#include "base.h"
-#include "ilbm.h"
-#include "particle.h"
-#include "embed.h"
-#include "network.h"
-#include "windp.h"
-#include "ypabact.h"
-#include "ypatank.h"
-#include "ypacar.h"
-#include "ypaflyer.h"
-#include "yparobo.h"
-#include "ypaufo.h"
-#include "3ds.h"
-#include "image.h"
+#include "nucleus/ade.h"
+#include "nucleus/area.h"
+#include "nucleus/amesh.h"
+#include "nucleus/bitmap.h"
+#include "nucleus/bmpAnm.h"
+#include "nucleus/base.h"
+#include "nucleus/ilbm.h"
+#include "nucleus/particle.h"
+#include "nucleus/embed.h"
+#include "platform/network.h"
+#include "platform/windp.h"
+#include "game/ypabact.h"
+#include "game/ypatank.h"
+#include "game/ypacar.h"
+#include "game/ypaflyer.h"
+#include "game/yparobo.h"
+#include "game/ypaufo.h"
+#include "nucleus/3ds.h"
+#include "nucleus/image.h"
 
 
-#include "font.h"
-#include "yw.h"
+#include "gui/font.h"
+#include "game/yw.h"
 
-#include "button.h"
+#include "gui/button.h"
 
 
 
@@ -45,8 +45,8 @@
 #include "system/inivals.h"
 #include "world/blacksecttint.h"
 #include "world/energyfx.h"
-#include "obj3d.h"
-#include "crashdiag.h"
+#include "nucleus/obj3d.h"
+#include "common/crashdiag.h"
 
 
 int dword_513638 = 0;
@@ -777,9 +777,6 @@ void sub_4113E8()
 int WinMain__sub0__sub1()
 {
     buildDate = "Jul 09 1998  23:52:47";
-//    strcpy(buildDate, __DATE__);
-//    strcat(buildDate, " ");
-//    strcat(buildDate, __TIME__);
 
     ypaworld = Nucleus::CInit<NC_STACK_ypaworld>( { {NC_STACK_ypaworld::YW_ATT_BUILD_DATE, std::string(buildDate)} } );
 
@@ -895,20 +892,12 @@ int main(int argc, char *argv[])
         Gui::UAWindow::FLAG_WND_MAXM |
         Gui::UAWindow::FLAG_WND_HSCROLL);
     smpl2->SetEnable(true);*/
-    //smpl2->SetAlpha(190);
-
-    //scl->MoveTo(100, 100);
-    //scl->ResizeWH(300, 360);
-
-    //Gui::Root::Instance.AddWidgetPortal(0, smpl2);
-    //Gui::Root::Instance.AddWidget(smpl2);
-    //smpl->AddChild(smpl2);
 
 
 
 
-//    int fps = 0;
-//    uint32_t fpstick = SDL_GetTicks() + 1000;
+
+
 
     while ( true )
     {

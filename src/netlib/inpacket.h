@@ -22,7 +22,7 @@ struct InRawPktHdr
 
     InRawPktHdr()
     : flags(0), fsize(0), offset(0), seqid(0)
-    , data(NULL), datasz(0), uchnl(PKT_CHNL_NOT_SET)
+    , data(nullptr), datasz(0), uchnl(PKT_CHNL_NOT_SET)
     {}
 
     bool Parse(uint8_t *_data, size_t len)
@@ -112,7 +112,7 @@ struct InRawPkt
         }
         else
         {
-            data = NULL;
+            data = nullptr;
             len = 0;
             addr.host = 0;
             addr.port = 0;
@@ -158,7 +158,7 @@ struct InPartedPkt
         ipseq = _ipseq;
         timeout = 0;
         nextOff = 0;
-        data = NULL;
+        data = nullptr;
         len = 0;
         flags = _flags;
         uchnl = _channel;
@@ -293,7 +293,7 @@ struct Pkt
         uchnl = pk->hdr.uchnl;
 
         //Detach data and delete
-        pk->data = NULL;
+        pk->data = nullptr;
         pk->len = 0;
 
         delete pk;
@@ -312,7 +312,7 @@ struct Pkt
         uchnl = pk->uchnl;
 
         //Detach data and delete
-        pk->data = NULL;
+        pk->data = nullptr;
         pk->len = 0;
 
         delete pk;

@@ -17,13 +17,13 @@ Pkt *ZNDClient::Recv_PreparePacket(InRawPkt *pkt)
     {
         // Incorrect packet
         delete pkt;
-        return NULL;
+        return nullptr;
     }
 
 
     if (pkt->hdr.flags & PKT_FLAG_SYSTEM) // System message
     {
-        return new Pkt(pkt, NULL);
+        return new Pkt(pkt, nullptr);
     }
     else
     {
@@ -31,7 +31,7 @@ Pkt *ZNDClient::Recv_PreparePacket(InRawPkt *pkt)
         {
             AddrSeq ipseq(pkt->addr, pkt->hdr.seqid);
 
-            InPartedPkt *parted = NULL;
+            InPartedPkt *parted = nullptr;
 
             for (PartedList::iterator it = pendingPkt.begin(); it != pendingPkt.end(); it++)
             {
@@ -54,18 +54,18 @@ Pkt *ZNDClient::Recv_PreparePacket(InRawPkt *pkt)
                     printf("Recovered packet! %d\n", parted->ipseq.seq);*/
 
                 pendingPkt.remove(parted);
-                return new Pkt(parted, NULL);
+                return new Pkt(parted, nullptr);
             }
 
             // if not complete -> return NULL
         }
         else // not parted packet -> make it
         {
-            return new Pkt(pkt, NULL);
+            return new Pkt(pkt, nullptr);
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void ZNDClient::ProcessSystemPkt(Pkt* pkt)

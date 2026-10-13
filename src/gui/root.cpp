@@ -25,7 +25,7 @@ uint32_t Root::GetNextId()
 
 void Root::AddWidget(Widget *w, bool top)
 {
-    _miceOn = NULL; // Find it
+    _miceOn = nullptr; // Find it
 
     w->Unparent();
     w->_rooted = LAYER_NORMAL;
@@ -72,13 +72,13 @@ void Root::RemoveWidget(Widget *w)
     GetLayerList(w->_rooted).remove(w);
 
     if (_miceOn == w)
-        _miceOn = NULL;
+        _miceOn = nullptr;
 
     if (_focused == w)
-        _focused = NULL;
+        _focused = nullptr;
 
     if (_dragging == w)
-        _dragging = NULL;
+        _dragging = nullptr;
 
     w->_rooted = LAYER_UNK;
 
@@ -107,11 +107,11 @@ void Root::Draw(SDL_Surface *screen)
         Common::Rect rct = _miceOn->GetScreenVisibleRect();
 
         SDL_Surface *srf = SDL_CreateRGBSurfaceWithFormat(0, rct.Width(), rct.Height(), screen->format->BitsPerPixel, screen->format->format);
-        SDL_FillRect(srf, NULL, SDL_MapRGBA(srf->format, 255, 0, 255, 128) );
+        SDL_FillRect(srf, nullptr, SDL_MapRGBA(srf->format, 255, 0, 255, 128) );
 
         SDL_Rect pz = rct;
 
-        SDL_BlitSurface(srf, NULL, screen, &pz);
+        SDL_BlitSurface(srf, nullptr, screen, &pz);
 
         SDL_FreeSurface(srf);
     }*/
@@ -123,7 +123,6 @@ void Root::ModAlpha(SDL_Surface *surf, Common::Rect space, uint8_t alpha)
     {
         int bpp = surf->format->BytesPerPixel;
         uint32_t ashift = surf->format->Ashift;
-        //uint32_t aloss = surf->format->Aloss;
         uint32_t amask = surf->format->Amask;
         uint32_t anmask = ~amask;
 
@@ -260,7 +259,7 @@ void Root::HwPrepareWidget(Widget *w)
             if (drawWidget)
                 w->Draw( w->_hwSurface, widgetSpace );
             else
-                SDL_FillRect( w->_hwSurface, NULL, SDL_MapRGBA(w->_hwSurface->format, 0, 0, 0, 0));
+                SDL_FillRect( w->_hwSurface, nullptr, SDL_MapRGBA(w->_hwSurface->format, 0, 0, 0, 0));
 
             Common::Point clientOffset(0, 0);
             Common::Rect clientSpace = widgetSpace;
@@ -347,7 +346,7 @@ bool Root::MouseUp(Common::Point pos, int button, int clkNum)
         if (!_buttons)
         {
             _dragging->MoveTo(pos - _dragPos);
-            _dragging = NULL;
+            _dragging = nullptr;
 
 
             UpdateWidgetOnMice( FindByMouse(pos) );
@@ -420,7 +419,7 @@ Widget *Root::_FindByPos(WidgetList &lst, const Common::Point &pos)
         if (w->IsEnabled() && w->GetScreenVisibleRect().IsIn(pos))
             return w->FindByPos(pos);
     }
-    return NULL;
+    return nullptr;
 }
 
 Widget *Root::_FindByMouse(WidgetList& lst, const Common::Point& pos)
@@ -435,7 +434,7 @@ Widget *Root::_FindByMouse(WidgetList& lst, const Common::Point& pos)
                 return ret;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 Widget *Root::FindByPos(const Common::Point &pos)
@@ -448,7 +447,7 @@ Widget *Root::FindByPos(const Common::Point &pos)
     if (w)
         return w;
 
-    return NULL;
+    return nullptr;
 }
 
 Widget *Root::FindByMouse(const Common::Point& pos)
@@ -461,7 +460,7 @@ Widget *Root::FindByMouse(const Common::Point& pos)
             {
                 if (w->GetScreenVisibleRect().IsIn(pos))
                     return w->FindByMouse(pos);
-                return NULL;
+                return nullptr;
             }
         }
     }
@@ -474,7 +473,7 @@ Widget *Root::FindByMouse(const Common::Point& pos)
     if (w)
         return w;
 
-    return NULL;
+    return nullptr;
 }
 
 Widget *Root::FindByID(uint32_t id, bool enabled)
@@ -487,7 +486,7 @@ Widget *Root::FindByID(uint32_t id, bool enabled)
     if (w)
         return w;
 
-    return NULL;
+    return nullptr;
 }
 
 Widget *Root::_FindByID(WidgetList &lst, uint32_t id, bool enabled)
@@ -498,7 +497,7 @@ Widget *Root::_FindByID(WidgetList &lst, uint32_t id, bool enabled)
         if (t)
             return t;
     }
-    return NULL;
+    return nullptr;
 }
 
 
@@ -562,13 +561,13 @@ bool Root::CheckEnable(Widget *w)
 void Root::ValidateWidgets()
 {
     if (_dragging && !CheckEnable(_dragging))
-        _dragging = NULL;
+        _dragging = nullptr;
 
     if (_miceOn && !CheckEnable(_miceOn))
-        _miceOn = NULL;
+        _miceOn = nullptr;
 
     if (_focused && !CheckEnable(_focused))
-        ChangeFocus(NULL);
+        ChangeFocus(nullptr);
 }
 
 
@@ -703,7 +702,7 @@ void Root::TimersUpdate(uint32_t dtime)
 SDL_Surface *Root::CreateScreenFmtSurface(uint32_t w, uint32_t h)
 {
     if (w == 0 || h == 0)
-        return NULL;
+        return nullptr;
 
     SDL_PixelFormat *fmt = GFX::Engine.GetPixelFormat();
 
@@ -822,7 +821,7 @@ void StreamTex::Stream(Common::Point sz, int32_t fmt, int32_t type, const void *
                 pStates.Tex = t;
                 GFX::Engine.SetRenderStates(0);
 
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Size.x, Size.y, 0, fmt, type, NULL);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Size.x, Size.y, 0, fmt, type, nullptr);
             }
         }
     }

@@ -1,5 +1,5 @@
 // Focused probe linked to the production parser and FX spawn paths.
-#include "../../yw.h"
+#include "game/yw.h"
 #include "../parsers.h"
 #include "../tools.h"
 #include <cstdio>

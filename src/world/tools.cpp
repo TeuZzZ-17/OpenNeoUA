@@ -1,5 +1,6 @@
+// World helpers: plane bytes from bitmaps and shared helpers for authored values.
 #include "tools.h"
-#include "../loaders.h"
+#include "nucleus/loaders.h"
 
 
 namespace World {
