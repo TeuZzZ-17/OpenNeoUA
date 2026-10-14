@@ -86,8 +86,8 @@ size_t NC_STACK_ypagun::Init(IDVList &stak)
                 setGUN_roboGun ( val.Get<int32_t>() );
                 break;
 
-            case GUN_ATT_NO_FALL:
-                setGUN_doesNotFall( val.Get<int32_t>() );
+            case GUN_ATT_LEVITATE:
+                setGUN_levitate( val.Get<int32_t>() );
                 break;
 
             default:
@@ -144,8 +144,8 @@ size_t NC_STACK_ypagun::SetParameters(IDVList &stak)
                 setGUN_roboGun ( val.Get<int32_t>() );
                 break;
 
-            case GUN_ATT_NO_FALL:
-                setGUN_doesNotFall( val.Get<int32_t>() );
+            case GUN_ATT_LEVITATE:
+                setGUN_levitate( val.Get<int32_t>() );
                 break;
 
             default:
@@ -159,6 +159,7 @@ size_t NC_STACK_ypagun::SetParameters(IDVList &stak)
 
 bool NC_STACK_ypagun::CheckPedestal()
 {
+    if (CollisionsDisabled()) return true;
     ypaworld_arg136 arg136;
     arg136.stPos = _position;
     arg136.vect.x = 0;
@@ -171,7 +172,7 @@ bool NC_STACK_ypagun::CheckPedestal()
     arg136.vect.z = 0;
     arg136.flags = 0;
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     return arg136.isect != 0;
 }
@@ -221,7 +222,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
         if ( stunned )
             UpdateActiveDebuffStunMoveIntent();
 
-        if ( !(_gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_NO_FALL)) )
+        if ( !(_gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_LEVITATE)) )
         {
             if ( _clock - _gunDownTime > 800 )
             {
@@ -451,7 +452,7 @@ void NC_STACK_ypagun::User_layer(update_msg *arg)
 
     if ( _status == BACT_STATUS_NORMAL )
     {
-        if ( _gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_NO_FALL) || CheckPedestal() )
+        if ( _gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_LEVITATE) || CheckPedestal() )
         {
             if ( _viewer_position.length() >= 3.0 )
             {
@@ -731,7 +732,7 @@ size_t NC_STACK_ypagun::SetPosition(bact_arg80 *arg)
         arg136.vect.z = 0;
         arg136.flags = 0;
 
-        _world->ypaworld_func136(&arg136);
+        TraceWorldCollision(&arg136);
 
         if ( arg136.isect )
             _position.y = arg136.isectPos.y - _overeof;
@@ -889,12 +890,12 @@ void NC_STACK_ypagun::setGUN_roboGun(int rbo)
         _gunFlags &= ~GUN_FLAGS_ROBO;
 }
 
-void NC_STACK_ypagun::setGUN_doesNotFall(int noFall)
+void NC_STACK_ypagun::setGUN_levitate(int levitate)
 {
-    if ( noFall )
-        _gunFlags |= GUN_FLAGS_NO_FALL;
+    if ( levitate )
+        _gunFlags |= GUN_FLAGS_LEVITATE;
     else
-        _gunFlags &= ~GUN_FLAGS_NO_FALL;
+        _gunFlags &= ~GUN_FLAGS_LEVITATE;
 }
 
 

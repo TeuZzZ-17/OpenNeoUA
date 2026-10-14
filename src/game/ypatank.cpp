@@ -339,7 +339,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                     }
                     arg136.flags = 1;
 
-                    _world->ypaworld_func136(&arg136);
+                    TraceWorldCollision(&arg136);
 
                     if ( !arg136.isect || arg136.skel->polygons[ arg136.polyID ].B > 0.6 )
                         _tankCollisionFlag &= ~(COLL_HILL_L | COLL_HILL_R);
@@ -362,7 +362,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                         arg136.stPos = _position;
                         arg136.flags = 1;
 
-                        _world->ypaworld_func136(&arg136);
+                        TraceWorldCollision(&arg136);
 
                         if ( !arg136.isect || arg136.skel->polygons[ arg136.polyID ].B > 0.6 )
                             _tankCollisionFlag &= ~(COLL_WALL_L | COLL_WALL_R);
@@ -524,7 +524,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
 
             arg136.flags = 1;
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
             if ( arg136.isect )
             {
@@ -574,7 +574,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                     arg136.vect = (_rotation.AxisY() - _rotation.AxisZ()) * v223;
                     arg136.flags = 1;
 
-                    _world->ypaworld_func136(&arg136);
+                    TraceWorldCollision(&arg136);
 
                     if ( !arg136.isect || ( arg136.isect && arg136.tVal * v223 * 0.7 > (_overeof + 30.0) ) )
                     {
@@ -601,7 +601,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                     arg136_4.vect = _rotation.AxisY() * 300.0;
                     arg136_4.flags = 1;
 
-                    _world->ypaworld_func136(&arg136_4);
+                    TraceWorldCollision(&arg136_4);
 
                     if ( alignRes == ALIGN_NORMAL )
                         v208 = -alignNorm;
@@ -1152,7 +1152,7 @@ void NC_STACK_ypatank::User_layer(update_msg *arg)
             arg136.vect = _position - _old_pos;
             arg136.flags = 0;
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
             if ( (a4 && CollisionWithBact(arg->frameTime)) || !arg136.isect ) // Check it
             {
@@ -1267,6 +1267,7 @@ size_t NC_STACK_ypatank::SetPosition(bact_arg80 *arg)
 {
     if ( NC_STACK_ypabact::SetPosition(arg) )
     {
+        if (CollisionsDisabled()) return 1;
         if ( arg->field_C & 1 )
         {
             ypaworld_arg136 arg136;
@@ -1274,7 +1275,7 @@ size_t NC_STACK_ypatank::SetPosition(bact_arg80 *arg)
             arg136.vect = vec3d::OY(50000.0);
             arg136.flags = 0;
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
             if ( !arg136.isect )
                 return 0;
@@ -1318,7 +1319,7 @@ void NC_STACK_ypatank::ApplyImpulse(bact_arg83 *arg)
     arg136.vect = v24 - _position;
     arg136.flags = 0;
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     if ( !arg136.isect )
         _position = v24;
@@ -1421,6 +1422,7 @@ size_t NC_STACK_ypatank::HandleShapeUnitContact(const Collision::Contact &contac
 
 size_t NC_STACK_ypatank::CollisionWithBact(int arg)
 {
+    if (CollisionsDisabled()) return 0;
     Collision::Contact shapeContact;
     if (_world && _world->_collisionScene &&
         _world->_collisionScene->TakeUnitContact(this, &shapeContact))
@@ -1465,7 +1467,7 @@ size_t NC_STACK_ypatank::CollisionWithBact(int arg)
 
         for ( NC_STACK_ypabact* &v12 : arg130.pcell->unitsList )
         {
-            if (v12->HasCollisionShape()) continue;
+            if (v12->CollisionsDisabled() || v12->HasCollisionShape()) continue;
             const bool v114 = CanCollectPlasmaFrom(v12);
 
             if ( v12->_bact_type != BACT_TYPES_MISSLE
@@ -1697,7 +1699,7 @@ size_t NC_STACK_ypatank::CollisionWithBact(int arg)
                             arg136.stPos = v80[i]->_position;
                             arg136.vect = v85 - v80[i]->_position;
                             arg136.flags = 0;
-                            _world->ypaworld_func136(&arg136);
+                            TraceWorldCollision(&arg136);
 
                             if ( !arg136.isect )
                             {
@@ -1806,7 +1808,7 @@ void NC_STACK_ypatank::BeginWorldCollisionAvoidance(const vec3d &normal)
     arg136_2.vect = _rotation.AxisY() * 300.0;
     arg136_2.flags = 1;
 
-    _world->ypaworld_func136(&arg136_2);
+    TraceWorldCollision(&arg136_2);
 
     vec3d v187;
 
@@ -1845,8 +1847,8 @@ void NC_STACK_ypatank::BeginWorldCollisionAvoidance(const vec3d &normal)
     arg136_3.stPos = _position;
     arg136_3.flags = 1;
 
-    _world->ypaworld_func136(&arg136_1);
-    _world->ypaworld_func136(&arg136_3);
+    TraceWorldCollision(&arg136_1);
+    TraceWorldCollision(&arg136_3);
 
     bool v86 = arg136_1.isect && arg136_1.skel->polygons[ arg136_1.polyID ].B < 0.6;
     bool v87 = arg136_3.isect && arg136_3.skel->polygons[ arg136_3.polyID ].B < 0.6;
@@ -2175,6 +2177,7 @@ bool NC_STACK_ypatank::TestTargetSector(const NC_STACK_ypabact * tgt) const
 
 void NC_STACK_ypatank::CorrectPositionOnLand()
 {
+    if (CollisionsDisabled()) return;
     NC_STACK_ypabact::CorrectPositionOnLand();
 
     if ( _status_flg & BACT_STFLAG_LAND )
@@ -2191,7 +2194,7 @@ void NC_STACK_ypatank::CorrectPositionOnLand()
         arg136.vect = vec3d::OY( v6 * 2.0 );
         arg136.flags = 0;
 
-        _world->ypaworld_func136(&arg136);
+        TraceWorldCollision(&arg136);
 
         if ( arg136.isect )
             _position.y = arg136.isectPos.y - v6;
@@ -2227,7 +2230,7 @@ int NC_STACK_ypatank::AlignVehicleAI(float dtime, vec3d *pNormal)
     arg136.vect = vec3d::OY( _overeof + 110.0 );
     arg136.flags = 0;
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     if ( !arg136.isect )
         return ALIGN_NONE;
@@ -2363,7 +2366,7 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
         arg136_2.flags = 1;
     }
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     if ( arg136.isect )
     {
@@ -2422,7 +2425,7 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
         v149 = 1;
     }
 
-    _world->ypaworld_func136(&arg136_1);
+    TraceWorldCollision(&arg136_1);
 
     if ( arg136_1.isect )
     {
@@ -2479,7 +2482,7 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
         v151 = 1;
     }
 
-    _world->ypaworld_func136(&arg136_2);
+    TraceWorldCollision(&arg136_2);
 
     if ( arg136_2.isect )
     {
@@ -2526,7 +2529,7 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
             arg136_3.vect = _rotation.AxisZ() * _viewer_radius;
             arg136_3.flags = 0;
 
-            _world->ypaworld_func136(&arg136_3);
+            TraceWorldCollision(&arg136_3);
 
             if ( arg136_3.isect )
             {
@@ -2630,7 +2633,7 @@ int NC_STACK_ypatank::AlignVehicleUser(float dtime, const vec3d &oldDir)
 
             arg136_4.flags = isViewer == 0;
 
-            _world->ypaworld_func136(&arg136_4);
+            TraceWorldCollision(&arg136_4);
 
             if ( !arg136_4.isect || (arg136_4.isect && arg136_4.skel->polygons[ arg136_4.polyID ].B < 0.6) )
             {

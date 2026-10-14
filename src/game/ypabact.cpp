@@ -492,7 +492,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_set = false;
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
-    _mgun_tracer = World::TWeaponTracerConfig();
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
     _mgun_3ds_dead.clear();
@@ -2190,6 +2189,7 @@ void NC_STACK_ypabact::Renew()
     _debugIgnoredByAI = false;
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _collisionShape.reset();
+    _disableCollision = false;
     _shapeCollisionDamageStamp = -1;
     ClearPlayerSprintPitchExtra();
     if ( _inlinePhysicalFX )
@@ -2255,7 +2255,6 @@ void NC_STACK_ypabact::Renew()
     _mgun_set = false;
     _mgun_shot_time = 0;
     _mgun_shot_time_user = 0;
-    _mgun_tracer = World::TWeaponTracerConfig();
     _mgun_vp_dead = 0;
     _mgun_vp_megadeth = 0;
     _mgun_3ds_dead.clear();

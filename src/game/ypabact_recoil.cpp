@@ -172,7 +172,7 @@ bool ypabact_UsesRenderOnlyRecoilTranslation(const NC_STACK_ypabact *unit)
     // Fixed/attached guns reuse the same shared envelope so recoil
     // cannot displace their logical pedestal/attachment position. This is the
     // recoil-only fall protection: normal pedestal loss/destruction still reaches
-    // ypagun::CheckPedestal()/Die() unchanged, and gun_does_not_fall is untouched.
+    // ypagun::CheckPedestal()/Die() unchanged, and gun_levitate is untouched.
     return unit && (ypabact_IsAiTankRecoilUnit(unit) ||
                     unit->_bact_type == BACT_TYPES_GUN);
 }
@@ -615,7 +615,7 @@ void NC_STACK_ypabact::ApplyRecoil(const vec3d &dir, float recoil)
     {
         // AI tanks and attached/fixed guns present the same recoil envelope
         // without moving their logical world position. For guns this is the
-        // recoil-only fall protection: pedestal destruction and gun_does_not_fall
+        // recoil-only fall protection: pedestal destruction and gun_levitate
         // remain entirely owned by ypagun and are untouched here.
         _recoilPushVel = vec3d(0.0, 0.0, 0.0);
         return;

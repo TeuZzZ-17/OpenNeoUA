@@ -377,7 +377,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             arg136_1.vect.y = arg136.vect.y;
             arg136_1.vect.z = arg136.vect.z * 0.93969 + arg136.vect.x * 0.34202;
 
-            _world->ypaworld_func136(&arg136_1);
+            TraceWorldCollision(&arg136_1);
         }
 
         ypaworld_arg136 arg136_2;
@@ -392,11 +392,11 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
             arg136_2.vect.y = arg136.vect.y;
             arg136_2.vect.z = arg136.vect.z * 0.93969 - arg136.vect.x * 0.34202;
 
-            _world->ypaworld_func136(&arg136_2);
+            TraceWorldCollision(&arg136_2);
         }
 
         if ( isViewer || !(_status_flg & (BACT_STFLAG_DODGE_LEFT | BACT_STFLAG_DODGE_RIGHT)) || (v90 && v82) )
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
         int v18 = 0;
 
@@ -504,7 +504,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
 
         arg136_3.flags = 0;
 
-        _world->ypaworld_func136(&arg136_3);
+        TraceWorldCollision(&arg136_3);
 
         if ( arg136_3.isect )
         {
@@ -767,7 +767,7 @@ void NC_STACK_ypaflyer::User_layer(update_msg *arg)
         ground.vect = vec3d(0.0, std::max(_overeof + 2.0f, 2.0f), 0.0);
         ground.flags = 0;
 
-        _world->ypaworld_func136(&ground);
+        TraceWorldCollision(&ground);
 
         if ( ground.isect )
         {
@@ -870,7 +870,7 @@ void NC_STACK_ypaflyer::User_layer(update_msg *arg)
             arg136.flags = 0;
             arg136.vect.y = v9 * 1.5;
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
             // Once player ground control has been locked, LAND remains latched
             // until Q requests takeoff.  Do not let a marginal ground ray clear
@@ -1106,7 +1106,7 @@ void NC_STACK_ypaflyer::User_layer(update_msg *arg)
                 arg137.collisions = v43;
 
                 if (HasCollisionShape()) GetShapeWorldContact(&arg137);
-                else _world->ypaworld_func137(&arg137);
+                else QueryWorldCollisions(&arg137);
 
                 if ( arg137.coll_count )
                 {
@@ -1135,7 +1135,7 @@ void NC_STACK_ypaflyer::User_layer(update_msg *arg)
                     arg136.vect = _position - _old_pos;
                     arg136.flags = 0;
 
-                    _world->ypaworld_func149(&arg136);
+                    TraceWorldCollision(&arg136, true);
 
                     if ( arg136.isect )
                     {

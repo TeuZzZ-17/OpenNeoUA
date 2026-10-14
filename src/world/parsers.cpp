@@ -3055,6 +3055,11 @@ static bool ParseCompoundCollisionParameter(
 
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( !StriCmp(p1, "disable_collision") )
+    {
+        _vhcl->disable_collision = p2 == "1";
+        return ScriptParser::RESULT_OK;
+    }
     if ( !StriCmp(p1, "collision_shape") )
     {
         _vhcl->collision_shape.clear();
@@ -4056,12 +4061,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->mgun_wireframe = Nucleus::CInit<NC_STACK_sklt>(
             {{NC_STACK_rsrc::RSRC_ATT_NAME, std::string(p2)}} );
     }
-    else if ( ParseMeshTracerParam(parser, p1, p2, _vhcl->mgun_tracer, "mgun_mesh_tracer_") )
-    {
-        // Every MGUN path, including model = gun/module + gun_type = mg,
-        // uses the dedicated mgun_mesh_tracer_* authoring namespace while
-        // reusing the same shared tracer config and renderer as physical Weapons.
-    }
     else if ( !StriCmp(p1, "mgun_ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -4435,10 +4434,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         if ( recognized )
             _vhcl->initParams.Add(NC_STACK_ypagun::GUN_ATT_FIRETYPE, (int32_t)gun_type);
     }
-    else if ( !StriCmp(p1, "gun_does_not_fall") )
+    else if ( !StriCmp(p1, "gun_levitate") )
     {
         if ( _vhcl->model_id == BACT_TYPES_GUN )
-            _vhcl->initParams.Add(NC_STACK_ypagun::GUN_ATT_NO_FALL, (int32_t)1);
+            _vhcl->initParams.Add(NC_STACK_ypagun::GUN_ATT_LEVITATE, (int32_t)(p2 == "1"));
     }
     else if ( !StriCmp(p1, "kamikaze") )
     {
@@ -4826,7 +4825,6 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_set = false;
         _vhcl->mgun_shot_time = 0;
         _vhcl->mgun_shot_time_user = 0;
-        _vhcl->mgun_tracer = TWeaponTracerConfig();
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
         _vhcl->mgun_ground_decal_id = -1;
@@ -5209,6 +5207,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     if ( ParseCompoundCollisionParameter(parser, p1, p2, _wpn->coll, _collID) )
         return ScriptParser::RESULT_OK;
 
+    if ( !StriCmp(p1, "disable_collision") )
+    {
+        _wpn->disable_collision = p2 == "1";
+        return ScriptParser::RESULT_OK;
+    }
     if ( !StriCmp(p1, "collision_shape") )
     {
         _wpn->collision_shape.clear();

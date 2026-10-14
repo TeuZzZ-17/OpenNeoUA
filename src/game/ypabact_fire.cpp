@@ -1247,12 +1247,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
     if ( shotEnergyMode && !_mgun_fire_energy_cost_defined && _bact_type != BACT_TYPES_GUN )
         _energy -= mgunDamage / 300.0f;
 
-    // Every FireMinigun() path consumes the MGUN tracer config authored with
-    // mgun_mesh_tracer_*. This includes normal Vehicle MGUNs and
-    // model = gun/module + gun_type = mg; rendering still reuses the shared mesh path.
-    const bool spawnMgunTracer = spawnVisual && _mgun_tracer.enabled &&
-                                 !_world->_isNetGame;
-
     // One spread ray per shot; the scope keeps the ray variables local.
     {
         bool cockpitAim = IsCockpitCameraActive();
@@ -1342,6 +1336,7 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                     minigunTargets.push_back(actor);
         for (NC_STACK_ypabact *cellUnit : minigunTargets)
         {
+            if (!cellUnit || cellUnit->CollisionsDisabled()) continue;
             if ( cellUnit != this && cellUnit->_bact_type != BACT_TYPES_MISSLE && cellUnit->_status != BACT_STATUS_DEAD )
             {
                 int v89 = 0;
@@ -1517,34 +1512,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
         if ( spawnVisual )
         {
-            if ( spawnMgunTracer )
-            {
-                float tracerDistance = minigunTraceRange;
-                if ( v108 && std::isfinite(v123) )
-                    tracerDistance = std::min(tracerDistance, v123);
-                else if ( minigunWorldHit )
-                    tracerDistance = std::min(tracerDistance, minigunWorldHitDistance);
-
-                // Treat mgun_mesh_tracer_pos_* exactly like a local offset on a
-                // hypothetical projectile emitted along this resolved MGUN ray.
-                // Using shotDir (not only the carrier rotation) keeps X/Y/Z
-                // attached to the actual spread/aim direction and also covers
-                // gun_type = mg through this same shared FireMinigun() path.
-                mat3x3 tracerRotation;
-                tracerRotation.SetZ(shotDir);
-                tracerRotation.SetX(_rotation.AxisX());
-                tracerRotation.SetY(tracerRotation.AxisZ() * tracerRotation.AxisX());
-
-                const vec3d tracerOrigin = shotPos +
-                    tracerRotation.Transpose().Transform(_mgun_tracer.pos);
-                const float sourceAdvance = (float)(tracerOrigin - shotPos).dot(shotDir);
-                if ( std::isfinite(sourceAdvance) )
-                    tracerDistance = std::max(0.0f, tracerDistance - sourceAdvance);
-
-                _world->SpawnMinigunTracer(
-                    tracerOrigin, shotDir, tracerDistance, _mgun_tracer);
-            }
-
             if ( v108 )
             {
                 v55 = 1;

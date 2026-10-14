@@ -50,7 +50,7 @@ public:
         GUN_ATT_FIRETIME = 0x80002004,
         GUN_ATT_SETGROUND = 0x80002005,
         GUN_ATT_ROBOGUN = 0x80002006,
-        GUN_ATT_NO_FALL = 0x80002007
+        GUN_ATT_LEVITATE = 0x80002007
     };
 
     enum GUN_TYPE
@@ -68,7 +68,7 @@ public:
         GUN_FLAGS_ROBO     = 2,
         GUN_FLAGS_FALLDOWN = 4,
         GUN_FLAGS_SHOT     = 8,
-        GUN_FLAGS_NO_FALL  = 16
+        GUN_FLAGS_LEVITATE  = 16
     };
 
     virtual void setGUN_sideAngle(int);
@@ -78,7 +78,8 @@ public:
     virtual void setGUN_fireTime(int);
     virtual void setGUN_setGround(int);
     virtual void setGUN_roboGun(int);
-    virtual void setGUN_doesNotFall(int);
+    virtual void setGUN_levitate(int);
+    bool getGUN_levitate() const { return (_gunFlags & GUN_FLAGS_LEVITATE) != 0; }
 
     virtual int getGUN_sideAngle();
     virtual int getGUN_upAngle();

@@ -363,6 +363,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
         *hitTarget = nullptr;
     if ( deflected )
         *deflected = false;
+    if (CollisionsDisabled()) return false;
 
     vec3d collisionSumPosition(0.0, 0.0, 0.0);
     int collisionCount = 0;
@@ -503,6 +504,7 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
     }
     for (NC_STACK_ypabact *bct : collisionTargets)
     {
+        if (!bct || bct->CollisionsDisabled()) continue;
         if ( bct == this || bct == _mislEmitter || bct->_status == BACT_STATUS_DEAD )
             continue;
 
@@ -917,6 +919,7 @@ bool NC_STACK_ypamissile::CanCollideWithWeapon(
     if ( !System::IniConf::GameWeaponWeaponCollision.Get<bool>() )
         return false;
 
+    if (CollisionsDisabled() || !other || other->CollisionsDisabled()) return false;
     if ( !other || other == this || other == _mislEmitter )
         return false;
 
@@ -1268,7 +1271,7 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             arg136.vect = _position - _old_pos;
             arg136.flags = 0;
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
             if ( arg136.isect )
             {
