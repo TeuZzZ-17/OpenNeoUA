@@ -621,6 +621,7 @@ public:
     int CalcShieldedCustomDamage(int rawDamage) const;
     virtual bool ypabact_func85(vec3d *arg);
     virtual size_t CrashOrLand(bact_arg86 *arg);
+    void MaintainIdleGroundSupport(int frameTime);
     virtual size_t CollisionWithBact(int arg);
     bool CanRecoverPlasmaEnergyFrom(const NC_STACK_ypabact *source) const;
     bool CanCreditPlasmaCurrencyFrom(const NC_STACK_ypabact *source) const;

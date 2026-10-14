@@ -537,6 +537,172 @@ void AirLandingRegression(const std::shared_ptr<Collision::Shape> &profile) {
     Check(maximumStep<100,"Air Prism landing has no large discontinuous relocation");
     world._collisionScene.reset();
 }
+struct LandingWorld : GroundWorld {
+    double slope;
+    LandingWorld(double value) : slope(value) {
+        for (auto &cell : _cells) cell.SectorType=1;
+        floorData.POO={vec3d(-600,0,-600),vec3d(-600,0,600),vec3d(600,0,600),vec3d(600,0,-600)};
+        for (auto &v : floorData.POO) v.y=slope*v.x;
+        auto &face=floorData.polygons[0];
+        face.A=-slope/std::sqrt(1+slope*slope);
+        face.B=1/std::sqrt(1+slope*slope);
+    }
+    void ypaworld_func136(ypaworld_arg136 *arg) override {
+        arg->isect=false;
+        const double denominator=arg->vect.y-slope*arg->vect.x;
+        if (std::fabs(denominator)<1e-9) return;
+        const double t=(slope*(arg->stPos.x-3000)-arg->stPos.y)/denominator;
+        if (t<0 || t>1) return;
+        arg->isect=true; arg->tVal=t; arg->isectPos=arg->stPos+arg->vect*t;
+        arg->skel=&floorData; arg->polyID=0;
+    }
+};
+template<class Base> struct LandingActor : Actor<Base> {
+    int rebounds=0;
+    void Recoil(bact_arg88 *arg) override { ++rebounds; Base::Recoil(arg); }
+};
+template<class Base> void AirIdleLandingProfile(const char *name, int type, int flyerType=-1) {
+    std::string error;
+    auto profile=Collision::Load(std::string("Data/Models/Collision/")+name+".collision", &error);
+    Check(profile!=nullptr,error.c_str());
+    if (!profile) return;
+    for (double slope : {0.0, .35, .75}) for (int dt : {16, 50, 100}) for (bool embedded : {false,true}) {
+        LandingWorld world(slope);
+        LandingActor<Base> a;
+        a.Bind(world,740,vec3d(3000,0,-3000),profile);
+        a._bact_type=type;
+        NC_STACK_ypabact *base=&a;
+        if (auto *flyer=dynamic_cast<NC_STACK_ypaflyer *>(base)) flyer->setFLY_type(flyerType);
+        a._pSector=&world._cells.At(0);
+        a._status=BACT_STATUS_IDLE;
+        if (embedded) a._status_flg|=BACT_STFLAG_LAND;
+        a._oflags=BACT_OFLAG_EXACTCOLL|BACT_OFLAG_BACTCOLL|BACT_OFLAG_LANDONWAIT;
+        a._wrldSize=vec2d(9600,-9600); a._mass=400; a._force=5600;
+        a._airconst=a._airconst_static=130; a._maxrot=.8; a._overeof=20;
+        a._energy=a._energy_max=21000;
+        a._rotation=mat3x3::RotateZ(.25)*mat3x3::RotateY(.4);
+        double down=-1000;
+        for (const auto &part : profile->parts) for (const auto &v : part.vertices) {
+            const vec3d p=a._rotation.Transpose().Transform(v);
+            down=std::max(down,p.y-slope*p.x);
+        }
+        a._position.y=-down+(embedded ? 5 : -180)*std::sqrt(1+slope*slope);
+        a._old_pos=a._position;
+        a._fly_dir=vec3d(0,1,0); a._fly_dir_length=20;
+        vec3d resting; int restingRebounds=0;
+        double depth=0, maxStep=0;
+        const auto penetration = [&]() {
+            double deepest=-1000;
+            for (const auto &part : profile->parts) for (const auto &v : part.vertices) {
+                const vec3d p=a.GetBodyPosition()+a._rotation.Transpose().Transform(v);
+                deepest=std::max(deepest,(p.y-slope*(p.x-3000))/std::sqrt(1+slope*slope));
+            }
+            return deepest;
+        };
+        for (int elapsed=0; elapsed<12000; elapsed+=dt) {
+            world._timeStamp+=dt; a._clock=world._timeStamp; a._newtarget_time=a._clock;
+            a.ResolveShapeMovement(a._position,a._rotation);
+            const vec3d start=a._position; const mat3x3 rotation=a._rotation;
+            update_msg step{}; step.frameTime=dt; step.gTime=world._timeStamp;
+            a.AI_layer3(&step);
+            a.ResolveShapeMovement(start,rotation,dt);
+            maxStep=std::max(maxStep,(a._position-start).length());
+            if (elapsed>=10000) depth=std::max(depth,penetration());
+            else { resting=a._position; restingRebounds=a.rebounds; }
+        }
+        const double drift=(a._position-resting).length();
+        std::printf("AIR_IDLE profile=%s flyer_type=%d embedded=%d slope=%.2f dt=%d land=%d depth=%.5f support_gap=%.5f drift=%.5f rebounds=%d max_step=%.5f\n",
+                    name,flyerType,embedded,slope,dt,bool(a._status_flg&BACT_STFLAG_LAND),depth,-penetration(),drift,a.rebounds-restingRebounds,maxStep);
+        Check(a._status_flg&BACT_STFLAG_LAND,"real aircraft profile reaches idle LAND");
+        Check(depth<=profile->tolerance+.03,"idle aircraft hull stays above flat/sloped terrain");
+        if (!embedded) Check(penetration()>=-profile->tolerance-.1,"idle aircraft reaches terrain support");
+        Check(drift<.05,"idle aircraft rests without repeated displacement");
+        Check(a.rebounds==restingRebounds,"idle aircraft does not retrigger terrain rebound");
+        if (!embedded) Check(maxStep<30,"aircraft landing has no abrupt relocation");
+        const vec3d takeoff=a._position;
+        a._status=BACT_STATUS_NORMAL; a._status_flg&=~BACT_STFLAG_LAND;
+        a._fly_dir=vec3d(0,-1,0); a._fly_dir_length=40; a._airconst=130;
+        const int takeoffRebounds=a.rebounds;
+        for (int elapsed=0; elapsed<1000; elapsed+=dt) {
+            world._timeStamp+=dt;
+            const vec3d start=a._position; const mat3x3 rotation=a._rotation;
+            move_msg step{}; step.flag=1; step.field_0=dt*.001;
+            a.Move(&step);
+            a.ResolveShapeMovement(start,rotation,dt);
+        }
+        Check(a._position.y<takeoff.y-50,"native aircraft Move can leave its resting terrain contact");
+        Check(a.rebounds==takeoffRebounds,"leaving terrain support does not cause repeated recoil");
+        world._collisionScene.reset();
+    }
+}
+void RoboRealProfileContacts(const std::shared_ptr<Collision::Shape> &profile);
+void AirIdleLandingRegression() {
+    AirIdleLandingProfile<NC_STACK_ypabact>("Ghargoil_II",BACT_TYPES_BACT);
+    AirIdleLandingProfile<NC_STACK_ypabact>("5P0_Air_Prism",BACT_TYPES_BACT);
+    AirIdleLandingProfile<NC_STACK_ypaflyer>("Falcon",BACT_TYPES_FLYER,3); // plane
+    AirIdleLandingProfile<NC_STACK_ypaflyer>("Gigant_2",BACT_TYPES_FLYER,2); // glider
+    AirIdleLandingProfile<NC_STACK_ypaflyer>("Zeppelin",BACT_TYPES_FLYER,0);
+    AirIdleLandingProfile<NC_STACK_ypaflyer>("Falcon",BACT_TYPES_FLYER,1); // cruiser uses the same hull for this controller probe.
+    AirIdleLandingProfile<NC_STACK_ypaufo>("Ghor-Scout",BACT_TYPES_UFO);
+    std::string error;
+    auto host=Collision::Load("Data/Models/Collision/Zeppelin.collision", &error);
+    Check(host!=nullptr,error.c_str());
+    if (host) {
+        RoboRealProfileContacts(host);
+        RoboUpdateRegression(host);
+    }
+    for (int type : {BACT_TYPES_BACT,BACT_TYPES_FLYER,BACT_TYPES_UFO}) {
+        GroundWorld world;
+        Actor<> legacy;
+        legacy.Bind(world,741,vec3d(3000,-15,-3000));
+        legacy._bact_type=type; legacy._status=BACT_STATUS_IDLE;
+        legacy._status_flg=BACT_STFLAG_LAND; legacy._overeof=20;
+        legacy.MaintainIdleGroundSupport(20);
+        Check(std::fabs(legacy._position.y+20)<1e-6,"profile-free idle support retains the legacy height correction");
+        Check(legacy._status_flg&BACT_STFLAG_LAND,"profile-free idle support keeps LAND");
+    }
+}
+template<class Base> void WreckLandingProfile(const char *name, int type) {
+    std::string error;
+    auto profile=Collision::Load(std::string("Data/Models/Collision/")+name+".collision", &error);
+    Check(profile!=nullptr,error.c_str());
+    if (!profile) return;
+    for (int dt : {16,50,100}) for (bool shaped : {false,true}) {
+        GroundWorld world;
+        world._vhclProtos.resize(256); world._weaponProtos.resize(256);
+        Actor<Base> wreck;
+        wreck.Bind(world,745,vec3d(2700,-180,-2700),shaped ? profile : nullptr);
+        wreck._bact_type=type; wreck._status=BACT_STATUS_DEAD;
+        wreck._status_flg=BACT_STFLAG_DEATH1;
+        wreck._oflags=BACT_OFLAG_EXACTCOLL;
+        wreck._pSector=&world._cells.At(0);
+        wreck._wrldSize=vec2d(9600,-9600);
+        wreck._mass=400; wreck._force=5600; wreck._airconst_static=130;
+        wreck._maxrot=.8; wreck._overeof=20;
+        wreck._energy=0; wreck._energy_max=21000;
+        wreck._fly_dir=vec3d(0,1,0); wreck._fly_dir_length=20;
+        double maximumY=wreck._position.y;
+        for (int elapsed=0; elapsed<4000 && !(wreck._status_flg&BACT_STFLAG_LAND); elapsed+=dt) {
+            world._timeStamp+=dt; wreck._clock=world._timeStamp;
+            bact_arg86 step; step.field_one=3; step.field_two=dt;
+            wreck.CrashOrLand(&step);
+            maximumY=std::max(maximumY,double(wreck._position.y));
+        }
+        std::printf("WRECK profile=%s shape=%d dt=%d land=%d y=%.5f max_y=%.5f\n",
+                    name,shaped,dt,bool(wreck._status_flg&BACT_STFLAG_LAND),wreck._position.y,maximumY);
+        Check(wreck._status_flg&BACT_STFLAG_LAND,"falling wreck reaches terrain contact before its timeout");
+        Check(wreck._status_flg&BACT_STFLAG_DEATH2,"falling wreck triggers its existing ground impact state");
+        Check(maximumY<=.01 && std::fabs(wreck._position.y+20)<.01,"falling wreck stops above the ground instead of below the map");
+        world._collisionScene.reset();
+    }
+}
+void WreckLandingRegression() {
+    WreckLandingProfile<NC_STACK_ypabact>("Ghargoil_II",BACT_TYPES_BACT);
+    WreckLandingProfile<NC_STACK_ypaflyer>("Zeppelin",BACT_TYPES_FLYER);
+    WreckLandingProfile<NC_STACK_ypaufo>("Ghor-Scout",BACT_TYPES_UFO);
+    WreckLandingProfile<NC_STACK_ypatank>("Tiger",BACT_TYPES_TANK);
+    WreckLandingProfile<NC_STACK_ypacar>("Rock_Sled",BACT_TYPES_CAR);
+}
 void PlayerTankUnitRegression(const std::shared_ptr<Collision::Shape> &cube) {
     for(bool shaped:{false,true}) for(bool reverse:{false,true}) {
         GroundWorld world;
@@ -2561,6 +2727,18 @@ void BuildingBenchmark(std::shared_ptr<Collision::Shape> profile) {
 }
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
+    if (argc>1 && std::string(argv[1])=="--wreck-landing") {
+        FSMgr::iDir::setBaseDir("");
+        WreckLandingRegression();
+        std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
+        return failures ? 1 : 0;
+    }
+    if (argc>1 && std::string(argv[1])=="--air-idle-landing") {
+        FSMgr::iDir::setBaseDir("");
+        AirIdleLandingRegression();
+        std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
+        return failures ? 1 : 0;
+    }
     if (argc>1 && std::string(argv[1])=="--host-first-exit") {
         FSMgr::iDir::setBaseDir("");
         GenesisMountedGunExitRegression();

@@ -1902,6 +1902,10 @@ bool NC_STACK_ypaworld::RestartCompletedMission()
     for ( size_t i = 0; i < _globalMapRegions.MapRegions.size(); i++ )
         _globalMapRegions.MapRegions[i].Status = _missionMapStatusSnapshot[i];
 
+    // Restart is a new attempt, even if this region was already completed
+    // before the run. Other regions keep their pre-run progression.
+    _globalMapRegions.MapRegions[levelID].Status = TMapRegionInfo::STATUS_ENABLED;
+
     // DeleteLevel has already persisted the completed run. Replace that file
     // with the restored pre-run state before starting the level again.
     if ( !SaveSettings(_GameShell,
@@ -1909,13 +1913,13 @@ bool NC_STACK_ypaworld::RestartCompletedMission()
                        World::SDF_ALL) )
     {
         // Keep the restored in-memory state authoritative and continue into
-        // ACTION_PLAY. ProcessMenuFrame performs the normal settings save once
+        // the fresh start. ProcessMenuFrame performs the normal settings save once
         // more before loading the mission, avoiding an inconsistent debrief
         // where Complete Mission could act on an already-restored run.
         ypa_log_out("Restart Mission: restored progression could not be persisted yet; retrying on level start.\n");
     }
 
-    _GameShell->envAction.action = EnvAction::ACTION_PLAY;
+    _GameShell->envAction.action = EnvAction::ACTION_RESTART_MISSION;
     _GameShell->envAction.params[0] = levelID;
     _GameShell->envAction.params[1] = levelID;
     FreeDebrief();

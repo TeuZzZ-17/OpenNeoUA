@@ -673,7 +673,8 @@ struct EnvAction
         ACTION_PLAY     = 2,
         ACTION_LOAD     = 3,
         ACTION_NETPLAY  = 4,
-        ACTION_REPLAY     = 5
+        ACTION_REPLAY     = 5,
+        ACTION_RESTART_MISSION = 6
     };
 
     int8_t action = ACTION_NONE;
@@ -2175,6 +2176,7 @@ struct yw_arg161
 {
     int lvlID;
     int field_4;
+    bool freshStart = false;
 };
 
 struct ypaworld_arg146
@@ -2608,6 +2610,7 @@ public:
     std::string BriefingPlayAsButtonText() const;
     bool CanRestartCompletedMission() const;
     bool RestartCompletedMission();
+    bool RestoreCompletedMissionHostStart(const std::vector<MapRobo> &robos);
     void FreeBriefDataSet();
     int ypaworld_func158__sub4__sub1__sub3__sub0();
     void yw_ActivateWunderstein(cellArea *cell, int a3);
@@ -2620,8 +2623,8 @@ public:
     TMobilePowerInfluence FindMobilePowerInfluenceForUnit(NC_STACK_ypabact *target);
     uint8_t GetUnitEnergyVisualState(NC_STACK_ypabact *target);
 
-    void sub_4D12D8(int id, int a3);
-    void sub_4D1594(int id);
+    void sub_4D12D8(int id, int a3, bool restoring = false);
+    void sub_4D1594(int id, bool restoring = false);
     void sub_4D1444(int id, bool restoring = false);
     int LoadingParseSaveFile(const std::string &filename);
     void LoadingUnitsRefresh();

@@ -229,11 +229,13 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
     const btCollisionObject *self;
     bool horizontal;
     bool bodyDirection;
+    const std::vector<btVector3> *terrainNormals;
     std::set<std::pair<const btCollisionShape *, const btCollisionShape *>> leaves;
     std::map<std::pair<const btCollisionObject *, const btCollisionShape *>, std::vector<btVector3>> footprints;
     std::vector<Contact> contacts;
-    explicit ContactCollector(const btCollisionObject *obj, bool ground = false, bool body = false)
-        : self(obj), horizontal(ground), bodyDirection(body) {}
+    explicit ContactCollector(const btCollisionObject *obj, bool ground = false, bool body = false,
+                              const std::vector<btVector3> *normals = nullptr)
+        : self(obj), horizontal(ground), bodyDirection(body), terrainNormals(normals) {}
     const std::vector<btVector3> &FootprintFor(const btCollisionObjectWrapper *object)
     {
         const auto key = std::make_pair(object->getCollisionObject(), object->getCollisionShape());
@@ -243,7 +245,7 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
         return footprints.emplace(key, Footprint(object)).first->second;
     }
     btScalar addSingleResult(btManifoldPoint &p, const btCollisionObjectWrapper *a,
-                            int, int, const btCollisionObjectWrapper *b, int, int) override
+                            int, int indexA, const btCollisionObjectWrapper *b, int, int indexB) override
     {
         if ( p.getDistance() > 0 ) return 0;
         const bool selfIsA = a->getCollisionObject() == self;
@@ -251,6 +253,27 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
         c.depth = -p.getDistance();
         c.normal = V(selfIsA ? p.m_normalWorldOnB : -p.m_normalWorldOnB);
         c.point = V(selfIsA ? p.getPositionWorldOnB() : p.getPositionWorldOnA());
+        const int triangle = selfIsA ? indexB : indexA;
+        if (terrainNormals && triangle >= 0 && (size_t)triangle < terrainNormals->size())
+        {
+            const auto *hull = selfIsA ? a : b;
+            const auto *terrain = selfIsA ? b : a;
+            const btVector3 normal = terrain->getCollisionObject()->getWorldTransform().getBasis() *
+                (*terrainNormals)[triangle];
+            if (normal.y() >= .6 && hull->getCollisionShape()->isConvex())
+            {
+                // A floor is one-sided support. Once a hull straddles it,
+                // the nearest Bullet exit can point down through the floor.
+                // Clear the whole hull above the actual support plane instead.
+                const btVector3 outward = -normal;
+                const auto *shape = static_cast<const btConvexShape *>(hull->getCollisionShape());
+                const auto &pose = hull->getWorldTransform();
+                const btVector3 support = pose * shape->localGetSupportingVertex(
+                    pose.getBasis().transpose() * -outward);
+                c.normal = V(outward);
+                c.depth = std::max(0.0, -double((support - V(c.point)).dot(outward)));
+            }
+        }
         if (horizontal)
         {
             if (!leaves.insert({a->getCollisionShape(), b->getCollisionShape()}).second) return 0;
@@ -1496,8 +1519,12 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
     btVector3 lo = start.getOrigin(), hi = lo; lo.setMin(end.getOrigin()); hi.setMax(end.getOrigin());
     auto nearby = impl->Nearby(lo - pad, hi + pad);
     std::vector<Body *> terrain;
+    const bool terrainSupported = GroundDrive(a) ||
+        (a->_bact_type == BACT_TYPES_ROBO && (a->_status_flg & BACT_STFLAG_LAND));
     if (a->HasCollisionShape() && a->getBACT_exactCollisions() && a->_status != BACT_STATUS_CREATE)
-        terrain = impl->Terrain(fromPosition + bodyOffset, a->GetBodyPosition(), radius, a->_status_flg & BACT_STFLAG_LAND);
+        // Ground controllers supply their own support height and slope.
+        // Landed aircraft still need hull/terrain checks while levelling out.
+        terrain = impl->Terrain(fromPosition + bodyOffset, a->GetBodyPosition(), radius, terrainSupported);
     nearby.insert(nearby.end(), terrain.begin(), terrain.end());
     if (a->HasCollisionShape() && a->getBACT_bactCollisions())
         for (Body *body : nearby)
@@ -1546,7 +1573,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             nearby = impl->Nearby(low - pad, high + pad);
             if (a->HasCollisionShape() && a->getBACT_exactCollisions() && a->_status != BACT_STATUS_CREATE)
             {
-                auto geometry = impl->Terrain(safePosition + bodyOffset, desiredPosition + bodyOffset, radius, a->_status_flg & BACT_STFLAG_LAND);
+                auto geometry = impl->Terrain(safePosition + bodyOffset, desiredPosition + bodyOffset, radius, terrainSupported);
                 nearby.insert(nearby.end(), geometry.begin(), geometry.end());
             }
             impl->Order(nearby);
@@ -1770,7 +1797,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             nearby = impl->Nearby(p - pad, p + pad);
             if (a->HasCollisionShape() && a->getBACT_exactCollisions() && a->_status != BACT_STATUS_CREATE)
             {
-                auto geometry = impl->Terrain(a->GetBodyPosition(), a->GetBodyPosition(), radius, a->_status_flg & BACT_STFLAG_LAND);
+                auto geometry = impl->Terrain(a->GetBodyPosition(), a->GetBodyPosition(), radius, terrainSupported);
                 nearby.insert(nearby.end(), geometry.begin(), geometry.end());
             }
             impl->Order(nearby);
@@ -1780,7 +1807,8 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
         {
             if (!allowed(body)) continue;
             ContactCollector result(&self.object, HorizontalPair(a, body->actor),
-                a->_bact_type == BACT_TYPES_ROBO || (body->actor && body->actor->_bact_type == BACT_TYPES_ROBO));
+                a->_bact_type == BACT_TYPES_ROBO || (body->actor && body->actor->_bact_type == BACT_TYPES_ROBO),
+                body->terrain ? &body->triangleNormals : nullptr);
             ContactPair(impl->detector, self.object, body->object, result);
             for (auto c : result.contacts)
             {

@@ -715,15 +715,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
 
                 SetState(&arg78);
 
-                ypaworld_arg136 arg136_4;
-                arg136_4.stPos = _position;
-                arg136_4.vect = vec3d::OY(_overeof + 50.0);
-                arg136_4.flags = 0;
-
-                _world->ypaworld_func136(&arg136_4);
-
-                if ( arg136_4.isect )
-                    _position.y = arg136_4.isectPos.y - _overeof;
+                MaintainIdleGroundSupport(arg->frameTime);
             }
             else
             {

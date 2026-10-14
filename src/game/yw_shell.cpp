@@ -5542,6 +5542,49 @@ void NC_STACK_ypaworld::LoadingUnitsRefresh()
     }
 }
 
+bool NC_STACK_ypaworld::RestoreCompletedMissionHostStart(const std::vector<MapRobo> &robos)
+{
+    auto *host = dynamic_cast<NC_STACK_yparobo *>(_userRobo);
+    if ( !host )
+        return false;
+
+    const Common::Point cell = World::PositionToSectorID(host->_position);
+    const bool onGate = std::any_of(_levelInfo.Gates.begin(), _levelInfo.Gates.end(),
+        [&](const TMapGate &gate) { return gate.CellId == cell; });
+    if ( !onGate )
+        return false;
+
+    for ( const MapRobo &start : robos )
+    {
+        if ( start.Owner != host->_owner )
+            continue;
+
+        // Use the same authored, terrain-relative position as a fresh mission.
+        // The completed territory and its units remain in the final-save state.
+        ypaworld_arg136 ground;
+        ground.stPos = start.Pos.X0Z() - vec3d::OY(30000.0);
+        ground.vect = vec3d::OY(50000.0);
+        ground.flags = 0;
+        ypaworld_func136(&ground);
+
+        bact_arg80 placement;
+        placement.pos = start.Pos;
+        if ( ground.isect )
+            placement.pos.y += ground.isectPos.y;
+        placement.field_C = 0;
+        if ( !host->SetPosition(&placement) )
+            return false;
+
+        host->_old_pos = host->_position;
+        host->_beam_time = 0;
+        host->_fly_dir_length = 0;
+        host->_thraction = 0;
+        host->_roboState &= ~NC_STACK_yparobo::ROBOSTATE_MOVE;
+        return true;
+    }
+    return false;
+}
+
 size_t NC_STACK_ypaworld::LoadGame(const std::string &saveFile)
 {
     bool loadOK = false;
@@ -5620,7 +5663,10 @@ size_t NC_STACK_ypaworld::LoadGame(const std::string &saveFile)
     LoadingUnitsRefresh();
 
     if ( saveFile.find(".fin") != std::string::npos || saveFile.find(".FIN") != std::string::npos )
+    {
+        RestoreCompletedMissionHostStart(mapp.Robos);
         InitBuddies();
+    }
 
     for(int y = 0; y < _mapSize.y; y++)
     {
