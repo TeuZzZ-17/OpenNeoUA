@@ -671,6 +671,9 @@ size_t NC_STACK_ypaworld::Deinit()
     _superItemProfiles.clear();
     _buffProfiles.clear();
     _debuffProfiles.clear();
+    _decalProfiles.clear();
+    _superItemDefs.clear();
+    _cloudProfiles.clear();
     _debugBlastRings.clear();
     ClearMinigunTracers();
     ClearProceduralEnergyFX();

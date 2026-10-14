@@ -23,33 +23,30 @@ struct FXWorld : NC_STACK_ypaworld {
 void ParserChecks() {
     for(int context=0;context<3;++context) for(const char *value : {"", "0", "1", "2", "-1", "1.0", "invalid"}) {
         NC_STACK_ypaworld world; world._vhclProtos.resize(2); world._weaponProtos.resize(2);
-        std::vector<World::TSuperItemProfile> profiles;
+        std::map<int32_t, World::TSuperItemProfile> profiles;
         ScriptParser::HandlersList handlers;
         handlers.push_back(context==0 ? (ScriptParser::DataHandler*)new World::Parsers::VhclProtoParser(&world) :
             context==1 ? (ScriptParser::DataHandler*)new World::Parsers::WeaponProtoParser(&world) :
             (ScriptParser::DataHandler*)new World::Parsers::SuperItemProfileParser(&profiles));
-        Engine::StringList lines{context==0 ? "new_vehicle 1" : context==1 ? "new_weapon 1" : "begin_superitem_profile"};
-        for(const char *mode : {"visual","physical","legacy","ground_decal"}) {
+        Engine::StringList lines{context==0 ? "new_vehicle 1" : context==1 ? "new_weapon 1" : "new_superitem 1"};
+        for(const char *mode : {"visual","physical","legacy"}) {
             if(context==2 && std::string(mode)!="visual") continue;
             lines.push_back("begin_fx");
             // Deliberately put the shared parameter before mode.
             if(*value) lines.push_back(std::string("random_rotation = ")+value);
-            lines.push_back(std::string("trigger = ")+(context==0 ? "destroyed" : context==1 && std::string(mode)=="ground_decal" ? "impact_world" : "detonate"));
+            lines.push_back(std::string("trigger = ")+(context==0 ? "destroyed" : "detonate"));
             lines.push_back(std::string("mode = ")+(std::string(mode)=="legacy" ? "physical" : mode));
             if(std::string(mode)=="visual") { lines.push_back("vp_model = 1"); lines.push_back("duration = 1000"); }
             else if(std::string(mode)=="physical") { lines.push_back("vp_model = 1"); lines.push_back("mass = 40"); lines.push_back("radius = 2"); }
-            else if(std::string(mode)=="legacy") lines.push_back("physical_vehicle = 1");
-            else { lines.push_back("texture = Data/Interface/GroundDecals/impact_01.png"); lines.push_back("size = 50"); lines.push_back("duration = 1000"); }
+            else lines.push_back("physical_vehicle = 1");
             lines.push_back("end");
         }
         lines.push_back("end");
         Check(ScriptParser::ParseStringList(lines,handlers,ScriptParser::FLAG_NO_SCOPE_SKIP),"all applicable modes parse");
-        const auto &fx=context==0 ? world._vhclProtos[1].chain_fx : context==1 ? world._weaponProtos[1].chain_fx : profiles.back().detonate_chain_fx;
-        Check(fx.size()==(context==2 ? 1u : 4u),"all applicable blocks retained");
+        const auto &fx=context==0 ? world._vhclProtos[1].chain_fx : context==1 ? world._weaponProtos[1].chain_fx : profiles.rbegin()->second.detonate_chain_fx;
+        Check(fx.size()==(context==2 ? 1u : 3u),"all applicable blocks retained");
         for(const auto &config:fx) {
             Check(config.random_rotation==(std::string(value)=="1"),"only exact 1 enables random rotation");
-            if(config.mode==World::TChainFXConfig::MODE_GROUND_DECAL)
-                Check(config.ground_decal_random_rotation==config.random_rotation,"decal rotation retains shared parameter");
         }
     }
 }

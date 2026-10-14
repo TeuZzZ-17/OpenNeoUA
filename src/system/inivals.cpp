@@ -480,6 +480,8 @@ Common::Ini::Key IniConf::GfxParticlesLimit("gfx.particles.limit", Common::Ini::
 // OpenNeoUA custom: bounded world-side terrain decals. Zero disables the system;
 // the generated mesh uses a fixed internal triangle cap.
 Common::Ini::Key IniConf::GfxGroundDecalLimit("gfx.ground_decal_limit", Common::Ini::KT_DIGIT, (int32_t)256);
+// OpenNeoUA custom: global cap of ground decals that smoke at the same time (smoke is set per decal block).
+Common::Ini::Key IniConf::GfxGroundDecalSmokeLimit("gfx.ground_decal_smoke_limit", Common::Ini::KT_DIGIT, (int32_t)256);
 
 Common::Ini::Key IniConf::MenuWindowed("menu.windowed", Common::Ini::KT_BOOL, false);
 
@@ -814,6 +816,7 @@ void IniConf::Init()
 
         , &GfxParticlesLimit
         , &GfxGroundDecalLimit
+        , &GfxGroundDecalSmokeLimit
 
         , &MenuWindowed
 
