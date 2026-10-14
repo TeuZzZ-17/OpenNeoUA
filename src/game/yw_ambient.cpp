@@ -35,86 +35,19 @@
 #include "world/tools.h"
 #include "game/yw_impl.h"
 
-bool NC_STACK_ypaworld::LoadAtmosphericFXProfilePath(const std::string &authoredPath,
-                                                      World::TAtmosphericFXProfile &outProfile)
+// Copies one cloud profile of Clouds.cfg. The parser already validated it.
+bool NC_STACK_ypaworld::FindCloudProfile(int32_t id, World::TAtmosphericFXProfile &outProfile)
 {
     outProfile = World::TAtmosphericFXProfile();
 
-    if ( authoredPath.empty() )
-        return false;
-
-    std::string profilePath;
-    if ( !uaNormalizeDataAssetPath(authoredPath, &profilePath, true) )
+    const auto it = _cloudProfiles.find(id);
+    if ( it == _cloudProfiles.end() )
     {
-        ypa_log_out("WARNING: Atmospheric FX profile path '%s' is not a valid Data path.\n",
-                    authoredPath.c_str());
+        ypa_log_out("WARNING: cloud profile %d is not defined in the scripts.\n", id);
         return false;
     }
 
-    if ( !uaFileExist(profilePath) )
-    {
-        ypa_log_out("WARNING: Atmospheric FX profile '%s' was not found.\n",
-                    authoredPath.c_str());
-        return false;
-    }
-
-    World::TAtmosphericFXProfile parsedProfile;
-    ScriptParser::HandlersList parsers {
-        new World::Parsers::AtmosphericFXProfileParser(&parsedProfile)
-    };
-
-    if ( !ScriptParser::ParseFile(profilePath, parsers,
-                                  ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
-    {
-        ypa_log_out("WARNING: Atmospheric FX profile '%s' is invalid.\n",
-                    authoredPath.c_str());
-        return false;
-    }
-
-    if ( parsedProfile.mesh3ds.empty() || parsedProfile.count <= 0 )
-    {
-        ypa_log_out("WARNING: Atmospheric FX profile '%s' is missing mesh_3ds or has count <= 0.\n",
-                    authoredPath.c_str());
-        return false;
-    }
-
-    if ( parsedProfile.count > 512 )
-    {
-        ypa_log_out("WARNING: Atmospheric FX profile '%s' requests count=%d; clamping to 512.\n",
-                    authoredPath.c_str(), parsedProfile.count);
-        parsedProfile.count = 512;
-    }
-
-    if ( parsedProfile.lifetime_min <= 0 && parsedProfile.lifetime_max <= 0 )
-        parsedProfile.lifetime_min = parsedProfile.lifetime_max = 1000;
-    else if ( parsedProfile.lifetime_min <= 0 )
-        parsedProfile.lifetime_min = parsedProfile.lifetime_max;
-    else if ( parsedProfile.lifetime_max <= 0 )
-        parsedProfile.lifetime_max = parsedProfile.lifetime_min;
-
-    if ( parsedProfile.lifetime_max < parsedProfile.lifetime_min )
-        std::swap(parsedProfile.lifetime_min, parsedProfile.lifetime_max);
-
-    parsedProfile.spawn_offset.x = std::isfinite(parsedProfile.spawn_offset.x) ? parsedProfile.spawn_offset.x : 0.0;
-    parsedProfile.spawn_offset.y = std::isfinite(parsedProfile.spawn_offset.y) ? parsedProfile.spawn_offset.y : 0.0;
-    parsedProfile.spawn_offset.z = std::isfinite(parsedProfile.spawn_offset.z) ? parsedProfile.spawn_offset.z : 0.0;
-    parsedProfile.velocity.x = std::isfinite(parsedProfile.velocity.x) ? parsedProfile.velocity.x : 0.0;
-    parsedProfile.velocity.y = std::isfinite(parsedProfile.velocity.y) ? parsedProfile.velocity.y : 0.0;
-    parsedProfile.velocity.z = std::isfinite(parsedProfile.velocity.z) ? parsedProfile.velocity.z : 0.0;
-    parsedProfile.spin.x = std::isfinite(parsedProfile.spin.x) ? parsedProfile.spin.x : 0.0;
-    parsedProfile.spin.y = std::isfinite(parsedProfile.spin.y) ? parsedProfile.spin.y : 0.0;
-    parsedProfile.spin.z = std::isfinite(parsedProfile.spin.z) ? parsedProfile.spin.z : 0.0;
-    parsedProfile.scale.x = (std::isfinite(parsedProfile.scale.x) && parsedProfile.scale.x > 0.0f) ? parsedProfile.scale.x : 1.0f;
-    parsedProfile.scale.y = (std::isfinite(parsedProfile.scale.y) && parsedProfile.scale.y > 0.0f) ? parsedProfile.scale.y : 1.0f;
-    parsedProfile.scale.z = (std::isfinite(parsedProfile.scale.z) && parsedProfile.scale.z > 0.0f) ? parsedProfile.scale.z : 1.0f;
-    parsedProfile.tint.Clamp();
-
-    if ( parsedProfile.loop_sound_volume < 0 )
-        parsedProfile.loop_sound_volume = 0;
-    if ( parsedProfile.loop_sound_volume > 127 )
-        parsedProfile.loop_sound_volume = 127;
-    parsedProfile.valid = true;
-    outProfile = std::move(parsedProfile);
+    outProfile = it->second;
     return true;
 }
 
@@ -124,20 +57,19 @@ bool NC_STACK_ypaworld::LoadAtmosphericFXProfile(const TLevelDescription &mapp)
     StopAtmosphericFXLoopSound();
     _atmosphericFXProfile = World::TAtmosphericFXProfile();
 
-    if ( mapp.AtmosphericFXProfilePath.empty() )
+    if ( mapp.CloudId < 0 )
         return false;
 
     World::TAtmosphericFXProfile parsedProfile;
-    if ( !LoadAtmosphericFXProfilePath(mapp.AtmosphericFXProfilePath, parsedProfile) )
+    if ( !FindCloudProfile(mapp.CloudId, parsedProfile) )
     {
-        ypa_log_out("WARNING: atmospheric FX disabled for this level.\n");
+        ypa_log_out("WARNING: cloud disabled for this level.\n");
         return false;
     }
 
     _atmosphericFXProfile = std::move(parsedProfile);
     StartAtmosphericFXLoopSound();
-    ypa_log_out("OpenNeoUA: loaded Atmospheric FX profile %s for this level.\n",
-                mapp.AtmosphericFXProfilePath.c_str());
+    ypa_log_out("OpenNeoUA: loaded cloud %d for this level.\n", mapp.CloudId);
     return true;
 }
 

@@ -263,7 +263,7 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
     {
         _vhclProtos[targetID] = previous;
         _spectatorVehicleProtoID = -1;
-        ypa_log_out("WARNING: spectator vehicle file %s must define a valid model = ufo with hidden = yes and a buff_id linked to a Buff profile with buff_invulnerable = 1. Spectator mode disabled for this level.\n", spectatorScript.c_str());
+        ypa_log_out("WARNING: spectator vehicle file %s must define a valid model = ufo with hidden = yes and a buff_id linked to a Buff profile with invulnerable = 1. Spectator mode disabled for this level.\n", spectatorScript.c_str());
         return false;
     }
 
@@ -280,6 +280,9 @@ bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
     ScriptParser::HandlersList parsers {
         new World::Parsers::BuffProfileParser(&_buffProfiles),
         new World::Parsers::DebuffProfileParser(&_debuffProfiles),
+        new World::Parsers::DecalProfileParser(&_decalProfiles),
+        new World::Parsers::SuperItemProfileParser(&_superItemDefs),
+        new World::Parsers::AtmosphericFXProfileParser(&_cloudProfiles),
         new World::Parsers::VhclProtoParser(this),
         new World::Parsers::WeaponProtoParser(this),
         new World::Parsers::BuildProtoParser(this)
@@ -371,6 +374,76 @@ void NC_STACK_ypaworld::ResolveStatusProfileLinks()
         resolveWeaponDebuff(i, proto.delay_time_debuff_id, 1,
                             "delay_time_debuff_id", proto.delay_time_debuff);
     }
+
+    ResolveDecalProfileLinks();
+}
+
+// Builds the ground decals every vehicle (destroyed), weapon (impact_world) and MGUN
+// (impact_world) spawns from its decal_id / mgun_decal_id. The decal size can depend on the
+// unit: silhouette = collision diameter, explosion = blast (weapon) or at-death radius (vehicle).
+// Resolved decals are rebuilt from scratch every time, so changed profiles are always picked up.
+void NC_STACK_ypaworld::ResolveDecalProfileLinks()
+{
+    const auto isGroundDecal = [](const World::TChainFXConfig &chain)
+    {
+        return chain.mode == World::TChainFXConfig::MODE_GROUND_DECAL;
+    };
+
+    const auto findProfile = [this](int32_t id, const char *owner, size_t index, const char *key)
+        -> const World::TGroundDecalProfile *
+    {
+        if ( id < 0 )
+            return nullptr;
+
+        auto it = _decalProfiles.find(id);
+        if ( it == _decalProfiles.end() )
+        {
+            ypa_log_out("WARNING: %s %u references missing %s %d; decal disabled.\n",
+                        owner, (unsigned)index, key, id);
+            return nullptr;
+        }
+
+        return &it->second;
+    };
+
+    for (World::TVhclProto &proto : _vhclProtos)
+    {
+        proto.chain_fx.erase(std::remove_if(proto.chain_fx.begin(), proto.chain_fx.end(), isGroundDecal),
+                             proto.chain_fx.end());
+        proto.mgun_decal_enable = false;
+        proto.mgun_decal = World::TChainFXConfig();
+
+        if ( const World::TGroundDecalProfile *profile = findProfile(proto.decal_id, "vehicle",
+                                                                       (size_t)proto.Index, "decal_id") )
+        {
+            const float explosionRadius = std::max(proto.at_death_energy_radius, proto.at_death_push_radius);
+            proto.chain_fx.push_back(World::ResolveGroundDecal(
+                *profile, World::TChainFXConfig::TRIGGER_DESTROYED,
+                proto.radius * 2.0f, explosionRadius * 2.0f));
+        }
+
+        // MGUN hits have no explosion or silhouette of their own: a profile with
+        // percentage sizes gets its size floor.
+        if ( const World::TGroundDecalProfile *profile = findProfile(proto.mgun_decal_id, "vehicle",
+                                                                       (size_t)proto.Index, "mgun_decal_id") )
+        {
+            proto.mgun_decal = World::ResolveGroundDecal(
+                *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD, 0.0f, 0.0f);
+            proto.mgun_decal_enable = true;
+        }
+    }
+
+    for (size_t i = 0; i < _weaponProtos.size(); ++i)
+    {
+        World::TWeapProto &proto = _weaponProtos[i];
+        proto.chain_fx.erase(std::remove_if(proto.chain_fx.begin(), proto.chain_fx.end(), isGroundDecal),
+                             proto.chain_fx.end());
+
+        if ( const World::TGroundDecalProfile *profile = findProfile(proto.decal_id, "weapon", i, "decal_id") )
+            proto.chain_fx.push_back(World::ResolveGroundDecal(
+                *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
+                proto.radius * 2.0f, proto.blast_radius * 2.0f));
+    }
 }
 
 bool NC_STACK_ypaworld::ProtosInit()
@@ -378,6 +451,9 @@ bool NC_STACK_ypaworld::ProtosInit()
     _speechEventVariants.clear();
     _buffProfiles.clear();
     _debuffProfiles.clear();
+    _decalProfiles.clear();
+    _superItemDefs.clear();
+    _cloudProfiles.clear();
     _vhclProtos.resize(NUM_VHCL_PROTO);
     _weaponProtos.resize(NUM_WEAPON_PROTO);
     _buildProtos.resize(NUM_BUILD_PROTO);
@@ -391,75 +467,23 @@ bool NC_STACK_ypaworld::ProtosInit()
     return true;
 }
 
-std::string yw_SuperItemProfilePathName(const std::string &path)
-{
-    std::string name = path;
-    std::replace(name.begin(), name.end(), '\\', '/');
-    const size_t slash = name.find_last_of('/');
-    if ( slash != std::string::npos )
-        name = name.substr(slash + 1);
-    const size_t dot = name.find_last_of('.');
-    if ( dot != std::string::npos )
-        name.resize(dot);
-    return name;
-}
-
-bool NC_STACK_ypaworld::LoadSuperItemProfilePath(const std::string &authoredPath,
-                                                  World::TSuperItemProfile &outProfile)
+// Copies one SuperItem definition of SuperItems.cfg for a level and checks what the level
+// needs from it. Returns false when the bomb must use the vanilla behaviour.
+bool NC_STACK_ypaworld::PrepareSuperItemProfile(int32_t id, World::TSuperItemProfile &outProfile)
 {
     outProfile = World::TSuperItemProfile();
 
-    if ( authoredPath.empty() )
-        return false;
-
-    std::string profilePath;
-    if ( !uaNormalizeDataAssetPath(authoredPath, &profilePath, false) )
+    const auto definition = _superItemDefs.find(id);
+    if ( definition == _superItemDefs.end() )
     {
-        ypa_log_out("WARNING: SuperItem profile path '%s' is not a valid explicit Data path.\n",
-                    authoredPath.c_str());
+        ypa_log_out("WARNING: SuperItem profile %d is not defined in the scripts.\n", id);
         return false;
     }
 
-    if ( !uaFileExist(profilePath) )
-    {
-        ypa_log_out("WARNING: SuperItem profile '%s' was not found.\n",
-                    authoredPath.c_str());
-        return false;
-    }
-
-    std::vector<World::TSuperItemProfile> parsedProfiles;
-    ScriptParser::HandlersList parsers {
-        new World::Parsers::BuffProfileParser(&_buffProfiles),
-        new World::Parsers::DebuffProfileParser(&_debuffProfiles),
-        new World::Parsers::SuperItemProfileParser(&parsedProfiles)
-    };
-
-    if ( !ScriptParser::ParseFile(profilePath, parsers,
-                                  ScriptParser::FLAG_NO_SCOPE_SKIP | ScriptParser::FLAG_NO_INCLUDE) )
-    {
-        ypa_log_out("WARNING: SuperItem profile file '%s' is invalid.\n",
-                    authoredPath.c_str());
-        return false;
-    }
-
-    // A directly loaded SuperItem file may also define new_buff/new_debuff
-    // blocks, so refresh prototype links only after the whole file was parsed.
-    ResolveStatusProfileLinks();
-
-    if ( parsedProfiles.size() != 1 )
-    {
-        ypa_log_out("WARNING: SuperItem profile file '%s' must contain exactly one begin_superitem_profile block; found %u.\n",
-                    authoredPath.c_str(), (unsigned)parsedProfiles.size());
-        return false;
-    }
-
-    World::TSuperItemProfile profile = parsedProfiles.front();
+    World::TSuperItemProfile profile = definition->second;
     profile.valid = true;
-
-    // The file path is now the profile identity. id remains optional metadata
-    // used for the in-game display name; absent id falls back to the file name.
-    if ( profile.id.empty() )
-        profile.id = yw_SuperItemProfilePathName(profilePath);
+    if ( profile.name.empty() )
+        profile.name = "superitem_" + std::to_string(id);
 
     profile.debuff = World::TWeaponDebuffConfig();
     if ( profile.debuff_id >= 0 )
@@ -469,13 +493,13 @@ bool NC_STACK_ypaworld::LoadSuperItemProfilePath(const std::string &authoredPath
             profile.debuff = debuffIt->second;
         else
             ypa_log_out("WARNING: SuperItem profile '%s' references missing debuff_id %d; Debuff disabled.\n",
-                        profile.id.c_str(), profile.debuff_id);
+                        profile.name.c_str(), profile.debuff_id);
     }
 
     if ( profile.wave_vp <= 0 && profile.wave_3ds.empty() && profile.wave_base.empty() )
     {
         ypa_log_out("WARNING: SuperItem profile '%s' has no wave_vp, wave_base or wave_3ds; using vanilla fallback.\n",
-                    profile.id.c_str());
+                    profile.name.c_str());
         return false;
     }
 
@@ -492,7 +516,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfilePath(const std::string &authoredPath
     if ( !waveSpeedTrioValid )
     {
         ypa_log_out("WARNING: SuperItem profile '%s' requires valid wave_start_speed, wave_speed_ramp_time and wave_end_speed; using vanilla fallback.\n",
-                    profile.id.c_str());
+                    profile.name.c_str());
         return false;
     }
 
@@ -519,7 +543,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfilePath(const std::string &authoredPath
              !std::isfinite(chain.spin.z) )
         {
             ypa_log_out("WARNING: invalid detonation Chain FX ignored in SuperItem profile '%s'.\n",
-                        profile.id.c_str());
+                        profile.name.c_str());
             chainIt = profile.detonate_chain_fx.erase(chainIt);
         }
         else
@@ -531,8 +555,7 @@ bool NC_STACK_ypaworld::LoadSuperItemProfilePath(const std::string &authoredPath
     // owning MainSample pointer and leave the destination with a dangling sample.
     // InitSuperItems() loads sounds only after every profile is in stable storage.
     outProfile = std::move(profile);
-    ypa_log_out("Loaded SuperItem profile '%s' from %s.\n",
-                outProfile.id.c_str(), profilePath.c_str());
+    ypa_log_out("Prepared SuperItem profile %d '%s'.\n", id, outProfile.name.c_str());
     return true;
 }
 

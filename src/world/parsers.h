@@ -11,6 +11,7 @@
 #include "common/def_parser.h"
 
 #include "protos.h"
+#include "grounddecal_profile.h"
 
 
 class NC_STACK_ypaworld;
@@ -106,13 +107,15 @@ protected:
 class SuperItemProfileParser : public ScriptParser::DataHandler
 {
 public:
-    SuperItemProfileParser(std::vector<TSuperItemProfile> *profiles)
+    SuperItemProfileParser(std::map<int32_t, TSuperItemProfile> *profiles)
     : _profiles(*profiles) {};
     virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
-    std::vector<TSuperItemProfile> &_profiles;
+    std::map<int32_t, TSuperItemProfile> &_profiles;
     TSuperItemProfile *_profile = nullptr;
+    // Receives the lines of a block that has no valid id, so they are skipped cleanly.
+    TSuperItemProfile _discard;
 };
 
 class BuffProfileParser : public ScriptParser::DataHandler
@@ -141,17 +144,41 @@ protected:
     int32_t _profileID = -1;
 };
 
-class AtmosphericFXProfileParser : public ScriptParser::DataHandler
+class DecalProfileParser : public ScriptParser::DataHandler
 {
 public:
-    AtmosphericFXProfileParser(TAtmosphericFXProfile *profile)
-    : _profile(*profile) {};
+    DecalProfileParser(std::map<int32_t, TGroundDecalProfile> *profiles)
+    : _profiles(*profiles) {};
     virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
-    TAtmosphericFXProfile &_profile;
-    bool _seenScope = false;
-    bool _duplicateScope = false;
+    // Validates the block that just ended and stores it.
+    void Finish();
+
+    std::map<int32_t, TGroundDecalProfile> &_profiles;
+    TGroundDecalProfile _work;   // profile being parsed
+    bool _active = false;
+    int32_t _profileID = -1;
+    bool _durationValid = false;
+    int _fadeIn = 0;
+    int _fadeOut = 0;
+};
+
+class AtmosphericFXProfileParser : public ScriptParser::DataHandler
+{
+public:
+    AtmosphericFXProfileParser(std::map<int32_t, TAtmosphericFXProfile> *profiles)
+    : _profiles(*profiles) {};
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
+protected:
+    // Validates the block that just ended (new_cloud) and stores it.
+    void Finish();
+
+    std::map<int32_t, TAtmosphericFXProfile> &_profiles;
+    TAtmosphericFXProfile _work;   // profile being parsed
+    bool _active = false;
+    int32_t _profileID = -1;
 };
 
 class MiscParser : public ScriptParser::DataHandler

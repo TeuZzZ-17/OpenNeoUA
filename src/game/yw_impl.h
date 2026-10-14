@@ -137,7 +137,6 @@ int32_t yw_ClampRenderSectors(int32_t sectors);
 int32_t yw_RenderSectorsToNormalVizLimit(int32_t sectors);
 void yw_ApplyNucleusViewDistanceOverrides(NC_STACK_ypaworld *yw);
 bool yw_IsUsableGameplayName(const std::string &name);
-std::string yw_SuperItemProfilePathName(const std::string &path);
 int yw_InitSceneRecorder(NC_STACK_ypaworld *yw);
 void yw_setInitScriptLoc(NC_STACK_ypaworld *yw);
 void sub_445230(NC_STACK_ypaworld *yw);

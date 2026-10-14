@@ -80,6 +80,7 @@ set(SOURCES
     world/blacksecttint.cpp
     world/energyfx.cpp
     world/grounddecal.cpp
+    world/grounddecal_smoke.cpp
     world/collision_shape.cpp
     world/weapontracer.cpp
     world/luaevents.cpp

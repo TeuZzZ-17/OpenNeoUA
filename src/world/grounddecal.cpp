@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "grounddecal_contact.h"
+#include "grounddecal_limit.h"
 #include "common/env.h"
 #include "common/includes.h"
 #include "nucleus/loaders.h"
@@ -17,9 +18,7 @@
 namespace
 {
 
-constexpr int GROUND_DECAL_DEFAULT_LIMIT = 256;
 constexpr int GROUND_DECAL_MAX_TRIANGLES = 128;
-constexpr int GROUND_DECAL_HARD_LIMIT = 10000;
 constexpr int GROUND_DECAL_SHAPE_POINTS = 12;
 constexpr float GROUND_DECAL_SHAPE_JAGGEDNESS = 0.35f;
 constexpr float GROUND_DECAL_SURFACE_BIAS = 1.5f;
@@ -43,15 +42,6 @@ struct TGroundDecalShapePoint
 static bool GroundDecalFinitePoint(const vec3d &point)
 {
     return std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
-}
-
-static int GroundDecalLimit()
-{
-    int value = System::IniConf::GfxGroundDecalLimit.Get<int32_t>();
-    if ( value < 0 )
-        value = GROUND_DECAL_DEFAULT_LIMIT;
-
-    return std::min(value, GROUND_DECAL_HARD_LIMIT);
 }
 
 static bool GroundDecalTerrainCell(NC_STACK_ypaworld *world,
@@ -1037,7 +1027,7 @@ static NC_STACK_bitmap *GroundDecalBakedEdgeFadeTexture(NC_STACK_ypaworld *world
 bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &config,
                                                 const vec3d &center, float radius)
 {
-    if ( _isNetGame || GroundDecalLimit() <= 0 ||
+    if ( _isNetGame || World::GroundDecalLimit() <= 0 ||
          config.mode != World::TChainFXConfig::MODE_GROUND_DECAL ||
          config.trigger != World::TChainFXConfig::TRIGGER_DESTROYED ||
          !GroundDecalFinitePoint(center) || !std::isfinite(radius) || radius <= 0.0f ||
@@ -1150,7 +1140,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &co
 bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
                                          const ypaworld_arg136 &hit)
 {
-    const int limit = GroundDecalLimit();
+    const int limit = World::GroundDecalLimit();
     const int maxTriangles = GROUND_DECAL_MAX_TRIANGLES;
     const bool supportedTrigger =
         config.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD ||
@@ -1278,12 +1268,16 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     decal.mesh.Mat.Tex = texture ? texture->GetBitmap() : nullptr;
     decal.mesh.RecalcBoundBox();
     GFX::Engine.MeshMakeVBO(&decal.mesh);
+
+    // Optional smoke rising from the fresh decal (off unless the block has smoke = 1).
+    SpawnGroundDecalSmoke(config.ground_decal_smoke, decal.pos, decal.radius,
+                          (uint32_t)(GroundDecalRandomUnit(this, hit, 0x534d4f4bu) * 16777216.0f));
     return true;
 }
 
 void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
 {
-    const int limit = GroundDecalLimit();
+    const int limit = World::GroundDecalLimit();
     if ( limit <= 0 )
     {
         _groundDecals.clear();
@@ -1349,6 +1343,7 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
 void NC_STACK_ypaworld::ClearGroundDecals()
 {
     _groundDecals.clear();
+    ClearGroundDecalSmoke();
 
     for (auto &entry : _groundDecalTextures)
     {
