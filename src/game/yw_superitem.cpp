@@ -31,8 +31,8 @@ void NC_STACK_ypaworld::InitSuperItems()
 {
     ClearSuperItemRuntime();
 
-    // SuperItem profiles are level-owned now: each begin_item loads the file
-    // referenced by profile_path instead of resolving a global profile id.
+    // The level owns copies of the SuperItem definitions it uses: each begin_item names
+    // its definition with superitem_id (see SuperItems.cfg).
     for (World::TSuperItemProfile &profile : _superItemProfiles)
     {
         profile.debuff.tick_snd.ClearSounds();
@@ -48,7 +48,7 @@ void NC_STACK_ypaworld::InitSuperItems()
     _superItemFalloutSoundSamples.assign(_levelInfo.SuperItems.size(), nullptr);
     _superItemFalloutActive.assign(_levelInfo.SuperItems.size(), 0);
 
-    std::map<std::string, int32_t> loadedProfilePaths;
+    std::map<int32_t, int32_t> loadedProfileIds;
 
     for ( size_t i = 0; i < _levelInfo.SuperItems.size(); i++ )
     {
@@ -87,39 +87,26 @@ void NC_STACK_ypaworld::InitSuperItems()
         sitem.CustomHitUnitGids.clear();
         sitem.CustomHitBuildingSlots.clear();
 
-        if ( _isNetGame || sitem.Type != TMapSuperItem::TYPE_BOMB ||
-             sitem.ProfilePath.empty() )
+        if ( _isNetGame || sitem.Type != TMapSuperItem::TYPE_BOMB || sitem.ProfileId < 0 )
             continue;
-
-        std::string normalizedProfilePath;
-        if ( !uaNormalizeDataAssetPath(sitem.ProfilePath, &normalizedProfilePath, false) )
-        {
-            ypa_log_out("WARNING: SuperItem #%u profile_path '%s' is not a valid explicit Data path; using vanilla fallback.\n",
-                        (unsigned)i, sitem.ProfilePath.c_str());
-            continue;
-        }
-
-        std::string profilePathKey = normalizedProfilePath;
-        std::transform(profilePathKey.begin(), profilePathKey.end(), profilePathKey.begin(),
-                       [](unsigned char ch) { return (char)std::tolower(ch); });
 
         int32_t resolvedProfile = -1;
-        const auto loadedIt = loadedProfilePaths.find(profilePathKey);
-        if ( loadedIt != loadedProfilePaths.end() )
+        const auto loadedIt = loadedProfileIds.find(sitem.ProfileId);
+        if ( loadedIt != loadedProfileIds.end() )
             resolvedProfile = loadedIt->second;
         else
         {
             World::TSuperItemProfile loadedProfile;
-            if ( !LoadSuperItemProfilePath(normalizedProfilePath, loadedProfile) )
+            if ( !PrepareSuperItemProfile(sitem.ProfileId, loadedProfile) )
             {
-                ypa_log_out("WARNING: SuperItem #%u profile_path '%s' could not be loaded; using vanilla fallback.\n",
-                            (unsigned)i, sitem.ProfilePath.c_str());
+                ypa_log_out("WARNING: SuperItem #%u superitem_id %d could not be used; using vanilla fallback.\n",
+                            (unsigned)i, sitem.ProfileId);
                 continue;
             }
 
             _superItemProfiles.push_back(std::move(loadedProfile));
             resolvedProfile = (int32_t)_superItemProfiles.size() - 1;
-            loadedProfilePaths[profilePathKey] = resolvedProfile;
+            loadedProfileIds[sitem.ProfileId] = resolvedProfile;
         }
 
         const World::TSuperItemProfile &profile = _superItemProfiles[resolvedProfile];
@@ -135,7 +122,7 @@ void NC_STACK_ypaworld::InitSuperItems()
         if ( !waveVisual )
         {
             ypa_log_out("WARNING: SuperItem #%u profile '%s' wave visual is unavailable; using vanilla fallback.\n",
-                        (unsigned)i, profile.id.c_str());
+                        (unsigned)i, profile.name.c_str());
             continue;
         }
 
@@ -144,21 +131,20 @@ void NC_STACK_ypaworld::InitSuperItems()
         _superItemSoundCarriers[i].reset(new TSndCarrier());
         _superItemWaveSoundCarriers[i].reset(new TSndCarrier());
 
-        if ( !profile.fallout_fx_profile.empty() )
+        if ( profile.fallout_cloud_id >= 0 )
         {
             World::TAtmosphericFXProfile falloutProfile;
-            if ( LoadAtmosphericFXProfilePath(profile.fallout_fx_profile,
-                                              falloutProfile) )
+            if ( FindCloudProfile(profile.fallout_cloud_id, falloutProfile) )
             {
                 _superItemFalloutAtmosphericFXProfiles[i] = std::move(falloutProfile);
                 _superItemFalloutSoundCarriers[i].reset(new TSndCarrier());
-                ypa_log_out("OpenNeoUA: SuperItem #%u loaded fallout Atmospheric FX profile '%s'.\n",
-                            (unsigned)i, profile.fallout_fx_profile.c_str());
+                ypa_log_out("OpenNeoUA: SuperItem #%u loaded fallout cloud %d.\n",
+                            (unsigned)i, profile.fallout_cloud_id);
             }
             else
             {
-                ypa_log_out("WARNING: SuperItem #%u fallout Atmospheric FX '%s' is unavailable; fallout visuals disabled for this bomb.\n",
-                            (unsigned)i, profile.fallout_fx_profile.c_str());
+                ypa_log_out("WARNING: SuperItem #%u fallout cloud %d is unavailable; fallout visuals disabled for this bomb.\n",
+                            (unsigned)i, profile.fallout_cloud_id);
             }
         }
     }
@@ -253,7 +239,7 @@ std::string NC_STACK_ypaworld::GetSuperItemDisplayName(const TMapSuperItem &site
     const World::TSuperItemProfile *profile = GetSuperItemProfile(sitem);
     if ( IsCustomSuperItem(sitem) && profile )
     {
-        std::string name = profile->id;
+        std::string name = profile->name;
         std::replace(name.begin(), name.end(), '_', ' ');
         return name;
     }
@@ -1057,7 +1043,7 @@ uint32_t yw_SuperItemBuildingHash(const World::TSuperItemProfile &profile,
         mixByte((uint8_t)((raw >> 24) & 0xff));
     };
 
-    for (unsigned char ch : profile.id)
+    for (unsigned char ch : profile.name)
         mixByte(ch);
     mixInt(sitem.CellId.x);
     mixInt(sitem.CellId.y);

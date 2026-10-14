@@ -216,9 +216,13 @@ struct TChainFXVisual
 
 struct TChainFXPhysical;
 
+// One new_cloud profile: a volume of floating 3DS meshes around the viewer, a SuperItem
+// fallout or a Mobile Power generator (rain of radiation, spores, snow, power aura...).
 struct TAtmosphericFXProfile
 {
     bool valid = false;
+    int32_t profile_id = -1;
+    std::string name;
     std::string loop_sound;
     int loop_sound_volume = 100;
     std::string mesh3ds;
@@ -252,6 +256,37 @@ struct DestFX
     bool Accel   = false;
 
     static uint8_t ParseTypeName(const std::string &in);
+};
+
+// OpenNeoUA: smoke rising from a ground decal, authored with the smoke_* keys of a
+// begin_fx ground_decal block. Sizes, speeds and spreads are percentages of the decal
+// radius. Disabled unless the block says smoke = 1; the defaults give a dense plume.
+struct TGroundDecalSmoke
+{
+    bool enabled = false;
+    int chance = 100;
+    int duration_min = 20000;
+    int duration_max = 25000;
+    int fade_in = 3000;
+    int fade_out = 20000;
+    int count_min = 10;         // Puffs at the same time for a decal of radius 50,
+    int count_max = 30;         // rolled between the two for every decal.
+    float size_min = 35.0f;
+    float size_max = 50.0f;
+    float growth = 3.3f;        // Final puff size divided by its initial size.
+    float rise_speed = 25.0f;   // Percent of the radius per second.
+    int puff_time_min = 4000;
+    int puff_time_max = 7500;
+    float drift = 35.0f;        // Sideways wind drift, percent of the rise.
+    float spread = 35.0f;       // Start area, percent of the radius.
+    float intensity = 120.0f;   // Opacity multiplier in percent.
+    TVisualTint tint;
+
+    TGroundDecalSmoke()
+    {
+        tint.r = tint.g = tint.b = 70.0f / 255.0f;
+        tint.a = 150.0f / 255.0f;
+    }
 };
 
 struct TChainFXConfig
@@ -301,7 +336,7 @@ struct TChainFXConfig
     std::string ground_decal_texture;
     float ground_decal_size = 0.0f;
     // Optional authored min/max range. When unset, ground_decal_size keeps the
-    // legacy fixed-size behaviour. MGUN decals opt in via "mgun_decal_size = min_max".
+    // legacy fixed-size behaviour. Decal profiles fill it per unit (see grounddecal_profile.h).
     float ground_decal_size_min = 0.0f;
     float ground_decal_size_max = 0.0f;
     float ground_decal_stretch_x = 1.0f;
@@ -315,6 +350,7 @@ struct TChainFXConfig
     float ground_decal_edge_fade = 0.0f;
     int ground_decal_edge_fade_min = -1;
     int ground_decal_edge_fade_max = -1;
+    TGroundDecalSmoke ground_decal_smoke;
 };
 
 struct TRoboColl
@@ -547,13 +583,14 @@ struct TWeaponDebuffConfig
 
 struct TSuperItemProfile
 {
-    std::string id; // Optional display name; profile_path is the runtime identity.
+    int32_t profile_id = -1; // new_superitem <id>
+    std::string name; // Optional display name; underscores are shown as spaces.
     bool valid = false;
 
     int wave_vp = 0;
     std::string wave_3ds;
     std::string wave_base;
-    std::string fallout_fx_profile; // Explicit Data\... FX profile activated locally behind the propagated wave
+    int32_t fallout_cloud_id = -1; // new_cloud profile activated locally behind the propagated wave
     vec3d wave_axis_scale = vec3d(1.0, 1.0, 1.0);
     TVisualTint wave_tint;
     float wave_start_speed = 0.0f;
@@ -810,7 +847,7 @@ struct TVhclProto
     int power = 0;
     float power_radius = 0.0;
     int power_falloff = 1;
-    std::string power_fx_profile; // Data-relative FX profile; XZ coverage is always power_radius
+    int32_t power_cloud_id = -1; // new_cloud profile; XZ coverage is always power_radius
     // OpenNeoUA custom: fixed horizontal radius for automatic world-UI inspection
     // while directly controlling model = ufo. Independent from optical zoom.
     float spy_ui_radius = 0.0f;
@@ -868,6 +905,10 @@ struct TVhclProto
     // OpenNeoUA custom: data-driven Buff link. buff_id resolves a reusable
     // new_buff profile into this runtime copy; -1 means no Buff.
     int buff_id = -1;
+    // OpenNeoUA custom: decal_id / mgun_decal_id link a reusable new_decal profile.
+    // The resolved copies live in chain_fx (destruction decal) and mgun_decal.
+    int decal_id = -1;
+    int mgun_decal_id = -1;
     TVehicleBuffConfig buff;
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
@@ -1224,6 +1265,10 @@ struct TWeapProto
     // the generic shk_launch shake for the directly controlled player weapon and
     // is fired once per successful LaunchMissile() call, regardless of num_weapons.
     TSndFxPosParam shk_launch_player;
+    // OpenNeoUA custom: decal_id links a reusable new_decal profile (impact decal);
+    // the resolved copy lives in chain_fx.
+    int decal_id = -1;
+
     // OpenNeoUA custom: data-driven Debuff link. debuff_id resolves a reusable
     // new_debuff profile into this runtime copy; -1 means no Debuff.
     int debuff_id = -1;

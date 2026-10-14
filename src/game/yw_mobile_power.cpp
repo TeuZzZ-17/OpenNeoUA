@@ -196,16 +196,16 @@ void NC_STACK_ypaworld::UpdateMobilePowerFX()
                               ? generator->_mimic_disguise_vehicleID
                               : generator->_vehicleID;
         const World::TVhclProto &proto = _vhclProtos[protoId];
-        if ( proto.power_fx_profile.empty() )
+        if ( proto.power_cloud_id < 0 )
             continue;
 
-        auto cacheIt = _mobilePowerFXProfileCache.find(proto.power_fx_profile);
+        auto cacheIt = _mobilePowerFXProfileCache.find(proto.power_cloud_id);
         if ( cacheIt == _mobilePowerFXProfileCache.end() )
         {
             World::TAtmosphericFXProfile parsed;
-            if ( !LoadAtmosphericFXProfilePath(proto.power_fx_profile, parsed) )
+            if ( !FindCloudProfile(proto.power_cloud_id, parsed) )
                 parsed = World::TAtmosphericFXProfile();
-            cacheIt = _mobilePowerFXProfileCache.emplace(proto.power_fx_profile,
+            cacheIt = _mobilePowerFXProfileCache.emplace(proto.power_cloud_id,
                                                           std::move(parsed)).first;
         }
 

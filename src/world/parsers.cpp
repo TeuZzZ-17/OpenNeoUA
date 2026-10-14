@@ -1071,40 +1071,40 @@ static bool ParseBuffParam(ScriptParser::Parser &parser,
                            const std::string &p2,
                            TVehicleBuffConfig &buff)
 {
-    if ( !StriCmp(p1, "buff_name") )
+    if ( !StriCmp(p1, "name") )
         buff.name = p2;
-    else if ( !StriCmp(p1, "buff_icon") )
+    else if ( !StriCmp(p1, "icon") )
         buff.icon = p2;
-    else if ( !StriCmp(p1, "buff_invisible") )
+    else if ( !StriCmp(p1, "invisible") )
         buff.invisible = StrGetBool(p2);
-    else if ( !StriCmp(p1, "buff_invisible_reveal_vp") )
+    else if ( !StriCmp(p1, "invisible_reveal_vp") )
     {
         const long vp = parser.stol(p2, nullptr, 0);
         buff.invisible_reveal_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
             ? (int16_t)vp
             : 0;
     }
-    else if ( !StriCmp(p1, "buff_invisible_reveal_3ds") )
+    else if ( !StriCmp(p1, "invisible_reveal_3ds") )
         buff.invisible_reveal_3ds = p2;
-    else if ( !StriCmp(p1, "buff_invisible_reveal_base") )
+    else if ( !StriCmp(p1, "invisible_reveal_base") )
         buff.invisible_reveal_base = p2;
-    else if ( !StriCmp(p1, "buff_invulnerable") )
+    else if ( !StriCmp(p1, "invulnerable") )
         buff.invulnerable = StrGetBool(p2);
-    else if ( !StriCmp(p1, "buff_deflect_charges") )
+    else if ( !StriCmp(p1, "deflect_charges") )
     {
         const long value = parser.stol(p2, nullptr, 0);
         buff.deflect_charges = value > 0
             ? (int)std::min<long>(value, std::numeric_limits<int>::max())
             : 0;
     }
-    else if ( !StriCmp(p1, "buff_deflect_max_energy") )
+    else if ( !StriCmp(p1, "deflect_max_energy") )
     {
         const long value = parser.stol(p2, nullptr, 0);
         buff.deflect_max_energy = value > 0
             ? (int)std::min<long>(value, std::numeric_limits<int>::max())
             : 0;
     }
-    else if ( !StriCmp(p1, "buff_deflect_end_energy_reduction") )
+    else if ( !StriCmp(p1, "deflect_end_energy_reduction") )
     {
         TAuthoredScalar value;
         buff.deflect_end_energy_reduction = 0.0f;
@@ -1112,30 +1112,30 @@ static bool ParseBuffParam(ScriptParser::Parser &parser,
         if ( ParseAuthoredScalar(p2, value) && value.percent && value.value >= 0.0f )
             buff.deflect_end_energy_reduction = std::min(value.value, 100.0f) / 100.0f;
         else
-            ypa_log_out("WARNING: buff_deflect_end_energy_reduction='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Using 0%%.\n",
+            ypa_log_out("WARNING: deflect_end_energy_reduction='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Using 0%%.\n",
                         p2.c_str());
     }
-    else if ( !StriCmp(p1, "buff_deflect_vp") )
+    else if ( !StriCmp(p1, "deflect_vp") )
     {
         const long vp = parser.stol(p2, nullptr, 0);
         buff.deflect_vp = vp > 0 && vp <= std::numeric_limits<int16_t>::max()
             ? (int16_t)vp
             : 0;
     }
-    else if ( !StriCmp(p1, "buff_deflect_3ds") )
+    else if ( !StriCmp(p1, "deflect_3ds") )
         buff.deflect_3ds = p2;
-    else if ( !StriCmp(p1, "buff_deflect_base") )
+    else if ( !StriCmp(p1, "deflect_base") )
         buff.deflect_base = p2;
-    else if ( !StriCmp(p1, "buff_glow_intensity") )
+    else if ( !StriCmp(p1, "glow_intensity") )
     {
         const float value = parser.stof(p2, 0);
         buff.glow_intensity = std::isfinite(value)
             ? std::max(0.0f, std::min(value, 1.0f))
             : 0.0f;
     }
-    else if ( ParseTintParam(parser, "buff_glow_tint", p1, p2, buff.glow_tint, true) )
+    else if ( ParseTintParam(parser, "glow_tint", p1, p2, buff.glow_tint, true) )
         return true;
-    else if ( !StriCmp(p1, "buff_glow_pulse_seconds") )
+    else if ( !StriCmp(p1, "glow_pulse_seconds") )
     {
         const float value = parser.stof(p2, 0);
         buff.glow_pulse_seconds = std::isfinite(value) && value > 0.0f
@@ -1153,98 +1153,98 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
                              const std::string &p2,
                              TWeaponDebuffConfig &debuff)
 {
-    if ( !StriCmp(p1, "debuff_allow_on_host_station") )
+    if ( !StriCmp(p1, "allow_on_host_station") )
         debuff.allow_on_host_station = parser.stol(p2, nullptr, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_allow_on_children") )
+    else if ( !StriCmp(p1, "allow_on_children") )
         debuff.allow_on_children = parser.stol(p2, nullptr, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_name") )
+    else if ( !StriCmp(p1, "name") )
         debuff.name = p2;
-    else if ( !StriCmp(p1, "debuff_energy") )
+    else if ( !StriCmp(p1, "energy") )
         ParseAbsoluteOrPercent(p2, debuff.energy, 100.0f);
-    else if ( !StriCmp(p1, "debuff_mindcontrol") )
+    else if ( !StriCmp(p1, "mindcontrol") )
         debuff.mindcontrol = parser.stol(p2, nullptr, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_tick_time") )
+    else if ( !StriCmp(p1, "tick_time") )
     {
         int tickTime = parser.stol(p2, nullptr, 0);
         debuff.tick_time = tickTime > 0 ? tickTime : 1000;
         debuff.has_tick_time = true;
     }
-    else if ( !StriCmp(p1, "debuff_duration") )
+    else if ( !StriCmp(p1, "duration") )
     {
         int duration = parser.stol(p2, nullptr, 0);
         debuff.duration = duration > 0 ? duration : 0;
     }
-    else if ( !StriCmp(p1, "debuff_stun") )
+    else if ( !StriCmp(p1, "stun") )
         debuff.stun = parser.stol(p2, nullptr, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_stun_motion_level") )
+    else if ( !StriCmp(p1, "stun_motion_level") )
         debuff.stun_motion_level = ParseNormalizedOrPercent(p2);
-    else if ( !StriCmp(p1, "debuff_stun_unit_fire") )
+    else if ( !StriCmp(p1, "stun_unit_fire") )
         debuff.stun_unit_fire = parser.stol(p2, nullptr, 0) != 0;
-    else if ( !StriCmp(p1, "debuff_force_malus") )
+    else if ( !StriCmp(p1, "force_malus") )
         debuff.force_malus = ParseMalusPercent(p2);
-    else if ( !StriCmp(p1, "debuff_maxrot_malus") )
+    else if ( !StriCmp(p1, "maxrot_malus") )
         debuff.maxrot_malus = ParseMalusPercent(p2);
-    else if ( !StriCmp(p1, "debuff_shield_malus") )
+    else if ( !StriCmp(p1, "shield_malus") )
         debuff.shield_malus = ParseMalusPercent(p2);
-    else if ( !StriCmp(p1, "debuff_mgun_shot_time_malus") )
+    else if ( !StriCmp(p1, "mgun_shot_time_malus") )
         debuff.mgun_shot_time_malus = ParseMalusPercent(p2);
-    else if ( !StriCmp(p1, "debuff_shot_time_malus") )
+    else if ( !StriCmp(p1, "shot_time_malus") )
         debuff.shot_time_malus = ParseMalusPercent(p2);
-    else if ( !StriCmp(p1, "debuff_snd_pitch") )
+    else if ( !StriCmp(p1, "snd_pitch_malus") )
         debuff.snd_pitch_multiplier = ParseSignedPitchPercent(p2);
-    else if ( ParseTintParam(parser, "debuff_target_tint", p1, p2,
+    else if ( ParseTintParam(parser, "target_tint", p1, p2,
                              debuff.target_tint, true) )
         return true;
-    else if ( !StriCmp(p1, "debuff_vp") )
+    else if ( !StriCmp(p1, "vp") )
     {
         if ( !ParseSmartVPList(p2, debuff.vps) )
             debuff.vps.clear();
     }
-    else if ( !StriCmp(p1, "debuff_3ds") )
+    else if ( !StriCmp(p1, "3ds") )
         debuff.mesh3ds = p2;
-    else if ( !StriCmp(p1, "debuff_scale") )
+    else if ( !StriCmp(p1, "scale") )
         debuff.visual_scale = ParseVPScaleValue(parser, p2);
-    else if ( ParseTintParam(parser, "debuff_tint", p1, p2, debuff.tint) )
+    else if ( ParseTintParam(parser, "tint", p1, p2, debuff.tint) )
         return true;
-    else if ( !StriCmp(p1, "debuff_random_max_offset") )
+    else if ( !StriCmp(p1, "random_max_offset") )
         ParseAbsoluteOrPercent(p2, debuff.random_max_offset, 100.0f);
-    else if ( ParseTintParam(parser, "debuff_vp_trail_tint", p1, p2,
+    else if ( ParseTintParam(parser, "vp_trail_tint", p1, p2,
                              debuff.vp_trail_tint) )
     {
         debuff.has_vp_trail_tint = true;
         return true;
     }
-    else if ( !StriCmp(p1, "debuff_icon") )
+    else if ( !StriCmp(p1, "icon") )
         debuff.icon = p2;
-    else if ( !StriCmp(p1, "snd_debuff_sample") )
+    else if ( !StriCmp(p1, "snd_sample") )
         debuff.tick_snd.MainSample.Name = p2;
-    else if ( !StriCmp(p1, "snd_debuff_pitch") )
+    else if ( !StriCmp(p1, "snd_pitch") )
         ParseSoundPitchRange(p2, debuff.tick_snd);
-    else if ( !StriCmp(p1, "snd_debuff_volume") )
+    else if ( !StriCmp(p1, "snd_volume") )
         debuff.tick_snd.volume = parser.stol(p2, nullptr, 0);
-    else if ( !StriCmp(p1, "snd_debuff_radius") )
+    else if ( !StriCmp(p1, "snd_radius") )
         debuff.tick_snd.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "pal_debuff_slot") )
+    else if ( !StriCmp(p1, "pal_slot") )
         debuff.tick_snd.sndPrm.slot = parser.stol(p2, nullptr, 0);
-    else if ( !StriCmp(p1, "pal_debuff_mag0") )
+    else if ( !StriCmp(p1, "pal_mag0") )
         debuff.tick_snd.sndPrm.mag0 = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "pal_debuff_mag1") )
+    else if ( !StriCmp(p1, "pal_mag1") )
         debuff.tick_snd.sndPrm.mag1 = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "pal_debuff_time") )
+    else if ( !StriCmp(p1, "pal_time") )
         debuff.tick_snd.sndPrm.time = parser.stol(p2, nullptr, 0);
-    else if ( !StriCmp(p1, "pal_debuff_radius") )
+    else if ( !StriCmp(p1, "pal_radius") )
         debuff.tick_snd.sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "shk_debuff_slot") )
+    else if ( !StriCmp(p1, "shk_slot") )
         debuff.tick_snd.sndPrm_shk.slot = parser.stol(p2, nullptr, 0);
-    else if ( !StriCmp(p1, "shk_debuff_mag0") )
+    else if ( !StriCmp(p1, "shk_mag0") )
         debuff.tick_snd.sndPrm_shk.mag0 = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "shk_debuff_mag1") )
+    else if ( !StriCmp(p1, "shk_mag1") )
         debuff.tick_snd.sndPrm_shk.mag1 = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "shk_debuff_time") )
+    else if ( !StriCmp(p1, "shk_time") )
         debuff.tick_snd.sndPrm_shk.time = parser.stol(p2, nullptr, 0);
-    else if ( !StriCmp(p1, "shk_debuff_radius") )
+    else if ( !StriCmp(p1, "shk_radius") )
         debuff.tick_snd.sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "shk_debuff_mute") )
+    else if ( !StriCmp(p1, "shk_mute") )
         debuff.tick_snd.sndPrm_shk.mute = parser.stof(p2, 0);
     else
         return false;
@@ -2108,9 +2108,6 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
     if ( !StriCmp(name, "physical") )
         return World::TChainFXConfig::MODE_PHYSICAL;
 
-    if ( !StriCmp(name, "ground_decal") )
-        return World::TChainFXConfig::MODE_GROUND_DECAL;
-
     return World::TChainFXConfig::MODE_VISUAL;
 }
 
@@ -2162,6 +2159,105 @@ private:
     World::TChainFXPhysical &_physical;
 };
 
+// OpenNeoUA: smoke_* keys of a new_decal block. Returns true when p1 is a smoke key; any
+// smoke key switches the smoke on (smoke_count = 0 switches it off again). A bad value keeps
+// the default of that key (with a warning), so a typo never removes the whole smoke. Ranges
+// use the shared fixed value / min_max syntax.
+static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
+                                       const std::string &p1,
+                                       const std::string &p2,
+                                       World::TGroundDecalSmoke &smoke)
+{
+    const World::TGroundDecalSmoke defaults;
+
+    const auto readIntRange = [&](const char *key, int lo, int hi,
+                                  int defMin, int defMax, int &outMin, int &outMax)
+    {
+        int first = 0;
+        int second = 0;
+        if ( !World::ParseIntRangeValue(p2, first, second) )
+        {
+            ypa_log_out("WARNING: invalid begin_fx %s '%s', using %d_%d\n",
+                        key, p2.c_str(), defMin, defMax);
+            outMin = defMin;
+            outMax = defMax;
+            return;
+        }
+
+        outMin = std::max(lo, std::min(first, hi));
+        outMax = std::max(lo, std::min(second, hi));
+    };
+
+    const auto readFloat = [&](const char *key, float lo, float hi, float def, float &out)
+    {
+        size_t parsed = 0;
+        const float value = parser.stof(p2, &parsed);
+        if ( parsed != p2.size() || !std::isfinite(value) )
+        {
+            ypa_log_out("WARNING: invalid begin_fx %s '%s', using %.3f\n", key, p2.c_str(), def);
+            out = def;
+            return;
+        }
+
+        out = std::max(lo, std::min(value, hi));
+    };
+
+    if ( ParseBoundedIntegerParam("smoke_chance", p1, p2, 0, 100, defaults.chance, smoke.chance) )
+    {
+    }
+    else if ( !StriCmp(p1, "smoke_duration") )
+        readIntRange("smoke_duration", 0, 3600000, defaults.duration_min, defaults.duration_max,
+                     smoke.duration_min, smoke.duration_max);
+    else if ( ParseBoundedIntegerParam("smoke_fade_in", p1, p2, 0, 3600000, defaults.fade_in, smoke.fade_in) )
+    {
+    }
+    else if ( ParseBoundedIntegerParam("smoke_fade_out", p1, p2, 0, 3600000, defaults.fade_out, smoke.fade_out) )
+    {
+    }
+    else if ( !StriCmp(p1, "smoke_count") )
+        readIntRange("smoke_count", 0, 50, defaults.count_min, defaults.count_max,
+                     smoke.count_min, smoke.count_max);
+    else if ( !StriCmp(p1, "smoke_size") )
+    {
+        float first = 0.0f;
+        float second = 0.0f;
+        if ( World::ParseFloatRangeValue(p2, first, second) &&
+             std::isfinite(first) && std::isfinite(second) && first > 0.0f && second > 0.0f )
+        {
+            smoke.size_min = std::max(0.5f, std::min(first, 200.0f));
+            smoke.size_max = std::max(0.5f, std::min(second, 200.0f));
+        }
+        else
+        {
+            ypa_log_out("WARNING: invalid begin_fx smoke_size '%s', using %.1f_%.1f\n",
+                        p2.c_str(), defaults.size_min, defaults.size_max);
+            smoke.size_min = defaults.size_min;
+            smoke.size_max = defaults.size_max;
+        }
+    }
+    else if ( !StriCmp(p1, "smoke_growth") )
+        readFloat("smoke_growth", 1.0f, 10.0f, defaults.growth, smoke.growth);
+    else if ( !StriCmp(p1, "smoke_rise_speed") )
+        readFloat("smoke_rise_speed", 0.0f, 200.0f, defaults.rise_speed, smoke.rise_speed);
+    else if ( !StriCmp(p1, "smoke_puff_time") )
+        readIntRange("smoke_puff_time", 200, 60000, defaults.puff_time_min, defaults.puff_time_max,
+                     smoke.puff_time_min, smoke.puff_time_max);
+    else if ( !StriCmp(p1, "smoke_drift") )
+        readFloat("smoke_drift", 0.0f, 300.0f, defaults.drift, smoke.drift);
+    else if ( !StriCmp(p1, "smoke_spread") )
+        readFloat("smoke_spread", 0.0f, 100.0f, defaults.spread, smoke.spread);
+    else if ( !StriCmp(p1, "smoke_intensity") )
+        readFloat("smoke_intensity", 0.0f, 300.0f, defaults.intensity, smoke.intensity);
+    else if ( ParseTintParam(parser, "smoke_tint", p1, p2, smoke.tint, true) )
+    {
+    }
+    else
+        return false;
+
+    smoke.enabled = true;
+    return true;
+}
+
 static int ParseChainFXBlock(ScriptParser::Parser &parser,
                              std::vector<World::TChainFXConfig> *out,
                              ChainFXParseContext context)
@@ -2181,8 +2277,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     vec3d launchMax = vec3d(0.0, 0.0, 0.0);
     vec3d spin = vec3d(0.0, 0.0, 0.0);
     int duration = 0;
-    bool groundDecalDurationValid = false;
-    bool groundDecalPermanent = false;
     int fadeIn = 0;
     int fadeOut = 0;
     std::vector<World::TChainFXVisual> visuals;
@@ -2195,21 +2289,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     bool hasInlinePhysicalKey = false;
     bool hasOffset = false;
     bool invalidInlinePhysical = false;
-    std::string groundDecalTexture;
-    float groundDecalSize = 0.0f;
-    float groundDecalSizeMin = 0.0f;
-    float groundDecalSizeMax = 0.0f;
-    float groundDecalStretchX = 1.0f;
-    float groundDecalStretchXMin = 1.0f;
-    float groundDecalStretchXMax = 1.0f;
-    float groundDecalStretchZ = 1.0f;
-    float groundDecalStretchZMin = 1.0f;
-    float groundDecalStretchZMax = 1.0f;
-    TVisualTint groundDecalTint;
     bool randomRotation = false;
-    float groundDecalEdgeFade = 0.0f;
-    int groundDecalEdgeFadeMin = -1;
-    int groundDecalEdgeFadeMax = -1;
     World::TChainFXConfig::Trigger trigger = World::TChainFXConfig::TRIGGER_NONE;
     bool hasTrigger = false;
     bool badTrigger = false;
@@ -2239,16 +2319,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         {
             if ( badTrigger || badMode )
                 return ScriptParser::RESULT_OK;
-
-            if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL && !hasTrigger )
-            {
-                if ( context == CHAIN_FX_VEHICLE )
-                    trigger = World::TChainFXConfig::TRIGGER_DESTROYED;
-                else if ( context == CHAIN_FX_WEAPON )
-                    trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
-
-                hasTrigger = trigger != World::TChainFXConfig::TRIGGER_NONE;
-            }
 
             if ( !hasTrigger )
             {
@@ -2336,62 +2406,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     ypa_log_out("WARNING: incomplete or invalid begin_fx physical fragment ignored\n");
                 }
             }
-            else if ( mode == World::TChainFXConfig::MODE_GROUND_DECAL )
-            {
-                const bool validGroundDecalTrigger =
-                    (context == CHAIN_FX_WEAPON &&
-                     trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD) ||
-                    (context == CHAIN_FX_VEHICLE &&
-                     trigger == World::TChainFXConfig::TRIGGER_DESTROYED);
-
-                if ( !validGroundDecalTrigger )
-                {
-                    if ( context == CHAIN_FX_WEAPON )
-                        ypa_log_out("WARNING: Weapon begin_fx ground_decal supports only trigger = impact_world; block ignored\n");
-                    else if ( context == CHAIN_FX_VEHICLE )
-                        ypa_log_out("WARNING: Vehicle begin_fx ground_decal supports only trigger = destroyed; block ignored\n");
-                    else
-                        ypa_log_out("WARNING: begin_fx ground_decal is not supported for this prototype; block ignored\n");
-                }
-                else if ( !std::isfinite(groundDecalSizeMin) || !std::isfinite(groundDecalSizeMax) ||
-                          groundDecalSizeMin <= 0.0f || groundDecalSizeMax <= 0.0f ||
-                          !std::isfinite(groundDecalStretchXMin) || !std::isfinite(groundDecalStretchXMax) ||
-                          groundDecalStretchXMin <= 0.0f || groundDecalStretchXMax <= 0.0f ||
-                          !std::isfinite(groundDecalStretchZMin) || !std::isfinite(groundDecalStretchZMax) ||
-                          groundDecalStretchZMin <= 0.0f || groundDecalStretchZMax <= 0.0f ||
-                          !groundDecalDurationValid || (!groundDecalPermanent && duration <= 0) ||
-                          groundDecalTint.a <= 0.0f )
-                {
-                    ypa_log_out("WARNING: incomplete or disabled begin_fx ground_decal block ignored\n");
-                }
-                else
-                {
-                    World::TChainFXConfig chain;
-                    chain.mode = mode;
-                    chain.trigger = trigger;
-                    chain.random_rotation = randomRotation;
-                    chain.duration = duration;
-                    chain.ground_decal_permanent = groundDecalPermanent;
-                    chain.fade_out = groundDecalPermanent ? 0 : std::min(fadeOut, duration);
-                    chain.fade_in = groundDecalPermanent ? fadeIn : std::min(fadeIn, duration - chain.fade_out);
-                    chain.ground_decal_texture = groundDecalTexture;
-                    chain.ground_decal_size = groundDecalSize;
-                    chain.ground_decal_size_min = groundDecalSizeMin;
-                    chain.ground_decal_size_max = groundDecalSizeMax;
-                    chain.ground_decal_stretch_x = groundDecalStretchX;
-                    chain.ground_decal_stretch_x_min = groundDecalStretchXMin;
-                    chain.ground_decal_stretch_x_max = groundDecalStretchXMax;
-                    chain.ground_decal_stretch_z = groundDecalStretchZ;
-                    chain.ground_decal_stretch_z_min = groundDecalStretchZMin;
-                    chain.ground_decal_stretch_z_max = groundDecalStretchZMax;
-                    chain.ground_decal_tint = groundDecalTint;
-                    chain.ground_decal_random_rotation = randomRotation;
-                    chain.ground_decal_edge_fade = groundDecalEdgeFade;
-                    chain.ground_decal_edge_fade_min = groundDecalEdgeFadeMin;
-                    chain.ground_decal_edge_fade_max = groundDecalEdgeFadeMax;
-                    out->push_back(chain);
-                }
-            }
 
             return ScriptParser::RESULT_OK;
         }
@@ -2401,8 +2415,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
 
         if ( !StriCmp(p1, "mode") )
         {
-            if ( !StriCmp(p2, "visual") || !StriCmp(p2, "physical") ||
-                 !StriCmp(p2, "ground_decal") )
+            if ( !StriCmp(p2, "visual") || !StriCmp(p2, "physical") )
             {
                 mode = ParseChainFXMode(p2);
                 if ( context == CHAIN_FX_SUPERITEM && mode != World::TChainFXConfig::MODE_VISUAL )
@@ -2451,21 +2464,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             hasEndSize = true;
         }
         else if ( !StriCmp(p1, "duration") )
-        {
-            if ( !StriCmp(p2, "permanent") )
-            {
-                duration = 0;
-                groundDecalPermanent = true;
-                groundDecalDurationValid = true;
-            }
-            else
-            {
-                size_t parsed = 0;
-                duration = parser.stol(p2, &parsed, 0);
-                groundDecalPermanent = false;
-                groundDecalDurationValid = parsed == p2.size() && duration > 0;
-            }
-        }
+            duration = parser.stol(p2, nullptr, 0);
         else if ( !StriCmp(p1, "fade_in") )
             fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
         else if ( !StriCmp(p1, "fade_out") )
@@ -2569,8 +2568,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 visuals.push_back(visual);
             }
         }
-        else if ( !StriCmp(p1, "tint") &&
-                  mode != World::TChainFXConfig::MODE_GROUND_DECAL )
+        else if ( !StriCmp(p1, "tint") )
         {
             if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
             {
@@ -2701,101 +2699,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             else
                 physicalVehicle = parser.stol(p2, nullptr, 0);
         }
-        else if ( !StriCmp(p1, "texture") )
-            groundDecalTexture = p2;
-        else if ( !StriCmp(p1, "size") )
-        {
-            if ( World::ParseFloatRangeValue(p2, groundDecalSizeMin, groundDecalSizeMax) &&
-                 std::isfinite(groundDecalSizeMin) && std::isfinite(groundDecalSizeMax) &&
-                 groundDecalSizeMin > 0.0f && groundDecalSizeMax > 0.0f )
-            {
-                groundDecalSize = groundDecalSizeMin;
-            }
-            else
-            {
-                groundDecalSize = 0.0f;
-                groundDecalSizeMin = 0.0f;
-                groundDecalSizeMax = 0.0f;
-            }
-        }
-        else if ( !StriCmp(p1, "stretch_x") )
-        {
-            float stretchMin = 1.0f;
-            float stretchMax = 1.0f;
-            if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
-                 std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
-                 stretchMin > 0.0f && stretchMax > 0.0f )
-            {
-                groundDecalStretchX = stretchMin;
-                groundDecalStretchXMin = stretchMin;
-                groundDecalStretchXMax = stretchMax;
-            }
-            else
-            {
-                groundDecalStretchX = 1.0f;
-                groundDecalStretchXMin = 1.0f;
-                groundDecalStretchXMax = 1.0f;
-                ypa_log_out("WARNING: invalid ground decal stretch_x '%s', using 1.0\n", p2.c_str());
-            }
-        }
-        else if ( !StriCmp(p1, "stretch_z") )
-        {
-            float stretchMin = 1.0f;
-            float stretchMax = 1.0f;
-            if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
-                 std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
-                 stretchMin > 0.0f && stretchMax > 0.0f )
-            {
-                groundDecalStretchZ = stretchMin;
-                groundDecalStretchZMin = stretchMin;
-                groundDecalStretchZMax = stretchMax;
-            }
-            else
-            {
-                groundDecalStretchZ = 1.0f;
-                groundDecalStretchZMin = 1.0f;
-                groundDecalStretchZMax = 1.0f;
-                ypa_log_out("WARNING: invalid ground decal stretch_z '%s', using 1.0\n", p2.c_str());
-            }
-        }
-        else if ( ParseTintParam(parser, "tint", p1, p2,
-                                 groundDecalTint, true) )
-        {
-        }
         else if ( !StriCmp(p1, "random_rotation") )
             randomRotation = p2 == "1";
-        else if ( !StriCmp(p1, "edge_fade") )
-        {
-            if ( p2.find('_') != std::string::npos )
-            {
-                // Ranged edge fade uses whole 0..10 steps so textured decals
-                // reuse a small bounded set of baked fade textures.
-                int fadeMin = 0;
-                int fadeMax = 0;
-                if ( World::ParseIntRangeValue(p2, fadeMin, fadeMax) )
-                {
-                    groundDecalEdgeFadeMin = std::max(0, std::min(fadeMin, 10));
-                    groundDecalEdgeFadeMax = std::max(0, std::min(fadeMax, 10));
-                    groundDecalEdgeFade = (float)groundDecalEdgeFadeMin;
-                }
-                else
-                {
-                    groundDecalEdgeFade = 0.0f;
-                    groundDecalEdgeFadeMin = -1;
-                    groundDecalEdgeFadeMax = -1;
-                    ypa_log_out("WARNING: invalid edge_fade range '%s', using 0\n", p2.c_str());
-                }
-            }
-            else
-            {
-                size_t parsed = 0;
-                const float value = parser.stof(p2, &parsed);
-                groundDecalEdgeFade = parsed == p2.size() && std::isfinite(value)
-                                    ? std::max(0.0f, std::min(value, 10.0f)) : 0.0f;
-                groundDecalEdgeFadeMin = -1;
-                groundDecalEdgeFadeMax = -1;
-            }
-        }
         else
         {
             if ( context == CHAIN_FX_SUPERITEM )
@@ -2809,6 +2714,230 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     }
 
     return ScriptParser::RESULT_UNEXP_EOF;
+}
+
+// OpenNeoUA: stretch_x / stretch_z of a decal profile (fixed value or min_max, > 0).
+static void ParseDecalStretch(const char *key, const std::string &value,
+                              float &fixed, float &minValue, float &maxValue)
+{
+    float parsedMin = 1.0f;
+    float parsedMax = 1.0f;
+    if ( World::ParseFloatRangeValue(value, parsedMin, parsedMax) &&
+         std::isfinite(parsedMin) && std::isfinite(parsedMax) &&
+         parsedMin > 0.0f && parsedMax > 0.0f )
+    {
+        fixed = parsedMin;
+        minValue = parsedMin;
+        maxValue = parsedMax;
+        return;
+    }
+
+    fixed = 1.0f;
+    minValue = 1.0f;
+    maxValue = 1.0f;
+    ypa_log_out("WARNING: invalid new_decal %s '%s', using 1.0\n", key, value.c_str());
+}
+
+// Edge fade 0-10, fixed or a whole-number min_max range rolled per decal.
+static void ParseDecalEdgeFade(ScriptParser::Parser &parser, const std::string &value,
+                               World::TChainFXConfig &fx)
+{
+    fx.ground_decal_edge_fade = 0.0f;
+    fx.ground_decal_edge_fade_min = -1;
+    fx.ground_decal_edge_fade_max = -1;
+
+    if ( value.find('_') != std::string::npos )
+    {
+        // Ranged edge fade uses whole 0..10 steps so textured decals reuse a small
+        // bounded set of baked fade textures.
+        int fadeMin = 0;
+        int fadeMax = 0;
+        if ( World::ParseIntRangeValue(value, fadeMin, fadeMax) )
+        {
+            fx.ground_decal_edge_fade_min = std::max(0, std::min(fadeMin, 10));
+            fx.ground_decal_edge_fade_max = std::max(0, std::min(fadeMax, 10));
+            fx.ground_decal_edge_fade = (float)fx.ground_decal_edge_fade_min;
+        }
+        else
+            ypa_log_out("WARNING: invalid new_decal edge_fade range '%s', using 0\n", value.c_str());
+        return;
+    }
+
+    size_t parsed = 0;
+    const float number = parser.stof(value, &parsed);
+    if ( parsed == value.size() && std::isfinite(number) )
+        fx.ground_decal_edge_fade = std::max(0.0f, std::min(number, 10.0f));
+}
+
+// Percentage range (fixed value or min_max), both ends > 0.
+static bool ParseDecalPercentRange(const std::string &value, float &minValue, float &maxValue)
+{
+    float parsedMin = 0.0f;
+    float parsedMax = 0.0f;
+    if ( !World::ParseFloatRangeValue(value, parsedMin, parsedMax) ||
+         !std::isfinite(parsedMin) || !std::isfinite(parsedMax) ||
+         parsedMin <= 0.0f || parsedMax <= 0.0f )
+        return false;
+
+    minValue = parsedMin;
+    maxValue = parsedMax;
+    return true;
+}
+
+bool DecalProfileParser::IsScope(ScriptParser::Parser &parser,
+                                 const std::string &word,
+                                 const std::string &opt)
+{
+    if ( StriCmp(word, "new_decal") )
+        return false;
+
+    _active = false;
+    _profileID = -1;
+
+    if ( opt.empty() )
+    {
+        ypa_log_out("WARNING: new_decal requires a numeric id; profile ignored.\n");
+        return true;
+    }
+
+    const long value = parser.stol(opt, nullptr, 0);
+    if ( value < 0 || value > std::numeric_limits<int32_t>::max() )
+    {
+        ypa_log_out("WARNING: new_decal id '%s' is invalid; profile ignored.\n", opt.c_str());
+        return true;
+    }
+
+    _profileID = (int32_t)value;
+    _work = TGroundDecalProfile();
+    _work.profile_id = _profileID;
+    _work.fx.mode = TChainFXConfig::MODE_GROUND_DECAL;
+    _durationValid = false;
+    _fadeIn = 0;
+    _fadeOut = 0;
+    _active = true;
+    return true;
+}
+
+void DecalProfileParser::Finish()
+{
+    TChainFXConfig &fx = _work.fx;
+
+    if ( !_durationValid || (!fx.ground_decal_permanent && fx.duration <= 0) ||
+         fx.ground_decal_tint.a <= 0.0f )
+    {
+        ypa_log_out("WARNING: new_decal %d needs a valid duration and a tint alpha above 0; profile ignored.\n",
+                    _profileID);
+        return;
+    }
+
+    fx.ground_decal_random_rotation = fx.random_rotation;
+    fx.fade_out = fx.ground_decal_permanent ? 0 : std::min(_fadeOut, fx.duration);
+    fx.fade_in = fx.ground_decal_permanent ? _fadeIn : std::min(_fadeIn, fx.duration - fx.fade_out);
+
+    if ( _profiles.find(_profileID) != _profiles.end() )
+        ypa_log_out("WARNING: new_decal %d is defined more than once; replacing the previous profile.\n", _profileID);
+
+    _work.valid = true;
+    _profiles[_profileID] = _work;
+}
+
+int DecalProfileParser::Handle(ScriptParser::Parser &parser,
+                               const std::string &p1,
+                               const std::string &p2)
+{
+    if ( !StriCmp(p1, "end") )
+    {
+        if ( _active )
+            Finish();
+        _active = false;
+        _profileID = -1;
+        return ScriptParser::RESULT_SCOPE_END;
+    }
+
+    if ( !_active )
+        return ScriptParser::RESULT_OK;
+
+    TChainFXConfig &fx = _work.fx;
+
+    if ( !StriCmp(p1, "name") )
+        _work.name = p2;
+    else if ( !StriCmp(p1, "texture") )
+        fx.ground_decal_texture = p2;
+    else if ( !StriCmp(p1, "size") )
+    {
+        float sizeMin = 0.0f;
+        float sizeMax = 0.0f;
+        if ( ParseDecalPercentRange(p2, sizeMin, sizeMax) )
+        {
+            _work.has_absolute_size = true;
+            _work.size_min = sizeMin;
+            _work.size_max = sizeMax;
+        }
+        else
+        {
+            _work.has_absolute_size = false;
+            ypa_log_out("WARNING: invalid new_decal size '%s'; using the size_explosion rule\n", p2.c_str());
+        }
+    }
+    else if ( !StriCmp(p1, "size_explosion") )
+    {
+        if ( !ParseDecalPercentRange(p2, _work.explosion_percent_min, _work.explosion_percent_max) )
+            ypa_log_out("WARNING: invalid new_decal size_explosion '%s', using 70_80\n", p2.c_str());
+    }
+    else if ( !StriCmp(p1, "size_silhouette") )
+    {
+        if ( !ParseDecalPercentRange(p2, _work.silhouette_percent_min, _work.silhouette_percent_max) )
+            ypa_log_out("WARNING: invalid new_decal size_silhouette '%s', using 150_200\n", p2.c_str());
+    }
+    else if ( !StriCmp(p1, "size_min") )
+    {
+        size_t parsed = 0;
+        const float value = parser.stof(p2, &parsed);
+        if ( parsed == p2.size() && std::isfinite(value) && value >= 0.0f )
+            _work.floor_size = value;
+        else
+            ypa_log_out("WARNING: invalid new_decal size_min '%s', using 30\n", p2.c_str());
+    }
+    else if ( !StriCmp(p1, "stretch_x") )
+        ParseDecalStretch("stretch_x", p2, fx.ground_decal_stretch_x,
+                          fx.ground_decal_stretch_x_min, fx.ground_decal_stretch_x_max);
+    else if ( !StriCmp(p1, "stretch_z") )
+        ParseDecalStretch("stretch_z", p2, fx.ground_decal_stretch_z,
+                          fx.ground_decal_stretch_z_min, fx.ground_decal_stretch_z_max);
+    else if ( ParseTintParam(parser, "tint", p1, p2, fx.ground_decal_tint, true) )
+    {
+    }
+    else if ( !StriCmp(p1, "random_rotation") )
+        fx.random_rotation = p2 == "1";
+    else if ( !StriCmp(p1, "edge_fade") )
+        ParseDecalEdgeFade(parser, p2, fx);
+    else if ( !StriCmp(p1, "duration") )
+    {
+        if ( !StriCmp(p2, "permanent") )
+        {
+            fx.duration = 0;
+            fx.ground_decal_permanent = true;
+            _durationValid = true;
+        }
+        else
+        {
+            size_t parsed = 0;
+            fx.duration = parser.stol(p2, &parsed, 0);
+            fx.ground_decal_permanent = false;
+            _durationValid = parsed == p2.size() && fx.duration > 0;
+        }
+    }
+    else if ( !StriCmp(p1, "fade_in") )
+        _fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "fade_out") )
+        _fadeOut = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( ParseGroundDecalSmokeParam(parser, p1, p2, fx.ground_decal_smoke) )
+    {
+    }
+    else
+        return ScriptParser::RESULT_UNKNOWN;
+
+    return ScriptParser::RESULT_OK;
 }
 
 static int ParseVehicleChainFXBlock(ScriptParser::Parser &parser, TVhclProto *vhcl)
@@ -3232,6 +3361,13 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             ? (int32_t)value
             : -1;
     }
+    else if ( !StriCmp(p1, "decal_id") )
+    {
+        const long value = parser.stol(p2, nullptr, 0);
+        _vhcl->decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
+    }
     else if ( !StriCmp(p1, "mass") )
     {
         _vhcl->mass = parser.stof(p2, 0);
@@ -3520,9 +3656,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->power_falloff = parser.stol(p2, nullptr, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "power_fx_profile") )
+    else if ( !StriCmp(p1, "power_cloud_id") )
     {
-        _vhcl->power_fx_profile = p2;
+        const long value = parser.stol(p2, nullptr, 0);
+        _vhcl->power_cloud_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
     }
     else if ( !StriCmp(p1, "spy_ui_radius") )
     {
@@ -3923,134 +4062,13 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         // uses the dedicated mgun_mesh_tracer_* authoring namespace while
         // reusing the same shared tracer config and renderer as physical Weapons.
     }
-    else if ( !StriCmp(p1, "mgun_decal_enable") )
+    else if ( !StriCmp(p1, "mgun_decal_id") )
     {
-        size_t parsed = 0;
-        const long enabled = parser.stol(p2, &parsed, 0);
-        _vhcl->mgun_decal_enable = parsed == p2.size() && enabled == 1;
-        _vhcl->mgun_decal.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
-        _vhcl->mgun_decal.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
+        const long value = parser.stol(p2, nullptr, 0);
+        _vhcl->mgun_decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
     }
-    else if ( !StriCmp(p1, "mgun_decal_texture") )
-        _vhcl->mgun_decal.ground_decal_texture = p2;
-    else if ( !StriCmp(p1, "mgun_decal_size") )
-    {
-        float sizeMin = 0.0f;
-        float sizeMax = 0.0f;
-        if ( World::ParseFloatRangeValue(p2, sizeMin, sizeMax) &&
-             std::isfinite(sizeMin) && std::isfinite(sizeMax) &&
-             sizeMin > 0.0f && sizeMax > 0.0f )
-        {
-            // Keep the legacy scalar populated for old/shared decal paths,
-            // while the runtime uses the authored range when available.
-            _vhcl->mgun_decal.ground_decal_size = sizeMin;
-            _vhcl->mgun_decal.ground_decal_size_min = sizeMin;
-            _vhcl->mgun_decal.ground_decal_size_max = sizeMax;
-        }
-        else
-        {
-            _vhcl->mgun_decal.ground_decal_size = 0.0f;
-            _vhcl->mgun_decal.ground_decal_size_min = 0.0f;
-            _vhcl->mgun_decal.ground_decal_size_max = 0.0f;
-        }
-    }
-    else if ( !StriCmp(p1, "mgun_decal_stretch_x") )
-    {
-        float stretchMin = 1.0f;
-        float stretchMax = 1.0f;
-        if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
-             std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
-             stretchMin > 0.0f && stretchMax > 0.0f )
-        {
-            _vhcl->mgun_decal.ground_decal_stretch_x = stretchMin;
-            _vhcl->mgun_decal.ground_decal_stretch_x_min = stretchMin;
-            _vhcl->mgun_decal.ground_decal_stretch_x_max = stretchMax;
-        }
-        else
-        {
-            _vhcl->mgun_decal.ground_decal_stretch_x = 1.0f;
-            _vhcl->mgun_decal.ground_decal_stretch_x_min = 1.0f;
-            _vhcl->mgun_decal.ground_decal_stretch_x_max = 1.0f;
-            ypa_log_out("WARNING: invalid mgun_decal_stretch_x '%s', using 1.0\n", p2.c_str());
-        }
-    }
-    else if ( !StriCmp(p1, "mgun_decal_stretch_z") )
-    {
-        float stretchMin = 1.0f;
-        float stretchMax = 1.0f;
-        if ( World::ParseFloatRangeValue(p2, stretchMin, stretchMax) &&
-             std::isfinite(stretchMin) && std::isfinite(stretchMax) &&
-             stretchMin > 0.0f && stretchMax > 0.0f )
-        {
-            _vhcl->mgun_decal.ground_decal_stretch_z = stretchMin;
-            _vhcl->mgun_decal.ground_decal_stretch_z_min = stretchMin;
-            _vhcl->mgun_decal.ground_decal_stretch_z_max = stretchMax;
-        }
-        else
-        {
-            _vhcl->mgun_decal.ground_decal_stretch_z = 1.0f;
-            _vhcl->mgun_decal.ground_decal_stretch_z_min = 1.0f;
-            _vhcl->mgun_decal.ground_decal_stretch_z_max = 1.0f;
-            ypa_log_out("WARNING: invalid mgun_decal_stretch_z '%s', using 1.0\n", p2.c_str());
-        }
-    }
-    else if ( ParseTintParam(parser, "mgun_decal_tint", p1, p2,
-                             _vhcl->mgun_decal.ground_decal_tint, true) )
-    {
-    }
-    else if ( !StriCmp(p1, "mgun_decal_random_rotation") )
-        _vhcl->mgun_decal.ground_decal_random_rotation = p2 == "1";
-    else if ( !StriCmp(p1, "mgun_decal_edge_fade") )
-    {
-        if ( p2.find('_') != std::string::npos )
-        {
-            int fadeMin = 0;
-            int fadeMax = 0;
-            if ( World::ParseIntRangeValue(p2, fadeMin, fadeMax) )
-            {
-                _vhcl->mgun_decal.ground_decal_edge_fade_min =
-                    std::max(0, std::min(fadeMin, 10));
-                _vhcl->mgun_decal.ground_decal_edge_fade_max =
-                    std::max(0, std::min(fadeMax, 10));
-                _vhcl->mgun_decal.ground_decal_edge_fade =
-                    (float)_vhcl->mgun_decal.ground_decal_edge_fade_min;
-            }
-            else
-            {
-                _vhcl->mgun_decal.ground_decal_edge_fade = 0.0f;
-                _vhcl->mgun_decal.ground_decal_edge_fade_min = -1;
-                _vhcl->mgun_decal.ground_decal_edge_fade_max = -1;
-                ypa_log_out("WARNING: invalid mgun_decal_edge_fade range '%s', using 0\n", p2.c_str());
-            }
-        }
-        else
-        {
-            size_t parsed = 0;
-            const float value = parser.stof(p2, &parsed);
-            _vhcl->mgun_decal.ground_decal_edge_fade =
-                parsed == p2.size() && std::isfinite(value)
-                ? std::max(0.0f, std::min(value, 10.0f)) : 0.0f;
-            _vhcl->mgun_decal.ground_decal_edge_fade_min = -1;
-            _vhcl->mgun_decal.ground_decal_edge_fade_max = -1;
-        }
-    }
-    else if ( !StriCmp(p1, "mgun_decal_duration") )
-    {
-        if ( !StriCmp(p2, "permanent") )
-        {
-            _vhcl->mgun_decal.duration = 0;
-            _vhcl->mgun_decal.ground_decal_permanent = true;
-        }
-        else
-        {
-            _vhcl->mgun_decal.duration = NonNegativeFiniteMilliseconds(parser, p2);
-            _vhcl->mgun_decal.ground_decal_permanent = false;
-        }
-    }
-    else if ( !StriCmp(p1, "mgun_decal_fade_in") )
-        _vhcl->mgun_decal.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "mgun_decal_fade_out") )
-        _vhcl->mgun_decal.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
     else if ( !StriCmp(p1, "mgun_vp_dead") )
     {
         _vhcl->mgun_vp_dead = parser.stol(p2, nullptr, 0);
@@ -4811,8 +4829,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_tracer = TWeaponTracerConfig();
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
-        _vhcl->mgun_decal.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
-        _vhcl->mgun_decal.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
+        _vhcl->mgun_decal_id = -1;
         _vhcl->mgun_vp_dead = 0;
         _vhcl->mgun_vp_megadeth = 0;
         _vhcl->mgun_energy = 0.0;
@@ -4850,7 +4867,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->power = 0;
         _vhcl->power_radius = 0.0;
         _vhcl->power_falloff = 1;
-        _vhcl->power_fx_profile.clear();
+        _vhcl->power_cloud_id = -1;
         _vhcl->spy_ui_radius = 0.0f;
         _vhcl->zoom_steps = -1;
         _vhcl->damaged_force_malus = 0.0;
@@ -4893,6 +4910,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
         _vhcl->buff_id = -1;
+        _vhcl->decal_id = -1;
         _vhcl->buff = TVehicleBuffConfig();
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
@@ -5118,6 +5136,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_mesh = TWeapProto::TLaserMeshConfig();
         _wpn->type_icon = 65;
         _wpn->debuff_id = -1;
+        _wpn->decal_id = -1;
         _wpn->debuff = TWeaponDebuffConfig();
         _wpn->delay_time_debuff_id = 0;
         _wpn->delay_time_debuff = TWeaponDebuffConfig();
@@ -5282,6 +5301,13 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         const long value = parser.stol(p2, nullptr, 0);
         _wpn->debuff_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
+    }
+    else if ( !StriCmp(p1, "decal_id") )
+    {
+        const long value = parser.stol(p2, nullptr, 0);
+        _wpn->decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
             ? (int32_t)value
             : -1;
     }
@@ -6792,18 +6818,76 @@ bool AtmosphericFXProfileParser::IsScope(ScriptParser::Parser &parser,
                                          const std::string &word,
                                          const std::string &opt)
 {
-    if ( StriCmp(word, "begin_fx_profile") )
+    if ( StriCmp(word, "new_cloud") )
         return false;
 
-    if ( _seenScope )
+    _active = false;
+    _profileID = -1;
+
+    if ( opt.empty() )
     {
-        _duplicateScope = true;
+        ypa_log_out("WARNING: new_cloud requires a numeric id; profile ignored.\n");
         return true;
     }
 
-    _profile = TAtmosphericFXProfile();
-    _seenScope = true;
+    const long value = parser.stol(opt, nullptr, 0);
+    if ( value < 0 || value > std::numeric_limits<int32_t>::max() )
+    {
+        ypa_log_out("WARNING: new_cloud id '%s' is invalid; profile ignored.\n", opt.c_str());
+        return true;
+    }
+
+    _profileID = (int32_t)value;
+    _work = TAtmosphericFXProfile();
+    _work.profile_id = _profileID;
+    _active = true;
     return true;
+}
+
+// Checks the finished block with the same rules the old single-profile files had, so only
+// usable clouds end up in the table.
+void AtmosphericFXProfileParser::Finish()
+{
+    TAtmosphericFXProfile &profile = _work;
+
+    if ( profile.mesh3ds.empty() || profile.count <= 0 )
+    {
+        ypa_log_out("WARNING: new_cloud %d is missing mesh_3ds or has count <= 0; profile ignored.\n", _profileID);
+        return;
+    }
+
+    if ( profile.count > 512 )
+    {
+        ypa_log_out("WARNING: new_cloud %d requests count=%d; clamping to 512.\n", _profileID, profile.count);
+        profile.count = 512;
+    }
+
+    if ( profile.lifetime_min <= 0 && profile.lifetime_max <= 0 )
+        profile.lifetime_min = profile.lifetime_max = 1000;
+    else if ( profile.lifetime_min <= 0 )
+        profile.lifetime_min = profile.lifetime_max;
+    else if ( profile.lifetime_max <= 0 )
+        profile.lifetime_max = profile.lifetime_min;
+
+    if ( profile.lifetime_max < profile.lifetime_min )
+        std::swap(profile.lifetime_min, profile.lifetime_max);
+
+    const auto finiteOr = [](double value, double fallback) { return std::isfinite(value) ? value : fallback; };
+    profile.spawn_offset = vec3d(finiteOr(profile.spawn_offset.x, 0.0), finiteOr(profile.spawn_offset.y, 0.0),
+                                 finiteOr(profile.spawn_offset.z, 0.0));
+    profile.velocity = vec3d(finiteOr(profile.velocity.x, 0.0), finiteOr(profile.velocity.y, 0.0),
+                             finiteOr(profile.velocity.z, 0.0));
+    profile.spin = vec3d(finiteOr(profile.spin.x, 0.0), finiteOr(profile.spin.y, 0.0), finiteOr(profile.spin.z, 0.0));
+    const auto positiveOr1 = [](double value) { return (std::isfinite(value) && value > 0.0) ? value : 1.0; };
+    profile.scale = vec3d(positiveOr1(profile.scale.x), positiveOr1(profile.scale.y), positiveOr1(profile.scale.z));
+    profile.tint.Clamp();
+
+    profile.loop_sound_volume = std::max(0, std::min(profile.loop_sound_volume, 127));
+    profile.valid = true;
+
+    if ( _profiles.find(_profileID) != _profiles.end() )
+        ypa_log_out("WARNING: new_cloud %d is defined more than once; replacing the previous profile.\n", _profileID);
+    _profiles[_profileID] = profile;
 }
 
 static float ParseAtmosphericFXPositiveScale(ScriptParser::Parser &parser,
@@ -6814,7 +6898,7 @@ static float ParseAtmosphericFXPositiveScale(ScriptParser::Parser &parser,
     if ( std::isfinite(scale) && scale > 0.0f )
         return scale;
 
-    ypa_log_out("WARNING: Atmospheric FX parameter '%s' must be finite and greater than zero; using 1.0\n",
+    ypa_log_out("WARNING: new_cloud parameter '%s' must be finite and greater than zero; using 1.0\n",
                 param.c_str());
     return 1.0f;
 }
@@ -6823,13 +6907,23 @@ int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
                                        const std::string &p1,
                                        const std::string &p2)
 {
-    if ( _duplicateScope )
-        return ScriptParser::RESULT_BAD_DATA;
-
     if ( !StriCmp(p1, "end") )
+    {
+        if ( _active )
+            Finish();
+        _active = false;
+        _profileID = -1;
         return ScriptParser::RESULT_SCOPE_END;
+    }
 
-    if ( !StriCmp(p1, "loop_sound") )
+    if ( !_active )
+        return ScriptParser::RESULT_OK;
+
+    TAtmosphericFXProfile &_profile = _work;
+
+    if ( !StriCmp(p1, "name") )
+        _profile.name = p2;
+    else if ( !StriCmp(p1, "loop_sound") )
         _profile.loop_sound = p2;
     else if ( !StriCmp(p1, "loop_sound_volume") )
         _profile.loop_sound_volume = parser.stol(p2, nullptr, 0);
@@ -6995,11 +7089,34 @@ bool SuperItemProfileParser::IsScope(ScriptParser::Parser &parser,
                                      const std::string &word,
                                      const std::string &opt)
 {
-    if ( StriCmp(word, "begin_superitem_profile") )
+    if ( StriCmp(word, "new_superitem") )
         return false;
 
-    _profiles.emplace_back();
-    _profile = &_profiles.back();
+    _profile = nullptr;
+    _discard = TSuperItemProfile();
+
+    if ( opt.empty() )
+    {
+        ypa_log_out("WARNING: new_superitem requires a numeric id; profile ignored.\n");
+        _profile = &_discard;
+        return true;
+    }
+
+    const long value = parser.stol(opt, nullptr, 0);
+    if ( value < 0 || value > std::numeric_limits<int32_t>::max() )
+    {
+        ypa_log_out("WARNING: new_superitem id '%s' is invalid; profile ignored.\n", opt.c_str());
+        _profile = &_discard;
+        return true;
+    }
+
+    if ( _profiles.find((int32_t)value) != _profiles.end() )
+        ypa_log_out("WARNING: new_superitem %d is defined more than once; replacing the previous profile.\n", (int)value);
+
+    TSuperItemProfile profile;
+    profile.profile_id = (int32_t)value;
+    _profiles[(int32_t)value] = profile;
+    _profile = &_profiles[(int32_t)value];
     return true;
 }
 
@@ -7073,21 +7190,32 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
                                    const std::string &p2)
 {
     if ( !StriCmp(p1, "end") )
+    {
+        _profile = nullptr;
         return ScriptParser::RESULT_SCOPE_END;
+    }
+
+    if ( !_profile )
+        return ScriptParser::RESULT_OK;
 
     if ( !StriCmp(p1, "begin_fx") )
         return ParseSuperItemChainFXBlock(parser, _profile);
 
-    if ( !StriCmp(p1, "id") )
-        _profile->id = p2;
+    if ( !StriCmp(p1, "name") )
+        _profile->name = p2;
     else if ( !StriCmp(p1, "wave_vp") )
         _profile->wave_vp = parser.stol(p2, nullptr, 0);
     else if ( !StriCmp(p1, "wave_3ds") )
         _profile->wave_3ds = p2;
     else if ( !StriCmp(p1, "wave_base") )
         _profile->wave_base = p2;
-    else if ( !StriCmp(p1, "fallout_fx_profile") )
-        _profile->fallout_fx_profile = p2;
+    else if ( !StriCmp(p1, "fallout_cloud_id") )
+    {
+        const long value = parser.stol(p2, nullptr, 0);
+        _profile->fallout_cloud_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
+    }
     else if ( !StriCmp(p1, "wave_scale_x") )
         _profile->wave_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
     else if ( !StriCmp(p1, "wave_scale_y") )
@@ -7224,7 +7352,7 @@ bool LevelDataParser::IsScope(ScriptParser::Parser &parser, const std::string &w
     _o._levelUnitLimitType = _o._defaultUnitLimitType;
     _o._levelUnitLimitArg = _o._defaultUnitLimitArg;
     _o._luaScriptName = "";
-    _m.AtmosphericFXProfilePath.clear();
+    _m.CloudId = -1;
     return true;
 }
 
@@ -7341,9 +7469,12 @@ int LevelDataParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _m.AmbientSoundStr = p2;
     }
-    else if ( !StriCmp(p1, "atmospheric_fx_profile") )
+    else if ( !StriCmp(p1, "cloud_id") )
     {
-        _m.AtmosphericFXProfilePath = p2;
+        const long value = parser.stol(p2, nullptr, 0);
+        _m.CloudId = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
     }
     else if ( !StriCmp(p1, "movie") )
     {
@@ -8274,9 +8405,12 @@ int LevelSuperItemsParser::Handle(ScriptParser::Parser &parser, const std::strin
     {
         _s->TimerValue = parser.stol(p2, nullptr, 0);
     }
-    else if ( !StriCmp(p1, "profile_path") )
+    else if ( !StriCmp(p1, "superitem_id") )
     {
-        _s->ProfilePath = p2;
+        const long value = parser.stol(p2, nullptr, 0);
+        _s->ProfileId = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+            ? (int32_t)value
+            : -1;
     }
     else
         return ScriptParser::RESULT_UNKNOWN;

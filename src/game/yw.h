@@ -38,6 +38,8 @@
 #include "world/parsers.h"
 #include "world/saveparsers.h"
 #include "world/nparticle.h"
+#include "world/grounddecal_smoke.h"
+#include "world/grounddecal_profile.h"
 
 #include "gui/uamsgbox.h"
 
@@ -1569,7 +1571,7 @@ struct TLevelDescription
     std::string HgtStr;
     std::string BlgStr;
     std::string AmbientSoundStr;
-    std::string AtmosphericFXProfilePath;
+    int32_t CloudId = -1;
     std::vector<MapRobo> Robos;
     std::vector<MapSquad> Squads;
     std::array<std::string, 8> Palettes;
@@ -1625,7 +1627,7 @@ struct TMapSuperItem
     int32_t LastSec = 0;
     int32_t CurrentRadius = 0; // Current radius of the propagation wave
     int32_t LastRadius = 0;
-    std::string ProfilePath;
+    int32_t ProfileId = -1;
     int32_t CustomProfileIndex = -1;
     int32_t WaveTransientVPId = 0;
     bool WavePalEffectStarted = false;
@@ -2593,6 +2595,7 @@ public:
     void sub_4491A0(const std::string &movie_fname);
     bool LoadProtosScript(const std::string &filename);
     void ResolveStatusProfileLinks();
+    void ResolveDecalProfileLinks();
     bool LoadSpectatorVehicleProto();
     bool sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const std::string &fname);
     void ypaworld_func158__sub4__sub1();
@@ -2847,9 +2850,9 @@ public:
     void CellCheckHealth(cellArea *cell, int a5, NC_STACK_ypabact *a6);
     void InitBuddies();
     void InitSuperItems();
-    bool LoadSuperItemProfilePath(const std::string &profilePath, World::TSuperItemProfile &outProfile);
+    bool PrepareSuperItemProfile(int32_t id, World::TSuperItemProfile &outProfile);
     bool LoadAtmosphericFXProfile(const TLevelDescription &mapp);
-    bool LoadAtmosphericFXProfilePath(const std::string &profilePath, World::TAtmosphericFXProfile &outProfile);
+    bool FindCloudProfile(int32_t id, World::TAtmosphericFXProfile &outProfile);
     void ClearAtmosphericFXRuntime();
     void UpdateAtmosphericFX();
     void UpdateSuperItemFalloutAtmosphericFX();
@@ -2943,6 +2946,9 @@ public:
     bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
+    bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius, uint32_t seed);
+    void RenderGroundDecalSmoke(baseRender_msg *arg);
+    void ClearGroundDecalSmoke();
     bool SpawnMinigunTracer(const vec3d &origin, const vec3d &direction,
                             float availableDistance,
                             const World::TWeaponTracerConfig &config);
@@ -3234,6 +3240,9 @@ public:
     std::vector<World::TRoboProto> _roboProtos;
     std::map<int32_t, World::TVehicleBuffConfig> _buffProfiles;
     std::map<int32_t, World::TWeaponDebuffConfig> _debuffProfiles;
+    std::map<int32_t, World::TGroundDecalProfile> _decalProfiles;
+    std::map<int32_t, World::TSuperItemProfile> _superItemDefs;
+    std::map<int32_t, World::TAtmosphericFXProfile> _cloudProfiles;
     std::vector<World::TSuperItemProfile> _superItemProfiles;
     World::TAtmosphericFXProfile _atmosphericFXProfile;
 
@@ -3252,7 +3261,7 @@ public:
     TSndCarrier _ambientSoundCarrier;
     NC_STACK_sample *_atmosphericFXLoopSoundSample = nullptr;
     TSndCarrier _atmosphericFXLoopSoundCarrier;
-    std::map<std::string, World::TAtmosphericFXProfile> _mobilePowerFXProfileCache;
+    std::map<int32_t, World::TAtmosphericFXProfile> _mobilePowerFXProfileCache;
     std::map<int32_t, TMobilePowerFXSound> _mobilePowerFXSounds;
 
     std::list<NC_STACK_base *> _overrideModels;
@@ -3260,6 +3269,8 @@ public:
     int32_t _nextTransientVPId = 1;
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
+    std::vector<World::GroundDecalSmoke::Emitter> _groundDecalSmoke;
+    GFX::TMesh _groundDecalSmokeMesh;
     std::vector<TMinigunTracer> _mgunTracers;
     std::map<std::string, NC_STACK_base *> _sharedExternalMeshes;
     std::map<std::string, NC_STACK_base *> _sharedExternalBases;

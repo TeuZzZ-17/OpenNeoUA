@@ -538,6 +538,8 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 
     RenderGroundDecals(&rndrs);
 
+    RenderGroundDecalSmoke(&rndrs);
+
     yw_RenderTransientVPs(this, &_transientVPs, &rndrs);
 
     bs64->field_C = rndrs.adeCount;
