@@ -108,10 +108,19 @@ and compares old/current poses for fast motion and rotation. LEGO and prepared
 filler skeletons are copied into cached triangle meshes; changes to vertices or
 topology invalidate those entries.
 Whole-sector LEGO geometry is cached and queried once per building, even though
-the old 300-unit grid returns it from nine interior cells. Supported actors use
+the old 300-unit grid returns it from nine interior cells. Supported ground controllers use
 a separate cached mesh that omits walkable faces (`B >= 0.6`, the existing tank
-support rule); their original ground/landing controller owns height and tip.
-Walls, steep faces and airborne terrain queries keep the full physical geometry.
+support rule); their original ground controller owns height and tip.
+Aircraft keep the full terrain mesh even after LAND, so gradual levelling cannot
+rotate their lower parts into the floor. Heli, UFO and all Flyer variants share
+`MaintainIdleGroundSupport`: shaped aircraft retain their accepted hull pose;
+profile-free actors retain the original centre-ray height correction. A live
+shaped actor lands on its real hull contact, rather than an unrelated legacy offset.
+Falling wrecks are outside the live shape scene and retain the native ground ray
+in `CrashOrLand`, including their original impact, sound and death progression.
+Walkable triangle contacts clear an intersecting hull above the full support
+plane; they never choose the shorter exit down through the floor. Walls and
+steep faces retain their existing response.
 
 The response stops a crossing movement, projects the remaining displacement
 along contact planes with up to four sweeps, removes entering velocity
@@ -197,3 +206,7 @@ orders through the production controller. Building bypass fixtures use the real
 world ray query for rectangular and sloped LEGO geometry at 20/100 ms steps.
 Air Prism probes cover every wall, vanilla bounce attenuation, retreat and
 simultaneous rotation/translation without undoing the accepted CCD pose.
+The focused `--air-idle-landing` probe covers flat/sloped support, existing
+penetration, idle stability and upward departure at 16/50/100 ms. It exercises
+Heli, UFO and all four Flyer variants with real profiles, plus the Zeppelin
+Robo hover path and profile-free support compatibility.

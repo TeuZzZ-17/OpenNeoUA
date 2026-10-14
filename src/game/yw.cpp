@@ -3993,7 +3993,9 @@ size_t NC_STACK_ypaworld::ypaworld_func183(yw_arg161 *arg)
 
     int v6;
 
-    if ( _globalMapRegions.MapRegions[ arg->lvlID ].Status == TMapRegionInfo::STATUS_COMPLETED && ypaworld_func183__sub0(arg->lvlID, _GameShell->UserName.c_str()) )
+    if ( !arg->freshStart &&
+         _globalMapRegions.MapRegions[ arg->lvlID ].Status == TMapRegionInfo::STATUS_COMPLETED &&
+         ypaworld_func183__sub0(arg->lvlID, _GameShell->UserName.c_str()) )
     {
         std::string savename = fmt::sprintf("save:%s/%d.fin", _GameShell->UserName, arg->lvlID);
         v6 = LoadGame(savename);

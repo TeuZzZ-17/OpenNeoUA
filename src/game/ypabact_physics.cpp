@@ -560,6 +560,32 @@ void CrashOrLand__sub0(NC_STACK_ypabact *bact, int a2)
     }
 }
 
+void NC_STACK_ypabact::MaintainIdleGroundSupport(int frameTime)
+{
+    if ( _bact_type == BACT_TYPES_BACT )
+    {
+        // A helicopter can enter idle before its landing tilt has recovered.
+        bact_arg86 settle;
+        settle.field_one = 0;
+        settle.field_two = frameTime;
+        CrashOrLand(&settle);
+    }
+
+    // Shape landing already found the hull's safe support pose.
+    // A centre-ray snap would push its lower parts back into the ground.
+    if ( HasCollisionShape() )
+        return;
+
+    ypaworld_arg136 ground;
+    ground.stPos = _position;
+    ground.vect = vec3d::OY(_overeof + 50.0);
+    ground.flags = 0;
+    _world->ypaworld_func136(&ground);
+
+    if ( ground.isect )
+        _position.y = ground.isectPos.y - _overeof;
+}
+
 size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 {
     yw_137col v58[10];
@@ -809,7 +835,9 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                     }
                 }
 
-                if ( !v85 )
+                // Live shaped units land on their hull contact. Falling wrecks
+                // are outside the live shape scene and still need the ground ray.
+                if ( !v85 && (!HasCollisionShape() || (arg->field_one & 1)) )
                 {
                     ypaworld_arg136 arg136;
                     arg136.stPos = _old_pos;

@@ -339,7 +339,8 @@ int ProcessMenuFrame()
 
     if ( userdata.envAction.action == EnvAction::ACTION_QUIT )
         return 0;
-    else if ( userdata.envAction.action == EnvAction::ACTION_PLAY )
+    else if ( userdata.envAction.action == EnvAction::ACTION_PLAY ||
+              userdata.envAction.action == EnvAction::ACTION_RESTART_MISSION )
     {
         CrashDiag::Breadcrumb("LEVEL", "start requested level=%d", userdata.envAction.params[0]);
         CrashDiag::SetPhase("LevelStart");
@@ -354,6 +355,7 @@ int ProcessMenuFrame()
         yw_arg161 v22;
         v22.lvlID = userdata.envAction.params[0];
         v22.field_4 = 0;
+        v22.freshStart = userdata.envAction.action == EnvAction::ACTION_RESTART_MISSION;
 
         if ( !ypaworld->ypaworld_func183(&v22) )
         {
