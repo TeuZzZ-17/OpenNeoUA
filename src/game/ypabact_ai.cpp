@@ -916,33 +916,13 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
 
             if ( _status_flg & BACT_STFLAG_LAND )
             {
-                if ( _bact_type == BACT_TYPES_BACT )
-                {
-                    // A player can leave a landed helicopter while it is still
-                    // tilted. Reuse the normal landing rotation recovery while
-                    // it waits, otherwise the idle path only corrects height
-                    // and preserves the intersecting pose until the next order.
-                    bact_arg86 settle;
-                    settle.field_one = 0;
-                    settle.field_two = arg->frameTime;
-                    CrashOrLand(&settle);
-                }
-
                 setState_msg arg78;
                 arg78.unsetFlags = 0;
                 arg78.setFlags = 0;
                 arg78.newStatus = BACT_STATUS_IDLE;
                 SetState(&arg78);
 
-                ypaworld_arg136 v52;
-                v52.stPos = _position;
-                v52.vect = vec3d(0.0, _overeof + 50.0, 0.0);
-                v52.flags = 0;
-
-                _world->ypaworld_func136(&v52);
-
-                if ( v52.isect )
-                    _position.y = v52.isectPos.y - _overeof;
+                MaintainIdleGroundSupport(arg->frameTime);
             }
             else
             {

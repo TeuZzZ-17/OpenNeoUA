@@ -2422,7 +2422,7 @@ void NC_STACK_ypaworld::RecalcSectorsPowerForPS(const TPowerStationInfo &ps)
     }
 }
 
-void NC_STACK_ypaworld::sub_4D12D8(int id, int a3)
+void NC_STACK_ypaworld::sub_4D12D8(int id, int a3, bool restoring)
 {
     TMapSuperItem &sitem = _levelInfo.SuperItems[id];
 
@@ -2450,6 +2450,11 @@ void NC_STACK_ypaworld::sub_4D12D8(int id, int a3)
     sitem.PCell->PurposeType = cellArea::PT_STOUDSON;
     sitem.PCell->PurposeIndex = id;
 
+    // Loading restores the building state before player control exists.
+    // It must not replay an activation announcement.
+    if ( restoring )
+        return;
+
     yw_arg159 arg159;
     arg159.unit = 0;
     arg159.Priority = 94;
@@ -2473,7 +2478,7 @@ void NC_STACK_ypaworld::sub_4D12D8(int id, int a3)
     ypaworld_func159(&arg159);
 }
 
-void NC_STACK_ypaworld::sub_4D1594(int id)
+void NC_STACK_ypaworld::sub_4D1594(int id, bool restoring)
 {
     TMapSuperItem &sitem = _levelInfo.SuperItems[id];
 
@@ -2490,6 +2495,9 @@ void NC_STACK_ypaworld::sub_4D1594(int id)
 
     sitem.PCell->PurposeType = cellArea::PT_STOUDSON;
     sitem.PCell->PurposeIndex = id;
+
+    if ( restoring )
+        return;
 
     yw_arg159 arg159;
     arg159.unit = 0;

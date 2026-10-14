@@ -469,16 +469,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
 
                 SetState(&arg78);
 
-                ypaworld_arg136 arg136_1;
-
-                arg136_1.stPos = _position;
-                arg136_1.vect = vec3d::OY(_overeof + 50.0);
-                arg136_1.flags = 0;
-
-                _world->ypaworld_func136(&arg136_1);
-
-                if ( arg136_1.isect )
-                    _position.y = arg136_1.isectPos.y - _overeof;
+                MaintainIdleGroundSupport(arg->frameTime);
             }
             else
             {
