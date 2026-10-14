@@ -150,12 +150,12 @@ int main()
         handlers.push_back(new World::Parsers::VhclProtoParser(&world));
         handlers.push_back(new World::Parsers::WeaponProtoParser(&world));
         const bool linked = ScriptParser::ParseStringList(Engine::StringList{
-            "new_vehicle 1", "decal_id = 1", "radius = 40", "at_death_energy_radius = 100", "mgun_decal_id = 2", "end",
-            "new_vehicle 2", "decal_id = 7", "radius = 40", "end",
-            "new_weapon 1", "decal_id = 1", "blast_radius = 200", "end",
+            "new_vehicle 1", "ground_decal_id = 1", "radius = 40", "at_death_energy_radius = 100", "mgun_ground_decal_id = 2", "end",
+            "new_vehicle 2", "ground_decal_id = 7", "radius = 40", "end",
+            "new_weapon 1", "ground_decal_id = 1", "blast_radius = 200", "end",
             "new_weapon 2", "blast_radius = 200", "end"},
             handlers, ScriptParser::FLAG_NO_SCOPE_SKIP);
-        Check(linked, "decal_id and mgun_decal_id are known keys");
+        Check(linked, "ground_decal_id and mgun_ground_decal_id are known keys");
     }
     world.ResolveDecalProfileLinks();
 
@@ -165,14 +165,14 @@ int main()
           "vehicle: destroyed decal, 60-70% of the at-death explosion diameter");
     Check(world._vhclProtos[1].mgun_decal_enable &&
           world._vhclProtos[1].mgun_decal.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
-          world._vhclProtos[1].mgun_decal.ground_decal_size_min == 10.0f, "mgun_decal_id links profile 2");
+          world._vhclProtos[1].mgun_decal.ground_decal_size_min == 10.0f, "mgun_ground_decal_id links profile 2");
     Check(!FindDecal(world._vhclProtos[2].chain_fx), "missing decal id: no decal");
 
     const World::TChainFXConfig *weaponDecal = FindDecal(world._weaponProtos[1].chain_fx);
     Check(weaponDecal && weaponDecal->trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
           Near(weaponDecal->ground_decal_size_min, 240.0f) && Near(weaponDecal->ground_decal_size_max, 280.0f),
           "weapon: impact decal, 60-70% of the blast diameter");
-    Check(!FindDecal(world._weaponProtos[2].chain_fx), "no decal_id: no decal");
+    Check(!FindDecal(world._weaponProtos[2].chain_fx), "no ground_decal_id: no decal");
 
     // Resolving again after a profile change replaces the decal instead of stacking another.
     world._decalProfiles[1].explosion_percent_min = 50.0f;
