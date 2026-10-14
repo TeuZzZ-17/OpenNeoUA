@@ -74,14 +74,14 @@ int main()
             scan(proto.chain_fx);
         for (const auto &proto : world.GetVhclProtos())
             scan(proto.chain_fx);
-        Check(decals > 0 && decals == smoking, "live Ground Decals (decal_id = 1) all have smoke");
+        Check(decals > 0 && decals == smoking, "live Ground Decals (ground_decal_id = 1) all have smoke");
         const auto isDecal = [](const World::TChainFXConfig &fx) { return fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL; };
         const auto &decalVehicle = world.GetVhclProtos()[1];
         const auto &decalWeapon = world.GetWeaponsProtos()[3];
-        Check(decalVehicle.decal_id == 1 &&
+        Check(decalVehicle.ground_decal_id == 1 &&
               std::count_if(decalVehicle.chain_fx.begin(), decalVehicle.chain_fx.end(), isDecal) == 1,
               "live vehicle links decal 1");
-        Check(decalWeapon.decal_id == 1 && decalWeapon.blast_radius > 0.0f &&
+        Check(decalWeapon.ground_decal_id == 1 && decalWeapon.blast_radius > 0.0f &&
               std::count_if(decalWeapon.chain_fx.begin(), decalWeapon.chain_fx.end(), isDecal) == 1,
               "live weapon links decal 1");
         Check(sample && sample->count_min == 10 && sample->count_max == 30 &&
