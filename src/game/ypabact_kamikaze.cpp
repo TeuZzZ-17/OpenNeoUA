@@ -314,7 +314,8 @@ bool ypabact_IsKamikazeContact(const TKamikazeMount &mount,
                                       const vec3d &from, double *fraction)
 {
     NC_STACK_ypabact *carrier = mount.carrier;
-    if ( !carrier || !mount.weapon ||
+    if ( !carrier || !mount.weapon || carrier->CollisionsDisabled() ||
+         mount.weapon->disable_collision || !target || target->CollisionsDisabled() ||
          !ypabact_IsValidKamikazeTarget(carrier, target) )
         return false;
 
@@ -692,9 +693,11 @@ bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
 
 void NC_STACK_ypabact::UpdateKamikaze(update_msg *, const vec3d *oldPosition)
 {
+    if (CollisionsDisabled()) return;
     TKamikazeMount mount;
     if ( !ypabact_ResolveKamikazeMount(this, &mount) ||
-         mount.carrier != this || !ypabact_IsKamikazeMountArmed(mount) )
+         mount.carrier != this || mount.weapon->disable_collision ||
+         !ypabact_IsKamikazeMountArmed(mount) )
         return;
 
     const vec3d from = oldPosition ? *oldPosition : _position;

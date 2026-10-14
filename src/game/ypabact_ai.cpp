@@ -604,7 +604,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
             arg136_1.vect.y = arg136.vect.y;
             arg136_1.vect.z = arg136.vect.z * 0.93969 + arg136.vect.x * 0.34202;
 
-            _world->ypaworld_func136(&arg136_1);
+            TraceWorldCollision(&arg136_1);
         }
 
         ypaworld_arg136 arg136_2;
@@ -618,11 +618,11 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
             arg136_2.vect.y = arg136.vect.y;
             arg136_2.vect.z = arg136.vect.z * 0.93969 - arg136.vect.x * 0.34202;
 
-            _world->ypaworld_func136(&arg136_2);
+            TraceWorldCollision(&arg136_2);
         }
 
         if ( v82 || !(_status_flg & (BACT_STFLAG_DODGE_LEFT | BACT_STFLAG_DODGE_RIGHT)) || (v80 && v70) )
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
         int v18 = 0;
 
@@ -719,7 +719,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
         arg136_3.stPos = _old_pos;
         arg136_3.flags = 0;
 
-        _world->ypaworld_func136(&arg136_3);
+        TraceWorldCollision(&arg136_3);
 
         if ( arg136_3.isect )
         {
@@ -2524,7 +2524,7 @@ void NC_STACK_ypabact::StuckFree(update_msg *arg)
                     arg136.vect = _position - _old_pos;
                     arg136.flags = 1;
 
-                    _world->ypaworld_func136(&arg136);
+                    TraceWorldCollision(&arg136);
 
                     if ( arg136.isect )
                     {

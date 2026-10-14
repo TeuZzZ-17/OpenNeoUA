@@ -211,9 +211,9 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                 arg136_2.flags = 0;
                 arg136.flags = 0;
 
-                _world->ypaworld_func136(&arg136);
+                TraceWorldCollision(&arg136);
 
-                _world->ypaworld_func136(&arg136_2);
+                TraceWorldCollision(&arg136_2);
 
                 if ( (arg136_2.isect && arg136_2.tVal * 300.0 < _radius) || (arg136.isect && arg136.tVal * 300.0 < _radius) )
                 {
@@ -634,7 +634,7 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
 
             arg136.flags = 0;
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
             if ( !arg136.isect || _thraction != 0.0 || _ufoBoost > _mass * 9.80665 )
             {
@@ -859,7 +859,7 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
                 arg137.field_30 = 0;
 
                 if (HasCollisionShape()) GetShapeWorldContact(&arg137);
-                else _world->ypaworld_func137(&arg137);
+                else QueryWorldCollisions(&arg137);
 
                 int v49 = 0;
 
@@ -896,7 +896,7 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
 
                     arg136.flags = 0;
 
-                    _world->ypaworld_func136(&arg136);
+                    TraceWorldCollision(&arg136);
 
                     if ( arg136.isect )
                     {

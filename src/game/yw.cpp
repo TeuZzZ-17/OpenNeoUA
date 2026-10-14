@@ -571,8 +571,6 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
     _deadCacheList.clear();
     _transientVPs.clear();
     _nextTransientVPId = 1;
-    ClearMinigunTracers();
-    _mgunTracers.reserve(512);
     _proceduralEnergyFX.reserve(512);
     ClearGroundDecals();
     _damageHoverTargets.clear();
@@ -675,7 +673,6 @@ size_t NC_STACK_ypaworld::Deinit()
     _superItemDefs.clear();
     _cloudProfiles.clear();
     _debugBlastRings.clear();
-    ClearMinigunTracers();
     ClearProceduralEnergyFX();
     ClearGroundDecals();
     // Transient instances may reference BASE objects owned by either external
@@ -2680,6 +2677,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         // collision, while an authored radius keeps the vanilla sphere active
         // alongside the compound set. The prototype default radius remains
         // available to non-collision systems without silently becoming a hitbox.
+        bacto->_disableCollision = vhcl.disable_collision;
         bacto->ApplyCompoundCollision(vhcl.coll, vhcl.radius_defined);
 
         bacto->_overeof = vhcl.overeof;
@@ -2718,7 +2716,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_set = vhcl.mgun_set;
         bacto->_mgun_shot_time = vhcl.mgun_shot_time;
         bacto->_mgun_shot_time_user = vhcl.mgun_shot_time_user;
-        bacto->_mgun_tracer = vhcl.mgun_tracer;
         bacto->_mgun_decal_enable = vhcl.mgun_decal_enable;
         bacto->_mgun_decal = vhcl.mgun_decal;
         bacto->_mgun_vp_dead = vhcl.mgun_vp_dead;
@@ -3061,6 +3058,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->_base_maxrot = wproto.maxrot;  // _base_force/_base_maxrot too, or they crawl at the 5000/0.5 defaults.
     wobj->_height = wproto.heightStd;
     wobj->_radius = wproto.radius;
+    wobj->_disableCollision = wproto.disable_collision;
     wobj->ApplyCompoundCollision(wproto.coll, wproto.radius_defined);
     wobj->_viewer_radius = wproto.vwr_radius;
     wobj->_overeof = wproto.overeof;
@@ -3696,7 +3694,6 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     Common::DeleteAndNull(&_script);
     _transientVPs.clear();
     _nextTransientVPId = 1;
-    ClearMinigunTracers();
     ClearProceduralEnergyFX();
     ClearGroundDecals();
     _damageHoverTargets.clear();

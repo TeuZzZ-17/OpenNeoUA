@@ -112,7 +112,7 @@ void ypabact_RenderLaserMeshes(NC_STACK_ypabact *bact,
 
 bool ypabact_IsLaserDamageTarget(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit)
 {
-    if ( !ypabact_IsCarrierSpawnAliveUnit(unit) )
+    if ( !ypabact_IsCarrierSpawnAliveUnit(unit) || unit->CollisionsDisabled() )
         return false;
 
     if ( unit == shooter )
@@ -429,7 +429,7 @@ bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapProto &wp
         *outHit = TLaserUnitHit();
 
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
-    if ( !world )
+    if ( !world || wproto.disable_collision )
         return false;
 
     // Scan the whole square of sectors covering the beam, so off-axis bodies are found.
@@ -463,7 +463,7 @@ bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapProto &wp
 
             for (NC_STACK_ypabact *bct : cell.unitsList)
             {
-                if (bct->HasCollisionShape() || !ypabact_IsLaserDamageTarget(shooter, bct))
+                if (bct->CollisionsDisabled() || bct->HasCollisionShape() || !ypabact_IsLaserDamageTarget(shooter, bct))
                     continue;
 
                 float weaponRadius = wproto.radius > 0.0f ? wproto.radius : 1.0f;
@@ -1498,7 +1498,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         bool hasUnitHit = ypabact_LaserHitscan(this, wproto, request.start, dir, range, &unitHit);
 
         vec3d worldHitPoint;
-        bool worldHit = ypabact_LaserWorldHit(this, request.start, dir, range, &worldHitPoint);
+        bool worldHit = !wproto.disable_collision && ypabact_LaserWorldHit(this, request.start, dir, range, &worldHitPoint);
         float worldAlong = range + 1.0f;
         if ( worldHit )
         {
@@ -1840,7 +1840,7 @@ NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter,
     bool hasUnitHit = ypabact_LaserHitscan(shooter, wproto, start, down, range, &unitHit);
 
     vec3d worldHitPoint;
-    bool worldHit = ypabact_LaserWorldHit(shooter, start, down, range, &worldHitPoint);
+    bool worldHit = !wproto.disable_collision && ypabact_LaserWorldHit(shooter, start, down, range, &worldHitPoint);
     float worldAlong = range + 1.0f;
     if ( worldHit )
     {

@@ -9,8 +9,6 @@
 namespace
 {
 
-const size_t MGUN_TRACER_LIMIT = 512;
-const float MGUN_TRACER_VISUAL_SPEED = 6000.0f;
 const float WEAPON_TRACER_PI = 3.14159265358979323846f;
 
 static bool NormalizeExternalBasePath(const std::string &path, std::string *normalized)
@@ -480,101 +478,6 @@ static void RenderMeshBeamSegment(
 }
 
 } // namespace
-
-bool NC_STACK_ypaworld::SpawnMinigunTracer(
-    const vec3d &origin, const vec3d &direction, float availableDistance,
-    const World::TWeaponTracerConfig &config)
-{
-    if ( _isNetGame || !config.enabled || config.mesh_path.empty() ||
-         !WeaponTracerFinite(origin) || !WeaponTracerFinite(direction) ||
-         !std::isfinite(availableDistance) || availableDistance <= 0.01f ||
-         !std::isfinite(config.size_z) || config.size_z <= 0.01f ||
-         !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
-         !std::isfinite(config.ResolveSizeY()) || config.ResolveSizeY() < 0.0f ||
-         !WeaponTracerFinite(config.tint) ||
-         config.tint.a <= 0.0f )
-        return false;
-
-    vec3d rayDirection = direction;
-    if ( rayDirection.normalise() <= 0.001f )
-        return false;
-
-    CleanupExpiredMinigunTracers();
-
-    if ( _mgunTracers.size() >= MGUN_TRACER_LIMIT )
-        _mgunTracers.erase(_mgunTracers.begin());
-
-    TMinigunTracer tracer;
-    tracer.origin = origin;
-    tracer.direction = rayDirection;
-    tracer.availableDistance = availableDistance;
-    tracer.startTime = _timeStamp;
-    // MGUN is hitscan and has no physical projectile lifetime. Derive the
-    // visual duration internally from the resolved ray plus authored size_z,
-    // so the head reaches the endpoint and the tail can follow it out.
-    tracer.duration = std::max(1, (int32_t)std::ceil(
-        ((double)availableDistance + (double)config.size_z) * 1000.0 /
-        (double)MGUN_TRACER_VISUAL_SPEED));
-    tracer.visualSeed = WeaponTracerHash((uint32_t)_timeStamp ^
-                                         (uint32_t)(_mgunTracers.size() + 1));
-    tracer.config = config;
-    tracer.config.tint.Clamp();
-    tracer.config.tint_head.Clamp();
-    tracer.config.tint_tail.Clamp();
-    _mgunTracers.push_back(tracer);
-    return true;
-}
-
-void NC_STACK_ypaworld::CleanupExpiredMinigunTracers()
-{
-    _mgunTracers.erase(
-        std::remove_if(_mgunTracers.begin(), _mgunTracers.end(),
-                       [this](const TMinigunTracer &tracer)
-                       {
-                           const int32_t age = _timeStamp - tracer.startTime;
-                           return age < 0 || age >= tracer.duration;
-                       }),
-        _mgunTracers.end());
-}
-
-void NC_STACK_ypaworld::RenderMinigunTracers(baseRender_msg *arg)
-{
-    if ( !arg || _isNetGame || _mgunTracers.empty() )
-        return;
-
-    CleanupExpiredMinigunTracers();
-
-    for (const TMinigunTracer &tracer : _mgunTracers)
-    {
-        const int32_t age = std::max(0, _timeStamp - tracer.startTime);
-        if ( age >= tracer.duration )
-            continue;
-
-        const float ageSeconds = (float)age * 0.001f;
-        const float travelled = MGUN_TRACER_VISUAL_SPEED * ageSeconds;
-        const float headDistance = std::min(tracer.availableDistance, travelled);
-        if ( headDistance <= 0.01f )
-            continue;
-
-        // MGUN damage stays hitscan/immediate. The visual head travels along the
-        // already resolved ray, then the tail follows it out at the impact/end
-        // point. Its lifetime is therefore derived internally from ray distance
-        // plus size_z, with no public life/fade control.
-        const float tailDistance = std::max(0.0f, std::min(
-            tracer.availableDistance, travelled - tracer.config.size_z));
-        if ( headDistance - tailDistance <= 0.01f )
-            continue;
-        const vec3d start = tracer.origin + tracer.direction * tailDistance;
-        const vec3d end = tracer.origin + tracer.direction * headDistance;
-        RenderWeaponTracerSegment(arg, start, end, tracer.config,
-                                  0.0f, 1.0f, tracer.visualSeed);
-    }
-}
-
-void NC_STACK_ypaworld::ClearMinigunTracers()
-{
-    _mgunTracers.clear();
-}
 
 void NC_STACK_ypaworld::RenderWeaponTracerSegment(
     baseRender_msg *arg, const vec3d &start, const vec3d &end,

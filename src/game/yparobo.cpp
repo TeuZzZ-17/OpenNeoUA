@@ -850,6 +850,7 @@ void NC_STACK_yparobo::ChangeSectorEnergyFromRoboCollision(yw_arg129 *arg)
 
 size_t NC_STACK_yparobo::checkCollisions(float a2)
 {
+    if (CollisionsDisabled()) return 0;
     bool isViewer = getBACT_viewer();
     int v81 = getBACT_inputting();
     int v79 = getBACT_exactCollisions();
@@ -883,7 +884,7 @@ size_t NC_STACK_yparobo::checkCollisions(float a2)
             else
                 arg136.vect = vec3d::X0Z( (t.XZ() - tmp.XZ()) * 300.0 / v82 );
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
 
             if ( arg136.isect )
@@ -965,7 +966,7 @@ size_t NC_STACK_yparobo::checkCollisions(float a2)
             arg137.field_30 = 0;
             arg137.coll_max = 32;
 
-            _world->ypaworld_func137(&arg137);
+            QueryWorldCollisions(&arg137);
 
             if ( arg137.coll_count )
             {
@@ -1066,7 +1067,7 @@ size_t NC_STACK_yparobo::checkCollisions(float a2)
     arg136.vect = vec3d::OY( hoverHeight * 1.5 ) + _fly_dir.X0Z() * 100.0;
     arg136.flags = 0;
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     if ( arg136.isect )
     {

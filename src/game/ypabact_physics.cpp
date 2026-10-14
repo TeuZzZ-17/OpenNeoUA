@@ -152,12 +152,13 @@ bool ypabact_IsAirVehicle(const NC_STACK_ypabact *unit)
 
 void NC_STACK_ypabact::FixSectorFall()
 {
+    if (CollisionsDisabled()) return;
     ypaworld_arg136 arg136;
     arg136.stPos = vec3d(_position.x, -30000.0, _position.z);
     arg136.vect = vec3d(0.0, 50000.0, 0.0);
     arg136.flags = 0;
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     if ( arg136.isect )
         _position.y = arg136.isectPos.y - 50.0;
@@ -203,6 +204,29 @@ bool ypabact_NormalizeXZ(vec3d *dir)
 
     *dir /= dirLen;
     return true;
+}
+
+void NC_STACK_ypabact::TraceWorldCollision(ypaworld_arg136 *query, bool exact)
+{
+    if (!CollisionsDisabled())
+    {
+        if (exact) _world->ypaworld_func149(query);
+        else _world->ypaworld_func136(query);
+        return;
+    }
+    query->isect = false;
+    query->tVal = 2.0f;
+    query->skel = nullptr;
+    query->polyID = 0;
+    query->hitCell = Common::Point(-1, -1);
+    query->hitCollisionType = 0;
+    query->hitSkelPos = vec3d(0, 0, 0);
+}
+
+void NC_STACK_ypabact::QueryWorldCollisions(ypaworld_arg137 *query)
+{
+    if (CollisionsDisabled()) query->coll_count = 0;
+    else _world->ypaworld_func137(query);
 }
 
 void NC_STACK_ypabact::Move(move_msg *arg)
@@ -562,6 +586,7 @@ void CrashOrLand__sub0(NC_STACK_ypabact *bact, int a2)
 
 void NC_STACK_ypabact::MaintainIdleGroundSupport(int frameTime)
 {
+    if (CollisionsDisabled()) return;
     if ( _bact_type == BACT_TYPES_BACT )
     {
         // A helicopter can enter idle before its landing tilt has recovered.
@@ -580,7 +605,7 @@ void NC_STACK_ypabact::MaintainIdleGroundSupport(int frameTime)
     ground.stPos = _position;
     ground.vect = vec3d::OY(_overeof + 50.0);
     ground.flags = 0;
-    _world->ypaworld_func136(&ground);
+    TraceWorldCollision(&ground);
 
     if ( ground.isect )
         _position.y = ground.isectPos.y - _overeof;
@@ -588,6 +613,7 @@ void NC_STACK_ypabact::MaintainIdleGroundSupport(int frameTime)
 
 size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
 {
+    if (CollisionsDisabled()) return 0;
     yw_137col v58[10];
 
     int v85 = 0;
@@ -721,7 +747,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                     arg137.coll_max = 10;
 
                     if (HasCollisionShape()) GetShapeWorldContact(&arg137);
-                    else _world->ypaworld_func137(&arg137);
+                    else QueryWorldCollisions(&arg137);
 
                     if ( arg137.coll_count )
                     {
@@ -844,7 +870,7 @@ size_t NC_STACK_ypabact::CrashOrLand(bact_arg86 *arg)
                     arg136.vect = _position - _old_pos + vec3d(0.0, v90, 0.0);
                     arg136.flags = 0;
 
-                    _world->ypaworld_func136(&arg136);
+                    TraceWorldCollision(&arg136);
 
                     if ( arg136.isect )
                     {
@@ -1025,6 +1051,7 @@ void NC_STACK_ypabact::GetCollisionSpheres(
         bool useViewerSemantics)
 {
     out.clear();
+    if (CollisionsDisabled()) return;
 
     World::rbcolls *colls = getBACT_collNodes();
     const bool manual = HasManualCompoundCollision();
@@ -1082,6 +1109,7 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
 {
     if ( !other || other == this )
         return false;
+    if (CollisionsDisabled() || other->CollisionsDisabled()) return false;
     if (IgnoresGenesisHostCollision(other) || other->IgnoresGenesisHostCollision(this))
         return false;
 
@@ -1235,7 +1263,7 @@ bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
     worldMove.stPos = _position;
     worldMove.vect = candidate - _position;
     worldMove.flags = 0;
-    _world->ypaworld_func136(&worldMove);
+    TraceWorldCollision(&worldMove);
 
     if ( worldMove.isect )
         return false;
@@ -1249,6 +1277,7 @@ bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
 
 float NC_STACK_ypabact::GetCollisionBroadRadius()
 {
+    if (CollisionsDisabled()) return 0.0f;
     if (HasCollisionShape()) return _collisionShape->radius;
     float broadRadius = UsesLegacyRadiusCollision() ? _radius : 0.0f;
     World::rbcolls *colls = getBACT_collNodes();
@@ -1283,6 +1312,7 @@ float NC_STACK_ypabact::GetCollisionBroadRadius()
 
 void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int frameTime)
 {
+    if (!other || CollisionsDisabled() || other->CollisionsDisabled()) return;
     if ( !other || other == this || !_world || other->_world != _world )
         return;
 
@@ -1347,6 +1377,7 @@ void NC_STACK_ypabact::HandleUnitCollisionContact(NC_STACK_ypabact *other, int f
 
 size_t NC_STACK_ypabact::CollisionWithBact(int arg)
 {
+    if (CollisionsDisabled()) return 0;
     Collision::Contact shapeContact;
     if (_world && _world->_collisionScene &&
         _world->_collisionScene->TakeUnitContact(this, &shapeContact))
@@ -1375,7 +1406,7 @@ size_t NC_STACK_ypabact::CollisionWithBact(int arg)
 
         if (bnode && bnode->HasCollisionShape()) continue;
 
-        if ( !bnode || bnode == this || bnode->_bact_type == BACT_TYPES_MISSLE ||
+        if ( !bnode || bnode->CollisionsDisabled() || bnode == this || bnode->_bact_type == BACT_TYPES_MISSLE ||
              (bnode->IsDestroyed() && !plasma) )
             continue;
         if (IgnoresGenesisHostCollision(bnode) || bnode->IgnoresGenesisHostCollision(this))
@@ -1617,6 +1648,7 @@ void NC_STACK_ypabact::PlaceGenesisAboveTerrain()
 
 void NC_STACK_ypabact::CorrectPositionOnLand()
 {
+    if (CollisionsDisabled()) return;
     float radius;
     if ( _viewer_radius >= 32.0 )
         radius = _viewer_radius;
@@ -1634,7 +1666,7 @@ void NC_STACK_ypabact::CorrectPositionOnLand()
     arg137.collisions = coltmp;
 
     if (HasCollisionShape()) arg137.coll_count = 0;
-                else _world->ypaworld_func137(&arg137);
+                else QueryWorldCollisions(&arg137);
 
     vec3d tmp(0.0, 0.0, 0.0);
 
@@ -1670,7 +1702,7 @@ void NC_STACK_ypabact::CorrectPositionOnLand()
     arg137.collisions = coltmp;
 
     if (HasCollisionShape()) arg137.coll_count = 0;
-                else _world->ypaworld_func137(&arg137);
+                else QueryWorldCollisions(&arg137);
 
     for (int i = arg137.coll_count - 1; i >= 0; i-- )
     {
@@ -1740,7 +1772,7 @@ void NC_STACK_ypabact::CorrectPositionInLevelBox(void *)
                 arg136.vect = vec3d::OY(_viewer_overeof + 100.0);
                 arg136.flags = 0;
 
-                _world->ypaworld_func136(&arg136);
+                TraceWorldCollision(&arg136);
 
                 if ( arg136.isect )
                     _position.y = arg136.isectPos.y - _viewer_overeof;
