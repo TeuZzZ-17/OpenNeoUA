@@ -3361,10 +3361,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             ? (int32_t)value
             : -1;
     }
-    else if ( !StriCmp(p1, "decal_id") )
+    else if ( !StriCmp(p1, "ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
-        _vhcl->decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+        _vhcl->ground_decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
             ? (int32_t)value
             : -1;
     }
@@ -4062,10 +4062,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         // uses the dedicated mgun_mesh_tracer_* authoring namespace while
         // reusing the same shared tracer config and renderer as physical Weapons.
     }
-    else if ( !StriCmp(p1, "mgun_decal_id") )
+    else if ( !StriCmp(p1, "mgun_ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
-        _vhcl->mgun_decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+        _vhcl->mgun_ground_decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
             ? (int32_t)value
             : -1;
     }
@@ -4829,7 +4829,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_tracer = TWeaponTracerConfig();
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
-        _vhcl->mgun_decal_id = -1;
+        _vhcl->mgun_ground_decal_id = -1;
         _vhcl->mgun_vp_dead = 0;
         _vhcl->mgun_vp_megadeth = 0;
         _vhcl->mgun_energy = 0.0;
@@ -4910,7 +4910,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
         _vhcl->buff_id = -1;
-        _vhcl->decal_id = -1;
+        _vhcl->ground_decal_id = -1;
         _vhcl->buff = TVehicleBuffConfig();
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
@@ -5136,7 +5136,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_mesh = TWeapProto::TLaserMeshConfig();
         _wpn->type_icon = 65;
         _wpn->debuff_id = -1;
-        _wpn->decal_id = -1;
+        _wpn->ground_decal_id = -1;
         _wpn->debuff = TWeaponDebuffConfig();
         _wpn->delay_time_debuff_id = 0;
         _wpn->delay_time_debuff = TWeaponDebuffConfig();
@@ -5304,10 +5304,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             ? (int32_t)value
             : -1;
     }
-    else if ( !StriCmp(p1, "decal_id") )
+    else if ( !StriCmp(p1, "ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
-        _wpn->decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
+        _wpn->ground_decal_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
             ? (int32_t)value
             : -1;
     }

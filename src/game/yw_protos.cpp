@@ -379,7 +379,7 @@ void NC_STACK_ypaworld::ResolveStatusProfileLinks()
 }
 
 // Builds the ground decals every vehicle (destroyed), weapon (impact_world) and MGUN
-// (impact_world) spawns from its decal_id / mgun_decal_id. The decal size can depend on the
+// (impact_world) spawns from its ground_decal_id / mgun_ground_decal_id. The decal size can depend on the
 // unit: silhouette = collision diameter, explosion = blast (weapon) or at-death radius (vehicle).
 // Resolved decals are rebuilt from scratch every time, so changed profiles are always picked up.
 void NC_STACK_ypaworld::ResolveDecalProfileLinks()
@@ -413,8 +413,8 @@ void NC_STACK_ypaworld::ResolveDecalProfileLinks()
         proto.mgun_decal_enable = false;
         proto.mgun_decal = World::TChainFXConfig();
 
-        if ( const World::TGroundDecalProfile *profile = findProfile(proto.decal_id, "vehicle",
-                                                                       (size_t)proto.Index, "decal_id") )
+        if ( const World::TGroundDecalProfile *profile = findProfile(proto.ground_decal_id, "vehicle",
+                                                                       (size_t)proto.Index, "ground_decal_id") )
         {
             const float explosionRadius = std::max(proto.at_death_energy_radius, proto.at_death_push_radius);
             proto.chain_fx.push_back(World::ResolveGroundDecal(
@@ -424,8 +424,8 @@ void NC_STACK_ypaworld::ResolveDecalProfileLinks()
 
         // MGUN hits have no explosion or silhouette of their own: a profile with
         // percentage sizes gets its size floor.
-        if ( const World::TGroundDecalProfile *profile = findProfile(proto.mgun_decal_id, "vehicle",
-                                                                       (size_t)proto.Index, "mgun_decal_id") )
+        if ( const World::TGroundDecalProfile *profile = findProfile(proto.mgun_ground_decal_id, "vehicle",
+                                                                       (size_t)proto.Index, "mgun_ground_decal_id") )
         {
             proto.mgun_decal = World::ResolveGroundDecal(
                 *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD, 0.0f, 0.0f);
@@ -439,7 +439,7 @@ void NC_STACK_ypaworld::ResolveDecalProfileLinks()
         proto.chain_fx.erase(std::remove_if(proto.chain_fx.begin(), proto.chain_fx.end(), isGroundDecal),
                              proto.chain_fx.end());
 
-        if ( const World::TGroundDecalProfile *profile = findProfile(proto.decal_id, "weapon", i, "decal_id") )
+        if ( const World::TGroundDecalProfile *profile = findProfile(proto.ground_decal_id, "weapon", i, "ground_decal_id") )
             proto.chain_fx.push_back(World::ResolveGroundDecal(
                 *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
                 proto.radius * 2.0f, proto.blast_radius * 2.0f));
