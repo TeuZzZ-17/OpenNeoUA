@@ -905,10 +905,10 @@ struct TVhclProto
     // OpenNeoUA custom: data-driven Buff link. buff_id resolves a reusable
     // new_buff profile into this runtime copy; -1 means no Buff.
     int buff_id = -1;
-    // OpenNeoUA custom: decal_id / mgun_decal_id link a reusable new_decal profile.
+    // OpenNeoUA custom: ground_decal_id / mgun_ground_decal_id link a reusable new_decal profile.
     // The resolved copies live in chain_fx (destruction decal) and mgun_decal.
-    int decal_id = -1;
-    int mgun_decal_id = -1;
+    int ground_decal_id = -1;
+    int mgun_ground_decal_id = -1;
     TVehicleBuffConfig buff;
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
@@ -1265,9 +1265,9 @@ struct TWeapProto
     // the generic shk_launch shake for the directly controlled player weapon and
     // is fired once per successful LaunchMissile() call, regardless of num_weapons.
     TSndFxPosParam shk_launch_player;
-    // OpenNeoUA custom: decal_id links a reusable new_decal profile (impact decal);
+    // OpenNeoUA custom: ground_decal_id links a reusable new_decal profile (impact decal);
     // the resolved copy lives in chain_fx.
-    int decal_id = -1;
+    int ground_decal_id = -1;
 
     // OpenNeoUA custom: data-driven Debuff link. debuff_id resolves a reusable
     // new_debuff profile into this runtime copy; -1 means no Debuff.
