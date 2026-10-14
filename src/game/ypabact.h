@@ -788,11 +788,16 @@ public:
     virtual bool getBACT_inputting() const
     { return (_oflags & BACT_OFLAG_USERINPT) != 0; }
 
+    bool CollisionsDisabled() const { return _disableCollision; }
+    bool _disableCollision = false;
+    void TraceWorldCollision(ypaworld_arg136 *query, bool exact = false);
+    void QueryWorldCollisions(ypaworld_arg137 *query);
+
     virtual bool getBACT_exactCollisions() const
-    { return (_oflags & BACT_OFLAG_EXACTCOLL) != 0; }
+    { return !CollisionsDisabled() && (_oflags & BACT_OFLAG_EXACTCOLL) != 0; }
 
     virtual bool getBACT_bactCollisions() const
-    { return (_oflags & BACT_OFLAG_BACTCOLL) != 0; }
+    { return !CollisionsDisabled() && (_oflags & BACT_OFLAG_BACTCOLL) != 0; }
 
     virtual bool getBACT_landingOnWait() const
     { return (_oflags & BACT_OFLAG_LANDONWAIT) != 0; }
@@ -1144,7 +1149,6 @@ public:
     bool _mgun_set;
     int _mgun_shot_time;
     int _mgun_shot_time_user;
-    World::TWeaponTracerConfig _mgun_tracer;
     bool _mgun_decal_enable;
     World::TChainFXConfig _mgun_decal;
     int _mgun_vp_dead;

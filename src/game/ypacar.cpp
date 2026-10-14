@@ -536,7 +536,7 @@ void NC_STACK_ypacar::User_layer(update_msg *arg)
                 arg136.vect = _position - _old_pos;
                 arg136.flags = 0;
 
-                _world->ypaworld_func136(&arg136);
+                TraceWorldCollision(&arg136);
 
                 if ( arg136.isect )
                 {
@@ -577,7 +577,7 @@ int NC_STACK_ypacar::AlignVehicleAI(float dtime, vec3d *pNormal)
     arg136.vect = vec3d::OY( _overeof + 110.0 );
     arg136.flags = 0;
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     if ( !arg136.isect )
         return ALIGN_NONE;
@@ -719,7 +719,7 @@ int NC_STACK_ypacar::AlignVehicleUser(float dtime, const vec3d &oldDir)
     arg136_2.vect = (t3 - arg136_2.stPos) * v166;
     arg136_2.flags = 0;
 
-    _world->ypaworld_func136(&arg136);
+    TraceWorldCollision(&arg136);
 
     if ( arg136.isect )
     {
@@ -777,7 +777,7 @@ int NC_STACK_ypacar::AlignVehicleUser(float dtime, const vec3d &oldDir)
         v158 = 1;
     }
 
-    _world->ypaworld_func136(&arg136_1);
+    TraceWorldCollision(&arg136_1);
 
     if ( arg136_1.isect )
     {
@@ -835,7 +835,7 @@ int NC_STACK_ypacar::AlignVehicleUser(float dtime, const vec3d &oldDir)
         v160 = 1;
     }
 
-    _world->ypaworld_func136(&arg136_2);
+    TraceWorldCollision(&arg136_2);
 
     if ( arg136_2.isect )
     {
@@ -883,7 +883,7 @@ int NC_STACK_ypacar::AlignVehicleUser(float dtime, const vec3d &oldDir)
 
             arg136_3.flags = 0;
 
-            _world->ypaworld_func136(&arg136_3);
+            TraceWorldCollision(&arg136_3);
 
             if ( arg136_3.isect )
             {
@@ -978,7 +978,7 @@ int NC_STACK_ypacar::AlignVehicleUser(float dtime, const vec3d &oldDir)
     arg136_4.vect = vec3d::OY(v90 * 2.0);
     arg136_4.flags = 0;
 
-    _world->ypaworld_func136(&arg136_4);
+    TraceWorldCollision(&arg136_4);
 
     if ( arg136_4.isect && (!arg136_4.isect || arg136_4.skel->polygons[ arg136_4.polyID ].B >= 0.6) )
     {

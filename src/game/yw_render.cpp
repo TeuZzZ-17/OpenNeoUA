@@ -532,8 +532,6 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 
     RenderFillers(&rndrs);
 
-    RenderMinigunTracers(&rndrs);
-
     RenderProceduralEnergyFX(&rndrs);
 
     RenderGroundDecals(&rndrs);

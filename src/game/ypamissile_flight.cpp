@@ -444,7 +444,7 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
         }
     }
 
-    if ( _artilleryShellImpactOnSurface && !_world->_isNetGame && hasGroundDecalChainFX )
+    if ( !CollisionsDisabled() && _artilleryShellImpactOnSurface && !_world->_isNetGame && hasGroundDecalChainFX )
     {
         ypaworld_arg136 groundHit;
         groundHit.stPos = vec3d(_position.x, -30000.0, _position.z);
@@ -461,7 +461,7 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
     // damage/push, building/sector damage, VP dead/megadeth and chain FX. The artillery shell
     // F10 blast rings are suppressed in Impact() so they do not look like target
     // markers in the 3D view.
-    bool applySectorDamage = (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) ||
+    bool applySectorDamage = !CollisionsDisabled() && (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) ||
                               (_pSector && _pSector->PurposeType == cellArea::PT_NONE)) &&
                              (_world->_userRobo->_owner == _owner || !_world->_isNetGame);
     vec3d directDamagePos = _position;

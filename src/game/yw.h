@@ -2949,12 +2949,6 @@ public:
     bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius, uint32_t seed);
     void RenderGroundDecalSmoke(baseRender_msg *arg);
     void ClearGroundDecalSmoke();
-    bool SpawnMinigunTracer(const vec3d &origin, const vec3d &direction,
-                            float availableDistance,
-                            const World::TWeaponTracerConfig &config);
-    void CleanupExpiredMinigunTracers();
-    void RenderMinigunTracers(baseRender_msg *arg);
-    void ClearMinigunTracers();
     void RenderWeaponTracerSegment(baseRender_msg *arg, const vec3d &start,
                                    const vec3d &end,
                                    const World::TWeaponTracerConfig &config,
@@ -3171,17 +3165,6 @@ public:
         TGroundDecal &operator=(const TGroundDecal &) = delete;
     };
 
-    struct TMinigunTracer
-    {
-        vec3d origin;
-        vec3d direction;
-        float availableDistance = 0.0f;
-        int32_t startTime = 0;
-        int32_t duration = 0;
-        uint32_t visualSeed = 0;
-        World::TWeaponTracerConfig config;
-    };
-
     struct TProceduralEnergyFX
     {
         vec3d pos;
@@ -3271,7 +3254,6 @@ public:
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<World::GroundDecalSmoke::Emitter> _groundDecalSmoke;
     GFX::TMesh _groundDecalSmokeMesh;
-    std::vector<TMinigunTracer> _mgunTracers;
     std::map<std::string, NC_STACK_base *> _sharedExternalMeshes;
     std::map<std::string, NC_STACK_base *> _sharedExternalBases;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;

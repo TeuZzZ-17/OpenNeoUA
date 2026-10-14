@@ -209,7 +209,7 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
             arg136.flags = 0;
             arg136.vect.y = v8 * 1.5;
 
-            _world->ypaworld_func136(&arg136);
+            TraceWorldCollision(&arg136);
 
             if ( arg136.isect && _thraction <= _mass * 9.80665 )
             {
@@ -502,7 +502,7 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
                         bodyProbe.radius = sphere.robo_coll_radius;
                         bodyProbe.collisions = v43 + arg137.coll_count;
                         bodyProbe.coll_max = arg137.coll_max - arg137.coll_count;
-                        _world->ypaworld_func137(&bodyProbe);
+                        QueryWorldCollisions(&bodyProbe);
                         arg137.coll_count += bodyProbe.coll_count;
                     }
 
@@ -511,12 +511,12 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
                         ypaworld_arg137 legacyProbe = arg137;
                         legacyProbe.collisions = v43 + arg137.coll_count;
                         legacyProbe.coll_max = arg137.coll_max - arg137.coll_count;
-                        _world->ypaworld_func137(&legacyProbe);
+                        QueryWorldCollisions(&legacyProbe);
                         arg137.coll_count += legacyProbe.coll_count;
                     }
                 }
                 else
-                    _world->ypaworld_func137(&arg137);
+                    QueryWorldCollisions(&arg137);
 
                 if ( arg137.coll_count )
                 {
@@ -551,7 +551,7 @@ void NC_STACK_ypabact::User_layer(update_msg *arg)
                     arg136.vect = _position - _old_pos;
                     arg136.flags = 0;
 
-                    _world->ypaworld_func136(&arg136);
+                    TraceWorldCollision(&arg136);
 
                     if ( arg136.isect )
                     {
@@ -952,7 +952,7 @@ void NC_STACK_ypabact::setBACT_inputting(bool inpt)
             ground.vect = vec3d(0.0, std::max(_viewer_radius, _viewer_overeof) * 1.5f, 0.0);
             ground.flags = 0;
 
-            _world->ypaworld_func136(&ground);
+            TraceWorldCollision(&ground);
 
             if ( ground.isect )
             {

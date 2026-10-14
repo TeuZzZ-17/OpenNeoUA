@@ -624,11 +624,11 @@ bool Vehicle(const NC_STACK_ypabact *a)
 }
 bool Live(const NC_STACK_ypabact *a)
 {
-    return a && a->_status != BACT_STATUS_DEAD && !(a->_status_flg & BACT_STFLAG_DEATH1);
+    return a && !a->CollisionsDisabled() && a->_status != BACT_STATUS_DEAD && !(a->_status_flg & BACT_STFLAG_DEATH1);
 }
 bool Residue(const NC_STACK_ypabact *a)
 {
-    return a && a->_status == BACT_STATUS_DEAD &&
+    return a && !a->CollisionsDisabled() && a->_status == BACT_STATUS_DEAD &&
            (a->_vp_extra[0].flags & EVPROTO_FLAG_ACTIVE) && a->_scale_time > 0;
 }
 bool Related(const NC_STACK_ypabact *a, const NC_STACK_ypabact *b)
@@ -956,6 +956,7 @@ Scene::Scene(NC_STACK_ypaworld &world) : impl(new Impl(world)) {}
 Scene::~Scene() = default;
 bool Scene::TakeWorldContact(NC_STACK_ypabact *a, Contact *contact)
 {
+    if (!a || a->CollisionsDisabled()) return false;
     const auto it = impl->actors.find(a);
     if (it == impl->actors.end() || it->second->stamp != impl->world._timeStamp ||
         !it->second->hasWorldContact) return false;
@@ -966,6 +967,7 @@ bool Scene::TakeWorldContact(NC_STACK_ypabact *a, Contact *contact)
 }
 bool Scene::TakeUnitContact(NC_STACK_ypabact *a, Contact *contact)
 {
+    if (!a || a->CollisionsDisabled()) return false;
     const auto it = impl->actors.find(a);
     if (it == impl->actors.end() || it->second->stamp != impl->world._timeStamp ||
         !it->second->hasUnitContact || a->_shapeCollisionResponseStamp == impl->world._timeStamp)
@@ -1059,6 +1061,7 @@ struct TerrainFootprintSurface : btTriangleCallback
 
 bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
 {
+    if (!a || a->CollisionsDisabled()) return false;
     if (!a || !Finite(a->_position) ||
         (a->_bact_type != BACT_TYPES_BACT && a->_bact_type != BACT_TYPES_TANK &&
          a->_bact_type != BACT_TYPES_CAR && a->_bact_type != BACT_TYPES_FLYER &&
@@ -1140,13 +1143,13 @@ bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
 }
 double Scene::RoboGroundPenetration(NC_STACK_yparobo *robo)
 {
-    if (!robo || !Finite(robo->_position) || robo->_status != BACT_STATUS_NORMAL)
+    if (!robo || robo->CollisionsDisabled() || !Finite(robo->_position) || robo->_status != BACT_STATUS_NORMAL)
         return 0.0;
 
     double penetration = 0.0;
     const auto checkBody = [&](NC_STACK_ypabact *actor, const vec3d &position,
                                const mat3x3 &rotation, bool isRobo) {
-        if (!actor || actor->IsDestroyed()) return;
+        if (!actor || actor->CollisionsDisabled() || actor->IsDestroyed()) return;
 
         const vec3d origin = position + (actor->GetBodyPosition() - actor->_position);
         struct Footprint { btVector3 lo, hi; double tolerance; };
@@ -1276,7 +1279,7 @@ std::vector<NC_STACK_ypabact *> Scene::ShapeTargets(const vec3d &from, const vec
 bool Scene::Trace(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to,
                   double radius, Contact *out)
 {
-    if (!target || !target->HasCollisionShape() || !Finite(from) || !Finite(to)) return false;
+    if (!target || target->CollisionsDisabled() || !target->HasCollisionShape() || !Finite(from) || !Finite(to)) return false;
     btCollisionObject object;
     object.setCollisionShape(&target->_collisionShape->impl->compound);
     object.setWorldTransform(Pose(target->GetBodyPosition(), target->_rotation));
@@ -1380,7 +1383,7 @@ bool Scene::TraceSector(const vec3d &target, const vec3d &from, const vec3d &to,
 bool Scene::TraceProjectile(NC_STACK_ypabact *projectile, NC_STACK_ypabact *target,
                             const mat3x3 &oldRotation, Contact *out)
 {
-    if (!projectile || !Live(target)) return false;
+    if (!projectile || projectile->CollisionsDisabled() || !Live(target)) return false;
     if (projectile->HasCollisionShape())
     {
         // A projectile with its own shape replaces its physical spheres for

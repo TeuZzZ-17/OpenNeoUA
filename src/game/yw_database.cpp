@@ -189,8 +189,9 @@ std::string db_optional_float_display(float value)
 
 bool db_static_gun_support_active(const World::TVhclProto &p)
 {
-    return p.model_id == BACT_TYPES_GUN &&
-           p.initParams.find(NC_STACK_ypagun::GUN_ATT_NO_FALL) != p.initParams.end();
+    const auto it = p.initParams.find(NC_STACK_ypagun::GUN_ATT_LEVITATE);
+    return p.model_id == BACT_TYPES_GUN && it != p.initParams.end() &&
+           nonstd::any_cast<int32_t>(it->second.Value) == 1;
 }
 
 std::string db_vehicle_job_stars(int value)
