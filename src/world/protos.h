@@ -678,6 +678,7 @@ struct TRoboGun
     std::string icon;
     uint8_t robo_gun_type = 0;
     int protect = 0; // OpenNeoUA: optional damage-sponge attachment, unified attachment protection
+    int noSwitch = 0; // OpenNeoUA: 1 = the player cannot cycle (F6/button) from the carrier into this gun
 
     TRoboGun()
     {}
@@ -696,6 +697,7 @@ struct TRoboGun
         icon = std::move(b.icon);
         robo_gun_type = b.robo_gun_type;
         protect = b.protect;
+        noSwitch = b.noSwitch;
     }
 
     TRoboGun& operator=(const TRoboGun &b)
@@ -707,6 +709,7 @@ struct TRoboGun
         icon = b.icon;
         robo_gun_type = b.robo_gun_type;
         protect = b.protect;
+        noSwitch = b.noSwitch;
         return *this;
     }
 };
@@ -818,6 +821,7 @@ struct TVhclProto
     bool mgun_angle_set = false;
     float weapon_spread_x = 0.0;
     float weapon_spread_y = 0.0;
+    float weapon_spread_z = 0.0; // Bombs only: ground-plane forward/back spread.
     float weapon_arc_x = 0.0;
     float weapon_arc_y = 0.0;
     float weapon_cone_xy = 0.0;

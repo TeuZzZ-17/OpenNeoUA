@@ -291,10 +291,8 @@ public:
     static Common::Ini::Key GameAiTargetRange;
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
-    static Common::Ini::Key GameGlobalShkFadeIn;
-    static Common::Ini::Key GameGlobalShkFadeOut;
-    static Common::Ini::Key GameGlobalPalFadeIn;
-    static Common::Ini::Key GameGlobalPalFadeOut;
+    static Common::Ini::Key GameGlobalShkFade;
+    static Common::Ini::Key GameGlobalPalFade;
 
     // OpenNeoUA: optional procedural HP bar shared by world/HUD. When enabled,
     // world-space Shield is omitted while the personal cockpit Shield keeps the
@@ -317,9 +315,7 @@ public:
     static Common::Ini::Key GfxRegenFX3DS;
     static Common::Ini::Key GfxRegenFXBase;
     static Common::Ini::Key GfxRegenFXScale;
-    static Common::Ini::Key GfxRegenFXSpinX;
-    static Common::Ini::Key GfxRegenFXSpinY;
-    static Common::Ini::Key GfxRegenFXSpinZ;
+    static Common::Ini::Key GfxRegenFXSpin;
     static Common::Ini::Key GfxRegenFXTint;
     static Common::Ini::Key GfxRegenFXDuration;
     static Common::Ini::Key GfxRegenFXInterval;
@@ -328,16 +324,13 @@ public:
     static Common::Ini::Key GfxRegenMeshSize;
     static Common::Ini::Key GfxRegenMeshThickness;
     static Common::Ini::Key GfxRegenMeshRiseSpeed;
-    static Common::Ini::Key GfxRegenMeshFadeIn;
-    static Common::Ini::Key GfxRegenMeshFadeOut;
+    static Common::Ini::Key GfxRegenMeshFade;
 
     static Common::Ini::Key GfxDrainFXVP;
     static Common::Ini::Key GfxDrainFX3DS;
     static Common::Ini::Key GfxDrainFXBase;
     static Common::Ini::Key GfxDrainFXScale;
-    static Common::Ini::Key GfxDrainFXSpinX;
-    static Common::Ini::Key GfxDrainFXSpinY;
-    static Common::Ini::Key GfxDrainFXSpinZ;
+    static Common::Ini::Key GfxDrainFXSpin;
     static Common::Ini::Key GfxDrainFXTint;
     static Common::Ini::Key GfxDrainFXDuration;
     static Common::Ini::Key GfxDrainFXInterval;
@@ -346,8 +339,7 @@ public:
     static Common::Ini::Key GfxDrainMeshSize;
     static Common::Ini::Key GfxDrainMeshThickness;
     static Common::Ini::Key GfxDrainMeshRiseSpeed;
-    static Common::Ini::Key GfxDrainMeshFadeIn;
-    static Common::Ini::Key GfxDrainMeshFadeOut;
+    static Common::Ini::Key GfxDrainMeshFade;
 
     // OpenNeoUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only

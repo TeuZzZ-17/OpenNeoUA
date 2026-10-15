@@ -68,10 +68,10 @@ static bool ParseFloatStrict(const std::string &value, float *out)
     return true;
 }
 
-static int ReadInt(Common::Ini::Key &key, int fallback, int minValue, int maxValue)
+static int ReadIntText(Common::Ini::Key &key, const std::string &value,
+                       int fallback, int minValue, int maxValue)
 {
     long parsed = fallback;
-    const std::string value = key.Get<std::string>();
 
     if ( !ParseLongStrict(value, &parsed) )
     {
@@ -85,6 +85,11 @@ static int ReadInt(Common::Ini::Key &key, int fallback, int minValue, int maxVal
     if ( parsed > maxValue )
         parsed = maxValue;
     return (int)parsed;
+}
+
+static int ReadInt(Common::Ini::Key &key, int fallback, int minValue, int maxValue)
+{
+    return ReadIntText(key, key.Get<std::string>(), fallback, minValue, maxValue);
 }
 
 static void ReadIntRange(Common::Ini::Key &key, int fallbackMin, int fallbackMax,
@@ -112,10 +117,9 @@ static void ReadIntRange(Common::Ini::Key &key, int fallbackMin, int fallbackMax
     outMax = parsedMax;
 }
 
-static float ReadFloat(Common::Ini::Key &key, float fallback)
+static float ReadFloatText(Common::Ini::Key &key, const std::string &value, float fallback)
 {
     float parsed = fallback;
-    const std::string value = key.Get<std::string>();
 
     if ( !ParseFloatStrict(value, &parsed) )
     {
@@ -125,6 +129,25 @@ static float ReadFloat(Common::Ini::Key &key, float fallback)
     }
 
     return parsed;
+}
+
+static float ReadFloat(Common::Ini::Key &key, float fallback)
+{
+    return ReadFloatText(key, key.Get<std::string>(), fallback);
+}
+
+// Splits a compact "a_b_c" key (see World::SplitTupleValue). A malformed value
+// is reported only when the author set it; the caller then keeps its defaults.
+static bool ReadTupleParts(Common::Ini::Key &key, size_t count, std::string *parts)
+{
+    const std::string value = key.Get<std::string>();
+    if ( World::SplitTupleValue(value, count, parts) )
+        return true;
+
+    if ( key.WasSet )
+        ypa_log_out("Warning: invalid %s '%s', expected %u values separated by '_'\n",
+                    key.Name.c_str(), value.c_str(), (unsigned)count);
+    return false;
 }
 
 
@@ -211,9 +234,7 @@ static Config BuildConfig(Common::Ini::Key &vp,
                           Common::Ini::Key &mesh3ds,
                           Common::Ini::Key &basePath,
                           Common::Ini::Key &scale,
-                          Common::Ini::Key &spinX,
-                          Common::Ini::Key &spinY,
-                          Common::Ini::Key &spinZ,
+                          Common::Ini::Key &spin,
                           Common::Ini::Key &tint,
                           Common::Ini::Key &duration,
                           Common::Ini::Key &interval,
@@ -222,8 +243,7 @@ static Config BuildConfig(Common::Ini::Key &vp,
                           Common::Ini::Key &size,
                           Common::Ini::Key &thickness,
                           Common::Ini::Key &riseSpeed,
-                          Common::Ini::Key &fadeIn,
-                          Common::Ini::Key &fadeOut,
+                          Common::Ini::Key &fade,
                           bool regenProfile)
 {
     Config config;
@@ -235,9 +255,13 @@ static Config BuildConfig(Common::Ini::Key &vp,
     if ( config.scale <= 0.0f )
         config.scale = 1.0f;
 
-    config.spin.x = Spin::ClampStrength(ReadFloat(spinX, 0.0f));
-    config.spin.y = Spin::ClampStrength(ReadFloat(spinY, 0.0f));
-    config.spin.z = Spin::ClampStrength(ReadFloat(spinZ, 0.0f));
+    std::string spinParts[3];
+    if ( ReadTupleParts(spin, 3, spinParts) )
+    {
+        config.spin.x = Spin::ClampStrength(ReadFloatText(spin, spinParts[0], 0.0f));
+        config.spin.y = Spin::ClampStrength(ReadFloatText(spin, spinParts[1], 0.0f));
+        config.spin.z = Spin::ClampStrength(ReadFloatText(spin, spinParts[2], 0.0f));
+    }
 
     const TVisualTint whiteTint = MakeTint(255, 255, 255, 255);
     const TVisualTint proceduralTint = regenProfile ?
@@ -282,8 +306,17 @@ static Config BuildConfig(Common::Ini::Key &vp,
     else if ( config.rise_speed > 5000.0f )
         config.rise_speed = 5000.0f;
 
-    config.fade_in = ReadInt(fadeIn, 150, 0, config.duration);
-    config.fade_out = ReadInt(fadeOut, 300, 0, config.duration);
+    std::string fadeParts[2];
+    if ( ReadTupleParts(fade, 2, fadeParts) )
+    {
+        config.fade_in = ReadIntText(fade, fadeParts[0], 150, 0, config.duration);
+        config.fade_out = ReadIntText(fade, fadeParts[1], 300, 0, config.duration);
+    }
+    else
+    {
+        config.fade_in = std::min(150, config.duration);
+        config.fade_out = std::min(300, config.duration);
+    }
 
     return config;
 }
@@ -294,9 +327,7 @@ void Init()
                           System::IniConf::GfxRegenFX3DS,
                           System::IniConf::GfxRegenFXBase,
                           System::IniConf::GfxRegenFXScale,
-                          System::IniConf::GfxRegenFXSpinX,
-                          System::IniConf::GfxRegenFXSpinY,
-                          System::IniConf::GfxRegenFXSpinZ,
+                          System::IniConf::GfxRegenFXSpin,
                           System::IniConf::GfxRegenFXTint,
                           System::IniConf::GfxRegenFXDuration,
                           System::IniConf::GfxRegenFXInterval,
@@ -305,17 +336,14 @@ void Init()
                           System::IniConf::GfxRegenMeshSize,
                           System::IniConf::GfxRegenMeshThickness,
                           System::IniConf::GfxRegenMeshRiseSpeed,
-                          System::IniConf::GfxRegenMeshFadeIn,
-                          System::IniConf::GfxRegenMeshFadeOut,
+                          System::IniConf::GfxRegenMeshFade,
                           true);
 
     s_drain = BuildConfig(System::IniConf::GfxDrainFXVP,
                           System::IniConf::GfxDrainFX3DS,
                           System::IniConf::GfxDrainFXBase,
                           System::IniConf::GfxDrainFXScale,
-                          System::IniConf::GfxDrainFXSpinX,
-                          System::IniConf::GfxDrainFXSpinY,
-                          System::IniConf::GfxDrainFXSpinZ,
+                          System::IniConf::GfxDrainFXSpin,
                           System::IniConf::GfxDrainFXTint,
                           System::IniConf::GfxDrainFXDuration,
                           System::IniConf::GfxDrainFXInterval,
@@ -324,8 +352,7 @@ void Init()
                           System::IniConf::GfxDrainMeshSize,
                           System::IniConf::GfxDrainMeshThickness,
                           System::IniConf::GfxDrainMeshRiseSpeed,
-                          System::IniConf::GfxDrainMeshFadeIn,
-                          System::IniConf::GfxDrainMeshFadeOut,
+                          System::IniConf::GfxDrainMeshFade,
                           false);
 }
 

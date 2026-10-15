@@ -1576,6 +1576,18 @@ bool NC_STACK_ypabact::IgnoresGenesisHostCollision(const NC_STACK_ypabact *other
     return false;
 }
 
+bool NC_STACK_ypabact::IsMountedFamilyWith(const NC_STACK_ypabact *other) const
+{
+    if (!other || other == this) return false;
+
+    const bool mountedThis = _isUnitGunChild || _isDummy;
+    const bool mountedOther = other->_isUnitGunChild || other->_isDummy;
+
+    return (mountedThis && _parent == other) ||
+           (mountedOther && other->_parent == this) ||
+           (mountedThis && mountedOther && _parent && _parent == other->_parent);
+}
+
 void NC_STACK_ypabact::UpdateGenesisHostExit()
 {
     if (!_genesisExitPending || _status == BACT_STATUS_CREATE) return;

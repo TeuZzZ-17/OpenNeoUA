@@ -479,8 +479,8 @@ bool ypabact_IsArtilleryShellEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *can
     return true;
 }
 
-// V1 target selection: pick the nearest valid enemy within [artillery_shell_min_range,
-// artillery_shell_max_range] and use its position as the barrage center.
+// V1 target selection: pick the nearest valid enemy within the min/max of
+// artillery_shell_range_minmax and use its position as the barrage center.
 //
 // onlyHostStation: when true, only enemy Host Stations (robo) are considered (used for
 // the built-in Host Station priority pass). The radar requirement is always
@@ -915,7 +915,7 @@ bool NC_STACK_ypabact::CanManualArtilleryShell(const vec3d &targetPos, int *outW
     if ( wproto.artillery_shell_barrage_shots <= 0 )
         return false;
 
-    // Range from this unit to the requested target point. artillery_shell_max_range is the
+    // Range from this unit to the requested target point. The max of artillery_shell_range_minmax is the
     // single authoritative maximum range for both manual fire and auto-search.
     float maxRange = wproto.artillery_shell_max_range;
     if ( maxRange <= 0.0 )

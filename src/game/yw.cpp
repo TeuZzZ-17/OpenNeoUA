@@ -2732,6 +2732,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_sector_damage_accum = 0.0;
         bacto->_weapon_spread_x = vhcl.weapon_spread_x;
         bacto->_weapon_spread_y = vhcl.weapon_spread_y;
+        bacto->_weapon_spread_z = vhcl.weapon_spread_z;
         bacto->_weapon_arc_x = vhcl.weapon_arc_x;
         bacto->_weapon_arc_y = vhcl.weapon_arc_y;
         bacto->_weapon_cone_xy = vhcl.weapon_cone_xy;
