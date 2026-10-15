@@ -201,6 +201,31 @@ int main() {
     Check(victim.hits==1, "MGUN skips disabled target");
     victim._disableCollision=false; shot.field_10=1400; shooter.FireMinigun(&shot);
     Check(victim.hits==2, "zero restores MGUN contact");
+
+    // A mounted Unit Gun never hits its carrier or sibling guns; unrelated units are unaffected.
+    Actor<> sibling, stranger;
+    sibling.Bind(rays); stranger.Bind(rays);
+    shooter._isUnitGunChild = true; shooter._parent = &victim; sibling._isUnitGunChild = true;
+    sibling._parent = &victim;
+    Check(shooter.IsMountedFamilyWith(&victim) && victim.IsMountedFamilyWith(&shooter),
+          "carrier and mounted gun are one family");
+    Check(shooter.IsMountedFamilyWith(&sibling), "guns of one carrier are one family");
+    Check(!shooter.IsMountedFamilyWith(&stranger) && !shooter.IsMountedFamilyWith(&shooter) &&
+          !shooter.IsMountedFamilyWith(nullptr), "unrelated, self and null are not family");
+    shot.field_10 = 1600; shooter.FireMinigun(&shot);
+    Check(victim.hits==2, "mounted gun MGUN skips its carrier");
+    shooter._isUnitGunChild = false; shot.field_10 = 1800; shooter.FireMinigun(&shot);
+    Check(victim.hits==3, "unmounted shooter still hits the same unit");
+
+    // unit_gun_no_switch accepts only the literal 1 and defaults to 0.
+    Check(Parse(w, {"new_vehicle 3", "model = tank", "unit_num_guns = 3",
+                    "unit_act_gun = 0", "unit_gun_no_switch = 1",
+                    "unit_act_gun = 1", "unit_gun_no_switch = 2",
+                    "unit_act_gun = 2", "end"}), "unit_gun_no_switch parses");
+    auto &mother = w._vhclProtos[3];
+    Check(mother.unit_guns.size()==3 && mother.unit_guns[0].noSwitch==1 &&
+          mother.unit_guns[1].noSwitch==0 && mother.unit_guns[2].noSwitch==0,
+          "unit_gun_no_switch literal one enables, invalid and absent stay off");
     std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
     return failures ? 1 : 0;
 }

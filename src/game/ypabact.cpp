@@ -507,6 +507,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _vehicle_fire_vp_end_time = 0;
     _weapon_spread_x = 0.0;
     _weapon_spread_y = 0.0;
+    _weapon_spread_z = 0.0;
     _weapon_arc_x = 0.0;
     _weapon_arc_y = 0.0;
     _weapon_cone_xy = 0.0;
@@ -545,6 +546,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _unitGunsSpawned = false;
     _unitGunsHaveParentRotation = false;
     _isUnitGunChild = false;
+    _unitGunNoSwitch = false;
     _isDummy = false;
     _collNodes = World::rbcolls();
     _manualCompoundBroadRadius = -1.0f;
@@ -685,6 +687,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _unitGunsSpawned = false;
     _unitGunsHaveParentRotation = false;
     _isUnitGunChild = false;
+    _unitGunNoSwitch = false;
     _isDummy = false;
     _collNodes = World::rbcolls();
     _manualCompoundBroadRadius = -1.0f;
@@ -983,6 +986,7 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
                 // behavior (notably legacy dummy, which is fully passive only when
                 // mounted as a Unit Gun/Module).
                 gunObj->_isUnitGunChild = true;
+                gunObj->_unitGunNoSwitch = gun.noSwitch == 1;
 
                 if ( NC_STACK_ypagun *attachedGun = dynamic_cast<NC_STACK_ypagun *>(gunObj) )
                 {

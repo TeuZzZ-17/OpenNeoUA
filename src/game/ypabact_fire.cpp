@@ -586,7 +586,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         }
         const float effectiveSpreadX = spreadX * handBrakeSpreadScale;
         const float effectiveSpreadY = spreadY * handBrakeSpreadScale;
-        if ( effectiveSpreadX > 0.0f || effectiveSpreadY > 0.0f )
+        // Bombs ignore the aim-based X/Y rotation: their spread is the ground-plane
+        // push (X and Z of weapon_spread_xyz) applied with the launch speed below.
+        const bool bombSpread = wproto.IsBombLike();
+        if ( !bombSpread && (effectiveSpreadX > 0.0f || effectiveSpreadY > 0.0f) )
             wobj->_fly_dir = World::ApplyDirectionalSpread(_rotation, wobj->_fly_dir,
                                                            effectiveSpreadX, effectiveSpreadY);
 
@@ -594,7 +597,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         {
             // SetupArcGrenadeLaunch()/the AI solver establish the base vector
             // above. Commit the direction only after the shared pattern and
-            // weapon_spread_x/weapon_spread_y path has run, otherwise Arc
+            // X/Y path of weapon_spread_xyz has run, otherwise Arc
             // Grenade would overwrite the vertical spread (and all AI spread).
             wobj->SetupArcGrenadeVelocity(wobj->_fly_dir * wproto.start_speed,
                                           wproto.grenade_arc_gravity);
@@ -605,6 +608,22 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
             if ( !(wproto._weaponFlags & 0x12) )
                 wobj->_fly_dir_length *= 0.2;
+
+            const float effectiveSpreadZ = _weapon_spread_z * handBrakeSpreadScale;
+            if ( bombSpread && (effectiveSpreadX > 0.0f || effectiveSpreadZ > 0.0f) )
+            {
+                // A bomb's launch speed is tiny (or zero), so rotating it barely
+                // moves the bomb. Add a fixed-speed push on the ground plane instead.
+                const vec3d bombVelocity = World::ApplyBombSpreadKick(
+                    wobj->_fly_dir * wobj->_fly_dir_length, _rotation,
+                    effectiveSpreadX, effectiveSpreadZ);
+                const float bombSpeed = bombVelocity.length();
+                if ( bombSpeed > 0.001f )
+                {
+                    wobj->_fly_dir = bombVelocity / bombSpeed;
+                    wobj->_fly_dir_length = bombSpeed;
+                }
+            }
 
             wobj->_rotation.SetZ( wobj->_fly_dir );
             wobj->_rotation.SetX( _rotation.AxisX() );
@@ -1337,6 +1356,8 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         for (NC_STACK_ypabact *cellUnit : minigunTargets)
         {
             if (!cellUnit || cellUnit->CollisionsDisabled()) continue;
+            // A mounted Unit Gun's hit scan never touches its carrier or sibling guns.
+            if (IsMountedFamilyWith(cellUnit)) continue;
             if ( cellUnit != this && cellUnit->_bact_type != BACT_TYPES_MISSLE && cellUnit->_status != BACT_STATUS_DEAD )
             {
                 int v89 = 0;

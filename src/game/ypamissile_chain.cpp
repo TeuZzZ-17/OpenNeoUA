@@ -303,6 +303,9 @@ bool NC_STACK_ypamissile::CanChainToTarget(NC_STACK_ypabact *target, NC_STACK_yp
     if ( !target || target == this || target == _mislEmitter || target == currentHit )
         return false;
 
+    if ( _mislEmitter && _mislEmitter->IsMountedFamilyWith(target) )
+        return false;
+
     if ( !_world || target->getBACT_pWorld() != _world )
         return false;
 

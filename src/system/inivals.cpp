@@ -389,10 +389,8 @@ Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment",
 // OpenNeoUA: global temporal envelopes are limited to SHK and PAL.
 // Event-specific fade keys are intentionally unsupported; missing, malformed,
 // negative or zero means no additional fade. SND keeps its legacy behavior.
-Common::Ini::Key IniConf::GameGlobalShkFadeIn("game.global_shk_fade_in", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GameGlobalShkFadeOut("game.global_shk_fade_out", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GameGlobalPalFadeIn("game.global_pal_fade_in", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GameGlobalPalFadeOut("game.global_pal_fade_out", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameGlobalShkFade("game.global_shk_fade_inout", Common::Ini::KT_WORD, std::string("0_0"));
+Common::Ini::Key IniConf::GameGlobalPalFade("game.global_pal_fade_inout", Common::Ini::KT_WORD, std::string("0_0"));
 
 // OpenNeoUA custom: procedural HP bar shared by world/HUD. When enabled, the
 // world-space Shield bar is omitted while the personal cockpit Shield keeps
@@ -419,9 +417,7 @@ Common::Ini::Key IniConf::GfxRegenFXVP("gfx.regen_fx_vp", Common::Ini::KT_WORD, 
 Common::Ini::Key IniConf::GfxRegenFX3DS("gfx.regen_fx_3ds", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxRegenFXBase("gfx.regen_fx_base", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxRegenFXScale("gfx.regen_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxRegenFXSpinX("gfx.regen_fx_spin_x", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXSpinY("gfx.regen_fx_spin_y", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxRegenFXSpinZ("gfx.regen_fx_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxRegenFXSpin("gfx.regen_fx_spin_xyz", Common::Ini::KT_WORD, std::string("0_0_0"));
 Common::Ini::Key IniConf::GfxRegenFXTint("gfx.regen_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GfxRegenFXDuration("gfx.regen_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GfxRegenFXInterval("gfx.regen_fx_interval", Common::Ini::KT_WORD, std::string("0"));
@@ -430,16 +426,13 @@ Common::Ini::Key IniConf::GfxRegenFXRandomMaxOffset("gfx.regen_fx_random_max_off
 Common::Ini::Key IniConf::GfxRegenMeshSize("gfx.regen_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxRegenMeshThickness("gfx.regen_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxRegenMeshRiseSpeed("gfx.regen_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxRegenMeshFadeIn("gfx.regen_mesh_fade_in", Common::Ini::KT_WORD, std::string("150"));
-Common::Ini::Key IniConf::GfxRegenMeshFadeOut("gfx.regen_mesh_fade_out", Common::Ini::KT_WORD, std::string("300"));
+Common::Ini::Key IniConf::GfxRegenMeshFade("gfx.regen_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150_300"));
 
 Common::Ini::Key IniConf::GfxDrainFXVP("gfx.drain_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFX3DS("gfx.drain_fx_3ds", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxDrainFXBase("gfx.drain_fx_base", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxDrainFXScale("gfx.drain_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxDrainFXSpinX("gfx.drain_fx_spin_x", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXSpinY("gfx.drain_fx_spin_y", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GfxDrainFXSpinZ("gfx.drain_fx_spin_z", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GfxDrainFXSpin("gfx.drain_fx_spin_xyz", Common::Ini::KT_WORD, std::string("0_0_0"));
 Common::Ini::Key IniConf::GfxDrainFXTint("gfx.drain_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GfxDrainFXDuration("gfx.drain_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GfxDrainFXInterval("gfx.drain_fx_interval", Common::Ini::KT_WORD, std::string("0"));
@@ -448,8 +441,7 @@ Common::Ini::Key IniConf::GfxDrainFXRandomMaxOffset("gfx.drain_fx_random_max_off
 Common::Ini::Key IniConf::GfxDrainMeshSize("gfx.drain_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxDrainMeshThickness("gfx.drain_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxDrainMeshRiseSpeed("gfx.drain_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxDrainMeshFadeIn("gfx.drain_mesh_fade_in", Common::Ini::KT_WORD, std::string("150"));
-Common::Ini::Key IniConf::GfxDrainMeshFadeOut("gfx.drain_mesh_fade_out", Common::Ini::KT_WORD, std::string("300"));
+Common::Ini::Key IniConf::GfxDrainMeshFade("gfx.drain_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150_300"));
 
 // OpenNeoUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -737,10 +729,8 @@ void IniConf::Init()
         , &GameAiTargetRange
         , &GameMgunRange
         , &GameMgunAiFireAlignment
-        , &GameGlobalShkFadeIn
-        , &GameGlobalShkFadeOut
-        , &GameGlobalPalFadeIn
-        , &GameGlobalPalFadeOut
+        , &GameGlobalShkFade
+        , &GameGlobalPalFade
         , &GfxWorldNewHpBarEnable
         , &GfxWorldNewHpBarFullTint
         , &GfxWorldNewHpBarLowTint
@@ -751,9 +741,7 @@ void IniConf::Init()
         , &GfxRegenFX3DS
         , &GfxRegenFXBase
         , &GfxRegenFXScale
-        , &GfxRegenFXSpinX
-        , &GfxRegenFXSpinY
-        , &GfxRegenFXSpinZ
+        , &GfxRegenFXSpin
         , &GfxRegenFXTint
         , &GfxRegenFXDuration
         , &GfxRegenFXInterval
@@ -762,15 +750,12 @@ void IniConf::Init()
         , &GfxRegenMeshSize
         , &GfxRegenMeshThickness
         , &GfxRegenMeshRiseSpeed
-        , &GfxRegenMeshFadeIn
-        , &GfxRegenMeshFadeOut
+        , &GfxRegenMeshFade
         , &GfxDrainFXVP
         , &GfxDrainFX3DS
         , &GfxDrainFXBase
         , &GfxDrainFXScale
-        , &GfxDrainFXSpinX
-        , &GfxDrainFXSpinY
-        , &GfxDrainFXSpinZ
+        , &GfxDrainFXSpin
         , &GfxDrainFXTint
         , &GfxDrainFXDuration
         , &GfxDrainFXInterval
@@ -779,8 +764,7 @@ void IniConf::Init()
         , &GfxDrainMeshSize
         , &GfxDrainMeshThickness
         , &GfxDrainMeshRiseSpeed
-        , &GfxDrainMeshFadeIn
-        , &GfxDrainMeshFadeOut
+        , &GfxDrainMeshFade
         , &UiStatusIconRegen
         , &UiStatusIconDrain
         , &UiStatusIconDamaged

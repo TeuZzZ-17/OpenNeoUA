@@ -646,6 +646,9 @@ public:
     virtual void CreationTimeUpdate(update_msg *arg);
     void PlaceGenesisAboveTerrain();
     bool IgnoresGenesisHostCollision(const NC_STACK_ypabact *other) const;
+    // True when both actors belong to the same mounted Unit Gun family: carrier and
+    // its attached Gun/module, or two Guns/modules of the same carrier.
+    bool IsMountedFamilyWith(const NC_STACK_ypabact *other) const;
     void UpdateGenesisHostExit();
     virtual size_t IsDestroyed();
     virtual size_t CheckFireAI(bact_arg101 *arg);
@@ -1165,6 +1168,7 @@ public:
     float _mgun_sector_damage_accum;
     float _weapon_spread_x;
     float _weapon_spread_y;
+    float _weapon_spread_z;
     float _weapon_arc_x;
     float _weapon_arc_y;
     float _weapon_cone_xy;
@@ -1331,6 +1335,8 @@ public:
     bool _unitGunsSpawned;
     bool _unitGunsHaveParentRotation;
     bool _isUnitGunChild;
+    // Copied from unit_gun_no_switch when the Unit Gun is spawned: F6/button cycling skips it.
+    bool _unitGunNoSwitch;
     // Runtime semantic for gun_type=dummy. This is intentionally not a second
     // attachment system; it only feeds existing AI/visibility filters.
     bool _isDummy;

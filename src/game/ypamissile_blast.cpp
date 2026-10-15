@@ -811,6 +811,11 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
 
             for ( NC_STACK_ypabact *bct : cell.unitsList.safe_iter() )
             {
+                // Blast of a mounted Unit Gun never reaches its carrier or sibling guns
+                // (damage, push and debuff).
+                if ( _mislEmitter && _mislEmitter->IsMountedFamilyWith(bct) )
+                    continue;
+
                 const char *dmgSkip  = GetBlastEnergySkipReason(bct, allowFriendly);
                 const char *pushSkip = doBlastPush ? GetAreaPushSkipReason(bct) : "push_disabled";
 

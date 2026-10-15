@@ -508,6 +508,10 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
         if ( bct == this || bct == _mislEmitter || bct->_status == BACT_STATUS_DEAD )
             continue;
 
+        // Shots of a mounted Unit Gun never touch its carrier or sibling guns.
+        if ( _mislEmitter->IsMountedFamilyWith(bct) )
+            continue;
+
         if ( IsArmorPenetratedTarget(bct) )
             continue;
 
@@ -1677,6 +1681,9 @@ void NC_STACK_ypamissile::Impact()
 
     for( NC_STACK_ypabact* &bct : _pSector->unitsList )
     {
+        if ( _mislEmitter && _mislEmitter->IsMountedFamilyWith(bct) )
+            continue;
+
         if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_bact_type != BACT_TYPES_ROBO && bct->_bact_type != BACT_TYPES_TANK && bct->_bact_type != BACT_TYPES_CAR && bct->_bact_type != BACT_TYPES_GUN && !(bct->_status_flg & BACT_STFLAG_DEATH2) )
         {
             int v10 = 1;

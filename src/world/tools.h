@@ -211,7 +211,13 @@ inline bool ParsePositiveIntRangeValue(const std::string &value,
     return true;
 }
 
-inline bool ParseFloatRangeValue(const std::string &value, float &minValue, float &maxValue)
+// Float counterpart of ParseIntRangeValue(). The separator defaults to "_"
+// (value_value); inside a compact tuple such as offset_xyz it is "~" because
+// "_" already separates the axes.
+inline bool ParseFloatRangeValue(const std::string &value,
+                                 float &minValue,
+                                 float &maxValue,
+                                 char rangeSeparator = '_')
 {
     auto parsePart = [](const std::string &part, float &out) -> bool
     {
@@ -229,7 +235,7 @@ inline bool ParseFloatRangeValue(const std::string &value, float &minValue, floa
         return true;
     };
 
-    const size_t separator = value.find('_');
+    const size_t separator = value.find(rangeSeparator);
     if ( separator == std::string::npos )
     {
         float fixed = 0.0f;
@@ -240,7 +246,7 @@ inline bool ParseFloatRangeValue(const std::string &value, float &minValue, floa
         return true;
     }
 
-    if ( value.find('_', separator + 1) != std::string::npos )
+    if ( value.find(rangeSeparator, separator + 1) != std::string::npos )
         return false;
 
     float first = 0.0f;
@@ -251,6 +257,34 @@ inline bool ParseFloatRangeValue(const std::string &value, float &minValue, floa
 
     minValue = std::min(first, second);
     maxValue = std::max(first, second);
+    return true;
+}
+
+// Compact tuple syntax shared by the OpenNeoUA multi-value parameters
+// (spin_xyz = x_y_z, fade_inout = in_out, lifetime_minmax = min_max, ...).
+// The text must hold exactly `count` non-empty parts separated by "_".
+// Callers parse every part with their own rules, so the clamps and fallbacks
+// of the former single-value parameters stay identical.
+inline bool SplitTupleValue(const std::string &value, size_t count, std::string *parts)
+{
+    if ( count == 0 || !parts )
+        return false;
+
+    size_t start = 0;
+    for (size_t i = 0; i < count; i++)
+    {
+        const bool last = i + 1 == count;
+        const size_t separator = value.find('_', start);
+        if ( last ? separator != std::string::npos : separator == std::string::npos )
+            return false;
+
+        parts[i] = value.substr(start, separator == std::string::npos ? std::string::npos : separator - start);
+        if ( parts[i].empty() )
+            return false;
+
+        start = separator + 1;
+    }
+
     return true;
 }
 
@@ -402,6 +436,56 @@ inline vec3d ApplyDirectionalSpread(const mat3x3 &rotation,
         return aimDir;
 
     return direction;
+}
+
+// Fixed launch speed used to turn the random X/Z angle of weapon_spread_xyz on a bomb
+// into a push on the ground plane. Bombs leave the carrier at only 20% of its
+// speed, so an angle alone would move a hovering or slow carrier's bombs by
+// almost nothing.
+constexpr float BOMB_SPREAD_REFERENCE_SPEED = 20.0f;
+
+// Adds the random ground-plane push of a bomb's weapon_spread_xyz X (left/right
+// of the carrier's heading) and Z (forward/back) to its launch velocity. The
+// push is horizontal on purpose: it does not depend on the carrier's pitch,
+// and the Y value plays no part in it.
+// Same angle scale as ApplyDirectionalSpread: tan(spread) in [-1, 1] * speed.
+inline vec3d ApplyBombSpreadKick(const vec3d &velocity,
+                                 const mat3x3 &rotation,
+                                 float spreadX,
+                                 float spreadZ)
+{
+    const bool useX = std::isfinite(spreadX) && spreadX > 0.0f;
+    const bool useZ = std::isfinite(spreadZ) && spreadZ > 0.0f;
+    if ( !useX && !useZ )
+        return velocity;
+
+    // Horizontal heading axes of the carrier. When one is degenerate (carrier
+    // pointing straight up/down or rolled 90 degrees) rebuild it from the other.
+    vec3d right(rotation.AxisX().x, 0.0f, rotation.AxisX().z);
+    vec3d forward(rotation.AxisZ().x, 0.0f, rotation.AxisZ().z);
+    const bool hasRight = right.normalise() > 0.001f;
+    const bool hasForward = forward.normalise() > 0.001f;
+    if ( !hasRight && !hasForward )
+    {
+        right = vec3d::OX(1.0f);
+        forward = vec3d::OZ(1.0f);
+    }
+    else if ( !hasRight )
+        right = vec3d(forward.z, 0.0f, -forward.x);
+    else if ( !hasForward )
+        forward = vec3d(right.z, 0.0f, -right.x);
+
+    const float maxDegrees = 89.0f;
+    const double degreesToRadians = 0.01745329251994329577;
+    vec3d push(0.0f, 0.0f, 0.0f);
+    if ( useX )
+        push += right * (float)((((double)rand() / (double)RAND_MAX) * 2.0 - 1.0) *
+                                std::tan(std::min(spreadX, maxDegrees) * degreesToRadians));
+    if ( useZ )
+        push += forward * (float)((((double)rand() / (double)RAND_MAX) * 2.0 - 1.0) *
+                                  std::tan(std::min(spreadZ, maxDegrees) * degreesToRadians));
+
+    return velocity + push * BOMB_SPREAD_REFERENCE_SPEED;
 }
 
 inline bool IsWeaponClusterTriggerDue(int triggerTime,
