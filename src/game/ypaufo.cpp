@@ -523,7 +523,10 @@ void NC_STACK_ypaufo::User_layer(update_msg *arg)
         // Keep the mouse wheel as the permanent contextual shortcut. The
         // remappable Zoom In/Out pair is shared with the tactical map and
         // Spectator Follow, with the open map taking absolute priority.
-        if (arg->inpt->ClickInf.selected_btn == nullptr && arg->inpt->ClickInf.wheel != 0)
+        // Only a wheel-enabled list under the pointer may take the wheel away.
+        // Other click boxes must not block it: the pointer position is stale
+        // while the mouse is grabbed and could hide the zoom at random.
+        if (!_world->IsWheelOwnedByGuiList(arg->inpt->ClickInf) && arg->inpt->ClickInf.wheel != 0)
         {
             zoomSteps += arg->inpt->ClickInf.wheel;
             arg->inpt->ClickInf.wheel = 0;

@@ -1236,6 +1236,14 @@ bool NC_STACK_ypaworld::IsRoboMapOpen() const
     return robo_map.IsOpen();
 }
 
+// True when a visible wheel-enabled list (unit list, Squadron Manager) is under
+// the pointer and therefore has priority over the world's wheel zoom.
+bool NC_STACK_ypaworld::IsWheelOwnedByGuiList(const TClickBoxInf &click) const
+{
+    return yw_GuiListOwnsWheelAtPointer(gui_lstvw, click) ||
+           yw_GuiListOwnsWheelAtPointer(squadron_manager, click);
+}
+
 void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 {
     if ( robo_map.IsClosed() )
