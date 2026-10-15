@@ -1037,6 +1037,22 @@ static float ParseVPScaleValue(ScriptParser::Parser &parser, const std::string &
     return std::isfinite(scale) && scale > 0.0 ? scale : 1.0;
 }
 
+// Splits a compact "a_b_c" value (see World::SplitTupleValue). A wrong shape is
+// logged and rejected, so the caller keeps the previous/default values.
+static bool ReadTuple(const std::string &key,
+                      const std::string &value,
+                      size_t count,
+                      std::string *parts)
+{
+    if ( World::SplitTupleValue(value, count, parts) )
+        return true;
+
+    ypa_log_out("WARNING: invalid %s '%s': expected %u values separated by '_'.\n",
+                key.c_str(), value.c_str(), (unsigned)count);
+    return false;
+}
+
+// <prefix>_scale_xyz = x_y_z
 static bool ParseVPScaleParam(ScriptParser::Parser &parser,
                               const std::string &prefix,
                               const std::string &p1,
@@ -1045,25 +1061,17 @@ static bool ParseVPScaleParam(ScriptParser::Parser &parser,
 {
     const std::string keyPrefix = prefix.empty() ? std::string() : prefix + "_";
 
-    if ( !StriCmp(p1, keyPrefix + "scale_x") )
-    {
-        scale.x = ParseVPScaleValue(parser, p2);
-        return true;
-    }
+    if ( StriCmp(p1, keyPrefix + "scale_xyz") )
+        return false;
 
-    if ( !StriCmp(p1, keyPrefix + "scale_y") )
+    std::string axis[3];
+    if ( ReadTuple(p1, p2, 3, axis) )
     {
-        scale.y = ParseVPScaleValue(parser, p2);
-        return true;
+        scale.x = ParseVPScaleValue(parser, axis[0]);
+        scale.y = ParseVPScaleValue(parser, axis[1]);
+        scale.z = ParseVPScaleValue(parser, axis[2]);
     }
-
-    if ( !StriCmp(p1, keyPrefix + "scale_z") )
-    {
-        scale.z = ParseVPScaleValue(parser, p2);
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
 static bool ParseBuffParam(ScriptParser::Parser &parser,
@@ -1380,25 +1388,17 @@ static bool ParseVPSpinParam(ScriptParser::Parser &parser,
 {
     const std::string keyPrefix = prefix.empty() ? std::string() : prefix + "_";
 
-    if ( !StriCmp(p1, keyPrefix + "spin_x") )
-    {
-        spin.x = Spin::ClampStrength(parser.stof(p2, 0));
-        return true;
-    }
+    if ( StriCmp(p1, keyPrefix + "spin_xyz") )
+        return false;
 
-    if ( !StriCmp(p1, keyPrefix + "spin_y") )
+    std::string axis[3];
+    if ( ReadTuple(p1, p2, 3, axis) )
     {
-        spin.y = Spin::ClampStrength(parser.stof(p2, 0));
-        return true;
+        spin.x = Spin::ClampStrength(parser.stof(axis[0], 0));
+        spin.y = Spin::ClampStrength(parser.stof(axis[1], 0));
+        spin.z = Spin::ClampStrength(parser.stof(axis[2], 0));
     }
-
-    if ( !StriCmp(p1, keyPrefix + "spin_z") )
-    {
-        spin.z = Spin::ClampStrength(parser.stof(p2, 0));
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
 static float ParseFiniteFloatOrFallback(ScriptParser::Parser &parser,
@@ -1421,25 +1421,17 @@ static bool ParseVPRotationParam(ScriptParser::Parser &parser,
 {
     const std::string keyPrefix = prefix.empty() ? std::string() : prefix + "_";
 
-    if ( !StriCmp(p1, keyPrefix + "rotation_x") )
-    {
-        rotation.x = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
-        return true;
-    }
+    if ( StriCmp(p1, keyPrefix + "rotation_xyz") )
+        return false;
 
-    if ( !StriCmp(p1, keyPrefix + "rotation_y") )
+    std::string axis[3];
+    if ( ReadTuple(p1, p2, 3, axis) )
     {
-        rotation.y = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
-        return true;
+        rotation.x = ParseFiniteFloatOrFallback(parser, axis[0], 0.0f);
+        rotation.y = ParseFiniteFloatOrFallback(parser, axis[1], 0.0f);
+        rotation.z = ParseFiniteFloatOrFallback(parser, axis[2], 0.0f);
     }
-
-    if ( !StriCmp(p1, keyPrefix + "rotation_z") )
-    {
-        rotation.z = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
 static bool ParseExternalVisualParam(const std::string &p1,
@@ -1583,31 +1575,25 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( !StriCmp(p1, "decoration_fx_fade_in") )
+    if ( !StriCmp(p1, "decoration_fx_fade_inout") )
     {
-        int fade = parser.stol(p2, nullptr, 0);
-        config.fade_in = fade > 0 ? fade : 0;
+        std::string fade[2];
+        if ( ReadTuple(p1, p2, 2, fade) )
+        {
+            config.fade_in = std::max(0, (int)parser.stol(fade[0], nullptr, 0));
+            config.fade_out = std::max(0, (int)parser.stol(fade[1], nullptr, 0));
+        }
         return true;
     }
 
-    if ( !StriCmp(p1, "decoration_fx_fade_out") )
+    if ( !StriCmp(p1, "decoration_fx_vp_trail_fade_inout") )
     {
-        int fade = parser.stol(p2, nullptr, 0);
-        config.fade_out = fade > 0 ? fade : 0;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "decoration_fx_vp_trail_fade_in") )
-    {
-        int fade = parser.stol(p2, nullptr, 0);
-        config.vp_trail_fade_in = fade > 0 ? fade : 0;
-        return true;
-    }
-
-    if ( !StriCmp(p1, "decoration_fx_vp_trail_fade_out") )
-    {
-        int fade = parser.stol(p2, nullptr, 0);
-        config.vp_trail_fade_out = fade > 0 ? fade : 0;
+        std::string fade[2];
+        if ( ReadTuple(p1, p2, 2, fade) )
+        {
+            config.vp_trail_fade_in = std::max(0, (int)parser.stol(fade[0], nullptr, 0));
+            config.vp_trail_fade_out = std::max(0, (int)parser.stol(fade[1], nullptr, 0));
+        }
         return true;
     }
 
@@ -1618,21 +1604,15 @@ static bool ParseDecorationFXParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( !StriCmp(p1, "decoration_fx_offset_x") )
+    if ( !StriCmp(p1, "decoration_fx_offset_xyz") )
     {
-        config.offset.x = parser.stof(p2, 0);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "decoration_fx_offset_y") )
-    {
-        config.offset.y = parser.stof(p2, 0);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "decoration_fx_offset_z") )
-    {
-        config.offset.z = parser.stof(p2, 0);
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            config.offset.x = parser.stof(axis[0], 0);
+            config.offset.y = parser.stof(axis[1], 0);
+            config.offset.z = parser.stof(axis[2], 0);
+        }
         return true;
     }
 
@@ -1869,42 +1849,31 @@ static bool ParseMeshTracerParam(ScriptParser::Parser &parser,
     if ( ParseTintParam(parser, key("tint"), p1, p2, config.tint, true) )
         return true;
 
-    if ( !StriCmp(p1, key("size_z")) )
+    if ( !StriCmp(p1, key("size_xyz")) )
     {
-        config.size_z = ParseBoundedPositiveFiniteOrZero(parser, p2, 6000.0f);
+        std::string size[3];
+        if ( ReadTuple(p1, p2, 3, size) )
+        {
+            config.size_x = ParseBoundedPositiveFiniteOrZero(parser, size[0], 100.0f);
+            // A malformed Y inherits X.
+            const float sizeY = ParseBoundedNonNegativeFiniteOrFallback(
+                parser, size[1], 100.0f, -1.0f);
+            config.has_size_y = sizeY >= 0.0f;
+            config.size_y = config.has_size_y ? sizeY : 0.0f;
+            config.size_z = ParseBoundedPositiveFiniteOrZero(parser, size[2], 6000.0f);
+        }
         return true;
     }
 
-    if ( !StriCmp(p1, key("size_x")) )
+    if ( !StriCmp(p1, key("pos_xyz")) )
     {
-        config.size_x = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
-        return true;
-    }
-
-    if ( !StriCmp(p1, key("size_y")) )
-    {
-        const float value = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 100.0f, -1.0f);
-        config.has_size_y = value >= 0.0f;
-        config.size_y = config.has_size_y ? value : 0.0f;
-        return true;
-    }
-
-    if ( !StriCmp(p1, key("pos_x")) )
-    {
-        config.pos.x = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
-        return true;
-    }
-
-    if ( !StriCmp(p1, key("pos_y")) )
-    {
-        config.pos.y = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
-        return true;
-    }
-
-    if ( !StriCmp(p1, key("pos_z")) )
-    {
-        config.pos.z = ParseBoundedFiniteOrZero(parser, p2, 6000.0);
+        std::string pos[3];
+        if ( ReadTuple(p1, p2, 3, pos) )
+        {
+            config.pos.x = ParseBoundedFiniteOrZero(parser, pos[0], 6000.0);
+            config.pos.y = ParseBoundedFiniteOrZero(parser, pos[1], 6000.0);
+            config.pos.z = ParseBoundedFiniteOrZero(parser, pos[2], 6000.0);
+        }
         return true;
     }
 
@@ -1993,22 +1962,22 @@ static bool ParseLaserMeshParam(
     if ( ParseTintParam(parser, "laser_mesh_tint", p1, p2, config.tint, true) )
         return true;
 
-    if ( !StriCmp(p1, "laser_mesh_size_x") )
+    if ( !StriCmp(p1, "laser_mesh_size_xy") )
     {
-        // A non-positive or malformed primary size leaves the external mesh
-        // renderer disabled for this weapon; no hidden geometry is substituted.
-        config.size_x = ParseBoundedPositiveFiniteOrZero(parser, p2, 100.0f);
-        return true;
-    }
+        std::string size[2];
+        if ( ReadTuple(p1, p2, 2, size) )
+        {
+            // A non-positive or malformed primary size leaves the external mesh
+            // renderer disabled for this weapon; no hidden geometry is substituted.
+            config.size_x = ParseBoundedPositiveFiniteOrZero(parser, size[0], 100.0f);
 
-    if ( !StriCmp(p1, "laser_mesh_size_y") )
-    {
-        // The secondary axis is optional. Zero, negative and malformed values
-        // deliberately clear the override so it inherits size_x.
-        const float value = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 100.0f, -1.0f);
-        config.has_size_y = value > 0.0f;
-        config.size_y = config.has_size_y ? value : 0.0f;
+            // The secondary axis is optional. Zero, negative and malformed values
+            // deliberately clear the override so it inherits size_x.
+            const float sizeY = ParseBoundedNonNegativeFiniteOrFallback(
+                parser, size[1], 100.0f, -1.0f);
+            config.has_size_y = sizeY > 0.0f;
+            config.size_y = config.has_size_y ? sizeY : 0.0f;
+        }
         return true;
     }
 
@@ -2111,25 +2080,31 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
     return World::TChainFXConfig::MODE_VISUAL;
 }
 
-// Chain FX offsets use the shared fixed value / min_max syntax. Invalid text
-// falls back to a fixed 0 so the block stays vanilla-safe and loadable.
-static void ParseChainFXRangeAxis(const std::string &key,
-                                  const std::string &value,
-                                  double &minValue,
-                                  double &maxValue)
+// Chain FX offset_xyz / launch_xyz = x_y_z. Every axis is a fixed value or an
+// inclusive "min~max" range ("_" already separates the axes). Invalid text
+// falls back to a fixed 0 on all axes so the block stays vanilla-safe and loadable.
+static void ParseChainFXRangeTuple(const std::string &key,
+                                   const std::string &value,
+                                   vec3d &minValue,
+                                   vec3d &maxValue)
 {
-    float parsedMin = 0.0f;
-    float parsedMax = 0.0f;
-    if ( World::ParseFloatRangeValue(value, parsedMin, parsedMax) )
+    std::string axis[3];
+    float parsedMin[3] = {0.0f, 0.0f, 0.0f};
+    float parsedMax[3] = {0.0f, 0.0f, 0.0f};
+    bool valid = World::SplitTupleValue(value, 3, axis);
+    for (int i = 0; valid && i < 3; i++)
+        valid = World::ParseFloatRangeValue(axis[i], parsedMin[i], parsedMax[i], '~');
+
+    if ( valid )
     {
-        minValue = parsedMin;
-        maxValue = parsedMax;
+        minValue = vec3d(parsedMin[0], parsedMin[1], parsedMin[2]);
+        maxValue = vec3d(parsedMax[0], parsedMax[1], parsedMax[2]);
         return;
     }
 
-    minValue = 0.0;
-    maxValue = 0.0;
-    ypa_log_out("WARNING: invalid begin_fx %s '%s', using 0\n",
+    minValue = vec3d(0.0, 0.0, 0.0);
+    maxValue = vec3d(0.0, 0.0, 0.0);
+    ypa_log_out("WARNING: invalid begin_fx %s '%s', using 0_0_0\n",
                 key.c_str(), value.c_str());
 }
 
@@ -2208,11 +2183,14 @@ static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
     else if ( !StriCmp(p1, "smoke_duration") )
         readIntRange("smoke_duration", 0, 3600000, defaults.duration_min, defaults.duration_max,
                      smoke.duration_min, smoke.duration_max);
-    else if ( ParseBoundedIntegerParam("smoke_fade_in", p1, p2, 0, 3600000, defaults.fade_in, smoke.fade_in) )
+    else if ( !StriCmp(p1, "smoke_fade_inout") )
     {
-    }
-    else if ( ParseBoundedIntegerParam("smoke_fade_out", p1, p2, 0, 3600000, defaults.fade_out, smoke.fade_out) )
-    {
+        std::string fade[2];
+        if ( ReadTuple(p1, p2, 2, fade) )
+        {
+            ParseBoundedIntegerParam(p1, p1, fade[0], 0, 3600000, defaults.fade_in, smoke.fade_in);
+            ParseBoundedIntegerParam(p1, p1, fade[1], 0, 3600000, defaults.fade_out, smoke.fade_out);
+        }
     }
     else if ( !StriCmp(p1, "smoke_count") )
         readIntRange("smoke_count", 0, 50, defaults.count_min, defaults.count_max,
@@ -2465,10 +2443,15 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "duration") )
             duration = parser.stol(p2, nullptr, 0);
-        else if ( !StriCmp(p1, "fade_in") )
-            fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
-        else if ( !StriCmp(p1, "fade_out") )
-            fadeOut = NonNegativeFiniteMilliseconds(parser, p2);
+        else if ( !StriCmp(p1, "fade_inout") )
+        {
+            std::string fade[2];
+            if ( ReadTuple(p1, p2, 2, fade) )
+            {
+                fadeIn = NonNegativeFiniteMilliseconds(parser, fade[0]);
+                fadeOut = NonNegativeFiniteMilliseconds(parser, fade[1]);
+            }
+        }
         else if ( !StriCmp(p1, "count") )
         {
             if ( context == CHAIN_FX_SUPERITEM )
@@ -2484,35 +2467,15 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 ypa_log_out("WARNING: invalid begin_fx count '%s', using 1\n", p2.c_str());
             }
         }
-        else if ( !StriCmp(p1, "offset_x") )
+        else if ( !StriCmp(p1, "offset_xyz") )
         {
             hasOffset = true;
-            ParseChainFXRangeAxis("offset_x", p2, offsetMin.x, offsetMax.x);
+            ParseChainFXRangeTuple(p1, p2, offsetMin, offsetMax);
         }
-        else if ( !StriCmp(p1, "offset_y") )
-        {
-            hasOffset = true;
-            ParseChainFXRangeAxis("offset_y", p2, offsetMin.y, offsetMax.y);
-        }
-        else if ( !StriCmp(p1, "offset_z") )
-        {
-            hasOffset = true;
-            ParseChainFXRangeAxis("offset_z", p2, offsetMin.z, offsetMax.z);
-        }
-        else if ( !StriCmp(p1, "launch_x") )
+        else if ( !StriCmp(p1, "launch_xyz") )
         {
             hasInlinePhysicalKey = true;
-            ParseChainFXRangeAxis("launch_x", p2, launchMin.x, launchMax.x);
-        }
-        else if ( !StriCmp(p1, "launch_y") )
-        {
-            hasInlinePhysicalKey = true;
-            ParseChainFXRangeAxis("launch_y", p2, launchMin.y, launchMax.y);
-        }
-        else if ( !StriCmp(p1, "launch_z") )
-        {
-            hasInlinePhysicalKey = true;
-            ParseChainFXRangeAxis("launch_z", p2, launchMin.z, launchMax.z);
+            ParseChainFXRangeTuple(p1, p2, launchMin, launchMax);
         }
         else if ( ParseVPSpinParam(parser, "", p1, p2, spin) )
         {
@@ -2716,13 +2679,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     return ScriptParser::RESULT_UNEXP_EOF;
 }
 
-// OpenNeoUA: stretch_x / stretch_z of a decal profile (fixed value or min_max, > 0).
+// OpenNeoUA: one axis of stretch_xz of a decal profile (fixed value or min~max, > 0).
 static void ParseDecalStretch(const char *key, const std::string &value,
                               float &fixed, float &minValue, float &maxValue)
 {
     float parsedMin = 1.0f;
     float parsedMax = 1.0f;
-    if ( World::ParseFloatRangeValue(value, parsedMin, parsedMax) &&
+    if ( World::ParseFloatRangeValue(value, parsedMin, parsedMax, '~') &&
          std::isfinite(parsedMin) && std::isfinite(parsedMax) &&
          parsedMin > 0.0f && parsedMax > 0.0f )
     {
@@ -2898,12 +2861,17 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
         else
             ypa_log_out("WARNING: invalid new_decal size_min '%s', using 30\n", p2.c_str());
     }
-    else if ( !StriCmp(p1, "stretch_x") )
-        ParseDecalStretch("stretch_x", p2, fx.ground_decal_stretch_x,
-                          fx.ground_decal_stretch_x_min, fx.ground_decal_stretch_x_max);
-    else if ( !StriCmp(p1, "stretch_z") )
-        ParseDecalStretch("stretch_z", p2, fx.ground_decal_stretch_z,
-                          fx.ground_decal_stretch_z_min, fx.ground_decal_stretch_z_max);
+    else if ( !StriCmp(p1, "stretch_xz") )
+    {
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            ParseDecalStretch("stretch_xz", axis[0], fx.ground_decal_stretch_x,
+                              fx.ground_decal_stretch_x_min, fx.ground_decal_stretch_x_max);
+            ParseDecalStretch("stretch_xz", axis[1], fx.ground_decal_stretch_z,
+                              fx.ground_decal_stretch_z_min, fx.ground_decal_stretch_z_max);
+        }
+    }
     else if ( ParseTintParam(parser, "tint", p1, p2, fx.ground_decal_tint, true) )
     {
     }
@@ -2927,10 +2895,15 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
             _durationValid = parsed == p2.size() && fx.duration > 0;
         }
     }
-    else if ( !StriCmp(p1, "fade_in") )
-        _fadeIn = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "fade_out") )
-        _fadeOut = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "fade_inout") )
+    {
+        std::string fade[2];
+        if ( ReadTuple(p1, p2, 2, fade) )
+        {
+            _fadeIn = NonNegativeFiniteMilliseconds(parser, fade[0]);
+            _fadeOut = NonNegativeFiniteMilliseconds(parser, fade[1]);
+        }
+    }
     else if ( ParseGroundDecalSmokeParam(parser, p1, p2, fx.ground_decal_smoke) )
     {
     }
@@ -3029,24 +3002,25 @@ static bool ParseCompoundCollisionParameter(
         return true;
     }
 
-    if ( !StriCmp(p1, "coll_radius") ||
-         !StriCmp(p1, "coll_x") ||
-         !StriCmp(p1, "coll_y") ||
-         !StriCmp(p1, "coll_z") )
+    if ( !StriCmp(p1, "coll_radius") || !StriCmp(p1, "coll_xyz") )
     {
         if ( collID < 0 || (size_t)collID >= coll.roboColls.size() )
             return true;
 
         TRoboColl &sphere = coll.roboColls.at(collID);
-        float value = ParseFiniteCollisionFloat(parser, p2);
         if ( !StriCmp(p1, "coll_radius") )
-            sphere.robo_coll_radius = std::max(0.0f, value);
-        else if ( !StriCmp(p1, "coll_x") )
-            sphere.coll_pos.x = value;
-        else if ( !StriCmp(p1, "coll_y") )
-            sphere.coll_pos.y = value;
-        else
-            sphere.coll_pos.z = value;
+        {
+            sphere.robo_coll_radius = std::max(0.0f, ParseFiniteCollisionFloat(parser, p2));
+            return true;
+        }
+
+        std::string pos[3];
+        if ( ReadTuple(p1, p2, 3, pos) )
+        {
+            sphere.coll_pos.x = ParseFiniteCollisionFloat(parser, pos[0]);
+            sphere.coll_pos.y = ParseFiniteCollisionFloat(parser, pos[1]);
+            sphere.coll_pos.z = ParseFiniteCollisionFloat(parser, pos[2]);
+        }
         return true;
     }
 
@@ -3747,17 +3721,15 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         float radius = parser.stof(p2, 0);
         _vhcl->spawn_random_pos = radius > 0.0 ? radius : 0.0;
     }
-    else if ( !StriCmp(p1, "spawn_offset_x") )
+    else if ( !StriCmp(p1, "spawn_offset_xyz") )
     {
-        _vhcl->spawn_offset.x = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
-    }
-    else if ( !StriCmp(p1, "spawn_offset_y") )
-    {
-        _vhcl->spawn_offset.y = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
-    }
-    else if ( !StriCmp(p1, "spawn_offset_z") )
-    {
-        _vhcl->spawn_offset.z = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _vhcl->spawn_offset.x = ParseFiniteFloatOrFallback(parser, axis[0], 0.0f);
+            _vhcl->spawn_offset.y = ParseFiniteFloatOrFallback(parser, axis[1], 0.0f);
+            _vhcl->spawn_offset.z = ParseFiniteFloatOrFallback(parser, axis[2], 0.0f);
+        }
     }
     else if ( !StriCmp(p1, "spawn_max_active") )
     {
@@ -4115,36 +4087,41 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->mgun_angle = parser.stof(p2, 0);
         _vhcl->mgun_angle_set = true;
     }
-    else if ( !StriCmp(p1, "weapon_spread_x") )
+    else if ( !StriCmp(p1, "weapon_spread_xyz") )
     {
-        _vhcl->weapon_spread_x = parser.stof(p2, 0);
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _vhcl->weapon_spread_x = parser.stof(axis[0], 0);
+            _vhcl->weapon_spread_y = parser.stof(axis[1], 0);
+            float value = parser.stof(axis[2], 0);
+            _vhcl->weapon_spread_z = std::isfinite(value) && value > 0.0f ? value : 0.0f;
+        }
     }
-    else if ( !StriCmp(p1, "weapon_spread_y") )
+    else if ( !StriCmp(p1, "weapon_arc_xy") )
     {
-        _vhcl->weapon_spread_y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "weapon_arc_x") )
-    {
-        float value = parser.stof(p2, 0);
-        _vhcl->weapon_arc_x = std::isfinite(value) && value > 0.0f ? value : 0.0f;
-    }
-    else if ( !StriCmp(p1, "weapon_arc_y") )
-    {
-        float value = parser.stof(p2, 0);
-        _vhcl->weapon_arc_y = std::isfinite(value) && value > 0.0f ? value : 0.0f;
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            float x = parser.stof(axis[0], 0);
+            float y = parser.stof(axis[1], 0);
+            _vhcl->weapon_arc_x = std::isfinite(x) && x > 0.0f ? x : 0.0f;
+            _vhcl->weapon_arc_y = std::isfinite(y) && y > 0.0f ? y : 0.0f;
+        }
     }
     else if ( !StriCmp(p1, "weapon_cone_xy") )
     {
         float value = parser.stof(p2, 0);
         _vhcl->weapon_cone_xy = std::isfinite(value) && value > 0.0f ? value : 0.0f;
     }
-    else if ( !StriCmp(p1, "mgun_spread_x") )
+    else if ( !StriCmp(p1, "mgun_spread_xy") )
     {
-        _vhcl->mgun_spread_x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "mgun_spread_y") )
-    {
-        _vhcl->mgun_spread_y = parser.stof(p2, 0);
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            _vhcl->mgun_spread_x = parser.stof(axis[0], 0);
+            _vhcl->mgun_spread_y = parser.stof(axis[1], 0);
+        }
     }
     else if ( !StriCmp(p1, "fire_x") )
     {
@@ -4204,17 +4181,15 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
                               : 0;
         _vhcl->fire_x_slots_defined = true;
     }
-    else if ( !StriCmp(p1, "cockpit_camera_offset_x") )
+    else if ( !StriCmp(p1, "cockpit_camera_offset_xyz") )
     {
-        _vhcl->cockpit_camera_offset.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "cockpit_camera_offset_y") )
-    {
-        _vhcl->cockpit_camera_offset.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "cockpit_camera_offset_z") )
-    {
-        _vhcl->cockpit_camera_offset.z = parser.stof(p2, 0);
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _vhcl->cockpit_camera_offset.x = parser.stof(axis[0], 0);
+            _vhcl->cockpit_camera_offset.y = parser.stof(axis[1], 0);
+            _vhcl->cockpit_camera_offset.z = parser.stof(axis[2], 0);
+        }
     }
     else if ( !StriCmp(p1, "cockpit_gun_camera_recoil") )
     {
@@ -4626,35 +4601,31 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             _vhcl->unit_guns.resize(_unitGunID + 1);
         }
     }
-    else if ( !StriCmp(p1, "unit_gun_pos_x") )
+    else if ( !StriCmp(p1, "unit_gun_pos_xyz") )
     {
-        if (TRoboGun *gun = getUnitGun())
-            gun->pos.x = parser.stof(p2, 0);
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            if (TRoboGun *gun = getUnitGun())
+            {
+                gun->pos.x = parser.stof(axis[0], 0);
+                gun->pos.y = parser.stof(axis[1], 0);
+                gun->pos.z = parser.stof(axis[2], 0);
+            }
+        }
     }
-    else if ( !StriCmp(p1, "unit_gun_pos_y") )
+    else if ( !StriCmp(p1, "unit_gun_dir_xyz") )
     {
-        if (TRoboGun *gun = getUnitGun())
-            gun->pos.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_gun_pos_z") )
-    {
-        if (TRoboGun *gun = getUnitGun())
-            gun->pos.z = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_gun_dir_x") )
-    {
-        if (TRoboGun *gun = getUnitGun())
-            gun->dir.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_gun_dir_y") )
-    {
-        if (TRoboGun *gun = getUnitGun())
-            gun->dir.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "unit_gun_dir_z") )
-    {
-        if (TRoboGun *gun = getUnitGun())
-            gun->dir.z = parser.stof(p2, 0);
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            if (TRoboGun *gun = getUnitGun())
+            {
+                gun->dir.x = parser.stof(axis[0], 0);
+                gun->dir.y = parser.stof(axis[1], 0);
+                gun->dir.z = parser.stof(axis[2], 0);
+            }
+        }
     }
     else if ( !StriCmp(p1, "unit_gun_type") )
     {
@@ -4670,6 +4641,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         if (TRoboGun *gun = getUnitGun())
             gun->protect = parser.stol(p2, nullptr, 0) ? 1 : 0;
+    }
+    else if ( !StriCmp(p1, "unit_gun_no_switch") )
+    {
+        if (TRoboGun *gun = getUnitGun())
+            gun->noSwitch = parser.stol(p2, nullptr, 0) == 1 ? 1 : 0;
     }
     else if ( !StriCmp(p1, "robo_dock_x") )
     {
@@ -4841,6 +4817,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_base_megadeth.clear();
         _vhcl->weapon_spread_x = 0.0;
         _vhcl->weapon_spread_y = 0.0;
+        _vhcl->weapon_spread_z = 0.0;
         _vhcl->weapon_arc_x = 0.0;
         _vhcl->weapon_arc_y = 0.0;
         _vhcl->weapon_cone_xy = 0.0;
@@ -5520,15 +5497,16 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         _wpn->cluster.vertical_angle_max =
             _wpn->cluster.vertical_angle_set ? angleMax : 0.0f;
     }
-    else if ( !StriCmp(p1, "cluster_spread_x") )
+    else if ( !StriCmp(p1, "cluster_spread_xy") )
     {
-        float spread = parser.stof(p2, 0);
-        _wpn->cluster.spread_x = spread > 0.0 ? spread : 0.0;
-    }
-    else if ( !StriCmp(p1, "cluster_spread_y") )
-    {
-        float spread = parser.stof(p2, 0);
-        _wpn->cluster.spread_y = spread > 0.0 ? spread : 0.0;
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            float spreadX = parser.stof(axis[0], 0);
+            float spreadY = parser.stof(axis[1], 0);
+            _wpn->cluster.spread_x = spreadX > 0.0 ? spreadX : 0.0;
+            _wpn->cluster.spread_y = spreadY > 0.0 ? spreadY : 0.0;
+        }
     }
     else if ( !StriCmp(p1, "cluster_vp") )
     {
@@ -5603,17 +5581,15 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->cluster.snd.sndPrm_shk.mute = parser.stof(p2, 0);
     }
-    else if ( !StriCmp(p1, "shk_cluster_x") )
+    else if ( !StriCmp(p1, "shk_cluster_xyz") )
     {
-        _wpn->cluster.snd.sndPrm_shk.pos.x = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "shk_cluster_y") )
-    {
-        _wpn->cluster.snd.sndPrm_shk.pos.y = parser.stof(p2, 0);
-    }
-    else if ( !StriCmp(p1, "shk_cluster_z") )
-    {
-        _wpn->cluster.snd.sndPrm_shk.pos.z = parser.stof(p2, 0);
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _wpn->cluster.snd.sndPrm_shk.pos.x = parser.stof(axis[0], 0);
+            _wpn->cluster.snd.sndPrm_shk.pos.y = parser.stof(axis[1], 0);
+            _wpn->cluster.snd.sndPrm_shk.pos.z = parser.stof(axis[2], 0);
+        }
     }
     else if ( !StriCmp(p1, "chain_allow") )
     {
@@ -5717,15 +5693,16 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->ramp_up_max_shot_time = NonNegativeFiniteMilliseconds(parser, p2);
     }
-    else if ( !StriCmp(p1, "ramp_up_max_weapon_spread_x") )
+    else if ( !StriCmp(p1, "ramp_up_max_weapon_spread_xy") )
     {
-        _wpn->ramp_up_max_weapon_spread_x =
-            NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "ramp_up_max_weapon_spread_y") )
-    {
-        _wpn->ramp_up_max_weapon_spread_y =
-            NonNegativeFiniteOrZero(parser.stof(p2, 0));
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            _wpn->ramp_up_max_weapon_spread_x =
+                NonNegativeFiniteOrZero(parser.stof(axis[0], 0));
+            _wpn->ramp_up_max_weapon_spread_y =
+                NonNegativeFiniteOrZero(parser.stof(axis[1], 0));
+        }
     }
     else if ( !StriCmp(p1, "ramp_up_overheat_time") )
     {
@@ -6180,15 +6157,16 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int v = parser.stol(p2, nullptr, 0);
         _wpn->artillery_shell_fall_delay = v > 0 ? v : 0;
     }
-    else if ( !StriCmp(p1, "artillery_shell_min_range") )
+    else if ( !StriCmp(p1, "artillery_shell_range_minmax") )
     {
-        float v = parser.stof(p2, 0);
-        _wpn->artillery_shell_min_range = v > 0.0 ? v : 0.0;
-    }
-    else if ( !StriCmp(p1, "artillery_shell_max_range") )
-    {
-        float v = parser.stof(p2, 0);
-        _wpn->artillery_shell_max_range = v > 0.0 ? v : 0.0;
+        std::string range[2];
+        if ( ReadTuple(p1, p2, 2, range) )
+        {
+            float minRange = parser.stof(range[0], 0);
+            float maxRange = parser.stof(range[1], 0);
+            _wpn->artillery_shell_min_range = minRange > 0.0 ? minRange : 0.0;
+            _wpn->artillery_shell_max_range = maxRange > 0.0 ? maxRange : 0.0;
+        }
     }
     else if ( !StriCmp(p1, "artillery_shell_requires_radar") )
     {
@@ -6226,15 +6204,16 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float v = parser.stof(p2, 0);
         _wpn->artillery_shell_speed = v > 0.0 ? v : 0.0;
     }
-    else if ( !StriCmp(p1, "artillery_shell_vertical_spread_x") )
+    else if ( !StriCmp(p1, "artillery_shell_vertical_spread_xz") )
     {
-        float v = parser.stof(p2, 0);
-        _wpn->artillery_shell_vertical_spread_x = (std::isfinite(v) && v > 0.0f) ? std::min(v, 45.0f) : 0.0f;
-    }
-    else if ( !StriCmp(p1, "artillery_shell_vertical_spread_z") )
-    {
-        float v = parser.stof(p2, 0);
-        _wpn->artillery_shell_vertical_spread_z = (std::isfinite(v) && v > 0.0f) ? std::min(v, 45.0f) : 0.0f;
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            float x = parser.stof(axis[0], 0);
+            float z = parser.stof(axis[1], 0);
+            _wpn->artillery_shell_vertical_spread_x = (std::isfinite(x) && x > 0.0f) ? std::min(x, 45.0f) : 0.0f;
+            _wpn->artillery_shell_vertical_spread_z = (std::isfinite(z) && z > 0.0f) ? std::min(z, 45.0f) : 0.0f;
+        }
     }
     else if ( !StriCmp(p1, "artillery_shell_airburst") )
     {
@@ -6392,13 +6371,14 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
         float radius = ParseFiniteFloatOrFallback(parser, p2, 340.0f);
         _bld->spawn_random_pos = radius >= 0.0 ? radius : 340.0f;
     }
-    else if ( !StriCmp(p1, "spawn_offset_x") )
+    else if ( !StriCmp(p1, "spawn_offset_xz") )
     {
-        _bld->spawn_offset.x = ParseFiniteFloatOrFallback(parser, p2, 37.0f);
-    }
-    else if ( !StriCmp(p1, "spawn_offset_z") )
-    {
-        _bld->spawn_offset.z = ParseFiniteFloatOrFallback(parser, p2, -41.0f);
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            _bld->spawn_offset.x = ParseFiniteFloatOrFallback(parser, axis[0], 37.0f);
+            _bld->spawn_offset.z = ParseFiniteFloatOrFallback(parser, axis[1], -41.0f);
+        }
     }
     else if ( !StriCmp(p1, "spawn_height") )
     {
@@ -6934,50 +6914,84 @@ int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
         _profile.mesh3ds = p2;
     else if ( !StriCmp(p1, "count") )
         _profile.count = parser.stol(p2, nullptr, 0);
-    else if ( !StriCmp(p1, "spawn_radius_x") )
-        _profile.spawn_radius.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "spawn_radius_y") )
-        _profile.spawn_radius.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "spawn_radius_z") )
-        _profile.spawn_radius.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "spawn_offset_x") )
-        _profile.spawn_offset.x = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "spawn_offset_y") )
-        _profile.spawn_offset.y = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "spawn_offset_z") )
-        _profile.spawn_offset.z = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "lifetime_min") )
-        _profile.lifetime_min = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "lifetime_max") )
-        _profile.lifetime_max = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "velocity_x") )
-        _profile.velocity.x = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "velocity_y") )
-        _profile.velocity.y = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "velocity_z") )
-        _profile.velocity.z = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "velocity_random_x") )
-        _profile.velocity_random.x = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "velocity_random_y") )
-        _profile.velocity_random.y = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "velocity_random_z") )
-        _profile.velocity_random.z = NonNegativeFiniteOrZero(parser.stof(p2, 0));
-    else if ( !StriCmp(p1, "scale_x") )
-        _profile.scale.x = ParseAtmosphericFXPositiveScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "scale_y") )
-        _profile.scale.y = ParseAtmosphericFXPositiveScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "scale_z") )
-        _profile.scale.z = ParseAtmosphericFXPositiveScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "spin_x") )
-        _profile.spin.x = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "spin_y") )
-        _profile.spin.y = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "spin_z") )
-        _profile.spin.z = parser.stof(p2, 0);
-    else if ( !StriCmp(p1, "fade_in") )
-        _profile.fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "fade_out") )
-        _profile.fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "spawn_radius_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _profile.spawn_radius.x = NonNegativeFiniteOrZero(parser.stof(axis[0], 0));
+            _profile.spawn_radius.y = NonNegativeFiniteOrZero(parser.stof(axis[1], 0));
+            _profile.spawn_radius.z = NonNegativeFiniteOrZero(parser.stof(axis[2], 0));
+        }
+    }
+    else if ( !StriCmp(p1, "spawn_offset_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _profile.spawn_offset.x = parser.stof(axis[0], 0);
+            _profile.spawn_offset.y = parser.stof(axis[1], 0);
+            _profile.spawn_offset.z = parser.stof(axis[2], 0);
+        }
+    }
+    else if ( !StriCmp(p1, "lifetime_minmax") )
+    {
+        std::string lifetime[2];
+        if ( ReadTuple(p1, p2, 2, lifetime) )
+        {
+            _profile.lifetime_min = NonNegativeFiniteMilliseconds(parser, lifetime[0]);
+            _profile.lifetime_max = NonNegativeFiniteMilliseconds(parser, lifetime[1]);
+        }
+    }
+    else if ( !StriCmp(p1, "velocity_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _profile.velocity.x = parser.stof(axis[0], 0);
+            _profile.velocity.y = parser.stof(axis[1], 0);
+            _profile.velocity.z = parser.stof(axis[2], 0);
+        }
+    }
+    else if ( !StriCmp(p1, "velocity_random_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _profile.velocity_random.x = NonNegativeFiniteOrZero(parser.stof(axis[0], 0));
+            _profile.velocity_random.y = NonNegativeFiniteOrZero(parser.stof(axis[1], 0));
+            _profile.velocity_random.z = NonNegativeFiniteOrZero(parser.stof(axis[2], 0));
+        }
+    }
+    else if ( !StriCmp(p1, "scale_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _profile.scale.x = ParseAtmosphericFXPositiveScale(parser, p1, axis[0]);
+            _profile.scale.y = ParseAtmosphericFXPositiveScale(parser, p1, axis[1]);
+            _profile.scale.z = ParseAtmosphericFXPositiveScale(parser, p1, axis[2]);
+        }
+    }
+    else if ( !StriCmp(p1, "spin_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _profile.spin.x = parser.stof(axis[0], 0);
+            _profile.spin.y = parser.stof(axis[1], 0);
+            _profile.spin.z = parser.stof(axis[2], 0);
+        }
+    }
+    else if ( !StriCmp(p1, "fade_inout") )
+    {
+        std::string fade[2];
+        if ( ReadTuple(p1, p2, 2, fade) )
+        {
+            _profile.fade_in = NonNegativeFiniteMilliseconds(parser, fade[0]);
+            _profile.fade_out = NonNegativeFiniteMilliseconds(parser, fade[1]);
+        }
+    }
     else if ( !StriCmp(p1, "tint") )
         ParseTintParam(parser, "tint", p1, p2, _profile.tint, true);
     else
@@ -7219,12 +7233,16 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
             ? (int32_t)value
             : -1;
     }
-    else if ( !StriCmp(p1, "wave_scale_x") )
-        _profile->wave_axis_scale.x = ParseSuperItemScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "wave_scale_y") )
-        _profile->wave_axis_scale.y = ParseSuperItemScale(parser, p1, p2);
-    else if ( !StriCmp(p1, "wave_scale_z") )
-        _profile->wave_axis_scale.z = ParseSuperItemScale(parser, p1, p2);
+    else if ( !StriCmp(p1, "wave_scale_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            _profile->wave_axis_scale.x = ParseSuperItemScale(parser, p1, axis[0]);
+            _profile->wave_axis_scale.y = ParseSuperItemScale(parser, p1, axis[1]);
+            _profile->wave_axis_scale.z = ParseSuperItemScale(parser, p1, axis[2]);
+        }
+    }
     else if ( !StriCmp(p1, "wave_tint") )
         ParseTintParam(parser, "wave_tint", p1, p2, _profile->wave_tint);
     else if ( !StriCmp(p1, "wave_start_speed") )
@@ -7261,10 +7279,15 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         ypa_log_out("WARNING: SuperItem parameter '%s' is deprecated and ignored; wave_push_force now acts on wave contact.\n",
                     p1.c_str());
     }
-    else if ( !StriCmp(p1, "fade_in") )
-        _profile->fade_in = NonNegativeFiniteMilliseconds(parser, p2);
-    else if ( !StriCmp(p1, "fade_out") )
-        _profile->fade_out = NonNegativeFiniteMilliseconds(parser, p2);
+    else if ( !StriCmp(p1, "fade_inout") )
+    {
+        std::string fade[2];
+        if ( ReadTuple(p1, p2, 2, fade) )
+        {
+            _profile->fade_in = NonNegativeFiniteMilliseconds(parser, fade[0]);
+            _profile->fade_out = NonNegativeFiniteMilliseconds(parser, fade[1]);
+        }
+    }
     else if ( !StriCmp(p1, "wave_unit_energy") )
     {
         int damage = parser.stol(p2, nullptr, 0);

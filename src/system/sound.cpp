@@ -66,9 +66,8 @@ static float SFX_EffectTemporalFactor(TSoundSource &sound, size_t now,
     return SFX_TemporalFactor(sound.StartTime, now, duration, fadeIn, fadeOut);
 }
 
-static int SFX_ReadGlobalFadeMilliseconds(Common::Ini::Key &key)
+static int SFX_ReadGlobalFadeMilliseconds(Common::Ini::Key &key, const std::string &value)
 {
-    const std::string value = key.Get<std::string>();
     if ( value.empty() || value.find(',') != std::string::npos )
     {
         if ( key.WasSet )
@@ -103,6 +102,25 @@ static int SFX_ReadGlobalFadeMilliseconds(Common::Ini::Key &key)
                         key.Name.c_str(), value.c_str());
         return 0;
     }
+}
+
+// game.global_*_fade_inout = in_out (milliseconds). A malformed value disables both fades.
+static void SFX_ReadGlobalFade(Common::Ini::Key &key, int &fadeIn, int &fadeOut)
+{
+    const std::string value = key.Get<std::string>();
+    std::string parts[2];
+    if ( !World::SplitTupleValue(value, 2, parts) )
+    {
+        if ( key.WasSet )
+            ypa_log_out("Warning: invalid %s '%s', using 0_0\n",
+                        key.Name.c_str(), value.c_str());
+        fadeIn = 0;
+        fadeOut = 0;
+        return;
+    }
+
+    fadeIn = SFX_ReadGlobalFadeMilliseconds(key, parts[0]);
+    fadeOut = SFX_ReadGlobalFadeMilliseconds(key, parts[1]);
 }
 
 void wrapper_setSampleVRP(void *, walsmpl *hSample, int rate, int volume, int pan)
@@ -165,10 +183,8 @@ int SFXEngine::init()
     audio_volume    = System::IniConf::AudioVolume.Get<int>();
     audio_num_palfx = System::IniConf::AudioNumPalfx.Get<int>();
     audio_rev_stereo = System::IniConf::AudioRevStereo.Get<bool>();
-    globalShkFadeIn = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalShkFadeIn);
-    globalShkFadeOut = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalShkFadeOut);
-    globalPalFadeIn = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalPalFadeIn);
-    globalPalFadeOut = SFX_ReadGlobalFadeMilliseconds(System::IniConf::GameGlobalPalFadeOut);
+    SFX_ReadGlobalFade(System::IniConf::GameGlobalShkFade, globalShkFadeIn, globalShkFadeOut);
+    SFX_ReadGlobalFade(System::IniConf::GameGlobalPalFade, globalPalFadeIn, globalPalFadeOut);
 
     if ( audio_volume > 127 )
         audio_volume = 127;
