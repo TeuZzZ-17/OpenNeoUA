@@ -4212,8 +4212,17 @@ void gui_update_player_panel(NC_STACK_ypaworld *yw, CmdStream *cur)
         else if ( yw->_cmdrsRemap.size() > 1 )
             v35 = 0x90;
 
-        if ( !yw->_userUnit->_kidList.empty() )
-            v35 |= 0x40;
+        // Show the "next unit" button only if at least one child can be selected.
+        // Unit Guns with unit_gun_no_switch = 1 do not count, so the button is
+        // hidden (and its hotkey disabled) when they are the only children.
+        for ( NC_STACK_ypabact *kid : yw->_userUnit->_kidList )
+        {
+            if ( !kid->_unitGunNoSwitch )
+            {
+                v35 |= 0x40;
+                break;
+            }
+        }
     }
     else
     {

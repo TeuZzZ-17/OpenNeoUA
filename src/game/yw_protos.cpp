@@ -379,8 +379,8 @@ void NC_STACK_ypaworld::ResolveStatusProfileLinks()
 }
 
 // Builds the ground decals every vehicle (destroyed), weapon (impact_world) and MGUN
-// (impact_world) spawns from its ground_decal_id / mgun_ground_decal_id. The decal size can depend on the
-// unit: silhouette = collision diameter, explosion = blast (weapon) or at-death radius (vehicle).
+// (impact_world) spawns from its ground_decal_id / mgun_ground_decal_id. The decal size is not
+// resolved here: it depends on the visual model of the unit and is measured when the decal spawns.
 // Resolved decals are rebuilt from scratch every time, so changed profiles are always picked up.
 void NC_STACK_ypaworld::ResolveDecalProfileLinks()
 {
@@ -415,20 +415,15 @@ void NC_STACK_ypaworld::ResolveDecalProfileLinks()
 
         if ( const World::TGroundDecalProfile *profile = findProfile(proto.ground_decal_id, "vehicle",
                                                                        (size_t)proto.Index, "ground_decal_id") )
-        {
-            const float explosionRadius = std::max(proto.at_death_energy_radius, proto.at_death_push_radius);
             proto.chain_fx.push_back(World::ResolveGroundDecal(
-                *profile, World::TChainFXConfig::TRIGGER_DESTROYED,
-                proto.radius * 2.0f, explosionRadius * 2.0f));
-        }
+                *profile, World::TChainFXConfig::TRIGGER_DESTROYED, proto.ground_decal_size));
 
-        // MGUN hits have no explosion or silhouette of their own: a profile with
-        // percentage sizes gets its size floor.
+        // MGUN hits are sized from the vehicle that fires them.
         if ( const World::TGroundDecalProfile *profile = findProfile(proto.mgun_ground_decal_id, "vehicle",
                                                                        (size_t)proto.Index, "mgun_ground_decal_id") )
         {
             proto.mgun_decal = World::ResolveGroundDecal(
-                *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD, 0.0f, 0.0f);
+                *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD, proto.mgun_ground_decal_size);
             proto.mgun_decal_enable = true;
         }
     }
@@ -441,8 +436,7 @@ void NC_STACK_ypaworld::ResolveDecalProfileLinks()
 
         if ( const World::TGroundDecalProfile *profile = findProfile(proto.ground_decal_id, "weapon", i, "ground_decal_id") )
             proto.chain_fx.push_back(World::ResolveGroundDecal(
-                *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
-                proto.radius * 2.0f, proto.blast_radius * 2.0f));
+                *profile, World::TChainFXConfig::TRIGGER_IMPACT_WORLD, proto.ground_decal_size));
     }
 }
 

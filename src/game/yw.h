@@ -2771,6 +2771,7 @@ public:
 
     void yw_MAP_MouseSelect(TClickBoxInf *winp);
     bool IsRoboMapOpen() const;
+    bool IsWheelOwnedByGuiList(const TClickBoxInf &click) const;
 
     void ypaworld_func64__sub21__sub1__sub3__sub0(TClickBoxInf *winp);
     void yw_3D_MouseSelect(TClickBoxInf *winp);
@@ -2942,8 +2943,9 @@ public:
     int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
-    bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
-    bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
+    // modelDiameter = World::GroundDecalModelDiameter() of the unit that spawns the decal.
+    bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit, float modelDiameter);
+    bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius, float modelDiameter);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
     bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius, uint32_t seed);

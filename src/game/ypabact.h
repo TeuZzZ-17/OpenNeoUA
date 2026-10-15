@@ -793,6 +793,8 @@ public:
 
     bool CollisionsDisabled() const { return _disableCollision; }
     bool _disableCollision = false;
+    // Copied from the Vehicle proto: own and attached Unit Gun shots show the Vehicle fire visual.
+    bool _weapon_use_vehicle_fire = false;
     void TraceWorldCollision(ypaworld_arg136 *query, bool exact = false);
     void QueryWorldCollisions(ypaworld_arg137 *query);
 
@@ -1093,7 +1095,7 @@ public:
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
-    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: first-person MGUN shake, scaled from mgun_recoil_player
+    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: first-person MGUN shake, scaled from cockpit_mgun_camera_recoil
     TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: ordered snd_normal playback while model=laser is firing
     TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: same snd_normal path for laser vertical mode
@@ -1163,7 +1165,7 @@ public:
     float _mgun_energy;
     float _mgun_angle;
     bool _mgun_energy_set;
-    float _mgun_recoil_player;
+    float _cockpit_mgun_camera_recoil;
     bool _mgun_angle_set;
     float _mgun_sector_damage_accum;
     float _weapon_spread_x;

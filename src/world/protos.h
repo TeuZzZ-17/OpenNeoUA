@@ -288,6 +288,15 @@ struct TGroundDecalSmoke
     }
 };
 
+// OpenNeoUA custom: ground_decal_size_by_model_% written in a Vehicle/Weapon script. When
+// defined it replaces the size_by_model_% of the linked new_decal profile for that unit.
+struct TDecalSizeOverride
+{
+    bool defined = false;
+    float percent_min = 100.0f;
+    float percent_max = 100.0f;
+};
+
 struct TChainFXConfig
 {
     enum Mode
@@ -333,11 +342,10 @@ struct TChainFXConfig
     vec3d launch_min = vec3d(0.0, 0.0, 0.0);
     vec3d launch_max = vec3d(0.0, 0.0, 0.0);
     std::string ground_decal_texture;
-    float ground_decal_size = 0.0f;
-    // Optional authored min/max range. When unset, ground_decal_size keeps the
-    // legacy fixed-size behaviour. Decal profiles fill it per unit (see grounddecal_profile.h).
-    float ground_decal_size_min = 0.0f;
-    float ground_decal_size_max = 0.0f;
+    // Decal size as a percentage range (size_by_model_%) of the diameter of the
+    // owner's visual model sphere. The diameter is measured when the decal spawns.
+    float ground_decal_model_percent_min = 100.0f;
+    float ground_decal_model_percent_max = 100.0f;
     float ground_decal_stretch_x = 1.0f;
     float ground_decal_stretch_x_min = 1.0f;
     float ground_decal_stretch_x_max = 1.0f;
@@ -817,7 +825,7 @@ struct TVhclProto
     float mgun_angle = 0.0;
     std::string mgun_name;
     bool mgun_energy_set = false;
-    float mgun_recoil_player = 0.0f;
+    float cockpit_mgun_camera_recoil = 0.0f;
     bool mgun_angle_set = false;
     float weapon_spread_x = 0.0;
     float weapon_spread_y = 0.0;
@@ -909,6 +917,9 @@ struct TVhclProto
     // The resolved copies live in chain_fx (destruction decal) and mgun_decal.
     int ground_decal_id = -1;
     int mgun_ground_decal_id = -1;
+    // ground_decal_size_by_model_% / mgun_ground_decal_size_by_model_%: per-unit decal size.
+    TDecalSizeOverride ground_decal_size;
+    TDecalSizeOverride mgun_ground_decal_size;
     TVehicleBuffConfig buff;
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
@@ -1079,6 +1090,9 @@ struct TVhclProto
     rbcolls coll;                           // OpenNeoUA: universal compound collision spheres (coll_*)
     bool disable_collision = false;         // Opt-in: no physical contacts for this actor.
     std::string collision_shape;            // Optional baked convex vehicle body; absent keeps existing collisions.
+    // OpenNeoUA custom, Vehicle-side: whenever this Vehicle or its attached Unit Guns fire,
+    // the Vehicle temporarily uses its own fire visual. Missing/0 keeps vanilla behavior.
+    bool weapon_use_vehicle_fire = false;
 
     ~TVhclProto();
 };
@@ -1225,9 +1239,6 @@ struct TWeapProto
     std::string name;
     int16_t vp_normal = 0;
     int16_t vp_fire = 0;
-    // OpenNeoUA custom, Weapon-side: when this Weapon is fired, the carrier
-    // temporarily uses its own Vehicle fire visual. Missing/0 keeps vanilla behavior.
-    bool weapon_use_vehicle_fire = false;
     int16_t vp_dead = 0;
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
@@ -1270,6 +1281,7 @@ struct TWeapProto
     // OpenNeoUA custom: ground_decal_id links a reusable new_decal profile (impact decal);
     // the resolved copy lives in chain_fx.
     int ground_decal_id = -1;
+    TDecalSizeOverride ground_decal_size; // ground_decal_size_by_model_%
 
     // OpenNeoUA custom: data-driven Debuff link. debuff_id resolves a reusable
     // new_debuff profile into this runtime copy; -1 means no Debuff.

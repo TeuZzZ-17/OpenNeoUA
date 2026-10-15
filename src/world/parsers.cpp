@@ -2732,6 +2732,21 @@ static void ParseDecalEdgeFade(ScriptParser::Parser &parser, const std::string &
         fx.ground_decal_edge_fade = std::max(0.0f, std::min(number, 10.0f));
 }
 
+// Removes one optional trailing '%' from each '_' separated value ("30%_40%" -> "30_40").
+static std::string StripPercentSigns(const std::string &value)
+{
+    std::string out;
+    out.reserve(value.size());
+    for (size_t i = 0; i < value.size(); ++i)
+    {
+        const bool endsValue = i + 1 == value.size() || value[i + 1] == '_';
+        if ( value[i] == '%' && endsValue )
+            continue;
+        out.push_back(value[i]);
+    }
+    return out;
+}
+
 // Percentage range (fixed value or min_max), both ends > 0.
 static bool ParseDecalPercentRange(const std::string &value, float &minValue, float &maxValue)
 {
@@ -2745,6 +2760,25 @@ static bool ParseDecalPercentRange(const std::string &value, float &minValue, fl
     minValue = parsedMin;
     maxValue = parsedMax;
     return true;
+}
+
+// ground_decal_size_by_model_% of a Vehicle/Weapon script: same syntax as the profile key
+// (single value or min_max, optional '%'). A bad value is ignored, the profile size is kept.
+static void ParseDecalSizeOverride(const char *key, const std::string &value,
+                                   TDecalSizeOverride &out)
+{
+    float minValue = 0.0f;
+    float maxValue = 0.0f;
+    if ( ParseDecalPercentRange(StripPercentSigns(value), minValue, maxValue) )
+    {
+        out.defined = true;
+        out.percent_min = minValue;
+        out.percent_max = maxValue;
+        return;
+    }
+
+    out = TDecalSizeOverride();
+    ypa_log_out("WARNING: invalid %s '%s'; the decal profile size is used\n", key, value.c_str());
 }
 
 bool DecalProfileParser::IsScope(ScriptParser::Parser &parser,
@@ -2826,40 +2860,13 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
         _work.name = p2;
     else if ( !StriCmp(p1, "texture") )
         fx.ground_decal_texture = p2;
-    else if ( !StriCmp(p1, "size") )
+    else if ( !StriCmp(p1, "size_by_model_%") )
     {
-        float sizeMin = 0.0f;
-        float sizeMax = 0.0f;
-        if ( ParseDecalPercentRange(p2, sizeMin, sizeMax) )
-        {
-            _work.has_absolute_size = true;
-            _work.size_min = sizeMin;
-            _work.size_max = sizeMax;
-        }
-        else
-        {
-            _work.has_absolute_size = false;
-            ypa_log_out("WARNING: invalid new_decal size '%s'; using the size_explosion rule\n", p2.c_str());
-        }
-    }
-    else if ( !StriCmp(p1, "size_explosion") )
-    {
-        if ( !ParseDecalPercentRange(p2, _work.explosion_percent_min, _work.explosion_percent_max) )
-            ypa_log_out("WARNING: invalid new_decal size_explosion '%s', using 70_80\n", p2.c_str());
-    }
-    else if ( !StriCmp(p1, "size_silhouette") )
-    {
-        if ( !ParseDecalPercentRange(p2, _work.silhouette_percent_min, _work.silhouette_percent_max) )
-            ypa_log_out("WARNING: invalid new_decal size_silhouette '%s', using 150_200\n", p2.c_str());
-    }
-    else if ( !StriCmp(p1, "size_min") )
-    {
-        size_t parsed = 0;
-        const float value = parser.stof(p2, &parsed);
-        if ( parsed == p2.size() && std::isfinite(value) && value >= 0.0f )
-            _work.floor_size = value;
-        else
-            ypa_log_out("WARNING: invalid new_decal size_min '%s', using 30\n", p2.c_str());
+        // Percentage of the diameter of the owner's visual model sphere. Each value may
+        // carry an optional '%' (150, 150%, 150_200, 150%_200%, 150_200%).
+        if ( !ParseDecalPercentRange(StripPercentSigns(p2), fx.ground_decal_model_percent_min,
+                                     fx.ground_decal_model_percent_max) )
+            ypa_log_out("WARNING: invalid new_decal size_by_model_%% '%s', using 100_100\n", p2.c_str());
     }
     else if ( !StriCmp(p1, "stretch_xz") )
     {
@@ -3032,6 +3039,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     if ( !StriCmp(p1, "disable_collision") )
     {
         _vhcl->disable_collision = p2 == "1";
+        return ScriptParser::RESULT_OK;
+    }
+    if ( !StriCmp(p1, "weapon_use_vehicle_fire") )
+    {
+        _vhcl->weapon_use_vehicle_fire = p2 == "1";
         return ScriptParser::RESULT_OK;
     }
     if ( !StriCmp(p1, "collision_shape") )
@@ -3340,6 +3352,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             ? (int32_t)value
             : -1;
     }
+    else if ( !StriCmp(p1, "ground_decal_size_by_model_%") )
+        ParseDecalSizeOverride("ground_decal_size_by_model_%", p2, _vhcl->ground_decal_size);
     else if ( !StriCmp(p1, "ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -4033,6 +4047,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->mgun_wireframe = Nucleus::CInit<NC_STACK_sklt>(
             {{NC_STACK_rsrc::RSRC_ATT_NAME, std::string(p2)}} );
     }
+    else if ( !StriCmp(p1, "mgun_ground_decal_size_by_model_%") )
+        ParseDecalSizeOverride("mgun_ground_decal_size_by_model_%", p2, _vhcl->mgun_ground_decal_size);
     else if ( !StriCmp(p1, "mgun_ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -4064,7 +4080,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun_base_megadeth = p2;
     }
-    else if ( !StriCmp(p1, "mgun_recoil_player") )
+    else if ( !StriCmp(p1, "cockpit_mgun_camera_recoil") )
     {
         // First-person MGUN shake intensity, 0-10. Invalid values disable it.
         float intensity = parser.stof(p2, 0);
@@ -4072,7 +4088,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             intensity = 0.0f;
         else if ( intensity > 10.0f )
             intensity = 10.0f;
-        _vhcl->mgun_recoil_player = intensity;
+        _vhcl->cockpit_mgun_camera_recoil = intensity;
     }
     else if ( !StriCmp(p1, "mgun_energy") )
     {
@@ -4804,12 +4820,13 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_decal_enable = false;
         _vhcl->mgun_decal = World::TChainFXConfig();
         _vhcl->mgun_ground_decal_id = -1;
+        _vhcl->mgun_ground_decal_size = TDecalSizeOverride();
         _vhcl->mgun_vp_dead = 0;
         _vhcl->mgun_vp_megadeth = 0;
         _vhcl->mgun_energy = 0.0;
         _vhcl->mgun_angle = 0.0;
         _vhcl->mgun_energy_set = false;
-        _vhcl->mgun_recoil_player = 0.0f;
+        _vhcl->cockpit_mgun_camera_recoil = 0.0f;
         _vhcl->mgun_angle_set = false;
         _vhcl->mgun_3ds_dead.clear();
         _vhcl->mgun_3ds_megadeth.clear();
@@ -4886,6 +4903,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->shield = 50;
         _vhcl->buff_id = -1;
         _vhcl->ground_decal_id = -1;
+        _vhcl->ground_decal_size = TDecalSizeOverride();
         _vhcl->buff = TVehicleBuffConfig();
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
@@ -5112,6 +5130,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->type_icon = 65;
         _wpn->debuff_id = -1;
         _wpn->ground_decal_id = -1;
+        _wpn->ground_decal_size = TDecalSizeOverride();
         _wpn->debuff = TWeaponDebuffConfig();
         _wpn->delay_time_debuff_id = 0;
         _wpn->delay_time_debuff = TWeaponDebuffConfig();
@@ -5284,6 +5303,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             ? (int32_t)value
             : -1;
     }
+    else if ( !StriCmp(p1, "ground_decal_size_by_model_%") )
+        ParseDecalSizeOverride("ground_decal_size_by_model_%", p2, _wpn->ground_decal_size);
     else if ( !StriCmp(p1, "ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -5986,10 +6007,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "vp_fire") )
     {
         _wpn->vp_fire = parser.stol(p2, nullptr, 0);
-    }
-    else if ( !StriCmp(p1, "weapon_use_vehicle_fire") )
-    {
-        _wpn->weapon_use_vehicle_fire = parser.stol(p2, nullptr, 0) == 1;
     }
     else if ( !StriCmp(p1, "vp_megadeth") )
     {

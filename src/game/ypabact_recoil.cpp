@@ -196,11 +196,11 @@ bool ypabact_ShouldRenderRecoilVisualOffset(const NC_STACK_ypabact *unit)
 // shake carrier path of the weapon launch shake and never moves the vehicle.
 void ypabact_TriggerPlayerMgunRecoilShake(NC_STACK_ypabact *bact)
 {
-    if ( !bact || bact->_mgun_recoil_player <= 0.0f || !bact->IsCockpitCameraActive() )
+    if ( !bact || bact->_cockpit_mgun_camera_recoil <= 0.0f || !bact->IsCockpitCameraActive() )
         return;
 
     const float recoilDegrees = std::min(
-        bact->_mgun_recoil_player * MGUN_RECOIL_PLAYER_DEGREES_PER_UNIT,
+        bact->_cockpit_mgun_camera_recoil * MGUN_RECOIL_PLAYER_DEGREES_PER_UNIT,
         MGUN_RECOIL_PLAYER_MAX_DEGREES);
 
     bact->_mgun_recoil_shake.slot = 1;

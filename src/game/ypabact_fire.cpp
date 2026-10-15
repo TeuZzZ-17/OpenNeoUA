@@ -139,18 +139,16 @@ void ypabact_StartVehicleFireVP(NC_STACK_ypabact *bact, int now)
     }
 }
 
-void ypabact_StartVehicleFireVPForWeapon(NC_STACK_ypabact *bact, int weaponId, int now)
+void ypabact_StartVehicleFireVPIfEnabled(NC_STACK_ypabact *bact, int now)
 {
-    if ( !bact || weaponId < 0 )
+    if ( !bact )
         return;
 
-    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
-    if ( !world || (size_t)weaponId >= world->GetWeaponsProtos().size() )
-        return;
-
-    const World::TWeapProto &wproto = world->GetWeaponsProtos().at(weaponId);
-    if ( wproto.weapon_use_vehicle_fire )
-        ypabact_StartVehicleFireVP(bact, now);
+    // An attached Unit Gun shows the fire visual on its carrier Vehicle, so only
+    // the carrier's weapon_use_vehicle_fire counts for it.
+    NC_STACK_ypabact *vehicle = (bact->_isUnitGunChild && bact->_parent) ? bact->_parent : bact;
+    if ( vehicle->_weapon_use_vehicle_fire )
+        ypabact_StartVehicleFireVP(vehicle, now);
 }
 
 size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
@@ -505,7 +503,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             soundEnabledProjectiles++;
 
         if ( i == 0 )
-            ypabact_StartVehicleFireVPForWeapon(this, selectedWeapon, arg->g_time);
+            ypabact_StartVehicleFireVPIfEnabled(this, arg->g_time);
 
         ypabact_ConsumeProjectileFireX(this);
 
@@ -1249,6 +1247,10 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             if ( emitLocalMgunPulse && vehicleTimedMgun )
                 ypabact_StartVehicleFireVP(this, arg->field_10);
 
+            // weapon_use_vehicle_fire: an attached MGUN gun pulse also shows its carrier's fire visual.
+            if ( emitLocalMgunPulse )
+                ypabact_StartVehicleFireVPIfEnabled(this, arg->field_10);
+
             // One cockpit shake per shot, so the shake follows the fire rate.
             if ( emitLocalMgunPulse )
                 ypabact_TriggerPlayerMgunRecoilShake(this);
@@ -1549,7 +1551,8 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             {
                 v55 = 1;
                 if ( _mgun_decal_enable )
-                    _world->SpawnGroundDecal(_mgun_decal, v59);
+                    _world->SpawnGroundDecal(_mgun_decal, v59,
+                                             World::GroundDecalModelDiameter(_vp_normal, _vp_scale));
             }
 
             bool spawnedVehicleImpact = false;

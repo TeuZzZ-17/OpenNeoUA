@@ -229,14 +229,19 @@ static float GroundDecalResolvedFloatRange(const NC_STACK_ypaworld *world,
     return minValue + (maxValue - minValue) * random;
 }
 
+// Decal size: size_by_model_% of the model sphere diameter, rolled between its two ends.
+// No model geometry means no decal (size 0).
 static float GroundDecalResolvedSize(const NC_STACK_ypaworld *world,
                                      const ypaworld_arg136 &hit,
-                                     const World::TChainFXConfig &config)
+                                     const World::TChainFXConfig &config,
+                                     float modelDiameter)
 {
-    return GroundDecalResolvedFloatRange(world, hit,
-                                         config.ground_decal_size,
-                                         config.ground_decal_size_min,
-                                         config.ground_decal_size_max,
+    if ( !std::isfinite(modelDiameter) || modelDiameter <= 0.0f )
+        return 0.0f;
+
+    return GroundDecalResolvedFloatRange(world, hit, 0.0f,
+                                         modelDiameter * config.ground_decal_model_percent_min * 0.01f,
+                                         modelDiameter * config.ground_decal_model_percent_max * 0.01f,
                                          0x53495a45u);
 }
 
@@ -1024,8 +1029,69 @@ static NC_STACK_bitmap *GroundDecalBakedEdgeFadeTexture(NC_STACK_ypaworld *world
 
 }
 
+float World::GroundDecalModelDiameter(NC_STACK_base *model, const vec3d &scale)
+{
+    if ( !model || !std::isfinite(scale.x) || !std::isfinite(scale.y) || !std::isfinite(scale.z) )
+        return 0.0f;
+
+    const mat3x3 visualScale = mat3x3::Scale(scale);
+
+    // Visits every vertex of the model and of its child models, already scaled.
+    const auto forEachPoint = [&](const auto &visitModel, NC_STACK_base *node, const mat3x3 &basis,
+                                  const vec3d &offset, const auto &visitPoint) -> void
+    {
+        if ( !node )
+            return;
+
+        if ( NC_STACK_skeleton *skeleton = node->GetSkeleton() )
+        {
+            if ( UAskeleton::Data *data = skeleton->GetSkelet() )
+            {
+                for (const auto &vertex : data->POO)
+                    visitPoint(visualScale.Transform(basis.Transform(vertex) + offset));
+            }
+        }
+
+        for (NC_STACK_base *child : node->GetKidList())
+            visitModel(visitModel, child, basis * child->TForm().SclRot,
+                       basis.Transform(child->TForm().Pos) + offset, visitPoint);
+    };
+
+    vec3d low(0.0, 0.0, 0.0);
+    vec3d high(0.0, 0.0, 0.0);
+    bool hasPoint = false;
+    forEachPoint(forEachPoint, model, mat3x3::Ident(), vec3d(0.0, 0.0, 0.0), [&](const vec3d &point)
+    {
+        if ( !hasPoint )
+        {
+            low = point;
+            high = point;
+            hasPoint = true;
+            return;
+        }
+
+        low = vec3d(std::min(low.x, point.x), std::min(low.y, point.y), std::min(low.z, point.z));
+        high = vec3d(std::max(high.x, point.x), std::max(high.y, point.y), std::max(high.z, point.z));
+    });
+
+    if ( !hasPoint )
+        return 0.0f;
+
+    // Sphere centered on the middle of the bounding box that reaches the farthest vertex.
+    const vec3d center = (low + high) * 0.5;
+    double radiusSquared = 0.0;
+    forEachPoint(forEachPoint, model, mat3x3::Ident(), vec3d(0.0, 0.0, 0.0), [&](const vec3d &point)
+    {
+        radiusSquared = std::max(radiusSquared, (double)(point - center).square());
+    });
+
+    const float diameter = (float)(2.0 * std::sqrt(radiusSquared));
+    return std::isfinite(diameter) ? diameter : 0.0f;
+}
+
 bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &config,
-                                                const vec3d &center, float radius)
+                                                const vec3d &center, float radius,
+                                                float modelDiameter)
 {
     if ( _isNetGame || World::GroundDecalLimit() <= 0 ||
          config.mode != World::TChainFXConfig::MODE_GROUND_DECAL ||
@@ -1133,12 +1199,13 @@ bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &co
     if ( bestLocation.CollisionType != 1 )
         sub_44E07C(bestLocation);
     bestHit.skel = bestLocation.sklt ? bestLocation.sklt->GetSkelet() : nullptr;
-    return SpawnGroundDecal(config, bestHit);
+    return SpawnGroundDecal(config, bestHit, modelDiameter);
 }
 
 
 bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
-                                         const ypaworld_arg136 &hit)
+                                         const ypaworld_arg136 &hit,
+                                         float modelDiameter)
 {
     const int limit = World::GroundDecalLimit();
     const int maxTriangles = GROUND_DECAL_MAX_TRIANGLES;
@@ -1156,7 +1223,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     const int decalPoints = GROUND_DECAL_SHAPE_POINTS;
     const float decalJaggedness = GROUND_DECAL_SHAPE_JAGGEDNESS;
 
-    const float decalSize = GroundDecalResolvedSize(this, hit, config);
+    const float decalSize = GroundDecalResolvedSize(this, hit, config, modelDiameter);
     const float decalStretchX = GroundDecalResolvedStretchX(this, hit, config);
     const float decalStretchZ = GroundDecalResolvedStretchZ(this, hit, config);
     const float decalSizeX = decalSize * decalStretchX;
