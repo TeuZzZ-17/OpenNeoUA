@@ -323,6 +323,28 @@ void ypabact_BuildFireXRandomOrder(NC_STACK_ypabact *unit)
     unit->_fire_x_slot_index = 0;
 }
 
+// Local X range covered by every spawn point ypabact_GetProjectileFireX() can
+// return: +-fire_x for the vanilla/simple/salve modes, the rack for fire_x_advanced.
+void ypabact_GetFireXSpan(const NC_STACK_ypabact *unit, float *minX, float *maxX)
+{
+    const float side = fabs(unit->_fire_pos.x);
+    *minX = -side;
+    *maxX = side;
+
+    const bool rack = unit->_fire_x_advanced &&
+                      (unit->_fire_x_mode == World::TVhclProto::FIRE_X_MODE_SEQUENCE ||
+                       unit->_fire_x_mode == World::TVhclProto::FIRE_X_MODE_RANDOM) &&
+                      unit->_fire_x_slots > 0 &&
+                      unit->_fire_x_slots <= World::TVhclProto::FIRE_X_MAX_SLOTS;
+    if ( !rack )
+        return;
+
+    const float first = unit->_fire_x_start;
+    const float last = unit->_fire_x_start + (float)(unit->_fire_x_slots - 1) * unit->_fire_x_step;
+    *minX = std::min(first, last);
+    *maxX = std::max(first, last);
+}
+
 float ypabact_GetProjectileFireX(NC_STACK_ypabact *unit, float vanillaFireX,
                                         int projectileIndex, int projectileCount)
 {

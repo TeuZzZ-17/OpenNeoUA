@@ -1190,6 +1190,70 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
                 drawLabel(labelPos, buf, 255, 60, 60);
             }
         }
+
+        // Orange = ai_fire_trigger_area_below_xz AI fire volume of each bomb-like weapon slot, from the
+        // fire point down to the terrain. Bright for the weapon the AI fires now.
+        if ( !isCurrentControlled && unit->_bact_type != BACT_TYPES_MISSLE )
+        {
+            const int currentWeapon = unit->GetCurrentWeaponId();
+            const int slots[4] = { unit->_weapon, unit->_extra_weapons[0],
+                                   unit->_extra_weapons[1], unit->_extra_weapons[2] };
+            for (int s = 0; s < 4; s++)
+            {
+                const int weaponId = slots[s];
+                if ( weaponId < 0 || (s > 0 && weaponId == 0) ||
+                     (size_t)weaponId >= _weaponProtos.size() )
+                    continue;
+
+                const World::TWeapProto &wproto = _weaponProtos[weaponId];
+                TFireTriggerArea box;
+                if ( !unit->GetAIFireTriggerArea(wproto, &box) )
+                    continue;
+
+                // A vertical ray keeps the same sector from start to end, so one
+                // long probe finds the terrain reliably.
+                ypaworld_arg136 ground;
+                ground.stPos = box.top;
+                ground.vect = vec3d(0.0, 20000.0, 0.0);
+                ground.flags = 0;
+                ypaworld_func136(&ground);
+                const float bottomY = ground.isect ? ground.isectPos.y
+                                                   : box.top.y + World::CVSectorLength;
+
+                const bool active = weaponId == currentWeapon;
+                const uint8_t r = active ? 255 : 160;
+                const uint8_t g = active ? 150 : 100;
+                const uint8_t b = active ? 30 : 40;
+
+                vec3d corners[8];
+                for (int i = 0; i < 4; i++)
+                {
+                    const float x = (i & 1) ? box.maxX : box.minX;
+                    const float z = (i & 2) ? box.halfZ : -box.halfZ;
+                    corners[i] = box.top + box.right * x + box.forward * z;
+                    corners[i + 4] = vec3d(corners[i].x, bottomY, corners[i].z);
+                }
+
+                static const int edges[12][2] = {
+                    {0, 1}, {1, 3}, {3, 2}, {2, 0},
+                    {4, 5}, {5, 7}, {7, 6}, {6, 4},
+                    {0, 4}, {1, 5}, {2, 6}, {3, 7} };
+                for (const auto &edge : edges)
+                {
+                    int x0, y0, x1, y1;
+                    if ( project(corners[edge[0]], x0, y0) && project(corners[edge[1]], x1, y1) )
+                        GFX::GFXEngine::DrawLine(scr, Common::Line(x0, y0, x1, y1), r, g, b);
+                }
+
+                if ( dist <= LABEL_MAX_DIST )
+                {
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "fire trigger area %.0fx%.0f",
+                             wproto.ai_fire_trigger_area_x, wproto.ai_fire_trigger_area_z);
+                    drawLabel(box.top, buf, r, g, b);
+                }
+            }
+        }
     }
 
     if (_collisionScene)

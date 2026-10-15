@@ -1366,6 +1366,14 @@ struct TWeapProto
     bool  vertical_laser_enable = false;          // 1 = model=laser uses the downward vertical-fire mode
     float vertical_laser_ai_trigger_radius = 300.0; // X/Z distance required before AI fires downward
     TLaserMeshConfig laser_mesh;                    // visual-only mesh body for laser, including vertical mode
+    // OpenNeoUA custom: ai_fire_trigger_area_below_xz = width_length. Optional AI fire volume under the fire point of
+    // bomb-like weapons; when valid it replaces the legacy bomb/vertical-laser fire test (0 = off).
+    float ai_fire_trigger_area_x = 0.0;
+    float ai_fire_trigger_area_z = 0.0;
+    bool HasAIFireTriggerArea() const
+    {
+        return IsBombLike() && ai_fire_trigger_area_x > 0.0f && ai_fire_trigger_area_z > 0.0f;
+    }
     float energy_heli = 0.0;
     float energy_tank = 0.0;
     float energy_flyer = 0.0;

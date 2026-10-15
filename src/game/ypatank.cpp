@@ -2058,6 +2058,12 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
         v43 = 2;
     }
 
+    // A fire trigger area replaces the downward bomb/vertical-laser test; its own
+    // candidates already respect the primary weapon elevation window.
+    size_t triggerAreaFire = 0;
+    if ( v22 && CheckAIFireTriggerArea(*v22, arg, &triggerAreaFire) )
+        return triggerAreaFire;
+
     // Only the primary Weapon uses this window. Keep the existing MGUN
     // fallback and independent AI minigun firing conditions unchanged.
     if ( v22 && !IsPrimaryWeaponElevationAllowed(v34) )

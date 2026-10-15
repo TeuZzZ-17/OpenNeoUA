@@ -5,7 +5,7 @@
 //   movement, collisions, crashes ... ypabact_physics.cpp
 //   damage, death, plasma, medals ... ypabact_damage.cpp
 //   weapons (missiles, minigun) ..... ypabact_weapons.cpp
-//   laser / artillery / kamikaze / carrier / proximity / projectile / recoil / status FX / camera / control:
+//   laser / artillery / kamikaze / carrier / proximity / fire trigger area / projectile / recoil / status FX / camera / control:
 //   ypabact_<feature>.cpp
 // Shared helpers and constants are declared in ypabact_internal.h.
 #include "game/ypabact_internal.h"
