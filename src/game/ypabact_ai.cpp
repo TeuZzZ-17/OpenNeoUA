@@ -1209,6 +1209,7 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
 
                 arg79.start_point = aiStartPoint;
                 arg79.flags = BACT_ARG79_FLAG_AI_BALLISTIC_AIM;
+                ypabact_AimAtFireTriggerAreaTarget(arg101, &arg79);
 
                 LaunchMissile(&arg79);
             }
@@ -1649,6 +1650,7 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
 
                 arg79.start_point = aiStartPoint;
                 arg79.flags = BACT_ARG79_FLAG_AI_BALLISTIC_AIM;
+                ypabact_AimAtFireTriggerAreaTarget(arg101, &arg79);
 
                 LaunchMissile(&arg79);
             }
@@ -2397,6 +2399,10 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
             return 0;
         }
     }
+
+    size_t triggerAreaFire = 0;
+    if ( v8 && CheckAIFireTriggerArea(*v8, arg, &triggerAreaFire) )
+        return triggerAreaFire;
 
     if ( v8 && v8->IsVerticalLaser() )
     {

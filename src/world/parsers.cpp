@@ -5101,6 +5101,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_beam_count = 1;
         _wpn->vertical_laser_enable = false;
         _wpn->vertical_laser_ai_trigger_radius = 300.0f;
+        _wpn->ai_fire_trigger_area_x = 0.0f;
+        _wpn->ai_fire_trigger_area_z = 0.0f;
         _wpn->fire_time_scale = 1.0f;
         _wpn->fire_time_scale_hp_drain.Clear();
         _wpn->vp_normal = 0;
@@ -5838,6 +5840,30 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         float radius = parser.stof(p2, 0);
         _wpn->vertical_laser_ai_trigger_radius = std::isfinite(radius) && radius > 0.0f ? radius : 300.0f;
+    }
+    else if ( !StriCmp(p1, "ai_fire_trigger_area_below_xz") )
+    {
+        // Both sizes must be valid, otherwise the box stays off and the legacy
+        // fire test is kept. Only bomb-like models use it (HasAIFireTriggerArea).
+        _wpn->ai_fire_trigger_area_x = 0.0f;
+        _wpn->ai_fire_trigger_area_z = 0.0f;
+
+        std::string axis[2];
+        if ( ReadTuple(p1, p2, 2, axis) )
+        {
+            const float width = parser.stof(axis[0], 0);
+            const float length = parser.stof(axis[1], 0);
+            if ( std::isfinite(width) && width > 0.0f && std::isfinite(length) && length > 0.0f )
+            {
+                _wpn->ai_fire_trigger_area_x = width;
+                _wpn->ai_fire_trigger_area_z = length;
+            }
+            else
+            {
+                ypa_log_out("WARNING: weapon %d ai_fire_trigger_area_below_xz='%s' is invalid; expected two values > 0. Fire trigger area disabled.\n",
+                            _wpnID, p2.c_str());
+            }
+        }
     }
     else if ( !StriCmp(p1, "add_energy") )
     {

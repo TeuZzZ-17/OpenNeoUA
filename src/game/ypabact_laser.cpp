@@ -1761,9 +1761,25 @@ vec3d ypabact_VerticalLaserSourceOrigin(NC_STACK_ypabact *bact, const bact_arg79
     return bact->GetBodyPosition() + bact->_rotation.Transpose().Transform(localOffset);
 }
 
+// AI fire zone of the vertical laser: the fire trigger area when the weapon has one,
+// otherwise the legacy cylinder of vertical_laser_ai_trigger_radius. Both need
+// the centre below the fire point (+Y is down).
+bool ypabact_IsInVerticalLaserFireZone(const TFireTriggerArea *box, const vec3d &origin,
+                                              float aiTriggerRadius, const vec3d &pos, float radius)
+{
+    if ( box )
+        return ypabact_FireTriggerAreaContains(*box, pos, radius);
+
+    if ( pos.y < origin.y )
+        return false;
+
+    return (pos.XZ() - origin.XZ()).length() <= aiTriggerRadius;
+}
+
 bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit,
                                                   bool friendlyTargets, const vec3d &origin,
                                                   float range, float aiTriggerRadius,
+                                                  const TFireTriggerArea *box,
                                                   const std::vector<NC_STACK_ypabact *> &excluded)
 {
     if ( !ypabact_IsLaserSecondaryTargetCandidate(shooter, unit, friendlyTargets) )
@@ -1771,16 +1787,17 @@ bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_y
     if ( ypabact_LaserTargetInList(unit, excluded) )
         return false;
 
-    vec3d to = unit->_position - origin;
-    if ( to.y < 0.0f || to.y > range )
+    if ( unit->_position.y - origin.y > range )
         return false;
 
-    return to.XZ().length() <= aiTriggerRadius;
+    return ypabact_IsInVerticalLaserFireZone(box, origin, aiTriggerRadius, unit->_position,
+                                             box ? unit->GetCollisionBroadRadius() : 0.0f);
 }
 
 NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shooter,
                                                                const vec3d &origin,
                                                                float range, float aiTriggerRadius,
+                                                               const TFireTriggerArea *box,
                                                                bool friendlyTargets,
                                                                const std::vector<NC_STACK_ypabact *> &excluded)
 {
@@ -1788,11 +1805,12 @@ NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shoot
         return nullptr;
 
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
-    int sectorRadius = (int)(aiTriggerRadius / World::CVSectorLength) + 2;
+    const float searchRadius = box ? ypabact_FireTriggerAreaSearchRadius(*box) : aiTriggerRadius;
+    int sectorRadius = (int)(searchRadius / World::CVSectorLength) + 2;
     Common::Point center = World::PositionToSectorID(origin);
 
     NC_STACK_ypabact *best = nullptr;
-    float bestDist = aiTriggerRadius + 1.0f;
+    float bestDist = std::numeric_limits<float>::max();
 
     for (int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++)
     {
@@ -1807,7 +1825,7 @@ NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shoot
             for (NC_STACK_ypabact *bct : cell.unitsList)
             {
                 if ( !ypabact_IsVerticalLaserMultiCandidate(shooter, bct, friendlyTargets,
-                                                            origin, range, aiTriggerRadius, excluded) )
+                                                            origin, range, aiTriggerRadius, box, excluded) )
                     continue;
 
                 float dist = (bct->_position.XZ() - origin.XZ()).length();
@@ -2026,6 +2044,8 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
     const vec3d down(0.0, 1.0, 0.0);
     float range = ypabact_LaserRange(wproto);
     float aiTriggerRadius = ypabact_AiVerticalFireTriggerRadius(wproto);
+    TFireTriggerArea triggerArea;
+    const TFireTriggerArea *aiTriggerArea = GetAIFireTriggerArea(wproto, &triggerArea) ? &triggerArea : nullptr;
     bool playerControlled = getBACT_inputting() || getBACT_viewer();
     bool wasActive = _vertical_laser_active;
     size_t oldBeamCount = _vertical_laser_beams.size();
@@ -2138,7 +2158,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
             else
             {
                 extraTarget = ypabact_FindNearestVerticalLaserTarget(
-                    this, _vertical_laser_request_start, range, aiTriggerRadius,
+                    this, _vertical_laser_request_start, range, aiTriggerRadius, aiTriggerArea,
                     friendlyMultiTargets, selectedTargets);
             }
 
@@ -2300,14 +2320,14 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
         const vec3d fireOrigin =
             bact->_position + bact->_rotation.Transpose().Transform(bact->_fire_pos);
 
-        // Preserve the existing vertical-laser semantics: the target must remain
-        // below the emitter and inside the horizontal fire cylinder.  Also stop
-        // when it has moved beyond the beam's real life_time-derived reach.
-        if ( arg->pos.y < fireOrigin.y )
-            return false;
-
-        if ( (arg->pos.XZ() - fireOrigin.XZ()).length() >
-             ypabact_AiVerticalFireTriggerRadius(wproto) )
+        // The target must remain inside the AI fire zone (fire trigger area or legacy
+        // cylinder). Also stop when it has moved beyond the beam's real
+        // life_time-derived reach.
+        TFireTriggerArea triggerArea;
+        const TFireTriggerArea *box = bact->GetAIFireTriggerArea(wproto, &triggerArea) ? &triggerArea : nullptr;
+        if ( !ypabact_IsInVerticalLaserFireZone(box, fireOrigin,
+                                                ypabact_AiVerticalFireTriggerRadius(wproto),
+                                                arg->pos, box && arg->unkn == 2 ? arg->radius : 0.0f) )
             return false;
 
         return (arg->pos - fireOrigin).length() <= ypabact_LaserRange(wproto);
