@@ -441,6 +441,21 @@ struct bact_arg101
     // Grenade reachability falls back to the unit fire point when unavailable.
     vec3d launch_pos;
     bool has_launch_pos = false;
+    // Output of the ai_fire_trigger_area_below_xz fire test: the enemy inside the box that made the
+    // weapon fire when it is not the current target (nullptr otherwise).
+    NC_STACK_ypabact *fire_trigger_area_target = nullptr;
+};
+
+// OpenNeoUA custom: ai_fire_trigger_area_below_xz AI fire volume of a bomb-like weapon. It hangs
+// straight down (+Y) from the fire point and turns only with the unit heading.
+struct TFireTriggerArea
+{
+    vec3d top;          // fire point on the unit centre line (local X = 0)
+    vec3d right;        // horizontal unit axes of the box
+    vec3d forward;
+    float minX = 0.0f;  // extents along right: projectile X span plus half width
+    float maxX = 0.0f;
+    float halfZ = 0.0f; // half length along forward
 };
 
 struct bact_arg83
@@ -529,6 +544,8 @@ public:
     bool TriggerKamikazeDetonation(NC_STACK_ypabact *directHit);
     bool ApplyKamikazeRammingGuidance();
     bool GetKamikazeDebugSphere(float *outRadius);
+    bool GetAIFireTriggerArea(const World::TWeapProto &wproto, TFireTriggerArea *out); // OpenNeoUA custom: false when the weapon has no valid ai_fire_trigger_area_below_xz
+    bool CheckAIFireTriggerArea(const World::TWeapProto &wproto, bact_arg101 *arg, size_t *outFire); // OpenNeoUA custom: false = no fire trigger area, legacy fire test applies
     bool ApplyAiMaxAltitudeAboveGround();
     bool HasLocalPlayerForceVerticalPursuitTarget() const;
     // OpenNeoUA custom: continuous laser beam ("model = laser"). UpdateLaser drives the

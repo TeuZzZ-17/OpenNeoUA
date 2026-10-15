@@ -137,6 +137,7 @@ set(SOURCES
     game/ypabact_carrier.cpp
     game/ypabact_proximity.cpp
     game/ypabact_projectile.cpp
+    game/ypabact_fire_trigger_area.cpp
     game/ypabact_recoil.cpp
     game/ypabact_status_fx.cpp
     game/ypabact_weapons.cpp
