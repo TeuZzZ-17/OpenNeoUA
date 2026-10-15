@@ -501,7 +501,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_energy = 0.0;
     _mgun_angle = 0.0;
     _mgun_energy_set = false;
-    _mgun_recoil_player = 0.0f;
+    _cockpit_mgun_camera_recoil = 0.0f;
     _mgun_angle_set = false;
     _mgun_sector_damage_accum = 0.0;
     _vehicle_fire_vp_end_time = 0;
@@ -2194,6 +2194,7 @@ void NC_STACK_ypabact::Renew()
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _collisionShape.reset();
     _disableCollision = false;
+    _weapon_use_vehicle_fire = false;
     _shapeCollisionDamageStamp = -1;
     ClearPlayerSprintPitchExtra();
     if ( _inlinePhysicalFX )
@@ -2268,7 +2269,7 @@ void NC_STACK_ypabact::Renew()
     _mgun_energy = 0.0;
     _mgun_angle = 0.0;
     _mgun_energy_set = false;
-    _mgun_recoil_player = 0.0f;
+    _cockpit_mgun_camera_recoil = 0.0f;
     _mgun_angle_set = false;
     _mgun_sector_damage_accum = 0.0;
     _mgun_soundcarrier.Clear();

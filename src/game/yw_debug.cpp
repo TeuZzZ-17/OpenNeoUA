@@ -1060,8 +1060,10 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         bool isCurrentControlled = yw_DebugIsCurrentControlledBact(this, unit);
         vec3d pos = unit->_position;
         World::rbcolls *colls = unit->getBACT_collNodes();
-        bool legacyRadiusCollisionEnabled = !unit->HasCollisionShape() && unit->UsesLegacyRadiusCollision();
-        if (unit->HasCollisionShape() && !isCurrentControlled)
+        // Units with disable_collision have no active collision volumes, so none are drawn.
+        const bool collisionActive = !unit->CollisionsDisabled();
+        bool legacyRadiusCollisionEnabled = collisionActive && !unit->HasCollisionShape() && unit->UsesLegacyRadiusCollision();
+        if (collisionActive && unit->HasCollisionShape() && !isCurrentControlled)
         {
             const mat3x3 rotation = unit->_rotation.Transpose();
             const vec3d origin = unit->GetBodyPosition();
@@ -1104,16 +1106,15 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
 
-        // Compound collision spheres: green for vehicles, blue for weapons.
+        // Compound collision spheres: green (same color as the Studio) for vehicles and weapons.
         // Compound slot/radius/offset labels are intentionally omitted;
         // only the legacy radius keeps a numeric label.
-        if (!isCurrentControlled && colls && !unit->HasCollisionShape())
+        if (collisionActive && !isCurrentControlled && colls && !unit->HasCollisionShape())
         {
             mat3x3 rotT = unit->_rotation.Transpose();
-            bool isWeapon = unit->_bact_type == BACT_TYPES_MISSLE;
-            uint8_t sphereR = 60;
-            uint8_t sphereG = isWeapon ? 130 : 220;
-            uint8_t sphereB = isWeapon ? 235 : 60;
+            const uint8_t sphereR = 60;
+            const uint8_t sphereG = 220;
+            const uint8_t sphereB = 60;
             for (const World::TRoboColl &cs : colls->roboColls)
             {
                 if (!cs.debug_visible || cs.robo_coll_radius < 0.01f)

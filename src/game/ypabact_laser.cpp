@@ -1319,7 +1319,7 @@ void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg)
     _laser_weapon = weaponId;
     _laser_fire_request = true;
 
-    ypabact_StartVehicleFireVPForWeapon(this, weaponId, _clock);
+    ypabact_StartVehicleFireVPIfEnabled(this, _clock);
 
     TLaserBeamRequest request;
     request.target = (arg->tgType == BACT_TGT_TYPE_UNIT) ? arg->target.pbact : nullptr;
@@ -1964,7 +1964,7 @@ void NC_STACK_ypabact::RequestVerticalLaserFire(int weaponId, bact_arg79 *arg)
     _vertical_laser_weapon = weaponId;
     _vertical_laser_fire_request = true;
 
-    ypabact_StartVehicleFireVPForWeapon(this, weaponId, _clock);
+    ypabact_StartVehicleFireVPIfEnabled(this, _clock);
     _vertical_laser_request_target = (arg && arg->tgType == BACT_TGT_TYPE_UNIT) ? arg->target.pbact : nullptr;
     _vertical_laser_request_start = ypabact_VerticalLaserSourceOrigin(this, arg);
 }

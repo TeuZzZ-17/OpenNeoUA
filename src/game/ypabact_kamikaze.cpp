@@ -647,7 +647,8 @@ bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
         {
             if ( fx.trigger == World::TChainFXConfig::TRIGGER_DESTROYED &&
                  fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
-                _world->SpawnGroundDecalInSphere(fx, _position, mount.weapon->trigger_radius);
+                _world->SpawnGroundDecalInSphere(fx, _position, mount.weapon->trigger_radius,
+                                                 World::GroundDecalModelDiameter(_vp_normal, _vp_scale));
         }
     }
 
