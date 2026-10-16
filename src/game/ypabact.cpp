@@ -2193,6 +2193,7 @@ void NC_STACK_ypabact::Renew()
     _collisionShape.reset();
     _disableCollision = false;
     _weapon_use_vehicle_fire = false;
+    _disable_genesis = false;
     _shapeCollisionDamageStamp = -1;
     ClearPlayerSprintPitchExtra();
     if ( _inlinePhysicalFX )
@@ -2347,6 +2348,9 @@ void NC_STACK_ypabact::CreationTimeUpdate(update_msg *arg)
     if (!_genesisGroundChecked) PlaceGenesisAboveTerrain();
     if (ypabact_IsGenesisSeparationVehicle(this) && _host_station)
         _genesisExitPending = true;
+    // disable_genesis: no scale-in, the creation phase is over on the first update.
+    if ( _disable_genesis )
+        _scale_time = 0;
     _scale_time -= arg->frameTime;
 
     float v30 = arg->frameTime / 1000.0;
@@ -2955,7 +2959,8 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
     if ( arg->newStatus == BACT_STATUS_CREATE && 4 != _vp_active )
     {
         _vp_active = arg->newStatus;
-        SetVP(_vp_genesis);
+        // disable_genesis: the unit shows its normal model instead of the Genesis plasma.
+        SetVP(_disable_genesis ? _vp_normal : _vp_genesis);
 
         if ( _soundFlags & 2 )
         {
@@ -2989,7 +2994,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
             SFXEngine::SFXe.sub_424000(&_soundcarrier, 7);
         }
 
-        if ( !(_soundFlags & 8) )
+        if ( !(_soundFlags & 8) && !_disable_genesis )
         {
             _soundFlags |= 8;
             SFXEngine::SFXe.startSound(&_soundcarrier, 3);

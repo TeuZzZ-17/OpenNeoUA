@@ -827,6 +827,8 @@ public:
     bool _disableCollision = false;
     // Copied from the Vehicle proto: own and attached Unit Gun shots show the Vehicle fire visual.
     bool _weapon_use_vehicle_fire = false;
+    // Copied from the Vehicle proto: instant creation (no plasma, scale-in or genesis sound) and no death plasma.
+    bool _disable_genesis = false;
     void TraceWorldCollision(ypaworld_arg136 *query, bool exact = false);
     void QueryWorldCollisions(ypaworld_arg137 *query);
 

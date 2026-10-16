@@ -2679,6 +2679,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         // available to non-collision systems without silently becoming a hitbox.
         bacto->_disableCollision = vhcl.disable_collision;
         bacto->_weapon_use_vehicle_fire = vhcl.weapon_use_vehicle_fire;
+        bacto->_disable_genesis = vhcl.disable_genesis;
         bacto->ApplyCompoundCollision(vhcl.coll, vhcl.radius_defined);
 
         bacto->_overeof = vhcl.overeof;
