@@ -1093,6 +1093,9 @@ struct TVhclProto
     // OpenNeoUA custom, Vehicle-side: whenever this Vehicle or its attached Unit Guns fire,
     // the Vehicle temporarily uses its own fire visual. Missing/0 keeps vanilla behavior.
     bool weapon_use_vehicle_fire = false;
+    // OpenNeoUA custom: 1 removes the Genesis of this Vehicle, both when it is created
+    // (plasma, scale-in, genesis sound) and when it dies (death plasma). Missing/0 = vanilla.
+    bool disable_genesis = false;
 
     ~TVhclProto();
 };

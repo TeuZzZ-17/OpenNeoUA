@@ -2127,7 +2127,8 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 
         _status_flg |= BACT_STFLAG_LAND;
 
-        if ( _owner && _bact_type != BACT_TYPES_MISSLE && _vp_genesis )
+        // disable_genesis: the wreck falls as usual but leaves no death plasma.
+        if ( _owner && _bact_type != BACT_TYPES_MISSLE && _vp_genesis && !_disable_genesis )
         {
             int a2 = GetPlasmaDurationMs();
 
