@@ -1366,13 +1366,33 @@ struct TWeapProto
     bool  vertical_laser_enable = false;          // 1 = model=laser uses the downward vertical-fire mode
     float vertical_laser_ai_trigger_radius = 300.0; // X/Z distance required before AI fires downward
     TLaserMeshConfig laser_mesh;                    // visual-only mesh body for laser, including vertical mode
-    // OpenNeoUA custom: ai_fire_trigger_area_below_xz = width_length. Optional AI fire volume under the fire point of
-    // bomb-like weapons; when valid it replaces the legacy bomb/vertical-laser fire test (0 = off).
-    float ai_fire_trigger_area_x = 0.0;
-    float ai_fire_trigger_area_z = 0.0;
+    // Optional AI acquisition volumes. Forward dimensions use muzzle-local axes;
+    // cones store two full angles in degrees followed by axial depth.
+    vec3d ai_fire_trigger_box_below; // X width, Y downward depth, Z horizontal length
+    vec3d ai_fire_trigger_box_forward;
+    vec3d ai_fire_trigger_cone_forward;
+    vec3d ai_fire_trigger_cone_below;
+    enum AIFireTriggerShape { AI_TRIGGER_NONE, AI_TRIGGER_BOX_BELOW, AI_TRIGGER_BOX_FORWARD,
+                              AI_TRIGGER_CONE_FORWARD, AI_TRIGGER_CONE_BELOW };
+    AIFireTriggerShape GetAIFireTriggerShape() const
+    {
+        const bool below = ai_fire_trigger_box_below.x > 0.0f;
+        const bool forward = ai_fire_trigger_box_forward.x > 0.0f;
+        const bool cone = ai_fire_trigger_cone_forward.x > 0.0f;
+        const bool coneBelow = ai_fire_trigger_cone_below.x > 0.0f;
+        // Ambiguous definitions keep the existing fire control. Do not silently
+        // select one of two differently authored volumes.
+        if ( (int)below + (int)forward + (int)cone + (int)coneBelow != 1 )
+            return AI_TRIGGER_NONE;
+        if ( IsBombLike() )
+            return below ? AI_TRIGGER_BOX_BELOW : coneBelow ? AI_TRIGGER_CONE_BELOW : AI_TRIGGER_NONE;
+        if ( !(_weaponFlags & WEAPON_FLAG_PROJECTILE) || IsKamikaze() || IsArtilleryShell() )
+            return AI_TRIGGER_NONE;
+        return forward ? AI_TRIGGER_BOX_FORWARD : cone ? AI_TRIGGER_CONE_FORWARD : AI_TRIGGER_NONE;
+    }
     bool HasAIFireTriggerArea() const
     {
-        return IsBombLike() && ai_fire_trigger_area_x > 0.0f && ai_fire_trigger_area_z > 0.0f;
+        return GetAIFireTriggerShape() != AI_TRIGGER_NONE;
     }
     float energy_heli = 0.0;
     float energy_tank = 0.0;

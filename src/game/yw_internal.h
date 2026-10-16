@@ -26,6 +26,10 @@ struct TRenderingSector
 
 int yw_InitNetwork(NC_STACK_ypaworld *yw);
 
+// Project a camera-space debug segment, clipping against the near plane and viewport.
+bool yw_ProjectDebugSegment(vec3d a, vec3d b, const mat4x4f &projection, float nearZ,
+                            int width, int height, Common::Line *out);
+
 
 
 

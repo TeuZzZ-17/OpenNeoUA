@@ -88,6 +88,7 @@ public:
     virtual int getGUN_fireTime();
     virtual bool getGUN_setGround();
     virtual bool IsRoboGun();
+    bool IsPrimaryWeaponElevationAllowed(const vec3d &direction, bool useNativeLimits = false) const override;
     bool IsPassiveModule() const
     {
         return _gunType == GUN_TYPE_RADAR || _gunType == GUN_TYPE_POWER ||

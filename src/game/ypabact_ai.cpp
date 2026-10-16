@@ -2384,6 +2384,10 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
         v36 = 2;
     }
 
+    size_t triggerAreaFire = 0;
+    if ( v8 && CheckAIFireTriggerArea(*v8, arg, &triggerAreaFire) )
+        return triggerAreaFire;
+
     if ( v8 && v8->IsArcGrenade() )
     {
         const vec3d launchPos = arg->has_launch_pos
@@ -2399,10 +2403,6 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
             return 0;
         }
     }
-
-    size_t triggerAreaFire = 0;
-    if ( v8 && CheckAIFireTriggerArea(*v8, arg, &triggerAreaFire) )
-        return triggerAreaFire;
 
     if ( v8 && v8->IsVerticalLaser() )
     {

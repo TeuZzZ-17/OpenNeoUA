@@ -540,7 +540,8 @@ bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapProto &wp
 // Shared automatic Laser target acquisition. Callers provide their own alignment
 // threshold so player aim-assist can stay narrow without changing the proven AI cone.
 NC_STACK_ypabact *ypabact_LaserAutoTarget(NC_STACK_ypabact *shooter, const vec3d &origin,
-                                                 const vec3d &dir, float range, float minAlignment)
+                                                 const vec3d &dir, float range, float minAlignment,
+                                                 bool useNativeLimits)
 {
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
     if ( !world )
@@ -565,6 +566,9 @@ NC_STACK_ypabact *ypabact_LaserAutoTarget(NC_STACK_ypabact *shooter, const vec3d
             for (NC_STACK_ypabact *bct : cell.unitsList)
             {
                 if ( !ypabact_IsLaserAimTarget(shooter, bct) )
+                    continue;
+
+                if ( useNativeLimits && !shooter->IsPrimaryWeaponElevationAllowed(bct->_position - shooter->_position, true) )
                     continue;
 
                 vec3d to = bct->_position - origin;
@@ -655,7 +659,8 @@ bool ypabact_IsLaserSecondaryTargetCandidate(NC_STACK_ypabact *shooter, NC_STACK
 NC_STACK_ypabact *ypabact_FindNearestLaserMultiTarget(NC_STACK_ypabact *shooter, const vec3d &origin,
                                                             const vec3d &aimDir, float range,
                                                             bool friendlyTargets,
-                                                            const std::vector<NC_STACK_ypabact *> &excluded)
+                                                            const std::vector<NC_STACK_ypabact *> &excluded,
+                                                            bool useNativeLimits)
 {
     if ( !shooter || !shooter->getBACT_pWorld() || range <= 0.0f )
         return nullptr;
@@ -683,6 +688,8 @@ NC_STACK_ypabact *ypabact_FindNearestLaserMultiTarget(NC_STACK_ypabact *shooter,
             for (NC_STACK_ypabact *bct : cell.unitsList)
             {
                 if ( !ypabact_IsLaserSecondaryTargetCandidate(shooter, bct, friendlyTargets) )
+                    continue;
+                if ( useNativeLimits && !shooter->IsPrimaryWeaponElevationAllowed(bct->_position - shooter->_position, true) )
                     continue;
                 if ( ypabact_LaserTargetInList(bct, excluded) )
                     continue;
@@ -786,7 +793,8 @@ void ypabact_AddLaserMultiTargetRequests(NC_STACK_ypabact *shooter, const World:
             primaryAim = shooter->_rotation.AxisZ();
 
         NC_STACK_ypabact *target = ypabact_FindNearestLaserMultiTarget(shooter, source.start, primaryAim,
-                                                                       range, friendlyTargets, selectedTargets);
+            range, friendlyTargets, selectedTargets,
+            !playerControlled && wproto.HasAIFireTriggerArea() && !wproto.IsBombLike());
         if ( !target )
             break;
 
@@ -1414,6 +1422,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
     float range = ypabact_LaserRange(wproto);
     bool playerControlled = getBACT_inputting() || getBACT_viewer();
+    const bool useNativeLimits = !playerControlled && wproto.HasAIFireTriggerArea() && !wproto.IsBombLike();
 
     bool wasActive = _laser_active;
     size_t oldBeamCount = _laser_beams.size();
@@ -1460,7 +1469,8 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         // still hit allies/friendly units if they physically stand in front of the lock.
         NC_STACK_ypabact *aimTarget = nullptr;
 
-        if ( request.target && ypabact_IsLaserDamageTarget(this, request.target) )
+        if ( request.target && ypabact_IsLaserDamageTarget(this, request.target) &&
+             (!useNativeLimits || IsPrimaryWeaponElevationAllowed(request.target->_position - _position, true)) )
         {
             // Preserve explicit-target compatibility, including deliberate friendly
             // fire paths. Only automatic acquisition below is enemy-only.
@@ -1480,7 +1490,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         }
         else
         {
-            aimTarget = ypabact_LaserAutoTarget(this, request.start, dir, range, 0.4f);
+            aimTarget = ypabact_LaserAutoTarget(this, request.start, dir, range, 0.4f, useNativeLimits);
         }
 
         if ( aimTarget )
@@ -1789,6 +1799,8 @@ bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_y
 
     if ( unit->_position.y - origin.y > range )
         return false;
+    if ( box && (unit->_position - origin).length() > range )
+        return false;
 
     return ypabact_IsInVerticalLaserFireZone(box, origin, aiTriggerRadius, unit->_position,
                                              box ? unit->GetCollisionBroadRadius() : 0.0f);
@@ -1801,20 +1813,22 @@ NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shoot
                                                                bool friendlyTargets,
                                                                const std::vector<NC_STACK_ypabact *> &excluded)
 {
-    if ( !shooter || !shooter->getBACT_pWorld() || range <= 0.0f || aiTriggerRadius <= 0.0f )
+    if ( !shooter || !shooter->getBACT_pWorld() || range <= 0.0f || (!box && aiTriggerRadius <= 0.0f) )
         return nullptr;
 
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
     const float searchRadius = box ? ypabact_FireTriggerAreaSearchRadius(*box) : aiTriggerRadius;
-    int sectorRadius = (int)(searchRadius / World::CVSectorLength) + 2;
+    const Common::Point mapSize = world->GetMapSize();
+    const int sectorRadius = (int)std::min((double)searchRadius / World::CVSectorLength + 2,
+                                         (double)std::max(mapSize.x, mapSize.y));
     Common::Point center = World::PositionToSectorID(origin);
 
     NC_STACK_ypabact *best = nullptr;
     float bestDist = std::numeric_limits<float>::max();
 
-    for (int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++)
+    for (int y = std::max(0, center.y-sectorRadius); y <= std::min(mapSize.y-1, center.y+sectorRadius); y++)
     {
-        for (int x = center.x - sectorRadius; x <= center.x + sectorRadius; x++)
+        for (int x = std::max(0, center.x-sectorRadius); x <= std::min(mapSize.x-1, center.x+sectorRadius); x++)
         {
             Common::Point cellId(x, y);
             if ( !world->IsSector(cellId) )
@@ -2293,11 +2307,12 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
          !ypabact_IsValidWeaponId(bact, weaponId) )
         return false;
 
-    if ( !bact->IsPrimaryWeaponElevationAllowed(arg->pos - bact->_position) )
-        return false;
-
     const World::TWeapProto &wproto =
         bact->getBACT_pWorld()->GetWeaponsProtos().at(weaponId);
+
+    if ( !bact->IsPrimaryWeaponElevationAllowed(arg->pos - bact->_position,
+                                               wproto.HasAIFireTriggerArea() && !wproto.IsBombLike()) )
+        return false;
 
     const bool activeNormal =
         wproto.IsLaser() && !wproto.IsVerticalLaser() &&
@@ -2324,7 +2339,7 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
         // cylinder). Also stop when it has moved beyond the beam's real
         // life_time-derived reach.
         TFireTriggerArea triggerArea;
-        const TFireTriggerArea *box = bact->GetAIFireTriggerArea(wproto, &triggerArea) ? &triggerArea : nullptr;
+        const TFireTriggerArea *box = bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos) ? &triggerArea : nullptr;
         if ( !ypabact_IsInVerticalLaserFireZone(box, fireOrigin,
                                                 ypabact_AiVerticalFireTriggerRadius(wproto),
                                                 arg->pos, box && arg->unkn == 2 ? arg->radius : 0.0f) )
@@ -2334,12 +2349,17 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
     }
 
     const vec3d fireOrigin = ypabact_LaserSourceOrigin(bact);
+    TFireTriggerArea triggerArea;
+    const bool hasTriggerArea = bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos);
+    if ( hasTriggerArea &&
+         !ypabact_FireTriggerAreaContains(triggerArea, arg->pos, arg->unkn == 2 ? arg->radius : 0.0f) )
+        return false;
     vec3d toAim = arg->pos - fireOrigin;
     const float distance = toAim.normalise();
     if ( distance <= 0.001f || distance > ypabact_LaserRange(wproto) )
         return false;
 
-    vec3d forward = bact->_rotation.AxisZ();
+    vec3d forward = hasTriggerArea ? triggerArea.forward : bact->_rotation.AxisZ();
     if ( forward.normalise() <= 0.001f )
         return false;
 

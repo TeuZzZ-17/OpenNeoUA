@@ -13,6 +13,7 @@
 #include "common/env.h"
 #include "common/includes.h"
 #include "game/yw_internal.h"
+#include "game/ypabact_internal.h"
 #include "game/yw.h"
 #include "game/yw_net.h"
 #include "platform/windp.h"
@@ -835,6 +836,41 @@ bool yw_DebugIsCurrentControlledBact(NC_STACK_ypaworld *world, NC_STACK_ypabact 
             (unit == world->_viewerBact && unit->getBACT_inputting()));
 }
 
+bool yw_ProjectDebugSegment(vec3d a, vec3d b, const mat4x4f &projection, float nearZ,
+                            int width, int height, Common::Line *out)
+{
+    if ( !out || width <= 0 || height <= 0 || nearZ <= 0.0f ||
+         !std::isfinite(a.x) || !std::isfinite(a.y) || !std::isfinite(a.z) ||
+         !std::isfinite(b.x) || !std::isfinite(b.y) || !std::isfinite(b.z) ||
+         (a.z < nearZ && b.z < nearZ) )
+        return false;
+
+    // A segment remains visible even when one endpoint is behind the camera.
+    if ( a.z < nearZ )
+    {
+        a += (b-a) * ((nearZ-a.z)/(b.z-a.z));
+        a.z = nearZ;
+    }
+    if ( b.z < nearZ )
+    {
+        b += (a-b) * ((nearZ-b.z)/(a.z-b.z));
+        b.z = nearZ;
+    }
+    const vec3d pa = projection.Transform(a), pb = projection.Transform(b);
+    const double wa = projection.CalcW(a), wb = projection.CalcW(b);
+    if ( wa <= 0.0 || wb <= 0.0 )
+        return false;
+
+    Common::TLine<double> line((pa.x/wa*0.5+0.5)*width, (1.0-(pa.y/wa*0.5+0.5))*height,
+                               (pb.x/wb*0.5+0.5)*width, (1.0-(pb.y/wb*0.5+0.5))*height);
+    if ( !std::isfinite(line.x1) || !std::isfinite(line.y1) ||
+         !std::isfinite(line.x2) || !std::isfinite(line.y2) ||
+         !line.ClipBy(Common::TRect<double>(0, 0, width-1, height-1)) )
+        return false;
+    *out = Common::Line((int)line.x1, (int)line.y1, (int)line.x2, (int)line.y2);
+    return true;
+}
+
 void NC_STACK_ypaworld::debug_draw_coll_spheres()
 {
     SDL_Surface *scr = GFX::Engine.Screen();
@@ -856,9 +892,15 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         float w = Proj.CalcW(cam);
         if (w <= 0.001f)
             return false;
-        sx = (int)((p.x / w * 0.5f + 0.5f) * screenW);
-        sy = (int)((1.0f - (p.y / w * 0.5f + 0.5f)) * screenH);
-        return sx >= -64 && sx <= screenW + 64 && sy >= -64 && sy <= screenH + 64;
+        const double screenX = (p.x / w * 0.5 + 0.5) * screenW;
+        const double screenY = (1.0 - (p.y / w * 0.5 + 0.5)) * screenH;
+        // Very wide cones can project far outside the integer screen range.
+        if ( !std::isfinite(screenX) || !std::isfinite(screenY) ||
+             screenX < -64 || screenX > screenW+64 || screenY < -64 || screenY > screenH+64 )
+            return false;
+        sx = (int)screenX;
+        sy = (int)screenY;
+        return true;
     };
 
     const int SEGS = 12;
@@ -1191,11 +1233,12 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
 
-        // Orange = ai_fire_trigger_area_below_xz AI fire volume of each bomb-like weapon slot, from the
-        // fire point down to the terrain. Bright for the weapon the AI fires now.
+        // Orange = AI fire volume of each compatible weapon slot.
+        // Keep the below palette; the weapon currently selected by the AI is bright.
         if ( !isCurrentControlled && unit->_bact_type != BACT_TYPES_MISSLE )
         {
             const int currentWeapon = unit->GetCurrentWeaponId();
+            const int currentSourceSlot = ypabact_GetCurrentPrimaryWeaponSourceSlot(unit);
             const int slots[4] = { unit->_weapon, unit->_extra_weapons[0],
                                    unit->_extra_weapons[1], unit->_extra_weapons[2] };
             for (int s = 0; s < 4; s++)
@@ -1210,47 +1253,49 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
                 if ( !unit->GetAIFireTriggerArea(wproto, &box) )
                     continue;
 
-                // A vertical ray keeps the same sector from start to end, so one
-                // long probe finds the terrain reliably.
-                ypaworld_arg136 ground;
-                ground.stPos = box.top;
-                ground.vect = vec3d(0.0, 20000.0, 0.0);
-                ground.flags = 0;
-                ypaworld_func136(&ground);
-                const float bottomY = ground.isect ? ground.isectPos.y
-                                                   : box.top.y + World::CVSectorLength;
-
-                const bool active = weaponId == currentWeapon;
+                const bool active = weaponId == currentWeapon && s == currentSourceSlot;
                 const uint8_t r = active ? 255 : 160;
                 const uint8_t g = active ? 150 : 100;
                 const uint8_t b = active ? 30 : 40;
+                const auto line = [&](const vec3d &a, const vec3d &c) {
+                    Common::Line clipped;
+                    if ( yw_ProjectDebugSegment(view->CalcSclRot.Transform(a-view->CalcPos),
+                                                view->CalcSclRot.Transform(c-view->CalcPos),
+                                                Proj, nearZ, screenW, screenH, &clipped) )
+                        GFX::GFXEngine::DrawLine(scr, clipped, r, g, b);
+                };
 
-                vec3d corners[8];
-                for (int i = 0; i < 4; i++)
+                if ( !box.IsCone() )
                 {
-                    const float x = (i & 1) ? box.maxX : box.minX;
-                    const float z = (i & 2) ? box.halfZ : -box.halfZ;
-                    corners[i] = box.top + box.right * x + box.forward * z;
-                    corners[i + 4] = vec3d(corners[i].x, bottomY, corners[i].z);
+                    vec3d corners[8];
+                    for (int i = 0; i < 8; ++i)
+                        corners[i] = box.top + box.right*((i&1) ? box.maxX : box.minX) +
+                                     box.up*((i&2) ? box.halfY : -box.halfY) +
+                                     box.forward*((i&4) ? box.depth : 0.0f);
+                    for (int i = 0; i < 8; ++i)
+                        for (int bit = 1; bit <= 4; bit *= 2)
+                            if ( !(i&bit) ) line(corners[i], corners[i|bit]);
                 }
-
-                static const int edges[12][2] = {
-                    {0, 1}, {1, 3}, {3, 2}, {2, 0},
-                    {4, 5}, {5, 7}, {7, 6}, {6, 4},
-                    {0, 4}, {1, 5}, {2, 6}, {3, 7} };
-                for (const auto &edge : edges)
+                else
                 {
-                    int x0, y0, x1, y1;
-                    if ( project(corners[edge[0]], x0, y0) && project(corners[edge[1]], x1, y1) )
-                        GFX::GFXEngine::DrawLine(scr, Common::Line(x0, y0, x1, y1), r, g, b);
-                }
-
-                if ( dist <= LABEL_MAX_DIST )
-                {
-                    char buf[64];
-                    snprintf(buf, sizeof(buf), "fire trigger area %.0fx%.0f",
-                             wproto.ai_fire_trigger_area_x, wproto.ai_fire_trigger_area_z);
-                    drawLabel(box.top, buf, r, g, b);
+                    // The cone is swept over the same fire_x interval as the
+                    // runtime test, including racks and mirrored salvo origins.
+                    const auto rim = [&](double angle) {
+                        const double c = cos(angle), sn = sin(angle);
+                        const float x = (c < 0.0 ? box.minX : box.maxX) + (float)(c*box.coneX*box.depth);
+                        return box.top + box.right*x + box.up*(float)(sn*box.coneY*box.depth) + box.forward*box.depth;
+                    };
+                    for (int i = 0; i < 32; ++i)
+                    {
+                        const double angle = 2.0*C_PI*i/32;
+                        line(rim(angle), rim(2.0*C_PI*(i+1)/32));
+                        if ( i%8 == 0 )
+                        {
+                            const float x = cos(angle) < 0.0 ? box.minX : box.maxX;
+                            line(box.top + box.right*x, rim(angle));
+                        }
+                    }
+                    line(box.top + box.right*box.minX, box.top + box.right*box.maxX);
                 }
             }
         }

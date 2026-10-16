@@ -5,6 +5,7 @@
 #include <math.h>
 #include "game/yw.h"
 #include "game/ypagun.h"
+#include "game/ypabact_internal.h"
 #include "game/yparobo.h"
 #include "world/gunrotation.h"
 
@@ -614,11 +615,38 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
     const float engagementRange = (_gunType == GUN_TYPE_PROTO) ? GetMinigunRange() : 2400.0f;
     bool arcGrenadeReachable = true;
     bool usesArcGrenade = false;
-
-    if ( _gunType == GUN_TYPE_REAL && _world && _weapon >= 0 &&
-         (size_t)_weapon < _world->GetWeaponsProtos().size() )
+    int aiWeaponSourceSlot = -1;
+    bact_arg101 fireTest;
+    bool usesTriggerArea = false;
+    size_t triggerAreaFire = 0;
+    bool hasConfiguredTrigger = false;
+    if ( _gunType == GUN_TYPE_REAL )
     {
-        const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_weapon);
+        int slots[4];
+        const int count = ypabact_GetPrimaryWeaponSlots(this, slots, nullptr);
+        for (int i = 0; i < count; ++i)
+            hasConfiguredTrigger |= _world->GetWeaponsProtos().at(slots[i]).HasAIFireTriggerArea();
+    }
+
+    if ( hasConfiguredTrigger )
+    {
+        fireTest.weapon = ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(
+            this, arg->target.pbact, &aiWeaponSourceSlot);
+        fireTest.unkn = 2;
+        fireTest.pos = arg->target.pbact->_position;
+        fireTest.radius = arg->target.pbact->GetCollisionBroadRadius();
+        fireTest.launch_pos = GetBodyPosition() + _rotation.Transpose().Transform(_fire_pos);
+        fireTest.has_launch_pos = true;
+        if ( ypabact_IsValidFireWeaponId(this, fireTest.weapon) )
+            usesTriggerArea = CheckAIFireTriggerArea(
+                _world->GetWeaponsProtos().at(fireTest.weapon), &fireTest, &triggerAreaFire);
+    }
+
+    const int checkedWeapon = hasConfiguredTrigger ? fireTest.weapon : _weapon;
+    if ( !usesTriggerArea && _gunType == GUN_TYPE_REAL && _world && checkedWeapon >= 0 &&
+         (size_t)checkedWeapon < _world->GetWeaponsProtos().size() )
+    {
+        const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(checkedWeapon);
         usesArcGrenade = wproto.IsArcGrenade();
         if ( usesArcGrenade )
         {
@@ -630,8 +658,8 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
         }
     }
 
-    if ( dist <= engagementRange && arcGrenadeReachable &&
-         vTgt.dot( _rotation.AxisZ() ) >= 0.95 )
+    if ( usesTriggerArea ? triggerAreaFire != 0 :
+         (dist <= engagementRange && arcGrenadeReachable && vTgt.dot( _rotation.AxisZ() ) >= 0.95) )
     {
         if ( _gunType == GUN_TYPE_REAL )
         {
@@ -642,9 +670,14 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
             arg79.target.pbact = arg->target.pbact;
             arg79.tgt_pos = arg->target.pbact->_position;
             arg79.weapon = _weapon;
+            if ( hasConfiguredTrigger )
+            {
+                arg79.weapon_source_slot = aiWeaponSourceSlot;
+                ypabact_AimAtFireTriggerAreaTarget(fireTest, &arg79);
+            }
             arg79.g_time = arg->g_time;
             arg79.flags = (!getBACT_inputting() ? 4 : 0) |
-                          (usesArcGrenade ? BACT_ARG79_FLAG_AI_BALLISTIC_AIM : 0);
+                          ((usesArcGrenade || usesTriggerArea) ? BACT_ARG79_FLAG_AI_BALLISTIC_AIM : 0);
 
             if ( LaunchMissile(&arg79) )
             {
@@ -804,6 +837,19 @@ bool NC_STACK_ypagun::TestTargetSector(const NC_STACK_ypabact * cel_unit) const
     if ( dist > 2400.0 )
         return 0;
 
+    return IsPrimaryWeaponElevationAllowed(vTgt, true);
+}
+
+bool NC_STACK_ypagun::IsPrimaryWeaponElevationAllowed(const vec3d &direction, bool useNativeLimits) const
+{
+    if ( !useNativeLimits )
+        return NC_STACK_ypabact::IsPrimaryWeaponElevationAllowed(direction);
+
+    // Reuse the turret's native angular limits without its target-search range.
+    vec3d vTgt = direction;
+    const float dist = vTgt.length();
+    if ( dist < 0.001f )
+        return false;
     vTgt /= dist;
 
     if ( C_PI_2 - clp_acos( vTgt.dot(-_gunRott) ) > _gunMaxUp )
