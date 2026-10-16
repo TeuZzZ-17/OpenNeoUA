@@ -3046,6 +3046,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->weapon_use_vehicle_fire = p2 == "1";
         return ScriptParser::RESULT_OK;
     }
+    if ( !StriCmp(p1, "disable_genesis") )
+    {
+        _vhcl->disable_genesis = p2 == "1";
+        return ScriptParser::RESULT_OK;
+    }
     if ( !StriCmp(p1, "collision_shape") )
     {
         _vhcl->collision_shape.clear();
