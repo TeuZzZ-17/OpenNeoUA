@@ -1453,11 +1453,8 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
         _status_flg &= ~(BACT_STFLAG_APPROACH | BACT_STFLAG_ATTACK);
     }
 
-    // The vanilla sector path always stopped FIRE here because MGUNs could not
-    // attack sectors. OpenNeoUA can now keep a legacy vehicle MGUN firing at a
-    // sector, so only stop the loop immediately when the AI is no longer in
-    // the fight state. TA_FIGHT handles its own MGUN stop below.
-    if ( _atk_ret != TA_FIGHT && (_status_flg & BACT_STFLAG_FIRE) )
+    // As in vanilla, a sector order stops MGUN fire and uses the primary weapon.
+    if ( _status_flg & BACT_STFLAG_FIRE )
     {
         setState_msg arg78;
         arg78.unsetFlags = BACT_STFLAG_FIRE;
@@ -1662,45 +1659,6 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
                 _status_flg &= ~BACT_STFLAG_ATTACK;
             }
 
-            // Optional global sector/building minigun attack.
-            vec3d minigunDir = arg->pos - _position;
-            float minigunDistance = minigunDir.normalise();
-            bool fireSectorMinigun = HasMinigun() &&
-                                     minigunDistance > 0.01f &&
-                                     minigunDistance <= ypabact_GetMinigunRange() &&
-                                     minigunDir.dot(_rotation.AxisZ()) > ypabact_GetMinigunAiFireAlignment();
-
-            if ( fireSectorMinigun )
-            {
-                if ( v64 )
-                    _status_flg |= BACT_STFLAG_FIGHT_S;
-                else
-                    _status_flg |= BACT_STFLAG_FIGHT_P;
-
-                if ( !UsesVehicleMinigunTiming() && !(_status_flg & BACT_STFLAG_FIRE) )
-                {
-                    setState_msg arg78;
-                    arg78.unsetFlags = 0;
-                    arg78.newStatus = BACT_STATUS_NOPE;
-                    arg78.setFlags = BACT_STFLAG_FIRE;
-                    SetState(&arg78);
-                }
-
-                bact_arg105 arg105;
-                arg105.field_C = arg->fperiod;
-                arg105.field_10 = _clock;
-                arg105.field_0 = minigunDir;
-                FireMinigun(&arg105);
-            }
-            else if ( !UsesVehicleMinigunTiming() && (_status_flg & BACT_STFLAG_FIRE) )
-            {
-                setState_msg arg78;
-                arg78.setFlags = 0;
-                arg78.newStatus = BACT_STATUS_NOPE;
-                arg78.unsetFlags = BACT_STFLAG_FIRE;
-
-                SetState(&arg78);
-            }
         }
         break;
 
@@ -2351,6 +2309,17 @@ void NC_STACK_ypabact::GetFormationPosition(bact_arg94 *arg)
     // With y = 0
 }
 
+bool ypabact_IsSectorFireAimAligned(const NC_STACK_ypabact &unit, const World::TWeapProto &weapon,
+                                   const vec3d &direction)
+{
+    // The caller supplies the normalized vanilla sector direction, which uses
+    // the vehicle's terrain-clearance height rather than the building's Y.
+    const int flags = weapon.GetFireControlFlags();
+    if ( flags == 16 )
+        return direction.XZ().dot(unit._rotation.AxisZ().XZ()) > 0.91;
+    return flags && direction.dot(unit._rotation.AxisZ()) > 0.91;
+}
+
 size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
 {
     vec3d tmp;
@@ -2466,15 +2435,8 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
     {
         if ( v36 )
         {
-            if ( v36 == 16 )
-            {
-                if ( len < World::CVSectorLength && tmp.XZ().dot( _rotation.AxisZ().XZ() ) > 0.91 )
-                    return 1;
-            }
-            else if ( len < World::CVSectorLength && tmp.dot( _rotation.AxisZ() ) > 0.91 )
-            {
+            if ( len < World::CVSectorLength && ypabact_IsSectorFireAimAligned(*this, *v8, tmp) )
                 return 1;
-            }
         }
         else
         {

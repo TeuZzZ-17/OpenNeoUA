@@ -2339,7 +2339,7 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
         // cylinder). Also stop when it has moved beyond the beam's real
         // life_time-derived reach.
         TFireTriggerArea triggerArea;
-        const TFireTriggerArea *box = bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos) ? &triggerArea : nullptr;
+        const TFireTriggerArea *box = bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos, arg->unkn != 2) ? &triggerArea : nullptr;
         if ( !ypabact_IsInVerticalLaserFireZone(box, fireOrigin,
                                                 ypabact_AiVerticalFireTriggerRadius(wproto),
                                                 arg->pos, box && arg->unkn == 2 ? arg->radius : 0.0f) )
@@ -2350,7 +2350,7 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
 
     const vec3d fireOrigin = ypabact_LaserSourceOrigin(bact);
     TFireTriggerArea triggerArea;
-    const bool hasTriggerArea = bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos);
+    const bool hasTriggerArea = bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos, arg->unkn != 2);
     if ( hasTriggerArea &&
          !ypabact_FireTriggerAreaContains(triggerArea, arg->pos, arg->unkn == 2 ? arg->radius : 0.0f) )
         return false;

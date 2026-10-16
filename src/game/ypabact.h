@@ -558,7 +558,7 @@ public:
     bool ApplyKamikazeRammingGuidance();
     bool GetKamikazeDebugSphere(float *outRadius);
     bool GetAIFireTriggerArea(const World::TWeapProto &wproto, TFireTriggerArea *out,
-                             const vec3d *aimPos = nullptr); // false when no compatible AI fire volume is configured
+                             const vec3d *aimPos = nullptr, bool sectorTarget = false); // false when no compatible AI fire volume is configured
     bool CheckAIFireTriggerArea(const World::TWeapProto &wproto, bact_arg101 *arg, size_t *outFire); // OpenNeoUA custom: false = no fire trigger area, legacy fire test applies
     bool ApplyAiMaxAltitudeAboveGround();
     bool HasLocalPlayerForceVerticalPursuitTarget() const;
@@ -1199,7 +1199,6 @@ public:
     bool _mgun_energy_set;
     float _cockpit_mgun_camera_recoil;
     bool _mgun_angle_set;
-    float _mgun_sector_damage_accum;
     float _weapon_spread_x;
     float _weapon_spread_y;
     float _weapon_spread_z;
