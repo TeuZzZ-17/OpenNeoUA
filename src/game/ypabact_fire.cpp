@@ -212,6 +212,10 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     World::TWeapProto &cooldownProto = _world->GetWeaponsProtos().at(cooldownWeapon);
 
+    if ( !getBACT_inputting() && cooldownProto.HasAIFireTriggerArea() && !cooldownProto.IsBombLike() &&
+         !IsPrimaryWeaponElevationAllowed(scopeAim, true) )
+        return 0;
+
     // Central safety gate: a Kamikaze Weapon is a mounted carrier payload,
     // never a normally launchable projectile, even from secondary call sites.
     if ( cooldownProto.IsKamikaze() )

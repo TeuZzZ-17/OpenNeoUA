@@ -10,6 +10,13 @@
 #include <cstdio>
 #undef main
 
+// Invalid-number cases intentionally exercise the parser's error path. Keep its
+// modal SDL dialog out of this unattended probe; the parser still logs the error.
+extern "C" int SDLCALL SDL_ShowSimpleMessageBox(Uint32, const char *, const char *, SDL_Window *)
+{
+    return 0;
+}
+
 namespace {
 int checks = 0, failures = 0;
 void Check(bool value, const char *label) {

@@ -550,6 +550,11 @@ std::vector<NC_STACK_ypabact *> ypabact_CollectMissileMultiTargets(NC_STACK_ypab
         }
     }
 
+    if ( !launcher->getBACT_inputting() && wproto.HasAIFireTriggerArea() && !wproto.IsBombLike() )
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [launcher](const TMissileMultiTargetCandidate &c) {
+            return !launcher->IsPrimaryWeaponElevationAllowed(c.target->_position - launcher->_position, true);
+        }), candidates.end());
+
     std::sort(candidates.begin(), candidates.end(), [](const TMissileMultiTargetCandidate &a, const TMissileMultiTargetCandidate &b) {
         return a.score < b.score;
     });
@@ -939,30 +944,40 @@ int ypabact_GetAuthoredPercentEnergyCost(int energyMax, float percent)
         : 0;
 }
 
-bool NC_STACK_ypabact::IsPrimaryWeaponElevationAllowed(const vec3d &direction) const
+void NC_STACK_ypabact::GetPrimaryWeaponElevationLimits(double *minPitch, double *maxPitch) const
 {
-    if ( !IsGroundUnit() || !_world || _vehicleID >= _world->GetVhclProtos().size() )
-        return true;
-
-    const World::TVhclProto &proto = _world->GetVhclProtos().at(_vehicleID);
-    if ( !proto.scope_angle_min_max_set )
-        return true;
-
-    // World Y points down. Compare hull-local vertical aim with the same
-    // vanilla reticle offsets for the player and AI, independent of lateral aim.
-    const vec3d local = _rotation.Transform(direction == vec3d() ? _rotation.AxisZ() : direction);
-    if ( !std::isfinite(local.x) || !std::isfinite(local.y) || !std::isfinite(local.z) )
-        return false;
+    // Scope values narrow the existing reticle travel; they are not degrees.
+    const World::TVhclProto *proto = _world && _vehicleID < _world->GetVhclProtos().size()
+        ? &_world->GetVhclProtos().at(_vehicleID) : nullptr;
     float corW, corH;
     GFX::Engine.getAspectCorrection(corW, corH, true);
-    const double pitch = std::atan2(-local.y, local.z);
     const auto referencePitch = [corH](float reference) {
         const double travel = reference < 0.0f ? -USER_GROUND_AIM_MIN : USER_GROUND_AIM_MAX;
         return std::atan(reference * 0.01 * travel * corH);
     };
+    *minPitch = referencePitch(proto && proto->scope_angle_min_max_set ? proto->scope_angle_min_max[0] : -100.0f);
+    *maxPitch = referencePitch(proto && proto->scope_angle_min_max_set ? proto->scope_angle_min_max[1] : 100.0f);
+}
+
+bool NC_STACK_ypabact::IsPrimaryWeaponElevationAllowed(const vec3d &direction, bool useNativeLimits) const
+{
+    if ( !IsGroundUnit() )
+        return true;
+    const bool hasScope = _world && _vehicleID < _world->GetVhclProtos().size() &&
+        _world->GetVhclProtos().at(_vehicleID).scope_angle_min_max_set;
+    // Only configured forward AI volumes request the full reticle limits.
+    // Legacy AI can retain its original, wider fire-control checks.
+    if ( !hasScope && !useNativeLimits )
+        return true;
+
+    const vec3d local = _rotation.Transform(direction == vec3d() ? _rotation.AxisZ() : direction);
+    if ( !std::isfinite(local.x) || !std::isfinite(local.y) || !std::isfinite(local.z) )
+        return false;
+    const double pitch = std::atan2(-local.y, local.z);
+    double minPitch, maxPitch;
+    GetPrimaryWeaponElevationLimits(&minPitch, &maxPitch);
     constexpr double EndpointTolerance = 0.0000001; // Inclusive bounds despite roundoff.
-    return pitch >= referencePitch(proto.scope_angle_min_max[0]) - EndpointTolerance &&
-           pitch <= referencePitch(proto.scope_angle_min_max[1]) + EndpointTolerance;
+    return pitch >= minPitch - EndpointTolerance && pitch <= maxPitch + EndpointTolerance;
 }
 
 bool NC_STACK_ypabact::IsPlayerPrimaryWeaponElevationAllowed() const
