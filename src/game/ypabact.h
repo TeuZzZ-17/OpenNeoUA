@@ -441,21 +441,34 @@ struct bact_arg101
     // Grenade reachability falls back to the unit fire point when unavailable.
     vec3d launch_pos;
     bool has_launch_pos = false;
-    // Output of the ai_fire_trigger_area_below_xz fire test: the enemy inside the box that made the
+    // Output of the AI fire volume test: the enemy inside the volume that made the
     // weapon fire when it is not the current target (nullptr otherwise).
     NC_STACK_ypabact *fire_trigger_area_target = nullptr;
 };
 
-// OpenNeoUA custom: ai_fire_trigger_area_below_xz AI fire volume of a bomb-like weapon. It hangs
-// straight down (+Y) from the fire point and turns only with the unit heading.
+// Shared world-space acquisition volume. Below stays vertical; forward shapes
+// follow the muzzle axes. The local X interval covers all authored fire_x slots.
 struct TFireTriggerArea
 {
+    World::TWeapProto::AIFireTriggerShape shape = World::TWeapProto::AI_TRIGGER_BOX_BELOW;
     vec3d top;          // fire point on the unit centre line (local X = 0)
-    vec3d right;        // horizontal unit axes of the box
-    vec3d forward;
+    vec3d right;
+    vec3d up;          // second cross-section axis; horizontal heading for below
+    vec3d forward;     // finite depth axis; world-down for below
     float minX = 0.0f;  // extents along right: projectile X span plus half width
     float maxX = 0.0f;
-    float halfZ = 0.0f; // half length along forward
+    float halfY = 0.0f;
+    float depth = 0.0f;
+    double coneX = 0.0; // tangents of the half angles
+    double coneY = 0.0;
+    bool IsCone() const
+    {
+        return shape == World::TWeapProto::AI_TRIGGER_CONE_FORWARD || shape == World::TWeapProto::AI_TRIGGER_CONE_BELOW;
+    }
+    bool IsBelow() const
+    {
+        return shape == World::TWeapProto::AI_TRIGGER_BOX_BELOW || shape == World::TWeapProto::AI_TRIGGER_CONE_BELOW;
+    }
 };
 
 struct bact_arg83
@@ -544,7 +557,8 @@ public:
     bool TriggerKamikazeDetonation(NC_STACK_ypabact *directHit);
     bool ApplyKamikazeRammingGuidance();
     bool GetKamikazeDebugSphere(float *outRadius);
-    bool GetAIFireTriggerArea(const World::TWeapProto &wproto, TFireTriggerArea *out); // OpenNeoUA custom: false when the weapon has no valid ai_fire_trigger_area_below_xz
+    bool GetAIFireTriggerArea(const World::TWeapProto &wproto, TFireTriggerArea *out,
+                             const vec3d *aimPos = nullptr); // false when no compatible AI fire volume is configured
     bool CheckAIFireTriggerArea(const World::TWeapProto &wproto, bact_arg101 *arg, size_t *outFire); // OpenNeoUA custom: false = no fire trigger area, legacy fire test applies
     bool ApplyAiMaxAltitudeAboveGround();
     bool HasLocalPlayerForceVerticalPursuitTarget() const;
@@ -796,7 +810,8 @@ public:
     static constexpr float USER_GROUND_AIM_MIN = -0.3f;
     static constexpr float USER_GROUND_AIM_MAX = 0.8f;
     vec3d GetUserWeaponAimDirection() const;
-    bool IsPrimaryWeaponElevationAllowed(const vec3d &direction) const;
+    void GetPrimaryWeaponElevationLimits(double *minPitch, double *maxPitch) const;
+    virtual bool IsPrimaryWeaponElevationAllowed(const vec3d &direction, bool useNativeLimits = false) const;
     bool IsPlayerPrimaryWeaponElevationAllowed() const;
 
     virtual TF::TForm3D *getBACT_pTransform()

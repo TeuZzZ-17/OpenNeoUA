@@ -382,13 +382,13 @@ bool ypabact_LaserGetSectorHit(NC_STACK_ypaworld *world, const vec3d &pos, TLase
 int32_t ypabact_LaserSectorTargetId(const TLaserWorldHit &hit);
 int ypabact_LaserTickSectorEnergy(const World::TWeapProto &wproto, int connectedTicks);
 bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapProto &wproto, const vec3d &origin, const vec3d &dir, float range, TLaserUnitHit *outHit);
-NC_STACK_ypabact *ypabact_LaserAutoTarget(NC_STACK_ypabact *shooter, const vec3d &origin, const vec3d &dir, float range, float minAlignment);
+NC_STACK_ypabact *ypabact_LaserAutoTarget(NC_STACK_ypabact *shooter, const vec3d &origin, const vec3d &dir, float range, float minAlignment, bool useNativeLimits = false);
 NC_STACK_ypabact *ypabact_RetainPlayerLaserTarget(NC_STACK_ypabact *shooter, const vec3d &origin, const vec3d &aimDir, float range, int32_t targetGid);
 bool ypabact_LaserTargetInList(NC_STACK_ypabact *target, const std::vector<NC_STACK_ypabact *> &targets);
 bool ypabact_IsLaserFriendlyToShooter(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit);
 bool ypabact_IsLaserEnemyToShooter(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit);
 bool ypabact_IsLaserSecondaryTargetCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit, bool friendly);
-NC_STACK_ypabact *ypabact_FindNearestLaserMultiTarget(NC_STACK_ypabact *shooter, const vec3d &origin, const vec3d &aimDir, float range, bool friendlyTargets, const std::vector<NC_STACK_ypabact *> &excluded);
+NC_STACK_ypabact *ypabact_FindNearestLaserMultiTarget(NC_STACK_ypabact *shooter, const vec3d &origin, const vec3d &aimDir, float range, bool friendlyTargets, const std::vector<NC_STACK_ypabact *> &excluded, bool useNativeLimits = false);
 NC_STACK_ypabact *ypabact_FindNearestLaserChainUnit(NC_STACK_ypabact *shooter, const vec3d &origin, float range, bool friendlyChain, const std::vector<NC_STACK_ypabact *> &excluded);
 void ypabact_AddLaserMultiTargetRequests(NC_STACK_ypabact *shooter, const World::TWeapProto &wproto, std::vector<NC_STACK_ypabact::TLaserBeamRequest> *requests, float range, bool friendlyTargets, bool playerControlled);
 bool ypabact_PrepareLaserSoundSource(TSoundSource &snd, World::TVhclSound &fx);
@@ -416,7 +416,7 @@ bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_y
 NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shooter, const vec3d &origin, float range, float aiTriggerRadius, const TFireTriggerArea *box, bool friendlyTargets, const std::vector<NC_STACK_ypabact *> &excluded);
 bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &pos, float radius);
 float ypabact_FireTriggerAreaSearchRadius(const TFireTriggerArea &box);
-NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box);
+NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box, const World::TWeapProto *wproto = nullptr);
 void ypabact_AimAtFireTriggerAreaTarget(const bact_arg101 &fireTest, bact_arg79 *shot);
 NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter, World::TWeapProto &wproto, NC_STACK_ypabact::TLaserBeamRuntime &beam, const vec3d &start, const vec3d &down, float range, bool beamWasActive, bool spawnBeamVPs, bool playerControlled, float damageMult, std::vector<vec3d> &chainFXPoints);
 void ypabact_EnsureFireXRandomSeeded(NC_STACK_ypabact *unit);

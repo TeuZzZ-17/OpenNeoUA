@@ -5101,8 +5101,10 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_beam_count = 1;
         _wpn->vertical_laser_enable = false;
         _wpn->vertical_laser_ai_trigger_radius = 300.0f;
-        _wpn->ai_fire_trigger_area_x = 0.0f;
-        _wpn->ai_fire_trigger_area_z = 0.0f;
+        _wpn->ai_fire_trigger_box_below = vec3d();
+        _wpn->ai_fire_trigger_box_forward = vec3d();
+        _wpn->ai_fire_trigger_cone_forward = vec3d();
+        _wpn->ai_fire_trigger_cone_below = vec3d();
         _wpn->fire_time_scale = 1.0f;
         _wpn->fire_time_scale_hp_drain.Clear();
         _wpn->vp_normal = 0;
@@ -5200,7 +5202,13 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
 int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
     if ( !StriCmp(p1, "end") )
+    {
+        if ( !_wpn->HasAIFireTriggerArea() &&
+             (_wpn->ai_fire_trigger_box_below.x > 0.0f || _wpn->ai_fire_trigger_box_forward.x > 0.0 ||
+              _wpn->ai_fire_trigger_cone_forward.x > 0.0 || _wpn->ai_fire_trigger_cone_below.x > 0.0) )
+            ypa_log_out("WARNING: weapon %d AI fire volume ignored: select one volume compatible with its weapon model. Existing fire control retained.\n", _wpnID);
         return ScriptParser::RESULT_SCOPE_END;
+    }
 
     if ( ParseCompoundCollisionParameter(parser, p1, p2, _wpn->coll, _collID) )
         return ScriptParser::RESULT_OK;
@@ -5841,29 +5849,42 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         float radius = parser.stof(p2, 0);
         _wpn->vertical_laser_ai_trigger_radius = std::isfinite(radius) && radius > 0.0f ? radius : 300.0f;
     }
-    else if ( !StriCmp(p1, "ai_fire_trigger_area_below_xz") )
+    else if ( !StriCmp(p1, "ai_fire_trigger_box_below_xyz") ||
+              !StriCmp(p1, "ai_fire_trigger_box_forward_xyz") ||
+              !StriCmp(p1, "ai_fire_trigger_cone_forward_xyz") ||
+              !StriCmp(p1, "ai_fire_trigger_cone_below_xyz") )
     {
-        // Both sizes must be valid, otherwise the box stays off and the legacy
-        // fire test is kept. Only bomb-like models use it (HasAIFireTriggerArea).
-        _wpn->ai_fire_trigger_area_x = 0.0f;
-        _wpn->ai_fire_trigger_area_z = 0.0f;
+        const bool below = !StriCmp(p1, "ai_fire_trigger_box_below_xyz");
+        const bool coneBelow = !StriCmp(p1, "ai_fire_trigger_cone_below_xyz");
+        const bool cone = coneBelow || !StriCmp(p1, "ai_fire_trigger_cone_forward_xyz");
+        vec3d &size = below ? _wpn->ai_fire_trigger_box_below :
+                      coneBelow ? _wpn->ai_fire_trigger_cone_below :
+                      cone ? _wpn->ai_fire_trigger_cone_forward : _wpn->ai_fire_trigger_box_forward;
+        size = vec3d();
+        if ( p2 == "0" )
+            return ScriptParser::RESULT_OK;
 
-        std::string axis[2];
-        if ( ReadTuple(p1, p2, 2, axis) )
+        const int count = 3;
+        std::string axis[3];
+        bool valid = ReadTuple(p1, p2, count, axis);
+        float values[3] = {};
+        for (int i = 0; valid && i < count; ++i)
         {
-            const float width = parser.stof(axis[0], 0);
-            const float length = parser.stof(axis[1], 0);
-            if ( std::isfinite(width) && width > 0.0f && std::isfinite(length) && length > 0.0f )
+            try
             {
-                _wpn->ai_fire_trigger_area_x = width;
-                _wpn->ai_fire_trigger_area_z = length;
+                size_t used = 0;
+                values[i] = std::stof(axis[i], &used);
+                valid = used == axis[i].size() && std::isfinite(values[i]) && values[i] > 0.0f;
             }
-            else
-            {
-                ypa_log_out("WARNING: weapon %d ai_fire_trigger_area_below_xz='%s' is invalid; expected two values > 0. Fire trigger area disabled.\n",
-                            _wpnID, p2.c_str());
-            }
+            catch (const std::exception &) { valid = false; }
         }
+        if ( cone && (values[0] >= 180.0f || values[1] >= 180.0f) )
+            valid = false;
+        if ( valid )
+            size = vec3d(values[0], values[1], values[2]);
+        else
+            ypa_log_out("WARNING: weapon %d %s='%s' is invalid; expected %d positive finite values (cone angles < 180). Volume disabled.\n",
+                        _wpnID, p1.c_str(), p2.c_str(), count);
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
