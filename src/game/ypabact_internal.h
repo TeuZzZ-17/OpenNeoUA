@@ -415,6 +415,7 @@ bool ypabact_IsInVerticalLaserFireZone(const TFireTriggerArea *box, const vec3d 
 bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit, bool friendlyTargets, const vec3d &origin, float range, float aiTriggerRadius, const TFireTriggerArea *box, const std::vector<NC_STACK_ypabact *> &excluded);
 NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shooter, const vec3d &origin, float range, float aiTriggerRadius, const TFireTriggerArea *box, bool friendlyTargets, const std::vector<NC_STACK_ypabact *> &excluded);
 bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &pos, float radius);
+bool ypabact_IsSectorFireAimAligned(const NC_STACK_ypabact &unit, const World::TWeapProto &weapon, const vec3d &direction);
 float ypabact_FireTriggerAreaSearchRadius(const TFireTriggerArea &box);
 NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box, const World::TWeapProto *wproto = nullptr);
 void ypabact_AimAtFireTriggerAreaTarget(const bact_arg101 &fireTest, bact_arg79 *shot);
@@ -444,8 +445,6 @@ vec3d ypabact_GetCockpitAimDirection(NC_STACK_ypabact *bact, const vec3d &origin
 void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact);
 vec3d ypabact_GetMinigunFireDir(NC_STACK_ypabact *bact, const vec3d &requestedDir);
 bool ypabact_SpawnVehicleMinigunImpact(NC_STACK_ypabact *bact, const vec3d &pos, const vec3d &dir, bool worldHit);
-int ypabact_GetMinigunSectorDamageStep(NC_STACK_ypabact *bact, const vec3d &pos);
-void ypabact_ApplyMinigunSectorDamage(NC_STACK_ypabact *bact, const vec3d &pos, float energy);
 bool ypabact_GetMinigunSpreadImpactPoint(const vec3d &origin, const vec3d &dir, const vec3d &center, float radius, vec3d *outPos, float *outDistance);
 bool ypabact_GetRaySphereEntryDistance(const vec3d &origin, const vec3d &dir, const vec3d &center, float radius, float *outDistance);
 bool ypabact_GetCompoundFXGeometry(NC_STACK_ypabact *bact, vec3d *center, float *radius);
