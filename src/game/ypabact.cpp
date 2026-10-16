@@ -503,7 +503,6 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_energy_set = false;
     _cockpit_mgun_camera_recoil = 0.0f;
     _mgun_angle_set = false;
-    _mgun_sector_damage_accum = 0.0;
     _vehicle_fire_vp_end_time = 0;
     _weapon_spread_x = 0.0;
     _weapon_spread_y = 0.0;
@@ -673,7 +672,6 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;
-    _mgun_sector_damage_accum = 0.0;
     _vehicle_fire_vp_end_time = 0;
     // The player limit is altitude above the current sector terrain and keeps
     // the vanilla 1600 default. The optional AI ceiling is read globally.
@@ -2271,7 +2269,6 @@ void NC_STACK_ypabact::Renew()
     _mgun_energy_set = false;
     _cockpit_mgun_camera_recoil = 0.0f;
     _mgun_angle_set = false;
-    _mgun_sector_damage_accum = 0.0;
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();
     _mgun_sound_index = 0;

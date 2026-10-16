@@ -59,6 +59,32 @@ struct FightProbe : Unit {
     int launches = 0;
     size_t LaunchMissile(bact_arg79 *) override { ++launches; return 1; }
 };
+struct SectorFightProbe : FightProbe {
+    bact_arg79 lastLaunch{};
+    int minigunCalls = 0, minigunStops = 0;
+    size_t FireMinigun(bact_arg105 *) override { ++minigunCalls; return 1; }
+    void SetState(setState_msg *arg) override {
+        if (arg->unsetFlags & BACT_STFLAG_FIRE) ++minigunStops;
+        _status_flg = (_status_flg & ~arg->unsetFlags) | arg->setFlags;
+    }
+    // Isolate fire control from the map's building layout; keep the selected part fixed.
+    void GetBestSectorPart(vec3d *) override {}
+    size_t LaunchMissile(bact_arg79 *arg) override {
+        lastLaunch = *arg;
+        return FightProbe::LaunchMissile(arg);
+    }
+};
+struct MgunWallWorld : WorldProbe {
+    void ypaworld_func149(ypaworld_arg136 *arg) override {
+        arg->isect = true; arg->tVal = 0.25f;
+        arg->isectPos = arg->stPos + arg->vect*arg->tVal;
+    }
+    size_t ypaworld_func145(NC_STACK_ypabact *) override { return 0; }
+};
+struct MgunDamageProbe : Unit {
+    int buildingDamageCalls = 0;
+    void ChangeSectorEnergy(yw_arg129 *) override { ++buildingDamageCalls; }
+};
 struct TankProbe : NC_STACK_ypatank {
     void Bind(WorldProbe &w) {
         _world = &w; _vehicleID = 0; _owner = 1;
@@ -847,6 +873,188 @@ bool SameLaunchSnapshot(const LaunchSnapshot &a, const LaunchSnapshot &b) {
     return true;
 }
 
+void TestVanillaSectorMinigun() {
+    WorldProbe world;
+    Check(ParseWeapons(world, {"new_weapon 80", "model = rocket", "end"}), "sector MGUN fixture parses");
+    for (bool secondary : {false, true}) {
+        for (bool timed : {false, true}) {
+            SectorFightProbe unit;
+            unit.Bind(world, 1, 620, vec3d(4200, -100, -4200));
+            const vec3d target = unit._position + vec3d(0, 100, 500);
+            auto *cell = &world.SectorAt(World::PositionToSectorID(target));
+            unit._primTtype = secondary ? BACT_TGT_TYPE_NONE : BACT_TGT_TYPE_CELL;
+            unit._secndTtype = secondary ? BACT_TGT_TYPE_CELL : BACT_TGT_TYPE_NONE;
+            unit._primT.pcell = secondary ? nullptr : cell; unit._secndT.pcell = secondary ? cell : nullptr;
+            unit._primTpos = unit._sencdTpos = target;
+            unit._height = 100; unit._weapon = 80;
+            unit._mgun = 1; unit._mgun_set = !timed; unit._mgun_shot_time = timed ? 100 : 0;
+            unit._mgun_energy_set = timed; unit._mgun_energy = 1000;
+            unit._status_flg = BACT_STFLAG_FIRE; unit._aggr = 100;
+            unit._clock = unit._assess_time = 1000; unit._atk_ret = NC_STACK_ypabact::TA_FIGHT;
+            unit._adist_sector = 800; unit._sdist_sector = 100; unit._wrldSize = vec2d(9600, -9600);
+            bact_arg75 fight{}; fight.target.pcell = cell; fight.pos = target; fight.g_time = 1000;
+            Check(unit.HasMinigun(), "sector MGUN fixture has a usable mounted MGUN");
+            unit.FightWithSect(&fight);
+            Check(unit.minigunCalls == 0 && unit.minigunStops == 1 && !(unit._status_flg & BACT_STFLAG_FIRE),
+                  "primary and secondary sector orders stop MGUN fire without reactivating legacy or timed MGUNs");
+            Check(unit.launches == 1, "sector order retains primary weapon fire after stopping the MGUN");
+        }
+    }
+    MgunWallWorld walls;
+    MgunDamageProbe shooter;
+    shooter.Bind(walls, 1, 621, vec3d(4200, -100, -4200));
+    shooter._mgun = -1; shooter._mgun_set = false;
+    shooter._mgun_shot_time = 100; shooter._mgun_decal_enable = false;
+    shooter._mgun_spread_x = shooter._mgun_spread_y = 0;
+    shooter._gun_power = shooter._mgun_energy = 100000;
+    shooter._energy = shooter._energy_max = 1000000;
+    int clock = 1000;
+    for (bool player : {false, true}) {
+        for (bool timed : {false, true}) {
+            shooter._oflags = player ? BACT_OFLAG_USERINPT : 0;
+            shooter._mgun_energy_set = timed;
+            bact_arg105 shot{}; shot.field_0 = vec3d(0, 0, 1); shot.field_C = 1.0f; shot.field_10 = clock;
+            clock += 1000;
+            Check(shooter.FireMinigun(&shot) == 1 && shooter.buildingDamageCalls == 0,
+                  "actual AI/manual MGUN world impacts cause no sector damage in continuous or timed fire");
+        }
+    }
+}
+
+void TestAirSectorElevation() {
+    WorldProbe world;
+    Check(ParseWeapons(world, {
+        "new_weapon 70", "model = rocket", "end",
+        "new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+        "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", "end",
+        "new_weapon 73", "model = missile", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+        "new_weapon 74", "model = missile", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", "end",
+        "new_weapon 75", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_3000", "end",
+        "new_weapon 76", "model = laser", "life_time = 5000", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+        "new_weapon 77", "model = arc_grenade", "start_speed = 100", "grenade_arc_gravity = 35",
+        "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+        "new_weapon 78", "model = rocket", "ai_fire_trigger_box_forward_xyz = 0", "end",
+        "new_weapon 79", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_bad_1000", "end"
+    }), "air-sector elevation fixtures parse");
+    Unit aircraft;
+    aircraft.Bind(world, 1, 610, vec3d(4200, -250, -4200));
+    aircraft._height = 250;
+    aircraft._primTtype = BACT_TGT_TYPE_CELL;
+    aircraft._secndTtype = BACT_TGT_TYPE_NONE;
+    aircraft._primTpos = aircraft._position + vec3d(0, 250, 700);
+    bact_arg101 fire{};
+    fire.unkn = 1; fire.pos = aircraft._primTpos;
+    for (int type : {BACT_TYPES_BACT, BACT_TYPES_FLYER}) {
+        aircraft._bact_type = type;
+        fire.weapon = 70;
+        Check(aircraft.CheckFireAI(&fire) == 1,
+              "vanilla helicopter and fixed-wing sector fire allows downward weapon aim without pitching the hull");
+        for (int weapon : {78, 79}) {
+            fire.weapon = weapon;
+            Check(aircraft.CheckFireAI(&fire) == 1,
+                  "zero or malformed aerial forward volumes preserve vanilla sector aiming");
+        }
+        for (int weapon : {71, 72, 73, 74, 76, 77}) {
+            fire.weapon = weapon;
+            Check(aircraft.CheckFireAI(&fire) == 1,
+                  "forward box and cone retain vanilla aerial downward sector aim");
+            TFireTriggerArea area;
+            Check(aircraft.GetAIFireTriggerArea(world._weaponProtos[weapon], &area) &&
+                  ypabact_FireTriggerAreaContains(area, fire.pos, 0),
+                  "aerial debug volume follows the same sector elevation as the firing query");
+            const vec3d originalForward = aircraft._rotation.AxisZ();
+            fire.unkn = 2;
+            Check(aircraft.CheckFireAI(&fire) == 0,
+                  "unit targets do not inherit the sector-only aerial elevation allowance");
+            fire.unkn = 1;
+            aircraft._laser_active = true; aircraft._laser_weapon = 76;
+            if (weapon == 76)
+                Check(ypabact_ShouldPersistAILaserFire(&aircraft, weapon, &fire, nullptr),
+                      "aerial continuous-laser sector retention shares the acquisition elevation");
+            Check(Near(aircraft._rotation.AxisZ(), originalForward),
+                  "aerial sector elevation leaves the hull and its independent MGUN axes untouched");
+        }
+
+        for (int weapon : {71, 72}) {
+            fire.weapon = weapon;
+            for (const vec3d &offset : {vec3d(300, 250, 700), vec3d(0, 250, -700), vec3d(0, 250, 1100)}) {
+                fire.pos = aircraft._position + offset;
+                Check(aircraft.CheckFireAI(&fire) == 0,
+                      "aerial sector elevation cannot bypass horizontal width, rear rejection or finite depth");
+            }
+        }
+        fire.pos = aircraft._position + vec3d(0, 250, 1800);
+        fire.weapon = 70;
+        Check(aircraft.CheckFireAI(&fire) == 0, "unconfigured aerial sector fire retains its vanilla distance cap");
+        fire.weapon = 75;
+        Check(aircraft.CheckFireAI(&fire) == 1, "aerial sector pitch allowance does not import the vanilla range cap into configured depth");
+        fire.pos = aircraft._primTpos;
+        aircraft._height = 700;
+        for (int weapon : {70, 71, 72}) {
+            fire.weapon = weapon;
+            Check(aircraft.CheckFireAI(&fire) == 0,
+                  "aerial sector elevation cannot track freely outside the vanilla angular allowance");
+        }
+        aircraft._height = 250;
+
+        aircraft._oflags = BACT_OFLAG_USERINPT;
+        TFireTriggerArea area;
+        Check(aircraft.GetAIFireTriggerArea(world._weaponProtos[71], &area) && Near(area.forward, aircraft._rotation.AxisZ()),
+              "manual aerial volume orientation retains its original hull axes");
+        aircraft._oflags = 0;
+        aircraft._height = 450;
+        aircraft._rotation = mat3x3::RotateY(0.4)*mat3x3::RotateX(-0.3)*mat3x3::RotateZ(0.1);
+        fire.pos = aircraft._position + aircraft._rotation.Transpose().Transform(vec3d(0, 250, 700));
+        aircraft._primTpos = fire.pos;
+        fire.weapon = 70;
+        Check(aircraft.CheckFireAI(&fire) == 1, "pitched and rolled aircraft fixture lies within vanilla sector aim allowance");
+        for (int weapon : {71, 72}) {
+            fire.weapon = weapon;
+            Check(aircraft.CheckFireAI(&fire) == 1 && aircraft.GetAIFireTriggerArea(world._weaponProtos[weapon], &area) &&
+                  Near(area.right, aircraft._rotation.AxisX()) && ypabact_FireTriggerAreaContains(area, fire.pos, 0),
+                  "aerial sector elevation preserves yaw and roll while tilting only the weapon axis");
+        }
+        aircraft._height = 250; aircraft._rotation = mat3x3::Ident();
+        aircraft._primTpos = aircraft._position + vec3d(0, 250, 700); fire.pos = aircraft._primTpos;
+
+        SectorFightProbe legacy, configured, cone;
+        for (auto *unit : {&legacy, &configured, &cone}) {
+            unit->Bind(world, 1, 611, aircraft._position);
+            unit->_bact_type = type;
+            unit->_primTtype = BACT_TGT_TYPE_CELL; unit->_secndTtype = BACT_TGT_TYPE_NONE;
+            unit->_primT.pcell = &world.SectorAt(World::PositionToSectorID(aircraft._primTpos));
+            unit->_secndT.pcell = nullptr;
+            unit->_primTpos = aircraft._primTpos;
+            unit->_height = 250; unit->_aggr = 100;
+            unit->_clock = unit->_assess_time = 1000; unit->_atk_ret = NC_STACK_ypabact::TA_FIGHT;
+            unit->_unifiedAICombatDistance = true;
+            unit->_ai_engage_range = 250; unit->_ai_retreat_range = 100; unit->_ai_reengage_range = 220;
+            unit->_wrldSize = vec2d(9600, -9600);
+            unit->_fly_dir = vec3d(0, 0, 1);
+        }
+        legacy._weapon = 70; configured._weapon = 71; cone._weapon = 72;
+        for (float distance : {700.f, 99.f, 150.f, 219.f, 220.f, 700.f}) {
+            for (auto *unit : {&legacy, &configured, &cone}) {
+                unit->_position = unit->_primTpos - vec3d(0, 250, distance);
+                bact_arg75 fight{}; fight.target.pcell = unit->_primT.pcell;
+                fight.pos = unit->_primTpos; fight.g_time = 1000;
+                unit->FightWithSect(&fight);
+            }
+            Check(legacy.launches == configured.launches && legacy._status_flg == configured._status_flg &&
+                  Near(legacy._target_vec, configured._target_vec),
+                  "sector fight keeps vanilla firing and retreat/reengage decisions with forward box enabled");
+            Check(legacy.launches == cone.launches && legacy._status_flg == cone._status_flg &&
+                  Near(legacy._target_vec, cone._target_vec),
+                  "sector fight keeps vanilla firing and retreat/reengage decisions with forward cone enabled");
+        }
+        Check(configured.launches == 2 && configured.lastLaunch.tgType == BACT_TGT_TYPE_CELL &&
+              configured.lastLaunch.direction.y > 0.0f,
+              "actual sector fight emits downward shots at both passes using the original Hornet movement thresholds");
+        Check(cone.launches == 2 && cone.lastLaunch.tgType == BACT_TGT_TYPE_CELL && cone.lastLaunch.direction.y > 0.0f,
+              "forward cone also emits downward sector shots at both passes");
+    }
+}
+
 void TestVolumeDistanceAndMovement() {
     WorldProbe world;
     Check(ParseWeapons(world, {
@@ -1097,6 +1305,8 @@ int main() {
     TestArcFallback();
     TestTurretSlotsAndCadence();
     TestRealLaunchGateParity();
+    TestVanillaSectorMinigun();
+    TestAirSectorElevation();
     TestVolumeDistanceAndMovement();
     TestDebugSegmentClipping();
 

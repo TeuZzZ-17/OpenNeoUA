@@ -1033,51 +1033,6 @@ bool ypabact_SpawnVehicleMinigunImpact(NC_STACK_ypabact *bact, const vec3d &pos,
     return true;
 }
 
-int ypabact_GetMinigunSectorDamageStep(NC_STACK_ypabact *bact, const vec3d &pos)
-{
-    if ( !bact || !bact->getBACT_pWorld() )
-        return 0;
-
-    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
-    TLaserWorldHit hit;
-    if ( !ypabact_LaserGetSectorHit(world, pos, &hit) )
-        return 0;
-
-    cellArea &cell = world->SectorAt(hit.cellId);
-    int shield = world->_legoArray[ world->GetLegoBld(&cell, hit.bldX, hit.bldY) ].Shield;
-    int damagePercent = 100 - shield;
-    if ( damagePercent <= 0 )
-        return 0;
-
-    return (40000 + damagePercent - 1) / damagePercent;
-}
-
-void ypabact_ApplyMinigunSectorDamage(NC_STACK_ypabact *bact, const vec3d &pos, float energy)
-{
-    if ( !bact || energy <= 0.0 )
-        return;
-
-    int stepEnergy = ypabact_GetMinigunSectorDamageStep(bact, pos);
-    if ( stepEnergy <= 0 )
-        return;
-
-    bact->_mgun_sector_damage_accum += energy;
-
-    int sectorEnergy = (int)bact->_mgun_sector_damage_accum;
-    if ( sectorEnergy < stepEnergy )
-        return;
-
-    sectorEnergy = (sectorEnergy / stepEnergy) * stepEnergy;
-    bact->_mgun_sector_damage_accum -= sectorEnergy;
-
-    yw_arg129 dmg;
-    dmg.field_0 = 0;
-    dmg.pos = pos;
-    dmg.field_10 = sectorEnergy;
-    dmg.unit = bact;
-    bact->ChangeSectorEnergy(&dmg);
-}
-
 bool ypabact_GetMinigunSpreadImpactPoint(const vec3d &origin, const vec3d &dir,
                                                 const vec3d &center, float radius,
                                                 vec3d *outPos, float *outDistance)
@@ -1526,16 +1481,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
 
         int v55 = 0;
         int v96 = minigunWorldHit && !v108 ? 1 : 0;
-
-        if ( minigunWorldHit && !v108 )
-        {
-            NC_STACK_ypabact *userHost = _world->getYW_userHostStation();
-            bool canApplyDamage = !_world->_isNetGame ||
-                                  (userHost && userHost->_owner == _owner);
-
-            if ( canApplyDamage )
-                ypabact_ApplyMinigunSectorDamage(this, v80, mgunDamage);
-        }
 
         if ( spawnVisual )
         {
