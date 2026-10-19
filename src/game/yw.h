@@ -2146,10 +2146,13 @@ struct TLego
     std::vector<ExFX> Explosions;
 };
 
+constexpr size_t SET_LEGO_LIMIT = 4096;
+constexpr size_t SET_SUBSECTOR_LIMIT = 4096;
+
 struct TSubSectorDesc
 {
     int32_t StartHealth = 0;
-    std::array<uint8_t, 4> HPModels = Common::ArrayInit<uint8_t, 4>(0); //Building health models 0 - 100%hp, 3 - 0%hp
+    std::array<uint16_t, 4> HPModels = Common::ArrayInit<uint16_t, 4>(0); // Intact through destroyed model IDs; not serialized in saves.
 };
 
 struct TSectorDesc
@@ -3215,8 +3218,8 @@ public:
     World::RefBactList _deadCacheList;
     World::RefBactList::SnapshotWorkspace _bactSnapshotWorkspace;
     std::vector<NC_STACK_base *> _vhclModels;
-    std::array<TLego, 256> _legoArray;
-    std::array<TSubSectorDesc, 256> _subSectorArray;
+    std::array<TLego, SET_LEGO_LIMIT> _legoArray;
+    std::array<TSubSectorDesc, SET_SUBSECTOR_LIMIT> _subSectorArray;
     std::array<TSectorDesc, 256> _secTypeArray;
 
     std::vector<World::TVhclProto> _vhclProtos;

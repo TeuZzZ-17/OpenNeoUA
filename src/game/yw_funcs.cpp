@@ -1020,6 +1020,11 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
     int id = 0;
     for( NC_STACK_base *& bs : base->GetKidList() )
     {
+        if ( (size_t)id >= yw->_legoArray.size() )
+        {
+            ypa_log_out("Too many LEGO models in set.base (limit %u)!\n", (unsigned)yw->_legoArray.size());
+            return 0;
+        }
         yw->_legoArray[id].Base = bs;
         bs->SetVizLimit(yw->_normalVizLimit);
         bs->SetFadeLength(yw->_normalFadeLength);
@@ -1031,14 +1036,6 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
     std::string line;
     while ( fil->ReadLine(&line) && !line.empty() && line[0] != '>' )
     {
-        TLego &lego = yw->_legoArray[id];
-
-        if ( id >= 256 )
-        {
-            ypa_log_out("Too many legos!\n");
-            return 0;
-        }
-
         size_t pos = line.find_first_of(";#\n\r");
         if ( pos != std::string::npos )
             line.erase(pos);
@@ -1047,6 +1044,12 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
         std::string token;
         if ( parse.GetNext(&token) ) // ignore base file name
         {
+            if ( (size_t)id >= yw->_legoArray.size() )
+            {
+                ypa_log_out("Too many legos (limit %u)!\n", (unsigned)yw->_legoArray.size());
+                return 0;
+            }
+            TLego &lego = yw->_legoArray[id];
             if ( !parse.GetNext(&token) )
                 return 0;
 
@@ -1131,12 +1134,6 @@ int yw_parse_subSect(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
     std::string line;
     while ( fil->ReadLine(&line) && !line.empty() && line[0] != '>' )
     {
-        if ( id >= 256 )
-        {
-            ypa_log_out("Too many sub sector defs!\n");
-            return 0;
-        }
-
         size_t pos = line.find_first_of(";#\n\r");
         if ( pos != std::string::npos )
             line.erase(pos);
@@ -1145,24 +1142,29 @@ int yw_parse_subSect(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
         std::string token;
         if ( parse.GetNext(&token) )
         {
+            if ( (size_t)id >= yw->_subSectorArray.size() )
+            {
+                ypa_log_out("Too many sub sector defs (limit %u)!\n", (unsigned)yw->_subSectorArray.size());
+                return 0;
+            }
             TSubSectorDesc *ssec = &yw->_subSectorArray[id];
-
-            ssec->HPModels[0] = std::stol(token, nullptr, 0);
-
-            if ( !parse.GetNext(&token) )
-                return 0;
-
-            ssec->HPModels[1] = std::stol(token, nullptr, 0);
-
-            if ( !parse.GetNext(&token) )
-                return 0;
-
-            ssec->HPModels[2] = std::stol(token, nullptr, 0);
-
-            if ( !parse.GetNext(&token) )
-                return 0;
-
-            ssec->HPModels[3] = std::stol(token, nullptr, 0);
+            for (size_t state = 0; state < ssec->HPModels.size(); ++state)
+            {
+                try
+                {
+                    size_t end = 0;
+                    const long model = std::stol(token, &end, 0);
+                    if (end != token.size() || model < 0 || (size_t)model >= yw->_legoArray.size())
+                        return 0;
+                    ssec->HPModels[state] = (uint16_t)model;
+                }
+                catch (...)
+                {
+                    return 0;
+                }
+                if (state + 1 < ssec->HPModels.size() && !parse.GetNext(&token))
+                    return 0;
+            }
 
             if ( !parse.GetNext(&token) )
                 return 0;
@@ -1179,14 +1181,14 @@ int yw_parse_subSect(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
 
 int yw_parse_sektor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
 {
-    auto parseArrayIndex = [](const std::string &token, int *result) -> bool
+    auto parseArrayIndex = [](const std::string &token, size_t limit, int *result) -> bool
     {
         try
         {
             size_t pos = 0;
             const long value = std::stol(token, &pos, 0);
             if ( token.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
-                 value < 0 || value >= 256 )
+                 value < 0 || (size_t)value >= limit )
                 return false;
 
             *result = (int)value;
@@ -1212,7 +1214,7 @@ int yw_parse_sektor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
         if ( parse.GetNext(&token) )
         {
             int sectorId = -1;
-            if ( !parseArrayIndex(token, &sectorId) )
+            if ( !parseArrayIndex(token, yw->_secTypeArray.size(), &sectorId) )
             {
                 ypa_log_out("Error reading '%s': sector id outside 0..255, line '%s'.\n",
                             "set.sdf", line.c_str());
@@ -1256,10 +1258,10 @@ int yw_parse_sektor(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
                 }
 
                 int subSectorId = -1;
-                if ( !parseArrayIndex(token, &subSectorId) )
+                if ( !parseArrayIndex(token, yw->_subSectorArray.size(), &subSectorId) )
                 {
-                    ypa_log_out("Error reading '%s': subsector id outside 0..255, line '%s'.\n",
-                                "set.sdf", line.c_str());
+                    ypa_log_out("Error reading '%s': subsector id outside 0..%u, line '%s'.\n",
+                                "set.sdf", (unsigned)yw->_subSectorArray.size() - 1, line.c_str());
                     return 0;
                 }
 
@@ -3699,18 +3701,29 @@ void NC_STACK_ypaworld::LoadOverrideModels()
         model->MakeVBO();
 
         uint32_t id = std::stoi(tokens[1]);
+        bool assigned = false;
 
         if (!StriCmp(tokens[0], "vhcl"))
         {
             if (id < _vhclModels.size())
+            {
                 _vhclModels[id] = model;
+                assigned = true;
+            }
             else if (id == _vhclModels.size())
+            {
                 _vhclModels.push_back(model);
+                assigned = true;
+            }
         }
         else if (!StriCmp(tokens[0], "lego"))
         {
             if (id < _legoArray.size())
+            {
                 _legoArray[id].Base = model;
+                model->SetStatic(true);
+                assigned = true;
+            }
         }
         else if (!StriCmp(tokens[0], "slurp"))
         {
@@ -3723,9 +3736,11 @@ void NC_STACK_ypaworld::LoadOverrideModels()
                     _fillersHorizontal(id / 6 , id % 6) = model;
                 else if (i == 1)
                     _fillersVertical(id / 6 , id % 6) = model;
-
+                assigned = true;
             }
         }
+        if (assigned)
+            _overrideModels.push_back(model);
         else
             model->Delete();
     }
