@@ -1,5 +1,6 @@
 // Energy and damage, death, plasma currency, elite medals, progressive fire rate and stun phases.
 #include "game/ypabact_internal.h"
+#include <algorithm>
 
 float ypabact_GetPlasmaDeathDurationMultiplier()
 {
@@ -2060,10 +2061,10 @@ void sb_0x4874c4(NC_STACK_ypabact *bact, int a2, int a3, float a4)
     bact->_vp_extra[0].rotate = mat3x3::RotateY(bact->_maxrot * 2.0 * (float)a3 * 0.001) * bact->_vp_extra[0].rotate;
 }
 
-// OpenNeoUA follow_vehicle: mirrors the guiding fragment's trajectory onto its
-// wreck. The render transform is copied too, so the wreck stays in sync even
-// when unit update order puts the fragment last in the frame.
-void ypabact_CopyDeadFollowTransform(NC_STACK_ypabact *dst, NC_STACK_ypabact *src)
+// OpenNeoUA follow_carcass: mirrors the falling wreck's trajectory onto its
+// fragment. The render transform is copied too, so the fragment stays in sync
+// even when unit update order puts the wreck last in the frame.
+void ypabact_CopyCarcassTransform(NC_STACK_ypabact *dst, NC_STACK_ypabact *src)
 {
     dst->_old_pos = dst->_position;
     dst->_position = src->_position;
@@ -2078,35 +2079,34 @@ void ypabact_CopyDeadFollowTransform(NC_STACK_ypabact *dst, NC_STACK_ypabact *sr
         dst->_tForm.SclRot = dst->_rotation.Transpose();
 }
 
-void NC_STACK_ypabact::ClearDeadFollowLink()
+void NC_STACK_ypabact::ClearCarcassLink()
 {
-    if ( _deadFollowWreck )
+    if ( _carcassWreck )
     {
-        _deadFollowWreck->_deadFollowLeader = nullptr;
-        _deadFollowWreck = nullptr;
+        std::vector<NC_STACK_ypabact *> &siblings = _carcassWreck->_carcassFragments;
+        siblings.erase(std::remove(siblings.begin(), siblings.end(), this), siblings.end());
+        _carcassWreck = nullptr;
     }
 
-    if ( _deadFollowLeader )
-    {
-        _deadFollowLeader->_deadFollowWreck = nullptr;
-        _deadFollowLeader = nullptr;
-    }
+    for ( NC_STACK_ypabact *fragment : _carcassFragments )
+        fragment->_carcassWreck = nullptr;
+    _carcassFragments.clear();
 }
 
 void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 {
-    // OpenNeoUA follow_vehicle: a wreck bound to a guiding fragment only mirrors
-    // that fragment's trajectory. Its own fall physics and death timeout stay
-    // frozen until the link breaks (fragment impact/DEATH2 or removal).
-    if ( _deadFollowLeader )
+    // OpenNeoUA follow_carcass: this fragment only mirrors its wreck's fall. When
+    // the wreck lands or disappears the link ends and the fragment continues with
+    // its own physics from the position and direction it inherited.
+    if ( _carcassWreck )
     {
-        if ( !(_deadFollowLeader->_status_flg & (BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER)) )
+        if ( !(_carcassWreck->_status_flg & (BACT_STFLAG_LAND | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER)) )
+        {
+            ypabact_CopyCarcassTransform(this, _carcassWreck);
             return;
+        }
 
-        // The fragment ends here: leave the wreck at this exact spot and let its
-        // own death finish (DEATH2 -> plasma) run from the impact point.
-        ClearDeadFollowLink();
-        _status_flg |= BACT_STFLAG_LAND;
+        ClearCarcassLink();
     }
 
     const int deadLifetimeMs = _inlinePhysicalFX ?
@@ -2201,12 +2201,6 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
         arg86.field_two = arg->frameTime;
 
         CrashOrLand(&arg86);
-
-        // OpenNeoUA follow_vehicle: after the fragment's own fall step, drag the
-        // bound wreck onto the same trajectory. Skipped after Release() moves the
-        // fragment out of the world.
-        if ( _deadFollowWreck && !(_status_flg & BACT_STFLAG_NORENDER) )
-            ypabact_CopyDeadFollowTransform(_deadFollowWreck, this);
     }
 }
 

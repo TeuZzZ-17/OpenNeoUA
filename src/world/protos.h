@@ -484,9 +484,9 @@ struct TChainFXPhysical
     float impact_energy_radius = 0.0f; // 0 = direct target only; positive = additional 3D area damage
     int lifetime_min = 30000; // Maximum flight lifetime in ms; fixed value uses the same min/max
     int lifetime_max = 30000; // Inclusive per-fragment lifetime range
-    // 1 = the destroyed unit's vp_dead wreck follows this fragment's exact
-    // trajectory (position and rotation) until the fragment impacts the ground.
-    bool follow_vehicle = false;
+    // 1 = this fragment follows the destroyed unit's falling wreck (position and
+    // rotation) until the wreck lands, then continues with its own physics.
+    bool follow_carcass = false;
     std::array<TVhclSound, 8> sounds;
 };
 

@@ -789,9 +789,9 @@ public:
     virtual void setBACT_yourLastSeconds(int);
     virtual void SetVP(NC_STACK_base *vp);
 
-    // OpenNeoUA follow_vehicle: clears the fragment/wreck trajectory binding on
+    // OpenNeoUA follow_carcass: clears the fragment/wreck trajectory binding on
     // both ends so a removed unit never leaves a dangling pointer behind.
-    void ClearDeadFollowLink();
+    void ClearCarcassLink();
     virtual void setBACT_aggression(int);
     virtual void setBACT_extraViewer(bool);
     virtual void setBACT_alwaysRender(bool);
@@ -984,11 +984,12 @@ public:
     bool _inlinePhysicalImpactDamageSpent = false;
     bool _inlinePhysicalExplodeFXStarted = false;
     int _inlinePhysicalLifetimeMs = 0;
-    // OpenNeoUA follow_vehicle: fragment/wreck trajectory binding.
-    // _deadFollowWreck is set on the guiding fragment, _deadFollowLeader on the
-    // wreck that mirrors its trajectory. Both links are always cleared together.
-    NC_STACK_ypabact *_deadFollowWreck = nullptr;
-    NC_STACK_ypabact *_deadFollowLeader = nullptr;
+    // OpenNeoUA follow_carcass: fragment/wreck trajectory binding. The wreck
+    // falls on its own and the fragments mirror it. _carcassWreck is set on each
+    // fragment, _carcassFragments lists them on the wreck. Links are always
+    // cleared together.
+    NC_STACK_ypabact *_carcassWreck = nullptr;
+    std::vector<NC_STACK_ypabact *> _carcassFragments;
     uint8_t _mimic_disguise_vehicleID; // OpenNeoUA: copied proto for model = mimic runtime behavior
     uint8_t _bflags;
     uint32_t _commandID = 0;

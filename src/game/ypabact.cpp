@@ -865,9 +865,9 @@ size_t NC_STACK_ypabact::Deinit()
 
     _kidRef.Detach();
 
-    // OpenNeoUA follow_vehicle: a removed unit must never leave its trajectory
+    // OpenNeoUA follow_carcass: a removed unit must never leave its trajectory
     // partner pointing at freed memory.
-    ClearDeadFollowLink();
+    ClearCarcassLink();
 
     CleanupUnitGuns(true);
 

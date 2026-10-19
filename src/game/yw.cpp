@@ -2615,17 +2615,17 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
         fragment->_fly_dir = velocity / finalSpeed;
     }
 
-    // OpenNeoUA follow_vehicle: bind the dying unit's wreck to this fragment so
-    // both share one exact trajectory until the fragment impacts. The guards keep
-    // live shooters (weapon impact/detonate triggers) and already-landed wrecks
-    // (DEATH2 phase) unbound, and with count > 1 only the first fragment binds.
-    if ( physical->follow_vehicle && deadWreck &&
-         deadWreck != fragment && !deadWreck->_deadFollowLeader &&
+    // OpenNeoUA follow_carcass: bind this fragment to the dying unit's wreck. The
+    // wreck keeps its own fall and the fragment mirrors it. The guards keep live
+    // shooters (weapon impact/detonate triggers) and wrecks that already landed
+    // unbound. Any number of fragments can follow the same wreck.
+    if ( physical->follow_carcass && deadWreck &&
+         deadWreck != fragment &&
          deadWreck->_status == BACT_STATUS_DEAD &&
-         !(deadWreck->_status_flg & BACT_STFLAG_DEATH2) )
+         !(deadWreck->_status_flg & (BACT_STFLAG_DEATH2 | BACT_STFLAG_LAND)) )
     {
-        fragment->_deadFollowWreck = deadWreck;
-        deadWreck->_deadFollowLeader = fragment;
+        fragment->_carcassWreck = deadWreck;
+        deadWreck->_carcassFragments.push_back(fragment);
     }
 
     return fragment;
