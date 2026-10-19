@@ -1205,7 +1205,7 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
                      _legoArray[currentLego].Shield >= 100 )
                     continue;
 
-                uint8_t currentVisual = subSector->HPModels[_buildHealthModelId[currentHealth]];
+                uint16_t currentVisual = subSector->HPModels[_buildHealthModelId[currentHealth]];
                 bool visuallyPerfect = currentVisual == subSector->HPModels[0];
                 int targetHealth = 0;
 
@@ -1221,8 +1221,8 @@ void NC_STACK_ypaworld::ApplyCustomSuperItemFront(int id, float lastRadius, floa
 
                     if ( !destroy )
                     {
-                        uint8_t destroyedVisual = subSector->HPModels[3];
-                        uint8_t perfectVisual = subSector->HPModels[0];
+                        uint16_t destroyedVisual = subSector->HPModels[3];
+                        uint16_t perfectVisual = subSector->HPModels[0];
                         if ( subSector->HPModels[2] != destroyedVisual &&
                              subSector->HPModels[2] != perfectVisual )
                             targetHealth = 100;

@@ -2258,6 +2258,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     int fadeIn = 0;
     int fadeOut = 0;
     std::vector<World::TChainFXVisual> visuals;
+    World::TVisualTint visualTint;
+    bool hasVisualTint = false;
     int physicalVehicle = 0;
     bool hasPhysicalVehicleKey = false;
     std::shared_ptr<World::TChainFXPhysical> physical(new World::TChainFXPhysical());
@@ -2328,6 +2330,12 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.duration = duration;
                     chain.fade_in = fadeIn;
                     chain.fade_out = fadeOut;
+                    // One tint applies to every visual, regardless of its position in the block.
+                    for (World::TChainFXVisual &visual : visuals)
+                    {
+                        visual.tint = visualTint;
+                        visual.has_tint = hasVisualTint;
+                    }
                     chain.visuals = visuals;
                     out->push_back(chain);
                 }
@@ -2539,14 +2547,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 ParseTintParam(parser, "tint", p1, p2, physical->tint, true);
                 continue;
             }
-            if ( visuals.empty() )
-            {
-                ypa_log_out("WARNING: begin_fx tint without preceding vp_model/base_model/3ds_model ignored\n");
-                continue;
-            }
-
-            ParseTintParam(parser, "tint", p1, p2, visuals.back().tint);
-            visuals.back().has_tint = true;
+            ParseTintParam(parser, "tint", p1, p2, visualTint, true);
+            hasVisualTint = true;
         }
         else if ( !StriCmp(p1, "vp_impact") )
         {
