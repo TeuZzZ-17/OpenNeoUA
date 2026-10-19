@@ -204,6 +204,10 @@ and suppresses combat only; it is not a complete mission or pathfinding test.
 The landing regression drops five real-profile Tigers and follows their movement
 orders through the production controller. Building bypass fixtures use the real
 world ray query for rectangular and sloped LEGO geometry at 20/100 ms steps.
+AI Flyers with a valid profile also run a stuck watchdog (`ypaflyer_unstuck.cpp`): with an obstacle ahead and
+almost no progress for 3 s, the plane reverses while climbing, then makes a wide climbing turn; a repeat within
+12 s switches side and lengthens the manoeuvre (3 levels). Kamikaze charges, stunned planes and profile-free
+planes never enter it. Probe: `tests/flyer_unstuck_test.cpp`.
 Air Prism probes cover every wall, vanilla bounce attenuation, retreat and
 simultaneous rotation/translation without undoing the accepted CCD pose.
 The focused `--air-idle-landing` probe covers flat/sloped support, existing
