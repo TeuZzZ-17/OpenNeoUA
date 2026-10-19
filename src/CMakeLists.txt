@@ -145,6 +145,7 @@ set(SOURCES
     game/ypabact_control.cpp
     game/ypacar.cpp
     game/ypaflyer.cpp
+    game/ypaflyer_unstuck.cpp
     game/ypagun.cpp
     game/ypamissile.cpp
     game/ypamissile_tracer.cpp

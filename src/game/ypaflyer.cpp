@@ -470,6 +470,14 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
                 _status_flg |= BACT_STFLAG_DODGE_LEFT;
         }
 
+        // Con ostacolo davanti e nessun progresso, dopo qualche secondo parte lo sblocco.
+        // L'impatto voluto del kamikaze e lo stordimento non contano come incastro.
+        const bool unstuckAllowed = !kamikazeRamming && !IsActiveDebuffStunning();
+        if ( unstuckAllowed )
+            UpdateUnstuck(v18 > 0 || (_status_flg & (BACT_STFLAG_DODGE_LEFT | BACT_STFLAG_DODGE_RIGHT)));
+        else
+            ResetUnstuck();
+
         ypaworld_arg136 arg136_3;
 
         arg136_3.stPos = _old_pos;
@@ -563,7 +571,10 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
 
         bool altitudeLimited = !kamikazeRamming && ApplyAiMaxAltitudeAboveGround();
 
+        ApplyUnstuckSteering();
         ypaflyer_func70__sub0(a2a);
+        // Prima del limite di quota AI: il tetto configurato resta valido anche durante lo sblocco.
+        ApplyUnstuckThrust();
         // Smooth pursuit lift is valid only on a clear route. Terrain clearance
         // and an active dodge retain the native controller's lift and direction.
         if ( kamikazeRamming && !arg136_3.isect &&
@@ -1269,6 +1280,7 @@ size_t NC_STACK_ypaflyer::SetPosition(bact_arg80 *arg)
         return 0;
 
     _flyerBoost = _mass * 9.80665;
+    ResetUnstuck(); // Teletrasporto/rigenerazione: il vecchio timer non vale piu'.
     return 1;
 }
 
@@ -1278,6 +1290,7 @@ void NC_STACK_ypaflyer::Renew()
 
     _flyerType = 0;
     _flyerBoost = 0;
+    ResetUnstuck();
 }
 
 void NC_STACK_ypaflyer::HandBrake(update_msg *arg)
