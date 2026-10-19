@@ -2596,11 +2596,11 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                             p2.c_str());
             }
         }
-        else if ( !StriCmp(p1, "follow_vehicle") )
+        else if ( !StriCmp(p1, "follow_carcass") )
         {
             hasInlinePhysicalKey = true;
             size_t parsed = 0;
-            physical->follow_vehicle = parser.stol(p2, &parsed, 0) == 1 && parsed == p2.size();
+            physical->follow_carcass = parser.stol(p2, &parsed, 0) == 1 && parsed == p2.size();
         }
         else if ( !StriCmp(p1, "mass") || !StriCmp(p1, "airconst") ||
                   !StriCmp(p1, "force") || !StriCmp(p1, "maxrot") ||

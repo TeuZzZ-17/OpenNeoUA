@@ -448,7 +448,7 @@ bool ypabact_SpawnVehicleMinigunImpact(NC_STACK_ypabact *bact, const vec3d &pos,
 bool ypabact_GetMinigunSpreadImpactPoint(const vec3d &origin, const vec3d &dir, const vec3d &center, float radius, vec3d *outPos, float *outDistance);
 bool ypabact_GetRaySphereEntryDistance(const vec3d &origin, const vec3d &dir, const vec3d &center, float radius, float *outDistance);
 bool ypabact_GetCompoundFXGeometry(NC_STACK_ypabact *bact, vec3d *center, float *radius);
-void ypabact_CopyDeadFollowTransform(NC_STACK_ypabact *dst, NC_STACK_ypabact *src);
+void ypabact_CopyCarcassTransform(NC_STACK_ypabact *dst, NC_STACK_ypabact *src);
 
 // ---- other free functions shared between the parts ----
 bool ypabact_TrySolveArcGrenadeDirection( const vec3d &launchPos, const vec3d &targetPos, const World::TWeapProto &wproto, vec3d *outDirection);

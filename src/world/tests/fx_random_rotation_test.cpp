@@ -37,7 +37,7 @@ void ParserChecks() {
             lines.push_back(std::string("trigger = ")+(context==0 ? "destroyed" : "detonate"));
             lines.push_back(std::string("mode = ")+(std::string(mode)=="legacy" ? "physical" : mode));
             if(std::string(mode)=="visual") { lines.push_back("vp_model = 1"); lines.push_back("duration = 1000"); }
-            else if(std::string(mode)=="physical") { lines.push_back("vp_model = 1"); lines.push_back("mass = 40"); lines.push_back("radius = 2"); }
+            else if(std::string(mode)=="physical") { lines.push_back("vp_model = 1"); lines.push_back("mass = 40"); lines.push_back("radius = 2"); if(*value) lines.push_back(std::string("follow_carcass = ")+value); }
             else lines.push_back("physical_vehicle = 1");
             lines.push_back("end");
         }
@@ -47,6 +47,8 @@ void ParserChecks() {
         Check(fx.size()==(context==2 ? 1u : 3u),"all applicable blocks retained");
         for(const auto &config:fx) {
             Check(config.random_rotation==(std::string(value)=="1"),"only exact 1 enables random rotation");
+            const bool inlinePhysical=config.physical_inline!=nullptr;
+            Check(!inlinePhysical || config.physical_inline->follow_carcass==(std::string(value)=="1"),"only exact 1 enables follow_carcass");
         }
     }
 }
@@ -102,6 +104,23 @@ int main() {
     Check(fragment==&cached && !Same(cached._rotation,source),"inline physical random orientation applied");
     Check((cached._position-pos).length()<1e-10,"inline physical position unchanged");
     Check((cached._fly_dir*cached._fly_dir_length-inlineVelocity).length()<1e-10,"inline physical launch unchanged");
+
+    // follow_carcass: the fragment mirrors a wreck that is still falling.
+    inlineConfig.random_rotation=false;
+    Fragment wreck; wreck.Bind(&inlineWorld); wreck._bact_type=BACT_TYPES_FLYER;
+    wreck._status=BACT_STATUS_DEAD; wreck._position=vec3d(5,6,7); wreck._rotation=mat3x3::RotateY(.3);
+    inlineConfig.physical_inline->follow_carcass=true;
+    fragment=inlineWorld.SpawnInlinePhysicalFX(inlineConfig,pos,source,launch,1,&wreck);
+    Check(fragment==&cached && cached._carcassWreck==&wreck && wreck._carcassFragments.size()==1 && wreck._carcassFragments[0]==&cached,"follow_carcass binds the fragment to the falling wreck");
+    update_msg frame; frame.frameTime=16;
+    cached.DeadTimeUpdate(&frame);
+    Check((cached._position-wreck._position).length()<1e-10 && Same(cached._rotation,wreck._rotation),"follow_carcass fragment mirrors the wreck");
+    cached.ClearCarcassLink();
+    Check(!cached._carcassWreck && wreck._carcassFragments.empty(),"clearing the link resets both ends");
+    wreck._status_flg|=BACT_STFLAG_LAND;
+    fragment=inlineWorld.SpawnInlinePhysicalFX(inlineConfig,pos,source,launch,1,&wreck);
+    Check(!cached._carcassWreck && wreck._carcassFragments.empty(),"follow_carcass ignores a wreck that already landed");
+    inlineConfig.physical_inline->follow_carcass=false;
 
     cacheRef.Detach(); inlineWorld._vhclModels[1]=nullptr;
     NC_STACK_ypaworld superWorld; superWorld._vhclModels.resize(2); superWorld._vhclModels[1]=&model;
