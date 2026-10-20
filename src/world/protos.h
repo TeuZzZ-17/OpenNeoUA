@@ -1443,6 +1443,9 @@ struct TWeapProto
     float trigger_radius = 0.0;
     float fire_time_scale = 1.0f; // model=kamikaze/player: one FIRE press latches slowdown; 1.0 disables the sequence
     TAbsoluteOrPercent fire_time_scale_hp_drain; // absolute HP/sec or explicit max-HP percentage/sec; zero/absent disables it
+    // OpenNeoUA custom: 1 plays snd_launch from the shooter's fixed MGUN-style sound pool instead of
+    // from the moving projectile, so fast bullets get no Doppler/pan drift. Missing/0 = vanilla.
+    bool snd_launch_at_muzzle = false;
     float blast_radius = 0.0;
     float overeof = 0.0;
     float vwr_radius = 0.0;
