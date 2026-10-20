@@ -711,7 +711,15 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             launchSource.SetShkPlay(false);
         }
 
-        SFXEngine::SFXe.startSound(&wobj->_soundcarrier, World::TWeapProto::SND_LAUNCH);
+        if ( wproto.snd_launch_at_muzzle &&
+             wobj->_soundcarrier.Sounds.size() > World::TWeapProto::SND_LAUNCH )
+        {
+            // Launch sound comes from the shooter, not from the fast projectile that would
+            // Doppler-shift and pan it. Silent projectiles (snd event limit) have no PSample.
+            ypabact_PlayMuzzleSound(this, wobj->_soundcarrier.Sounds[World::TWeapProto::SND_LAUNCH]);
+        }
+        else
+            SFXEngine::SFXe.startSound(&wobj->_soundcarrier, World::TWeapProto::SND_LAUNCH);
 
         if ( _world->_isNetGame )
         {
@@ -944,15 +952,12 @@ vec3d ypabact_ApplyWeaponDirectionPattern(const mat3x3 &rotation, const vec3d &d
     return direction;
 }
 
-void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact)
+// Plays a one-shot copy of src from the shooter's fixed sound pool (no projectile Doppler/pan drift).
+void ypabact_PlayMuzzleSound(NC_STACK_ypabact *bact, const TSoundSource &src)
 {
     static const size_t MGUN_PULSE_SOUND_SLOTS = 8;
 
-    if ( !bact || bact->_soundcarrier.Sounds.size() <= World::TVhclProto::SND_FIRE )
-        return;
-
-    TSoundSource &src = bact->_soundcarrier.Sounds[World::TVhclProto::SND_FIRE];
-    if ( !src.PSample )
+    if ( !bact || !src.PSample )
         return;
 
     if ( bact->_mgun_soundcarrier.Sounds.empty() )
@@ -994,6 +999,14 @@ void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact)
     SFXEngine::SFXe.startSound(&bact->_mgun_soundcarrier, soundIndex);
     SFXEngine::SFXe.UpdateSoundCarrier(&bact->_mgun_soundcarrier);
     bact->_mgun_sound_index = (int)((soundIndex + 1) % soundCount);
+}
+
+void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact)
+{
+    if ( !bact || bact->_soundcarrier.Sounds.size() <= World::TVhclProto::SND_FIRE )
+        return;
+
+    ypabact_PlayMuzzleSound(bact, bact->_soundcarrier.Sounds[World::TVhclProto::SND_FIRE]);
 }
 
 vec3d ypabact_GetMinigunFireDir(NC_STACK_ypabact *bact, const vec3d &requestedDir)

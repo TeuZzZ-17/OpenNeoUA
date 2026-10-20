@@ -5114,6 +5114,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->ai_fire_trigger_cone_below = vec3d();
         _wpn->fire_time_scale = 1.0f;
         _wpn->fire_time_scale_hp_drain.Clear();
+        _wpn->snd_launch_at_muzzle = false;
         _wpn->vp_normal = 0;
         _wpn->vp_fire = 1;
         _wpn->vp_megadeth = 2;
@@ -5422,6 +5423,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "fire_time_scale_hp_drain") )
     {
         ParseAbsoluteOrPercent(p2, _wpn->fire_time_scale_hp_drain, 100.0f);
+    }
+    else if ( !StriCmp(p1, "snd_launch_at_muzzle") )
+    {
+        _wpn->snd_launch_at_muzzle = p2 == "1";
     }
     else if ( !StriCmp(p1, "blast_radius") )
     {

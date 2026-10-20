@@ -442,6 +442,7 @@ vec3d ypabact_ApplyWeaponDirectionPattern(const mat3x3 &rotation, const vec3d &d
 vec3d ypabact_GetCockpitViewDirection(NC_STACK_ypabact *bact, const vec3d &viewDir);
 vec3d ypabact_GetCockpitAimTarget(NC_STACK_ypabact *bact, const vec3d &viewDir, float range);
 vec3d ypabact_GetCockpitAimDirection(NC_STACK_ypabact *bact, const vec3d &origin, const vec3d &viewDir, const vec3d &fallbackDir, float range);
+void ypabact_PlayMuzzleSound(NC_STACK_ypabact *bact, const TSoundSource &src);
 void ypabact_PlayVehicleMinigunPulse(NC_STACK_ypabact *bact);
 vec3d ypabact_GetMinigunFireDir(NC_STACK_ypabact *bact, const vec3d &requestedDir);
 bool ypabact_SpawnVehicleMinigunImpact(NC_STACK_ypabact *bact, const vec3d &pos, const vec3d &dir, bool worldHit);
