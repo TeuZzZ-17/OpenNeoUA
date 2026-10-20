@@ -1023,6 +1023,17 @@ rsrc * NC_STACK_ilbm::rsrc_func64(IDVList &stak)
         }
     }
 
+    // Texture of an external BASE without an ILBM beside it: use the PNG beside it instead.
+    std::string externalPngPath;
+    if ( IFFile::FindExternalBasePngFallback(resName, &externalPngPath) )
+    {
+        rsrc *pngRes = ILBM_ReadPngOverride(this, stak, externalPngPath, 0);
+        if ( pngRes )
+            return pngRes;
+
+        ypa_log_out("WARNING: external BASE PNG texture failed to load: %s\n", externalPngPath.c_str());
+    }
+
     return ILBM_ReadOpenedOrVanilla(this, stak, resName, 0);
 }
 

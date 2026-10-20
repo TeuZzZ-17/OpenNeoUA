@@ -14,6 +14,7 @@
 #include <math.h>
 #include "gui/uamsgbox.h"
 #include "common/env.h"
+#include "common/utils.h"
 #include "system/movie.h"
 #include "system/inivals.h"
 #include "system/system.h"
@@ -326,7 +327,16 @@ int yw_loadSky(NC_STACK_ypaworld *yw, const std::string &skyname)
     } skyLooseGuard(skyname);
 
     std::string tmprsrc = Common::Env.SetPrefix("rsrc", "data:");
+
+    // "sky = Data/....BASE" loads an external BASE (canonical Data-first path, same resolver
+    // as the other external models). Any other value keeps the legacy form, a path
+    // relative to Data such as "objects/1998_04.bas".
     std::string skyfilename = fmt::sprintf("data:%s", skyname);
+    std::string externalSky;
+    if ( uaNormalizeDataAssetPath(skyname, &externalSky, false) &&
+         externalSky.size() > 5 &&
+         !StriCmp(externalSky.substr(externalSky.size() - 5), ".BASE") )
+        skyfilename = externalSky;
 
     NC_STACK_base *sky = Utils::ProxyLoadBase(skyfilename);
     yw->_skyObject = sky;
