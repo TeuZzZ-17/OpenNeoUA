@@ -148,6 +148,7 @@ public:
     static void BeginExternalBaseResourceScope(const std::string &baseFilePath);
     static void EndExternalBaseResourceScope();
     static bool IsExternalBaseResourceScopeActive();
+    static bool FindExternalBasePngFallback(const std::string &filename, std::string *outPath);
 
 protected:
     FSMgr::FileHandle file_handle;

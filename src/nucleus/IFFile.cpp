@@ -1842,6 +1842,24 @@ bool IFFile::FindSet46RootPngOverride(const std::string &filename, const std::st
     return false;
 }
 
+// PNG fallback for textures of an external BASE ("Data/..." path). The original ILBM beside the
+// BASE always wins; the PNG is used only when that ILBM does not exist.
+bool IFFile::FindExternalBasePngFallback(const std::string &filename, std::string *outPath)
+{
+    if (outPath)
+        outPath->clear();
+
+    if (!outPath || !IsExternalBaseResourceScopeActive())
+        return false;
+
+    std::string localIlbm;
+    if (externalBaseResolveLocalResource(filename, "rb", &localIlbm))
+        return false;
+
+    const std::string pngName = setLooseReplaceExtension(setLooseNormalizeSlashes(filename), ".PNG");
+    return externalBaseResolveLocalResource(pngName, "rb", outPath);
+}
+
 FSMgr::FileHandle IFFile::UAOpenFileWithSetLooseOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction)
 {
     SetLooseOverride overrideInfo;
