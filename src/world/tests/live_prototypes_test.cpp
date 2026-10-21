@@ -43,6 +43,20 @@ int main()
               weapon.blast_push == 4.0f && weapon.blast_falloff == 1,
               "live Weapon blast fields");
 
+        // Muzzle visuals are begin_fx trigger = launch blocks (Weapon 1: VP 99 at scale 0.6).
+        int launchBlocks = 0;
+        const World::TChainFXConfig *firstLaunch = nullptr;
+        for (const World::TChainFXConfig &fx : world.GetWeaponsProtos()[1].chain_fx)
+            if (fx.trigger == World::TChainFXConfig::TRIGGER_LAUNCH)
+            {
+                ++launchBlocks;
+                firstLaunch = &fx;
+            }
+        Check(launchBlocks == 1 && firstLaunch && firstLaunch->visuals.size() == 1 &&
+              firstLaunch->visuals[0].vp == 99 && firstLaunch->duration == 1000 &&
+              firstLaunch->start_size == 0.6f && firstLaunch->end_size == 0.6f,
+              "live Weapon launch FX");
+
         const auto &vehicle = world.GetVhclProtos()[1];
         Check(vehicle.speech_voicepack ==
               "Data/Sounds/Speech/Voicepacks/resistance-tank-light",

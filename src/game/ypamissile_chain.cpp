@@ -176,10 +176,8 @@ bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
         }
         child->StartWeaponTracer();
 
-        _world->SpawnTransientVisual(childProto.vp_launch, childProto.visual_3ds.launch,
-                                     childProto.visual_base.launch,
-                                     child->_position, child->_rotation, 1000,
-                                     1.0, World::TVisualTint(), childProto.launch_scale);
+        child->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
+                                     &childProto.chain_fx, &child->_position, &child->_rotation);
 
         child->_kidRef.Detach();
         child->_parent = nullptr;
@@ -463,10 +461,8 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     }
     child->StartWeaponTracer();
 
-    _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
-                                 wproto.visual_base.launch,
-                                 child->_position, child->_rotation, 1000,
-                                 1.0, World::TVisualTint(), wproto.launch_scale);
+    child->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
+                                 &wproto.chain_fx, &child->_position, &child->_rotation);
 
     child->_kidRef.Detach();
     child->_parent = nullptr;

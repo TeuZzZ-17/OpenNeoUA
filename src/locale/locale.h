@@ -62,13 +62,6 @@ public:
         return Get(LBL_HUDTXT + id, DefaultStrings::HudStrings[id]);
     }
 
-    static std::string Gem(uint32_t id)
-    {
-        if (id >= GEMSTR_MAX)
-            return OpenUA(OUA_GEM_UPGRADE_UNLOCKED);
-        return OpenUA(OUA_GEM_UPGRADE_UNLOCKED + id);
-    }
-
     static std::string WinName(uint32_t id)
     {
         return Get(LBL_WINNAMES + id, DefaultStrings::WinNames[id]);

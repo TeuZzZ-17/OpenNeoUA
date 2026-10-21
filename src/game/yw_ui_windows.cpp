@@ -32,36 +32,6 @@ void yw_SetFullScreenUiClip(NC_STACK_ypaworld *yw)
                                              yw->_screenSize.y / 2));
 }
 
-void yw_CloseGameplayWindowsForGemNotification(NC_STACK_ypaworld *yw)
-{
-    if ( !yw || !yw->_guiLoaded )
-        return;
-
-    // Close ordinary gameplay windows without destroying or unregistering the
-    // GUI. Map and Squadron Manager now have higher visual priority than the GEM
-    // notification, while the Exit Menu remains the absolute top-level window.
-    std::vector<GuiBase *> activeWindows(yw->_guiActive.begin(),
-                                         yw->_guiActive.end());
-    for ( GuiBase *window : activeWindows )
-    {
-        if ( window &&
-             window != &robo_map &&
-             window != &squadron_manager &&
-             window != &exit_menu )
-        {
-            yw->GuiWinClose(window);
-        }
-    }
-
-    // The nested vehicle/building list is not guaranteed to be registered in
-    // _guiActive, so close it explicitly through the same canonical window path.
-    yw->GuiWinClose(&gui_lstvw);
-
-    yw_ResetWorldSelectionDrag(yw);
-    yw->_moveOrderFeedbackActive = false;
-    yw->_attackOrderFeedbacks.clear();
-}
-
 bool yw_IsTopLevelExitMenuFlowWindow(const GuiBase *window)
 {
     if ( !window )

@@ -2,7 +2,7 @@
 // entry points. The other areas live next to it:
 //   yw_shell.cpp ........ game shell (menus), settings, input bindings, save/load entry points
 //   yw_sprint.cpp ....... player sprint
-//   yw_gem.cpp .......... gem notifications and their sounds
+//   yw_gem.cpp .......... gem unlock popup duration and map marker sound
 //   yw_plasma.cpp ....... plasma currency
 //   yw_ambient.cpp ...... ambient level sound and atmospheric FX
 //   yw_protos.cpp ....... prototype scripts, super item profiles and display names
@@ -261,6 +261,10 @@ float yw_GetActiveGameplayTimeScale(NC_STACK_ypaworld *yw)
     float fireScale = 1.0f;
     if ( yw_GetActiveKamikazeFireTimeScale(yw, &fireScale, nullptr) )
         scale = std::min(scale, fireScale);
+
+    // Optional GEM slow motion: same scale as the debug slow motion.
+    if ( yw_IsGemUnlockSlowMotionEnabled() && yw->IsGemPopupVisible() )
+        scale = std::min(scale, DEBUG_GAMEPLAY_TIME_SCALE);
 
     // Debug acceleration uses the same clock. Authored slow-motion effects
     // still take priority when they are active.
@@ -1069,37 +1073,6 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         {
             ypaworld_func64__sub1(arg->field_8); //Precompute input (add mouse turn)
 
-            if ( HasActiveNewGemNotification() && !yw_IsPriorityGameplayUiOpen() )
-            {
-                const bool escRequested =
-                    _kbdLastKeyHit == Input::KC_ESCAPE ||
-                    arg->field_8->KbdLastHit == Input::KC_ESCAPE;
-                const bool fireRequested =
-                    arg->field_8->Buttons.IsAny({0, 2, 5});
-
-                if ( escRequested || fireRequested )
-                {
-                    DismissNewGemNotification();
-
-                    // FIRE is an action, not a physical key, so this works with
-                    // the player's current bindings. Consume it in the same frame
-                    // so dismissing the popup never also fires a weapon.
-                    if ( fireRequested )
-                        arg->field_8->Buttons.UnSet({0, 2, 5});
-
-                    if ( escRequested )
-                    {
-                        // ESC belongs exclusively to the GEM popup while it is
-                        // active. Do not let the original menu/window handlers
-                        // observe the same key in this frame.
-                        _kbdLastKeyHit = Input::KC_NONE;
-                        arg->field_8->KbdLastHit = Input::KC_NONE;
-                        arg->field_8->KbdLastDown = Input::KC_NONE;
-                        arg->field_8->HotKeyID = -1;
-                    }
-                }
-            }
-
             yw_UpdateUfoSpyUiToggle(this, arg->field_8);
             yw_UpdateHideVehicleToggle(this, arg->field_8);
 
@@ -1764,49 +1737,26 @@ void sub_47C29C(NC_STACK_ypaworld *yw, cellArea *cell, int a3)
     int a3a, a4;
     sub_47C1EC(yw, &gem, &a3a, &a4);
 
-    bool newUiCapture = System::IniConf::GameGemUnlockNewUI.Get<bool>();
-
     yw->_upgradeId = a3;
     yw->_upgradeTimeStamp = yw->_timeStamp;
     yw->_upgradeVehicleId = a3a;
     yw->_upgradeWeaponId = 0;
     yw->_upgradeBuildId = a4;
 
-    if ( newUiCapture )
-        yw->BeginGemNotificationCapture();
-    else
-        yw->ClearGemNotificationCapture();
-
     if ( a3a )
     {
-        bool wasEnabled = (yw->_vhclProtos[a3a].disable_enable_bitmask &
-                           (1 << yw->_GameShell->netPlayerOwner)) != 0;
         yw->_vhclProtos[a3a].disable_enable_bitmask = 0;
         yw->_vhclProtos[a3a].disable_enable_bitmask |= 1 << yw->_GameShell->netPlayerOwner;
-        yw->RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, a3a,
-                                        TGemNotificationEntry::CHANGE_ENABLE,
-                                        wasEnabled ? 1 : 0, 1, !wasEnabled);
     }
 
     if ( a4 )
     {
-        bool wasEnabled = (yw->_buildProtos[a4].EnableMask &
-                           (1 << yw->_GameShell->netPlayerOwner)) != 0;
         yw->_buildProtos[a4].EnableMask = 0;
         yw->_buildProtos[a4].EnableMask |= 1 << yw->_GameShell->netPlayerOwner;
-        yw->RecordGemNotificationChange(TGemNotificationEntry::TARGET_BUILDING, a4,
-                                        TGemNotificationEntry::CHANGE_ENABLE,
-                                        wasEnabled ? 1 : 0, 1, !wasEnabled);
     }
 
-    if ( newUiCapture )
-        yw->FinishGemNotificationCapture(true);
-
     yw_arg159 v14;
-    if ( newUiCapture )
-        v14.txt = yw->BuildNewGemNotificationLogText();
-    if ( v14.txt.empty() )
-        v14.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
+    v14.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
     v14.unit = 0;
     v14.Priority = 48;
 
@@ -1879,15 +1829,8 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
     _upgradeBuildId = 0;
     _upgradeWeaponId = 0;
 
-    bool newUiCapture = System::IniConf::GameGemUnlockNewUI.Get<bool>();
-
     _upgradeId = gemid;
     _upgradeTimeStamp = _timeStamp;
-
-    if ( newUiCapture )
-        BeginGemNotificationCapture();
-    else
-        ClearGemNotificationCapture();
 
     TMapGem &gem = _techUpgrades[gemid];
     bool parseSuccessful = false;
@@ -1916,16 +1859,10 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
             ResolveStatusProfileLinks();
     }
 
-    if ( newUiCapture )
-        FinishGemNotificationCapture(parseSuccessful);
-
     yw_arg159 arg159;
     arg159.unit = nullptr;
     arg159.Priority = 48;
-    if ( newUiCapture )
-        arg159.txt = BuildNewGemNotificationLogText();
-    if ( arg159.txt.empty() )
-        arg159.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
+    arg159.txt = Locale::Text::Feedback(Locale::FEEDBACK_TECHUP);
 
     if ( gem.Type )
         arg159.MsgID = World::Log::GetUpgradeLogID(gem.Type);
@@ -3744,7 +3681,6 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _upgradeVehicleId = 0;
     _upgradeWeaponId = 0;
     _upgradeBuildId = 0;
-    ClearGemNotificationCapture();
     _gemUnlockSoundAttemptedPath.clear();
 }
 

@@ -1,4 +1,4 @@
-// Gem notifications, gem unlock and map marker sounds.
+// Gem unlock popup (visibility, duration), unlock sound and map marker sound.
 #include <inttypes.h>
 #include <string.h>
 #include <math.h>
@@ -38,26 +38,7 @@
 uint32_t yw_GetGemUnlockDuration()
 {
     return yw_ReadNonNegativeDuration(System::IniConf::GameGemUnlockDuration,
-                                      GEM_NEW_UI_DEFAULT_DURATION_MS);
-}
-
-void NC_STACK_ypaworld::BeginGemNotificationCapture()
-{
-    _gemNotificationEntries.clear();
-    _gemNotificationActionOrder = 0;
-    _gemNotificationCaptureActive = true;
-}
-
-void NC_STACK_ypaworld::ClearGemNotificationCapture()
-{
-    _gemNotificationCaptureActive = false;
-    _gemNotificationActionOrder = 0;
-    _gemNotificationEntries.clear();
-}
-
-bool NC_STACK_ypaworld::IsGemNotificationCaptureActive() const
-{
-    return _gemNotificationCaptureActive;
+                                      GEM_UNLOCK_DEFAULT_DURATION_MS);
 }
 
 uint32_t NC_STACK_ypaworld::GetGemUnlockDuration() const
@@ -65,111 +46,68 @@ uint32_t NC_STACK_ypaworld::GetGemUnlockDuration() const
     return yw_GetGemUnlockDuration();
 }
 
-bool NC_STACK_ypaworld::HasActiveNewGemNotification() const
+float NC_STACK_ypaworld::GetGemPopupY() const
 {
-    const uint32_t durationMs = GetGemUnlockDuration();
-    return durationMs > 0 &&
-           System::IniConf::GameGemUnlockNewUI.Get<bool>() &&
-           _upgradeId != -1 &&
-           GetNewGemNotificationElapsedTime() < durationMs;
-}
-
-uint32_t NC_STACK_ypaworld::GetNewGemNotificationElapsedTime() const
-{
-    return (uint32_t)_timeStamp - _upgradeTimeStamp;
-}
-
-void NC_STACK_ypaworld::DismissNewGemNotification()
-{
-    if ( !HasActiveNewGemNotification() )
-        return;
-
-    _upgradeTimeStamp = (uint32_t)_timeStamp - GetGemUnlockDuration();
-}
-
-bool NC_STACK_ypaworld::IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const
-{
-    return bact && bact == _userUnit && bact->_bact_type != BACT_TYPES_UFO &&
-           HasActiveNewGemNotification();
-}
-
-void NC_STACK_ypaworld::RecordGemNotificationChange(uint8_t targetKind, int32_t targetProtoId,
-                                                     uint8_t changeKind, int32_t previousRawValue,
-                                                     int32_t newRawValue, bool newlyEnabled)
-{
-    if ( !_gemNotificationCaptureActive )
-        return;
-
-    if ( (targetKind == TGemNotificationEntry::TARGET_VEHICLE &&
-          (targetProtoId < 0 || (size_t)targetProtoId >= _vhclProtos.size())) ||
-         (targetKind == TGemNotificationEntry::TARGET_WEAPON &&
-          (targetProtoId < 0 || (size_t)targetProtoId >= _weaponProtos.size())) ||
-         (targetKind == TGemNotificationEntry::TARGET_BUILDING &&
-          (targetProtoId < 0 || (size_t)targetProtoId >= _buildProtos.size())) )
-        return;
-
-    TGemNotificationEntry entry;
-    entry.TargetKind = targetKind;
-    entry.ChangeKind = changeKind;
-    entry.TargetProtoId = targetProtoId;
-    entry.PreviousRawValue = previousRawValue;
-    entry.NewRawValue = newRawValue;
-    entry.ActionOrder = _gemNotificationActionOrder++;
-    entry.NewlyEnabled = changeKind == TGemNotificationEntry::CHANGE_ENABLE && newlyEnabled;
-    entry.AlreadyUnlocked = (changeKind == TGemNotificationEntry::CHANGE_ENABLE &&
-                             previousRawValue != 0 && newRawValue != 0);
-    _gemNotificationEntries.push_back(entry);
-}
-
-void NC_STACK_ypaworld::FinishGemNotificationCapture(bool successful)
-{
-    _gemNotificationCaptureActive = false;
-
-    if ( !successful )
+    // Missing, non numeric or non finite values keep the vanilla position.
+    constexpr float vanillaY = -0.5f;
+    const std::string value = System::IniConf::GameGemUnlockPopupY.Get<std::string>();
+    try
     {
-        _gemNotificationEntries.clear();
-        return;
+        size_t pos = 0;
+        const float y = std::stof(value, &pos);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos || !std::isfinite(y) )
+            return vanillaY;
+
+        return std::max(-1.0f, std::min(y, 1.0f));
     }
-
-    for (TGemNotificationEntry &entry : _gemNotificationEntries)
+    catch (...)
     {
-        if ( entry.TargetKind != TGemNotificationEntry::TARGET_WEAPON )
-            continue;
+        return vanillaY;
+    }
+}
 
-        std::vector<int32_t> candidates;
-        for (const TGemNotificationEntry &other : _gemNotificationEntries)
+bool NC_STACK_ypaworld::IsGemPopupVisible(int32_t *outVehicleId) const
+{
+    if ( _upgradeId == -1 )
+        return false;
+
+    // With the optional slow motion the game clock runs slower, so the popup
+    // lifetime shrinks by the same factor to last the configured real time.
+    uint32_t duration = GetGemUnlockDuration();
+    if ( yw_IsGemUnlockSlowMotionEnabled() )
+        duration = (uint32_t)(duration * DEBUG_GAMEPLAY_TIME_SCALE);
+
+    if ( (uint32_t)_timeStamp - _upgradeTimeStamp >= duration )
+        return false;
+
+    int32_t vehicleId = _upgradeVehicleId;
+    if ( !vehicleId && _upgradeWeaponId )
+    {
+        for (size_t i = 0; i < _vhclProtos.size(); i++)
         {
-            if ( other.TargetKind != TGemNotificationEntry::TARGET_VEHICLE ||
-                 other.TargetProtoId < 0 ||
-                 (size_t)other.TargetProtoId >= _vhclProtos.size() ||
-                 !yw_VehicleReferencesWeapon(_vhclProtos[other.TargetProtoId], entry.TargetProtoId) )
-                continue;
-
-            if ( std::find(candidates.begin(), candidates.end(), other.TargetProtoId) == candidates.end() )
-                candidates.push_back(other.TargetProtoId);
-        }
-
-        if ( candidates.size() == 1 )
-        {
-            entry.RelatedVehicleId = candidates.front();
-            continue;
-        }
-
-        if ( !candidates.empty() )
-            continue;
-
-        for (size_t vehicleId = 0; vehicleId < _vhclProtos.size(); ++vehicleId)
-        {
-            if ( yw_VehicleReferencesWeapon(_vhclProtos[vehicleId], entry.TargetProtoId) )
-                candidates.push_back(vehicleId);
-
-            if ( candidates.size() > 1 )
+            if ( _vhclProtos[i].weapon == _upgradeWeaponId )
+            {
+                vehicleId = (int32_t)i;
                 break;
+            }
         }
 
-        if ( candidates.size() == 1 )
-            entry.RelatedVehicleId = candidates.front();
+        if ( !vehicleId )
+            return false;
     }
+
+    if ( !vehicleId && !_upgradeBuildId )
+        return false;
+
+    if ( outVehicleId )
+        *outVehicleId = vehicleId;
+
+    return true;
+}
+
+bool yw_IsGemUnlockSlowMotionEnabled()
+{
+    return System::IniConf::GameGemUnlockSlowMotion.Get<bool>();
 }
 
 void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
@@ -188,6 +126,7 @@ void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
     NC_STACK_sample *&sample = _GameShell->samples1[soundId];
     TSoundSource &source = _GameShell->samples1_info.Sounds[soundId];
 
+    // Cache the attempted path so an unloadable file logs only once.
     if ( _gemUnlockSoundAttemptedPath != path )
     {
         if ( sample )
@@ -200,13 +139,22 @@ void NC_STACK_ypaworld::PlayConfiguredGemUnlockSound()
         }
 
         _gemUnlockSoundAttemptedPath = path;
+
+        // Canonical value is Data/...; the loader root is data:, so drop the Data/ prefix.
+        std::string normalized;
+        if ( !uaNormalizeDataAssetPath(path, &normalized, true) )
+        {
+            ypa_log_out("Warning: Invalid GEM unlock sample path %s. GEM unlock sound disabled.\n", path.c_str());
+            return;
+        }
+
         std::string previousRsrc = Common::Env.SetPrefix("rsrc", "data:");
-        NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, path}});
+        NC_STACK_wav *wav = Nucleus::CInit<NC_STACK_wav>({{NC_STACK_rsrc::RSRC_ATT_NAME, normalized.substr(5)}});
         Common::Env.SetPrefix("rsrc", previousRsrc);
 
         if ( !wav )
         {
-            ypa_log_out("Warning: Could not load GEM unlock sample %s. Using vanilla GEM audio only.\n", path.c_str());
+            ypa_log_out("Warning: Could not load GEM unlock sample %s. GEM unlock sound disabled.\n", path.c_str());
             return;
         }
 

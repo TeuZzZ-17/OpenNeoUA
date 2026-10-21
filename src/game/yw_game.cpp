@@ -761,7 +761,6 @@ void NC_STACK_ypaworld::yw_InitTechUpgradeBuildings()
     _upgradeVehicleId = 0;
     _upgradeWeaponId = 0;
     _upgradeId = -1;
-    ClearGemNotificationCapture();
     _gemUnlockSoundAttemptedPath.clear();
 
     for (size_t i = 0; i < _techUpgrades.size(); i++)

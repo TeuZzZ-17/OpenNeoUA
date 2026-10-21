@@ -1494,51 +1494,6 @@ struct TMapGem
     int Type = 0;
 };
 
-struct TGemNotificationEntry
-{
-    enum TARGET_KIND
-    {
-        TARGET_VEHICLE = 0,
-        TARGET_WEAPON,
-        TARGET_BUILDING
-    };
-
-    enum CHANGE_KIND
-    {
-        CHANGE_ENABLE = 0,
-        CHANGE_ENERGY,
-        CHANGE_SHIELD,
-        CHANGE_RADAR,
-        CHANGE_NUM_WEAPONS,
-        CHANGE_SHOT_TIME,
-        CHANGE_SHOT_TIME_USER,
-        CHANGE_ENERGY_HELI,
-        CHANGE_ENERGY_TANK,
-        CHANGE_ENERGY_FLYER,
-        CHANGE_ENERGY_ROBO,
-        // Keep every pre-existing numeric kind stable; new kinds are appended.
-        CHANGE_UNHIDE_RADAR,
-        CHANGE_ENERGY_PLANE,
-        CHANGE_ENERGY_GLIDER,
-        CHANGE_ENERGY_ZEPPELIN,
-        CHANGE_ENERGY_UFO,
-        CHANGE_ENERGY_CAR,
-        CHANGE_ENERGY_GUN,
-        CHANGE_ENERGY_CRUISER,
-        CHANGE_MAX_ACTIVE_AT_ONCE
-    };
-
-    uint8_t TargetKind = TARGET_VEHICLE;
-    uint8_t ChangeKind = CHANGE_ENABLE;
-    int32_t TargetProtoId = 0;
-    int32_t RelatedVehicleId = 0;
-    int32_t PreviousRawValue = 0;
-    int32_t NewRawValue = 0;
-    uint32_t ActionOrder = 0;
-    bool NewlyEnabled = false;
-    bool AlreadyUnlocked = false;
-};
-
 struct TBkgPicInfo
 {
     Common::Point Size;
@@ -3013,19 +2968,11 @@ public:
     std::string ResolveGameplayBuildingName(uint32_t id, bool net = false) const;
     std::string ResolveGameplayBuildingName(const World::TBuildingProto &proto, bool net = false) const;
 
-    void BeginGemNotificationCapture();
-    void FinishGemNotificationCapture(bool successful);
-    void ClearGemNotificationCapture();
-    bool IsGemNotificationCaptureActive() const;
-    bool HasActiveNewGemNotification() const;
     uint32_t GetGemUnlockDuration() const;
-    uint32_t GetNewGemNotificationElapsedTime() const;
-    void DismissNewGemNotification();
-    std::string BuildNewGemNotificationLogText();
+    float GetGemPopupY() const;
     void StartRoboDeathTimeScale(const NC_STACK_ypabact *destroyedRobo);
     bool HasActiveRoboDeathTimeScale() const;
     int32_t GetGameplayRenderTimeStamp() const;
-    bool IsNewGemNotificationBlockingPlayerWeapons(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintEnabledFor(const NC_STACK_ypabact *bact) const;
     bool IsPlayerSprintActiveFor(const NC_STACK_ypabact *bact) const;
     // True only when the configured Sprint hotkey currently belongs to a
@@ -3036,10 +2983,9 @@ public:
     float GetPlayerSprintPitchScale(const NC_STACK_ypabact *bact) const;
     void UpdatePlayerSprint(TInputState *inpt, int32_t frameTime);
     void ResetPlayerSprint();
-    void RecordGemNotificationChange(uint8_t targetKind, int32_t targetProtoId,
-                                     uint8_t changeKind, int32_t previousRawValue,
-                                     int32_t newRawValue, bool newlyEnabled = false);
     void PlayConfiguredGemUnlockSound();
+    // True while the classic GEM popup is on screen; outVehicleId = vehicle it shows (0 = building).
+    bool IsGemPopupVisible(int32_t *outVehicleId = nullptr) const;
     void PlayConfiguredMapMarkerSound();
     void StartAmbientLevelSound(const TLevelDescription &mapp);
     void UpdateAmbientLevelSound();
@@ -3537,9 +3483,6 @@ public:
     int32_t _upgradeVehicleId = 0;
     int32_t _upgradeWeaponId = 0;
     int32_t _upgradeBuildId = 0;
-    std::vector<TGemNotificationEntry> _gemNotificationEntries;
-    bool _gemNotificationCaptureActive = false;
-    uint32_t _gemNotificationActionOrder = 0;
     std::string _gemUnlockSoundAttemptedPath;
     std::string _mapMarkerSoundAttemptedPath;
 

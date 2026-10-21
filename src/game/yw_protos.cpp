@@ -553,19 +553,3 @@ bool NC_STACK_ypaworld::PrepareSuperItemProfile(int32_t id, World::TSuperItemPro
     return true;
 }
 
-bool yw_VehicleReferencesWeapon(const World::TVhclProto &vehicle, int32_t weaponId)
-{
-    if ( vehicle.weapon == weaponId )
-        return true;
-
-    for (int16_t extraWeaponId : vehicle.extra_weapons)
-    {
-        if ( extraWeaponId == weaponId )
-            return true;
-    }
-
-    if ( vehicle.mgun_set && vehicle.mgun == weaponId )
-        return true;
-
-    return vehicle.proximity_defense_enable && vehicle.proximity_defense_weapon == weaponId;
-}
