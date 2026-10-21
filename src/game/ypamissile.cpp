@@ -1739,7 +1739,7 @@ void NC_STACK_ypamissile::Impact()
 
     // F10 shows the one shared blast radius used by all target categories.
     if ( _world && _world->_showCollDebug && !_isArtilleryShellProjectile )
-        _world->DebugAddBlastRing(_position, _mislBlastRadius, 255, 140, 0);
+        _world->DebugAddBlastRing(_position, _mislBlastRadius, 255, 40, 40);
 
     _mislDirectHitUnits.clear();
     _mislDirectPushRecipientGids.clear();

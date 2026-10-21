@@ -1317,16 +1317,9 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         if ((ring.pos - camPos).length() > RING_MAX_DIST)
             continue;
 
-        if ( ring.sphere3d )
-        {
-            drawRing(ring.pos, ring.radius, 0, ring.r, ring.g, ring.b);
-            drawRing(ring.pos, ring.radius, 1, ring.r, ring.g, ring.b);
-            drawRing(ring.pos, ring.radius, 2, ring.r, ring.g, ring.b);
-        }
-        else
-        {
-            drawFlatRing(ring.pos, ring.radius, ring.r, ring.g, ring.b);
-        }
+        drawRing(ring.pos, ring.radius, 0, ring.r, ring.g, ring.b);
+        drawRing(ring.pos, ring.radius, 1, ring.r, ring.g, ring.b);
+        drawRing(ring.pos, ring.radius, 2, ring.r, ring.g, ring.b);
     }
 
     FontUA::reset_tileset(&labels, 15);
@@ -1361,7 +1354,6 @@ void NC_STACK_ypaworld::DebugAddBlastRing(const vec3d &pos, float radius, uint8_
     ring.r = r;
     ring.g = g;
     ring.b = b;
-    ring.sphere3d = false;
     ring.createdStamp = _timeStamp;
     ring.expireStamp = _timeStamp + 1536; // ~1.5s (1024 ticks = 1s)
 
@@ -1382,7 +1374,6 @@ void NC_STACK_ypaworld::DebugAddAtDeathSphere(const vec3d &pos, float radius)
     ring.r = 185;
     ring.g = 80;
     ring.b = 255;
-    ring.sphere3d = true;
     ring.createdStamp = _timeStamp;
     ring.expireStamp = _timeStamp + 3072; // ~3.0s (1024 ticks = 1s)
 
