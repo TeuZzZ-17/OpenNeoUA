@@ -3384,7 +3384,7 @@ public:
     };
     std::vector<DebugDpsSample> _debugDpsSamples;
 
-    // F9 debug: transient blast impact rings. Recorded on weapon detonation,
+    // F9 debug: transient debug spheres (blast area, at-death volume). Recorded on weapon detonation,
     // fade out after a short time. Only populated while _showCollDebug is on.
     struct DebugBlastRing
     {
@@ -3393,7 +3393,6 @@ public:
         uint8_t r            = 255;
         uint8_t g            = 255;
         uint8_t b            = 255;
-        bool    sphere3d     = false;
         int32_t createdStamp = 0;
         int32_t expireStamp  = 0;
     };
