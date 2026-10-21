@@ -34,6 +34,14 @@ bool ypabact_TrySolveArcGrenadeDirection(
     const vec3d &launchPos, const vec3d &targetPos,
     const World::TWeapProto &wproto, vec3d *outDirection);
 
+// Player aim of an Arc Grenade. Casts a ray from the
+// muzzle along aimDir and finds the launch direction that lands the shell on the
+// terrain point it meets. Sky, or a point out of reach, gives the 45 degree
+// maximum range along the same heading.
+bool ypabact_ComputeArcGrenadeGroundAim(
+    NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
+    const vec3d &muzzle, const vec3d &aimDir, vec3d *outLaunchDir);
+
 
 
 

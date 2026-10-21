@@ -1455,6 +1455,8 @@ struct TWeapProto
     // launch as an absolute elevation above the world horizontal plane. Gravity
     // is then applied every frame by the dedicated Arc Grenade runtime. A missing,
     // zero or invalid gravity uses the engine-standard 9.80665 fallback.
+    // The player aims like a mortar: the shell lands where the crosshair meets the
+    // terrain, so grenade_arc_angle only picks between the high and the low arc.
     float grenade_arc_angle = 0.0f;
     float grenade_arc_gravity = 0.0f;
     // OpenNeoUA custom: dedicated artillery shell barrage weapon ("model = artillery_shell").

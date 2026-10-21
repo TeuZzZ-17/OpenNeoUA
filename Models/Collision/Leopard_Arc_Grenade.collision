@@ -1,0 +1,109 @@
+begin_collision_shape
+version = 1
+source = Leopard_Arc_Grenade
+source_hash = 67b3f6ed44e67ed8373e68b7f7e6476579bb516fcc3baeaab8df95305b3918cf
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"","components":["Scafo","Piattaforma","Canna","Collare"],"disabled_hulls":[]}
+begin_hull
+vertex = -21_-1_42
+vertex = -21_-1_-32
+vertex = -21_8_-21
+vertex = -21_8_32
+vertex = 21_-1_-32
+vertex = 21_8_-21
+vertex = 21_-1_42
+vertex = 21_8_32
+vertex = -16_-9_26
+vertex = -16_-9_-16
+vertex = 16_-9_-16
+vertex = 16_-9_26
+face = 3_2_1
+face = 3_1_0
+face = 5_1_2
+face = 5_4_1
+face = 5_2_3
+face = 5_3_7
+face = 9_0_1
+face = 9_8_0
+face = 6_4_5
+face = 6_5_7
+face = 6_3_0
+face = 6_7_3
+face = 6_0_8
+face = 6_8_11
+face = 10_1_4
+face = 10_9_1
+face = 10_4_6
+face = 10_6_11
+face = 10_8_9
+face = 10_11_8
+end
+begin_hull
+vertex = -10_-9_-12
+vertex = 10_-9_-12
+vertex = 10_-9_8
+vertex = -10_-9_8
+vertex = -8_-13_-10
+vertex = 8_-13_-10
+vertex = 8_-13_6
+vertex = -8_-13_6
+face = 3_2_1
+face = 3_1_0
+face = 5_0_1
+face = 5_4_0
+face = 7_3_0
+face = 7_0_4
+face = 6_1_2
+face = 6_5_1
+face = 6_2_3
+face = 6_3_7
+face = 6_4_5
+face = 6_7_4
+end
+begin_hull
+vertex = -4_-8.8646717071533203_-3.5069725513458252
+vertex = 4_-8.8646717071533203_-3.5069725513458252
+vertex = 4_-14.006972312927246_-9.6353282928466797
+vertex = -4_-14.006972312927246_-9.6353282928466797
+vertex = -4_-31.846004486083984_15.776655197143555
+vertex = 4_-31.846004486083984_15.776655197143555
+vertex = 4_-36.988304138183594_9.6483001708984375
+vertex = -4_-36.988304138183594_9.6483001708984375
+face = 5_6_2
+face = 5_2_1
+face = 5_1_0
+face = 5_0_4
+face = 3_1_2
+face = 3_0_1
+face = 7_6_5
+face = 7_5_4
+face = 7_2_6
+face = 7_3_2
+face = 7_4_0
+face = 7_0_3
+end
+begin_hull
+vertex = -5.8000001907348633_-23.794588088989258_11.370447158813477
+vertex = 5.8000001907348633_-23.794588088989258_11.370447158813477
+vertex = 5.8000001907348633_-31.250923156738281_2.4843316078186035
+vertex = -5.8000001907348633_-31.250923156738281_2.4843316078186035
+vertex = -5.8000001907348633_-28.390853881835938_15.2271728515625
+vertex = 5.8000001907348633_-28.390853881835938_15.2271728515625
+vertex = 5.8000001907348633_-35.847190856933594_6.341057300567627
+vertex = -5.8000001907348633_-35.847190856933594_6.341057300567627
+face = 3_1_2
+face = 3_0_1
+face = 5_2_1
+face = 5_6_2
+face = 5_1_0
+face = 5_0_4
+face = 7_3_2
+face = 7_2_6
+face = 7_6_5
+face = 7_5_4
+face = 7_0_3
+face = 7_4_0
+end
+end
