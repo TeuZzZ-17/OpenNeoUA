@@ -3484,10 +3484,14 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         const int increment = ParsePositiveIntOrZero(p2);
         if ( increment > 0 && _vhcl->max_active_at_once > 0 )
         {
+            const int previousLimit = _vhcl->max_active_at_once;
             if ( _vhcl->max_active_at_once > std::numeric_limits<int>::max() - increment )
                 _vhcl->max_active_at_once = std::numeric_limits<int>::max();
             else
                 _vhcl->max_active_at_once += increment;
+
+            if ( _isModify && _vhcl->max_active_at_once != previousLimit )
+                _o._upgradeMaxActiveVehicleId = _vhclID;
         }
     }
     else if ( !StriCmp(p1, "vp_normal") )

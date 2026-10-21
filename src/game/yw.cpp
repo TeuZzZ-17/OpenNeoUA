@@ -1742,6 +1742,7 @@ void sub_47C29C(NC_STACK_ypaworld *yw, cellArea *cell, int a3)
     yw->_upgradeVehicleId = a3a;
     yw->_upgradeWeaponId = 0;
     yw->_upgradeBuildId = a4;
+    yw->_upgradeMaxActiveVehicleId = 0;
 
     if ( a3a )
     {
@@ -1827,6 +1828,7 @@ void NC_STACK_ypaworld::yw_ActivateWunderstein(cellArea *cell, int gemid)
 {
     _upgradeVehicleId = 0;
     _upgradeBuildId = 0;
+    _upgradeMaxActiveVehicleId = 0;
     _upgradeWeaponId = 0;
 
     _upgradeId = gemid;
@@ -3681,6 +3683,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _upgradeVehicleId = 0;
     _upgradeWeaponId = 0;
     _upgradeBuildId = 0;
+    _upgradeMaxActiveVehicleId = 0;
     _gemUnlockSoundAttemptedPath.clear();
 }
 

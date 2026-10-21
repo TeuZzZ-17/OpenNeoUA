@@ -758,6 +758,7 @@ void NC_STACK_ypaworld::yw_InitTechUpgradeBuildings()
 {
     _upgradeTimeStamp = 0;
     _upgradeBuildId = 0;
+    _upgradeMaxActiveVehicleId = 0;
     _upgradeVehicleId = 0;
     _upgradeWeaponId = 0;
     _upgradeId = -1;

@@ -3483,6 +3483,8 @@ public:
     int32_t _upgradeVehicleId = 0;
     int32_t _upgradeWeaponId = 0;
     int32_t _upgradeBuildId = 0;
+    // Vehicle whose max_active_at_once the last GEM raised (0 = none): only its popup row blinks.
+    int32_t _upgradeMaxActiveVehicleId = 0;
     std::string _gemUnlockSoundAttemptedPath;
     std::string _mapMarkerSoundAttemptedPath;
 
