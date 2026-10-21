@@ -2,6 +2,7 @@
 // selection, and the shorter game-clock lifetime used by the optional slow motion.
 #include "game/yw.h"
 #include "system/inivals.h"
+#include "../parsers.h"
 #include <cstdio>
 #undef main
 int main()
@@ -61,6 +62,24 @@ int main()
     System::IniConf::GameGemUnlockPopupY.Value = std::string("abc");
     check(world.GetGemPopupY() == -0.5f, "invalid popup position keeps vanilla");
     System::IniConf::GameGemUnlockPopupY.Value = std::string("-0.5");
+
+    // Only a GEM that raises max_active_at_once marks its vehicle (its popup row blinks).
+    {
+        NC_STACK_ypaworld w2;
+        w2._vhclProtos.resize(3);
+        ScriptParser::HandlersList handlers;
+        handlers.push_back(new World::Parsers::VhclProtoParser(&w2));
+        const bool parsed = ScriptParser::ParseStringList(
+            Engine::StringList{"new_vehicle 1", "max_active_at_once = 5", "end",
+                               "modify_vehicle 1", "add_energy = 100", "end"},
+            handlers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+        check(parsed && w2._upgradeMaxActiveVehicleId == 0, "other upgrades do not mark the limit");
+        ScriptParser::ParseStringList(
+            Engine::StringList{"modify_vehicle 1", "add_max_active_at_once = 2", "end"},
+            handlers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+        check(w2._upgradeMaxActiveVehicleId == 1 && w2._vhclProtos[1].max_active_at_once == 7,
+              "limit upgrade marks the vehicle");
+    }
 
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);
     return failures ? 1 : 0;

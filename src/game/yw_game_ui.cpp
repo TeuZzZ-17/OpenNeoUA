@@ -8362,8 +8362,10 @@ int sb_0x4d7c08__sub0__sub0__sub0(NC_STACK_ypaworld *yw)
         // the name is. Only vehicles that define max_active_at_once get it, so
         // vanilla data keeps the original popup. The limit is off in network games.
         const int maxActive = (size_t)v6 < yw->_vhclProtos.size() ? yw->_vhclProtos[v6].max_active_at_once : 0;
-        const bool nameShown = !(a8 & 8) || ((yw->_timeStamp / 200) & 1);
-        if ( maxActive > 0 && !yw->_isNetGame && nameShown )
+        // The row blinks only when this GEM raised that limit; otherwise it stays steady.
+        const bool limitRaised = yw->_upgradeMaxActiveVehicleId == v6;
+        const bool rowShown = !limitRaised || ((yw->_timeStamp / 200) & 1);
+        if ( maxActive > 0 && !yw->_isNetGame && rowShown )
             yw_RenderInfoVehicleName(yw, wis, &buf,
                                      Locale::Text::OpenUA(Locale::OUA_HUD_MAX_UNITS) + " " + std::to_string(maxActive),
                                      0.0, popupY + wis->field_92 * 14.5f);
