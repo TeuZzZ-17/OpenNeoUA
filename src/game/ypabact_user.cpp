@@ -104,7 +104,6 @@ void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg)
     // could duplicate continuous/laser requests. The suicide-handoff latch shares
     // this existing filtered-input path instead of creating a second User_layer.
     const bool suppressWeapons =
-        world->IsNewGemNotificationBlockingPlayerWeapons(bact) ||
         bact->IsActiveDebuffStunning(false) ||
         suppressSuicideHandoffFire;
     if ( !suppressWeapons )

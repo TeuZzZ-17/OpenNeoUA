@@ -169,9 +169,6 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     if ( _world && _world->IsSpectatorBact(this) )
         return 0;
 
-    if ( _world && _world->IsNewGemNotificationBlockingPlayerWeapons(this) )
-        return 0;
-
     NC_STACK_ypamissile *wobj = nullptr;
 
     int slots[4];
@@ -664,10 +661,8 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         // A launch flash belongs to the vehicle fire event, not each projectile.
         // The first successful projectile supplies the final muzzle transform.
         if ( i == 0 )
-            _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
-                                         wproto.visual_base.launch,
-                                         wobj->_position, wobj->_rotation, 1000,
-                                         1.0, World::TVisualTint(), wproto.launch_scale);
+            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
+                                  &wproto.chain_fx, &wobj->_position, &wobj->_rotation);
 
         /** Missiles will be stored in another list
          *  so kidref will be not attached to anything.
@@ -1139,9 +1134,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
         return 0;
 
     if ( _world && _world->IsSpectatorBact(this) )
-        return 0;
-
-    if ( _world && _world->IsNewGemNotificationBlockingPlayerWeapons(this) )
         return 0;
 
     int a5 = 0;

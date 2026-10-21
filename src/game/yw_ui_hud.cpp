@@ -1315,27 +1315,6 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
     }
 }
 
-std::string NC_STACK_ypaworld::BuildNewGemNotificationLogText()
-{
-    std::vector<GemNotificationLine> lines;
-    yw_BuildNewGemNotificationLines(this, &lines);
-
-    // Reuse the exact visible strings selected for the center-screen popup.
-    // Spacer-only rows are layout, not text, so they are not added to the info log.
-    std::string text;
-    for (const GemNotificationLine &line : lines)
-    {
-        if ( line.Text.empty() )
-            continue;
-
-        if ( !text.empty() )
-            text += '\n';
-        text += line.Text;
-    }
-
-    return text;
-}
-
 void wis_color2(NC_STACK_ypaworld *yw, float x1, float y1, float x2, float y2, SDL_Color *out1, SDL_Color *out2)
 {
     float v7 = yw->_hud.field_86 * 6.28;
@@ -2326,7 +2305,6 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
     UAskeleton::Data *wpn_wure = nullptr;
     UAskeleton::Data *wpn_wure2 = nullptr;
 
-    const bool hideWireframes = yw->HasActiveNewGemNotification();
     float v86 = (yw->_timeStamp - wis->field_76 - 350) / 200.0;
 
     if ( v86 > 0.0 )
@@ -2387,16 +2365,19 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
 
         // Alternative View keeps only the vehicle info wireframe rendered by
         // yw_RenderInfoVehicleWire(). Hide the authored visor/weapon overlays.
-        const bool hideAlternativeViewHudWireframes =
-            yw->_userUnit && yw->_userUnit->IsAlternativeViewActive();
+        // The classic GEM popup is centered where the reticle is, so every
+        // reticle overlay is hidden while it is on screen. The unit panel stays.
+        const bool hideReticleOverlays =
+            (yw->_userUnit && yw->_userUnit->IsAlternativeViewActive()) ||
+            yw->IsGemPopupVisible();
 
-        if ( !hideWireframes && !hideAlternativeViewHudWireframes && hud_wure )
+        if ( !hideReticleOverlays && hud_wure )
         {
             SDL_Color v14 = yw->GetColor(34);
             yw_RenderVector2D(yw, hud_wure, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.99, 0.99, v14, nullptr, nullptr, true);
         }
 
-        if ( !hideWireframes && !hideAlternativeViewHudWireframes && yw->_guiVisor.field_0 )
+        if ( !hideReticleOverlays && yw->_guiVisor.field_0 )
         {
             if ( mg_wure )
             {
@@ -2428,7 +2409,7 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
             }
         }
 
-        if ( !hideWireframes && !hideAlternativeViewHudWireframes && yw->_guiVisor.field_4 )
+        if ( !hideReticleOverlays && yw->_guiVisor.field_4 )
         {
             bool locked = yw->_guiVisor.field_18 != nullptr;
             const bool lockedTargetVisible = !locked ||

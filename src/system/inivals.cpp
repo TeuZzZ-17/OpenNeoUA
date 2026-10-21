@@ -343,16 +343,19 @@ Common::Ini::Key IniConf::GameEliteUnitMaxGlowIntensity("game.elite_unit_max_glo
 Common::Ini::Key IniConf::GameEliteUnitGlowTint("game.elite_unit_glow_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
 Common::Ini::Key IniConf::GameEliteUnitGlowPulseSeconds("game.elite_unit_glow_pulse_seconds", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
-Common::Ini::Key IniConf::GameGemUnlockNewUI("game.gem_unlock_new_ui", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
 // OpenNeoUA: optional global mission ambience. A level may override both the
 // sample/folder and its volume through begin_level. A directory selects one
 // supported audio file randomly at each level start. Empty disables ambience.
 Common::Ini::Key IniConf::GameAmbientSound("game.ambient_sound", Common::Ini::KT_STRING, std::string());
 Common::Ini::Key IniConf::GameAmbientSoundVolume("game.ambient_sound_volume", Common::Ini::KT_WORD, std::string("100"));
-// OpenNeoUA: display lifetime of the new GEM-unlock popup only. GEM unlocks no
-// longer alter gameplay time. Missing/invalid values preserve 8000 ms.
-Common::Ini::Key IniConf::GameGemUnlockDuration("game.gem_unlock_duration", Common::Ini::KT_WORD, std::string("8000"));
+// OpenNeoUA: optional sound played when a GEM is unlocked (Data/... path). Empty = silent, as vanilla.
+Common::Ini::Key IniConf::GameGemUnlockSound("game.gem_unlock_sound", Common::Ini::KT_STRING, std::string());
+// OpenNeoUA: display lifetime of the GEM-unlock popup. Missing/invalid values preserve the vanilla 10000 ms.
+Common::Ini::Key IniConf::GameGemUnlockDuration("game.gem_unlock_duration", Common::Ini::KT_WORD, std::string("10000"));
+// OpenNeoUA: 1 slows gameplay (debug slow-motion scale) while the GEM popup is on screen. Default 0 = vanilla.
+Common::Ini::Key IniConf::GameGemUnlockSlowMotion("game.gem_unlock_slow_motion", Common::Ini::KT_BOOL, false);
+// OpenNeoUA: vertical anchor of the GEM popup, -1 = top edge, 0 = center, 1 = bottom edge. Default: vanilla -0.5.
+Common::Ini::Key IniConf::GameGemUnlockPopupY("game.gem_unlock_popup_y", Common::Ini::KT_WORD, std::string("-0.5"));
 // OpenNeoUA: Host Station destruction slowdown. Defaults disable the feature and
 // preserve existing gameplay when scale/duration are absent. A zero maximum
 // distance keeps the previous unlimited-range behavior.
@@ -709,11 +712,12 @@ void IniConf::Init()
         , &GameEliteUnitGlowTint
         , &GameEliteUnitGlowPulseSeconds
         , &GameHandBrakeSound
-        , &GameGemUnlockNewUI
-        , &GameGemUnlockSound
         , &GameAmbientSound
         , &GameAmbientSoundVolume
+        , &GameGemUnlockSound
         , &GameGemUnlockDuration
+        , &GameGemUnlockSlowMotion
+        , &GameGemUnlockPopupY
         , &GameRoboDeathTimeScale
         , &GameRoboDeathTimeScaleDuration
         , &GameRoboDeathTimeScaleMaxDistance

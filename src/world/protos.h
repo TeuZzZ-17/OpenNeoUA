@@ -86,7 +86,6 @@ struct TExternalVisualSet
     std::string wait;
     std::string megadeth;
     std::string genesis;
-    std::string launch;
 };
 
 // Shared authored quantity for parameters that accept either an absolute value
@@ -312,7 +311,8 @@ struct TChainFXConfig
         TRIGGER_AIR_DESTROYED,
         TRIGGER_DESTROYED,
         TRIGGER_DETONATE,
-        TRIGGER_IMPACT_WORLD
+        TRIGGER_IMPACT_WORLD,
+        TRIGGER_LAUNCH
     };
 
     uint8_t mode = MODE_VISUAL;
@@ -1246,10 +1246,8 @@ struct TWeapProto
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
-    int16_t vp_launch = 0;
     TExternalVisualSet visual_3ds;
     TExternalVisualSet visual_base;
-    vec3d launch_scale = vec3d(1.0, 1.0, 1.0);
     vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
     vec3d visual_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d visual_spin = vec3d(0.0, 0.0, 0.0);

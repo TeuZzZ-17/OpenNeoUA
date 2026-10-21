@@ -1569,10 +1569,11 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         }
 
         if ( !beamWasActive )
-            _world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
-                                         wproto.visual_base.launch,
-                                         beam.start, ypabact_LaserRotationFromDir(dir, _rotation), 90,
-                                         1.0, World::TVisualTint(), wproto.launch_scale);
+        {
+            const mat3x3 launchRot = ypabact_LaserRotationFromDir(dir, _rotation);
+            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
+                                  &wproto.chain_fx, &beam.start, &launchRot);
+        }
 
         if ( spawnBeamVPs )
             ypabact_SpawnLaserBeamVisuals(this, wproto, beam.start, beam.end);
@@ -1894,10 +1895,11 @@ NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter,
     beam.has_contact = target != nullptr || useWorldHit;
 
     if ( !beamWasActive )
-        world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
-                                    wproto.visual_base.launch,
-                                    beam.start, ypabact_LaserRotationFromDir(down, shooter->_rotation), 90,
-                                    1.0, World::TVisualTint(), wproto.launch_scale);
+    {
+        const mat3x3 launchRot = ypabact_LaserRotationFromDir(down, shooter->_rotation);
+        shooter->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
+                                       &wproto.chain_fx, &beam.start, &launchRot);
+    }
 
     if ( spawnBeamVPs )
         ypabact_SpawnLaserBeamVisuals(shooter, wproto, beam.start, beam.end);

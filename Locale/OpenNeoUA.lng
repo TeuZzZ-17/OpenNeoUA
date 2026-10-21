@@ -90,20 +90,6 @@
 3085 = Radar Building
 3086 = %s  page %d / %d  (%d entries)
 3087 = %s  -- no prototype data available --
-3088 = Upgrade unlocked
-3089 = Upgrades unlocked
-3092 = Energy upgrade
-3093 = Armor upgrade
-3094 = Energy upgrade
-3095 = Radar upgrade
-3097 = Already unlocked
-3098 = Unlocked
-3099 = Weapon count upgrade
-3100 = Fire rate upgrade
-3101 = Heli damage upgrade
-3102 = Tank damage upgrade
-3103 = Flyer damage upgrade
-3104 = Robo damage upgrade
 3105 = Server address
 3106 = Please enter server IP
 3107 = Cannot happen.
@@ -149,3 +135,4 @@
 3190 = Genesis List Order:
 3191 = Classic
 3192 = Energy
+3194 = Max units:

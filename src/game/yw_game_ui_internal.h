@@ -31,7 +31,6 @@ static constexpr int kWorldSelectionXHalfArm = 2;
 static constexpr int kWorldSelectionXBossHalfArm = 5;
 static constexpr int kWorldSelectionXShadowOffset = 1;
 static constexpr int kWorldSelectionXUiGap = 2;
-static constexpr int BZDA_GEM_PRESS_CREATE = 0x800;
 static constexpr int STATUS_ICON_MAX_COUNT = 8;
 static constexpr int STATUS_ICON_SIZE = 16;
 static constexpr int STATUS_ICON_SPACING = 2;
@@ -141,27 +140,6 @@ enum YwOrderTemplateId
     YW_ORDER_TEMPLATE_ATTACK,
     YW_ORDER_TEMPLATE_ROBO_MOVE,
     YW_ORDER_TEMPLATE_MAP_MARKER
-};
-
-struct GemNotificationView
-{
-    const TGemNotificationEntry *Entry = nullptr;
-    std::string TargetName;
-};
-
-struct GemNotificationLine
-{
-    std::string Text;
-    SDL_Color TextColor;
-    bool HasCustomColor;
-
-    explicit GemNotificationLine(const std::string &text)
-        : Text(text), TextColor{0, 0, 0, 255}, HasCustomColor(false)
-    {}
-
-    GemNotificationLine(const std::string &text, SDL_Color color)
-        : Text(text), TextColor(color), HasCustomColor(true)
-    {}
 };
 
 struct aab
@@ -392,7 +370,6 @@ void sub_4E2B24(NC_STACK_ypaworld *yw);
 void sub_4C8524(NC_STACK_ypaworld *yw);
 int sb_0x451034(NC_STACK_ypaworld *yw);
 void sb_0x4d7c08__sub0__sub1(const SDL_Color *uiAccent);
-void yw_CloseGameplayWindowsForGemNotification(NC_STACK_ypaworld *yw);
 bool yw_IsTopLevelExitMenuFlowWindow(const GuiBase *window);
 bool yw_IsVisiblePriorityGameplayWindow(const GuiBase *window);
 bool yw_IsPriorityGameplayUiOpen();
@@ -569,17 +546,6 @@ std::string yw_BuildInfoMgunDamageText(int effectivePower);
 void yw_RenderInfoMgunDamage(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, float xpos, float ypos);
 void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float xpos, float ypos, NC_STACK_ypabact *bact, int vhclid, int flag);
 void sb_0x4d7c08__sub0__sub0__sub0__sub0(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, float a4, float a5, int bldId, int a7);
-std::string yw_GemTargetName(NC_STACK_ypaworld *yw, const TGemNotificationEntry &entry);
-std::string yw_GemCategoryLabel(const TGemNotificationEntry &entry);
-std::string yw_GemTargetKey(const TGemNotificationEntry &entry);
-void yw_GemAppendSpacer(std::vector<GemNotificationLine> *lines);
-void yw_GemAppendUpgradeLine(std::vector<GemNotificationLine> *lines, const TGemNotificationEntry &entry);
-void yw_GemAddUniqueFallbackTarget(NC_STACK_ypaworld *yw, std::vector<GemNotificationLine> *targets, const TGemNotificationEntry &entry);
-int yw_GemFindPrimaryVehicleForWeapon(NC_STACK_ypaworld *yw, int weaponId);
-void yw_GemBuildFallbackLines(NC_STACK_ypaworld *yw, std::vector<GemNotificationLine> *lines);
-void yw_DrawGemPanelOutline(NC_STACK_ypaworld *yw, int halfWidth, int top, int bottom);
-void yw_BuildNewGemNotificationLines(NC_STACK_ypaworld *yw, std::vector<GemNotificationLine> *lines);
-bool yw_RenderNewGemNotification(NC_STACK_ypaworld *yw);
 int sb_0x4d7c08__sub0__sub0__sub0(NC_STACK_ypaworld *yw);
 void wis_color2(NC_STACK_ypaworld *yw, float x1, float y1, float x2, float y2, SDL_Color *out1, SDL_Color *out2);
 void yw_RenderHUDCompass(NC_STACK_ypaworld *yw, sklt_wis *wis);

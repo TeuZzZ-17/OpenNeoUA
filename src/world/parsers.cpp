@@ -24,11 +24,6 @@ namespace World
 namespace Parsers
 {
 
-static int GemFloatHundredths(float value)
-{
-    return (int)std::lround((double)value * 100.0);
-}
-
 static int ParsePositiveIntOrZero(const std::string &value)
 {
     try
@@ -1437,8 +1432,7 @@ static bool ParseVPRotationParam(ScriptParser::Parser &parser,
 static bool ParseExternalVisualParam(const std::string &p1,
                                      const std::string &p2,
                                      const std::string &prefix,
-                                     World::TExternalVisualSet &visuals,
-                                     bool allowLaunch)
+                                     World::TExternalVisualSet &visuals)
 {
     if ( !StriCmp(p1, prefix + "_normal") )
         visuals.normal = p2;
@@ -1452,8 +1446,6 @@ static bool ParseExternalVisualParam(const std::string &p1,
         visuals.dead = p2;
     else if ( !StriCmp(p1, prefix + "_genesis") )
         visuals.genesis = p2;
-    else if ( allowLaunch && !StriCmp(p1, prefix + "_launch") )
-        visuals.launch = p2;
     else
         return false;
 
@@ -2048,6 +2040,10 @@ static World::TChainFXConfig::Trigger ParseChainFXTrigger(const std::string &nam
 
         if ( !StriCmp(name, "impact_world") )
             return World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
+
+        // Weapon fired: spawns at the muzzle when the projectile or beam starts.
+        if ( !StriCmp(name, "launch") )
+            return World::TChainFXConfig::TRIGGER_LAUNCH;
     }
     else if ( context == CHAIN_FX_SUPERITEM )
     {
@@ -3304,13 +3300,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "enable") )
     {
         int fraction = parser.stol(p2, nullptr, 0);
-        bool wasEnabled = (_vhcl->disable_enable_bitmask & (1 << fraction)) != 0;
         _vhcl->disable_enable_bitmask |= 1 << fraction;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
-                                           TGemNotificationEntry::CHANGE_ENABLE,
-                                           wasEnabled ? 1 : 0, 1, !wasEnabled);
     }
     else if ( !StriCmp(p1, "disable") )
     {
@@ -3479,50 +3469,25 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
-        int previousValue = _vhcl->energy;
         _vhcl->energy += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
-                                           TGemNotificationEntry::CHANGE_ENERGY,
-                                           previousValue, _vhcl->energy);
     }
     else if ( !StriCmp(p1, "add_shield") )
     {
-        int previousValue = _vhcl->shield;
         _vhcl->shield += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
-                                           TGemNotificationEntry::CHANGE_SHIELD,
-                                           previousValue, _vhcl->shield);
     }
     else if ( !StriCmp(p1, "add_radar") )
     {
-        int previousValue = _vhcl->radar;
         _vhcl->radar += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
-                                           TGemNotificationEntry::CHANGE_RADAR,
-                                           previousValue, _vhcl->radar);
     }
     else if ( !StriCmp(p1, "add_max_active_at_once") )
     {
         const int increment = ParsePositiveIntOrZero(p2);
         if ( increment > 0 && _vhcl->max_active_at_once > 0 )
         {
-            const int previousValue = _vhcl->max_active_at_once;
-            if ( previousValue > std::numeric_limits<int>::max() - increment )
+            if ( _vhcl->max_active_at_once > std::numeric_limits<int>::max() - increment )
                 _vhcl->max_active_at_once = std::numeric_limits<int>::max();
             else
                 _vhcl->max_active_at_once += increment;
-
-            if ( _vhcl->max_active_at_once != previousValue &&
-                 _isModify && _o.IsGemNotificationCaptureActive() )
-                _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
-                                               TGemNotificationEntry::CHANGE_MAX_ACTIVE_AT_ONCE,
-                                               previousValue, _vhcl->max_active_at_once);
         }
     }
     else if ( !StriCmp(p1, "vp_normal") )
@@ -3549,10 +3514,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->vp_genesis = parser.stol(p2, nullptr, 0);
     }
-    else if ( ParseExternalVisualParam(p1, p2, "3ds", _vhcl->visual_3ds, false) )
+    else if ( ParseExternalVisualParam(p1, p2, "3ds", _vhcl->visual_3ds) )
     {
     }
-    else if ( ParseExternalVisualParam(p1, p2, "base", _vhcl->visual_base, false) )
+    else if ( ParseExternalVisualParam(p1, p2, "base", _vhcl->visual_base) )
     {
     }
     else if ( !StriCmp(p1, "damaged_fx_vp") )
@@ -4255,7 +4220,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "num_weapons") )
     {
-        int previousValue = _vhcl->num_weapons;
         int minCount = 0;
         int maxCount = 0;
 
@@ -4269,11 +4233,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->num_weapons = minCount;
         _vhcl->num_weapons_min = minCount;
         _vhcl->num_weapons_max = maxCount;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
-                                           TGemNotificationEntry::CHANGE_NUM_WEAPONS,
-                                           previousValue, _vhcl->num_weapons);
     }
     else if ( !StriCmp(p1, "mgun_fire_energy_cost") )
     {
@@ -4776,18 +4735,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "add_unhide_radar") )
     {
-        int previousValue = _vhcl->unhideRadar;
         _vhcl->unhideRadar += parser.stol(p2, nullptr, 0);
 
         if (_vhcl->unhideRadar < 0)
             _vhcl->unhideRadar = 0;
         else if (_vhcl->unhideRadar > _vhcl->radar)
             _vhcl->unhideRadar = _vhcl->radar + 1;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_VEHICLE, _vhclID,
-                                           TGemNotificationEntry::CHANGE_UNHIDE_RADAR,
-                                           previousValue, _vhcl->unhideRadar);
     }
     else
         return ParseSndFX(parser, p1, p2);
@@ -5121,10 +5074,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_wait = 3;
         _wpn->vp_dead = 4;
         _wpn->vp_genesis = 5;
-        _wpn->vp_launch = 0;
         _wpn->visual_3ds = TExternalVisualSet();
         _wpn->visual_base = TExternalVisualSet();
-        _wpn->launch_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->visual_scale = vec3d(1.0, 1.0, 1.0);
         _wpn->visual_rotation = vec3d(0.0, 0.0, 0.0);
         _wpn->visual_spin = vec3d(0.0, 0.0, 0.0);
@@ -5900,164 +5851,80 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "add_energy") )
     {
-        int previousValue = _wpn->energy;
         _wpn->energy += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY,
-                                           previousValue, _wpn->energy);
     }
     else if ( !StriCmp(p1, "add_energy_heli") )
     {
-        int previousValue = GemFloatHundredths(_wpn->energy_heli);
         _wpn->energy_heli += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_HELI,
-                                           previousValue, GemFloatHundredths(_wpn->energy_heli));
     }
     else if ( !StriCmp(p1, "add_energy_tank") )
     {
-        int previousValue = GemFloatHundredths(_wpn->energy_tank);
         _wpn->energy_tank += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_TANK,
-                                           previousValue, GemFloatHundredths(_wpn->energy_tank));
     }
     else if ( !StriCmp(p1, "add_energy_flyer") )
     {
-        int previousValue = GemFloatHundredths(_wpn->energy_flyer);
         _wpn->energy_flyer += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_FLYER,
-                                           previousValue, GemFloatHundredths(_wpn->energy_flyer));
     }
     else if ( !StriCmp(p1, "add_energy_Robo") )
     {
-        int previousValue = GemFloatHundredths(_wpn->energy_robo);
         _wpn->energy_robo += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_ROBO,
-                                           previousValue, GemFloatHundredths(_wpn->energy_robo));
     }
     else if ( !StriCmp(p1, "add_energy_plane") )
     {
         if ( !_wpn->energy_plane_defined )
             _wpn->energy_plane = _wpn->energy_flyer;
-        int previousValue = GemFloatHundredths(_wpn->energy_plane);
         _wpn->energy_plane += parser.stol(p2, nullptr, 0);
         _wpn->energy_plane_defined = true;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_PLANE,
-                                           previousValue, GemFloatHundredths(_wpn->energy_plane));
     }
     else if ( !StriCmp(p1, "add_energy_cruiser") )
     {
         if ( !_wpn->energy_cruiser_defined )
             _wpn->energy_cruiser = _wpn->energy_flyer;
-        int previousValue = GemFloatHundredths(_wpn->energy_cruiser);
         _wpn->energy_cruiser += parser.stol(p2, nullptr, 0);
         _wpn->energy_cruiser_defined = true;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_CRUISER,
-                                           previousValue, GemFloatHundredths(_wpn->energy_cruiser));
     }
     else if ( !StriCmp(p1, "add_energy_glider") )
     {
         if ( !_wpn->energy_glider_defined )
             _wpn->energy_glider = _wpn->energy_flyer;
-        int previousValue = GemFloatHundredths(_wpn->energy_glider);
         _wpn->energy_glider += parser.stol(p2, nullptr, 0);
         _wpn->energy_glider_defined = true;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_GLIDER,
-                                           previousValue, GemFloatHundredths(_wpn->energy_glider));
     }
     else if ( !StriCmp(p1, "add_energy_zeppelin") )
     {
         if ( !_wpn->energy_zeppelin_defined )
             _wpn->energy_zeppelin = _wpn->energy_flyer;
-        int previousValue = GemFloatHundredths(_wpn->energy_zeppelin);
         _wpn->energy_zeppelin += parser.stol(p2, nullptr, 0);
         _wpn->energy_zeppelin_defined = true;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_ZEPPELIN,
-                                           previousValue, GemFloatHundredths(_wpn->energy_zeppelin));
     }
     else if ( !StriCmp(p1, "add_energy_ufo") )
     {
         if ( !_wpn->energy_ufo_defined )
             _wpn->energy_ufo = _wpn->energy_flyer;
-        int previousValue = GemFloatHundredths(_wpn->energy_ufo);
         _wpn->energy_ufo += parser.stol(p2, nullptr, 0);
         _wpn->energy_ufo_defined = true;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_UFO,
-                                           previousValue, GemFloatHundredths(_wpn->energy_ufo));
     }
     else if ( !StriCmp(p1, "add_energy_car") )
     {
         if ( !_wpn->energy_car_defined )
             _wpn->energy_car = _wpn->energy_tank;
-        int previousValue = GemFloatHundredths(_wpn->energy_car);
         _wpn->energy_car += parser.stol(p2, nullptr, 0);
         _wpn->energy_car_defined = true;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_CAR,
-                                           previousValue, GemFloatHundredths(_wpn->energy_car));
     }
     else if ( !StriCmp(p1, "add_energy_gun") )
     {
         if ( !_wpn->energy_gun_defined )
             _wpn->energy_gun = 1.0f;
-        int previousValue = GemFloatHundredths(_wpn->energy_gun);
         _wpn->energy_gun += parser.stol(p2, nullptr, 0);
         _wpn->energy_gun_defined = true;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_ENERGY_GUN,
-                                           previousValue, GemFloatHundredths(_wpn->energy_gun));
     }
     else if ( !StriCmp(p1, "add_shot_time") )
     {
-        int previousValue = _wpn->shot_time;
         _wpn->shot_time += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_SHOT_TIME,
-                                           previousValue, _wpn->shot_time);
     }
     else if ( !StriCmp(p1, "add_shot_time_user") )
     {
-        int previousValue = _wpn->shot_time_user;
         _wpn->shot_time_user += parser.stol(p2, nullptr, 0);
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_WEAPON, _wpnID,
-                                           TGemNotificationEntry::CHANGE_SHOT_TIME_USER,
-                                           previousValue, _wpn->shot_time_user);
     }
     else if ( !StriCmp(p1, "vp_normal") )
     {
@@ -6083,20 +5950,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->vp_genesis = parser.stol(p2, nullptr, 0);
     }
-    else if ( ParseExternalVisualParam(p1, p2, "3ds", _wpn->visual_3ds, true) )
+    else if ( ParseExternalVisualParam(p1, p2, "3ds", _wpn->visual_3ds) )
     {
     }
-    else if ( ParseExternalVisualParam(p1, p2, "base", _wpn->visual_base, true) )
+    else if ( ParseExternalVisualParam(p1, p2, "base", _wpn->visual_base) )
     {
-    }
-    else if ( !StriCmp(p1, "vp_launch") )
-    {
-        _wpn->vp_launch = parser.stol(p2, nullptr, 0);
-    }
-    else if ( !StriCmp(p1, "launch_scale") )
-    {
-        float scale = ParseVPScaleValue(parser, p2);
-        _wpn->launch_scale = vec3d(scale, scale, scale);
     }
     else if ( ParseVPScaleParam(parser, "", p1, p2, _wpn->visual_scale) )
     {
@@ -6379,13 +6237,7 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     else if ( !StriCmp(p1, "enable") )
     {
         int fraction = parser.stol(p2, nullptr, 0);
-        bool wasEnabled = (_bld->EnableMask & (1 << fraction)) != 0;
         _bld->EnableMask |= 1 << fraction;
-
-        if ( _isModify && _o.IsGemNotificationCaptureActive() )
-            _o.RecordGemNotificationChange(TGemNotificationEntry::TARGET_BUILDING, _bldID,
-                                           TGemNotificationEntry::CHANGE_ENABLE,
-                                           wasEnabled ? 1 : 0, 1, !wasEnabled);
     }
     else if ( !StriCmp(p1, "disable") )
     {

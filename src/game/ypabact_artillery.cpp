@@ -654,10 +654,8 @@ bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, const Worl
     shell->_parent = nullptr;
     unit->_missiles_list.push_back(shell);
 
-    world->SpawnTransientVisual(wproto.vp_launch, wproto.visual_3ds.launch,
-                                wproto.visual_base.launch,
-                                shell->_position, shell->_rotation, 1000,
-                                1.0, World::TVisualTint(), wproto.launch_scale);
+    shell->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
+                                 &wproto.chain_fx, &shell->_position, &shell->_rotation);
 
     SFXEngine::SFXe.startSound(&shell->_soundcarrier, 1);
 

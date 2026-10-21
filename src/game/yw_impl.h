@@ -41,7 +41,7 @@
 #include "world/tools.h"
 
 // ---- constants shared by the parts ----
-static constexpr uint32_t GEM_NEW_UI_DEFAULT_DURATION_MS = 8000;
+static constexpr uint32_t GEM_UNLOCK_DEFAULT_DURATION_MS = 10000;
 static constexpr uint32_t GAMEPLAY_TIME_SCALE_MAX_DURATION_MS = 600000;
 static constexpr float GAMEPLAY_MIN_TIME_SCALE = 0.05f;
 static constexpr float DEBUG_GAMEPLAY_TIME_SCALE = 0.20f;
@@ -104,6 +104,7 @@ float yw_ReadGameplayTimeScale(Common::Ini::Key &key, float fallback);
 uint32_t yw_ReadNonNegativeDuration(Common::Ini::Key &key, uint32_t fallback);
 float yw_ReadNonNegativeDistance(Common::Ini::Key &key, float fallback);
 uint32_t yw_GetGemUnlockDuration();
+bool yw_IsGemUnlockSlowMotionEnabled();
 TimedGameplayScaleProfile yw_GetRoboDeathScaleProfile();
 World::TAbsoluteOrPercent yw_ParseSprintAbsoluteOrPercent(Common::Ini::Key &key, float maximumPercent);
 float yw_ParseSprintExplicitPercent(Common::Ini::Key &key, float maximum);
@@ -142,7 +143,6 @@ void yw_setInitScriptLoc(NC_STACK_ypaworld *yw);
 void sub_445230(NC_STACK_ypaworld *yw);
 void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt);
 void yw_UpdateHideVehicleToggle(NC_STACK_ypaworld *yw, TInputState *inpt);
-bool yw_VehicleReferencesWeapon(const World::TVhclProto &vehicle, int32_t weaponId);
 bool yw_PlayerSprintAcceleratorPressed(const NC_STACK_ypabact *bact, const TInputState *inpt);
 bool yw_PlayerSprintCanRun(const NC_STACK_ypabact *bact, const TInputState *inpt);
 void yw_ClampTankSprintExcessSpeed(NC_STACK_ypabact *bact, float sprintFactor, const World::TAbsoluteOrPercent &forceUp);
