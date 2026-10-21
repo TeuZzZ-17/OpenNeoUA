@@ -557,12 +557,24 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             }
             else
             {
-                // Player/manual fire first establishes the configured Arc
-                // Grenade elevation. The common directional modifiers below
-                // then apply their authored horizontal and vertical offsets.
-                wobj->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
-                                            wproto.grenade_arc_gravity,
-                                            wproto.start_speed);
+                // Player/manual fire first establishes the Arc Grenade elevation.
+                // The common directional modifiers below then apply their
+                // authored horizontal and vertical offsets (weapon_spread_xyz).
+                vec3d groundAimDir;
+                if ( getBACT_inputting() &&
+                     ypabact_ComputeArcGrenadeGroundAim(this, wproto, arg147.pos,
+                                                        wobj->_fly_dir, &groundAimDir) )
+                {
+                    // Player aim: the shell lands where the crosshair meets the
+                    // terrain, so aiming up/down changes the range (mortar-style).
+                    wobj->_fly_dir = groundAimDir;
+                }
+                else
+                {
+                    wobj->SetupArcGrenadeLaunch(wproto.grenade_arc_angle,
+                                                wproto.grenade_arc_gravity,
+                                                wproto.start_speed);
+                }
             }
         }
 

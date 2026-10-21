@@ -97,6 +97,49 @@ bool ypabact_TrySolveArcGrenadeDirection(
     return true;
 }
 
+bool ypabact_ComputeArcGrenadeGroundAim(
+    NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
+    const vec3d &muzzle, const vec3d &aimDir, vec3d *outLaunchDir)
+{
+    if ( !bact || !bact->getBACT_pWorld() || !wproto.IsArcGrenade() ||
+         !(wproto.start_speed > 0.0f) || !outLaunchDir )
+        return false;
+
+    vec3d aim = aimDir;
+    if ( aim.normalise() <= 0.001f )
+        return false;
+
+    // Longest possible flight on flat ground (45 degrees): the ray never needs to
+    // go much further than this, anything beyond is out of reach anyway.
+    const double maxRange = (double)wproto.start_speed * wproto.start_speed /
+                            ypabact_GetArcGrenadeGravity(wproto) *
+                            YPABACT_MISSILE_DISTANCE_SCALE;
+
+    ypaworld_arg136 trace;
+    trace.stPos = muzzle;
+    trace.vect = aim * (float)std::min(maxRange * 3.0 + 1000.0, 30000.0);
+    trace.flags = 0;
+    bact->getBACT_pWorld()->ypaworld_func149(&trace);
+
+    if ( trace.isect &&
+         ypabact_TrySolveArcGrenadeDirection(muzzle, trace.isectPos, wproto, outLaunchDir) )
+        return true;
+
+    // Sky or out of reach: 45 degrees along the heading of the aim.
+    vec3d heading(aim.x, 0.0f, aim.z);
+    if ( heading.normalise() <= 0.001f )
+    {
+        heading = vec3d(bact->_rotation.AxisZ().x, 0.0f, bact->_rotation.AxisZ().z);
+        if ( heading.normalise() <= 0.001f )
+            heading = vec3d::OZ(1.0f);
+    }
+
+    const float c45 = 0.70710678f;
+    *outLaunchDir = heading * c45;
+    outLaunchDir->y = -c45;
+    return true;
+}
+
 float NC_STACK_ypabact::ReadPowerStationEnergyMultiplier()
 {
     std::string value = System::IniConf::GamePowerStationEnergyMultiplier.Get<std::string>();
