@@ -1,5 +1,7 @@
 #define GLOBAL
+#include <fstream>
 #include "system/fsmgr.h"
+#include "common/utils.h"
 #include "system/system.h"
 #include "common/env.h"
 
@@ -841,6 +843,18 @@ int main(int argc, char *argv[])
 
     System::IniConf::Init();
     FSMgr::iDir::setBaseDir("");
+
+    // OpenNeoUA.ini is required: it carries the shipped configuration of the game.
+    {
+        const std::string openNeoUAIni = uaDataFirstOpenNeoUAIniPath();
+        if ( !std::ifstream(openNeoUAIni).good() )
+        {
+            const std::string message = "OpenNeoUA.ini was not found (" + openNeoUAIni +
+                                        ").\nPut it in the Data folder and start the game again.";
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenNeoUA", message.c_str(), nullptr);
+            return 1;
+        }
+    }
 
     System::IniConf::ReadFromNucleusIni();
     bool gfxVbo = System::IniConf::GfxVBO.Get<bool>();
