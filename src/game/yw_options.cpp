@@ -384,6 +384,7 @@ void NC_STACK_ypaworld::SetFarView(bool farvw)
 // Go to options menu
 void UserData::ShowOptionsMenu()
 {
+    resetGraphicProfilePending = false;
     atmospherePageActive = false;
     if (atmosphere_button)
         atmosphere_button->HideScreen();
@@ -454,13 +455,13 @@ void UserData::ShowOptionsMenu()
     video_listvw.selectedEntry = _gfxModeIndex;
 }
 
-// OpenNeoUA: restore only the controls exposed on the main Options page.
-// Advanced Graphics Settings uses the OpenNeoUA graphics profile as its default
-// path. Values are staged exactly like ordinary UI edits: Back cancels them;
+// Restore the main page and stage the default profile for the advanced page.
+// Values are staged exactly like ordinary UI edits: Back cancels them;
 // Save Settings persists them through
 // the existing USER.TXT/OpenNeoUA.ini paths.
 void UserData::ResetOptionsToDefaults()
 {
+    resetGraphicProfilePending = true;
     const std::vector<GFX::GfxMode> &modes = GFX::GFXEngine::Instance.GetAvailableModes();
 
     // OpenNeoUA reset profile prefers 800x600. On an unusual display that does
@@ -970,6 +971,12 @@ void UserData::ShowAtmosphereOptionsMenu()
     DetectMatchingGraphicProfile();
     atmosphereSavedGraphicProfileName = atmosphereGraphicProfileName;
     atmospherePageActive = true;
+    if (resetGraphicProfilePending)
+    {
+        const std::string name = System::DEFAULT_GRAPHIC_PROFILE_NAME;
+        ApplyGraphicProfile({name, "Data/Scripts/Graphic_Profiles/" + name + ".cfg"});
+        resetGraphicProfilePending = false;
+    }
     video_button->HideScreen();
     atmosphere_button->ShowScreen();
 }
@@ -996,6 +1003,127 @@ void  UserData::UpdateSelected3DDevFromList()
     conf3DGuid = guid;
 
     video_button->SetText(1172, name);
+}
+
+bool UserData::SaveGraphicProfile(const std::string &name, std::string *error)
+{
+    auto fail = [&](Locale::OPENUA_STRING id) {
+        if (error) *error = Locale::Text::OpenUA(id);
+        return false;
+    };
+    // Keep the supplied name inside the profile folder and valid on Windows.
+    if (name.empty() || name.size() > 32 || name.front() == ' ' ||
+        name.back() == ' ' || name.back() == '.' || !StriCmp(name, "Custom"))
+        return fail(Locale::OUA_PRESET_INVALID_NAME);
+    for (unsigned char c : name)
+        if (c < 32 || c == 127 || std::string("/\\:*?\"<>|").find(c) != std::string::npos)
+            return fail(Locale::OUA_PRESET_INVALID_NAME);
+    const std::string stem = name.substr(0, name.find('.'));
+    if (!StriCmp(stem, "CON") || !StriCmp(stem, "PRN") ||
+        !StriCmp(stem, "AUX") || !StriCmp(stem, "NUL") ||
+        (stem.size() == 4 && stem[3] >= '1' && stem[3] <= '9' &&
+         (!StriCmp(stem.substr(0, 3), "COM") || !StriCmp(stem.substr(0, 3), "LPT"))))
+        return fail(Locale::OUA_PRESET_INVALID_NAME);
+
+    RefreshGraphicProfiles();
+    for (const TGraphicProfile &profile : atmosphereGraphicProfiles)
+        if (!StriCmp(profile.Name, name))
+            return fail(Locale::OUA_PRESET_EXISTS);
+
+    // Serialize the values shown in the menu, including edits not yet saved to INI.
+    const std::array<const char *, ATMOPT_COUNT> keys = {{
+        "gfx.palette_filter_strength", "gfx.atmosphere_strength",
+        "gfx.atmosphere_exposure", "gfx.atmosphere_contrast", "gfx.atmosphere_saturation",
+        "gfx.atmosphere_vignette", "gfx.skydistance", "gfx.sky_height",
+        "gfx.horizon_fog_start", "gfx.horizon_fog_length", "gfx.horizon_fog_strength",
+        "gfx.horizon_dark_start", "gfx.horizon_dark_length", "gfx.horizon_dark_strength",
+        "game.world_ui_max_distance", "gfx.vhs_filter_strength", "gfx.particles.limit",
+        "gfx.video_filter_mode", "gfx.horizon_fade_mode"
+    }};
+    std::string text = "gfx.palette_filter = " + PaletteThemeStorageValue(confPaletteTheme) + "\n";
+    for (int i = 0; i < ATMOPT_COUNT; ++i)
+    {
+        std::string value;
+        switch (i)
+        {
+        case ATMOPT_VISUAL_FILTER_STRENGTH: case ATMOPT_ATMOSPHERE_STRENGTH:
+        case ATMOPT_VIGNETTE: case ATMOPT_FOG_STRENGTH: case ATMOPT_DARK_STRENGTH:
+        case ATMOPT_VHS_STRENGTH:
+            value = VisualFilterStrengthStorageValue(atmosphereValues[i]);
+            break;
+        case ATMOPT_EXPOSURE: case ATMOPT_CONTRAST: case ATMOPT_SATURATION:
+            value = HundredStorageValue(atmosphereValues[i]);
+            break;
+        case ATMOPT_SKY_HORIZON_DISTANCE:
+            value = std::to_string(SkyHorizonSliderToDistance(atmosphereValues[i]));
+            break;
+        default:
+            value = std::to_string(atmosphereValues[i]);
+            break;
+        }
+        text += std::string(keys[i]) + " = " + value + "\n";
+    }
+
+    const std::string folder = "data:Scripts/Graphic_Profiles";
+    if (!uaOpenDir(folder) && !uaCreateDir(folder))
+        return fail(Locale::OUA_PRESET_WRITE_FAILED);
+    const std::string path = folder + "/" + name + ".cfg";
+    auto file = uaOpenFile(path, "wb");
+    if (!file.OK())
+        return fail(Locale::OUA_PRESET_WRITE_FAILED);
+    const bool written = file.write(text.data(), text.size()) == text.size();
+    file.close();
+    // Read back after close so a buffered write failure cannot report success.
+    auto saved = uaOpenFile(path, "rb");
+    std::string actual(text.size() + 1, '\0');
+    const size_t count = saved.read(&actual[0], actual.size());
+    saved.close();
+    actual.resize(count);
+    if (!written || actual != text)
+    {
+        uaDeleteFile(path);
+        return fail(Locale::OUA_PRESET_WRITE_FAILED);
+    }
+    RefreshGraphicProfiles();
+    atmosphereGraphicProfileName = name;
+    UpdateGraphicProfileText();
+    if (error) error->clear();
+    return true;
+}
+
+void UserData::HandleGraphicPresetDialog(TInputState *input)
+{
+    const auto result = confirm_button->ProcessWidgetsEvents(input);
+    if (result.code == 1351 || input->KbdLastHit == Input::KC_ESCAPE)
+    {
+        sub_46D960();
+        graphicPresetInput.clear();
+    }
+    else if (result.code == 1350 || input->KbdLastHit == Input::KC_RETURN)
+    {
+        if (confirmMode == 8)
+            sub_46D960();
+        else
+        {
+            std::string error;
+            if (SaveGraphicProfile(graphicPresetInput, &error))
+            {
+                sub_46D960();
+                ShowConfirmDialog(8, Locale::Text::OpenUA(Locale::OUA_PRESET_SAVED), "", 1);
+                graphicPresetInput.clear();
+            }
+            else
+                confirm_button->SetText(1302, error);
+        }
+    }
+    else if (confirmMode == 7)
+    {
+        if (input->KbdLastHit == Input::KC_BACKSPACE && !graphicPresetInput.empty())
+            graphicPresetInput.pop_back();
+        else if (input->chr >= ' ' && graphicPresetInput.size() < 32)
+            graphicPresetInput.push_back(input->chr);
+        confirm_button->SetText(1303, graphicPresetInput + "_");
+    }
 }
 
 void UserData::RefreshGraphicProfiles()

@@ -803,11 +803,13 @@ public:
     NC_STACK_button *video_button;
     NC_STACK_button *atmosphere_button = nullptr;
     bool atmospherePageActive = false;
+    bool resetGraphicProfilePending = false;
     std::array<int, ATMOPT_COUNT> atmosphereValues = {};
     std::array<int, ATMOPT_COUNT> atmosphereSavedValues = {};
     std::vector<TGraphicProfile> atmosphereGraphicProfiles;
     std::string atmosphereGraphicProfileName;
     std::string atmosphereSavedGraphicProfileName;
+    std::string graphicPresetInput;
     GuiList video_listvw;
     int game_default_res;
 
@@ -1111,6 +1113,8 @@ public:
     void RefreshGraphicProfiles();
     void DetectMatchingGraphicProfile();
     void CycleGraphicProfile();
+    bool SaveGraphicProfile(const std::string &name, std::string *error);
+    void HandleGraphicPresetDialog(TInputState *input);
     bool ApplyGraphicProfile(const TGraphicProfile &profile);
     void UpdateGraphicProfileText();
     void MarkAtmosphereGraphicProfileCustom();

@@ -287,6 +287,13 @@ enum OPENUA_STRING
     // Options menu: alpha mouse cursors checkbox.
     OUA_RETRO_CURSORS,
 
+    OUA_SAVE_PRESET,
+    OUA_PRESET_NAME,
+    OUA_PRESET_SAVED,
+    OUA_PRESET_INVALID_NAME,
+    OUA_PRESET_EXISTS,
+    OUA_PRESET_WRITE_FAILED,
+
     OUA_STRING_MAX
 };
 

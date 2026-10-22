@@ -6,6 +6,7 @@
 
 namespace System
 {
+static constexpr const char *DEFAULT_GRAPHIC_PROFILE_NAME = "Classic 1998";
 
 class IniConf
 {
