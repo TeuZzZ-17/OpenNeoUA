@@ -241,6 +241,21 @@ bool ParseIniFileOverlay(std::string iniFile, PKeyList *lst)
     return ParseIniFileImpl(iniFile, lst, false);
 }
 
+// Applies an in-memory ini text on top of the current values, line by line, like a file overlay.
+void ParseIniTextOverlay(const std::string &text, PKeyList *lst)
+{
+    size_t start = 0;
+    while ( start < text.size() )
+    {
+        size_t end = text.find('\n', start);
+        if ( end == std::string::npos )
+            end = text.size();
+
+        ParseLine<Key *>(text.substr(start, end - start), lst);
+        start = end + 1;
+    }
+}
+
 void ApplyPredefinedIniKeys(KeyList *lst)
 {
     for ( const std::string &str : Env._predefinedIniKeys )

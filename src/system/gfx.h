@@ -635,7 +635,8 @@ public:
     TileMap * GetTileset(int id);
 
     bool LoadPalette(const std::string &palette_ilbm);
-    SDL_Cursor *LoadCursor(const std::string &name);
+    SDL_Cursor *LoadCursor(const std::string &name, bool retro = false);
+    void LoadCursorSet(bool retro);
 
     // OpenNeoUA custom: modern fullscreen visual filter (Data/Filters/*.pal used as a
     // luminance-indexed LUT applied on the final post-process pass). Vanilla-safe:
@@ -853,7 +854,7 @@ public:
 
 private:
     std::vector<GfxMode> graphicsModes;
-    std::array<SDL_Cursor *, 11> cursors;
+    std::array<SDL_Cursor *, 11> cursors{};
     int CurrentCursorID = -1;
     GfxMode GfxSelectedMode;
 

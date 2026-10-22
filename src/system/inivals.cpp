@@ -1,6 +1,7 @@
 // System::IniConf: every setting read from the INI files (name, default, value).
 #include <inttypes.h>
 #include "inivals.h"
+#include "openneoua_default_ini.h"
 #include "common/utils.h"
 
 namespace System
@@ -93,6 +94,8 @@ Common::Ini::Key IniConf::GfxVBO("gfx.vbo", Common::Ini::KT_BOOL, true);
 // Stored as a single token when saved by Options, e.g. Liberation_Mono_Regular.
 // KT_STRING is intentionally kept so older test builds with spaces still parse.
 Common::Ini::Key IniConf::UiMenuFont("ui.menu_font", Common::Ini::KT_STRING, std::string("Default"));
+// OpenNeoUA: yes = alpha/beta mouse cursors from Res/Retro, no = the release cursors of Res (vanilla).
+Common::Ini::Key IniConf::UiRetroCursors("ui.retro_cursors", Common::Ini::KT_BOOL, false);
 // OpenNeoUA: default/current virtual UI scaling style. yes = nearest/Retro, no = linear/Smooth.
 Common::Ini::Key IniConf::UiRetroInterface("ui.retro_interface", Common::Ini::KT_BOOL, true);
 // OpenNeoUA: the weapon-name panel did not exist in the vanilla HUD. Keep it
@@ -817,6 +820,7 @@ void IniConf::Init()
         , &GfxHorizonFadeMode
 
         , &UiMenuFont
+        , &UiRetroCursors
         , &UiRetroInterface
         , &UiWeaponName
         , &UiMapMarkerSound
@@ -855,6 +859,12 @@ bool IniConf::ReadFromNucleusIni()
             Common::Ini::ParseIniFileOverlay(
                 "Data/Scripts/Graphic_Profiles/Classic.txt", &_varList);
     }
+
+    // Built-in defaults: a copy of the shipped OpenNeoUA.ini, embedded at build time.
+    // A key missing from the user's OpenNeoUA.ini takes its value from here, so the
+    // shipped configuration is the engine default (also for keys that only enable a
+    // feature when they are written).
+    Common::Ini::ParseIniTextOverlay(OPENNEOUA_DEFAULT_INI, &_varList);
 
     // OpenNeoUA custom settings are the user layer above Nucleus + the default profile.
     Common::Ini::ParseIniFileOverlay(uaDataFirstOpenNeoUAIniPath(), &_varList);

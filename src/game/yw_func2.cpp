@@ -953,6 +953,15 @@ void UserData::sb_0x46aa8c()
             ypa_log_out("WARNING: Could not save gfx.hide_map_border_walls to OpenNeoUA.ini\n");
     }
 
+    if ( _settingsChangeOptions & SETTINGS_CHANGE_RETRO_CURSORS )
+    {
+        System::IniConf::UiRetroCursors.Value = confRetroCursors;
+        GFX::Engine.LoadCursorSet(confRetroCursors);
+
+        if ( !SaveKeyToOpenNeoUAIni("ui.retro_cursors", confRetroCursors ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save ui.retro_cursors to OpenNeoUA.ini\n");
+    }
+
     if ( _settingsChangeOptions & SETTINGS_CHANGE_INTERFACE_STYLE )
     {
         interfaceStyle = confInterfaceStyle;
@@ -1276,6 +1285,7 @@ void UserData::sub_46A3C0()
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
     confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
+    confRetroCursors = System::IniConf::UiRetroCursors.Get<bool>();
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     confGenesisListOrder = NormalizeGenesisListOrder(System::IniConf::UiGenesisListOrder.Get<std::string>());
@@ -1357,6 +1367,10 @@ void UserData::sub_46A3C0()
 
     v10.butID = 1193;
     v10.field_4 = confHideMapBorderWalls ? 1 : 2;
+    video_button->SetState(&v10);
+
+    v10.butID = 1196;
+    v10.field_4 = confRetroCursors ? 1 : 2;
     video_button->SetState(&v10);
     UpdateGfxOptionTexts();
     UpdateMenuFontText();
@@ -2676,6 +2690,16 @@ void UserData::GameShellUiHandleInput()
         {
             confInterfaceStyle = GFX::VirtualUIStyle::SMOOTH;
             _settingsChangeOptions |= SETTINGS_CHANGE_INTERFACE_STYLE;
+        }
+        else if ( r.code == 1322 ) // Retro Cursors checkbox (checked)
+        {
+            confRetroCursors = true;
+            _settingsChangeOptions |= SETTINGS_CHANGE_RETRO_CURSORS;
+        }
+        else if ( r.code == 1323 ) // Retro Cursors checkbox (unchecked)
+        {
+            confRetroCursors = false;
+            _settingsChangeOptions |= SETTINGS_CHANGE_RETRO_CURSORS;
         }
         else if ( r.code == 1318 ) // Hide Map Border Walls checkbox (checked)
         {
