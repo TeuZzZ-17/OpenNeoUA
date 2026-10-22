@@ -437,6 +437,12 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_PARTICLE_LIMIT:              fallback = "Particle Limit"; break;
         case OUA_GRAPHIC_PRESET:              fallback = "Preset"; break;
         case OUA_CUSTOM:                      fallback = "Custom"; break;
+        case OUA_SAVE_PRESET:                 fallback = "Save Preset"; break;
+        case OUA_PRESET_NAME:                 fallback = "Enter preset name"; break;
+        case OUA_PRESET_SAVED:                fallback = "Preset saved"; break;
+        case OUA_PRESET_INVALID_NAME:         fallback = "Invalid preset name"; break;
+        case OUA_PRESET_EXISTS:               fallback = "Name already used: choose another"; break;
+        case OUA_PRESET_WRITE_FAILED:         fallback = "Could not save preset"; break;
         case OUA_ADVANCED_GRAPHICS_SETTINGS:  fallback = "Advanced Graphics Settings"; break;
         case OUA_SKY_HORIZON_DISTANCE:           fallback = "Sky Horizon Distance"; break;
         case OUA_SKY_HEIGHT:                       fallback = "Sky Height"; break;

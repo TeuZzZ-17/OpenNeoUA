@@ -2988,7 +2988,7 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
             return false;
     }
 
-    int buttonWidth = (menuWidth - buttonsSpace) / 2;
+    int buttonWidth = (menuWidth - 2 * buttonsSpace) / 3;
     btn.tileset_down = 19;
     btn.tileset_up = 18;
     btn.field_3A = 30;
@@ -3008,6 +3008,13 @@ bool NC_STACK_ypaworld::CreateAtmosphereControls()
         return false;
 
     btn.xpos = buttonWidth + buttonsSpace;
+    btn.caption = Locale::Text::OpenUA(Locale::OUA_SAVE_PRESET);
+    btn.upCode = 1453;
+    btn.button_id = 1453;
+    if (!_GameShell->atmosphere_button->Add(&btn))
+        return false;
+
+    btn.xpos = 2 * (buttonWidth + buttonsSpace);
     btn.caption = Locale::Text::Common(Locale::CMN_CANCEL);
     btn.upCode = 1452;
     btn.button_id = 1452;

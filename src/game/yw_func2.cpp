@@ -680,6 +680,13 @@ void UserData::sb_0x46aa8c()
 {
     NC_STACK_ypaworld *yw = p_YW;
 
+    // Commit the staged graphics reset through the existing advanced-page path.
+    if (resetGraphicProfilePending)
+    {
+        ShowAtmosphereOptionsMenu();
+        AtmosphereOptionsSave();
+    }
+
     bool forceChange = false;
     Common::Point resolution;
 
@@ -1969,7 +1976,11 @@ void UserData::GameShellUiHandleInput()
     if ( confirmMode )
         v3 = 1;
 
-    NC_STACK_button::ResCode r = confirm_button->ProcessWidgetsEvents(Input);
+    const bool presetDialog = confirmMode == 7 || confirmMode == 8;
+    if (presetDialog)
+        HandleGraphicPresetDialog(Input);
+    NC_STACK_button::ResCode r = presetDialog
+        ? NC_STACK_button::ResCode() : confirm_button->ProcessWidgetsEvents(Input);
 
     if ( r )
     {
@@ -2019,7 +2030,7 @@ void UserData::GameShellUiHandleInput()
         }
     }
 
-    if ( confirmMode )
+    if ( confirmMode && !presetDialog )
     {
         if ( Input->HotKeyID == 24 )
         {
@@ -2502,6 +2513,12 @@ void UserData::GameShellUiHandleInput()
                     AtmosphereOptionsCancel();
                 else if (atmosphereResult.code == 1449)
                     CycleGraphicProfile();
+                else if (atmosphereResult.code == 1453)
+                {
+                    AtmosphereOptionsApplyLive();
+                    graphicPresetInput.clear();
+                    ShowConfirmDialog(7, Locale::Text::OpenUA(Locale::OUA_PRESET_NAME), "_", 0);
+                }
                 else if (atmosphereResult.code == 1136)
                     CyclePaletteTheme();
             }

@@ -839,12 +839,16 @@ bool IniConf::ReadFromNucleusIni()
     if ( !Common::Ini::ParseIniFile(uaDataFirstNucleusIniPath(), &_varList) )
         return false;
 
-    // The editable OpenNeoUA graphics profile is the default baseline for
-    // the Advanced Graphics Settings page. If the profile is unavailable,
-    // Classic provides a safe fallback. A user's OpenNeoUA.ini remains the
+    // Classic 1998 is the default baseline for Advanced Graphics Settings.
+    // Older installations can fall back to their OpenNeoUA/Classic profiles.
+    // A user's OpenNeoUA.ini remains the
     // higher-priority layer, so existing saved/custom values still win.
     bool graphicsProfileLoaded = Common::Ini::ParseIniFileOverlay(
-        "Data/Scripts/Graphic_Profiles/OpenNeoUA.cfg", &_varList);
+        std::string("Data/Scripts/Graphic_Profiles/") + DEFAULT_GRAPHIC_PROFILE_NAME + ".cfg", &_varList);
+
+    if (!graphicsProfileLoaded)
+        graphicsProfileLoaded = Common::Ini::ParseIniFileOverlay(
+            "Data/Scripts/Graphic_Profiles/OpenNeoUA.cfg", &_varList);
 
     // Compatibility with profiles created before .cfg became the native extension.
     if (!graphicsProfileLoaded)
