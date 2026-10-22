@@ -433,6 +433,7 @@ std::string Text::OpenUA(uint32_t id)
         case OUA_PLASMA_OBTAINED:             fallback = "Plasma Obtained"; break;
         case OUA_PLASMA_RESERVE:              fallback = "Plasma Reserve"; break;
         case OUA_HUD_MAX_UNITS:               fallback = "Max units:"; break;
+        case OUA_RETRO_CURSORS:               fallback = "Retro Cursors"; break;
         case OUA_PARTICLE_LIMIT:              fallback = "Particle Limit"; break;
         case OUA_GRAPHIC_PRESET:              fallback = "Preset"; break;
         case OUA_CUSTOM:                      fallback = "Custom"; break;

@@ -2670,6 +2670,57 @@ bool NC_STACK_ypaworld::CreateVideoControls()
         }
     }
 
+    // OpenNeoUA: alpha mouse cursors toggle (right column, same row as Hide Map Border Walls).
+    // Unchecked by default: the release cursors of Res stay in use.
+    {
+        const int availableWidth = dword_5A50B2 - 6 * buttonsSpace - 2 * checkBoxWidth;
+        const int columnWidth = availableWidth / 2;
+
+        btn_64arg.tileset_down = 19;
+        btn_64arg.tileset_up = 18;
+        btn_64arg.field_3A = 30;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CHECKBX;
+        btn_64arg.xpos = 3 * buttonsSpace + checkBoxWidth + columnWidth;
+        btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
+        btn_64arg.width = checkBoxWidth;
+        btn_64arg.caption = "g";
+        btn_64arg.caption2 = "g";
+        btn_64arg.downCode = 1322;
+        btn_64arg.upCode = 1323;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 1196;
+        btn_64arg.flags = 0;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Retro Cursors checkbox\n");
+            return false;
+        }
+
+        btn_64arg.tileset_down = 16;
+        btn_64arg.tileset_up = 16;
+        btn_64arg.field_3A = 16;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+        btn_64arg.xpos = 4 * buttonsSpace + columnWidth + 2 * checkBoxWidth;
+        btn_64arg.width = columnWidth;
+        btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_RETRO_CURSORS);
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 0;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.button_id = 0;
+        btn_64arg.flags = NC_STACK_button::FLAG_TEXT;
+        btn_64arg.txt_r = _iniColors[60].r;
+        btn_64arg.txt_g = _iniColors[60].g;
+        btn_64arg.txt_b = _iniColors[60].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+        {
+            ypa_log_out("Unable to add Retro Cursors label\n");
+            return false;
+        }
+    }
+
     _GameShell->UpdatePaletteThemeText();
     _GameShell->UpdateGfxOptionTexts();
     _GameShell->UpdateMenuFontText();
@@ -5383,6 +5434,11 @@ void NC_STACK_ypaworld::UpdateGameShell()
     _GameShell->confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
     v16.butID = 1193; // Hide Map Border Walls checkbox
     v16.field_4 = _GameShell->confHideMapBorderWalls ? 1 : 2;
+    _GameShell->video_button->SetState(&v16);
+
+    _GameShell->confRetroCursors = System::IniConf::UiRetroCursors.Get<bool>();
+    v16.butID = 1196; // Retro Cursors checkbox
+    v16.field_4 = _GameShell->confRetroCursors ? 1 : 2;
     _GameShell->video_button->SetState(&v16);
 
     _GameShell->confGenesisListOrder = System::IniConf::UiGenesisListOrder.Get<std::string>();

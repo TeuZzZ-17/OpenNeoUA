@@ -397,6 +397,7 @@ void UserData::ShowOptionsMenu()
     confSpectatorMode = System::IniConf::GameSpectatorMode.Get<bool>();
     confPlayAsOtherFactions = System::IniConf::GamePlayAsOtherFactions.Get<bool>();
     confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
+    confRetroCursors = System::IniConf::UiRetroCursors.Get<bool>();
     confInterfaceStyle = interfaceStyle;
     confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     confGenesisListOrder = NormalizeGenesisListOrder(System::IniConf::UiGenesisListOrder.Get<std::string>());
@@ -426,6 +427,10 @@ void UserData::ShowOptionsMenu()
 
     state.butID = 1193;
     state.field_4 = confHideMapBorderWalls ? 1 : 2;
+    video_button->SetState(&state);
+
+    state.butID = 1196;
+    state.field_4 = confRetroCursors ? 1 : 2;
     video_button->SetState(&state);
 
     if ( NC_STACK_button::Slider *ambientSlider = video_button->GetSliderData(1191) )
@@ -505,6 +510,7 @@ void UserData::ResetOptionsToDefaults()
     confSpectatorMode = OPTIONS_RESET_SPECTATOR;
     confPlayAsOtherFactions = OPTIONS_RESET_PLAY_AS;
     confHideMapBorderWalls = OPTIONS_RESET_HIDE_MAP_BORDER_WALLS;
+    confRetroCursors = OPTIONS_RESET_RETRO_CURSORS;
 
     const bool defaultRetroInterface = OPTIONS_RESET_RETRO_INTERFACE;
     confInterfaceStyle = defaultRetroInterface ? GFX::VirtualUIStyle::RETRO : GFX::VirtualUIStyle::SMOOTH;
@@ -520,7 +526,8 @@ void UserData::ResetOptionsToDefaults()
                               SETTINGS_CHANGE_PLAY_AS_OTHER_FACTIONS |
                               SETTINGS_CHANGE_AMBIENT_VOLUME |
                               SETTINGS_CHANGE_INTERFACE_STYLE |
-                              SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS;
+                              SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS |
+                              SETTINGS_CHANGE_RETRO_CURSORS;
 
     NC_STACK_button::button_66arg state;
 
@@ -558,6 +565,10 @@ void UserData::ResetOptionsToDefaults()
 
     state.butID = 1193;
     state.field_4 = confHideMapBorderWalls ? 1 : 2;
+    video_button->SetState(&state);
+
+    state.butID = 1196;
+    state.field_4 = confRetroCursors ? 1 : 2;
     video_button->SetState(&state);
 
     if ( NC_STACK_button::Slider *slider = video_button->GetSliderData(1159) )

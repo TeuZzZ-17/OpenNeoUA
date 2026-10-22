@@ -854,6 +854,7 @@ public:
     bool confSpectatorMode;
     bool confPlayAsOtherFactions;
     bool confHideMapBorderWalls = false;
+    bool confRetroCursors = false;
     // OpenNeoUA: optional modern cockpit camera. The original first-person viewer remains
     // the default; OpenNeoUA.ini may opt into cockpit mode for the current session.
     bool cockpitCameraRuntimeMode = false;

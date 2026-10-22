@@ -370,6 +370,7 @@ public:
     static Common::Ini::Key GfxVBO;
 
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
+    static Common::Ini::Key UiRetroCursors; // OpenNeoUA: ui.retro_cursors (default no) - alpha mouse cursors from Res/Retro
     static Common::Ini::Key UiRetroInterface; // OpenNeoUA: ui.retro_interface (default yes) - nearest vs smooth virtual UI scaling
     static Common::Ini::Key UiWeaponName; // OpenNeoUA: optional Weapon-name panel; default false preserves vanilla HUD
     static Common::Ini::Key UiMapMarkerSound; // OpenNeoUA: optional Data-relative WAV played when a Map Marker is placed; empty/unloadable = silent

@@ -284,6 +284,9 @@ enum OPENUA_STRING
     // Classic GEM popup: label of the unit limit row (max_active_at_once), followed by the number.
     OUA_HUD_MAX_UNITS,
 
+    // Options menu: alpha mouse cursors checkbox.
+    OUA_RETRO_CURSORS,
+
     OUA_STRING_MAX
 };
 

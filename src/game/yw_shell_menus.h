@@ -41,6 +41,7 @@ static constexpr int SETTINGS_CHANGE_MOVIE_PLAYER          = 0x100000;
 static constexpr int SETTINGS_CHANGE_MENU_FONT             = 0x200000;
 static constexpr int SETTINGS_CHANGE_INTERFACE_STYLE       = 0x800000;
 static constexpr int SETTINGS_CHANGE_HIDE_MAP_BORDER_WALLS = 0x1000000;
+static constexpr int SETTINGS_CHANGE_RETRO_CURSORS         = 0x2000000;
 static constexpr int SETTINGS_CHANGE_RESTART_REQUIRED_GRAPHICS =
     SETTINGS_CHANGE_BLENDING | SETTINGS_CHANGE_MENU_FONT;
 static constexpr int MENU_MSGBOX_RESTORE_DEFAULT_KEYS = 1;
@@ -56,6 +57,7 @@ static constexpr bool OPTIONS_RESET_SPECTATOR = false;
 static constexpr bool OPTIONS_RESET_PLAY_AS = false;
 static constexpr bool OPTIONS_RESET_RETRO_INTERFACE = true;
 static constexpr bool OPTIONS_RESET_HIDE_MAP_BORDER_WALLS = false;
+static constexpr bool OPTIONS_RESET_RETRO_CURSORS = false;
 static constexpr const char *OPTIONS_RESET_GENESIS_LIST_ORDER = "energy";
 static constexpr int OPTIONS_RESET_FX_NUMBER = 16;
 static constexpr int OPTIONS_RESET_SOUND_VOLUME = 127;

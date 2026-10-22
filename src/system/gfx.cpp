@@ -3462,9 +3462,37 @@ uint32_t GFXEngine::CursPix(uint8_t *data, int ofs, int bpp)
     return 0;
 }
 
-SDL_Cursor *GFXEngine::LoadCursor(const std::string &name)
+// Loads the 11 mouse cursors: the alpha set from Res/Retro when retro is on, the
+// release set from Res otherwise. A cursor missing from Res/Retro falls back to
+// the release one. The set in use is replaced without losing the current cursor.
+void GFXEngine::LoadCursorSet(bool retro)
 {
-    FSMgr::FileHandle *fil = uaOpenFileAlloc( fmt::sprintf("res/%s.cur", name) , "rb");
+    static const char *const names[11] =
+    {
+        "Pointer", "Cancel", "Select", "Attack", "Goto", "Disk",
+        "New", "Add", "Control", "Beam", "Build"
+    };
+
+    const std::array<SDL_Cursor *, 11> previous = cursors;
+
+    for (size_t i = 0; i < cursors.size(); i++)
+    {
+        cursors[i] = LoadCursor(names[i], retro);
+        if ( !cursors[i] && retro )
+            cursors[i] = LoadCursor(names[i], false);
+    }
+
+    if ( CurrentCursorID > 0 )
+        SetCursor(CurrentCursorID, 1);
+
+    for (SDL_Cursor *old : previous)
+        if ( old )
+            SDL_FreeCursor(old);
+}
+
+SDL_Cursor *GFXEngine::LoadCursor(const std::string &name, bool retro)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc( fmt::sprintf(retro ? "res/retro/%s.cur" : "res/%s.cur", name) , "rb");
 
     UA_PALETTE pal;
 
@@ -3682,17 +3710,7 @@ void GFXEngine::Init()
 
     std::sort(graphicsModes.begin(), graphicsModes.end(), GfxMode::SortCompare);
 
-    cursors[0] = LoadCursor("Pointer");
-    cursors[1] = LoadCursor("Cancel");
-    cursors[2] = LoadCursor("Select");
-    cursors[3] = LoadCursor("Attack");
-    cursors[4] = LoadCursor("Goto");
-    cursors[5] = LoadCursor("Disk");
-    cursors[6] = LoadCursor("New");
-    cursors[7] = LoadCursor("Add");
-    cursors[8] = LoadCursor("Control");
-    cursors[9] = LoadCursor("Beam");
-    cursors[10] = LoadCursor("Build");
+    LoadCursorSet(System::IniConf::UiRetroCursors.Get<bool>());
 
     IDVList stak { {ATT_WIDTH,  (int32_t)640},
             {ATT_HEIGHT, (int32_t)480} };
