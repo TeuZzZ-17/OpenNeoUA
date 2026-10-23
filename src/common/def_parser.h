@@ -85,6 +85,8 @@ public:
 public:
     /** Useable from handlers **/
     bool ReadLine(std::string *out);
+    // Opt-in access for fields whose value contains spaces; legacy tokenization stays unchanged.
+    std::string FullLineValue() const;
 
     long stol(const std::string& str, std::size_t* __idx = 0, int __base = 10);
     int stoi(const std::string& str, std::size_t* __idx = 0, int __base = 10);

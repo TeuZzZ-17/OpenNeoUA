@@ -338,9 +338,9 @@ void yw_DrawSquadronManagerSelectionSummary(
     if ( displayUnits.empty() )
         return;
 
-    const uint8_t icon = (uint8_t)yw_GetSquadronManagerUnitIcon(
+    const uint32_t icon = yw_GetSquadronManagerUnitIcon(
         yw, commander, 0);
-    const Common::PointRect &source = yw->_guiTiles[28]->map[icon];
+    const Common::PointRect &source = yw->_guiTiles[28]->Glyph(icon);
     const int iconWidth = source.w;
     const int iconHeight = source.h;
     const std::string count = fmt::sprintf("%d", (int)displayUnits.size());
@@ -364,7 +364,7 @@ void yw_DrawSquadronManagerSelectionSummary(
     FontUA::set_center_ypos(&summary, iconY - yw->_screenSize.y / 2);
     // At 100% the standard glyph path preserves the original unit artwork.
     // The title summary intentionally omits the separate row health glyph.
-    FontUA::store_u8(&summary, icon);
+    FontUA::store_glyph(&summary, icon);
 
     FontUA::reset_tileset(&summary, 0);
     FontUA::set_center_xpos(&summary, countX - yw->_screenSize.x / 2);
@@ -594,7 +594,7 @@ char yw_GetSquadronManagerStatusIcon(NC_STACK_ypabact *bact)
     return 97;
 }
 
-char yw_GetSquadronManagerUnitIcon(NC_STACK_ypaworld *yw,
+uint32_t yw_GetSquadronManagerUnitIcon(NC_STACK_ypaworld *yw,
                                           NC_STACK_ypabact *bact, int blink)
 {
     if ( bact == yw->_userUnit && blink )
@@ -881,11 +881,8 @@ void yw_RenderSquadronManagerSquadContent(NC_STACK_ypaworld *yw,
             ? displayUnits[slot]
             : nullptr;
 
-        std::string iconText;
-        if ( unit )
-            iconText += yw_GetSquadronManagerUnitIcon(yw, unit, blink);
-
-        sub_4514F0(yw->_guiTiles[28], cur, iconText, cellWidth, 64);
+        FontUA::glyph_cell(yw->_guiTiles[28], cur,
+            unit ? yw_GetSquadronManagerUnitIcon(yw, unit, blink) : 0, cellWidth);
 
         if ( unit )
         {
@@ -937,9 +934,8 @@ void yw_RenderSquadronManagerWholeSquadDragGhost(
         if ( !unit )
             continue;
 
-        sub_4514F0(yw->_guiTiles[28], cur,
-                   std::string(1, yw_GetSquadronManagerUnitIcon(yw, unit, blink)),
-                   iconCellWidth, 64);
+        FontUA::glyph_cell(yw->_guiTiles[28], cur,
+            yw_GetSquadronManagerUnitIcon(yw, unit, blink), iconCellWidth);
     }
 
     FontUA::set_opacity(cur, 255);

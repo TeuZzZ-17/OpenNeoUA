@@ -1,0 +1,28 @@
+begin_collision_shape
+version = 1
+source = VP_LASR2
+source_hash = 4a81208d439594dfb8a239d14a8b139144073519b97eda41fa0cad203ec157bd
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 215_212_-99.980427324771881
+vertex = 39.995105341076851_-0.0056771673262119293_99.980427324771881
+vertex = 215_-238_-99.980427324771881
+vertex = -235_212_-99.980427324771881
+vertex = -29.998042471706867_5.9849251881241798_99.980427324771881
+vertex = -10_-13_99.980427324771881
+vertex = -235_-238_-99.980427324771881
+face = 0_1_2
+face = 0_2_6
+face = 0_6_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_5
+face = 1_5_2
+face = 2_5_6
+face = 3_6_4
+face = 4_6_5
+end
+end

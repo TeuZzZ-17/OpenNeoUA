@@ -1,0 +1,22 @@
+begin_collision_shape
+version = 1
+source = VP_GRANA
+source_hash = d837adf0d766835e7134fac0e777ea54c2701b93fd19bd865adbd055586b81d8
+scale = 0.69999999999999996_0.69999999999999996_2
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 61.599999999999994_56_-20.000001758337021
+vertex = 61.599999999999994_-63_-20.000001758337021
+vertex = -57.400000000000006_56_-20.000001758337021
+vertex = 0.0032890386879422806_-0.0054815094917977092_40.000001758337021
+vertex = -57.400000000000006_-63_-20.000001758337021
+face = 0_1_4
+face = 0_4_2
+face = 0_2_3
+face = 0_3_1
+face = 1_3_4
+face = 2_4_3
+end
+end

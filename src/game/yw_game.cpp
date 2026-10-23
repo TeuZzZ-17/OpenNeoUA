@@ -152,6 +152,7 @@ int NC_STACK_ypaworld::LevelCommonLoader(TLevelDescription *mapp, int levelID, i
         return 0;
 
     StopAmbientLevelSound();
+    ResetLocations();
     StopAtmosphericFXLoopSound();
     ClearMobilePowerFXRuntime();
 

@@ -1,0 +1,22 @@
+begin_collision_shape
+version = 1
+source = VP_GRAN9
+source_hash = 65f5addb8ccdcc75948c79c61bcb25f7d116ace784fbd2d72d4dd91760503f04
+scale = 1.5_1.5_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 133.5_117_-10.000000055879354
+vertex = 133.5_-138_-10.000000055879354
+vertex = -121.5_117_-10.000000055879354
+vertex = 0.0093972533941268921_-0.016445193439722061_20.000000055879354
+vertex = -121.5_-138_-10.000000055879354
+face = 0_1_4
+face = 0_4_2
+face = 0_2_3
+face = 0_3_1
+face = 1_3_4
+face = 2_4_3
+end
+end

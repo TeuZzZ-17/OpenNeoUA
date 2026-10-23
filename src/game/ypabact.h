@@ -712,7 +712,8 @@ public:
     virtual void ChangeSectorEnergy(yw_arg129 *arg);
     virtual void DeadTimeUpdate(update_msg *arg);
     int GetPlasmaDurationMs() const; // OpenNeoUA: vanilla plasma lifetime scaled only in single-player
-    void UpdateDeathPlasmaMagnet(int frameTime); // OpenNeoUA: player-only death-plasma attraction
+    NC_STACK_ypabact *FindDeathPlasmaCollector(float radius) const;
+    void UpdateDeathPlasmaMagnet(int frameTime); // OpenNeoUA: death-plasma attraction toward the nearest eligible collector
     virtual void ypabact_func122(update_msg *arg);
     virtual void ypabact_func123(update_msg *arg);
     virtual size_t PathFinder(bact_arg124 *arg);

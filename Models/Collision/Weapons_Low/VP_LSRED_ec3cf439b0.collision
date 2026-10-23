@@ -1,0 +1,28 @@
+begin_collision_shape
+version = 1
+source = VP_LSRED
+source_hash = 142d13f58598957f58b611be0437abcbd0f7cb4d847844ea9e9fe6c731045941
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 10.997748911380768_0.00019573979079723358_-6
+vertex = -0.00019573979079723358_0.99980426020920277_32
+vertex = -0.00019573979079723358_-10.997748911380768_-6
+vertex = -0.00019573979079723358_0.00019573979079723358_-44
+vertex = -0.00019573979079723358_11.997748911380768_-6
+vertex = -0.99980426020920277_0.00019573979079723358_32
+vertex = -11.997748911380768_0.00019573979079723358_-6
+face = 0_1_5
+face = 0_5_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_6
+face = 1_6_5
+face = 2_6_3
+face = 2_5_6
+face = 3_6_4
+end
+end

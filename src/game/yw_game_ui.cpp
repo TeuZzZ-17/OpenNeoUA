@@ -1273,7 +1273,7 @@ bool GetPlayerRoboAIBehaviorMapTarget(NC_STACK_ypaworld *yw, vec3d *target)
     return robo->GetPlayerRoboAIBehaviorMoveTarget(target);
 }
 
-void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5, int screenYOffset)
+void sub_4F6980(CmdStream *cur, float a1, float a2, uint32_t a3, int a4, int a5, int screenYOffset)
 {
     Common::Point tmp = sub_4F681C( {a1, a2} );
 
@@ -1343,7 +1343,7 @@ void sub_4F6980(CmdStream *cur, float a1, float a2, char a3, int a4, int a5, int
             FontUA::set_xwidth(cur, v34);
         }
 
-        FontUA::store_u8(cur, a3);
+        FontUA::store_glyph(cur, a3);
     }
 }
 
@@ -3850,7 +3850,7 @@ void sb_0x4d7c08__sub0(NC_STACK_ypaworld *yw)
 }
 
 void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStream *cur,
-                         char a5, const std::string &a6, int a7, int remaining)
+                         uint32_t a5, const std::string &a6, int a7, int remaining)
 {
     const int scrollbarGap = yw_GetGuiListScrollbarGapFillWidth(lstvw, yw);
     int v33 = lstvw->entryWidth - 2 * yw->_fontBorderW + scrollbarGap;
@@ -3904,7 +3904,7 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
                                  + selectedPricePadding;
     const int effectivePriceColumnWidth = std::max(normalPriceWidth, selectedPriceWidth);
 
-    v24[0].txt = a5;
+    v24[0].txt.clear();
     v24[0].fontID = 28;
     v24[0].width = squadron_manager.field_2CC;
     v24[0].prefixChar = 0;
@@ -3951,7 +3951,8 @@ void buy_list_update_sub(NC_STACK_ypaworld *yw, int a2, GuiList *lstvw, CmdStrea
     // icons, names and prices remain at their original opacity.
     if ( backgroundOpacity != 255 )
         FontUA::set_opacity(cur, 255);
-    FormateColumnItem(yw, cur, 1, v24);
+    FontUA::select_tileset(cur, 28);
+    FontUA::glyph_cell(yw->_guiTiles[28], cur, a5, squadron_manager.field_2CC);
 
     if ( backgroundOpacity != 255 )
         FontUA::set_opacity(cur, backgroundOpacity);
@@ -5619,7 +5620,7 @@ void sub_4E1D6C(NC_STACK_ypaworld *yw, CmdStream *cur, int x, int y, uint8_t ico
     FontUA::set_center_xpos(cur, x);
     FontUA::set_center_ypos(cur, y);
 
-    FontUA::store_u8(cur, icon);
+    FontUA::store_glyph(cur, icon);
 
     FontUA::store_u8(cur, 84);
 
@@ -6019,10 +6020,10 @@ void ypaworld_func64__sub7__sub7(NC_STACK_ypaworld *yw, TInputState *inpt)
     ypaworld_func64__sub7__sub7__sub0(yw);
 }
 
-char sub_4C7134(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+uint32_t sub_4C7134(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
     int protoId = ResolveUnitDisplayVehicleProtoId(yw, bact);
-    uint8_t icon = protoId >= 0 ? yw->_vhclProtos[protoId].type_icon : 0;
+    uint32_t icon = protoId >= 0 ? yw->_vhclProtos[protoId].type_icon : 0;
 
     if ( !icon )
         icon = 65;
@@ -6044,7 +6045,7 @@ void sub_4C7950(NC_STACK_ypaworld *yw, CmdStream *cur, int a4, int a3)
                 FontUA::set_center_ypos(cur, a3 - (yw->_screenSize.y / 2));
 
                 FontUA::set_opacity(cur, kSquadronManagerDragOpacity);
-                FontUA::store_u8(cur, sub_4C7134(yw, squadron_manager.field_2BC));
+                FontUA::store_glyph(cur, sub_4C7134(yw, squadron_manager.field_2BC));
                 FontUA::set_opacity(cur, 255);
             }
         }
@@ -6111,7 +6112,7 @@ void sub_4514F0(TileMap *tyle, CmdStream *cur, const std::string &st, int a3, ch
 void ypaworld_func64__sub7__sub3__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, CmdStream *cur)
 {
     const int blink = (yw->_timeStamp / 300) & 1;
-    char icon = sub_4C7134(yw, bact);
+    uint32_t icon = sub_4C7134(yw, bact);
     if ( bact == yw->_userUnit && blink )
         icon = 33;
     else if ( info_log.field_255C == bact->_gid
@@ -6133,12 +6134,12 @@ void ypaworld_func64__sub7__sub3__sub0__sub1(NC_STACK_ypaworld *yw, NC_STACK_ypa
           + yw_GetSquadronManagerScrollbarGapFillWidth(yw)));
 
     FontUA::select_tileset(cur, 28);
-    FontUA::store_u8(cur, icon);
+    FontUA::store_glyph(cur, icon);
 
     // Keep the classic lifemeter visible for the Host Station as well.  The
     // 128..131 glyphs carry their own vertical offset and render above the
     // unit icon, matching the original Squadron Manager health indicator.
-    FontUA::add_xpos(cur, -yw->_guiTiles[28]->map[(uint8_t)icon].w);
+    FontUA::add_xpos(cur, -yw->_guiTiles[28]->Glyph(icon).w);
     FontUA::store_u8(cur, yw_GetSquadronManagerHealthGlyph(bact));
 
     FontUA::next_line(cur);

@@ -1,3 +1,4 @@
+#include "common/glyph_key.h"
 // World helpers: base/level loading support, sky and miscellaneous ypaworld functions.
 #include <inttypes.h>
 #include <cctype>
@@ -153,6 +154,7 @@ TileMap * NC_STACK_ypaworld::yw_LoadFont(const std::string &fontname)
         return nullptr;
     }
 
+    if (buf.compare(0, 3, "\xef\xbb\xbf") == 0) buf.erase(0, 3);
     Utils::StringSetEnd(&buf, ";\n\r");
 
     std::string bitmap_name;
@@ -186,31 +188,25 @@ TileMap * NC_STACK_ypaworld::yw_LoadFont(const std::string &fontname)
         Utils::StringSetEnd(&buf, "\n\r");
         Stok tkc(buf, " \t");
 
-        int chr = -1;
-
-        if ( buf[0] == ' ' )
-            chr = (uint8_t)' ';
+        uint32_t chr = 0;
+        bool valid = false;
+        if (!buf.empty() && buf[0] == ' ')
+            valid = GlyphKey::Parse(" ", chr);
         else
         {
-            std::string sChar;
-            if (tkc.GetNext(&sChar))
-            {
-                if ( sChar[0] == '#' && sChar.length() > 1 )
-                    chr = std::stol(sChar.substr(1), nullptr, 0);
-                else
-                    chr = (uint8_t)sChar[0];
-            }
+            std::string token;
+            if (tkc.GetNext(&token)) valid = GlyphKey::Parse(token, chr, true);
         }
-
-        if ( chr >= 0 )
+        if (valid)
         {
             std::string sX, sY, sW;
-            if ( tkc.GetNext(&sX) && tkc.GetNext(&sY) && tkc.GetNext(&sW) )
+            if (tkc.GetNext(&sX) && tkc.GetNext(&sY) && tkc.GetNext(&sW))
             {
-                tileset->map[chr].x = std::stol(sX, nullptr, 0);
-                tileset->map[chr].y = std::stol(sY, nullptr, 0);
-                tileset->map[chr].w = std::stol(sW, nullptr, 0);
-                tileset->map[chr].h = tileset->h;
+                Common::PointRect &glyph = chr < 256 ? tileset->map[chr] : tileset->extendedGlyphs[chr];
+                glyph.x = std::stol(sX, nullptr, 0);
+                glyph.y = std::stol(sY, nullptr, 0);
+                glyph.w = std::stol(sW, nullptr, 0);
+                glyph.h = tileset->h;
             }
         }
     }
@@ -555,6 +551,7 @@ bool NC_STACK_ypaworld::sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const s
     *mapp = TLevelDescription();
     ScriptParser::HandlersList handlers {
         new World::Parsers::LevelDataParser(this, mapp),
+        new World::Parsers::LevelLocationParser(&mapp->Locations),
         new World::Parsers::MapRobosParser(mapp),
         new World::Parsers::MapSizesParser(mapp)
     };
@@ -2342,6 +2339,7 @@ int NC_STACK_ypaworld::ypaworld_func158__sub4__sub1__sub5__sub0(TLevelDescriptio
     ScriptParser::HandlersList parsers
     {
         new World::Parsers::LevelDataParser(this, mapproto),
+        new World::Parsers::LevelLocationParser(&mapproto->Locations),
         new World::Parsers::LevelGatesParser(this),
         new World::Parsers::LevelMbMapParser(mapproto),
         new World::Parsers::LevelMapsParser(this, mapproto),
@@ -2604,6 +2602,7 @@ int NC_STACK_ypaworld::sub_4DA41C(TLevelDescription *mapp, const std::string &fn
     ScriptParser::HandlersList parsers
     {
         new World::Parsers::LevelDataParser(this, mapp),
+        new World::Parsers::LevelLocationParser(&mapp->Locations),
         new World::Parsers::MapRobosParser(mapp),
         new World::Parsers::LevelGemParser(this),
         new World::Parsers::LevelSquadParser(mapp),
@@ -2619,8 +2618,10 @@ int NC_STACK_ypaworld::sub_4DA41C(TLevelDescription *mapp, const std::string &fn
     };
 
     const bool parsed = ScriptParser::ParseFile(fname, parsers, ScriptParser::FLAG_NO_SCOPE_SKIP);
-    if ( parsed )
+    if ( parsed ) {
         ResolveStatusProfileLinks();
+        _locations=mapp->Locations;
+    }
     return parsed;
 }
 

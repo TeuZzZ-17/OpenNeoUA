@@ -1523,35 +1523,95 @@ int NC_STACK_ypabact::GetPlasmaDurationMs() const
     return std::max(1, (int)scaledDuration);
 }
 
+NC_STACK_ypabact *NC_STACK_ypabact::FindDeathPlasmaCollector(float radius) const
+{
+    const vec3d plasmaPos = _vp_extra[0].pos;
+
+    // The closest eligible collector wins. The player-controlled unit has no
+    // priority over a friendly AI unit that is closer to the residue.
+    NC_STACK_ypabact *collector = nullptr;
+    float nearestSquare = radius * radius;
+
+    NC_STACK_ypabact *playerUnit = _world->getYW_userVehicle();
+    if ( playerUnit && playerUnit != this && playerUnit->getBACT_inputting() &&
+         playerUnit->CanCollectPlasmaFrom(this) )
+    {
+        const float distanceSquare =
+            (playerUnit->_position - plasmaPos).square();
+        if ( isfinite(distanceSquare) && distanceSquare <= nearestSquare )
+        {
+            nearestSquare = distanceSquare;
+            collector = playerUnit;
+        }
+    }
+
+    // Plasma and units live in 1200-unit sector cells. Scan only the cells
+    // touched by the magnet radius instead of every unit on the map.
+    // The map bound also keeps an oversized configured radius from turning
+    // the cell search into an unbounded loop.
+    const Common::Point center = World::PositionToSectorID(plasmaPos);
+    const Common::Point mapSize = _world->Sectors().Size();
+    const int maxReach = std::max(mapSize.x, mapSize.y);
+    const float reachCells = std::ceil(
+        std::min(radius / World::CVSectorLength, (float)maxReach));
+    const int reach = std::max(1, (int)reachCells);
+
+    for ( int dy = -reach; dy <= reach; ++dy )
+    {
+        for ( int dx = -reach; dx <= reach; ++dx )
+        {
+            const Common::Point cell(center.x + dx, center.y + dy);
+            if ( !_world->IsSector(cell) )
+                continue;
+
+            for ( NC_STACK_ypabact *unit : _world->SectorAt(cell).unitsList )
+            {
+                if ( !unit || unit == this || !unit->CanCollectPlasmaFrom(this) )
+                    continue;
+
+                const float distanceSquare = (unit->_position - plasmaPos).square();
+                if ( !isfinite(distanceSquare) || distanceSquare > nearestSquare ||
+                     (collector && distanceSquare == nearestSquare && unit->_gid >= collector->_gid) )
+                    continue;
+
+                nearestSquare = distanceSquare;
+                collector = unit;
+            }
+        }
+    }
+
+    return collector;
+}
+
 void NC_STACK_ypabact::UpdateDeathPlasmaMagnet(int frameTime)
 {
     if ( !_world || _world->_isNetGame || frameTime <= 0 ||
          !(_vp_extra[0].flags & EVPROTO_FLAG_ACTIVE) || _scale_time <= 0 )
         return;
 
-    NC_STACK_ypabact *player = _world->getYW_userVehicle();
-    if ( !player || player == this || !player->getBACT_inputting() )
-        return;
-
     const float radius = ypabact_GetPlasmaDeathMagnetRadius();
     const float speed = ypabact_GetPlasmaDeathMagnetSpeed();
-    if ( radius <= 0.0f || speed <= 0.0f ||
-         !player->CanCollectPlasmaFrom(this) )
+    if ( radius <= 0.0f || speed <= 0.0f )
         return;
 
     const vec3d plasmaPos = _vp_extra[0].pos;
-    const vec3d offset = player->_position - plasmaPos;
+    NC_STACK_ypabact *collector = FindDeathPlasmaCollector(radius);
+
+    if ( !collector )
+        return;
+
+    const vec3d offset = collector->_position - plasmaPos;
     const float distance = offset.length();
     if ( !isfinite(distance) || distance > radius )
         return;
 
     // Magnet pickup is gameplay logic, not physical collision. A precise
     // collision shape can leave the vehicle origin inside empty hull space, so
-    // plasma that reaches the player centre must be collected directly instead
-    // of waiting for a shape contact that may never exist.
+    // plasma that reaches the collector centre must be collected directly
+    // instead of waiting for a shape contact that may never exist.
     if ( distance <= 0.001f )
     {
-        player->CollectPlasmaFrom(this);
+        collector->CollectPlasmaFrom(this);
         return;
     }
 
@@ -1570,10 +1630,10 @@ void NC_STACK_ypabact::UpdateDeathPlasmaMagnet(int frameTime)
         _vp_extra[0].pos = _position;
 
         // Complete the magnet interaction in the same frame that the plasma
-        // reaches the player. This keeps pickup independent from legacy,
+        // reaches the collector. This keeps pickup independent from legacy,
         // compound and collision_shape geometry alike.
         if ( travel >= distance )
-            player->CollectPlasmaFrom(this);
+            collector->CollectPlasmaFrom(this);
     }
 }
 
@@ -1651,6 +1711,11 @@ bool NC_STACK_ypabact::CanRecoverPlasmaEnergyFrom(const NC_STACK_ypabact *source
     if ( _oflags & BACT_OFLAG_USERINPT )
         return true;
 
+    // With Plasma currency enabled, owned AI units collect only for credits.
+    // The disabled-feature and multiplayer paths retain their energy rules.
+    if ( _world->IsPlasmaCurrencyEnabled() )
+        return false;
+
     if ( _world->_isNetGame || source->_bact_type == BACT_TYPES_ROBO )
         return false;
 
@@ -1661,6 +1726,7 @@ bool NC_STACK_ypabact::CanRecoverPlasmaEnergyFrom(const NC_STACK_ypabact *source
 bool NC_STACK_ypabact::CanCreditPlasmaCurrencyFrom(const NC_STACK_ypabact *source) const
 {
     if ( !source || source == this || !_world || !_world->IsPlasmaCurrencyEnabled() ||
+         _bact_type == BACT_TYPES_MISSLE ||
          _status == BACT_STATUS_DEAD ||
          (_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_CLEAN)) ||
          source->_status != BACT_STATUS_DEAD ||
@@ -1682,9 +1748,8 @@ bool NC_STACK_ypabact::CanCreditPlasmaCurrencyFrom(const NC_STACK_ypabact *sourc
 
 bool NC_STACK_ypabact::CanCollectPlasmaFrom(const NC_STACK_ypabact *source) const
 {
-    // Keep vanilla energy eligibility and Plasma-currency eligibility separate.
-    // A full-energy allied unit may still collect any valid enemy residue for
-    // the global currency, without gaining/overflowing vanilla energy.
+    // The player can recover energy and credits. Owned AI units can collect
+    // enemy residue for credits even at full energy, without healing.
     return CanRecoverPlasmaEnergyFrom(source) || CanCreditPlasmaCurrencyFrom(source);
 }
 
@@ -1694,6 +1759,14 @@ bool NC_STACK_ypabact::CollectPlasmaFrom(NC_STACK_ypabact *source)
     const bool creditCurrency = CanCreditPlasmaCurrencyFrom(source);
     if ( !recoverEnergy && !creditCurrency )
         return false;
+
+    // Physical contact obeys the same nearest-collector rule as attraction.
+    if (_world->IsPlasmaCurrencyEnabled() && ypabact_GetPlasmaDeathMagnetRadius() > 0.0f &&
+        ypabact_GetPlasmaDeathMagnetSpeed() > 0.0f)
+    {
+        NC_STACK_ypabact *nearest = source->FindDeathPlasmaCollector(ypabact_GetPlasmaDeathMagnetRadius());
+        if (nearest && nearest != this) return false;
+    }
 
     const uint64_t plasmaCurrencyValue =
         creditCurrency ? ypabact_CalculatePlasmaCurrencyValue(source) : 0;

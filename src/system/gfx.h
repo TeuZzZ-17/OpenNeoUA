@@ -41,6 +41,8 @@ struct TileMap
 {
     NC_STACK_bitmap *img = nullptr;
     std::array<Common::PointRect, 256> map;
+    std::map<uint32_t, Common::PointRect> extendedGlyphs;
+    const Common::PointRect &Glyph(uint32_t key) const;
     int h = 0;
 
     TileMap();
@@ -768,6 +770,7 @@ public:
 
     int LoadFontByDescr(const std::string &fontname);
     int MeasureScreenTextWidth(const std::string &text) const;
+    void DrawLocationTitle(const std::string &name, const SDL_Color &color, float opacity);
     void matrixAspectCorrection(mat3x3 &inout, bool invert);
     void getAspectCorrection(float &cW, float &cH, bool invert);
     void viewZoomCorrection(float &x, float &y, bool invert = false) const;
@@ -933,6 +936,13 @@ public:
     UA_PALETTE _palette;
 
     void ClearUiAccentCache();
+    void ClearLocationTitle();
+    TTF_Font *_locationFont=nullptr;
+    TTF_Font *_locationLabelFont=nullptr;
+    SDL_Surface *_locationTitle=nullptr, *_locationLabel=nullptr;
+    std::string _locationTitleName;
+    SDL_Color _locationTitleColor{0,0,0,0};
+    int _locationCanvasWidth=0, _locationCanvasHeight=0;
     SDL_Surface *GetUiAccentSurface(SDL_Surface *source, const SDL_Color &accent,
                                     uint8_t tilesetId);
     static bool IsUiAccentTileset(uint8_t id);

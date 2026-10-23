@@ -1,0 +1,28 @@
+begin_collision_shape
+version = 1
+source = VP_RTX
+source_hash = f68f583c1a5c419a287720a8e646ff598f1a26f254ec1c2d528b7a1957827bd3
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 21.5_22.5_-25
+vertex = 21.5_-22.5_-25
+vertex = -23.5_22.5_-25
+vertex = -9.7848474979400635e-05_0_35
+vertex = 4.9994126856327057_0.9999021515250206_26.994909644126892
+vertex = 2.9996086061000824_-4.999510645866394_26.994909644126892
+vertex = -23.5_-22.5_-25
+face = 0_1_6
+face = 0_6_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_5
+face = 1_5_6
+face = 2_6_3
+face = 3_6_5
+face = 3_5_4
+end
+end

@@ -1534,6 +1534,7 @@ struct TLevelDescription
     int32_t CloudId = -1;
     std::vector<MapRobo> Robos;
     std::vector<MapSquad> Squads;
+    std::vector<World::Location> Locations;
     std::array<std::string, 8> Palettes;
     std::vector<TBkgPicInfo> Mbmaps;
     std::vector<TBkgPicInfo> Dbmaps;
@@ -2995,6 +2996,10 @@ public:
     void StartAmbientLevelSound(const TLevelDescription &mapp);
     void UpdateAmbientLevelSound();
     void StopAmbientLevelSound();
+    void ResetLocations();
+    void UpdateLocations();
+    void RenderLocationTitle();
+    void WriteLocations(FSMgr::FileHandle *file);
     void StartAtmosphericFXLoopSound();
     void StopAtmosphericFXLoopSound();
     bool StartAtmosphericFXLoopSoundInstance(const World::TAtmosphericFXProfile &profile,
@@ -3198,6 +3203,11 @@ public:
     std::vector<uint8_t> _superItemFalloutActive;
     NC_STACK_sample *_ambientSoundSample = nullptr;
     TSndCarrier _ambientSoundCarrier;
+    std::vector<World::Location> _locations;
+    World::LocationEntryState _locationEntry;
+    std::vector<NC_STACK_sample *> _locationSamples;
+    std::vector<bool> _locationSoundAttempted;
+    TSndCarrier _locationCarrier;
     NC_STACK_sample *_atmosphericFXLoopSoundSample = nullptr;
     TSndCarrier _atmosphericFXLoopSoundCarrier;
     std::map<int32_t, World::TAtmosphericFXProfile> _mobilePowerFXProfileCache;
