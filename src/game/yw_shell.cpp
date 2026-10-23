@@ -5542,6 +5542,7 @@ int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
         new World::Parsers::SaveRoboParser(this),
         new World::Parsers::SaveSquadParser(this), // commander and units
         new World::Parsers::SaveGemParser(this),
+        new World::Parsers::LevelLocationParser(&_locations, true),
         new World::Parsers::VhclProtoParser(this),
         new World::Parsers::WeaponProtoParser(this),
         new World::Parsers::BuildProtoParser(this),
@@ -5567,6 +5568,8 @@ int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
     {
         ResolveStatusProfileLinks();
         RestoreCustomSuperItemRuntimeAfterLoad();
+        _locationEntry=World::LocationEntryState();
+        _locationEntry.suppressInitial=true;
     }
     return parsed;
 }
@@ -5792,6 +5795,8 @@ size_t NC_STACK_ypaworld::SaveGame(const std::string &saveFile)
         ypa_log_out("Unable to open savegame file\n");
         return 0;
     }
+
+    WriteLocations(fil);
 
     if ( write_modifers )
     {

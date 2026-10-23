@@ -12,6 +12,7 @@
 
 #include "protos.h"
 #include "grounddecal_profile.h"
+#include "locations.h"
 
 
 class NC_STACK_ypaworld;
@@ -366,6 +367,19 @@ public:
 protected:
     TLevelDescription &_m;
     MapSquad *_s;
+};
+
+class LevelLocationParser : public ScriptParser::DataHandler
+{
+public:
+    LevelLocationParser(std::vector<World::Location> *values, bool replace=false)
+        : _values(*values), _replace(replace) {}
+    bool IsScope(ScriptParser::Parser &, const std::string &, const std::string &) override;
+    int Handle(ScriptParser::Parser &, const std::string &, const std::string &) override;
+private:
+    std::vector<World::Location> &_values;
+    World::Location _value;
+    bool _replace=false, _valid=false;
 };
 
 class LevelGatesParser : public ScriptParser::DataHandler

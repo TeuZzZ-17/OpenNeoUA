@@ -1,3 +1,4 @@
+#include "common/glyph_key.h"
 // Script parsers that fill the prototypes (vehicles, weapons, buildings...).
 #include "parsers.h"
 #include "../fmtlib/core.h"
@@ -3879,7 +3880,11 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "type_icon") )
     {
-        _vhcl->type_icon = p2[0];
+        uint32_t glyph;
+        if (GlyphKey::Parse(p2, glyph))
+            _vhcl->type_icon = glyph;
+        else
+            ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
     }
     else if ( !StriCmp(p1, "dest_fx") )
     {
@@ -6008,7 +6013,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "type_icon") )
     {
-        _wpn->type_icon = p2[0];
+        uint32_t glyph;
+        if (GlyphKey::Parse(p2, glyph))
+            _wpn->type_icon = glyph;
+        else
+            ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
     }
     else if ( !StriCmp(p1, "wireframe") )
     {
@@ -6278,7 +6287,11 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     }
     else if ( !StriCmp(p1, "type_icon") )
     {
-        _bld->TypeIcon = p2[0];
+        uint32_t glyph;
+        if (GlyphKey::Parse(p2, glyph))
+            _bld->TypeIcon = glyph;
+        else
+            ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
     }
     else if ( !StriCmp(p1, "spawn_units") )
     {
@@ -7884,6 +7897,66 @@ int LevelSquadParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     return ScriptParser::RESULT_OK;
 }
 
+
+bool LevelLocationParser::IsScope(ScriptParser::Parser &, const std::string &word, const std::string &opt)
+{
+    if (StriCmp(word, "begin_location")) return false;
+    if (_replace) { _values.clear(); _replace=false; }
+    _value=World::Location();
+    _valid=true;
+    try {
+        size_t used=0;
+        _value.id=std::stoi(opt, &used);
+        _valid=used==opt.size();
+    } catch (...) { _valid=false; }
+    return true;
+}
+
+int LevelLocationParser::Handle(ScriptParser::Parser &parser, const std::string &key, const std::string &text)
+{
+    if (!StriCmp(key,"end")) {
+        bool duplicate=false;
+        for (const auto &v:_values) if (v.id==_value.id) duplicate=true;
+        if (_valid && !duplicate && _values.size()<256 && World::ValidLocation(_value)) {
+            World::PrepareLocationBounds(_value);
+            _values.push_back(_value);
+        } else
+            ypa_log_out("WARNING: ignored invalid or duplicate location %d.\n",_value.id);
+        return ScriptParser::RESULT_SCOPE_END;
+    }
+    try {
+        if (!StriCmp(key,"name")) _value.name=parser.FullLineValue();
+        else if (!StriCmp(key,"color")) {
+            _value.color=World::NormalizeLocationColor(parser.FullLineValue());
+        } else if (!StriCmp(key,"sound")) {
+            const std::string path=parser.FullLineValue();
+            _value.sound.clear();
+            if (!path.empty() && !uaNormalizeDataAssetPath(path,&_value.sound,false)) {
+                _value.sound.clear();
+                ypa_log_out("WARNING: ignored invalid location sound path.\n");
+            }
+        } else if (!StriCmp(key,"point")) {
+            const size_t split=text.find('_');
+            if (split==std::string::npos || _value.points.size()>=256) _valid=false;
+            else {
+                size_t usedX=0, usedZ=0;
+                const double x=std::stod(text.substr(0,split),&usedX);
+                const double z=std::stod(text.substr(split+1),&usedZ);
+                if (usedX!=split || usedZ!=text.size()-split-1) _valid=false;
+                else _value.points.push_back({x,z});
+            }
+        } else {
+            size_t used=0;
+            const int number=std::stoi(text,&used);
+            if (used!=text.size()) _valid=false;
+            if (!StriCmp(key,"fade_in_ms")) _value.fadeIn=number;
+            else if (!StriCmp(key,"hold_ms")) _value.hold=number;
+            else if (!StriCmp(key,"fade_out_ms")) _value.fadeOut=number;
+            else _valid=false;
+        }
+    } catch (...) { _valid=false; }
+    return ScriptParser::RESULT_OK;
+}
 
 bool LevelGatesParser::IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt)
 {

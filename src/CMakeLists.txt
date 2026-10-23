@@ -108,6 +108,7 @@ set(SOURCES
     game/yw_gem.cpp
     game/yw_plasma.cpp
     game/yw_ambient.cpp
+    game/yw_locations.cpp
     game/yw_protos.cpp
     game/yw_attached_fx.cpp
     game/yw_brif.cpp

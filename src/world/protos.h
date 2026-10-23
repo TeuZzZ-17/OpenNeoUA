@@ -835,7 +835,7 @@ struct TVhclProto
     float weapon_cone_xy = 0.0;
     float mgun_spread_x = 0.0;
     float mgun_spread_y = 0.0;
-    uint8_t type_icon = 0;
+    uint32_t type_icon = 0;
     std::string name;
     int16_t vp_normal = 0;
     int16_t vp_fire = 0;
@@ -1238,7 +1238,7 @@ struct TWeapProto
             (_weaponFlags & ~(WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_ARC_GRENADE));
     }
 
-    uint8_t type_icon = 0;
+    uint32_t type_icon = 0;
     std::string name;
     int16_t vp_normal = 0;
     int16_t vp_fire = 0;
@@ -1526,7 +1526,7 @@ struct TBuildingProto
     uint8_t EnableMask = 0;
     uint8_t ModelID = 0;
     uint8_t Power = 0;
-    uint8_t TypeIcon = 0;
+    uint32_t TypeIcon = 0;
     std::string Name;
     int Energy = 0;
     int production_cost = 0; // OpenNeoUA: displayed Genesis price; 0 keeps vanilla Energy-as-cost

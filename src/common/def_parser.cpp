@@ -134,6 +134,21 @@ int Parser::ParseRoutine(const std::string &filename, HandlersList &callbacks, i
 }
 
 
+std::string Parser::FullLineValue() const
+{
+    std::string line=_lastLine;
+    const size_t marker=line.find(";#!");
+    if (marker!=std::string::npos) line.erase(0,marker+3);
+    const size_t end=line.find_first_of(";\r\n");
+    if (end!=std::string::npos) line.erase(end);
+    size_t value=line.find('=');
+    if (value==std::string::npos) value=line.find_first_of(" \t",line.find_first_not_of(" \t"));
+    if (value==std::string::npos) return {};
+    value=line.find_first_not_of(" =\t",value);
+    if (value==std::string::npos) return {};
+    return line.substr(value,line.find_last_not_of(" \t")-value+1);
+}
+
 bool Parser::ReadLine(std::string *out)
 {
     bool ok = false;
@@ -156,6 +171,8 @@ bool Parser::ReadLine(std::string *out)
         default:
             break;
     }
+    if (_line == 0 && _lastLine.compare(0, 3, "\xef\xbb\xbf") == 0)
+        _lastLine.erase(0, 3);
     *out = _lastLine;
     _line++;
     return ok;

@@ -659,6 +659,7 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
 size_t NC_STACK_ypaworld::Deinit()
 {
     StopAmbientLevelSound();
+    ResetLocations();
     StopAtmosphericFXLoopSound();
     ClearAtmosphericFXRuntime();
     ClearMobilePowerFXRuntime();
@@ -1548,6 +1549,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
 
             UpdateAmbientLevelSound();
+            if (!gameplayFrozen) UpdateLocations();
 
             //ypaworld_func64__sub22(this); // scene events
 
@@ -1602,6 +1604,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 // Map/Squadron Manager only occlude gameplay UI inside their
                 // own rectangles. Finalize them after every ordinary overlay
                 // so the overlap can be cleared without globally hiding HUD.
+                RenderLocationTitle();
                 yw_FinalizePriorityGameplayUi(this);
 
                 GFX::Engine.EndVirtualUI();
@@ -3622,6 +3625,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _debugGlobalInvulnerability = false;
     ResetPlasmaCurrencyRuntime();
     StopAmbientLevelSound();
+    ResetLocations();
     StopAtmosphericFXLoopSound();
     ClearAtmosphericFXRuntime();
     ClearMobilePowerFXRuntime();

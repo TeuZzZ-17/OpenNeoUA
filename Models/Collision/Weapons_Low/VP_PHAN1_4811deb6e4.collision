@@ -1,0 +1,34 @@
+begin_collision_shape
+version = 1
+source = VP_PHAN1
+source_hash = 12df4d8932674c03f455d4ee9caa1a599ed91ef9cc336dd38c22314fae4dae48
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 7.9984342753887177_5.9984340071678162_-34
+vertex = 7.9984342753887177_-3.9984342753887177_-34
+vertex = -7.9984342753887177_5.9984340071678162_-34
+vertex = 0_11.998434275388718_50
+vertex = 4.9992170780897141_4_29.994909286499023
+vertex = -7.9984342753887177_-3.9984342753887177_-34
+vertex = 4.9992170780897141_-2.0000002682209015_29.994909286499023
+vertex = -4.9992170780897141_4_29.994909286499023
+vertex = -4.9992170780897141_-2.0000002682209015_29.994909286499023
+face = 0_1_5
+face = 0_5_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_6
+face = 0_6_1
+face = 1_6_8
+face = 1_8_5
+face = 2_7_3
+face = 2_5_8
+face = 2_8_7
+face = 3_7_8
+face = 3_8_6
+face = 3_6_4
+end
+end

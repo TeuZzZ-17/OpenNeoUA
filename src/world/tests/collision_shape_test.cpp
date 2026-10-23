@@ -3081,7 +3081,60 @@ int main(int argc,char **argv) {
         Check(b._scale_time<0 && a._energy>10,
               "plasma already at player centre is collected instead of remaining stuck");
 
+        // Friendly AI units are valid collectors too; only the nearest one wins.
+        Actor<> aiHost, aiAlly;
+        const vec3d aiCenter(300,0,-300);
+        const uint64_t currencyBefore = world.GetPlasmaCurrency();
+        aiHost.Bind(world,20,aiCenter); aiHost._owner=1;
+        aiHost._energy=0; aiHost._energy_max=0;
+        aiAlly.Bind(world,21,aiCenter+vec3d(10,0,0)); aiAlly._owner=1;
+        aiAlly._energy=10; aiAlly._energy_max=1000;
+        world._userRobo=&aiHost; world._playerOwner=1; world._userUnit=nullptr;
+
+        b._status=BACT_STATUS_DEAD; b._status_flg=BACT_STFLAG_DEATH1;
+        b._position=aiCenter; b._vp_extra[0].pos=aiCenter;
+        b._vp_extra[0].flags=EVPROTO_FLAG_ACTIVE; b._scale_time=10000; b._energy_max=1000;
+        b.UpdateDeathPlasmaMagnet(20);
+        Check(b._scale_time<0 && aiAlly._energy>10,
+              "plasma magnet also collects for a friendly AI unit");
+        Check(world.GetPlasmaCurrency() == currencyBefore,
+              "friendly AI plasma pickup does not credit the player's Plasma reserve");
+
+        // A full-energy friendly AI must not vacuum enemy residue for currency.
+        aiAlly._energy=aiAlly._energy_max;
+        b._position=aiCenter; b._vp_extra[0].pos=aiCenter;
+        b._vp_extra[0].flags=EVPROTO_FLAG_ACTIVE; b._scale_time=10000;
+        b.UpdateDeathPlasmaMagnet(20);
+        Check(b._scale_time==10000 && (b._vp_extra[0].pos-aiCenter).length()<0.01f,
+              "full-energy friendly AI cannot farm enemy Plasma for the player");
+
+        // The nearest eligible collector wins even when the player unit is
+        // also in range, so the player no longer steals closer AI pickups.
+        a._status=BACT_STATUS_NORMAL; a._status_flg=0;
+        a._position=aiCenter+vec3d(50,0,0); a._owner=1;
+        a._energy=10; a._energy_max=1000;
+        a._oflags=BACT_OFLAG_USERINPT|BACT_OFLAG_BACTCOLL;
+        world._userUnit=&a;
+
+        aiAlly._owner=1; aiAlly._energy=10; aiAlly._energy_max=1000;
+        aiAlly._position=aiCenter+vec3d(10,0,0);
+        b._status=BACT_STATUS_DEAD; b._status_flg=BACT_STFLAG_DEATH1;
+        b._position=aiCenter; b._vp_extra[0].pos=aiCenter;
+        b._vp_extra[0].flags=EVPROTO_FLAG_ACTIVE; b._scale_time=10000; b._energy_max=1000;
+        b.UpdateDeathPlasmaMagnet(100);
+        Check(b._scale_time<0 && aiAlly._energy>10 && a._energy==10,
+              "plasma magnet gives the residue to the nearest eligible unit, not always the player");
+
         world._userUnit=nullptr;
+        a._position=center;
+        aiAlly._owner=2; aiAlly._energy=10;
+        b._position=aiCenter; b._vp_extra[0].pos=aiCenter;
+        b._vp_extra[0].flags=EVPROTO_FLAG_ACTIVE; b._scale_time=10000;
+        b.UpdateDeathPlasmaMagnet(20);
+        Check(b._scale_time==10000 && (b._vp_extra[0].pos-aiCenter).length()<0.01f,
+              "plasma magnet ignores AI units that cannot collect Plasma");
+
+        world._userRobo=nullptr; world._playerOwner=0;
         magnetRadius.Value=savedRadius; magnetRadius.WasSet=savedRadiusWasSet;
         magnetSpeed.Value=savedSpeed; magnetSpeed.WasSet=savedSpeedWasSet;
     }

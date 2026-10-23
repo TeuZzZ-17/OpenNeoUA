@@ -1,5 +1,7 @@
 // GFXEngine: rendering back end (OpenGL), render nodes, textures, 2D drawing.
 #include "../fmtlib/printf.h"
+// Extended unit-icon keys retain the original 256-entry font table.
+#include "common/glyph_key.h"
 #include <SDL2/SDL_opengl.h>
 
 #if defined(__APPLE__) && defined(__MACH__)
@@ -21,6 +23,7 @@
 #include "gui/font.h"
 #include "inivals.h"
 #include "gametime.h"
+#include "world/locations.h"
 #include "glfuncs.h"
 
 #include <algorithm>
@@ -636,6 +639,73 @@ void GFXEngine::DrawScreenText()
         DrawTextEntry(&entry);
 
     _font.entries.clear();
+}
+
+void GFXEngine::ClearLocationTitle()
+{
+    if (_locationTitle) SDL_FreeSurface(_locationTitle);
+    if (_locationLabel) SDL_FreeSurface(_locationLabel);
+    if (_locationFont) TTF_CloseFont(_locationFont);
+    if (_locationLabelFont) TTF_CloseFont(_locationLabelFont);
+    _locationTitle=nullptr; _locationLabel=nullptr;
+    _locationFont=nullptr; _locationLabelFont=nullptr;
+    _locationTitleName.clear();
+    _locationTitleColor={0,0,0,0};
+    _locationCanvasWidth=_locationCanvasHeight=0;
+}
+
+void GFXEngine::DrawLocationTitle(const std::string &name, const SDL_Color &color, float opacity)
+{
+    SDL_Surface *canvas=Screen();
+    if (!canvas || opacity<=0) return;
+    if (name!=_locationTitleName || color.r!=_locationTitleColor.r ||
+        color.g!=_locationTitleColor.g || color.b!=_locationTitleColor.b ||
+        canvas->w!=_locationCanvasWidth || canvas->h!=_locationCanvasHeight) {
+        ClearLocationTitle();
+        _locationTitleName=name;
+        _locationTitleColor=color;
+        _locationCanvasWidth=canvas->w; _locationCanvasHeight=canvas->h;
+        const std::string display=World::LocationDisplayName(name);
+        const int available=std::max(1,canvas->w-48);
+        int size=std::max(14,int(canvas->h*.076));
+        // Cache a fitted glyph surface; animation only changes its opacity.
+        for (;size>=6;--size) {
+            _locationFont=System::LoadFont("xolonium bold",size);
+            if (!_locationFont) break;
+            int width=0, height=0;
+            if (TTF_SizeUTF8(_locationFont,display.c_str(),&width,&height)==0 && width<=available) break;
+            TTF_CloseFont(_locationFont); _locationFont=nullptr;
+        }
+        _locationLabelFont=System::LoadFont("xolonium bold",std::max(10,int(canvas->h*.023)));
+        TTF_Font *titleFont=_locationFont ? _locationFont : _font.ttfFont;
+        TTF_Font *labelFont=_locationLabelFont ? _locationLabelFont : _font.ttfFont;
+        if (titleFont) _locationTitle=TTF_RenderUTF8_Blended(titleFont,display.c_str(),color);
+        if (labelFont) _locationLabel=TTF_RenderUTF8_Blended(labelFont,"LOCATION",SDL_Color{144,185,194,255});
+    }
+    const uint8_t alpha=uint8_t(std::min(1.f,opacity)*255);
+    const int top=int(canvas->h*.19);
+    auto blit=[&](SDL_Surface *surface,int y,bool shadow) {
+        if (!surface) return;
+        SDL_SetSurfaceBlendMode(surface,SDL_BLENDMODE_BLEND);
+        const float scale=std::min(1.f,float(std::max(1,canvas->w-48))/surface->w);
+        const int width=std::max(1,int(surface->w*scale)), height=std::max(1,int(surface->h*scale));
+        SDL_Rect target{(canvas->w-width)/2,y,width,height};
+        if (shadow) {
+            SDL_SetSurfaceColorMod(surface,0,0,0);
+            SDL_SetSurfaceAlphaMod(surface,uint8_t(alpha*.63f));
+            ++target.x; target.y+=2;
+            SDL_BlitScaled(surface,nullptr,canvas,&target);
+            --target.x; target.y-=2;
+            SDL_SetSurfaceColorMod(surface,255,255,255);
+        }
+        SDL_SetSurfaceAlphaMod(surface,alpha);
+        SDL_BlitScaled(surface,nullptr,canvas,&target);
+    };
+    blit(_locationLabel,top,false);
+    blit(_locationTitle,top+28,true);
+    const int y=top+94;
+    DrawLine(canvas,Common::Line(int(canvas->w*.3),y,int(canvas->w*.48),y),128,175,183,alpha,_virtualUiPass);
+    DrawLine(canvas,Common::Line(int(canvas->w*.52),y,int(canvas->w*.7),y),128,175,183,alpha,_virtualUiPass);
 }
 
 int GFXEngine::MeasureScreenTextWidth(const std::string &text) const
@@ -2256,11 +2326,18 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
 
     while ( 1 )
     {
-        int v13 = FontUA::get_u8(*curStream, &curPos);
+        uint32_t v13 = FontUA::get_u8(*curStream, &curPos);
+        // Opcode 25 carries a wide glyph without changing legacy byte commands.
+        if (!v13 && curPos < (int32_t)curStream->size() && (*curStream)[curPos] == 25)
+        {
+            ++curPos;
+            v13 = (uint32_t)FontUA::get_u16(*curStream, &curPos) << 16;
+            v13 |= FontUA::get_u16(*curStream, &curPos);
+        }
 
         if ( v13 )
         {
-            Common::PointRect &chrr = tile->map[v13];
+            const Common::PointRect &chrr = tile->Glyph(v13);
 
             int cpy_width;
 
@@ -3249,6 +3326,15 @@ void GFXEngine::fpsLimitter(int value)
 }
 
 
+const Common::PointRect &TileMap::Glyph(uint32_t key) const
+{
+    if (key < map.size()) return map[key];
+    const auto found = extendedGlyphs.find(key);
+    if (found != extendedGlyphs.end()) return found->second;
+    const uint32_t legacy = GlyphKey::LegacyAlias(key);
+    return map[legacy < map.size() ? legacy : 0];
+}
+
 TileMap::TileMap()
 {
     img = nullptr;
@@ -3802,6 +3888,7 @@ void GFXEngine::Init()
 void GFXEngine::Deinit()
 {
     ClearUiAccentCache();
+    ClearLocationTitle();
 
     if ( _font.ttfFont )
     {

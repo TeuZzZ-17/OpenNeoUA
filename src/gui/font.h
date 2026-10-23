@@ -11,6 +11,8 @@ class NC_STACK_ypaworld;
 namespace FontUA
 {
 void store_u32(CmdStream *pos, uint32_t val);
+void store_glyph(CmdStream *pos, uint32_t key);
+void glyph_cell(TileMap *font, CmdStream *pos, uint32_t key, int width);
 void store_s32(CmdStream *pos, int32_t val);
 void store_u16(CmdStream *pos, uint16_t val);
 void store_s16(CmdStream *pos, int16_t val);

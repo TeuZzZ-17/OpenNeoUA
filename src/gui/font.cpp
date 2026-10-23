@@ -501,3 +501,28 @@ void FontUA::FormateColumnItem(NC_STACK_ypaworld *yw, CmdStream *cmdbuf, int num
         else
             FormateAlignedClippedString(yw, cmdbuf, &a4[i]);
 }
+
+// Keep glyph keys wide until drawing, including clipped squad and Genesis cells.
+void FontUA::store_glyph(CmdStream *pos, uint32_t key)
+{
+    if (key <= 255)
+        store_u8(pos, (uint8_t)key);
+    else
+    {
+        store_u16(pos, 25);
+        store_u32(pos, key);
+    }
+}
+
+void FontUA::glyph_cell(TileMap *font, CmdStream *pos, uint32_t key, int width)
+{
+    if (width <= 0) return;
+    int drawn = 0;
+    if (key)
+    {
+        drawn = std::min(width, font->Glyph(key).w);
+        if (font->Glyph(key).w > width) set_xwidth(pos, width);
+        store_glyph(pos, key);
+    }
+    add_xpos(pos, width - drawn);
+}

@@ -1,0 +1,25 @@
+begin_collision_shape
+version = 1
+source = VP_SULG2
+source_hash = 124684dfdec16cb18ec2fdf9b931856d3ab008926a5192f0136c997f2c6eb7ca
+scale = 1_1_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 5.9980424642562866_8.0000002980232239_-8.0000002980232239
+vertex = 0.99980437755584717_-0.00117453932762146_12.000000298023224
+vertex = 9_1.9996086955070496_-3.0000001490116119
+vertex = 0.99980437755584717_-12.000000298023224_5.9996086955070496
+vertex = -11.998629331588745_-2_-1.9996086955070496
+vertex = -13_6.9996091723442078_12.000000298023224
+face = 0_1_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_5
+face = 0_5_1
+face = 1_5_3
+face = 1_3_2
+face = 3_5_4
+end
+end
