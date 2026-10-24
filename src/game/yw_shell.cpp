@@ -3390,14 +3390,16 @@ bool NC_STACK_ypaworld::CreateDatabaseControls()
         b.txt_r=_iniColors[68].r;b.txt_g=_iniColors[68].g;b.txt_b=_iniColors[68].b;
         return panel->Add(&b)!=0;
     };
-    if(!add(UIWidgets::DB_BTN_UNITS,UIWidgets::DB_UP_UNITS,0,0,_screenSize.x/4,Locale::Text::OpenUA(Locale::OUA_DB_UNITS)))return false;
-    if(!add(UIWidgets::DB_BTN_BUILDINGS,UIWidgets::DB_UP_BUILDINGS,_screenSize.x/4,0,_screenSize.x/4,Locale::Text::OpenUA(Locale::OUA_DB_BUILDINGS)))return false;
-    if(!add(UIWidgets::DB_BTN_PURCHASE,UIWidgets::DB_UP_PURCHASE,0,l.bottom-2*l.line,l.listWidth,"Purchase"))return false;
-    if(!add(UIWidgets::DB_LABEL_PAGE,0,0,2*l.line,l.listWidth," ",true))return false;
+    const int third=_screenSize.x/3;
+    if(!add(UIWidgets::DB_BTN_UNITS,UIWidgets::DB_UP_UNITS,0,0,third,Locale::Text::OpenUA(Locale::OUA_DB_UNITS)))return false;
+    if(!add(UIWidgets::DB_BTN_BUILDINGS,UIWidgets::DB_UP_BUILDINGS,third,0,third,Locale::Text::OpenUA(Locale::OUA_DB_BUILDINGS)))return false;
+    if(!add(DatabaseLayout::WorkshopButton,DatabaseLayout::WorkshopEvent,2*third,0,_screenSize.x-2*third,"Workshop"))return false;
+    if(!add(UIWidgets::DB_BTN_PURCHASE,UIWidgets::DB_UP_PURCHASE,0,l.bottom-l.line,l.listWidth,"Purchase"))return false;
+    if(!add(UIWidgets::DB_LABEL_PAGE,0,0,l.line,l.listWidth," ",true))return false;
     for(int i=0;i<l.rows;++i)
-        if(!add(UIWidgets::DB_LINE_0+i,UIWidgets::DB_UP_LINE_BASE+i,0,(i+3)*l.line,l.listWidth," "))return false;
+        if(!add(DatabaseLayout::ListButton+i,DatabaseLayout::ListEvent+i,0,l.listTop+i*l.line,l.listWidth," "))return false;
     for(int i=0;i<3;++i)
-        if(!add(2040+i,2140+i,0,l.bottom-(7-i)*l.line,l.listWidth," "))return false;
+        if(!add(2040+i,2140+i,0,l.bottom-(5-i)*l.line,l.listWidth," "))return false;
     const int nav[]={Locale::OUA_DB_PREV,Locale::OUA_DB_BACK,Locale::OUA_DB_NEXT};
     for(int i=0;i<3;++i)
         if(!add(UIWidgets::DB_BTN_PREV+i,UIWidgets::DB_UP_PREV+i,i*_screenSize.x/3,l.bottom,_screenSize.x/3,

@@ -3,6 +3,7 @@
 #include "game/yw_game_ui_internal.h"
 #include "locale/locale.h"
 #include <algorithm>
+#include <sstream>
 
 namespace
 {
@@ -19,6 +20,48 @@ void caption(NC_STACK_ypaworld *w,const std::string &s,int x,int y,int width)
     FontUA::set_txtColor(&out,217,241,245);
     FontUA::FormateClippedText(w->_guiTiles[15],&out,s,width,' ');
     FontUA::set_end(&out);GFX::Engine.ProcessDrawSeq(out);
+}
+void smallCaption(DatabaseSession &session,const std::string &value,int x,int y,int width,bool fit=false)
+{
+    if(value.empty()||width<=0||!session.detailFont)return;
+    auto found=session.captions.find(value);
+    if(found==session.captions.end())
+        found=session.captions.emplace(value,TTF_RenderUTF8_Blended(session.detailFont,value.c_str(),SDL_Color{217,241,245,255})).first;
+    auto *text=found->second;if(!text)return;
+    SDL_Rect from{0,0,std::min(width,text->w),text->h},to{x,y,from.w,from.h};
+    if(fit&&text->w>width)SDL_BlitScaled(text,nullptr,GFX::Engine.Screen(),&to);
+    else SDL_BlitSurface(text,&from,GFX::Engine.Screen(),&to);
+}
+int smallWidth(DatabaseSession &session,const std::string &value)
+{
+    int width=0,height=0;
+    if(session.detailFont)TTF_SizeUTF8(session.detailFont,value.c_str(),&width,&height);
+    return width;
+}
+std::vector<std::string> wrapCaption(DatabaseSession &session,const std::string &value,int width,int maxLines)
+{
+    std::vector<std::string> result;
+    std::istringstream paragraphs(value);std::string paragraph;
+    while((int)result.size()<maxLines&&std::getline(paragraphs,paragraph))
+    {
+        std::istringstream words(paragraph);std::string word,line;
+        while(words>>word)
+        {
+            if(!line.empty()&&smallWidth(session,line+" "+word)>width)
+            {result.push_back(line);line.clear();if((int)result.size()>=maxLines)return result;}
+            while(smallWidth(session,word)>width&&word.size()>1)
+            {
+                size_t cut=word.size();
+                do {--cut;while(cut>1&&((uint8_t)word[cut]&0xC0)==0x80)--cut;}
+                while(cut>1&&smallWidth(session,word.substr(0,cut))>width);
+                result.push_back(word.substr(0,cut));word.erase(0,cut);
+                if((int)result.size()>=maxLines)return result;
+            }
+            if(!line.empty())line+=" ";line+=word;
+        }
+        result.push_back(line);
+    }
+    return result;
 }
 std::string metricLabel(World::Database::Metric m)
 {
@@ -182,21 +225,29 @@ void UserData::ReleaseDatabasePreview()
 void UserData::PopulateDatabasePage()
 {
     if(!database_button||!db_session||!db_session->definitions)return;
-    const auto l=DatabaseLayout::For(*p_YW);
+    const auto l=DatabaseLayout::For(*p_YW,db_workshop);
     const auto &source=*db_session->definitions;
     const auto &entries=db_session->catalog.Entries(db_tab);
     const int total=db_workshop?(int)db_session->offers.size():(int)entries.size();
-    const int pageRows=db_workshop?std::max(1,l.rows-5):l.rows;
+    const int pageRows=l.rows;
     const int pages=std::max(1,(total+pageRows-1)/pageRows);
     db_page=std::max(0,std::min(db_page,pages-1));
     const int available=std::min(pageRows,total-db_page*pageRows);
     db_selected=std::max(0,std::min(db_selected,std::max(0,available-1)));
-    visible(database_button,UIWidgets::DB_BTN_UNITS,!db_workshop);
-    visible(database_button,UIWidgets::DB_BTN_BUILDINGS,!db_workshop);
+    const int top=0;
+    for(int button:std::array<int,3>{{UIWidgets::DB_BTN_UNITS,UIWidgets::DB_BTN_BUILDINGS,DatabaseLayout::WorkshopButton}})
+    {
+        visible(database_button,button,true);
+        NC_STACK_button::button_arg76 pos;pos.butID=button;pos.xpos=-1;pos.ypos=top;pos.width=-1;
+        database_button->setXYWidth(&pos);
+    }
+    NC_STACK_button::button_arg76 pagePos;pagePos.butID=UIWidgets::DB_LABEL_PAGE;pagePos.xpos=-1;
+    pagePos.ypos=db_workshop?2*l.line:l.line;pagePos.width=-1;database_button->setXYWidth(&pagePos);
+    db_session->LoadDetailFont(std::max(8,l.detailLine-3));
     visible(database_button,UIWidgets::DB_BTN_PURCHASE,db_workshop&&total>0);
     database_button->SetText(UIWidgets::DB_LABEL_PAGE,fmt::sprintf("%s  %d/%d  (%d)",
         db_workshop?"Workshop":(db_tab==0?"Units":"Buildings"),db_page+1,pages,total));
-    for(int row=0;row<l.rows;++row)
+    for(int row=0;row<DatabaseLayout::MaxRows;++row)
     {
         const int index=db_page*pageRows+row;std::string label=" ";
         if(row<pageRows&&index<total)
@@ -205,8 +256,10 @@ void UserData::PopulateDatabasePage()
             label=(row==db_selected?"> ":"  ")+(db_tab==0?source.GetVhclProtos()[id].name:source.GetBuildProtos()[id].Name);
             if(db_workshop&&p_YW->GetWorkshopOwned().count(id))label+=" *";
         }
-        database_button->SetText(UIWidgets::DB_LINE_0+row,label);
-        visible(database_button,UIWidgets::DB_LINE_0+row,row<pageRows&&index<total);
+        NC_STACK_button::button_arg76 pos;pos.butID=DatabaseLayout::ListButton+row;pos.xpos=-1;
+        pos.ypos=l.listTop+row*l.line;pos.width=-1;database_button->setXYWidth(&pos);
+        database_button->SetText(DatabaseLayout::ListButton+row,label);
+        visible(database_button,DatabaseLayout::ListButton+row,row<pageRows&&index<total);
     }
     const int selected=db_page*pageRows+db_selected;
     const int id=total>0?(db_workshop?db_session->offers[selected].vehicle:entries[selected]):-1;
@@ -245,7 +298,7 @@ void UserData::PopulateDatabasePage()
         {
             const int owned=db_session->ownedHosts[index];
             const auto &p=source.GetVhclProtos()[owned];
-            database_button->SetText(2040+row,(owned==p_YW->GetWorkshopHost()?"> ":"  ")+p.name+"  "+std::to_string(std::max<int64_t>(0,p.purchase_cost)));
+            database_button->SetText(2040+row,(owned==p_YW->GetWorkshopHost()?"> ":"  ")+p.name);
         }
     }
     PopulateDetailPane();
@@ -260,37 +313,26 @@ void UserData::PopulateDetailPane()
     add(db_tab==0?"Vehicle":"Building",std::to_string(db_entry_id));
     if(!card.className.empty())add("Class",card.className);
     if(card.productionCost>=0)add("Production Cost",std::to_string(card.productionCost)+" Plasma");
-    if(card.purchaseCost>=0)add("Purchase Cost",std::to_string(card.purchaseCost)+" Plasma");
+    if(card.purchaseCost>=0)add("Purchase Cost",std::to_string(card.purchaseCost));
     if(card.guns>0)add("Guns",std::to_string(card.guns));
     if(card.healingPower>0)add("Healing Power",fmt::sprintf("%g",(double)card.healingPower));
     if(card.guardians>0)add("Guardians",std::to_string(card.guardians));
     if(card.radarPower>1)add("Radar Power","Enhanced reconnaissance");
 
-    const auto l=DatabaseLayout::For(*p_YW);
-    const int columns=std::max(12,(l.width-12)/std::max(1,GFX::Engine.MeasureScreenTextWidth("M")));
-    db_session->text=db_wrap_text_columns(body,columns,1024);
-    for(const auto &versus:card.versus)
+    const auto l=DatabaseLayout::For(*p_YW,db_workshop);
+    if(!card.weapons.empty())
     {
-        db_session->text.push_back("VS "+versus.first);
-        db_session->versusRows.push_back({(int)db_session->text.size(),versus.second});
-        db_session->text.push_back(" ");
-    }
-    for(int wid:card.weapons)
-    {
-        const auto &weapon=db_session->definitions->GetWeaponsProtos()[wid];
-        db_session->text.push_back("Weapon: "+weapon.name);
-        if(weapon.wireframe)
+        std::string weapons;
+        for(int wid:card.weapons)
         {
-            db_session->weaponRows.push_back({(int)db_session->text.size(),wid});
-            db_session->text.push_back(" ");db_session->text.push_back(" ");db_session->text.push_back(" ");
+            if(!weapons.empty())weapons+=", ";
+            weapons+=db_session->definitions->GetWeaponsProtos()[wid].name;
         }
+        add("Weapon",weapons);
     }
-    if(!card.description.empty())
-    {
-        const auto description=db_wrap_text_columns("Description\n"+card.description,columns,1024);
-        db_session->text.insert(db_session->text.end(),description.begin(),description.end());
-    }
-    db_text_scroll=std::max(0,std::min(db_text_scroll,std::max(0,(int)db_session->text.size()-l.textLines)));
+    const int infoWidth=card.description.empty()?l.width:l.width*62/100;
+    db_session->text=wrapCaption(*db_session,body,infoWidth-12,1024);
+    db_text_scroll=0;
 }
 void UserData::HandleDatabaseInput()
 {
@@ -298,13 +340,15 @@ void UserData::HandleDatabaseInput()
     const auto result=database_button->ProcessWidgetsEvents(Input);
     const int key=Input->KbdLastHit;
     if((result&&result.code==UIWidgets::DB_UP_BACK)||key==Input::KC_ESCAPE){CloseDatabaseMenu();return;}
-    const int rows=DatabaseLayout::For(*p_YW).rows;bool change=false;
+    const int rows=DatabaseLayout::For(*p_YW,db_workshop).rows;bool change=false;
     if(result)
     {
-        if(!db_workshop&&(result.code==UIWidgets::DB_UP_UNITS||result.code==UIWidgets::DB_UP_BUILDINGS))
-        {db_tab=result.code==UIWidgets::DB_UP_UNITS?0:2;db_page=0;db_selected=0;change=true;}
-        else if(result.code>=UIWidgets::DB_UP_LINE_BASE&&result.code<UIWidgets::DB_UP_LINE_BASE+rows)
-        {db_selected=result.code-UIWidgets::DB_UP_LINE_BASE;change=true;}
+        if(result.code==UIWidgets::DB_UP_UNITS||result.code==UIWidgets::DB_UP_BUILDINGS)
+        {db_workshop=false;EnvMode=ENVMODE_DATABASE;db_tab=result.code==UIWidgets::DB_UP_UNITS?0:2;db_page=0;db_selected=0;change=true;}
+        else if(result.code==DatabaseLayout::WorkshopEvent)
+        {if(p_YW->IsPlasmaCurrencyEnabled())ShowWorkshopMenu();return;}
+        else if(result.code>=DatabaseLayout::ListEvent&&result.code<DatabaseLayout::ListEvent+rows)
+        {db_selected=result.code-DatabaseLayout::ListEvent;change=true;}
         else if(db_workshop&&result.code>=2140&&result.code<2143&&!db_session->ownedHosts.empty())
         {
             const int row=result.code-2140;
@@ -326,18 +370,19 @@ void UserData::HandleDatabaseInput()
                         (key==Input::KC_RIGHT||(result&&result.code==UIWidgets::DB_UP_NEXT))?1:0;
     if(direction){db_page+=direction;db_selected=0;change=true;}
     if(key==Input::KC_UP||key==Input::KC_DOWN){db_selected+=(key==Input::KC_UP?-1:1);change=true;}
-    if(key==Input::KC_PGUP||key==Input::KC_PGDOWN)
-    {db_text_scroll+=(key==Input::KC_PGUP?-1:1)*std::max(1,DatabaseLayout::For(*p_YW).textLines-1);PopulateDetailPane();}
     if(change)PopulateDatabasePage();
 }
 void UserData::RenderDatabaseEntryMedia()
 {
     if(!db_session)return;
-    const auto l=DatabaseLayout::For(*p_YW);auto *surface=GFX::Engine.Screen();if(!surface)return;
+    const auto l=DatabaseLayout::For(*p_YW,db_workshop);auto *surface=GFX::Engine.Screen();if(!surface)return;
     SDL_Rect oldClip;SDL_GetClipRect(surface,&oldClip);SDL_SetClipRect(surface,nullptr);
     const auto body=SDL_MapRGB(surface->format,5,12,16),edge=SDL_MapRGB(surface->format,48,91,103);
+    const auto &card=db_session->card;
+    const int modelHeight=l.previewHeight-(card.weapons.empty()?0:2*l.detailLine);
     // Opaque reading panels keep text legible over either authored background.
-    fill(surface,l.right-4,l.line,l.width+4,l.bottom-l.line,body);
+    const int panelTop=(db_workshop?2:1)*l.line;
+    fill(surface,l.right-4,panelTop,l.width+4,l.bottom-panelTop,body);
     fill(surface,l.right,l.previewTop,l.previewWidth,l.previewHeight,edge);
     fill(surface,l.right+1,l.previewTop+1,l.previewWidth-2,l.previewHeight-2,
          db_session->preview.Available()?SDL_MapRGBA(surface->format,0,0,0,0):body);
@@ -349,79 +394,99 @@ void UserData::RenderDatabaseEntryMedia()
         auto *previous=TF::Engine.GetViewPoint();TF::Engine.SetViewPoint(&camera);
         GFX::Engine.SetFBOBlending(1);GFX::Engine.BeginScene();
         baseRender_msg arg;arg.frameTime=step;arg.globTime=GlobalTime;arg.minZ=1;arg.maxZ=32000;
-        const double fraction=std::max(0.05,std::min((double)l.previewWidth/p_YW->_screenSize.x,(double)l.previewHeight/p_YW->_screenSize.y));
+        const double fraction=std::max(0.05,std::min((double)l.previewWidth/p_YW->_screenSize.x,(double)modelHeight/p_YW->_screenSize.y));
         const double distance=db_session->preview.Radius()*1.35/fraction;
         const double x=(2.0*(l.right+l.previewWidth/2.0)/p_YW->_screenSize.x-1.0)*distance;
-        const double y=(2.0*(l.previewTop+l.previewHeight/2.0)/p_YW->_screenSize.y-1.0)*distance;
+        const double y=(2.0*(l.previewTop+modelHeight/2.0)/p_YW->_screenSize.y-1.0)*distance;
         db_session->preview.Render(arg,vec3d(x,y,distance),db_session->angle,-18,true,true,true);
         GFX::Engine.Rasterize();GFX::Engine.EndScene();GFX::Engine.SetFBOBlending(0);TF::Engine.SetViewPoint(previous);
     }
     else caption(p_YW,text(Locale::OUA_DB_PREVIEW_UNAVAILABLE),l.right+8,l.previewTop+l.previewHeight/2,l.previewWidth-16);
-    caption(p_YW,"Model",l.right,2*l.line,l.previewWidth);
-    const auto &card=db_session->card;
-    if(card.valid&&card.icon)
+    caption(p_YW,card.valid?card.name:text(Locale::OUA_DB_NO_ENTRY),l.right,2*l.line,l.previewWidth);
+    if(card.valid&&card.icon&&db_session->icons&&db_session->icons->img)
     {
-        const auto *font=p_YW->_guiTiles[26];
-        if(font&&font->img)
+        const auto &font=*db_session->icons;
+        SDL_Rect source=font.Glyph(card.icon);
+        if(source.w>0&&source.h>0)
         {
-            SDL_Rect source=font->Glyph(card.icon);
-            if(source.w>0&&source.h>0)
-            {
-                SDL_Rect target{l.right,l.line,std::min(2*l.line,l.line*source.w/source.h),l.line};
-                SDL_BlitScaled(font->img->GetSwTex(),&source,surface,&target);
-            }
+            const int size=std::max(l.line,2*l.detailLine);
+            const int width=std::max(1,size*source.w/source.h);
+            SDL_Rect target{l.right+l.previewWidth-width-6,l.previewTop+6,width,size};
+            SDL_BlitScaled(font.img->GetSwTex(),&source,surface,&target);
         }
     }
-    caption(p_YW,card.valid?card.name:text(Locale::OUA_DB_NO_ENTRY),l.right+2*l.line,l.line,l.width-2*l.line);
     int statRow=0;
     for(const auto &rating:card.ratings)
     {
-        const int top=l.previewTop+statRow++*2*l.line;
-        if(top+2*l.line>l.textTop)break;
-        caption(p_YW,metricLabel(rating.kind),l.statsLeft,top,l.statsWidth);
-        if(rating.blocks>=0)blocks(surface,l.statsLeft,top+l.line+2,l.statsWidth,l.line,rating.blocks);
-        else caption(p_YW,fmt::sprintf("%.0f",rating.value),l.statsLeft,top+l.line,l.statsWidth);
+        const int top=l.previewTop+statRow++*2*l.detailLine;
+        if(top+2*l.detailLine>l.textTop)break;
+        smallCaption(*db_session,metricLabel(rating.kind),l.statsLeft,top,l.statsWidth);
+        if(rating.blocks>=0)blocks(surface,l.statsLeft,top+l.detailLine+2,l.statsWidth,l.detailLine,rating.blocks);
+        else smallCaption(*db_session,fmt::sprintf("%.0f",rating.value),l.statsLeft,top+l.detailLine,l.statsWidth);
+    }
+    if(card.valid)
+    {
+        const int top=l.previewTop+statRow*2*l.detailLine;
+        smallCaption(*db_session,"Score",l.statsLeft,top,l.statsWidth);
+        blocks(surface,l.statsLeft,top+l.detailLine+2,l.statsWidth,l.detailLine,card.score);
     }
     fill(surface,l.right,l.textTop-3,l.width,1,edge);
-    for(int i=0;i<l.textLines&&i+db_text_scroll<(int)db_session->text.size();++i)
-        caption(p_YW,db_session->text[i+db_text_scroll],l.right+4,l.textTop+i*l.line,l.width-8);
-    for(const auto &row:db_session->versusRows)
+    const int infoWidth=card.description.empty()?l.width:l.width*62/100;
+    const int vsColumns=3,vsRows=((int)card.versus.size()+vsColumns-1)/vsColumns;
+    const int vsStep=l.detailLine+10;
+    const int vsTop=l.bottom-4-vsRows*vsStep;
+    const int infoLines=std::max(0,(vsTop-l.textTop-4)/l.detailLine);
+    for(int i=0;i<infoLines&&i<(int)db_session->text.size();++i)
     {
-        const int y=row.first-db_text_scroll;
-        if(y>=0&&y<l.textLines)blocks(surface,l.right+8,l.textTop+y*l.line+2,l.width,l.line,row.second);
+        const auto &line=db_session->text[i];
+        smallCaption(*db_session,line,l.right+4,l.textTop+i*l.detailLine,infoWidth-8);
+        if(line.find("Purchase Cost:")==0)
+        {
+            const int size=l.detailLine-2;
+            if(auto *icon=StatusIconLoad(StatusIconPlasmaPath(p_YW),size,size))
+                StatusIconRenderBitmap(p_YW,icon,l.right+8+smallWidth(*db_session,line),l.textTop+i*l.detailLine,size);
+        }
     }
-    sklt_wis wire{};
-    for(const auto &row:db_session->weaponRows)
+    for(size_t i=0;i<card.versus.size();++i)
     {
-        const int y=row.first-db_text_scroll;
-        if(y<0||y+3>l.textLines)continue;
-        const auto &weapon=db_session->definitions->GetWeaponsProtos()[row.second];
-        const float x=2.0f*(l.right+l.width/2)/p_YW->_screenSize.x-1;
-        const float top=2.0f*(l.textTop+(y+1.5f)*l.line)/p_YW->_screenSize.y-1;
-        yw_RenderInfoWeaponLikeWire(p_YW,&wire,weapon.wireframe,nullptr,x,top);
+        const int width=infoWidth/vsColumns;
+        const int x=l.right+4+(i%vsColumns)*width,y=vsTop+(i/vsColumns)*vsStep;
+        const std::string label="VS "+(card.versus[i].first=="robo"?std::string("Host Station"):card.versus[i].first);
+        smallCaption(*db_session,label,x,y,width-4,true);
+        blocks(surface,x,y+l.detailLine,width-8,10,card.versus[i].second);
+    }
+    if(!card.description.empty())
+    {
+        const int x=l.right+infoWidth+8,width=l.width-infoWidth-12;
+        const auto lines=wrapCaption(*db_session,"Description\n"+card.description,width,l.textLines);
+        for(size_t i=0;i<lines.size();++i)
+            smallCaption(*db_session,lines[i],x,l.textTop+i*l.detailLine,width);
+    }
+    if(!card.weapons.empty())
+    {
+        const int top=l.previewTop+modelHeight;
+        fill(surface,l.right+1,top,l.previewWidth-2,2*l.detailLine-1,body);
+        sklt_wis wire{};
+        const int width=l.previewWidth/card.weapons.size();
+        for(size_t i=0;i<card.weapons.size();++i)
+        {
+            const auto &weapon=db_session->definitions->GetWeaponsProtos()[card.weapons[i]];
+            const float x=2.0f*(l.right+(i+0.5f)*width)/p_YW->_screenSize.x-1;
+            const float y=2.0f*(top+l.detailLine)/p_YW->_screenSize.y-1;
+            yw_RenderInfoWeaponLikeWire(p_YW,&wire,weapon.wireframe,nullptr,x,y);
+        }
     }
     if(db_workshop)
     {
         p_YW->RenderPlasmaCurrencyBank();
-        if(db_entry_id>=0)
-        {
-            const auto &p=db_session->definitions->GetVhclProtos()[db_entry_id];
-            const int y=l.bottom-3*l.line;
-            fill(surface,0,y,l.listWidth,l.line,body);
-            const int size=l.line;
-            if(auto *icon=StatusIconLoad(StatusIconPlasmaPath(p_YW),size,size))
-                StatusIconRenderBitmap(p_YW,icon,8,y,size);
-            caption(p_YW,std::to_string(p.purchase_cost),12+size,y,l.listWidth-size-16);
-        }
         const int equipped=p_YW->GetWorkshopHost();
         const auto &vehicles=db_session->definitions->GetVhclProtos();
         const std::string active=equipped>=0&&equipped<(int)vehicles.size()?vehicles[equipped].name:"Mission default";
-        caption(p_YW,"In use: "+active,8,l.line,l.listWidth-16);
-        fill(surface,0,l.bottom-8*l.line,l.listWidth,l.line,body);
-        caption(p_YW,"Owned Host Stations",8,l.bottom-8*l.line,l.listWidth-16);
+        smallCaption(*db_session,"In use: "+active,8,l.line+2,l.listWidth-16);
+        fill(surface,0,l.bottom-6*l.line,l.listWidth,l.line,body);
+        caption(p_YW,"Owned Host Stations",8,l.bottom-6*l.line,l.listWidth-16);
         if(!db_session->transactionMessage.empty())
-            caption(p_YW,db_session->transactionMessage,l.right,l.bottom-2*l.line,l.width);
+            smallCaption(*db_session,db_session->transactionMessage,8,l.bottom-2*l.line,l.listWidth-16,true);
     }
-    caption(p_YW,"PgUp / PgDn",l.right,l.bottom-l.line,l.width);
     SFXEngine::SFXe.UpdateSoundCarrier(&db_session->carrier);SDL_SetClipRect(surface,&oldClip);
 }
