@@ -1517,8 +1517,9 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             {
                 v55 = 1;
                 if ( _mgun_decal_enable )
-                    _world->SpawnGroundDecal(_mgun_decal, v59,
-                                             World::GroundDecalModelDiameter(_vp_normal, _vp_scale));
+                {
+                    _world->SpawnGroundDecal(_mgun_decal, v59);
+                }
             }
 
             bool spawnedVehicleImpact = false;

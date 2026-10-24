@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <list>
 #include <map>
+#include <set>
 #include <memory>
 #include <string>
 #include <vector>
@@ -100,17 +101,22 @@ struct uamessage_vhclDataI;
 
 
 struct TSectorCollision;
+class ModelPreview;
+struct DatabaseSession;
+struct DatabaseLayout;
 
 namespace UIWidgets {
+    enum ABOUT_WIDGET_IDS { ABOUT_BTN_BACK = 2201, ABOUT_UP_BACK = 2202 };
     enum MAIN_MENU_WIDGET_IDS{
         BTN_SAVE_LOAD = 1001,
         BTN_INPUT_SETTINGS = 1003,
         BTN_OPTIONS = 1004,
         BTN_QUIT = 1007,
-        BTN_LANGUAGE = 1008,
+        BTN_ABOUT = 1008,
         BTN_MULTIPLAYER = 1016,
         BTN_HELP = 1017,
-        BTN_SINGLE_PLAYER = 1018
+        BTN_SINGLE_PLAYER = 1018,
+        BTN_WORKSHOP = 1019
 
     };
     enum MAIN_MENU_EVENT_IDS{
@@ -120,9 +126,10 @@ namespace UIWidgets {
         BTN_INPUT_SETTINGS_UP = 1007,
         BTN_OPTIONS_UP = 1005,
         BTN_SAVE_LOAD_UP = 1001,
-        BTN_LANGUAGE_UP = 1011,
+        BTN_ABOUT_UP = 1011,
         BTN_HELP_UP = 1025,
-        BTN_QUIT_UP = 1013
+        BTN_QUIT_UP = 1013,
+        BTN_WORKSHOP_UP = 1026
     };
     enum NETWORK_MENU_WIDGET_IDS{
         TXT_MENU_TITLE = 1204,
@@ -135,7 +142,7 @@ namespace UIWidgets {
     // OpenNeoUA: Database screen widget and event IDs (range 2000-2079)
     enum DATABASE_WIDGET_IDS {
         DB_BTN_UNITS      = 2001,
-        DB_BTN_WEAPONS    = 2002,
+        DB_BTN_PURCHASE   = 2002,
         DB_BTN_BUILDINGS  = 2003,
         DB_BTN_PREV       = 2004,
         DB_BTN_BACK       = 2005,
@@ -166,41 +173,11 @@ namespace UIWidgets {
         DB_LINE_22        = 2032,
         // Page label (left panel header)
         DB_LABEL_PAGE     = 2033,
-        // Detail pane (right panel) — TYPE_CAPTION text lines
-        DB_DETAIL_HEADER  = 2060,
-        DB_DETAIL_0       = 2061,
-        DB_DETAIL_1       = 2062,
-        DB_DETAIL_2       = 2063,
-        DB_DETAIL_3       = 2064,
-        DB_DETAIL_4       = 2065,
-        DB_DETAIL_5       = 2066,
-        DB_DETAIL_6       = 2067,
-        DB_DETAIL_7       = 2068,
-        DB_DETAIL_8       = 2069,
-        DB_DETAIL_9       = 2070,
-        DB_DETAIL_10      = 2071,
-        DB_DETAIL_11      = 2072,
-        DB_DETAIL_12      = 2073,
-        DB_DETAIL_13      = 2074,
-        DB_IMAGE_TEXT     = 2075,
-        // Compact stat block shown in the free upper-right database space.
-        DB_STATS_HEADER   = 2076,
-        DB_STATS_0        = 2077,
-        DB_STATS_1        = 2078,
-        DB_STATS_2        = 2079,
-        DB_STATS_3        = 2080,
-        DB_STATS_4        = 2081,
-        DB_STATS_5        = 2082,
-        DB_STATS_6        = 2083,
-        DB_STATS_7        = 2084,
-        DB_STATS_8        = 2085,
-        DB_STATS_9        = 2086,
-        DB_STATS_10       = 2087,
-        DB_STATS_11       = 2088,
+
     };
     enum DATABASE_EVENT_IDS {
         DB_UP_UNITS       = 2101,
-        DB_UP_WEAPONS     = 2102,
+        DB_UP_PURCHASE    = 2102,
         DB_UP_BUILDINGS   = 2103,
         DB_UP_PREV        = 2104,
         DB_UP_BACK        = 2105,
@@ -663,7 +640,8 @@ enum
     ENVMODE_ABOUT = 8,
     ENVMODE_SELPLAYER = 9,
     ENVMODE_HELP = 10,
-    ENVMODE_DATABASE = 11
+    ENVMODE_DATABASE = 11,
+    ENVMODE_WORKSHOP = 12
 };
 
 struct EnvAction
@@ -906,8 +884,9 @@ public:
     int db_selected = 0;   // selected row index within current page
     int db_entry_tab = -1;
     int db_entry_id = -1;
-    NC_STACK_bitmap *db_entry_image = nullptr;
-    bool db_entry_has_image = false;
+    std::shared_ptr<DatabaseSession> db_session;
+    bool db_workshop = false;
+    int db_text_scroll = 0;
 
     NC_STACK_button *network_button;
     GuiList network_listvw;
@@ -1148,9 +1127,12 @@ public:
     void sub_46A7F8();
     void ShowAbout();
     void ShowDatabaseMenu();
+    void ShowWorkshopMenu();
+    void CloseDatabaseMenu();
+    void HandleDatabaseInput();
     void PopulateDatabasePage();
     void PopulateDetailPane();
-    void ReleaseDatabaseEntryImage();
+    void ReleaseDatabasePreview();
     void RenderDatabaseEntryMedia();
 
     bool SaveBuildProtoState();
@@ -1655,8 +1637,7 @@ struct TBriefObject
     int Owner = 0;
     std::string Title;
 
-    NC_STACK_base::Instance *VP = nullptr; // Must not be copied
-    std::vector<std::unique_ptr<NC_STACK_base::Instance>> GunVPs; // Visual-only, per mount.
+    std::shared_ptr<ModelPreview> Preview;
 
     TBriefObject() = default;
 
@@ -1682,14 +1663,8 @@ struct TBriefObject
 
     TBriefObject(TBriefObject &&b) noexcept
         : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), TileSet(b.TileSet),
-          TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title), VP(b.VP), GunVPs(std::move(b.GunVPs))
+          TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title), Preview(std::move(b.Preview))
     {
-        b.VP = nullptr;
-    }
-
-    ~TBriefObject()
-    {
-        Common::DeleteAndNull(&VP);
     }
 
     TBriefObject &operator=(const TBriefObject &b)
@@ -1704,8 +1679,7 @@ struct TBriefObject
             Color = b.Color;
             Owner = b.Owner;
             Title = b.Title;
-            Common::DeleteAndNull(&VP);
-            GunVPs.clear();
+            Preview.reset();
         }
         return *this;
     }
@@ -1714,7 +1688,6 @@ struct TBriefObject
     {
         if (this != &b)
         {
-            Common::DeleteAndNull(&VP);
             Pos = b.Pos;
             ObjType = b.ObjType;
             ID = b.ID;
@@ -1723,9 +1696,7 @@ struct TBriefObject
             Color = b.Color;
             Owner = b.Owner;
             Title = b.Title;
-            VP = b.VP;
-            GunVPs = std::move(b.GunVPs);
-            b.VP = nullptr;
+            Preview = std::move(b.Preview);
         }
         return *this;
     }
@@ -2281,6 +2252,9 @@ struct TRenderingSector;
 class NC_STACK_ypaworld: public NC_STACK_nucleus //NC_STACK_base
 {
 friend class UserData;
+friend class ModelPreview;
+friend struct DatabaseSession;
+friend struct DatabaseLayout;
 friend class World::Parsers::UserParser;
 friend class World::Parsers::SaveRoboParser;
 friend class World::Parsers::SaveSquadParser;
@@ -2497,6 +2471,11 @@ public:
     virtual std::vector<World::TBuildingProto> &GetBuildProtos() { return _buildProtos; };
     virtual std::vector<World::TVhclProto> &GetVhclProtos() { return _vhclProtos; };
     virtual std::vector<World::TRoboProto> &GetRoboProtos() { return _roboProtos; };
+    const std::vector<World::TVhclProto> &GetVhclProtos() const { return _vhclProtos; }
+    const std::vector<World::TWeapProto> &GetWeaponsProtos() const { return _weaponProtos; }
+    const std::vector<World::TBuildingProto> &GetBuildProtos() const { return _buildProtos; }
+    const TSectorDesc *GetSectorDescriptor(int id) const
+    { return id >= 0 && id < (int)_secTypeArray.size() ? &_secTypeArray[id] : nullptr; }
     virtual int getYW_lvlFinished();
     virtual int getYW_screenW();
     virtual int getYW_screenH();
@@ -2907,10 +2886,10 @@ public:
     int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
-    // modelDiameter = World::GroundDecalModelDiameter() of the unit that spawns the decal.
-    bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit, float modelDiameter);
-    bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius, float modelDiameter);
+    bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
+    bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
     void RenderGroundDecals(baseRender_msg *arg);
+    void UpdateGroundDecalFire();
     void ClearGroundDecals();
     bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius, uint32_t seed);
     void RenderGroundDecalSmoke(baseRender_msg *arg);
@@ -3022,6 +3001,10 @@ public:
     bool IsPlasmaCurrencyEnabled() const;
     uint64_t GetPlasmaCurrency() const { return _plasmaCurrency; }
     uint64_t GetPlasmaCurrencyBank() const { return _plasmaCurrencyBank; }
+    const std::set<int> &GetWorkshopOwned() const { return _workshopOwned; }
+    int GetWorkshopHost() const { return _workshopHost; }
+    bool WorkshopPurchase(int id, uint64_t cost, bool host);
+    bool WorkshopEquip(int id);
     static uint64_t ParsePlasmaCurrencyAmount(const std::string &value);
     void RestorePlasmaCurrency(uint64_t amount);
     void CommitPlasmaCurrency();
@@ -3216,6 +3199,12 @@ public:
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;
     int32_t _nextTransientVPId = 1;
+    struct TGroundFireSpread {
+        World::TChainFXConfig config;
+        vec3d position;
+        int32_t due = 0;
+    };
+    std::vector<TGroundFireSpread> _groundFireSpread;
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<World::GroundDecalSmoke::Emitter> _groundDecalSmoke;
@@ -3663,6 +3652,8 @@ public:
     int8_t _playerOwner = 0;
 
     uint64_t _plasmaCurrencyBank = 0;
+    std::set<int> _workshopOwned;
+    int _workshopHost = -1;
     uint64_t _plasmaCurrency = 0;
     uint64_t _plasmaCurrencyHudStartValue = 0;
     uint64_t _plasmaCurrencyHudTargetValue = 0;

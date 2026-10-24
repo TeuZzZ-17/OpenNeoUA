@@ -1183,7 +1183,7 @@ mat3x3 ypabact_LaserRotationFromDir(const vec3d &beamDir, const mat3x3 &fallback
 }
 
 void ypabact_SpawnLaserImpactChainFX(
-    NC_STACK_ypabact *shooter, World::TWeapProto &wproto,
+    NC_STACK_ypabact *shooter, int weaponId, World::TWeapProto &wproto,
     const NC_STACK_ypabact::TLaserBeamRuntime &beam, const vec3d &dir,
     bool worldContact, std::vector<vec3d> &spawnedPoints)
 {
@@ -1598,7 +1598,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             // ---- Throttled impact/contact FX ----
             if ( _clock >= beam.next_fx_time )
             {
-                ypabact_SpawnLaserImpactChainFX(this, wproto, beam, dir,
+                ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, beam, dir,
                                                 false, chainFXPoints);
                 ypabact_SpawnWeaponImpactVisual(_world, wproto, false, beam.end,
                                                    ypabact_LaserRotationFromDir(dir, _rotation), 90);
@@ -1653,7 +1653,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             // vp_dead so old test weapons still show something instead of nothing.
             if ( useWorldHit && _clock >= beam.next_fx_time )
             {
-                ypabact_SpawnLaserImpactChainFX(this, wproto, beam, dir,
+                ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, beam, dir,
                                                 true, chainFXPoints);
                 ypabact_SpawnWeaponImpactVisual(_world, wproto, true, beam.end,
                                                    ypabact_LaserRotationFromDir(dir, _rotation), 90);
@@ -1725,7 +1725,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
                 if ( _clock >= beam.next_fx_time )
                 {
-                    ypabact_SpawnLaserImpactChainFX(this, wproto, beam, dir,
+                    ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, beam, dir,
                                                     false, chainFXPoints);
                     ypabact_SpawnWeaponImpactVisual(_world, wproto, false, beam.end,
                                                        ypabact_LaserRotationFromDir(dir, _rotation), 90);
@@ -1918,7 +1918,7 @@ NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter,
 
         if ( shooter->_clock >= beam.next_fx_time )
         {
-            ypabact_SpawnLaserImpactChainFX(shooter, wproto, beam, down,
+            ypabact_SpawnLaserImpactChainFX(shooter, shooter->_vertical_laser_weapon, wproto, beam, down,
                                             false, chainFXPoints);
             ypabact_SpawnWeaponImpactVisual(world, wproto, false, beam.end,
                                                ypabact_LaserRotationFromDir(down, shooter->_rotation), 90);
@@ -1979,7 +1979,7 @@ NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter,
 
         if ( useWorldHit && shooter->_clock >= beam.next_fx_time )
         {
-            ypabact_SpawnLaserImpactChainFX(shooter, wproto, beam, down,
+            ypabact_SpawnLaserImpactChainFX(shooter, shooter->_vertical_laser_weapon, wproto, beam, down,
                                             true, chainFXPoints);
             ypabact_SpawnWeaponImpactVisual(world, wproto, true, beam.end,
                                                ypabact_LaserRotationFromDir(down, shooter->_rotation), 90);
@@ -2267,7 +2267,7 @@ void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
 
                 if ( _clock >= chainBeam.next_fx_time )
                 {
-                    ypabact_SpawnLaserImpactChainFX(this, wproto, chainBeam,
+                    ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, chainBeam,
                                                     chainDir, false, chainFXPoints);
                     ypabact_SpawnWeaponImpactVisual(_world, wproto, false, chainBeam.end,
                                                        ypabact_LaserRotationFromDir(chainDir, _rotation), 90);

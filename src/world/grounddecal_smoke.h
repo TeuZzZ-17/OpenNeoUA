@@ -127,7 +127,9 @@ inline bool Evaluate(const Emitter &e, int slot, int32_t age, Puff *out)
     out->pos = e.pos + vec3d(std::cos(angle) * distance + std::cos(windAngle) * drift,
                              -(kGroundLift + 0.05f * e.radius + rise),
                              std::sin(angle) * distance + std::sin(windAngle) * drift);
-    out->size = size;
+    out->size = p.flame?std::max(kMinParticleSize,size*(1.0f-0.65f*phase)):size;
+    if(p.flame)
+        out->pos.x+=std::sin(age*0.012f+slotHash%100)*baseSize*0.15f*phase;
     out->alpha = std::min(1.0f, phase / 0.12f) * (1.0f - phase) * std::min(1.0f, gate);
     out->phase = phase;
     out->shade = 0.8f + 0.4f * HashUnit(Hash(cycleHash, 7u, 0u));

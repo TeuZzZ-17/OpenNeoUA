@@ -45,26 +45,41 @@ int main()
     World::TChainFXConfig fx;
     fx.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
     fx.trigger = World::TChainFXConfig::TRIGGER_DESTROYED;
-    // Decal size = 100% of the model diameter passed to the spawn call.
+    // Source supplies the manual world-space diameter.
+    fx.ground_decal_size_min=fx.ground_decal_size_max=100;
     fx.ground_decal_permanent = true;
     const vec3d center(1800, -10, -1800);
-    Check(world->SpawnGroundDecalInSphere(fx, center, 10, 100.0f), "production scanner accepts exact terrain tangency");
+    Check(world->SpawnGroundDecalInSphere(fx, center, 10), "production scanner accepts exact terrain tangency");
     Check(world->_groundDecals.size() == 1, "one configured decal emitted");
     if ( !world->_groundDecals.empty() )
         Check((world->_groundDecals.back().pos - vec3d(1800, 0, -1800)).length() < 1e-8,
               "decal anchored to nearest real terrain point");
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 9.999f, 100.0f), "production scanner rejects tiny gap");
-    Check(world->SpawnGroundDecalInSphere(fx, center, 10.001f, 100.0f), "production scanner accepts tiny overlap");
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 0, 100.0f), "production scanner rejects zero radius");
-    Check(!world->SpawnGroundDecalInSphere(fx, center, -1, 100.0f), "production scanner rejects negative radius");
-    Check(!world->SpawnGroundDecalInSphere(fx, vec3d(1800, -1000, -1800), 10, 100.0f), "air explosion too high emits no decal");
+    auto burning=fx;
+    burning.ground_decal_fire=World::GroundDecalFireDefaults();
+    burning.ground_decal_fire.enabled=true;burning.ground_decal_fire.chance=100;
+    burning.fire_propagation_chance=100;burning.fire_propagation_count=2;
+    burning.fire_propagation_radius=15;burning.fire_propagation_delay=1000;
+    Check(world->SpawnGroundDecalInSphere(burning,center,10),"burning decal uses the actual terrain path");
+    Check(world->_groundFireSpread.size()==2,"successful ignition schedules bounded child patches");
+    Check(!world->_groundDecalSmoke.empty()&&world->_groundDecalSmoke.back().params.flame,"terrain decal creates flame emitter");
+    world->_timeStamp=500;world->UpdateGroundDecalFire();
+    Check(world->_groundFireSpread.size()==2,"propagation waits for the authored delay");
+    const size_t beforeSpread=world->_groundDecals.size();
+    world->_timeStamp=1500;world->UpdateGroundDecalFire();
+    Check(world->_groundFireSpread.empty(),"child patches do not schedule another generation");
+    Check(world->_groundDecals.size()==beforeSpread+2,"propagation projects two new decal patches onto the terrain");
+    Check(!world->SpawnGroundDecalInSphere(fx, center, 9.999f), "production scanner rejects tiny gap");
+    Check(world->SpawnGroundDecalInSphere(fx, center, 10.001f), "production scanner accepts tiny overlap");
+    Check(!world->SpawnGroundDecalInSphere(fx, center, 0), "production scanner rejects zero radius");
+    Check(!world->SpawnGroundDecalInSphere(fx, center, -1), "production scanner rejects negative radius");
+    Check(!world->SpawnGroundDecalInSphere(fx, vec3d(1800, -1000, -1800), 10), "air explosion too high emits no decal");
     // A building's horizontal face is closer than the ground, but is ineligible.
     for (UAskeleton::Vertex &vertex : data.POO) vertex.y = -10;
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 10, 100.0f), "building surface cannot satisfy terrain rule");
+    Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "building surface cannot satisfy terrain rule");
     for (UAskeleton::Vertex &vertex : data.POO) vertex.y = 0;
     data.polygons[0].B = 0;
     data.polygons[0].A = 1;
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 10, 100.0f), "wall normal cannot satisfy terrain rule");
+    Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "wall normal cannot satisfy terrain rule");
     data.polygons[0].B = 1;
     data.polygons[0].A = 0;
     NC_STACK_skeleton filler;
@@ -76,16 +91,16 @@ int main()
     world->_fillerSide = &filler;
     for (int y = 0; y < 4; ++y) world->_cells.At(1, y).height = -300;
     const vec3d slopeCenter(2400, -160, -1800);
-    Check(world->SpawnGroundDecalInSphere(fx, slopeCenter, 8, 100.0f), "real terrain filler accepts side contact beyond vertical reach");
+    Check(world->SpawnGroundDecalInSphere(fx, slopeCenter, 8), "real terrain filler accepts side contact beyond vertical reach");
     if ( !world->_groundDecals.empty() )
         Check((world->_groundDecals.back().pos - vec3d(2395, -155, -1800)).length() < 1e-8,
               "shared filler restored and decal anchored to slope");
-    Check(!world->SpawnGroundDecalInSphere(fx, slopeCenter, 7, 100.0f), "real terrain filler outside radius rejected");
+    Check(!world->SpawnGroundDecalInSphere(fx, slopeCenter, 7), "real terrain filler outside radius rejected");
     world->_isNetGame = true;
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 10, 100.0f), "existing network decal restriction retained");
+    Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "existing network decal restriction retained");
     world->_isNetGame = false;
     fx.trigger = World::TChainFXConfig::TRIGGER_AIR_DESTROYED;
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 10, 100.0f), "only destroyed decal blocks accepted");
+    Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "only destroyed decal blocks accepted");
     world->_legoArray[0].CollisionSkelet = nullptr;
     world->_fillerSide = nullptr;
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);
