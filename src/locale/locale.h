@@ -25,6 +25,8 @@ public:
 
     static std::string Tooltip(uint32_t id)
     {
+        if (id == TIP_CONF_RESOLUTION)
+            return OpenUA(OUA_INTERFACE_RESOLUTION_TOOLTIP);
         if (id == TIP_MENU_HELP)
             return OpenUA(OUA_DATABASE_TOOLTIP);
         if (id == TIP_MENU_WINDOWED)

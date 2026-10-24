@@ -115,6 +115,9 @@ set(SOURCES
     game/yw_funcs.cpp
     game/yw_func2.cpp
     game/yw_database.cpp
+    game/model_preview.cpp
+    game/database_session.cpp
+    world/database_catalog.cpp
     game/yw_options.cpp
     game/yw_input_config.cpp
     game/yw_game.cpp

@@ -26,6 +26,7 @@
 #include "nucleus/IFFile.h"
 #include "world/gunrotation.h"
 #include "game/yw_shell_menus.h"
+#include "game/model_preview.h"
 
 void LayoutSaveLoadActionButtons(UserData *usr, bool deleteVisible)
 {
@@ -54,146 +55,22 @@ void LayoutSaveLoadActionButtons(UserData *usr, bool deleteVisible)
     usr->disk_button->setXYWidth(&layout);
 }
 
-void sb_0x4eb94c__sub0(NC_STACK_ypaworld *yw, bool clockwise, int a3, vec3d *pos, baseRender_msg *arg)
+void sb_0x4eb94c__sub0(NC_STACK_ypaworld *yw,bool clockwise,int tilt,vec3d *pos,baseRender_msg *arg)
 {
-    const World::TVhclProto &proto = yw->_vhclProtos[yw->_briefScreen.ViewingObject.ID];
-    NC_STACK_base *model_base = yw->ResolveVisualModel(proto.vp_normal,
-                                                       proto.visual_3ds.normal,
-                                                       proto.visual_base.normal);
-    if ( !model_base )
-        return;
-
-    model_base->SetVizLimit(16000);
-    model_base->SetFadeLength(100);
-
-    model_base->SetPosition(*pos);
-
-    if (clockwise)
-    {
-        yw->_briefScreen.ViewingObjectAngle += (arg->frameTime / 5);
-        if (yw->_briefScreen.ViewingObjectAngle >= 360)
-            yw->_briefScreen.ViewingObjectAngle -= 360;
-    }
-    else
-    {
-        yw->_briefScreen.ViewingObjectAngle -= (arg->frameTime / 5);
-        if (yw->_briefScreen.ViewingObjectAngle < 0)
-            yw->_briefScreen.ViewingObjectAngle += 360;
-    }
-
-    model_base->SetEulerRotation(a3 + 10, yw->_briefScreen.ViewingObjectAngle, 0);
-
-    NC_STACK_base::CheckOpts(&yw->_briefScreen.ViewingObject.VP, model_base);
-
-    model_base->Render(arg, yw->_briefScreen.ViewingObject.VP);
-
-    // Capture the parent transform before rendering shared attachment bases:
-    // a mount can reference the same visual as its parent or another mount.
-    const mat3x3 parentRotation = model_base->TForm().SclRot;
-    TBriefObject &object = yw->_briefScreen.ViewingObject;
-    const World::TRoboProto *robo =
-        proto.model_id == BACT_TYPES_ROBO ? proto.RoboProto : nullptr;
-    object.GunVPs.resize((robo ? robo->guns.size() : 0) + proto.unit_guns.size());
-    size_t mountIndex = 0;
-    auto renderGuns = [&](const std::vector<World::TRoboGun> &guns)
-    {
-        for (const World::TRoboGun &gun : guns)
-        {
-            auto &instance = object.GunVPs[mountIndex++];
-            if ( !gun.robo_gun_type || gun.robo_gun_type >= yw->_vhclProtos.size() )
-            {
-                instance.reset();
-                continue;
-            }
-
-            const World::TVhclProto &gunProto = yw->_vhclProtos[gun.robo_gun_type];
-            NC_STACK_base *visual = yw->ResolveVisualModel(gunProto.vp_normal,
-                                                         gunProto.visual_3ds.normal,
-                                                         gunProto.visual_base.normal);
-            if ( !visual )
-            {
-                instance.reset();
-                continue;
-            }
-
-            if ( !instance || instance->Bas != visual )
-                instance.reset(visual->GenRenderInstance());
-
-            visual->SetStatic(false);
-            visual->SetVizLimit(16000);
-            visual->SetFadeLength(100);
-            visual->SetPosition(*pos + parentRotation.Transform(gun.pos));
-            visual->TForm().SclRot = parentRotation *
-                World::InitialGunRotation(gun.dir).Transpose();
-            visual->Render(arg, instance.get());
-        }
-    };
-
-    if ( robo )
-        renderGuns(robo->guns);
-    renderGuns(proto.unit_guns);
-
+    auto &object=yw->_briefScreen.ViewingObject;
+    if(!object.Preview)
+    {object.Preview=std::make_shared<ModelPreview>();object.Preview->Select(*yw,*yw,0,object.ID);}
+    yw->_briefScreen.ViewingObjectAngle=(yw->_briefScreen.ViewingObjectAngle+(clockwise?1:-1)*(arg->frameTime/5)+360)%360;
+    object.Preview->Render(*arg,*pos,yw->_briefScreen.ViewingObjectAngle,tilt+10,false,false);
 }
 
-void sb_0x4eb94c__sub1(NC_STACK_ypaworld *yw, bool clockwise, int rot, vec3d *pos, baseRender_msg *arg)
+void sb_0x4eb94c__sub1(NC_STACK_ypaworld *yw,bool clockwise,int tilt,vec3d *pos,baseRender_msg *arg)
 {
-    TSectorDesc *scType = &yw->_secTypeArray[yw->_briefScreen.ViewingObject.ID];
-
-    NC_STACK_base *v7 = yw->_vhclModels.at(0);
-
-    if (clockwise)
-    {
-        yw->_briefScreen.ViewingObjectAngle += (arg->frameTime / 5);
-        if (yw->_briefScreen.ViewingObjectAngle >= 360)
-            yw->_briefScreen.ViewingObjectAngle -= 360;
-    }
-    else
-    {
-        yw->_briefScreen.ViewingObjectAngle -= (arg->frameTime / 5);
-        if (yw->_briefScreen.ViewingObjectAngle < 0)
-            yw->_briefScreen.ViewingObjectAngle += 360;
-    }
-
-    v7->SetEulerRotation(rot + 10, yw->_briefScreen.ViewingObjectAngle, 0);
-
-    int first;
-    int demens;
-
-    if (scType->SectorType == 1)
-    {
-        first = 0;
-        demens = 1;
-    }
-    else
-    {
-        first = -1;
-        demens = 3;
-    }
-
-    int v22 = first;
-    for (int y = 0; y < demens; y++)
-    {
-        int v30 = first;
-        for (int x = 0; x < demens; x++)
-        {
-            vec3d inSectorPos = vec3d(v30, 0.0, v22) * 300.0;
-
-            NC_STACK_base *lego = yw->_legoArray[scType->SubSectors.At(x, y)->HPModels[0]].Base;
-            lego->SetStatic(false);
-            lego->SetVizLimit(16000);
-            lego->SetFadeLength(100);
-
-            lego->SetEulerRotation(rot + 10, yw->_briefScreen.ViewingObjectAngle, 0);
-            lego->SetPosition(*pos + v7->TForm().SclRot.Transform(inSectorPos));
-
-            NC_STACK_base::CheckOpts(&yw->_briefScreen.ViewingObject.VP, lego);
-
-            lego->Render(arg, yw->_briefScreen.ViewingObject.VP);
-
-            v30++;
-        }
-        v22++;
-    }
+    auto &object=yw->_briefScreen.ViewingObject;
+    if(!object.Preview)
+    {object.Preview=std::make_shared<ModelPreview>();object.Preview->SelectSector(*yw,object.ID);}
+    yw->_briefScreen.ViewingObjectAngle=(yw->_briefScreen.ViewingObjectAngle+(clockwise?1:-1)*(arg->frameTime/5)+360)%360;
+    object.Preview->Render(*arg,*pos,yw->_briefScreen.ViewingObjectAngle,tilt+10,false,false);
 }
 
 void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc, int a5)
@@ -637,6 +514,8 @@ void UserData::sb_0x46cdf8()
 
         p_YW->_playersStats.fill(World::TPlayerStatus());
         p_YW->_plasmaCurrencyBank = 0;
+        p_YW->_workshopOwned.clear();
+        p_YW->_workshopHost=-1;
         p_YW->ResetPlasmaCurrencyRuntime();
 
         diskScreenMode = 0;
@@ -1816,7 +1695,7 @@ void UserData::GameShellUiHandleInput()
     titel_button->Disable(&v410);
     v410.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_SAVE_LOAD;
     titel_button->Disable(&v410);
-    v410.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_LANGUAGE;
+    v410.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_ABOUT;
     titel_button->Disable(&v410);
     v410.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_QUIT;
     titel_button->Disable(&v410);
@@ -1932,11 +1811,8 @@ void UserData::GameShellUiHandleInput()
         v410.butID = 1001;
         titel_button->Enable(&v410);
 
-        v410.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_LANGUAGE;
-        if ( lang_dlls.size() > 1 )
-            titel_button->Enable(&v410);
-        else
-            titel_button->Disable(&v410);
+        v410.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_ABOUT;
+        titel_button->Enable(&v410);
 
         v410.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_QUIT;
         titel_button->Enable(&v410);
@@ -2104,9 +1980,9 @@ void UserData::GameShellUiHandleInput()
         {
             ShowInputSettings();
         }
-        else if ( r.code == UIWidgets::MAIN_MENU_EVENT_IDS::BTN_LANGUAGE_UP )
+        else if ( r.code == UIWidgets::MAIN_MENU_EVENT_IDS::BTN_ABOUT_UP )
         {
-            ShowLanguageMenu();
+            ShowAbout();
         }
         else if ( r.code == UIWidgets::MAIN_MENU_EVENT_IDS::BTN_QUIT_UP )
         {
@@ -2131,64 +2007,14 @@ void UserData::GameShellUiHandleInput()
         {
             ShowDatabaseMenu();
         }
-    }
-
-    // OpenNeoUA: Database screen event processing
-    if ( EnvMode == ENVMODE_DATABASE && database_button )
-    {
-        NC_STACK_button::ResCode dbr = database_button->ProcessWidgetsEvents(Input);
-        if ( dbr )
+        else if(r.code==UIWidgets::BTN_WORKSHOP_UP)
         {
-            if ( dbr.code == UIWidgets::DB_UP_UNITS )
-            {
-                db_tab = 0; db_page = 0; db_selected = 0;
-                PopulateDatabasePage();
-            }
-            else if ( dbr.code == UIWidgets::DB_UP_WEAPONS )
-            {
-                db_tab = 1; db_page = 0; db_selected = 0;
-                PopulateDatabasePage();
-            }
-            else if ( dbr.code == UIWidgets::DB_UP_BUILDINGS )
-            {
-                db_tab = 2; db_page = 0; db_selected = 0;
-                PopulateDatabasePage();
-            }
-            else if ( dbr.code == UIWidgets::DB_UP_PREV )
-            {
-                db_page--; db_selected = 0;
-                PopulateDatabasePage();
-            }
-            else if ( dbr.code == UIWidgets::DB_UP_NEXT )
-            {
-                db_page++; db_selected = 0;
-                PopulateDatabasePage();
-            }
-            else if ( dbr.code == UIWidgets::DB_UP_BACK )
-            {
-                EnvMode = ENVMODE_TITLE;
-                database_button->HideScreen();
-                titel_button->ShowScreen();
-            }
-            else if ( dbr.code >= UIWidgets::DB_UP_LINE_BASE &&
-                      dbr.code <  UIWidgets::DB_UP_LINE_BASE + 22 )
-            {
-                db_selected = dbr.code - UIWidgets::DB_UP_LINE_BASE;
-                PopulateDatabasePage();
-            }
-        }
-
-        // Keyboard Up/Down row navigation
-        if ( Input->KbdLastHit == Input::KC_UP )
-        {
-            if ( db_selected > 0 ) { db_selected--; PopulateDatabasePage(); }
-        }
-        else if ( Input->KbdLastHit == Input::KC_DOWN )
-        {
-            db_selected++;   // PopulateDatabasePage clamps to valid entries
-            PopulateDatabasePage();
+            ShowWorkshopMenu();
         }
     }
+
+    if ((EnvMode==ENVMODE_DATABASE||EnvMode==ENVMODE_WORKSHOP)&&database_button)
+        HandleDatabaseInput();
 
     if ( (EnvMode == ENVMODE_SINGLEPLAY || EnvMode == ENVMODE_TUTORIAL) && Input->HotKeyID == 24 )
     {
@@ -3322,38 +3148,16 @@ void UserData::GameShellUiHandleInput()
         local_listvw.Formate(p_YW);
     }
 
-    r = about_button->ProcessWidgetsEvents(Input);
-
-    if ( r )
-    {
-        if ( r.code == 103 )
-        {
-            EnvMode = ENVMODE_TITLE;
-
-            about_button->HideScreen();
-        }
-    }
-
     if ( EnvMode == ENVMODE_ABOUT )
     {
-        if ( Input->KbdLastHit == Input::KC_RETURN || Input->KbdLastHit == Input::KC_ESCAPE )
+        const auto aboutEvent=about_button->ProcessWidgetsEvents(Input);
+        if ( (aboutEvent&&aboutEvent.code==UIWidgets::ABOUT_UP_BACK) ||
+             Input->KbdLastHit == Input::KC_RETURN || Input->KbdLastHit == Input::KC_ESCAPE )
         {
-                        
-
             EnvMode = ENVMODE_TITLE;
 
             about_button->HideScreen();
 
-            titel_button->ShowScreen();
-        }
-    }
-
-    if ( EnvMode == ENVMODE_DATABASE && database_button )
-    {
-        if ( Input->KbdLastHit == Input::KC_ESCAPE )
-        {
-            EnvMode = ENVMODE_TITLE;
-            database_button->HideScreen();
             titel_button->ShowScreen();
         }
     }

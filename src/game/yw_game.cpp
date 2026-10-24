@@ -508,6 +508,11 @@ bool NC_STACK_ypaworld::yw_createRobos(const std::vector<MapRobo> &Robos)
         int firstOwner = Robos.empty() ? 0 : Robos[0].Owner;
         _levelInfo.UserMask = (firstOwner >= 0 && firstOwner < (int)World::CVFractionsCount) ? (1 << firstOwner) : 0;
 
+        if(IsPlasmaCurrencyEnabled())
+            for(int id:_workshopOwned)
+                if(id>=0&&id<(int)_vhclProtos.size()&&_vhclProtos[id].Index>=0&&
+                   _vhclProtos[id].model_id!=BACT_TYPES_ROBO)
+                    _vhclProtos[id].disable_enable_bitmask|=_levelInfo.UserMask;
         bool first = true;
 
         for ( const MapRobo &roboInf : Robos)
@@ -519,6 +524,10 @@ bool NC_STACK_ypaworld::yw_createRobos(const std::vector<MapRobo> &Robos)
 
             ypaworld_arg146 v15;
             v15.vehicle_id = roboInf.VhclID;
+            if(first&&IsPlasmaCurrencyEnabled()&&_workshopOwned.count(_workshopHost)&&
+               _workshopHost>=0&&_workshopHost<(int)_vhclProtos.size()&&
+               _vhclProtos[_workshopHost].model_id==BACT_TYPES_ROBO)
+                v15.vehicle_id=_workshopHost;
             v15.pos = roboInf.Pos;
 
             ypaworld_func136(&v14);

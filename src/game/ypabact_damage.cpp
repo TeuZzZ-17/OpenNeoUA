@@ -1975,10 +1975,6 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
         }
     }
 
-    // Ground decals are sized from the visual model of this unit or projectile.
-    const float decalModelDiameter =
-        hasGroundDecal ? World::GroundDecalModelDiameter(_vp_normal, _vp_scale) : 0.0f;
-
     // Persistent terrain decals are generated even when the source is outside
     // the normal FX visibility range. Existing visual/physical Chain FX keep
     // their historical visibility gate.
@@ -1996,7 +1992,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
         {
             if ( worldHit && trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD )
             {
-                if ( _world->SpawnGroundDecal(fx, *worldHit, decalModelDiameter) )
+                if ( _world->SpawnGroundDecal(fx, *worldHit) )
                     spawned = true;
             }
             else if ( !worldHit &&
@@ -2015,7 +2011,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
                 _world->ypaworld_func136(&projectedGroundHit);
 
                 if ( projectedGroundHit.isect &&
-                     _world->SpawnGroundDecal(fx, projectedGroundHit, decalModelDiameter) )
+                     _world->SpawnGroundDecal(fx, projectedGroundHit) )
                     spawned = true;
             }
 

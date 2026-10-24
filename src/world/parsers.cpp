@@ -25,6 +25,15 @@ namespace World
 namespace Parsers
 {
 
+static bool ParseNonNegativeInt64(const std::string &value, int64_t *out)
+{
+    if (!out || value.empty()) return false;
+    errno = 0; char *end = nullptr;
+    const long long parsed = std::strtoll(value.c_str(), &end, 0);
+    if (errno == ERANGE || end == value.c_str() || *end != '\0' || parsed < 0) return false;
+    *out = static_cast<int64_t>(parsed); return true;
+}
+
 static int ParsePositiveIntOrZero(const std::string &value)
 {
     try
@@ -257,6 +266,8 @@ bool UserParser::IsScope(ScriptParser::Parser &parser, const std::string &word, 
 
     // Profiles and older saves without this field start with an empty reserve.
     _o._plasmaCurrencyBank = 0;
+    _o._workshopOwned.clear();
+    _o._workshopHost=-1;
 
     if (!_o._GameShell->remoteMode)
     {
@@ -280,6 +291,16 @@ int UserParser::Handle(ScriptParser::Parser &parser, const std::string &p1, cons
     else if ( !StriCmp(p1, "plasma_bank") )
     {
         _o._plasmaCurrencyBank = NC_STACK_ypaworld::ParsePlasmaCurrencyAmount(p2);
+    }
+    else if(!StriCmp(p1,"workshop_owned")||!StriCmp(p1,"workshop_host"))
+    {
+        try {
+            size_t end=0;const int id=std::stoi(p2,&end);
+            if(end==p2.size()&&id>=0&&id<(int)_o._vhclProtos.size()) {
+                if(!StriCmp(p1,"workshop_owned"))_o._workshopOwned.insert(id);
+                else _o._workshopHost=id;
+            }
+        } catch(const std::exception &) {}
     }
     else if ( !StriCmp(p1, "maxroboenergy") )
     {
@@ -2746,38 +2767,38 @@ static std::string StripPercentSigns(const std::string &value)
     return out;
 }
 
-// Percentage range (fixed value or min_max), both ends > 0.
-static bool ParseDecalPercentRange(const std::string &value, float &minValue, float &maxValue)
+// Manual diameter, in world units. Zero suppresses the decal.
+static bool ParseDecalSizeRange(const std::string &value, float &minValue, float &maxValue)
 {
     float parsedMin = 0.0f;
     float parsedMax = 0.0f;
     if ( !World::ParseFloatRangeValue(value, parsedMin, parsedMax) ||
          !std::isfinite(parsedMin) || !std::isfinite(parsedMax) ||
-         parsedMin <= 0.0f || parsedMax <= 0.0f )
+         parsedMin < 0.0f || parsedMax < 0.0f ||
+         parsedMin > 12000.0f || parsedMax > 12000.0f )
         return false;
 
-    minValue = parsedMin;
-    maxValue = parsedMax;
+    minValue = std::min(parsedMin, parsedMax);
+    maxValue = std::max(parsedMin, parsedMax);
     return true;
 }
 
-// ground_decal_size_by_model_% of a Vehicle/Weapon script: same syntax as the profile key
-// (single value or min_max, optional '%'). A bad value is ignored, the profile size is kept.
+// Invalid values disable the decal without changing its linked profile.
 static void ParseDecalSizeOverride(const char *key, const std::string &value,
                                    TDecalSizeOverride &out)
 {
     float minValue = 0.0f;
     float maxValue = 0.0f;
-    if ( ParseDecalPercentRange(StripPercentSigns(value), minValue, maxValue) )
+    if ( ParseDecalSizeRange(value, minValue, maxValue) )
     {
         out.defined = true;
-        out.percent_min = minValue;
-        out.percent_max = maxValue;
+        out.size_min = minValue;
+        out.size_max = maxValue;
         return;
     }
 
     out = TDecalSizeOverride();
-    ypa_log_out("WARNING: invalid %s '%s'; the decal profile size is used\n", key, value.c_str());
+    ypa_log_out("WARNING: invalid %s '%s'; decal disabled\n", key, value.c_str());
 }
 
 bool DecalProfileParser::IsScope(ScriptParser::Parser &parser,
@@ -2859,14 +2880,6 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
         _work.name = p2;
     else if ( !StriCmp(p1, "texture") )
         fx.ground_decal_texture = p2;
-    else if ( !StriCmp(p1, "size_by_model_%") )
-    {
-        // Percentage of the diameter of the owner's visual model sphere. Each value may
-        // carry an optional '%' (150, 150%, 150_200, 150%_200%, 150_200%).
-        if ( !ParseDecalPercentRange(StripPercentSigns(p2), fx.ground_decal_model_percent_min,
-                                     fx.ground_decal_model_percent_max) )
-            ypa_log_out("WARNING: invalid new_decal size_by_model_%% '%s', using 100_100\n", p2.c_str());
-    }
     else if ( !StriCmp(p1, "stretch_xz") )
     {
         std::string axis[2];
@@ -2909,6 +2922,28 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
             _fadeIn = NonNegativeFiniteMilliseconds(parser, fade[0]);
             _fadeOut = NonNegativeFiniteMilliseconds(parser, fade[1]);
         }
+    }
+    else if(!StriCmp(p1,"fire_change"))
+    {
+        const std::string value=StripPercentSigns(p2);
+        int chance=0;
+        ParseBoundedIntegerParam("fire_change","fire_change",value,0,100,0,chance);
+        fx.ground_decal_fire.chance=chance;
+        fx.ground_decal_fire.enabled=chance>0;
+    }
+    else if(ParseBoundedIntegerParam("fire_propagation_chance",p1,StripPercentSigns(p2),0,100,0,fx.fire_propagation_chance)) {}
+    else if(ParseBoundedIntegerParam("fire_propagation_count",p1,p2,0,8,0,fx.fire_propagation_count)) {}
+    else if(ParseBoundedIntegerParam("fire_propagation_delay",p1,p2,0,3600000,1500,fx.fire_propagation_delay)) {}
+    else if(!StriCmp(p1,"fire_propagation_radius"))
+        fx.fire_propagation_radius=ParseBoundedNonNegativeFiniteOrFallback(parser,p2,12000.0f,0.0f);
+    else if(!StriCmp(p1.substr(0,5),"fire_"))
+    {
+        const bool enabled=fx.ground_decal_fire.enabled;
+        const int chance=fx.ground_decal_fire.chance;
+        if(!ParseGroundDecalSmokeParam(parser,"smoke_"+p1.substr(5),p2,fx.ground_decal_fire))
+            return ScriptParser::RESULT_UNKNOWN;
+        fx.ground_decal_fire.enabled=enabled;
+        fx.ground_decal_fire.chance=chance;
     }
     else if ( ParseGroundDecalSmokeParam(parser, p1, p2, fx.ground_decal_smoke) )
     {
@@ -3196,6 +3231,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
     if ( !StriCmp(p1, "model") )
     {
+        _vhcl->script_class = p2;
         _vhcl->is_mimic = 0;
 
         if ( !StriCmp(p2, "heli") )
@@ -3312,15 +3348,29 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->name = p2;
         std::replace(_vhcl->name.begin(), _vhcl->name.end(), '_', ' ');
     }
+    else if (!StriCmp(p1,"purchase_cost"))
+    {
+        const auto value=parser.FullLineValue();
+        if(!value.empty()&&value.find_first_not_of("0123456789")==std::string::npos)
+        {
+            try { _vhcl->purchase_cost=std::stoll(value); }
+            catch(const std::exception &) { _vhcl->purchase_cost=-1; }
+        }
+        else _vhcl->purchase_cost=-1;
+    }
+    else if ( !StriCmp(p1, "vehicle_description") )
+        _vhcl->description = parser.FullLineValue();
     else if ( !StriCmp(p1, "energy") )
     {
         _vhcl->energy = parser.stol(p2, nullptr, 0);
+        _vhcl->energy_defined = true;
     }
     else if ( !StriCmp(p1, "production_cost") )
     {
         // Displayed Genesis price. Zero or invalid keeps vanilla energy-as-cost.
         const long value = parser.stol(p2, nullptr, 0);
         _vhcl->production_cost = value > 0 ? (int)value : 0;
+        _vhcl->production_cost_defined = value >= 0;
     }
     else if ( !StriCmp(p1, "mimic_energy_cost") )
     {
@@ -3341,7 +3391,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "shield") )
     {
-        _vhcl->shield = parser.stol(p2, nullptr, 0);
+        const long shield=parser.stol(p2, nullptr, 0);
+        _vhcl->shield=shield;
+        _vhcl->shield_defined=shield>=0&&shield<=100;
     }
     else if ( !StriCmp(p1, "buff_id") )
     {
@@ -3350,8 +3402,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             ? (int32_t)value
             : -1;
     }
-    else if ( !StriCmp(p1, "ground_decal_size_by_model_%") )
-        ParseDecalSizeOverride("ground_decal_size_by_model_%", p2, _vhcl->ground_decal_size);
+    else if ( !StriCmp(p1, "ground_decal_size") )
+        ParseDecalSizeOverride("ground_decal_size", p2, _vhcl->ground_decal_size);
     else if ( !StriCmp(p1, "ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -3437,6 +3489,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "radar") )
     {
         _vhcl->radar = parser.stol(p2, nullptr, 0);
+        _vhcl->radar_defined = true;
     }
     else if ( !StriCmp(p1, "push_resistance") )
     {
@@ -3737,6 +3790,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             count = 8;
 
         _vhcl->spawn_count = count;
+        _vhcl->spawn_count_defined = true;
     }
     else if ( !StriCmp(p1, "spawn_instant") )
     {
@@ -3882,7 +3936,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         uint32_t glyph;
         if (GlyphKey::Parse(p2, glyph))
+        {
             _vhcl->type_icon = glyph;
+            _vhcl->type_icon_defined = true;
+        }
         else
             ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
     }
@@ -4028,8 +4085,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->mgun_wireframe = Nucleus::CInit<NC_STACK_sklt>(
             {{NC_STACK_rsrc::RSRC_ATT_NAME, std::string(p2)}} );
     }
-    else if ( !StriCmp(p1, "mgun_ground_decal_size_by_model_%") )
-        ParseDecalSizeOverride("mgun_ground_decal_size_by_model_%", p2, _vhcl->mgun_ground_decal_size);
+    else if ( !StriCmp(p1, "mgun_ground_decal_size") )
+        ParseDecalSizeOverride("mgun_ground_decal_size", p2, _vhcl->mgun_ground_decal_size);
     else if ( !StriCmp(p1, "mgun_ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -4500,6 +4557,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             cnt = ROBO_GUN_MAX_COUNT;
 
         robo->guns.resize(cnt);
+        if(_gunID<0&&cnt>0)_gunID=0;
 
         if ( _vhcl->model_id == BACT_TYPES_ROBO && _unitGunID >= cnt )
             _unitGunID = cnt - 1;
@@ -5281,8 +5339,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             ? (int32_t)value
             : -1;
     }
-    else if ( !StriCmp(p1, "ground_decal_size_by_model_%") )
-        ParseDecalSizeOverride("ground_decal_size_by_model_%", p2, _wpn->ground_decal_size);
+    else if ( !StriCmp(p1, "ground_decal_size") )
+        ParseDecalSizeOverride("ground_decal_size", p2, _wpn->ground_decal_size);
     else if ( !StriCmp(p1, "ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -6228,6 +6286,7 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
 
     if ( !StriCmp(p1, "model") )
     {
+        _bld->script_class = p2;
         if ( !StriCmp(p2, "building") )
         {
             _bld->ModelID = 0;
@@ -6261,6 +6320,18 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
         _bld->Name = p2;
         std::replace(_bld->Name.begin(), _bld->Name.end(), '_', ' ');
     }
+    else if ( !StriCmp(p1, "building_description") )
+        _bld->description = parser.FullLineValue();
+    else if(!StriCmp(p1,"shield"))
+    {
+        const long value=parser.stol(p2,nullptr,0);
+        _bld->shield=value>=0&&value<=100?value:-1;
+    }
+    else if(!StriCmp(p1,"radar"))
+    {
+        _bld->radar=std::max(0,parser.stoi(p2));
+        _bld->radar_defined=true;
+    }
     else if ( !StriCmp(p1, "power") )
     {
         _bld->Power = parser.stol(p2, nullptr, 0);
@@ -6268,12 +6339,14 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     else if ( !StriCmp(p1, "energy") )
     {
         _bld->Energy = parser.stol(p2, nullptr, 0);
+        _bld->energy_defined = true;
     }
     else if ( !StriCmp(p1, "production_cost") )
     {
         // Displayed Genesis price. Zero or invalid keeps vanilla Energy-as-cost.
         const long value = parser.stol(p2, nullptr, 0);
         _bld->production_cost = value > 0 ? (int)value : 0;
+        _bld->production_cost_defined = value >= 0;
     }
     else if ( ParseTintParam(parser, "tint", p1, p2, _bld->tint, true) )
     {
@@ -6289,7 +6362,10 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         uint32_t glyph;
         if (GlyphKey::Parse(p2, glyph))
+        {
             _bld->TypeIcon = glyph;
+            _bld->type_icon_defined = true;
+        }
         else
             ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
     }
@@ -6347,6 +6423,7 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         int count = parser.stol(p2, nullptr, 0);
         _bld->spawn_count = count > 0 ? count : 1;
+        _bld->spawn_count_defined = true;
     }
     else if ( !StriCmp(p1, "spawn_instant") )
     {
@@ -7272,7 +7349,7 @@ Common::Point MapSizesParser::ParseSizes(ScriptParser::Parser &parser)
     std::string tmp;
     parser.ReadLine(&tmp);
 
-    Stok stok(tmp, " \r\n");
+    Stok stok(tmp, " \t\r\n");
 
     std::string sX, sY;
     stok.GetNext(&sX);

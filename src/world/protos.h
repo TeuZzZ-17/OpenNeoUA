@@ -262,6 +262,7 @@ struct DestFX
 struct TGroundDecalSmoke
 {
     bool enabled = false;
+    bool flame = false;
     int chance = 100;
     int duration_min = 20000;
     int duration_max = 25000;
@@ -287,14 +288,28 @@ struct TGroundDecalSmoke
     }
 };
 
-// OpenNeoUA custom: ground_decal_size_by_model_% written in a Vehicle/Weapon script. When
-// defined it replaces the size_by_model_% of the linked new_decal profile for that unit.
+// Explicit decal diameter in world units, authored on the source.
 struct TDecalSizeOverride
 {
     bool defined = false;
-    float percent_min = 100.0f;
-    float percent_max = 100.0f;
+    float size_min = 0.0f;
+    float size_max = 0.0f;
 };
+
+inline TGroundDecalSmoke GroundDecalFireDefaults()
+{
+    TGroundDecalSmoke fire;
+    fire.flame=true;fire.chance=0;
+    fire.duration_min=8000;fire.duration_max=16000;
+    fire.fade_in=300;fire.fade_out=4000;
+    fire.count_min=2;fire.count_max=6;
+    fire.size_min=15;fire.size_max=35;
+    fire.growth=1.4f;fire.rise_speed=60;
+    fire.puff_time_min=350;fire.puff_time_max=900;
+    fire.drift=15;fire.spread=65;fire.intensity=180;
+    fire.tint.r=1.0f;fire.tint.g=140.0f/255;fire.tint.b=25.0f/255;fire.tint.a=220.0f/255;
+    return fire;
+}
 
 struct TChainFXConfig
 {
@@ -342,10 +357,8 @@ struct TChainFXConfig
     vec3d launch_min = vec3d(0.0, 0.0, 0.0);
     vec3d launch_max = vec3d(0.0, 0.0, 0.0);
     std::string ground_decal_texture;
-    // Decal size as a percentage range (size_by_model_%) of the diameter of the
-    // owner's visual model sphere. The diameter is measured when the decal spawns.
-    float ground_decal_model_percent_min = 100.0f;
-    float ground_decal_model_percent_max = 100.0f;
+    float ground_decal_size_min = 0.0f;
+    float ground_decal_size_max = 0.0f;
     float ground_decal_stretch_x = 1.0f;
     float ground_decal_stretch_x_min = 1.0f;
     float ground_decal_stretch_x_max = 1.0f;
@@ -358,6 +371,11 @@ struct TChainFXConfig
     int ground_decal_edge_fade_min = -1;
     int ground_decal_edge_fade_max = -1;
     TGroundDecalSmoke ground_decal_smoke;
+    TGroundDecalSmoke ground_decal_fire = GroundDecalFireDefaults();
+    int fire_propagation_chance = 0;
+    int fire_propagation_count = 0;
+    float fire_propagation_radius = 0.0f;
+    int fire_propagation_delay = 1500;
 };
 
 struct TRoboColl
@@ -792,6 +810,14 @@ struct TVhclProto
 
     int32_t Index = -1;
     int model_id = 0;
+    std::string description;
+    int64_t purchase_cost = -1;
+    std::string script_class;
+    bool shield_defined = false;
+    bool energy_defined = false;
+    bool type_icon_defined = false;
+    bool production_cost_defined = false;
+    bool radar_defined = false;
     VehicleCombatClass combat_class = VEHICLE_COMBAT_CLASS_UNKNOWN;
     uint8_t disable_enable_bitmask = 0;
     int8_t weapon = 0;
@@ -875,6 +901,7 @@ struct TVhclProto
     vec3d spawn_offset = vec3d(0.0, 0.0, 0.0);
     int spawn_max_active = 0;
     int spawn_count = 1;
+    bool spawn_count_defined = false;
     int spawn_instant = 0;
     int at_death_spawn_units = 0;
     int16_t at_death_spawn_vehicle = 0;
@@ -917,7 +944,7 @@ struct TVhclProto
     // The resolved copies live in chain_fx (destruction decal) and mgun_decal.
     int ground_decal_id = -1;
     int mgun_ground_decal_id = -1;
-    // ground_decal_size_by_model_% / mgun_ground_decal_size_by_model_%: per-unit decal size.
+    // ground_decal_size and MGUN equivalent: per-unit decal size.
     TDecalSizeOverride ground_decal_size;
     TDecalSizeOverride mgun_ground_decal_size;
     TVehicleBuffConfig buff;
@@ -1102,6 +1129,7 @@ struct TVhclProto
 
 struct TWeapProto
 {
+
     // OpenNeoUA custom: optional external 3DS body for continuous laser beams.
     // The configuration is nested in the weapon prototype so normal and vertical
     // lasers share one data-driven visual path without changing gameplay state.
@@ -1282,7 +1310,7 @@ struct TWeapProto
     // OpenNeoUA custom: ground_decal_id links a reusable new_decal profile (impact decal);
     // the resolved copy lives in chain_fx.
     int ground_decal_id = -1;
-    TDecalSizeOverride ground_decal_size; // ground_decal_size_by_model_%
+    TDecalSizeOverride ground_decal_size; // ground_decal_size
 
     // OpenNeoUA custom: data-driven Debuff link. debuff_id resolves a reusable
     // new_debuff profile into this runtime copy; -1 means no Debuff.
@@ -1523,6 +1551,14 @@ struct TBuildingProto
 
     int32_t Index = -1;
     uint8_t SecType = 0;
+    std::string description;
+    std::string script_class;
+    bool energy_defined = false;
+    bool type_icon_defined = false;
+    bool production_cost_defined = false;
+    bool radar_defined = false;
+    int radar = 0;
+    int shield = -1;
     uint8_t EnableMask = 0;
     uint8_t ModelID = 0;
     uint8_t Power = 0;
@@ -1559,6 +1595,7 @@ struct TBuildingProto
     float spawn_height_max = 900.0f;
     int spawn_max_active = 0;
     int spawn_count = 1;
+    bool spawn_count_defined = false;
     int spawn_instant = 0;
 };
 
