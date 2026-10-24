@@ -87,10 +87,35 @@ void TestCatalogEligibilityAndRatings() {
     Check(Parse(w,{"new_vehicle 1","model = tank","end"},0)&&!v.type_icon_defined&&v.purchase_cost<0&&v.description.empty(),"new definition resets optional metadata");
 
 }
+void TestScoreAndClassNames() {
+    WorldProbe w;
+    auto &low=w._vhclProtos[1];low.Index=1;low.type_icon='A';low.type_icon_defined=true;
+    low.energy_defined=true;low.energy=100;low.shield_defined=true;low.shield=20;
+    low.force=10;low.airconst=2;low.mass=5;low.maxrot=1;low.weapon=1;
+    w._weaponProtos[1].energy=100;w._weaponProtos[2].energy=200;
+    auto &high=w._vhclProtos[2];high=low;high.Index=2;high.energy=200;high.shield=40;high.force=20;high.weapon=2;
+    auto &zero=w._vhclProtos[3];zero.Index=3;zero.type_icon='C';zero.type_icon_defined=true;zero.mass=0;zero.weapon=-1;
+    auto &b=w._buildProtos[1];b.Index=1;b.TypeIcon='B';b.type_icon_defined=true;b.energy_defined=true;b.Energy=50;
+    World::Database::Catalog catalog;catalog.Build(w);
+    const auto weak=catalog.Describe(w,0,1),strong=catalog.Describe(w,0,2);
+    Check(strong.score==10&&weak.score>=1&&weak.score<strong.score,"normalized score rewards stronger displayed attributes");
+    Check(catalog.Describe(w,0,3).score==1,"zero strength still has the requested minimum one block");
+    Check(catalog.Describe(w,2,1).score>=1&&catalog.Describe(w,2,1).score<=10,"buildings use the shared score scale");
+    low.purchase_cost=999999;low.production_cost=999999;
+    Check(catalog.Describe(w,0,1).score==weak.score,"costs do not alter strength score");
+    Check(catalog.Describe(w,0,7).score==0,"invalid cards have no score");
+    for(const auto &item:std::vector<std::pair<std::string,std::string>>{{"kraftwerk","Power Station"},{"defcenter","Flak Station"},{"radar","Radar Station"},{"building","building"}})
+    {b.script_class=item.first;Check(catalog.Describe(w,2,1).className==item.second&&b.script_class==item.first,"building class uses display alias without changing its model");}
+    auto &support=w._buildProtos[2];support=b;support.Index=2;support.Power=100;support.spawn_count_defined=true;support.spawn_count=4;support.radar_defined=true;support.radar=5;
+    catalog.Build(w);
+    Check(catalog.Describe(w,2,2).score>catalog.Describe(w,2,1).score,"healing guardians and radar contribute to score");
+    WorldProbe empty;catalog.Build(empty);Check(catalog.Entries(0).empty(),"empty catalog resets score references safely");
+}
 }
 int main() {
     TestAuthoredParserFields();
     TestCatalogEligibilityAndRatings();
+    TestScoreAndClassNames();
     std::printf("database_catalog_test: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

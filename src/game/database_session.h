@@ -16,6 +16,7 @@ struct DatabaseSession
     DatabaseSession();
     ~DatabaseSession();
     bool LoadResources();
+    void LoadDetailFont(int size);
     bool LoadDefinitions(const NC_STACK_ypaworld &source);
     void LoadOffers(const NC_STACK_ypaworld &source);
     void StopAudio();
@@ -26,6 +27,10 @@ struct DatabaseSession
     World::Database::Catalog catalog;
     World::Database::Card card;
     ModelPreview preview;
+    std::unique_ptr<TileMap> icons;
+    TTF_Font *detailFont = nullptr;
+    int detailFontSize = 0;
+    std::map<std::string, SDL_Surface *> captions;
     std::vector<WorkshopOffer> offers;
     std::vector<int> ownedHosts;
     std::string transactionMessage;
@@ -41,9 +46,10 @@ struct DatabaseSession
 // One layout is used for controls, model fitting and the information panel.
 struct DatabaseLayout
 {
-    int line, rows, listWidth, right, width, previewTop, previewWidth,
-        previewHeight, statsLeft, statsWidth, textTop, textLines, bottom;
-    static DatabaseLayout For(const NC_STACK_ypaworld &world);
+    enum { ListButton=2200, ListEvent=2300, MaxRows=64, WorkshopButton=2007, WorkshopEvent=2107 };
+    int line, rows, listTop, listWidth, right, width, previewTop, previewWidth,
+        previewHeight, statsLeft, statsWidth, textTop, textLines, bottom, detailLine;
+    static DatabaseLayout For(const NC_STACK_ypaworld &world, bool workshop=false);
 };
 
 #endif

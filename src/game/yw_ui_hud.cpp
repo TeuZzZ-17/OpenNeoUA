@@ -18,6 +18,7 @@
 #include "game/ypagun.h"
 #include "platform/windp.h"
 #include "world/analyzer.h"
+#include "game/database_session.h"
 #include "system/inivals.h"
 #include "game/yw_game_ui_internal.h"
 
@@ -140,7 +141,7 @@ void NC_STACK_ypaworld::RenderPlasmaCurrencyBank()
     const int width = std::min(_screenSize.x / 4, iconSize + textWidth + pad * 4 + notch);
     const int margin = std::max(pad, _screenSize.x / 80);
     const int left = _screenSize.x - margin - width;
-    const int top = margin;
+    const int top = _GameShell&&_GameShell->EnvMode==ENVMODE_WORKSHOP?DatabaseLayout::For(*this,true).line+2:margin;
 
     SDL_Rect oldClip;
     SDL_GetClipRect(screen, &oldClip);

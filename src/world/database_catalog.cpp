@@ -85,11 +85,20 @@ void AddVersus(Card &card, const TVhclProto &v)
             card.versus.push_back({values[i].first, values[i].second});
 }
 
+std::string DisplayClass(const std::string &name)
+{
+    if(!StriCmp(name,"robo"))return "Host Station";
+    if(!StriCmp(name,"kraftwerk"))return "Power Station";
+    if(!StriCmp(name,"defcenter"))return "Flak Station";
+    if(!StriCmp(name,"radar"))return "Radar Station";
+    return name;
+}
+
 void DescribeVehicle(Card &card, const TVhclProto &v, const std::vector<TVhclProto> &vehicles,
                      const std::vector<TWeapProto> &weapons)
 {
     card.valid = true; card.name = v.name; card.description = v.description;
-    card.className = !StriCmp(v.script_class,"robo")?"Host Station":v.script_class; card.icon = v.type_icon; card.purchaseCost = v.purchase_cost;
+    card.className = DisplayClass(v.script_class); card.icon = v.type_icon; card.purchaseCost = v.purchase_cost;
     card.productionCost = v.production_cost_defined ? v.production_cost : -1;
     std::set<int> attackStack;
     AddRating(card, Metric::Attack, AttackForVehicle(static_cast<int>(&v - vehicles.data()), vehicles, weapons, attackStack), -2);
@@ -110,7 +119,7 @@ void DescribeVehicle(Card &card, const TVhclProto &v, const std::vector<TVhclPro
 void DescribeBuilding(Card &card, const TBuildingProto &b, const std::vector<TVhclProto> &vehicles,
                       const std::vector<TWeapProto> &weapons)
 {
-    card.valid = true; card.name = b.Name; card.description = b.description; card.className = b.script_class;
+    card.valid = true; card.name = b.Name; card.description = b.description; card.className = DisplayClass(b.script_class);
     card.icon = b.TypeIcon; card.productionCost = b.production_cost_defined ? b.production_cost : -1;
     if(b.shield>=0&&b.shield<=100)AddRating(card,Metric::Defense,b.shield,(int)std::floor(b.shield/10.0+0.499999));
     card.radarPower=b.radar_defined?b.radar:0;
@@ -134,6 +143,33 @@ void DescribeBuilding(Card &card, const TBuildingProto &b, const std::vector<TVh
     AddRating(card, Metric::Attack, attack, -2);
 }
 
+Card RawCard(const NC_STACK_ypaworld &world,int category,int id)
+{
+    Card card;const auto &vehicles=world.GetVhclProtos();const auto &weapons=world.GetWeaponsProtos();const auto &buildings=world.GetBuildProtos();
+    if(category==Vehicle&&Valid(id,vehicles.size())&&EligibleVehicle(vehicles[id]))DescribeVehicle(card,vehicles[id],vehicles,weapons);
+    else if(category==Building&&Valid(id,buildings.size())&&EligibleBuilding(buildings[id]))DescribeBuilding(card,buildings[id],vehicles,weapons);
+    return card;
+}
+
+std::array<double,9> ScoreValues(const Card &card)
+{
+    std::array<double,9> values{};
+    for(const auto &rating:card.ratings)values[static_cast<size_t>(rating.kind)]=std::max(0.0,rating.value);
+    values[4]=std::max(0,card.healingPower);values[5]=std::max(0,card.guardians);
+    values[6]=std::max(0,card.guns);values[7]=card.radarPower>1?card.radarPower:0;
+    // Treat the VS grid as one attribute, so eleven classes do not outweigh all other stats.
+    for(const auto &versus:card.versus)values[8]+=versus.second;
+    if(!card.versus.empty())values[8]/=card.versus.size();
+    return values;
+}
+
+double ScoreSum(const Card &card,const std::array<double,9> &maxima)
+{
+    const auto values=ScoreValues(card);double sum=0;
+    for(size_t i=0;i<values.size();++i)if(maxima[i]>0)sum+=std::min(1.0,values[i]/maxima[i]);
+    return sum;
+}
+
 } // namespace
 
 void Catalog::Build(NC_STACK_ypaworld &world)
@@ -142,15 +178,23 @@ void Catalog::Build(NC_STACK_ypaworld &world)
     const auto &vehicles = world.GetVhclProtos(); const auto &buildings = world.GetBuildProtos();
     for (size_t i = 0; i < vehicles.size(); ++i) if (EligibleVehicle(vehicles[i])) entries_[Vehicle].push_back(static_cast<int>(i));
     for (size_t i = 0; i < buildings.size(); ++i) if (EligibleBuilding(buildings[i])) entries_[Building].push_back(static_cast<int>(i));
+    // One shared scale for Database and Workshop; costs are not strength attributes.
+    scoreMaxima_.fill(0);scorePeak_=0;
+    std::vector<Card> cards;
+    for(int category:{Vehicle,Building})for(int id:entries_[category])
+    {
+        cards.push_back(RawCard(world,category,id));const auto values=ScoreValues(cards.back());
+        for(size_t i=0;i<values.size();++i)scoreMaxima_[i]=std::max(scoreMaxima_[i],values[i]);
+    }
+    for(const auto &card:cards)scorePeak_=std::max(scorePeak_,ScoreSum(card,scoreMaxima_));
 }
 
 const std::vector<int> &Catalog::Entries(int category) const { static const std::vector<int> empty; return category >= Vehicle && category <= Building ? entries_[category] : empty; }
 
 Card Catalog::Describe(const NC_STACK_ypaworld &world, int category, int id) const
 {
-    Card card; const auto &vehicles = world.GetVhclProtos(); const auto &weapons = world.GetWeaponsProtos(); const auto &buildings = world.GetBuildProtos();
-    if (category == Vehicle && Valid(id, vehicles.size()) && EligibleVehicle(vehicles[static_cast<size_t>(id)])) DescribeVehicle(card, vehicles[static_cast<size_t>(id)], vehicles, weapons);
-    else if (category == Building && Valid(id, buildings.size()) && EligibleBuilding(buildings[static_cast<size_t>(id)])) DescribeBuilding(card, buildings[static_cast<size_t>(id)], vehicles, weapons);
+    Card card=RawCard(world,category,id);
+    if(card.valid)card.score=scorePeak_>0?std::max(1,std::min(10,(int)std::lround(10*ScoreSum(card,scoreMaxima_)/scorePeak_))):1;
     return card;
 }
 
