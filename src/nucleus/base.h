@@ -15,6 +15,7 @@
 class NC_STACK_base;
 class NC_STACK_skeleton;
 class NC_STACK_ade;
+namespace World { class ParticleSystem; }
 
 typedef std::list<NC_STACK_base *> BaseList;
 
@@ -22,6 +23,8 @@ typedef std::list<NC_STACK_base *> BaseList;
 
 struct area_arg_65
 {
+    // Optional render-only destination; absent preserves mission particles.
+    World::ParticleSystem *particleSystem = nullptr;
     //polys *rndrSTK_cur;
     //polysDat *argSTK_cur;
     int timeStamp;
@@ -72,6 +75,7 @@ struct area_arg_65
 
 struct baseRender_msg
 {
+    World::ParticleSystem *particleSystem = nullptr;
     int frameTime = 0;
     int globTime = 0;
     int adeCount = 0;

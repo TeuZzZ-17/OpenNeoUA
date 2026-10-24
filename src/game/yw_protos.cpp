@@ -12,6 +12,7 @@
 #include <tuple>
 #include "common/includes.h"
 #include "game/yw.h"
+#include "game/database_session.h"
 #include "game/yw_internal.h"
 #include "nucleus/loaders.h"
 #include "gui/button.h"
@@ -458,6 +459,12 @@ bool NC_STACK_ypaworld::ProtosInit()
     if ( !LoadProtosScript(_initScriptFilePath) )
         return false;
 
+    DatabaseSession scripts;
+    if(!scripts.LoadDefinitions(*this))return false;
+    _vhclProtos.swap(scripts.definitions->_vhclProtos);
+    _weaponProtos.swap(scripts.definitions->_weaponProtos);
+    _buildProtos.swap(scripts.definitions->_buildProtos);
+    ResolveStatusProfileLinks();
     return true;
 }
 

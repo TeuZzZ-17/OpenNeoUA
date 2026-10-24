@@ -34,6 +34,7 @@
 #include "world/energyfx.h"
 #include "world/tools.h"
 #include "game/yw_impl.h"
+#include "game/database_session.h"
 
 bool UserData::IsInputBindingRetired(int binding)
 {
@@ -368,7 +369,7 @@ void TMapRegionsNet::UnloadImages()
     }
 }
 
-NC_STACK_bitmap *yw_LoadDatabaseBackground()
+NC_STACK_bitmap *yw_LoadDatabaseBackground(bool workshop)
 {
     // Database backgrounds are loose Data assets so modders can replace them
     // without editing world.ini. Use the same image loader already used by the
@@ -390,7 +391,7 @@ NC_STACK_bitmap *yw_LoadDatabaseBackground()
 
     for ( const char *ext : extensions )
     {
-        const std::string fileName = std::string("database.") + ext;
+        const std::string fileName = std::string(workshop ? "Workshop." : "database.") + ext;
         const std::string dataPath = std::string("data:levels/bg/") + fileName;
         if ( !uaFileExist(dataPath) )
             continue;
@@ -465,8 +466,9 @@ void sb_0x4e75e8__sub1(NC_STACK_ypaworld *yw, int mode)
             rollover_map = yw->_globalMapRegions.settings_map[v38].PicName;
             break;
         case ENVMODE_DATABASE:
+        case ENVMODE_WORKSHOP:
             menu_map  = yw->_globalMapRegions.menu_map[v38].PicName;
-            ilbm_rollover_map = yw_LoadDatabaseBackground();
+            ilbm_rollover_map = yw_LoadDatabaseBackground(mode == ENVMODE_WORKSHOP);
             if ( !ilbm_rollover_map )
                 rollover_map = yw->_globalMapRegions.settings_map[v38].PicName;
             break;
@@ -669,142 +671,47 @@ bool NC_STACK_ypaworld::GameShellInitBkg()
 }
 
 //Controls creation methods
-bool NC_STACK_ypaworld::CreateTitleControls(){
-    _GameShell->titel_button = Nucleus::CInit<NC_STACK_button>( {
-        {NC_STACK_button::BTN_ATT_X, (int32_t)0},
-        {NC_STACK_button::BTN_ATT_Y, (int32_t)0},
-        {NC_STACK_button::BTN_ATT_W, (int32_t)_screenSize.x},
-        {NC_STACK_button::BTN_ATT_H, (int32_t)_screenSize.y} } );
-    if ( !_GameShell->titel_button )
+bool NC_STACK_ypaworld::CreateTitleControls()
+{
+    auto *panel=Nucleus::CInit<NC_STACK_button>({
+        {NC_STACK_button::BTN_ATT_X,(int32_t)0},{NC_STACK_button::BTN_ATT_Y,(int32_t)0},
+        {NC_STACK_button::BTN_ATT_W,(int32_t)_screenSize.x},{NC_STACK_button::BTN_ATT_H,(int32_t)_screenSize.y}});
+    _GameShell->titel_button=panel;
+    if(!panel)return false;
+    // These controls are drawn on the logical menu canvas, also at high resolutions.
+    panel->screen_width=_screenSize.x;panel->screen_height=_screenSize.y;
+    struct Item { int row,half,id,event,title; };
+    const Item items[]={
+        {0,0,UIWidgets::BTN_SINGLE_PLAYER,UIWidgets::BTN_SINGLE_PLAYER_UP,Locale::TITLE_GAME},
+        {0,1,UIWidgets::BTN_MULTIPLAYER,UIWidgets::BTN_MULTIPLAYER_UP,Locale::TITLE_NETWORK},
+        {1,0,UIWidgets::BTN_HELP,UIWidgets::BTN_HELP_UP,Locale::TITLE_DATABASE},
+        {1,1,UIWidgets::BTN_WORKSHOP,UIWidgets::BTN_WORKSHOP_UP,-1},
+        {2,-1,UIWidgets::BTN_INPUT_SETTINGS,UIWidgets::BTN_INPUT_SETTINGS_UP,Locale::TITLE_INPUT},
+        {3,-1,UIWidgets::BTN_OPTIONS,UIWidgets::BTN_OPTIONS_UP,Locale::TITLE_SETTINGS},
+        {4,-1,UIWidgets::BTN_ABOUT,UIWidgets::BTN_ABOUT_UP,Locale::TITLE_LOCALE},
+        {5,-1,UIWidgets::BTN_SAVE_LOAD,UIWidgets::BTN_SAVE_LOAD_UP,Locale::TITLE_PROFILE},
+        {6,-1,UIWidgets::BTN_QUIT,UIWidgets::BTN_QUIT_UP,Locale::TITLE_QUIT}};
+    const double rows[]={0.2291666666666666,0.3083333333333334,0.4333333333333334,
+                         0.5125,0.5916666666666667,0.7166666666666667,0.7958333333333333};
+    const bool workshop=IsPlasmaCurrencyEnabled();
+    const int left=_screenSize.x*0.3328125,width=_screenSize.x/3,gap=std::max(2,_screenSize.x/320);
+    for(const auto &item:items)
     {
-        ypa_log_out("Unable to create Titel-Button-Object\n");
-        return false;
+        if(item.id==UIWidgets::BTN_WORKSHOP&&!workshop)continue;
+        NC_STACK_button::button_64_arg btn;
+        btn.tileset_down=19;btn.tileset_up=18;btn.button_type=NC_STACK_button::TYPE_BUTTON;btn.field_3A=30;
+        const bool split=item.half>=0&&(item.row!=1||workshop);
+        btn.xpos=left+(split&&item.half==1?(width+gap)/2:0);
+        btn.width=split?(width-gap)/2:width;btn.ypos=_screenSize.y*rows[item.row];
+        btn.caption=item.title<0?Locale::Text::OpenUA(Locale::OUA_WORKSHOP):Locale::Text::Title(item.title);
+        if(item.id==UIWidgets::BTN_ABOUT)btn.caption=Locale::Text::OpenUA(Locale::OUA_ABOUT);
+        btn.caption2.clear();btn.downCode=UIWidgets::ALL_DOWN;btn.pressedCode=0;
+        btn.button_id=item.id;btn.upCode=item.event;
+        btn.flags=NC_STACK_button::FLAG_BORDER|NC_STACK_button::FLAG_CENTER|NC_STACK_button::FLAG_TEXT;
+        btn.txt_r=_iniColors[68].r;btn.txt_g=_iniColors[68].g;btn.txt_b=_iniColors[68].b;
+        if(!panel->Add(&btn))return false;
     }
-
-    int v70 = 0;
-    NC_STACK_button::button_64_arg btn_64arg;
-
-    btn_64arg.tileset_down = 19;
-    btn_64arg.tileset_up = 18;
-    btn_64arg.button_type = NC_STACK_button::TYPE_BUTTON;
-    btn_64arg.field_3A = 30;
-    btn_64arg.xpos = _screenSize.x * 0.3328125;
-    btn_64arg.ypos = _screenSize.y * 0.2291666666666666;
-    btn_64arg.width = _screenSize.x / 3;
-    btn_64arg.caption = Locale::Text::Title(Locale::TITLE_GAME);
-    btn_64arg.caption2.clear();
-    btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-    btn_64arg.pressedCode = 0;
-    btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_SINGLE_PLAYER;
-    btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_SINGLE_PLAYER_UP;
-    btn_64arg.flags = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
-    btn_64arg.txt_r = _iniColors[68].r;
-    btn_64arg.txt_g = _iniColors[68].g;
-    btn_64arg.txt_b = _iniColors[68].b;
-
-    if ( _GameShell->titel_button->Add(&btn_64arg) )
-    {
-        btn_64arg.ypos = _screenSize.y * 0.3083333333333334;
-        btn_64arg.caption = Locale::Text::Title(Locale::TITLE_NETWORK);
-        btn_64arg.caption2.clear();
-        btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_MULTIPLAYER_UP;
-        btn_64arg.pressedCode = 0;
-        btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-        btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_MULTIPLAYER;
-
-        if ( _GameShell->titel_button->Add(&btn_64arg) )
-        {
-            btn_64arg.xpos = _screenSize.x * 0.3328125;
-            btn_64arg.ypos = _screenSize.y * 0.4333333333333334;
-            btn_64arg.width = _screenSize.x / 3;
-            btn_64arg.caption = Locale::Text::Title(Locale::TITLE_INPUT);
-            btn_64arg.caption2.clear();
-            btn_64arg.pressedCode = 0;
-            btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-            btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_INPUT_SETTINGS;
-            btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_INPUT_SETTINGS_UP;
-
-            if ( _GameShell->titel_button->Add(&btn_64arg) )
-            {
-                btn_64arg.ypos = _screenSize.y * 0.5125;
-                btn_64arg.caption = Locale::Text::Title(Locale::TITLE_SETTINGS);
-                btn_64arg.caption2.clear();
-                btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_OPTIONS_UP;
-                btn_64arg.pressedCode = 0;
-                btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-                btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_OPTIONS;
-
-                if ( _GameShell->titel_button->Add(&btn_64arg) )
-                {
-                    btn_64arg.ypos = _screenSize.y * 0.5916666666666667;
-                    btn_64arg.caption = Locale::Text::Title(Locale::TITLE_PROFILE);
-                    btn_64arg.caption2.clear();
-                    btn_64arg.pressedCode = 0;
-                    btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-                    btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_SAVE_LOAD_UP;
-                    btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_SAVE_LOAD;
-
-                    if ( _GameShell->titel_button->Add(&btn_64arg) )
-                    {
-                        btn_64arg.xpos = _screenSize.x * 0.890625;
-                        btn_64arg.ypos = _screenSize.y * 0.9583333333333334;
-                        btn_64arg.width = _screenSize.x * 0.1;
-                        btn_64arg.caption = Locale::Text::Title(Locale::TITLE_LOCALE);
-                        btn_64arg.caption2.clear();
-                        btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_LANGUAGE_UP;
-                        btn_64arg.pressedCode = 0;
-                        btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-                        btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_LANGUAGE;
-
-                        if ( _GameShell->titel_button->Add(&btn_64arg) )
-                        {
-                            btn_64arg.xpos = _screenSize.x * 0.3328125;
-                            btn_64arg.ypos = _screenSize.y * 0.7166666666666667;
-                            btn_64arg.width = _screenSize.x / 3;
-                            btn_64arg.caption = Locale::Text::Title(Locale::TITLE_DATABASE);
-                            btn_64arg.caption2.clear();
-                            btn_64arg.pressedCode = 0;
-                            btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-                            btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_HELP;
-                            btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_HELP_UP;
-
-                            if ( _GameShell->titel_button->Add(&btn_64arg) )
-                            {
-                                btn_64arg.ypos = _screenSize.y * 0.7958333333333333;
-                                btn_64arg.caption = Locale::Text::Title(Locale::TITLE_QUIT);
-                                btn_64arg.caption2.clear();
-                                btn_64arg.upCode = UIWidgets::MAIN_MENU_EVENT_IDS::BTN_QUIT_UP;
-                                btn_64arg.pressedCode = 0;
-                                btn_64arg.downCode = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-                                btn_64arg.button_id = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_QUIT;
-
-                                if ( _GameShell->titel_button->Add(&btn_64arg) )
-                                    v70 = 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if ( !v70 )
-    {
-        ypa_log_out("Unable to add button to Titel\n");
-        return false;
-    }
-
-    NC_STACK_button::button_66arg v228;
-
-    if ( _GameShell->lang_dlls.size() <= 1 )
-    {
-        v228.field_4 = 0;
-        v228.butID = UIWidgets::MAIN_MENU_WIDGET_IDS::BTN_LANGUAGE;
-        _GameShell->titel_button->Disable(&v228);
-    }
-
-    _GameShell->titel_button->HideScreen();
-    return true;
+    panel->HideScreen();return true;
 }
 
 bool NC_STACK_ypaworld::CreateSubBarControls(){
@@ -1423,7 +1330,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
     int v99 = posLeftPaddingX + buttonsSpace + v98;
 
     _GameShell->video_listvw.x = v99;
-    _GameShell->video_listvw.y = 4 * vertMenuSpace + 4 * _fontH + scaledFontHeight; // OpenNeoUA: opens just below Display Resolution (row 3)
+    _GameShell->video_listvw.y = 4 * vertMenuSpace + 4 * _fontH + scaledFontHeight; // Opens below Interface Resolution (row 3).
 
     _GameShell->d3d_listvw.x = v99;
     _GameShell->d3d_listvw.y = 7 * vertMenuSpace + 7 * _fontH + scaledFontHeight;
@@ -1488,9 +1395,9 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                     btn_64arg.field_3A = 16;
                     btn_64arg.xpos = 0;
                     btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-                    btn_64arg.ypos = 3 * (_fontH + vertMenuSpace); // OpenNeoUA: Display Resolution moved above Atmosphere
+                    btn_64arg.ypos = 3 * (_fontH + vertMenuSpace); // Interface Resolution appears above Atmosphere.
                     btn_64arg.width = v98;
-                    btn_64arg.caption = Locale::Text::Dialogs(Locale::DLG_S_RES);
+                    btn_64arg.caption = Locale::Text::OpenUA(Locale::OUA_INTERFACE_RESOLUTION);
                     btn_64arg.caption2.clear();
                     btn_64arg.downCode = 0;
                     btn_64arg.upCode = 0;
@@ -3416,328 +3323,86 @@ _GameShell->locale_button->HideScreen();
     return true;
 }
 
-bool NC_STACK_ypaworld::CreateAboutControls(){
-    _GameShell->about_button = Nucleus::CInit<NC_STACK_button>( {
-        {NC_STACK_button::BTN_ATT_X, (int32_t)0},
-        {NC_STACK_button::BTN_ATT_Y, (int32_t)scaledFontHeight},
-        {NC_STACK_button::BTN_ATT_W, (int32_t)(_screenSize.x - 0)},
-        {NC_STACK_button::BTN_ATT_H, (int32_t)(_screenSize.y - scaledFontHeight)}} );
-
-    if ( !_GameShell->about_button )
+bool NC_STACK_ypaworld::CreateAboutControls()
+{
+    auto *panel=Nucleus::CInit<NC_STACK_button>({
+        {NC_STACK_button::BTN_ATT_X,(int32_t)0},{NC_STACK_button::BTN_ATT_Y,(int32_t)0},
+        {NC_STACK_button::BTN_ATT_W,(int32_t)_screenSize.x},{NC_STACK_button::BTN_ATT_H,(int32_t)_screenSize.y}});
+    _GameShell->about_button=panel;if(!panel)return false;
+    panel->screen_width=_screenSize.x;panel->screen_height=_screenSize.y;
+    const int line=std::max(12,_fontH+vertMenuSpace);
+    const std::vector<std::string> credits={
+        "OpenNeoUA",
+        Locale::Text::OpenUA(Locale::OUA_ABOUT_SUMMARY),
+        Locale::Text::OpenUA(Locale::OUA_ABOUT_BUILD)+": "+__DATE__+" "+__TIME__,
+        "OpenNeoUA: TeuZzZ-17 and contributors",
+        "UA_source / OpenUA: Marisa-Chan and contributors",
+        "Urban Assault: TerraTools / Microsoft",
+        " ",Locale::Text::OpenUA(Locale::OUA_ABOUT_CREDITS),
+        "Bernd Beyreuther, Andre 'Floh' Weissflog, Andreas Flemming",
+        "Stefan 'Metzel Hetzel' Karau, Sylvius Lack",
+        "Dietmar 'Didi' Koebelin, Nico Nitsch, Steffen Priebus",
+        "Stefan Warias, Henrik Volkening, Uta Kapp",
+        " ",Locale::Text::OpenUA(Locale::OUA_ABOUT_THANKS),
+        "Microsoft: Michael Lyons, Jonathan Sposato, Earnest Yuen",
+        "Robert Birker, Andre 'Goetz' Blechschmidt, Jan Blechschmidt",
+        "Stephan Bludau, Andre Kunth, Markus Lorenz, Dirk Mansbart",
+        "GoldEd - dPaint - SAS/C"};
+    for(size_t i=0;i<credits.size();++i)
     {
-        ypa_log_out("Unable to create sound-buttonobject\n");
-        return false;
+        NC_STACK_button::button_64_arg b;
+        b.tileset_down=16;b.tileset_up=16;b.field_3A=16;
+        b.button_type=NC_STACK_button::TYPE_CAPTION;b.xpos=8;b.ypos=(i+1)*line;
+        b.width=_screenSize.x-16;b.caption=credits[i];b.caption2.clear();
+        b.downCode=0;b.upCode=0;b.pressedCode=0;b.button_id=2300+i;
+        b.flags=NC_STACK_button::FLAG_CENTER|NC_STACK_button::FLAG_TEXT;
+        b.txt_r=_iniColors[68].r;b.txt_g=_iniColors[68].g;b.txt_b=_iniColors[68].b;
+        if(!panel->Add(&b))return false;
     }
-    int v70 = 0;
-    NC_STACK_button::button_64_arg btn_64arg;
-    v70 = 0;
-    btn_64arg.tileset_down = 16;
-    btn_64arg.tileset_up = 16;
-    btn_64arg.field_3A = 16;
-    btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
-    btn_64arg.xpos = 0;
-    btn_64arg.width = (_screenSize.x - 4 * buttonsSpace);
-    btn_64arg.caption2.clear();
-    btn_64arg.downCode = 0;
-    btn_64arg.upCode = 0;
-    btn_64arg.pressedCode = 0;
-    btn_64arg.button_id = 2;
-    btn_64arg.ypos = vertMenuSpace + _fontH;
-    btn_64arg.flags = NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
-    btn_64arg.caption = "Fuer den Kauf dieses erzgebirgischen Qualitaetsspielzeuges bedanken sich";
-    btn_64arg.txt_r = _iniColors[68].r;
-    btn_64arg.txt_g = _iniColors[68].g;
-    btn_64arg.txt_b = _iniColors[68].b;
-
-    if ( _GameShell->about_button->Add(&btn_64arg) )
-    {
-        btn_64arg.ypos = 2 * (_fontH + vertMenuSpace);
-        btn_64arg.caption = "Bernd Beyreuther,";
-
-        if ( _GameShell->about_button->Add(&btn_64arg) )
-        {
-            btn_64arg.ypos = 3 * (vertMenuSpace + _fontH);
-            btn_64arg.caption = "Andre 'Floh' Weissflog, Andreas Flemming,";
-
-            if ( _GameShell->about_button->Add(&btn_64arg) )
-            {
-                btn_64arg.ypos = 4 * (_fontH + vertMenuSpace);
-                btn_64arg.caption = "Stefan 'Metzel Hetzel' Karau, Sylvius Lack,";
-
-                if ( _GameShell->about_button->Add(&btn_64arg) )
-                {
-                    btn_64arg.ypos = 5 * (vertMenuSpace + _fontH);
-                    btn_64arg.caption = "Dietmar 'Didi' Koebelin, Nico Nitsch, Steffen Priebus, ";
-
-                    if ( _GameShell->about_button->Add(&btn_64arg) )
-                    {
-                        btn_64arg.ypos = 6 * (_fontH + vertMenuSpace);
-                        btn_64arg.caption = "Stefan Warias, Henrik Volkening und";
-
-                        if ( _GameShell->about_button->Add(&btn_64arg) )
-                        {
-                            btn_64arg.ypos = 7 * (vertMenuSpace + _fontH);
-                            btn_64arg.caption = "Uta Kapp";
-
-                            if ( _GameShell->about_button->Add(&btn_64arg) )
-                            {
-                                btn_64arg.ypos = 8 * (_fontH + vertMenuSpace);
-                                btn_64arg.caption = " ";
-
-                                if ( _GameShell->about_button->Add(&btn_64arg) )
-                                {
-                                    btn_64arg.ypos = 9 * (_fontH + vertMenuSpace);
-                                    btn_64arg.caption = "Unser Dank gilt:";
-
-                                    if ( _GameShell->about_button->Add(&btn_64arg) )
-                                    {
-                                        btn_64arg.ypos = 10 * (_fontH + vertMenuSpace);
-                                        btn_64arg.caption = "dem gesamten Microsoft Team, besonders";
-
-                                        if ( _GameShell->about_button->Add(&btn_64arg) )
-                                        {
-                                            btn_64arg.ypos = 11 * (vertMenuSpace + _fontH);
-                                            btn_64arg.caption = "Michael Lyons, Jonathan Sposato und Earnest Yuen";
-
-                                            if ( _GameShell->about_button->Add(&btn_64arg) )
-                                            {
-                                                btn_64arg.ypos = 12 * (_fontH + vertMenuSpace);
-                                                btn_64arg.caption = "weiterhin";
-
-                                                if ( _GameShell->about_button->Add(&btn_64arg) )
-                                                {
-                                                    btn_64arg.ypos = 13 * (_fontH + vertMenuSpace);
-                                                    btn_64arg.caption = "Robert Birker, Andre 'Goetz' Blechschmidt, Jan Blechschmidt, Stephan Bludau,";
-
-                                                    if ( _GameShell->about_button->Add(&btn_64arg) )
-                                                    {
-                                                        btn_64arg.ypos = 14 * (_fontH + vertMenuSpace);
-                                                        btn_64arg.caption = "Andre Kunth, Markus Lorenz, Dirk Mansbart";
-
-                                                        if ( _GameShell->about_button->Add(&btn_64arg) )
-                                                        {
-                                                            btn_64arg.ypos = 15 * (vertMenuSpace + _fontH);
-                                                            btn_64arg.caption = "und natuerlich";
-
-                                                            if ( _GameShell->about_button->Add(&btn_64arg) )
-                                                            {
-                                                                btn_64arg.ypos = 16 * (_fontH + vertMenuSpace);
-                                                                btn_64arg.caption = "        GoldEd - dPaint - SAS/C";
-
-                                                                if ( _GameShell->about_button->Add(&btn_64arg) )
-                                                                {
-                                                                    v70 = 1;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if ( !v70 )
-    {
-        ypa_log_out("Unable to add about-button\n");
-        return false;
-    }
-
-    _GameShell->about_button->HideScreen();
-    return true;
+    NC_STACK_button::button_64_arg back;
+    back.tileset_down=19;back.tileset_up=18;back.field_3A=30;
+    back.button_type=NC_STACK_button::TYPE_BUTTON;back.xpos=_screenSize.x/3;
+    back.ypos=_screenSize.y-_fontH;back.width=_screenSize.x/3;
+    back.caption=Locale::Text::OpenUA(Locale::OUA_DB_BACK);back.caption2.clear();
+    back.downCode=UIWidgets::ALL_DOWN;back.upCode=UIWidgets::ABOUT_UP_BACK;back.pressedCode=0;
+    back.button_id=UIWidgets::ABOUT_BTN_BACK;
+    back.flags=NC_STACK_button::FLAG_BORDER|NC_STACK_button::FLAG_CENTER|NC_STACK_button::FLAG_TEXT;
+    back.txt_r=_iniColors[68].r;back.txt_g=_iniColors[68].g;back.txt_b=_iniColors[68].b;
+    if(!panel->Add(&back))return false;
+    panel->HideScreen();return true;
 }
 
 bool NC_STACK_ypaworld::CreateDatabaseControls()
 {
-    _GameShell->database_button = Nucleus::CInit<NC_STACK_button>( {
-        {NC_STACK_button::BTN_ATT_X, (int32_t)0},
-        // OpenNeoUA Database: use the full shell height. The previous panel started at
-        // scaledFontHeight, leaving a large empty strip above the tabs and wasting
-        // vertical space.
-        {NC_STACK_button::BTN_ATT_Y, (int32_t)0},
-        {NC_STACK_button::BTN_ATT_W, (int32_t)_screenSize.x},
-        {NC_STACK_button::BTN_ATT_H, (int32_t)_screenSize.y} });
-
-    if ( !_GameShell->database_button )
-    {
-        ypa_log_out("Unable to create database-button\n");
-        return false;
-    }
-
-    // Database V2: list rows now show only ID + name, so the left bars can be
-    // shorter and the lore/image pane can claim more of the screen.
-    const int lw   = (_screenSize.x * 34) / 100;   // list panel width
-    const int rx   = (_screenSize.x * 36) / 100;   // right panel x origin
-    const int rw   = _screenSize.x - rx;            // right panel width
-    const int lh   = _fontH + vertMenuSpace;        // line height
-    const int DB_VISIBLE_LINES = 22;                // fill the vertical space above the bottom buttons without overlapping navigation
-    const int DB_DETAIL_LINES = 14;
-    const int panelH = _screenSize.y;
-    // OpenNeoUA Database: anchor navigation buttons to the lowest safe row of the
-    // full-screen database panel. The previous formula subtracted an extra
-    // vertMenuSpace, leaving a visible gap under Prev/Back/Next.
-    // Button height is roughly _fontH; subtracting the full line height (lh)
-    // leaves one vertMenuSpace gap at the bottom. Subtract only _fontH to
-    // place Prev/Back/Next on the lowest safe row without clipping.
-    int nav_y = panelH - _fontH;
-    if (nav_y < 10 * lh) nav_y = 10 * lh;   // safety floor on tiny resolutions
-
-    int imgW = std::max(120, (rw * 70) / 100);
-    const int textW = imgW;
-    const int textX = rx;
-    const int statsX = rx + (rw * 52) / 100;
-    int statsW = _screenSize.x - statsX - vertMenuSpace;
-    if ( statsW < 80 ) statsW = 80;
-    const int imgX = rx + (rw - imgW) / 2;
-    const int imgY = (DB_DETAIL_LINES + 3) * lh;
-    int imgH = nav_y - imgY - vertMenuSpace;
-    if (imgH < lh * 3) imgH = lh * 3;
-    if (imgX + imgW > _screenSize.x) imgW = _screenSize.x - imgX;
-    if (imgH < 1) imgH = 1;
-
-    bool ok = true;
-    NC_STACK_button::button_64_arg btn;
-    btn.caption2.clear();
-    btn.pressedCode = 0;
-
-    // --- TAB BUTTONS (full width, top row) ---
-    btn.tileset_down = 19;
-    btn.tileset_up   = 18;
-    btn.field_3A     = 30;
-    btn.button_type  = NC_STACK_button::TYPE_BUTTON;
-    btn.downCode     = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-    btn.flags        = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
-    btn.txt_r        = _iniColors[68].r;
-    btn.txt_g        = _iniColors[68].g;
-    btn.txt_b        = _iniColors[68].b;
-    btn.ypos         = 0;
-    btn.width        = _screenSize.x / 3;
-
-    btn.xpos = 0;                        btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_UNITS);     btn.button_id = UIWidgets::DB_BTN_UNITS;     btn.upCode = UIWidgets::DB_UP_UNITS;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = _screenSize.x / 3;       btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_WEAPONS);   btn.button_id = UIWidgets::DB_BTN_WEAPONS;   btn.upCode = UIWidgets::DB_UP_WEAPONS;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = (2 * _screenSize.x) / 3; btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BUILDINGS); btn.button_id = UIWidgets::DB_BTN_BUILDINGS; btn.upCode = UIWidgets::DB_UP_BUILDINGS;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-
-    // --- LEFT PANEL: page label (TYPE_CAPTION, left-aligned) ---
-    btn.tileset_down = 16;
-    btn.tileset_up   = 16;
-    btn.field_3A     = 16;
-    btn.button_type  = NC_STACK_button::TYPE_CAPTION;
-    btn.downCode     = 0;
-    btn.upCode       = 0;
-    btn.xpos         = 0;
-    btn.width        = lw;
-    btn.flags        = NC_STACK_button::FLAG_TEXT;
-    btn.ypos         = lh;
-    btn.caption      = " ";
-    btn.button_id    = UIWidgets::DB_LABEL_PAGE;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-
-    // --- LEFT PANEL: compact list rows (TYPE_BUTTON, clickable, no border) ---
-    btn.tileset_down = 19;
-    btn.tileset_up   = 18;
-    btn.field_3A     = 30;
-    btn.button_type  = NC_STACK_button::TYPE_BUTTON;
-    btn.downCode     = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-    btn.flags        = NC_STACK_button::FLAG_TEXT;   // no border, just text+click
-    btn.xpos         = 0;
-    btn.width        = lw;
-    for (int k = 0; k < DB_VISIBLE_LINES; k++)
-    {
-        btn.ypos      = (k + 2) * lh;
-        btn.caption   = " ";
-        btn.button_id = UIWidgets::DB_LINE_0 + k;
-        btn.upCode    = UIWidgets::DB_UP_LINE_BASE + k;
-        if (!_GameShell->database_button->Add(&btn)) ok = false;
-    }
-
-    // --- RIGHT PANEL: detail header (TYPE_CAPTION) ---
-    btn.tileset_down = 16;
-    btn.tileset_up   = 16;
-    btn.field_3A     = 16;
-    btn.button_type  = NC_STACK_button::TYPE_CAPTION;
-    btn.downCode     = 0;
-    btn.upCode       = 0;
-    btn.xpos         = textX;
-    btn.width        = textW;
-    btn.flags        = NC_STACK_button::FLAG_TEXT;
-    btn.ypos         = lh;
-    btn.caption      = std::string("-- ") + Locale::Text::OpenUA(Locale::OUA_DB_DETAILS) + " --";
-    btn.button_id    = UIWidgets::DB_DETAIL_HEADER;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-
-    // --- RIGHT PANEL: player-facing detail/description lines (TYPE_CAPTION, left-aligned) ---
-    btn.flags = NC_STACK_button::FLAG_TEXT;
-    btn.xpos = textX;
-    btn.width = textW;
-    for (int k = 0; k < DB_DETAIL_LINES; k++)
-    {
-        btn.ypos      = (k + 2) * lh;
-        btn.caption   = " ";
-        btn.button_id = UIWidgets::DB_DETAIL_0 + k;
-        if (!_GameShell->database_button->Add(&btn)) ok = false;
-    }
-
-    // --- RIGHT PANEL: compact runtime stats block, using the empty upper-right space. ---
-    btn.flags     = NC_STACK_button::FLAG_TEXT;
-    btn.xpos      = statsX;
-    btn.width     = statsW;
-    btn.ypos      = 2 * lh;
-    btn.caption   = " ";
-    btn.button_id = UIWidgets::DB_STATS_HEADER;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-
-    for (int k = 0; k < 12; k++)
-    {
-        btn.ypos      = (k + 3) * lh;
-        btn.caption   = " ";
-        btn.button_id = UIWidgets::DB_STATS_0 + k;
-        if (!_GameShell->database_button->Add(&btn)) ok = false;
-    }
-
-    // --- RIGHT PANEL: image placeholder text, centered inside the custom preview box ---
-    btn.xpos      = imgX;
-    btn.width     = imgW;
-    btn.ypos      = imgY + (imgH / 2) - (lh / 2);
-    btn.flags     = NC_STACK_button::FLAG_TEXT | NC_STACK_button::FLAG_CENTER;
-    btn.caption   = " ";
-    btn.button_id = UIWidgets::DB_IMAGE_TEXT;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-
-    // --- NAV BUTTONS (full width, anchored near the bottom of the panel) ---
-    // The database panel starts at screen top, so child Y is relative to the full screen.
-    btn.tileset_down = 19;
-    btn.tileset_up   = 18;
-    btn.field_3A     = 30;
-    btn.button_type  = NC_STACK_button::TYPE_BUTTON;
-    btn.downCode     = UIWidgets::MAIN_MENU_EVENT_IDS::ALL_DOWN;
-    btn.flags        = NC_STACK_button::FLAG_BORDER | NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
-    btn.ypos         = nav_y;
-    btn.width        = _screenSize.x / 3;
-
-    btn.xpos = 0;                        btn.caption = std::string("< ") + Locale::Text::OpenUA(Locale::OUA_DB_PREV); btn.button_id = UIWidgets::DB_BTN_PREV; btn.upCode = UIWidgets::DB_UP_PREV;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = _screenSize.x / 3;       btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_BACK);   btn.button_id = UIWidgets::DB_BTN_BACK; btn.upCode = UIWidgets::DB_UP_BACK;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-    btn.xpos = (2 * _screenSize.x) / 3; btn.caption = Locale::Text::OpenUA(Locale::OUA_DB_NEXT) + " >"; btn.button_id = UIWidgets::DB_BTN_NEXT; btn.upCode = UIWidgets::DB_UP_NEXT;
-    if (!_GameShell->database_button->Add(&btn)) ok = false;
-
-    if ( !ok )
-    {
-        ypa_log_out("Unable to add buttons to database panel\n");
-        return false;
-    }
-
-    _GameShell->database_button->HideScreen();
-    return true;
+    auto *panel=Nucleus::CInit<NC_STACK_button>({
+        {NC_STACK_button::BTN_ATT_X,(int32_t)0},{NC_STACK_button::BTN_ATT_Y,(int32_t)0},
+        {NC_STACK_button::BTN_ATT_W,(int32_t)_screenSize.x},{NC_STACK_button::BTN_ATT_H,(int32_t)_screenSize.y}});
+    _GameShell->database_button=panel;if(!panel)return false;
+    panel->screen_width=_screenSize.x;panel->screen_height=_screenSize.y;
+    const auto l=DatabaseLayout::For(*this);
+    auto add=[&](int id,int event,int x,int y,int width,const std::string &title,bool caption=false) {
+        NC_STACK_button::button_64_arg b;
+        b.tileset_down=caption?16:19;b.tileset_up=caption?16:18;b.field_3A=caption?16:30;
+        b.button_type=caption?NC_STACK_button::TYPE_CAPTION:NC_STACK_button::TYPE_BUTTON;
+        b.downCode=caption?0:UIWidgets::ALL_DOWN;b.upCode=event;b.pressedCode=0;
+        b.xpos=x;b.ypos=y;b.width=width;b.caption=title;b.caption2.clear();b.button_id=id;
+        b.flags=NC_STACK_button::FLAG_TEXT|(caption?0:NC_STACK_button::FLAG_BORDER|NC_STACK_button::FLAG_CENTER);
+        b.txt_r=_iniColors[68].r;b.txt_g=_iniColors[68].g;b.txt_b=_iniColors[68].b;
+        return panel->Add(&b)!=0;
+    };
+    if(!add(UIWidgets::DB_BTN_UNITS,UIWidgets::DB_UP_UNITS,0,0,_screenSize.x/4,Locale::Text::OpenUA(Locale::OUA_DB_UNITS)))return false;
+    if(!add(UIWidgets::DB_BTN_BUILDINGS,UIWidgets::DB_UP_BUILDINGS,_screenSize.x/4,0,_screenSize.x/4,Locale::Text::OpenUA(Locale::OUA_DB_BUILDINGS)))return false;
+    if(!add(UIWidgets::DB_BTN_PURCHASE,UIWidgets::DB_UP_PURCHASE,0,l.bottom-2*l.line,l.listWidth,"Purchase"))return false;
+    if(!add(UIWidgets::DB_LABEL_PAGE,0,0,2*l.line,l.listWidth," ",true))return false;
+    for(int i=0;i<l.rows;++i)
+        if(!add(UIWidgets::DB_LINE_0+i,UIWidgets::DB_UP_LINE_BASE+i,0,(i+3)*l.line,l.listWidth," "))return false;
+    for(int i=0;i<3;++i)
+        if(!add(2040+i,2140+i,0,l.bottom-(7-i)*l.line,l.listWidth," "))return false;
+    const int nav[]={Locale::OUA_DB_PREV,Locale::OUA_DB_BACK,Locale::OUA_DB_NEXT};
+    for(int i=0;i<3;++i)
+        if(!add(UIWidgets::DB_BTN_PREV+i,UIWidgets::DB_UP_PREV+i,i*_screenSize.x/3,l.bottom,_screenSize.x/3,
+            (i==0?"< ":"")+Locale::Text::OpenUA(nav[i])+(i==2?" >":"")))return false;
+    panel->HideScreen();return true;
 }
 
 bool NC_STACK_ypaworld::CreateNetworkControls()
@@ -4576,6 +4241,12 @@ void NC_STACK_ypaworld::CloseGameShell()
             _GameShell->network_button = nullptr;
         }
 
+        _GameShell->ReleaseDatabasePreview();
+        if(_GameShell->database_button)
+        {
+            _GameShell->database_button->HideScreen();_GameShell->database_button->Delete();
+            _GameShell->database_button=nullptr;
+        }
         SFXEngine::SFXe.StopPlayingSounds();
 
         _globalMapRegions.UnloadImages();

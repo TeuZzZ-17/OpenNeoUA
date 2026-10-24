@@ -41,6 +41,11 @@ int yw_write_user(FSMgr::FileHandle *fil, UserData *usr)
     if ( yw->GetPlasmaCurrencyBank() != 0 )
         fil->printf("    plasma_bank = %" PRIu64 "\n", yw->GetPlasmaCurrencyBank());
 
+    for(int id:yw->GetWorkshopOwned())
+        fil->printf("    workshop_owned = %d\n",id);
+    if(yw->GetWorkshopHost()>=0)
+        fil->printf("    workshop_host = %d\n",yw->GetWorkshopHost());
+
     for (int i = 0; i < 8; i++)
     {
         fil->printf("    playerstatus = %d_%d_%d_%d_%d_%d_%d_%d\n",

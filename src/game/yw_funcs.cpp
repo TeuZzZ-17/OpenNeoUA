@@ -3377,6 +3377,7 @@ void ypaworld_func158__sub3(NC_STACK_ypaworld *yw, UserData *usr)
         break;
 
     case ENVMODE_DATABASE:
+    case ENVMODE_WORKSHOP:
         if ( usr->database_button )
         {
             usr->database_button->Draw();
@@ -3556,10 +3557,9 @@ void UserData::clear()
     about_button = nullptr;
     aboutDlgLastKeyTime = 0;
     aboutDlgKeyCount = 0;
-    ReleaseDatabaseEntryImage();
+    ReleaseDatabasePreview();
     db_entry_tab = -1;
     db_entry_id = -1;
-    db_entry_has_image = false;
 
     network_button = nullptr;
     //GuiList network_listvw;
