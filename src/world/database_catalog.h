@@ -2,6 +2,7 @@
 #define WORLD_DATABASE_CATALOG_H
 
 #include <string>
+#include <array>
 #include <cstdint>
 #include <vector>
 #include <utility>
@@ -49,6 +50,7 @@ struct Card
     int healingPower = 0;
     int guardians = 0;
     int radarPower = 0;
+    int score = 0;
     std::vector<std::pair<std::string, int>> versus;
     std::vector<Rating> ratings;
     std::vector<int> weapons;
@@ -63,6 +65,8 @@ public:
 
 private:
     std::vector<int> entries_[3];
+    std::array<double,9> scoreMaxima_{};
+    double scorePeak_ = 0;
 };
 }
 }

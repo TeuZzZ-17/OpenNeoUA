@@ -10,6 +10,8 @@
 #include <cctype>
 #include <cstdlib>
 #include <new>
+#include "system/system.h"
+#include "locale/locale.h"
 
 namespace {
 template<class Prototype> void ResetCatalogPrototype(const Prototype &prototype)
@@ -33,6 +35,8 @@ DatabaseSession::DatabaseSession() { carrier.Resize(1); }
 DatabaseSession::~DatabaseSession()
 {
     StopAudio();
+    for(auto &entry:captions)SDL_FreeSurface(entry.second);
+    if(detailFont)TTF_CloseFont(detailFont);
     preview.Clear();
     if (resources)
     {
@@ -56,8 +60,22 @@ bool DatabaseSession::LoadResources()
     resources->_normalFadeLength = 100;
     const std::string previous = Common::Env.GetPrefix("rsrc");
     loaded = yw_MBLoadSet(resources.get(),1) != 0;
+    // Gameplay loads type_ns.font from Data/Fonts, not the shell's Set46 fonts.
+    Common::Env.SetPrefix("rsrc","data:fonts");
+    icons.reset(resources->yw_LoadFont("type_ns.font"));
     Common::Env.SetPrefix("rsrc",previous);
     return loaded;
+}
+
+void DatabaseSession::LoadDetailFont(int size)
+{
+    if(detailFont&&detailFontSize==size)return;
+    for(auto &entry:captions)SDL_FreeSurface(entry.second);
+    captions.clear();
+    if(detailFont)TTF_CloseFont(detailFont);
+    const auto parts=Stok::Split(System::ResolveMenuFontDescr(Locale::Text::Font()),",");
+    detailFont=parts.empty()?nullptr:System::LoadFont(parts[0],size);
+    detailFontSize=size;
 }
 
 void DatabaseSession::StopAudio()
@@ -205,22 +223,22 @@ void DatabaseSession::LoadOffers(const NC_STACK_ypaworld &source)
     }
 }
 
-DatabaseLayout DatabaseLayout::For(const NC_STACK_ypaworld &world)
+DatabaseLayout DatabaseLayout::For(const NC_STACK_ypaworld &world, bool workshop)
 {
     DatabaseLayout r;
-    const int w = world._screenSize.x, h = world._screenSize.y;
-    r.line = std::max(12,world._fontH + vertMenuSpace);
-    r.bottom = h-world._fontH;
-    r.rows = std::max(1,std::min(22,(r.bottom-6*r.line)/r.line));
-    r.listWidth = w*32/100;
-    r.right = w*34/100;
-    r.width = w-r.right-8;
-    r.previewTop = 3*r.line;
-    r.previewWidth = r.width*54/100;
-    r.previewHeight = std::max(3*r.line,h*51/100-r.previewTop);
-    r.statsLeft = r.right+r.previewWidth+8;
-    r.statsWidth = w-r.statsLeft-8;
-    r.textTop = std::max(h*54/100,r.previewTop+r.previewHeight+r.line/2);
-    r.textLines = std::max(1,(r.bottom-r.textTop-r.line)/r.line);
+    const int w=world._screenSize.x,h=world._screenSize.y;
+    r.line=std::max(12,world._fontH+vertMenuSpace);
+    r.detailLine=std::max(12,world._fontH*3/4+2);
+    r.bottom=h-world._fontH;
+    r.listTop=(workshop?3:2)*r.line;
+    const int listBottom=workshop?r.bottom-6*r.line:r.bottom;
+    r.rows=std::max(1,std::min((int)MaxRows,(listBottom-r.listTop)/r.line));
+    r.listWidth=w*32/100;r.right=w*34/100;r.width=w-r.right-8;
+    r.previewTop=3*r.line;
+    r.previewWidth=r.width*54/100;
+    r.previewHeight=std::max(5*r.detailLine,h*28/100);
+    r.statsLeft=r.right+r.previewWidth+8;r.statsWidth=w-r.statsLeft-8;
+    r.textTop=r.previewTop+r.previewHeight+8;
+    r.textLines=std::max(1,(r.bottom-r.textTop-4)/r.detailLine);
     return r;
 }

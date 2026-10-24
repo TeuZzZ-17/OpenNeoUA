@@ -21,6 +21,7 @@
 
 extern int init_classesLists_and_variables();
 extern int yw_write_user(FSMgr::FileHandle *,UserData *);
+extern NC_STACK_bitmap *yw_LoadDatabaseBackground(bool);
 extern std::vector<std::string> db_wrap_text_columns(const std::string &,int,int);
 
 
@@ -101,16 +102,46 @@ int main(int argc,char **argv)
     check(!user.db_session->catalog.Entries(0).empty(),"loose scripts produce units");
     check(user.db_session->catalog.Entries(1).empty(),"no weapons tab/catalog");
     check(!user.db_session->catalog.Entries(2).empty(),"loose scripts produce buildings");
+    auto *databaseBackground=yw_LoadDatabaseBackground(false);
+    auto *workshopBackground=yw_LoadDatabaseBackground(true);
     auto draw=[&](const char *name){
         user.DTime=40;user.GlobalTime+=40;
         GFX::Engine.BeginFrame();GFX::Engine.BeginVirtualUI(world->_screenSize);
+        auto *background=user.db_workshop?workshopBackground:databaseBackground;
+        if(background)world->GameShellBlitBkg(background);
         user.database_button->Draw();user.RenderDatabaseEntryMedia();
         GFX::Engine.EndVirtualUI();GFX::Engine.EndFrame();
         const std::string path=std::string(std::getenv("OPENNEOUA_PROBE_OUTPUT")?std::getenv("OPENNEOUA_PROBE_OUTPUT"):".")+"/"+name+".png";
         Capture(path,resolution.x,resolution.y);
     };
+    const auto layout=DatabaseLayout::For(*world);
+    check(layout.listTop+layout.rows*layout.line<=layout.bottom&&layout.bottom-(layout.listTop+layout.rows*layout.line)<layout.line,"unit list uses every complete available row");
+    const int tabs[]={UIWidgets::DB_BTN_UNITS,UIWidgets::DB_BTN_BUILDINGS,DatabaseLayout::WorkshopButton};
+    int right=0;
+    for(int tab:tabs)
+    {
+        const auto &button=user.database_button->field_d8[user.database_button->GetIndexByID(tab)];
+        check(button.xpos==right,"top navigation has no gaps");right=button.xpos+button.width;
+    }
+    check(right==world->_screenSize.x,"top navigation spans the full screen");
+    check(user.db_session->icons&&user.db_session->detailFont,"gameplay icon atlas and compact font loaded");
+    const auto prefix=Common::Env.SetPrefix("rsrc","data:fonts");
+    std::unique_ptr<TileMap> gameplayIcons(world->yw_LoadFont("type_ns.font"));
+    Common::Env.SetPrefix("rsrc",prefix);
+    const auto expected=gameplayIcons->Glyph(user.db_session->card.icon);
+    const auto iconGlyph=user.db_session->icons->Glyph(user.db_session->card.icon);
+    check(expected.x==iconGlyph.x&&expected.y==iconGlyph.y&&expected.w==iconGlyph.w&&expected.h==iconGlyph.h,"unit icon resolves exactly like gameplay");
+    check(user.db_session->card.versus.size()==11,"real Weasel includes all eleven authored combat classes");
+    for(int category:{0,2})for(int id:user.db_session->catalog.Entries(category))
+        check(user.db_session->catalog.Describe(*user.db_session->definitions,category,id).score>=1&&user.db_session->catalog.Describe(*user.db_session->definitions,category,id).score<=10,"real catalog score lies in 1..10");
+    check(layout.previewTop+10*layout.detailLine+2<=layout.textTop,"score below Speed fits above detail text");
     draw("database-units");
     check(user.db_session->preview.Available(),"normal-state unit preview");
+    user.db_session->card.description="Compact shared card with every authored combat class visible. Description stays beside the complete VS grid instead of pushing ratings below the screen.";
+    user.PopulateDetailPane();draw("database-full-card");
+    for(const auto &line:user.db_session->text)
+    {int w=0,h=0;TTF_SizeUTF8(user.db_session->detailFont,line.c_str(),&w,&h);check(w<=layout.width*62/100-12,"detail text wraps to measured font width");}
+    check(user.db_session->versusRows.empty(),"VS never enters the scrolling text flow");
     user.db_tab=2;user.db_page=0;user.db_selected=0;user.PopulateDatabasePage();draw("database-buildings");
     check(user.db_session->card.valid,"building card binds to shared definitions");
     user.CloseDatabaseMenu();
@@ -146,8 +177,33 @@ int main(int argc,char **argv)
     for(int id:user.db_session->catalog.Entries(0))defs._vhclProtos[id].purchase_cost=250+id;
     user.db_session->LoadOffers(defs);user.PopulateDatabasePage();draw("workshop");
     for(int id:{UIWidgets::DB_BTN_UNITS,UIWidgets::DB_BTN_BUILDINGS})
-    {const auto &b=user.database_button->field_d8[user.database_button->GetIndexByID(id)];check(!(b.flags&NC_STACK_button::FLAG_DRAW),"workshop has no fake header buttons");}
-    check(user.db_session->card.valid,"workshop uses the shared card");
+    {const auto &b=user.database_button->field_d8[user.database_button->GetIndexByID(id)];check((b.flags&NC_STACK_button::FLAG_DRAW)!=0,"workshop uses the same real navigation buttons");check(b.ypos==0,"workshop navigation touches the top edge");}
+    check(user.db_session->card.valid&&user.db_session->card.score>=1,"workshop uses the shared scored card");
+    const auto workshopLayout=DatabaseLayout::For(*world,true);
+    check(workshopLayout.line+2+world->_guiTiles[15]->h+2*std::max(4,world->_guiTiles[15]->h/3)<=workshopLayout.previewTop,"unchanged plasma badge fits below navigation above preview");
+    const auto &hostButton=user.database_button->field_d8[user.database_button->GetIndexByID(2040)];
+    check(host<0||hostButton.caption.find(std::to_string(250+host))==std::string::npos,"owned Host Station list does not duplicate its price");
+    TInputState input{};user.Input=&input;
+    auto click=[&](int id){
+        input.KbdLastHit=0;input.ClickInf.selected_btn=user.database_button;
+        input.ClickInf.selected_btnID=user.database_button->GetIndexByID(id);
+        input.ClickInf.flag=TClickBoxInf::FLAG_OK|TClickBoxInf::FLAG_BTN_DOWN;
+        user.HandleDatabaseInput();
+        input.ClickInf.flag=TClickBoxInf::FLAG_OK|TClickBoxInf::FLAG_BTN_UP;
+        user.HandleDatabaseInput();
+    };
+    click(UIWidgets::DB_BTN_UNITS);
+    check(!user.db_workshop&&user.db_tab==0&&user.EnvMode==ENVMODE_DATABASE,"Units returns from Workshop to database");
+    const int last=DatabaseLayout::For(*world).rows-1;
+    click(DatabaseLayout::ListButton+last);
+    check(user.db_selected==last&&user.db_entry_id==user.db_session->catalog.Entries(0)[last],"new bottom list row selects its real unit");
+    click(UIWidgets::DB_BTN_BUILDINGS);
+    check(user.db_tab==2&&user.db_session->card.valid,"Buildings button selects the building catalog");
+    click(DatabaseLayout::WorkshopButton);
+    check(user.db_workshop&&user.EnvMode==ENVMODE_WORKSHOP,"Workshop button opens the real Workshop");
+    user.Input=nullptr;
+    if(databaseBackground)databaseBackground->Delete();
+    if(workshopBackground)workshopBackground->Delete();
     user.CloseDatabaseMenu();
     std::printf("DATABASE_RENDER CHECKS %d FAILURES %d\n",checks,failures);
     return failures?1:0;
