@@ -216,6 +216,130 @@ struct BuildingWorld : GroundWorld {
     }
     void ypaworld_func136(ypaworld_arg136 *arg) override { NC_STACK_ypaworld::ypaworld_func136(arg); }
 };
+struct MountainWorld : GroundWorld {
+    MountainWorld() {
+        for(int z=0;z<8;++z)for(int x=0;x<8;++x)_cells(x,z).height=x<=2?-600:0;
+    }
+    void ypaworld_func136(ypaworld_arg136 *arg) override { NC_STACK_ypaworld::ypaworld_func136(arg); }
+};
+void TankCliffRegression() {
+    for(int surface:{0,1})for(int shaped:{0,1,2})for(bool cockpit:{false,true})for(int stepMs:{8,20,50})
+    {
+        std::unique_ptr<GroundWorld> terrain(surface?static_cast<GroundWorld*>(new MountainWorld):static_cast<GroundWorld*>(new BuildingWorld));
+        auto &world=*terrain;world._vhclProtos.resize(256);world._weaponProtos.resize(256);
+        Actor<NC_STACK_ypatank> tank;
+        const auto hull=Shape({Box(vec3d(0,0,0),18,12,30)});
+        tank.Bind(world,970,vec3d(surface?3300:3000,surface?-613:-193,-3000),shaped==2?Collision::Load("Data/Models/Collision/Weasel.collision"):shaped?hull:nullptr);
+        tank._bact_type=BACT_TYPES_TANK;tank._oflags=BACT_OFLAG_EXACTCOLL|BACT_OFLAG_VIEWER|BACT_OFLAG_USERINPT;
+        tank._status_flg=BACT_STFLAG_LAND;tank._overeof=10;tank._viewer_overeof=40;tank._viewer_radius=35;
+        tank._position.y-=27;tank._old_pos=tank._position;
+        UserData user;user.clear();user.cockpitCameraRuntimeMode=cockpit;world._GameShell=&user;world._userUnit=world._viewerBact=&tank;
+        tank._energy=tank._energy_max=1000000;tank._vp_normal=tank._vp_fire=tank._vp_wait=tank._vp_dead=tank._vp_megadeth=tank._vp_genesis=nullptr;
+        tank._wrldSize=vec2d(9600,-9600);tank._mass=200;tank._force=10000;tank._airconst=tank._airconst_static=200;
+        tank._maxrot=1;tank._rotation=mat3x3::RotateY(-1.5707963267948966);tank._fly_dir=tank._rotation.AxisZ();tank._fly_dir_length=10;
+        bool airborne=false,belowFloor=false;double maxX=tank._position.x;
+        for(int frame=0;frame<5000/stepMs;++frame)
+        {
+            world._timeStamp+=stepMs;tank._clock+=stepMs;
+            const vec3d old=tank._position;const auto rotation=tank._rotation;
+            tank.ResolveShapeMovement(old,rotation);
+            if(tank._status_flg&BACT_STFLAG_LAND)
+            {
+                tank._thraction=tank._force;move_msg move;move.field_0=stepMs*.001;move.flag=0;
+                const auto direction=tank._rotation.AxisZ();tank.Move(&move);tank.AlignVehicleUser(move.field_0,direction);
+            }
+            else {airborne=true;bact_arg86 fall;fall.field_one=1;fall.field_two=stepMs;tank.CrashOrLand(&fall);}
+            tank.ResolveShapeMovement(old,rotation,stepMs);
+            maxX=std::max(maxX,tank._position.x);
+            belowFloor|=tank.GetBodyPosition().y>1;
+        }
+        std::printf("CLIFF surface=%d shape=%d cockpit=%d dt=%d x=%.3f y=%.3f maxX=%.3f airborne=%d below=%d\n",surface,shaped,cockpit,stepMs,tank._position.x,tank._position.y,maxX,airborne,belowFloor);
+        Check(airborne&&maxX>(surface?3900:3300),"tank leaves a high roof or mountain edge and falls instead of sticking");
+        Check(!belowFloor&&tank.GetBodyPosition().y<=.5,"tank does not cross below the lower terrain");
+        world._userUnit=world._viewerBact=nullptr;world._GameShell=nullptr;world._collisionScene.reset();
+    }
+}
+
+// A roof can rise towards its edge. The edge wall is below the support
+// plane even though its top is higher than the ground under the tank centre.
+struct SlopingRoofWorld : BuildingWorld {
+    SlopingRoofWorld() {
+        _collisionScene.reset();
+        for(auto &point:buildingData.POO)
+            if(point.y<0)point.y=-180.0-(point.z+140.0)*.7;
+        for(auto &polygon:buildingData.polygons) {
+            const auto &a=buildingData.POO[polygon.v[0]];
+            auto normal=(buildingData.POO[polygon.v[1]]-a)*(buildingData.POO[polygon.v[2]]-a);
+            normal.normalise();polygon.A=normal.x;polygon.B=normal.y;polygon.C=normal.z;polygon.D=-normal.dot(a);
+        }
+        _collisionScene.reset(new Collision::Scene(*this));
+    }
+};
+void TankSlopingRoofRegression() {
+    for(bool cockpit:{false,true})for(int dt:{8,20,50}) {
+        SlopingRoofWorld world;world._vhclProtos.resize(256);world._weaponProtos.resize(256);
+        auto shape=Collision::Load("Data/Models/Collision/Weasel.collision");
+        Check(shape!=nullptr,"real Weasel profile for sloping roof");if(!shape)continue;
+        Actor<NC_STACK_ypatank> tank;tank.Bind(world,975,vec3d(3000,-318,-3000),shape);
+        tank._bact_type=BACT_TYPES_TANK;tank._oflags=BACT_OFLAG_EXACTCOLL|BACT_OFLAG_VIEWER|BACT_OFLAG_USERINPT;
+        tank._status_flg=BACT_STFLAG_LAND;tank._overeof=10;tank._viewer_overeof=40;tank._viewer_radius=35;
+        tank._energy=tank._energy_max=1000000;tank._wrldSize=vec2d(9600,-9600);
+        tank._mass=200;tank._force=10000;tank._airconst=tank._airconst_static=200;tank._maxrot=1;
+        UserData user;user.clear();user.cockpitCameraRuntimeMode=cockpit;world._GameShell=&user;world._userUnit=world._viewerBact=&tank;
+        bool airborne=false,belowFloor=false;int rebounds=0;double furthest=tank._position.z;
+        for(int frame=0;frame<8000/dt;++frame) {
+            world._timeStamp+=dt;tank._clock+=dt;const auto old=tank._position;const auto rotation=tank._rotation;
+            tank.ResolveShapeMovement(old,rotation);
+            if(tank._status_flg&BACT_STFLAG_LAND) {
+                tank._thraction=tank._force;move_msg move;move.field_0=dt*.001;move.flag=0;
+                const auto direction=tank._rotation.AxisZ();tank.Move(&move);tank.AlignVehicleUser(move.field_0,direction);
+            } else {airborne=true;bact_arg86 fall;fall.field_one=1;fall.field_two=dt;tank.CrashOrLand(&fall);}
+            tank.ResolveShapeMovement(old,rotation,dt);furthest=std::max(furthest,tank._position.z);
+            belowFloor|=tank.GetBodyPosition().y>1;rebounds=std::max(rebounds,(int)tank._reb_count);
+        }
+        std::printf("SLOPING_ROOF cockpit=%d dt=%d z=%.3f y=%.3f airborne=%d rebounds=%d\n",cockpit,dt,tank._position.z,tank._position.y,airborne,rebounds);
+        Check(airborne&&furthest>-2700,"Weasel crosses the high edge of a sloping roof and falls");
+        Check(!belowFloor&&tank._energy>0&&rebounds<50,"roof descent neither crosses the floor nor enters a fatal rebound loop");
+        world._userUnit=world._viewerBact=nullptr;world._GameShell=nullptr;world._collisionScene.reset();
+    }
+}
+
+void TankVanillaFallRegression() {
+    auto shape=Collision::Load("Data/Models/Collision/Weasel.collision");
+    Check(shape!=nullptr,"real Weasel profile for vanilla fall comparison");if(!shape)return;
+    for(bool cockpit:{false,true})for(int dt:{8,20,50}) {
+        GroundWorld world;world._vhclProtos.resize(256);world._weaponProtos.resize(256);
+        Actor<NC_STACK_ypatank> legacy,shaped;
+        legacy.Bind(world,981,vec3d(3000,-1000,-3000));shaped.Bind(world,982,legacy._position,shape);
+        UserData user;user.clear();user.cockpitCameraRuntimeMode=cockpit;world._GameShell=&user;
+        for(auto *tank:{&legacy,&shaped}) {
+            tank->_bact_type=BACT_TYPES_TANK;tank->_oflags=BACT_OFLAG_EXACTCOLL|BACT_OFLAG_VIEWER|BACT_OFLAG_USERINPT;
+            tank->_status_flg=0;tank->_overeof=10;tank->_viewer_overeof=40;tank->_viewer_radius=35;
+            tank->_energy=tank->_energy_max=1000000;tank->_wrldSize=vec2d(9600,-9600);
+            tank->_mass=200;tank->_force=10000;tank->_airconst=tank->_airconst_static=200;tank->_maxrot=1;
+        }
+        int legacyLanded=-1,shapedLanded=-1;bool sameFreeFall=true;
+        for(int frame=0;frame<6000/dt;++frame) {
+            world._timeStamp+=dt;
+            const bool bothAirborne=!(legacy._status_flg&BACT_STFLAG_LAND)&&!(shaped._status_flg&BACT_STFLAG_LAND);
+            for(auto *tank:{&legacy,&shaped}) {
+                world._userUnit=world._viewerBact=tank;
+                if(!(tank->_status_flg&BACT_STFLAG_LAND)) {bact_arg86 fall;fall.field_one=1;fall.field_two=dt;tank->CrashOrLand(&fall);}
+            }
+            if(frame<10&&bothAirborne)
+                sameFreeFall&=(legacy._position-shaped._position).length()<1e-6&&fabs(legacy._fly_dir_length-shaped._fly_dir_length)<1e-6;
+            if(legacyLanded<0&&(legacy._status_flg&BACT_STFLAG_LAND))legacyLanded=frame;
+            if(shapedLanded<0&&(shaped._status_flg&BACT_STFLAG_LAND))shapedLanded=frame;
+            if(legacyLanded>=0&&shapedLanded>=0)break;
+        }
+        std::printf("VANILLA_FALL cockpit=%d dt=%d land_frames=%d/%d hp=%d/%d y=%.3f/%.3f\n",cockpit,dt,legacyLanded,shapedLanded,legacy._energy,shaped._energy,legacy._position.y,shaped._position.y);
+        Check(sameFreeFall,"compound shape preserves vanilla free-fall acceleration and displacement");
+        Check(legacyLanded>=0&&shapedLanded>=0&&abs(legacyLanded-shapedLanded)<=1,"both collision modes complete the same flat-ground fall within one frame");
+        Check(shaped.GetBodyPosition().y<=.5&&shaped._energy>0&&shaped._reb_count==0,"compound landing remains above ground without a rebound loop");
+        world._userUnit=world._viewerBact=nullptr;world._GameShell=nullptr;world._collisionScene.reset();
+    }
+}
+
 void GroundRegression(std::shared_ptr<Collision::Shape> tiger) {
     GroundWorld w;
     Actor<NC_STACK_ypatank> shaped,legacy;
@@ -1240,6 +1364,41 @@ void BirthPlacementRegression(const std::shared_ptr<Collision::Shape> &myko)
         Check(world._collisionScene->PlaceAboveTerrain(&zeppelin) &&
               std::fabs(zeppelin._position.y + 45) < .01,
               "legacy ZEPP uses overeof when it has no authored collision shape");
+    }
+
+    {
+        GroundWorld world;
+        Robo host;
+        host.Bind(world, 808, centre + vec3d(0, 200, 0), myko);
+        host._bact_type = BACT_TYPES_ROBO;
+        host._pSector = &world._cells.At(0);
+        host._overeof = 20;
+        Check(world._collisionScene->PlaceAboveTerrain(&host),
+              "normal Host/Robo birth unit is raised above roof and terrain geometry");
+        Check(host._position.y < 0.0,
+              "Host/Robo birth correction moves the final height upward");
+    }
+
+    {
+        GroundWorld world;
+        Actor<> disabled;
+        disabled.Bind(world, 809, centre + vec3d(0, 200, 0), myko);
+        disabled._disableCollision = true;
+        const vec3d start = disabled._position;
+        Check(!world._collisionScene->PlaceAboveTerrain(&disabled) &&
+              disabled._position == start,
+              "no_collision units keep their authored birth position");
+    }
+
+    {
+        GroundWorld world;
+        Actor<> mounted;
+        mounted.Bind(world, 810, centre + vec3d(0, 200, 0), myko);
+        mounted._isUnitGunChild = true;
+        const vec3d start = mounted._position;
+        Check(!world._collisionScene->PlaceAboveTerrain(&mounted) &&
+              mounted._position == start,
+              "mounted gun children are not moved independently at birth");
     }
 
     {
@@ -2727,6 +2886,10 @@ void BuildingBenchmark(std::shared_ptr<Collision::Shape> profile) {
 }
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
+    if(argc>1&&std::string(argv[1])=="--tank-cliff") {
+        FSMgr::iDir::setBaseDir("");TankCliffRegression();TankSlopingRoofRegression();TankVanillaFallRegression();
+        std::printf("CHECKS=%d FAILED=%d\n",checks,failures);return failures?1:0;
+    }
     if (argc>1 && std::string(argv[1])=="--wreck-landing") {
         FSMgr::iDir::setBaseDir("");
         WreckLandingRegression();
@@ -2950,6 +3113,9 @@ int main(int argc,char **argv) {
     }
     if(!pilotProfiles.empty()) { SpawnLandingRegression(pilotProfiles.front()); GroundRegression(pilotProfiles.front()); AIOrderRegression(pilotProfiles.front()); AIWorldBuildingRegression(pilotProfiles.front()); BuildingControlsRegression(pilotProfiles.front()); BuildingBenchmark(pilotProfiles.front()); }
     if(pilotProfiles.size()>2) { AirWorldBuildingRegression(pilotProfiles[2]); AirLandingRegression(pilotProfiles[2]); }
+    TankCliffRegression();
+    TankSlopingRoofRegression();
+    TankVanillaFallRegression();
     CompoundWorldSweepRegression();
     UnitResponseRegression(cube);
     PlayerTankUnitRegression(cube);

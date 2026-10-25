@@ -1019,6 +1019,8 @@ struct TVhclProto
     // makes a larger number mean a larger model.
     static constexpr float BRIEFING_SIZE_REFERENCE = 4000.0f;
     float briefing_size = 0.0f; // Optional briefing size; 0 uses the legacy radius.
+    // Camera-axis offset used only by briefing/debriefing, never by physical geometry.
+    vec3d briefing_xyz = vec3d();
     float BriefingRadius() const { return briefing_size > 0.0f ? BRIEFING_SIZE_REFERENCE / briefing_size : radius; }
     float overeof = 0.0;
     float vwr_radius = 0.0;

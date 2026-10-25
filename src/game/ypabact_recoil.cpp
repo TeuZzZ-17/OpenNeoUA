@@ -93,6 +93,13 @@ void ypabact_EvaluateRecoilVisual(const NC_STACK_ypabact *bact,
         visualPitch = bact->_recoilVisualPeakPitch * f;
     }
 
+    if ( bact->_bact_type == BACT_TYPES_GUN )
+    {
+        // Gun envelope distances are local to the barrel, so turning during
+        // the return cannot leave the recoil pointing towards an old shot.
+        visualOffset = bact->_rotation.AxisZ() * visualOffset.z;
+        visualPitch = 0.0f;
+    }
     if ( offset )
         *offset = visualOffset;
     if ( pitch )
@@ -115,8 +122,7 @@ float ypabact_GetRecoilVisualPitch(const NC_STACK_ypabact *bact)
     if ( !bact || ypabact_IsPlayerGunRecoilFirstPersonView(bact) )
         return 0.0f;
 
-    if ( bact->_bact_type != BACT_TYPES_TANK &&
-         bact->_bact_type != BACT_TYPES_GUN )
+    if ( bact->_bact_type != BACT_TYPES_TANK )
         return 0.0f;
 
     float pitch = 0.0f;
@@ -134,21 +140,23 @@ void ypabact_StartRecoilVisual(NC_STACK_ypabact *bact,
     float currentPitch = 0.0f;
     ypabact_EvaluateRecoilVisual(bact, &currentOffset, &currentPitch);
 
-    vec3d peakOffset = currentOffset +
-                       recoilDir * (recoil * RECOIL_DISTANCE_PER_UNIT);
+    const bool gun = bact->_bact_type == BACT_TYPES_GUN;
+    vec3d peakOffset = gun
+        ? vec3d(0.0, 0.0, -currentOffset.length() - recoil * RECOIL_DISTANCE_PER_UNIT)
+        : currentOffset + recoilDir * (recoil * RECOIL_DISTANCE_PER_UNIT);
     const float offsetLen = peakOffset.length();
     if ( std::isfinite(offsetLen) && offsetLen > RECOIL_VISUAL_MAX_DISTANCE )
         peakOffset *= RECOIL_VISUAL_MAX_DISTANCE / offsetLen;
 
     const float pitchAdd = recoil * RECOIL_VISUAL_DEGREES_PER_UNIT * C_PI_180;
     const float maxPitch = RECOIL_VISUAL_MAX_DEGREES * C_PI_180;
-    const float peakPitch = std::max(0.0f, std::min(currentPitch + pitchAdd, maxPitch));
+    const float peakPitch = gun ? 0.0f : std::max(0.0f, std::min(currentPitch + pitchAdd, maxPitch));
 
     const int kick = ypabact_GetRecoilKickTimeMs();
     const int hold = ypabact_GetRecoilHoldTimeMs();
     const int ret = ypabact_GetRecoilReturnTimeMs();
 
-    bact->_recoilVisualStartOffset = currentOffset;
+    bact->_recoilVisualStartOffset = gun ? vec3d(0.0, 0.0, -currentOffset.length()) : currentOffset;
     bact->_recoilVisualPeakOffset = peakOffset;
     bact->_recoilVisualStartPitch = currentPitch;
     bact->_recoilVisualPeakPitch = peakPitch;
@@ -299,6 +307,17 @@ bool ypabact_ResolveRecoilDirection(NC_STACK_ypabact *unit,
 {
     if ( !unit || !resolvedDir )
         return false;
+
+    if ( unit->_bact_type == BACT_TYPES_GUN )
+    {
+        // A fixed gun recoils along its barrel, including elevation. Surface
+        // projection belongs to moving vehicles, not to this visual slide.
+        vec3d axis = -unit->_rotation.AxisZ();
+        const double length = axis.length();
+        if ( !std::isfinite(length) || length <= .001 ) return false;
+        *resolvedDir = axis / length;
+        return true;
+    }
 
     auto resolveOne = [unit](vec3d dir, vec3d *out) -> bool
     {

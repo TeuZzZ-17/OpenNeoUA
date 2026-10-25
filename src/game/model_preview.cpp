@@ -288,7 +288,15 @@ mat3x3 ModelPreview::ViewOrientation(const vec3d &position,int yaw,int tilt,bool
 void ModelPreview::Render(baseRender_msg &arg, const vec3d &position, int yaw, int tilt,
                            bool authoredTransforms, bool center, bool faceCamera)
 {
-    const mat3x3 rotation = ViewOrientation(position,yaw,tilt,faceCamera);
+    mat3x3 rotation;
+    if(authoredTransforms)rotation=ViewOrientation(position,yaw,tilt,faceCamera);
+    else
+    {
+        // Briefing uses the original BASE Euler convention, whose X tilt has
+        // the opposite sign to the authored visual-rotation helpers.
+        TF::TForm3D legacy;legacy.Scale=vec3d(1);legacy.ax=tilt;legacy.ay=yaw;legacy.az=0;
+        legacy.MakeScaleRotationMatrix();rotation=legacy.SclRot;
+    }
     auto renderContext=arg;
     if(authoredTransforms)renderContext.particleSystem=&effects_->particles;
     if(authoredTransforms)age_+=std::max(0,arg.frameTime);

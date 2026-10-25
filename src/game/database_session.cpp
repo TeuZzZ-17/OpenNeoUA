@@ -230,8 +230,10 @@ DatabaseLayout DatabaseLayout::For(const NC_STACK_ypaworld &world, bool workshop
     r.line=std::max(12,world._fontH+vertMenuSpace);
     r.detailLine=std::max(12,world._fontH*3/4+2);
     r.bottom=h-world._fontH;
-    r.listTop=(workshop?3:2)*r.line;
-    const int listBottom=workshop?r.bottom-6*r.line:r.bottom;
+    // Workshop: sopra la lista c'è il tasto Purchase (sotto l'etichetta pagina).
+    r.listTop=(workshop?4:2)*r.line;
+    // Workshop: sotto la lista restano messaggio e blocco "Owned Host Stations" (5 righe).
+    const int listBottom=workshop?r.bottom-5*r.line:r.bottom;
     r.rows=std::max(1,std::min((int)MaxRows,(listBottom-r.listTop)/r.line));
     r.listWidth=w*32/100;r.right=w*34/100;r.width=w-r.right-8;
     r.previewTop=3*r.line;

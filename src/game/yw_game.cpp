@@ -37,6 +37,8 @@
 #include "world/spin.h"
 #include "common/crashdiag.h"
 #include "game/yw_game_impl.h"
+#include "world/collision_shape.h"
+#include "game/ypatank.h"
 
 TRenderingSector rendering_sectors[YW_RENDER_SECTORS_MAX + 1][ YW_RENDER_SECTORS_MAX + 1];
 
@@ -657,6 +659,13 @@ void NC_STACK_ypaworld::yw_InitSquads(const std::vector<MapSquad> &squads)
 {
     if ( _levelInfo.Mode != 1 )
     {
+        std::unique_ptr<Collision::Scene> localPlacementScene;
+        Collision::Scene *placementScene = _collisionScene.get();
+        if ( !placementScene )
+        {
+            localPlacementScene.reset(new Collision::Scene(*this));
+            placementScene = localPlacementScene.get();
+        }
         size_t i = 0;
         for ( const MapSquad &squad : squads )
         {
@@ -677,6 +686,20 @@ void NC_STACK_ypaworld::yw_InitSquads(const std::vector<MapSquad> &squads)
             }
             else
             {
+                // yw_InitSquads runs after LoadBlgMap, so building geometry is
+                // already available.  Capture this host's existing children so
+                // only the freshly authored squad units are corrected; saved
+                // units and unrelated runtime children keep their positions.
+                std::set<NC_STACK_ypabact *> existingSquadUnits;
+                const auto collectSquad = [&](const auto &visit,
+                                              NC_STACK_ypabact *unit) -> void {
+                    if ( !unit ) return;
+                    existingSquadUnits.insert(unit);
+                    for ( NC_STACK_ypabact *child : unit->GetKidList() )
+                        visit(visit, child);
+                };
+                for ( NC_STACK_ypabact *child : robo->GetKidList() )
+                    collectSquad(collectSquad, child);
                 vec3d squadPos;
 
                 ypaworld_arg136 arg136;
@@ -707,6 +730,32 @@ void NC_STACK_ypaworld::yw_InitSquads(const std::vector<MapSquad> &squads)
                 }
                 // Create squad by robo method
                 robo->MakeSquad( std::vector<int>(squad.Count, squad.VhclID), squadPos, squad.Useable); // yparobo_func133
+
+                const auto placeFreshSquad = [&](const auto &visit,
+                                                 NC_STACK_ypabact *unit) -> void {
+                    if ( !unit ) return;
+                    if ( !existingSquadUnits.count(unit) &&
+                         (unit->_status == BACT_STATUS_NORMAL ||
+                          unit->_status == BACT_STATUS_IDLE) &&
+                         placementScene->PlaceAboveTerrain(unit) )
+                    {
+                        // An authored tank placed on a roof starts supported,
+                        // using the ordinary ground controller rather than a fall.
+                        if ( auto *tank=dynamic_cast<NC_STACK_ypatank *>(unit) )
+                            if ( tank->AlignVehicleAI(0.0f,nullptr)==NC_STACK_ypatank::ALIGN_DONE )
+                            {
+                                unit->_status_flg|=BACT_STFLAG_LAND;
+                                unit->_old_pos=unit->_position;
+                                placementScene->ResetActorPose(unit);
+                            }
+                    }
+                    for ( NC_STACK_ypabact *child : unit->GetKidList() )
+                        visit(visit, child);
+                };
+                for ( NC_STACK_ypabact *child : robo->GetKidList() )
+                {
+                    placeFreshSquad(placeFreshSquad, child);
+                }
             }
 
             i++;

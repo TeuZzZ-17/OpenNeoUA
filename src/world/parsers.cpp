@@ -3436,6 +3436,20 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->radius = parser.stof(p2, 0);
         _vhcl->radius_defined = true;
     }
+    else if ( !StriCmp(p1, "briefing_xyz") )
+    {
+        std::string axis[3];
+        if(ReadTuple(p1,p2,3,axis))
+        {
+            double offset[3];bool valid=true;
+            for(int i=0;i<3;++i)
+            {
+                offset[i]=ParseFiniteFloatOrFallback(parser,axis[i],std::numeric_limits<float>::quiet_NaN());
+                valid=valid&&std::isfinite(offset[i])&&std::abs(offset[i])<=100000.0;
+            }
+            if(valid)_vhcl->briefing_xyz=vec3d(offset[0],offset[1],offset[2]);
+        }
+    }
     else if ( !StriCmp(p1, "briefing_size") )
     {
         // Valid sizes are 1-10000. Anything else keeps the vanilla radius framing.
@@ -4959,6 +4973,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->radius = 25.0;
         _vhcl->radius_defined = false;
         _vhcl->briefing_size = 0.0f;
+        _vhcl->briefing_xyz = vec3d();
         _vhcl->overeof = 25.0;
         _vhcl->vwr_radius = 30.0;
         _vhcl->vwr_overeof = 30.0;
