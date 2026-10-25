@@ -128,6 +128,14 @@ void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc
         pos.y = pos.y * v18;
         pos.x = pos.x * v18;
 
+        // Size changes the camera distance. Scale the offset with it so the
+        // projected model origin stays fixed when briefing_size changes.
+        if(brf->ViewingObject.ObjType==TBriefObject::TYPE_VEHICLE)
+        {
+            const auto &proto = yw->_vhclProtos[brf->ViewingObject.ID];
+            pos += proto.briefing_xyz * (proto.BriefingRadius() / std::max(.001f, proto.radius));
+        }
+
         if (brf->ViewingObject.ObjType == TBriefObject::TYPE_SECTOR)
             sb_0x4eb94c__sub1(yw, true, rot, &pos, &brf->ObjRenderParams);
         else if (brf->ViewingObject.ObjType == TBriefObject::TYPE_VEHICLE)

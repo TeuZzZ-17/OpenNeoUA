@@ -4,6 +4,7 @@
 #define private public
 #include "game/model_preview.h"
 #include "game/yw.h"
+#include "world/parsers.h"
 #include "nucleus/particle.h"
 #include "system/inivals.h"
 #include "common/global.h"
@@ -11,6 +12,8 @@
 #undef private
 #include <cstdio>
 #undef main
+
+extern void sb_0x4eb94c(NC_STACK_ypaworld *,TBriefengScreen *,TInputState *,int);
 
 struct PreviewCaptureBase:NC_STACK_base
 {
@@ -23,11 +26,12 @@ struct PreviewCaptureBase:NC_STACK_base
 int main()
 {
     std::setvbuf(stdout,nullptr,_IONBF,0);
+    TF::Engine.Init();
     NC_STACK_ypaworld world;
     ModelPreview preview;
-    int failures = 0;
+    int checks=0,failures = 0;
     auto check = [&](bool ok, const char *message) {
-        if (!ok) { ++failures; std::printf("FAIL %s\n", message); }
+        ++checks;if (!ok) { ++failures; std::printf("FAIL %s\n", message); }
     };
     check(!preview.Select(world, world, 0, 4), "undefined vehicle is unavailable");
     check(!preview.Select(world, world, 1, -1), "negative weapon is unavailable");
@@ -79,6 +83,17 @@ int main()
         check(rotation.Transform(vec3d(0,-1,0)).dot(position)<0,
               "menu viewing ray exposes the top at every screen position");
     }
+    // Compare the production preview with the original briefing BASE Euler path.
+    for(int yaw:{0,45,120,270})for(int tilt:{10,45,100})
+    {
+        PreviewCaptureBase original;original.SetScale(vec3d(1));original.SetEulerRotation(tilt,yaw,0);
+        const vec3d position(-400,350,1000);
+        preview.Render(arg,position,yaw,tilt,false,false,false);
+        for(const auto axis:{vec3d(1,0,0),vec3d(0,1,0),vec3d(0,0,1)})
+            check((body.observed.SclRot.Transform(axis)-original.TForm().SclRot.Transform(axis)).length()<1e-6,
+                  "briefing preserves the original Euler tilt and yaw at every rotation phase");
+        check(body.observed.Pos==position,"briefing keeps the original uncentered model origin");
+    }
     PreviewCaptureBase decoration;
     world._vhclModels.push_back(&decoration);
     weapon.decoration_fx.mode=World::DECORATION_FX_PERSISTENT;
@@ -122,6 +137,44 @@ int main()
     emission.particleSystem=menuParticles;options.reset(emitter.GenRenderInstance());emitter.Emit(&emission,options.get());
     preview.Clear();
     check(menuParticles->_particles.empty(),"selection cleanup releases all preview particles");
-    std::printf("PREVIEW: 27 checks, %d failures\n", failures);
+    NC_STACK_ypaworld parsed;parsed._vhclProtos.resize(2);parsed._roboProtos.resize(1);
+    auto parse=[&](Engine::StringList lines) {
+        ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(&parsed)};
+        return ScriptParser::ParseStringList(lines,handlers,0);
+    };
+    check(parse({"new_vehicle 1","model = tank","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(),"absent briefing_xyz keeps the classic position");
+    check(parse({"modify_vehicle 1","briefing_xyz = -12.5_30_-8","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(-12.5,30,-8),"briefing_xyz accepts signed fractional axes");
+    const auto authored=parsed._vhclProtos[1].briefing_xyz;
+    for(const char *bad:{"1_2","1_2_3_4","1__3","nan_2_3","1_inf_3","1_2_1e100","100001_0_0","1x_2_3"})
+        check(parse({"modify_vehicle 1",std::string("briefing_xyz = ")+bad,"end"})&&parsed._vhclProtos[1].briefing_xyz==authored,"invalid briefing offset preserves the last valid value");
+    check(parse({"modify_vehicle 1","briefing_xyz = -100000_100000_0","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(-100000,100000,0),"briefing offset accepts inclusive coordinate bounds");
+    check(parse({"modify_vehicle 1","briefing_xyz = 0_0_0","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(),"explicit zero restores the classic position");
+    parse({"modify_vehicle 1","briefing_xyz = 2_3_4","end"});
+    check(parse({"new_vehicle 1","model = tank","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(),"new vehicle clears an earlier briefing displacement");
+    auto &p=world._vhclProtos[1];p.radius=40;p.briefing_size=100;p.briefing_xyz=vec3d();
+    world._briefScreen.ViewingObject.ObjType=TBriefObject::TYPE_VEHICLE;world._briefScreen.ViewingObject.ID=1;
+    world._briefScreen.ViewingObjectRect=Common::FRect(-.9,.3,-.1,.9);
+    TInputState input{};input.Period=0;
+    auto *savedView=TF::Engine.GetViewPoint();
+    sb_0x4eb94c(&world,&world._briefScreen,&input,500);const auto classic=body.observed;
+    p.briefing_xyz=vec3d(15,-20,30);
+    sb_0x4eb94c(&world,&world._briefScreen,&input,500);
+    check((body.observed.Pos-classic.Pos-p.briefing_xyz).length()<1e-6,"real briefing applies the offset after screen placement");
+    check((body.observed.SclRot.Transform(vec3d(1,2,3))-classic.SclRot.Transform(vec3d(1,2,3))).length()<1e-6,"briefing offset leaves the classic rotation intact");
+    const auto anchor = body.observed.Pos;
+    for(float size:{1.f,9.f,50.f,100.f,10000.f})
+    {
+        p.briefing_size=size;
+        sb_0x4eb94c(&world,&world._briefScreen,&input,500);
+        const auto position=body.observed.Pos;
+        check(std::abs(position.x/position.z-anchor.x/anchor.z)<1e-6 &&
+              std::abs(position.y/position.z-anchor.y/anchor.z)<1e-6,
+              "changing briefing size preserves the projected origin with XYZ offsets");
+    }
+    TF::Engine.SetViewPoint(savedView);
+    preview.Select(world,world,0,1);preview.Render(arg,vec3d(0,0,500),20,-18,true,true,true);const auto menu=body.observed.Pos;
+    p.briefing_xyz=vec3d(-1000,2000,-3000);preview.Select(world,world,0,1);preview.Render(arg,vec3d(0,0,500),20,-18,true,true,true);
+    check(body.observed.Pos==menu,"Database and Workshop preview ignore briefing_xyz");
+    std::printf("PREVIEW: %d checks, %d failures\n",checks,failures);
     return failures != 0;
 }

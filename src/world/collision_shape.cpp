@@ -230,12 +230,16 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
     bool horizontal;
     bool bodyDirection;
     const std::vector<btVector3> *terrainNormals;
+    const std::vector<double> *terrainMinimumSupport;
+    double supportHeight;
     std::set<std::pair<const btCollisionShape *, const btCollisionShape *>> leaves;
     std::map<std::pair<const btCollisionObject *, const btCollisionShape *>, std::vector<btVector3>> footprints;
     std::vector<Contact> contacts;
     explicit ContactCollector(const btCollisionObject *obj, bool ground = false, bool body = false,
-                              const std::vector<btVector3> *normals = nullptr)
-        : self(obj), horizontal(ground), bodyDirection(body), terrainNormals(normals) {}
+                              const std::vector<btVector3> *normals = nullptr,
+                              const std::vector<double> *minimumY = nullptr, double groundHeight = 0)
+        : self(obj), horizontal(ground), bodyDirection(body), terrainNormals(normals),
+          terrainMinimumSupport(minimumY),supportHeight(groundHeight) {}
     const std::vector<btVector3> &FootprintFor(const btCollisionObjectWrapper *object)
     {
         const auto key = std::make_pair(object->getCollisionObject(), object->getCollisionShape());
@@ -254,6 +258,10 @@ struct ContactCollector : btCollisionWorld::ContactResultCallback
         c.normal = V(selfIsA ? p.m_normalWorldOnB : -p.m_normalWorldOnB);
         c.point = V(selfIsA ? p.getPositionWorldOnB() : p.getPositionWorldOnA());
         const int triangle = selfIsA ? indexB : indexA;
+        // The ground controller owns the support plane. A ledge face wholly
+        // below that plane must not trap a hull whose bottom overlaps its lip.
+        if(terrainMinimumSupport&&triangle>=0&&(size_t)triangle<terrainMinimumSupport->size()&&
+           (*terrainMinimumSupport)[triangle]>=supportHeight-1e-5)return 0;
         if (terrainNormals && triangle >= 0 && (size_t)triangle < terrainNormals->size())
         {
             const auto *hull = selfIsA ? a : b;
@@ -303,10 +311,16 @@ void ContactPair(Detector &detector, btCollisionObject &a, btCollisionObject &b,
 struct TerrainCastResult : btCollisionWorld::ClosestConvexResultCallback
 {
     int triangle = -1;
-    TerrainCastResult(const btVector3 &from, const btVector3 &to) : ClosestConvexResultCallback(from, to) {}
+    const std::vector<double> *minimumY;
+    double supportHeight;
+    TerrainCastResult(const btVector3 &from, const btVector3 &to,
+                      const std::vector<double> *heights=nullptr,double groundHeight=0)
+        : ClosestConvexResultCallback(from,to),minimumY(heights),supportHeight(groundHeight) {}
     btScalar addSingleResult(btCollisionWorld::LocalConvexResult &result, bool worldNormal) override
     {
-        triangle = result.m_localShapeInfo ? result.m_localShapeInfo->m_triangleIndex : -1;
+        const int index=result.m_localShapeInfo?result.m_localShapeInfo->m_triangleIndex:-1;
+        if(minimumY&&index>=0&&(size_t)index<minimumY->size()&&(*minimumY)[index]>=supportHeight-1e-5)return 1;
+        triangle=index;
         return ClosestConvexResultCallback::addSingleResult(result, worldNormal);
     }
 };
@@ -696,6 +710,7 @@ struct Body
     std::shared_ptr<Shape> profile;
     std::unique_ptr<btTriangleMesh> mesh;
     std::vector<btVector3> triangleNormals;
+    std::vector<std::array<btVector3,3>> terrainTriangles;
     std::unique_ptr<btBvhTriangleMeshShape> terrain;
     btCollisionObject object;
     std::vector<btConvexShape *> parts;
@@ -718,6 +733,18 @@ struct Body
     Common::Point terrainCell;
     int terrainCollisionType = 0;
 };
+// Heights measured along the actual ground support normal, including slopes.
+// A horizontal Y threshold mistakes the far edge of a sloping roof for a wall.
+std::vector<double> TerrainSupportHeights(const Body &body, const btVector3 &normal)
+{
+    std::vector<double> heights;
+    heights.reserve(body.terrainTriangles.size());
+    const auto localNormal=body.object.getWorldTransform().getBasis().transpose()*normal;
+    for(const auto &triangle:body.terrainTriangles)
+        heights.push_back(std::min({double(triangle[0].dot(localNormal)),
+            double(triangle[1].dot(localNormal)),double(triangle[2].dot(localNormal))}));
+    return heights;
+}
 struct Candidates : btBroadphaseAabbCallback
 {
     std::vector<Body *> bodies;
@@ -933,6 +960,7 @@ struct Scene::Impl
                         {
                             body.mesh->addTriangle(V(a), V(b), V(c), true);
                             body.triangleNormals.push_back(V(normal).normalized());
+                            body.terrainTriangles.push_back({V(a),V(b),V(c)});
                         }
                     }
                 }
@@ -1020,6 +1048,9 @@ struct TerrainFootprintSurface : btTriangleCallback
     btVector3 lo, hi;
     double y;
     bool floorOnly;
+    double walkableY=std::numeric_limits<double>::infinity();
+    btVector3 walkablePoint=btVector3(0,0,0);
+    bool hasWalkablePoint=false;
     TerrainFootprintSurface(const btVector3 &low, const btVector3 &high,
                             double ground, bool floorOnly = false)
         : lo(low), hi(high), y(ground), floorOnly(floorOnly) {}
@@ -1056,16 +1087,28 @@ struct TerrainFootprintSurface : btTriangleCallback
             polygon.swap(clipped);
         }
         for (const auto &v : polygon) y=std::min(y, double(v.y()));
+        if(polygon.empty())return;
+        const auto normal=(pose*triangle[1]-pose*triangle[0]).cross(pose*triangle[2]-pose*triangle[0]);
+        if(normal.y()<=normal.length()*.6)return;
+        double top=std::numeric_limits<double>::infinity();
+        btVector3 centre(0,0,0);
+        for(const auto &v:polygon){top=std::min(top,double(v.y()));centre+=v;}
+        centre/=polygon.size();
+        if(top<walkableY) {walkableY=top;walkablePoint=centre;hasWalkablePoint=true;}
     }
 };
 
 bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
 {
     if (!a || a->CollisionsDisabled()) return false;
+    // Mounted guns and dummy children inherit their parent pose; moving them
+    // independently at birth would break the attachment transform.
+    if (a->_isUnitGunChild || a->_isDummy) return false;
     if (!a || !Finite(a->_position) ||
         (a->_bact_type != BACT_TYPES_BACT && a->_bact_type != BACT_TYPES_TANK &&
          a->_bact_type != BACT_TYPES_CAR && a->_bact_type != BACT_TYPES_FLYER &&
-         a->_bact_type != BACT_TYPES_UFO && a->_bact_type != BACT_TYPES_ZEPP)) return false;
+         a->_bact_type != BACT_TYPES_UFO && a->_bact_type != BACT_TYPES_ZEPP &&
+         a->_bact_type != BACT_TYPES_ROBO)) return false;
     const vec3d origin=a->GetBodyPosition();
     yw_130arg sector;
     sector.pos_x=origin.x; sector.pos_z=origin.z;
@@ -1136,7 +1179,23 @@ bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
     bact_arg80 placement;
     placement.pos=a->_position;
     placement.pos.y+=maximumY-a->GetBodyPosition().y;
-    placement.field_C=2; // The factory already checked the playable bounds; only Y changes here.
+    if(a->IsGroundUnit() && a->_status!=BACT_STATUS_CREATE && surface.hasWalkablePoint)
+    {
+        // A footprint can overlap a roof while its centre is just outside it.
+        // Put that initial unit over the nearby roof surface instead of leaving
+        // it balanced on the wall, where the vanilla centre ground ray misses.
+        ypaworld_arg136 support;
+        support.stPos=vec3d(origin.x,maximumY,origin.z);
+        support.vect=vec3d::OY(clearance+radius*2.0+1.0);
+        support.flags=0;
+        a->TraceWorldCollision(&support);
+        if(!support.isect || !support.skel || support.skel->polygons[support.polyID].B<.6)
+        {
+            placement.pos.x+=surface.walkablePoint.x()-origin.x;
+            placement.pos.z+=surface.walkablePoint.z()-origin.z;
+        }
+    }
+    placement.field_C=2; // Both positions are inside the already validated spawn footprint.
     if (!a->SetPosition(&placement)) return false;
     if (impl->actors.find(a) != impl->actors.end()) ResetActorPose(a);
     return true;
@@ -1522,6 +1581,30 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
     btVector3 lo = start.getOrigin(), hi = lo; lo.setMin(end.getOrigin()); hi.setMax(end.getOrigin());
     auto nearby = impl->Nearby(lo - pad, hi + pad);
     std::vector<Body *> terrain;
+    btVector3 supportNormal=V(fromRotation.AxisY());
+    const double supportOffset=a->getBACT_viewer()?a->_viewer_overeof:a->_overeof;
+    btVector3 supportPoint=V(fromPosition)+
+        (a->getBACT_viewer()?btVector3(0,1,0):supportNormal)*supportOffset;
+    if(GroundDrive(a))
+    {
+        // Use the same local ground ray as the vanilla tank controller. Its
+        // surface plane excludes visual tip and the gradual rotation response.
+        ypaworld_arg136 ground;
+        ground.stPos=fromPosition;
+        ground.vect=vec3d::OY(supportOffset*2.0);
+        ground.flags=0;
+        a->TraceWorldCollision(&ground);
+        if(ground.isect && ground.skel && ground.polyID>=0 &&
+           (size_t)ground.polyID<ground.skel->polygons.size())
+        {
+            const vec3d normal=ground.skel->polygons[ground.polyID].Normal();
+            if(normal.y>=.6)
+            {
+                supportNormal=V(normal).normalized();
+                supportPoint=V(ground.isectPos);
+            }
+        }
+    }
     const bool terrainSupported = GroundDrive(a) ||
         (a->_bact_type == BACT_TYPES_ROBO && (a->_status_flg & BACT_STFLAG_LAND));
     if (a->HasCollisionShape() && a->getBACT_exactCollisions() && a->_status != BACT_STATUS_CREATE)
@@ -1594,6 +1677,9 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             if (body->terrain)
                 body->object.getCollisionShape()->getAabb(body->object.getWorldTransform(),
                                                         terrainBounds.minimum, terrainBounds.maximum);
+            const auto supportHeights=body->terrain&&GroundDrive(a)?
+                TerrainSupportHeights(*body,supportNormal):std::vector<double>();
+            const double supportHeight=(supportPoint-body->object.getWorldTransform().getOrigin()).dot(supportNormal)-tolerance;
             for (size_t i = 0; i < self.parts.size(); ++i)
             {
                 Contact c; bool castHit = false;
@@ -1601,7 +1687,9 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
                 {
                     if (!TestAabbAgainstAabb2(selfBounds[i].minimum, selfBounds[i].maximum,
                                              terrainBounds.minimum, terrainBounds.maximum)) continue;
-                    TerrainCastResult result(slideFrom.getOrigin(), slideTo.getOrigin());
+                    TerrainCastResult result(slideFrom.getOrigin(),slideTo.getOrigin(),
+                        GroundDrive(a)?&supportHeights:nullptr,
+                        supportHeight);
                     const btTransform partFrom=slideFrom*self.local[i],partTo=slideTo*self.local[i];
                     // Later parts only need to beat the earliest blocking hit.
                     // Shortening their sweep also lets the mesh BVH discard
@@ -1809,9 +1897,13 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
         for (Body *body : nearby)
         {
             if (!allowed(body)) continue;
+            const auto supportHeights=body->terrain&&GroundDrive(a)?
+                TerrainSupportHeights(*body,supportNormal):std::vector<double>();
             ContactCollector result(&self.object, HorizontalPair(a, body->actor),
                 a->_bact_type == BACT_TYPES_ROBO || (body->actor && body->actor->_bact_type == BACT_TYPES_ROBO),
-                body->terrain ? &body->triangleNormals : nullptr);
+                body->terrain ? &body->triangleNormals : nullptr,
+                body->terrain&&GroundDrive(a)?&supportHeights:nullptr,
+                (supportPoint-body->object.getWorldTransform().getOrigin()).dot(supportNormal)-tolerance);
             ContactPair(impl->detector, self.object, body->object, result);
             for (auto c : result.contacts)
             {

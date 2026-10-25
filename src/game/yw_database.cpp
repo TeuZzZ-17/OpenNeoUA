@@ -244,6 +244,7 @@ void UserData::PopulateDatabasePage()
     NC_STACK_button::button_arg76 pagePos;pagePos.butID=UIWidgets::DB_LABEL_PAGE;pagePos.xpos=-1;
     pagePos.ypos=db_workshop?2*l.line:l.line;pagePos.width=-1;database_button->setXYWidth(&pagePos);
     db_session->LoadDetailFont(std::max(8,l.detailLine-3));
+    database_button->SetText(DatabaseLayout::WorkshopButton,db_workshop?"Database":"Workshop");
     visible(database_button,UIWidgets::DB_BTN_PURCHASE,db_workshop&&total>0);
     database_button->SetText(UIWidgets::DB_LABEL_PAGE,fmt::sprintf("%s  %d/%d  (%d)",
         db_workshop?"Workshop":(db_tab==0?"Units":"Buildings"),db_page+1,pages,total));
@@ -346,7 +347,11 @@ void UserData::HandleDatabaseInput()
         if(result.code==UIWidgets::DB_UP_UNITS||result.code==UIWidgets::DB_UP_BUILDINGS)
         {db_workshop=false;EnvMode=ENVMODE_DATABASE;db_tab=result.code==UIWidgets::DB_UP_UNITS?0:2;db_page=0;db_selected=0;change=true;}
         else if(result.code==DatabaseLayout::WorkshopEvent)
-        {if(p_YW->IsPlasmaCurrencyEnabled())ShowWorkshopMenu();return;}
+        {
+            // Nel Workshop il tab diventa "Database" e riporta al database (Units).
+            if(db_workshop){db_workshop=false;EnvMode=ENVMODE_DATABASE;db_tab=0;db_page=0;db_selected=0;change=true;}
+            else{if(p_YW->IsPlasmaCurrencyEnabled())ShowWorkshopMenu();return;}
+        }
         else if(result.code>=DatabaseLayout::ListEvent&&result.code<DatabaseLayout::ListEvent+rows)
         {db_selected=result.code-DatabaseLayout::ListEvent;change=true;}
         else if(db_workshop&&result.code>=2140&&result.code<2143&&!db_session->ownedHosts.empty())
@@ -483,10 +488,12 @@ void UserData::RenderDatabaseEntryMedia()
         const auto &vehicles=db_session->definitions->GetVhclProtos();
         const std::string active=equipped>=0&&equipped<(int)vehicles.size()?vehicles[equipped].name:"Mission default";
         smallCaption(*db_session,"In use: "+active,8,l.line+2,l.listWidth-16);
-        fill(surface,0,l.bottom-6*l.line,l.listWidth,l.line,body);
-        caption(p_YW,"Owned Host Stations",8,l.bottom-6*l.line,l.listWidth-16);
+        // Linea di separazione sopra il blocco delle Host Station possedute.
+        fill(surface,0,l.bottom-4*l.line-1,l.listWidth,l.line+1,body);
+        fill(surface,0,l.bottom-4*l.line-1,l.listWidth,1,edge);
+        caption(p_YW,"Owned Host Stations:",8,l.bottom-4*l.line,l.listWidth-16);
         if(!db_session->transactionMessage.empty())
-            smallCaption(*db_session,db_session->transactionMessage,8,l.bottom-2*l.line,l.listWidth-16,true);
+            smallCaption(*db_session,db_session->transactionMessage,8,l.bottom-5*l.line,l.listWidth-16,true);
     }
     SFXEngine::SFXe.UpdateSoundCarrier(&db_session->carrier);SDL_SetClipRect(surface,&oldClip);
 }
