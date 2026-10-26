@@ -1449,6 +1449,8 @@ void NC_STACK_ypamissile::SetState(setState_msg *arg)
 void NC_STACK_ypamissile::Renew()
 {
     NC_STACK_ypabact::Renew();
+    _debugPlayerProjectile=false;
+    _mislEmitter=nullptr;
 
     // Missiles are recycled from the world's dead cache. Never let the
     // previous shot's fine energy snapshot leak into a new projectile before
@@ -1871,6 +1873,8 @@ void NC_STACK_ypamissile::setBACT_viewer(bool vwr)
 
 void NC_STACK_ypamissile::SetLauncherBact(NC_STACK_ypabact *bact)
 {
+    if(!_mislEmitter&&bact)
+        _debugPlayerProjectile=bact->IsPlayerTimeOwner();
     _mislEmitter = bact;
 
 }

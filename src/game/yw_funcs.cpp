@@ -552,6 +552,7 @@ bool NC_STACK_ypaworld::sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const s
     ScriptParser::HandlersList handlers {
         new World::Parsers::LevelDataParser(this, mapp),
         new World::Parsers::LevelLocationParser(&mapp->Locations),
+        new World::Parsers::LevelBriefingTextParser(mapp),
         new World::Parsers::MapRobosParser(mapp),
         new World::Parsers::MapSizesParser(mapp)
     };
@@ -2235,7 +2236,9 @@ bool NC_STACK_ypaworld::InitBriefing(int lvlid)
 
     BriefingInitPlayAsOwners();
 
-    _briefScreen.BriefingText = Locale::Text::MissionText(_levelInfo.LevelID, "<NO INFO AVAILABLE>");
+    _briefScreen.BriefingText = mproto.BriefingText.empty()
+        ? Locale::Text::MissionText(_levelInfo.LevelID, "<NO INFO AVAILABLE>")
+        : mproto.BriefingText;
 
     if ( mproto.Mbmaps.empty() )
         goto ON_ERR;
@@ -2340,6 +2343,7 @@ int NC_STACK_ypaworld::ypaworld_func158__sub4__sub1__sub5__sub0(TLevelDescriptio
     {
         new World::Parsers::LevelDataParser(this, mapproto),
         new World::Parsers::LevelLocationParser(&mapproto->Locations),
+        new World::Parsers::LevelBriefingTextParser(mapproto),
         new World::Parsers::LevelGatesParser(this),
         new World::Parsers::LevelMbMapParser(mapproto),
         new World::Parsers::LevelMapsParser(this, mapproto),
@@ -2603,6 +2607,7 @@ int NC_STACK_ypaworld::sub_4DA41C(TLevelDescription *mapp, const std::string &fn
     {
         new World::Parsers::LevelDataParser(this, mapp),
         new World::Parsers::LevelLocationParser(&mapp->Locations),
+        new World::Parsers::LevelBriefingTextParser(mapp),
         new World::Parsers::MapRobosParser(mapp),
         new World::Parsers::LevelGemParser(this),
         new World::Parsers::LevelSquadParser(mapp),

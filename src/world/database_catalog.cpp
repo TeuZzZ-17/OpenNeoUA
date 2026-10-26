@@ -151,23 +151,164 @@ Card RawCard(const NC_STACK_ypaworld &world,int category,int id)
     return card;
 }
 
-std::array<double,9> ScoreValues(const Card &card)
+double Positive(double value)
 {
-    std::array<double,9> values{};
-    for(const auto &rating:card.ratings)values[static_cast<size_t>(rating.kind)]=std::max(0.0,rating.value);
-    values[4]=std::max(0,card.healingPower);values[5]=std::max(0,card.guardians);
-    values[6]=std::max(0,card.guns);values[7]=card.radarPower>1?card.radarPower:0;
-    // Treat the VS grid as one attribute, so eleven classes do not outweigh all other stats.
-    for(const auto &versus:card.versus)values[8]+=versus.second;
-    if(!card.versus.empty())values[8]/=card.versus.size();
-    return values;
+    return std::isfinite(value) ? std::max(0.0,value) : 0.0;
 }
 
-double ScoreSum(const Card &card,const std::array<double,9> &maxima)
+double EffectiveDurability(double energy,double shield)
 {
-    const auto values=ScoreValues(card);double sum=0;
-    for(size_t i=0;i<values.size();++i)if(maxima[i]>0)sum+=std::min(1.0,values[i]/maxima[i]);
-    return sum;
+    // A 100% shield is bounded for ranking; it must never divide by zero.
+    return Positive(energy)/std::max(0.01,1.0-std::min(100.0,Positive(shield))/100.0);
+}
+
+double WeaponQuality(const TWeapProto &w,double count)
+{
+    double targetMultiplier=0;
+    for(int type=VEHICLE_COMBAT_CLASS_HELI;type<VEHICLE_COMBAT_CLASS_COUNT;++type)
+    {
+        float specific=1;
+        if(!TryGetSpecificWeaponEnergy(w,static_cast<VehicleCombatClass>(type),&specific))
+        {
+            switch(type)
+            {
+            case VEHICLE_COMBAT_CLASS_HELI:
+                if(w.energy_heli_defined)specific=w.energy_heli;
+                break;
+            case VEHICLE_COMBAT_CLASS_TANK:case VEHICLE_COMBAT_CLASS_CAR:
+                if(w.energy_tank_defined)specific=w.energy_tank;
+                break;
+            case VEHICLE_COMBAT_CLASS_ROBO:
+                if(w.energy_robo_defined)specific=w.energy_robo;
+                break;
+            case VEHICLE_COMBAT_CLASS_PLANE:case VEHICLE_COMBAT_CLASS_GLIDER:
+            case VEHICLE_COMBAT_CLASS_ZEPPELIN:case VEHICLE_COMBAT_CLASS_UFO:
+                if(w.energy_flyer_defined)specific=w.energy_flyer;
+                break;
+            }
+        }
+        targetMultiplier+=Positive(specific);
+    }
+    targetMultiplier/=VEHICLE_COMBAT_CLASS_COUNT-1;
+    double interval=std::max(1,w.shot_time);
+    if(w.salve_shots>0&&w.salve_delay>0)
+        interval=((w.salve_shots-1.0)*interval+w.salve_delay)/w.salve_shots;
+    if(w.IsLaser())
+    {
+        interval=std::max(1,w.laser_energy_tick_time);
+        count=std::max(1,w.laser_beam_count);
+    }
+    if(w.IsArtilleryShell())
+    {
+        if(w.artillery_shell_barrage_shots<=0||w.artillery_shell_max_range<=0)return 0;
+        interval=(Positive(w.artillery_shell_barrage_cooldown)+
+                  (w.artillery_shell_barrage_shots-1.0)*Positive(w.artillery_shell_barrage_shot_delay))/w.artillery_shell_barrage_shots;
+    }
+    const double damage=Positive(w.energy)*targetMultiplier+Positive(w.blast_energy);
+    // Reach is a bounded advantage, not a claim that every shot connects.
+    const double speed=w.start_speed>0?w.start_speed:(w.airconst>0?w.force/w.airconst:0);
+    const double lifetime=w.life_time_max>0?(w.life_time_min+w.life_time_max)*0.5:w.life_time;
+    double reach=Positive(speed)*Positive(lifetime)/1000.0;
+    if(w.IsArtilleryShell())reach=Positive(w.artillery_shell_max_range);
+    const double reachBonus=1.0+0.5*reach/(1200.0+reach);
+    return damage*Positive(count)*1000.0/std::max(1.0,interval)*reachBonus;
+}
+
+std::array<double,4> VehicleQuality(int id,const std::vector<TVhclProto> &vehicles,
+                                  const std::vector<TWeapProto> &weapons,std::set<int> &stack)
+{
+    std::array<double,4> result{};
+    if(!Valid(id,vehicles.size())||!stack.insert(id).second)return result;
+    const auto &v=vehicles[id];
+    double primary=0;int slots=0;
+    auto weapon=[&](int wid,double count) {return Valid(wid,weapons.size())?WeaponQuality(weapons[wid],count):0.0;};
+    const double count=std::max(1.0,v.num_weapons_max>0?
+        (v.num_weapons_min+v.num_weapons_max)*0.5:(double)v.num_weapons);
+    auto addPrimary=[&](int wid,double amount) {
+        if(!Valid(wid,weapons.size()))return;
+        const double value=weapon(wid,amount);
+        primary=v.weapon_ai_switch_mode==TVhclProto::WEAPON_AI_SWITCH_MODE_SMART?std::max(primary,value):primary+value;
+        ++slots;
+    };
+    addPrimary(v.weapon,count);
+    for(size_t i=0;i<v.extra_weapons.size();++i)if(v.extra_weapons[i]>0)
+    {
+        const double extra=v.extra_num_weapons_max[i]>0?
+            (v.extra_num_weapons_min[i]+v.extra_num_weapons_max[i])*0.5:
+            (v.extra_num_weapons[i]>0?v.extra_num_weapons[i]:count);
+        addPrimary(v.extra_weapons[i],extra);
+    }
+    // Alternative slots share a firing channel. Mounted guns fire independently.
+    if(slots>0&&v.weapon_ai_switch_mode!=TVhclProto::WEAPON_AI_SWITCH_MODE_SMART)primary/=slots;
+    result[0]=primary;
+    const bool hasMgun=v.mgun_set?Valid(v.mgun,weapons.size()):v.mgun_shot_time>0;
+    if(hasMgun)
+    {
+        const int cadence=v.mgun_shot_time>0?v.mgun_shot_time:weapons[v.mgun].shot_time;
+        // MGUN damage comes from the vehicle, not the referenced visual weapon.
+        result[0]+=v.mgun_energy_set?Positive(v.mgun_energy)*1000.0/std::max(1,cadence):Positive(v.gun_power);
+    }
+    if(v.proximity_defense_enable&&Valid(v.proximity_defense_weapon,weapons.size()))
+    {
+        const auto &defense=weapons[v.proximity_defense_weapon];
+        const double shots=std::max(1,v.proximity_defense_shots);
+        const double cycle=std::max(1.0,std::max((double)v.proximity_defense_interval,
+            shots*Positive(v.proximity_defense_sequence_delay)));
+        result[0]+=weapon(v.proximity_defense_weapon,shots)*std::max(1,defense.shot_time)/cycle;
+    }
+    result[1]=EffectiveDurability(v.energy,v.shield);
+    if(v.model_id!=BACT_TYPES_GUN&&v.airconst>0&&v.mass>0)
+        result[2]=Positive(v.force/v.airconst)*(1.0-std::exp(-2.0*v.airconst/v.mass))*
+                  (0.8+0.4*Positive(v.maxrot)/(1.0+Positive(v.maxrot)));
+    if(v.power>0&&v.power_radius>0)result[3]+=v.power*std::sqrt(v.power_radius/1200.0);
+    result[3]+=std::max(0,(int)v.radar-1)*25.0;
+    auto mounts=[&](const std::vector<TRoboGun> &guns) {
+        for(const auto &gun:guns)if(gun.robo_gun_type>0)
+        {
+            const auto mounted=VehicleQuality(gun.robo_gun_type,vehicles,weapons,stack);
+            result[0]+=mounted[0];result[3]+=mounted[3];
+            if(gun.protect)result[1]+=mounted[1];
+        }
+    };
+    mounts(v.unit_guns);if(v.RoboProto)mounts(v.RoboProto->guns);
+    if(v.spawn_units&&v.spawn_count>0&&v.spawn_vehicle>0&&v.spawn_interval>0)
+    {
+        const auto spawned=VehicleQuality(v.spawn_vehicle,vehicles,weapons,stack);
+        result[3]+=std::sqrt(spawned[0]*spawned[1])*v.spawn_count*1000.0/v.spawn_interval;
+    }
+    stack.erase(id);
+    for(auto &value:result)value=Positive(value);
+    return result;
+}
+
+void SetQuality(Card &card,const NC_STACK_ypaworld &world,int category,int id)
+{
+    std::set<int> stack;
+    const auto &vehicles=world.GetVhclProtos();const auto &weapons=world.GetWeaponsProtos();
+    if(category==Vehicle)card.quality=VehicleQuality(id,vehicles,weapons,stack);
+    else
+    {
+        const auto &b=world.GetBuildProtos()[id];
+        card.quality[1]=EffectiveDurability(b.Energy,b.shield);
+        card.quality[3]=Positive(b.Power)+std::max(0,b.radar-1)*25.0;
+        for(const auto &gun:b.Guns)card.quality[0]+=VehicleQuality(gun.VhclID,vehicles,weapons,stack)[0];
+        if(b.spawn_units&&b.spawn_count>0&&b.spawn_vehicle>0&&b.spawn_interval>0)
+        {
+            const auto spawned=VehicleQuality(b.spawn_vehicle,vehicles,weapons,stack);
+            card.quality[3]+=std::sqrt(spawned[0]*spawned[1])*b.spawn_count*1000.0/b.spawn_interval;
+        }
+    }
+}
+
+double ScoreSum(const Card &card,const std::array<double,4> &maxima)
+{
+    std::array<double,4> normalized{};
+    for(size_t i=0;i<normalized.size();++i)if(maxima[i]>0)
+        normalized[i]=std::sqrt(std::min(1.0,Positive(card.quality[i])/maxima[i]));
+    // Combat and support are alternative roles. Empty guns or authored AI
+    // preferences earn nothing; health and shield form one durability measure.
+    return 0.5*std::max(normalized[0],normalized[3])+0.3*normalized[1]+0.2*normalized[2]+
+           0.1*std::min(normalized[0],normalized[3]);
 }
 
 } // namespace
@@ -183,8 +324,17 @@ void Catalog::Build(NC_STACK_ypaworld &world)
     std::vector<Card> cards;
     for(int category:{Vehicle,Building})for(int id:entries_[category])
     {
-        cards.push_back(RawCard(world,category,id));const auto values=ScoreValues(cards.back());
-        for(size_t i=0;i<values.size();++i)scoreMaxima_[i]=std::max(scoreMaxima_[i],values[i]);
+        cards.push_back(RawCard(world,category,id));SetQuality(cards.back(),world,category,id);
+    }
+    // The upper decile is the reference. A single extreme modded prototype
+    // must not compress every ordinary unit into the first score block.
+    for(size_t i=0;i<scoreMaxima_.size();++i)
+    {
+        std::vector<double> values;
+        for(const auto &card:cards)if(card.quality[i]>0)values.push_back(card.quality[i]);
+        if(values.empty())continue;
+        std::sort(values.begin(),values.end());
+        scoreMaxima_[i]=values[(size_t)std::ceil(0.9*(values.size()-1))];
     }
     for(const auto &card:cards)scorePeak_=std::max(scorePeak_,ScoreSum(card,scoreMaxima_));
 }
@@ -194,6 +344,7 @@ const std::vector<int> &Catalog::Entries(int category) const { static const std:
 Card Catalog::Describe(const NC_STACK_ypaworld &world, int category, int id) const
 {
     Card card=RawCard(world,category,id);
+    if(card.valid)SetQuality(card,world,category,id);
     if(card.valid)card.score=scorePeak_>0?std::max(1,std::min(10,(int)std::lround(10*ScoreSum(card,scoreMaxima_)/scorePeak_))):1;
     return card;
 }

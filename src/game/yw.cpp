@@ -944,7 +944,7 @@ void NC_STACK_ypaworld::HandleDebugTimeHotkeys(TInputState *inpt, bool openUADeb
         _debugGameplaySlowMotion = !_debugGameplaySlowMotion;
         if ( _debugGameplaySlowMotion )
             _debugGameplayFastMotion = false;
-        message = _debugGameplaySlowMotion ? "Slow Motion 20%" : "Slow Motion OFF";
+        message = _debugGameplaySlowMotion ? "Slow Motion 20% - Player 100%" : "Slow Motion OFF";
     }
     else if ( key == Input::KC_F3 )
     {
@@ -1029,7 +1029,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         // domain; platform/network time stays outside this scope.
         arg->DTime = System::GameClock.BeginFrame(realFrameTimeStamp, unscaledFrameTime,
                                                    _timeStamp, gameplayTimeScale,
-                                                   gameplayFrozen, forceAllTimeScaled);
+                                                   gameplayFrozen, forceAllTimeScaled,
+                                                   !_isNetGame&&openUADebug&&_debugGameplaySlowMotion);
         _timeStamp = System::GameClock.Time();
         arg->TimeStamp = System::GameClock.VisualTime();
         if ( arg->field_8 )
@@ -1038,8 +1039,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         Gui::Root::Instance.TimersUpdate(arg->DTime);
 
         // Audio pitch and sound-effect clocks consume the same master time.
-        // Debug F2/F3/F4 also override per-source opt-outs so nothing audible can
-        // silently continue at real speed while the world is globally dilated.
+        // F2 keeps the controlled actor and its projectiles at real speed.
+        // F3/F4 remain global; authored source opt-outs cannot bypass them.
         SFXEngine::SFXe.SetTimeScale(gameplayFrozen ? 0.0f : gameplayTimeScale,
                                      forceAllTimeScaled);
         yw_UpdateKamikazeFireTimeScaleHpDrain(this, arg->DTime);
@@ -1363,10 +1364,10 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         _updateMessage.frameTime = arg->DTime;
         _updateMessage.units_count = 0;
         _updateMessage.inpt = arg->field_8;
-        // Sprint consumes the same already-scaled gameplay delta as every
-        // other update path. New systems should use _updateMessage.frameTime
-        // or _timeStamp rather than adding event-specific scaling.
-        UpdatePlayerSprint(_updateMessage.inpt, gameplayFrozen ? 0 : _updateMessage.frameTime);
+        // Sprint follows the controlled actor's F2 exception; the shared world
+        // update remains scaled for every other unit.
+        UpdatePlayerSprint(_updateMessage.inpt, gameplayFrozen ? 0 :
+            (_userUnit?_userUnit->GetDebugFrameTime(_updateMessage.frameTime):_updateMessage.frameTime));
         _FPS = 1024 / unscaledFrameTime;
         _profileVals[PFID_FPS] = _FPS;
 
@@ -3090,7 +3091,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetDriveTime(wproto.drive_time);
     wobj->SetHomingTime(
         wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || wproto.IsHomingBomb()
-            ? wproto.homing_time : 0);
+            ? wproto.guide_time : 0);
     wobj->SetMissileType(missileType);
     wobj->SetPowerHeli(wproto.energy_heli * 1000.0);
     wobj->SetPowerTank(wproto.energy_tank * 1000.0);

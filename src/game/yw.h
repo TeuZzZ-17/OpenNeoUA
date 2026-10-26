@@ -1518,6 +1518,7 @@ struct TLevelDescription
     std::vector<MapSquad> Squads;
     std::vector<World::Location> Locations;
     std::array<std::string, 8> Palettes;
+    std::string BriefingText; // Optional level-authored briefing; empty uses the locale.
     std::vector<TBkgPicInfo> Mbmaps;
     std::vector<TBkgPicInfo> Dbmaps;
 

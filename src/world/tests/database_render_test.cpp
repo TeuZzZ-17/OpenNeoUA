@@ -132,6 +132,25 @@ int main(int argc,char **argv)
     const auto iconGlyph=user.db_session->icons->Glyph(user.db_session->card.icon);
     check(expected.x==iconGlyph.x&&expected.y==iconGlyph.y&&expected.w==iconGlyph.w&&expected.h==iconGlyph.h,"unit icon resolves exactly like gameplay");
     check(user.db_session->card.versus.size()==11,"real Weasel includes all eleven authored combat classes");
+    for(int id:user.db_session->catalog.Entries(0))
+    {
+        const auto &definition=user.db_session->definitions->GetVhclProtos()[id];
+        if(definition.model_id!=BACT_TYPES_ROBO)continue;
+        ModelPreview host;
+        if(!host.Select(*user.db_session->resources,*user.db_session->definitions,0,id))continue;
+        for(int yaw=0;yaw<360;yaw+=30)
+        {
+            const auto fitted=host.FitPosition(vec3d(300,-400,1000),vec2d(.2,.1),yaw,-18);
+            const auto rotation=ModelPreview::ViewOrientation(fitted,yaw,-18,true);
+            bool inside=true;
+            for(const auto &vertex:host.framePoints_)
+            {
+                const auto point=fitted+rotation.Transform(vertex-host.center_);
+                inside=inside&&point.z>0&&std::abs(point.x/point.z-.3)<.2&&std::abs(point.y/point.z+.4)<.1;
+            }
+            check(inside,"real Host Station assembly fits at every sampled rotation");
+        }
+    }
     for(int category:{0,2})for(int id:user.db_session->catalog.Entries(category))
         check(user.db_session->catalog.Describe(*user.db_session->definitions,category,id).score>=1&&user.db_session->catalog.Describe(*user.db_session->definitions,category,id).score<=10,"real catalog score lies in 1..10");
     check(layout.previewTop+10*layout.detailLine+2<=layout.textTop,"score below Speed fits above detail text");

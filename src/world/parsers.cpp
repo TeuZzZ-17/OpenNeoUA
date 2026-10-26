@@ -5117,6 +5117,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->life_time_min = 20000;
         _wpn->life_time_max = 20000;
         _wpn->life_time_nt = 0;
+        _wpn->life_time_nt_min = 0;
+        _wpn->life_time_nt_max = 0;
         _wpn->drive_time = 7000;
         _wpn->shot_time = 3000;
         _wpn->shot_time_user = 1000;
@@ -5718,7 +5720,21 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "life_time_nt") )
     {
-        _wpn->life_time_nt = parser.stol(p2, nullptr, 0);
+        int minLifeTime = 0;
+        int maxLifeTime = 0;
+        if ( p2.find('_') != std::string::npos )
+        {
+            // Range min_max; a malformed range disables the override (0).
+            if ( !ParseScriptIntRange(p2, minLifeTime, maxLifeTime) )
+                minLifeTime = maxLifeTime = 0;
+        }
+        else
+        {
+            minLifeTime = maxLifeTime = parser.stol(p2, nullptr, 0);
+        }
+        _wpn->life_time_nt = minLifeTime;
+        _wpn->life_time_nt_min = minLifeTime;
+        _wpn->life_time_nt_max = maxLifeTime;
     }
     else if ( !StriCmp(p1, "drive_time") )
     {
@@ -5825,9 +5841,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int maxTargets = parser.stol(p2, nullptr, 0);
         _wpn->multi_target = maxTargets > 0 ? maxTargets : 0;
     }
-    else if ( !StriCmp(p1, "homing_time") )
+    else if ( !StriCmp(p1, "guide_time") )
     {
-        _wpn->homing_time = ParsePositiveIntOrZero(p2);
+        _wpn->guide_time = ParsePositiveIntOrZero(p2);
     }
     // ---- OpenNeoUA custom: model = laser parameters ----
     else if ( !StriCmp(p1, "laser_energy_tick_time") )
@@ -8147,6 +8163,34 @@ int LevelGatesParser::Handle(ScriptParser::Parser &parser, const std::string &p1
 
 
 
+
+bool LevelBriefingTextParser::IsScope(ScriptParser::Parser &, const std::string &word, const std::string &)
+{
+    if (StriCmp(word, "begin_briefing_text")) return false;
+    _m.BriefingText.clear();
+    _first = true;
+    return true;
+}
+
+int LevelBriefingTextParser::Handle(ScriptParser::Parser &, const std::string &raw, const std::string &)
+{
+    std::string line = raw;
+    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+    const auto first = line.find_first_not_of(" \t");
+    const auto last = line.find_last_not_of(" \t");
+    if (first != std::string::npos && !StriCmp(line.substr(first, last-first+1), "end"))
+    {
+        if (_m.BriefingText.find_first_not_of(" \t\r\n") == std::string::npos)
+            _m.BriefingText.clear();
+        return ScriptParser::RESULT_SCOPE_END;
+    }
+    // Escape a literal end line or leading backslash with one leading backslash.
+    if (!line.empty() && line.front() == '\\') line.erase(0, 1);
+    if (!_first) _m.BriefingText += '\n';
+    _first = false;
+    _m.BriefingText += line;
+    return ScriptParser::RESULT_OK;
+}
 
 bool LevelMbMapParser::IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt)
 {

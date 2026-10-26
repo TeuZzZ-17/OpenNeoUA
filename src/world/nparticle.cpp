@@ -7,6 +7,8 @@
 #include "nucleus/base.h"
 #include "common/utils.h"
 #include "spin.h"
+#include "tools.h"
+#include "system/gametime.h"
 
 #include <cmath>
 #include <utility>
@@ -30,14 +32,14 @@ static float ParticleSystem_MaxScaleAxis(const vec3d &scale)
     return maxScale > 0.0f ? maxScale : 1.0f;
 }
 
-void ParticleSystem::AddParticle(NC_STACK_particle *base, const vec3d& pos, const vec3d& vec, int32_t age, const GFX::TGLColor &tint, const vec3d &scale, const vec3d &spin, float lifetimeScale, bool tintAlphaAffectsAdditive, bool colorizeTint)
+void ParticleSystem::AddParticle(NC_STACK_particle *base, const vec3d& pos, const vec3d& vec, int32_t age, const GFX::TGLColor &tint, const vec3d &scale, const vec3d &spin, float lifetimeScale, bool tintAlphaAffectsAdditive, bool colorizeTint, bool debugPlayer)
 {
     if ( !std::isfinite(lifetimeScale) || lifetimeScale <= 0.0f )
         lifetimeScale = 1.0f;
 
     if (!_disableAdd && (int32_t)_particles.size() < System::IniConf::GfxParticlesLimit.Get<int32_t>())
         _particles.emplace_back( base, pos, vec, age, tint, scale, spin, lifetimeScale,
-                                 tintAlphaAffectsAdditive, colorizeTint );
+                                 tintAlphaAffectsAdditive, colorizeTint, debugPlayer );
 }
 
 void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
@@ -45,7 +47,6 @@ void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
     //Prevent spawn new particles from particle render
     _disableAdd = true;
 
-    float fsec = (float)delta * 0.001;
 
     size_t survivorCount = 0;
     for (size_t particleIndex = 0; particleIndex < _particles.size(); particleIndex++)
@@ -54,7 +55,9 @@ void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
         if (!f.pParticleGen)
             continue;
 
-        f.Age += delta;
+        const int particleDelta=f.DebugPlayer&&System::GameClock.PlayerRealtime()?System::GameClock.RealDelta():delta;
+        const float fsec=particleDelta*0.001f;
+        f.Age += particleDelta;
         float scaledLifeTime = (float)f.pParticleGen->_lifeTime * f.LifetimeScale;
 
         if ((float)f.Age >= scaledLifeTime)
@@ -68,7 +71,7 @@ void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
         // the same trajectories at any frame rate: at 60fps frameScale ~= 1.0
         // (vanilla behavior), at 240fps each of the 4x more frequent steps
         // contributes a quarter.
-        float frameScale = (float)delta * (60.0f / 1024.0f);
+        float frameScale = (float)particleDelta * (60.0f / 1024.0f);
 
         f.Vec += (f.pParticleGen->_accelStart + f.pParticleGen->_accelDelta * visualAge) * frameScale;
         f.Pos += f.Vec * fsec + NC_STACK_particle::RandVec() * (f.pParticleGen->_noisePower * frameScale);
@@ -97,6 +100,12 @@ void ParticleSystem::Render(Frak *p, const vec3d &scale, area_arg_65 *rndrParams
 
     if (pos.z < GFX::Engine.GetProjectionNear() || pos.z > GFX::Engine.GetProjectionFar())
         return;
+
+    const float distance = pos.length();
+    if (rndrParams->maxZ > 0.0f && distance >= rndrParams->maxZ)
+        return;
+    const float distanceFade = ComputeSpatialFalloff(distance - rndrParams->fadeStart,
+                                                    rndrParams->fadeLength);
 
     // Calculate projection position and W parameter for NDC
     const mat4x4f &Proj = GFX::Engine.GetProjectionMatrix();
@@ -130,12 +139,13 @@ void ParticleSystem::Render(Frak *p, const vec3d &scale, area_arg_65 *rndrParams
             GFX::TRenderNode& rend = GFX::Engine.AllocRenderNode();
             rend = GFX::TRenderNode( GFX::TRenderNode::TYPE_PARTICLE );
 
-            rend.Distance = pos.length();
+            rend.Distance = distance;
             rend.Flags = mesh.Mat.Flags | rndrParams->flags;
             rend.Color = mesh.Mat.Color;
             rend.ColorMul = p->Tint;
+            rend.ColorMul.a *= distanceFade;
             rend.Colorize = p->ColorizeTint;
-            rend.VPFadeFactor = p->TintAlphaAffectsAdditive ? p->Tint.a : 1.0f;
+            rend.VPFadeFactor = (p->TintAlphaAffectsAdditive ? p->Tint.a : 1.0f) * distanceFade;
 
             if ((mesh.Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) && mesh.Mat.TexSource)
             {

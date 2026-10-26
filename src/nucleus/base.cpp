@@ -546,6 +546,7 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
         _renderMsg.particleLifetimeScale = arg->particleLifetimeScale;
         _renderMsg.particleTintAlphaAffectsAdditive = arg->particleTintAlphaAffectsAdditive;
         _renderMsg.particleSystem = arg->particleSystem;
+        _renderMsg.debugPlayerParticles = arg->debugPlayerParticles;
 
         if (!inst)
             isVisible = _skeleton->skeleton_func132(&skel132);

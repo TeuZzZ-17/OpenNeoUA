@@ -111,11 +111,74 @@ void TestScoreAndClassNames() {
     Check(catalog.Describe(w,2,2).score>catalog.Describe(w,2,1).score,"healing guardians and radar contribute to score");
     WorldProbe empty;catalog.Build(empty);Check(catalog.Entries(0).empty(),"empty catalog resets score references safely");
 }
+void TestSustainedQuality() {
+    WorldProbe w;
+    auto &slow=w._vhclProtos[1];slow.Index=1;slow.type_icon='A';slow.type_icon_defined=true;
+    slow.weapon=1;slow.num_weapons=1;slow.energy=1000;slow.energy_defined=true;
+    auto &fast=w._vhclProtos[2];fast=slow;fast.Index=2;fast.weapon=2;
+    w._weaponProtos[1].energy=w._weaponProtos[2].energy=1000;
+    w._weaponProtos[1].shot_time=2000;w._weaponProtos[2].shot_time=100;
+    World::Database::Catalog catalog;catalog.Build(w);
+    Check(catalog.Describe(w,0,2).score>catalog.Describe(w,0,1).score,
+          "sustained fire outranks equal damage with a long reload");
+    auto baseline=catalog.Describe(w,0,1).score;
+    slow.job_fighttank=10;slow.job_fighttank_defined=true;
+    catalog.Build(w);
+    Check(catalog.Describe(w,0,1).score==baseline,"AI preferences do not count as combat strength");
+    const auto original=catalog.Describe(w,0,2).quality;
+    fast.num_weapons=4;catalog.Build(w);
+    Check(catalog.Describe(w,0,2).quality[0]>original[0],"projectile count contributes to sustained damage");
+    w._weaponProtos[2].salve_shots=2;w._weaponProtos[2].salve_delay=10000;catalog.Build(w);
+    Check(catalog.Describe(w,0,2).quality[0]<original[0],"long salve pauses reduce sustained damage");
+    fast.shield=80;catalog.Build(w);
+    Check(catalog.Describe(w,0,2).quality[1]>catalog.Describe(w,0,1).quality[1],
+          "armor increases effective durability instead of adding an independent vote");
+    fast.power=100;fast.power_radius=1000;catalog.Build(w);
+    Check(catalog.Describe(w,0,2).quality[3]>0,"active mobile power contributes support");
+    fast.power_radius=0;catalog.Build(w);
+    Check(catalog.Describe(w,0,2).quality[3]==0,"inactive mobile power does not earn a support bonus");
+    fast.mgun_set=true;fast.mgun=-1;fast.gun_power=999999;catalog.Build(w);
+    const auto withoutMgun=catalog.Describe(w,0,2).quality[0];
+    fast.mgun_set=false;fast.mgun_shot_time=0;catalog.Build(w);
+    Check(catalog.Describe(w,0,2).quality[0]==withoutMgun,"disabled MGUN does not gain phantom firepower");
+    fast.mgun_shot_time=100;fast.mgun_energy_set=false;catalog.Build(w);
+    Check(std::abs(catalog.Describe(w,0,2).quality[0]-withoutMgun-fast.gun_power)<.01,
+          "legacy continuous MGUN uses damage per second without multiplying it by cadence");
+    fast.model_id=BACT_TYPES_GUN;fast.force=10000;fast.airconst=100;fast.mass=100;
+    catalog.Build(w);
+    Check(catalog.Describe(w,0,2).quality[2]==0,"stationary guns do not earn mobile vehicle speed");
+}
+void TestLifeTimeNtRange() {
+    WorldProbe w;
+    Check(Parse(w, {"new_weapon 1", "model = missile", "life_time = 3000_4000", "life_time_nt = 2200_1000", "end",
+                    "new_weapon 2", "model = missile", "life_time_nt = 2200", "end",
+                    "new_weapon 3", "model = missile", "life_time_nt = 100_200_300", "end",
+                    "new_weapon 4", "model = missile", "end"}, World::Database::Weapon), "weapon life_time_nt forms parse");
+    const auto &ranged = w._weaponProtos[1];
+    Check(ranged.life_time_nt_min == 1000 && ranged.life_time_nt_max == 2200, "life_time_nt range is stored, reversed endpoints included");
+    bool varies = false;
+    for (int i = 0; i < 200; ++i) {
+        const int roll = ranged.RollLifeTimeNt();
+        Check(roll >= 1000 && roll <= 2200, "life_time_nt roll stays inside the range");
+        varies = varies || roll != ranged.RollLifeTimeNt();
+    }
+    Check(varies, "life_time_nt rolls differ between projectiles");
+    Check(w._weaponProtos[2].RollLifeTimeNt() == 2200, "single life_time_nt value stays fixed");
+    Check(w._weaponProtos[3].RollLifeTimeNt() == 0, "malformed life_time_nt range disables the override");
+    Check(w._weaponProtos[4].RollLifeTimeNt() == 0, "missing life_time_nt keeps the vanilla behavior");
+    WorldProbe g;
+    Check(Parse(g, {"new_weapon 1", "model = missile", "guide_time = 450", "end"}, World::Database::Weapon), "guide_time weapon parses");
+    Check(g._weaponProtos[1].guide_time == 450, "guide_time is stored");
+    WorldProbe old;
+    Check(!Parse(old, {"new_weapon 1", "model = missile", "homing_time = 450", "end"}, World::Database::Weapon), "old homing_time key is no longer accepted");
+}
 }
 int main() {
+    TestLifeTimeNtRange();
     TestAuthoredParserFields();
     TestCatalogEligibilityAndRatings();
     TestScoreAndClassNames();
+    TestSustainedQuality();
     std::printf("database_catalog_test: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

@@ -160,8 +160,13 @@ bool ypabact_FireProximityDefenseShot(NC_STACK_ypabact *unit, int shotIndex, int
 
     SFXEngine::SFXe.startSound(&wobj->_soundcarrier, 1);
 
-    if ( wobj->_primTtype != BACT_TGT_TYPE_UNIT && wproto.life_time_nt )
-        wobj->SetLifeTime(wproto.life_time_nt);
+    if ( wobj->_primTtype != BACT_TGT_TYPE_UNIT )
+    {
+        const int lifeTimeNt = wproto.RollLifeTimeNt();
+
+        if ( lifeTimeNt )
+            wobj->SetLifeTime(lifeTimeNt);
+    }
 
     return true;
 }

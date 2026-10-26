@@ -25,6 +25,13 @@ int main()
     check(total == 20, "accumulation at 200 percent");
     clock.Reset(0);
     check(clock.BeginFrame(1000, 50, 0, 20.0f, false, true) == 100, "debug-safe upper bound");
+    clock.Reset(0);
+    clock.BeginFrame(1000,50,0,.2f,false,true,true);
+    check(clock.PlayerRealtime()&&clock.RealDelta()==50&&clock.Delta()==10,"F2 publishes separate world and player deltas");
+    clock.BeginFrame(1050,50,10,.2f,true,true,true);
+    check(!clock.PlayerRealtime(),"freeze suppresses the player exception");
+    clock.Reset();
+    check(!clock.PlayerRealtime(),"reset clears transient player timing");
     std::printf("debug_time_scale_test: %d failures\n", failures);
     return failures ? 1 : 0;
 }

@@ -138,6 +138,7 @@ bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
                                           : _mislEmitter->_host_station;
         child->ConfigureSpawnedProjectileBase(_mislEmitter, childHost,
                                                _owner, childDir);
+        child->_debugPlayerProjectile=_debugPlayerProjectile;
         child->SetClusterSpawnedChild(cluster.generations <= 0);
         child->_mislClusterGeneration = childClusterGeneration;
         if ( childProto.IsArcGrenade() )
@@ -247,7 +248,7 @@ bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
 
         if ( childTargetType != BACT_TGT_TYPE_UNIT )
         {
-            int life_time_nt = childProto.life_time_nt;
+            int life_time_nt = childProto.RollLifeTimeNt();
 
             if ( life_time_nt )
                 child->SetLifeTime(life_time_nt);
@@ -436,6 +437,7 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
         return false;
 
     child->SetLauncherBact(_mislEmitter);
+    child->_debugPlayerProjectile=_debugPlayerProjectile;
     child->SetStartHeight(arg147.pos.y);
     child->_owner = _owner;
     child->_host_station = _host_station;

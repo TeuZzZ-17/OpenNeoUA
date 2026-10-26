@@ -9,6 +9,7 @@
 //   ypabact_<feature>.cpp
 // Shared helpers and constants are declared in ypabact_internal.h.
 #include "game/ypabact_internal.h"
+#include "system/gametime.h"
 
 int ypabact_id = 1;
 
@@ -506,6 +507,8 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_decal_enable = false;
     _mgun_decal = World::TChainFXConfig();
     _clock = 0;
+    _debugVisualTimeOffset = 0;
+    _debugPlayerProjectile = false;
     _AI_time1 = 0;
     _AI_time2 = 0;
     _search_time1 = 0;
@@ -1373,8 +1376,56 @@ void sub_481F94(NC_STACK_ypabact *bact)
     }
 }
 
+bool NC_STACK_ypabact::IsPlayerTimeOwner() const
+{
+    if ( _debugPlayerProjectile )
+        return true;
+    if ( !_world )
+        return false;
+    if ( _world->getYW_userVehicle() == this )
+        return true;
+    return (_isUnitGunChild || _isDummy || _bact_type == BACT_TYPES_GUN) &&
+           _parent && _parent != this && _parent->IsPlayerTimeOwner();
+}
+
+bool NC_STACK_ypabact::UsesDebugRealtime() const
+{
+    return _world && !_world->_isNetGame && System::IniConf::IsGameNewDebugEnabled() &&
+           _world->IsDebugGameplaySlowMotionEnabled() && System::GameClock.IsActive() &&
+           !System::GameClock.IsFrozen() && IsPlayerTimeOwner();
+}
+
+int NC_STACK_ypabact::GetDebugFrameTime(int worldFrameTime) const
+{
+    return UsesDebugRealtime() ? System::GameClock.RealDelta() : worldFrameTime;
+}
+
 void NC_STACK_ypabact::Update(update_msg *arg)
 {
+    // Use an actor-local copy. Squad members must still receive world time;
+    // their own update decides whether they belong to the player's action.
+    update_msg *worldUpdate=arg;
+    update_msg actorUpdate;
+    TInputState actorInput;
+    const int frameTime=GetDebugFrameTime(arg->frameTime);
+    if(frameTime!=arg->frameTime)
+    {
+        _debugVisualTimeOffset+=frameTime-arg->frameTime;
+        actorUpdate=*arg;actorUpdate.frameTime=frameTime;
+        actorUpdate.gTime=_clock+frameTime;
+        if(arg->inpt)
+        {
+            actorInput=*arg->inpt;actorInput.Period=frameTime;
+            actorUpdate.inpt=&actorInput;
+        }
+        arg=&actorUpdate;
+    }
+    const bool debugRealtime=UsesDebugRealtime();
+    for(auto *carrier:{&_soundcarrier,&_mgun_soundcarrier,&_laser_soundcarrier,
+        &_vertical_laser_soundcarrier,&_laser_launch_soundcarrier,&_laser_hit_soundcarrier,
+        &_vertical_laser_hit_soundcarrier,&_mimic_soundcarrier,&_debuff_soundcarrier,
+        &_player_launch_shake_carrier,&_mgun_recoil_shake_carrier})
+        carrier->DebugRealtime=debugRealtime;
     ClearPlayerSprintPitchExtra();
 
     if ( _kidRef.IsListType(World::BLIST_CACHE) ) // Do not update units in dead list
@@ -1525,7 +1576,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateGenesisHostExit();
 
     for( NC_STACK_ypamissile *misl : Utils::IterateListCopy<NC_STACK_ypamissile *>(_missiles_list))
-        misl->Update(arg);
+        misl->Update(worldUpdate);
 
     sub_481F94(this);
 
@@ -1572,7 +1623,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
      **/
     for ( NC_STACK_ypabact *bnod : _world->SnapshotBacts(_kidList) )
     {
-        bnod->Update(arg);
+        bnod->Update(worldUpdate);
 
         arg->units_count++;
     }
@@ -1680,6 +1731,16 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     // Physics/control/collision keep running elsewhere; only the visual body is skipped.
     if ( IsInvisibleUnrevealed() )
         return;
+
+    auto *worldRender=arg;
+    auto actorRender=*arg;
+    actorRender.debugPlayerParticles=IsPlayerTimeOwner();
+    actorRender.globTime+=_debugVisualTimeOffset;
+    if(UsesDebugRealtime())
+    {
+        actorRender.frameTime=GetDebugFrameTime(arg->frameTime);
+    }
+    arg=&actorRender;
 
     // OpenNeoUA Black Sect unit tint: owner-5 combat units use the configured render-only
     // tint. It deliberately overrides per-prototype vp_tint without mutating actor or
@@ -1942,6 +2003,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     // Continuous laser bodies are queued from the authoritative runtime beam
     // endpoints. The helper keeps the legacy VP path available as fallback.
     ypabact_RenderLaserMeshes(this, arg);
+    worldRender->adeCount=arg->adeCount;
 }
 
 void NC_STACK_ypabact::SetTarget(setTarget_msg *arg)
@@ -2281,6 +2343,8 @@ void NC_STACK_ypabact::Renew()
     _gun_leftright = 0.0;
     _scale_time = 0;
     _clock = 0;
+    _debugVisualTimeOffset = 0;
+    _debugPlayerProjectile = false;
     _AI_time1 = 0;
     _AI_time2 = 0;
     _search_time1 = 0;

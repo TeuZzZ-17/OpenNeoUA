@@ -752,6 +752,9 @@ public:
     vec3d GetAlternativeViewAimDirection() const;
     mat3x3 GetAlternativeViewRotation();
     bool HasMinigun() const;
+    bool IsPlayerTimeOwner() const;
+    bool UsesDebugRealtime() const;
+    int GetDebugFrameTime(int worldFrameTime) const;
     float GetMinigunRange() const;
     bool UsesVehicleMinigunTiming() const { return !_mgun_set && _mgun_shot_time > 0; }
     int GetMinigunShotTime(int frameDeltaMs) const;
@@ -1020,6 +1023,8 @@ public:
     int _buff_deflect_charges_max;
     bool _invulnerable;
     bool _debugIgnoredByAI = false; // Runtime-only New Debug F9 toggle; never saved.
+    bool _debugPlayerProjectile = false; // Runtime-only ownership captured when a projectile is fired.
+    int32_t _debugVisualTimeOffset = 0; // Extra actor ticks preserve animation continuity across F2 toggles.
     int _reload_const;
     uint8_t _shield;
     uint8_t _radar; // num sectors view
