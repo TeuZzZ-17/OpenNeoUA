@@ -1,6 +1,6 @@
 # OpenNeoUA
 
-<img width="1280" height="800" alt="Screenshot 2026-10-24 080442" src="https://github.com/user-attachments/assets/2f487413-d18a-4569-bbd7-5357cca38f5c" />
+<img width="1280" height="800" alt="Screenshot 2026-10-26 213324" src="https://github.com/user-attachments/assets/aa3a519e-0982-4282-8e36-10b7fa56fcb4" />
 
 OpenNeoUA is an independent, open-source and non-commercial evolution of the `UA_source`/OpenUA engine for **Urban Assault**. It modernizes real engine limitations while preserving vanilla data, levels, scripts, saves and the original game feeling. A legitimate copy of the original game data is still required to play.
 
