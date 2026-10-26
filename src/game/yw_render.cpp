@@ -550,7 +550,11 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     rrg.timeStamp = GetGameplayRenderTimeStamp();
     rrg.frameTime = bs64->DTime;
     rrg.minZ = 1.0;
-    rrg.maxZ = rndrs.maxZ;
+    // Particles outlive their emitter's visibility; use the visible limit,
+    // not the extra sectors prepared behind the horizon.
+    rrg.maxZ = (float)_normalVizLimit;
+    rrg.fadeStart = (float)(_normalVizLimit - _normalFadeLength);
+    rrg.fadeLength = (float)_normalFadeLength;
     rrg.ViewTForm = TF::Engine.GetViewPoint();
     rrg.OwnerTForm = nullptr;
     rrg.flags = 0;

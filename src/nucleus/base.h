@@ -23,6 +23,7 @@ typedef std::list<NC_STACK_base *> BaseList;
 
 struct area_arg_65
 {
+    bool debugPlayerParticles = false;
     // Optional render-only destination; absent preserves mission particles.
     World::ParticleSystem *particleSystem = nullptr;
     //polys *rndrSTK_cur;
@@ -75,6 +76,7 @@ struct area_arg_65
 
 struct baseRender_msg
 {
+    bool debugPlayerParticles = false;
     World::ParticleSystem *particleSystem = nullptr;
     int frameTime = 0;
     int globTime = 0;

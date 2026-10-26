@@ -112,17 +112,15 @@ void TWeapProto::GetCombinedProjectileCountRange(int carrierMinCount,
     }
 }
 
-int TWeapProto::RollLifeTime() const
+// Shared by life_time and life_time_nt: picks one value in the inclusive range.
+static int RollLifeTimeRange(int minLifeTime, int maxLifeTime, int scalarLifeTime)
 {
-    int minLifeTime = life_time_min;
-    int maxLifeTime = life_time_max;
-
     // Keep prototypes created by older callers/source snapshots compatible:
-    // before the range fields existed, life_time was the only source value.
-    if ( minLifeTime == 0 && maxLifeTime == 0 && life_time != 0 )
+    // before the range fields existed, the scalar was the only source value.
+    if ( minLifeTime == 0 && maxLifeTime == 0 && scalarLifeTime != 0 )
     {
-        minLifeTime = life_time;
-        maxLifeTime = life_time;
+        minLifeTime = scalarLifeTime;
+        maxLifeTime = scalarLifeTime;
     }
 
     if ( maxLifeTime < minLifeTime )
@@ -136,6 +134,16 @@ int TWeapProto::RollLifeTime() const
     const double randomPart = (double)rand() / ((double)RAND_MAX + 1.0);
     const int64_t offset = (int64_t)(randomPart * (double)span);
     return (int)((int64_t)minLifeTime + offset);
+}
+
+int TWeapProto::RollLifeTime() const
+{
+    return RollLifeTimeRange(life_time_min, life_time_max, life_time);
+}
+
+int TWeapProto::RollLifeTimeNt() const
+{
+    return RollLifeTimeRange(life_time_nt_min, life_time_nt_max, life_time_nt);
 }
 
 int TVhclProto::RollMimicProductionCost()

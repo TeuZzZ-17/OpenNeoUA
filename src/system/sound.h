@@ -245,6 +245,7 @@ struct TSoundSource
 
 struct TSndCarrier
 {
+    bool DebugRealtime = false; // Runtime-only F2 exception for the player's actor and projectiles.
     vec3d Position;
     vec3d Vector;
     std::vector<TSoundSource> Sounds;

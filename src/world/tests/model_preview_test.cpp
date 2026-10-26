@@ -13,6 +13,10 @@
 #include <cstdio>
 #undef main
 
+// Invalid parser fixtures must not wait for a modal error dialog in this probe.
+extern "C" int SDLCALL SDL_ShowSimpleMessageBox(Uint32,const char *,const char *,SDL_Window *)
+{return 0;}
+
 extern void sb_0x4eb94c(NC_STACK_ypaworld *,TBriefengScreen *,TInputState *,int);
 
 struct PreviewCaptureBase:NC_STACK_base
@@ -63,6 +67,31 @@ int main()
     check(preview.Select(world,world,0,1)&&preview.center_==vec3d(110,220,330),
           "off-origin geometry is centered without changing the source model");
     check(std::abs(preview.Radius()-std::sqrt(1400.0))<0.01,"framing follows visible bounds");
+    world._vhclProtos[1].model_id=BACT_TYPES_ROBO;
+    world._vhclProtos[1].briefing_size=4000;
+    preview.Select(world,world,0,1);
+    check(std::abs(preview.Radius()-std::sqrt(1400.0))<0.01,
+          "Host Station menu framing uses complete geometry instead of briefing size");
+    for(int yaw=0;yaw<360;yaw+=15)
+    {
+        const vec3d anchor(300,-400,1000);
+        const vec2d halfSize(.2,.1);
+        const auto fitted=preview.FitPosition(anchor,halfSize,yaw,-18);
+        const auto rotation=ModelPreview::ViewOrientation(fitted,yaw,-18,true);
+        bool inside=true;
+        for(const auto &vertex:preview.framePoints_)
+        {
+            const auto p=fitted+rotation.Transform(vertex-preview.center_);
+            inside=inside&&p.z>0&&std::abs(p.x/p.z-.3)<halfSize.x&&std::abs(p.y/p.z+.4)<halfSize.y;
+        }
+        check(inside,"rotating off-origin Host Station stays inside its preview rectangle");
+    }
+    world._vhclProtos[1].model_id=BACT_TYPES_TANK;
+    preview.Select(world,world,0,1);
+    check(preview.Radius()==1.0f,"ordinary vehicle menu framing keeps its authored size");
+    check(preview.FitPosition(vec3d(300,-400,1000),vec2d(.2,.1),20,-18)==vec3d(300,-400,1000),
+          "automatic framing leaves already accepted ordinary vehicles unchanged");
+    world._vhclProtos[1].briefing_size=0;
     world._weaponProtos.resize(2);
     auto &weapon=world._weaponProtos[1];
     weapon.vp_normal=0;weapon.visual_scale=vec3d(2,3,4);

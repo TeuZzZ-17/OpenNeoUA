@@ -586,7 +586,7 @@ size_t NC_STACK_particle::Emit(area_arg_65 *arg, InstanceOpts * uopts)
                                                    arg->particleScale, arg->particleSpin,
                                                    arg->particleLifetimeScale,
                                                    arg->particleTintAlphaAffectsAdditive,
-                                                   arg->colorizeTint);
+                                                   arg->colorizeTint, arg->debugPlayerParticles);
 
             timeDelta += delta;
             opts->Time -= _genPause;

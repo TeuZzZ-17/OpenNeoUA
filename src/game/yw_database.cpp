@@ -403,7 +403,9 @@ void UserData::RenderDatabaseEntryMedia()
         const double distance=db_session->preview.Radius()*1.35/fraction;
         const double x=(2.0*(l.right+l.previewWidth/2.0)/p_YW->_screenSize.x-1.0)*distance;
         const double y=(2.0*(l.previewTop+modelHeight/2.0)/p_YW->_screenSize.y-1.0)*distance;
-        db_session->preview.Render(arg,vec3d(x,y,distance),db_session->angle,-18,true,true,true);
+        const auto position=db_session->preview.FitPosition(vec3d(x,y,distance),
+            vec2d((double)l.previewWidth/p_YW->_screenSize.x,(double)modelHeight/p_YW->_screenSize.y),db_session->angle,-18);
+        db_session->preview.Render(arg,position,db_session->angle,-18,true,true,true);
         GFX::Engine.Rasterize();GFX::Engine.EndScene();GFX::Engine.SetFBOBlending(0);TF::Engine.SetViewPoint(previous);
     }
     else caption(p_YW,text(Locale::OUA_DB_PREVIEW_UNAVAILABLE),l.right+8,l.previewTop+l.previewHeight/2,l.previewWidth-16);

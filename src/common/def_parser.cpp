@@ -69,7 +69,8 @@ int Parser::ParseRoutine(const std::string &filename, HandlersList &callbacks, i
 
     int selectedHandler = -1;
 
-    while ( ParseNextLine(&p1, &p2) )
+    while ( selectedHandler != -1 && callbacks[selectedHandler]->RawLines()
+            ? ReadLine(&p1) : ParseNextLine(&p1, &p2) )
     {
         if ( selectedHandler != -1 )
         {

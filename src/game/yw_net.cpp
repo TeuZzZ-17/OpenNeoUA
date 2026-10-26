@@ -1653,7 +1653,7 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
         if ( nwMsg->targetType == BACT_TGT_TYPE_UNIT )
             break;
 
-        int weapLifeTime = yw->GetWeaponsProtos().at(nwMsg->type).life_time_nt;
+        int weapLifeTime = yw->GetWeaponsProtos().at(nwMsg->type).RollLifeTimeNt();
 
         if ( weapLifeTime )
             weapo->SetLifeTime(weapLifeTime);

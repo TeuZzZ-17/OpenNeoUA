@@ -51,6 +51,8 @@ struct Card
     int guardians = 0;
     int radarPower = 0;
     int score = 0;
+    // Sustained offense, effective durability, mobility and active support.
+    std::array<double,4> quality{};
     std::vector<std::pair<std::string, int>> versus;
     std::vector<Rating> ratings;
     std::vector<int> weapons;
@@ -65,7 +67,7 @@ public:
 
 private:
     std::vector<int> entries_[3];
-    std::array<double,9> scoreMaxima_{};
+    std::array<double,4> scoreMaxima_{};
     double scorePeak_ = 0;
 };
 }

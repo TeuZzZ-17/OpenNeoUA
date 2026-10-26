@@ -13,6 +13,7 @@ void GameplayClock::Reset(int32_t gameTime)
     _active = false;
     _frozen = false;
     _forceAllTimeScaled = false;
+    _playerRealtime = false;
     _realTime = 0;
     _realDelta = 0;
     _gameTime = gameTime;
@@ -24,12 +25,13 @@ void GameplayClock::Reset(int32_t gameTime)
 
 int32_t GameplayClock::BeginFrame(int32_t realTime, int32_t realDelta,
                                   int32_t currentGameTime, float scale,
-                                  bool frozen, bool forceAllTimeScaled)
+                                  bool frozen, bool forceAllTimeScaled, bool playerRealtime)
 {
     _realTime = realTime;
     _realDelta = std::max(realDelta, 0);
     _frozen = frozen;
     _forceAllTimeScaled = forceAllTimeScaled;
+    _playerRealtime = playerRealtime;
 
     if ( !std::isfinite(scale) || scale <= 0.0f )
         scale = 1.0f;

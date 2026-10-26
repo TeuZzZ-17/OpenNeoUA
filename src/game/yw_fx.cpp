@@ -546,8 +546,11 @@ bool yw_HasTransientVPRotation(const vec3d &rotation)
 
 void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld::TTransientVP> *effects, baseRender_msg *arg)
 {
+    auto *worldRender=arg;
     for (auto it = effects->begin(); it != effects->end();)
     {
+        auto effectRender=*worldRender;
+        arg=&effectRender;
         const bool endingFinished = it->ending &&
                                     it->endingDuration > 0 &&
                                     it->age - it->endingAge >= it->endingDuration;
@@ -567,6 +570,11 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
                 it = effects->erase(it);
                 continue;
             }
+            // Attached flashes and emitters follow their actor's F2 clock.
+            // The local copy keeps unrelated world effects in scaled time.
+            arg->frameTime=owner->GetDebugFrameTime(arg->frameTime);
+            arg->globTime+=owner->_debugVisualTimeOffset;
+            arg->debugPlayerParticles=owner->IsPlayerTimeOwner();
 
             if ( it->playerFirstPersonOnly && (!owner->IsPlayerFirstPersonCameraActive() || world->_viewerBact != owner) )
             {
@@ -707,6 +715,24 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
             renderTint.a *= fadeFactor;
         }
 
+        // External meshes can lack material fog. Keep every transient effect
+        // inside the world draw distance, independently of its lifetime fade.
+        // With the sky dome active the visible world ends at the sky horizon.
+        // _normalVizLimit is only a CPU-side budget (diamond window plus hidden
+        // safety sectors), several times larger than the horizon.
+        float vizLimit = (float)world->_normalVizLimit;
+        if ( world->_skyRender && world->_skyObject )
+            vizLimit = std::min(vizLimit, (float)world->GetSkyHorizonDistance());
+        const float distance = arg->particleSystem ? 0.0f
+            : (it->pos - TF::Engine.GetViewPoint()->CalcPos).length();
+        const float fadeLength = std::max(0, world->_normalFadeLength);
+        const float fadeStart = std::max(0.0f, vizLimit - fadeLength);
+        const float distanceFade = arg->particleSystem ? 1.0f
+            : distance >= vizLimit ? 0.0f
+            : World::ComputeSpatialFalloff(distance - fadeStart, fadeLength);
+        fadeFactor *= distanceFade;
+        renderTint.a *= distanceFade;
+
         // OpenNeoUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.
         GFX::TGLColor oldTint = arg->tint;
@@ -769,7 +795,9 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
         // only when the authored tint actually changes the target hue.
         arg->colorizeTint = it->tint.ColorizesRGB();
 
-        it->vp->Bas->Render(arg, it->vp.get());
+        if ( distanceFade > 0.0f )
+            it->vp->Bas->Render(arg, it->vp.get());
+        worldRender->adeCount=arg->adeCount;
 
         arg->tint = oldTint;
         arg->colorizeTint = oldColorizeTint;

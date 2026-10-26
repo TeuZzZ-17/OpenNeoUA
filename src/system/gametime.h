@@ -17,11 +17,12 @@ public:
     // Advances one local world frame and returns the canonical scaled delta.
     int32_t BeginFrame(int32_t realTime, int32_t realDelta,
                        int32_t currentGameTime, float scale,
-                       bool frozen, bool forceAllTimeScaled);
+                       bool frozen, bool forceAllTimeScaled, bool playerRealtime = false);
     void SyncGameTime(int32_t gameTime) { _gameTime = gameTime; }
 
     bool IsActive() const { return _active; }
     bool IsFrozen() const { return _frozen; }
+    bool PlayerRealtime() const { return _playerRealtime && !_frozen; }
     bool ForceAllTimeScaled() const { return _forceAllTimeScaled; }
 
     int32_t RealTime() const { return _realTime; }
@@ -35,6 +36,7 @@ private:
     bool _active = false;
     bool _frozen = false;
     bool _forceAllTimeScaled = false;
+    bool _playerRealtime = false;
     int32_t _realTime = 0;
     int32_t _realDelta = 0;
     int32_t _gameTime = 0;

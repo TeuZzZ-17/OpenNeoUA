@@ -34,6 +34,8 @@ class DataHandler
 {
 public:
     virtual ~DataHandler() {};
+    // Text scopes opt out of tokenization, comment removal and include handling.
+    virtual bool RawLines() const { return false; }
 
     /*** Data handling method
          p1 - often key

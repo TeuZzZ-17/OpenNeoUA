@@ -393,6 +393,18 @@ protected:
     TMapGate *_g;
 };
 
+class LevelBriefingTextParser : public ScriptParser::DataHandler
+{
+public:
+    explicit LevelBriefingTextParser(TLevelDescription *m) : _m(*m) {}
+    bool RawLines() const override { return true; }
+    bool IsScope(ScriptParser::Parser &, const std::string &, const std::string &) override;
+    int Handle(ScriptParser::Parser &, const std::string &, const std::string &) override;
+private:
+    TLevelDescription &_m;
+    bool _first = true;
+};
+
 class LevelMbMapParser : public ScriptParser::DataHandler
 {
 public:

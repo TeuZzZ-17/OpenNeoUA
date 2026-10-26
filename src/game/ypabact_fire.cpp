@@ -776,7 +776,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
         if ( missileArg.tgType != BACT_TGT_TYPE_UNIT )
         {
-            int life_time_nt = wproto.life_time_nt;
+            int life_time_nt = wproto.RollLifeTimeNt();
 
             if ( life_time_nt )
                 wobj->SetLifeTime(life_time_nt);

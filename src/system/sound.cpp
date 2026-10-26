@@ -962,7 +962,8 @@ void SFXEngine::sb_0x424c74__sub2__sub1(TSoundSource *smpl)
     // Global gameplay time dilation changes normal playback rates. Selected
     // one-shot UI/voice sources may opt out without changing the rest of the
     // audio mix or the global gameplay time domain.
-    const float sourceTimeScale = (smpl->IgnoreTimeScale && !forceAllTimeScaled) ? 1.0f : timeScale;
+    const bool debugRealtime=smpl->PCarrier&&smpl->PCarrier->DebugRealtime&&timeScale>0.0f&&timeScale<1.0f;
+    const float sourceTimeScale = debugRealtime||(smpl->IgnoreTimeScale && !forceAllTimeScaled) ? 1.0f : timeScale;
     v14 = (int)floor((double)v14 * (double)sourceTimeScale + 0.5);
 
     if ( v14 < 2000 )

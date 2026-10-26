@@ -1345,7 +1345,11 @@ struct TWeapProto
     // legacy consumers; projectiles resolve the range when they are created.
     int life_time_min = 0;
     int life_time_max = 0;
+    // OpenNeoUA: life_time_nt (lifetime of projectiles fired without a unit target)
+    // uses the same fixed value or min_max range as life_time. 0 = no override.
     int life_time_nt = 0;
+    int life_time_nt_min = 0;
+    int life_time_nt_max = 0;
     int drive_time = 0;
     int delay_time = 0;
     // OpenNeoUA custom: optional Debuff applied immediately when a delayed
@@ -1380,7 +1384,7 @@ struct TWeapProto
     // OpenNeoUA: generic multi-target count for compatible homing weapon models.
     // Consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
     int multi_target = 0;
-    int homing_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
+    int guide_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
     // OpenNeoUA custom: shared continuous beam parameters for model = laser.
     // vertical_laser_enable selects the downward-fire mode. "energy" is static base damage per tick; the class
     // multipliers below (energy_heli/tank/flyer/robo) are applied like normal weapons.
@@ -1516,6 +1520,7 @@ struct TWeapProto
     std::vector<TChainFXConfig> chain_fx;
 
     int RollLifeTime() const;
+    int RollLifeTimeNt() const;
     ~TWeapProto();
 };
 

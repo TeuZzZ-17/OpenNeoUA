@@ -20,6 +20,7 @@ public:
     bool SelectSector(NC_STACK_ypaworld &resources, int sector);
     bool Available() const { return !parts_.empty() || laser_; }
     float Radius() const { return radius_; }
+    vec3d FitPosition(const vec3d &position,const vec2d &halfSize,int yaw,int tilt) const;
     size_t PartCount() const { return parts_.size(); }
     void Render(baseRender_msg &arg, const vec3d &position, int yaw, int tilt,
                 bool authoredTransforms = true, bool center = true, bool faceCamera = false);
@@ -56,6 +57,8 @@ private:
     bool laser_ = false;
     float radius_ = 25.0f;
     vec3d center_;
+    std::vector<vec3d> framePoints_;
+    bool fitToView_ = false;
     vec3d visualRotation_;
     struct Effects;
     std::unique_ptr<Effects> effects_;
