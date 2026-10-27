@@ -4,9 +4,6 @@
 
 /*
 
-# Questa lista limita i nuovi file aggiunti: i file gia tracciati vanno controllati a parte.
-!/.gitignore
-
 # ============================================================
 # WIRELESS
 # ============================================================
@@ -28,8 +25,6 @@
 !/Sounds/Speech/Voicepacks/
 /Sounds/Speech/Voicepacks/*
 !/Sounds/Speech/Voicepacks/UserCreated/
-# Suono originale del gioco: resta sul disco per il gioco, ma non va pubblicato.
-/Sounds/New/Gem.wav
 
 # ============================================================
 # SCRIPTS
@@ -79,8 +74,6 @@
 !/src/
 !/svg/
 !/Res/
-/Res/*.cur
-/Res/Retro/
 !/Interface/
 !/Filters/
 !/Database/
