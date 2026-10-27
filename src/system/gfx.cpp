@@ -27,8 +27,14 @@
 #include "glfuncs.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstring>
 #include <utility>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace GFX
 {
@@ -3548,9 +3554,8 @@ uint32_t GFXEngine::CursPix(uint8_t *data, int ofs, int bpp)
     return 0;
 }
 
-// Loads the 11 mouse cursors: the alpha set from Res/Retro when retro is on, the
-// release set from Res otherwise. A cursor missing from Res/Retro falls back to
-// the release one. The set in use is replaced without losing the current cursor.
+// Loads the 11 mouse cursors. Embedded assets take priority over loose files;
+// missing retro cursors fall back to the release set.
 void GFXEngine::LoadCursorSet(bool retro)
 {
     static const char *const names[11] =
@@ -3566,6 +3571,8 @@ void GFXEngine::LoadCursorSet(bool retro)
         cursors[i] = LoadCursor(names[i], retro);
         if ( !cursors[i] && retro )
             cursors[i] = LoadCursor(names[i], false);
+        if ( !cursors[i] )
+            cursors[i] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
     }
 
     if ( CurrentCursorID > 0 )
@@ -3576,9 +3583,66 @@ void GFXEngine::LoadCursorSet(bool retro)
             SDL_FreeCursor(old);
 }
 
+#ifdef _WIN32
+class CursorResourceHandle final : public FSMgr::iFileHandle
+{
+public:
+    CursorResourceHandle(const void *data, size_t size)
+        : _data(static_cast<const uint8_t *>(data)), _size(size) {}
+
+    size_t read(void *buf, size_t num) override
+    {
+        const size_t count = std::min(num, _size - _position);
+        std::memcpy(buf, _data + _position, count);
+        _position += count;
+        if (count != num)
+            _ReadERR = true;
+        return count;
+    }
+    size_t write(const void *, size_t) override { return 0; }
+    size_t tell() const override { return _position; }
+    int seek(long offset, int origin) override
+    {
+        const int64_t base = origin == SEEK_SET ? 0 : origin == SEEK_CUR ? static_cast<int64_t>(_position) : static_cast<int64_t>(_size);
+        const int64_t next = base + offset;
+        if (next < 0 || static_cast<uint64_t>(next) > _size)
+            return -1;
+        _position = static_cast<size_t>(next);
+        return 0;
+    }
+    void close() override { _data = nullptr; _size = _position = 0; }
+    bool OK() const override { return _data != nullptr; }
+    bool eof() const override { return _position >= _size; }
+
+private:
+    const uint8_t *_data;
+    size_t _size;
+    size_t _position = 0;
+};
+#endif
+
 SDL_Cursor *GFXEngine::LoadCursor(const std::string &name, bool retro)
 {
-    FSMgr::FileHandle *fil = uaOpenFileAlloc( fmt::sprintf(retro ? "res/retro/%s.cur" : "res/%s.cur", name) , "rb");
+    FSMgr::iFileHandle *fil = nullptr;
+#ifdef _WIN32
+    std::string resourceName = fmt::sprintf("CURSOR_%s_%s", retro ? "RETRO" : "CLASSIC", name);
+    std::transform(resourceName.begin(), resourceName.end(), resourceName.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    HMODULE module = GetModuleHandle(nullptr);
+    HRSRC resource = FindResourceA(module, resourceName.c_str(), RT_RCDATA);
+    if (resource)
+    {
+        HGLOBAL loaded = LoadResource(module, resource);
+        if (loaded)
+        {
+            const void *data = LockResource(loaded);
+            if (data)
+                fil = new CursorResourceHandle(data, SizeofResource(module, resource));
+        }
+    }
+#endif
+    if (!fil)
+        fil = uaOpenFileAlloc(fmt::sprintf(retro ? "res/retro/%s.cur" : "res/%s.cur", name), "rb");
 
     UA_PALETTE pal;
 

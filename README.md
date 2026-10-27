@@ -110,6 +110,8 @@ OpenNeoUA is currently distributed as source code. On Windows, the executable mu
     cmake --build build -j12
     ```
 
+    To embed both cursor sets in a Windows build, supply your own cursor files in a local folder with `Classic/` and `Retro/` subfolders (11 matching `.cur` files in each), then configure with `-DOPENNEOUA_CURSOR_ASSET_DIR=/path/to/your/cursors`. The repository does not contain these cursor files. Without embedded cursors, the engine can use loose files from your local game data and then a system cursor if neither set is available.
+
     `-j12` uses up to 12 parallel build jobs; adjust it for your CPU. These commands run inside `Data`, so a successful build produces:
 
     ```text
