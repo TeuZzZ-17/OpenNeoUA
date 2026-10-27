@@ -1,0 +1,31 @@
+begin_collision_shape
+version = 1
+source = Vp_MFLSH
+source_hash = 04932c2a5f8ea0059241203587af0a5c79e9066dd614918ab7ff0a7ec83fdb8b
+scale = 0.5_1_1
+rotation = 0_0_0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = 0_-3.9992173202335835_-5
+vertex = -1.4996085790917277_0_-5
+vertex = 0_2.9992171581834555_-5
+vertex = 1.9996086601167917_0_-3.9982374608516693
+vertex = 0_-3.9992173202335835_114
+vertex = -1.9996086601167917_0_112.99823746085167
+vertex = 0_3.9992173202335835_114
+vertex = 0.99960849806666374_0_112.99823746085167
+face = 0_1_2
+face = 0_2_3
+face = 0_3_4
+face = 0_4_5
+face = 0_5_1
+face = 1_5_2
+face = 2_5_6
+face = 2_6_3
+face = 3_6_7
+face = 3_7_4
+face = 4_6_5
+face = 4_7_6
+end
+end
