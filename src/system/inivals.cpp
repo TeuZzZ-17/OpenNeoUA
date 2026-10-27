@@ -276,6 +276,9 @@ Common::Ini::Key IniConf::GamePlayerMaxAltitudeAboveGround("game.player_max_alti
 // OpenNeoUA custom: optional absolute AI aerial ceiling above the current sector
 // terrain. Missing, zero, negative or invalid preserves vanilla AI behavior.
 Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_above_ground", Common::Ini::KT_WORD, std::string("0.0"));
+// Optional AI flight controls. Missing or invalid values keep vanilla behavior.
+Common::Ini::Key IniConf::GameAiAirVerticalForce("game.ai_air_vertical_force", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameAiBomberExtraAltitude("game.ai_bomber_extra_altitude", Common::Ini::KT_WORD, std::string("0"));
 // OpenNeoUA custom: the player Sprint exists only when all three Sprint values are
 // explicitly present in OpenNeoUA.ini. Missing any one of them disables Sprint.
 Common::Ini::Key IniConf::GameSprintForceUp("game.sprint_force_up", Common::Ini::KT_WORD, std::string("0"));
@@ -288,7 +291,7 @@ Common::Ini::Key IniConf::GameSprintEnergyCost("game.sprint_energy_cost", Common
 // Zero applies the accumulated drain as soon as a whole energy unit is ready.
 Common::Ini::Key IniConf::GameSprintEnergyDrainIntervalMs("game.sprint_energy_drain_interval_ms", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameTimeLine("game.timeline", Common::Ini::KT_DIGIT, (int32_t)600000);
-Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.robo_player_ai_behavior", Common::Ini::KT_BOOL, false);
+Common::Ini::Key IniConf::GameRoboPlayerAIBehavior("game.ai_robo_player_behavior", Common::Ini::KT_BOOL, false);
 // OpenNeoUA custom: independent multipliers for the three Host Station resources
 // consumed by physical player relocation. These defaults preserve the current
 // hardcoded balance when the Nucleus keys are absent.
@@ -388,10 +391,10 @@ Common::Ini::Key IniConf::GamePlasmaSndPickupPitch("game.plasma_snd_pickup_pitch
 Common::Ini::Key IniConf::GameWorldUiMaxDistance("game.world_ui_max_distance", Common::Ini::KT_WORD, std::string("5700"));
 // OpenNeoUA custom: optional global distance for automatic AI target acquisition.
 // Zero or an invalid value preserves the vanilla acquisition behavior.
-Common::Ini::Key IniConf::GameAiTargetRange("game.ai_target_range", Common::Ini::KT_WORD, std::string("0"));
+Common::Ini::Key IniConf::GameAiTargetAcquisitionRange("game.ai_target_acquisition_range", Common::Ini::KT_WORD, std::string("0"));
 // OpenNeoUA custom: global MGUN hitscan and AI engagement range. 1000 is vanilla.
 Common::Ini::Key IniConf::GameMgunRange("game.mgun_range", Common::Ini::KT_WORD, std::string("1000"));
-Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.mgun_ai_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
+Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.ai_mgun_fire_alignment", Common::Ini::KT_WORD, std::string("0.85"));
 // OpenNeoUA: global temporal envelopes are limited to SHK and PAL.
 // Event-specific fade keys are intentionally unsupported; missing, malformed,
 // negative or zero means no additional fade. SND keeps its legacy behavior.
@@ -677,6 +680,8 @@ void IniConf::Init()
         , &GamePlayerTankBrakeTime
         , &GamePlayerMaxAltitudeAboveGround
         , &GameAiMaxAltitudeAboveGround
+        , &GameAiAirVerticalForce
+        , &GameAiBomberExtraAltitude
         , &GameSprintForceUp
         , &GameSprintPitchUp
         , &GameSprintRampTime
@@ -733,7 +738,7 @@ void IniConf::Init()
         , &GamePlasmaSndPickupVolume
         , &GamePlasmaSndPickupPitch
         , &GameWorldUiMaxDistance
-        , &GameAiTargetRange
+        , &GameAiTargetAcquisitionRange
         , &GameMgunRange
         , &GameMgunAiFireAlignment
         , &GameGlobalShkFade

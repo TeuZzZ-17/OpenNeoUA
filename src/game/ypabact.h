@@ -449,6 +449,9 @@ struct bact_arg101
     // Grenade reachability falls back to the unit fire point when unavailable.
     vec3d launch_pos;
     bool has_launch_pos = false;
+    // Optional unit target of a unit query (unkn 2). Aerial forward volumes
+    // tilt down only toward ground targets; nullptr keeps the unit-target rules.
+    NC_STACK_ypabact *target = nullptr;
     // Output of the AI fire volume test: the enemy inside the volume that made the
     // weapon fire when it is not the current target (nullptr otherwise).
     NC_STACK_ypabact *fire_trigger_area_target = nullptr;
@@ -467,6 +470,7 @@ struct TFireTriggerArea
     float maxX = 0.0f;
     float halfY = 0.0f;
     float depth = 0.0f;
+    float minDepth = 0.0f;
     double coneX = 0.0; // tangents of the half angles
     double coneY = 0.0;
     bool IsCone() const
@@ -566,10 +570,13 @@ public:
     bool ApplyKamikazeRammingGuidance();
     bool GetKamikazeDebugSphere(float *outRadius);
     bool GetAIFireTriggerArea(const World::TWeapProto &wproto, TFireTriggerArea *out,
-                             const vec3d *aimPos = nullptr, bool sectorTarget = false); // false when no compatible AI fire volume is configured
+                             const vec3d *aimPos = nullptr, bool groundTarget = false); // false when no compatible AI fire volume is configured
     bool CheckAIFireTriggerArea(const World::TWeapProto &wproto, bact_arg101 *arg, size_t *outFire); // OpenNeoUA custom: false = no fire trigger area, legacy fire test applies
     bool ApplyAiMaxAltitudeAboveGround();
-    bool HasLocalPlayerForceVerticalPursuitTarget() const;
+    bool HasVerticalPursuitTarget();
+    bool GetBomberAltitudeAim(vec3d *outPos = nullptr); // OpenNeoUA custom: point an AI bomber aircraft flies above (game.ai_bomber_extra_altitude)
+    void ApplyBomberAltitude();
+    float GetAiGroundClearance(); // OpenNeoUA custom: distance kept above the surface below; _height unless a bomber is closing on its target
     // OpenNeoUA custom: continuous laser beam ("model = laser"). UpdateLaser drives the
     // static tick damage, beam state and serialized snd_normal playback each frame;
     // the firing paths only register a per-frame request via RequestLaserFire().

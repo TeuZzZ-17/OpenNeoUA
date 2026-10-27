@@ -56,6 +56,24 @@ double ConeDistanceSquared(double x, double y, double z, const TFireTriggerArea 
             }
         }
     }
+    else if ( pz < box.minDepth )
+    {
+        const double ax = a * box.minDepth, by = b * box.minDepth;
+        pz = box.minDepth;
+        if ( ax > 0.0 && by > 0.0 && px*px/(ax*ax) + py*py/(by*by) > 1.0 )
+        {
+            double lo = 0.0, hi = std::hypot(ax*px, by*py);
+            const double x0 = px, y0 = py;
+            for (int i = 0; i < 40; ++i)
+            {
+                const double t = (lo + hi) * 0.5;
+                px = x0 / (1.0 + t/(ax*ax));
+                py = y0 / (1.0 + t/(by*by));
+                if ( px*px/(ax*ax) + py*py/(by*by) > 1.0 ) lo = t;
+                else hi = t;
+            }
+        }
+    }
     return (x-px)*(x-px) + (y-py)*(y-py) + (z-pz)*(z-pz);
 }
 
@@ -85,7 +103,7 @@ bool CanAcquire(NC_STACK_ypabact *shooter, const World::TWeapProto &wproto,
 }
 
 bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFireTriggerArea *out,
-                                         const vec3d *aimPos, bool sectorTarget)
+                                         const vec3d *aimPos, bool groundTarget)
 {
     if ( !out || !wproto.HasAIFireTriggerArea() )
         return false;
@@ -111,27 +129,36 @@ bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFi
         out->right = _rotation.AxisX();
         out->up = _rotation.AxisY();
         out->forward = _rotation.AxisZ();
-        const bool aerial = _bact_type == BACT_TYPES_BACT || _bact_type == BACT_TYPES_FLYER;
+        const bool aerial = _bact_type == BACT_TYPES_BACT || _bact_type == BACT_TYPES_FLYER ||
+                            _bact_type == BACT_TYPES_UFO;
         if ( (IsGroundUnit() || aerial) && !getBACT_inputting() )
         {
             // Debug resolves the same target type and position as the fire query.
             if ( !aimPos )
             {
-                if ( _secndTtype == BACT_TGT_TYPE_UNIT && _secndT.pbact ) aimPos = &_secndT.pbact->_position;
-                else if ( _secndTtype == BACT_TGT_TYPE_CELL ) { aimPos = &_sencdTpos; sectorTarget = true; }
-                else if ( _primTtype == BACT_TGT_TYPE_UNIT && _primT.pbact ) aimPos = &_primT.pbact->_position;
-                else if ( _primTtype == BACT_TGT_TYPE_CELL ) { aimPos = &_primTpos; sectorTarget = true; }
+                NC_STACK_ypabact *unit = nullptr;
+                if ( _secndTtype == BACT_TGT_TYPE_UNIT && _secndT.pbact ) unit = _secndT.pbact;
+                else if ( _secndTtype == BACT_TGT_TYPE_CELL ) { aimPos = &_sencdTpos; groundTarget = true; }
+                else if ( _primTtype == BACT_TGT_TYPE_UNIT && _primT.pbact ) unit = _primT.pbact;
+                else if ( _primTtype == BACT_TGT_TYPE_CELL ) { aimPos = &_primTpos; groundTarget = true; }
+                if ( unit )
+                {
+                    aimPos = &unit->_position;
+                    groundTarget = ypabact_IsGroundFireTarget(unit);
+                }
             }
             if ( aimPos )
             {
-                // Vanilla aerial sector fire already aims the shot below the
-                // nose. Retain that allowance inside forward volumes, using the
-                // same alignment test without its legacy distance cap.
-                vec3d sectorDirection = aimPos->X0Z() - _position.X0Z() + vec3d::OY(_height);
-                const bool aerialSectorAim = aerial && sectorTarget && sectorDirection.normalise() > 0.0f &&
-                    ypabact_IsSectorFireAimAligned(*this, wproto, sectorDirection);
+                // ai_fire_trigger_forward_max_inclination of the weapon limits how
+                // far its forward volume tilts toward the target. Absent, aircraft
+                // keep the volume on the hull axes and ground units follow only
+                // their native scope limits.
+                // With it, a ground target (sector or ground unit) ahead of an
+                // aircraft tilts the volume toward it up to that limit.
+                const double maxTilt = wproto.GetAIFireTriggerMaxInclination() * C_PI / 180.0;
+                const bool aerialGroundAim = aerial && groundTarget && maxTilt > 0.0;
                 const vec3d local = _rotation.Transform(*aimPos - out->top);
-                if ( local.z >= 0.0f && (IsGroundUnit() || aerialSectorAim) )
+                if ( local.z >= 0.0f && (IsGroundUnit() || aerialGroundAim) )
                 {
                     double pitch = atan2(-local.y, local.z);
                     if ( IsGroundUnit() )
@@ -140,6 +167,8 @@ bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFi
                         GetPrimaryWeaponElevationLimits(&minPitch, &maxPitch);
                         pitch = std::max(minPitch, std::min(pitch, maxPitch));
                     }
+                    if ( maxTilt > 0.0 )
+                        pitch = std::max(-maxTilt, std::min(pitch, maxTilt));
                     out->up = _rotation.AxisY()*cos(pitch) + _rotation.AxisZ()*sin(pitch);
                     out->forward = _rotation.AxisZ()*cos(pitch) - _rotation.AxisY()*sin(pitch);
                 }
@@ -170,7 +199,27 @@ bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFi
         out->coneY = tan((double)size.y * C_PI / 360.0);
         out->depth = size.z;
     }
+    if ( wproto.ai_fire_trigger_min_depth < out->depth )
+        out->minDepth = wproto.ai_fire_trigger_min_depth;
     return true;
+}
+
+// Tanks, cars and turrets placed in the world. Host Station guns fly with
+// their station, so they keep the air-target rules.
+bool ypabact_IsGroundFireTarget(NC_STACK_ypabact *unit)
+{
+    if ( !unit )
+        return false;
+    if ( unit->IsGroundUnit() )
+        return true;
+    NC_STACK_ypagun *gun = unit->_bact_type == BACT_TYPES_GUN ? dynamic_cast<NC_STACK_ypagun *>(unit) : nullptr;
+    return gun && !gun->IsRoboGun();
+}
+
+// Sector queries (unkn 1) and unit queries aimed at a ground unit.
+bool ypabact_IsGroundFireQuery(const bact_arg101 &arg)
+{
+    return arg.unkn != 2 || ypabact_IsGroundFireTarget(arg.target);
 }
 
 // All volumes intersect the target broad sphere, including their sides and
@@ -181,7 +230,7 @@ bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &p
     const double r = std::max(radius, 0.0f);
     const double z = d.dot(box.forward);
     // The centre must be on the firing side of the muzzle.
-    if ( z < 0.0 || z > box.depth + r )
+    if ( z < 0.0 || z + r < box.minDepth || z > box.depth + r )
         return false;
     const double x = d.dot(box.right);
     const double y = d.dot(box.up);
@@ -193,7 +242,7 @@ bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &p
         return ConeDistanceSquared(dx, y, z, box) <= r*r + 1e-6;
     }
     const double dy = std::max(fabs(y) - box.halfY, 0.0);
-    const double dz = std::max(z - box.depth, 0.0);
+    const double dz = std::max(std::max(z - box.depth, (double)box.minDepth - z), 0.0);
     return dx*dx + dy*dy + dz*dz <= r*r + 1e-6;
 }
 
@@ -265,7 +314,7 @@ NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, co
 bool NC_STACK_ypabact::CheckAIFireTriggerArea(const World::TWeapProto &wproto, bact_arg101 *arg, size_t *outFire)
 {
     TFireTriggerArea box;
-    if ( !GetAIFireTriggerArea(wproto, &box, &arg->pos, arg->unkn != 2) )
+    if ( !GetAIFireTriggerArea(wproto, &box, &arg->pos, ypabact_IsGroundFireQuery(*arg)) )
         return false;
 
     arg->fire_trigger_area_target = nullptr;

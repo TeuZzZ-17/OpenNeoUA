@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "game/yw.h"
 #include "game/ypaflyer.h"
+#include "game/ypabact_internal.h"
 #include "system/inpt.h"
 #include "common/log.h"
 #include <math.h>
@@ -271,14 +272,23 @@ void NC_STACK_ypaflyer::ypaflyer_func70__sub0(float angl)
 
     _thraction = _force;
 
+    // Level flight (lift = weight) is the base. Vanilla climbs with 2.5x the
+    // weight and descends with 0.7x. game.ai_air_vertical_force multiplies how
+    // far the lift moves away from level flight, in both directions: the climb
+    // boost (1.5 above the weight) and the descent cut (0.3 below it). 1 or
+    // absent = vanilla; above 1 climbs harder and sinks faster.
+    const float verticalForce = ypabact_GetAiAirConfig().verticalForce;
+    const float climbLift = 1.0f + 1.5f * verticalForce;
+    const float descentLift = std::max(0.0f, 1.0f - 0.3f * verticalForce);
+
     float v14;
 
     if ( fabs(_target_dir.y) >= 0.1 )
     {
         if ( _target_dir.y > -0.1 )
-            v14 = _mass * 0.7;
+            v14 = _mass * descentLift;
         else
-            v14 = _mass * 2.5;
+            v14 = _mass * climbLift;
     }
     else
         v14 = _mass;
@@ -286,7 +296,7 @@ void NC_STACK_ypaflyer::ypaflyer_func70__sub0(float angl)
     _flyerBoost = v14 * 9.80665;
 
     if ( _status_flg & BACT_STFLAG_UPWRD )
-        _flyerBoost = _mass * 2.5 * 9.80665;
+        _flyerBoost = _mass * climbLift * 9.80665;
 }
 
 
@@ -301,6 +311,9 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
 
     if ( v88 > 0.0 )
         _target_dir = _target_vec / v88;
+
+    if ( !kamikazeRamming )
+        ApplyBomberAltitude();
 
     if ( IsActiveDebuffStunning() )
     {
@@ -500,7 +513,8 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
         if ( arg136_3.vect.x > 200.0 )
             arg136_3.vect.x = 200.0;
 
-        arg136_3.vect.y = _height;
+        const float groundClearance = GetAiGroundClearance();
+        arg136_3.vect.y = groundClearance;
 
         arg136_3.vect.z = (_fly_dir.z * 200.0 * _fly_dir_length) / (v22 / v100);
 
@@ -520,7 +534,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
         }
         else
         {
-            if ( (!kamikazeRamming && !HasLocalPlayerForceVerticalPursuitTarget()) ||
+            if ( (!kamikazeRamming && !HasVerticalPursuitTarget()) ||
                  _target_dir.y >= -0.01 )
             {
                 if ( _target_dir.y < 0.15 )
@@ -531,7 +545,7 @@ void NC_STACK_ypaflyer::AI_layer3(update_msg *arg)
         if ( _status_flg & (BACT_STFLAG_DODGE_LEFT | BACT_STFLAG_DODGE_RIGHT) )
             _target_dir.y = -0.2;
 
-        if ( arg136_3.isect && arg136_3.tVal * _height < _radius && _fly_dir.y > 0.0 )
+        if ( arg136_3.isect && arg136_3.tVal * groundClearance < _radius && _fly_dir.y > 0.0 )
         {
             arg88.pos1 = arg136_3.skel->polygons[arg136_3.polyID].Normal();
 

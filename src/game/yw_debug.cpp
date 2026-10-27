@@ -1233,36 +1233,21 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
             }
         }
 
-        // Orange = AI fire volume of each compatible weapon slot.
-        // Keep the below palette; the weapon currently selected by the AI is bright.
+        // Orange = AI fire volume of the weapon slot currently selected by the AI.
+        // The other slots stay hidden, so only one volume is drawn per unit.
         if ( !isCurrentControlled && unit->_bact_type != BACT_TYPES_MISSLE )
         {
-            const int currentWeapon = unit->GetCurrentWeaponId();
-            const int currentSourceSlot = ypabact_GetCurrentPrimaryWeaponSourceSlot(unit);
-            const int slots[4] = { unit->_weapon, unit->_extra_weapons[0],
-                                   unit->_extra_weapons[1], unit->_extra_weapons[2] };
-            for (int s = 0; s < 4; s++)
+            const int weaponId = ypabact_GetWeaponIdForSourceSlot(unit, ypabact_GetCurrentPrimaryWeaponSourceSlot(unit));
+            TFireTriggerArea box;
+            if ( weaponId >= 0 && (size_t)weaponId < _weaponProtos.size() &&
+                 unit->GetAIFireTriggerArea(_weaponProtos[weaponId], &box) )
             {
-                const int weaponId = slots[s];
-                if ( weaponId < 0 || (s > 0 && weaponId == 0) ||
-                     (size_t)weaponId >= _weaponProtos.size() )
-                    continue;
-
-                const World::TWeapProto &wproto = _weaponProtos[weaponId];
-                TFireTriggerArea box;
-                if ( !unit->GetAIFireTriggerArea(wproto, &box) )
-                    continue;
-
-                const bool active = weaponId == currentWeapon && s == currentSourceSlot;
-                const uint8_t r = active ? 255 : 160;
-                const uint8_t g = active ? 150 : 100;
-                const uint8_t b = active ? 30 : 40;
                 const auto line = [&](const vec3d &a, const vec3d &c) {
                     Common::Line clipped;
                     if ( yw_ProjectDebugSegment(view->CalcSclRot.Transform(a-view->CalcPos),
                                                 view->CalcSclRot.Transform(c-view->CalcPos),
                                                 Proj, nearZ, screenW, screenH, &clipped) )
-                        GFX::GFXEngine::DrawLine(scr, clipped, r, g, b);
+                        GFX::GFXEngine::DrawLine(scr, clipped, 255, 150, 30);
                 };
 
                 if ( !box.IsCone() )
@@ -1271,7 +1256,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
                     for (int i = 0; i < 8; ++i)
                         corners[i] = box.top + box.right*((i&1) ? box.maxX : box.minX) +
                                      box.up*((i&2) ? box.halfY : -box.halfY) +
-                                     box.forward*((i&4) ? box.depth : 0.0f);
+                                     box.forward*((i&4) ? box.depth : box.minDepth);
                     for (int i = 0; i < 8; ++i)
                         for (int bit = 1; bit <= 4; bit *= 2)
                             if ( !(i&bit) ) line(corners[i], corners[i|bit]);
@@ -1280,22 +1265,23 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
                 {
                     // The cone is swept over the same fire_x interval as the
                     // runtime test, including racks and mirrored salvo origins.
-                    const auto rim = [&](double angle) {
+                    const auto rim = [&](double angle, float depth) {
                         const double c = cos(angle), sn = sin(angle);
-                        const float x = (c < 0.0 ? box.minX : box.maxX) + (float)(c*box.coneX*box.depth);
-                        return box.top + box.right*x + box.up*(float)(sn*box.coneY*box.depth) + box.forward*box.depth;
+                        const float x = (c < 0.0 ? box.minX : box.maxX) + (float)(c*box.coneX*depth);
+                        return box.top + box.right*x + box.up*(float)(sn*box.coneY*depth) + box.forward*depth;
                     };
                     for (int i = 0; i < 32; ++i)
                     {
                         const double angle = 2.0*C_PI*i/32;
-                        line(rim(angle), rim(2.0*C_PI*(i+1)/32));
+                        const double next = 2.0*C_PI*(i+1)/32;
+                        line(rim(angle, box.depth), rim(next, box.depth));
+                        if ( box.minDepth > 0.0f )
+                            line(rim(angle, box.minDepth), rim(next, box.minDepth));
                         if ( i%8 == 0 )
-                        {
-                            const float x = cos(angle) < 0.0 ? box.minX : box.maxX;
-                            line(box.top + box.right*x, rim(angle));
-                        }
+                            line(rim(angle, box.minDepth), rim(angle, box.depth));
                     }
-                    line(box.top + box.right*box.minX, box.top + box.right*box.maxX);
+                    line(box.top + box.right*box.minX + box.forward*box.minDepth,
+                         box.top + box.right*box.maxX + box.forward*box.minDepth);
                 }
             }
         }

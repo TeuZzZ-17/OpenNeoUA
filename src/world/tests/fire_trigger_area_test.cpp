@@ -921,18 +921,127 @@ void TestVanillaSectorMinigun() {
     }
 }
 
+void TestMinimumDepth() {
+    WorldProbe w;
+    Check(ParseWeapons(w, {
+        "new_weapon 80", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_min_depth = 150", "end",
+        "new_weapon 81", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 40_40_1000", "ai_fire_trigger_min_depth = 150", "end",
+        "new_weapon 82", "model = bomb", "ai_fire_trigger_box_below_xyz = 80_1000_400", "ai_fire_trigger_min_depth = 150", "end",
+        "new_weapon 83", "model = bomb", "ai_fire_trigger_cone_below_xyz = 40_40_1000", "ai_fire_trigger_min_depth = 150", "end",
+        "new_weapon 84", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_min_depth = -1", "end",
+        "new_weapon 85", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_min_depth = 1200", "end"}),
+        "minimum depth fixtures parse");
+    Unit shooter; shooter.Bind(w, 1, 1, vec3d(2400, -300, -2400));
+    for (int id : {80, 81, 82, 83}) {
+        TFireTriggerArea area;
+        Check(shooter.GetAIFireTriggerArea(w._weaponProtos[id], &area) && Near(area.minDepth, 150),
+              "minimum depth applies to all four shapes");
+        Check(!ypabact_FireTriggerAreaContains(area, area.top + area.forward * 100, 0),
+              "point inside the near dead zone cannot trigger fire");
+        Check(ypabact_FireTriggerAreaContains(area, area.top + area.forward * 150, 0),
+              "near boundary starts the active volume");
+        Check(ypabact_FireTriggerAreaContains(area, area.top + area.forward * 140, 10),
+              "a unit touching the near boundary can trigger fire");
+    }
+    TFireTriggerArea area;
+    Check(shooter.GetAIFireTriggerArea(w._weaponProtos[84], &area) && Near(area.minDepth, 0),
+          "invalid minimum leaves the vanilla near boundary");
+    Check(shooter.GetAIFireTriggerArea(w._weaponProtos[85], &area) && Near(area.minDepth, 0),
+          "minimum beyond the far end cannot disable the volume");
+}
+
+// One max inclination key applies to either forward shape, in degrees from 0 to below 90.
+void TestMaxInclinationParse() {
+    WorldProbe w;
+    Check(ParseWeapons(w, {
+        "new_weapon 90", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "ai_fire_trigger_forward_max_inclination = 25", "end",
+        "new_weapon 91", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000",
+        "ai_fire_trigger_forward_max_inclination = 12.5", "end",
+        "new_weapon 92", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000",
+        "ai_fire_trigger_forward_max_inclination = 25", "end",
+        "new_weapon 93", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+        "new_weapon 94", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "ai_fire_trigger_forward_max_inclination = 0", "end",
+        "new_weapon 95", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "ai_fire_trigger_forward_max_inclination = 90", "end",
+        "new_weapon 96", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "ai_fire_trigger_forward_max_inclination = -5", "end",
+        "new_weapon 97", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "ai_fire_trigger_forward_max_inclination = steep", "end",
+        "new_weapon 98", "model = bomb", "ai_fire_trigger_cone_below_xyz = 30_30_1500",
+        "ai_fire_trigger_forward_max_inclination = 25", "end"}),
+        "max inclination fixtures parse");
+    const auto &wp = w._weaponProtos;
+    Check(Near(wp[90].GetAIFireTriggerMaxInclination(), 25.0f), "box forward volume reads its max inclination");
+    Check(Near(wp[91].GetAIFireTriggerMaxInclination(), 12.5f), "cone forward volume reads its max inclination");
+    Check(Near(wp[92].GetAIFireTriggerMaxInclination(), 25.0f), "the shared key applies to a cone volume");
+    Check(Near(wp[93].GetAIFireTriggerMaxInclination(), 0.0f), "absent key: no tilt limit configured");
+    for (int id : {94, 95, 96, 97})
+        Check(Near(wp[id].GetAIFireTriggerMaxInclination(), 0.0f), "zero, 90 or more, negative or malformed value leaves the tilt off");
+    Check(wp[95].HasAIFireTriggerArea(), "an invalid max inclination keeps the volume itself");
+    Check(Near(wp[98].GetAIFireTriggerMaxInclination(), 0.0f), "below volumes never use a max inclination");
+}
+
+// Without a max_inclination on the weapon, aircraft volumes stay on the hull axes for every target.
+void TestAirTiltAbsent() {
+    WorldProbe world;
+    Check(ParseWeapons(world, {"new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+                               "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", "end"}),
+          "absent-tilt fixtures parse");
+    Unit aircraft;
+    aircraft.Bind(world, 1, 620, vec3d(4200, -250, -4200));
+    aircraft._height = 250;
+    aircraft._primTtype = BACT_TGT_TYPE_CELL; aircraft._secndTtype = BACT_TGT_TYPE_NONE;
+    aircraft._primTpos = aircraft._position + vec3d(0, 250, 700);
+    TankProbe groundFoe; groundFoe.Bind(world); groundFoe._position = aircraft._primTpos;
+    for (int type : {BACT_TYPES_BACT, BACT_TYPES_FLYER, BACT_TYPES_UFO}) {
+        aircraft._bact_type = type;
+        for (int weapon : {71, 72}) {
+            TFireTriggerArea area;
+            bact_arg101 fire{}; fire.weapon = weapon; fire.unkn = 1; fire.pos = aircraft._primTpos;
+            Check(aircraft.GetAIFireTriggerArea(world._weaponProtos[weapon], &area, &fire.pos, true) &&
+                  Near(area.forward, aircraft._rotation.AxisZ()),
+                  "absent max inclination: aircraft volume stays on the hull axis");
+            Check(aircraft.CheckFireAI(&fire) == 0, "absent max inclination: a sector far below the nose is outside the volume");
+            fire.unkn = 2; fire.target = &groundFoe;
+            Check(aircraft.CheckFireAI(&fire) == 0, "absent max inclination: a ground unit far below the nose is outside the volume");
+        }
+    }
+}
+
+// The optional weapon max inclination also caps ground units, on top of their native scope limits.
+void TestTankTiltCap() {
+    WorldProbe w;
+    Check(ParseWeapons(w, {"new_weapon 10", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60_40_900", "end",
+                           "new_weapon 11", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60_40_900",
+                           "ai_fire_trigger_forward_max_inclination = 10", "end"}),
+          "tank tilt-cap fixture parses");
+    TankProbe tank; tank.Bind(w);
+    Unit enemy; enemy.Bind(w, 2, 500, tank._position + vec3d(0, -300, 500));
+    tank._primTtype = BACT_TGT_TYPE_UNIT; tank._primT.pbact = &enemy;
+    TFireTriggerArea box;
+    Check(tank.GetAIFireTriggerArea(w._weaponProtos[10], &box) && box.forward.y < -0.4f,
+          "absent max inclination: ground unit volume follows only its native limits");
+    Check(tank.GetAIFireTriggerArea(w._weaponProtos[11], &box) &&
+          box.forward.y >= -std::sin(10.0 * C_PI / 180.0) - 1e-3 && box.forward.y < -0.1f,
+          "max inclination caps the volume of a ground unit at 10 degrees");
+}
+
 void TestAirSectorElevation() {
     WorldProbe world;
+    const char *BoxTilt = "ai_fire_trigger_forward_max_inclination = 25";
+    const char *ConeTilt = "ai_fire_trigger_forward_max_inclination = 25";
     Check(ParseWeapons(world, {
         "new_weapon 70", "model = rocket", "end",
-        "new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
-        "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", "end",
-        "new_weapon 73", "model = missile", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
-        "new_weapon 74", "model = missile", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", "end",
-        "new_weapon 75", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_3000", "end",
-        "new_weapon 76", "model = laser", "life_time = 5000", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+        "new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
+        "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", ConeTilt, "end",
+        "new_weapon 73", "model = missile", "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
+        "new_weapon 74", "model = missile", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", ConeTilt, "end",
+        "new_weapon 75", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_3000", BoxTilt, "end",
+        "new_weapon 76", "model = laser", "life_time = 5000", "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
         "new_weapon 77", "model = arc_grenade", "start_speed = 100", "grenade_arc_gravity = 35",
-        "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
+        "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
         "new_weapon 78", "model = rocket", "ai_fire_trigger_box_forward_xyz = 0", "end",
         "new_weapon 79", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_bad_1000", "end"
     }), "air-sector elevation fixtures parse");
@@ -944,7 +1053,7 @@ void TestAirSectorElevation() {
     aircraft._primTpos = aircraft._position + vec3d(0, 250, 700);
     bact_arg101 fire{};
     fire.unkn = 1; fire.pos = aircraft._primTpos;
-    for (int type : {BACT_TYPES_BACT, BACT_TYPES_FLYER}) {
+    for (int type : {BACT_TYPES_BACT, BACT_TYPES_FLYER, BACT_TYPES_UFO}) {
         aircraft._bact_type = type;
         fire.weapon = 70;
         Check(aircraft.CheckFireAI(&fire) == 1,
@@ -965,7 +1074,7 @@ void TestAirSectorElevation() {
             const vec3d originalForward = aircraft._rotation.AxisZ();
             fire.unkn = 2;
             Check(aircraft.CheckFireAI(&fire) == 0,
-                  "unit targets do not inherit the sector-only aerial elevation allowance");
+                  "unit queries without a ground target do not inherit the aerial elevation allowance");
             fire.unkn = 1;
             aircraft._laser_active = true; aircraft._laser_weapon = 76;
             if (weapon == 76)
@@ -990,12 +1099,58 @@ void TestAirSectorElevation() {
         Check(aircraft.CheckFireAI(&fire) == 1, "aerial sector pitch allowance does not import the vanilla range cap into configured depth");
         fire.pos = aircraft._primTpos;
         aircraft._height = 700;
-        for (int weapon : {70, 71, 72}) {
+        fire.weapon = 70;
+        Check(aircraft.CheckFireAI(&fire) == 0,
+              "unconfigured aerial sector fire keeps the vanilla 24-degree allowance");
+        for (int weapon : {71, 72}) {
             fire.weapon = weapon;
-            Check(aircraft.CheckFireAI(&fire) == 0,
-                  "aerial sector elevation cannot track freely outside the vanilla angular allowance");
+            Check(aircraft.CheckFireAI(&fire) == 1,
+                  "aerial sector volumes tilt to any point ahead, independently of the vanilla allowance");
         }
         aircraft._height = 250;
+        fire.pos = aircraft._position + vec3d(0, 250, 450);
+        for (int weapon : {71, 72}) {
+            fire.weapon = weapon;
+            Check(aircraft.CheckFireAI(&fire) == 1,
+                  "aircraft fires at a sector point just beyond the vanilla 24-degree allowance");
+        }
+        fire.weapon = 70;
+        Check(aircraft.CheckFireAI(&fire) == 0, "the same point stays outside the unconfigured vanilla allowance");
+        fire.pos = aircraft._position + vec3d(0, 250, 60);
+        for (int weapon : {71, 72}) {
+            fire.weapon = weapon;
+            Check(aircraft.CheckFireAI(&fire) == 0,
+                  "aircraft almost above the sector does not fire down: the tilt stops at 25 degrees");
+            TFireTriggerArea area;
+            Check(aircraft.GetAIFireTriggerArea(world._weaponProtos[weapon], &area, &fire.pos, true) &&
+                  std::fabs(area.forward.dot(aircraft._rotation.AxisZ()) - std::cos(25.0 * C_PI / 180.0)) < 1e-3,
+                  "aerial ground tilt is clamped to 25 degrees below the nose");
+        }
+        fire.pos = aircraft._position + vec3d(0, 250, -60);
+        for (int weapon : {71, 72}) {
+            fire.weapon = weapon;
+            Check(aircraft.CheckFireAI(&fire) == 0, "aerial sector volumes never tilt toward a point behind the nose");
+        }
+        fire.pos = aircraft._primTpos;
+        {
+            TankProbe groundFoe; groundFoe.Bind(world); groundFoe._position = fire.pos;
+            Unit airFoe; airFoe._bact_type = BACT_TYPES_FLYER;
+            bact_arg101 unitFire{}; unitFire.unkn = 2; unitFire.radius = 0; unitFire.pos = fire.pos;
+            for (int weapon : {71, 72}) {
+                unitFire.weapon = weapon;
+                unitFire.target = &groundFoe;
+                Check(aircraft.CheckFireAI(&unitFire) == 1, "aerial volumes tilt down toward a ground unit ahead");
+                unitFire.target = &airFoe;
+                Check(aircraft.CheckFireAI(&unitFire) == 0, "air unit targets keep the untilted forward volume");
+            }
+            const auto savedTarget = aircraft._primT;
+            aircraft._primTtype = BACT_TGT_TYPE_UNIT; aircraft._primT.pbact = &groundFoe;
+            TFireTriggerArea area;
+            Check(aircraft.GetAIFireTriggerArea(world._weaponProtos[71], &area) &&
+                  ypabact_FireTriggerAreaContains(area, groundFoe._position, 0),
+                  "aerial debug volume tilts toward its ground unit target");
+            aircraft._primTtype = BACT_TGT_TYPE_CELL; aircraft._primT = savedTarget;
+        }
 
         aircraft._oflags = BACT_OFLAG_USERINPT;
         TFireTriggerArea area;
@@ -1033,25 +1188,28 @@ void TestAirSectorElevation() {
             unit->_fly_dir = vec3d(0, 0, 1);
         }
         legacy._weapon = 70; configured._weapon = 71; cone._weapon = 72;
-        for (float distance : {700.f, 99.f, 150.f, 219.f, 220.f, 700.f}) {
+        for (float distance : {700.f, 450.f, 99.f, 150.f, 219.f, 220.f, 700.f}) {
             for (auto *unit : {&legacy, &configured, &cone}) {
                 unit->_position = unit->_primTpos - vec3d(0, 250, distance);
                 bact_arg75 fight{}; fight.target.pcell = unit->_primT.pcell;
                 fight.pos = unit->_primTpos; fight.g_time = 1000;
                 unit->FightWithSect(&fight);
             }
-            Check(legacy.launches == configured.launches && legacy._status_flg == configured._status_flg &&
+            // ATTACK only reports whether the last shot was possible; movement uses APPROACH and target_vec.
+            const int moveFlags = ~BACT_STFLAG_ATTACK;
+            Check((legacy._status_flg & moveFlags) == (configured._status_flg & moveFlags) &&
                   Near(legacy._target_vec, configured._target_vec),
-                  "sector fight keeps vanilla firing and retreat/reengage decisions with forward box enabled");
-            Check(legacy.launches == cone.launches && legacy._status_flg == cone._status_flg &&
+                  "sector fight keeps vanilla retreat/reengage movement with forward box enabled");
+            Check((legacy._status_flg & moveFlags) == (cone._status_flg & moveFlags) &&
                   Near(legacy._target_vec, cone._target_vec),
-                  "sector fight keeps vanilla firing and retreat/reengage decisions with forward cone enabled");
+                  "sector fight keeps vanilla retreat/reengage movement with forward cone enabled");
         }
-        Check(configured.launches == 2 && configured.lastLaunch.tgType == BACT_TGT_TYPE_CELL &&
+        Check(legacy.launches == 2, "unconfigured sector fight fires only outside the vanilla close-range dead zone");
+        Check(configured.launches == 3 && configured.lastLaunch.tgType == BACT_TGT_TYPE_CELL &&
               configured.lastLaunch.direction.y > 0.0f,
-              "actual sector fight emits downward shots at both passes using the original Hornet movement thresholds");
-        Check(cone.launches == 2 && cone.lastLaunch.tgType == BACT_TGT_TYPE_CELL && cone.lastLaunch.direction.y > 0.0f,
-              "forward cone also emits downward sector shots at both passes");
+              "forward box also fires at mid range, but not steeply down from above the sector");
+        Check(cone.launches == 3 && cone.lastLaunch.tgType == BACT_TGT_TYPE_CELL && cone.lastLaunch.direction.y > 0.0f,
+              "forward cone also fires at mid range, but not steeply down from above the sector");
     }
 }
 
@@ -1306,6 +1464,10 @@ int main() {
     TestTurretSlotsAndCadence();
     TestRealLaunchGateParity();
     TestVanillaSectorMinigun();
+    TestMaxInclinationParse();
+    TestMinimumDepth();
+    TestAirTiltAbsent();
+    TestTankTiltCap();
     TestAirSectorElevation();
     TestVolumeDistanceAndMovement();
     TestDebugSegmentClipping();

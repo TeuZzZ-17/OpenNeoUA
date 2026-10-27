@@ -5149,6 +5149,8 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->ai_fire_trigger_box_forward = vec3d();
         _wpn->ai_fire_trigger_cone_forward = vec3d();
         _wpn->ai_fire_trigger_cone_below = vec3d();
+        _wpn->ai_fire_trigger_forward_max_inclination = 0.0f;
+        _wpn->ai_fire_trigger_min_depth = 0.0f;
         _wpn->fire_time_scale = 1.0f;
         _wpn->fire_time_scale_hp_drain.Clear();
         _wpn->snd_launch_at_muzzle = false;
@@ -5946,6 +5948,27 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         else
             ypa_log_out("WARNING: weapon %d %s='%s' is invalid; expected %d positive finite values (cone angles < 180). Volume disabled.\n",
                         _wpnID, p1.c_str(), p2.c_str(), count);
+    }
+    else if ( !StriCmp(p1, "ai_fire_trigger_forward_max_inclination") ||
+              !StriCmp(p1, "ai_fire_trigger_min_depth") )
+    {
+        const bool tilt = !StriCmp(p1, "ai_fire_trigger_forward_max_inclination");
+        float &valueOut = tilt ? _wpn->ai_fire_trigger_forward_max_inclination : _wpn->ai_fire_trigger_min_depth;
+        valueOut = 0.0f;
+        bool valid = false;
+        try
+        {
+            size_t used = 0;
+            const float value = std::stof(p2, &used);
+            valid = used == p2.size() && std::isfinite(value) && value >= 0.0f &&
+                    (tilt ? value < 90.0f : value <= 30000.0f);
+            if ( valid )
+                valueOut = value;
+        }
+        catch (const std::exception &) {}
+        if ( !valid )
+            ypa_log_out("WARNING: weapon %d %s='%s' is invalid; value disabled.\n",
+                        _wpnID, p1.c_str(), p2.c_str());
     }
     else if ( !StriCmp(p1, "add_energy") )
     {

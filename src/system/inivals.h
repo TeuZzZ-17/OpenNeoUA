@@ -233,6 +233,8 @@ public:
     static Common::Ini::Key GamePlayerTankBrakeTime;
     static Common::Ini::Key GamePlayerMaxAltitudeAboveGround;
     static Common::Ini::Key GameAiMaxAltitudeAboveGround;
+    static Common::Ini::Key GameAiAirVerticalForce;
+    static Common::Ini::Key GameAiBomberExtraAltitude;
     static Common::Ini::Key GameSprintForceUp;
     static Common::Ini::Key GameSprintPitchUp;
     static Common::Ini::Key GameSprintRampTime;
@@ -290,7 +292,7 @@ public:
     static Common::Ini::Key GamePlasmaSndPickupVolume;
     static Common::Ini::Key GamePlasmaSndPickupPitch;
     static Common::Ini::Key GameWorldUiMaxDistance;
-    static Common::Ini::Key GameAiTargetRange;
+    static Common::Ini::Key GameAiTargetAcquisitionRange;
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
     static Common::Ini::Key GameGlobalShkFade;
