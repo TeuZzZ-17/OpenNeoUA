@@ -1407,6 +1407,8 @@ struct TWeapProto
     vec3d ai_fire_trigger_box_forward;
     vec3d ai_fire_trigger_cone_forward;
     vec3d ai_fire_trigger_cone_below;
+    float ai_fire_trigger_forward_max_inclination = 0.0f;
+    float ai_fire_trigger_min_depth = 0.0f;
     enum AIFireTriggerShape { AI_TRIGGER_NONE, AI_TRIGGER_BOX_BELOW, AI_TRIGGER_BOX_FORWARD,
                               AI_TRIGGER_CONE_FORWARD, AI_TRIGGER_CONE_BELOW };
     AIFireTriggerShape GetAIFireTriggerShape() const
@@ -1428,6 +1430,13 @@ struct TWeapProto
     bool HasAIFireTriggerArea() const
     {
         return GetAIFireTriggerShape() != AI_TRIGGER_NONE;
+    }
+    // Maximum tilt in degrees of the active forward volume; 0 for below volumes or when not set.
+    float GetAIFireTriggerMaxInclination() const
+    {
+        const AIFireTriggerShape shape = GetAIFireTriggerShape();
+        return shape == AI_TRIGGER_BOX_FORWARD || shape == AI_TRIGGER_CONE_FORWARD
+            ? ai_fire_trigger_forward_max_inclination : 0.0f;
     }
     float energy_heli = 0.0;
     float energy_tank = 0.0;

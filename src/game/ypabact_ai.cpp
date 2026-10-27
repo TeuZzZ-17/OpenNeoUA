@@ -23,7 +23,7 @@ const TAiTargetRangeConfig &ypabact_GetAiTargetRangeConfig()
         constexpr float VanillaRange = 1800.0f;
         constexpr float MaxRange = 2160.0f;
 
-        float parsed = ypabact_ReadNonNegativeFloatIni(System::IniConf::GameAiTargetRange, 0.0f);
+        float parsed = ypabact_ReadNonNegativeFloatIni(System::IniConf::GameAiTargetAcquisitionRange, 0.0f);
         if ( !isfinite(parsed) || parsed <= 0.0f )
             return TAiTargetRangeConfig{VanillaRange, false};
 
@@ -530,6 +530,9 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
     if ( v77 > 0.0 )
         _target_dir = _target_vec / v77;
 
+    if ( !kamikazeRamming )
+        ApplyBomberAltitude();
+
     if ( IsActiveDebuffStunning() )
     {
         UpdateActiveDebuffStunMoveIntent();
@@ -706,7 +709,8 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
         if ( arg136_3.vect.x > 200.0 )
             arg136_3.vect.x = 200.0;
 
-        arg136_3.vect.y = _height;
+        const float groundClearance = GetAiGroundClearance();
+        arg136_3.vect.y = groundClearance;
 
         arg136_3.vect.z = (_fly_dir.z * 200.0 * _fly_dir_length) / (v21 / v88);
 
@@ -727,7 +731,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
         }
         else
         {
-            if ( (!kamikazeRamming && !HasLocalPlayerForceVerticalPursuitTarget()) ||
+            if ( (!kamikazeRamming && !HasVerticalPursuitTarget()) ||
                  _target_dir.y >= -0.01 )
             {
                 if ( _target_dir.y < 0.15 )
@@ -740,7 +744,7 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
 
         if ( arg136_3.isect )
         {
-            if ( arg136_3.tVal * _height < _radius && _fly_dir.y > 0.0 )
+            if ( arg136_3.tVal * groundClearance < _radius && _fly_dir.y > 0.0 )
             {
                 arg88.pos1 += arg136_3.skel->polygons[arg136_3.polyID].Normal();
 
@@ -795,7 +799,10 @@ void NC_STACK_ypabact::AI_layer3(update_msg *arg)
         /*if ( bact->status_flg & BACT_STFLAG_DODGE ) //Unused flag
             bact->fly_dir_length *= 0.95;*/
 
-        _thraction = (0.85 - _target_dir.y) * _force;
+        // game.ai_air_vertical_force scales how strongly the thrust follows the climb or descent slope.
+        // 1 (or absent) is the vanilla thrust; the floor is the vanilla minimum, reached on a vertical dive.
+        const float verticalForce = ypabact_GetAiAirConfig().verticalForce;
+        _thraction = std::max((0.85 - _target_dir.y * verticalForce) * _force, -0.15 * _force);
         _thraction = GetActiveDebuffStunTraction(_thraction, false);
 
         move_msg arg74;
@@ -1173,6 +1180,7 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
             arg101.pos = arg->target.pbact->_position;
             arg101.unkn = 2;
             arg101.radius = arg->target.pbact->GetCollisionBroadRadius();
+            arg101.target = arg->target.pbact;
             int aiWeaponSourceSlot = -1;
             arg101.weapon = ypabact_SelectAIPrimaryWeaponSlotWithLaserHold(
                 this, arg->target.pbact, &aiWeaponSourceSlot);
@@ -1760,7 +1768,140 @@ bool NC_STACK_ypabact::ApplyAiMaxAltitudeAboveGround()
     return true;
 }
 
-bool NC_STACK_ypabact::HasLocalPlayerForceVerticalPursuitTarget() const
+namespace {
+TAiAirConfig LoadAiAirConfig()
+{
+    TAiAirConfig config;
+    const float force = ypabact_ReadNonNegativeFloatIni(System::IniConf::GameAiAirVerticalForce, 0.0f);
+    if ( isfinite(force) && force > 0.0f )
+        config.verticalForce = std::min(force, 5.0f);
+    const float extra = ypabact_ReadNonNegativeFloatIni(System::IniConf::GameAiBomberExtraAltitude, 0.0f);
+    if ( isfinite(extra) && extra > 0.0f )
+        config.bomberExtraAltitude = std::min(extra, 3000.0f);
+    return config;
+}
+
+TAiAirConfig &AiAirConfigStorage()
+{
+    static TAiAirConfig config = LoadAiAirConfig();
+    return config;
+}
+
+bool HasBombLikePrimaryWeapon(NC_STACK_ypabact *bact)
+{
+    int slots[4];
+    const int count = ypabact_GetPrimaryWeaponSlots(bact, slots);
+    const auto &protos = bact->getBACT_pWorld()->GetWeaponsProtos();
+    for (int i = 0; i < count; ++i)
+        if ( slots[i] >= 0 && (size_t)slots[i] < protos.size() && protos.at(slots[i]).IsBombLike() )
+            return true;
+    return false;
+}
+}
+
+const TAiAirConfig &ypabact_GetAiAirConfig()
+{
+    return AiAirConfigStorage();
+}
+
+void ypabact_ReloadAiAirConfig()
+{
+    AiAirConfigStorage() = LoadAiAirConfig();
+}
+
+// Point that a bomber-class aircraft should fly above, or false when the feature does not apply.
+// Only AI aircraft with a bomb, homing bomb or vertical laser qualify, and only against other
+// aircraft or buildings: a ground unit target never changes the altitude. For a sector the point
+// is the roof of the building (the terrain when nothing stands there), so the extra altitude
+// is measured above the roof. The roof ray runs only when the caller asks for the point.
+bool NC_STACK_ypabact::GetBomberAltitudeAim(vec3d *outPos)
+{
+    if ( ypabact_GetAiAirConfig().bomberExtraAltitude <= 0.0f || !_world ||
+         !ypabact_IsAirVehicle(this) || (_oflags & BACT_OFLAG_USERINPT) )
+        return false;
+
+    // Same target choice as the AI layers: a secondary sector order hides the primary unit.
+    const vec3d *aim = nullptr;
+    NC_STACK_ypabact *target = nullptr;
+    if ( _secndTtype == BACT_TGT_TYPE_UNIT )
+        target = _secndT.pbact;
+    else if ( _secndTtype == BACT_TGT_TYPE_CELL )
+        aim = &_sencdTpos;
+    else if ( _primTtype == BACT_TGT_TYPE_UNIT )
+        target = _primT.pbact;
+    else if ( _primTtype == BACT_TGT_TYPE_CELL )
+        aim = &_primTpos;
+
+    if ( target )
+    {
+        if ( target == this || target->_status == BACT_STATUS_DEAD || !ypabact_IsAirVehicle(target) )
+            return false;
+        aim = &target->_position;
+    }
+
+    if ( !aim )
+        return false;
+
+    // Far targets keep the level cruise, as in the vanilla AI (vertical part dropped beyond 2000).
+    if ( (aim->XZ() - _position.XZ()).length() > 2000.0f )
+        return false;
+
+    if ( !HasBombLikePrimaryWeapon(this) )
+        return false;
+
+    if ( outPos )
+    {
+        *outPos = *aim;
+        if ( !target )
+        {
+            // A building target is its roof, found with the same downward ray used to
+            // place units on the surface: it hits the topmost polygon, or the terrain
+            // when nothing stands there. World Y grows downward.
+            ypaworld_arg136 roof;
+            roof.stPos = vec3d(aim->x, -30000.0, aim->z);
+            roof.vect = vec3d(0.0, 50000.0, 0.0);
+            roof.flags = 0;
+            TraceWorldCollision(&roof);
+            if ( roof.isect )
+                outPos->y = roof.isectPos.y;
+        }
+    }
+    return true;
+}
+
+// Distance an AI aircraft keeps above the surface below it. Vanilla always uses _height,
+// which would push a bomber back up to _height over the roof it is meant to fly just above.
+// While it closes on its target, the distance shrinks to the extra altitude, never below
+// two body radii.
+float NC_STACK_ypabact::GetAiGroundClearance()
+{
+    const float extra = ypabact_GetAiAirConfig().bomberExtraAltitude;
+    if ( extra > 0.0f && GetBomberAltitudeAim() )
+        return std::min(_height, std::max(extra, 2.0f * _radius));
+
+    return _height;
+}
+
+// Aims the climb or descent at a point game.ai_bomber_extra_altitude above the target, so the
+// falling payload hits it from above. The slope is capped at 45 degrees, and at close range the
+// cap stays large enough not to turn the flight into a vertical line.
+void NC_STACK_ypabact::ApplyBomberAltitude()
+{
+    vec3d aim;
+    if ( !GetBomberAltitudeAim(&aim) )
+        return;
+
+    const vec3d toTarget = aim - _position;
+    const float limit = std::max((float)toTarget.XZ().length(), 600.0f);
+    // World Y grows downward: a negative value means the aim point is above the aircraft.
+    const float dy = std::max(-limit, std::min(limit, (float)(toTarget.y - ypabact_GetAiAirConfig().bomberExtraAltitude)));
+
+    vec3d direction(toTarget.x, dy, toTarget.z);
+    if ( direction.normalise() > 0.001f )
+        _target_dir = direction;
+}
+
+bool NC_STACK_ypabact::HasVerticalPursuitTarget()
 {
     if ( !_world )
         return false;
@@ -1768,8 +1909,9 @@ bool NC_STACK_ypabact::HasLocalPlayerForceVerticalPursuitTarget() const
     NC_STACK_ypabact *userVehicle = _world->getYW_userVehicle();
     const int playerOwner = _world->_userRobo ? _world->_userRobo->_owner : World::OWNER_0;
     const bool customAiAltitudeEnabled = ypabact_GetAiMaxAltitudeAboveGround() > 0.0f;
+    const bool airTargetPursuit = ypabact_GetAiAirConfig().verticalForce > 1.0f;
 
-    auto isEligible = [userVehicle, playerOwner, customAiAltitudeEnabled](NC_STACK_ypabact *target)
+    auto isEligible = [userVehicle, playerOwner, customAiAltitudeEnabled, airTargetPursuit](NC_STACK_ypabact *target)
     {
         if ( !target )
             return false;
@@ -1777,7 +1919,9 @@ bool NC_STACK_ypabact::HasLocalPlayerForceVerticalPursuitTarget() const
         // Preserve the vanilla Host Station/current-player exceptions and extend
         // them to the rest of the local player's force. Relinquishing direct
         // control must not make the same target suddenly lose vertical pursuit.
+        // Above 1, game.ai_air_vertical_force makes any airborne target count too.
         return target->_bact_type == BACT_TYPES_ROBO ||
+               (airTargetPursuit && ypabact_IsAirVehicle(target)) ||
                target == userVehicle ||
                (customAiAltitudeEnabled &&
                 playerOwner != World::OWNER_0 &&
@@ -1785,6 +1929,10 @@ bool NC_STACK_ypabact::HasLocalPlayerForceVerticalPursuitTarget() const
     };
 
     if ( _secndTtype == BACT_TGT_TYPE_UNIT && isEligible(_secndT.pbact) )
+        return true;
+
+    // A bomber must be allowed to climb above its target.
+    if ( GetBomberAltitudeAim() )
         return true;
 
     return _primTtype == BACT_TGT_TYPE_UNIT && isEligible(_primT.pbact);
@@ -2309,17 +2457,6 @@ void NC_STACK_ypabact::GetFormationPosition(bact_arg94 *arg)
     // With y = 0
 }
 
-bool ypabact_IsSectorFireAimAligned(const NC_STACK_ypabact &unit, const World::TWeapProto &weapon,
-                                   const vec3d &direction)
-{
-    // The caller supplies the normalized vanilla sector direction, which uses
-    // the vehicle's terrain-clearance height rather than the building's Y.
-    const int flags = weapon.GetFireControlFlags();
-    if ( flags == 16 )
-        return direction.XZ().dot(unit._rotation.AxisZ().XZ()) > 0.91;
-    return flags && direction.dot(unit._rotation.AxisZ()) > 0.91;
-}
-
 size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
 {
     vec3d tmp;
@@ -2435,8 +2572,15 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
     {
         if ( v36 )
         {
-            if ( len < World::CVSectorLength && ypabact_IsSectorFireAimAligned(*this, *v8, tmp) )
+            if ( v36 == 16 )
+            {
+                if ( len < World::CVSectorLength && tmp.XZ().dot( _rotation.AxisZ().XZ() ) > 0.91 )
+                    return 1;
+            }
+            else if ( len < World::CVSectorLength && tmp.dot( _rotation.AxisZ() ) > 0.91 )
+            {
                 return 1;
+            }
         }
         else
         {

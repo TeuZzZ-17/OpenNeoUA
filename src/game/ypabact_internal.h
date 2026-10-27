@@ -96,6 +96,13 @@ struct TAiTargetRangeConfig
     bool enforceViewerRange;
 };
 
+struct TAiAirConfig
+{
+    float verticalForce = 1.0f;
+    float bomberExtraAltitude = 0.0f;
+};
+
+
 struct ypabact_TEliteUnitConfig
 {
     float maxStatBonusPercent = 0.0f;
@@ -154,6 +161,8 @@ bool ypabact_ReadAbsoluteOrPercentIni(Common::Ini::Key &key, World::TAbsoluteOrP
 bool ypabact_ReadFallDamage(World::TAbsoluteOrPercent *out);
 float ypabact_ReadPlayerMaxAltitudeAboveGround();
 float ypabact_GetAiMaxAltitudeAboveGround();
+const TAiAirConfig &ypabact_GetAiAirConfig();
+void ypabact_ReloadAiAirConfig();
 float ypabact_GetMinigunRange();
 const TAiTargetRangeConfig &ypabact_GetAiTargetRangeConfig();
 float ypabact_GetMinigunAiFireAlignment();
@@ -415,7 +424,8 @@ bool ypabact_IsInVerticalLaserFireZone(const TFireTriggerArea *box, const vec3d 
 bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit, bool friendlyTargets, const vec3d &origin, float range, float aiTriggerRadius, const TFireTriggerArea *box, const std::vector<NC_STACK_ypabact *> &excluded);
 NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shooter, const vec3d &origin, float range, float aiTriggerRadius, const TFireTriggerArea *box, bool friendlyTargets, const std::vector<NC_STACK_ypabact *> &excluded);
 bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &pos, float radius);
-bool ypabact_IsSectorFireAimAligned(const NC_STACK_ypabact &unit, const World::TWeapProto &weapon, const vec3d &direction);
+bool ypabact_IsGroundFireTarget(NC_STACK_ypabact *unit);
+bool ypabact_IsGroundFireQuery(const bact_arg101 &arg);
 float ypabact_FireTriggerAreaSearchRadius(const TFireTriggerArea &box);
 NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box, const World::TWeapProto *wproto = nullptr);
 void ypabact_AimAtFireTriggerAreaTarget(const bact_arg101 &fireTest, bact_arg79 *shot);

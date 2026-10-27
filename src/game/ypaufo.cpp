@@ -5,6 +5,7 @@
 #include <string.h>
 #include "game/yw.h"
 #include "game/ypaufo.h"
+#include "game/ypabact_internal.h"
 #include "common/log.h"
 
 #include <math.h>
@@ -93,6 +94,9 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
     if ( v108 != 0.0 )
         _target_dir = _target_vec / v108;
 
+    if ( !kamikazeRamming )
+        ApplyBomberAltitude();
+
     if ( IsActiveDebuffStunning() )
     {
         UpdateActiveDebuffStunMoveIntent();
@@ -129,8 +133,19 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                     const double turn = std::max(-(double)_maxrot * v110,
                                                  std::min((double)_maxrot * v110, angle));
                     _rotation = mat3x3::RotateY(turn) * _rotation;
-                    const double liftSlope = _target_dir.y > 0.0 ? 0.7 : 3.0;
-                    _ufoBoost = _mass * 9.80665 * (1.0 - liftSlope * _target_dir.y);
+                }
+                // The native state machine only descends or avoids obstacles, so a
+                // target above is never followed. Above 1, game.ai_air_vertical_force
+                // (or a bomber climb) adds a smooth pursuit lift whose strength grows
+                // with the excess over 1; 1 or absent = vanilla.
+                const float verticalForce = ypabact_GetAiAirConfig().verticalForce;
+                const bool pursuitLift = !kamikazeRamming &&
+                    (verticalForce > 1.0f || GetBomberAltitudeAim()) && HasVerticalPursuitTarget();
+                if ( !(_ufoFlags & 1) && (kamikazeRamming || pursuitLift) )
+                {
+                    const double power = (kamikazeRamming || verticalForce <= 1.0f) ? 1.0 : verticalForce - 1.0;
+                    const double liftSlope = (_target_dir.y > 0.0 ? 0.7 : 3.0) * power;
+                    _ufoBoost = std::max(0.0, _mass * 9.80665 * (1.0 - liftSlope * _target_dir.y));
                 }
 
                 if ( _ufoFlags & 1 )
@@ -315,7 +330,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                     }
                     else
                     {
-                        if ( (!kamikazeRamming && !HasLocalPlayerForceVerticalPursuitTarget()) ||
+                        if ( (!kamikazeRamming && !HasVerticalPursuitTarget()) ||
                              _target_dir.y >= 0.0 )
                         {
                             _ufoFlags |= 5;

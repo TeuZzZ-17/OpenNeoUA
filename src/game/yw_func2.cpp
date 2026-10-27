@@ -768,8 +768,8 @@ void UserData::sb_0x46aa8c()
     {
         System::IniConf::GameRoboPlayerAIBehavior.Value = confPlayerRoboAIBehavior;
 
-        if ( !SaveKeyToOpenNeoUAIni("game.robo_player_ai_behavior", confPlayerRoboAIBehavior ? "yes" : "no") )
-            ypa_log_out("WARNING: Could not save game.robo_player_ai_behavior to OpenNeoUA.ini\n");
+        if ( !SaveKeyToOpenNeoUAIni("game.ai_robo_player_behavior", confPlayerRoboAIBehavior ? "yes" : "no") )
+            ypa_log_out("WARNING: Could not save game.ai_robo_player_behavior to OpenNeoUA.ini\n");
     }
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_SPECTATOR_MODE )
