@@ -3641,6 +3641,9 @@ SDL_Cursor *GFXEngine::LoadCursor(const std::string &name, bool retro)
         }
     }
 #endif
+    // Loose files: Data/Res/Cursors/{Classic,Retro}/<name>.cur, then the old Data/Res locations.
+    if (!fil)
+        fil = uaOpenFileAlloc(fmt::sprintf(retro ? "Res/Cursors/Retro/%s.cur" : "Res/Cursors/Classic/%s.cur", name), "rb");
     if (!fil)
         fil = uaOpenFileAlloc(fmt::sprintf(retro ? "res/retro/%s.cur" : "res/%s.cur", name), "rb");
 
