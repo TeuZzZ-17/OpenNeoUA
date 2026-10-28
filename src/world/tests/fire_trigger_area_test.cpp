@@ -1183,7 +1183,7 @@ void TestAirSectorElevation() {
             unit->_height = 250; unit->_aggr = 100;
             unit->_clock = unit->_assess_time = 1000; unit->_atk_ret = NC_STACK_ypabact::TA_FIGHT;
             unit->_unifiedAICombatDistance = true;
-            unit->_ai_engage_range = 250; unit->_ai_retreat_range = 100; unit->_ai_reengage_range = 220;
+            unit->_ai_attack_range = 250; unit->_ai_retreat_start_range = 100; unit->_ai_retreat_stop_range = 220;
             unit->_wrldSize = vec2d(9600, -9600);
             unit->_fly_dir = vec3d(0, 0, 1);
         }
@@ -1199,10 +1199,10 @@ void TestAirSectorElevation() {
             const int moveFlags = ~BACT_STFLAG_ATTACK;
             Check((legacy._status_flg & moveFlags) == (configured._status_flg & moveFlags) &&
                   Near(legacy._target_vec, configured._target_vec),
-                  "sector fight keeps vanilla retreat/reengage movement with forward box enabled");
+                  "sector fight keeps vanilla retreat/attack movement with forward box enabled");
             Check((legacy._status_flg & moveFlags) == (cone._status_flg & moveFlags) &&
                   Near(legacy._target_vec, cone._target_vec),
-                  "sector fight keeps vanilla retreat/reengage movement with forward cone enabled");
+                  "sector fight keeps vanilla retreat/attack movement with forward cone enabled");
         }
         Check(legacy.launches == 2, "unconfigured sector fight fires only outside the vanilla close-range dead zone");
         Check(configured.launches == 3 && configured.lastLaunch.tgType == BACT_TGT_TYPE_CELL &&
@@ -1246,13 +1246,13 @@ void TestVolumeDistanceAndMovement() {
     shooter._primTtype = BACT_TGT_TYPE_UNIT; shooter._primT.pbact = &enemy;
     shooter._secndTtype = BACT_TGT_TYPE_NONE;
     shooter._unifiedAICombatDistance = true;
-    shooter._ai_engage_range = 900; shooter._ai_retreat_range = 100; shooter._ai_reengage_range = 600;
+    shooter._ai_attack_range = 900; shooter._ai_retreat_start_range = 100; shooter._ai_retreat_stop_range = 600;
     shooter._wrldSize = vec2d(9600, -9600);
     shooter._clock = shooter._assess_time = 1000; shooter._atk_ret = NC_STACK_ypabact::TA_FIGHT;
     bact_arg75 fight{}; fight.target.pbact = &enemy; fight.g_time = 1000; fight.fperiod = 16;
     shooter.FightWithBact(&fight);
     Check(shooter.launches == 1 && !(shooter._status_flg & BACT_STFLAG_ATTACK),
-          "volume authorizes fire beyond engage range while movement remains outside its engage band");
+          "volume authorizes fire beyond attack range while movement remains outside its attack band");
     enemy._position = shooter._position + vec3d(0, 0, 50);
     shooter.FightWithBact(&fight);
     Check(shooter.launches == 2 && (shooter._status_flg & BACT_STFLAG_APPROACH),
@@ -1260,11 +1260,11 @@ void TestVolumeDistanceAndMovement() {
     enemy._position = shooter._position + vec3d(0, 0, 400);
     shooter.FightWithBact(&fight);
     Check(shooter.launches == 3 && (shooter._status_flg & BACT_STFLAG_APPROACH),
-          "reengage hysteresis changes movement without suppressing volume fire");
+          "retreat hysteresis changes movement without suppressing volume fire");
     enemy._position = shooter._position + vec3d(0, 0, 700);
     shooter.FightWithBact(&fight);
     Check(shooter.launches == 4 && !(shooter._status_flg & BACT_STFLAG_APPROACH) &&
-          (shooter._status_flg & BACT_STFLAG_ATTACK), "normal reengagement remains intact");
+          (shooter._status_flg & BACT_STFLAG_ATTACK), "normal re-attack after retreat remains intact");
     enemy._position = shooter._position + vec3d(0, 0, 4000);
     for (int weapon : {43, 44, 45, 46}) {
         shooter._weapon = weapon;

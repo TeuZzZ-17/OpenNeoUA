@@ -1598,7 +1598,8 @@ void sb_0x4f8f64__sub1(NC_STACK_ypaworld *yw)
             }
         }
 
-        if ( yw->_userUnit )
+        // Position cross of the controlled unit; the Spectator has none.
+        if ( yw->_userUnit && !yw->IsSpectatorControlled() )
         {
             sub_4F68FC(yw->_userUnit->_position.x, 0.0, yw->_userUnit->_position.x, -yw->_mapLength.y, yw->GetColor(13));
             sub_4F68FC(0.0, yw->_userUnit->_position.z, yw->_mapLength.x, yw->_userUnit->_position.z, yw->GetColor(13));
@@ -1925,7 +1926,13 @@ void sub_4F6DFC(NC_STACK_ypaworld *yw, CmdStream *cur, int height, int width, NC
 {
     // OpenNeoUA invisible: cloaked stealth units never appear on the strategic map / radar
     // (icon, view triangle and health bar are all drawn from here).
-    if ( bact->_status != BACT_STATUS_DEAD && !bact->IsInvisibleUnrevealed() && !bact->IsHiddenFor( yw->GetPlayerOwner() ) )
+    // The Spectator's own UFO never appears on the map or radar (icon and view triangle).
+    if ( yw->IsSpectatorBact(bact) )
+        return;
+
+    // Spectator Mode sees every faction, including the hidden Black Sect.
+    if ( bact->_status != BACT_STATUS_DEAD && !bact->IsInvisibleUnrevealed() &&
+         (yw->IsSpectatorControlled() || !bact->IsHiddenFor( yw->GetPlayerOwner() )) )
     {
         int v8;
 
@@ -2463,7 +2470,8 @@ void sb_0x4f8f64__sub3(NC_STACK_ypaworld *yw, CmdStream *cur)
         }
     }
 
-    if ( yw->_userUnit )
+    // Blinking marker of the controlled unit; the Spectator has none.
+    if ( yw->_userUnit && !yw->IsSpectatorControlled() )
     {
         if ( yw->_timeStamp / 300 & 1 )
         {
@@ -8507,6 +8515,14 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
             yw->_hud.field_86 = 0;
 
         yw_RenderHUDVectorGFX(yw, &buf);
+    }
+    else if ( yw->IsSpectatorControlled() )
+    {
+        // Spectator Mode: always show the radar, without the cockpit vehicle HUD.
+        // The H (HUD) hotkey is not routed to the spectator, so the radar cannot
+        // depend on _hud.field_0 (it starts at 0). It is drawn at the
+        // bottom-left inside yw_RenderHUDRadare.
+        yw_RenderHUDRadare(yw);
     }
 
     if ( yw->_guiActFlags & 0x20 )

@@ -429,9 +429,9 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _adist_bact = 0.0;
     _sdist_sector = 0.0;
     _sdist_bact = 0.0;
-    _ai_engage_range = 0.0f;
-    _ai_retreat_range = 0.0f;
-    _ai_reengage_range = 0.0f;
+    _ai_attack_range = 0.0f;
+    _ai_retreat_start_range = 0.0f;
+    _ai_retreat_stop_range = 0.0f;
     _unifiedAICombatDistance = false;
     _current_waypoint = 0;
     _waypoints_count = 0;

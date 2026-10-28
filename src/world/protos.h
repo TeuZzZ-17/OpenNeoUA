@@ -973,27 +973,27 @@ struct TVhclProto
     // OpenNeoUA: optional atomic combat-distance authoring. The bit mask records
     // presence, so malformed/partial new sets can fall back to the untouched
     // adist_*/sdist_* path instead of mixing old and new semantics.
-    float ai_engage_range = 0.0f;
-    float ai_retreat_range = 0.0f;
-    float ai_reengage_range = 0.0f;
+    float ai_attack_range = 0.0f;
+    float ai_retreat_start_range = 0.0f;
+    float ai_retreat_stop_range = 0.0f;
     uint8_t ai_combat_distance_mask = 0;
     enum : uint8_t
     {
-        AI_COMBAT_ENGAGE_DEFINED = 1 << 0,
-        AI_COMBAT_RETREAT_DEFINED = 1 << 1,
-        AI_COMBAT_REENGAGE_DEFINED = 1 << 2,
-        AI_COMBAT_ALL_DEFINED = AI_COMBAT_ENGAGE_DEFINED |
-                                AI_COMBAT_RETREAT_DEFINED |
-                                AI_COMBAT_REENGAGE_DEFINED
+        AI_COMBAT_ATTACK_DEFINED = 1 << 0,
+        AI_COMBAT_RETREAT_START_DEFINED = 1 << 1,
+        AI_COMBAT_RETREAT_STOP_DEFINED = 1 << 2,
+        AI_COMBAT_ALL_DEFINED = AI_COMBAT_ATTACK_DEFINED |
+                                AI_COMBAT_RETREAT_START_DEFINED |
+                                AI_COMBAT_RETREAT_STOP_DEFINED
     };
     bool HasValidUnifiedAICombatDistance() const
     {
         return ai_combat_distance_mask == AI_COMBAT_ALL_DEFINED &&
-               std::isfinite(ai_engage_range) && ai_engage_range > 0.0f &&
-               std::isfinite(ai_retreat_range) && ai_retreat_range >= 0.0f &&
-               std::isfinite(ai_reengage_range) &&
-               ai_reengage_range > ai_retreat_range &&
-               ai_reengage_range <= ai_engage_range;
+               std::isfinite(ai_attack_range) && ai_attack_range > 0.0f &&
+               std::isfinite(ai_retreat_start_range) && ai_retreat_start_range >= 0.0f &&
+               std::isfinite(ai_retreat_stop_range) &&
+               ai_retreat_stop_range > ai_retreat_start_range &&
+               ai_retreat_stop_range <= ai_attack_range;
     }
     int8_t radar = 0;
     float push_resistance = 0.0; // OpenNeoUA custom: target-side resistance to push / blast_push
