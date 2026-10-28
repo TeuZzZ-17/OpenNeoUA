@@ -1326,6 +1326,10 @@ struct TWeapProto
                                          int carrierMaxCount,
                                          int &minCount,
                                          int &maxCount) const;
+    // OpenNeoUA UI helper: damage shown to the player. It is the higher of
+    // energy and blast_energy; blast_energy counts only when the blast can
+    // really happen (blast_radius > 0, not a laser). Gameplay is unchanged.
+    int GetDisplayEnergy() const;
     TWeaponChainConfig chain;
     TDecorationFXConfig decoration_fx;
     int energy = 0;

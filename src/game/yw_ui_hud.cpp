@@ -1106,7 +1106,7 @@ void yw_RenderInfoWeaponInf(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur
 {
     if ( weap )
     {
-        const int displayBaseEnergy = weap->energy;
+        const int displayBaseEnergy = weap->GetDisplayEnergy();
         const int effectiveEnergy = bact
             ? bact->GetEffectiveOutgoingEnergy(displayBaseEnergy)
             : displayBaseEnergy;
@@ -1286,7 +1286,7 @@ void yw_RenderHUDInfo(NC_STACK_ypaworld *yw, sklt_wis *wis, CmdStream *cur, floa
                                 yw->ResolveGameplayWeaponName(*weap), xpos,
                                 ypos - wis->field_92 * 12.0);
 
-        const int weaponBaseEnergy = weap->energy;
+        const int weaponBaseEnergy = weap->GetDisplayEnergy();
         const int weaponEffectiveEnergy = bact
             ? bact->GetEffectiveOutgoingEnergy(weaponBaseEnergy)
             : weaponBaseEnergy;
