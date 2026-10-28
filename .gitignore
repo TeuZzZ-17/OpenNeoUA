@@ -84,8 +84,7 @@
 !/Models/Collision/
 !/Models/Base/
 /Models/Base/*
-# Solo modelli originali creati dall'autore e collocati in questa cartella.
-!/Models/Base/UserCreated/
+!/Models/Base/new/
 
 # ============================================================
 # FILE ROOT
