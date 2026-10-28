@@ -1985,7 +1985,7 @@ void yw_DebriefTechUpgradeLine(NC_STACK_ypaworld *yw, TBriefengScreen *brf, cons
                                                    maxDisplayCount);
                 }
 
-                v14 = fmt::sprintf("(%d%s)", wpn->energy / 100,
+                v14 = fmt::sprintf("(%d%s)", wpn->GetDisplayEnergy() / 100,
                                    countSuffix.c_str());
             }
         }

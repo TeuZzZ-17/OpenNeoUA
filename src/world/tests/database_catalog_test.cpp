@@ -172,8 +172,23 @@ void TestLifeTimeNtRange() {
     WorldProbe old;
     Check(!Parse(old, {"new_weapon 1", "model = missile", "homing_time = 450", "end"}, World::Database::Weapon), "old homing_time key is no longer accepted");
 }
+void TestDisplayEnergy() {
+    World::TWeapProto weapon;
+    weapon.energy = 100; weapon.blast_energy = 300; weapon.blast_radius = 400;
+    Check(weapon.GetDisplayEnergy() == 300, "higher blast_energy is shown");
+    weapon.blast_energy = 50;
+    Check(weapon.GetDisplayEnergy() == 100, "higher energy is shown");
+    weapon.blast_energy = 300; weapon.blast_radius = 0;
+    Check(weapon.GetDisplayEnergy() == 100, "blast without radius is not shown");
+    weapon.blast_radius = 400; weapon.blast_energy = 0;
+    Check(weapon.GetDisplayEnergy() == 100, "missing blast_energy keeps energy");
+    weapon.blast_energy = 300; weapon.blast_radius = std::nanf("");
+    Check(weapon.GetDisplayEnergy() == 100, "invalid blast_radius is not shown");
 }
+}
+
 int main() {
+    TestDisplayEnergy();
     TestLifeTimeNtRange();
     TestAuthoredParserFields();
     TestCatalogEligibilityAndRatings();

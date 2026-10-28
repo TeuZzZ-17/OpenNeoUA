@@ -9,6 +9,7 @@
 #include "../system/inivals.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace World
@@ -110,6 +111,13 @@ void TWeapProto::GetCombinedProjectileCountRange(int carrierMinCount,
         minCount *= minClusterCount;
         maxCount *= maxClusterCount;
     }
+}
+
+int TWeapProto::GetDisplayEnergy() const
+{
+    const bool blastActive = !IsLaser() && std::isfinite(blast_radius) &&
+                             blast_radius > 0.0f && blast_energy > 0;
+    return blastActive ? std::max(energy, blast_energy) : energy;
 }
 
 // Shared by life_time and life_time_nt: picks one value in the inclusive range.

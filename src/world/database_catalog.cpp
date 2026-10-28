@@ -50,7 +50,7 @@ int AttackForVehicle(int id, const std::vector<TVhclProto> &vehicles,
     if (!Valid(id, vehicles.size()) || !stack.insert(id).second) return 0;
     const TVhclProto &v = vehicles[static_cast<size_t>(id)];
     long long total = 0;
-    auto addWeapon = [&](int wid) { if (Valid(wid, weapons.size())) total += weapons[static_cast<size_t>(wid)].energy; };
+    auto addWeapon = [&](int wid) { if (Valid(wid, weapons.size())) total += weapons[static_cast<size_t>(wid)].GetDisplayEnergy(); };
     addWeapon(v.weapon);
     for (int wid : v.extra_weapons) if (wid > 0) addWeapon(wid);
     if (v.mgun_set&&Valid(v.mgun,weapons.size()))addWeapon(v.mgun);
