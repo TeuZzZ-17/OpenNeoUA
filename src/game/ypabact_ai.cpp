@@ -964,10 +964,10 @@ bool NC_STACK_ypabact::ApplyUnifiedAICombatDistance(float distance, bool *starte
     {
         _status_flg &= ~BACT_STFLAG_ATTACK;
 
-        if ( distance >= _ai_reengage_range )
+        if ( distance >= _ai_retreat_stop_range )
         {
             _status_flg &= ~BACT_STFLAG_APPROACH;
-            if ( distance <= _ai_engage_range )
+            if ( distance <= _ai_attack_range )
                 _status_flg |= BACT_STFLAG_ATTACK;
         }
         else
@@ -979,7 +979,7 @@ bool NC_STACK_ypabact::ApplyUnifiedAICombatDistance(float distance, bool *starte
         return true;
     }
 
-    if ( distance < _ai_retreat_range )
+    if ( distance < _ai_retreat_start_range )
     {
         _status_flg &= ~BACT_STFLAG_ATTACK;
         _status_flg |= BACT_STFLAG_APPROACH;
@@ -990,7 +990,7 @@ bool NC_STACK_ypabact::ApplyUnifiedAICombatDistance(float distance, bool *starte
         return true;
     }
 
-    if ( distance <= _ai_engage_range )
+    if ( distance <= _ai_attack_range )
         _status_flg |= BACT_STFLAG_ATTACK;
     else
         _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -1059,8 +1059,8 @@ void NC_STACK_ypabact::FightWithBact(bact_arg75 *arg)
                 // Preserve the existing world-bound escape: do not repeatedly
                 // re-enter APPROACH while there is no room to increase range.
                 _status_flg &= ~BACT_STFLAG_APPROACH;
-                if ( foeDistance >= _ai_retreat_range &&
-                     foeDistance <= _ai_engage_range )
+                if ( foeDistance >= _ai_retreat_start_range &&
+                     foeDistance <= _ai_attack_range )
                     _status_flg |= BACT_STFLAG_ATTACK;
                 else
                     _status_flg &= ~BACT_STFLAG_ATTACK;
@@ -1407,8 +1407,8 @@ void NC_STACK_ypabact::FightWithSect(bact_arg75 *arg)
             if ( atMovementBoundary )
             {
                 _status_flg &= ~BACT_STFLAG_APPROACH;
-                if ( cellDistance >= _ai_retreat_range &&
-                     cellDistance <= _ai_engage_range )
+                if ( cellDistance >= _ai_retreat_start_range &&
+                     cellDistance <= _ai_attack_range )
                     _status_flg |= BACT_STFLAG_ATTACK;
                 else
                     _status_flg &= ~BACT_STFLAG_ATTACK;

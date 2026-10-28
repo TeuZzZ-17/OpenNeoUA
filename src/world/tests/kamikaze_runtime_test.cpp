@@ -147,7 +147,7 @@ int main() {
 
     carrier._position=anchor; carrier.Target(&enemy); enemy._position=anchor+vec3d(0,500,-1000);
     carrier._status_flg=BACT_STFLAG_ATTACK|BACT_STFLAG_APPROACH|BACT_STFLAG_DODGE_LEFT;
-    carrier._ai_engage_range=500; carrier._ai_retreat_range=200; carrier._ai_reengage_range=450;
+    carrier._ai_attack_range=500; carrier._ai_retreat_start_range=200; carrier._ai_retreat_stop_range=450;
     Check(carrier.ApplyKamikazeRammingGuidance(),"armed carrier has active guidance");
     const vec3d desired=enemy._position-carrier._position;
     Check((carrier._target_vec-desired).length()<1e-8,"guidance refreshes the live enemy destination");

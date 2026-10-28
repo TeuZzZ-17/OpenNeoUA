@@ -1643,7 +1643,9 @@ uint8_t yw_GetUfoSpyWorldOpacity(NC_STACK_ypaworld *yw,
                               BACT_STFLAG_CLEAN | BACT_STFLAG_NORENDER)) ||
          bact->ShouldHideFromStrategicUI() ||
          bact->IsInvisibleUnrevealed() ||
-         bact->IsHiddenFor(playerOwner) )
+         // Spectator Mode sees every faction, including the Black Sect whose
+         // interface is normally hidden from the other players.
+         (!yw->IsSpectatorControlled() && bact->IsHiddenFor(playerOwner)) )
     {
         return 0;
     }
@@ -1889,6 +1891,11 @@ bool yw_IsExplicitWorldStatusTarget(NC_STACK_ypaworld *yw,
                                             const std::vector<NC_STACK_ypabact *> &damageHoverTargets)
 {
     if ( !yw || !bact )
+        return false;
+
+    // Spectator Mode does not draw hover/visor/damage bars, so the Spy pass
+    // must not skip those units or they would lose their bar.
+    if ( yw->IsSpectatorControlled() )
         return false;
 
     if ( (yw->_guiActFlags & 0x20) && yw->_bactOnMouse == bact )
@@ -2490,6 +2497,16 @@ void yw_RenderCursorOverUnitWithOpacity(NC_STACK_ypaworld *yw, NC_STACK_ypabact 
         if ( a3 > -v30 && v33 < v30 && v33 > -v30 )
         {
             SDL_Color v11 = yw->GetColor(bact->_owner);
+
+            // The Black Sect colour is a dark grey that vanishes in dark levels.
+            // Brighten it for the Spectator so the arrow stays readable.
+            if ( yw->IsSpectatorControlled() && bact->_owner == World::OWNER_BLACK )
+            {
+                v11.r = (uint8_t)std::min(255, v11.r * 5 / 2);
+                v11.g = (uint8_t)std::min(255, v11.g * 5 / 2);
+                v11.b = (uint8_t)std::min(255, v11.b * 5 / 2);
+            }
+
             v11.a = worldUiOpacity;
             UAskeleton::Data *v12 = yw->_hud.sklts_intern[13];
 
@@ -2570,6 +2587,23 @@ void yw_RenderHUDRadare(NC_STACK_ypaworld *yw)
     int v7 = robo_map.field_1EC;
     int32_t v8 = robo_map.MapViewMask;
     int v9 = robo_map.field_1EE;
+    const float savedLeft = robo_map.field_254;
+    const float savedRight = robo_map.field_25C;
+    const float savedTop = robo_map.field_258;
+    const float savedBottom = robo_map.field_260;
+
+    // Spectator Mode: compact radar window in the bottom-left corner. Edges are
+    // fractions of the half screen from its centre (-1 = left/top edge,
+    // +1 = right/bottom edge): about 31% of the width and 26% of the height,
+    // ending just before the map button of the bottom toolbar. The covered
+    // world area is unchanged.
+    if ( yw->IsSpectatorControlled() )
+    {
+        robo_map.field_254 = -0.995f;
+        robo_map.field_25C = -0.38f;
+        robo_map.field_258 = 0.46f;
+        robo_map.field_260 = 0.98f;
+    }
 
     robo_map.field_1EC = 1;
     robo_map.MapViewMask = -1;
@@ -2612,4 +2646,8 @@ void yw_RenderHUDRadare(NC_STACK_ypaworld *yw)
     robo_map.field_1E0 = v14;
     robo_map.field_1E8 &= 0xFFFFFEFF;
     robo_map.field_1E4 = v13;
+    robo_map.field_254 = savedLeft;
+    robo_map.field_25C = savedRight;
+    robo_map.field_258 = savedTop;
+    robo_map.field_260 = savedBottom;
 }

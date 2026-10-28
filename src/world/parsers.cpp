@@ -3484,21 +3484,20 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->sdist_bact = parser.stof(p2, 0);
     }
-    // ai_attack_range remains accepted only for compatibility with older OpenNeoUA scripts.
-    else if ( !StriCmp(p1, "ai_engage_range") || !StriCmp(p1, "ai_attack_range") )
+    else if ( !StriCmp(p1, "ai_attack_range") )
     {
-        _vhcl->ai_engage_range = parser.stof(p2, 0);
-        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_ENGAGE_DEFINED;
+        _vhcl->ai_attack_range = parser.stof(p2, 0);
+        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_ATTACK_DEFINED;
     }
-    else if ( !StriCmp(p1, "ai_retreat_range") )
+    else if ( !StriCmp(p1, "ai_retreat_start_range") )
     {
-        _vhcl->ai_retreat_range = parser.stof(p2, 0);
-        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_RETREAT_DEFINED;
+        _vhcl->ai_retreat_start_range = parser.stof(p2, 0);
+        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_RETREAT_START_DEFINED;
     }
-    else if ( !StriCmp(p1, "ai_reengage_range") )
+    else if ( !StriCmp(p1, "ai_retreat_stop_range") )
     {
-        _vhcl->ai_reengage_range = parser.stof(p2, 0);
-        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_REENGAGE_DEFINED;
+        _vhcl->ai_retreat_stop_range = parser.stof(p2, 0);
+        _vhcl->ai_combat_distance_mask |= TVhclProto::AI_COMBAT_RETREAT_STOP_DEFINED;
     }
     else if ( !StriCmp(p1, "radar") )
     {

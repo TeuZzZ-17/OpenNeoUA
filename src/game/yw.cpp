@@ -2633,9 +2633,9 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_adist_bact = vhcl.adist_bact;
         bacto->_sdist_sector = vhcl.sdist_sector;
         bacto->_sdist_bact = vhcl.sdist_bact;
-        bacto->_ai_engage_range = vhcl.ai_engage_range;
-        bacto->_ai_retreat_range = vhcl.ai_retreat_range;
-        bacto->_ai_reengage_range = vhcl.ai_reengage_range;
+        bacto->_ai_attack_range = vhcl.ai_attack_range;
+        bacto->_ai_retreat_start_range = vhcl.ai_retreat_start_range;
+        bacto->_ai_retreat_stop_range = vhcl.ai_retreat_stop_range;
         bacto->_unifiedAICombatDistance = vhcl.HasValidUnifiedAICombatDistance();
         bacto->_radar = vhcl.radar;
         bacto->_gun_radius = vhcl.gun_radius;
