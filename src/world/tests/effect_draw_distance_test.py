@@ -47,6 +47,27 @@ class EffectDrawDistanceTest(unittest.TestCase):
             subprocess.run(['C:/msys64/mingw64/bin/g++.exe', '-std=c++14', str(cpp), '-o', str(exe)], check=True, capture_output=True)
             subprocess.run([str(exe)], check=True, capture_output=True)
 
+    def test_curved_spatial_falloff_keeps_linear_default_and_zero_at_radius(self):
+        tools = (ROOT / 'world/tools.h').read_text()
+        begin = tools.index('inline float ComputeSpatialFalloff(')
+        end = tools.index('inline Common::Point PositionToSectorID(const vec3d')
+        program = '#include <algorithm>\n#include <cmath>\n#include <cassert>\nnamespace World {\n' + tools[begin:end] + '\n}\n'
+        program += '''int main() {
+            using namespace World;
+            assert(ComputeSpatialFalloffCurved(1750, 3500, 1.0f) == 0.5f);
+            assert(ComputeSpatialFalloffCurved(0, 3500, 0.5f) == 1.0f);
+            assert(ComputeSpatialFalloffCurved(3500, 3500, 0.5f) == 0.0f);
+            assert(ComputeSpatialFalloffCurved(4000, 3500, 0.5f) == 0.0f);
+            assert(ComputeSpatialFalloffCurved(3000, 3500, 0.5f) > ComputeSpatialFalloffCurved(3000, 3500, 1.0f));
+            assert(ComputeSpatialFalloffCurved(3000, 3500, 2.0f) < ComputeSpatialFalloffCurved(3000, 3500, 1.0f));
+            assert(ComputeSpatialFalloffCurved(10, 0, 0.5f) == 1.0f);
+        }'''
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            cpp, exe = Path(folder) / 'curve.cpp', Path(folder) / 'curve.exe'
+            cpp.write_text(program)
+            subprocess.run(['C:/msys64/mingw64/bin/g++.exe', '-std=c++14', str(cpp), '-o', str(exe)], check=True, capture_output=True)
+            subprocess.run([str(exe)], check=True, capture_output=True)
+
     def test_transient_fade_uses_current_world_distance(self):
         source = (ROOT / 'game/yw_fx.cpp').read_text()
         body = source[source.index('void yw_RenderTransientVPs('):]

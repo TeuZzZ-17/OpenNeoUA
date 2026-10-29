@@ -297,6 +297,9 @@ public:
     static Common::Ini::Key GameMgunAiFireAlignment;
     static Common::Ini::Key GameGlobalShkFade;
     static Common::Ini::Key GameGlobalPalFade;
+    static Common::Ini::Key GameGlobalShkFalloffPower;
+    static Common::Ini::Key GameGlobalPalFalloffPower;
+    static Common::Ini::Key GameGlobalSndFalloffPower;
 
     // OpenNeoUA: optional procedural HP bar shared by world/HUD. When enabled,
     // world-space Shield is omitted while the personal cockpit Shield keeps the

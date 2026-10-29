@@ -56,10 +56,10 @@ double ConeDistanceSquared(double x, double y, double z, const TFireTriggerArea 
             }
         }
     }
-    else if ( pz < box.minDepth )
+    else if ( pz < box.deadZone )
     {
-        const double ax = a * box.minDepth, by = b * box.minDepth;
-        pz = box.minDepth;
+        const double ax = a * box.deadZone, by = b * box.deadZone;
+        pz = box.deadZone;
         if ( ax > 0.0 && by > 0.0 && px*px/(ax*ax) + py*py/(by*by) > 1.0 )
         {
             double lo = 0.0, hi = std::hypot(ax*px, by*py);
@@ -199,8 +199,8 @@ bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFi
         out->coneY = tan((double)size.y * C_PI / 360.0);
         out->depth = size.z;
     }
-    if ( wproto.ai_fire_trigger_min_depth < out->depth )
-        out->minDepth = wproto.ai_fire_trigger_min_depth;
+    if ( wproto.ai_fire_trigger_dead_zone < out->depth )
+        out->deadZone = wproto.ai_fire_trigger_dead_zone;
     return true;
 }
 
@@ -230,7 +230,7 @@ bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &p
     const double r = std::max(radius, 0.0f);
     const double z = d.dot(box.forward);
     // The centre must be on the firing side of the muzzle.
-    if ( z < 0.0 || z + r < box.minDepth || z > box.depth + r )
+    if ( z < 0.0 || z + r < box.deadZone || z > box.depth + r )
         return false;
     const double x = d.dot(box.right);
     const double y = d.dot(box.up);
@@ -242,7 +242,7 @@ bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &p
         return ConeDistanceSquared(dx, y, z, box) <= r*r + 1e-6;
     }
     const double dy = std::max(fabs(y) - box.halfY, 0.0);
-    const double dz = std::max(std::max(z - box.depth, (double)box.minDepth - z), 0.0);
+    const double dz = std::max(std::max(z - box.depth, (double)box.deadZone - z), 0.0);
     return dx*dx + dy*dy + dz*dz <= r*r + 1e-6;
 }
 

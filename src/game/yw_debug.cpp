@@ -1256,7 +1256,7 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
                     for (int i = 0; i < 8; ++i)
                         corners[i] = box.top + box.right*((i&1) ? box.maxX : box.minX) +
                                      box.up*((i&2) ? box.halfY : -box.halfY) +
-                                     box.forward*((i&4) ? box.depth : box.minDepth);
+                                     box.forward*((i&4) ? box.depth : box.deadZone);
                     for (int i = 0; i < 8; ++i)
                         for (int bit = 1; bit <= 4; bit *= 2)
                             if ( !(i&bit) ) line(corners[i], corners[i|bit]);
@@ -1275,13 +1275,13 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
                         const double angle = 2.0*C_PI*i/32;
                         const double next = 2.0*C_PI*(i+1)/32;
                         line(rim(angle, box.depth), rim(next, box.depth));
-                        if ( box.minDepth > 0.0f )
-                            line(rim(angle, box.minDepth), rim(next, box.minDepth));
+                        if ( box.deadZone > 0.0f )
+                            line(rim(angle, box.deadZone), rim(next, box.deadZone));
                         if ( i%8 == 0 )
-                            line(rim(angle, box.minDepth), rim(angle, box.depth));
+                            line(rim(angle, box.deadZone), rim(angle, box.depth));
                     }
-                    line(box.top + box.right*box.minX + box.forward*box.minDepth,
-                         box.top + box.right*box.maxX + box.forward*box.minDepth);
+                    line(box.top + box.right*box.minX + box.forward*box.deadZone,
+                         box.top + box.right*box.maxX + box.forward*box.deadZone);
                 }
             }
         }

@@ -470,7 +470,7 @@ struct TFireTriggerArea
     float maxX = 0.0f;
     float halfY = 0.0f;
     float depth = 0.0f;
-    float minDepth = 0.0f;
+    float deadZone = 0.0f;
     double coneX = 0.0; // tangents of the half angles
     double coneY = 0.0;
     bool IsCone() const
@@ -1151,7 +1151,7 @@ public:
     TActiveDebuffState _active_debuff;
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
-    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: first-person MGUN shake, scaled from cockpit_mgun_camera_recoil
+    TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: first-person MGUN shake, scaled from mgun_cockpit_camera_recoil
     TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: ordered snd_normal playback while model=laser is firing
     TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: same snd_normal path for laser vertical mode
@@ -1221,7 +1221,7 @@ public:
     float _mgun_energy;
     float _mgun_angle;
     bool _mgun_energy_set;
-    float _cockpit_mgun_camera_recoil;
+    float _mgun_cockpit_camera_recoil;
     bool _mgun_angle_set;
     float _weapon_spread_x;
     float _weapon_spread_y;

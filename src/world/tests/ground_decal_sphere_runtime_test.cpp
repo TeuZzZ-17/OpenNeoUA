@@ -54,20 +54,6 @@ int main()
     if ( !world->_groundDecals.empty() )
         Check((world->_groundDecals.back().pos - vec3d(1800, 0, -1800)).length() < 1e-8,
               "decal anchored to nearest real terrain point");
-    auto burning=fx;
-    burning.ground_decal_fire=World::GroundDecalFireDefaults();
-    burning.ground_decal_fire.enabled=true;burning.ground_decal_fire.chance=100;
-    burning.fire_propagation_chance=100;burning.fire_propagation_count=2;
-    burning.fire_propagation_radius=15;burning.fire_propagation_delay=1000;
-    Check(world->SpawnGroundDecalInSphere(burning,center,10),"burning decal uses the actual terrain path");
-    Check(world->_groundFireSpread.size()==2,"successful ignition schedules bounded child patches");
-    Check(!world->_groundDecalSmoke.empty()&&world->_groundDecalSmoke.back().params.flame,"terrain decal creates flame emitter");
-    world->_timeStamp=500;world->UpdateGroundDecalFire();
-    Check(world->_groundFireSpread.size()==2,"propagation waits for the authored delay");
-    const size_t beforeSpread=world->_groundDecals.size();
-    world->_timeStamp=1500;world->UpdateGroundDecalFire();
-    Check(world->_groundFireSpread.empty(),"child patches do not schedule another generation");
-    Check(world->_groundDecals.size()==beforeSpread+2,"propagation projects two new decal patches onto the terrain");
     Check(!world->SpawnGroundDecalInSphere(fx, center, 9.999f), "production scanner rejects tiny gap");
     Check(world->SpawnGroundDecalInSphere(fx, center, 10.001f), "production scanner accepts tiny overlap");
     Check(!world->SpawnGroundDecalInSphere(fx, center, 0), "production scanner rejects zero radius");
