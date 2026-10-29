@@ -2672,7 +2672,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_mgun_energy = vhcl.mgun_energy;
         bacto->_mgun_angle = vhcl.mgun_angle;
         bacto->_mgun_energy_set = vhcl.mgun_energy_set;
-        bacto->_cockpit_mgun_camera_recoil = vhcl.cockpit_mgun_camera_recoil;
+        bacto->_mgun_cockpit_camera_recoil = vhcl.mgun_cockpit_camera_recoil;
         bacto->_mgun_angle_set = vhcl.mgun_angle_set;
         bacto->_weapon_spread_x = vhcl.weapon_spread_x;
         bacto->_weapon_spread_y = vhcl.weapon_spread_y;
@@ -3712,10 +3712,16 @@ void NC_STACK_ypaworld::ypaworld_func153(bact_hudi *arg)
 
 void NC_STACK_ypaworld::NoteUserDamageHover(NC_STACK_ypabact *attacker, NC_STACK_ypabact *target)
 {
-    if ( !attacker || !target || attacker != _userUnit || attacker != _viewerBact || !attacker->getBACT_inputting() )
+    if ( !attacker || !target || !_userUnit )
         return;
 
-    if ( target == attacker ||
+    // Fire from a Unit Gun/module mounted on the controlled unit counts as the
+    // player's own fire, so its targets show the HP bar too.
+    if ( (attacker != _userUnit && !attacker->IsMountedFamilyWith(_userUnit)) ||
+         _userUnit != _viewerBact || !_userUnit->getBACT_inputting() )
+        return;
+
+    if ( target == attacker || target == _userUnit ||
          target->_bact_type == BACT_TYPES_MISSLE ||
          target->_status == BACT_STATUS_DEAD ||
          target->_status == BACT_STATUS_CREATE ||

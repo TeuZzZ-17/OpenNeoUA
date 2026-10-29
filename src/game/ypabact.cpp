@@ -547,7 +547,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_energy = 0.0;
     _mgun_angle = 0.0;
     _mgun_energy_set = false;
-    _cockpit_mgun_camera_recoil = 0.0f;
+    _mgun_cockpit_camera_recoil = 0.0f;
     _mgun_angle_set = false;
     _vehicle_fire_vp_end_time = 0;
     _weapon_spread_x = 0.0;
@@ -2375,7 +2375,7 @@ void NC_STACK_ypabact::Renew()
     _mgun_energy = 0.0;
     _mgun_angle = 0.0;
     _mgun_energy_set = false;
-    _cockpit_mgun_camera_recoil = 0.0f;
+    _mgun_cockpit_camera_recoil = 0.0f;
     _mgun_angle_set = false;
     _mgun_soundcarrier.Clear();
     _mimic_soundcarrier.Clear();

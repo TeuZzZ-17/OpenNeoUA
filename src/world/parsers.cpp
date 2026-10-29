@@ -2752,21 +2752,6 @@ static void ParseDecalEdgeFade(ScriptParser::Parser &parser, const std::string &
         fx.ground_decal_edge_fade = std::max(0.0f, std::min(number, 10.0f));
 }
 
-// Removes one optional trailing '%' from each '_' separated value ("30%_40%" -> "30_40").
-static std::string StripPercentSigns(const std::string &value)
-{
-    std::string out;
-    out.reserve(value.size());
-    for (size_t i = 0; i < value.size(); ++i)
-    {
-        const bool endsValue = i + 1 == value.size() || value[i + 1] == '_';
-        if ( value[i] == '%' && endsValue )
-            continue;
-        out.push_back(value[i]);
-    }
-    return out;
-}
-
 // Manual diameter, in world units. Zero suppresses the decal.
 static bool ParseDecalSizeRange(const std::string &value, float &minValue, float &maxValue)
 {
@@ -2922,28 +2907,6 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
             _fadeIn = NonNegativeFiniteMilliseconds(parser, fade[0]);
             _fadeOut = NonNegativeFiniteMilliseconds(parser, fade[1]);
         }
-    }
-    else if(!StriCmp(p1,"fire_change"))
-    {
-        const std::string value=StripPercentSigns(p2);
-        int chance=0;
-        ParseBoundedIntegerParam("fire_change","fire_change",value,0,100,0,chance);
-        fx.ground_decal_fire.chance=chance;
-        fx.ground_decal_fire.enabled=chance>0;
-    }
-    else if(ParseBoundedIntegerParam("fire_propagation_chance",p1,StripPercentSigns(p2),0,100,0,fx.fire_propagation_chance)) {}
-    else if(ParseBoundedIntegerParam("fire_propagation_count",p1,p2,0,8,0,fx.fire_propagation_count)) {}
-    else if(ParseBoundedIntegerParam("fire_propagation_delay",p1,p2,0,3600000,1500,fx.fire_propagation_delay)) {}
-    else if(!StriCmp(p1,"fire_propagation_radius"))
-        fx.fire_propagation_radius=ParseBoundedNonNegativeFiniteOrFallback(parser,p2,12000.0f,0.0f);
-    else if(!StriCmp(p1.substr(0,5),"fire_"))
-    {
-        const bool enabled=fx.ground_decal_fire.enabled;
-        const int chance=fx.ground_decal_fire.chance;
-        if(!ParseGroundDecalSmokeParam(parser,"smoke_"+p1.substr(5),p2,fx.ground_decal_fire))
-            return ScriptParser::RESULT_UNKNOWN;
-        fx.ground_decal_fire.enabled=enabled;
-        fx.ground_decal_fire.chance=chance;
     }
     else if ( ParseGroundDecalSmokeParam(parser, p1, p2, fx.ground_decal_smoke) )
     {
@@ -4131,7 +4094,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->mgun_base_megadeth = p2;
     }
-    else if ( !StriCmp(p1, "cockpit_mgun_camera_recoil") )
+    else if ( !StriCmp(p1, "mgun_cockpit_camera_recoil") )
     {
         // First-person MGUN shake intensity, 0-10. Invalid values disable it.
         float intensity = parser.stof(p2, 0);
@@ -4139,7 +4102,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
             intensity = 0.0f;
         else if ( intensity > 10.0f )
             intensity = 10.0f;
-        _vhcl->cockpit_mgun_camera_recoil = intensity;
+        _vhcl->mgun_cockpit_camera_recoil = intensity;
     }
     else if ( !StriCmp(p1, "mgun_energy") )
     {
@@ -4866,7 +4829,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_energy = 0.0;
         _vhcl->mgun_angle = 0.0;
         _vhcl->mgun_energy_set = false;
-        _vhcl->cockpit_mgun_camera_recoil = 0.0f;
+        _vhcl->mgun_cockpit_camera_recoil = 0.0f;
         _vhcl->mgun_angle_set = false;
         _vhcl->mgun_3ds_dead.clear();
         _vhcl->mgun_3ds_megadeth.clear();
@@ -5149,7 +5112,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->ai_fire_trigger_cone_forward = vec3d();
         _wpn->ai_fire_trigger_cone_below = vec3d();
         _wpn->ai_fire_trigger_forward_max_inclination = 0.0f;
-        _wpn->ai_fire_trigger_min_depth = 0.0f;
+        _wpn->ai_fire_trigger_dead_zone = 0.0f;
         _wpn->fire_time_scale = 1.0f;
         _wpn->fire_time_scale_hp_drain.Clear();
         _wpn->snd_launch_at_muzzle = false;
@@ -5949,10 +5912,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
                         _wpnID, p1.c_str(), p2.c_str(), count);
     }
     else if ( !StriCmp(p1, "ai_fire_trigger_forward_max_inclination") ||
-              !StriCmp(p1, "ai_fire_trigger_min_depth") )
+              !StriCmp(p1, "ai_fire_trigger_dead_zone") )
     {
         const bool tilt = !StriCmp(p1, "ai_fire_trigger_forward_max_inclination");
-        float &valueOut = tilt ? _wpn->ai_fire_trigger_forward_max_inclination : _wpn->ai_fire_trigger_min_depth;
+        float &valueOut = tilt ? _wpn->ai_fire_trigger_forward_max_inclination : _wpn->ai_fire_trigger_dead_zone;
         valueOut = 0.0f;
         bool valid = false;
         try

@@ -164,14 +164,14 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
 
     // One soft disc as a camera-facing node, like the procedural energy symbols.
     const auto queueDisc = [&](const vec3d &worldPos, float size, float red, float green,
-                               float blue, float alpha, bool flame=false)
+                               float blue, float alpha)
     {
         alpha = GroundDecalSmokeClampUnit(alpha);
         if ( size <= 0.01f || alpha <= 0.0f )
             return;
 
         const vec3d viewPos = view->CalcSclRot.Transform(worldPos - view->CalcPos);
-        mat4x4 transform(mat3x3::Scale(flame?vec3d(size*0.45f,size*1.6f,1.0f):vec3d(size,size,1.0f)));
+        mat4x4 transform(mat3x3::Scale(vec3d(size, size, 1.0f)));
         transform.m03 = viewPos.x;
         transform.m13 = viewPos.y;
         transform.m23 = viewPos.z;
@@ -180,7 +180,6 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
         render = GFX::TRenderNode(GFX::TRenderNode::TYPE_MESH);
         render.Mesh = &_groundDecalSmokeMesh;
         render.Flags = _groundDecalSmokeMesh.Mat.Flags | arg->flags;
-        if(flame)render.Flags=(render.Flags&~GFX::RFLAGS_ALPHABLEND)|GFX::RFLAGS_LUMTRACY;
         render.Color = _groundDecalSmokeMesh.Mat.Color;
         render.ColorMul = GFX::TGLColor(GroundDecalSmokeClampUnit(red),
                                         GroundDecalSmokeClampUnit(green),
@@ -220,16 +219,6 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
                 if ( !GDS::Evaluate(*it, slot, age, &puff) )
                     continue;
 
-                if(params.flame)
-                {
-                    const float flicker=0.85f+0.15f*std::sin(age*0.045f+slot*2.37f);
-                    const float alpha=params.tint.a*puff.alpha*gain*flicker;
-                    queueDisc(puff.pos,puff.size*flicker,params.tint.r,
-                              params.tint.g*(1.0f-0.55f*puff.phase),params.tint.b*(1.0f-puff.phase),alpha,true);
-                    queueDisc(puff.pos+vec3d(0,puff.size*0.3f,0),puff.size*0.45f,
-                              1.0f,0.88f,0.45f,alpha*0.8f,true);
-                    continue;
-                }
                 const float shade = std::min(1.0f, (0.85f + 0.5f * puff.phase) * puff.shade);
                 queueDisc(puff.pos, puff.size,
                           params.tint.r * shade, params.tint.g * shade, params.tint.b * shade,

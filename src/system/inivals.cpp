@@ -400,6 +400,11 @@ Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.ai_mgun_fire_alignment",
 // negative or zero means no additional fade. SND keeps its legacy behavior.
 Common::Ini::Key IniConf::GameGlobalShkFade("game.global_shk_fade_inout", Common::Ini::KT_WORD, std::string("0_0"));
 Common::Ini::Key IniConf::GameGlobalPalFade("game.global_pal_fade_inout", Common::Ini::KT_WORD, std::string("0_0"));
+// OpenNeoUA: curve of the distance attenuation of SHK, PAL and SND effects that
+// author a radius. 1 (default, missing or invalid) = linear; below 1 = softer.
+Common::Ini::Key IniConf::GameGlobalShkFalloffPower("game.global_shk_falloff_power", Common::Ini::KT_WORD, std::string("1"));
+Common::Ini::Key IniConf::GameGlobalPalFalloffPower("game.global_pal_falloff_power", Common::Ini::KT_WORD, std::string("1"));
+Common::Ini::Key IniConf::GameGlobalSndFalloffPower("game.global_snd_falloff_power", Common::Ini::KT_WORD, std::string("1"));
 
 // OpenNeoUA custom: procedural HP bar shared by world/HUD. When enabled, the
 // world-space Shield bar is omitted while the personal cockpit Shield keeps
@@ -743,6 +748,9 @@ void IniConf::Init()
         , &GameMgunAiFireAlignment
         , &GameGlobalShkFade
         , &GameGlobalPalFade
+        , &GameGlobalShkFalloffPower
+        , &GameGlobalPalFalloffPower
+        , &GameGlobalSndFalloffPower
         , &GfxWorldNewHpBarEnable
         , &GfxWorldNewHpBarFullTint
         , &GfxWorldNewHpBarLowTint

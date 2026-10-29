@@ -924,17 +924,17 @@ void TestVanillaSectorMinigun() {
 void TestMinimumDepth() {
     WorldProbe w;
     Check(ParseWeapons(w, {
-        "new_weapon 80", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_min_depth = 150", "end",
-        "new_weapon 81", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 40_40_1000", "ai_fire_trigger_min_depth = 150", "end",
-        "new_weapon 82", "model = bomb", "ai_fire_trigger_box_below_xyz = 80_1000_400", "ai_fire_trigger_min_depth = 150", "end",
-        "new_weapon 83", "model = bomb", "ai_fire_trigger_cone_below_xyz = 40_40_1000", "ai_fire_trigger_min_depth = 150", "end",
-        "new_weapon 84", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_min_depth = -1", "end",
-        "new_weapon 85", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_min_depth = 1200", "end"}),
+        "new_weapon 80", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 81", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 40_40_1000", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 82", "model = bomb", "ai_fire_trigger_box_below_xyz = 80_1000_400", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 83", "model = bomb", "ai_fire_trigger_cone_below_xyz = 40_40_1000", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 84", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_dead_zone = -1", "end",
+        "new_weapon 85", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_dead_zone = 1200", "end"}),
         "minimum depth fixtures parse");
     Unit shooter; shooter.Bind(w, 1, 1, vec3d(2400, -300, -2400));
     for (int id : {80, 81, 82, 83}) {
         TFireTriggerArea area;
-        Check(shooter.GetAIFireTriggerArea(w._weaponProtos[id], &area) && Near(area.minDepth, 150),
+        Check(shooter.GetAIFireTriggerArea(w._weaponProtos[id], &area) && Near(area.deadZone, 150),
               "minimum depth applies to all four shapes");
         Check(!ypabact_FireTriggerAreaContains(area, area.top + area.forward * 100, 0),
               "point inside the near dead zone cannot trigger fire");
@@ -944,9 +944,9 @@ void TestMinimumDepth() {
               "a unit touching the near boundary can trigger fire");
     }
     TFireTriggerArea area;
-    Check(shooter.GetAIFireTriggerArea(w._weaponProtos[84], &area) && Near(area.minDepth, 0),
+    Check(shooter.GetAIFireTriggerArea(w._weaponProtos[84], &area) && Near(area.deadZone, 0),
           "invalid minimum leaves the vanilla near boundary");
-    Check(shooter.GetAIFireTriggerArea(w._weaponProtos[85], &area) && Near(area.minDepth, 0),
+    Check(shooter.GetAIFireTriggerArea(w._weaponProtos[85], &area) && Near(area.deadZone, 0),
           "minimum beyond the far end cannot disable the volume");
 }
 

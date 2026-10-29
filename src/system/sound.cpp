@@ -123,6 +123,29 @@ static void SFX_ReadGlobalFade(Common::Ini::Key &key, int &fadeIn, int &fadeOut)
     fadeOut = SFX_ReadGlobalFadeMilliseconds(key, parts[1]);
 }
 
+// game.global_*_falloff_power: 0.1 to 4. Missing, malformed or out of range = 1 (linear).
+static float SFX_ReadFalloffPower(Common::Ini::Key &key)
+{
+    const std::string value = key.Get<std::string>();
+
+    try
+    {
+        size_t pos = 0;
+        const double power = std::stod(value, &pos);
+        if ( value.find_first_not_of(" \t\r\n", pos) == std::string::npos &&
+             std::isfinite(power) && power >= 0.1 && power <= 4.0 )
+            return (float)power;
+    }
+    catch (...)
+    {
+    }
+
+    if ( key.WasSet )
+        ypa_log_out("Warning: invalid %s '%s', using 1\n",
+                    key.Name.c_str(), value.c_str());
+    return 1.0f;
+}
+
 void wrapper_setSampleVRP(void *, walsmpl *hSample, int rate, int volume, int pan)
 {
     hSample->playback_rate(rate);
@@ -164,6 +187,9 @@ int SFXEngine::init()
     globalShkFadeOut = 0;
     globalPalFadeIn = 0;
     globalPalFadeOut = 0;
+    globalShkFalloffPower = 1.0f;
+    globalPalFalloffPower = 1.0f;
+    globalSndFalloffPower = 1.0f;
 
     for (int i = 0; i < 64; i++)
         flt_546F18[i] = 0.0;
@@ -185,6 +211,9 @@ int SFXEngine::init()
     audio_rev_stereo = System::IniConf::AudioRevStereo.Get<bool>();
     SFX_ReadGlobalFade(System::IniConf::GameGlobalShkFade, globalShkFadeIn, globalShkFadeOut);
     SFX_ReadGlobalFade(System::IniConf::GameGlobalPalFade, globalPalFadeIn, globalPalFadeOut);
+    globalShkFalloffPower = SFX_ReadFalloffPower(System::IniConf::GameGlobalShkFalloffPower);
+    globalPalFalloffPower = SFX_ReadFalloffPower(System::IniConf::GameGlobalPalFalloffPower);
+    globalSndFalloffPower = SFX_ReadFalloffPower(System::IniConf::GameGlobalSndFalloffPower);
 
     if ( audio_volume > 127 )
         audio_volume = 127;
@@ -618,7 +647,7 @@ void SFXEngine::SoundCarrierProcessSounds(TSndCarrier *smpls, float distance)
             float spatialFactor = 1.0f;
             if ( snd.Radius > 0.0f )
             {
-                spatialFactor = World::ComputeSpatialFalloff(distance, snd.Radius);
+                spatialFactor = World::ComputeSpatialFalloffCurved(distance, snd.Radius, globalSndFalloffPower);
                 if ( spatialFactor <= 0.0f )
                     continue;
             }
@@ -731,7 +760,7 @@ void SFXEngine::SoundCarrierProcessPFx(TSndCarrier *smpls, float distance)
         {
             if ( snd.PPFx->radius > 0.0f )
             {
-                if ( World::ComputeSpatialFalloff(distance, snd.PPFx->radius) <= 0.0f )
+                if ( World::ComputeSpatialFalloffCurved(distance, snd.PPFx->radius, globalPalFalloffPower) <= 0.0f )
                     continue;
             }
             else if ( distance >= 2400.0f )
@@ -751,7 +780,7 @@ void SFXEngine::SoundCarrierProcessPFx(TSndCarrier *smpls, float distance)
                     snd.PFxMag = (snd.PPFx->mag1 - snd.PPFx->mag0) * ((float)(currentTime - snd.StartTime) / (float)snd.PPFx->time) + snd.PPFx->mag0;
 
                 if ( snd.PPFx->radius > 0.0f )
-                    snd.PFxMag *= World::ComputeSpatialFalloff(distance, snd.PPFx->radius);
+                    snd.PFxMag *= World::ComputeSpatialFalloffCurved(distance, snd.PPFx->radius, globalPalFalloffPower);
                 else
                 {
                     const float legacyDistance = distance / 300.0f;
@@ -810,7 +839,7 @@ void SFXEngine::SoundCarrierProcessShake(TSndCarrier *smpls, float distance)
         {
             if ( snd.PShkFx->radius > 0.0f )
             {
-                if ( World::ComputeSpatialFalloff(distance, snd.PShkFx->radius) <= 0.0f )
+                if ( World::ComputeSpatialFalloffCurved(distance, snd.PShkFx->radius, globalShkFalloffPower) <= 0.0f )
                     continue;
             }
             else if ( distance >= 2400.0f )
@@ -830,7 +859,7 @@ void SFXEngine::SoundCarrierProcessShake(TSndCarrier *smpls, float distance)
                     snd.ShkMag = (snd.PShkFx->mag1 - snd.PShkFx->mag0) * ((float)(currentTime - snd.StartTime) / (float)snd.PShkFx->time) + snd.PShkFx->mag0;
 
                 if ( snd.PShkFx->radius > 0.0f )
-                    snd.ShkMag *= World::ComputeSpatialFalloff(distance, snd.PShkFx->radius);
+                    snd.ShkMag *= World::ComputeSpatialFalloffCurved(distance, snd.PShkFx->radius, globalShkFalloffPower);
                 else
                 {
                     // Legacy mute is the old shake-distance attenuation. It is

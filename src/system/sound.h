@@ -359,6 +359,9 @@ public:
     int globalShkFadeOut;
     int globalPalFadeIn;
     int globalPalFadeOut;
+    float globalShkFalloffPower;
+    float globalPalFalloffPower;
+    float globalSndFalloffPower;
     float flt_546F18[64];
     vec3d stru_547018;
     vec3d stru_547024;

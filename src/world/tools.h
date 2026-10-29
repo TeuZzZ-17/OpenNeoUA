@@ -579,6 +579,18 @@ inline float ComputeSpatialFalloff(float distance, float radius)
     return factor < 0.0f ? 0.0f : (factor > 1.0f ? 1.0f : factor);
 }
 
+// Same attenuation with an adjustable curve: power = 1 is the linear one above,
+// below 1 the effect stays stronger at a distance and still reaches exactly zero
+// at the radius, above 1 it dies out sooner.
+inline float ComputeSpatialFalloffCurved(float distance, float radius, float power)
+{
+    const float linear = ComputeSpatialFalloff(distance, radius);
+    if ( power == 1.0f || linear <= 0.0f || linear >= 1.0f )
+        return linear;
+
+    return std::pow(linear, power);
+}
+
 inline Common::Point PositionToSectorID(const vec3d &pos)
 { return Common::Point(pos.x / CVSectorLength, -pos.z / CVSectorLength); };
 

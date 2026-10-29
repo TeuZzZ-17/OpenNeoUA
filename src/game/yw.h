@@ -2890,7 +2890,6 @@ public:
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
     bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
     void RenderGroundDecals(baseRender_msg *arg);
-    void UpdateGroundDecalFire();
     void ClearGroundDecals();
     bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius, uint32_t seed);
     void RenderGroundDecalSmoke(baseRender_msg *arg);
@@ -3200,12 +3199,6 @@ public:
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;
     int32_t _nextTransientVPId = 1;
-    struct TGroundFireSpread {
-        World::TChainFXConfig config;
-        vec3d position;
-        int32_t due = 0;
-    };
-    std::vector<TGroundFireSpread> _groundFireSpread;
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<World::GroundDecalSmoke::Emitter> _groundDecalSmoke;

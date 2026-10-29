@@ -262,7 +262,6 @@ struct DestFX
 struct TGroundDecalSmoke
 {
     bool enabled = false;
-    bool flame = false;
     int chance = 100;
     int duration_min = 20000;
     int duration_max = 25000;
@@ -295,21 +294,6 @@ struct TDecalSizeOverride
     float size_min = 0.0f;
     float size_max = 0.0f;
 };
-
-inline TGroundDecalSmoke GroundDecalFireDefaults()
-{
-    TGroundDecalSmoke fire;
-    fire.flame=true;fire.chance=0;
-    fire.duration_min=8000;fire.duration_max=16000;
-    fire.fade_in=300;fire.fade_out=4000;
-    fire.count_min=2;fire.count_max=6;
-    fire.size_min=15;fire.size_max=35;
-    fire.growth=1.4f;fire.rise_speed=60;
-    fire.puff_time_min=350;fire.puff_time_max=900;
-    fire.drift=15;fire.spread=65;fire.intensity=180;
-    fire.tint.r=1.0f;fire.tint.g=140.0f/255;fire.tint.b=25.0f/255;fire.tint.a=220.0f/255;
-    return fire;
-}
 
 struct TChainFXConfig
 {
@@ -371,11 +355,6 @@ struct TChainFXConfig
     int ground_decal_edge_fade_min = -1;
     int ground_decal_edge_fade_max = -1;
     TGroundDecalSmoke ground_decal_smoke;
-    TGroundDecalSmoke ground_decal_fire = GroundDecalFireDefaults();
-    int fire_propagation_chance = 0;
-    int fire_propagation_count = 0;
-    float fire_propagation_radius = 0.0f;
-    int fire_propagation_delay = 1500;
 };
 
 struct TRoboColl
@@ -851,7 +830,7 @@ struct TVhclProto
     float mgun_angle = 0.0;
     std::string mgun_name;
     bool mgun_energy_set = false;
-    float cockpit_mgun_camera_recoil = 0.0f;
+    float mgun_cockpit_camera_recoil = 0.0f;
     bool mgun_angle_set = false;
     float weapon_spread_x = 0.0;
     float weapon_spread_y = 0.0;
@@ -1412,7 +1391,7 @@ struct TWeapProto
     vec3d ai_fire_trigger_cone_forward;
     vec3d ai_fire_trigger_cone_below;
     float ai_fire_trigger_forward_max_inclination = 0.0f;
-    float ai_fire_trigger_min_depth = 0.0f;
+    float ai_fire_trigger_dead_zone = 0.0f;
     enum AIFireTriggerShape { AI_TRIGGER_NONE, AI_TRIGGER_BOX_BELOW, AI_TRIGGER_BOX_FORWARD,
                               AI_TRIGGER_CONE_FORWARD, AI_TRIGGER_CONE_BELOW };
     AIFireTriggerShape GetAIFireTriggerShape() const

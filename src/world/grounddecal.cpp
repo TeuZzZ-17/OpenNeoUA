@@ -19,7 +19,16 @@
 namespace
 {
 
-constexpr int GROUND_DECAL_MAX_TRIANGLES = 128;
+// A decal that needs more triangles than this is discarded without any message.
+// Very large decals (about 1000+ units) cover many terrain cells and need
+// far more triangles than small ones. Small decals never come close to it.
+constexpr int GROUND_DECAL_MAX_TRIANGLES = 1024;
+// Starting buffer size only: it must not follow the cap, because the decal
+// keeps the vectors' capacity for its whole life.
+constexpr int GROUND_DECAL_RESERVED_TRIANGLES = 128;
+// Maximum terrain locations scanned for one decal. Independent from the
+// triangle cap, so raising the cap does not make the scan more expensive.
+constexpr int64_t GROUND_DECAL_MAX_LOCATIONS = 128 * 16 + 64;
 constexpr int GROUND_DECAL_SHAPE_POINTS = 12;
 constexpr float GROUND_DECAL_SHAPE_JAGGEDNESS = 0.35f;
 constexpr float GROUND_DECAL_SURFACE_BIAS = 1.5f;
@@ -808,8 +817,7 @@ static bool GroundDecalBuildGeometry(NC_STACK_ypaworld *world,
 
     const int64_t locationCount = (int64_t)(maxMicroX - minMicroX + 1) *
                                   (int64_t)(maxMicroZ - minMicroZ + 1);
-    const int64_t locationLimit = (int64_t)maxTriangles * 16 + 64;
-    if ( locationCount > locationLimit )
+    if ( locationCount > GROUND_DECAL_MAX_LOCATIONS )
         return false;
 
     const int centerMicroX = GroundDecalMicroX(hit.isectPos.x);
@@ -1211,8 +1219,8 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
 
     std::vector<GFX::TVertex> vertices;
     std::vector<GFX::IndexType> indices;
-    vertices.reserve((size_t)maxTriangles * 3);
-    indices.reserve((size_t)maxTriangles * 3);
+    vertices.reserve((size_t)GROUND_DECAL_RESERVED_TRIANGLES * 3);
+    indices.reserve((size_t)GROUND_DECAL_RESERVED_TRIANGLES * 3);
 
     if ( !GroundDecalBuildGeometry(this, hit, decalSizeX, decalSizeZ, angle,
                                    decalPoints,
@@ -1271,45 +1279,11 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     // Optional smoke rising from the fresh decal (off unless the block has smoke = 1).
     SpawnGroundDecalSmoke(config.ground_decal_smoke, decal.pos, decal.radius,
                           (uint32_t)(GroundDecalRandomUnit(this, hit, 0x534d4f4bu) * 16777216.0f));
-    const uint32_t fireSeed=(uint32_t)(GroundDecalRandomUnit(this,hit,0x46495245u)*16777216.0f);
-    if(SpawnGroundDecalSmoke(config.ground_decal_fire,decal.pos,decal.radius,fireSeed)&&
-       config.fire_propagation_count>0&&config.fire_propagation_radius>0)
-    {
-        for(int i=0;i<std::min(8,config.fire_propagation_count)&&_groundFireSpread.size()<128;++i)
-        {
-            if(GroundDecalRandomUnit(this,hit,0x50524f50u+i)*100>=config.fire_propagation_chance)continue;
-            const float angle=GROUND_DECAL_PI2*GroundDecalRandomUnit(this,hit,0x46414e47u+i);
-            const float distance=config.fire_propagation_radius*std::sqrt(GroundDecalRandomUnit(this,hit,0x46444953u+i));
-            TGroundFireSpread child;child.config=config;
-            child.config.fire_propagation_count=0;
-            child.config.ground_decal_fire.chance=100;
-            child.config.ground_decal_smoke.enabled=true;
-            child.position=decal.pos+vec3d(std::cos(angle)*distance,0,std::sin(angle)*distance);
-            child.due=_timeStamp+std::max(0,std::min(3600000,config.fire_propagation_delay));
-            _groundFireSpread.push_back(std::move(child));
-        }
-    }
     return true;
-}
-
-void NC_STACK_ypaworld::UpdateGroundDecalFire()
-{
-    if(_isNetGame||World::GroundDecalLimit()<=0){_groundFireSpread.clear();return;}
-    for(size_t i=0;i<_groundFireSpread.size();)
-    {
-        if(_timeStamp<_groundFireSpread[i].due){++i;continue;}
-        auto child=std::move(_groundFireSpread[i]);
-        _groundFireSpread.erase(_groundFireSpread.begin()+i);
-        ypaworld_arg136 hit;
-        hit.stPos=child.position-vec3d(0,2000,0);hit.vect=vec3d(0,4000,0);hit.flags=0;
-        ypaworld_func136(&hit);
-        if(hit.isect)SpawnGroundDecal(child.config,hit);
-    }
 }
 
 void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
 {
-    UpdateGroundDecalFire();
     const int limit = World::GroundDecalLimit();
     if ( limit <= 0 )
     {
@@ -1375,7 +1349,6 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
 
 void NC_STACK_ypaworld::ClearGroundDecals()
 {
-    _groundFireSpread.clear();
     _groundDecals.clear();
     ClearGroundDecalSmoke();
 
