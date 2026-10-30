@@ -10,7 +10,7 @@ void log_d3dlog(const char *format, ...);
 
 void init_dinputlog();
 
-void sub_412038(const char *);
+
 
 void log_d3d_fail(const char *title, const char *msg, unsigned int errID);
 

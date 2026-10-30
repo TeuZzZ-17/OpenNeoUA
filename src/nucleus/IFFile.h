@@ -106,12 +106,6 @@ public:
     void ReportSetLooseOverrideFailed(const std::string &reason) const;
     static void ReportSetLooseOverrideUsed(const SetLooseOverride &overrideInfo);
     static void ReportSetLooseOverrideFailed(const SetLooseOverride &overrideInfo, const std::string &reason);
-    static void ReportSetBasRawScan(const std::string &filename, const char *sourceFunction = nullptr);
-    static void FlushSetLooseOverrideReport();
-    static void BeginSetBasParseTrace(const std::string &filename);
-    static void EndSetBasParseTrace();
-    static bool IsSetBasParseTraceActive();
-    static void TraceSetBasParse(const char *section, const std::string &message, const IFFile *mfile = nullptr);
     static std::string ChunkLabel(const Context &chunk);
 
     static bool FindSetLooseOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction = nullptr);
@@ -137,7 +131,6 @@ public:
     static IFFile *RsrcOpenIFFileVanilla(const std::string &filename, const std::string &mode);
     static IFFile UAOpenIFFileVanilla(const std::string &filename, const std::string &mode);
     static IFFile UAOpenIFFileWithSetLooseEmbeddedOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction = nullptr);
-    static IFFile UAOpenIFFileWithSetLooseEmrsOverride(const std::string &filename, const std::string &mode, const std::string &className, const std::string &payload, SetLooseOverride *out, const char *sourceFunction = nullptr, size_t currentOffset = (size_t)-1);
     static IFFile *RsrcOpenIFFile(const std::string &filename, const std::string &mode, const char *sourceFunction = nullptr);
     static IFFile UAOpenIFFile(const std::string &filename, const std::string &mode, const char *sourceFunction = nullptr);
 

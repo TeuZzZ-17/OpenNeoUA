@@ -21,6 +21,62 @@
 #include "system/inivals.h"
 #include "game/yw_game_ui_internal.h"
 
+namespace
+{
+std::map<std::string, bool> g_speechEventLoggedUsed;
+std::map<std::string, bool> g_speechEventLoggedFallback;
+
+// Logs a speech event message only once per key.
+void SpeechEventLogOnce(std::map<std::string, bool> &cache, const std::string &key, const char *fmt, const std::string &path)
+{
+    if ( cache[key] )
+        return;
+
+    cache[key] = true;
+    ypa_log_out(fmt, path.c_str());
+}
+
+// Picks one of the variants of a speech event file (cached per path).
+std::string SpeechEventFindFile(std::map<std::string, World::Speech::Variants> &cache,
+                                const std::string &path)
+{
+    std::string authored = path;
+    if ( authored.compare(0, 5, "rsrc:") == 0 ) authored.erase(0, 5);
+    std::string normalized;
+    if ( !uaNormalizeDataAssetPath(authored, &normalized, true) ) return "";
+    const std::string relative = normalized.substr(5);
+    auto cached = cache.find(normalized);
+    if ( cached == cache.end() )
+    {
+        World::Speech::Variants variants;
+        const std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:");
+        if ( relative.size() >= 4 && !StriCmp(relative.substr(relative.size() - 4), ".wav") )
+        {
+            if ( uaFileExist("rsrc:" + relative) ) variants.Files.push_back(relative);
+        }
+        else
+        {
+            const size_t slash = relative.find_last_of('/');
+            const std::string directory = slash == std::string::npos ? "" : relative.substr(0, slash + 1);
+            const std::string stem = slash == std::string::npos ? relative : relative.substr(slash + 1);
+            FSMgr::DirIter files = uaOpenDir("rsrc:" + directory);
+            for (FSMgr::iNode *file = files.getNext(); file; file = files.getNext())
+            {
+                if ( file->getType() == FSMgr::iNode::NTYPE_FILE &&
+                     World::Speech::IsVariantFilename(file->getName(), stem) )
+                    variants.Files.push_back(directory + file->getName());
+            }
+            std::sort(variants.Files.begin(), variants.Files.end());
+            if ( variants.Files.empty() && uaFileExist("rsrc:" + relative + ".wav") )
+                variants.Files.push_back(relative + ".wav");
+        }
+        Common::Env.SetPrefix("rsrc", oldRsrc);
+        cached = cache.emplace(normalized, std::move(variants)).first;
+    }
+    return World::Speech::ChooseVariant(cached->second, static_cast<unsigned int>(rand()));
+}
+}
+
 bool NC_STACK_ypaworld::VoiceMessagePlayResourceFile(const std::string &filename, NC_STACK_ypabact *unit, int priority, bool ignoreTimeScale)
 {
     if ( IsSpectatorControlled() )

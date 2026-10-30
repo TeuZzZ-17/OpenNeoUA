@@ -136,13 +136,6 @@ public:
 
     void writeU32(uint32_t dw)
     {
-        /*uint8_t bytes[4];
-        bytes[0] = dw & 0xFF;
-        bytes[1] = (dw >> 8) & 0xFF;
-        bytes[2] = (dw >> 16) & 0xFF;
-        bytes[3] = (dw >> 24) & 0xFF;
-
-        write(bytes, 4);*/
         write(&dw, 4);
     }
 

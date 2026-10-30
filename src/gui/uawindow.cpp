@@ -228,13 +228,6 @@ void UAWindow::OnCloseClick(Widget *w, void *d)
     form->SetEnable(false);
 }
 
-void UAWindow::OnHelpClick(Widget *w, void *d)
-{
-    // OpenNeoUA: legacy online help is intentionally disabled.
-    (void)w;
-    (void)d;
-}
-
 void UAWindow::OnBtnDownSound(Widget *w, void *d, Common::Point, Common::Point, int)
 {
     SFXEngine::SFXe.startSound(&yw->_GameShell->samples1_info, 3);

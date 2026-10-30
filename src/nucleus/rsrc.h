@@ -79,9 +79,6 @@ public:
     virtual void *getRsrc_pData();
     virtual int getRsrc_dontCopy();
 
-    static RSRCList *getRsrc_sharedList();
-    static RSRCList *getRsrc_privateList();
-
     virtual bool IsSameRes(NC_STACK_rsrc *res)
     {
         return resource == res->resource;

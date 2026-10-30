@@ -71,6 +71,7 @@ set(SOURCES
     nucleus/skeleton.cpp
     nucleus/sklt.cpp
     system/fsmgr.cpp
+    system/framepacer.cpp
     system/gametime.cpp
     system/gfx.cpp
     system/glfuncs.cpp
@@ -96,6 +97,12 @@ set(SOURCES
     world/weapontracer.cpp
     world/luaevents.cpp
     world/parsers.cpp
+    world/parsers_fx.cpp
+    world/parsers_level.cpp
+    world/parsers_user.cpp
+    world/parsers_vehicle.cpp
+    world/parsers_weapon.cpp
+    world/parsers_world.cpp
     world/nparticle.cpp
     world/protos.cpp
     world/saveparsers.cpp
@@ -104,6 +111,9 @@ set(SOURCES
     platform/wrapal.cpp
     game/yw.cpp
     game/yw_shell.cpp
+    game/yw_shell_session.cpp
+    game/yw_shell_ui_options.cpp
+    game/yw_shell_ui_screens.cpp
     game/yw_sprint.cpp
     game/yw_gem.cpp
     game/yw_plasma.cpp
@@ -131,6 +141,10 @@ set(SOURCES
     game/yw_debug.cpp
     game/yw_artillery_markers.cpp
     game/yw_game_ui.cpp
+    game/yw_ui_status_icons.cpp
+    game/yw_ui_map_draw.cpp
+    game/yw_ui_panels.cpp
+    game/yw_ui_render.cpp
     game/yw_ui_artillery.cpp
     game/yw_ui_squadron.cpp
     game/yw_ui_map.cpp

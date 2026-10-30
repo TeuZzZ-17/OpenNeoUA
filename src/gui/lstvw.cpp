@@ -506,7 +506,8 @@ int GuiList::Init(NC_STACK_ypaworld *yw, tInit &in)
     if ( !in.title.empty() )
     {
         listFlags |= GLIST_FLAG_WITH_TITLEBAR;
-        strncpy(title, in.title.c_str(), 64);
+        strncpy(title, in.title.c_str(), sizeof(title) - 1); // Always NUL-terminated.
+        title[sizeof(title) - 1] = 0;
     }
 
 

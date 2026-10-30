@@ -339,7 +339,6 @@ public:
                               const Common::Point &logicalSize);
 
     void AddClickBoxFront(ClickBox *box);
-    void AddClickBoxBack(ClickBox *box);
     void RemClickBox(ClickBox *box);
 
     virtual bool SetInputExpression(bool slider, uint32_t index, const std::string &val);
@@ -351,7 +350,6 @@ public:
 
     virtual void ResetSlider(int sldr);
 
-    int16_t GetHotKeyID(int16_t keycode);
     int16_t GetHotKey(uint16_t id);
 
     void RegisterInterface(const TQueryState& iface);

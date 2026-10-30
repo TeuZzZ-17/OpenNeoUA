@@ -78,12 +78,6 @@ void log_netlog(const char *format, ...)
 }
 
 
-void sub_412038(const char *msg)
-{
-    ypa_log_out("sub_412038: %s", msg);
-}
-
-
 void log_d3d_fail(const char *title, const char *msg, unsigned int errID)
 {
     const char *err;

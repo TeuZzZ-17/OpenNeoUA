@@ -669,19 +669,6 @@ struct SetLooseVisprotoCandidate
     IFFile::SetLooseOverride overrideInfo;
 };
 
-static std::string TrimBaseListLine(const std::string &line)
-{
-    size_t begin = 0;
-    while (begin < line.size() && std::isspace((unsigned char)line[begin]))
-        begin++;
-
-    size_t end = line.size();
-    while (end > begin && std::isspace((unsigned char)line[end - 1]))
-        end--;
-
-    return line.substr(begin, end - begin);
-}
-
 static BaseListLoadResult LoadBaseList(FSMgr::FileHandle *fil, BaseListParsePolicy policy)
 {
     BaseListLoadResult result;
@@ -711,13 +698,13 @@ static BaseListLoadResult LoadBaseList(FSMgr::FileHandle *fil, BaseListParsePoli
 
         if ( policy == BaseListParsePolicy::STRICT_LOOSE )
         {
-            std::string parsedLine = TrimBaseListLine(line);
+            std::string parsedLine = StrTrim(line);
             if ( parsedLine.empty() || parsedLine[0] == ';' || parsedLine[0] == '#' )
                 continue;
 
             if ( parsedLine[0] == '>' )
             {
-                std::string trailing = TrimBaseListLine(parsedLine.substr(1));
+                std::string trailing = StrTrim(parsedLine.substr(1));
                 if ( !trailing.empty() && trailing[0] != ';' && trailing[0] != '#' )
                 {
                     result.errorSlot = result.entryCount;
@@ -2441,7 +2428,6 @@ void yw_calcPlayerScore(NC_STACK_ypaworld *yw)
     {
         int last_time = 0;
 
-        //yw_f726c_nod *hnode = (yw_f726c_nod *)yw->history->lst.head;
         auto reader = yw->_history.GetReader();
 
         bool run = true;
@@ -3515,11 +3501,8 @@ void UserData::clear()
 
     inputChangedParts = 0;
     video_button = nullptr;
-    //GuiList video_listvw;
     game_default_res = 0;
-    //nlist video_mode_list;
     _gfxModeIndex = 0;
-    //GuiList d3d_listvw;
     win3d_guid.clear();
     win3d_name.clear();
 
@@ -3544,18 +3527,14 @@ void UserData::clear()
     confEnemyIndicator = false;
     _settingsChangeOptions = 0;
     disk_button = nullptr;
-    //GuiList disk_listvw;
     diskListActiveElement = 0;
     userNameDir.clear();
     diskScreenMode = 0;
-    //nlist files_list;
 
     savedDataFlags = 0;
 
     diskEnterFromMapSelect = false;
     locale_button = nullptr;
-    //nlist lang_dlls;
-    //GuiList local_listvw;
     default_lang_dll = nullptr;
     prev_lang = nullptr;
 
@@ -3567,7 +3546,6 @@ void UserData::clear()
     db_entry_id = -1;
 
     network_button = nullptr;
-    //GuiList network_listvw;
 
     netListY = 0;
 
@@ -3637,10 +3615,6 @@ void UserData::clear()
     missiontrack = 0;
     loadingtrack = 0;
     debriefingtrack = 0;
-//     audiotrack_adv shelltrack__adv;
-//     audiotrack_adv missiontrack__adv;
-//     audiotrack_adv loadingtrack__adv;
-//     audiotrack_adv debriefingtrack__adv;
 
     lastInputEvent = 0;
 

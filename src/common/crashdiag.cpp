@@ -679,11 +679,6 @@ void DisarmWatchdog()
     Breadcrumb("WATCHDOG", "watchdog disarmed for shutdown");
 }
 
-bool Enabled()
-{
-    return g_enabled.load(std::memory_order_relaxed);
-}
-
 void SetPhase(const char *phase)
 {
     if ( !g_enabled.load(std::memory_order_relaxed) )

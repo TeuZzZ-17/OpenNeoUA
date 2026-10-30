@@ -275,13 +275,6 @@ size_t NC_STACK_windp::CreateSession(windp_openSessionMsg *osm)
     return 0;
 }
 
-size_t NC_STACK_windp::GetSessionData(IDVPair *stak)
-{
-    //get session
-    
-    return 0;
-}
-
 size_t NC_STACK_windp::CloseSession(IDVPair *stak)
 {
     //close session
@@ -539,13 +532,6 @@ size_t NC_STACK_windp::FlushBroadcastBuffer()
     return ret;
 }
 
-size_t NC_STACK_windp::GetCaps(IDVPair *stak)
-{
-    // get caps info
-    
-    return 0;
-}
-
 size_t NC_STACK_windp::LockSession(int *arg)
 {
     // lock session
@@ -603,13 +589,6 @@ bool NC_STACK_windp::GetRemoteStart(windp_arg87 *arg)
     }
 
     return 1;
-}
-
-size_t NC_STACK_windp::GetLocalName(IDVPair *stak)
-{
-    //ask local machine
-    
-    return 0;
 }
 
 void NC_STACK_windp::SetVersion(const std::string &ver)

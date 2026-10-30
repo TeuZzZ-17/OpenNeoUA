@@ -107,7 +107,6 @@ void recorder_read_framedata(TGameRecorder *rcrd);
 void ypaworld_func163__sub2__sub1(NC_STACK_ypaworld *yw, float fperiod, TInputState *inpt);
 void ypaworld_func163__sub2__sub0(NC_STACK_ypaworld *yw, float fperiod, TInputState *inpt);
 void sub_445654(NC_STACK_ypaworld *yw, CmdStream *in, char *buf, const char *fmt, ...);
-bool yw_DebugIsLiveBact(NC_STACK_ypabact *unit);
 bool yw_DebugIsCurrentControlledBact(NC_STACK_ypaworld *world, NC_STACK_ypabact *unit);
 
 #endif // YW_GAME_IMPL_H_INCLUDED

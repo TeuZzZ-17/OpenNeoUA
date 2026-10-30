@@ -17,7 +17,7 @@
 extern "C" int SDLCALL SDL_ShowSimpleMessageBox(Uint32,const char *,const char *,SDL_Window *)
 {return 0;}
 
-extern void sb_0x4eb94c(NC_STACK_ypaworld *,TBriefengScreen *,TInputState *,int);
+extern void DrawBriefingObject(NC_STACK_ypaworld *,TBriefengScreen *,TInputState *,int);
 
 struct PreviewCaptureBase:NC_STACK_base
 {
@@ -185,16 +185,16 @@ int main()
     world._briefScreen.ViewingObjectRect=Common::FRect(-.9,.3,-.1,.9);
     TInputState input{};input.Period=0;
     auto *savedView=TF::Engine.GetViewPoint();
-    sb_0x4eb94c(&world,&world._briefScreen,&input,500);const auto classic=body.observed;
+    DrawBriefingObject(&world,&world._briefScreen,&input,500);const auto classic=body.observed;
     p.briefing_xyz=vec3d(15,-20,30);
-    sb_0x4eb94c(&world,&world._briefScreen,&input,500);
+    DrawBriefingObject(&world,&world._briefScreen,&input,500);
     check((body.observed.Pos-classic.Pos-p.briefing_xyz).length()<1e-6,"real briefing applies the offset after screen placement");
     check((body.observed.SclRot.Transform(vec3d(1,2,3))-classic.SclRot.Transform(vec3d(1,2,3))).length()<1e-6,"briefing offset leaves the classic rotation intact");
     const auto anchor = body.observed.Pos;
     for(float size:{1.f,9.f,50.f,100.f,10000.f})
     {
         p.briefing_size=size;
-        sb_0x4eb94c(&world,&world._briefScreen,&input,500);
+        DrawBriefingObject(&world,&world._briefScreen,&input,500);
         const auto position=body.observed.Pos;
         check(std::abs(position.x/position.z-anchor.x/anchor.z)<1e-6 &&
               std::abs(position.y/position.z-anchor.y/anchor.z)<1e-6,

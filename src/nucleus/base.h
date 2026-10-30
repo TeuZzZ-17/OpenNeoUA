@@ -220,8 +220,6 @@ public:
 
     vec3d GetPos();
     vec3d GetScale();
-    vec3d GetEulerAngles();
-    vec3i GetIntEulerAngles();
 
     virtual Instance *GenRenderInstance();
     static void CheckOpts(Instance **vpOpts, NC_STACK_base *bas);

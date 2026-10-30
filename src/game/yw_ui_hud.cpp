@@ -22,6 +22,15 @@
 #include "system/inivals.h"
 #include "game/yw_game_ui_internal.h"
 
+namespace
+{
+// Per-unit fade state of the enemy indicators, pruned against the current world.
+std::map<const NC_STACK_ypabact *, EnemyIndicatorVisibilityState> g_enemyIndicatorVisibilityStates;
+NC_STACK_ypaworld *g_enemyIndicatorVisibilityWorld = nullptr;
+int32_t g_enemyIndicatorVisibilityLastGameTime = 0;
+uint32_t g_enemyIndicatorVisibilityLastPrune = 0;
+}
+
 bool yw_GetPlasmaCurrencyHudLayout(NC_STACK_ypaworld *yw,
                                            uint64_t value,
                                            TPlasmaCurrencyHudLayout *layout)
@@ -963,10 +972,10 @@ int yw_GetInfoWeaponEffectIcons(NC_STACK_ypaworld *yw,
     // are configured.
     if ( weap->armor_penetration_targets > 0 )
         StatusIconAdd(paths, pathCount,
-                      StatusIconTrimPath(weap->armor_penetration_icon));
+                      StrTrim(weap->armor_penetration_icon));
 
     if ( weap->debuff.valid )
-        StatusIconAdd(paths, pathCount, StatusIconTrimPath(weap->debuff.icon));
+        StatusIconAdd(paths, pathCount, StrTrim(weap->debuff.icon));
 
     int iconCount = 0;
     for (int i = 0; i < pathCount && iconCount < 2; ++i)

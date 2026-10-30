@@ -817,17 +817,6 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
     ExpireArtilleryShellMarkers();
 }
 
-bool yw_DebugIsLiveBact(NC_STACK_ypabact *unit)
-{
-    return unit &&
-           !unit->_kidRef.IsListType(World::BLIST_CACHE) &&
-           unit->_status != BACT_STATUS_NOPE &&
-           unit->_status != BACT_STATUS_DEAD &&
-           unit->_status != BACT_STATUS_CREATE &&
-           unit->_status != BACT_STATUS_BEAM &&
-           !(unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
-}
-
 bool yw_DebugIsCurrentControlledBact(NC_STACK_ypaworld *world, NC_STACK_ypabact *unit)
 {
     return world &&

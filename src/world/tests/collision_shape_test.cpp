@@ -2909,12 +2909,12 @@ int main(int argc,char **argv) {
         return failures ? 1 : 0;
     }
     if (argc>1 && std::string(argv[1])=="--genesis-visual-terrain") {
-        extern int init_classesLists_and_variables();
+        extern int RegisterNucleusClasses();
         FSMgr::iDir::setBaseDir("..");
         Common::Env.SetPrefix("data", "Data");
         Common::Env.SetPrefix("rsrc", "data:set1");
         Common::Env.SetPrefix("scripts", "data:scripts");
-        init_classesLists_and_variables();
+        RegisterNucleusClasses();
         auto *set=load_set_base();
         Check(set && !set->GetKidList().empty(), "native active Set1 visual models load");
         if (set && !set->GetKidList().empty()) GenesisRealVisualTerrainRegression(set->GetKidList().front());

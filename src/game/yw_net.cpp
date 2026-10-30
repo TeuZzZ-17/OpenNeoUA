@@ -3428,7 +3428,8 @@ void yw_HandleNetMsg(NC_STACK_ypaworld *yw)
                         if ( usr->netLevelID > 0 && usr->netLevelID < 256 )
                         {
                             uamessage_lobbyInit lbyMsg;
-                            strncpy(lbyMsg.hostName, usr->netPlayerName.c_str(), 64);
+                            strncpy(lbyMsg.hostName, usr->netPlayerName.c_str(), sizeof(lbyMsg.hostName) - 1); // Always NUL-terminated.
+                            lbyMsg.hostName[sizeof(lbyMsg.hostName) - 1] = 0;
                             lbyMsg.msgID = UAMSG_LOBBYINIT;
                             lbyMsg.lvlID = usr->netLevelID;
                             lbyMsg.owner = 0;

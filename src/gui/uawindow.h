@@ -37,7 +37,6 @@ public:
 
 protected:
     static void OnCloseClick(Widget *w, void *); // For button
-    static void OnHelpClick(Widget *w, void *);  // For button
 
     static void OnBtnDownSound(Widget *w, void *, Common::Point, Common::Point, int);
 

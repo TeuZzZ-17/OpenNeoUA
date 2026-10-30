@@ -944,7 +944,7 @@ void NC_STACK_ypaworld::yw_3D_MouseSelect(TClickBoxInf *winp)
 
     ypaworld_func150(&arg150);
 
-    float v27, v28;
+    float v27 = 0.0f, v28 = 0.0f;
 
     if ( arg149.isect )
     {

@@ -113,19 +113,6 @@ vec3d NC_STACK_ypabact::GetCockpitCameraViewPosition() const
         _viewer_position * _cockpit_gun_camera_recoil);
 }
 
-void NC_STACK_ypabact::ToggleCockpitCameraMode()
-{
-    if ( !_world || !_world->_GameShell )
-        return;
-
-    // Intentionally retained as an internal legacy POV/cockpit switch. OpenNeoUA no longer
-    // exposes or persists this action; Nucleus.ini selects the session default.
-    // The two views are intentionally mutually exclusive. Do not leave an
-    // Alternative View camera state latched behind a manual cockpit-camera change.
-    ResetAlternativeView();
-    _world->_GameShell->cockpitCameraRuntimeMode = !_world->_GameShell->cockpitCameraRuntimeMode;
-}
-
 bool NC_STACK_ypabact::IsAlternativeViewAvailable()
 {
     if ( !_world || _world->_isNetGame ||

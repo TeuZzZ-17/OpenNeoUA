@@ -13,8 +13,6 @@ void Init(bool enabled, const std::string &buildTag);
 void Shutdown();
 void DisarmWatchdog();
 
-bool Enabled();
-
 // Phase names must be static string literals. They are read by the watchdog
 // and the unhandled-exception handler without allocating memory.
 void SetPhase(const char *phase);

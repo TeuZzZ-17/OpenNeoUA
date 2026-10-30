@@ -38,11 +38,6 @@ bool ypabact_CanUseProximityDefense(NC_STACK_ypabact *unit)
     return true;
 }
 
-bool NC_STACK_ypabact::CanUseProximityDefense()
-{
-    return ypabact_CanUseProximityDefense(this);
-}
-
 vec3d ypabact_GetProximityDefenseLocalDirection(NC_STACK_ypabact *unit, int shotIndex, int totalShots)
 {
     return World::ResolveYawPitchDirection(
@@ -208,11 +203,6 @@ bool ypabact_CanUseProximityDefenseAtDeath(NC_STACK_ypabact *unit)
         return false;
 
     return true;
-}
-
-bool NC_STACK_ypabact::CanUseProximityDefenseAtDeath()
-{
-    return ypabact_CanUseProximityDefenseAtDeath(this);
 }
 
 void ypabact_FireProximityDefenseAtDeath(NC_STACK_ypabact *unit)

@@ -93,7 +93,6 @@ public:
     void Unparent();
 
     void SetPrivate(bool mode);
-    bool GetPrivate() const;
 
     void ToFront();
 

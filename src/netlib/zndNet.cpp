@@ -263,26 +263,6 @@ Event *ZNDNet::Events_Pop()
     return nullptr;
 }
 
-void ZNDNet::Events_ClearByType(uint32_t type)
-{
-    if (SDL_LockMutex(eEventMutex) == 0)
-    {
-        for(EventList::iterator it = eEventList.begin(); it != eEventList.end();)
-        {
-            Event *evt = *it;
-            if (evt->type == type)
-            {
-                eEventDataSize -= evt->size;
-                it = eEventList.erase(it);
-                delete evt;
-            }
-            else
-                it++;
-        }
-        SDL_UnlockMutex(eEventMutex);
-    }
-}
-
 void ZNDNet::Events_Clear()
 {
     if (SDL_LockMutex(eEventMutex) == 0)
@@ -297,91 +277,6 @@ void ZNDNet::Events_Clear()
 
         SDL_UnlockMutex(eEventMutex);
     }
-}
-
-Event *ZNDNet::Events_PeekByType(uint32_t type)
-{
-    if (SDL_LockMutex(eEventMutex) == 0)
-    {
-        for(EventList::iterator it = eEventList.begin(); it != eEventList.end(); it++)
-        {
-            Event *evt = *it;
-            if (evt->type == type)
-            {
-                eEventDataSize -= evt->size;
-
-                eEventList.erase(it);
-                SDL_UnlockMutex(eEventMutex);
-
-                return evt;
-            }
-        }
-        SDL_UnlockMutex(eEventMutex);
-    }
-    return nullptr;
-}
-
-Event *ZNDNet::Events_WaitForMsg(uint32_t type, uint32_t time)
-{
-    uint32_t nextID = 0;
-
-    if (SDL_LockMutex(eEventMutex) == 0)
-    {
-        eEventWaitLock++;
-
-        for(EventList::iterator it = eEventList.begin(); it != eEventList.end(); it++)
-        {
-            Event *evt = *it;
-            if (evt->type == type)
-            {
-                eEventDataSize -= evt->size;
-                eEventList.erase(it);
-                eEventWaitLock--;
-                SDL_UnlockMutex(eEventMutex);
-                return evt;
-            }
-        }
-
-        nextID = eEventNextID;
-        SDL_UnlockMutex(eEventMutex);
-    }
-
-    //Wait for new events
-
-    uint64_t tmax = ttime.GetTicks() + time;
-
-    while(true)
-    {
-        SDL_Delay(1);
-
-        if (nextID < eEventNextID) // If new packets arrived
-        {
-            if (SDL_LockMutex(eEventMutex) == 0) //lock it for iterate
-            {
-                for(EventList::iterator it = eEventList.begin(); it != eEventList.end(); it++)
-                {
-                    Event *evt = *it;
-                    if (evt->type == type)
-                    {
-                        eEventDataSize -= evt->size;
-                        eEventList.erase(it);
-                        eEventWaitLock--;
-                        SDL_UnlockMutex(eEventMutex);
-                        return evt;
-                    }
-                }
-
-                nextID = eEventNextID;
-                SDL_UnlockMutex(eEventMutex);
-            }
-        }
-
-        if (time && ttime.GetTicks() >= tmax)
-            break;
-    }
-
-    eEventWaitLock--;
-    return nullptr;
 }
 
 Event *ZNDNet::Events_PopSystem()

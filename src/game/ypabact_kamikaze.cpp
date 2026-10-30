@@ -193,11 +193,6 @@ bool ypabact_IsKamikazeArmed(NC_STACK_ypabact *unit)
            ypabact_IsKamikazeMountArmed(mount);
 }
 
-bool NC_STACK_ypabact::IsKamikazeArmed()
-{
-    return ypabact_IsKamikazeArmed(this);
-}
-
 bool NC_STACK_ypabact::GetKamikazeFireTimeScale(float *outScale,
                                                   float *outHpDrainPerSecond)
 {

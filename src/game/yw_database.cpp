@@ -57,7 +57,9 @@ std::vector<std::string> wrapCaption(DatabaseSession &session,const std::string 
                 result.push_back(word.substr(0,cut));word.erase(0,cut);
                 if((int)result.size()>=maxLines)return result;
             }
-            if(!line.empty())line+=" ";line+=word;
+            if(!line.empty())
+                line+=" ";
+            line+=word;
         }
         result.push_back(line);
     }

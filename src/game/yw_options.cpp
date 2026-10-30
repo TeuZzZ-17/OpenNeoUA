@@ -25,6 +25,7 @@
 #include "nucleus/IFFile.h"
 #include "world/gunrotation.h"
 #include "game/yw_shell_menus.h"
+#include "system/framepacer.h"
 
 std::string BlendingLabel(int v)
 {
@@ -55,33 +56,6 @@ std::string GenesisListOrderLabel(const std::string &v)
     return Locale::Text::OpenUA(NormalizeGenesisListOrder(v) == "energy"
         ? Locale::OUA_GENESIS_ORDER_ENERGY
         : Locale::OUA_GENESIS_ORDER_CLASSIC);
-}
-
-int NormalizeFrameRateLimit(int value)
-{
-    static const int validLimits[] = {60, 75, 90, 120, 144, 165, 200, 240};
-
-    for (int limit : validLimits)
-    {
-        if (value == limit)
-            return value;
-    }
-
-    return 60;
-}
-
-int CycleFrameRateLimit(int value)
-{
-    static const int validLimits[] = {60, 75, 90, 120, 144, 165, 200, 240};
-    value = NormalizeFrameRateLimit(value);
-
-    for (size_t i = 0; i < sizeof(validLimits) / sizeof(validLimits[0]); i++)
-    {
-        if (validLimits[i] == value)
-            return validLimits[(i + 1) % (sizeof(validLimits) / sizeof(validLimits[0]))];
-    }
-
-    return 60;
 }
 
 int NormalizeGraphicsMode(int value)
@@ -183,19 +157,9 @@ std::string VisualFilterStrengthStorageValue(int value)
          + std::to_string(value % 100);
 }
 
-std::string TrimIniValue(std::string s)
-{
-    size_t first = s.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos)
-        return std::string();
-
-    size_t last = s.find_last_not_of(" \t\r\n");
-    return s.substr(first, last - first + 1);
-}
-
 int VisualFilterStrengthPercentFromString(std::string s, int fallback)
 {
-    s = TrimIniValue(s);
+    s = StrTrim(s);
     if (s.empty())
         return fallback;
 
@@ -206,7 +170,7 @@ int VisualFilterStrengthPercentFromString(std::string s, int fallback)
 
         size_t pos = 0;
         float st = std::stof(s, &pos);
-        if (TrimIniValue(s.substr(pos)).size() != 0)
+        if (StrTrim(s.substr(pos)).size() != 0)
             return fallback;
 
         if (st < 0.0f) st = 0.0f;
@@ -221,7 +185,7 @@ int VisualFilterStrengthPercentFromString(std::string s, int fallback)
 
 int FloatHundredFromString(std::string s, int fallback, int minValue, int maxValue)
 {
-    s = TrimIniValue(s);
+    s = StrTrim(s);
     if (s.empty())
         return fallback;
 
@@ -232,7 +196,7 @@ int FloatHundredFromString(std::string s, int fallback, int minValue, int maxVal
 
         size_t pos = 0;
         float value = std::stof(s, &pos);
-        if (TrimIniValue(s.substr(pos)).size() != 0 || !std::isfinite(value))
+        if (StrTrim(s.substr(pos)).size() != 0 || !std::isfinite(value))
             return fallback;
 
         int scaled = (int)(value * 100.0f + (value >= 0.0f ? 0.5f : -0.5f));
@@ -248,7 +212,7 @@ int FloatHundredFromString(std::string s, int fallback, int minValue, int maxVal
 
 int IntFromString(std::string s, int fallback, int minValue, int maxValue)
 {
-    s = TrimIniValue(s);
+    s = StrTrim(s);
     if (s.empty())
         return fallback;
 
@@ -256,7 +220,7 @@ int IntFromString(std::string s, int fallback, int minValue, int maxValue)
     {
         size_t pos = 0;
         int value = std::stoi(s, &pos);
-        if (TrimIniValue(s.substr(pos)).size() != 0)
+        if (StrTrim(s.substr(pos)).size() != 0)
             return fallback;
         if (value < minValue) value = minValue;
         if (value > maxValue) value = maxValue;
@@ -400,7 +364,7 @@ void UserData::ShowOptionsMenu()
     confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
     confRetroCursors = System::IniConf::UiRetroCursors.Get<bool>();
     confInterfaceStyle = interfaceStyle;
-    confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
+    confMaxFps = System::NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     confGenesisListOrder = NormalizeGenesisListOrder(System::IniConf::UiGenesisListOrder.Get<std::string>());
     ambientSoundVolume = p_YW->GetAmbientSoundGlobalVolume();
     confAmbientSoundVolume = ambientSoundVolume;
@@ -503,7 +467,7 @@ void UserData::ResetOptionsToDefaults()
     _settingsChangeOptions |= 0x40 | 0x80 | 0x100;
 
     confBlending = OPTIONS_RESET_BLENDING;
-    confMaxFps = NormalizeFrameRateLimit(OPTIONS_RESET_MAX_FPS);
+    confMaxFps = System::NormalizeFrameRateLimit(OPTIONS_RESET_MAX_FPS);
     confGenesisListOrder = OPTIONS_RESET_GENESIS_LIST_ORDER;
     confMoviePlayer = OPTIONS_RESET_MOVIE_PLAYER;
     confMenuFont = OPTIONS_RESET_MENU_FONT;
@@ -1581,7 +1545,7 @@ bool UserData::RemoveKeyFromOpenNeoUAIni(const std::string &key)
 void UserData::UpdateGfxOptionTexts()
 {
     video_button->SetText(1183, BlendingLabel(confBlending));
-    video_button->SetText(1187, std::to_string(NormalizeFrameRateLimit(confMaxFps)));
+    video_button->SetText(1187, std::to_string(System::NormalizeFrameRateLimit(confMaxFps)));
 }
 
 // OpenNeoUA: refresh the Genesis List Order cycle-button caption.

@@ -110,20 +110,10 @@ static SDL_GLContext cont = nullptr;
 static ResRatio winRes(640, 480);
 static bool curRelMouse = false;
 
-static std::string TrimFontString(std::string value)
-{
-    size_t first = value.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos)
-        return std::string();
-
-    size_t last = value.find_last_not_of(" \t\r\n");
-    return value.substr(first, last - first + 1);
-}
-
 static std::string FontDisplayName(const FontNode &fnt)
 {
-    std::string name = TrimFontString(fnt.Name);
-    std::string style = TrimFontString(fnt.Style);
+    std::string name = StrTrim(fnt.Name);
+    std::string style = StrTrim(fnt.Style);
 
     if (name.empty())
         return std::string();
@@ -136,7 +126,7 @@ static std::string FontDisplayName(const FontNode &fnt)
 
 static std::string NormalizeMenuFontName(std::string fontName)
 {
-    fontName = TrimFontString(fontName);
+    fontName = StrTrim(fontName);
 
     if (fontName.empty() || !StriCmp(fontName, "Default"))
         return std::string("Default");
@@ -290,7 +280,7 @@ std::vector<std::string> GetScannedFontNames()
 
 bool IsFontAvailable(const std::string &fontname)
 {
-    std::string selected = TrimFontString(fontname);
+    std::string selected = StrTrim(fontname);
     if (selected.empty())
         return false;
 
@@ -327,7 +317,7 @@ std::string ResolveMenuFontDescr(const std::string &defaultDescr, const std::str
 
     std::string resolved = selected;
     for (size_t i = 1; i < parts.size(); i++)
-        resolved += "," + TrimFontString(parts[i]);
+        resolved += "," + StrTrim(parts[i]);
 
     return resolved;
 }
@@ -496,11 +486,6 @@ bool ProcessEvents()
     return false;
 }
 
-ResRatio GetRResolution()
-{
-    return winRes;
-}
-
 Common::Point GetResolution()
 {
     return Common::Point(winRes.W, winRes.H);
@@ -545,12 +530,6 @@ void SetVideoMode(const Common::Point &sz, uint32_t full, SDL_DisplayMode *mode)
         SDL_GL_GetDrawableSize(window, &w, &h);
         winRes = ResRatio(w, h);
     }
-}
-
-void RestoreWindow()
-{
-    SDL_RestoreWindow(window);
-    SDL_Delay(250);
 }
 
 void SetReleativeMouse(bool mode)

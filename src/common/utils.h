@@ -106,8 +106,6 @@
 
 int read_yes_no_status(const std::string &file, int result);
 
-float SWAP32F(float f);
-
 #ifndef strnicmp
 int strnicmp (const char *s1, const char *s2, size_t n);
 #endif
@@ -177,6 +175,8 @@ std::string correctSeparatorAndExt(std::string str);
 
 int StriCmp(const std::string &a, const std::string &b);
 bool StrGetBool(const std::string &str);
+// Copy of `str` without leading and trailing whitespace.
+std::string StrTrim(const std::string &str);
 
 
 

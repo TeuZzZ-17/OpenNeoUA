@@ -20,7 +20,7 @@ public:
     static constexpr const char * __ClassName = "wintimer.class";
 
 public:
-    uint32_t ticks = 0;
+    uint64_t ticks = 0; // Absolute time of the previous call, in 1/1024 s.
 };
 
 #endif // WINTIMER_H_INCLUDED

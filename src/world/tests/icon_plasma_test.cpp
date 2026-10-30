@@ -69,8 +69,8 @@ int main()
     FSMgr::iDir::setBaseDir("");
     Common::Env.SetPrefix("data", "Data");
     Common::Env.SetPrefix("rsrc", "data:fonts");
-    extern int init_classesLists_and_variables();
-    init_classesLists_and_variables();
+    extern int RegisterNucleusClasses();
+    RegisterNucleusClasses();
     GFX::Engine.StaticInit();
 
     NC_STACK_ypaworld world;

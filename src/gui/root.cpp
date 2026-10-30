@@ -101,20 +101,6 @@ void Root::Draw(SDL_Surface *screen)
         for(Widget *w : _normal)
             HwPrepareWidget(w);
     }
-
-    /*if (_miceOn)
-    {
-        Common::Rect rct = _miceOn->GetScreenVisibleRect();
-
-        SDL_Surface *srf = SDL_CreateRGBSurfaceWithFormat(0, rct.Width(), rct.Height(), screen->format->BitsPerPixel, screen->format->format);
-        SDL_FillRect(srf, nullptr, SDL_MapRGBA(srf->format, 255, 0, 255, 128) );
-
-        SDL_Rect pz = rct;
-
-        SDL_BlitSurface(srf, nullptr, screen, &pz);
-
-        SDL_FreeSurface(srf);
-    }*/
 }
 
 void Root::ModAlpha(SDL_Surface *surf, Common::Rect space, uint8_t alpha)
@@ -596,55 +582,6 @@ uint32_t Root::TimerAdd(uint32_t wID, uint32_t time, uint32_t code)
     auto tmID = _nextTimerID;
     _nextTimerID = (_nextTimerID + 2) & ~(1 << ((sizeof(_nextTimerID) << 3) - 1));
     return tmID;
-}
-
-int32_t Root::_TimerGet(std::list<Timer> &list, uint32_t id)
-{
-    for ( const Timer &t : list)
-    {
-        if (t.ID == id)
-            return t.EndTime;
-    }
-
-    return -1;
-}
-
-int32_t Root::TimerGet(uint32_t id)
-{
-    int32_t t = _TimerGet(_timers, id);
-    if (t != -1)
-        return t - _timeStamp;
-
-    t = _TimerGet(_timersNew, id);
-    if (t != -1)
-        return t - _timeStamp;
-
-    return -1;
-}
-
-bool Root::_TimerDelete(std::list<Timer> &list, uint32_t id)
-{
-    for ( auto it = list.begin(); it != list.end(); it++ )
-    {
-        if (it->ID == id)
-        {
-            list.erase( it );
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool Root::TimerDelete(uint32_t id)
-{
-    if (_TimerDelete(_timers, id))
-        return true;
-
-    if (_TimerDelete(_timersNew, id))
-        return true;
-
-    return false;
 }
 
 int Root::_TimerDeleteByWidget(std::list<Timer> &list, uint32_t wID, uint32_t code)

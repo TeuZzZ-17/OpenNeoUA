@@ -36,6 +36,7 @@
 #include "common/env.h"
 #include "system/inivals.h"
 #include "system/gametime.h"
+#include "system/framepacer.h"
 #include "system/system.h"
 #include "locale/locale.h"
 #include "common/utils.h"
@@ -1368,7 +1369,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         // update remains scaled for every other unit.
         UpdatePlayerSprint(_updateMessage.inpt, gameplayFrozen ? 0 :
             (_userUnit?_userUnit->GetDebugFrameTime(_updateMessage.frameTime):_updateMessage.frameTime));
-        _FPS = 1024 / unscaledFrameTime;
+        _FPS = System::Frames.MeasuredFps();
         _profileVals[PFID_FPS] = _FPS;
 
         if ( !gameplayFrozen )
@@ -1400,8 +1401,6 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             if ( !_doNotRender )
             {
                 GFX::Engine.BeginFrame();
-                /*_win3d->setRSTR_BGpen(0);
-                _win3d->raster_func192(nullptr);*/
             }
 
             // Spectator Follow input is handled during the GUI input pass,

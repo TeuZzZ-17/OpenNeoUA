@@ -77,8 +77,6 @@ public:
 
     void flush();
 
-    iDir *MakeDir(const std::string &name);
-
     void Override(iDir *nod);
 
     static iDir *GetRoot();
@@ -230,10 +228,6 @@ protected:
     bool _writeMode = false;
 
 };
-
-void dumpDir();
-
-
 
 }
 

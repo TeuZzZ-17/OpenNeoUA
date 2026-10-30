@@ -53,7 +53,6 @@ public:
 
     void EOS_callback( void (*func)(void *) );
 
-    bool isPlaying();
     bool isStopped();
 
 
@@ -64,13 +63,9 @@ public:
         SMPL_STATUS_PAUSED  = 2
     };
 
-    int GetQueueSize();
-    bool IsFreeBuffer();
     size_t BuffersCapacity() const;
 
     uint32_t BuffersTime() const;
-    uint32_t GetStreamedTime() const;
-    uint32_t GetPlayedTime() const;
     int32_t GetTS() const;
 
 protected:
@@ -141,7 +136,6 @@ class walmus: public CTsmpl
 
 public:
     bool open(const std::string &fname);
-    size_t getLen();
 
 protected:
     walmus(waldev *dev);
@@ -172,7 +166,6 @@ public:
     void SetFormat(ALenum fmt, uint32_t freq);
     void Feed(void *data, size_t sz, int32_t ts = -1);
 
-    int BuffersCount();
     size_t DataLeft();
 
 protected:
@@ -199,9 +192,6 @@ public:
 
     walsmpl *newSample();
     walmus *createMusicPlayer();
-    void deleteSample(CTsmpl *smpl);
-
-    void master_volume(int vol);
 
     WALStream *CreateStream();
 
