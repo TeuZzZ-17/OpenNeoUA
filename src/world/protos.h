@@ -12,6 +12,7 @@
 #include <memory>
 #include <map>
 #include <string>
+#include <utility>
 
 class NC_STACK_ypabact;
 
@@ -494,8 +495,7 @@ struct TDamagedFXConfig
 {
     std::vector<int16_t> vps;
     std::vector<std::string> meshes3ds;
-    float scale = 1.0;
-    float scale_max = 1.0;
+    std::vector<std::pair<float, float>> scales;
     TAbsoluteOrPercent threshold;
     int count_min = 0;
     int count_max = 0;

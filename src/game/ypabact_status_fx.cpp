@@ -539,7 +539,7 @@ void ypabact_SpawnSingleDamagedFX(NC_STACK_ypabact *bact,
     bool rotateOffset = ypabact_BuildAttachedFXOffset(
         bact, bact->_damaged_fx.random_max_offset, &localOffset);
     const float randomScale = (float)World::RandomFloatRangeInclusive(
-        bact->_damaged_fx.scale, bact->_damaged_fx.scale_max);
+        visual.scale_min, visual.scale_max);
     const vec3d effectScale = ypabact_BuildUniformStatusFXScale(randomScale);
 
     if ( !visual.mesh3ds.empty() )
@@ -561,12 +561,20 @@ void ypabact_SpawnDamagedFXEvent(NC_STACK_ypabact *bact)
 
     std::vector<TDamagedVisualRef> validVisuals;
     validVisuals.reserve(bact->_damaged_fx.vps.size() + bact->_damaged_fx.meshes3ds.size());
-    for (int16_t vp : bact->_damaged_fx.vps)
+    for (size_t i = 0; i < bact->_damaged_fx.vps.size(); ++i)
     {
+        const int16_t vp = bact->_damaged_fx.vps[i];
         if ( vp > 0 )
         {
             TDamagedVisualRef visual;
             visual.vp = vp;
+            const auto &scales = bact->_damaged_fx.scales;
+            if ( !scales.empty() && (scales.size() == 1 || i < scales.size()) )
+            {
+                const auto &scale = scales[scales.size() == 1 ? 0 : i];
+                visual.scale_min = scale.first;
+                visual.scale_max = scale.second;
+            }
             validVisuals.push_back(visual);
         }
     }
@@ -576,6 +584,11 @@ void ypabact_SpawnDamagedFXEvent(NC_STACK_ypabact *bact)
         {
             TDamagedVisualRef visual;
             visual.mesh3ds = mesh3ds;
+            if ( bact->_damaged_fx.scales.size() == 1 )
+            {
+                visual.scale_min = bact->_damaged_fx.scales[0].first;
+                visual.scale_max = bact->_damaged_fx.scales[0].second;
+            }
             validVisuals.push_back(visual);
         }
     }
