@@ -712,11 +712,11 @@ int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
     if ( !StriCmp(p1, "name") )
         _profile.name = p2;
     else if ( !StriCmp(p1, "loop_sound") )
-        _profile.loop_sound = p2;
+        _profile.loop_sound = parser.FullLineValue(); // Whole line: file names may contain spaces.
     else if ( !StriCmp(p1, "loop_sound_volume") )
         _profile.loop_sound_volume = parser.stol(p2, nullptr, 0);
     else if ( !StriCmp(p1, "mesh_3ds") )
-        _profile.mesh3ds = p2;
+        _profile.mesh3ds = parser.FullLineValue(); // Whole line: file names may contain spaces.
     else if ( !StriCmp(p1, "count") )
         _profile.count = parser.stol(p2, nullptr, 0);
     else if ( !StriCmp(p1, "spawn_radius_xyz") )

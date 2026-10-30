@@ -197,7 +197,8 @@ int LevelDataParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "ambient_sound") )
     {
-        _m.AmbientSoundStr = p2;
+        // Whole line: p2 stops at the first space, which would cut "santa maria.wav" to "santa".
+        _m.AmbientSoundStr = parser.FullLineValue();
     }
     else if ( !StriCmp(p1, "cloud_id") )
     {
