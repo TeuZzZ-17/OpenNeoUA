@@ -30,18 +30,6 @@ int read_yes_no_status(const std::string &file, int result)
     return result;
 }
 
-float SWAP32F(float f)
-{
-    // memcpy is the well-defined way to reinterpret the bits (no strict-aliasing violation).
-    uint32_t tmp;
-    memcpy(&tmp, &f, sizeof(tmp));
-    tmp = SWAP32(tmp);
-    memcpy(&f, &tmp, sizeof(f));
-    return f;
-}
-
-
-
 #ifndef strnicmp
 int strnicmp (const char *s1, const char *s2, size_t n)
 {
@@ -498,4 +486,15 @@ int StriCmp(const std::string &a, const std::string &b)
 bool StrGetBool(const std::string &str)
 {
     return !StriCmp(str, "yes") || !StriCmp(str, "true") || !StriCmp(str, "on") || !StriCmp(str, "1");
+}
+
+std::string StrTrim(const std::string &str)
+{
+    const char *spaces = " \t\r\n\v\f";
+    const size_t first = str.find_first_not_of(spaces);
+    if ( first == std::string::npos )
+        return std::string();
+
+    const size_t last = str.find_last_not_of(spaces);
+    return str.substr(first, last - first + 1);
 }

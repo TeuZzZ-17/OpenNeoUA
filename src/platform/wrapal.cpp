@@ -177,30 +177,6 @@ WALStream *waldev::CreateStream()
     return tmp;
 }
 
-void waldev::deleteSample(CTsmpl *smpl)
-{
-    if (SDL_LockMutex(mutex) == 0)
-    {
-
-        for(std::list<CTsmpl *>::iterator it = sample_list.begin(); it != sample_list.end(); ++it)
-        {
-            if (*it == smpl)
-            {
-                delete smpl;
-                sample_list.erase(it);
-                break;
-            }
-        }
-
-        SDL_UnlockMutex(mutex);
-    }
-}
-
-void waldev::master_volume(int vol)
-{
-    alCheck(alListenerf(AL_GAIN, (float)vol / 127.0 ));
-}
-
 bool waldev::update()
 {
     if (SDL_LockMutex(mutex) == 0)
@@ -421,11 +397,6 @@ bool walmus::open(const std::string &fname)
     return false;
 }
 
-size_t walmus::getLen()
-{
-    return len;
-}
-
 size_t walmus::_read(void *buf, size_t bufsz, int32_t *endTs)
 {
     if ( !hndl )
@@ -633,27 +604,6 @@ void CTsmpl::loop_count(int loops)
     }
 }
 
-int CTsmpl::GetQueueSize()
-{
-    int tmp = 0;
-    for (AlBuffer &u : _buffers)
-    {
-        if (u.Used)
-            tmp++;
-    }
-    return tmp;
-}
-
-bool CTsmpl::IsFreeBuffer()
-{
-    for (AlBuffer &u : _buffers)
-    {
-        if (!u.Used)
-            return true;
-    }
-    return false;
-}
-
 size_t CTsmpl::BuffersCapacity() const
 {
     return _BufSZ * _buffers.size();
@@ -679,19 +629,6 @@ uint32_t CTsmpl::BytesToMsec(uint32_t bytes) const
 uint32_t CTsmpl::BuffersTime() const
 {
     return BytesToMsec( BuffersCapacity() );
-}
-
-uint32_t CTsmpl::GetStreamedTime() const
-{
-    return BytesToMsec( _queuedBytes ) ;
-}
-
-uint32_t CTsmpl::GetPlayedTime() const
-{
-    ALint bytes = 0;
-    alCheck(alGetSourcei(_source, AL_BYTE_OFFSET, &bytes));
-
-    return BytesToMsec( _playedBytes + bytes ) ;
 }
 
 int32_t CTsmpl::GetTS() const
@@ -921,12 +858,6 @@ void CTsmpl::play()
     }
 }
 
-
-bool CTsmpl::isPlaying()
-{
-    return _status == SMPL_STATUS_PLAYING;
-}
-
 bool CTsmpl::isStopped()
 {
     return _status == SMPL_STATUS_STOPPED;
@@ -1027,11 +958,6 @@ void WALStream::_stop()
         _queue.pop();
     _bufPos = 0;
     _dataLeft = 0;
-}
-
-int WALStream::BuffersCount()
-{
-    return _queue.size();
 }
 
 size_t WALStream::DataLeft()

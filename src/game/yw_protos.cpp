@@ -36,19 +36,9 @@
 #include "world/tools.h"
 #include "game/yw_impl.h"
 
-std::string yw_TrimConfigValue(std::string s)
-{
-    size_t first = s.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos)
-        return std::string();
-
-    size_t last = s.find_last_not_of(" \t\r\n");
-    return s.substr(first, last - first + 1);
-}
-
 bool yw_ParseOptionalInt(std::string s, int32_t *out)
 {
-    s = yw_TrimConfigValue(s);
+    s = StrTrim(s);
     if (s.empty())
         return false;
 
@@ -71,7 +61,7 @@ bool yw_ParseOptionalInt(std::string s, int32_t *out)
 
 bool yw_ParseOptionalBool(std::string s, bool *out)
 {
-    s = yw_TrimConfigValue(s);
+    s = StrTrim(s);
     if (s.empty())
         return false;
 

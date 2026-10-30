@@ -17,14 +17,10 @@ public:
     void Start(const std::string &name, const IPaddress &addr);
     uint8_t GetStatus();
 
-    void RequestSessions();
-
     bool GetSessions(SessionInfoVect &dst);
     void CreateSession(const std::string &name, const std::string &pass, uint32_t max_players);
     void JoinSession(uint64_t SID, const std::string &pass);
     void SendDisconnect();
-
-    void LeaveSession();
 
     void CloseSession(uint32_t closeTime) override;
     void KickUser(uint64_t _ID) override;

@@ -315,7 +315,6 @@ struct TRenderNode
 
     static bool CompareSolid(TRenderNode *a, TRenderNode *b);
     static bool CompareTransparent(TRenderNode *a, TRenderNode *b);
-    static bool CompareDistance(TRenderNode *a, TRenderNode *b);
 };
 
 enum
@@ -575,7 +574,6 @@ public:
     static int can_srcblend;
     static int can_destblend;
     static int can_stippling;
-    static uint32_t FpsMaxTicks;
 
 protected:
     static SDL_PixelFormat *_pixfmt;
@@ -617,8 +615,6 @@ public:
 
 
     uint8_t *MakeScreenCopy(int *ow, int *oh);
-    uint8_t *MakeDepthScreenCopy(int *ow, int *oh);
-
 
     GfxMode windd_func0__sub0(const std::string &file);
     GfxMode sub_41F68C();
@@ -658,7 +654,6 @@ public:
 
     static SDL_PixelFormat *GetPixelFormat() { return _pixfmt; };
     static uint32_t GetPixelFormatU32() { return _pixfmt->format; };
-    static void GetGlPixTypeFmt(GLint *format, GLint *type);
     static GLint GetGlPixFormat() { return _glPixfmt; };
     static GLint GetGlPixType() { return _glPixtype; };
 
@@ -672,7 +667,6 @@ public:
     static void Draw(SDL_Surface *src, const Common::Rect &sRect, SDL_Surface *dst, Common::PointRect dRect);
 
     static SDL_Color Color(uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
-    static bool ColorCmp(const SDL_Color &a, const SDL_Color &b);
 
 protected:
     template <typename T>
@@ -734,7 +728,6 @@ public:
 
 
     virtual void setWDD_cursor(int arg);
-    virtual void setWDD_disLowRes(int arg);
     virtual void setWDD_16bitTex(int arg);
     virtual void setWDD_drawPrim(int arg);
 
@@ -775,7 +768,6 @@ public:
     void getAspectCorrection(float &cW, float &cH, bool invert);
     void viewZoomCorrection(float &x, float &y, bool invert = false) const;
 
-    void setFrustumClip(float near, float far);
     void setViewZoom(float zoom);
     float getViewZoom() const { return _viewZoom; }
 
@@ -786,7 +778,6 @@ public:
 
     static SDL_Surface *ConvertSDLSurface(SDL_Surface *src, const SDL_PixelFormat * fmt);
 
-    void fpsLimitter(int value);
 
     float GetColorEffectPower(int id);
 

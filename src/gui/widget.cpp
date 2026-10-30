@@ -379,11 +379,6 @@ void Widget::SetPrivate(bool mode)
         _flags &= ~FLAG_PRIVATE;
 }
 
-bool Widget::GetPrivate() const
-{
-    return (_flags & FLAG_PRIVATE) != 0;
-}
-
 void Widget::ToFront()
 {
     if (IsRooted())

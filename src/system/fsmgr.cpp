@@ -446,37 +446,6 @@ bool iDir::createDir(const std::string &path)
     return true;
 }
 
-iDir *iDir::MakeDir(const std::string &vname)
-{
-    if (vname.empty() || vname.find_first_of("\\/") != std::string::npos)
-        return nullptr;
-
-    iNode *node = getNode(vname);
-    if (node)
-    {
-        if ( node->getType() != NTYPE_DIR )
-            return nullptr;
-        return (iDir *)node;
-    }
-
-    std::string newPath = path + FSD + vname;
-
-    iDir *newDir = nullptr;
-#if defined(WIN32) && !defined(__WINE__)
-    if (CreateDirectory(newPath.c_str(), nullptr))
-        newDir = new iDir(vname, newPath);
-#else
-    if (mkdir(newPath.c_str(), 0755) == 0)
-        newDir = new iDir(vname, newPath);
-#endif // WIN32
-
-    if (!newDir)
-        return nullptr;
-
-    addNode(newDir);
-    return newDir;
-}
-
 bool iDir::deleteDir(const std::string &path)
 {
     std::string leaved;
@@ -775,12 +744,6 @@ bool iDir::Detach(const std::string &vname)
     }
     return false;
 }
-
-void dumpDir()
-{
-    directories._dumpdir();
-}
-
 
 DirIter::DirIter(iDir *dr)
 : _d(dr), _cur(dr->nodes.begin())

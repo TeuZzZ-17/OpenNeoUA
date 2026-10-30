@@ -41,9 +41,7 @@ public:
     int GetScrollCount()    const { return _scrlCount; };
     int GetScrollPageSize() const { return _scrlPageSz; };
 
-    void SetScrollPos(int p);
     void SetScrollCount(int c);
-    void SetScrollPageSize(int ps);
 
 protected:
 

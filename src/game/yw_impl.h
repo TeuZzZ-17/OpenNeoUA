@@ -131,7 +131,6 @@ bool yw_IsPointInsideAttachedFXMesh(const vec3d &point, const NC_STACK_ypaworld:
 float yw_NextAttachedFXCacheRandom(uint32_t *state);
 void yw_BuildAttachedFXVolumeCache(NC_STACK_ypaworld::TAttachedFXGeometryCache *cache, const yw_ModelPointCloud &bounds);
 bool yw_SameAttachedFXTransform(const vec3d &a, const vec3d &b);
-std::string yw_TrimConfigValue(std::string s);
 bool yw_ParseOptionalInt(std::string s, int32_t *out);
 bool yw_ParseOptionalBool(std::string s, bool *out);
 int32_t yw_ClampRenderSectors(int32_t sectors);

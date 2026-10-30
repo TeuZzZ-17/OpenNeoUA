@@ -2765,9 +2765,6 @@ int ypaworld_func64__sub4(NC_STACK_ypaworld *yw, base_64arg *arg)
     {
         GFX::Engine.BeginFrame();
 
-        /*yw->_win3d->setRSTR_BGpen(0);
-
-        yw->_win3d->raster_func192(nullptr);*/
 
         vec3d a2a = yw->_viewerPosition + vec3d::OY(50000.0);
 
@@ -3327,9 +3324,6 @@ void NC_STACK_ypaworld::ProfileCalcValues()
 
     if ( _profileFramesCount >= 5 )
     {
-        if ( _profileVals[PFID_FPS] > 200 )
-            _profileVals[PFID_FPS] = 0;
-
         for (size_t i = 0; i < PFID_MAX; i++)
         {
             if ( _profileVals[i] != 0 )

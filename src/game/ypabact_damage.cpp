@@ -400,7 +400,7 @@ void NC_STACK_ypabact::Die()
     // guns/dummies are normalized to their carrying unit. Friendly/self kills,
     // components and missiles never award marks.
     NC_STACK_ypabact *creditedKiller = ypabact_ResolveSessionKillCreditedUnit(this);
-    const uint8_t creditedOwner = creditedKiller ? creditedKiller->_owner : World::OWNER_0;
+    const uint8_t creditedOwner = creditedKiller ? creditedKiller->_owner : (uint8_t)World::OWNER_0;
 
     if ( _world && !_world->_isNetGame && creditedKiller &&
          _owner != World::OWNER_0 && creditedOwner != World::OWNER_0 &&
@@ -1459,7 +1459,7 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
         // transfer a Host Station's sectors back to its defeated faction.
         const int16_t damageOwner = arg->killerOwner
                                   ? arg->killerOwner
-                                  : (arg->unit ? arg->unit->_owner : World::OWNER_0);
+                                  : (arg->unit ? arg->unit->_owner : (uint8_t)World::OWNER_0);
         if ( arg->energy < 0 && damageOwner > World::OWNER_0 && damageOwner != _owner )
             _killer_owner = damageOwner;
 

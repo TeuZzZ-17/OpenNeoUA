@@ -399,16 +399,6 @@ bool ZNDClient::GetSessions(SessionInfoVect &dst)
     return res;
 }
 
-void ZNDClient::RequestSessions()
-{
-    if ( !cME.IsOnline() )
-        return;
-
-    cSessionsMakeRequest = true;
-}
-
-
-
 void ZNDClient::CreateSession(const std::string &name, const std::string &pass, uint32_t max_players)
 {
     if ( !cME.IsOnline() )
@@ -569,17 +559,6 @@ void ZNDClient::ShowSession(bool show)
     RefDataWStream *rfdata = RefDataWStream::create(4);
     rfdata->writeU8(SYS_MSG_SES_SHOW);
     rfdata->writeU8(show ? 1 : 0);
-    Send_PushData( new SendingData(cServAddress, 0, rfdata, PKT_FLAG_SYSTEM));
-}
-
-
-void ZNDClient::LeaveSession()
-{
-    if ( !cME.IsOnline() || !(eStatus & FLAGS_SESSION_JOINED) )
-        return;
-
-    RefDataWStream *rfdata = RefDataWStream::create(4);
-    rfdata->writeU8(SYS_MSG_SES_LEAVE);
     Send_PushData( new SendingData(cServAddress, 0, rfdata, PKT_FLAG_SYSTEM));
 }
 

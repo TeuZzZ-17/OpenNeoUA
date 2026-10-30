@@ -13,15 +13,6 @@ void FontUA::store_u32(CmdStream *pos, uint32_t val)
     pos->push_back( (val      ) & 0xFF );
 }
 
-
-void FontUA::store_s32(CmdStream *pos, int32_t val)
-{
-    pos->push_back( (val >> 24) & 0xFF );
-    pos->push_back( (val >> 16) & 0xFF );
-    pos->push_back( (val >>  8) & 0xFF );
-    pos->push_back( (val      ) & 0xFF );
-}
-
 void FontUA::store_u16(CmdStream *pos, uint16_t val)
 {
     pos->push_back( (val >>  8) & 0xFF );

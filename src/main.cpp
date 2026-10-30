@@ -1,3 +1,5 @@
+// Program entry point: engine start-up, the main loop and the switch between
+// menu (game shell), gameplay and replay screens.
 #define GLOBAL
 #include <fstream>
 #include "system/fsmgr.h"
@@ -8,6 +10,7 @@
 #include "common/includes.h"
 #include "system/gfx.h"
 #include "system/inpt.h"
+#include "system/framepacer.h"
 #include "platform/winp.h"
 #include "platform/wintimer.h"
 
@@ -20,6 +23,9 @@
 #include "nucleus/ilbm.h"
 #include "nucleus/particle.h"
 #include "nucleus/embed.h"
+#include "nucleus/3ds.h"
+#include "nucleus/image.h"
+#include "nucleus/obj3d.h"
 #include "platform/network.h"
 #include "platform/windp.h"
 #include "game/ypabact.h"
@@ -28,17 +34,9 @@
 #include "game/ypaflyer.h"
 #include "game/yparobo.h"
 #include "game/ypaufo.h"
-#include "nucleus/3ds.h"
-#include "nucleus/image.h"
-
-
-#include "gui/font.h"
 #include "game/yw.h"
-
+#include "gui/font.h"
 #include "gui/button.h"
-
-
-
 #include "gui/widget.h"
 #include "gui/uawidgets.h"
 #include "gui/uamsgbox.h"
@@ -47,18 +45,10 @@
 #include "system/inivals.h"
 #include "world/blacksecttint.h"
 #include "world/energyfx.h"
-#include "nucleus/obj3d.h"
 #include "common/crashdiag.h"
 
-
-int dword_513638 = 0;
-int dword_51362C = 0;
-int dword_513630 = 0;
-std::string buildDate;
-
-int tform_inited = 0;
-int audio_inited = 0;
-int input_inited = 0;
+namespace
+{
 
 enum GAME_SCREEN_MODE {
     GAME_SCREEN_MODE_UNKNOWN = 0,
@@ -70,9 +60,74 @@ enum GAME_SCREEN_MODE {
 GAME_SCREEN_MODE GameScreenMode;
 UserData userdata;
 
-static int DiagnosticLevelId()
+// Netplay and replays change the player settings; when they end, the copy
+// saved in settings.tmp is restored.
+bool restoreSettingsOnExit = false;
+// The menu demo loop chains the next demo replay when the current one ends.
+bool chainDemoReplays = false;
+// Index of the demo replay shown last, so the loop does not repeat it.
+int lastDemoIndex = 0;
+
+bool tformInited = false;
+bool audioInited = false;
+bool inputInited = false;
+
+int DiagnosticLevelId()
 {
     return ypaworld ? ypaworld->GetLevelInfo().LevelID : -1;
+}
+
+bool RestoreSavedSettings()
+{
+    if ( !restoreSettingsOnExit )
+        return true;
+
+    if ( !ypaworld->LoadSettings("settings.tmp", userdata.UserName,
+                                 World::SDF_BUDDY | World::SDF_PROTO | World::SDF_USER,
+                                 false) )
+        return false;
+
+    restoreSettingsOnExit = false;
+    return true;
+}
+
+// Opens the game shell again after a level or a replay. Returns false when the
+// shell cannot be opened (fatal).
+bool ReturnToMenu()
+{
+    GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
+    world_update_arg.TimeStamp = 0;
+    userdata.lastInputEvent = 0;
+
+    if ( !ypaworld->OpenGameShell() )
+    {
+        ypa_log_out("GameShell-Error!!!\n");
+        ypaworld->DeinitGameShell();
+        return false;
+    }
+
+    GameScreenMode = GAME_SCREEN_MODE_MENU;
+    return true;
+}
+
+// Picks a demo replay from env:snaps, avoiding the one shown last time.
+std::string PickDemoReplay(uint32_t seed)
+{
+    if ( userdata.snaps.empty() )
+        return std::string();
+
+    int index = seed % userdata.snaps.size();
+
+    if ( index == lastDemoIndex )
+    {
+        if ( index )
+            index--;
+        else if ( userdata.snaps.size() > 1 )
+            index = 1;
+    }
+
+    lastDemoIndex = index;
+    return userdata.snaps[index];
 }
 
 int ProcessGameplayFrame()
@@ -83,7 +138,7 @@ int ProcessGameplayFrame()
 
     const TLevelInfo &levelInfo = ypaworld->GetLevelInfo();
 
-    switch( levelInfo.State )
+    switch ( levelInfo.State )
     {
     case TLevelInfo::STATE_QUIT_GAME:
         CrashDiag::Breadcrumb("LEVEL", "quit requested level=%d", levelInfo.LevelID);
@@ -94,23 +149,16 @@ int ProcessGameplayFrame()
     {
         CrashDiag::Breadcrumb("LEVEL", "leave level=%d state=%d", levelInfo.LevelID, levelInfo.State);
         CrashDiag::SetPhase("DeleteLevel");
+        const bool aborted = levelInfo.State == TLevelInfo::STATE_ABORTED;
         ypaworld->DeleteLevel();
 
-        if ( dword_513638 || levelInfo.State == TLevelInfo::STATE_ABORTED )
-        {
-            if ( !ypaworld->LoadSettings("settings.tmp",
-                                         userdata.UserName,
-                                         (World::SDF_BUDDY | World::SDF_PROTO | World::SDF_USER),
-                                         false))
-                return 0;
+        if ( aborted )
+            restoreSettingsOnExit = true;
+        if ( !RestoreSavedSettings() )
+            return 0;
 
-            dword_513638 = 0;
-        }
-
-        int v0 = 1;
-
-        if ( userdata.remoteMode )
-            v0 = 0;
+        // A remote-mode session quits after its level instead of returning to the menu.
+        const bool keepRunning = !userdata.remoteMode;
 
         if ( userdata.EnvMode == ENVMODE_NETPLAY )
         {
@@ -122,71 +170,244 @@ int ProcessGameplayFrame()
             userdata.returnToTitle = false;
         }
 
-        GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
-        world_update_arg.TimeStamp = 0;
-
-        userdata.lastInputEvent = 0;
         userdata.GameIsOver = true;
 
-        if ( ypaworld->OpenGameShell() )
-        {
-            GameScreenMode = GAME_SCREEN_MODE_MENU;
-            Input::Engine.QueryInput(&input_states);
-
-            if (!v0)
-                return 0;
-        }
-        else
-        {
-            ypa_log_out("GameShell-Error!!!\n");
-            ypaworld->DeinitGameShell();
+        if ( !ReturnToMenu() )
             return 0;
-        }
+
+        Input::Engine.QueryInput(&input_states);
+        if ( !keepRunning )
+            return 0;
     }
     break;
 
     case TLevelInfo::STATE_RESTART:
     {
         CrashDiag::Breadcrumb("LEVEL", "restart level=%d", levelInfo.LevelID);
+        const int levelId = levelInfo.LevelID;
         const int tacticalMapZoom = ypaworld->GetTacticalMapZoomLevel();
 
         CrashDiag::SetPhase("RestartDeleteLevel");
         ypaworld->DeleteLevel();
 
-        if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.rst", userdata.UserName, levelInfo.LevelID) ) )
-        {
+        if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.rst", userdata.UserName, levelId) ) )
             ypa_log_out("Warning, load error\n");
-        }
         else
-        {
-            // Restart keeps the zoom chosen by the player before restarting.
-            ypaworld->SetTacticalMapZoomLevel(tacticalMapZoom);
-        }
+            ypaworld->SetTacticalMapZoomLevel(tacticalMapZoom); // Restart keeps the player's zoom.
 
         Input::Engine.QueryInput(&input_states);
     }
     break;
 
     case TLevelInfo::STATE_SAVE:
-    {
         if ( !ypaworld->SaveGame( fmt::sprintf("save:%s/%d.sgm", userdata.UserName, 0) ) )
-        {
             ypa_log_out("Warning, Save error\n");
-        }
 
         Input::Engine.QueryInput(&input_states);
-    }
-    break;
+        break;
 
     case TLevelInfo::STATE_LOAD:
-    {
         CrashDiag::Breadcrumb("LEVEL", "load save from level=%d", levelInfo.LevelID);
         CrashDiag::SetPhase("LoadDeleteLevel");
         ypaworld->DeleteLevel();
 
         if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.sgm", userdata.UserName, 0) ) )
-        {
             ypa_log_out("Warning, load error\n");
+
+        Input::Engine.QueryInput(&input_states);
+        break;
+
+    default:
+        break;
+    }
+
+    return 1;
+}
+
+// Advances replay playback and handles its keys. Returns false when the
+// player leaves the replay (or the next demo cannot be loaded).
+bool UpdateReplayPlayback(base_64arg *arg)
+{
+    TGameRecorder *player = userdata.p_YW->_replayPlayer;
+
+    if ( chainDemoReplays && player->field_74 - 3 <= player->frame_id )
+    {
+        ypaworld->ypaworld_func164();
+
+        if ( !ypaworld->ypaworld_func162( PickDemoReplay(arg->TimeStamp) ) )
+        {
+            GameScreenMode = GAME_SCREEN_MODE_MENU;
+            Input::Engine.QueryInput(&input_states);
+            return false;
+        }
+
+        GameScreenMode = GAME_SCREEN_MODE_REPLAY;
+    }
+
+    ypaworld->ypaworld_func163(arg);
+
+    // Replay control keys: field_0 is the replay command, frame the step size.
+    yw_arg165 control;
+    control.field_0 = 0;
+    control.frame = 0;
+
+    switch ( arg->field_8->KbdLastHit )
+    {
+    case Input::KC_S: control.field_0 = 1; break;
+    case Input::KC_P: control.field_0 = 2; break;
+    case Input::KC_R: control.field_0 = 3; break;
+    case Input::KC_N: control.field_0 = 4; break;
+    case Input::KC_B: control.field_0 = 5; break;
+    case Input::KC_V: control.field_0 = 7; control.frame = -10; break;
+    case Input::KC_M: control.field_0 = 7; control.frame = 10; break;
+    case Input::KC_SPACE:
+    case Input::KC_ESCAPE:
+        return false;
+    default:
+        break;
+    }
+
+    if ( control.field_0 )
+        ypaworld->ypaworld_func165(&control);
+
+    return true;
+}
+
+int ProcessReplayFrame()
+{
+    if ( UpdateReplayPlayback(&world_update_arg) )
+        return 1;
+
+    ypaworld->ypaworld_func164();
+
+    if ( !RestoreSavedSettings() )
+        return 0;
+
+    if ( !ReturnToMenu() )
+        return 0;
+
+    userdata.p_YW->_levelInfo.State = TLevelInfo::STATE_MENU;
+    input_states = TInputState();
+    Input::Engine.QueryInput(&input_states);
+    return 1;
+}
+
+// Closes the shell before a level, a saved game or a replay starts.
+bool LeaveMenu()
+{
+    userdata.SaveSettings();
+    ypaworld->CloseGameShell();
+    GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
+    return userdata.SaveBuildProtoState();
+}
+
+int ProcessMenuFrame()
+{
+    userdata.GlobalTime = world_update_arg.TimeStamp;
+    userdata.DTime = world_update_arg.DTime;
+    userdata.Input = &input_states;
+
+    ypaworld->ProcessGameShell();
+
+    switch ( userdata.envAction.action )
+    {
+    case EnvAction::ACTION_QUIT:
+        return 0;
+
+    case EnvAction::ACTION_PLAY:
+    case EnvAction::ACTION_RESTART_MISSION:
+    {
+        CrashDiag::Breadcrumb("LEVEL", "start requested level=%d", userdata.envAction.params[0]);
+        CrashDiag::SetPhase("LevelStart");
+        if ( !LeaveMenu() )
+            return 0;
+
+        yw_arg161 level;
+        level.lvlID = userdata.envAction.params[0];
+        level.field_4 = 0;
+        level.freshStart = userdata.envAction.action == EnvAction::ACTION_RESTART_MISSION;
+
+        if ( !ypaworld->ypaworld_func183(&level) )
+        {
+            ypa_log_out("Sorry, unable to init this level!\n");
+            ypaworld->DeinitGameShell();
+            return 0;
+        }
+        GameScreenMode = GAME_SCREEN_MODE_GAME;
+        Input::Engine.QueryInput(&input_states);
+    }
+    break;
+
+    case EnvAction::ACTION_LOAD:
+    {
+        CrashDiag::Breadcrumb("LEVEL", "load save requested");
+        CrashDiag::SetPhase("LevelLoad");
+        const int levelId = ypaworld->GetLevelInfo().LevelID;
+        if ( !LeaveMenu() )
+            return 0;
+
+        if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.sgm", userdata.UserName, 0) ) )
+        {
+            ypa_log_out("Error while loading level (level %d, User %s\n", levelId, userdata.UserName.c_str());
+            ypaworld->DeinitGameShell();
+            return 0;
+        }
+        GameScreenMode = GAME_SCREEN_MODE_GAME;
+        Input::Engine.QueryInput(&input_states);
+    }
+    break;
+
+    case EnvAction::ACTION_NETPLAY:
+    {
+        CrashDiag::Breadcrumb("LEVEL", "netplay start requested level=%d", userdata.envAction.params[0]);
+        CrashDiag::SetPhase("NetLevelStart");
+        if ( !LeaveMenu() )
+            return 0;
+
+        restoreSettingsOnExit = true;
+
+        yw_arg161 level;
+        level.lvlID = userdata.envAction.params[0];
+        level.field_4 = 0;
+
+        if ( !ypaworld->ypaworld_func179(&level) )
+        {
+            ypa_log_out("Sorry, unable to init this level for network!\n");
+            ypaworld->DeinitGameShell();
+            return 0;
+        }
+
+        GameScreenMode = GAME_SCREEN_MODE_GAME;
+        Input::Engine.QueryInput(&input_states);
+    }
+    break;
+
+    case EnvAction::ACTION_REPLAY:
+    {
+        std::string replayName = PickDemoReplay(world_update_arg.TimeStamp);
+        if ( replayName.empty() )
+        {
+            userdata.lastInputEvent = world_update_arg.TimeStamp;
+            return 1;
+        }
+
+        if ( !userdata.SaveBuildProtoState() )
+            return 0;
+
+        restoreSettingsOnExit = true;
+        ypaworld->CloseGameShell();
+        GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
+
+        if ( ypaworld->ypaworld_func162(replayName) )
+        {
+            chainDemoReplays = true;
+            GameScreenMode = GAME_SCREEN_MODE_REPLAY;
+        }
+        else
+        {
+            ypa_log_out("Sorry, unable to init player!\n");
+            if ( !ReturnToMenu() )
+                return 0;
         }
 
         Input::Engine.QueryInput(&input_states);
@@ -200,298 +421,26 @@ int ProcessGameplayFrame()
     return 1;
 }
 
-std::string sub_4107A0(uint32_t a1)
-{
-    if ( userdata.snaps.empty() )
-        return std::string();
-
-    int v2 = a1 % userdata.snaps.size();
-
-    if ( dword_51362C == v2 )
-    {
-        if ( v2 )
-        {
-            v2 = v2 - 1;
-        }
-        else if ( (userdata.snaps.size() - 1) > 0 )
-        {
-            v2 = 1;
-        }
-    }
-
-    dword_51362C = v2;
-    return userdata.snaps[v2];
-}
-
-int sb_0x411324__sub2__sub0(base_64arg *arg)
-{
-    if ( (userdata.p_YW->_replayPlayer->field_74 - 3) <= userdata.p_YW->_replayPlayer->frame_id  &&  dword_513630 )
-    {
-        ypaworld->ypaworld_func164();
-
-        if ( !ypaworld->ypaworld_func162( sub_4107A0(arg->TimeStamp) ) )
-        {
-            GameScreenMode = GAME_SCREEN_MODE_MENU;
-
-            Input::Engine.QueryInput(&input_states);
-
-            return 0;
-        }
-
-        dword_513630 = 1;
-        GameScreenMode = GAME_SCREEN_MODE_REPLAY;
-    }
-
-    ypaworld->ypaworld_func163(arg);
-
-    yw_arg165 arg165;
-    arg165.field_0 = 0;
-    arg165.frame = 0;
-
-    int cont_play = 1;
-
-    if ( arg->field_8->KbdLastHit == Input::KC_N )
-    {
-        arg165.field_0 = 4;
-    }
-    else if ( arg->field_8->KbdLastHit == Input::KC_P )
-    {
-        arg165.field_0 = 2;
-    }
-    else if ( arg->field_8->KbdLastHit == Input::KC_R )
-    {
-        arg165.field_0 = 3;
-    }
-    else if ( arg->field_8->KbdLastHit == Input::KC_S )
-    {
-        arg165.field_0 = 1;
-    }
-    else if ( arg->field_8->KbdLastHit == Input::KC_V )
-    {
-        arg165.frame = -10;
-        arg165.field_0 = 7;
-    }
-    else if ( arg->field_8->KbdLastHit == Input::KC_B )
-    {
-        arg165.field_0 = 5;
-    }
-    else if ( arg->field_8->KbdLastHit == Input::KC_M )
-    {
-        arg165.frame = 10;
-        arg165.field_0 = 7;
-    }
-    else if ( arg->field_8->KbdLastHit == Input::KC_SPACE || arg->field_8->KbdLastHit == Input::KC_ESCAPE )
-    {
-        cont_play = 0;
-    }
-
-    if ( arg165.field_0 )
-        ypaworld->ypaworld_func165(&arg165);
-
-    return cont_play;
-}
-
-int ProcessReplayFrame()
-{
-    if ( !sb_0x411324__sub2__sub0(&world_update_arg) )
-    {
-        ypaworld->ypaworld_func164();
-
-        if ( dword_513638 )
-        {
-            if ( !ypaworld->LoadSettings("settings.tmp",
-                                         userdata.UserName,
-                                         (World::SDF_BUDDY | World::SDF_PROTO | World::SDF_USER),
-                                         false) )
-                return 0;
-
-            dword_513638 = 0;
-        }
-
-        GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
-        world_update_arg.TimeStamp = 0;
-        userdata.lastInputEvent = 0;
-
-        if ( !ypaworld->OpenGameShell() )
-        {
-            ypa_log_out("GameShell-Error!!!\n");
-            ypaworld->DeinitGameShell();
-
-            return 0;
-        }
-
-        userdata.p_YW->_levelInfo.State = TLevelInfo::STATE_MENU;
-
-        GameScreenMode = GAME_SCREEN_MODE_MENU;
-
-        input_states = TInputState();
-
-        Input::Engine.QueryInput(&input_states);
-    }
-    return 1;
-}
-
-int ProcessMenuFrame()
-{
-    userdata.GlobalTime = world_update_arg.TimeStamp;
-    userdata.DTime = world_update_arg.DTime;
-    userdata.Input = &input_states;
-
-    ypaworld->ProcessGameShell();
-
-    if ( userdata.envAction.action == EnvAction::ACTION_QUIT )
-        return 0;
-    else if ( userdata.envAction.action == EnvAction::ACTION_PLAY ||
-              userdata.envAction.action == EnvAction::ACTION_RESTART_MISSION )
-    {
-        CrashDiag::Breadcrumb("LEVEL", "start requested level=%d", userdata.envAction.params[0]);
-        CrashDiag::SetPhase("LevelStart");
-        userdata.SaveSettings();
-        ypaworld->CloseGameShell();
-
-        GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
-
-        if ( !userdata.SaveBuildProtoState() )
-            return 0;
-
-        yw_arg161 v22;
-        v22.lvlID = userdata.envAction.params[0];
-        v22.field_4 = 0;
-        v22.freshStart = userdata.envAction.action == EnvAction::ACTION_RESTART_MISSION;
-
-        if ( !ypaworld->ypaworld_func183(&v22) )
-        {
-            ypa_log_out("Sorry, unable to init this level!\n");
-
-            ypaworld->DeinitGameShell();
-            return 0;
-        }
-        GameScreenMode = GAME_SCREEN_MODE_GAME;
-        Input::Engine.QueryInput(&input_states);
-    }
-    else if ( userdata.envAction.action == EnvAction::ACTION_LOAD )
-    {
-        CrashDiag::Breadcrumb("LEVEL", "load save requested");
-        CrashDiag::SetPhase("LevelLoad");
-        GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
-
-        const TLevelInfo &a4 = ypaworld->GetLevelInfo();
-
-        userdata.SaveSettings();
-        ypaworld->CloseGameShell();
-
-        if ( !userdata.SaveBuildProtoState() )
-            return 0;
-
-        if ( !ypaworld->LoadGame( fmt::sprintf("save:%s/%d.sgm", userdata.UserName, 0) ) )
-        {
-            ypa_log_out("Error while loading level (level %d, User %s\n", a4.LevelID, userdata.UserName.c_str());
-
-            ypaworld->DeinitGameShell();
-            return 0;
-        }
-        GameScreenMode = GAME_SCREEN_MODE_GAME;
-        Input::Engine.QueryInput(&input_states);
-    }
-    else if ( userdata.envAction.action == EnvAction::ACTION_NETPLAY )
-    {
-        CrashDiag::Breadcrumb("LEVEL", "netplay start requested level=%d", userdata.envAction.params[0]);
-        CrashDiag::SetPhase("NetLevelStart");
-        userdata.SaveSettings();
-
-        if ( !userdata.SaveBuildProtoState() )
-            return 0;
-
-        dword_513638 = 1;
-
-        ypaworld->CloseGameShell();
-
-        yw_arg161 v22;
-        v22.lvlID = userdata.envAction.params[0];
-        v22.field_4 = 0;
-
-        GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
-
-        if ( !ypaworld->ypaworld_func179(&v22) )
-        {
-            ypa_log_out("Sorry, unable to init this level for network!\n");
-            ypaworld->DeinitGameShell();
-
-            return 0;
-        }
-
-        GameScreenMode = GAME_SCREEN_MODE_GAME;
-        Input::Engine.QueryInput(&input_states);
-    }
-    else if ( userdata.envAction.action == EnvAction::ACTION_REPLAY )
-    {
-        std::string repname = sub_4107A0(world_update_arg.TimeStamp);
-        if ( repname.empty() )
-        {
-            userdata.lastInputEvent = world_update_arg.TimeStamp;
-            return 1;
-        }
-
-        if ( !userdata.SaveBuildProtoState() )
-            return 0;
-
-        dword_513638 = 1;
-
-        ypaworld->CloseGameShell();
-
-        GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
-
-        if ( ypaworld->ypaworld_func162(repname) )
-        {
-            dword_513630 = 1;
-            GameScreenMode = GAME_SCREEN_MODE_REPLAY;
-        }
-        else
-        {
-            ypa_log_out("Sorry, unable to init player!\n");
-            world_update_arg.TimeStamp = 0;
-            userdata.lastInputEvent = 0;
-
-            if ( !ypaworld->OpenGameShell() )
-            {
-                ypa_log_out("GameShell-Error!!!\n");
-                ypaworld->DeinitGameShell();
-                return 0;
-            }
-
-            GameScreenMode = GAME_SCREEN_MODE_MENU;
-        }
-
-        Input::Engine.QueryInput(&input_states);
-    }
-
-    return 1;
-}
-
-
-// OpenNeoUA frame-rate independent simulation timing is always active in gameplay.
+// Game clock units (1024 per second) that this frame advances.
 //
-// The game clock runs at 1024 units per second and the engine does exactly one
-// simulation step per rendered frame with DTime = measured frame delta + 1
-// (the historical Period++ bias). That couples gameplay speed to gfx.maxfps:
-// every rendered frame adds one extra clock unit, so 120/240 fps plays visibly
-// faster than 60 fps (~+17% at 240).
+// The clock always follows real time: the simulation steps once per rendered
+// frame with the measured delta, so the game runs at the same speed at 60 or
+// 240 FPS and every extra frame only adds fluidity. The delta is at least one
+// unit (some code divides by it) and at most 256 units (1/4 s), so a stall
+// such as alt-tab cannot become one giant physics step.
 //
-// Since almost all gameplay already scales by frameTime, feeding the TRUE
-// measured delta (no bias) makes the simulation advance in real time at any
-// frame cap, with native per-frame fluidity. Menu, replay and netplay keep the
-// legacy biased timing untouched.
-static bool FrameRateIndependentActive()
+// Netplay keeps the original +1 bias per frame: the network flush and sync
+// code was written around it.
+int32_t FrameClockDelta(int32_t measured)
 {
-    if ( GameScreenMode != GAME_SCREEN_MODE_GAME || !ypaworld )
-        return false;
+    const bool netGame = GameScreenMode == GAME_SCREEN_MODE_GAME && ypaworld && ypaworld->_isNetGame;
+    if ( netGame )
+        return measured + 1;
 
-    // Netplay keeps its own flush/sync timing assumptions.
-    if ( ypaworld->_isNetGame )
-        return false;
-
-    return true;
+    return std::max(1, std::min(measured, 256));
 }
+
+} // namespace
 
 int ProcessNextFrame()
 {
@@ -507,53 +456,41 @@ int ProcessNextFrame()
         userdata.ResetInputPeriod = false;
     }
 
-    if ( FrameRateIndependentActive() )
-    {
-        // True measured delta, no +1 bias. Floor to 1 (itimer can round to 0
-        // above ~1024 fps and _FPS divides by DTime), clamp to ~250ms so an
-        // alt-tab or loading stall cannot become one giant physics step.
-        if ( input_states.Period < 1 )
-            input_states.Period = 1;
-        else if ( input_states.Period > 256 )
-            input_states.Period = 256;
-    }
-    else
-    {
-        input_states.Period++;
-    }
+    input_states.Period = FrameClockDelta(input_states.Period);
 
     world_update_arg.DTime = input_states.Period;
     world_update_arg.field_8 = &input_states;
     world_update_arg.TimeStamp += input_states.Period;
 
-    if (ypaworld->_mouseGrabbed)
-        System::SetReleativeMouse(true);
-    else
-        System::SetReleativeMouse(false);
+    System::SetReleativeMouse(ypaworld->_mouseGrabbed);
 
     CrashDiag::SetPhase("GuiTimers");
-    // In-game/replay GUI timers belong to the master virtual clock and are
-    // advanced inside the respective world frame after time dilation is known.
-    // Menus remain on platform time.
+    // In-game and replay GUI timers follow the game clock (with time scale)
+    // and are advanced inside the world frame; menus use platform time.
     if ( GameScreenMode != GAME_SCREEN_MODE_GAME &&
          GameScreenMode != GAME_SCREEN_MODE_REPLAY )
         Gui::Root::Instance.TimersUpdate(input_states.Period);
 
     int result = 1;
-    if ( GameScreenMode == GAME_SCREEN_MODE_MENU )
+    switch ( GameScreenMode )
     {
+    case GAME_SCREEN_MODE_MENU:
         CrashDiag::SetPhase("MenuFrame");
         result = ProcessMenuFrame();
-    }
-    else if ( GameScreenMode == GAME_SCREEN_MODE_GAME )
-    {
+        break;
+
+    case GAME_SCREEN_MODE_GAME:
         CrashDiag::SetPhase("GameplayFrame");
         result = ProcessGameplayFrame();
-    }
-    else if ( GameScreenMode == GAME_SCREEN_MODE_REPLAY )
-    {
+        break;
+
+    case GAME_SCREEN_MODE_REPLAY:
         CrashDiag::SetPhase("ReplayFrame");
         result = ProcessReplayFrame();
+        break;
+
+    default:
+        break;
     }
 
     CrashDiag::SetPhase("FrameComplete");
@@ -561,7 +498,7 @@ int ProcessNextFrame()
     return result;
 }
 
-int init_classesLists_and_variables()
+int RegisterNucleusClasses()
 {
     ypa_log__ypa_general_log();
     init_d3dlog();
@@ -581,9 +518,7 @@ int init_classesLists_and_variables()
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_particle>() );
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_embed>() );
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_idev>() );
-    //Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_input>() );
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_itimer>() );
-    //Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_iwimp>() );
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_sample>() );
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_wav>() );
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_button>() );
@@ -607,32 +542,32 @@ int init_classesLists_and_variables()
     return 1;
 }
 
-void deinit_globl_engines()
+namespace
 {
-    if ( tform_inited )
+
+void DeinitEngines()
+{
+    if ( tformInited )
         TF::Engine.Deinit();
-    if ( input_inited )
+    if ( inputInited )
         Input::Engine.Deinit();
-    if ( audio_inited )
+    if ( audioInited )
         SFXEngine::SFXe.deinit();
 
     ypa_log_out("Nucleus shutdown:\n");
 }
 
-int WinMain__sub0__sub0()
+// Registers the Nucleus classes and starts the audio, input and transform engines.
+bool InitEngines()
 {
-    ypaworld = 0;
+    ypaworld = nullptr;
     GameScreenMode = GAME_SCREEN_MODE_UNKNOWN;
     userdata.clear();
     input_states = TInputState();
     world_update_arg = base_64arg();
 
-    if ( !init_classesLists_and_variables() )
-    {
-        sub_412038("Couldn't open Nucleus!");
-        deinit_globl_engines();
-        return 0;
-    }
+    RegisterNucleusClasses();
+
     Common::Env.AddGlobalIniKey("gfx.display  = win3d.class");
     Common::Env.AddGlobalIniKey("gfx.display2 = windd.class");
     Common::Env.AddGlobalIniKey("gfx.engine     = gfx.engine");
@@ -656,107 +591,133 @@ int WinMain__sub0__sub0()
     Common::Env.AddGlobalIniKey("input.button[22] = winp:joyb6");
     Common::Env.AddGlobalIniKey("input.button[23] = winp:joyb7");
 
-    audio_inited = SFXEngine::SFXe.init();
-    input_inited = Input::Engine.Init();
-    tform_inited = TF::Engine.Init();
+    audioInited = SFXEngine::SFXe.init();
+    inputInited = Input::Engine.Init();
+    tformInited = TF::Engine.Init();
 
-    if ( !audio_inited )
+    const char *failed = !audioInited ? "audio" : !tformInited ? "tform" : !inputInited ? "input" : nullptr;
+    if ( failed )
     {
-        sub_412038("Couldn't open audio engine!");
-        deinit_globl_engines();
-        return 0;
+        ypa_log_out("Couldn't open %s engine!\n", failed);
+        DeinitEngines();
+        return false;
     }
 
-    if ( !tform_inited )
-    {
-        sub_412038("Couldn't open tform engine!");
-        deinit_globl_engines();
-        return 0;
-    }
-    if ( !input_inited )
-    {
-        sub_412038("Couldn't open input engine!");
-        deinit_globl_engines();
-        return 0;
-    }
-
-    return 1;
+    return true;
 }
 
-int yw_initGameWithSettings()
+// Reads the default player from env:user.def and loads that player's settings
+// (SDU7 when the file or the player is missing).
+bool LoadDefaultUserSettings()
 {
-    FSMgr::FileHandle *user_def = uaOpenFileAlloc("env:user.def", "r");
+    std::string settingsFileName = "sdu7/user.txt";
+    userdata.UserName = "SDU7";
 
-    std::string settingsFileName;
-
-    if ( user_def )
+    if ( FSMgr::FileHandle *userDef = uaOpenFileAlloc("env:user.def", "r") )
     {
         std::string line;
-        user_def->ReadLine(&line);
+        userDef->ReadLine(&line);
+        delete userDef;
 
-        settingsFileName = fmt::sprintf("save:%s/user.txt", line);
-
-        FSMgr::FileHandle *user_txt = uaOpenFileAlloc(settingsFileName, "r");
-
-        if ( user_txt )
+        if ( FSMgr::FileHandle *userTxt = uaOpenFileAlloc(fmt::sprintf("save:%s/user.txt", line), "r") )
         {
-            delete user_txt;
-
+            delete userTxt;
             userdata.UserName = line;
             settingsFileName = fmt::sprintf("%s/user.txt", line);
         }
         else
         {
-            ypa_log_out("Warning: default user file doesn't exist (%s)\n", settingsFileName.c_str());
-            settingsFileName = fmt::sprintf("sdu7/user.txt");
-            userdata.UserName = "SDU7";
+            ypa_log_out("Warning: default user file doesn't exist (save:%s/user.txt)\n", line.c_str());
         }
-
-        delete user_def;
     }
     else
     {
-        settingsFileName = fmt::sprintf("sdu7/user.txt");
-        userdata.UserName = "SDU7";
         ypa_log_out("Warning: No default user set\n");
     }
 
     userdata.diskListActiveElement = -1;
 
-    int v8 = 1;
-    for ( ProfileList::iterator it = userdata.profiles.begin(); it != userdata.profiles.end(); it++ )
+    int element = 1;
+    for ( const auto &profile : userdata.profiles )
     {
-        if ( !StriCmp(it->name, userdata.UserName) )
+        if ( !StriCmp(profile.name, userdata.UserName) )
         {
-            userdata.diskListActiveElement = v8;
+            userdata.diskListActiveElement = element;
             break;
         }
-
-        v8++;
+        element++;
     }
 
-    return ypaworld->LoadSettings(settingsFileName,
-                                  userdata.UserName,
-                                  World::SDF_ALL,
-                                  true, true) != 0;
+    return ypaworld->LoadSettings(settingsFileName, userdata.UserName, World::SDF_ALL, true, true) != 0;
 }
 
 void ReadSnapsDir()
 {
     FSMgr::DirIter dir = uaOpenDir("env:snaps/");
+    if ( !dir )
+        return;
 
-    if ( dir )
+    FSMgr::iNode *entry;
+    while ( dir.getNext(&entry) )
     {
-        FSMgr::iNode *entr;
-        while ( dir.getNext(&entr) )
-        {
-            if ( entr->getType() == FSMgr::iNode::NTYPE_FILE && !StriCmp(entr->getName().substr(0, 4), "demo") )
-                userdata.snaps.push_back( fmt::sprintf("env:snaps/%s", entr->getName()) );
-        }
+        if ( entry->getType() == FSMgr::iNode::NTYPE_FILE && !StriCmp(entry->getName().substr(0, 4), "demo") )
+            userdata.snaps.push_back( fmt::sprintf("env:snaps/%s", entry->getName()) );
     }
 }
 
-void sub_4113E8()
+// Creates the world object and opens the game shell on the default player.
+bool InitWorld()
+{
+    // The original 1998 build date: the world class and save files expect it.
+    const std::string buildDate = "Jul 09 1998  23:52:47";
+
+    ypaworld = Nucleus::CInit<NC_STACK_ypaworld>( { {NC_STACK_ypaworld::YW_ATT_BUILD_DATE, buildDate} } );
+    Gui::UA::yw = ypaworld;
+
+    if ( !ypaworld )
+    {
+        ypa_log_out("Unable to init ypaworld.class\n");
+        return false;
+    }
+    if ( !ypaworld->InitGameShell(&userdata) )
+    {
+        ypa_log_out("Unable to init shell structure\n");
+        return false;
+    }
+    if ( !LoadDefaultUserSettings() )
+    {
+        ypa_log_out("Unable to init game with default settings\n");
+        return false;
+    }
+    if ( !userdata.HasInited && !ypaworld->OpenGameShell() )
+    {
+        ypa_log_out("Error: Unable to open Gameshell\n");
+        return false;
+    }
+
+    GameScreenMode = GAME_SCREEN_MODE_MENU;
+    ReadSnapsDir();
+    return true;
+}
+
+bool InitGame()
+{
+    if ( !InitEngines() )
+        return false;
+
+    std::vector<std::string> &cmdl = System::GetCmdLineArray();
+    int32_t i = System::FindCmdLineArg("-env");
+    if ( i >= 0 && i + 1 < (int32_t)cmdl.size() )
+        Common::Env.SetPrefix("env", cmdl[i + 1]);
+
+    if ( InitWorld() )
+        return true;
+
+    DeinitEngines();
+    return false;
+}
+
+void ShutdownWorld()
 {
     if ( ypaworld )
     {
@@ -775,70 +736,14 @@ void sub_4113E8()
         ypaworld->Delete();
     }
 
-    deinit_globl_engines();
+    DeinitEngines();
 }
 
-int WinMain__sub0__sub1()
-{
-    buildDate = "Jul 09 1998  23:52:47";
-
-    ypaworld = Nucleus::CInit<NC_STACK_ypaworld>( { {NC_STACK_ypaworld::YW_ATT_BUILD_DATE, std::string(buildDate)} } );
-
-    Gui::UA::yw = ypaworld;
-
-    if ( !ypaworld )
-    {
-        ypa_log_out("Unable to init ypaworld.class\n");
-        return 0;
-    }
-    if ( !ypaworld->InitGameShell(&userdata) )
-    {
-        ypa_log_out("Unable to init shell structure\n");
-        return 0;
-    }
-
-    if ( !yw_initGameWithSettings() )
-    {
-        ypa_log_out("Unable to init game with default settings\n");
-        return 0;
-    }
-
-    const bool mustOpenGameShell = !userdata.HasInited;
-    if ( mustOpenGameShell && !ypaworld->OpenGameShell())
-    {
-        ypa_log_out("Error: Unable to open Gameshell\n");
-        return 0;
-    }
-
-    GameScreenMode = GAME_SCREEN_MODE_MENU;
-    ReadSnapsDir();
-
-    return 1;
-}
-
-
-int WinMain__sub0()
-{
-    if ( WinMain__sub0__sub0() )
-    {
-        std::vector<std::string> &cmdl = System::GetCmdLineArray();
-        int32_t i = System::FindCmdLineArg("-env");
-        if (i >= 0 && i + 1 < (int32_t)cmdl.size())
-            Common::Env.SetPrefix("env", cmdl[i + 1]);
-
-        if ( WinMain__sub0__sub1() )
-            return 1;
-        deinit_globl_engines();
-    }
-
-    return 0;
-}
-
-uint32_t maxTicks = 1000/60; // init on 60FPS
+} // namespace
 
 int main(int argc, char *argv[])
 {
-    for(int i = 0; i < argc; ++i)
+    for ( int i = 0; i < argc; ++i )
         System::AddCmdLine( std::string(argv[i]) );
 
     System::IniConf::Init();
@@ -857,19 +762,14 @@ int main(int argc, char *argv[])
     }
 
     System::IniConf::ReadFromNucleusIni();
-    bool gfxVbo = System::IniConf::GfxVBO.Get<bool>();
-
-    System::Init(!gfxVbo);
+    System::Init(!System::IniConf::GfxVBO.Get<bool>());
 
     GFX::Engine.Init();
     System::Movie.Init();
-
     Gui::UA::Init();
 
-    if ( !WinMain__sub0() )
-    {
+    if ( !InitGame() )
         return 0;
-    }
 
     System::IniConf::ReadFromNucleusIni();
 
@@ -877,89 +777,22 @@ int main(int argc, char *argv[])
                     std::string("OpenNeoUA ") + __DATE__ + " " + __TIME__);
     CrashDiag::Breadcrumb("STARTUP", "runtime initialized");
 
-    // OpenNeoUA: cache global runtime configuration after Nucleus.ini is parsed.
+    // Cache global runtime configuration after Nucleus.ini is parsed.
     World::BlackSectTint::Init();
     World::EnergyFX::Init();
-
-    uint32_t ticks = 0;
 
     Gui::Root::Instance.SetHwCompose(true);
     ypaworld->LoadGuiFonts();
     ypaworld->CreateNewGuiElements();
 
-
-    //Gui::Root::Instance.AddPortal( Common::Point(640, 480), Common::Rect(0, 0, 300, 300));
-
-    // New gui test windows
-    /*Gui::UAWindow *smpl = new Gui::UAWindow("Test1", Common::PointRect(100, 100, 200, 300),
-        Gui::UAWindow::FLAG_WND_RESIZEABLE |
-        Gui::UAWindow::FLAG_WND_VSCROLL |
-        Gui::UAWindow::FLAG_WND_CLOSE );
-    smpl->SetEnable(true);
-    smpl->SetAlpha(190);
-
-    Gui::Root::Instance.AddWidget(smpl);
-
-    Gui::UAWindow *smpl2 = new Gui::UAWindow("Test2", Common::PointRect(0, 0, 50, 60),
-        Gui::UAWindow::FLAG_WND_RESIZEABLE |
-        Gui::UAWindow::FLAG_WND_VSCROLL |
-        Gui::UAWindow::FLAG_WND_CLOSE |
-        Gui::UAWindow::FLAG_WND_HELP |
-        Gui::UAWindow::FLAG_WND_MAXM |
-        Gui::UAWindow::FLAG_WND_HSCROLL);
-    smpl2->SetEnable(true);*/
-
-
-
-
-
-
-
-    while ( true )
-    {
-
-        if (GFX::Engine.FpsMaxTicks == 0)
-        {
-            if ( !ProcessNextFrame() )
-                break;
-
-            if ( System::ProcessEvents() )
-                break;
-        }
-        else
-        {
-            uint32_t curTick = SDL_GetTicks();
-
-            if (curTick >= ticks)
-            {
-                if ( !ProcessNextFrame() )
-                    break;
-
-                if ( System::ProcessEvents() )
-                    break;
-
-                ticks = curTick;
-
-                uint32_t diffTick = SDL_GetTicks() - curTick;
-
-                if (diffTick < GFX::Engine.FpsMaxTicks)
-                {
-                    uint16_t delay = GFX::Engine.FpsMaxTicks - diffTick;
-                    ticks += delay;
-                    SDL_Delay(delay);
-                }
-            }
-            else
-                SDL_Delay(1);
-        }
-
-    }
+    while ( ProcessNextFrame() && !System::ProcessEvents() )
+        System::Frames.EndFrame();
 
     CrashDiag::DisarmWatchdog();
     CrashDiag::SetPhase("Shutdown");
     ypaworld->DeleteNewGuiElements();
 
-    sub_4113E8();
+    ShutdownWorld();
     Gui::UA::Deinit();
 
     CrashDiag::Shutdown();

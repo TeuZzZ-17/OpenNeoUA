@@ -349,15 +349,6 @@ int UAScroll::GetArea(Common::Point pos)
     return AREA_NONE;
 }
 
-void UAScroll::SetScrollPos(int p)
-{
-    _downedArea = AREA_NONE;
-    _scrlPos = p;
-
-    Check();
-    UpdateAreas();
-}
-
 void UAScroll::SetScrollCount(int c)
 {
     _scrlCount = c;
@@ -365,15 +356,5 @@ void UAScroll::SetScrollCount(int c)
     Check();
     UpdateAreas();
 }
-
-void UAScroll::SetScrollPageSize(int ps)
-{
-    _scrlPageSz = ps;
-
-    Check();
-    UpdateAreas();
-}
-
-
 
 }

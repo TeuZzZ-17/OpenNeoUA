@@ -18,7 +18,7 @@
 #undef private
 #undef main
 
-extern int init_classesLists_and_variables();
+extern int RegisterNucleusClasses();
 
 
 int main()
@@ -46,7 +46,7 @@ int main()
     Common::Env.SetPrefix("levels","data:levels");Common::Env.SetPrefix("locale","data:locale");
     Common::Env.SetPrefix("rsrc","data:mc2res");
     // GFX initialization persists its selected mode. Keep the user's exact file.
-    init_classesLists_and_variables();System::RescanFonts();TF::Engine.Init();GFX::Engine.Init();
+    RegisterNucleusClasses();System::RescanFonts();TF::Engine.Init();GFX::Engine.Init();
     if(hadVideoFile)std::ofstream("Data/Env/vid.def",std::ios::binary|std::ios::trunc)<<videoMode;
     else std::remove("Data/Env/vid.def");
     const Common::Point resolution(640,480);

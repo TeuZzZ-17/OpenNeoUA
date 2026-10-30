@@ -148,13 +148,3 @@ int NC_STACK_rsrc::getRsrc_dontCopy()
     return 0;
 }
 
-RSRCList *NC_STACK_rsrc::getRsrc_sharedList()
-{
-    return &publicList;
-}
-
-RSRCList *NC_STACK_rsrc::getRsrc_privateList()
-{
-    return &privateList;
-}
-

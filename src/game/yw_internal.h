@@ -36,7 +36,7 @@ bool yw_ProjectDebugSegment(vec3d a, vec3d b, const mat4x4f &projection, float n
 int loadTOD(NC_STACK_ypaworld *yw, const char *fname);
 int writeTOD(NC_STACK_ypaworld *yw, const char *fname, int tod);
 
-void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc, int a5);
+void DrawBriefingObject(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc, int elapsed);
 void ypaworld_func158__DrawVehicle(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc);
 
 void set_keys_vals(NC_STACK_ypaworld *yw);

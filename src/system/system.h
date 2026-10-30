@@ -45,8 +45,6 @@ namespace System
     void Flip();
 
     void SetVideoMode(const Common::Point &sz, uint32_t full, SDL_DisplayMode *mode);
-    void RestoreWindow();
-
 
     void SetReleativeMouse(bool mode);
 
@@ -65,8 +63,6 @@ namespace System
     void EventsAddHandler(SDL_EventFilter func, bool first = true);
     void EventsDeleteHandler(SDL_EventFilter func);
 
-    // Return drawable area sizes
-    ResRatio GetRResolution();
     Common::Point GetResolution();
 
     std::vector<std::string>& GetCmdLineArray();

@@ -79,11 +79,6 @@ bool NC_STACK_ypaworld::IsSpectatorFollowActive() const
     return _spectatorFollowTarget != nullptr;
 }
 
-NC_STACK_ypabact *NC_STACK_ypaworld::GetSpectatorFollowTarget() const
-{
-    return _spectatorFollowTarget;
-}
-
 bool NC_STACK_ypaworld::IsValidSpectatorFollowTarget(NC_STACK_ypabact *bact) const
 {
     if ( !IsSpectatorControlled() || !bact )

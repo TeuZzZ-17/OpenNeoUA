@@ -351,11 +351,6 @@ void INPEngine::AddClickBoxFront(ClickBox *box)
     ClickCheck.CBoxList.push_front(box);
 }
 
-void INPEngine::AddClickBoxBack(ClickBox *box)
-{
-    ClickCheck.CBoxList.push_back(box);
-}
-
 void INPEngine::RemClickBox(ClickBox *box)
 {
     ClickCheck.CBoxList.remove(box);
@@ -634,16 +629,6 @@ int16_t INPEngine::CheckHotKey(int16_t key)
         }
     }
 
-    return -1;
-}
-
-int16_t INPEngine::GetHotKeyID(int16_t keycode)
-{
-    for ( size_t i = 0; i < _hotKeys.size(); i++ )
-    {
-        if ( _hotKeys[i] == keycode )
-            return i;
-    }
     return -1;
 }
 

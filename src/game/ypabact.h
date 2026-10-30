@@ -552,8 +552,6 @@ public:
     void UpdateCarrierSpawn(update_msg *arg);
     bool CanUseCarrierSpawn();
     void UpdateProximityDefense(update_msg *arg);
-    bool CanUseProximityDefense();
-    bool CanUseProximityDefenseAtDeath();
     void UpdateArtilleryShell(update_msg *arg); // OpenNeoUA custom: radar-guided artillery shell barrage AI
     bool StartArtilleryShellBarrage(const vec3d &targetCenter); // OpenNeoUA custom: begin a barrage at a point
     bool CanManualArtilleryShell(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow = nullptr); // OpenNeoUA custom: manual-call validity (+ ready-now flag)
@@ -564,7 +562,6 @@ public:
     std::string GetArtilleryShellMarkerPath(); // OpenNeoUA custom: SVG marker path authored by the artillery weapon
     float GetArtilleryShellReadinessRatio(); // OpenNeoUA custom: 0..1 cooldown readiness for UI bars
     void UpdateKamikaze(update_msg *arg, const vec3d *oldPosition = nullptr);
-    bool IsKamikazeArmed();
     bool GetKamikazeFireTimeScale(float *outScale, float *outHpDrainPerSecond);
     bool TriggerKamikazeDetonation(NC_STACK_ypabact *directHit);
     bool ApplyKamikazeRammingGuidance();
@@ -750,7 +747,6 @@ public:
     vec3d GetCockpitCameraPosition() const;
     vec3d GetCockpitCameraViewPosition() const;
     virtual float GetPlayerViewZoom() const { return 1.0f; }
-    void ToggleCockpitCameraMode();
     bool IsAlternativeViewAvailable();
     bool IsAlternativeViewActive() const { return _alternativeViewActive; }
     bool UsesDownwardAlternativeView();

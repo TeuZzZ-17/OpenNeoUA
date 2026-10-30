@@ -845,16 +845,6 @@ vec3d NC_STACK_base::GetScale()
     return _transform.Scale;
 }
 
-vec3d NC_STACK_base::GetEulerAngles()
-{
-    return vec3d( (double)_transform.ax, (double)_transform.ay, (double)_transform.az );
-}
-
-vec3i NC_STACK_base::GetIntEulerAngles()
-{
-    return vec3i( _transform.ax, _transform.ay, _transform.az );
-}
-
 AdeList *NC_STACK_base::GetAdeList()
 {
     return &_ADES;
@@ -933,25 +923,19 @@ NC_STACK_base *NC_STACK_base::LoadBaseFromFile(const std::string &fname)
 {
     std::string scanName = fname;
     std::replace(scanName.begin(), scanName.end(), '\\', '/');
-    bool traceSetBas = !StriCmp(scanName, "rsrc:objects/set.base") || !StriCmp(scanName, "rsrc:objects/set.bas") ||
+    bool isSetBas = !StriCmp(scanName, "rsrc:objects/set.base") || !StriCmp(scanName, "rsrc:objects/set.bas") ||
                        !StriCmp(scanName, "objects/set.base") || !StriCmp(scanName, "objects/set.bas");
-    SetLooseBaseObjectScope baseObjectScope(traceSetBas);
+    SetLooseBaseObjectScope baseObjectScope(isSetBas);
     ExternalBaseResourceScope externalResourceScope(fname);
 
     IFFile mfile = IFFile::UAOpenIFFile(fname, "rb", "NC_STACK_base::LoadBaseFromFile");
     if ( !mfile.OK() )
-    {
-        if ( traceSetBas )
-            IFFile::FlushSetLooseOverrideReport();
         return nullptr;
-    }
 
     NC_STACK_base *result = LoadBaseFromIFFFile(&mfile);
     if ( result )
     {
         mfile.ReportSetLooseOverrideUsed();
-        if ( traceSetBas )
-            IFFile::FlushSetLooseOverrideReport();
         return result;
     }
 
@@ -963,9 +947,6 @@ NC_STACK_base *NC_STACK_base::LoadBaseFromFile(const std::string &fname)
         if ( vanilla.OK() )
             result = LoadBaseFromIFFFile(&vanilla);
     }
-
-    if ( traceSetBas )
-        IFFile::FlushSetLooseOverrideReport();
 
     return result;
 }

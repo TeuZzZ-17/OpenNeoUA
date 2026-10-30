@@ -19,7 +19,7 @@
 #undef private
 #undef main
 
-extern int init_classesLists_and_variables();
+extern int RegisterNucleusClasses();
 extern int yw_write_user(FSMgr::FileHandle *,UserData *);
 extern NC_STACK_bitmap *yw_LoadDatabaseBackground(bool);
 extern std::vector<std::string> db_wrap_text_columns(const std::string &,int,int);
@@ -68,7 +68,7 @@ int main(int argc,char **argv)
         System::IniConf::GfxColorEffects.WasSet=true;
     }
     // GFX initialization persists its selected mode. Keep the user's exact file.
-    init_classesLists_and_variables();System::RescanFonts();TF::Engine.Init();GFX::Engine.Init();
+    RegisterNucleusClasses();System::RescanFonts();TF::Engine.Init();GFX::Engine.Init();
     if(hadVideoFile)std::ofstream("Data/Env/vid.def",std::ios::binary|std::ios::trunc)<<videoMode;
     else std::remove("Data/Env/vid.def");
     const Common::Point resolution(argc>1?std::atoi(argv[1]):640,argc>2?std::atoi(argv[2]):480);

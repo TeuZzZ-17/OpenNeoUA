@@ -43,24 +43,6 @@ SDL_Color yw_MapToolbarColor(NC_STACK_ypaworld *yw, bool active)
     return clr;
 }
 
-SDL_Color yw_MapToolbarFrameColor(NC_STACK_ypaworld *yw)
-{
-    // The PNG glyphs stay neutral, while the corner accents identify the
-    // current faction. Keep them deliberately bright so Resistance blue and
-    // the darker themes remain readable against the title bar.
-    SDL_Color clr = yw_MapToolbarColor(yw, true);
-    const int peak = std::max((int)clr.r, std::max((int)clr.g, (int)clr.b));
-    if ( peak > 0 && peak < 215 )
-    {
-        const float scale = 215.0f / (float)peak;
-        clr.r = (uint8_t)std::min(255, dround((float)clr.r * scale));
-        clr.g = (uint8_t)std::min(255, dround((float)clr.g * scale));
-        clr.b = (uint8_t)std::min(255, dround((float)clr.b * scale));
-    }
-    clr.a = 255;
-    return clr;
-}
-
 void yw_DrawMapToolbarLine(int x0, int y0, int x1, int y1)
 {
     GFX::Engine.raster_func201(Common::Line(x0, y0, x1, y1));

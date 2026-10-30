@@ -519,6 +519,7 @@ void TMovie::ProcessAudio()
                     av_samples_alloc_array_and_samples(&_ctx->adst_data, &_ctx->adst_linesize, Common::MIN(2, channels), frm->nb_samples, AV_SAMPLE_FMT_U8, 0);
                     _ctx->adst_nb_samples = frm->nb_samples;
 #endif
+                    // fall through - planar input is converted to packed U8.
                 case AV_SAMPLE_FMT_U8:
                     if (channels > 1)
                         SFXEngine::SFXe.AudioStream->SetFormat(AL_FORMAT_STEREO8, _ctx->AudCodecCtx->sample_rate);
@@ -544,6 +545,7 @@ void TMovie::ProcessAudio()
                     av_samples_alloc_array_and_samples(&_ctx->adst_data, &_ctx->adst_linesize, Common::MIN(2, channels), frm->nb_samples, AV_SAMPLE_FMT_S16, 0);
                     _ctx->adst_nb_samples = frm->nb_samples;
 #endif
+                    // fall through - other formats are converted to packed S16.
                 case AV_SAMPLE_FMT_S16:
                     if (channels > 1)
                         SFXEngine::SFXe.AudioStream->SetFormat(AL_FORMAT_STEREO16, _ctx->AudCodecCtx->sample_rate);

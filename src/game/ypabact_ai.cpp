@@ -1907,7 +1907,7 @@ bool NC_STACK_ypabact::HasVerticalPursuitTarget()
         return false;
 
     NC_STACK_ypabact *userVehicle = _world->getYW_userVehicle();
-    const int playerOwner = _world->_userRobo ? _world->_userRobo->_owner : World::OWNER_0;
+    const int playerOwner = _world->_userRobo ? _world->_userRobo->_owner : (uint8_t)World::OWNER_0;
     const bool customAiAltitudeEnabled = ypabact_GetAiMaxAltitudeAboveGround() > 0.0f;
     const bool airTargetPursuit = ypabact_GetAiAirConfig().verticalForce > 1.0f;
 

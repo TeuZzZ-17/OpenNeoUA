@@ -4,11 +4,13 @@
 #include <inttypes.h>
 #include <string.h>
 #include <algorithm>
+#include <iterator>
 #include <cctype>
 #include <cmath>
 #include "common/includes.h"
 #include "game/yw.h"
 #include "game/yw_internal.h"
+#include "system/framepacer.h"
 #include "gui/font.h"
 #include "gui/button.h"
 #include "game/yw_net.h"
@@ -55,92 +57,78 @@ void LayoutSaveLoadActionButtons(UserData *usr, bool deleteVisible)
     usr->disk_button->setXYWidth(&layout);
 }
 
-void sb_0x4eb94c__sub0(NC_STACK_ypaworld *yw,bool clockwise,int tilt,vec3d *pos,baseRender_msg *arg)
+// Draws the turning vehicle or sector of the briefing object panel.
+static void DrawBriefingPreview(NC_STACK_ypaworld *yw, int tilt, const vec3d &pos, baseRender_msg *arg)
 {
-    auto &object=yw->_briefScreen.ViewingObject;
-    if(!object.Preview)
-    {object.Preview=std::make_shared<ModelPreview>();object.Preview->Select(*yw,*yw,0,object.ID);}
-    yw->_briefScreen.ViewingObjectAngle=(yw->_briefScreen.ViewingObjectAngle+(clockwise?1:-1)*(arg->frameTime/5)+360)%360;
-    object.Preview->Render(*arg,*pos,yw->_briefScreen.ViewingObjectAngle,tilt+10,false,false);
+    TBriefengScreen &brf = yw->_briefScreen;
+    auto &object = brf.ViewingObject;
+    if ( !object.Preview )
+    {
+        object.Preview = std::make_shared<ModelPreview>();
+        if ( object.ObjType == TBriefObject::TYPE_SECTOR )
+            object.Preview->SelectSector(*yw, object.ID);
+        else
+            object.Preview->Select(*yw, *yw, 0, object.ID);
+    }
+
+    // The angle comes from the accumulated time (vanilla speed: one degree
+    // every 5 clock units), so the turn speed does not depend on the FPS.
+    brf.ViewingObjectSpinTime = (brf.ViewingObjectSpinTime + std::max(0, arg->frameTime)) % (360 * 5);
+    object.Preview->Render(*arg, pos, brf.ViewingObjectSpinTime / 5, tilt + 10, false, false);
 }
 
-void sb_0x4eb94c__sub1(NC_STACK_ypaworld *yw,bool clockwise,int tilt,vec3d *pos,baseRender_msg *arg)
-{
-    auto &object=yw->_briefScreen.ViewingObject;
-    if(!object.Preview)
-    {object.Preview=std::make_shared<ModelPreview>();object.Preview->SelectSector(*yw,object.ID);}
-    yw->_briefScreen.ViewingObjectAngle=(yw->_briefScreen.ViewingObjectAngle+(clockwise?1:-1)*(arg->frameTime/5)+360)%360;
-    object.Preview->Render(*arg,*pos,yw->_briefScreen.ViewingObjectAngle,tilt+10,false,false);
-}
-
-void sb_0x4eb94c(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc, int a5)
+// Places the briefing object in its panel: it flies in from far away during
+// the first 500 ms (`elapsed`), then keeps turning.
+void DrawBriefingObject(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc, int elapsed)
 {
     brf->ObjRenderParams.frameTime = struc->Period;
     brf->ObjRenderParams.globTime = brf->CurrTime;
 
-    TF::TForm3D v14;
-    v14.Scale = vec3d(1.0, 1.0, 1.0);
-    v14.SclRot = mat3x3::Ident();
+    TF::TForm3D viewPoint;
+    viewPoint.Scale = vec3d(1.0, 1.0, 1.0);
+    viewPoint.SclRot = mat3x3::Ident();
 
-    TF::Engine.SetViewPoint(&v14);
-    v14.CalcGlobal();
+    TF::Engine.SetViewPoint(&viewPoint);
+    viewPoint.CalcGlobal();
+
+    const TBriefObject &object = brf->ViewingObject;
+    const bool isSector = object.ObjType == TBriefObject::TYPE_SECTOR;
+    if ( !object || (!isSector && object.ObjType != TBriefObject::TYPE_VEHICLE) )
+        return;
+
+    // Camera distance at the start and at the end of the fly-in.
+    float farDistance = 9600.0;
+    float nearDistance = 3600.0;
+    if ( !isSector )
+    {
+        // Keep briefing framing independent of physical collision volumes.
+        const float radius = yw->_vhclProtos[object.ID].BriefingRadius();
+        nearDistance = radius * 7.0;
+        farDistance = radius * 32.0;
+    }
+
+    float distance = nearDistance;
+    int tilt = 0;
+    if ( elapsed < 500 )
+    {
+        distance = farDistance + (nearDistance - farDistance) * elapsed / 500.0;
+        tilt = -90 * elapsed / 500 + 90;
+    }
 
     vec3d pos;
+    pos.x = (brf->ViewingObjectRect.right + brf->ViewingObjectRect.left) / 2.0 * distance;
+    pos.y = (brf->ViewingObjectRect.bottom + brf->ViewingObjectRect.top) / 2.0 * distance;
+    pos.z = distance;
 
-    if (brf->ViewingObject)
+    // Size changes the camera distance. Scale the offset with it so the
+    // projected model origin stays fixed when briefing_size changes.
+    if ( !isSector )
     {
-        pos.x = (brf->ViewingObjectRect.right + brf->ViewingObjectRect.left) / 2.0;
-        pos.y = (brf->ViewingObjectRect.bottom + brf->ViewingObjectRect.top) / 2.0;
-
-        float v16;
-        float v17;
-        float v18;
-        int rot;
-
-        if (brf->ViewingObject.ObjType == TBriefObject::TYPE_SECTOR)
-        {
-            v16 = 9600.0;
-            v17 = 3600.0;
-        }
-        else if (brf->ViewingObject.ObjType == TBriefObject::TYPE_VEHICLE)
-        {
-            const World::TVhclProto &proto = yw->_vhclProtos[brf->ViewingObject.ID];
-
-            // Keep briefing framing independent of physical collision volumes.
-            const float radius = proto.BriefingRadius();
-
-            v17 = radius * 7.0;
-            v16 = radius * 32.0;
-        }
-
-        if (a5 >= 500)
-        {
-            v18 = v17;
-            rot = 0;
-        }
-        else
-        {
-            v18 = v16 + (v17 - v16) * a5 / 500.0;
-            rot = -90 * a5 / 500 + 90;
-        }
-
-        pos.z = v18;
-        pos.y = pos.y * v18;
-        pos.x = pos.x * v18;
-
-        // Size changes the camera distance. Scale the offset with it so the
-        // projected model origin stays fixed when briefing_size changes.
-        if(brf->ViewingObject.ObjType==TBriefObject::TYPE_VEHICLE)
-        {
-            const auto &proto = yw->_vhclProtos[brf->ViewingObject.ID];
-            pos += proto.briefing_xyz * (proto.BriefingRadius() / std::max(.001f, proto.radius));
-        }
-
-        if (brf->ViewingObject.ObjType == TBriefObject::TYPE_SECTOR)
-            sb_0x4eb94c__sub1(yw, true, rot, &pos, &brf->ObjRenderParams);
-        else if (brf->ViewingObject.ObjType == TBriefObject::TYPE_VEHICLE)
-            sb_0x4eb94c__sub0(yw, true, rot, &pos, &brf->ObjRenderParams);
+        const auto &proto = yw->_vhclProtos[object.ID];
+        pos += proto.briefing_xyz * (proto.BriefingRadius() / std::max(.001f, proto.radius));
     }
+
+    DrawBriefingPreview(yw, tilt, pos, &brf->ObjRenderParams);
 }
 
 void ypaworld_func158__DrawVehicle(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState *struc)
@@ -159,7 +147,7 @@ void ypaworld_func158__DrawVehicle(NC_STACK_ypaworld *yw, TBriefengScreen *brf, 
     {
         int v7 = brf->CurrTime - brf->ViewingObjectStartTime;
         if (v7 > 50)
-            sb_0x4eb94c(yw, brf, struc, v7 - 50);
+            DrawBriefingObject(yw, brf, struc, v7 - 50);
     }
 
     GFX::Engine.Rasterize();
@@ -797,9 +785,9 @@ void UserData::sb_0x46aa8c()
 
     if ( _settingsChangeOptions & SETTINGS_CHANGE_MAXFPS )
     {
-        confMaxFps = NormalizeFrameRateLimit(confMaxFps);
+        confMaxFps = System::NormalizeFrameRateLimit(confMaxFps);
         System::IniConf::GfxMaxFps.Value = (int32_t)confMaxFps;
-        GFX::Engine.fpsLimitter(confMaxFps);
+        System::Frames.SetFrameRateLimit(confMaxFps);
         if ( !SaveKeyToOpenNeoUAIni("gfx.maxfps", std::to_string(confMaxFps)) )
             ypa_log_out("WARNING: Could not save gfx.maxfps to OpenNeoUA.ini\n");
     }
@@ -1062,28 +1050,6 @@ void UserData::yw_returnToTitle()
     returnToTitle = false;
 }
 
-void UserData::ShowLanguageMenu()
-{
-    titel_button->HideScreen();
-
-    locale_button->ShowScreen();
-
-    EnvMode = ENVMODE_SELLOCALE;
-    p_YW->GuiWinClose( &local_listvw );
-    p_YW->GuiWinOpen( &local_listvw );
-
-    int i = 0;
-    for(const auto &x : lang_dlls)
-    {
-        if ( &x == default_lang_dll )
-            break;
-
-        i++;
-    }
-
-    local_listvw.selectedEntry = i;
-}
-
 void sub_4EDCD8(NC_STACK_ypaworld *yw)
 {
     yw->_briefScreen.Stage = TBriefengScreen::STAGE_CANCEL;
@@ -1181,7 +1147,7 @@ void UserData::sub_46A3C0()
     confHideMapBorderWalls = System::IniConf::GfxHideMapBorderWalls.Get<bool>();
     confRetroCursors = System::IniConf::UiRetroCursors.Get<bool>();
     confInterfaceStyle = interfaceStyle;
-    confMaxFps = NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
+    confMaxFps = System::NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>());
     confGenesisListOrder = NormalizeGenesisListOrder(System::IniConf::UiGenesisListOrder.Get<std::string>());
     confAmbientSoundVolume = ambientSoundVolume;
 
@@ -2503,7 +2469,7 @@ void UserData::GameShellUiHandleInput()
         }
         else if ( r.code == 1312 ) // FPS Limit cycle
         {
-            confMaxFps = CycleFrameRateLimit(confMaxFps);
+            confMaxFps = System::CycleFrameRateLimit(confMaxFps);
             video_button->SetText(1187, std::to_string(confMaxFps));
             _settingsChangeOptions |= SETTINGS_CHANGE_MAXFPS;
         }
@@ -3519,7 +3485,8 @@ void UserData::GameShellUiHandleInput()
                     msgMsg.msgID = UAMSG_MESSAGE;
                     msgMsg.owner = 0;
 
-                    strncpy(msgMsg.message, netName.c_str(), 64);
+                    strncpy(msgMsg.message, netName.c_str(), sizeof(msgMsg.message) - 1); // Always NUL-terminated.
+                    msgMsg.message[sizeof(msgMsg.message) - 1] = 0;
 
                     p_YW->NetBroadcastMessage(&msgMsg, sizeof(msgMsg), true);
 
@@ -3724,7 +3691,8 @@ void UserData::GameShellUiHandleInput()
                         msgMsg.msgID = UAMSG_MESSAGE;
                         msgMsg.owner = 0;
 
-                        strncpy(msgMsg.message, netName.c_str(), 64);
+                        strncpy(msgMsg.message, netName.c_str(), sizeof(msgMsg.message) - 1); // Always NUL-terminated.
+                        msgMsg.message[sizeof(msgMsg.message) - 1] = 0;
 
                         p_YW->NetBroadcastMessage(&msgMsg, sizeof(msgMsg), true);
 
@@ -4155,7 +4123,23 @@ void UserData::GameShellUiHandleInput()
             if ( !p_YW->_globalMapRegions.MapRegions[netLevelID].IsFraction(World::OWNER_TAER) )
                 FractionErrorMask |= World::OWNER_TAER_BIT;
 
+            // Owner of a single faction bit, or -1.
+            auto ownerOfFraction = [](int fraction)
+            {
+                switch ( fraction )
+                {
+                case World::OWNER_RESIST_BIT: return (int)World::OWNER_RESIST;
+                case World::OWNER_GHOR_BIT:   return (int)World::OWNER_GHOR;
+                case World::OWNER_MYKO_BIT:   return (int)World::OWNER_MYKO;
+                case World::OWNER_TAER_BIT:   return (int)World::OWNER_TAER;
+                default:                      return -1;
+                }
+            };
+
+            // Lobby index of the player who took each faction first; -1 = nobody.
+            // A faction missing from the map is never taken, so it stays -1.
             int FractionPlID[World::CVFractionsCount];
+            std::fill(std::begin(FractionPlID), std::end(FractionPlID), -1);
 
             for ( TDPPlayerData &p : p_YW->_netDriver->GetPlayersData() )
             {
@@ -4166,51 +4150,23 @@ void UserData::GameShellUiHandleInput()
                 else
                     fraction = lobbyPlayers[p.Index].NetFraction;
 
+                const int owner = ownerOfFraction(fraction);
+
                 if ( fraction & FractionErrorMask )
                 {
+                    // Faction not on the map, or already taken: both players are flagged.
                     lobbyPlayers[p.Index].IsTrouble = true;
                     netGameCanStart = false;
 
-                    switch ( fraction )
-                    {
-                    case World::OWNER_RESIST_BIT:
-                        lobbyPlayers[ FractionPlID[World::OWNER_RESIST] ].IsTrouble = true;
-                        break;
-                    case World::OWNER_GHOR_BIT:
-                        lobbyPlayers[ FractionPlID[World::OWNER_GHOR] ].IsTrouble = true;
-                        break;
-                    case World::OWNER_MYKO_BIT:
-                        lobbyPlayers[ FractionPlID[World::OWNER_MYKO] ].IsTrouble = true;
-                        break;
-                    case World::OWNER_TAER_BIT:
-                        lobbyPlayers[ FractionPlID[World::OWNER_TAER] ].IsTrouble = true;
-                        break;
-                    default:
-                        break;
-                    }
+                    if ( owner >= 0 && FractionPlID[owner] >= 0 )
+                        lobbyPlayers[ FractionPlID[owner] ].IsTrouble = true;
                 }
                 else
                 {
                     lobbyPlayers[p.Index].IsTrouble = false;
 
-                    switch ( fraction )
-                    {
-                    case World::OWNER_RESIST_BIT:
-                        FractionPlID[World::OWNER_RESIST] = p.Index;
-                        break;
-                    case World::OWNER_GHOR_BIT:
-                        FractionPlID[World::OWNER_GHOR] = p.Index;
-                        break;
-                    case World::OWNER_MYKO_BIT:
-                        FractionPlID[World::OWNER_MYKO] = p.Index;
-                        break;
-                    case World::OWNER_TAER_BIT:
-                        FractionPlID[World::OWNER_TAER] = p.Index;
-                        break;
-                    default:
-                        break;
-                    }
-
+                    if ( owner >= 0 )
+                        FractionPlID[owner] = p.Index;
                 }
 
                 FractionErrorMask |= fraction;

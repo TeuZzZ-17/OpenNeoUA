@@ -136,7 +136,6 @@ public:
     virtual size_t GetSessionName(windp_getNameMsg *arg);
     virtual size_t JoinSession(const std::string &stak);
     virtual size_t CreateSession(windp_openSessionMsg *os);
-    virtual size_t GetSessionData(IDVPair *stak);
     virtual size_t CloseSession(IDVPair *stak);
     virtual size_t GetSessionStatus();
     virtual size_t SetSessionName(const char *sessName);
@@ -164,14 +163,12 @@ public:
 
     size_t FlushBroadcastBuffer();
 
-    virtual size_t GetCaps(IDVPair *stak);
     virtual size_t LockSession(int *);
     virtual size_t Reset(IDVPair *stak);
 
 
     virtual bool GetRemoteStart(windp_arg87 *arg);
 
-    virtual size_t GetLocalName(IDVPair *stak);
     virtual void   SetVersion(const std::string &arg);
     virtual size_t GetProvType();
 
@@ -179,7 +176,6 @@ public:
 
     NC_STACK_windp() {
         _clear();
-        //memset(&wdp_intern, 0, sizeof(wdp_intern));
     };
     virtual ~NC_STACK_windp() {};
 
@@ -249,31 +245,14 @@ public:
     uint32_t _nextSessionsGet;
     uint64_t _sesID;
     std::string _sesName;
-    /*  _DWORD dword1504;
-      IDirectPlay3 *dplay3;
-      int providerID;
-      int connType;
-      int num_sessions;
-      windp_t2 sessions[64];
-      int act_sess;
-      windp_t2 own_sess;
-      int sess_joined;
-      int sess_created;*/
     std::string version_ident;
     int version_check;
-    /*windp_t3 players[4];
-    int num_players;*/
     char *norm_block;
     int norm_size;
-    /*int big_size;
-    int guaranteed;*/
     std::vector<uint8_t> broadcastBuff;
     int broadcastBuff_off = 0;
 
     int guaranteed_md;
-    /*nlist recv_list;
-    nlist send_list;
-    HANDLE mevent;*/
     int debug;
 };
 

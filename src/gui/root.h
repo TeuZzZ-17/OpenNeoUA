@@ -112,8 +112,6 @@ public:
 
     uint32_t TimerAdd(uint32_t wID, uint32_t time, uint32_t code = Timer::CODE_ANY);
 
-    int32_t TimerGet(uint32_t id);
-    bool TimerDelete(uint32_t id); // By timer ID
     int TimerDeleteByWidget(uint32_t wID, uint32_t code = Timer::CODE_ANY); // By widget ID
 
     void TimersUpdate(uint32_t dtime);
@@ -136,8 +134,6 @@ protected:
 
     void UpdateWidgetOnMice(Widget *w);
 
-    int32_t _TimerGet(std::list<Timer> &list, uint32_t id);
-    bool _TimerDelete(std::list<Timer> &list, uint32_t id); // By timer ID
     int _TimerDeleteByWidget(std::list<Timer> &list, uint32_t wID, uint32_t code); // By widget ID
 
     void ModAlpha(SDL_Surface *surf, Common::Rect space, uint8_t alpha);

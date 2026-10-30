@@ -24,6 +24,7 @@
 #include "gui/font.h"
 #include "inivals.h"
 #include "gametime.h"
+#include "framepacer.h"
 #include "world/locations.h"
 #include "glfuncs.h"
 
@@ -44,7 +45,6 @@ GFXEngine GFXEngine::Instance;
 int GFXEngine::can_srcblend;
 int GFXEngine::can_destblend;
 int GFXEngine::can_stippling;
-uint32_t GFXEngine::FpsMaxTicks = 1000/60;
 
 SDL_PixelFormat *GFXEngine::_pixfmt = nullptr;
 GLint GFXEngine::_glPixfmt, GFXEngine::_glPixtype;
@@ -71,18 +71,6 @@ static int GameplayAwareShaderRandom()
     x *= 0x846ca68bU;
     x ^= x >> 16;
     return (int)(x & 0x7fffffffU);
-}
-static int NormalizeFrameRateLimit(int value)
-{
-    static const int validLimits[] = {60, 75, 90, 120, 144, 165, 200, 240};
-
-    for (int limit : validLimits)
-    {
-        if (value == limit)
-            return value;
-    }
-
-    return 60;
 }
 
 // Vanilla palette effects only. OpenNeoUA custom slots 8..16 are loaded from
@@ -124,16 +112,6 @@ struct HorizonFogConfig
 
 static HorizonFogConfig gHorizonFogConfig;
 
-static std::string HorizonTrim(std::string s)
-{
-    size_t first = s.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos)
-        return std::string();
-
-    size_t last = s.find_last_not_of(" \t\r\n");
-    return s.substr(first, last - first + 1);
-}
-
 static float HorizonClamp01(float v)
 {
     if (v < 0.0f)
@@ -145,7 +123,7 @@ static float HorizonClamp01(float v)
 
 static bool HorizonParseFloat(std::string s, float *out)
 {
-    s = HorizonTrim(s);
+    s = StrTrim(s);
     if (s.empty())
         return false;
 
@@ -192,7 +170,7 @@ static int HorizonClampColor(int v)
 
 static TGLColor HorizonParseColor(std::string s, const TGLColor &fallback)
 {
-    s = HorizonTrim(s);
+    s = StrTrim(s);
     if (s.empty())
         return fallback;
 
@@ -216,7 +194,7 @@ static TGLColor HorizonParseColor(std::string s, const TGLColor &fallback)
 
 static bool ParseColorEffectRgb(std::string s, vec3d *out)
 {
-    s = HorizonTrim(s);
+    s = StrTrim(s);
     if (s.empty() || !out)
         return false;
 
@@ -287,11 +265,6 @@ bool TRenderNode::CompareSolid(TRenderNode *a, TRenderNode *b)
 bool TRenderNode::CompareTransparent(TRenderNode* a, TRenderNode* b)
 {
     return a->Distance > b->Distance;
-}
-
-bool TRenderNode::CompareDistance(TRenderNode* a, TRenderNode* b)
-{
-    return a->Distance < b->Distance;
 }
 
 static float HorizonDefaultAlphaFogStart(float fogStart, float fogLength)
@@ -753,11 +726,9 @@ int GFXEngine::LoadFontByDescr(const std::string &fontname)
 
     if (splt.size() > 1)
         s_height = splt[1];
-    //const char *s_weight = strtok(0, ",");
-    //const char *s_charset = strtok(0, ",");
 
-    int height;//, weight, charset;
-    if ( !facename.empty() && !s_height.empty() )//&& s_weight && s_charset )
+    int height;
+    if ( !facename.empty() && !s_height.empty() )
     {
         height = std::stoi(s_height);
     }
@@ -854,7 +825,7 @@ size_t GFXEngine::windd_func0(IDVList &stak)
             break;
     }
 
-    fpsLimitter(NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>()));
+    System::Frames.SetFrameRateLimit(System::NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>()));
 
     LoadFontByDescr("MS Sans Serif,12,400,0");
 
@@ -1104,7 +1075,6 @@ size_t GFXEngine::raster_func204(rstr_arg204 *arg)
 
 void GFXEngine::SetRenderStates(int setAll)
 {
-//    static const std::array<int, 4> blends = {GL_ZERO, GL_ONE, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
     GfxStates *newStates;
 
     if (setAll < 2)
@@ -2355,12 +2325,7 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
 
             int cpy_height = line_height - y_off;
 
-            //SDL_Rect srcR, dstR;
             Common::Rect dstR(x_out, y_out, x_out + cpy_width, y_out + cpy_height);
-            /*dstR.x = x_out;
-            dstR.y = y_out;
-            dstR.w = cpy_width;
-            dstR.h = cpy_height;*/
 
             Common::Rect srcR;
             srcR.left = chrr.x + x_off;
@@ -2384,19 +2349,6 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
                 DrawFill(source, srcR, Screen(), dstR);
             else
                 DrawFillAlpha(source, srcR, Screen(), dstR, opacity);
-
-            /*srcR.h = cpy_height;
-
-            if (v11)
-                srcR.w = cpy_width;
-            else
-                srcR.w = 1;
-
-            for(int i = 0; i < cpy_width; i += srcR.w)
-            {
-                SDL_BlitSurface(tile->img->GetSwTex(), &srcR, Screen(), &dstR);
-                dstR.x += srcR.w;
-            }*/
 
             line_width = 0;
             x_off = 0;
@@ -3073,10 +3025,6 @@ void GFXEngine::setWDD_cursor(int mode)
 {
 }
 
-void GFXEngine::setWDD_disLowRes(int arg)
-{
-}
-
 void GFXEngine::setWDD_16bitTex(int arg)
 {
     out_yes_no_status("env/txt16bit.def", arg);
@@ -3196,12 +3144,6 @@ void GFXEngine::viewZoomCorrection(float &x, float &y, bool invert) const
     y *= correction;
 }
 
-void GFXEngine::setFrustumClip(float _near, float _far)
-{
-    if (_near != _frustumNear || _far != _frustumFar)
-        _setFrustumClip(_near, _far);
-}
-
 void GFXEngine::_setFrustumClip(float _near, float _far)
 {
     //-z * frustum
@@ -3317,16 +3259,6 @@ SDL_Surface * GFXEngine::ConvertSDLSurface(SDL_Surface *src, const SDL_PixelForm
 #else
     return SDL_ConvertSurface(src, fmt, 0);
 #endif
-}
-
-void GFXEngine::fpsLimitter(int value)
-{
-    if (value > 1000)
-        FpsMaxTicks = 0;
-    else if (value <= 0)
-        FpsMaxTicks = 0;
-    else
-        FpsMaxTicks = 1000/value;
 }
 
 
@@ -4514,19 +4446,9 @@ static float ParseVhsFilterStrength(std::string s, float fallback)
     }
 }
 
-static std::string TrimConfigString(std::string s)
-{
-    size_t first = s.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos)
-        return std::string();
-
-    size_t last = s.find_last_not_of(" \t\r\n");
-    return s.substr(first, last - first + 1);
-}
-
 static float ParseAtmosphereValue(std::string s, float fallback, float minValue, float maxValue)
 {
-    s = TrimConfigString(s);
+    s = StrTrim(s);
     if (s.empty() || s.find(',') != std::string::npos)
         return fallback;
 
@@ -4787,7 +4709,7 @@ void GFXEngine::FreeVhsFilterShader()
 
 bool GFXEngine::LoadVhsFilterShader()
 {
-    std::string shaderPath = TrimConfigString(_vbo
+    std::string shaderPath = StrTrim(_vbo
                            ? System::IniConf::GfxVhsFilterShaderVbo.Get<std::string>()
                            : System::IniConf::GfxVhsFilterShader.Get<std::string>());
 
@@ -4874,27 +4796,6 @@ uint8_t *GFXEngine::MakeScreenCopy(int *ow, int *oh)
     *oh = res.y;
     return buf;
 }
-
-uint8_t *GFXEngine::MakeDepthScreenCopy(int *ow, int *oh)
-{
-    Common::Point res = System::GetResolution();
-
-    // power of 2
-    res.x &= ~1;
-    res.y &= ~1;
-
-    uint8_t *buf = (uint8_t *)malloc(res.x * res.y);
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glReadBuffer(GL_FRONT);
-    glReadPixels(0, 0, res.x, res.y, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, buf);
-
-    *ow = res.x;
-    *oh = res.y;
-    return buf;
-}
-
-
 
 SDL_Surface *GFXEngine::Screen()
 {
@@ -5725,12 +5626,6 @@ void GFXEngine::EndVirtualUI()
     _virtualUiPending = VirtualUISurface != nullptr;
 }
 
-void GFXEngine::GetGlPixTypeFmt(GLint *format, GLint *type)
-{
-    *format = _glPixfmt;
-    *type = _glPixtype;
-}
-
 void GFXEngine::RecreateScreenSurface()
 {
     if ( ScreenSurface )
@@ -6301,13 +6196,6 @@ SDL_Color GFXEngine::Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
     tmp.g = g;
     tmp.b = b;
     return tmp;
-}
-
-bool GFXEngine::ColorCmp(const SDL_Color &a, const SDL_Color &b)
-{
-    if (a.a != b.a || a.r != b.r || a.g != b.g || a.b != b.b)
-        return false;
-    return true;
 }
 
 float GFXEngine::GetColorEffectPower(int id)

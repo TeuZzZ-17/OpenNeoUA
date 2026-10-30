@@ -1057,7 +1057,6 @@ public:
     void sb_0x46aa8c();
     void ShowSaveLoadMenu();
     void ShowInputSettings();
-    void ShowLanguageMenu();
     void yw_returnToTitle();
     void InputPageCancel();
     void InputConfCancel();
@@ -1196,7 +1195,6 @@ struct TGameRecorder
     std::vector<NC_STACK_ypabact *> bacts;
     std::vector<trec_bct> oinf;
     std::vector<TSndState> sound_status;
-    //std::vector<???> field_20;
     std::vector<uint8_t> ainf;
 
     const int32_t max_bacts = 1024;
@@ -1786,7 +1784,7 @@ struct TBriefengScreen
     bool AddObjectsFlag = false;
     TBriefObject ViewingObject;
     Common::FRect ViewingObjectRect;
-    int32_t ViewingObjectAngle = 0;
+    int32_t ViewingObjectSpinTime = 0; // Clock units spent turning; one degree every 5 units.
     uint32_t ViewingObjectStartTime = 0;
 
     std::vector<TBriefObject> Objects;
@@ -1860,7 +1858,7 @@ struct TBriefengScreen
         ViewingObject = TBriefObject();
 
         ViewingObjectRect = Common::FRect();
-        ViewingObjectAngle = 0;
+        ViewingObjectSpinTime = 0;
         ViewingObjectStartTime = 0;
 
         MapBlitParams = GFX::rstr_arg204();
@@ -2461,7 +2459,6 @@ public:
     bool IsSpectatorControlled() const;
     bool CanControlUnitInSpectatorMode(const NC_STACK_ypabact *bact) const;
     bool IsSpectatorFollowActive() const;
-    NC_STACK_ypabact *GetSpectatorFollowTarget() const;
     bool IsValidSpectatorFollowTarget(NC_STACK_ypabact *bact) const;
     void SetSpectatorFollowTarget(NC_STACK_ypabact *bact);
     void ClearSpectatorFollowTarget();
