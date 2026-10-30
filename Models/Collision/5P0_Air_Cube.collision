@@ -1,0 +1,30 @@
+begin_collision_shape
+version = 1
+source = ALPHA_VP_BRGR2_NORMAL
+source_hash = efe38d602c1a322667cb806b2fd80a541ca77b19814832cc45865025bd1f5314
+scale = 1_1_1
+rotation = 0_0_0
+; studio_metadata = {"quality":"low","components":["root#component:9c00c89c4c614702"],"disabled_hulls":[]}
+begin_hull
+vertex = -50_-49.999998807907104_-50
+vertex = -50_39.999998807907104_-50
+vertex = 50_-49.999998807907104_-50
+vertex = -50_-49.999998807907104_50
+vertex = -50_39.999998807907104_50
+vertex = 50_39.999998807907104_-50
+vertex = 50_-49.999998807907104_50
+vertex = 50_39.999998807907104_50
+face = 0_1_5
+face = 0_5_2
+face = 0_2_6
+face = 0_6_3
+face = 0_3_4
+face = 0_4_1
+face = 1_4_7
+face = 1_7_5
+face = 2_5_7
+face = 2_7_6
+face = 3_6_7
+face = 3_7_4
+end
+end
