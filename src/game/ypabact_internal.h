@@ -117,6 +117,8 @@ struct TDamagedVisualRef
 {
     int16_t vp = 0;
     std::string mesh3ds;
+    float scale_min = 1.0f;
+    float scale_max = 1.0f;
 };
 
 struct TKamikazeMount

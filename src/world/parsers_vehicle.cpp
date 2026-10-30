@@ -561,18 +561,21 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "damaged_fx_scale") )
     {
-        float scaleMin = 1.0f;
-        float scaleMax = 1.0f;
-        if ( ParseScriptFloatRange(p2, scaleMin, scaleMax) &&
-             scaleMin > 0.0f && scaleMax > 0.0f )
+        auto &scales = _vhcl->damaged_fx.scales;
+        scales.clear();
+        size_t start = 0;
+        while ( true )
         {
-            _vhcl->damaged_fx.scale = scaleMin;
-            _vhcl->damaged_fx.scale_max = scaleMax;
-        }
-        else
-        {
-            _vhcl->damaged_fx.scale = 1.0f;
-            _vhcl->damaged_fx.scale_max = 1.0f;
+            const size_t separator = p2.find('_', start);
+            float scaleMin = 1.0f;
+            float scaleMax = 1.0f;
+            if ( !World::ParseFloatRangeValue(p2.substr(start, separator - start), scaleMin, scaleMax, '~') ||
+                 scaleMin <= 0.0f || scaleMax <= 0.0f )
+                scaleMin = scaleMax = 1.0f;
+            scales.emplace_back(scaleMin, scaleMax);
+            if ( separator == std::string::npos )
+                break;
+            start = separator + 1;
         }
     }
     else if ( !StriCmp(p1, "damaged_fx_threshold") )
