@@ -8,6 +8,12 @@ The project is derived from the upstream [Marisa-Chan/UA_source](https://github.
 
 **License:** GPLv2
 
+## Companion project: OpenNeoUA Studio
+
+[OpenNeoUA Studio](https://github.com/TeuZzZ-17/OpenNeoUAStudio) is a closely related editing workbench for Urban Assault and OpenNeoUA. It is designed to work with both the original game and the extended OpenNeoUA engine.
+
+We recommend visiting the companion repository and reporting bugs or other problems in the relevant project's issue tracker. Reports are appreciated and will be addressed as promptly as possible.
+
 # OpenNeoUA Parameter Guide
 
 OpenNeoUA extends Urban Assault with a growing collection of optional, data-driven parameters that can be used to customize gameplay, AI, vehicles, weapons, visual effects, user interfaces, level behavior and many other engine systems.
