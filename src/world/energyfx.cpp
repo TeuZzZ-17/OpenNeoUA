@@ -102,7 +102,7 @@ static void ReadIntRange(Common::Ini::Key &key, int fallbackMin, int fallbackMax
     if ( !World::ParseIntRangeValue(value, parsedMin, parsedMax) )
     {
         if ( key.WasSet )
-            ypa_log_out("Warning: invalid %s '%s', using %d_%d\n",
+            ypa_log_out("Warning: invalid %s '%s', using %d~%d\n",
                         key.Name.c_str(), value.c_str(), fallbackMin, fallbackMax);
         parsedMin = fallbackMin;
         parsedMax = fallbackMax;
@@ -136,7 +136,7 @@ static float ReadFloat(Common::Ini::Key &key, float fallback)
     return ReadFloatText(key, key.Get<std::string>(), fallback);
 }
 
-// Splits a compact "a_b_c" key (see World::SplitTupleValue). A malformed value
+// Splits a compact "a|b|c" key (see World::SplitTupleValue). A malformed value
 // is reported only when the author set it; the caller then keeps its defaults.
 static bool ReadTupleParts(Common::Ini::Key &key, size_t count, std::string *parts)
 {
@@ -145,7 +145,7 @@ static bool ReadTupleParts(Common::Ini::Key &key, size_t count, std::string *par
         return true;
 
     if ( key.WasSet )
-        ypa_log_out("Warning: invalid %s '%s', expected %u values separated by '_'\n",
+        ypa_log_out("Warning: invalid %s '%s', expected %u values separated by '|'\n",
                     key.Name.c_str(), value.c_str(), (unsigned)count);
     return false;
 }
@@ -202,7 +202,7 @@ static TVisualTint ReadTint(Common::Ini::Key &key, const TVisualTint &fallback)
 
         if ( i < 2 )
         {
-            if ( *pos != '_' )
+            if ( *pos != '|' )
             {
                 valid = false;
                 break;
@@ -211,7 +211,7 @@ static TVisualTint ReadTint(Common::Ini::Key &key, const TVisualTint &fallback)
         }
     }
 
-    if ( valid && *pos == '_' )
+    if ( valid && *pos == '|' )
     {
         pos++;
         valid = ParseTintComponent(pos, &component[3]);

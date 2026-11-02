@@ -174,7 +174,7 @@ static TGLColor HorizonParseColor(std::string s, const TGLColor &fallback)
     if (s.empty())
         return fallback;
 
-    std::vector<std::string> parts = Stok::Split(s, "_, \t");
+    std::vector<std::string> parts = Stok::Split(s, "|, \t");
     if (parts.size() < 3)
         return fallback;
 
@@ -198,7 +198,7 @@ static bool ParseColorEffectRgb(std::string s, vec3d *out)
     if (s.empty() || !out)
         return false;
 
-    std::vector<std::string> parts = Stok::Split(s, "_, \t");
+    std::vector<std::string> parts = Stok::Split(s, "|, \t");
     if (parts.size() != 3)
         return false;
 

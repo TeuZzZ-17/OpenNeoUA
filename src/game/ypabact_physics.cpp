@@ -1181,7 +1181,7 @@ bool NC_STACK_ypabact::GetUnitCollisionContact(NC_STACK_ypabact *other,
 bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
 {
     if (HasCollisionShape()) return false; // The common shape solver includes stationary genesis.
-    if ( _status != BACT_STATUS_CREATE || !getBACT_bactCollisions() || !_pSector ||
+    if ( (_status != BACT_STATUS_CREATE && !_spawnSeparationPending) || !getBACT_bactCollisions() || !_pSector ||
          IsDestroyed() || !ypabact_IsGenesisSeparationVehicle(this) )
         return false;
 
@@ -1246,7 +1246,10 @@ bool NC_STACK_ypabact::ResolveGenesisCompoundOverlap(int frameTime)
     }
 
     if ( contacts == 0 )
+    {
+        _spawnSeparationPending = false;
         return false;
+    }
 
     if ( correction.XZ().length() <= 0.001f )
         correction = strongestDir * std::min(strongestPenetration * 0.5f, 8.0f * frameScale);

@@ -743,7 +743,7 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
 
 GFX::TGLColor yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TGLColor &fallback)
 {
-    const std::vector<std::string> parts = Stok::Split(key.Get<std::string>(), "_, \t");
+    const std::vector<std::string> parts = Stok::Split(key.Get<std::string>(), "|, \t");
     if ( parts.size() != 4 )
         return fallback;
 

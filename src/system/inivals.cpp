@@ -36,12 +36,12 @@ Common::Ini::Key IniConf::GfxHorizonFogLength("gfx.horizon_fog_length", Common::
 Common::Ini::Key IniConf::GfxHorizonFogStrength("gfx.horizon_fog_strength", Common::Ini::KT_WORD, std::string("0.80"));
 // OpenNeoUA Horizon Atmosphere V2: RGB colour used to blend opaque world geometry
 // into the distant atmosphere. The effect preserves depth and object alpha.
-Common::Ini::Key IniConf::GfxHorizonFogColor("gfx.horizon_fog_color", Common::Ini::KT_WORD, std::string("150_155_160"));
+Common::Ini::Key IniConf::GfxHorizonFogColor("gfx.horizon_fog_color", Common::Ini::KT_WORD, std::string("150|155|160"));
 Common::Ini::Key IniConf::GfxHorizonDarkEnable("gfx.horizon_dark_enable", Common::Ini::KT_BOOL, true);
 Common::Ini::Key IniConf::GfxHorizonDarkStart("gfx.horizon_dark_start", Common::Ini::KT_WORD, std::string("2000"));
 Common::Ini::Key IniConf::GfxHorizonDarkLength("gfx.horizon_dark_length", Common::Ini::KT_WORD, std::string("2000"));
 Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Common::Ini::KT_WORD, std::string("0.65"));
-Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0_0_0"));
+Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0|0|0"));
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyRender("gfx.sky_render", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxHideMapBorderWalls("gfx.hide_map_border_walls", Common::Ini::KT_BOOL, false);
@@ -346,7 +346,7 @@ Common::Ini::Key IniConf::GameEliteUnitMaxStatBonus("game.elite_unit_max_stat_bo
 Common::Ini::Key IniConf::GameEliteUnitMaxMedals("game.elite_unit_max_medals", Common::Ini::KT_WORD, std::string("4"));
 Common::Ini::Key IniConf::GameEliteUnitKillsPerMedal("game.elite_unit_kills_per_medal", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GameEliteUnitMaxGlowIntensity("game.elite_unit_max_glow_intensity", Common::Ini::KT_WORD, std::string("0"));
-Common::Ini::Key IniConf::GameEliteUnitGlowTint("game.elite_unit_glow_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GameEliteUnitGlowTint("game.elite_unit_glow_tint", Common::Ini::KT_WORD, std::string("255|255|255|255"));
 Common::Ini::Key IniConf::GameEliteUnitGlowPulseSeconds("game.elite_unit_glow_pulse_seconds", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameHandBrakeSound("game.handbrake_sound", Common::Ini::KT_STRING, std::string("sounds/new/handbrake.wav"));
 // OpenNeoUA: optional global mission ambience. A level may override both the
@@ -398,8 +398,8 @@ Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.ai_mgun_fire_alignment",
 // OpenNeoUA: global temporal envelopes are limited to SHK and PAL.
 // Event-specific fade keys are intentionally unsupported; missing, malformed,
 // negative or zero means no additional fade. SND keeps its legacy behavior.
-Common::Ini::Key IniConf::GameGlobalShkFade("game.global_shk_fade_inout", Common::Ini::KT_WORD, std::string("0_0"));
-Common::Ini::Key IniConf::GameGlobalPalFade("game.global_pal_fade_inout", Common::Ini::KT_WORD, std::string("0_0"));
+Common::Ini::Key IniConf::GameGlobalShkFade("game.global_shk_fade_inout", Common::Ini::KT_WORD, std::string("0|0"));
+Common::Ini::Key IniConf::GameGlobalPalFade("game.global_pal_fade_inout", Common::Ini::KT_WORD, std::string("0|0"));
 // OpenNeoUA: curve of the distance attenuation of SHK, PAL and SND effects that
 // author a radius. 1 (default, missing or invalid) = linear; below 1 = softer.
 Common::Ini::Key IniConf::GameGlobalShkFalloffPower("game.global_shk_falloff_power", Common::Ini::KT_WORD, std::string("1"));
@@ -411,15 +411,15 @@ Common::Ini::Key IniConf::GameGlobalSndFalloffPower("game.global_snd_falloff_pow
 // the classic MAPMISC squares. Missing/disabled world HP keys preserve the
 // full vanilla HP/Shield paths. Active HP tint converges from full_tint toward low_tint as HP decreases.
 Common::Ini::Key IniConf::GfxWorldNewHpBarEnable("gfx.world_new_hp_bar_enable", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GfxWorldNewHpBarFullTint("gfx.world_new_hp_bar_full_tint", Common::Ini::KT_WORD, std::string("0_217_81_255"));
-Common::Ini::Key IniConf::GfxWorldNewHpBarLowTint("gfx.world_new_hp_bar_low_tint", Common::Ini::KT_WORD, std::string("255_0_0_255"));
-Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255_0_0_0"));
+Common::Ini::Key IniConf::GfxWorldNewHpBarFullTint("gfx.world_new_hp_bar_full_tint", Common::Ini::KT_WORD, std::string("0|217|81|255"));
+Common::Ini::Key IniConf::GfxWorldNewHpBarLowTint("gfx.world_new_hp_bar_low_tint", Common::Ini::KT_WORD, std::string("255|0|0|255"));
+Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_tint", Common::Ini::KT_WORD, std::string("255|0|0|0"));
 
 // OpenNeoUA custom: optional procedural world Shield bar under the unit HP bar.
 // Single RGBA tint: the missing part is drawn as a semi-transparent track of
 // the same color. Disabled/absent preserves the classic world Shield row.
 Common::Ini::Key IniConf::GfxWorldNewShieldBarEnable("gfx.world_new_shield_bar_enable", Common::Ini::KT_BOOL, false);
-Common::Ini::Key IniConf::GfxWorldNewShieldBarTint("gfx.world_new_shield_bar_tint", Common::Ini::KT_WORD, std::string("0_137_170_255"));
+Common::Ini::Key IniConf::GfxWorldNewShieldBarTint("gfx.world_new_shield_bar_tint", Common::Ini::KT_WORD, std::string("0|137|170|255"));
 
 // OpenNeoUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
 // gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
@@ -431,8 +431,8 @@ Common::Ini::Key IniConf::GfxRegenFXVP("gfx.regen_fx_vp", Common::Ini::KT_WORD, 
 Common::Ini::Key IniConf::GfxRegenFX3DS("gfx.regen_fx_3ds", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxRegenFXBase("gfx.regen_fx_base", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxRegenFXScale("gfx.regen_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxRegenFXSpin("gfx.regen_fx_spin_xyz", Common::Ini::KT_WORD, std::string("0_0_0"));
-Common::Ini::Key IniConf::GfxRegenFXTint("gfx.regen_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GfxRegenFXSpin("gfx.regen_fx_spin_xyz", Common::Ini::KT_WORD, std::string("0|0|0"));
+Common::Ini::Key IniConf::GfxRegenFXTint("gfx.regen_fx_tint", Common::Ini::KT_WORD, std::string("255|255|255|255"));
 Common::Ini::Key IniConf::GfxRegenFXDuration("gfx.regen_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GfxRegenFXInterval("gfx.regen_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXCount("gfx.regen_fx_count", Common::Ini::KT_WORD, std::string("0"));
@@ -440,14 +440,14 @@ Common::Ini::Key IniConf::GfxRegenFXRandomMaxOffset("gfx.regen_fx_random_max_off
 Common::Ini::Key IniConf::GfxRegenMeshSize("gfx.regen_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxRegenMeshThickness("gfx.regen_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxRegenMeshRiseSpeed("gfx.regen_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxRegenMeshFade("gfx.regen_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150_300"));
+Common::Ini::Key IniConf::GfxRegenMeshFade("gfx.regen_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
 
 Common::Ini::Key IniConf::GfxDrainFXVP("gfx.drain_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFX3DS("gfx.drain_fx_3ds", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxDrainFXBase("gfx.drain_fx_base", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GfxDrainFXScale("gfx.drain_fx_scale", Common::Ini::KT_WORD, std::string("1.0"));
-Common::Ini::Key IniConf::GfxDrainFXSpin("gfx.drain_fx_spin_xyz", Common::Ini::KT_WORD, std::string("0_0_0"));
-Common::Ini::Key IniConf::GfxDrainFXTint("gfx.drain_fx_tint", Common::Ini::KT_WORD, std::string("255_255_255_255"));
+Common::Ini::Key IniConf::GfxDrainFXSpin("gfx.drain_fx_spin_xyz", Common::Ini::KT_WORD, std::string("0|0|0"));
+Common::Ini::Key IniConf::GfxDrainFXTint("gfx.drain_fx_tint", Common::Ini::KT_WORD, std::string("255|255|255|255"));
 Common::Ini::Key IniConf::GfxDrainFXDuration("gfx.drain_fx_duration", Common::Ini::KT_WORD, std::string("1000"));
 Common::Ini::Key IniConf::GfxDrainFXInterval("gfx.drain_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXCount("gfx.drain_fx_count", Common::Ini::KT_WORD, std::string("0"));
@@ -455,7 +455,7 @@ Common::Ini::Key IniConf::GfxDrainFXRandomMaxOffset("gfx.drain_fx_random_max_off
 Common::Ini::Key IniConf::GfxDrainMeshSize("gfx.drain_mesh_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxDrainMeshThickness("gfx.drain_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxDrainMeshRiseSpeed("gfx.drain_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxDrainMeshFade("gfx.drain_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150_300"));
+Common::Ini::Key IniConf::GfxDrainMeshFade("gfx.drain_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
 
 // OpenNeoUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -473,8 +473,8 @@ Common::Ini::Key IniConf::UiStatusIconHandbrake("ui.status_icon_handbrake", Comm
 Common::Ini::Key IniConf::UiStatusIconBlinkCount("ui.status_icon_blink_count", Common::Ini::KT_DIGIT, (int32_t)0);
 
 // OpenNeoUA custom: render-only tint for Black Sect combat units (owner/faction 5).
-// game.black_sect_units_tint = 140_140_140_255 ; R_G_B_A, each component 0..255
-Common::Ini::Key IniConf::GameBlackSectUnitsTint("game.black_sect_units_tint", Common::Ini::KT_WORD, std::string("140_140_140_255"));
+// game.black_sect_units_tint = 140|140|140|255 ; R|G|B|A, each component 0..255
+Common::Ini::Key IniConf::GameBlackSectUnitsTint("game.black_sect_units_tint", Common::Ini::KT_WORD, std::string("140|140|140|255"));
 
 // Ypaworld keys
 Common::Ini::Key IniConf::NetGameExclusiveGem("netgame.exclusivegem", Common::Ini::KT_BOOL, true);

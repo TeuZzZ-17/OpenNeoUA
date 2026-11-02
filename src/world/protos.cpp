@@ -24,7 +24,7 @@ bool ParseVisualTint(const std::string &text, TVisualTint *out)
 
     for (int i = 0; i < 4; i++)
     {
-        const size_t end = text.find('_', start);
+        const size_t end = text.find('|', start);
         if ( (i < 3 && end == std::string::npos) ||
              (i == 3 && end != std::string::npos) )
             return false;

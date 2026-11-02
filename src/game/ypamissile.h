@@ -208,6 +208,10 @@ protected:
     void RememberChainHit(NC_STACK_ypabact *target);
     bool IsChainHit(NC_STACK_ypabact *target) const;
     void UpdateArtilleryShellBallistic(update_msg *arg); // OpenNeoUA custom: ballistic shell flight + timed impact
+    bool BeginBoomerangReturn();
+    void UpdateBoomerangReturn(update_msg *arg);
+    void FinishBoomerangReturn();
+    void ApplyBoomerangWorldImpact(const vec3d &position);
     vec3d GetWeaponTracerPosition() const;
     void UpdateWeaponTracer();
     void RenderWeaponTracer(baseRender_msg *arg);
@@ -224,6 +228,7 @@ protected:
         int bldX = 0;
         int bldY = 0;
     };
+    std::vector<TBuildingHitRef> _boomerangReturnWorldHits;
 
     //Data
 public:
@@ -233,6 +238,13 @@ protected:
     int _mislType = 0;
     NC_STACK_ypabact *_mislEmitter = nullptr;
     int _mislLifeTime   = 0;
+    World::TWeapProto::BoomerangReturnMode _boomerangReturnMode = World::TWeapProto::BOOMERANG_NONE;
+    bool _boomerangReturning = false;
+    int _boomerangReturnElapsed = 0;
+    int32_t _boomerangEmitterGid = 0;
+    float _boomerangReturnSpeed = 0.0f;
+    vec3d _boomerangFireLocal;
+    std::vector<int32_t> _boomerangReturnHitGids;
     int _mislDriveTime  = 0;
     int _mislHomingTimeRemaining = -1; // -1: disabled; 0: guidance has expired
     int _mislDelayTime  = 0;

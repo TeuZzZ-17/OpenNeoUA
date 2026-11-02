@@ -2786,6 +2786,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_at_death_spawn_random_pos = deathProto.at_death_spawn_random_pos > 0.0 ? deathProto.at_death_spawn_random_pos : 0.0;
         bacto->_at_death_spawn_instant = deathProto.at_death_spawn_instant ? 1 : 0;
         bacto->_at_death_spawn_immunity_time = deathProto.at_death_spawn_immunity_time > 0 ? deathProto.at_death_spawn_immunity_time : 0;
+        bacto->_eject_force = deathProto.eject_force;
         bacto->_at_death_spawn_done = false;
         bacto->_at_death_spawn_protection_end_time = 0;
         bacto->_at_death_spawn_restore_vulnerable = false;
@@ -3036,8 +3037,6 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
             ypa_log_out("WARNING: collision_shape %s does not match the visual scale/rotation; regenerate in Studio. Existing collision retained.\n", wproto.collision_shape.c_str());
     }
     const bool supportsProjectileVisualMotion = wproto.SupportsProjectileVisualMotion();
-    wobj->_spiral_speed = supportsProjectileVisualMotion ? wproto.spiral_speed : 0.0f;
-    wobj->_spiral_radius = supportsProjectileVisualMotion ? wproto.spiral_radius : 0.0f;
     wobj->_chaos_factor = supportsProjectileVisualMotion ? wproto.chaos_factor : 0.0f;
     wobj->_chaos_radius = supportsProjectileVisualMotion ? wproto.chaos_radius : 0.0f;
     wobj->ResetProjectileVisualMotionFreeze();
@@ -3083,7 +3082,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
         break;
     }
 
-    // Resolve an authored fixed lifetime or min_max range once per physical
+    // Resolve an authored fixed lifetime or min~max range once per physical
     // projectile. The prototype keeps the range; the missile owns the result.
     wobj->SetLifeTime(wproto.RollLifeTime());
     wobj->SetDelay(wproto.delay_time);

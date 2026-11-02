@@ -160,12 +160,11 @@ bool ModelPreview::Select(NC_STACK_ypaworld &resources, const NC_STACK_ypaworld 
         const auto &p = source.GetWeaponsProtos()[id];
         visualRotation_ = p.visual_rotation;
         tracer_=p.tracer;
-        if(!p.IsLaser()&&((p.spiral_speed>0&&p.spiral_radius>0)||(p.chaos_factor>0&&p.chaos_radius>0)))
+        if(!p.IsLaser()&&p.chaos_factor>0&&p.chaos_radius>0)
         {
             effects_->motion.reset(new NC_STACK_ypabact);
             auto &motion=*effects_->motion;
             motion._rotation=mat3x3::Ident();motion._gid=0x44425052u;
-            motion._spiral_speed=p.spiral_speed;motion._spiral_radius=p.spiral_radius;
             motion._chaos_factor=p.chaos_factor;motion._chaos_radius=p.chaos_radius;
             motion._fly_dir=vec3d(0,0,1);
             motion._fly_dir_length=p.start_speed>0?p.start_speed:(p.airconst>0?p.force/p.airconst:0);
@@ -286,7 +285,7 @@ void ModelPreview::FitBounds()
         radius_ = std::max(laser_?240.0f:1.0f,(float)((maximum - minimum) * 0.5).length());
     }
     if(tracer_.enabled)radius_=std::max(radius_,(float)tracer_.pos.length()+tracer_.size_z);
-    if(effects_->motion)radius_+=std::max(effects_->motion->_chaos_radius,effects_->motion->_spiral_radius);
+    if(effects_->motion)radius_+=effects_->motion->_chaos_radius;
 }
 
 vec3d ModelPreview::FitPosition(const vec3d &position,const vec2d &halfSize,int yaw,int tilt) const

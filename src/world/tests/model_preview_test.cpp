@@ -137,9 +137,6 @@ int main()
     check(decoration.captured.particleScale==vec3d(4,5,1)&&std::abs(decoration.captured.particleLifetimeScale-0.6f)<0.001,
           "decoration trail keeps its own scale and lifetime");
     check(world._transientVPs.empty()&&world._unitsList.empty(),"preview effects never enter mission actor or effect lists");
-    weapon.spiral_speed=1;weapon.spiral_radius=30;
-    preview.Select(world,world,1,1);preview.Render(arg,vec3d(0,0,500),0,0);
-    check(body.observed.Pos.x+preview.center_.x>20,"prototype spiral uses the existing visual-motion evaluator");
     auto *menuParticles=body.captured.particleSystem;
     preview.Render(arg,vec3d(0,0,500),0,0,false,false);
     check(body.observed.SclRot.Transform(vec3d(1,1,1))==vec3d(1,1,1)&&body.captured.tint.r==1.0f&&
@@ -172,13 +169,13 @@ int main()
         return ScriptParser::ParseStringList(lines,handlers,0);
     };
     check(parse({"new_vehicle 1","model = tank","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(),"absent briefing_xyz keeps the classic position");
-    check(parse({"modify_vehicle 1","briefing_xyz = -12.5_30_-8","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(-12.5,30,-8),"briefing_xyz accepts signed fractional axes");
+    check(parse({"modify_vehicle 1","briefing_xyz = -12.5|30|-8","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(-12.5,30,-8),"briefing_xyz accepts signed fractional axes");
     const auto authored=parsed._vhclProtos[1].briefing_xyz;
     for(const char *bad:{"1_2","1_2_3_4","1__3","nan_2_3","1_inf_3","1_2_1e100","100001_0_0","1x_2_3"})
         check(parse({"modify_vehicle 1",std::string("briefing_xyz = ")+bad,"end"})&&parsed._vhclProtos[1].briefing_xyz==authored,"invalid briefing offset preserves the last valid value");
-    check(parse({"modify_vehicle 1","briefing_xyz = -100000_100000_0","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(-100000,100000,0),"briefing offset accepts inclusive coordinate bounds");
-    check(parse({"modify_vehicle 1","briefing_xyz = 0_0_0","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(),"explicit zero restores the classic position");
-    parse({"modify_vehicle 1","briefing_xyz = 2_3_4","end"});
+    check(parse({"modify_vehicle 1","briefing_xyz = -100000|100000|0","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(-100000,100000,0),"briefing offset accepts inclusive coordinate bounds");
+    check(parse({"modify_vehicle 1","briefing_xyz = 0|0|0","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(),"explicit zero restores the classic position");
+    parse({"modify_vehicle 1","briefing_xyz = 2|3|4","end"});
     check(parse({"new_vehicle 1","model = tank","end"})&&parsed._vhclProtos[1].briefing_xyz==vec3d(),"new vehicle clears an earlier briefing displacement");
     auto &p=world._vhclProtos[1];p.radius=40;p.briefing_size=100;p.briefing_xyz=vec3d();
     world._briefScreen.ViewingObject.ObjType=TBriefObject::TYPE_VEHICLE;world._briefScreen.ViewingObject.ID=1;

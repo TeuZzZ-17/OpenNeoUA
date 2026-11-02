@@ -40,7 +40,7 @@ static bool ParseTintComponents(const std::string &str, int comp[4])
 
         if ( i < 3 )
         {
-            if ( *pos != '_' )
+            if ( *pos != '|' )
                 return false;
 
             pos++;
@@ -64,7 +64,7 @@ static TVisualTint ParseTint(const std::string &str)
     }
     else
     {
-        ypa_log_out("Warning: invalid game.black_sect_units_tint '%s', using 140_140_140_255\n",
+        ypa_log_out("Warning: invalid game.black_sect_units_tint '%s', using 140|140|140|255\n",
                     str.c_str());
     }
 

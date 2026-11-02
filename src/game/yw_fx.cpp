@@ -144,7 +144,7 @@ void NC_STACK_ypaworld::SpawnChainFX(const World::TChainFXConfig &config, const 
     if ( bases.empty() )
         return;
 
-    // Offset min_max is rolled fresh for every activation of the Chain FX.
+    // Offset min~max is rolled fresh for every activation of the Chain FX.
     vec3d spawnPos = pos + rot.Transform(World::RandomVec3RangeInclusive(config.offset_min,
                                                                         config.offset_max));
     _transientVPs.emplace_back(bases.front(), spawnPos,

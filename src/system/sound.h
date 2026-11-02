@@ -81,7 +81,7 @@ struct TSoundSource
     double FadeDuration = 0.0;
     uint16_t Flags = 0;
     int Pitch = 0;
-    // OpenNeoUA authored pitch range. Fixed values use min == max; min_max
+    // OpenNeoUA authored pitch range. Fixed values use min == max; min~max
     // ranges are resolved once per playback by SFXEngine::startSound().
     int PitchBase = 0;
     int PitchMin = 0;

@@ -28,6 +28,13 @@ namespace Parsers
 
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( !StriCmp(p1.substr(0, 6), "spawn_") )
+        _vhcl->spawn_units = 1;
+    if ( !StriCmp(p1.substr(0, 15), "at_death_spawn_") )
+        _vhcl->at_death_spawn_units = 1;
+    if ( !StriCmp(p1.substr(0, 18), "proximity_defense_") )
+        _vhcl->proximity_defense_enable = 1;
+
     if ( !StriCmp(p1, "disable_collision") )
     {
         _vhcl->disable_collision = p2 == "1";
@@ -566,10 +573,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         size_t start = 0;
         while ( true )
         {
-            const size_t separator = p2.find('_', start);
+            const size_t separator = p2.find('|', start);
             float scaleMin = 1.0f;
             float scaleMax = 1.0f;
-            if ( !World::ParseFloatRangeValue(p2.substr(start, separator - start), scaleMin, scaleMax, '~') ||
+            if ( !World::ParseFloatRangeValue(p2.substr(start, separator - start), scaleMin, scaleMax) ||
                  scaleMin <= 0.0f || scaleMax <= 0.0f )
                 scaleMin = scaleMax = 1.0f;
             scales.emplace_back(scaleMin, scaleMax);
@@ -709,10 +716,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->damaged_snd_pitch_multiplier = ParseSignedPitchPercent(p2);
     }
-    else if ( !StriCmp(p1, "spawn_units") )
-    {
-        _vhcl->spawn_units = parser.stol(p2, nullptr, 0) ? 1 : 0;
-    }
     else if ( !StriCmp(p1, "spawn_vehicle") )
     {
         int vehicleId = parser.stol(p2, nullptr, 0);
@@ -770,10 +773,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->spawn_instant = parser.stol(p2, nullptr, 0) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "at_death_spawn_units") )
-    {
-        _vhcl->at_death_spawn_units = parser.stol(p2, nullptr, 0) ? 1 : 0;
-    }
     else if ( !StriCmp(p1, "at_death_spawn_vehicle") )
     {
         int vehicleId = parser.stol(p2, nullptr, 0);
@@ -804,6 +803,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int time = parser.stol(p2, nullptr, 0);
         _vhcl->at_death_spawn_immunity_time = time > 0 ? time : 0;
     }
+    else if ( !StriCmp(p1, "at_death_spawn_units_eject_force") )
+    {
+        _vhcl->eject_force = ClampPushIntensity(parser.stof(p2, 0));
+    }
     else if ( !StriCmp(p1, "snd_mimic_sample") )
     {
         _vhcl->snd_mimic.MainSample.Name = p2;
@@ -815,10 +818,6 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "snd_mimic_volume") )
     {
         _vhcl->snd_mimic.volume = parser.stol(p2, nullptr, 0);
-    }
-    else if ( !StriCmp(p1, "proximity_defense_enable") )
-    {
-        _vhcl->proximity_defense_enable = parser.stol(p2, nullptr, 0) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "proximity_defense_weapon") )
     {
@@ -919,7 +918,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "dest_fx") )
     {
-        Stok stok(p2, " _");
+        // Vanilla key: "_" stays valid, "|" is the OpenNeoUA separator.
+        Stok stok(p2, " _|");
         std::string fx_type, pp1, pp2, pp3, pp4;
 
         if ( stok.GetNext(&fx_type) && stok.GetNext(&pp1) && stok.GetNext(&pp2) && stok.GetNext(&pp3) && stok.GetNext(&pp4) )
@@ -952,7 +952,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "ext_dest_fx") || !StriCmp(p1, "extended_dest_fx") )
     {
-        Stok stok(p2, " _");
+        // Vanilla key: "_" stays valid, "|" is the OpenNeoUA separator.
+        Stok stok(p2, " _|");
         std::string fx_type, pp1, pp2, pp3, pp4;
 
         if ( stok.GetNext(&fx_type) && stok.GetNext(&pp1) && stok.GetNext(&pp2) && stok.GetNext(&pp3) && stok.GetNext(&pp4) )
@@ -1243,15 +1244,16 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "scope_angle_min_max") )
     {
         float minimum = 0.0f, maximum = 0.0f, unused = 0.0f;
-        const size_t separator = p2.find('_');
-        const bool valid = separator != std::string::npos &&
-            p2.find('_', separator + 1) == std::string::npos &&
-            World::ParseFloatRangeValue(p2.substr(0, separator), minimum, unused) &&
-            World::ParseFloatRangeValue(p2.substr(separator + 1), maximum, unused) &&
+        std::string bounds[2];
+        const bool valid = World::SplitTupleValue(p2, 2, bounds) &&
+            bounds[0].find('~') == std::string::npos &&
+            bounds[1].find('~') == std::string::npos &&
+            World::ParseFloatRangeValue(bounds[0], minimum, unused) &&
+            World::ParseFloatRangeValue(bounds[1], maximum, unused) &&
             minimum >= -100.0f && maximum <= 100.0f && minimum <= maximum;
         if ( !valid )
         {
-            ypa_log_out("ERROR: vehicle %d %s='%s' must be min_max references with -100 <= min <= max <= 100.\n",
+            ypa_log_out("ERROR: vehicle %d %s='%s' must be min|max references with -100 <= min <= max <= 100.\n",
                         _vhclID, p1.c_str(), p2.c_str());
             return ScriptParser::RESULT_BAD_DATA;
         }
@@ -1265,7 +1267,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
         if ( !ParseNumWeaponsRange(p2, minCount, maxCount) )
         {
-            ypa_log_out("WARNING: vehicle %d num_weapons='%s' is invalid; expected 0 or an inclusive value/min_max in range 1-255. Keeping the previous value.\n",
+            ypa_log_out("WARNING: vehicle %d num_weapons='%s' is invalid; expected 0 or an inclusive value/min~max in range 1-255. Keeping the previous value.\n",
                         _vhclID, p2.c_str());
             return ScriptParser::RESULT_OK;
         }
@@ -1308,7 +1310,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
         if ( !ParseNumWeaponsRange(p2, minCount, maxCount) )
         {
-            ypa_log_out("WARNING: vehicle %d %s='%s' is invalid; expected 0/inherit or an inclusive value/min_max in range 1-255. Keeping the previous value.\n",
+            ypa_log_out("WARNING: vehicle %d %s='%s' is invalid; expected 0/inherit or an inclusive value/min~max in range 1-255. Keeping the previous value.\n",
                         _vhclID, p1.c_str(), p2.c_str());
         }
         else
@@ -1494,7 +1496,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "scale_fx") )
     {
-        Stok stok(p2, "_");
+        // Vanilla key: "_" stays valid, "|" is the OpenNeoUA separator.
+        Stok stok(p2, "_|");
         std::string pp0, pp1, pp2, pp3;
 
         if ( stok.GetNext(&pp0) && stok.GetNext(&pp1) && stok.GetNext(&pp2) && stok.GetNext(&pp3) )
@@ -1882,6 +1885,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->at_death_spawn_random_pos = 0.0;
         _vhcl->at_death_spawn_instant = 0;
         _vhcl->at_death_spawn_immunity_time = 0;
+        _vhcl->eject_force = 0.0f;
         _vhcl->proximity_defense_enable = 0;
         _vhcl->proximity_defense_weapon = 0;
         _vhcl->proximity_defense_trigger_radius = 0.0;

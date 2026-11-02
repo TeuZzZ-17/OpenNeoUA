@@ -18,7 +18,7 @@ struct Unit : NC_STACK_ypabact {
 bool Parse(NC_STACK_ypaworld &world, const char *scale)
 {
     ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(&world)};
-    Engine::StringList lines{"new_vehicle 1", "damaged_fx_vp = 138_138_130"};
+    Engine::StringList lines{"new_vehicle 1", "damaged_fx_vp = 138|138|130"};
     if (scale) lines.push_back(std::string("damaged_fx_scale = ") + scale);
     lines.push_back("end");
     return ScriptParser::ParseStringList(lines, handlers, 0);
@@ -29,7 +29,7 @@ int main()
 {
     NC_STACK_ypaworld world;
     world._vhclProtos.resize(2);
-    Check(Parse(world, "1.0~1.7_1.0~1.7_0.2~0.3"), "parse per-VP ranges");
+    Check(Parse(world, "1.0~1.7|1.0~1.7|0.2~0.3"), "parse per-VP ranges");
     const auto &scales = world._vhclProtos[1].damaged_fx.scales;
     Check(scales.size() == 3, "three VP scale ranges");
     if (scales.size() == 3) {
@@ -37,7 +37,7 @@ int main()
         Check(Near(scales[1].first, 1.0f) && Near(scales[1].second, 1.7f), "second range");
         Check(Near(scales[2].first, 0.2f) && Near(scales[2].second, 0.3f), "smoke range");
     }
-    Check(Parse(world, "2_0_0.4~0.2"), "parse fixed and invalid values");
+    Check(Parse(world, "2|0|0.4~0.2"), "parse fixed and invalid values");
     const auto &mixed = world._vhclProtos[1].damaged_fx.scales;
     Check(mixed.size() == 3 && Near(mixed[0].first, 2.0f) && Near(mixed[0].second, 2.0f) &&
           Near(mixed[1].first, 1.0f) && Near(mixed[1].second, 1.0f) &&
@@ -75,7 +75,7 @@ int main()
     for (const auto &fx : world._transientVPs)
         Check(fx.axisScale.x >= 0.5f && fx.axisScale.x <= 0.6f, "shared range applies to every VP");
     world._transientVPs.clear();
-    Check(Parse(world, "2_nan"), "parse missing and invalid scale");
+    Check(Parse(world, "2|nan"), "parse missing and invalid scale");
     unit._damaged_fx = world._vhclProtos[1].damaged_fx;
     ypabact_SpawnDamagedFXEvent(&unit);
     auto it = world._transientVPs.begin();

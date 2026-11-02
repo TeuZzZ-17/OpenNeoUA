@@ -12,7 +12,7 @@ int main()
     const auto fxLines = [](const char *header)
     {
         return Engine::StringList{header,
-            "begin_fx", "trigger = launch", "mode = visual", "offset_xyz = 0_-20_0",
+            "begin_fx", "trigger = launch", "mode = visual", "offset_xyz = 0|-20|0",
             "start_size = 0.2", "end_size = 0.2", "duration = 1000", "vp_model = 130",
             "end", "end"};
     };

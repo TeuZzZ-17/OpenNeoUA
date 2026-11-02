@@ -322,7 +322,7 @@ struct TChainFXConfig
     // Missing count keeps legacy behaviour: exactly one instance.
     int count_min = 1;
     int count_max = 1;
-    // Offset accepts a fixed value or a min_max range: equal ends mean fixed.
+    // Offset accepts a fixed value or a min~max range: equal ends mean fixed.
     // The range is rolled fresh for every generated Chain FX instance.
     vec3d offset_min = vec3d(0.0, 0.0, 0.0);
     vec3d offset_max = vec3d(0.0, 0.0, 0.0);
@@ -804,7 +804,7 @@ struct TVhclProto
     // OpenNeoUA custom: optional projectile-count overrides for weapon_2/_3/_4.
     // A zero value inherits the primary num_weapons count.
     std::array<int16_t, 3> extra_num_weapons = {0, 0, 0};
-    // OpenNeoUA custom: inclusive min_max authoring for projectile counts.
+    // OpenNeoUA custom: inclusive min~max authoring for projectile counts.
     // The scalar fields above remain the legacy/lower-endpoint compatibility
     // values; zero on an extra slot still means "inherit primary".
     std::array<int16_t, 3> extra_num_weapons_min = {0, 0, 0};
@@ -888,6 +888,7 @@ struct TVhclProto
     float at_death_spawn_random_pos = 0.0;
     int at_death_spawn_instant = 0;
     int at_death_spawn_immunity_time = 0;
+    float eject_force = 0.0f;
     int proximity_defense_enable = 0;
     int proximity_defense_weapon = 0;
     float proximity_defense_trigger_radius = 0.0;
@@ -1206,7 +1207,7 @@ struct TWeapProto
         return (_weaponFlags & WEAPON_FLAG_LASER) != 0;
     }
 
-    // OpenNeoUA custom: vertical fire is a mode of model = laser, never a separate model.
+    // Both laser model names share the continuous-beam implementation.
     bool IsVerticalLaser() const
     {
         return IsLaser() && vertical_laser_enable;
@@ -1265,15 +1266,9 @@ struct TWeapProto
     // keeps the existing collision.
     bool disable_collision = false;         // Opt-in: no physical contacts for this actor.
     std::string collision_shape;
-    // OpenNeoUA custom: render-only spiral orbit for every physical projectile
-    // class except model = laser (including vertical mode). Speed uses the shared
-    // 0..10 revolutions-per-second scale; radius is the lateral orbit distance in
-    // model/world units (0..1000). Physical movement and collision stay central.
-    float spiral_speed = 0.0f;
-    float spiral_radius = 0.0f;
     // OpenNeoUA custom: render-only erratic projectile motion. Factor controls
     // smooth random target changes per second (0..10), while radius bounds the
-    // lateral deviation (0..1000). Chaos takes priority over Spiral when valid.
+    // lateral deviation (0..1000). Physical movement and collision stay central.
     float chaos_factor = 0.0f;
     float chaos_radius = 0.0f;
     TVisualTint visual_tint; // OpenNeoUA custom: main model visual-only RGBA target hue/alpha
@@ -1323,13 +1318,20 @@ struct TWeapProto
     std::string armor_penetration_icon; // OpenNeoUA custom: optional HUD capability icon
     float recoil = 0.0; // OpenNeoUA: physical Weapon recoil intensity 0..10
     int life_time = 0;
+    enum BoomerangReturnMode
+    {
+        BOOMERANG_NONE = 0,
+        BOOMERANG_LIFETIME = 1,
+        BOOMERANG_LIFETIME_OR_IMPACT = 2
+    };
+    BoomerangReturnMode boomerang_return_mode = BOOMERANG_NONE;
     // OpenNeoUA: life_time accepts either a fixed value or an inclusive
-    // min_max range. life_time remains the stable scalar/lower endpoint for
+    // min~max range. life_time remains the stable scalar/lower endpoint for
     // legacy consumers; projectiles resolve the range when they are created.
     int life_time_min = 0;
     int life_time_max = 0;
     // OpenNeoUA: life_time_nt (lifetime of projectiles fired without a unit target)
-    // uses the same fixed value or min_max range as life_time. 0 = no override.
+    // uses the same fixed value or min~max range as life_time. 0 = no override.
     int life_time_nt = 0;
     int life_time_nt_min = 0;
     int life_time_nt_max = 0;
@@ -1369,7 +1371,7 @@ struct TWeapProto
     int multi_target = 0;
     int guide_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
     // OpenNeoUA custom: shared continuous beam parameters for model = laser.
-    // vertical_laser_enable selects the downward-fire mode. "energy" is static base damage per tick; the class
+    // The vertical_laser model selects downward fire. "energy" is static base damage per tick; the class
     // multipliers below (energy_heli/tank/flyer/robo) are applied like normal weapons.
     int   laser_energy_tick_time = 250;        // ms between damage ticks for AI/non-player fire
     int   laser_energy_tick_time_user = 150;   // ms between damage ticks for player-controlled fire

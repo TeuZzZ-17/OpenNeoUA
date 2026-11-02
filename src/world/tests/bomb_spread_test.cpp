@@ -76,13 +76,13 @@ int main() {
         ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(&w)};
         return ScriptParser::ParseStringList(lines, handlers, 0);
     };
-    ParseVehicle({"new_vehicle 1", "model = tank", "weapon_spread_xyz = 0_0_12.5", "end"});
+    ParseVehicle({"new_vehicle 1", "model = tank", "weapon_spread_xyz = 0|0|12.5", "end"});
     Check(w._vhclProtos[1].weapon_spread_z == 12.5f, "weapon_spread_xyz parses Z");
     for (const char *bad : {"-3", "nan", "inf", "junk", ""}) {
-        ParseVehicle({"new_vehicle 1", "model = tank", std::string("weapon_spread_xyz = 0_0_") + bad, "end"});
+        ParseVehicle({"new_vehicle 1", "model = tank", std::string("weapon_spread_xyz = 0|0|") + bad, "end"});
         Check(w._vhclProtos[1].weapon_spread_z == 0.0f, "invalid weapon_spread_xyz Z becomes 0");
     }
-    ParseVehicle({"new_vehicle 1", "model = tank", "weapon_spread_xyz = 0_0_9", "end"});
+    ParseVehicle({"new_vehicle 1", "model = tank", "weapon_spread_xyz = 0|0|9", "end"});
     ParseVehicle({"new_vehicle 1", "model = tank", "end"});
     Check(w._vhclProtos[1].weapon_spread_z == 0.0f, "absent weapon_spread_xyz is 0");
 

@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
     Check(source.GetSessionKillMarks()==4, "Host Station kill awards maximum medals");
     source._bact_type=BACT_TYPES_UFO;
     Check(source.GetSessionKillMarks()==0, "excluded classes cannot use medals");
-    System::IniConf::UiWireframeTintOwner1.Value=std::string("50_150_255_255");
+    System::IniConf::UiWireframeTintOwner1.Value=std::string("50|150|255|255");
     auto tint=World::GetOwnerWireframeTint(1);
     Check(tint.r==50/255.0f && tint.g==150/255.0f && tint.b==1, "owner wireframe tint");
     System::IniConf::UiWireframeTintOwner1.Value=std::string("0");
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         ini << "ui.wireframe_tints_owner_00 = 0\n";
         ini << "ui.wireframe_tints_owner_007 = 1_2_3_4\n";
         // Unprefixed names must not override the newly registered UI keys.
-        ini << System::IniConf::UiWireframeTintOwner1.Name.substr(3) << " = 255_255_255_255\n";
+        ini << System::IniConf::UiWireframeTintOwner1.Name.substr(3) << " = 255|255|255|255\n";
         ini.close();
         FSMgr::iDir::setBaseDir(".");
         Check(System::IniConf::ReadFromIni("Data/Build/probes/owner_tints.ini"), "owner tint INI parsed");

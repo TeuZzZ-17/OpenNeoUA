@@ -104,7 +104,7 @@ static int SFX_ReadGlobalFadeMilliseconds(Common::Ini::Key &key, const std::stri
     }
 }
 
-// game.global_*_fade_inout = in_out (milliseconds). A malformed value disables both fades.
+// game.global_*_fade_inout = in|out (milliseconds). A malformed value disables both fades.
 static void SFX_ReadGlobalFade(Common::Ini::Key &key, int &fadeIn, int &fadeOut)
 {
     const std::string value = key.Get<std::string>();
@@ -112,7 +112,7 @@ static void SFX_ReadGlobalFade(Common::Ini::Key &key, int &fadeIn, int &fadeOut)
     if ( !World::SplitTupleValue(value, 2, parts) )
     {
         if ( key.WasSet )
-            ypa_log_out("Warning: invalid %s '%s', using 0_0\n",
+            ypa_log_out("Warning: invalid %s '%s', using 0|0\n",
                         key.Name.c_str(), value.c_str());
         fadeIn = 0;
         fadeOut = 0;

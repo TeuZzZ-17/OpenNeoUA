@@ -339,6 +339,7 @@ void NC_STACK_ypabact::ResetFeatureRuntimeState()
     _at_death_spawn_random_pos = 0.0;
     _at_death_spawn_instant = 0;
     _at_death_spawn_immunity_time = 0;
+    _eject_force = 0.0f;
     _at_death_spawn_done = false;
     _at_death_spawn_protection_end_time = 0;
     _at_death_spawn_restore_vulnerable = false;
@@ -1769,7 +1770,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         if ( _vp_scale.x == 1.0 && _vp_scale.y == 1.0 && _vp_scale.z == 1.0 )
             return false;
 
-        return ypabact_IsMainVPBase(this, base);
+        return ypabact_IsTintableVisualBase(this, base);
     };
 
     // OpenNeoUA custom visual tint: all authored visual-state bodies are eligible
@@ -1852,7 +1853,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
             // Particles emitted by any tinted visual state inherit the same target hue.
             arg->particleTint = arg->tint;
             arg->particleColorizeTint = arg->colorizeTint;
-            arg->particleScale = mainBase && shouldApplyVPScale(base) ? _vp_scale : vec3d(1.0, 1.0, 1.0);
+            arg->particleScale = shouldApplyVPScale(base) ? _vp_scale : vec3d(1.0, 1.0, 1.0);
             arg->particleSpin = mainBase && ypabact_ShouldApplyVPSpin(this, base) ? _vp_spin_strength : vec3d(0.0, 0.0, 0.0);
             arg->particleLifetimeScale = 1.0f;
         }
@@ -2293,6 +2294,8 @@ void NC_STACK_ypabact::ypabact_func95(IDVPair *arg)
 // Reset
 void NC_STACK_ypabact::Renew()
 {
+    _spawnSeparationPending = false;
+    _eject_force = 0.0f;
     _debugIgnoredByAI = false;
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _collisionShape.reset();

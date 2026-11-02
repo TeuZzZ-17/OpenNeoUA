@@ -52,7 +52,7 @@ int main()
     ScriptParser::HandlersList handlers{new World::Parsers::LevelLocationParser(&values)};
     Engine::StringList lines={"begin_location 7", "name = New Dairopoli City",
         "color = yellow", "sound = Data/Sounds/My City.wav",
-        "point = 0_0", "point = 4_0", "point = 4_-4", "end"};
+        "point = 0|0", "point = 4|0", "point = 4|-4", "end"};
     CHECK(ScriptParser::Parser::ParseStringList(lines,handlers,ScriptParser::FLAG_NO_SCOPE_SKIP));
     CHECK(values.size()==1 && values[0].name=="New Dairopoli City");
     CHECK(values[0].color=="yellow");

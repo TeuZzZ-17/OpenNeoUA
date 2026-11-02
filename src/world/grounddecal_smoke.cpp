@@ -119,7 +119,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &sm
     emitter.radius = radius;
     emitter.startTime = _timeStamp;
     emitter.seed = seed;
-    // Every decal rolls its own puff count inside smoke_count = min_max.
+    // Every decal rolls its own puff count inside smoke_count = min~max.
     const int span = smoke.count_max - smoke.count_min + 1;
     const int rolled = std::min(smoke.count_min + (int)(GDS::HashUnit(GDS::Hash(seed, 0x434e5452u, 0u)) * (float)span),
                                 smoke.count_max);

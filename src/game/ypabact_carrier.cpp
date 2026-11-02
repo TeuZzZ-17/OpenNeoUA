@@ -114,6 +114,23 @@ int ypabact_CountCarrierSpawnedUnits(NC_STACK_ypabact *carrier)
     return aliveCount;
 }
 
+void NC_STACK_ypabact::InheritSpawnOrders(NC_STACK_ypabact *parent)
+{
+    if (!parent) return;
+    setTarget_msg order{};
+    order.tgt_type = parent->_primTtype;
+    order.tgt = parent->_primT;
+    order.tgt_pos = parent->_primTtype == BACT_TGT_TYPE_DRCT ? parent->_target_dir : parent->_primTpos;
+    SetTarget(&order);
+    _aggr = parent->_aggr;
+    CopyWaypointsStuff(parent);
+    _m_cmdID = parent->_m_cmdID;
+    _m_owner = parent->_m_owner;
+    const int flags = BACT_STFLAG_WAYPOINT | BACT_STFLAG_WAYPOINTCCL;
+    _status_flg = (_status_flg & ~flags) | (parent->_status_flg & flags);
+    _spawnSeparationPending = true;
+}
+
 bool ypabact_CanCarrierSpawn(NC_STACK_ypabact *carrier)
 {
     if ( !carrier || !carrier->getBACT_pWorld() )
@@ -253,6 +270,7 @@ NC_STACK_ypabact *ypabact_CreateCarrierSpawnedUnit(NC_STACK_ypabact *carrier, co
     unit->_carrier_spawn_root_vehicle = carrier->_carrier_spawn_root_vehicle > 0 ? carrier->_carrier_spawn_root_vehicle : carrier->_vehicleID;
 
     unit->InheritActiveDebuffFromParent(carrier);
+    unit->InheritSpawnOrders(carrier);
 
     if ( unit->_spawn_units )
         unit->_spawn_last_time = unit->_clock > 0 ? unit->_clock : 1;
@@ -400,6 +418,21 @@ NC_STACK_yparobo *ypabact_GetSpawnAtDeathOwnerRobo(NC_STACK_ypabact *parent)
     return ypabact_FindSpawnAtDeathOwnerRobo(parent->getBACT_pWorld(), parent->_owner);
 }
 
+void ypabact_ApplyEjectForce(NC_STACK_ypabact *unit, float force)
+{
+    if (!unit || !std::isfinite(force) || force <= 0.0f)
+        return;
+
+    // Uses the shared configured-push path (same one as at_death_push_force), because
+    // the per-class flight code (e.g. helicopter braking) would erase a direct fly_dir write.
+    // Air units flying freely get the horizontal part only.
+    const float vertical = 2.0f * ((float)rand() / (float)RAND_MAX) - 1.0f;
+    const float angle = ((float)rand() / (float)RAND_MAX) * (2.0f * C_PI);
+    const float horizontal = sqrtf(std::max(0.0f, 1.0f - vertical * vertical));
+    const vec3d direction(cosf(angle) * horizontal, vertical, sinf(angle) * horizontal);
+    unit->ApplyConfiguredPush(direction, force);
+}
+
 NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const vec3d &pos)
 {
     NC_STACK_ypaworld *world = parent->getBACT_pWorld();
@@ -433,11 +466,7 @@ NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const
 
     unit->InheritActiveDebuffFromParent(parent);
 
-    setTarget_msg target;
-    target.tgt_type = BACT_TGT_TYPE_CELL;
-    target.priority = 0;
-    target.tgt_pos = pos;
-    unit->SetTarget(&target);
+    unit->InheritSpawnOrders(parent);
 
     if ( !parent->_at_death_spawn_instant )
     {
@@ -449,6 +478,7 @@ NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const
         unit->_scale_time = unit->_energy_max * 0.2;
     }
 
+    ypabact_ApplyEjectForce(unit, parent->_eject_force);
     world->HistoryAktCreate(unit);
 
     return unit;
@@ -497,6 +527,7 @@ void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
 
     NC_STACK_ypabact *squadLeader = nullptr;
     int squadCommandId = dword_5B1128;
+    std::vector<NC_STACK_ypabact *> spawned;
 
     for (int i = 0; i < spawnCount; i++)
     {
@@ -509,6 +540,7 @@ void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
             continue;
 
         unit->_commandID = squadCommandId;
+        spawned.push_back(unit);
 
         if ( !squadLeader )
         {
@@ -523,6 +555,11 @@ void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
 
     if ( squadLeader )
         dword_5B1128++;
+
+    // The player controlling the dying unit continues in one of its new units,
+    // picked at random, instead of falling back to the Host Station.
+    if ( !spawned.empty() && (world->_userUnit == parent || world->_viewerBact == parent) )
+        ypabact_SafeDetachControlFrom(parent, spawned[rand() % spawned.size()]);
 }
 
 void NC_STACK_ypabact::BeforeSoundCarrierUpdate()
