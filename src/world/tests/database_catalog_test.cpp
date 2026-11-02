@@ -150,9 +150,9 @@ void TestSustainedQuality() {
 }
 void TestLifeTimeNtRange() {
     WorldProbe w;
-    Check(Parse(w, {"new_weapon 1", "model = missile", "life_time = 3000_4000", "life_time_nt = 2200_1000", "end",
+    Check(Parse(w, {"new_weapon 1", "model = missile", "life_time = 3000~4000", "life_time_nt = 2200~1000", "end",
                     "new_weapon 2", "model = missile", "life_time_nt = 2200", "end",
-                    "new_weapon 3", "model = missile", "life_time_nt = 100_200_300", "end",
+                    "new_weapon 3", "model = missile", "life_time_nt = 100~200~300", "end",
                     "new_weapon 4", "model = missile", "end"}, World::Database::Weapon), "weapon life_time_nt forms parse");
     const auto &ranged = w._weaponProtos[1];
     Check(ranged.life_time_nt_min == 1000 && ranged.life_time_nt_max == 2200, "life_time_nt range is stored, reversed endpoints included");

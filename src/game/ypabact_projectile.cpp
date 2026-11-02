@@ -1,4 +1,4 @@
-// Projectile visual motion (spiral, chaos), fire-X randomness and VP rotation.
+// Projectile visual motion, fire-X randomness and VP rotation.
 #include "game/ypabact_internal.h"
 
 bool ypabact_ShouldApplyVPRotation(NC_STACK_ypabact *bact, NC_STACK_base *base)
@@ -24,14 +24,9 @@ bool ypabact_HasProjectileChaos(const NC_STACK_ypabact *bact)
     return bact && bact->_chaos_factor > 0.0f && bact->_chaos_radius > 0.0f;
 }
 
-bool ypabact_HasProjectileSpiral(const NC_STACK_ypabact *bact)
-{
-    return bact && bact->_spiral_speed > 0.0f && bact->_spiral_radius > 0.0f;
-}
-
 bool ypabact_HasProjectileVisualMotion(const NC_STACK_ypabact *bact)
 {
-    return ypabact_HasProjectileChaos(bact) || ypabact_HasProjectileSpiral(bact);
+    return ypabact_HasProjectileChaos(bact);
 }
 
 bool ypabact_ShouldApplyProjectileVisualMotion(NC_STACK_ypabact *bact, NC_STACK_base *base)
@@ -47,61 +42,6 @@ bool ypabact_ShouldApplyProjectileVisualMotion(NC_STACK_ypabact *bact, NC_STACK_
     return bact->_projectile_visual_motion_frozen &&
            bact->_bact_type == BACT_TYPES_MISSLE &&
            (base == bact->_vp_dead || base == bact->_vp_megadeth);
-}
-
-double ypabact_GetProjectileSpiralPhase(float speed, int32_t age)
-{
-    constexpr double TWO_PI = 6.28318530717958647692;
-    const double safeAgeSeconds = (double)std::max<int32_t>(age, 0) * 0.001;
-    const double turns = (double)speed * safeAgeSeconds;
-    return std::fmod(turns, 1.0) * TWO_PI;
-}
-
-mat3x3 ypabact_BuildProjectileSpiralRoll(float speed, int32_t age)
-{
-    return mat3x3::RotateZ(ypabact_GetProjectileSpiralPhase(speed, age));
-}
-
-vec3d ypabact_BuildProjectileSpiralLocalOffset(const NC_STACK_ypabact *bact)
-{
-    if ( !ypabact_HasProjectileSpiral(bact) )
-        return vec3d(0.0, 0.0, 0.0);
-
-    const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
-    const double radius = bact->_spiral_radius;
-
-    // RotateZ() uses this clockwise X/Y convention. Keeping the orbit on the
-    // same phase makes the model, its children and its emitter directions sweep
-    // together instead of counter-rotating around the central flight line.
-    return vec3d(std::cos(phase) * radius,
-                -std::sin(phase) * radius,
-                 0.0);
-}
-
-vec3d ypabact_BuildProjectileSpiralOffset(const NC_STACK_ypabact *bact)
-{
-    if ( !bact )
-        return vec3d(0.0, 0.0, 0.0);
-
-    // Local Z is the projectile's forward axis. Orbit in its perpendicular X/Y
-    // plane, then transform that offset with the physical projectile orientation.
-    return bact->_rotation.Transpose().Transform(ypabact_BuildProjectileSpiralLocalOffset(bact));
-}
-
-mat3x3 ypabact_BuildProjectileSpiralTangent(const NC_STACK_ypabact *bact)
-{
-    if ( !ypabact_HasProjectileSpiral(bact) )
-        return mat3x3::Ident();
-
-    constexpr double TWO_PI = 6.28318530717958647692;
-    const double phase = ypabact_GetProjectileSpiralPhase(bact->_spiral_speed, bact->_clock);
-    const double angularSpeed = (double)bact->_spiral_speed * TWO_PI;
-    const double radius = bact->_spiral_radius;
-
-    const vec3d visualVelocityLocal(-std::sin(phase) * radius * angularSpeed,
-                                   -std::cos(phase) * radius * angularSpeed,
-                                    0.0);
-    return ypabact_BuildProjectileVisualTangent(bact, visualVelocityLocal);
 }
 
 uint32_t ypabact_ProjectileChaosHash(uint32_t value)
@@ -197,28 +137,13 @@ bool NC_STACK_ypabact::GetProjectileVisualMotionDelta(vec3d *worldOffset, mat3x3
         return true;
     }
 
-    // Chaos is the explicit alternative to Spiral. A valid Chaos configuration
-    // therefore takes priority if both modes are present on the same Weapon.
-    if ( ypabact_HasProjectileChaos(this) )
-    {
-        if ( worldOffset )
-            *worldOffset = ypabact_BuildProjectileChaosOffset(this);
-        if ( renderRotationDelta )
-            *renderRotationDelta = ypabact_BuildProjectileChaosTangent(this);
-        return true;
-    }
-
-    if ( !ypabact_HasProjectileSpiral(this) )
+    if ( !ypabact_HasProjectileChaos(this) )
         return false;
 
     if ( worldOffset )
-        *worldOffset = ypabact_BuildProjectileSpiralOffset(this);
-
+        *worldOffset = ypabact_BuildProjectileChaosOffset(this);
     if ( renderRotationDelta )
-    {
-        *renderRotationDelta = ypabact_BuildProjectileSpiralTangent(this);
-        *renderRotationDelta *= ypabact_BuildProjectileSpiralRoll(_spiral_speed, _clock);
-    }
+        *renderRotationDelta = ypabact_BuildProjectileChaosTangent(this);
 
     return true;
 }

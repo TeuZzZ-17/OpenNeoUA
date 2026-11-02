@@ -1,0 +1,30 @@
+begin_collision_shape
+version = 1
+source = M6NORM01.sklt
+source_hash = 05dd7fe5abcf65c558a70e632e1534055ff2b2fbf5c1797b6e55905aa195eb64
+scale = 0.29999999999999999|0.29999999999999999|0.29999999999999999
+rotation = 0|0|0
+; studio_metadata = {"quality":"low","components":["root#component:6ffc875fda475701"],"disabled_hulls":[]}
+begin_hull
+vertex = -18|-17.999999570846558|-18
+vertex = -18|14.399999570846557|-18
+vertex = 18|-17.999999570846558|-18
+vertex = -18|-17.999999570846558|18
+vertex = -18|14.399999570846557|18
+vertex = 18|14.399999570846557|-18
+vertex = 18|-17.999999570846558|18
+vertex = 18|14.399999570846557|18
+face = 0|1|5
+face = 0|5|2
+face = 0|2|6
+face = 0|6|3
+face = 0|3|4
+face = 0|4|1
+face = 1|4|7
+face = 1|7|5
+face = 2|5|7
+face = 2|7|6
+face = 3|6|7
+face = 3|7|4
+end
+end

@@ -382,11 +382,7 @@ NC_STACK_ypabact *yw_CreateBuildingSpawnedUnit(NC_STACK_ypaworld *world, cellAre
     unit->setBACT_bactCollisions(ownerRobo->getBACT_bactCollisions());
     ownerRobo->AddSubject(unit);
 
-    setTarget_msg target;
-    target.tgt_type = BACT_TGT_TYPE_CELL;
-    target.priority = 0;
-    target.tgt_pos = pos;
-    unit->SetTarget(&target);
+    unit->InheritSpawnOrders(ownerRobo);
 
     if ( !proto.spawn_instant )
     {

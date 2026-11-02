@@ -150,7 +150,7 @@ bool HorizontalContact(const btCollisionObjectWrapper *a, const btCollisionObjec
 bool Triple(const std::string &s, vec3d *v)
 {
     std::string text = s;
-    std::replace(text.begin(), text.end(), '_', ' ');
+    std::replace(text.begin(), text.end(), '|', ' ');
     std::istringstream input(text);
     std::string extra;
     return (input >> v->x >> v->y >> v->z) && !(input >> extra) && Finite(*v);

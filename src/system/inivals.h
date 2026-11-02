@@ -362,7 +362,7 @@ public:
     static Common::Ini::Key UiStatusIconBlinkCount;
 
     // OpenNeoUA: render-only tint for Black Sect combat units (owner/faction 5 only).
-    static Common::Ini::Key GameBlackSectUnitsTint; // game.black_sect_units_tint (default 140_140_140_255)
+    static Common::Ini::Key GameBlackSectUnitsTint; // game.black_sect_units_tint (default 140|140|140|255)
 
     static Common::Ini::Key NetGameExclusiveGem;
     static Common::Ini::Key NetWaitStart;

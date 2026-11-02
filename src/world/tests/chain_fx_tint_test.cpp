@@ -20,17 +20,17 @@ int main()
             (ScriptParser::DataHandler*)new World::Parsers::SuperItemProfileParser(&profiles));
         Engine::StringList lines{context == 0 ? "new_vehicle 1" : context == 1 ? "new_weapon 1" : "new_superitem 1",
             "begin_fx", context == 0 ? "trigger = air_destroyed" : "trigger = detonate"};
-        if (variant == 0) lines.push_back("tint = 255_231_8_255");
+        if (variant == 0) lines.push_back("tint = 255|231|8|255");
         lines.push_back("mode = visual");
         lines.push_back("duration = 1600");
         lines.push_back("vp_model = 1");
-        if (variant == 1 || variant == 3) lines.push_back("tint = 255_231_8_255");
+        if (variant == 1 || variant == 3) lines.push_back("tint = 255|231|8|255");
         lines.push_back("vp_model = 1");
         lines.push_back("vp_model = 1");
-        if (variant == 2) lines.push_back("tint = 255_231_8_255");
-        if (variant == 3) lines.push_back("tint = 8_231_255_128");
+        if (variant == 2) lines.push_back("tint = 255|231|8|255");
+        if (variant == 3) lines.push_back("tint = 8|231|255|128");
         if (variant == 5) lines.push_back("tint = invalid");
-        if (variant == 6) lines.push_back("tint = 999_-3_8_255");
+        if (variant == 6) lines.push_back("tint = 999|-3|8|255");
         lines.push_back("end");
         lines.push_back("end");
         auto check = [&](bool ok) { ++checks; if (!ok) { ++failures; std::printf("FAIL context=%d variant=%d check=%d\n", context, variant, checks); } };

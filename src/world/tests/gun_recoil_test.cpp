@@ -64,5 +64,23 @@ int main() {
     player._alternativeViewActive=true;
     check(ypabact_ShouldRenderRecoilVisualOffset(&player),"external alternative view retains the axial gun recoil");
     world._userUnit=world._viewerBact=nullptr;
+    for (int type : {BACT_TYPES_TANK, BACT_TYPES_MISSLE}) {
+        NC_STACK_ypabact actor; actor._world=&world; actor._bact_type=type;
+        actor._status_flg=0; actor._oflags=0; actor._energy=0;
+        actor._tForm.Pos=vec3d(); actor._tForm.SclRot=mat3x3::Ident();
+        actor._vp_scale=vec3d(0.3,0.3,0.3);
+        RecoilCapture normal, fire, wait, genesis, dead, megadeth;
+        actor._vp_normal=&normal; actor._vp_fire=&fire; actor._vp_wait=&wait;
+        actor._vp_genesis=&genesis; actor._vp_dead=&dead; actor._vp_megadeth=&megadeth;
+        NC_STACK_base *states[] = {&normal, &fire, &wait, &genesis, &dead, &megadeth};
+        for (NC_STACK_base *base : states) {
+            actor.SetVP(base);
+            baseRender_msg render{};
+            actor.Render(&render);
+            auto *capture=static_cast<RecoilCapture*>(base);
+            check((capture->observed.SclRot.Transform(vec3d(1,1,1))-vec3d(.3,.3,.3)).length()<1e-5,
+                  "scale applies to each authored visual state");
+        }
+    }
     printf("GUN_RECOIL CHECKS=%d FAILED=%d\n",checks,failures);return failures?1:0;
 }

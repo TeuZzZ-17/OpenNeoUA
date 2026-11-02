@@ -38,9 +38,14 @@ bool ParseVehicles(WorldProbe &w, Engine::StringList lines) {
     ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(&w)};
     return ScriptParser::ParseStringList(lines, handlers, 0);
 }
+bool ParseBuildings(WorldProbe &w, Engine::StringList lines) {
+    ScriptParser::HandlersList handlers{new World::Parsers::BuildProtoParser(&w)};
+    return ScriptParser::ParseStringList(lines, handlers, 0);
+}
 struct Unit : NC_STACK_ypabact {
     void Bind(WorldProbe &w, int owner, int gid, const vec3d &pos) {
         _world = &w; _owner = owner; _gid = gid; _vehicleID = 0;
+        _wrldSize = vec2d(9600, -9600);
         _position = _old_pos = pos; _rotation = mat3x3::Ident();
         _bact_type = BACT_TYPES_FLYER; _status = BACT_STATUS_NORMAL;
         _status_flg = 0; _oflags = 0; _radius = _viewer_radius = 30;
@@ -138,14 +143,14 @@ struct GunProbe : NC_STACK_ypagun {
 };
 
 void TestBelowCompatibility(WorldProbe &w, const World::TWeapProto *wp) {
-    for (const char *invalid : {"200_0_400", "200_-1_400", "200_nan_400", "200_inf_400",
-                                "200_1200", "200_1200_400_1", "200_1200_0"}) {
+    for (const char *invalid : {"200|0|400", "200|-1|400", "200|nan|400", "200|inf|400",
+                                "200|1200", "200|1200|400|1", "200|1200|0"}) {
         Check(ParseWeapons(w, {"new_weapon 50", "model = bomb",
                                std::string("ai_fire_trigger_box_below_xyz = ") + invalid, "end"}) &&
               w._weaponProtos[50].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_NONE,
               "invalid or incomplete below-box depth/length preserves legacy behavior");
     }
-    Check(ParseWeapons(w, {"modify_weapon 50", "ai_fire_trigger_box_below_xyz = 200_1200_400", "end",
+    Check(ParseWeapons(w, {"modify_weapon 50", "ai_fire_trigger_box_below_xyz = 200|1200|400", "end",
                            "modify_weapon 50", "ai_fire_trigger_box_below_xyz = 0", "end"}) &&
           !w._weaponProtos[50].HasAIFireTriggerArea(), "single zero disables a previously valid finite below box");
     const vec3d P(2400, -300, -2400);
@@ -209,13 +214,13 @@ void TestBelowCompatibility(WorldProbe &w, const World::TWeapProto *wp) {
 
 void TestTankElevation() {
     WorldProbe w;
-    Check(ParseWeapons(w, {"new_weapon 10", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60_40_900", "end",
-                           "new_weapon 11", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_10_900", "end",
+    Check(ParseWeapons(w, {"new_weapon 10", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60|40|900", "end",
+                           "new_weapon 11", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20|10|900", "end",
                            "new_weapon 12", "model = rocket", "end",
-                           "new_weapon 13", "model = laser", "life_time = 6000", "ai_fire_trigger_box_forward_xyz = 60_40_900", "end",
-                           "new_weapon 14", "model = rocket", "ai_fire_trigger_box_forward_xyz = 1000_1000_900", "end",
-                           "new_weapon 15", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 170_170_900", "end",
-                           "new_weapon 16", "model = missile", "multi_target = 4", "ai_fire_trigger_box_forward_xyz = 1000_1000_900", "end"}),
+                           "new_weapon 13", "model = laser", "life_time = 6000", "ai_fire_trigger_box_forward_xyz = 60|40|900", "end",
+                           "new_weapon 14", "model = rocket", "ai_fire_trigger_box_forward_xyz = 1000|1000|900", "end",
+                           "new_weapon 15", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 170|170|900", "end",
+                           "new_weapon 16", "model = missile", "multi_target = 4", "ai_fire_trigger_box_forward_xyz = 1000|1000|900", "end"}),
           "tank elevation weapon fixtures parsed");
     TankProbe tank; tank.Bind(w);
     Unit enemy; enemy.Bind(w, 2, 500, tank._position + vec3d(0, -300, 500));
@@ -366,16 +371,16 @@ void TestTankElevation() {
 
 void TestDownwardCone(WorldProbe &w) {
     Check(ParseWeapons(w, {
-        "new_weapon 22", "ai_fire_trigger_cone_below_xyz = 90_60_500", "model = bomb", "end",
-        "new_weapon 23", "model = homing_bomb", "ai_fire_trigger_cone_below_xyz = 90_60_500", "end",
-        "new_weapon 24", "model = laser", "vertical_laser_enable = 1", "life_time = 2000",
-        "ai_fire_trigger_cone_below_xyz = 90_60_500", "end",
-        "new_weapon 25", "model = rocket", "ai_fire_trigger_cone_below_xyz = 90_60_500", "end",
-        "new_weapon 26", "model = laser", "ai_fire_trigger_cone_below_xyz = 90_60_500", "end",
-        "new_weapon 27", "model = bomb", "ai_fire_trigger_box_below_xyz = 200_1200_200",
-        "ai_fire_trigger_cone_below_xyz = 90_60_500", "end",
-        "new_weapon 28", "model = bomb", "ai_fire_trigger_cone_below_xyz = 180_60_500", "end",
-        "new_weapon 29", "model = bomb", "ai_fire_trigger_cone_below_xyz = 90_nan_500", "end",
+        "new_weapon 22", "ai_fire_trigger_cone_below_xyz = 90|60|500", "model = bomb", "end",
+        "new_weapon 23", "model = homing_bomb", "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
+        "new_weapon 24", "model = vertical_laser", "life_time = 2000",
+        "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
+        "new_weapon 25", "model = rocket", "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
+        "new_weapon 26", "model = laser", "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
+        "new_weapon 27", "model = bomb", "ai_fire_trigger_box_below_xyz = 200|1200|200",
+        "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
+        "new_weapon 28", "model = bomb", "ai_fire_trigger_cone_below_xyz = 180|60|500", "end",
+        "new_weapon 29", "model = bomb", "ai_fire_trigger_cone_below_xyz = 90|nan|500", "end",
         "new_weapon 30", "model = bomb", "ai_fire_trigger_cone_below_xyz = 0", "end"
     }), "downward-cone parser fixtures loaded");
     for (int weapon : {22, 23, 24})
@@ -579,7 +584,7 @@ void TestFrontVolumes(WorldProbe &w, const World::TWeapProto *wp) {
 void TestArcFallback() {
     WorldProbe w;
     Check(ParseWeapons(w, {"new_weapon 1", "model = arc_grenade", "start_speed = 10",
-                           "ai_fire_trigger_box_forward_xyz = 200_200_600", "end"}), "arc fallback weapon parsed");
+                           "ai_fire_trigger_box_forward_xyz = 200|200|600", "end"}), "arc fallback weapon parsed");
     Unit shooter; shooter.Bind(w, 1, 1, vec3d(2400, 0, -2400));
     const World::TWeapProto &wp = w._weaponProtos[1];
     TFireTriggerArea box;
@@ -605,7 +610,7 @@ void TestArcFallback() {
 
     WorldProbe edgeWorld;
     Check(ParseWeapons(edgeWorld, {"new_weapon 2", "model = arc_grenade", "start_speed = 10",
-                                  "ai_fire_trigger_box_forward_xyz = 2000_200_600", "end"}),
+                                  "ai_fire_trigger_box_forward_xyz = 2000|200|600", "end"}),
           "wide arc-grenade volume parsed for muzzle-origin check");
     Unit edgeShooter; edgeShooter.Bind(edgeWorld, 1, 10, vec3d(2400, 0, -2400));
     const World::TWeapProto &wideProto = edgeWorld._weaponProtos[2];
@@ -625,14 +630,14 @@ void TestArcFallback() {
 
 void TestTurretSlotsAndCadence() {
     WorldProbe w;
-    Check(ParseWeapons(w, {"new_weapon 10", "ai_fire_trigger_box_forward_xyz = 200_200_500", "model = rocket", "end",
-                           "new_weapon 11", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200_200_500", "end",
-                           "new_weapon 12", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200_200_500", "end",
-                           "new_weapon 13", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200_200_500", "end"}),
+    Check(ParseWeapons(w, {"new_weapon 10", "ai_fire_trigger_box_forward_xyz = 200|200|500", "model = rocket", "end",
+                           "new_weapon 11", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200|200|500", "end",
+                           "new_weapon 12", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200|200|500", "end",
+                           "new_weapon 13", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200|200|500", "end"}),
           "turret weapons parsed");
     Check(ParseVehicles(w, {"new_vehicle 20", "model = tank", "weapon = 10", "weapon_2 = 11",
                             "weapon_3 = 12", "weapon_4 = 13", "weapon_ai_switch_mode = sequence",
-                            "num_weapons = 1_6", "num_weapons_2 = 2", "num_weapons_3 = 4",
+                            "num_weapons = 1~6", "num_weapons_2 = 2", "num_weapons_3 = 4",
                             "num_weapons_4 = 6", "end"}), "turret vehicle parsed");
     const World::TVhclProto &vehicle = w._vhclProtos[20];
     Check(vehicle.weapon == 10 && vehicle.extra_weapons[0] == 11 &&
@@ -924,12 +929,12 @@ void TestVanillaSectorMinigun() {
 void TestMinimumDepth() {
     WorldProbe w;
     Check(ParseWeapons(w, {
-        "new_weapon 80", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_dead_zone = 150", "end",
-        "new_weapon 81", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 40_40_1000", "ai_fire_trigger_dead_zone = 150", "end",
-        "new_weapon 82", "model = bomb", "ai_fire_trigger_box_below_xyz = 80_1000_400", "ai_fire_trigger_dead_zone = 150", "end",
-        "new_weapon 83", "model = bomb", "ai_fire_trigger_cone_below_xyz = 40_40_1000", "ai_fire_trigger_dead_zone = 150", "end",
-        "new_weapon 84", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_dead_zone = -1", "end",
-        "new_weapon 85", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "ai_fire_trigger_dead_zone = 1200", "end"}),
+        "new_weapon 80", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 81", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 40|40|1000", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 82", "model = bomb", "ai_fire_trigger_box_below_xyz = 80|1000|400", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 83", "model = bomb", "ai_fire_trigger_cone_below_xyz = 40|40|1000", "ai_fire_trigger_dead_zone = 150", "end",
+        "new_weapon 84", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "ai_fire_trigger_dead_zone = -1", "end",
+        "new_weapon 85", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "ai_fire_trigger_dead_zone = 1200", "end"}),
         "minimum depth fixtures parse");
     Unit shooter; shooter.Bind(w, 1, 1, vec3d(2400, -300, -2400));
     for (int id : {80, 81, 82, 83}) {
@@ -954,22 +959,22 @@ void TestMinimumDepth() {
 void TestMaxInclinationParse() {
     WorldProbe w;
     Check(ParseWeapons(w, {
-        "new_weapon 90", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "new_weapon 90", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000",
         "ai_fire_trigger_forward_max_inclination = 25", "end",
-        "new_weapon 91", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000",
+        "new_weapon 91", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20|20|1000",
         "ai_fire_trigger_forward_max_inclination = 12.5", "end",
-        "new_weapon 92", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000",
+        "new_weapon 92", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20|20|1000",
         "ai_fire_trigger_forward_max_inclination = 25", "end",
-        "new_weapon 93", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
-        "new_weapon 94", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "new_weapon 93", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "end",
+        "new_weapon 94", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000",
         "ai_fire_trigger_forward_max_inclination = 0", "end",
-        "new_weapon 95", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "new_weapon 95", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000",
         "ai_fire_trigger_forward_max_inclination = 90", "end",
-        "new_weapon 96", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "new_weapon 96", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000",
         "ai_fire_trigger_forward_max_inclination = -5", "end",
-        "new_weapon 97", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000",
+        "new_weapon 97", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000",
         "ai_fire_trigger_forward_max_inclination = steep", "end",
-        "new_weapon 98", "model = bomb", "ai_fire_trigger_cone_below_xyz = 30_30_1500",
+        "new_weapon 98", "model = bomb", "ai_fire_trigger_cone_below_xyz = 30|30|1500",
         "ai_fire_trigger_forward_max_inclination = 25", "end"}),
         "max inclination fixtures parse");
     const auto &wp = w._weaponProtos;
@@ -986,8 +991,8 @@ void TestMaxInclinationParse() {
 // Without a max_inclination on the weapon, aircraft volumes stay on the hull axes for every target.
 void TestAirTiltAbsent() {
     WorldProbe world;
-    Check(ParseWeapons(world, {"new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", "end",
-                               "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", "end"}),
+    Check(ParseWeapons(world, {"new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "end",
+                               "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20|20|1000", "end"}),
           "absent-tilt fixtures parse");
     Unit aircraft;
     aircraft.Bind(world, 1, 620, vec3d(4200, -250, -4200));
@@ -1013,8 +1018,8 @@ void TestAirTiltAbsent() {
 // The optional weapon max inclination also caps ground units, on top of their native scope limits.
 void TestTankTiltCap() {
     WorldProbe w;
-    Check(ParseWeapons(w, {"new_weapon 10", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60_40_900", "end",
-                           "new_weapon 11", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60_40_900",
+    Check(ParseWeapons(w, {"new_weapon 10", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60|40|900", "end",
+                           "new_weapon 11", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60|40|900",
                            "ai_fire_trigger_forward_max_inclination = 10", "end"}),
           "tank tilt-cap fixture parses");
     TankProbe tank; tank.Bind(w);
@@ -1034,16 +1039,16 @@ void TestAirSectorElevation() {
     const char *ConeTilt = "ai_fire_trigger_forward_max_inclination = 25";
     Check(ParseWeapons(world, {
         "new_weapon 70", "model = rocket", "end",
-        "new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
-        "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", ConeTilt, "end",
-        "new_weapon 73", "model = missile", "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
-        "new_weapon 74", "model = missile", "ai_fire_trigger_cone_forward_xyz = 20_20_1000", ConeTilt, "end",
-        "new_weapon 75", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80_80_3000", BoxTilt, "end",
-        "new_weapon 76", "model = laser", "life_time = 5000", "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
+        "new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000", BoxTilt, "end",
+        "new_weapon 72", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20|20|1000", ConeTilt, "end",
+        "new_weapon 73", "model = missile", "ai_fire_trigger_box_forward_xyz = 80|80|1000", BoxTilt, "end",
+        "new_weapon 74", "model = missile", "ai_fire_trigger_cone_forward_xyz = 20|20|1000", ConeTilt, "end",
+        "new_weapon 75", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|3000", BoxTilt, "end",
+        "new_weapon 76", "model = laser", "life_time = 5000", "ai_fire_trigger_box_forward_xyz = 80|80|1000", BoxTilt, "end",
         "new_weapon 77", "model = arc_grenade", "start_speed = 100", "grenade_arc_gravity = 35",
-        "ai_fire_trigger_box_forward_xyz = 80_80_1000", BoxTilt, "end",
+        "ai_fire_trigger_box_forward_xyz = 80|80|1000", BoxTilt, "end",
         "new_weapon 78", "model = rocket", "ai_fire_trigger_box_forward_xyz = 0", "end",
-        "new_weapon 79", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20_bad_1000", "end"
+        "new_weapon 79", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 20|bad|1000", "end"
     }), "air-sector elevation fixtures parse");
     Unit aircraft;
     aircraft.Bind(world, 1, 610, vec3d(4200, -250, -4200));
@@ -1216,14 +1221,14 @@ void TestAirSectorElevation() {
 void TestVolumeDistanceAndMovement() {
     WorldProbe world;
     Check(ParseWeapons(world, {
-        "new_weapon 40", "model = rocket", "ai_fire_trigger_box_forward_xyz = 100_100_5000", "end",
-        "new_weapon 41", "model = missile", "ai_fire_trigger_cone_forward_xyz = 30_20_5000", "end",
-        "new_weapon 42", "model = laser", "life_time = 100", "ai_fire_trigger_box_forward_xyz = 100_100_5000", "end",
+        "new_weapon 40", "model = rocket", "ai_fire_trigger_box_forward_xyz = 100|100|5000", "end",
+        "new_weapon 41", "model = missile", "ai_fire_trigger_cone_forward_xyz = 30|20|5000", "end",
+        "new_weapon 42", "model = laser", "life_time = 100", "ai_fire_trigger_box_forward_xyz = 100|100|5000", "end",
         "new_weapon 43", "model = rocket", "end",
         "new_weapon 44", "model = rocket", "ai_fire_trigger_box_forward_xyz = 0", "end",
-        "new_weapon 45", "model = rocket", "ai_fire_trigger_box_forward_xyz = 100_100_bad", "end",
-        "new_weapon 46", "model = rocket", "ai_fire_trigger_box_forward_xyz = 100_100_5000",
-        "ai_fire_trigger_cone_forward_xyz = 30_20_5000", "end"}), "distance/movement fixtures parsed");
+        "new_weapon 45", "model = rocket", "ai_fire_trigger_box_forward_xyz = 100|100|bad", "end",
+        "new_weapon 46", "model = rocket", "ai_fire_trigger_box_forward_xyz = 100|100|5000",
+        "ai_fire_trigger_cone_forward_xyz = 30|20|5000", "end"}), "distance/movement fixtures parsed");
     FightProbe shooter; shooter.Bind(world, 1, 400, vec3d(2400, 0, -7200));
     Unit enemy; enemy.Bind(world, 2, 401, shooter._position + vec3d(0, 0, 4000));
     for (int weapon : {40, 41}) {
@@ -1316,16 +1321,16 @@ void TestRealLaunchGateParity() {
     WorldProbe world;
     Check(ParseWeapons(world, {
         "new_weapon 30", "model = rocket", "start_speed = 100",
-        "ai_fire_trigger_box_forward_xyz = 240_240_600", "shot_time = 100",
+        "ai_fire_trigger_box_forward_xyz = 240|240|600", "shot_time = 100",
         "shot_time_user = 200", "salve_shots = 2", "salve_delay = 300", "end",
         "new_weapon 31", "model = rocket", "start_speed = 100",
-        "ai_fire_trigger_cone_forward_xyz = 80_40_600", "end",
+        "ai_fire_trigger_cone_forward_xyz = 80|40|600", "end",
         "new_weapon 32", "model = missile", "start_speed = 100", "multi_target = 3",
-        "ai_fire_trigger_cone_forward_xyz = 80_40_600", "end",
+        "ai_fire_trigger_cone_forward_xyz = 80|40|600", "end",
         "new_weapon 33", "model = homing_bomb", "multi_target = 3",
-        "ai_fire_trigger_box_below_xyz = 400_1200_400", "end",
+        "ai_fire_trigger_box_below_xyz = 400|1200|400", "end",
         "new_weapon 34", "model = homing_bomb", "multi_target = 3",
-        "ai_fire_trigger_cone_below_xyz = 80_60_600", "end"}),
+        "ai_fire_trigger_cone_below_xyz = 80|60|600", "end"}),
         "real-launch fixture weapons parsed");
     Nucleus::ClassList.push_back(Nucleus::MakeClassDescr<NC_STACK_ypamissile>());
 
@@ -1406,29 +1411,177 @@ void TestRealLaunchGateParity() {
 }
 }
 
+void TestImplicitFeatureGroups() {
+    WorldProbe w;
+    Check(ParseWeapons(w, {
+        "new_weapon 200", "model = missile", "cluster_count = 2", "cluster_weapon_id = 1", "end",
+        "new_weapon 201", "model = missile", "chain_max_jumps = 2", "chain_radius = 300", "end",
+        "new_weapon 202", "model = laser", "laser_chain_max_jumps = 2", "laser_chain_radius = 300", "end",
+        "new_weapon 203", "model = missile", "mesh_tracer_path = Data/Models/3ds/Tracer.3ds", "mesh_tracer_size_xyz = 1|1|80", "end",
+        "new_weapon 204", "model = laser", "laser_mesh_path = Data/Models/3ds/laser.3ds", "end",
+        "new_weapon 205", "model = laser", "end",
+        "new_weapon 206", "model = missile", "cluster_count = 2", "end"
+    }), "implicit weapon fixtures parsed");
+    Check(w._weaponProtos[200].cluster.enable, "cluster child definitions activate cluster");
+    Check(w._weaponProtos[201].chain.allow, "chain child definitions activate chain");
+    Check(w._weaponProtos[202].laser_chain_allow, "laser chain child definitions activate laser chain");
+    Check(w._weaponProtos[203].tracer.enabled, "tracer child definitions activate tracer");
+    Check(w._weaponProtos[204].laser_mesh.enabled, "laser mesh child definitions activate laser mesh");
+    Check(!w._weaponProtos[205].IsVerticalLaser(), "normal laser stays normal without vertical model");
+    Check(w._weaponProtos[206].cluster.enable && w._weaponProtos[206].cluster.weapon_id == 0,
+          "incomplete cluster requests activation but has no valid child weapon");
+
+    Check(ParseVehicles(w, {
+        "new_vehicle 200", "model = tank", "spawn_vehicle = 1", "spawn_interval = 5000", "end",
+        "new_vehicle 201", "model = tank", "at_death_spawn_vehicle = 1", "end",
+        "new_vehicle 202", "model = tank", "proximity_defense_weapon = 1", "end"
+    }), "implicit vehicle fixtures parsed");
+    Check(w._vhclProtos[200].spawn_units, "vehicle spawn child definition activates spawn");
+    Check(w._vhclProtos[201].at_death_spawn_units, "death spawn child definition activates spawn");
+    Check(w._vhclProtos[202].proximity_defense_enable, "proximity child definition activates defense");
+    Check(ParseVehicles(w, {"new_vehicle 203", "model = tank", "at_death_spawn_units_eject_force = 4", "end",
+                            "new_vehicle 204", "model = tank", "at_death_spawn_units_eject_force = -3", "end",
+                            "new_vehicle 205", "model = tank", "at_death_spawn_units_eject_force = 99", "end",
+                            "new_vehicle 206", "model = tank", "at_death_spawn_units_eject_force = nan", "end"}),
+          "spawn-at-death ejection force parses");
+    Check(w._vhclProtos[203].eject_force == 4 && w._vhclProtos[204].eject_force == 0 &&
+          w._vhclProtos[205].eject_force == 10 && w._vhclProtos[206].eject_force == 0,
+          "ejection force clamps valid values and disables invalid input");
+
+    Check(ParseBuildings(w, {"new_building 200", "model = building", "spawn_vehicle = 1", "spawn_interval = 5000", "end"}),
+          "implicit building fixture parsed");
+    Check(w._buildProtos[200].spawn_units, "building spawn child definition activates spawn");
+    Check(!ParseWeapons(w, {"new_weapon 207", "model = missile", "spiral_speed = 2", "end"}),
+          "removed Spiral parameter is rejected");
+    Check(ParseWeapons(w, {"new_weapon 208", "model = missile", "boomerang_return_mode = lifetime", "end",
+                           "new_weapon 209", "model = missile", "boomerang_return_mode = lifetime_or_impact", "end"}),
+          "boomerang return modes parse");
+}
+
+struct BoomerangWorld : WorldProbe {
+    size_t ypaworld_func145(NC_STACK_ypabact *) override { return 0; }
+};
+
+struct BoomerangMissileProbe : NC_STACK_ypamissile {
+    void Bind(BoomerangWorld &world, NC_STACK_ypabact &emitter, int weaponId) {
+        _world = &world; _vehicleID = weaponId; _owner = emitter._owner;
+        _vp_normal = _vp_fire = _vp_wait = _vp_dead = _vp_megadeth = _vp_genesis = nullptr;
+        _soundcarrier.Resize(7);
+        _status = BACT_STATUS_NORMAL; _status_flg = 0;
+        _position = _old_pos = emitter._position;
+        _rotation = mat3x3::Ident(); _fly_dir = vec3d(0, 0, 1);
+        _target_dir = _target_vec = _fly_dir;
+        _primTtype = BACT_TGT_TYPE_DRCT;
+        _bact_type = BACT_TYPES_MISSLE;
+        _fly_dir_length = 100; _force = 0; _mass = 1; _airconst = 1;
+        _mislType = MISL_DIRECT; _mislLifeTime = 0; _mislDriveTime = 1000;
+        _mislDelayTime = 0; _mislHomingTimeRemaining = -1;
+        _cellId = World::PositionToSectorID(_position);
+        _pSector = &world.SectorAt(_cellId);
+        _cellRef = _pSector->unitsList.push_back(this);
+        SetLauncherBact(&emitter);
+        _position += vec3d(0, 0, 100);
+        _old_pos = _position;
+    }
+};
+
+void TestBoomerangLifetimeReturn() {
+    BoomerangWorld world;
+    Check(ParseWeapons(world, {"new_weapon 208", "model = missile", "boomerang_return_mode = lifetime", "end"}),
+          "boomerang runtime fixture parsed");
+    Unit emitter;
+    emitter.Bind(world, 1, 920, vec3d(2400, -500, -2400));
+    emitter._bact_type = BACT_TYPES_TANK;
+    emitter._kidRef = world._unitsList.push_back(&emitter);
+    BoomerangMissileProbe missile;
+    missile.Bind(world, emitter, 208);
+    update_msg frame{};
+    frame.frameTime = 16;
+    missile.AI_layer3(&frame);
+    Check(missile._status == BACT_STATUS_NORMAL,
+          "boomerang enters return instead of dying when lifetime ends");
+    emitter._position.x += 200;
+    missile.AI_layer3(&frame);
+    Check(missile._fly_dir.x > 0, "return follows the moving emitter muzzle");
+    emitter._status = BACT_STATUS_DEAD;
+    missile.AI_layer3(&frame);
+    Check(missile._status == BACT_STATUS_DEAD, "return ends when emitter dies");
+    emitter._status = BACT_STATUS_NORMAL;
+    Check(ParseWeapons(world, {"new_weapon 209", "model = missile", "boomerang_return_mode = lifetime_or_impact", "end"}),
+          "impact-return fixture parsed");
+    BoomerangMissileProbe impactMissile;
+    impactMissile.Bind(world, emitter, 209);
+    impactMissile.SetLifeTime(1000);
+    impactMissile._radius = 5;
+    impactMissile._energy = 10;
+    Unit enemy;
+    enemy.Bind(world, 2, 940, impactMissile._position + vec3d(0, 0, 10));
+    impactMissile.AI_layer3(&frame);
+    impactMissile.AI_layer3(&frame);
+    Check(impactMissile._status == BACT_STATUS_NORMAL && impactMissile._fly_dir.z < 0,
+          "unit impact begins return before lifetime expires");
+
+    Unit parent, child;
+    parent.Bind(world, 1, 930, vec3d(2400, -500, -2400));
+    child.Bind(world, 1, 931, vec3d(2400, -500, -2400));
+    setTarget_msg order{};
+    order.tgt_type = BACT_TGT_TYPE_CELL;
+    order.tgt_pos = vec3d(3600, -500, -3600);
+    parent.SetTarget(&order);
+    parent._aggr = 77;
+    parent._waypoints_count = 2; parent._current_waypoint = 1;
+    parent._waypoints[1] = vec3d(4800, 0, -4800);
+    parent._status_flg |= BACT_STFLAG_WAYPOINT;
+    child.InheritSpawnOrders(&parent);
+    Check(child._primTtype == BACT_TGT_TYPE_CELL && Near(child._primTpos, parent._primTpos) && child._aggr == 77,
+          "spawn inherits primary command and aggression");
+    Check(child._waypoints_count == 2 && child._current_waypoint == 1 && Near(child._waypoints[1], parent._waypoints[1]),
+          "spawn inherits remaining waypoint route");
+    child.setBACT_bactCollisions(true);
+    const vec3d overlapped = child._position;
+    Check(child.ResolveGenesisCompoundOverlap(18) && !Near(child._position, overlapped),
+          "instant spawn reuses Genesis separation outside CREATE state");
+    child._fly_dir = vec3d(0,0,1); child._fly_dir_length = 2;
+    ypabact_ApplyEjectForce(&child, 0);
+    Check(child._fly_dir_length == 2, "absent ejection preserves existing velocity");
+    std::srand(17);
+    child._fly_dir_length = 0;
+    ypabact_ApplyEjectForce(&child, 4);
+    Check(Near(child._fly_dir_length, 4.0f) && std::fabs(child._fly_dir.y) > 0.001f &&
+          child._fly_dir.XZ().length() > 0.001f,
+          "ejection gives the spawned unit horizontal and vertical velocity");
+    bool up = false, down = false;
+    for (int i = 0; i < 32; ++i) {
+        child._fly_dir_length = 0;
+        ypabact_ApplyEjectForce(&child, 4);
+        up |= child._fly_dir.y < 0; down |= child._fly_dir.y > 0;
+    }
+    Check(up && down, "ejection samples both vertical directions");
+}
+
 int main() {
     WorldProbe w;
-    Check(ParseWeapons(w, {"new_weapon 1", "model = bomb", "ai_fire_trigger_box_below_xyz = 200_1200_400", "end",
-                           "new_weapon 2", "model = homing_bomb", "ai_fire_trigger_box_below_xyz = 100_1200_50", "end",
-                           "new_weapon 3", "model = rocket", "ai_fire_trigger_box_below_xyz = 200_1200_400", "end",
+    Check(ParseWeapons(w, {"new_weapon 1", "model = bomb", "ai_fire_trigger_box_below_xyz = 200|1200|400", "end",
+                           "new_weapon 2", "model = homing_bomb", "ai_fire_trigger_box_below_xyz = 100|1200|50", "end",
+                           "new_weapon 3", "model = rocket", "ai_fire_trigger_box_below_xyz = 200|1200|400", "end",
                            "new_weapon 4", "model = bomb", "ai_fire_trigger_box_below_xyz = 200", "end",
-                           "new_weapon 5", "model = bomb", "ai_fire_trigger_box_below_xyz = -1_1200_100", "end",
-                           "new_weapon 6", "model = bomb", "ai_fire_trigger_box_below_xyz = nan_1200_100", "end",
+                           "new_weapon 5", "model = bomb", "ai_fire_trigger_box_below_xyz = -1|1200|100", "end",
+                           "new_weapon 6", "model = bomb", "ai_fire_trigger_box_below_xyz = nan|1200|100", "end",
                            "new_weapon 7", "model = bomb", "end",
-                           "new_weapon 8", "model = laser", "vertical_laser_enable = 1", "ai_fire_trigger_box_below_xyz = 300_1200_300", "end",
-                           "new_weapon 9", "model = laser", "ai_fire_trigger_box_below_xyz = 300_1200_300", "end",
-                           "new_weapon 10", "ai_fire_trigger_box_forward_xyz = 200_100_500", "model = rocket", "end",
-                           "new_weapon 11", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 90_30_500", "end",
-                           "new_weapon 12", "model = bomb", "ai_fire_trigger_box_forward_xyz = 200_100_500", "end",
-                           "new_weapon 13", "model = artillery_shell", "ai_fire_trigger_cone_forward_xyz = 90_30_500", "end",
-                           "new_weapon 14", "model = kamikaze", "ai_fire_trigger_box_forward_xyz = 200_100_500", "end",
-                           "new_weapon 15", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200_100_500", "ai_fire_trigger_cone_forward_xyz = 90_30_500", "end",
-                           "new_weapon 16", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200_100_500junk", "end",
-                           "new_weapon 17", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 180_30_500", "end",
+                           "new_weapon 8", "model = vertical_laser", "ai_fire_trigger_box_below_xyz = 300|1200|300", "end",
+                           "new_weapon 9", "model = laser", "ai_fire_trigger_box_below_xyz = 300|1200|300", "end",
+                           "new_weapon 10", "ai_fire_trigger_box_forward_xyz = 200|100|500", "model = rocket", "end",
+                           "new_weapon 11", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 90|30|500", "end",
+                           "new_weapon 12", "model = bomb", "ai_fire_trigger_box_forward_xyz = 200|100|500", "end",
+                           "new_weapon 13", "model = artillery_shell", "ai_fire_trigger_cone_forward_xyz = 90|30|500", "end",
+                           "new_weapon 14", "model = kamikaze", "ai_fire_trigger_box_forward_xyz = 200|100|500", "end",
+                           "new_weapon 15", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200|100|500", "ai_fire_trigger_cone_forward_xyz = 90|30|500", "end",
+                           "new_weapon 16", "model = rocket", "ai_fire_trigger_box_forward_xyz = 200|100|500junk", "end",
+                           "new_weapon 17", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 180|30|500", "end",
                            "new_weapon 18", "model = rocket", "ai_fire_trigger_box_forward_xyz = 0", "end",
-                           "new_weapon 19", "model = bomb", "ai_fire_trigger_box_below_xyz = 200_1200_400tail", "end",
-                           "new_weapon 20", "model = laser", "life_time = 2000", "ai_fire_trigger_box_forward_xyz = 100_100_500", "end",
-                           "new_weapon 21", "model = arc_grenade", "start_speed = 10", "ai_fire_trigger_box_forward_xyz = 200_200_600", "end"}),
+                           "new_weapon 19", "model = bomb", "ai_fire_trigger_box_below_xyz = 200|1200|400tail", "end",
+                           "new_weapon 20", "model = laser", "life_time = 2000", "ai_fire_trigger_box_forward_xyz = 100|100|500", "end",
+                           "new_weapon 21", "model = arc_grenade", "start_speed = 10", "ai_fire_trigger_box_forward_xyz = 200|200|600", "end"}),
           "weapon parser fixtures loaded");
     const auto &wp = w._weaponProtos;
     Check(wp[1].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_BOX_BELOW && wp[1].ai_fire_trigger_box_below.x == 200.0f &&
@@ -1459,6 +1612,8 @@ int main() {
     TestBelowCompatibility(w, wp.data());
     TestTankElevation();
     TestDownwardCone(w);
+    TestImplicitFeatureGroups();
+    TestBoomerangLifetimeReturn();
     TestFrontVolumes(w, wp.data());
     TestArcFallback();
     TestTurretSlotsAndCadence();

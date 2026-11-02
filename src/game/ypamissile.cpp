@@ -505,6 +505,9 @@ bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypa
     for (NC_STACK_ypabact *bct : collisionTargets)
     {
         if (!bct || bct->CollisionsDisabled()) continue;
+        if (_boomerangReturning && (bct->_bact_type == BACT_TYPES_MISSLE ||
+            std::find(_boomerangReturnHitGids.begin(), _boomerangReturnHitGids.end(), bct->_gid) != _boomerangReturnHitGids.end()))
+            continue;
         if ( bct == this || bct == _mislEmitter || bct->_status == BACT_STATUS_DEAD )
             continue;
 
@@ -1088,8 +1091,109 @@ void NC_STACK_ypamissile::AttachDelayedDetonationToTarget(NC_STACK_ypabact *targ
     }
 }
 
+bool NC_STACK_ypamissile::BeginBoomerangReturn()
+{
+    if (_boomerangReturnMode == World::TWeapProto::BOOMERANG_NONE || _boomerangReturning ||
+        _mislClusterChild || !_world || !_world->FindLiveBactByGid(_boomerangEmitterGid))
+        return false;
+    _boomerangReturnSpeed = _fly_dir_length;
+    if (!std::isfinite(_boomerangReturnSpeed) || _boomerangReturnSpeed <= 0)
+        return false;
+    _boomerangReturning = true;
+    _boomerangReturnElapsed = 0;
+    _boomerangReturnHitGids.clear();
+    _mislArmorPenetratedGids.clear();
+    return true;
+}
+
+void NC_STACK_ypamissile::FinishBoomerangReturn()
+{
+    _boomerangReturning = false;
+    setState_msg state{};
+    state.newStatus = BACT_STATUS_DEAD;
+    SetStateInternal(&state, false);
+    SetVP(nullptr);
+    _yls_time = 0;
+    ResetViewing();
+}
+
+void NC_STACK_ypamissile::ApplyBoomerangWorldImpact(const vec3d &position)
+{
+    const vec3d end = _position;
+    _position = position;
+    const bool damageWorld = (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) || _pSector->PurposeType == cellArea::PT_NONE) &&
+        (!_world->_isNetGame || (_world->_userRobo && _world->_userRobo->_owner == _owner));
+    if (damageWorld)
+    {
+        RememberDirectHitBuildingAt(position);
+        RememberDirectHitSectorAt(position);
+    }
+    Impact();
+    if (damageWorld)
+    {
+        yw_arg129 damage{};
+        damage.pos.x = position.x; damage.pos.z = position.z;
+        damage.field_10 = _energy; damage.unit = _mislEmitter;
+        ChangeSectorEnergy(&damage);
+    }
+    _position = end;
+}
+
+void NC_STACK_ypamissile::UpdateBoomerangReturn(update_msg *arg)
+{
+    NC_STACK_ypabact *emitter = _world->FindLiveBactByGid(_boomerangEmitterGid);
+    if (!emitter || arg->frameTime > 30000 - _boomerangReturnElapsed)
+    {
+        FinishBoomerangReturn();
+        return;
+    }
+    _boomerangReturnElapsed += std::max(0, arg->frameTime);
+    _mislEmitter = emitter;
+    const vec3d target = emitter->GetBodyPosition() + emitter->_rotation.Transpose().Transform(_boomerangFireLocal);
+    vec3d direction = target - _position;
+    const float distance = direction.normalise();
+    const float step = _boomerangReturnSpeed * std::max(0, arg->frameTime) * 0.006f;
+    if (distance <= step + 0.001f)
+    {
+        _position = target;
+        FinishBoomerangReturn();
+        return;
+    }
+    _old_pos = _position;
+    _fly_dir = direction;
+    _position += direction * step;
+    AlignMissile();
+    _world->ypaworld_func145(this);
+    const vec3d end = _position;
+    NC_STACK_ypabact *hit = nullptr;
+    if (TubeCollisionTest(true, &hit))
+    {
+        for (auto *unit : _mislDirectHitUnits)
+            if (unit) _boomerangReturnHitGids.push_back(unit->_gid);
+        Impact();
+    }
+    _position = end;
+    ypaworld_arg136 contact{};
+    contact.stPos = _old_pos;
+    contact.vect = end - _old_pos;
+    TraceWorldCollision(&contact);
+    TBuildingHitRef slot;
+    if (contact.isect && GetSectorSlotAtPosition(contact.isectPos, &slot.cellId, &slot.bldX, &slot.bldY) &&
+        std::none_of(_boomerangReturnWorldHits.begin(), _boomerangReturnWorldHits.end(),
+            [&](const TBuildingHitRef &hit) { return hit.cellId == slot.cellId && hit.bldX == slot.bldX && hit.bldY == slot.bldY; }))
+    {
+        _boomerangReturnWorldHits.push_back(slot);
+        ApplyBoomerangWorldImpact(contact.isectPos);
+    }
+}
+
 void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 {
+    if (_boomerangReturning && _status == BACT_STATUS_NORMAL)
+    {
+        UpdateBoomerangReturn(arg);
+        return;
+    }
     // OpenNeoUA custom: artillery shells use a fully isolated ballistic path so normal
     // missile/bomb behavior is left completely unchanged.
     if ( _isArtilleryShellProjectile )
@@ -1241,6 +1345,12 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             bool deflected = false;
             if ( TubeCollisionTest(_mislDelayTime <= 0, &hitTarget, &deflected) )
             {
+                if (_boomerangReturnMode == World::TWeapProto::BOOMERANG_LIFETIME_OR_IMPACT &&
+                    hitTarget && hitTarget->_bact_type != BACT_TYPES_MISSLE && BeginBoomerangReturn())
+                {
+                    Impact();
+                    return;
+                }
                 if ( hitTarget && hitTarget->_bact_type == BACT_TYPES_MISSLE )
                 {
                     DetonateWeaponCollision(dynamic_cast<NC_STACK_ypamissile *>(hitTarget));
@@ -1288,6 +1398,12 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 AlignMissileByNormal( impactNormal );
 
                 _position = arg136.isectPos;
+
+                if (_boomerangReturnMode == World::TWeapProto::BOOMERANG_LIFETIME_OR_IMPACT && BeginBoomerangReturn())
+                {
+                    ApplyBoomerangWorldImpact(_position);
+                    return;
+                }
 
                 ResetViewing();
 
@@ -1371,6 +1487,8 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 }
                 else
                 {
+                    if (BeginBoomerangReturn())
+                        return;
                     Impact();
 
                     setState_msg arg78;
@@ -1451,6 +1569,14 @@ void NC_STACK_ypamissile::Renew()
     NC_STACK_ypabact::Renew();
     _debugPlayerProjectile=false;
     _mislEmitter=nullptr;
+    _boomerangReturnMode = World::TWeapProto::BOOMERANG_NONE;
+    _boomerangReturning = false;
+    _boomerangReturnElapsed = 0;
+    _boomerangEmitterGid = 0;
+    _boomerangReturnSpeed = 0;
+    _boomerangFireLocal = vec3d();
+    _boomerangReturnHitGids.clear();
+    _boomerangReturnWorldHits.clear();
 
     // Missiles are recycled from the world's dead cache. Never let the
     // previous shot's fine energy snapshot leak into a new projectile before
@@ -1876,6 +2002,15 @@ void NC_STACK_ypamissile::SetLauncherBact(NC_STACK_ypabact *bact)
     if(!_mislEmitter&&bact)
         _debugPlayerProjectile=bact->IsPlayerTimeOwner();
     _mislEmitter = bact;
+    _boomerangReturnMode = World::TWeapProto::BOOMERANG_NONE;
+    if (bact && _world && _vehicleID >= 0 && (size_t)_vehicleID < _world->GetWeaponsProtos().size())
+    {
+        const auto &proto = _world->GetWeaponsProtos()[_vehicleID];
+        if (!proto.IsLaser() && !proto.IsArtilleryShell() && !proto.IsKamikaze() && proto.delay_time <= 0)
+            _boomerangReturnMode = proto.boomerang_return_mode;
+        _boomerangEmitterGid = bact->_gid;
+        _boomerangFireLocal = bact->_rotation.Transform(_position - bact->GetBodyPosition());
+    }
 
 }
 

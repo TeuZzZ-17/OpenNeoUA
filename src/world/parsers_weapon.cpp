@@ -140,8 +140,6 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->visual_rotation = vec3d(0.0, 0.0, 0.0);
         _wpn->visual_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->collision_shape.clear();
-        _wpn->spiral_speed = 0.0f;
-        _wpn->spiral_radius = 0.0f;
         _wpn->chaos_factor = 0.0f;
         _wpn->chaos_radius = 0.0f;
         _wpn->visual_tint = TVisualTint();
@@ -220,6 +218,16 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
 
 int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( !StriCmp(p1.substr(0, 8), "cluster_") ||
+         !StriCmp(p1.substr(0, 12), "pal_cluster_") ||
+         !StriCmp(p1.substr(0, 12), "shk_cluster_") ||
+         !StriCmp(p1.substr(0, 12), "snd_cluster_") )
+        _wpn->cluster.enable = true;
+    if ( !StriCmp(p1.substr(0, 6), "chain_") )
+        _wpn->chain.allow = true;
+    if ( !StriCmp(p1.substr(0, 12), "laser_chain_") )
+        _wpn->laser_chain_allow = 1;
+
     if ( !StriCmp(p1, "end") )
     {
         if ( !_wpn->HasAIFireTriggerArea() &&
@@ -248,6 +256,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
 
     if ( !StriCmp(p1, "model") )
     {
+        _wpn->vertical_laser_enable = !StriCmp(p2, "vertical_laser");
         if ( !StriCmp(p2, "grenade") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_GRENADE;
         else if ( !StriCmp(p2, "arc_grenade") )
@@ -261,6 +270,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         else if ( !StriCmp(p2, "artillery_shell") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_ARTILLERY_SHELL;
         else if ( !StriCmp(p2, "laser") )
+            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_LASER;
+        else if ( !StriCmp(p2, "vertical_laser") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_LASER;
         else if ( !StriCmp(p2, "kamikaze") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_KAMIKAZE;
@@ -486,10 +497,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         // selects the engine-standard gravity in the runtime.
         _wpn->grenade_arc_gravity = std::min(ParseNonNegativeIniFloatOrZero(p2), 1000.0f);
     }
-    else if ( !StriCmp(p1, "cluster_enable") )
-    {
-        _wpn->cluster.enable = parser.stol(p2, nullptr, 0) != 0;
-    }
     else if ( !StriCmp(p1, "cluster_generations") )
     {
         int generations = parser.stol(p2, nullptr, 0);
@@ -643,10 +650,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             _wpn->cluster.snd.sndPrm_shk.pos.z = parser.stof(axis[2], 0);
         }
     }
-    else if ( !StriCmp(p1, "chain_allow") )
-    {
-        _wpn->chain.allow = parser.stol(p2, nullptr, 0) != 0;
-    }
     else if ( !StriCmp(p1, "chain_max_jumps") )
     {
         int maxJumps = parser.stol(p2, nullptr, 0);
@@ -667,6 +670,15 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int delay = parser.stol(p2, nullptr, 0);
         _wpn->chain.jump_delay = delay > 0 ? delay : 0;
     }
+    else if ( !StriCmp(p1, "boomerang_return_mode") )
+    {
+        if ( !StriCmp(p2, "lifetime") )
+            _wpn->boomerang_return_mode = TWeapProto::BOOMERANG_LIFETIME;
+        else if ( !StriCmp(p2, "lifetime_or_impact") )
+            _wpn->boomerang_return_mode = TWeapProto::BOOMERANG_LIFETIME_OR_IMPACT;
+        else
+            _wpn->boomerang_return_mode = TWeapProto::BOOMERANG_NONE;
+    }
     else if ( !StriCmp(p1, "life_time") )
     {
         int minLifeTime = 0;
@@ -677,7 +689,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             _wpn->life_time_min = minLifeTime;
             _wpn->life_time_max = maxLifeTime;
         }
-        else if ( p2.find('_') == std::string::npos )
+        else if ( p2.find('~') == std::string::npos )
         {
             _wpn->life_time = parser.stol(p2, nullptr, 0);
             _wpn->life_time_min = _wpn->life_time;
@@ -686,7 +698,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         else
         {
             // Do not let stol() silently accept only the first endpoint of a
-            // malformed range such as 2500_3000_3500.
+            // malformed range such as 2500~3000~3500.
             _wpn->life_time = 0;
             _wpn->life_time_min = 0;
             _wpn->life_time_max = 0;
@@ -696,9 +708,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         int minLifeTime = 0;
         int maxLifeTime = 0;
-        if ( p2.find('_') != std::string::npos )
+        if ( p2.find('~') != std::string::npos )
         {
-            // Range min_max; a malformed range disables the override (0).
+            // Range min~max; a malformed range disables the override (0).
             if ( !ParseScriptIntRange(p2, minLifeTime, maxLifeTime) )
                 minLifeTime = maxLifeTime = 0;
         }
@@ -851,10 +863,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             spacing = 500.0;
         _wpn->laser_spacing = spacing;
     }
-    else if ( !StriCmp(p1, "laser_chain_allow") )
-    {
-        _wpn->laser_chain_allow = parser.stol(p2, nullptr, 0) != 0 ? 1 : 0;
-    }
     else if ( !StriCmp(p1, "laser_chain_max_jumps") )
     {
         int maxJumps = parser.stol(p2, nullptr, 0);
@@ -874,10 +882,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         int maxTargets = parser.stol(p2, nullptr, 0);
         _wpn->laser_beam_count = maxTargets > 1 ? maxTargets : 1;
-    }
-    else if ( !StriCmp(p1, "vertical_laser_enable") )
-    {
-        _wpn->vertical_laser_enable = parser.stol(p2, nullptr, 0) == 1;
     }
     else if ( !StriCmp(p1, "vertical_laser_ai_trigger_radius") )
     {
@@ -1061,14 +1065,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( ParseVPSpinParam(parser, "", p1, p2, _wpn->visual_spin) )
     {
     }
-    else if ( !StriCmp(p1, "spiral_speed") )
-    {
-        _wpn->spiral_speed = (float)World::Spin::ClampStrength(parser.stof(p2, 0));
-    }
-    else if ( !StriCmp(p1, "spiral_radius") )
-    {
-        _wpn->spiral_radius = ClampProjectileVisualMotionRadius(parser.stof(p2, 0));
-    }
     else if ( !StriCmp(p1, "chaos_factor") )
     {
         _wpn->chaos_factor = (float)World::Spin::ClampStrength(parser.stof(p2, 0));
@@ -1112,7 +1108,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "dest_fx") )
     {
-        Stok stok(p2, " _");
+        // Vanilla key: "_" stays valid, "|" is the OpenNeoUA separator.
+        Stok stok(p2, " _|");
         std::string fx_type, pp1, pp2, pp3, pp4;
 
         if ( stok.GetNext(&fx_type) && stok.GetNext(&pp1) && stok.GetNext(&pp2) && stok.GetNext(&pp3) && stok.GetNext(&pp4) )
@@ -1143,7 +1140,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "ext_dest_fx") || !StriCmp(p1, "extended_dest_fx") )
     {
-        Stok stok(p2, " _");
+        // Vanilla key: "_" stays valid, "|" is the OpenNeoUA separator.
+        Stok stok(p2, " _|");
         std::string fx_type, pp1, pp2, pp3, pp4;
 
         if ( stok.GetNext(&fx_type) && stok.GetNext(&pp1) && stok.GetNext(&pp2) && stok.GetNext(&pp3) && stok.GetNext(&pp4) )

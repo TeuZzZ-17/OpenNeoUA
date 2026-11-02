@@ -62,7 +62,8 @@ TVhclSound *VhclProtoParser::GetSndFxByName(const std::string &sndname)
 
 bool FxParser::ParseExtSampleDef(ScriptParser::Parser &parser, TVhclSound *sndfx, const std::string &p2)
 {
-    Stok stok(p2, "_");
+    // Vanilla key: "_" stays valid, "|" is the OpenNeoUA separator.
+    Stok stok(p2, "_|");
     std::string pp1, pp2, pp3, pp4, pp5, pname;
 
     if ( !stok.GetNext(&pp1) || !stok.GetNext(&pp2) || !stok.GetNext(&pp3) || !stok.GetNext(&pp4) || !stok.GetNext(&pp5) || !stok.GetNext(&pname) )
@@ -212,7 +213,7 @@ static float ParseVPScaleValue(ScriptParser::Parser &parser, const std::string &
     return std::isfinite(scale) && scale > 0.0 ? scale : 1.0;
 }
 
-// Splits a compact "a_b_c" value (see World::SplitTupleValue). A wrong shape is
+// Splits a compact "a|b|c" value (see World::SplitTupleValue). A wrong shape is
 // logged and rejected, so the caller keeps the previous/default values.
 bool ReadTuple(const std::string &key,
                const std::string &value,
@@ -222,12 +223,12 @@ bool ReadTuple(const std::string &key,
     if ( World::SplitTupleValue(value, count, parts) )
         return true;
 
-    ypa_log_out("WARNING: invalid %s '%s': expected %u values separated by '_'.\n",
+    ypa_log_out("WARNING: invalid %s '%s': expected %u values separated by '|'.\n",
                 key.c_str(), value.c_str(), (unsigned)count);
     return false;
 }
 
-// <prefix>_scale_xyz = x_y_z
+// <prefix>_scale_xyz = x|y|z
 bool ParseVPScaleParam(ScriptParser::Parser &parser,
                        const std::string &prefix,
                        const std::string &p1,
@@ -830,7 +831,7 @@ bool ParseTintParam(ScriptParser::Parser &parser,
     if ( StriCmp(p1, paramName) )
         return false;
 
-    std::vector<std::string> parts = Stok::Split(p2, "_");
+    std::vector<std::string> parts = Stok::Split(p2, "|");
 
     long comp[4] = {255, 255, 255, 255};
 
@@ -875,7 +876,7 @@ bool ParseTintParam(ScriptParser::Parser &parser,
         if ( !valid )
         {
             tint = TVisualTint();
-            ypa_log_out("WARNING: invalid %s '%s', using neutral 255_255_255_255\n",
+            ypa_log_out("WARNING: invalid %s '%s', using neutral 255|255|255|255\n",
                         paramName.c_str(), p2.c_str());
             return true;
         }
@@ -1007,16 +1008,13 @@ bool ParseMeshTracerParam(ScriptParser::Parser &parser,
                             World::TWeaponTracerConfig &config,
                             const std::string &prefix)
 {
+    if ( !StriCmp(p1.substr(0, prefix.size()), prefix) )
+        config.enabled = true;
+
     const auto key = [&prefix](const char *suffix)
     {
         return prefix + suffix;
     };
-
-    if ( !StriCmp(p1, key("enable")) )
-    {
-        config.enabled = p2 == "1";
-        return true;
-    }
 
     if ( ParseTintParam(parser, key("tint"), p1, p2, config.tint, true) )
         return true;
@@ -1118,12 +1116,8 @@ bool ParseLaserMeshParam(
     ScriptParser::Parser &parser, const std::string &p1,
     const std::string &p2, World::TWeapProto::TLaserMeshConfig &config)
 {
-    if ( !StriCmp(p1, "laser_mesh_enable") )
-    {
-        // Only the exact value 1 enables the optional renderer.
-        config.enabled = p2 == "1";
-        return true;
-    }
+    if ( !StriCmp(p1.substr(0, 11), "laser_mesh_") )
+        config.enabled = true;
 
     if ( !StriCmp(p1, "laser_mesh_path") )
     {
@@ -1244,6 +1238,35 @@ static World::TChainFXConfig::Trigger ParseChainFXTrigger(const std::string &nam
     return World::TChainFXConfig::TRIGGER_NONE;
 }
 
+// "a|b" lists several triggers for one block. Any empty, unknown or
+// context-invalid name rejects the whole list; repeated names count once.
+static bool ParseChainFXTriggerList(const std::string &value,
+                                    ChainFXParseContext context,
+                                    std::vector<World::TChainFXConfig::Trigger> &triggers)
+{
+    triggers.clear();
+
+    size_t start = 0;
+    while ( true )
+    {
+        const size_t sep = value.find('|', start);
+        const std::string name = value.substr(
+            start, sep == std::string::npos ? std::string::npos : sep - start);
+
+        const World::TChainFXConfig::Trigger trigger = ParseChainFXTrigger(name, context);
+        if ( trigger == World::TChainFXConfig::TRIGGER_NONE )
+            return false;
+
+        if ( std::find(triggers.begin(), triggers.end(), trigger) == triggers.end() )
+            triggers.push_back(trigger);
+
+        if ( sep == std::string::npos )
+            return true;
+
+        start = sep + 1;
+    }
+}
+
 static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
 {
     if ( !StriCmp(name, "visual") )
@@ -1255,8 +1278,8 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
     return World::TChainFXConfig::MODE_VISUAL;
 }
 
-// Chain FX offset_xyz / launch_xyz = x_y_z. Every axis is a fixed value or an
-// inclusive "min~max" range ("_" already separates the axes). Invalid text
+// Chain FX offset_xyz / launch_xyz = x|y|z. Every axis is a fixed value or an
+// inclusive "min~max" range ("|" already separates the axes). Invalid text
 // falls back to a fixed 0 on all axes so the block stays vanilla-safe and loadable.
 static void ParseChainFXRangeTuple(const std::string &key,
                                    const std::string &value,
@@ -1268,7 +1291,7 @@ static void ParseChainFXRangeTuple(const std::string &key,
     float parsedMax[3] = {0.0f, 0.0f, 0.0f};
     bool valid = World::SplitTupleValue(value, 3, axis);
     for (int i = 0; valid && i < 3; i++)
-        valid = World::ParseFloatRangeValue(axis[i], parsedMin[i], parsedMax[i], '~');
+        valid = World::ParseFloatRangeValue(axis[i], parsedMin[i], parsedMax[i]);
 
     if ( valid )
     {
@@ -1279,7 +1302,7 @@ static void ParseChainFXRangeTuple(const std::string &key,
 
     minValue = vec3d(0.0, 0.0, 0.0);
     maxValue = vec3d(0.0, 0.0, 0.0);
-    ypa_log_out("WARNING: invalid begin_fx %s '%s', using 0_0_0\n",
+    ypa_log_out("WARNING: invalid begin_fx %s '%s', using 0|0|0\n",
                 key.c_str(), value.c_str());
 }
 
@@ -1312,7 +1335,7 @@ private:
 // OpenNeoUA: smoke_* keys of a new_decal block. Returns true when p1 is a smoke key; any
 // smoke key switches the smoke on (smoke_count = 0 switches it off again). A bad value keeps
 // the default of that key (with a warning), so a typo never removes the whole smoke. Ranges
-// use the shared fixed value / min_max syntax.
+// use the shared fixed value / min~max syntax.
 static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
                                        const std::string &p1,
                                        const std::string &p2,
@@ -1423,7 +1446,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     bool hasEndSize = false;
     int countMin = 1;
     int countMax = 1;
-    // Offset accepts a fixed value or a min_max range rolled for each instance.
+    // Offset accepts a fixed value or a min~max range rolled for each instance.
     vec3d offsetMin = vec3d(0.0, 0.0, 0.0);
     vec3d offsetMax = vec3d(0.0, 0.0, 0.0);
     vec3d launchMin = vec3d(0.0, 0.0, 0.0);
@@ -1445,10 +1468,20 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     bool hasOffset = false;
     bool invalidInlinePhysical = false;
     bool randomRotation = false;
-    World::TChainFXConfig::Trigger trigger = World::TChainFXConfig::TRIGGER_NONE;
+    std::vector<World::TChainFXConfig::Trigger> triggers;
     bool hasTrigger = false;
     bool badTrigger = false;
     bool badMode = false;
+
+    // One stored config per trigger: runtime code keeps matching a single trigger.
+    auto pushPerTrigger = [&](World::TChainFXConfig chain)
+    {
+        for (World::TChainFXConfig::Trigger trigger : triggers)
+        {
+            chain.trigger = trigger;
+            out->push_back(chain);
+        }
+    };
 
     std::string p1;
     std::string p2;
@@ -1491,7 +1524,6 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 {
                     World::TChainFXConfig chain;
                     chain.mode = mode;
-                    chain.trigger = trigger;
                     chain.random_rotation = randomRotation;
                     chain.count_min = countMin;
                     chain.count_max = countMax;
@@ -1512,7 +1544,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                         visual.has_tint = hasVisualTint;
                     }
                     chain.visuals = visuals;
-                    out->push_back(chain);
+                    pushPerTrigger(chain);
                 }
             }
             else if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
@@ -1529,14 +1561,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 {
                     World::TChainFXConfig chain;
                     chain.mode = mode;
-                    chain.trigger = trigger;
                     chain.random_rotation = randomRotation;
                     chain.count_min = countMin;
                     chain.count_max = countMax;
                     chain.offset_min = offsetMin;
                     chain.offset_max = offsetMax;
                     chain.physical_vehicle = physicalVehicle;
-                    out->push_back(chain);
+                    pushPerTrigger(chain);
                 }
                 else if ( hasPhysicalVehicleKey || hasOffset )
                 {
@@ -1553,14 +1584,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 {
                     World::TChainFXConfig chain;
                     chain.mode = mode;
-                    chain.trigger = trigger;
                     chain.random_rotation = randomRotation;
                     chain.count_min = countMin;
                     chain.count_max = countMax;
                     chain.launch_min = launchMin;
                     chain.launch_max = launchMax;
                     chain.physical_inline = physical;
-                    out->push_back(chain);
+                    pushPerTrigger(chain);
                 }
                 else
                 {
@@ -1593,9 +1623,8 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "trigger") )
         {
-            trigger = ParseChainFXTrigger(p2, context);
             hasTrigger = true;
-            if ( trigger == World::TChainFXConfig::TRIGGER_NONE )
+            if ( !ParseChainFXTriggerList(p2, context, triggers) )
             {
                 ypa_log_out("WARNING: Unknown or unsupported begin_fx trigger '%s' ignored\n", p2.c_str());
                 badTrigger = true;
@@ -1862,7 +1891,7 @@ static void ParseDecalStretch(const char *key, const std::string &value,
 {
     float parsedMin = 1.0f;
     float parsedMax = 1.0f;
-    if ( World::ParseFloatRangeValue(value, parsedMin, parsedMax, '~') &&
+    if ( World::ParseFloatRangeValue(value, parsedMin, parsedMax) &&
          std::isfinite(parsedMin) && std::isfinite(parsedMax) &&
          parsedMin > 0.0f && parsedMax > 0.0f )
     {
@@ -1878,7 +1907,7 @@ static void ParseDecalStretch(const char *key, const std::string &value,
     ypa_log_out("WARNING: invalid new_decal %s '%s', using 1.0\n", key, value.c_str());
 }
 
-// Edge fade 0-10, fixed or a whole-number min_max range rolled per decal.
+// Edge fade 0-10, fixed or a whole-number min~max range rolled per decal.
 static void ParseDecalEdgeFade(ScriptParser::Parser &parser, const std::string &value,
                                World::TChainFXConfig &fx)
 {
@@ -1886,7 +1915,7 @@ static void ParseDecalEdgeFade(ScriptParser::Parser &parser, const std::string &
     fx.ground_decal_edge_fade_min = -1;
     fx.ground_decal_edge_fade_max = -1;
 
-    if ( value.find('_') != std::string::npos )
+    if ( value.find('~') != std::string::npos )
     {
         // Ranged edge fade uses whole 0..10 steps so textured decals reuse a small
         // bounded set of baked fade textures.
@@ -2118,12 +2147,12 @@ bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "job_fightgun") ||
            !StriCmp(p1, "job_conquer") ||
            !StriCmp(p1, "job_reconnoitre") ||
-           !StriCmp(p1, "at_death_spawn_units") ||
            !StriCmp(p1, "at_death_spawn_vehicle") ||
            !StriCmp(p1, "at_death_spawn_count") ||
            !StriCmp(p1, "at_death_spawn_random_pos") ||
            !StriCmp(p1, "at_death_spawn_instant") ||
            !StriCmp(p1, "at_death_spawn_immunity_time") ||
+           !StriCmp(p1, "at_death_spawn_units_eject_force") ||
            !StriCmp(p1, "at_death_push_force") ||
            !StriCmp(p1, "at_death_push_radius") ||
            !StriCmp(p1, "at_death_push_falloff") ||

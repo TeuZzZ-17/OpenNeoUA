@@ -597,6 +597,7 @@ public:
     void UpdateRecoilPush(update_msg *arg);      // integrate Weapon recoil push; render envelope is clock-driven
     void ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner = 0);
     void InheritActiveDebuffFromParent(NC_STACK_ypabact *parent);
+    void InheritSpawnOrders(NC_STACK_ypabact *parent);
     void UpdateActiveDebuff(update_msg *arg);
     void ClearActiveDebuff();
     bool IsActiveDebuffStunning(bool requireMovementLevel = true) const;
@@ -1055,6 +1056,7 @@ public:
     vec3d _waypoints[32]; //waypoints
     int16_t _current_waypoint;
     int16_t _waypoints_count;
+    bool _spawnSeparationPending = false;
     int _m_cmdID;
     uint8_t _m_owner;
     uint32_t _fe_cmdID; // found enemy group ID
@@ -1113,8 +1115,6 @@ public:
     World::TVisualTint _vp_tint; // OpenNeoUA custom: main visual RGBA target hue/alpha
     vec3d _vp_rotation = vec3d(0.0, 0.0, 0.0);
     vec3d _vp_spin_strength = vec3d(0.0, 0.0, 0.0);
-    float _spiral_speed = 0.0f;   // OpenNeoUA: render-only spiral revolutions/s
-    float _spiral_radius = 0.0f;  // OpenNeoUA: visual orbit radius in model/world units
     float _chaos_factor = 0.0f;   // OpenNeoUA: smooth random target changes/s
     float _chaos_radius = 0.0f;   // OpenNeoUA: maximum lateral erratic deviation
     bool _projectile_visual_motion_frozen = false;
@@ -1284,6 +1284,7 @@ public:
     float _at_death_spawn_random_pos;
     int _at_death_spawn_instant;
     int _at_death_spawn_immunity_time;
+    float _eject_force = 0.0f;
     bool _at_death_spawn_done;
     int _at_death_spawn_protection_end_time;
     bool _at_death_spawn_restore_vulnerable;

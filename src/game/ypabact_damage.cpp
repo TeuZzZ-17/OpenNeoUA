@@ -631,13 +631,13 @@ void NC_STACK_ypabact::Die()
     if ( _primTtype == BACT_TGT_TYPE_UNIT )
         _primT.pbact->DeleteAttacker(this, 0);
 
+    ypabact_ApplyConfiguredAtDeathEffects(this);
+    ypabact_TrySpawnAtDeath(this);
 
     _secndTtype = BACT_TGT_TYPE_NONE;
     _primTtype = BACT_TGT_TYPE_NONE;
 
-    ypabact_ApplyConfiguredAtDeathEffects(this);
     ypabact_FireProximityDefenseAtDeath(this);
-    ypabact_TrySpawnAtDeath(this);
 
     _status = BACT_STATUS_DEAD;
     _commandID = 0;
@@ -2062,7 +2062,7 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
 
                 World::DestFX tempFx;
                 tempFx.ModelID = fx.physical_vehicle;
-                // Offset min_max is rolled independently for every generated instance.
+                // Offset min~max is rolled independently for every generated instance.
                 tempFx.Pos = World::RandomVec3RangeInclusive(fx.offset_min, fx.offset_max);
                 StartDestFX(tempFx, impactPos, impactRot, fx.random_rotation);
             }

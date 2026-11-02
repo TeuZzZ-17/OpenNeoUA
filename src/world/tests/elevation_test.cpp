@@ -62,7 +62,7 @@ int main() {
     auto &proto = world._vhclProtos[1];
     Check(!proto.scope_angle_min_max_set, "absent scope preserves vanilla");
     Check(tank.IsPrimaryWeaponElevationAllowed(Aim(-150)) && tank.IsPrimaryWeaponElevationAllowed(Aim(150)), "absent preserves actual vanilla AI beyond reticle travel");
-    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -50_75", "end"}), "single interval parser");
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -50|75", "end"}), "single interval parser");
     for (auto *actor : {static_cast<NC_STACK_ypabact*>(&tank), static_cast<NC_STACK_ypabact*>(&car)}) {
         Check(actor->IsPrimaryWeaponElevationAllowed(Aim(-50)), "inclusive lower boundary");
         Check(actor->IsPrimaryWeaponElevationAllowed(Aim(75)), "inclusive upper boundary");
@@ -116,32 +116,32 @@ int main() {
     Check(!tank.IsPlayerPrimaryWeaponElevationAllowed(), "above 75 reference up with lateral reticle");
     tank._gun_leftright = 0.0f;
     Check(flyer.IsPrimaryWeaponElevationAllowed(Aim(80)) && gun.IsPrimaryWeaponElevationAllowed(Aim(-80)), "air and mounted guns excluded");
-    for (const char *bad : {"nan_20", "-20_inf", "-101_20", "-20_101", "10junk_20",
-                            "10_20_30", "bad", "50", "0%_20%", "25_-10", "_20", "20_"}) {
+    for (const char *bad : {"nan|20", "-20|inf", "-101|20", "-20|101", "10junk|20",
+                            "10|20|30", "bad", "50", "0%|20%", "25|-10", "|20", "20|"}) {
         const auto range = proto.scope_angle_min_max;
         const bool wasSet = proto.scope_angle_min_max_set;
         Check(!Parse(world, {"modify_vehicle 1", std::string("scope_angle_min_max = ")+bad, "end"}) &&
               proto.scope_angle_min_max == range && proto.scope_angle_min_max_set == wasSet,
               "invalid interval rejected without fallback or state changes");
     }
-    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = 0_0", "end"}) &&
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = 0|0", "end"}) &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(0)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(1)) &&
           !tank.IsPrimaryWeaponElevationAllowed(Aim(-1)), "zero interval permits hull-parallel aim only");
-    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = 20_80", "end"}) &&
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = 20|80", "end"}) &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(20)) && tank.IsPrimaryWeaponElevationAllowed(Aim(80)) &&
           !tank.IsPrimaryWeaponElevationAllowed(Aim(0)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(-20)),
           "positive interval excludes hull-parallel and downward aim");
-    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -80_-20", "end"}) &&
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -80|-20", "end"}) &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(-80)) && tank.IsPrimaryWeaponElevationAllowed(Aim(-20)) &&
           !tank.IsPrimaryWeaponElevationAllowed(Aim(0)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(20)),
           "negative interval excludes hull-parallel and upward aim");
     Check(Parse(world, {"new_vehicle 1", "model = tank", "end"}) &&
           !proto.scope_angle_min_max_set, "new_vehicle clears previous scope configuration");
-    Check(Parse(world, {"new_vehicle 1", "model = tank", "scope_angle_min_max = -100_100", "end"}) &&
+    Check(Parse(world, {"new_vehicle 1", "model = tank", "scope_angle_min_max = -100|100", "end"}) &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(-100)) && tank.IsPrimaryWeaponElevationAllowed(Aim(100)) &&
           !tank.IsPrimaryWeaponElevationAllowed(Aim(-100.01)) && !tank.IsPrimaryWeaponElevationAllowed(Aim(100.01)),
           "explicit full interval covers entire unchanged vanilla reticle travel");
-    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -50.5_75.25", "end"}) &&
+    Check(Parse(world, {"modify_vehicle 1", "scope_angle_min_max = -50.5|75.25", "end"}) &&
           proto.scope_angle_min_max[0] == -50.5f && proto.scope_angle_min_max[1] == 75.25f &&
           tank.IsPrimaryWeaponElevationAllowed(Aim(-50.5)) && tank.IsPrimaryWeaponElevationAllowed(Aim(75.25)),
           "fractional reference interval includes endpoints");

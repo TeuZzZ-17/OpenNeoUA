@@ -67,6 +67,9 @@ bool BuildProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &
 
 int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( !StriCmp(p1.substr(0, 6), "spawn_") )
+        _bld->spawn_units = 1;
+
     if ( !StriCmp(p1, "end") )
         return ScriptParser::RESULT_SCOPE_END;
 
@@ -154,10 +157,6 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
         }
         else
             ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
-    }
-    else if ( !StriCmp(p1, "spawn_units") )
-    {
-        _bld->spawn_units = parser.stol(p2, nullptr, 0) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "spawn_vehicle") )
     {
@@ -742,11 +741,13 @@ int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
     else if ( !StriCmp(p1, "lifetime_minmax") )
     {
         std::string lifetime[2];
-        if ( ReadTuple(p1, p2, 2, lifetime) )
+        if ( World::SplitRangeValue(p2, lifetime) )
         {
             _profile.lifetime_min = NonNegativeFiniteMilliseconds(parser, lifetime[0]);
             _profile.lifetime_max = NonNegativeFiniteMilliseconds(parser, lifetime[1]);
         }
+        else
+            ypa_log_out("WARNING: invalid %s '%s': expected min~max.\n", p1.c_str(), p2.c_str());
     }
     else if ( !StriCmp(p1, "velocity_xyz") )
     {

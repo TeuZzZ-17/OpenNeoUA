@@ -70,7 +70,7 @@ inline bool ParseAuthoredScalar(const std::string &text, TAuthoredScalar &out)
     return true;
 }
 
-// Shared int16 list parser for VP-style parameters such as "123_456_789".
+// Shared int16 list parser for VP-style parameters such as "123|456|789".
 // Callers choose whether zero is valid; negative and malformed entries are
 // always rejected. maxItems <= 0 means no explicit limit.
 inline bool ParseInt16ListValue(const std::string &text,
@@ -85,7 +85,7 @@ inline bool ParseInt16ListValue(const std::string &text,
     size_t start = 0;
     while ( start <= text.size() )
     {
-        const size_t separator = text.find('_', start);
+        const size_t separator = text.find('|', start);
         const size_t end = separator == std::string::npos ? text.size() : separator;
         const std::string part = text.substr(start, end - start);
         if ( part.empty() )
@@ -120,7 +120,7 @@ inline bool ParseInt16ListValue(const std::string &text,
     return !out.empty();
 }
 
-// Smart list syntax shared by VP-style parameters: "123_456_789". A single
+// Smart list syntax shared by VP-style parameters: "123|456|789". A single
 // positive integer is also valid. Zero/negative/invalid entries are rejected
 // instead of silently creating holes.
 inline bool ParsePositiveInt16ListValue(const std::string &text,
@@ -131,7 +131,7 @@ inline bool ParsePositiveInt16ListValue(const std::string &text,
 }
 
 // Variant used by optional VP fields where 0 keeps its existing "disabled"
-// meaning while still allowing an authored underscore-separated list.
+// meaning while still allowing an authored list.
 inline bool ParseNonNegativeInt16ListValue(const std::string &text,
                                            std::vector<int16_t> &out,
                                            int maxItems = 0)
@@ -140,7 +140,7 @@ inline bool ParseNonNegativeInt16ListValue(const std::string &text,
 }
 
 // OpenNeoUA range syntax shared by script/config parameters authored as either
-// a fixed "value" or an inclusive "min_max" range. The generic tokenizer is
+// a fixed "value" or an inclusive "min~max" range. The generic tokenizer is
 // intentionally untouched; only callers that opt in get this syntax. Reversed
 // endpoints are normalized automatically.
 inline bool ParseIntRangeValue(const std::string &value, int &minValue, int &maxValue)
@@ -163,7 +163,7 @@ inline bool ParseIntRangeValue(const std::string &value, int &minValue, int &max
         return true;
     };
 
-    const size_t separator = value.find('_');
+    const size_t separator = value.find('~');
     if ( separator == std::string::npos )
     {
         int fixed = 0;
@@ -174,7 +174,7 @@ inline bool ParseIntRangeValue(const std::string &value, int &minValue, int &max
         return true;
     }
 
-    if ( value.find('_', separator + 1) != std::string::npos )
+    if ( value.find('~', separator + 1) != std::string::npos )
         return false;
 
     int first = 0;
@@ -211,13 +211,10 @@ inline bool ParsePositiveIntRangeValue(const std::string &value,
     return true;
 }
 
-// Float counterpart of ParseIntRangeValue(). The separator defaults to "_"
-// (value_value); inside a compact tuple such as offset_xyz it is "~" because
-// "_" already separates the axes.
+// Float counterpart of ParseIntRangeValue(): fixed "value" or "min~max".
 inline bool ParseFloatRangeValue(const std::string &value,
                                  float &minValue,
-                                 float &maxValue,
-                                 char rangeSeparator = '_')
+                                 float &maxValue)
 {
     auto parsePart = [](const std::string &part, float &out) -> bool
     {
@@ -235,7 +232,7 @@ inline bool ParseFloatRangeValue(const std::string &value,
         return true;
     };
 
-    const size_t separator = value.find(rangeSeparator);
+    const size_t separator = value.find('~');
     if ( separator == std::string::npos )
     {
         float fixed = 0.0f;
@@ -246,7 +243,7 @@ inline bool ParseFloatRangeValue(const std::string &value,
         return true;
     }
 
-    if ( value.find(rangeSeparator, separator + 1) != std::string::npos )
+    if ( value.find('~', separator + 1) != std::string::npos )
         return false;
 
     float first = 0.0f;
@@ -260,9 +257,26 @@ inline bool ParseFloatRangeValue(const std::string &value,
     return true;
 }
 
+// Splits a "min~max" range into its two text parts, for callers that parse each
+// end with their own rules. Exactly one "~" with both ends present is required.
+inline bool SplitRangeValue(const std::string &value, std::string *parts)
+{
+    if ( !parts )
+        return false;
+
+    const size_t separator = value.find('~');
+    if ( separator == std::string::npos || separator == 0 ||
+         separator + 1 >= value.size() || value.find('~', separator + 1) != std::string::npos )
+        return false;
+
+    parts[0] = value.substr(0, separator);
+    parts[1] = value.substr(separator + 1);
+    return true;
+}
+
 // Compact tuple syntax shared by the OpenNeoUA multi-value parameters
-// (spin_xyz = x_y_z, fade_inout = in_out, lifetime_minmax = min_max, ...).
-// The text must hold exactly `count` non-empty parts separated by "_".
+// (spin_xyz = x|y|z, fade_inout = in|out, ...).
+// The text must hold exactly `count` non-empty parts separated by "|".
 // Callers parse every part with their own rules, so the clamps and fallbacks
 // of the former single-value parameters stay identical.
 inline bool SplitTupleValue(const std::string &value, size_t count, std::string *parts)
@@ -274,7 +288,7 @@ inline bool SplitTupleValue(const std::string &value, size_t count, std::string 
     for (size_t i = 0; i < count; i++)
     {
         const bool last = i + 1 == count;
-        const size_t separator = value.find('_', start);
+        const size_t separator = value.find('|', start);
         if ( last ? separator != std::string::npos : separator == std::string::npos )
             return false;
 
@@ -288,7 +302,7 @@ inline bool SplitTupleValue(const std::string &value, size_t count, std::string 
     return true;
 }
 
-// Shared inclusive integer roll for authored value/min_max ranges. Keeping the
+// Shared inclusive integer roll for authored value/min~max ranges. Keeping the
 // calculation here prevents each runtime feature from growing its own subtly
 // different rand() endpoint handling.
 inline int RandomIntRangeInclusive(int minValue, int maxValue)
@@ -304,7 +318,7 @@ inline int RandomIntRangeInclusive(int minValue, int maxValue)
     return minValue + (int)((range + 1) * randomPart);
 }
 
-// Shared inclusive double roll for authored value/min_max ranges. Fixed values
+// Shared inclusive double roll for authored value/min~max ranges. Fixed values
 // return directly, so effects without an authored range never consume the
 // shared rand() stream.
 inline double RandomFloatRangeInclusive(double minValue, double maxValue)
@@ -332,7 +346,7 @@ inline mat3x3 RandomFXRotation(const mat3x3 &rotation, bool enabled)
     return rotation * mat3x3::RotateX(x) * mat3x3::RotateY(y) * mat3x3::RotateZ(z);
 }
 
-// Per-axis draw for authored vec3 value/min_max ranges (Chain FX offsets).
+// Per-axis draw for authored vec3 value/min~max ranges (Chain FX offsets).
 inline vec3d RandomVec3RangeInclusive(const vec3d &minValue, const vec3d &maxValue)
 {
     return vec3d(RandomFloatRangeInclusive(minValue.x, maxValue.x),
