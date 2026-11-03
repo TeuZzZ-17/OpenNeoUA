@@ -1335,11 +1335,14 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             }
 
             // F11: player Host Station economy cheat. The three Host batteries
-            // stay full and user-issued Host actions are charged zero energy.
+            // stay full, Host actions are free and the production cap is bypassed.
             if ( arg->field_8->KbdLastHit == Input::KC_F11 )
             {
                 arg->field_8->HotKeyID = -1;
                 _debugHostStationCheat = !_debugHostStationCheat;
+                CrashDiag::Breadcrumb("DEBUG", "host_station_cheat=%s production_limit_bypass=%s",
+                                       _debugHostStationCheat ? "yes" : "no",
+                                       _debugHostStationCheat ? "yes" : "no");
                 yw_ApplyDebugHostStationResources(this);
 
                 yw_arg159 infoMsg;
@@ -1482,7 +1485,8 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                 {
                     CrashDiag::SetActiveBact(unit, unit->_gid, unit->_bact_type,
                                                 unit->_owner, unit->_status,
-                                                unit->_status_flg, unit->_energy);
+                                                unit->_status_flg, unit->_energy, unit->_vehicleID,
+                                                unit->_position.x, unit->_position.y, unit->_position.z);
                     if (_isNetGame && unit != _userRobo && unit->_bact_type == BACT_TYPES_ROBO)
                         unit->NetUpdate(&_updateMessage);
                     else
@@ -2974,6 +2978,10 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->SetStateInternal(&arg119);
     }
 
+    if (bacto)
+        CrashDiag::Breadcrumb("UNIT_CREATE", "gid=%d vehicle=%d type=%d position=%.2f|%.2f|%.2f",
+                               bacto->_gid, bacto->_vehicleID, bacto->_bact_type,
+                               bacto->_position.x, bacto->_position.y, bacto->_position.z);
     if (_collisionScene) _collisionScene->UpdateActor(bacto);
     return bacto;
 }

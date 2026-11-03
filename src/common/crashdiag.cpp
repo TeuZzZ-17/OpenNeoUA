@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +20,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <dbghelp.h>
+#include <psapi.h>
 #else
 #include <unistd.h>
 #endif
@@ -28,11 +30,13 @@ namespace CrashDiag
 namespace
 {
 
-constexpr size_t BREADCRUMB_COUNT = 2048;
+constexpr size_t BREADCRUMB_COUNT = 8192;
 constexpr size_t BREADCRUMB_TEXT_SIZE = 512;
 constexpr uint64_t WATCHDOG_POLL_MS = 100;
 constexpr uint64_t HANG_THRESHOLD_MS = 2500;
 constexpr uint64_t HANG_RECOVERED_MS = 500;
+constexpr uint64_t STATE_INTERVAL_MS = 1000;
+constexpr long JOURNAL_LIMIT_BYTES = 16 * 1024 * 1024;
 
 struct BreadcrumbSlot
 {
@@ -59,6 +63,8 @@ struct RuntimeState
     std::atomic<int> activeStatus{0};
     std::atomic<int> activeStatusFlags{0};
     std::atomic<int> activeEnergy{0};
+    std::atomic<int> activeVehicleId{0};
+    std::atomic<float> activeX{0}, activeY{0}, activeZ{0};
 };
 
 std::atomic<bool> g_enabled{false};
@@ -86,10 +92,40 @@ std::string g_sessionDirLogical;
 std::string g_sessionDirPhysical;
 std::string g_buildTag;
 std::terminate_handler g_previousTerminate = nullptr;
+uint64_t g_journalSequence = 0;
 
 #ifdef _WIN32
 LPTOP_LEVEL_EXCEPTION_FILTER g_previousExceptionFilter = nullptr;
 std::atomic<bool> g_crashReportStarted{false};
+std::atomic<const char *> g_fatalReason{"unhandled_exception"};
+void (*g_previousAbort)(int) = SIG_DFL;
+char g_reportPath[4096] = {};
+char g_dumpPath[4096] = {};
+char g_executablePath[4096] = {};
+LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS *exceptionInfo);
+
+void ReportFatal(const char *reason)
+{
+    g_fatalReason.store(reason);
+    CONTEXT context = {};
+    RtlCaptureContext(&context);
+    EXCEPTION_RECORD record = {};
+    record.ExceptionCode = 0xe0000001;
+    record.ExceptionFlags = EXCEPTION_NONCONTINUABLE;
+#if defined(_M_X64) || defined(__x86_64__)
+    record.ExceptionAddress = reinterpret_cast<void *>(context.Rip);
+#elif defined(_M_IX86) || defined(__i386__)
+    record.ExceptionAddress = reinterpret_cast<void *>(context.Eip);
+#endif
+    EXCEPTION_POINTERS info = {&record, &context};
+    UnhandledExceptionHandler(&info);
+    std::_Exit(EXIT_FAILURE);
+}
+
+void AbortHandler(int)
+{
+    ReportFatal("SIGABRT");
+}
 #endif
 
 uint64_t NowMs()
@@ -170,6 +206,21 @@ void WriteRuntimeState(FILE *file)
     std::fprintf(file, "active_status=%d\n", g_state.activeStatus.load());
     std::fprintf(file, "active_status_flags=0x%x\n", g_state.activeStatusFlags.load());
     std::fprintf(file, "active_energy=%d\n", g_state.activeEnergy.load());
+    std::fprintf(file, "active_vehicle_id=%d\n", g_state.activeVehicleId.load());
+    std::fprintf(file, "active_position=%.3f|%.3f|%.3f\n",
+                 g_state.activeX.load(), g_state.activeY.load(), g_state.activeZ.load());
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS_EX memory = {};
+    memory.cb = sizeof(memory);
+    if (GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&memory), sizeof(memory)))
+    {
+        std::fprintf(file, "working_set_bytes=%llu\n", static_cast<unsigned long long>(memory.WorkingSetSize));
+        std::fprintf(file, "private_bytes=%llu\n", static_cast<unsigned long long>(memory.PrivateUsage));
+    }
+    DWORD handles = 0;
+    if (GetProcessHandleCount(GetCurrentProcess(), &handles))
+        std::fprintf(file, "process_handles=%lu\n", static_cast<unsigned long>(handles));
+#endif
 }
 
 void WriteBreadcrumbs(FILE *file)
@@ -217,7 +268,8 @@ bool WriteSnapshotFile(const std::string &fileName,
                  static_cast<unsigned long long>(NowMs() - g_startMs));
     std::fprintf(file, "thread_id=%lu\n", CurrentThreadIdValue());
     WriteRuntimeState(file);
-    WriteBreadcrumbs(file);
+    if (!reportType || std::strcmp(reportType, "periodic") != 0)
+        WriteBreadcrumbs(file);
 
     std::fclose(file);
     return true;
@@ -234,7 +286,20 @@ void WriteSessionInfo()
     std::fprintf(file, "session=%s\n", g_sessionId.c_str());
     std::fprintf(file, "build=%s\n", g_buildTag.c_str());
     std::fprintf(file, "nucleus_ini=%s\n", uaDataFirstNucleusIniPath().c_str());
+    std::fprintf(file, "openneoua_ini=%s\n", uaDataFirstOpenNeoUAIniPath().c_str());
+    std::fprintf(file, "pointer_bits=%zu\n", sizeof(void *) * 8);
 #ifdef _WIN32
+    std::fprintf(file, "executable=%s\n", g_executablePath);
+    WIN32_FILE_ATTRIBUTE_DATA attributes = {};
+    if (GetFileAttributesExA(g_executablePath, GetFileExInfoStandard, &attributes))
+    {
+        std::fprintf(file, "executable_size=%llu\n",
+                     (static_cast<unsigned long long>(attributes.nFileSizeHigh) << 32) |
+                     attributes.nFileSizeLow);
+        std::fprintf(file, "executable_filetime=%llu\n",
+                     (static_cast<unsigned long long>(attributes.ftLastWriteTime.dwHighDateTime) << 32) |
+                     attributes.ftLastWriteTime.dwLowDateTime);
+    }
     std::fprintf(file, "platform=Windows\n");
     std::fprintf(file, "process_id=%lu\n", static_cast<unsigned long>(GetCurrentProcessId()));
 #else
@@ -244,6 +309,74 @@ void WriteSessionInfo()
     std::fprintf(file, "hang_threshold_ms=%llu\n",
                  static_cast<unsigned long long>(HANG_THRESHOLD_MS));
     std::fprintf(file, "breadcrumb_capacity=%zu\n", BREADCRUMB_COUNT);
+    std::fclose(file);
+
+    // Keep the exact local settings even if they are changed before analysis.
+    for (const auto &config : {std::make_pair(uaDataFirstNucleusIniPath(), "Nucleus.ini"),
+                               std::make_pair(uaDataFirstOpenNeoUAIniPath(), "OpenNeoUA.ini")})
+    {
+        FILE *source = std::fopen(config.first.c_str(), "rb");
+        if (!source)
+            continue;
+        FILE *copy = std::fopen(JoinPath(g_sessionDirPhysical, config.second).c_str(), "wb");
+        if (copy)
+        {
+            char buffer[4096];
+            size_t size = 0;
+            while ((size = std::fread(buffer, 1, sizeof(buffer), source)) != 0)
+                std::fwrite(buffer, 1, size, copy);
+            std::fclose(copy);
+        }
+        std::fclose(source);
+    }
+}
+
+void FlushJournal()
+{
+    std::lock_guard<std::mutex> fileLock(g_fileMutex);
+    const std::string path = JoinPath(g_sessionDirPhysical, "Events.log");
+    const std::string previous = JoinPath(g_sessionDirPhysical, "Events.previous.log");
+    FILE *file = std::fopen(path.c_str(), "ab");
+    if (!file)
+        return;
+    const uint64_t newest = g_sequence.load(std::memory_order_acquire);
+    std::array<BreadcrumbSlot, 64> batch;
+    while (g_journalSequence < newest)
+    {
+        size_t count = 0;
+        uint64_t dropped = 0;
+        {
+            std::lock_guard<std::mutex> lock(g_ringMutex);
+            const uint64_t current = g_sequence.load();
+            const uint64_t oldest = current > BREADCRUMB_COUNT ? current - BREADCRUMB_COUNT + 1 : 1;
+            if (g_journalSequence + 1 < oldest)
+            {
+                dropped = oldest - g_journalSequence - 1;
+                g_journalSequence = oldest - 1;
+            }
+            while (g_journalSequence < newest && count < batch.size())
+            {
+                const uint64_t sequence = ++g_journalSequence;
+                batch[count++] = g_breadcrumbs[(sequence - 1) % BREADCRUMB_COUNT];
+            }
+        }
+        if (dropped)
+            std::fprintf(file, "[DIAG] journal_overrun dropped=%llu\n",
+                         static_cast<unsigned long long>(dropped));
+        for (size_t i = 0; i < count; ++i)
+        {
+            if (std::ftell(file) >= JOURNAL_LIMIT_BYTES)
+            {
+                std::fclose(file);
+                std::remove(previous.c_str());
+                std::rename(path.c_str(), previous.c_str());
+                file = std::fopen(path.c_str(), "ab");
+                if (!file)
+                    return;
+            }
+            std::fprintf(file, "%s\n", batch[i].text);
+        }
+    }
     std::fclose(file);
 }
 
@@ -267,8 +400,16 @@ void ConsumeCheckpoint()
 
 void WatchdogLoop()
 {
+    uint64_t lastState = 0;
     while ( g_running.load(std::memory_order_acquire) )
     {
+        FlushJournal();
+        const uint64_t stateTime = NowMs();
+        if (stateTime - lastState >= STATE_INTERVAL_MS)
+        {
+            WriteSnapshotFile("LatestState.txt", "periodic", "last observed runtime state");
+            lastState = stateTime;
+        }
         ConsumeCheckpoint();
 
         if ( g_watchdogArmed.load(std::memory_order_acquire) &&
@@ -301,10 +442,14 @@ void WatchdogLoop()
     }
 
     ConsumeCheckpoint();
+    FlushJournal();
 }
 
 void TerminateHandler()
 {
+#ifdef _WIN32
+    ReportFatal("std::terminate");
+#else
     Breadcrumb("CRASH", "std::terminate invoked");
     WriteSnapshotFile("TerminateReport.txt", "terminate", "std::terminate");
 
@@ -312,6 +457,7 @@ void TerminateHandler()
         g_previousTerminate();
 
     std::abort();
+#endif
 }
 
 #ifdef _WIN32
@@ -335,13 +481,11 @@ void WriteHandleFormat(HANDLE file, const char *format, ...)
     WriteHandleText(file, buffer);
 }
 
-void WriteExceptionStackTrace(HANDLE file, CONTEXT *context)
+void WriteExceptionStackTrace(HANDLE file, CONTEXT *context, HANDLE process, HANDLE thread)
 {
     if ( file == INVALID_HANDLE_VALUE || !context )
         return;
 
-    HANDLE process = GetCurrentProcess();
-    HANDLE thread = GetCurrentThread();
     CONTEXT localContext = *context;
     STACKFRAME64 frame = {};
     DWORD machineType = 0;
@@ -367,7 +511,8 @@ void WriteExceptionStackTrace(HANDLE file, CONTEXT *context)
     return;
 #endif
 
-    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS |
+                   SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_NO_PROMPTS);
     if ( !SymInitialize(process, nullptr, TRUE) )
     {
         WriteHandleFormat(file, "\r\n[SymInitialize failed error=%lu]\r\n",
@@ -463,8 +608,7 @@ LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS *exceptionInfo)
     if ( g_crashReportStarted.exchange(true) )
         return EXCEPTION_EXECUTE_HANDLER;
 
-    const std::string reportPath = JoinPath(g_sessionDirPhysical, "CrashReport.txt");
-    HANDLE report = CreateFileA(reportPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+    HANDLE report = CreateFileA(g_reportPath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                 nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
 
     if ( report != INVALID_HANDLE_VALUE )
@@ -490,6 +634,7 @@ LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS *exceptionInfo)
 
         WriteHandleText(report, "OpenNeoUA Diagnostics\r\n");
         WriteHandleText(report, "report_type=unhandled_exception\r\n");
+        WriteHandleFormat(report, "fatal_reason=%s\r\n", g_fatalReason.load());
         WriteHandleFormat(report, "session=%s\r\n", g_sessionId.c_str());
         WriteHandleFormat(report, "build=%s\r\n", g_buildTag.c_str());
         WriteHandleFormat(report, "thread_id=%lu\r\n", static_cast<unsigned long>(GetCurrentThreadId()));
@@ -541,6 +686,9 @@ LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS *exceptionInfo)
         WriteHandleFormat(report, "active_status=%d\r\n", g_state.activeStatus.load());
         WriteHandleFormat(report, "active_status_flags=0x%x\r\n", g_state.activeStatusFlags.load());
         WriteHandleFormat(report, "active_energy=%d\r\n", g_state.activeEnergy.load());
+        WriteHandleFormat(report, "active_vehicle_id=%d\r\n", g_state.activeVehicleId.load());
+        WriteHandleFormat(report, "active_position=%.3f|%.3f|%.3f\r\n",
+                          g_state.activeX.load(), g_state.activeY.load(), g_state.activeZ.load());
 
 #if defined(_M_X64) || defined(__x86_64__)
         if ( context )
@@ -575,31 +723,47 @@ LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS *exceptionInfo)
         }
 #endif
 
-        WriteExceptionStackTrace(report, exceptionInfo ? exceptionInfo->ContextRecord : nullptr);
         WriteEmergencyBreadcrumbs(report);
-        CloseHandle(report);
+        FlushFileBuffers(report);
     }
 
-    const std::string dumpPath = JoinPath(g_sessionDirPhysical, "CrashDump.dmp");
-    HANDLE dump = CreateFileA(dumpPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
-                              nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if ( dump != INVALID_HANDLE_VALUE )
+    // DbgHelp runs outside the damaged process. The parent stays alive so the
+    // writer can read its exception context and memory, with a bounded wait.
+    char command[sizeof(g_executablePath) + sizeof(g_dumpPath) + sizeof(g_reportPath) + 128];
+    std::snprintf(command, sizeof(command), "\"%s\" --openneoua-crash-dump %lu %lu %llx \"%s\" \"%s\"",
+                  g_executablePath, static_cast<unsigned long>(GetCurrentProcessId()),
+                  static_cast<unsigned long>(GetCurrentThreadId()),
+                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(exceptionInfo)),
+                  g_dumpPath, g_reportPath);
+    STARTUPINFOA startup = {};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION writer = {};
+    if (CreateProcessA(g_executablePath, command, nullptr, nullptr, FALSE,
+                       CREATE_NO_WINDOW, nullptr, nullptr, &startup, &writer))
     {
-        MINIDUMP_EXCEPTION_INFORMATION exceptionData = {};
-        exceptionData.ThreadId = GetCurrentThreadId();
-        exceptionData.ExceptionPointers = exceptionInfo;
-        exceptionData.ClientPointers = FALSE;
+        const DWORD wait = WaitForSingleObject(writer.hProcess, 15000);
+        DWORD exitCode = 0;
+        if (wait == WAIT_OBJECT_0 && GetExitCodeProcess(writer.hProcess, &exitCode))
+        {
+            SetFilePointer(report, 0, nullptr, FILE_END);
+            WriteHandleFormat(report, "\r\ndump_writer_exit=%lu\r\n", static_cast<unsigned long>(exitCode));
+        }
+        else
+        {
+            TerminateProcess(writer.hProcess, ERROR_TIMEOUT);
+            SetFilePointer(report, 0, nullptr, FILE_END);
+            WriteHandleFormat(report, "\r\ndump_writer_wait=%lu\r\n", static_cast<unsigned long>(wait));
+        }
+        CloseHandle(writer.hThread);
+        CloseHandle(writer.hProcess);
+    }
+    else
+        WriteHandleFormat(report, "\r\ndump_writer_start_error=%lu\r\n", static_cast<unsigned long>(GetLastError()));
 
-        const MINIDUMP_TYPE dumpType = static_cast<MINIDUMP_TYPE>(
-            MiniDumpWithDataSegs |
-            MiniDumpWithHandleData |
-            MiniDumpWithUnloadedModules |
-            MiniDumpWithThreadInfo);
-
-        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), dump,
-                          dumpType, exceptionInfo ? &exceptionData : nullptr,
-                          nullptr, nullptr);
-        CloseHandle(dump);
+    if (report != INVALID_HANDLE_VALUE)
+    {
+        FlushFileBuffers(report);
+        CloseHandle(report);
     }
 
     return EXCEPTION_EXECUTE_HANDLER;
@@ -607,6 +771,70 @@ LONG WINAPI UnhandledExceptionHandler(EXCEPTION_POINTERS *exceptionInfo)
 #endif
 
 } // namespace
+
+int RunDumpWriter(int argc, char **argv)
+{
+    if (argc < 2 || std::strcmp(argv[1], "--openneoua-crash-dump") != 0)
+        return -1;
+#ifdef _WIN32
+    if (argc != 7)
+        return ERROR_INVALID_PARAMETER;
+    char *end = nullptr;
+    const unsigned long pid = std::strtoul(argv[2], &end, 10);
+    if (!pid || !end || *end)
+        return ERROR_INVALID_PARAMETER;
+    const unsigned long tid = std::strtoul(argv[3], &end, 10);
+    if (!tid || !end || *end)
+        return ERROR_INVALID_PARAMETER;
+    const uintptr_t pointer = static_cast<uintptr_t>(std::strtoull(argv[4], &end, 16));
+    if (!pointer || !end || *end)
+        return ERROR_INVALID_PARAMETER;
+    HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_DUP_HANDLE,
+                                  FALSE, pid);
+    if (!process)
+        return static_cast<int>(GetLastError());
+    HANDLE dump = CreateFileA(argv[5], GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (dump == INVALID_HANDLE_VALUE)
+    {
+        const DWORD error = GetLastError();
+        CloseHandle(process);
+        return static_cast<int>(error);
+    }
+    MINIDUMP_EXCEPTION_INFORMATION exception = {};
+    exception.ThreadId = tid;
+    exception.ExceptionPointers = reinterpret_cast<EXCEPTION_POINTERS *>(pointer);
+    exception.ClientPointers = TRUE;
+    const MINIDUMP_TYPE type = static_cast<MINIDUMP_TYPE>(MiniDumpWithDataSegs |
+        MiniDumpWithHandleData | MiniDumpWithUnloadedModules | MiniDumpWithThreadInfo |
+        MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithFullMemoryInfo);
+    const BOOL ok = MiniDumpWriteDump(process, pid, dump, type, &exception, nullptr, nullptr);
+    const DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+    CloseHandle(dump);
+
+    // Symbol lookup can allocate and acquire loader locks, so it belongs in
+    // this writer too. Read the original faulting thread, not the writer's stack.
+    EXCEPTION_POINTERS remote = {};
+    CONTEXT context = {};
+    if (ReadProcessMemory(process, reinterpret_cast<void *>(pointer), &remote, sizeof(remote), nullptr) &&
+        ReadProcessMemory(process, remote.ContextRecord, &context, sizeof(context), nullptr))
+    {
+        HANDLE thread = OpenThread(THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, tid);
+        HANDLE report = CreateFileA(argv[6], FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (thread && report != INVALID_HANDLE_VALUE)
+            WriteExceptionStackTrace(report, &context, process, thread);
+        if (report != INVALID_HANDLE_VALUE)
+            CloseHandle(report);
+        if (thread)
+            CloseHandle(thread);
+    }
+    CloseHandle(process);
+    return static_cast<int>(error);
+#else
+    return 1;
+#endif
+}
 
 void Init(bool enabled, const std::string &buildTag)
 {
@@ -630,6 +858,17 @@ void Init(bool enabled, const std::string &buildTag)
     }
 
     g_sessionDirPhysical = uaDataFirstResolvedWritePath(g_sessionDirLogical);
+#ifdef _WIN32
+    GetModuleFileNameA(nullptr, g_executablePath, sizeof(g_executablePath));
+    GetFullPathNameA(JoinPath(g_sessionDirPhysical, "CrashReport.txt").c_str(),
+                     sizeof(g_reportPath), g_reportPath, nullptr);
+    GetFullPathNameA(JoinPath(g_sessionDirPhysical, "CrashDump.dmp").c_str(),
+                     sizeof(g_dumpPath), g_dumpPath, nullptr);
+    ULONG stackReserve = 64 * 1024;
+    SetThreadStackGuarantee(&stackReserve);
+    g_crashReportStarted.store(false);
+    g_fatalReason.store("unhandled_exception");
+#endif
     g_startMs = NowMs();
     g_lastHeartbeatMs.store(g_startMs);
     g_phase.store("Startup");
@@ -639,6 +878,7 @@ void Init(bool enabled, const std::string &buildTag)
     g_previousTerminate = std::set_terminate(&TerminateHandler);
 #ifdef _WIN32
     g_previousExceptionFilter = SetUnhandledExceptionFilter(&UnhandledExceptionHandler);
+    g_previousAbort = std::signal(SIGABRT, &AbortHandler);
 #endif
 
     g_running.store(true);
@@ -657,10 +897,12 @@ void Shutdown()
         g_watchdogThread.join();
 
     Breadcrumb("DIAG", "diagnostics shutdown");
+    FlushJournal();
     WriteSnapshotFile("SessionEnd.txt", "shutdown", "normal shutdown");
 
 #ifdef _WIN32
     SetUnhandledExceptionFilter(g_previousExceptionFilter);
+    std::signal(SIGABRT, g_previousAbort);
 #endif
     if ( g_previousTerminate )
         std::set_terminate(g_previousTerminate);
@@ -734,7 +976,7 @@ void SetActiveBact(const void *ptr,
                    int owner,
                    int status,
                    int statusFlags,
-                   int energy)
+                   int energy, int vehicleId, float x, float y, float z)
 {
     if ( !g_enabled.load(std::memory_order_relaxed) )
         return;
@@ -746,6 +988,10 @@ void SetActiveBact(const void *ptr,
     g_state.activeStatus.store(status);
     g_state.activeStatusFlags.store(statusFlags);
     g_state.activeEnergy.store(energy);
+    g_state.activeVehicleId.store(vehicleId);
+    g_state.activeX.store(x);
+    g_state.activeY.store(y);
+    g_state.activeZ.store(z);
 }
 
 void ClearActiveBact()
@@ -760,6 +1006,10 @@ void ClearActiveBact()
     g_state.activeStatus.store(0);
     g_state.activeStatusFlags.store(0);
     g_state.activeEnergy.store(0);
+    g_state.activeVehicleId.store(0);
+    g_state.activeX.store(0);
+    g_state.activeY.store(0);
+    g_state.activeZ.store(0);
 }
 
 ScopedActiveBact::ScopedActiveBact(const void *ptr,
@@ -768,7 +1018,7 @@ ScopedActiveBact::ScopedActiveBact(const void *ptr,
                                        int owner,
                                        int status,
                                        int statusFlags,
-                                       int energy)
+                                       int energy, int vehicleId, float x, float y, float z)
 {
     if ( !g_enabled.load(std::memory_order_relaxed) )
         return;
@@ -781,8 +1031,12 @@ ScopedActiveBact::ScopedActiveBact(const void *ptr,
     _previousStatus = g_state.activeStatus.load(std::memory_order_relaxed);
     _previousStatusFlags = g_state.activeStatusFlags.load(std::memory_order_relaxed);
     _previousEnergy = g_state.activeEnergy.load(std::memory_order_relaxed);
+    _previousVehicleId = g_state.activeVehicleId.load(std::memory_order_relaxed);
+    _previousX = g_state.activeX.load(std::memory_order_relaxed);
+    _previousY = g_state.activeY.load(std::memory_order_relaxed);
+    _previousZ = g_state.activeZ.load(std::memory_order_relaxed);
 
-    SetActiveBact(ptr, gid, type, owner, status, statusFlags, energy);
+    SetActiveBact(ptr, gid, type, owner, status, statusFlags, energy, vehicleId, x, y, z);
 }
 
 ScopedActiveBact::~ScopedActiveBact()
@@ -797,19 +1051,32 @@ ScopedActiveBact::~ScopedActiveBact()
     g_state.activeStatus.store(_previousStatus, std::memory_order_relaxed);
     g_state.activeStatusFlags.store(_previousStatusFlags, std::memory_order_relaxed);
     g_state.activeEnergy.store(_previousEnergy, std::memory_order_relaxed);
+    g_state.activeVehicleId.store(_previousVehicleId, std::memory_order_relaxed);
+    g_state.activeX.store(_previousX, std::memory_order_relaxed);
+    g_state.activeY.store(_previousY, std::memory_order_relaxed);
+    g_state.activeZ.store(_previousZ, std::memory_order_relaxed);
 }
 
 void Breadcrumb(const char *category, const char *format, ...)
 {
-    if ( !g_enabled.load(std::memory_order_relaxed) )
-        return;
-
-    char detail[352];
     va_list args;
     va_start(args, format);
-    std::vsnprintf(detail, sizeof(detail), format ? format : "", args);
+    LogMessage(category, format, args);
     va_end(args);
+}
+
+void LogMessage(const char *category, const char *format, va_list args)
+{
+    if ( !g_enabled.load(std::memory_order_relaxed) )
+        return;
+    char detail[352];
+    const int length = std::vsnprintf(detail, sizeof(detail), format ? format : "", args);
     detail[sizeof(detail) - 1] = '\0';
+    if (length < 0 || static_cast<size_t>(length) >= sizeof(detail))
+    {
+        static const char truncated[] = " [truncated]";
+        std::memcpy(detail + sizeof(detail) - sizeof(truncated), truncated, sizeof(truncated));
+    }
 
     const uint64_t elapsed = NowMs() - g_startMs;
 

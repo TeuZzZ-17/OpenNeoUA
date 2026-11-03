@@ -66,7 +66,7 @@ int main()
               mgunVehicle.mgun_shot_time == 100,
               "live MGUN shot energy and shot time");
 
-        // Every shipped Ground Decal block carries the smoke_* keys of the script.
+        // The conventional explosion profile retains its authored smoke settings.
         int decals = 0;
         int smoking = 0;
         const World::TGroundDecalSmoke *sample = nullptr;
@@ -85,11 +85,30 @@ int main()
             }
         };
         for (const auto &proto : world.GetWeaponsProtos())
-            scan(proto.chain_fx);
+            if (proto.ground_decal_id == 1) scan(proto.chain_fx);
         for (const auto &proto : world.GetVhclProtos())
-            scan(proto.chain_fx);
+            if (proto.ground_decal_id == 1) scan(proto.chain_fx);
         Check(decals > 0 && decals == smoking, "live Ground Decals (ground_decal_id = 1) all have smoke");
         const auto isDecal = [](const World::TChainFXConfig &fx) { return fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL; };
+        const auto electric = world._decalProfiles.find(2);
+        Check(electric != world._decalProfiles.end() &&
+              electric->second.fx.ground_decal_texture == "Interface/GroundDecals/Mykonian_Electric_02.png" &&
+              electric->second.fx.ground_decal_smoke.enabled,
+              "live electric profile has its revised texture and smoke");
+        for (int id : {17,18,58,63,64,65,66,67,68,69,70,76,97,113,145,150})
+        {
+            const auto &proto = world.GetVhclProtos()[id];
+            const auto fx = std::find_if(proto.chain_fx.begin(), proto.chain_fx.end(), isDecal);
+            Check(proto.ground_decal_id == 2 && fx != proto.chain_fx.end() &&
+                  fx->ground_decal_smoke.enabled, "live Mykonian wreck uses smoking electric decal");
+        }
+        for (int id : {41,62,63,64,65,66,68,69,70,80,82,97,117,122,125})
+        {
+            const auto &proto = world.GetWeaponsProtos()[id];
+            const auto fx = std::find_if(proto.chain_fx.begin(), proto.chain_fx.end(), isDecal);
+            Check(proto.ground_decal_id == 2 && fx != proto.chain_fx.end() &&
+                  fx->ground_decal_smoke.enabled, "live Mykonian impact uses smoking electric decal");
+        }
         const auto &decalVehicle = world.GetVhclProtos()[1];
         const auto &decalWeapon = world.GetWeaponsProtos()[3];
         Check(decalVehicle.ground_decal_id == 1 &&

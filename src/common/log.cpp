@@ -4,6 +4,7 @@
 #include "common/log.h"
 #include "system/fsmgr.h"
 #include "common/utils.h"
+#include "common/crashdiag.h"
 
 void ypa_log__ypa_general_log()
 {
@@ -19,6 +20,9 @@ void ypa_log__ypa_general_log()
 void ypa_log_out(const char *format, ...)
 {
     va_list va;
+    va_start(va, format);
+    CrashDiag::LogMessage("GAME_LOG", format, va);
+    va_end(va);
     va_start(va, format);
     FSMgr::FileHandle *f = FSMgr::iDir::openFileAlloc(uaDataFirstResolvedWritePath("env/ypa_log.txt"), "a");
     if ( f )
@@ -43,6 +47,9 @@ void log_d3dlog(const char *format, ...)
 {
     va_list va;
     va_start(va, format);
+    CrashDiag::LogMessage("GRAPHICS_LOG", format, va);
+    va_end(va);
+    va_start(va, format);
     FSMgr::FileHandle *f = FSMgr::iDir::openFileAlloc(uaDataFirstResolvedWritePath("env/d3dlog.txt"), "a");
     if ( f )
     {
@@ -66,6 +73,9 @@ void init_dinputlog()
 void log_netlog(const char *format, ...)
 {
     va_list va;
+    va_start(va, format);
+    CrashDiag::LogMessage("NETWORK_LOG", format, va);
+    va_end(va);
     va_start(va, format);
     FSMgr::FileHandle *f = FSMgr::iDir::openFileAlloc(uaDataFirstResolvedWritePath("env/ypa_log.txt"), "a");
     if ( f )
@@ -494,6 +504,9 @@ void log_d3d_fail(const char *title, const char *msg, unsigned int errID)
 void log_dinputlog(const char *format, ...)
 {
     va_list va;
+    va_start(va, format);
+    CrashDiag::LogMessage("INPUT_LOG", format, va);
+    va_end(va);
     va_start(va, format);
     FSMgr::FileHandle *f = FSMgr::iDir::openFileAlloc("env/dinplog.txt", "a");
     if ( f )

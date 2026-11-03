@@ -867,6 +867,8 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
 
 size_t NC_STACK_ypabact::Deinit()
 {
+    CrashDiag::Breadcrumb("UNIT_DELETE", "gid=%d vehicle=%d owner=%d status=%d flags=0x%x",
+                           _gid, _vehicleID, _owner, _status, _status_flg);
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _deinitInProgress = true;
     SFXEngine::SFXe.StopCarrier(&_soundcarrier);
@@ -1463,7 +1465,8 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         _status = BACT_STATUS_DEAD;
 
     CrashDiag::ScopedActiveBact diagnosticBact(this, _gid, _bact_type, _owner,
-                                                _status, _status_flg, _energy);
+                                                _status, _status_flg, _energy, _vehicleID,
+                                                _position.x, _position.y, _position.z);
 
     static TF::TForm3D bact_cam;
     TF::Engine.SetViewPoint(&bact_cam);
