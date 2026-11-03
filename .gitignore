@@ -63,6 +63,7 @@
 !/Env/
 /Env/*
 !/Env/Diagnostics/
+/Env/Diagnostics/*
 !/Env/menu_font.txt
 !/Env/visual_filter.txt
 !/Env/visual_filter_strength.txt

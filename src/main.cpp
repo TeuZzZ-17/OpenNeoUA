@@ -705,11 +705,6 @@ bool InitGame()
     if ( !InitEngines() )
         return false;
 
-    std::vector<std::string> &cmdl = System::GetCmdLineArray();
-    int32_t i = System::FindCmdLineArg("-env");
-    if ( i >= 0 && i + 1 < (int32_t)cmdl.size() )
-        Common::Env.SetPrefix("env", cmdl[i + 1]);
-
     if ( InitWorld() )
         return true;
 
@@ -743,6 +738,10 @@ void ShutdownWorld()
 
 int main(int argc, char *argv[])
 {
+    const int dumpWriter = CrashDiag::RunDumpWriter(argc, argv);
+    if (dumpWriter >= 0)
+        return dumpWriter;
+
     for ( int i = 0; i < argc; ++i )
         System::AddCmdLine( std::string(argv[i]) );
 
@@ -762,19 +761,31 @@ int main(int argc, char *argv[])
     }
 
     System::IniConf::ReadFromNucleusIni();
+    const std::vector<std::string> &cmdl = System::GetCmdLineArray();
+    const int32_t envArgument = System::FindCmdLineArg("-env");
+    if (envArgument >= 0 && envArgument + 1 < static_cast<int32_t>(cmdl.size()))
+        Common::Env.SetPrefix("env", cmdl[envArgument + 1]);
+    CrashDiag::Init(System::IniConf::GameCrashDiagnostics.Get<bool>(),
+                    std::string("OpenNeoUA ") + __DATE__ + " " + __TIME__);
+    CrashDiag::SetPhase("SystemInit");
     System::Init(!System::IniConf::GfxVBO.Get<bool>());
 
+    CrashDiag::SetPhase("GraphicsInit");
     GFX::Engine.Init();
+    CrashDiag::SetPhase("MovieInit");
     System::Movie.Init();
     Gui::UA::Init();
 
+    CrashDiag::SetPhase("GameInit");
     if ( !InitGame() )
+    {
+        CrashDiag::Breadcrumb("STARTUP", "game initialization failed");
+        CrashDiag::Shutdown();
         return 0;
+    }
 
     System::IniConf::ReadFromNucleusIni();
 
-    CrashDiag::Init(System::IniConf::GameCrashDiagnostics.Get<bool>(),
-                    std::string("OpenNeoUA ") + __DATE__ + " " + __TIME__);
     CrashDiag::Breadcrumb("STARTUP", "runtime initialized");
 
     // Cache global runtime configuration after Nucleus.ini is parsed.
@@ -795,8 +806,8 @@ int main(int argc, char *argv[])
     ShutdownWorld();
     Gui::UA::Deinit();
 
-    CrashDiag::Shutdown();
     System::Deinit();
+    CrashDiag::Shutdown();
 
     return 0;
 }

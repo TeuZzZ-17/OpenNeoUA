@@ -865,6 +865,11 @@ int NC_STACK_ypaworld::GetVehicleProductionLimitRemaining(int owner, int vehicle
     if ( !_userRobo || owner != _userRobo->_owner )
         return -1;
 
+    // Shift+F11 also removes the player's production cap during stress tests.
+    // Keep the authored/GEM limit intact so disabling the cheat restores it.
+    if (IsDebugHostStationCheatEnabled())
+        return -1;
+
     const int effectiveMax = _vhclProtos[vehicleId].max_active_at_once;
     if ( effectiveMax <= 0 )
         return -1;

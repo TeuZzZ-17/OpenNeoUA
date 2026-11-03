@@ -2,16 +2,20 @@
 #define OPENUA_CRASHDIAG_H_INCLUDED
 
 #include <cstdint>
+#include <cstdarg>
 #include <string>
 
 namespace CrashDiag
 {
 
 // Permanent OpenNeoUA diagnostics. The service is inert until
-// game.crash_diagnostics is enabled in Nucleus.ini.
+// game.crash_diagnostics is enabled in OpenNeoUA.ini.
 void Init(bool enabled, const std::string &buildTag);
 void Shutdown();
 void DisarmWatchdog();
+
+// Internal Windows dump-writer mode. Returns -1 for a normal game launch.
+int RunDumpWriter(int argc, char **argv);
 
 // Phase names must be static string literals. They are read by the watchdog
 // and the unhandled-exception handler without allocating memory.
@@ -32,7 +36,8 @@ void SetActiveBact(const void *ptr,
                    int owner,
                    int status,
                    int statusFlags,
-                   int energy);
+                   int energy,
+                   int vehicleId = 0, float x = 0, float y = 0, float z = 0);
 void ClearActiveBact();
 
 // Tracks the deepest BACT currently executing while preserving any parent
@@ -46,7 +51,8 @@ public:
                      int owner,
                      int status,
                      int statusFlags,
-                     int energy);
+                     int energy,
+                     int vehicleId = 0, float x = 0, float y = 0, float z = 0);
     ~ScopedActiveBact();
 
     ScopedActiveBact(const ScopedActiveBact &) = delete;
@@ -61,9 +67,12 @@ private:
     int _previousStatus = 0;
     int _previousStatusFlags = 0;
     int _previousEnergy = 0;
+    int _previousVehicleId = 0;
+    float _previousX = 0, _previousY = 0, _previousZ = 0;
 };
 
 void Breadcrumb(const char *category, const char *format, ...);
+void LogMessage(const char *category, const char *format, va_list args);
 
 // Requests a snapshot from the background diagnostic worker. This avoids
 // synchronous disk I/O in sensitive gameplay paths such as Host Station death.
