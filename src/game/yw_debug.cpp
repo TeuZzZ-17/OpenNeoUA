@@ -1272,6 +1272,43 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
                     line(box.top + box.right*box.minX + box.forward*box.deadZone,
                          box.top + box.right*box.maxX + box.forward*box.deadZone);
                 }
+
+                // Lime = cluster_ai_group_radius, the smart cluster group ring (horizontal section
+                // of the real 3D distance test, like the other gameplay radii). It is centred on
+                // the enemy that leads the group (the same unit the AI rule uses): the current
+                // target when it is inside the fire volume, else the nearest enemy inside it.
+                const World::TWeapProto &clusterProto = _weaponProtos[weaponId];
+                if ( clusterProto.cluster.IsActive() && clusterProto.cluster.ai_group_radius > 0.0f )
+                {
+                    NC_STACK_ypabact *target = nullptr;
+                    if ( unit->_secndTtype == BACT_TGT_TYPE_UNIT ) target = unit->_secndT.pbact;
+                    else if ( unit->_primTtype == BACT_TGT_TYPE_UNIT ) target = unit->_primT.pbact;
+
+                    NC_STACK_ypabact *lead =
+                        target && ypabact_FireTriggerAreaContains(box, target->_position, target->GetCollisionBroadRadius())
+                            ? target
+                            : ypabact_FindFireTriggerAreaEnemy(unit, box, &clusterProto);
+                    if ( lead )
+                    {
+                        const float groupRadius = clusterProto.cluster.ai_group_radius;
+                        drawFlatRing(lead->_position, groupRadius, 160, 255, 60);
+
+                        // The line ties the group sphere to the muzzle of the fire volume.
+                        const vec3d a = box.top, c = lead->_position;
+                        Common::Line clipped;
+                        if ( yw_ProjectDebugSegment(view->CalcSclRot.Transform(a-view->CalcPos),
+                                                    view->CalcSclRot.Transform(c-view->CalcPos),
+                                                    Proj, nearZ, screenW, screenH, &clipped) )
+                            GFX::GFXEngine::DrawLine(scr, clipped, 160, 255, 60);
+
+                        if ( (lead->_position - camPos).length() <= LABEL_MAX_DIST )
+                        {
+                            char buf[64];
+                            snprintf(buf, sizeof(buf), "group radius=%.0f", groupRadius);
+                            drawLabel(lead->_position + vec3d::OY(groupRadius + 15.0f), buf, 160, 255, 60);
+                        }
+                    }
+                }
             }
         }
     }

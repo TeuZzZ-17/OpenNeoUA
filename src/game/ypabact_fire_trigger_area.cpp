@@ -188,12 +188,11 @@ bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFi
             }
             if ( aimPos )
             {
-                // ai_fire_trigger_forward_max_inclination of the weapon limits how
-                // far its forward volume tilts toward the target. Absent, aircraft
-                // keep the volume on the hull axes and ground units follow only
-                // their native scope limits.
-                // With it, a ground target (sector or ground unit) ahead of an
-                // aircraft tilts the volume toward it up to that limit.
+                // Ground units follow the target within their native scope limits;
+                // the weapon's ai_fire_trigger_forward_max_inclination does not apply.
+                // Aircraft keep the volume on the hull axes. Only with that key does a
+                // ground target (sector or ground unit) ahead of them tilt the volume
+                // downward toward it, up to the limit. They never tilt upward.
                 const double maxTilt = wproto.GetAIFireTriggerMaxInclination() * C_PI / 180.0;
                 const bool aerialGroundAim = aerial && groundTarget && maxTilt > 0.0;
                 const vec3d local = _rotation.Transform(*aimPos - out->top);
@@ -206,8 +205,8 @@ bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFi
                         GetPrimaryWeaponElevationLimits(&minPitch, &maxPitch);
                         pitch = std::max(minPitch, std::min(pitch, maxPitch));
                     }
-                    if ( maxTilt > 0.0 )
-                        pitch = std::max(-maxTilt, std::min(pitch, maxTilt));
+                    else
+                        pitch = std::max(-maxTilt, std::min(pitch, 0.0));
                     out->up = _rotation.AxisY()*cos(pitch) + _rotation.AxisZ()*sin(pitch);
                     out->forward = _rotation.AxisZ()*cos(pitch) - _rotation.AxisY()*sin(pitch);
                 }
