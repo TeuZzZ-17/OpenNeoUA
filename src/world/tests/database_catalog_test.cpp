@@ -1,4 +1,5 @@
 #include "game/yw.h"
+#include "game/yw_game_ui_internal.h"
 #include "world/database_catalog.h"
 #include "../parsers.h"
 #include <algorithm>
@@ -185,10 +186,36 @@ void TestDisplayEnergy() {
     weapon.blast_energy = 300; weapon.blast_radius = std::nanf("");
     Check(weapon.GetDisplayEnergy() == 100, "invalid blast_radius is not shown");
 }
+void TestClusterDisplayEnergy() {
+    WorldProbe w;
+    auto &vehicle = w._vhclProtos[1];
+    vehicle.Index = 1; vehicle.type_icon = 'A'; vehicle.type_icon_defined = true; vehicle.weapon = 1; vehicle.num_weapons = 1;
+    auto &parent = w._weaponProtos[1];
+    parent.energy = 20000; parent.blast_energy = 30000; parent.blast_radius = 150;
+    parent.cluster.enable = true; parent.cluster.count = 20; parent.cluster.count_max = 30; parent.cluster.weapon_id = 2;
+    auto &child = w._weaponProtos[2];
+    child.energy = 15000; child.blast_energy = 5000; child.blast_radius = 85;
+    Check(yw_BuildInfoWeaponDamageText(nullptr, &vehicle, &parent,
+                                       parent.GetDisplayEnergy(&w._weaponProtos)) == "150x20-30",
+          "HUD shows child damage and cluster count");
+    World::Database::Catalog catalog; catalog.Build(w);
+    Check(Rating(catalog.Describe(w, 0, 1), World::Database::Metric::Attack)->value == 15000,
+          "cluster displays child damage instead of parent blast damage");
+    child.blast_energy = 18000;
+    Check(Rating(catalog.Describe(w, 0, 1), World::Database::Metric::Attack)->value == 18000,
+          "cluster display uses the higher active child blast damage");
+    parent.cluster.weapon_id = 99;
+    Check(Rating(catalog.Describe(w, 0, 1), World::Database::Metric::Attack)->value == 30000,
+          "invalid cluster weapon falls back to parent damage");
+    parent.cluster.weapon_id = 2; parent.cluster.enable = false;
+    Check(Rating(catalog.Describe(w, 0, 1), World::Database::Metric::Attack)->value == 30000,
+          "inactive cluster keeps parent damage");
+}
 }
 
 int main() {
     TestDisplayEnergy();
+    TestClusterDisplayEnergy();
     TestLifeTimeNtRange();
     TestAuthoredParserFields();
     TestCatalogEligibilityAndRatings();

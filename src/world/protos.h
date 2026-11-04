@@ -257,15 +257,28 @@ struct DestFX
     static uint8_t ParseTypeName(const std::string &in);
 };
 
-// OpenNeoUA: smoke rising from a ground decal, authored with the smoke_* keys of a
-// begin_fx ground_decal block. Sizes, speeds and spreads are percentages of the decal
-// radius. Disabled unless the block says smoke = 1; the defaults give a dense plume.
+// Effect settings of a new_decal profile. Sizes, speeds and spreads are percentages
+// of the decal radius. effect_mode is mandatory: without a valid mode nothing is emitted.
 struct TGroundDecalSmoke
 {
+    // GROUND_PULSE: short intermittent flashes around the decal (3DS, BASE or VP).
+    // RISE: camera-facing puffs of the 3DS that climb away from the decal.
+    enum Mode { MODE_NONE = 0, MODE_GROUND_PULSE, MODE_RISE };
+
+    // Visual source and pulse timing.
+    std::string mesh3ds;
+    std::string base_model;
+    Mode mode = MODE_NONE;
+    uint32_t keys_seen = 0;     // One bit per effect_* key written, for the profile warnings.
+    int pulse_interval_min = 900;
+    int pulse_interval_max = 900;
+    int pulse_vp = 0;
+    int pulse_time = 120;
+    float mesh_scale = 0.1f;
     bool enabled = false;
     int chance = 100;
-    int duration_min = 20000;
-    int duration_max = 25000;
+    int active_time_min = 20000;
+    int active_time_max = 25000;
     int fade_in = 3000;
     int fade_out = 20000;
     int count_min = 10;         // Puffs at the same time for a decal of radius 50,
@@ -1305,10 +1318,9 @@ struct TWeapProto
                                          int carrierMaxCount,
                                          int &minCount,
                                          int &maxCount) const;
-    // OpenNeoUA UI helper: damage shown to the player. It is the higher of
-    // energy and blast_energy; blast_energy counts only when the blast can
-    // really happen (blast_radius > 0, not a laser). Gameplay is unchanged.
-    int GetDisplayEnergy() const;
+    // UI damage uses the cluster child when available, otherwise this weapon.
+    // Show the higher of direct and active blast energy. Gameplay is unchanged.
+    int GetDisplayEnergy(const std::vector<TWeapProto> *weapons = nullptr) const;
     TWeaponChainConfig chain;
     TDecorationFXConfig decoration_fx;
     int energy = 0;

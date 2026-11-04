@@ -118,7 +118,7 @@ int main()
               std::count_if(decalWeapon.chain_fx.begin(), decalWeapon.chain_fx.end(), isDecal) == 1,
               "live weapon links decal 1");
         Check(sample && sample->count_min == 10 && sample->count_max == 30 &&
-              sample->duration_min == 20000 && sample->duration_max == 25000 &&
+              sample->active_time_min == 20000 && sample->active_time_max == 25000 &&
               sample->fade_out == 20000 &&
               sample->size_min == 35.0f && sample->size_max == 50.0f &&
               sample->puff_time_min == 4000 && sample->puff_time_max == 7500 &&

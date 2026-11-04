@@ -77,12 +77,12 @@
 !/Res/
 /Res/Cursors/Classic/
 !/Interface/
+!/Collision/
 !/Filters/
 !/Database/
 !/Models/
 /Models/*
 !/Models/3ds/
-!/Models/Collision/
 !/Models/Base/
 /Models/Base/*
 !/Models/Base/new/

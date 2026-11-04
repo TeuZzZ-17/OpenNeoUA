@@ -370,7 +370,7 @@ public:
 
     static Common::Ini::Key GfxParticlesLimit; // OpenNeoUA: maximum active particles; default 9000, matching the OpenNeoUA graphics profile
     static Common::Ini::Key GfxGroundDecalLimit;
-    static Common::Ini::Key GfxGroundDecalSmokeLimit; // gfx.ground_decal_smoke_limit: maximum smoking ground decals
+    static Common::Ini::Key GfxGroundDecalEffectLimit; // gfx.ground_decal_effect_limit: maximum smoking ground decals
     static Common::Ini::Key MenuWindowed;
 
     static Common::Ini::Key GfxVBO;

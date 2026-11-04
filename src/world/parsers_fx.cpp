@@ -1332,10 +1332,46 @@ private:
     World::TChainFXPhysical &_physical;
 };
 
-// OpenNeoUA: smoke_* keys of a new_decal block. Returns true when p1 is a smoke key; any
-// smoke key switches the smoke on (smoke_count = 0 switches it off again). A bad value keeps
-// the default of that key (with a warning), so a typo never removes the whole smoke. Ranges
-// use the shared fixed value / min~max syntax.
+// effect_* keys of a new_decal profile and the mode that uses them. The table index is
+// the bit stored in TGroundDecalSmoke::keys_seen, so Finish() can warn about keys the
+// chosen effect_mode ignores.
+namespace
+{
+enum DecalEffectKeyUse { EFFECT_KEY_BOTH, EFFECT_KEY_GROUND_PULSE, EFFECT_KEY_RISE };
+
+struct DecalEffectKey
+{
+    const char *name;
+    DecalEffectKeyUse use;
+};
+
+const DecalEffectKey kDecalEffectKeys[] = {
+    {"effect_mode", EFFECT_KEY_BOTH},
+    {"effect_3ds", EFFECT_KEY_BOTH},
+    {"effect_scale", EFFECT_KEY_BOTH},
+    {"effect_active_time", EFFECT_KEY_BOTH},
+    {"effect_chance", EFFECT_KEY_BOTH},
+    {"effect_spread", EFFECT_KEY_BOTH},
+    {"effect_tint", EFFECT_KEY_BOTH},
+    {"effect_base", EFFECT_KEY_GROUND_PULSE},
+    {"effect_vp", EFFECT_KEY_GROUND_PULSE},
+    {"effect_pulse_interval", EFFECT_KEY_GROUND_PULSE},
+    {"effect_pulse_time", EFFECT_KEY_GROUND_PULSE},
+    {"effect_fade_inout", EFFECT_KEY_RISE},
+    {"effect_count", EFFECT_KEY_RISE},
+    {"effect_size", EFFECT_KEY_RISE},
+    {"effect_growth", EFFECT_KEY_RISE},
+    {"effect_rise_speed", EFFECT_KEY_RISE},
+    {"effect_puff_time", EFFECT_KEY_RISE},
+    {"effect_drift", EFFECT_KEY_RISE},
+    {"effect_intensity", EFFECT_KEY_RISE},
+};
+const int kDecalEffectKeyCount = (int)(sizeof(kDecalEffectKeys) / sizeof(kDecalEffectKeys[0]));
+}
+
+// Parse the effect_* keys of a new_decal profile. Any key marks the profile as having an
+// effect, but nothing is emitted until a valid effect_mode and a model are given.
+// Invalid values use the relevant default.
 static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
                                        const std::string &p1,
                                        const std::string &p2,
@@ -1375,13 +1411,42 @@ static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
         out = std::max(lo, std::min(value, hi));
     };
 
-    if ( ParseBoundedIntegerParam("smoke_chance", p1, p2, 0, 100, defaults.chance, smoke.chance) )
+    if ( !StriCmp(p1, "effect_3ds") )
+        smoke.mesh3ds = p2 == "0" ? std::string() : p2;
+    else if ( !StriCmp(p1, "effect_base") )
+        smoke.base_model = p2 == "0" ? std::string() : p2;
+    else if ( !StriCmp(p1, "effect_mode") )
+    {
+        if ( !StriCmp(p2, "ground_pulse") )
+            smoke.mode = World::TGroundDecalSmoke::MODE_GROUND_PULSE;
+        else if ( !StriCmp(p2, "rise") )
+            smoke.mode = World::TGroundDecalSmoke::MODE_RISE;
+        else
+        {
+            smoke.mode = World::TGroundDecalSmoke::MODE_NONE;
+            ypa_log_out("WARNING: invalid effect_mode '%s' (use ground_pulse or rise); effect disabled\n",
+                        p2.c_str());
+        }
+    }
+    else if ( ParseBoundedIntegerParam("effect_vp", p1, p2, 0, 65535, 0, smoke.pulse_vp) )
     {
     }
-    else if ( !StriCmp(p1, "smoke_duration") )
-        readIntRange("smoke_duration", 0, 3600000, defaults.duration_min, defaults.duration_max,
-                     smoke.duration_min, smoke.duration_max);
-    else if ( !StriCmp(p1, "smoke_fade_inout") )
+    else if ( !StriCmp(p1, "effect_scale") )
+        readFloat("effect_scale", 0.001f, 10.0f, defaults.mesh_scale, smoke.mesh_scale);
+    else if ( !StriCmp(p1, "effect_pulse_interval") )
+        readIntRange("effect_pulse_interval", 200, 60000, defaults.pulse_interval_min, defaults.pulse_interval_max,
+                     smoke.pulse_interval_min, smoke.pulse_interval_max);
+    else if ( ParseBoundedIntegerParam("effect_pulse_time", p1, p2, 20, 1000,
+                                      defaults.pulse_time, smoke.pulse_time) )
+    {
+    }
+    else if ( ParseBoundedIntegerParam("effect_chance", p1, p2, 0, 100, defaults.chance, smoke.chance) )
+    {
+    }
+    else if ( !StriCmp(p1, "effect_active_time") )
+        readIntRange("effect_active_time", 0, 3600000, defaults.active_time_min, defaults.active_time_max,
+                     smoke.active_time_min, smoke.active_time_max);
+    else if ( !StriCmp(p1, "effect_fade_inout") )
     {
         std::string fade[2];
         if ( ReadTuple(p1, p2, 2, fade) )
@@ -1390,10 +1455,10 @@ static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
             ParseBoundedIntegerParam(p1, p1, fade[1], 0, 3600000, defaults.fade_out, smoke.fade_out);
         }
     }
-    else if ( !StriCmp(p1, "smoke_count") )
-        readIntRange("smoke_count", 0, 50, defaults.count_min, defaults.count_max,
+    else if ( !StriCmp(p1, "effect_count") )
+        readIntRange("effect_count", 0, 50, defaults.count_min, defaults.count_max,
                      smoke.count_min, smoke.count_max);
-    else if ( !StriCmp(p1, "smoke_size") )
+    else if ( !StriCmp(p1, "effect_size") )
     {
         float first = 0.0f;
         float second = 0.0f;
@@ -1405,30 +1470,36 @@ static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
         }
         else
         {
-            ypa_log_out("WARNING: invalid begin_fx smoke_size '%s', using %.1f_%.1f\n",
+            ypa_log_out("WARNING: invalid begin_fx effect_size '%s', using %.1f_%.1f\n",
                         p2.c_str(), defaults.size_min, defaults.size_max);
             smoke.size_min = defaults.size_min;
             smoke.size_max = defaults.size_max;
         }
     }
-    else if ( !StriCmp(p1, "smoke_growth") )
-        readFloat("smoke_growth", 1.0f, 10.0f, defaults.growth, smoke.growth);
-    else if ( !StriCmp(p1, "smoke_rise_speed") )
-        readFloat("smoke_rise_speed", 0.0f, 200.0f, defaults.rise_speed, smoke.rise_speed);
-    else if ( !StriCmp(p1, "smoke_puff_time") )
-        readIntRange("smoke_puff_time", 200, 60000, defaults.puff_time_min, defaults.puff_time_max,
+    else if ( !StriCmp(p1, "effect_growth") )
+        readFloat("effect_growth", 1.0f, 10.0f, defaults.growth, smoke.growth);
+    else if ( !StriCmp(p1, "effect_rise_speed") )
+        readFloat("effect_rise_speed", 0.0f, 200.0f, defaults.rise_speed, smoke.rise_speed);
+    else if ( !StriCmp(p1, "effect_puff_time") )
+        readIntRange("effect_puff_time", 200, 60000, defaults.puff_time_min, defaults.puff_time_max,
                      smoke.puff_time_min, smoke.puff_time_max);
-    else if ( !StriCmp(p1, "smoke_drift") )
-        readFloat("smoke_drift", 0.0f, 300.0f, defaults.drift, smoke.drift);
-    else if ( !StriCmp(p1, "smoke_spread") )
-        readFloat("smoke_spread", 0.0f, 100.0f, defaults.spread, smoke.spread);
-    else if ( !StriCmp(p1, "smoke_intensity") )
-        readFloat("smoke_intensity", 0.0f, 300.0f, defaults.intensity, smoke.intensity);
-    else if ( ParseTintParam(parser, "smoke_tint", p1, p2, smoke.tint, true) )
+    else if ( !StriCmp(p1, "effect_drift") )
+        readFloat("effect_drift", 0.0f, 300.0f, defaults.drift, smoke.drift);
+    else if ( !StriCmp(p1, "effect_spread") )
+        readFloat("effect_spread", 0.0f, 100.0f, defaults.spread, smoke.spread);
+    else if ( !StriCmp(p1, "effect_intensity") )
+        readFloat("effect_intensity", 0.0f, 300.0f, defaults.intensity, smoke.intensity);
+    else if ( ParseTintParam(parser, "effect_tint", p1, p2, smoke.tint, true) )
     {
     }
     else
         return false;
+
+    for (int i = 0; i < kDecalEffectKeyCount; ++i)
+    {
+        if ( !StriCmp(p1, kDecalEffectKeys[i].name) )
+            smoke.keys_seen |= 1u << i;
+    }
 
     smoke.enabled = true;
     return true;
@@ -2006,6 +2077,38 @@ bool DecalProfileParser::IsScope(ScriptParser::Parser &parser,
     return true;
 }
 
+// Explains in the log why a profile's effect does nothing or ignores some keys.
+static void WarnDecalEffectProblems(int profileID, const World::TGroundDecalSmoke &smoke)
+{
+    if ( !smoke.enabled )
+        return;
+
+    const uint32_t modeBit = 1u; // effect_mode is the first table entry.
+    if ( smoke.mode == World::TGroundDecalSmoke::MODE_NONE )
+    {
+        if ( !(smoke.keys_seen & modeBit) )
+            ypa_log_out("WARNING: new_decal %d has effect_* keys but no effect_mode (ground_pulse or rise); effect disabled.\n",
+                        profileID);
+        return;
+    }
+
+    const bool pulse = smoke.mode == World::TGroundDecalSmoke::MODE_GROUND_PULSE;
+    const DecalEffectKeyUse ignored = pulse ? EFFECT_KEY_RISE : EFFECT_KEY_GROUND_PULSE;
+    for (int i = 0; i < kDecalEffectKeyCount; ++i)
+    {
+        if ( (smoke.keys_seen & (1u << i)) && kDecalEffectKeys[i].use == ignored )
+            ypa_log_out("WARNING: new_decal %d: %s is ignored with effect_mode = %s.\n",
+                        profileID, kDecalEffectKeys[i].name, pulse ? "ground_pulse" : "rise");
+    }
+
+    const bool hasModel = pulse ? (!smoke.mesh3ds.empty() || !smoke.base_model.empty() || smoke.pulse_vp > 0)
+                                : !smoke.mesh3ds.empty();
+    if ( !hasModel )
+        ypa_log_out("WARNING: new_decal %d: effect_mode = %s needs %s; effect disabled.\n",
+                    profileID, pulse ? "ground_pulse" : "rise",
+                    pulse ? "effect_3ds, effect_base or effect_vp" : "effect_3ds");
+}
+
 void DecalProfileParser::Finish()
 {
     TChainFXConfig &fx = _work.fx;
@@ -2017,6 +2120,8 @@ void DecalProfileParser::Finish()
                     _profileID);
         return;
     }
+
+    WarnDecalEffectProblems(_profileID, fx.ground_decal_smoke);
 
     fx.ground_decal_random_rotation = fx.random_rotation;
     fx.fade_out = fx.ground_decal_permanent ? 0 : std::min(_fadeOut, fx.duration);

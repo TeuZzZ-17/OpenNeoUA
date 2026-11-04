@@ -25,6 +25,9 @@ struct Emitter
     int32_t duration = 0;
     uint32_t seed = 0;
     int count = 0;
+    int32_t meshCycle = -1;
+    int32_t meshCycleStart = 0; // Start time of the current pulse interval.
+    int32_t meshCycleLen = 0;   // Length of the current pulse interval; 0 = not rolled yet.
 };
 
 // One drawable smoke puff. pos is a world position (UA height grows towards -Y).
@@ -64,6 +67,17 @@ inline float HashUnit(uint32_t h)
 inline float RangeFrom(uint32_t h, float minValue, float maxValue)
 {
     return minValue + (maxValue - minValue) * HashUnit(h);
+}
+
+// Length in ms of the interval that starts pulse number `cycle`. A fixed
+// effect_pulse_interval gives the same length every time; min~max rolls it per pulse.
+inline int PulseInterval(const TGroundDecalSmoke &p, uint32_t seed, int cycle)
+{
+    if ( p.pulse_interval_max <= p.pulse_interval_min )
+        return std::max(200, p.pulse_interval_min);
+    return std::max(200, (int)RangeFrom(Hash(seed, (uint32_t)cycle, 0x494e5456u),
+                                        (float)p.pulse_interval_min,
+                                        (float)p.pulse_interval_max));
 }
 
 // Life shape: linear fade-in, full strength, then a linear fade-out that ends
