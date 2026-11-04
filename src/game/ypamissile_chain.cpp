@@ -26,7 +26,7 @@ bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
     World::TWeapProto &parentProto = weapons.at(_vehicleID);
     World::TWeaponClusterConfig &cluster = parentProto.cluster;
 
-    if ( !cluster.enable || cluster.count <= 0 || cluster.weapon_id <= 0 )
+    if ( !cluster.IsActive() )
         return false;
 
     if ( !World::IsWeaponClusterTriggerDue(cluster.trigger_time,

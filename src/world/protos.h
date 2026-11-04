@@ -649,6 +649,11 @@ struct TWeaponClusterConfig
     int count = 0;
     int count_max = 0;
     void GetCountRange(int &minCount, int &maxCount) const;
+    // True when the cluster can really spawn children (enabled, count and child weapon set).
+    bool IsActive() const { return enable && count > 0 && weapon_id > 0; }
+    // AI Smart only: a lone enemy in the fire volume still counts as a group when
+    // another enemy stands within this radius of it. 0 = only enemies inside the volume count.
+    float ai_group_radius = 0.0f;
     int16_t weapon_id = 0;
     int trigger_time = 0;
     bool horizontal_angle_set = false;

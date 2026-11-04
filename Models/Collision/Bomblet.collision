@@ -1,0 +1,49 @@
+begin_collision_shape
+version = 1
+source = VP_BOMBE
+source_hash = 2d7674db84871baf3f208063ed6e0973b6f35e79e172b630c08904cf6a825044
+scale = 1|1|1
+rotation = 0|0|0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root#convex-envelope"],"disabled_hulls":[]}
+begin_hull
+vertex = -7|1|-22
+vertex = -7|1|-8
+vertex = -5|-5|-16
+vertex = -5|-5|18
+vertex = -2|4|-16
+vertex = -2|4|18
+vertex = 0|-1|30
+vertex = 4|-7|18
+vertex = 5|6|-22
+vertex = 5|6|-6
+vertex = 6|-10|-21
+vertex = 6|-10|-8
+vertex = 7|2|-16
+vertex = 7|2|18
+face = 8|10|0
+face = 8|12|10
+face = 5|3|6
+face = 13|5|6
+face = 2|0|10
+face = 7|6|3
+face = 7|13|6
+face = 4|8|0
+face = 1|3|5
+face = 9|5|13
+face = 11|7|3
+face = 11|13|7
+face = 1|2|3
+face = 1|0|2
+face = 1|4|0
+face = 1|5|4
+face = 9|4|5
+face = 9|8|4
+face = 9|12|8
+face = 9|13|12
+face = 11|3|2
+face = 11|2|10
+face = 11|12|13
+face = 11|10|12
+end
+end
