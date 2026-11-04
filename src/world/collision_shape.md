@@ -1,6 +1,6 @@
 # Model-derived collision profiles
 
-`collision_shape = Data/Models/Collision/Tiger_Set1.collision` is an optional
+`collision_shape = Data/Collision/Tiger_Set1.collision` is an optional
 vehicle prototype field. Absence, empty input or `0` preserve the existing
 radius/coll_* path. Unsupported actors, a missing or malformed file, or changed
 visual scale/rotation retain that same fallback.

@@ -113,11 +113,17 @@ void TWeapProto::GetCombinedProjectileCountRange(int carrierMinCount,
     }
 }
 
-int TWeapProto::GetDisplayEnergy() const
+int TWeapProto::GetDisplayEnergy(const std::vector<TWeapProto> *weapons) const
 {
-    const bool blastActive = !IsLaser() && std::isfinite(blast_radius) &&
-                             blast_radius > 0.0f && blast_energy > 0;
-    return blastActive ? std::max(energy, blast_energy) : energy;
+    const TWeapProto *displayWeapon = this;
+    if ( weapons && cluster.IsActive() && (size_t)cluster.weapon_id < weapons->size() )
+        displayWeapon = &weapons->at(cluster.weapon_id);
+
+    const bool blastActive = !displayWeapon->IsLaser() &&
+                             std::isfinite(displayWeapon->blast_radius) &&
+                             displayWeapon->blast_radius > 0.0f && displayWeapon->blast_energy > 0;
+    return blastActive ? std::max(displayWeapon->energy, displayWeapon->blast_energy)
+                       : displayWeapon->energy;
 }
 
 // Shared by life_time and life_time_nt: picks one value in the inclusive range.

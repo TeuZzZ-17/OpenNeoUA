@@ -27,12 +27,12 @@ bool FinitePuff(const GDS::Puff &p)
 
 int main()
 {
-    // A block without smoke keys must stay vanilla; with smoke = 1 the defaults give a dense plume.
+    // A block without effect keys must stay vanilla; the effect needs an explicit effect_mode.
     const World::TGroundDecalSmoke defaults;
     World::TChainFXConfig plainBlock;
     Check(!defaults.enabled && !plainBlock.ground_decal_smoke.enabled, "smoke is disabled unless a block enables it");
     Check(defaults.count_min == 10 && defaults.count_max == 30 &&
-          defaults.duration_min == 20000 && defaults.duration_max == 25000 && defaults.intensity == 120.0f && defaults.size_min == 35.0f && defaults.size_max == 50.0f,
+          defaults.active_time_min == 20000 && defaults.active_time_max == 25000 && defaults.intensity == 120.0f && defaults.size_min == 35.0f && defaults.size_max == 50.0f,
           "standard smoke defaults");
     Check(defaults.tint.a > 0.5f && defaults.tint.a < 0.7f && defaults.tint.r < 0.3f, "default tint is semi-transparent dark gray");
 

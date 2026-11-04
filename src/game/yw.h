@@ -3199,7 +3199,6 @@ public:
     std::list<TGroundDecal> _groundDecals;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<World::GroundDecalSmoke::Emitter> _groundDecalSmoke;
-    GFX::TMesh _groundDecalSmokeMesh;
     std::map<std::string, NC_STACK_base *> _sharedExternalMeshes;
     std::map<std::string, NC_STACK_base *> _sharedExternalBases;
     std::vector<TProceduralEnergyFX> _proceduralEnergyFX;

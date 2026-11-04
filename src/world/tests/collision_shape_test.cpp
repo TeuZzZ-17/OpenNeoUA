@@ -229,7 +229,7 @@ void TankCliffRegression() {
         auto &world=*terrain;world._vhclProtos.resize(256);world._weaponProtos.resize(256);
         Actor<NC_STACK_ypatank> tank;
         const auto hull=Shape({Box(vec3d(0,0,0),18,12,30)});
-        tank.Bind(world,970,vec3d(surface?3300:3000,surface?-613:-193,-3000),shaped==2?Collision::Load("Data/Models/Collision/Weasel.collision"):shaped?hull:nullptr);
+        tank.Bind(world,970,vec3d(surface?3300:3000,surface?-613:-193,-3000),shaped==2?Collision::Load("Data/Collision/Weasel.collision"):shaped?hull:nullptr);
         tank._bact_type=BACT_TYPES_TANK;tank._oflags=BACT_OFLAG_EXACTCOLL|BACT_OFLAG_VIEWER|BACT_OFLAG_USERINPT;
         tank._status_flg=BACT_STFLAG_LAND;tank._overeof=10;tank._viewer_overeof=40;tank._viewer_radius=35;
         tank._position.y-=27;tank._old_pos=tank._position;
@@ -278,7 +278,7 @@ struct SlopingRoofWorld : BuildingWorld {
 void TankSlopingRoofRegression() {
     for(bool cockpit:{false,true})for(int dt:{8,20,50}) {
         SlopingRoofWorld world;world._vhclProtos.resize(256);world._weaponProtos.resize(256);
-        auto shape=Collision::Load("Data/Models/Collision/Weasel.collision");
+        auto shape=Collision::Load("Data/Collision/Weasel.collision");
         Check(shape!=nullptr,"real Weasel profile for sloping roof");if(!shape)continue;
         Actor<NC_STACK_ypatank> tank;tank.Bind(world,975,vec3d(3000,-318,-3000),shape);
         tank._bact_type=BACT_TYPES_TANK;tank._oflags=BACT_OFLAG_EXACTCOLL|BACT_OFLAG_VIEWER|BACT_OFLAG_USERINPT;
@@ -305,7 +305,7 @@ void TankSlopingRoofRegression() {
 }
 
 void TankVanillaFallRegression() {
-    auto shape=Collision::Load("Data/Models/Collision/Weasel.collision");
+    auto shape=Collision::Load("Data/Collision/Weasel.collision");
     Check(shape!=nullptr,"real Weasel profile for vanilla fall comparison");if(!shape)return;
     for(bool cockpit:{false,true})for(int dt:{8,20,50}) {
         GroundWorld world;world._vhclProtos.resize(256);world._weaponProtos.resize(256);
@@ -687,7 +687,7 @@ template<class Base> struct LandingActor : Actor<Base> {
 };
 template<class Base> void AirIdleLandingProfile(const char *name, int type, int flyerType=-1) {
     std::string error;
-    auto profile=Collision::Load(std::string("Data/Models/Collision/")+name+".collision", &error);
+    auto profile=Collision::Load(std::string("Data/Collision/")+name+".collision", &error);
     Check(profile!=nullptr,error.c_str());
     if (!profile) return;
     for (double slope : {0.0, .35, .75}) for (int dt : {16, 50, 100}) for (bool embedded : {false,true}) {
@@ -769,7 +769,7 @@ void AirIdleLandingRegression() {
     AirIdleLandingProfile<NC_STACK_ypaflyer>("Falcon",BACT_TYPES_FLYER,1); // cruiser uses the same hull for this controller probe.
     AirIdleLandingProfile<NC_STACK_ypaufo>("Ghor-Scout",BACT_TYPES_UFO);
     std::string error;
-    auto host=Collision::Load("Data/Models/Collision/Zeppelin.collision", &error);
+    auto host=Collision::Load("Data/Collision/Zeppelin.collision", &error);
     Check(host!=nullptr,error.c_str());
     if (host) {
         RoboRealProfileContacts(host);
@@ -788,7 +788,7 @@ void AirIdleLandingRegression() {
 }
 template<class Base> void WreckLandingProfile(const char *name, int type) {
     std::string error;
-    auto profile=Collision::Load(std::string("Data/Models/Collision/")+name+".collision", &error);
+    auto profile=Collision::Load(std::string("Data/Collision/")+name+".collision", &error);
     Check(profile!=nullptr,error.c_str());
     if (!profile) return;
     for (int dt : {16,50,100}) for (bool shaped : {false,true}) {
@@ -1466,7 +1466,7 @@ void GenesisFactoryBirthPlacementRegression()
     proto.max_active_at_once = 5;
     proto.overeof = 20;
     proto.scale_fx_pXX.fill(0);
-    proto.collision_shape = "Models/Collision/Myko-Scout.collision";
+    proto.collision_shape = "Collision/Myko-Scout.collision";
 
     const vec3d start(3000, 200, -3000);
     BirthCommandRobo host;
@@ -2379,7 +2379,7 @@ void GenesisTarantulFactoryGrid(NC_STACK_base *vpList,
     myko.overeof = 20.0f;
     myko.vp_normal = 200;
     myko.vp_genesis = 252;
-    myko.collision_shape = "Data/Models/Collision/Myko-Scout.collision";
+    myko.collision_shape = "Data/Collision/Myko-Scout.collision";
     myko.scale_fx_pXX.fill(0);
 
     GenesisProbeRobo host;
@@ -2566,13 +2566,13 @@ void GenesisRealVisualTerrainRegression(NC_STACK_base *vpList)
                 mykoGenesis.vertices.size(), mykoGenesis.minY, mykoGenesis.maxY,
                 mykoNormal.vertices.size(), mykoNormal.minY, mykoNormal.maxY);
     std::string error;
-    auto ghor = Collision::Load("Data/Models/Collision/Ghor-Scout.collision", &error);
+    auto ghor = Collision::Load("Data/Collision/Ghor-Scout.collision", &error);
     Check(ghor != nullptr, error.empty() ? "Ghor-Scout real collision profile" : error.c_str());
     error.clear();
-    auto myko = Collision::Load("Data/Models/Collision/Myko-Scout.collision", &error);
+    auto myko = Collision::Load("Data/Collision/Myko-Scout.collision", &error);
     Check(myko != nullptr, error.empty() ? "Myko-Scout real collision profile" : error.c_str());
     error.clear();
-    auto turantul = Collision::Load("Data/Models/Collision/Turantul_I.collision", &error);
+    auto turantul = Collision::Load("Data/Collision/Turantul_I.collision", &error);
     Check(turantul != nullptr, error.empty() ? "Turantul_I real collision profile" : error.c_str());
     if (ghor)
         GenesisFullAnimationProbe("Ghor-Scout", ghor, GenesisSet1Model(vpList, 199),
@@ -3087,7 +3087,7 @@ int main(int argc,char **argv) {
     }
     if (argc>1 && std::string(argv[1])=="--birth-placement") {
         std::string error;
-        auto myko=Collision::Load("Models/Collision/Myko-Scout.collision", &error);
+        auto myko=Collision::Load("Collision/Myko-Scout.collision", &error);
         BirthPlacementRegression(myko);
         GenesisFactoryBirthPlacementRegression();
         std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
@@ -3198,7 +3198,7 @@ int main(int argc,char **argv) {
           "large briefing size supported");
     Check(parse({"new_vehicle 1","model = heli","end"}) && world._vhclProtos[1].briefing_size == 0,
           "new vehicle resets briefing override");
-    Check(parse({"modify_vehicle 1","collision_shape = Data/Models/Collision/Pilot.collision","end"}) && world._vhclProtos[1].collision_shape=="Data/Models/Collision/Pilot.collision","production vehicle parser");
+    Check(parse({"modify_vehicle 1","collision_shape = Data/Collision/Pilot.collision","end"}) && world._vhclProtos[1].collision_shape=="Data/Collision/Pilot.collision","production vehicle parser");
     Check(parse({"modify_vehicle 1","collision_shape = 0","end"}) && world._vhclProtos[1].collision_shape.empty(),"explicit zero stays vanilla");
     Check(parse({"modify_vehicle 1","collision_shape = ../escape.collision","end"}) && world._vhclProtos[1].collision_shape.empty(),"invalid path fallback");
     world._collisionScene->Forget(&a); a._collisionShape=concave; world._collisionScene->UpdateActor(&a);
@@ -3208,7 +3208,7 @@ int main(int argc,char **argv) {
     missile._old_pos=center; missile._position=center;
     Check(missile.TubeCollisionTest(false,&target) && target==&a,"stationary projectile initially inside shape hits");
     Check(world._collisionScene->Trace(&a,center,center+vec3d(0,0,100),0,&hit) && hit.fraction==0,"ray starts inside shape");
-    Check(parse({"modify_vehicle 1","collision_shape = Data/Models/Collision/Pilot.collision","end"}) &&
+    Check(parse({"modify_vehicle 1","collision_shape = Data/Collision/Pilot.collision","end"}) &&
           parse({"modify_vehicle 1","energy = 32000","end"}) &&
           !world._vhclProtos[1].collision_shape.empty(),"saved modifier preserves base profile binding");
     b._status=BACT_STATUS_DEAD; b._status_flg=BACT_STFLAG_DEATH1;
