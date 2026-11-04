@@ -567,6 +567,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             _wpn->cluster.spread_y = spreadY > 0.0 ? spreadY : 0.0;
         }
     }
+    else if ( !StriCmp(p1, "cluster_ai_group_radius") )
+    {
+        // Capped to keep the neighbour search within a few sectors.
+        _wpn->cluster.ai_group_radius = std::min(ParseNonNegativeIniFloatOrZero(p2), 5000.0f);
+    }
     else if ( !StriCmp(p1, "cluster_vp") )
     {
         int vp = parser.stol(p2, nullptr, 0);

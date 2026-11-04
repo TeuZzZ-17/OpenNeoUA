@@ -1411,6 +1411,84 @@ void TestRealLaunchGateParity() {
 }
 }
 
+void TestSmartClusterPriority() {
+    WorldProbe w;
+    // 60 hits harder; 61 is a weaker cluster weapon with a forward box; 62 is a cluster without a volume.
+    Check(ParseWeapons(w, {
+        "new_weapon 60", "model = rocket", "energy = 100", "energy_flyer = 1", "end",
+        "new_weapon 61", "model = rocket", "energy = 10", "energy_flyer = 1",
+        "cluster_count = 2", "cluster_weapon_id = 60", "ai_fire_trigger_box_forward_xyz = 400|400|1200", "end",
+        "new_weapon 62", "model = rocket", "energy = 10", "energy_flyer = 1",
+        "cluster_count = 2", "cluster_weapon_id = 60", "end"}), "smart cluster fixtures parsed");
+
+    const vec3d P(2400, -300, -2400);
+    Unit shooter; shooter.Bind(w, 1, 1, P);
+    shooter._primTtype = shooter._secndTtype = BACT_TGT_TYPE_NONE;
+    shooter._weapon = 60; shooter._extra_weapons = {61};
+    shooter._weapon_ai_switch_mode = World::TVhclProto::WEAPON_AI_SWITCH_MODE_SMART;
+    Unit near1; near1.Bind(w, 2, 2, P + vec3d(0, 0, 500));
+    int slot = -1;
+    auto Pick = [&](NC_STACK_ypabact *target) {
+        int picked = -1;
+        for (int i = 0; i < 20; ++i) {
+            const int now = ypabact_SelectSmartAIPrimaryWeaponSlot(&shooter, target, &slot);
+            if (picked >= 0 && now != picked) return -2;
+            picked = now;
+        }
+        return picked;
+    };
+
+    Check(Pick(&near1) == 60, "one enemy in the cluster volume keeps the strongest weapon");
+    Unit near2; near2.Bind(w, 2, 3, P + vec3d(50, 0, 600));
+    Check(Pick(&near1) == 61 && slot == 1, "two enemies in the cluster volume force the cluster weapon");
+    Check(Pick(nullptr) == 61, "sector attack also prefers the cluster weapon when the volume is crowded");
+    near2._position = P + vec3d(0, 0, 3000);
+    Check(Pick(&near1) == 60, "second enemy outside the volume does not trigger the rule");
+    near2._position = P + vec3d(50, 0, 600);
+    near2._owner = 1;
+    Check(Pick(&near1) == 60, "friendly units are not counted");
+    near2._owner = 2;
+
+    w._weaponProtos[61].cluster.enable = false;
+    Check(Pick(&near1) == 60, "weapon without active cluster never gets the priority");
+    w._weaponProtos[61].cluster.enable = true;
+    shooter._extra_weapons = {62};
+    Check(Pick(&near1) == 60, "cluster weapon without a fire volume never gets the priority");
+    shooter._extra_weapons = {61};
+    shooter._weapon_ai_switch_mode = World::TVhclProto::WEAPON_AI_SWITCH_MODE_SEQUENCE;
+    Check(ypabact_SelectAIPrimaryWeaponSlot(&shooter, &near1, &slot) == 60, "rule belongs to smart only");
+
+    // cluster_ai_group_radius: a lone enemy in the volume leads a group when a neighbour is close to it.
+    shooter._weapon_ai_switch_mode = World::TVhclProto::WEAPON_AI_SWITCH_MODE_SMART;
+    const vec3d side(400, 0, 0); // outside the +-200 wide volume, 400 from near1
+    near2._position = near1._position + side;
+    Check(Pick(&near1) == 60, "neighbour outside the volume is ignored without a group radius");
+    for (const char *invalid : {"nan", "-5", "inf", "abc"}) {
+        Check(ParseWeapons(w, {"modify_weapon 61", std::string("cluster_ai_group_radius = ") + invalid, "end"}) &&
+              w._weaponProtos[61].cluster.ai_group_radius == 0.0f && Pick(&near1) == 60,
+              "invalid group radius keeps the volume-only rule");
+    }
+    Check(ParseWeapons(w, {"modify_weapon 61", "cluster_ai_group_radius = 99999", "end"}) &&
+          w._weaponProtos[61].cluster.ai_group_radius == 5000.0f, "group radius is capped");
+    w._weaponProtos[61].cluster.ai_group_radius = 500;
+    Check(Pick(&near1) == 61, "lone enemy with a neighbour inside the radius selects the cluster weapon");
+    Check(Pick(nullptr) == 61, "sector attack uses the nearest enemy in the volume as group lead");
+    near2._position = near1._position + side * 1.75f;
+    Check(Pick(&near1) == 60, "neighbour beyond the radius does not form a group");
+    near2._position = near1._position + side;
+    near2._owner = 1;
+    Check(Pick(&near1) == 60, "friendly neighbour does not form a group");
+    near2._owner = 2;
+    near1._position = P + vec3d(2000, 0, 500);
+    near2._position = near1._position + vec3d(100, 0, 0);
+    Check(Pick(&near1) == 60, "a group outside the volume does not trigger the cluster weapon");
+    near1._position = P + vec3d(0, 0, 500);
+    near2._position = near1._position + side;
+    w._weaponProtos[61].cluster.enable = false;
+    Check(Pick(&near1) == 60, "group radius never activates a weapon without a valid cluster");
+    w._weaponProtos[61].cluster.enable = true;
+}
+
 void TestImplicitFeatureGroups() {
     WorldProbe w;
     Check(ParseWeapons(w, {
@@ -1613,6 +1691,7 @@ int main() {
     TestTankElevation();
     TestDownwardCone(w);
     TestImplicitFeatureGroups();
+    TestSmartClusterPriority();
     TestBoomerangLifetimeReturn();
     TestFrontVolumes(w, wp.data());
     TestArcFallback();

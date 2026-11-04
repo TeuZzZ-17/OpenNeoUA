@@ -425,6 +425,7 @@ bool ypabact_IsGroundFireTarget(NC_STACK_ypabact *unit);
 bool ypabact_IsGroundFireQuery(const bact_arg101 &arg);
 float ypabact_FireTriggerAreaSearchRadius(const TFireTriggerArea &box);
 NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box, const World::TWeapProto *wproto = nullptr);
+int ypabact_CountFireTriggerAreaEnemies(NC_STACK_ypabact *shooter, const TFireTriggerArea &box, const World::TWeapProto *wproto, int limit);
 void ypabact_AimAtFireTriggerAreaTarget(const bact_arg101 &fireTest, bact_arg79 *shot);
 NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter, World::TWeapProto &wproto, NC_STACK_ypabact::TLaserBeamRuntime &beam, const vec3d &start, const vec3d &down, float range, bool beamWasActive, bool spawnBeamVPs, bool playerControlled, float damageMult, std::vector<vec3d> &chainFXPoints);
 void ypabact_EnsureFireXRandomSeeded(NC_STACK_ypabact *unit);

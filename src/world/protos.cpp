@@ -102,7 +102,7 @@ void TWeapProto::GetCombinedProjectileCountRange(int carrierMinCount,
     if ( maxCount < minCount )
         std::swap(minCount, maxCount);
 
-    if ( cluster.enable && cluster.count > 0 && cluster.weapon_id > 0 )
+    if ( cluster.IsActive() )
     {
         int minClusterCount = 1;
         int maxClusterCount = 1;

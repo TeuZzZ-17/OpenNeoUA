@@ -212,6 +212,37 @@ int ypabact_SelectRandomPrimaryWeaponSlot(NC_STACK_ypabact *bact, int *outSource
     return slots[index];
 }
 
+// Smart cluster rule: a cluster weapon whose own AI fire volume holds a group of
+// enemies. The volume is the one the following fire check will use.
+static bool ypabact_HasClusterCrowdInFireArea(NC_STACK_ypabact *bact,
+                                              const World::TWeapProto &wproto,
+                                              NC_STACK_ypabact *target)
+{
+    TFireTriggerArea box;
+    if ( !wproto.cluster.IsActive() ||
+         !bact->GetAIFireTriggerArea(wproto, &box, target ? &target->_position : nullptr,
+                                     ypabact_IsGroundFireTarget(target)) )
+        return false;
+
+    if ( ypabact_CountFireTriggerAreaEnemies(bact, box, &wproto, 2) > 1 )
+        return true;
+
+    // Enemies usually enter the volume one at a time. With cluster_ai_group_radius the
+    // first one already counts as a group if another enemy stands close to it. The
+    // reference is the unit the shot will really go to: the target, else the nearest.
+    const float groupRadius = wproto.cluster.ai_group_radius;
+    if ( !(groupRadius > 0.0f) )
+        return false;
+
+    NC_STACK_ypabact *lead =
+        target && ypabact_FireTriggerAreaContains(box, target->_position, target->GetCollisionBroadRadius())
+            ? target
+            : ypabact_FindFireTriggerAreaEnemy(bact, box, &wproto);
+
+    return lead &&
+           ypabact_FindNearestLaserChainUnit(bact, lead->_position, groupRadius, false, {lead}) != nullptr;
+}
+
 int ypabact_SelectSmartAIPrimaryWeaponSlot(NC_STACK_ypabact *bact,
                                                    NC_STACK_ypabact *target,
                                                    int *outSourceSlot)
@@ -234,28 +265,40 @@ int ypabact_SelectSmartAIPrimaryWeaponSlot(NC_STACK_ypabact *bact,
     float bestEnergy = -std::numeric_limits<float>::infinity();
     int bestIndices[4];
     int bestCount = 0;
+    // 1 = cluster weapon with several enemies in its fire volume. It beats any
+    // damage comparison; damage then only orders weapons of the same tier.
+    int bestTier = 0;
 
     for (int i = 0; i < count; ++i)
     {
         const World::TWeapProto &wproto = bact->getBACT_pWorld()->GetWeaponsProtos().at(slots[i]);
         float energy = 0.0f;
         bool defined = false;
+        const int tier = ypabact_HasClusterCrowdInFireArea(bact, wproto, target) ? 1 : 0;
 
         // Compare the actual weapon energy with the target multiplier. Missing
         // fine-class keys retain their normal legacy/generic hit semantics.
+        // Without a unit target (sector attack) only the cluster rule can decide.
         if ( !ypabact_GetWeaponEnergyForTarget(wproto, target, &energy, &defined) ||
              !isfinite(energy) )
-            continue;
-
-        energy *= std::max(0, wproto.energy);
-
-        if ( bestCount == 0 || energy > bestEnergy )
         {
+            if ( tier == 0 )
+                continue;
+            energy = 0.0f;
+        }
+        else
+        {
+            energy *= std::max(0, wproto.energy);
+        }
+
+        if ( bestCount == 0 || tier > bestTier || (tier == bestTier && energy > bestEnergy) )
+        {
+            bestTier = tier;
             bestEnergy = energy;
             bestIndices[0] = i;
             bestCount = 1;
         }
-        else if ( energy == bestEnergy )
+        else if ( tier == bestTier && energy == bestEnergy )
         {
             bestIndices[bestCount++] = i;
         }

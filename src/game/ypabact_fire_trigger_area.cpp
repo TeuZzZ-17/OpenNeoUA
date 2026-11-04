@@ -100,6 +100,45 @@ bool CanAcquire(NC_STACK_ypabact *shooter, const World::TWeapProto &wproto,
     }
     return true;
 }
+
+// Calls visit(enemy) for each valid enemy unit inside the box; visit returns false to stop early.
+template <class Visit>
+void ForEachFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box,
+                                 const World::TWeapProto *wproto, Visit visit)
+{
+    if ( !shooter || !shooter->getBACT_pWorld() )
+        return;
+
+    NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
+    const Common::Point mapSize = world->GetMapSize();
+    const double searchRadius = ypabact_FireTriggerAreaSearchRadius(box);
+    const int sectorRadius = (int)std::min(searchRadius / World::CVSectorLength + 2,
+                                         (double)std::max(mapSize.x, mapSize.y));
+    const Common::Point center = World::PositionToSectorID(box.top);
+
+    for (int y = std::max(0, center.y - sectorRadius); y <= std::min(mapSize.y-1, center.y + sectorRadius); y++)
+    {
+        for (int x = std::max(0, center.x - sectorRadius); x <= std::min(mapSize.x-1, center.x + sectorRadius); x++)
+        {
+            Common::Point cellId(x, y);
+            if ( !world->IsSector(cellId) )
+                continue;
+
+            for (NC_STACK_ypabact *bct : world->SectorAt(cellId).unitsList)
+            {
+                if ( !ypabact_IsLaserSecondaryTargetCandidate(shooter, bct, false) )
+                    continue;
+
+                if ( wproto ? !CanAcquire(shooter, *wproto, box, bct->_position, bct->GetCollisionBroadRadius())
+                            : !ypabact_FireTriggerAreaContains(box, bct->_position, bct->GetCollisionBroadRadius()) )
+                    continue;
+
+                if ( !visit(bct) )
+                    return;
+            }
+        }
+    }
+}
 }
 
 bool NC_STACK_ypabact::GetAIFireTriggerArea(const World::TWeapProto &wproto, TFireTriggerArea *out,
@@ -264,47 +303,33 @@ float ypabact_FireTriggerAreaSearchRadius(const TFireTriggerArea &box)
 NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box,
                                                 const World::TWeapProto *wproto)
 {
-    if ( !shooter || !shooter->getBACT_pWorld() )
-        return nullptr;
-
-    NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
-    const Common::Point mapSize = world->GetMapSize();
-    const double searchRadius = ypabact_FireTriggerAreaSearchRadius(box);
-    const int sectorRadius = (int)std::min(searchRadius / World::CVSectorLength + 2,
-                                         (double)std::max(mapSize.x, mapSize.y));
-    const Common::Point center = World::PositionToSectorID(box.top);
-
     NC_STACK_ypabact *best = nullptr;
     float bestDist = 0.0f;
 
-    for (int y = std::max(0, center.y - sectorRadius); y <= std::min(mapSize.y-1, center.y + sectorRadius); y++)
-    {
-        for (int x = std::max(0, center.x - sectorRadius); x <= std::min(mapSize.x-1, center.x + sectorRadius); x++)
+    ForEachFireTriggerAreaEnemy(shooter, box, wproto, [&](NC_STACK_ypabact *bct) {
+        const float dist = (bct->_position.XZ() - box.top.XZ()).length();
+        if ( !best || dist < bestDist )
         {
-            Common::Point cellId(x, y);
-            if ( !world->IsSector(cellId) )
-                continue;
-
-            for (NC_STACK_ypabact *bct : world->SectorAt(cellId).unitsList)
-            {
-                if ( !ypabact_IsLaserSecondaryTargetCandidate(shooter, bct, false) )
-                    continue;
-
-                if ( wproto ? !CanAcquire(shooter, *wproto, box, bct->_position, bct->GetCollisionBroadRadius())
-                            : !ypabact_FireTriggerAreaContains(box, bct->_position, bct->GetCollisionBroadRadius()) )
-                    continue;
-
-                const float dist = (bct->_position.XZ() - box.top.XZ()).length();
-                if ( !best || dist < bestDist )
-                {
-                    best = bct;
-                    bestDist = dist;
-                }
-            }
+            best = bct;
+            bestDist = dist;
         }
-    }
+        return true;
+    });
 
     return best;
+}
+
+// Number of valid enemy units inside the box, counted up to limit (then it stops scanning).
+int ypabact_CountFireTriggerAreaEnemies(NC_STACK_ypabact *shooter, const TFireTriggerArea &box,
+                                        const World::TWeapProto *wproto, int limit)
+{
+    int count = 0;
+
+    ForEachFireTriggerAreaEnemy(shooter, box, wproto, [&](NC_STACK_ypabact *) {
+        return ++count < limit;
+    });
+
+    return count;
 }
 
 // AI acquisition gate for a configured volume; absent/incompatible keeps legacy control.
