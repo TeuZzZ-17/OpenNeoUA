@@ -1015,7 +1015,26 @@ void TestAirTiltAbsent() {
     }
 }
 
-// The optional weapon max inclination also caps ground units, on top of their native scope limits.
+// Aircraft never tilt the volume upward, even toward a ground target above them.
+void TestAirTiltNeverUp() {
+    WorldProbe world;
+    Check(ParseWeapons(world, {"new_weapon 71", "model = rocket", "ai_fire_trigger_box_forward_xyz = 80|80|1000",
+                               "ai_fire_trigger_forward_max_inclination = 25", "end"}),
+          "never-up fixture parses");
+    Unit aircraft;
+    aircraft.Bind(world, 1, 620, vec3d(4200, -250, -4200));
+    aircraft._height = 250;
+    const vec3d above = aircraft._position + vec3d(0, -300, 700);
+    for (int type : {BACT_TYPES_BACT, BACT_TYPES_FLYER, BACT_TYPES_UFO}) {
+        aircraft._bact_type = type;
+        TFireTriggerArea area;
+        Check(aircraft.GetAIFireTriggerArea(world._weaponProtos[71], &area, &above, true) &&
+              Near(area.forward, aircraft._rotation.AxisZ()) && !ypabact_FireTriggerAreaContains(area, above, 0),
+              "aircraft volume stays on the hull axis toward a ground target above it");
+    }
+}
+
+// The weapon max inclination does not apply to ground units: they follow only their native scope limits.
 void TestTankTiltCap() {
     WorldProbe w;
     Check(ParseWeapons(w, {"new_weapon 10", "model = rocket", "ai_fire_trigger_box_forward_xyz = 60|40|900", "end",
@@ -1028,9 +1047,8 @@ void TestTankTiltCap() {
     TFireTriggerArea box;
     Check(tank.GetAIFireTriggerArea(w._weaponProtos[10], &box) && box.forward.y < -0.4f,
           "absent max inclination: ground unit volume follows only its native limits");
-    Check(tank.GetAIFireTriggerArea(w._weaponProtos[11], &box) &&
-          box.forward.y >= -std::sin(10.0 * C_PI / 180.0) - 1e-3 && box.forward.y < -0.1f,
-          "max inclination caps the volume of a ground unit at 10 degrees");
+    Check(tank.GetAIFireTriggerArea(w._weaponProtos[11], &box) && box.forward.y < -0.4f,
+          "max inclination is ignored by a ground unit");
 }
 
 void TestAirSectorElevation() {
@@ -1701,6 +1719,7 @@ int main() {
     TestMaxInclinationParse();
     TestMinimumDepth();
     TestAirTiltAbsent();
+    TestAirTiltNeverUp();
     TestTankTiltCap();
     TestAirSectorElevation();
     TestVolumeDistanceAndMovement();
