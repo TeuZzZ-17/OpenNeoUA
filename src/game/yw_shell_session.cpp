@@ -690,7 +690,7 @@ int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
         new World::Parsers::SaveSquadParser(this), // commander and units
         new World::Parsers::SaveGemParser(this),
         new World::Parsers::LevelLocationParser(&_locations, true),
-        new World::Parsers::VhclProtoParser(this),
+        new World::Parsers::VhclProtoParser(this, -1, true),
         new World::Parsers::WeaponProtoParser(this),
         new World::Parsers::BuildProtoParser(this),
         new World::Parsers::SaveExtraViewParser(this),
@@ -1125,7 +1125,7 @@ int NC_STACK_ypaworld::ParseSettingsFile(const std::string &fname, uint32_t sdfM
     {
         parsers += new World::Parsers::BuffProfileParser(&_buffProfiles);
         parsers += new World::Parsers::DebuffProfileParser(&_debuffProfiles);
-        parsers += new World::Parsers::VhclProtoParser(this);
+        parsers += new World::Parsers::VhclProtoParser(this, -1, true);
         parsers += new World::Parsers::WeaponProtoParser(this);
         parsers += new World::Parsers::BuildProtoParser(this);
     }

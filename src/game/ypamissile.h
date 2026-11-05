@@ -104,6 +104,7 @@ public:
     virtual void SetDelay(int);
     virtual void SetDriveTime(int);
     void SetHomingTime(int time);
+    void SetHomingForce(float turnRate);
     virtual void SetIgnoreBuilds(int);
     virtual void SetPowerHeli(int);
     virtual void SetPowerTank(int);
@@ -197,7 +198,8 @@ protected:
     NC_STACK_ypabact *FindAttachedTarget();
     void UpdateAttachedDetonationPosition();
     void ApplyAttachedDirectHitDamage();
-    void SteerHomingBombDirection(float dtime);
+    void SteerFlightDirectionToTarget(float dtime, float turnRate);
+    void ApplyHomingForce(float dtime);
     void UpdateArcGrenadeBallistic(float dtime);
     bool TryClusterSplit(bool impactOrDetonation = false);
     bool CanChainToTarget(NC_STACK_ypabact *target, NC_STACK_ypabact *currentHit) const;
@@ -247,6 +249,7 @@ protected:
     std::vector<int32_t> _boomerangReturnHitGids;
     int _mislDriveTime  = 0;
     int _mislHomingTimeRemaining = -1; // -1: disabled; 0: guidance has expired
+    float _mislHomingForce = 0.0f;     // extra turn speed (rad/s) toward the target; 0 = vanilla
     int _mislDelayTime  = 0;
     int _mislFlags      = 0;
     float _mislStartHeight  = 0.0;

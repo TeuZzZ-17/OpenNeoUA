@@ -1387,6 +1387,9 @@ struct TWeapProto
     // Consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
     int multi_target = 0;
     int guide_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
+    // OpenNeoUA custom: extra turn speed (rad/s) toward a live target for missile/homing_bomb,
+    // active while guidance lasts. 0 = vanilla.
+    float homing_force = 0.0f;
     // OpenNeoUA custom: shared continuous beam parameters for model = laser.
     // The vertical_laser model selects downward fire. "energy" is static base damage per tick; the class
     // multipliers below (energy_heli/tank/flyer/robo) are applied like normal weapons.

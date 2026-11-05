@@ -418,7 +418,7 @@ void yw_RenderCustomMapMarkers(NC_STACK_ypaworld *yw)
     // Marker mode controls both editing and visibility, matching the other
     // map-layer toggles: markers remain stored for the session, but disappear
     // immediately while the layer is disabled.
-    if ( !yw || !robo_map.markerMode || robo_map.customMarkers.empty() )
+    if ( !yw || yw->IsSpectatorControlled() || !robo_map.markerMode || robo_map.customMarkers.empty() )
         return;
 
     SDL_Color color = yw_MapToolbarColor(yw, true);
@@ -471,7 +471,7 @@ void yw_RenderCustomHudRadarMarkers(NC_STACK_ypaworld *yw)
     // closed.  The small gameplay radar uses the same world-to-map transform,
     // but renders a deliberately compact symbol so markers cannot be confused
     // with unit icons or dominate the compass.
-    if ( !yw || !robo_map.markerMode || robo_map.customMarkers.empty() )
+    if ( !yw || yw->IsSpectatorControlled() || !robo_map.markerMode || robo_map.customMarkers.empty() )
         return;
 
     Common::Rect clipRect;
@@ -1117,6 +1117,9 @@ int yw_FindRoboMapMarkerAt(const Common::Point &btnPos)
 
 int yw_AddRoboMapMarker(NC_STACK_ypaworld *yw, const Common::Point &btnPos)
 {
+    if ( !yw || yw->IsSpectatorControlled() )
+        return -1;
+
     const vec2d worldPos = yw_RoboMapButtonPosToWorld(btnPos);
     if ( !yw_IsRoboMapMarkerPositionValid(yw, worldPos) )
         return -1;
@@ -1239,6 +1242,12 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 
         TClickBoxInf *winpt = &inpt->ClickInf;
 
+        if ( yw->IsSpectatorControlled() && robo_map.markerDragIndex >= 0 )
+        {
+            robo_map.markerDragIndex = -1;
+            yw->_guiDragDefaultMouse = false;
+        }
+
         if ( yw->IsSpectatorControlled() && (robo_map.field_1E8 & 0x200) )
         {
             robo_map.field_1E8 &= 0xFFFFFDFF;
@@ -1315,7 +1324,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             // remains the permanent contextual marker shortcut handled below.
             // If the user remaps the primary action itself to RMB, let the
             // contextual route own that click so add/remove still toggles cleanly.
-            if ( winpt->selected_btn == &robo_map && winpt->selected_btnID == 17 &&
+            if ( !yw->IsSpectatorControlled() && winpt->selected_btn == &robo_map && winpt->selected_btnID == 17 &&
                  !World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
             {
                 yw_PlaceRoboMapMarker(yw, winpt->move.BtnPos);
@@ -1469,7 +1478,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
             // While an artillery shell is in manual aiming mode, RMB belongs to
             // artillery cancel. Do not let the normal map-marker handler consume
             // the same edge before ypaworld_func64__sub21() can clear the white ring.
-            if ( !yw->_artilleryShellManualGid &&
+            if ( !yw->IsSpectatorControlled() && !yw->_artilleryShellManualGid &&
                  World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_PLACE_MAP_MARKER) )
             {
                 if ( winpt->selected_btnID == 17 )
@@ -1515,7 +1524,7 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
 
             if ( winpt->flag & TClickBoxInf::FLAG_LM_DOWN )
             {
-                const int markerIndex = (winpt->selected_btnID == 17
+                const int markerIndex = (!yw->IsSpectatorControlled() && winpt->selected_btnID == 17
                                          && robo_map.markerMode)
                     ? yw_FindRoboMapMarkerAt(winpt->move.BtnPos)
                     : -1;
@@ -1622,10 +1631,13 @@ void  RoboMap_InputHandle(NC_STACK_ypaworld *yw, TInputState *inpt)
                     break;
 
                 case 9:
-                    robo_map.markerMode = !robo_map.markerMode;
-                    robo_map.markerDragIndex = -1;
-                    robo_map.field_1E8 &= ~(0x10 | 0x200);
-                    yw->_guiDragDefaultMouse = false;
+                    if ( !yw->IsSpectatorControlled() )
+                    {
+                        robo_map.markerMode = !robo_map.markerMode;
+                        robo_map.markerDragIndex = -1;
+                        robo_map.field_1E8 &= ~(0x10 | 0x200);
+                        yw->_guiDragDefaultMouse = false;
+                    }
                     break;
 
                 default:

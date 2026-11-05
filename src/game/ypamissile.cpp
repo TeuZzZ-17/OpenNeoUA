@@ -1293,16 +1293,20 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             case MISL_BOMB:
                 arg74.field_0 = v38;
                 arg74.flag = _mislHomingTimeRemaining == 0 ? 2 : 1;
-                if ( arg74.flag != 2 && ypamissile_HasHomingBombTarget(this) )
+                if ( arg74.flag != 2 )
                 {
-                    if ( _force > 0.0 )
+                    // Homing bomb: force pushes toward the target like a missile, and
+                    // homing_force adds the extra steering. A missile whose engine has
+                    // burned out is also a MISL_BOMB and keeps homing_force until it explodes.
+                    if ( _force > 0.0 && ypamissile_HasHomingBombTarget(this) )
                     {
                         arg74.flag = 0;
+                        ApplyHomingForce(v38);
                         arg74.vec = CalcForceVector();
                     }
                     else
                     {
-                        SteerHomingBombDirection(v38);
+                        ApplyHomingForce(v38);
                     }
                 }
                 Move(&arg74);
@@ -1319,7 +1323,10 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 arg74.field_0 = v38;
                 arg74.flag = _mislHomingTimeRemaining == 0 ? 2 : 0;
                 if ( arg74.flag != 2 )
+                {
+                    ApplyHomingForce(v38);
                     arg74.vec = CalcForceVector();
+                }
                 Move(&arg74);
                 break;
 
@@ -1587,6 +1594,7 @@ void NC_STACK_ypamissile::Renew()
     _mislFlags  = 0;
     _mislDelayTime = 0;
     _mislHomingTimeRemaining = -1;
+    _mislHomingForce = 0.0f;
     _mislBlastFalloff = 0;
     _mislBlastPush = 0.0f;
     _mislDirectPush = 0.0f;
@@ -2037,6 +2045,11 @@ void NC_STACK_ypamissile::SetDriveTime(int time)
 void NC_STACK_ypamissile::SetHomingTime(int time)
 {
     _mislHomingTimeRemaining = time > 0 ? time : -1;
+}
+
+void NC_STACK_ypamissile::SetHomingForce(float turnRate)
+{
+    _mislHomingForce = turnRate;
 }
 
 void NC_STACK_ypamissile::SetIgnoreBuilds(int ign)

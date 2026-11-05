@@ -133,11 +133,8 @@ bool ypamissile_IsHomingBomb(NC_STACK_ypamissile *missile)
     return ypamissile_IsHomingBombProto(weapons.at(missile->_vehicleID));
 }
 
-bool ypamissile_HasHomingBombTarget(NC_STACK_ypamissile *missile)
+bool ypamissile_HasLiveGuidanceTarget(NC_STACK_ypamissile *missile)
 {
-    if ( !ypamissile_IsHomingBomb(missile) )
-        return false;
-
     if ( missile->_primTtype == BACT_TGT_TYPE_CELL )
         return true;
 
@@ -152,7 +149,19 @@ bool ypamissile_HasHomingBombTarget(NC_STACK_ypamissile *missile)
            !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2 | BACT_STFLAG_NORENDER));
 }
 
-void NC_STACK_ypamissile::SteerHomingBombDirection(float dtime)
+bool ypamissile_HasHomingBombTarget(NC_STACK_ypamissile *missile)
+{
+    return ypamissile_IsHomingBomb(missile) && ypamissile_HasLiveGuidanceTarget(missile);
+}
+
+// homing_force: extra turn toward a live target, on top of the normal guidance.
+void NC_STACK_ypamissile::ApplyHomingForce(float dtime)
+{
+    if ( _mislHomingForce > 0.0f && ypamissile_HasLiveGuidanceTarget(this) )
+        SteerFlightDirectionToTarget(dtime, _mislHomingForce);
+}
+
+void NC_STACK_ypamissile::SteerFlightDirectionToTarget(float dtime, float turnRate)
 {
     vec3d desired = _target_dir;
     if ( desired.normalise() <= 0.001 )
@@ -176,7 +185,7 @@ void NC_STACK_ypamissile::SteerHomingBombDirection(float dtime)
         return;
 
     float rotAngle = clp_acos(current.dot(desired));
-    float maxAngle = _maxrot * dtime;
+    float maxAngle = turnRate * dtime;
 
     if ( maxAngle > 0.0 && rotAngle > maxAngle )
         rotAngle = maxAngle;

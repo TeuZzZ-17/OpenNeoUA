@@ -836,6 +836,12 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->guide_time = ParsePositiveIntOrZero(p2);
     }
+    else if ( !StriCmp(p1, "homing_force") )
+    {
+        // Invalid, negative or zero values keep vanilla guidance; 10 rad/s is already close to an instant snap.
+        const float force = parser.stof(p2, 0);
+        _wpn->homing_force = (std::isfinite(force) && force > 0.0f) ? std::min(force, 10.0f) : 0.0f;
+    }
     // ---- OpenNeoUA custom: model = laser parameters ----
     else if ( !StriCmp(p1, "laser_energy_tick_time") )
     {

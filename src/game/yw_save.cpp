@@ -361,7 +361,7 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
                 if ( proto.mimic_energy_cost_min == proto.mimic_energy_cost_max )
                     fil->printf("    mimic_energy_cost = %d\n", proto.mimic_energy_cost_min);
                 else
-                    fil->printf("    mimic_energy_cost = %d_%d\n",
+                    fil->printf("    mimic_energy_cost = %d~%d\n",
                                 proto.mimic_energy_cost_min,
                                 proto.mimic_energy_cost_max);
             }
@@ -375,7 +375,7 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
                 numWeaponsMin = numWeaponsMax = proto.num_weapons;
 
             if ( numWeaponsMin != numWeaponsMax )
-                fil->printf("    num_weapons    = %d_%d\n",
+                fil->printf("    num_weapons    = %d~%d\n",
                             numWeaponsMin, numWeaponsMax);
             else
                 fil->printf("    num_weapons    = %d\n", numWeaponsMin);

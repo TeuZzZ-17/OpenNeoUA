@@ -1678,8 +1678,10 @@ uint8_t yw_GetUfoSpyWorldOpacity(NC_STACK_ypaworld *yw,
             return 0;
     }
 
-    const float dx = bact->_position.x - yw->_userUnit->_position.x;
-    const float dz = bact->_position.z - yw->_userUnit->_position.z;
+    const vec3d &spyOrigin = yw->IsSpectatorControlled() ?
+        yw->_viewerPosition : yw->_userUnit->_position;
+    const float dx = bact->_position.x - spyOrigin.x;
+    const float dz = bact->_position.z - spyOrigin.z;
     const float horizontalDistance = sqrt(dx * dx + dz * dz);
     if ( horizontalDistance >= spyRadius )
         return 0;
@@ -1902,13 +1904,12 @@ bool yw_IsExplicitWorldStatusTarget(NC_STACK_ypaworld *yw,
     if ( !yw || !bact )
         return false;
 
-    // Spectator Mode does not draw hover/visor/damage bars, so the Spy pass
-    // must not skip those units or they would lose their bar.
-    if ( yw->IsSpectatorControlled() )
-        return false;
-
     if ( (yw->_guiActFlags & 0x20) && yw->_bactOnMouse == bact )
         return true;
+
+    // Spectator Mode does not draw visor or damage bars separately.
+    if ( yw->IsSpectatorControlled() )
+        return false;
 
     if ( yw->_guiVisor.field_18 == bact )
         return true;
@@ -1926,6 +1927,10 @@ bool yw_IsExplicitWorldCursorTarget(
 
     if ( (yw->_guiActFlags & 0x20) && yw->_bactOnMouse == bact )
         return true;
+
+    // Damage cursors are not drawn separately in Spectator Mode.
+    if ( yw->IsSpectatorControlled() )
+        return false;
 
     return std::find(damageHoverTargets.begin(), damageHoverTargets.end(), bact) !=
            damageHoverTargets.end();
@@ -2646,6 +2651,10 @@ void yw_RenderHUDRadare(NC_STACK_ypaworld *yw)
     flt_51650C = v18;
 
     sb_0x4d7c08__sub0__sub4__sub2__sub0(yw);
+
+    // The radar clips its contents; restore the world markers' drawing area.
+    if ( yw->IsSpectatorControlled() )
+        yw_ResetVirtualUiClipToFullScreen(yw);
 
     robo_map.field_1EC = v7;
     robo_map.field_1EE = v9;

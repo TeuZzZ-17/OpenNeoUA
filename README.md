@@ -22,9 +22,11 @@ These extensions are one of the main ways OpenNeoUA can go beyond the original g
 
 The repository includes:
 
-**`OpenNeoUA_Parameter_Guide.ini`**
+**[`OpenNeoUA_Parameter_Guide_EN.md`](OpenNeoUA_Parameter_Guide_EN.md)**
 
-This file serves as the public reference for OpenNeoUA-specific parameters. It contains example values, descriptions, supported ranges, fallback behavior, visual asset priorities, configuration notes and explanations of how many of the extended systems interact with the original engine.
+This Markdown file is the public reference for **all** the parameters the engine understands: both the original Urban Assault (vanilla) parameters and the OpenNeoUA extensions. Parameters are grouped by the file and block they belong to (vehicles, weapons, buildings, levels, World.ini and so on), so a vanilla parameter and the OpenNeoUA parameters that extend it appear side by side. Every entry has an example value, a description, supported ranges, fallback behavior and, where relevant, notes on how the extended systems interact with the original engine.
+
+A legend at the top of the guide explains the markers: every parameter is one line, and the marker in front of the name shows its origin: 🔵 is a vanilla parameter, 🟢 is an OpenNeoUA parameter. The guide is plain Markdown with no HTML, so it reads the same in any editor and viewer.
 
 The guide is intended both for experienced Urban Assault modders and for users who are discovering OpenNeoUA's extended scripting capabilities for the first time.
 

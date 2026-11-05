@@ -1378,7 +1378,8 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
     const int closeW = std::max(18, yw->_fontDefCloseW);
     const int toolW = std::max(18, std::min(24, yw->_fontH));
     const int toolbarIds[] = {3, 4, 5, 6, 9, 18, 19};
-    const int toolCount = (int)(sizeof(toolbarIds) / sizeof(toolbarIds[0]));
+    const bool spectator = yw->IsSpectatorControlled();
+    const int toolCount = (int)(sizeof(toolbarIds) / sizeof(toolbarIds[0])) - (spectator ? 1 : 0);
     const int toolStart = std::max(0, robo_map.w - closeW - toolCount * toolW);
     const int toolbarOffsetX = 1;
     const int toolbarOffsetY = 1;
@@ -1389,10 +1390,14 @@ void sub_4C0C00(NC_STACK_ypaworld *yw)
     robo_map.buttons[2] = ButtonBox();
     robo_map.buttons[7] = ButtonBox();
     robo_map.buttons[8] = ButtonBox();
+    robo_map.buttons[9] = ButtonBox();
 
     for ( int i = 0; i < toolCount; i++ )
-        robo_map.buttons[toolbarIds[i]] = ButtonBox(toolStart + i * toolW + toolbarOffsetX, toolbarOffsetY,
-                                                    toolW, yw->_fontH);
+    {
+        const int buttonId = toolbarIds[i + (spectator && i >= 4 ? 1 : 0)];
+        robo_map.buttons[buttonId] = ButtonBox(toolStart + i * toolW + toolbarOffsetX, toolbarOffsetY,
+                                               toolW, yw->_fontH);
+    }
 
     robo_map.cmdCommands.clear();
 
@@ -1975,7 +1980,11 @@ void  sb_0x451034__sub2(NC_STACK_ypaworld *yw)
     robo_map.field_1E4 = 18.75f;
     robo_map.field_1E0 = 18.75f;
 
-    robo_map.field_1ED = 0;
+    // Start each level with the map following the current viewer, including
+    // when a saved interface state is restored.
+    robo_map.field_1ED = 1;
+    yw->_roboMapStatus.Data[1] = 1;
+    yw->_vhclMapStatus.Data[1] = 1;
     robo_map.field_1E8 = 0;
     robo_map.markerMode = true;
     robo_map.markerDragIndex = -1;

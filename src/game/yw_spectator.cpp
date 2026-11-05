@@ -572,8 +572,7 @@ vec3d yw_GetSpectatorSpawnPosition(NC_STACK_ypaworld *yw)
 
 void NC_STACK_ypaworld::TryActivateSpectatorMode()
 {
-    // Detailed UFO Spy UI is normally opt-in. Reset it on every level load so
-    // only Spectator Mode starts with the detailed layer enabled by default.
+    // The detailed UFO Spy UI starts disabled on every level load.
     _ufoSpyUiEnabled = false;
 
     if ( !System::IniConf::GameSpectatorMode.Get<bool>() || _levelInfo.Mode == 1 )
@@ -612,11 +611,6 @@ void NC_STACK_ypaworld::TryActivateSpectatorMode()
 
     spectator->setBACT_viewer(true);
     spectator->setBACT_inputting(true);
-
-    // Spectator Mode starts with the normal UFO detailed Spy UI visible. The
-    // regular UFO toggle (including the fixed middle-click shortcut) remains
-    // authoritative afterwards, so the player can disable/re-enable it normally.
-    _ufoSpyUiEnabled = true;
 
     // Spectator mode must not start with owner-1 squads pre-selected. The
     // original player faction is simulated by AI only; direct player command

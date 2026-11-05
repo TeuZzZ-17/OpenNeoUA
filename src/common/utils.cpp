@@ -115,11 +115,19 @@ uint32_t profiler_end(uint32_t prev)
 
 
 
-std::string correctSeparatorAndExt(std::string str)
+static std::string correctDirectorySeparators(std::string str)
 {
     std::replace(str.begin(), str.end(), '/', '\\');
+    return str;
+}
 
+std::string correctSeparatorAndExt(std::string str)
+{
+    str = correctDirectorySeparators(str);
     size_t pos = str.rfind('.');
+    const size_t separator = str.find_last_of('\\');
+    if (pos != std::string::npos && separator != std::string::npos && pos < separator)
+        return str;
     // New profiles keep their explicit extension; legacy asset names retain
     // the existing DOS three-character mapping below.
     if (pos != std::string::npos && !StriCmp(str.substr(pos), ".collision"))
@@ -131,7 +139,7 @@ std::string correctSeparatorAndExt(std::string str)
 
 static bool uaNodeExistsAs(const std::string &path, int type)
 {
-    FSMgr::iNode *node = FSMgr::iDir::findNode(correctSeparatorAndExt(path));
+    FSMgr::iNode *node = FSMgr::iDir::findNode(type == FSMgr::iNode::NTYPE_DIR ? correctDirectorySeparators(path) : correctSeparatorAndExt(path));
     return node && node->getType() == type;
 }
 
@@ -326,10 +334,12 @@ static std::string uaResolveStandaloneDataFirst(std::string path, bool directory
 
 static std::string uaResolvePath(const std::string &path, bool directory, bool forWrite)
 {
-    std::string resolved = correctSeparatorAndExt(Common::Env.ApplyPrefix(path));
+    std::string resolved = Common::Env.ApplyPrefix(path);
+    resolved = directory ? correctDirectorySeparators(resolved) : correctSeparatorAndExt(resolved);
     if (!forWrite)
         resolved = uaResolveSetDirectoryContainer(resolved, directory);
-    return correctSeparatorAndExt(uaResolveStandaloneDataFirst(resolved, directory, forWrite));
+    resolved = uaResolveStandaloneDataFirst(resolved, directory, forWrite);
+    return directory ? correctDirectorySeparators(resolved) : correctSeparatorAndExt(resolved);
 }
 
 std::string uaSetDirectoryOrganizedPath(const std::string &path)
@@ -341,8 +351,10 @@ std::string uaSetDirectoryOrganizedPath(const std::string &path)
 
 std::string uaSetDirectoryResolvedReadPath(const std::string &path, bool directory)
 {
-    std::string resolved = correctSeparatorAndExt(Common::Env.ApplyPrefix(path));
-    return correctSeparatorAndExt(uaResolveSetDirectoryContainer(resolved, directory));
+    std::string resolved = Common::Env.ApplyPrefix(path);
+    resolved = directory ? correctDirectorySeparators(resolved) : correctSeparatorAndExt(resolved);
+    resolved = uaResolveSetDirectoryContainer(resolved, directory);
+    return directory ? correctDirectorySeparators(resolved) : correctSeparatorAndExt(resolved);
 }
 
 std::string uaDataFirstNucleusIniPath()
@@ -406,16 +418,16 @@ std::vector<std::string> uaDataFirstRootDirCandidates(const std::string &dirname
     if (!uaStandaloneRootDir(dirname, &canonical))
     {
         if (uaDirExistsDirect(dirname))
-            result.push_back(correctSeparatorAndExt(dirname));
+            result.push_back(correctDirectorySeparators(dirname));
         return result;
     }
 
     std::string dataDir = uaJoinPath("Data", canonical);
     if (uaDirExistsDirect(dataDir))
-        result.push_back(correctSeparatorAndExt(dataDir));
+        result.push_back(correctDirectorySeparators(dataDir));
 
     if (uaDirExistsDirect(dirname))
-        result.push_back(correctSeparatorAndExt(dirname));
+        result.push_back(correctDirectorySeparators(dirname));
 
     return result;
 }
