@@ -761,10 +761,11 @@ bool NC_STACK_ypaworld::IsUfoSpyUiControlContext() const
     return _GameShell &&
            _userRobo &&
            _userUnit &&
-           _viewerBact == _userUnit &&
+           _viewerBact &&
            !IsRoboMapOpen() &&
            _userUnit->_bact_type == BACT_TYPES_UFO &&
-           _userUnit->getBACT_inputting() &&
+           (IsSpectatorControlled() ||
+            (_viewerBact == _userUnit && _userUnit->getBACT_inputting())) &&
            GetUfoSpyUiRadius() > 0.0f;
 }
 
@@ -785,7 +786,7 @@ void yw_UpdateUfoSpyUiToggle(NC_STACK_ypaworld *yw, TInputState *inpt)
         return;
 
     const bool fixedShortcutPressed =
-        yw->_mouseGrabbed &&
+        (yw->_mouseGrabbed || yw->IsSpectatorControlled()) &&
         World::IsFixedInputShortcutPressed(inpt, World::INPUT_BIND_TOGGLE_UFO_SPY_UI);
 
     if ( !primaryPressed && !fixedShortcutPressed )
@@ -3095,9 +3096,9 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetLifeTime(wproto.RollLifeTime());
     wobj->SetDelay(wproto.delay_time);
     wobj->SetDriveTime(wproto.drive_time);
-    wobj->SetHomingTime(
-        wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || wproto.IsHomingBomb()
-            ? wproto.guide_time : 0);
+    const bool canHome = wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || wproto.IsHomingBomb();
+    wobj->SetHomingTime(canHome ? wproto.guide_time : 0);
+    wobj->SetHomingForce(canHome ? wproto.homing_force : 0.0f);
     wobj->SetMissileType(missileType);
     wobj->SetPowerHeli(wproto.energy_heli * 1000.0);
     wobj->SetPowerTank(wproto.energy_tank * 1000.0);

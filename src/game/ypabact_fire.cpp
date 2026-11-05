@@ -370,6 +370,14 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         arg = &cockpitAimArg;
     }
 
+    // homing_force needs a real crosshair lock when the player fires: arg->tgType is UNIT only
+    // when UserTargeting() locked an enemy (red crosshair). Without it the automatic multi_target
+    // search below may still hand targets to the missiles, but they must not get the extra
+    // steering. AI-controlled units always fire at an assigned target, so they are unchanged.
+    const bool suppressHomingForce =
+        (_oflags & BACT_OFLAG_USERINPT) &&
+        !(arg->tgType == BACT_TGT_TYPE_UNIT && arg->target.pbact);
+
     bool homingBomb = ypabact_IsHomingBombWeapon(wproto);
     bool missileTargeting = ypabact_UsesMissileTargeting(wproto);
     int maxTargets = ypabact_GetMultiTargetLimit(wproto, v13);
@@ -673,6 +681,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
         wobj->_parent = nullptr;
 
         _missiles_list.push_back(wobj);
+
+        if ( suppressHomingForce )
+            wobj->SetHomingForce(0.0f); // no lock at fire time: vanilla steering only
 
         int v42 = wobj->GetMissileType();
         if ( v42 == NC_STACK_ypamissile::MISL_TARGETED || homingBomb )

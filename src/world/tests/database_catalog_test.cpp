@@ -170,6 +170,10 @@ void TestLifeTimeNtRange() {
     WorldProbe g;
     Check(Parse(g, {"new_weapon 1", "model = missile", "guide_time = 450", "end"}, World::Database::Weapon), "guide_time weapon parses");
     Check(g._weaponProtos[1].guide_time == 450, "guide_time is stored");
+    Check(Parse(g, {"new_weapon 1", "model = missile", "homing_force = 4", "end"}, World::Database::Weapon), "homing_force weapon parses");
+    Check(g._weaponProtos[1].homing_force == 4.0f, "homing_force is stored");
+    Check(Parse(g, {"new_weapon 1", "model = missile", "homing_force = -3", "end"}, World::Database::Weapon) && g._weaponProtos[1].homing_force == 0.0f, "negative homing_force is disabled");
+    Check(Parse(g, {"new_weapon 1", "model = missile", "homing_force = 999", "end"}, World::Database::Weapon) && g._weaponProtos[1].homing_force == 10.0f, "homing_force is clamped to 10");
     WorldProbe old;
     Check(!Parse(old, {"new_weapon 1", "model = missile", "homing_time = 450", "end"}, World::Database::Weapon), "old homing_time key is no longer accepted");
 }

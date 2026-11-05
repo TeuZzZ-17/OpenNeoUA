@@ -582,8 +582,7 @@ void sb_0x4d7c08__sub0__sub4(NC_STACK_ypaworld *yw)
         {
             yw_RenderCursorOverUnit(yw, yw->_bactOnMouse);
 
-            if ( !yw->IsSpectatorControlled() )
-                yw_RenderUnitLifeBar(yw, &buf, yw->_bactOnMouse);
+            yw_RenderUnitLifeBar(yw, &buf, yw->_bactOnMouse);
         }
     }
 

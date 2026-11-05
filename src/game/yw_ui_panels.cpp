@@ -774,6 +774,39 @@ void ypaworld_func64__sub7__sub2__sub1(NC_STACK_ypaworld *yw)
             ypaworld_func64__sub7__sub2__sub1__sub0(yw, &bzda.cmdCommands);
     }
 
+    if ( (bzda.field_1D4 & 1) && yw->IsSpectatorControlled() && robo_map.IsClosed() && bzda.buttons[2] )
+    {
+        const vec3d &position = yw->_viewerPosition;
+        if ( position.x >= 0.0f && position.z <= 0.0f )
+        {
+            const Common::Point sector = World::PositionToSectorID(position);
+            if ( yw->IsSector(sector) )
+            {
+                const int owner = yw->SectorAt(sector).owner;
+                if ( owner >= 0 && owner <= 7 )
+                {
+                    const ButtonBox &button = bzda.buttons[2];
+                    int tileset = 50;
+                    for ( int i = 51; i <= 54; ++i )
+                    {
+                        if ( std::abs(yw->_guiTiles[i]->h - button.w) <
+                             std::abs(yw->_guiTiles[tileset]->h - button.w) )
+                            tileset = i;
+                    }
+                    const int size = yw->_guiTiles[tileset]->h;
+                    FontUA::set_opacity(&bzda.cmdCommands, 255);
+                    // Align the border with the map artwork inside the button.
+                    FontUA::set_center_xpos(&bzda.cmdCommands,
+                        bzda.x + button.x + (button.w - size) / 2 + 2 - yw->_screenSize.x / 2);
+                    FontUA::set_center_ypos(&bzda.cmdCommands,
+                        bzda.y + button.y + (button.h - size) / 2 - yw->_screenSize.y / 2);
+                    FontUA::reset_tileset(&bzda.cmdCommands, tileset);
+                    FontUA::store_u8(&bzda.cmdCommands, owner ? owner : 8);
+                }
+            }
+        }
+    }
+
     FontUA::set_opacity(&bzda.cmdCommands, 255);
     FontUA::set_end(&bzda.cmdCommands);
 
@@ -1591,7 +1624,9 @@ void  ypaworld_func64__sub7__sub2(NC_STACK_ypaworld *yw, TInputState *inpt)
             case 1: // Jump into vehicle
                 if ( winpt->flag & TClickBoxInf::FLAG_BTN_DOWN )
                 {
-                    if ( bzda.field_1D0 & 8 )
+                    if ( yw->IsSpectatorControlled() )
+                        bzda.field_1D0 = 8;
+                    else if ( bzda.field_1D0 & 8 )
                         bzda.field_1D0 = bzda.field_1CC & 1;
                     else
                         bzda.field_1D0 = 8;

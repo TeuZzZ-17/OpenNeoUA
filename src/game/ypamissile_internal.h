@@ -33,6 +33,7 @@ bool ypamissile_GetDirectPushDir(NC_STACK_ypamissile *missile, NC_STACK_ypabact 
 NC_STACK_ypabact *ypamissile_FindLiveBactByGid(World::RefBactList &list, int32_t gid);
 bool ypamissile_IsHomingBombProto(const World::TWeapProto &wproto);
 bool ypamissile_IsHomingBomb(NC_STACK_ypamissile *missile);
+bool ypamissile_HasLiveGuidanceTarget(NC_STACK_ypamissile *missile);
 bool ypamissile_HasHomingBombTarget(NC_STACK_ypamissile *missile);
 bool ypamissile_IsUsableSuicideReturn(NC_STACK_ypabact *candidate);
 

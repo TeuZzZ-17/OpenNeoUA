@@ -341,7 +341,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         int minCost = 0;
         int maxCost = 0;
-        if ( ParseMimicEnergyCostRange(p2, minCost, maxCost) )
+        std::string range = p2;
+        if ( _savedRanges && _isModify )
+            std::replace(range.begin(), range.end(), '_', '~');
+        if ( ParseMimicEnergyCostRange(range, minCost, maxCost) )
         {
             _vhcl->mimic_energy_cost_min = minCost;
             _vhcl->mimic_energy_cost_max = maxCost;
@@ -1264,8 +1267,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         int minCount = 0;
         int maxCount = 0;
+        std::string range = p2;
+        // Older profiles and saves wrote ranges with '_' instead of '~'.
+        if ( _savedRanges && _isModify )
+            std::replace(range.begin(), range.end(), '_', '~');
 
-        if ( !ParseNumWeaponsRange(p2, minCount, maxCount) )
+        if ( !ParseNumWeaponsRange(range, minCount, maxCount) )
         {
             ypa_log_out("WARNING: vehicle %d num_weapons='%s' is invalid; expected 0 or an inclusive value/min~max in range 1-255. Keeping the previous value.\n",
                         _vhclID, p2.c_str());

@@ -262,7 +262,7 @@ class VhclProtoParser : public ScriptParser::DataHandler, public FxParser
 {
 friend FxParser;
 public:
-    VhclProtoParser(NC_STACK_ypaworld *o, int32_t forcedVhclID = -1) : _o(*o), _vhcl(nullptr), _vhclID(-1), _isModify(false), _gunID(-1), _unitGunID(-1), _collID(-1), _forcedVhclID(forcedVhclID) {} ;
+    VhclProtoParser(NC_STACK_ypaworld *o, int32_t forcedVhclID = -1, bool savedRanges = false) : _o(*o), _vhcl(nullptr), _vhclID(-1), _isModify(false), _gunID(-1), _unitGunID(-1), _collID(-1), _forcedVhclID(forcedVhclID), _savedRanges(savedRanges) {} ;
     virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
@@ -276,6 +276,7 @@ protected:
     int32_t _unitGunID;
     int32_t _collID;
     int32_t _forcedVhclID;
+    bool _savedRanges;
     TRoboProto _roboTmp;
 };
 

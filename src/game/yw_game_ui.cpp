@@ -128,7 +128,12 @@ void sub_4C3A54(NC_STACK_ypaworld *yw)
     bzda.field_1D0 &= bzda.field_1CC;
     bzda.field_1D8 &= bzda.field_1D4;
 
-    if ( !bzda.field_1D0 )
+    if ( yw->IsSpectatorControlled() )
+    {
+        bzda.field_1CC |= 8;
+        bzda.field_1D0 = 8;
+    }
+    else if ( !bzda.field_1D0 )
         bzda.field_1D0 = bzda.field_1CC & 1;
 }
 
@@ -424,6 +429,9 @@ int sb_0x451034(NC_STACK_ypaworld *yw)
 {
     if ( yw->_guiLoaded )
         return yw->_guiLoaded;
+
+    if ( yw->IsSpectatorControlled() )
+        yw->_ufoSpyUiEnabled = false;
 
     yw->_guiDragging = false;
     yw->_guiDragElement = nullptr;
@@ -3081,16 +3089,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
              _bactOnMouse &&
              IsValidSpectatorFollowTarget(_bactOnMouse) )
         {
-            const bool jumpIntoVehicleMode = (bzda.field_1D0 & 8) != 0;
-
             SetSpectatorFollowTarget(_bactOnMouse);
-
-            // Match the vanilla one-shot control mode: after a valid unit is
-            // selected, release the Jump into Vehicle button. Direct one-click
-            // Spectator Follow remains available when the mode was not armed.
-            if ( jumpIntoVehicleMode )
-                bzda.field_1D0 = bzda.field_1CC & 1;
-
             arg->ClickInf.flag &= ~TClickBoxInf::FLAG_LM_DOWN;
             return;
         }
@@ -3441,19 +3440,8 @@ void NC_STACK_ypaworld::ypaworld_func64__sub21(TInputState *arg)
 
                 if ( (_guiActFlags & 0x20) && IsValidSpectatorFollowTarget(_bactOnMouse) )
                 {
-                    if ( bzda.field_1D0 & 8 )
-                    {
-                        // The armed button uses the same cursor and tooltip as
-                        // vanilla Jump into Vehicle, while the resulting view
-                        // remains the external Spectator Follow camera.
-                        mousePointer = 8;
-                        tooltip = Locale::TIP_DO_CONTROL;
-                    }
-                    else
-                    {
-                        mousePointer = 2;
-                        tooltip = 0;
-                    }
+                    mousePointer = 8;
+                    tooltip = Locale::TIP_DO_CONTROL;
                 }
                 else
                 {
@@ -3714,7 +3702,7 @@ void NC_STACK_ypaworld::ypaworld_func64__sub1(TInputState *inpt)
             }
             else
             {
-                if ( winp->selected_btn != &robo_map && winp->selected_btn != &bzda && !(bzda.field_1D0 & 1) )
+                if ( !IsSpectatorControlled() && winp->selected_btn != &robo_map && winp->selected_btn != &bzda && !(bzda.field_1D0 & 1) )
                     bzda.field_1D0 = bzda.field_1CC & 1;
             }
         }
