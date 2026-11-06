@@ -1,4 +1,4 @@
-// Debug overlays: unit counts, DPS meter, blast rings, collision spheres and info drawing.
+// Debug overlays: unit counts, F1 info overlay, blast rings, collision spheres and info drawing.
 #include <inttypes.h>
 #include <string.h>
 #include <math.h>
@@ -24,6 +24,9 @@
 #include "system/inivals.h"
 #include "system/gametime.h"
 #include "system/system.h"
+#include "system/framepacer.h"
+#include <SDL2/SDL.h>
+#include <cmath>
 #include "world/spin.h"
 #include "common/crashdiag.h"
 #include "game/yw_game_impl.h"
@@ -107,110 +110,99 @@ void NC_STACK_ypaworld::debug_count_units()
         _dbgTotalRoboCountMax = _dbgTotalRoboCount;
 }
 
-void NC_STACK_ypaworld::DebugResetDpsMeter()
+// F1 overlay, F3-style: the information that matters when judging performance and the
+// state of the world. Left column, one line per fact, coloured by how healthy the value is.
+void NC_STACK_ypaworld::DebugDrawInfoOverlay()
 {
-    _debugDpsSamples.clear();
-    _debugDpsSourceGid = 0;
-    _debugDpsPeakRaw = 0;
-    _debugDpsSessionDamageRaw = 0;
-    _debugDpsSessionStartStamp = 0;
-    _debugDpsLastDamageStamp = 0;
-}
+    CmdStream cmd;
+    cmd.reserve(4096);
+    char buf[2048];
 
-void NC_STACK_ypaworld::DebugUpdateDpsSource()
-{
-    if ( !_debugDpsEnabled || !_userUnit || IsSpectatorControlled() )
-        return;
+    FontUA::select_tileset(&cmd, 15);
+    FontUA::set_xpos(&cmd, 8);
+    // Start below the HUD bars and the message log at the top-left (up to ~6 lines of
+    // messages such as "Debug Info ON"), so the two never overlap. The block is kept
+    // compact (10 lines) to still fit on the screen from there.
+    FontUA::set_ypos(&cmd, (int16_t)((_screenSize.y * 36) / 100));
 
-    // Weapon Cam can temporarily make a projectile the user unit. Keep the
-    // last real controlled vehicle as the DPS source until control returns.
-    if ( _userUnit->_bact_type == BACT_TYPES_MISSLE )
-        return;
-
-    // A level/replay transition can move the gameplay clock backwards. Never
-    // carry a previous level's damage samples into the new one.
-    if ( !_debugDpsSamples.empty() && _timeStamp < _debugDpsSamples.back().stamp )
+    const auto line = [&](uint8_t r, uint8_t g, uint8_t b, const std::string &text)
     {
-        _debugDpsSamples.clear();
-        _debugDpsPeakRaw = 0;
-        _debugDpsSessionDamageRaw = 0;
-        _debugDpsSessionStartStamp = 0;
-        _debugDpsLastDamageStamp = 0;
-    }
+        FontUA::set_txtColor(&cmd, r, g, b);
+        sub_445654(this, &cmd, buf, "%s", text.c_str());
+        FontUA::next_line(&cmd);
+    };
 
-    const uint32_t gid = _userUnit->_gid;
-    if ( gid != _debugDpsSourceGid )
-    {
-        _debugDpsSourceGid = gid;
-        _debugDpsSamples.clear();
-        _debugDpsPeakRaw = 0;
-        _debugDpsSessionDamageRaw = 0;
-        _debugDpsSessionStartStamp = 0;
-        _debugDpsLastDamageStamp = 0;
-    }
-}
+    // --- Title
+    line(255, 220, 90, _buildDate.empty() ? std::string("OpenNeoUA")
+                                          : fmt::sprintf("OpenNeoUA  (build %s)", _buildDate));
 
-void NC_STACK_ypaworld::DebugRecordDpsDamage(NC_STACK_ypabact *attacker,
-                                              NC_STACK_ypabact *target,
-                                              int rawDamage)
-{
-    if ( !_debugDpsEnabled || _isNetGame || !attacker || !target || rawDamage <= 0 )
-        return;
+    // --- Frame rate
+    const System::FramePacer::FrameStats stats = System::Frames.GetFrameStats();
+    const int measured = System::Frames.MeasuredFps();
+    const double avgFps = stats.avgMs > 0.0 ? 1000.0 / stats.avgMs : 0.0;
+    const double lowFps = stats.low1PercentMs > 0.0 ? 1000.0 / stats.low1PercentMs : 0.0;
+    uint8_t fr = 110, fg = 255, fb = 140;               // healthy
+    if ( measured < 30 )      { fr = 255; fg = 90;  fb = 90;  }
+    else if ( measured < 60 ) { fr = 255; fg = 200; fb = 80;  }
+    line(fr, fg, fb, fmt::sprintf("FPS: %d   avg %.1f   1%% low %.1f   frame %.2f ms (worst %.2f)",
+                                  measured, avgFps, lowFps, stats.avgMs, stats.worstMs));
 
-    if ( !_debugDpsSourceGid || attacker->_gid != _debugDpsSourceGid )
-        return;
+    // --- Display and limiter
+    const int hz = System::GetDisplayRefreshRate();
+    const int limit = System::Frames.FrameRateLimit();
+    const int vsync = System::IniConf::GfxVsync.Get<int>();
+    const char *vsyncText = vsync == 0 ? "off" : (vsync == 2 ? "adaptive" : "on");
+    const Common::Point res = System::GetResolution();
+    line(200, 215, 230,
+         fmt::sprintf("Display: %s Hz   VSync: %s   cap: %s   %dx%d %s   CPU threads: %d",
+                      hz > 0 ? std::to_string(hz) : std::string("?"), vsyncText,
+                      limit > 0 ? std::to_string(limit) : std::string("unlimited"),
+                      res.x, res.y, System::IsFullscreenWindow() ? "fullscreen" : "windowed",
+                      SDL_GetCPUCount()));
 
-    // Friendly units are valid debug dummies: F6/F8 can keep them alive while
-    // the meter measures the damage this controlled unit would deal. Ignore only
-    // true self-damage so suicide/kill-after-shot mechanics do not pollute DPS.
-    if ( attacker == target )
-        return;
-
-    const int32_t now = _timeStamp;
-
-    // Start a new AVG/PEAK firing session after three seconds without damage.
-    // The rolling 1-second samples remain independent from this longer session.
-    if ( _debugDpsLastDamageStamp <= 0 ||
-         now < _debugDpsLastDamageStamp ||
-         now - _debugDpsLastDamageStamp >= 3000 )
-    {
-        _debugDpsPeakRaw = 0;
-        _debugDpsSessionDamageRaw = 0;
-        _debugDpsSessionStartStamp = now;
-    }
-
-    if ( _debugDpsSessionStartStamp <= 0 )
-        _debugDpsSessionStartStamp = now;
-
-    _debugDpsSessionDamageRaw =
-        std::min<int64_t>(_debugDpsSessionDamageRaw + (int64_t)rawDamage,
-                          std::numeric_limits<int64_t>::max());
-    _debugDpsLastDamageStamp = now;
-
-    const int32_t cutoff = now - 1000;
-    _debugDpsSamples.erase(
-        std::remove_if(_debugDpsSamples.begin(), _debugDpsSamples.end(),
-                       [cutoff](const DebugDpsSample &sample)
-                       {
-                           return sample.stamp < cutoff;
-                       }),
-        _debugDpsSamples.end());
-
-    // Aggregate hits generated in the same frame. This keeps MGUN and shotgun
-    // weapons cheap to profile even when they create many damage events.
-    if ( !_debugDpsSamples.empty() && _debugDpsSamples.back().stamp == now )
-    {
-        const int64_t sum = (int64_t)_debugDpsSamples.back().rawDamage + rawDamage;
-        _debugDpsSamples.back().rawDamage =
-            (int32_t)std::min<int64_t>(sum, std::numeric_limits<int32_t>::max());
-    }
+    // --- Graphics chip
+    const bool igpu = GFX::Engine.GpuIsIntegrated();
+    if ( igpu )
+        line(255, 170, 60, fmt::sprintf("GPU: %s   [integrated, iGPU]", GFX::Engine.GpuRenderer()));
     else
+        line(110, 255, 140, fmt::sprintf("GPU: %s   [dedicated]", GFX::Engine.GpuRenderer()));
+    line(160, 175, 190, fmt::sprintf("OpenGL: %s   (%s)", GFX::Engine.GpuGlVersion(), GFX::Engine.GpuVendor()));
+
+    // --- World
+    if ( _viewerBact )
     {
-        DebugDpsSample sample;
-        sample.stamp = now;
-        sample.rawDamage = rawDamage;
-        _debugDpsSamples.push_back(sample);
+        const vec3d &pos = _viewerBact->_position;
+        const vec3d fwd = _viewerBact->_rotation.AxisZ();
+        double heading = std::atan2((double)fwd.x, (double)fwd.z) * 180.0 / M_PI;
+        if ( heading < 0.0 )
+            heading += 360.0;
+
+        line(255, 255, 255, fmt::sprintf("XYZ: %.1f / %.1f / %.1f   Sector: %d, %d   Heading: %.0f deg",
+                                         pos.x, pos.y, pos.z,
+                                         _viewerBact->_cellId.x, _viewerBact->_cellId.y, heading));
     }
+
+    const int seconds = _timeStamp / 1024;
+    const char *speed = _debugGameplayFrozen ? "frozen"
+                      : (_debugGameplaySlowMotion ? "slow motion"
+                      : (_debugGameplayFastMotion ? "fast motion" : "normal"));
+    line(255, 255, 255, fmt::sprintf("Level: %d   Time: %02d:%02d:%02d   Speed: %s%s",
+                                     _levelInfo.LevelID, seconds / 3600, (seconds / 60) % 60,
+                                     seconds % 60, speed, _isNetGame ? "   (netgame)" : ""));
+
+    line(255, 255, 255, fmt::sprintf("Draw distance: %.0f   Sectors: %d   Polys: %d",
+                                     GetEffectDrawDistance(), _renderSectors, _polysCount));
+
+    debug_count_units();
+    line(255, 255, 255, fmt::sprintf("Units: %d host stations, %d vehicles, %d guns, %d shots",
+                                     _dbgTotalRoboCount, _dbgTotalVehicleCount,
+                                     _dbgTotalFlakCount, _dbgTotalWeaponCount));
+    line(255, 255, 255, fmt::sprintf("Effects: %d decals, %d decal smoke, %d transient",
+                                     (int)_groundDecals.size(), (int)_groundDecalSmoke.size(),
+                                     (int)_transientVPs.size()));
+
+    FontUA::set_end(&cmd);
+    GFX::Engine.ProcessDrawSeq(cmd);
 }
 
 void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
@@ -667,96 +659,9 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
             _showDebugMode = 0;
     }
 
-    if ( _debugDpsEnabled )
-    {
-        const int32_t cutoff = _timeStamp - 1000;
-        _debugDpsSamples.erase(
-            std::remove_if(_debugDpsSamples.begin(), _debugDpsSamples.end(),
-                           [cutoff](const DebugDpsSample &sample)
-                           {
-                               return sample.stamp < cutoff;
-                           }),
-            _debugDpsSamples.end());
-
-        int64_t rawDamage = 0;
-        for ( const DebugDpsSample &sample : _debugDpsSamples )
-            rawDamage += sample.rawDamage;
-
-        // DPS PEAK is the best rolling 1-second value reached during the current
-        // firing burst. DPS AVG covers the whole burst from its first recorded hit.
-        // Three seconds without damage starts a new burst for both values.
-        if ( _debugDpsLastDamageStamp > 0 &&
-             _timeStamp >= _debugDpsLastDamageStamp &&
-             _timeStamp - _debugDpsLastDamageStamp >= 3000 )
-        {
-            _debugDpsPeakRaw = 0;
-            _debugDpsSessionDamageRaw = 0;
-            _debugDpsSessionStartStamp = 0;
-            _debugDpsLastDamageStamp = 0;
-        }
-        else if ( rawDamage > _debugDpsPeakRaw )
-        {
-            _debugDpsPeakRaw = rawDamage;
-        }
-
-        // Player-facing combat values use the same /100 scale as the DMG row.
-        const double dps = (double)rawDamage / 100.0;
-        const double peakDps = (double)_debugDpsPeakRaw / 100.0;
-
-        double avgDps = 0.0;
-        if ( _debugDpsSessionStartStamp > 0 &&
-             _timeStamp >= _debugDpsSessionStartStamp &&
-             _debugDpsSessionDamageRaw > 0 )
-        {
-            // Clamp the first second to one full second so the first hit does not
-            // create an artificial huge AVG value from a near-zero denominator.
-            const int32_t elapsedMs =
-                std::max<int32_t>(1000, _timeStamp - _debugDpsSessionStartStamp);
-            avgDps = ((double)_debugDpsSessionDamageRaw / 100.0) *
-                     (1000.0 / (double)elapsedMs);
-        }
-
-        const std::string dpsText = fmt::sprintf("DPS: %.1f", dps);
-        const std::string avgText = fmt::sprintf("DPS AVG: %.1f", avgDps);
-        const std::string peakText = fmt::sprintf("DPS PEAK: %.1f", peakDps);
-
-        CmdStream dpsDraw;
-        dpsDraw.reserve(256);
-        FontUA::select_tileset(&dpsDraw, 15);
-
-        // Keep the diagnostics in the upper-centre area, below the top HUD bars.
-        // Use a screen-relative anchor so the placement remains consistent across resolutions.
-        const int32_t dpsBlockCenterY = std::max<int32_t>(3 * _fontH, (_screenSize.y * 17) / 100);
-        const int16_t dpsBlockCenterOffset =
-            (int16_t)(dpsBlockCenterY - (_screenSize.y / 2));
-
-        FontUA::set_txtColor(&dpsDraw, 90, 255, 170);
-        FontUA::set_xpos(&dpsDraw, 0);
-        FontUA::set_center_ypos(&dpsDraw, dpsBlockCenterOffset - _fontH);
-        if ( _guiTiles[15] )
-            FontUA::FormateCenteredSkipableItem(_guiTiles[15], &dpsDraw, dpsText, _screenSize.x);
-        else
-            FontUA::add_txt(&dpsDraw, _screenSize.x, 1, dpsText);
-
-        FontUA::set_txtColor(&dpsDraw, 110, 210, 255);
-        FontUA::set_xpos(&dpsDraw, 0);
-        FontUA::set_center_ypos(&dpsDraw, dpsBlockCenterOffset);
-        if ( _guiTiles[15] )
-            FontUA::FormateCenteredSkipableItem(_guiTiles[15], &dpsDraw, avgText, _screenSize.x);
-        else
-            FontUA::add_txt(&dpsDraw, _screenSize.x, 1, avgText);
-
-        FontUA::set_txtColor(&dpsDraw, 255, 80, 80);
-        FontUA::set_xpos(&dpsDraw, 0);
-        FontUA::set_center_ypos(&dpsDraw, dpsBlockCenterOffset + _fontH);
-        if ( _guiTiles[15] )
-            FontUA::FormateCenteredSkipableItem(_guiTiles[15], &dpsDraw, peakText, _screenSize.x);
-        else
-            FontUA::add_txt(&dpsDraw, _screenSize.x, 1, peakText);
-
-        FontUA::set_end(&dpsDraw);
-        GFX::Engine.ProcessDrawSeq(dpsDraw);
-    }
+    // F1: F3-style information overlay (GPU, refresh rate, FPS, position, world counters).
+    if ( _debugInfoEnabled )
+        DebugDrawInfoOverlay();
 
     bool openUADebug = System::IniConf::IsGameNewDebugEnabled();
     if ( !openUADebug )
@@ -768,8 +673,7 @@ void NC_STACK_ypaworld::debug_info_draw(TInputState *inpt)
         _debugGameplayFrozen = false;
         _debugHostStationCheat = false;
         _debugGlobalInvulnerability = false;
-        _debugDpsEnabled = false;
-        DebugResetDpsMeter();
+        _debugInfoEnabled = false;
     }
     else
     {

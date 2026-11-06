@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <math.h>
+#include <cmath>
 #include "game/yw.h"
 #include "game/ypagun.h"
 #include "game/ypabact_internal.h"
@@ -178,16 +179,95 @@ bool NC_STACK_ypagun::CheckPedestal()
     return arg136.isect != 0;
 }
 
+void NC_STACK_ypagun::UpdateRadarScan(const update_msg *arg)
+{
+    if ( !arg || arg->frameTime <= 0 )
+        return;
+
+    // The mounting axis follows the parent for Unit Guns. Rebuild a level
+    // orientation first, including when an older save left the dish tilted.
+    vec3d axis = _gunRott;
+    if ( !(axis.normalise() > 0.001) )
+        return;
+
+    vec3d forward = _rotation.AxisZ();
+    forward -= axis * forward.dot(axis);
+    if ( !(forward.normalise() > 0.001) )
+    {
+        forward = _gunBasis - axis * _gunBasis.dot(axis);
+        if ( !(forward.normalise() > 0.001) )
+            return;
+    }
+
+    vec3d right = axis * forward;
+    if ( !(right.normalise() > 0.001) )
+        return;
+
+    _rotation.SetX(right);
+    _rotation.SetY(axis);
+    _rotation.SetZ(forward);
+
+    if ( std::isfinite(_maxrot) && _maxrot > 0.0f )
+    {
+        const double angle = std::fmod(static_cast<double>(_maxrot) * arg->frameTime / 1000.0, C_2PI);
+        _rotation *= mat3x3(axis, angle);
+    }
+    _viewer_rotation = _rotation;
+}
+
+void NC_STACK_ypagun::AI_layer2(update_msg *arg)
+{
+    if ( _gunType != GUN_TYPE_RADAR )
+    {
+        NC_STACK_ypabact::AI_layer2(arg);
+        return;
+    }
+
+    // A radar scans continuously and does not select or follow a target.
+    if ( _secndTtype != BACT_TGT_TYPE_NONE )
+    {
+        if ( _secndTtype != BACT_TGT_TYPE_UNIT || _secndT.pbact )
+        {
+            setTarget_msg clearTarget{};
+            clearTarget.tgt_type = BACT_TGT_TYPE_NONE;
+            clearTarget.priority = 1;
+            SetTarget(&clearTarget);
+        }
+        else
+            _secndTtype = BACT_TGT_TYPE_NONE;
+    }
+    AI_layer3(arg);
+}
+
 void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 {
     if ( IsPassiveModule() )
     {
-        // OpenNeoUA: passive modules are fully inert. Only advance the create
-        // (genesis scale-in) and death timelines; never aim, fire, acquire
-        // targets, or run the pedestal check (that would kill an airborne
-        // attachment). Position/orientation are driven by the parent each frame.
+        // Passive modules do not aim or fire. Radar modules additionally scan;
+        // ordinary Unit Gun attachments must not run the ground pedestal test.
         switch ( _status )
         {
+        case BACT_STATUS_NORMAL:
+        case BACT_STATUS_IDLE:
+            if ( _gunType == GUN_TYPE_RADAR )
+            {
+                // Preserve the legacy building-gun support check. Mounted and
+                // levitating modules have their support supplied by the parent.
+                if ( !(_gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_LEVITATE)) &&
+                     _clock - _gunDownTime > 800 )
+                {
+                    _gunDownTime = _clock;
+                    if ( !CheckPedestal() )
+                    {
+                        if ( !_world || !_world->IsDebugGlobalInvulnerabilityEnabled() )
+                            _energy = -10;
+                        break;
+                    }
+                }
+                UpdateRadarScan(arg);
+            }
+            break;
+
         case BACT_STATUS_DEAD:
             DeadTimeUpdate(arg);
             break;
@@ -441,6 +521,12 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 
 void NC_STACK_ypagun::User_layer(update_msg *arg)
 {
+    if ( _gunType == GUN_TYPE_RADAR )
+    {
+        AI_layer3(arg);
+        return;
+    }
+
     if ( IsPassiveModule() )
     {
         // OpenNeoUA: passive modules are never player-controlled; stay inert.

@@ -1,4 +1,6 @@
 // Frame pacing for the main loop: frame-rate limit and measured FPS.
+#include <algorithm>
+#include <functional>
 #include <thread>
 #include <SDL2/SDL.h>
 #include "framepacer.h"
@@ -86,7 +88,8 @@ int CycleFrameRateLimit(int value)
 
 void FramePacer::SetFrameRateLimit(int fps)
 {
-    _period = (fps > 0 && fps <= 1000) ? SDL_GetPerformanceFrequency() / (uint64_t)fps : 0;
+    _limitFps = (fps > 0 && fps <= 1000) ? fps : 0;
+    _period = _limitFps ? SDL_GetPerformanceFrequency() / (uint64_t)_limitFps : 0;
     _deadline = 0;
 }
 
@@ -127,6 +130,16 @@ void FramePacer::EndFrame()
         now = SDL_GetPerformanceCounter();
     }
 
+    // Whole frame time (render + wait), kept for the debug overlay statistics.
+    if ( _lastFrameEnd != 0 )
+    {
+        _frameMs[_frameMsNext] = (float)((double)(now - _lastFrameEnd) * 1000.0 / (double)frequency);
+        _frameMsNext = (_frameMsNext + 1) % FrameHistory;
+        if ( _frameMsCount < FrameHistory )
+            _frameMsCount++;
+    }
+    _lastFrameEnd = now;
+
     if ( _fpsWindowStart == 0 )
         _fpsWindowStart = now;
 
@@ -138,6 +151,35 @@ void FramePacer::EndFrame()
         _fpsWindowFrames = 0;
         _fpsWindowStart = now;
     }
+}
+
+FramePacer::FrameStats FramePacer::GetFrameStats() const
+{
+    FrameStats stats;
+    if ( _frameMsCount <= 0 )
+        return stats;
+
+    float sorted[FrameHistory];
+    double sum = 0.0;
+    for (int i = 0; i < _frameMsCount; i++)
+    {
+        sorted[i] = _frameMs[i];
+        sum += _frameMs[i];
+    }
+
+    stats.frames = _frameMsCount;
+    stats.lastMs = _frameMs[(_frameMsNext + FrameHistory - 1) % FrameHistory];
+    stats.avgMs = sum / _frameMsCount;
+
+    // Slowest 1% (at least one frame) averaged: the usual "1% low" figure.
+    std::sort(sorted, sorted + _frameMsCount, std::greater<float>());
+    stats.worstMs = sorted[0];
+    const int worstCount = std::max(1, _frameMsCount / 100);
+    double worstSum = 0.0;
+    for (int i = 0; i < worstCount; i++)
+        worstSum += sorted[i];
+    stats.low1PercentMs = worstSum / worstCount;
+    return stats;
 }
 
 } // namespace System

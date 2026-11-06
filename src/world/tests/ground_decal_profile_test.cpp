@@ -70,10 +70,11 @@ int main()
           world->_decalProfiles[6].fx.ground_decal_smoke.pulse_vp==0, "zero VP keeps smoke mode");
     check(parse({"new_decal 7", "duration = permanent", "effect_base = Data/Models/Base/New/Effect_Smoke/Effect_Smoke.BASE", "end"}) &&
           !world->_decalProfiles[7].fx.ground_decal_smoke.base_model.empty(), "external BASE effect parses");
-    check(parse({"new_decal 8", "duration = permanent", "effect_3ds = Data/Models/3ds/Smoke.3ds", "effect_mode = rise", "effect_scale = 0.01", "end"}) &&
+    check(parse({"new_decal 8", "duration = permanent", "effect_3ds = Data/Models/3ds/Smoke.3ds", "effect_mode = rise", "effect_size = 30~45", "end"}) &&
           world->_decalProfiles[8].fx.ground_decal_smoke.mode==World::TGroundDecalSmoke::MODE_RISE &&
-          std::fabs(world->_decalProfiles[8].fx.ground_decal_smoke.mesh_scale - 0.01f) < 0.0001f,
-          "external rise settings parse");
+          world->_decalProfiles[8].fx.ground_decal_smoke.size_min==30.0f &&
+          world->_decalProfiles[8].fx.ground_decal_smoke.size_max==45.0f,
+          "external rise settings parse (size only, no effect_scale)");
     check(parse({"new_decal 9", "duration = permanent", "effect_3ds = Data/Models/3ds/Spark.3ds", "effect_mode = ground_pulse", "effect_pulse_interval = 1500~700", "end"}) &&
           world->_decalProfiles[9].fx.ground_decal_smoke.pulse_interval_min==700 &&
           world->_decalProfiles[9].fx.ground_decal_smoke.pulse_interval_max==1500, "effect_pulse_interval accepts a reversed min~max");

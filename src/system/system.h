@@ -65,6 +65,11 @@ namespace System
 
     Common::Point GetResolution();
 
+    // Refresh rate (Hz) of the display showing the game window; 0 if unknown.
+    int GetDisplayRefreshRate();
+    // True when the game window covers the whole display.
+    bool IsFullscreenWindow();
+
     std::vector<std::string>& GetCmdLineArray();
     void AddCmdLine(const std::string &);
     int32_t FindCmdLineArg(const std::string &);

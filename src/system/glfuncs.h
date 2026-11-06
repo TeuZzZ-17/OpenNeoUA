@@ -42,6 +42,7 @@ public:
     static PFNGLGETUNIFORMLOCATIONPROC GLGetUniformLocation;
     static PFNGLUNIFORM1FPROC GLUniform1f;
     static PFNGLUNIFORM1IPROC GLUniform1i;
+    static PFNGLUNIFORM1FVPROC GLUniform1fv;
     static PFNGLUNIFORM2FPROC GLUniform2f;
     static PFNGLUNIFORM2IPROC GLUniform2i;
     static PFNGLUNIFORM3FPROC GLUniform3f;

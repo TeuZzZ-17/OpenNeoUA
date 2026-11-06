@@ -7,7 +7,7 @@
 //   yw_fx.cpp .............. transient visuals, chain/decoration/atmospheric FX
 //   yw_render.cpp .......... rendering of sectors, fillers, sky, transient VPs and the game view
 //   yw_recorder.cpp ........ replay recorder
-//   yw_debug.cpp ........... debug overlays and DPS meter
+//   yw_debug.cpp ........... debug overlays and F1 info overlay
 //   yw_artillery_markers.cpp artillery shell map markers
 // Shared helpers are declared in yw_game_impl.h.
 #include <inttypes.h>
@@ -3481,6 +3481,7 @@ void NC_STACK_ypaworld::ProtosFreeSounds()
 
         wep.debuff.tick_snd.ClearSounds();
         wep.delay_time_debuff.tick_snd.ClearSounds();
+        wep.blast_debuff.tick_snd.ClearSounds();
     }
 
     for (World::TBuildingProto &proto : _buildProtos)

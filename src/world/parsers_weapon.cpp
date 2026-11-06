@@ -26,6 +26,27 @@ namespace World
 namespace Parsers
 {
 
+// debuff_id and blast_debuff_id take a profile ID or a new_debuff name. Names start
+// with a letter and are resolved with the Debuff links, after every script is read.
+static void ParseDebuffLink(ScriptParser::Parser &parser, const std::string &value,
+                            int32_t firstValidId, int32_t disabledId,
+                            int32_t &id, std::string &name)
+{
+    name.clear();
+    const unsigned char first = value.empty() ? '0' : (unsigned char)value[0];
+    if ( !std::isdigit(first) && first != '-' && first != '+' )
+    {
+        id = disabledId;
+        name = value;
+        return;
+    }
+
+    const long number = parser.stol(value, nullptr, 0);
+    id = number >= firstValidId && number <= std::numeric_limits<int32_t>::max()
+        ? (int32_t)number
+        : disabledId;
+}
+
 TVhclSound *WeaponProtoParser::GetSndFxByName(const std::string &sndname)
 {
     if ( !StriCmp(sndname, "normal") )
@@ -150,11 +171,15 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_mesh = TWeapProto::TLaserMeshConfig();
         _wpn->type_icon = 65;
         _wpn->debuff_id = -1;
+        _wpn->debuff_name.clear();
         _wpn->ground_decal_id = -1;
         _wpn->ground_decal_size = TDecalSizeOverride();
         _wpn->debuff = TWeaponDebuffConfig();
         _wpn->delay_time_debuff_id = 0;
         _wpn->delay_time_debuff = TWeaponDebuffConfig();
+        _wpn->blast_debuff_id = 0;
+        _wpn->blast_debuff_name.clear();
+        _wpn->blast_debuff = TWeaponDebuffConfig();
         _wpn->cluster = TWeaponClusterConfig();
         _wpn->cluster.snd.volume = 120;
         _wpn->cluster.snd.sndPrm.mag0 = 1.0;
@@ -336,12 +361,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         _wpn->recoil = ClampRecoilMultiplier(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "debuff_id") )
-    {
-        const long value = parser.stol(p2, nullptr, 0);
-        _wpn->debuff_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
-            ? (int32_t)value
-            : -1;
-    }
+        ParseDebuffLink(parser, p2, 0, -1, _wpn->debuff_id, _wpn->debuff_name);
+    else if ( !StriCmp(p1, "blast_debuff_id") )
+        ParseDebuffLink(parser, p2, 1, 0, _wpn->blast_debuff_id, _wpn->blast_debuff_name);
     else if ( !StriCmp(p1, "ground_decal_size") )
         ParseDecalSizeOverride("ground_decal_size", p2, _wpn->ground_decal_size);
     else if ( !StriCmp(p1, "ground_decal_id") )
@@ -832,9 +854,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int maxTargets = parser.stol(p2, nullptr, 0);
         _wpn->multi_target = maxTargets > 0 ? maxTargets : 0;
     }
-    else if ( !StriCmp(p1, "guide_time") )
+    else if ( !StriCmp(p1, "homing_time") )
     {
-        _wpn->guide_time = ParsePositiveIntOrZero(p2);
+        _wpn->homing_time = ParsePositiveIntOrZero(p2);
     }
     else if ( !StriCmp(p1, "homing_force") )
     {

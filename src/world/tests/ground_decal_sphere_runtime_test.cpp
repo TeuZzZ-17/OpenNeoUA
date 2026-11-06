@@ -1,6 +1,7 @@
 // Synthetic terrain fixture linked to the production world and decal builder.
 #include "game/yw.h"
 #include "nucleus/skeleton.h"
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #undef main
@@ -49,23 +50,42 @@ int main()
     fx.ground_decal_size_min=fx.ground_decal_size_max=100;
     fx.ground_decal_permanent = true;
     const vec3d center(1800, -10, -1800);
-    Check(world->SpawnGroundDecalInSphere(fx, center, 10), "production scanner accepts exact terrain tangency");
+    Check(world->SpawnGroundDecalInSphere(fx, center, 10), "production scanner accepts exact surface tangency");
     Check(world->_groundDecals.size() == 1, "one configured decal emitted");
     if ( !world->_groundDecals.empty() )
         Check((world->_groundDecals.back().pos - vec3d(1800, 0, -1800)).length() < 1e-8,
-              "decal anchored to nearest real terrain point");
+              "decal anchored to nearest real surface point");
     Check(!world->SpawnGroundDecalInSphere(fx, center, 9.999f), "production scanner rejects tiny gap");
     Check(world->SpawnGroundDecalInSphere(fx, center, 10.001f), "production scanner accepts tiny overlap");
     Check(!world->SpawnGroundDecalInSphere(fx, center, 0), "production scanner rejects zero radius");
     Check(!world->SpawnGroundDecalInSphere(fx, center, -1), "production scanner rejects negative radius");
     Check(!world->SpawnGroundDecalInSphere(fx, vec3d(1800, -1000, -1800), 10), "air explosion too high emits no decal");
-    // A building's horizontal face is closer than the ground, but is ineligible.
+    // Buildings and walls receive decals too: what shows them is decided per pixel.
     for (UAskeleton::Vertex &vertex : data.POO) vertex.y = -10;
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "building surface cannot satisfy terrain rule");
+    Check(world->SpawnGroundDecalInSphere(fx, center, 10), "building surface receives a decal");
+    // A big decal on a roof also marks the ground in reach; a small one stays up there.
+    for (UAskeleton::Vertex &vertex : data.POO) vertex.y = -100;
+    const vec3d roofCenter(1800, -110, -1800);
+    world->ClearGroundDecals();
+    fx.ground_decal_size_min = fx.ground_decal_size_max = 1000;
+    Check(world->SpawnGroundDecalInSphere(fx, roofCenter, 10), "big decal lands on the roof");
+    Check(world->_groundDecals.size() == 2, "big decal on a roof also marks the ground");
+    if ( world->_groundDecals.size() == 2 )
+    {
+        Check(std::fabs(world->_groundDecals.front().pos.y + 100) < 1e-6, "first decal stays on the roof");
+        Check(std::fabs(world->_groundDecals.back().pos.y) < 1e-6, "second decal lies on the sector ground");
+    }
+    world->ClearGroundDecals();
+    fx.ground_decal_size_min = fx.ground_decal_size_max = 100;
+    Check(world->SpawnGroundDecalInSphere(fx, roofCenter, 10), "small decal lands on the roof");
+    Check(world->_groundDecals.size() == 1, "small decal does not reach the ground");
+    for (UAskeleton::Vertex &vertex : data.POO) vertex.y = -10;
     for (UAskeleton::Vertex &vertex : data.POO) vertex.y = 0;
     data.polygons[0].B = 0;
     data.polygons[0].A = 1;
-    Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "wall normal cannot satisfy terrain rule");
+    Check(world->SpawnGroundDecalInSphere(fx, center, 10), "wall receives a decal");
+    if ( !world->_groundDecals.empty() )
+        Check(std::fabs(world->_groundDecals.back().axisN.x) > 0.99, "decal plane follows the wall");
     data.polygons[0].B = 1;
     data.polygons[0].A = 0;
     NC_STACK_skeleton filler;

@@ -1,4 +1,6 @@
 // System: resolution/aspect-ratio types and platform helpers.
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <list>
 #include <algorithm>
@@ -381,9 +383,76 @@ TTF_Font *LoadFont(const std::string &fontname, int height)
 }
 
 
+
+#ifndef _WIN32
+// Linux has no equivalent of the two exported names Windows drivers read, but
+// it decides inside the process instead: the NVIDIA library looks at these
+// variables when the first context is created, which is what the `prime-run`
+// command sets. So the program can set them itself, before SDL starts.
+//
+// Only done when the NVIDIA driver is actually loaded, and never over a choice
+// already made by whoever started the game. On a computer with one graphics
+// card they change nothing. If a context cannot be created with them, they are
+// dropped and the window is tried again, so this can never stop the game.
+//
+// Mesa (AMD and Intel) uses DRI_PRIME instead, and which card the number picks
+// depends on the computer, so it is left to the person: with a built-in chip
+// the graphics log says to start the game with DRI_PRIME=1.
+namespace
+{
+
+bool FileExists(const char *path)
+{
+    FILE *file = fopen(path, "rb");
+    if ( !file )
+        return false;
+    fclose(file);
+    return true;
+}
+
+bool NvidiaDriverLoaded()
+{
+    return FileExists("/proc/driver/nvidia/version") || FileExists("/dev/nvidia0");
+}
+
+bool AskedForNvidiaOffload = false;
+
+void AskNvidiaForTheGraphicsCard()
+{
+    if ( !NvidiaDriverLoaded() )
+        return;
+
+    // setenv with overwrite 0 keeps anything the person set themselves.
+    const bool hadOffload = getenv("__NV_PRIME_RENDER_OFFLOAD") != nullptr;
+    const bool hadVendor = getenv("__GLX_VENDOR_LIBRARY_NAME") != nullptr;
+    if ( hadOffload && hadVendor )
+        return;
+
+    setenv("__NV_PRIME_RENDER_OFFLOAD", "1", 0);
+    setenv("__GLX_VENDOR_LIBRARY_NAME", "nvidia", 0);
+    AskedForNvidiaOffload = !hadOffload || !hadVendor;
+}
+
+void StopAskingNvidiaForTheGraphicsCard()
+{
+    if ( !AskedForNvidiaOffload )
+        return;
+
+    unsetenv("__NV_PRIME_RENDER_OFFLOAD");
+    unsetenv("__GLX_VENDOR_LIBRARY_NAME");
+    AskedForNvidiaOffload = false;
+}
+
+}
+#endif
+
 void Init(bool oldGL)
 {
     EventHandlers.clear();
+
+#ifndef _WIN32
+    AskNvidiaForTheGraphicsCard();
+#endif
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) < 0)
     {
@@ -407,13 +476,39 @@ void Init(bool oldGL)
 
     window = SDL_CreateWindow("OpenNeoUA (Urban Assault)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winRes.W, winRes.H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
 
+    if (window)
+        cont = SDL_GL_CreateContext(window);
+
+#ifndef _WIN32
+    // Asking for the graphics card must never cost the game its window.
+    if ( (!window || !cont) && AskedForNvidiaOffload )
+    {
+        printf("Could not use the graphics card (%s); starting with the default one.\n",
+               SDL_GetError());
+        StopAskingNvidiaForTheGraphicsCard();
+
+        if ( cont )
+        {
+            SDL_GL_DeleteContext(cont);
+            cont = nullptr;
+        }
+        if ( window )
+        {
+            SDL_DestroyWindow(window);
+            window = nullptr;
+        }
+
+        window = SDL_CreateWindow("OpenNeoUA (Urban Assault)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winRes.W, winRes.H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
+        if (window)
+            cont = SDL_GL_CreateContext(window);
+    }
+#endif
+
     if (!window)
     {
         printf("Couldn't create window and renderer: %s", SDL_GetError());
         return;
     }
-
-    cont = SDL_GL_CreateContext(window);
 
     TTF_Init();
 
@@ -489,6 +584,24 @@ bool ProcessEvents()
 Common::Point GetResolution()
 {
     return Common::Point(winRes.W, winRes.H);
+}
+
+int GetDisplayRefreshRate()
+{
+    if ( !window )
+        return 0;
+
+    const int display = SDL_GetWindowDisplayIndex(window);
+    SDL_DisplayMode mode;
+    if ( display < 0 || SDL_GetCurrentDisplayMode(display, &mode) != 0 )
+        return 0;
+
+    return mode.refresh_rate;
+}
+
+bool IsFullscreenWindow()
+{
+    return window && (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
 }
 
 void Flip()

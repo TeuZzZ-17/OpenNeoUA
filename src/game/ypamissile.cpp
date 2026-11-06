@@ -1048,6 +1048,10 @@ const char *NC_STACK_ypamissile::GetAreaBuildingSkipReason(const cellArea &cell,
     if ( cell.buildings_health.Get(bldX, bldY) <= 0 )
         return "destroyed_slot";
 
+    // Direct energy replaces blast damage on the struck slot.
+    if ( _energy > 0 && IsDirectHitBuilding(cell.CellId, bldX, bldY) )
+        return "direct_hit";
+
     return nullptr;
 }
 
@@ -1061,6 +1065,10 @@ const char *NC_STACK_ypamissile::GetAreaSectorSkipReason(const cellArea &cell, i
 
     if ( cell.buildings_health.Get(bldX, bldY) <= 0 )
         return "destroyed_slot";
+
+    // Direct energy replaces blast damage on the struck slot.
+    if ( _energy > 0 && IsDirectHitSector(cell.CellId, bldX, bldY) )
+        return "direct_hit";
 
     return nullptr;
 }
@@ -1818,6 +1826,9 @@ void NC_STACK_ypamissile::Impact()
     for( NC_STACK_ypabact* &bct : _pSector->unitsList )
     {
         if ( _mislEmitter && _mislEmitter->IsMountedFamilyWith(bct) )
+            continue;
+
+        if ( IsArtilleryAlly(bct) )
             continue;
 
         if ( bct->_bact_type != BACT_TYPES_MISSLE && bct->_bact_type != BACT_TYPES_ROBO && bct->_bact_type != BACT_TYPES_TANK && bct->_bact_type != BACT_TYPES_CAR && bct->_bact_type != BACT_TYPES_GUN && !(bct->_status_flg & BACT_STFLAG_DEATH2) )

@@ -1011,8 +1011,7 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
             _debugGameplayFrozen = false;
             _debugHostStationCheat = false;
             _debugGlobalInvulnerability = false;
-            _debugDpsEnabled = false;
-            DebugResetDpsMeter();
+            _debugInfoEnabled = false;
         }
 
         HandleDebugTimeHotkeys(arg->field_8, openUADebug);
@@ -1111,37 +1110,19 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
                  arg->field_8->KbdLastHit == Input::KC_F10 )
                 arg->field_8->HotKeyID = -1;
 
-            // F1: rolling DPS meter for the currently controlled player unit.
+            // F1: F3-style information overlay (GPU, refresh rate, FPS, position...).
             // Consume the binding only while game.new.debug is enabled.
             if ( arg->field_8->KbdLastHit == Input::KC_F1 )
             {
                 arg->field_8->HotKeyID = -1;
+                _debugInfoEnabled = !_debugInfoEnabled;
 
-                if ( _isNetGame )
-                {
-                    _debugDpsEnabled = false;
-                    DebugResetDpsMeter();
-
-                    yw_arg159 infoMsg;
-                    infoMsg.txt = "DPS Debug unavailable in netgame";
-                    infoMsg.unit = nullptr;
-                    infoMsg.Priority = 100;
-                    infoMsg.MsgID = 0;
-                    ypaworld_func159(&infoMsg);
-                }
-                else
-                {
-                    _debugDpsEnabled = !_debugDpsEnabled;
-                    DebugResetDpsMeter();
-                    DebugUpdateDpsSource();
-
-                    yw_arg159 infoMsg;
-                    infoMsg.txt = _debugDpsEnabled ? "DPS Debug ON" : "DPS Debug OFF";
-                    infoMsg.unit = nullptr;
-                    infoMsg.Priority = 100;
-                    infoMsg.MsgID = 0;
-                    ypaworld_func159(&infoMsg);
-                }
+                yw_arg159 infoMsg;
+                infoMsg.txt = _debugInfoEnabled ? "Debug Info ON" : "Debug Info OFF";
+                infoMsg.unit = nullptr;
+                infoMsg.Priority = 100;
+                infoMsg.MsgID = 0;
+                ypaworld_func159(&infoMsg);
             }
 
             // F5 destroys vehicles and guns; F6/F7 only handle vehicles.
@@ -1358,8 +1339,6 @@ size_t NC_STACK_ypaworld::Process(base_64arg *arg)
         }
 
         yw_ApplyDebugHostStationResources(this);
-        if ( _debugDpsEnabled )
-            DebugUpdateDpsSource();
 
         _frameTime = arg->DTime;
         _framesElapsed++;
@@ -3097,7 +3076,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetDelay(wproto.delay_time);
     wobj->SetDriveTime(wproto.drive_time);
     const bool canHome = wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || wproto.IsHomingBomb();
-    wobj->SetHomingTime(canHome ? wproto.guide_time : 0);
+    wobj->SetHomingTime(canHome ? wproto.homing_time : 0);
     wobj->SetHomingForce(canHome ? wproto.homing_force : 0.0f);
     wobj->SetMissileType(missileType);
     wobj->SetPowerHeli(wproto.energy_heli * 1000.0);
@@ -3177,6 +3156,8 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
         wproto.debuff.tick_snd.LoadSamples();
     if ( wproto.delay_time_debuff.valid )
         wproto.delay_time_debuff.tick_snd.LoadSamples();
+    if ( wproto.blast_debuff.valid )
+        wproto.blast_debuff.tick_snd.LoadSamples();
 
     wobj->SetParameters(wproto.initParams);
 
@@ -4072,6 +4053,17 @@ int32_t NC_STACK_ypaworld::GetSkyHorizonDistance() const
     const int32_t configured = System::IniConf::GfxSkyDistance.Get<int32_t>();
     return std::max<int32_t>(YW_SKY_HORIZON_DISTANCE_MIN,
                              std::min<int32_t>(YW_SKY_HORIZON_DISTANCE_MAX, configured));
+}
+
+// Distance where world effects (transient visuals, ground decals, decal smoke) must be
+// fully invisible. _normalVizLimit is only a CPU-side budget; with the sky dome the
+// visible world ends at the sky horizon.
+float NC_STACK_ypaworld::GetEffectDrawDistance() const
+{
+    float limit = (float)_normalVizLimit;
+    if ( _skyRender && _skyObject )
+        limit = std::min(limit, (float)GetSkyHorizonDistance());
+    return limit;
 }
 
 void NC_STACK_ypaworld::UpdateSkyHorizonRenderSectors()
