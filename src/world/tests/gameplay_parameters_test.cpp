@@ -43,6 +43,10 @@ struct Missile : NC_STACK_ypamissile {
     using NC_STACK_ypamissile::ApplyBlastToSectors;
     using NC_STACK_ypamissile::ApplyEnergyToBact;
     using NC_STACK_ypamissile::RememberDirectHitUnit;
+    using NC_STACK_ypamissile::IsArtilleryAlly;
+    using NC_STACK_ypamissile::GetAreaPushSkipReason;
+    using NC_STACK_ypamissile::_mislDirectHitUnits;
+    using NC_STACK_ypamissile::_isArtilleryShellProjectile;
     using NC_STACK_ypamissile::_mislBlastRadius;
     using NC_STACK_ypamissile::_mislBlastEnergy;
     int buildingHits=0, sectorHits=0, lastEnergy=0;
@@ -78,6 +82,15 @@ int main(int argc, char **argv) {
     Check(weapon.blast_radius==1500 && weapon.blast_energy==200 && weapon.blast_push==3 && weapon.blast_falloff==1, "four blast values stored");
     Check(Parse(world, {"modify_weapon 1", "Blast_radius = nan", "Blast_energy = -50", "end"}), "invalid blast parser safe");
     Check(weapon.blast_radius==0 && weapon.blast_energy==0, "invalid blast disables energy and radius");
+    Check(weapon.blast_debuff_id==0, "blast_debuff_id is disabled by default");
+    Check(Parse(world, {"modify_weapon 1", "blast_debuff_id = 4", "end"}) && weapon.blast_debuff_id==4, "blast_debuff_id stored");
+    Check(Parse(world, {"modify_weapon 1", "blast_debuff_id = -3", "end"}) && weapon.blast_debuff_id==0, "invalid blast_debuff_id disables it");
+    Check(Parse(world, {"modify_weapon 1", "blast_debuff_id = shock", "debuff_id = Broken_Armor", "end"}) &&
+          weapon.blast_debuff_name=="shock" && weapon.blast_debuff_id==0 &&
+          weapon.debuff_name=="Broken_Armor" && weapon.debuff_id==-1, "debuff names stored");
+    Check(Parse(world, {"modify_weapon 1", "blast_debuff_id = 4", "debuff_id = 0", "end"}) &&
+          weapon.blast_debuff_name.empty() && weapon.blast_debuff_id==4 &&
+          weapon.debuff_name.empty() && weapon.debuff_id==0, "an ID replaces a previous name");
 
     const vec3d centre=World::SectorIDToCenterPos3(Common::Point(3,3));
     Unit source, enemy, ally, outside;
@@ -86,25 +99,39 @@ int main(int argc, char **argv) {
     ally.Bind(world,1,3,centre+vec3d(120,0,0));
     outside.Bind(world,2,4,centre+vec3d(1700,0,0));
     world._userRobo=&source; world._userUnit=&source;
-    weapon.debuff.valid=true; weapon.debuff.duration=10000; weapon.debuff.tick_time=1000;
+    weapon.blast_debuff.valid=true; weapon.blast_debuff.duration=10000; weapon.blast_debuff.tick_time=1000;
     Missile missile; missile.Bind(world,source,centre); missile.SetBlast(1500,0,0);
     missile.ApplyBlastToUnits();
-    Check(enemy.Debuffed() && ally.Debuffed() && source.Debuffed(), "debuff-only blast includes enemy ally and shooter");
+    Check(enemy.Debuffed() && !ally.Debuffed() && !source.Debuffed(), "blast_debuff reaches enemies only");
     Check(!outside.Debuffed(), "debuff respects radius");
-    enemy.ClearActiveDebuff(); ally.ClearActiveDebuff(); source.ClearActiveDebuff();
-    ally._buff.valid=true; ally._buff.deflect_charges=2;
+    enemy.ClearActiveDebuff();
+    enemy._buff.valid=true; enemy._buff.deflect_charges=2;
     missile.ApplyBlastToUnits();
-    Check(!ally.Debuffed() && ally.GetBuffDeflectChargesRemaining()==1, "Deflect stops debuff-only blast once");
-    ally._buff.deflect_charges=0;
-    weapon.debuff.mindcontrol=true;
-    ally.ClearActiveDebuff(); missile.ApplyBlastToUnits();
-    Check(ally.Debuffed() && ally._owner==1, "allied target keeps other debuff properties without mindcontrol");
-    weapon.debuff.mindcontrol=false;
+    Check(!enemy.Debuffed() && enemy.GetBuffDeflectChargesRemaining()==1, "Deflect stops debuff-only blast once");
+    enemy._buff.deflect_charges=0;
+    missile.RememberDirectHitUnit(&enemy);
+    missile.ApplyBlastToUnits();
+    Check(enemy.Debuffed(), "direct target without debuff_id takes blast_debuff");
+    enemy.ClearActiveDebuff();
+    weapon.debuff.valid=true; weapon.debuff.duration=10000; weapon.debuff.tick_time=1000;
+    missile.ApplyBlastToUnits();
+    Check(!enemy.Debuffed(), "debuff_id replaces blast_debuff on the direct target");
+    weapon.debuff.valid=false; weapon.blast_debuff.valid=false;
 
     enemy._owner=2; enemy._energy=10000; missile.SetBlast(1500,200,0);
-    missile.ApplyEnergyToBact(&enemy,100); missile.RememberDirectHitUnit(&enemy);
+    missile._energy=100; missile.ApplyBlastToUnits();
+    Check(enemy._energy==10000, "direct target with energy takes no blast energy");
+    missile._energy=0; missile.ApplyBlastToUnits();
+    Check(enemy._energy==9800, "direct target without energy takes blast energy");
+    missile._mislDirectHitUnits.clear(); enemy._energy=10000;
     missile.ApplyBlastToUnits();
-    Check(enemy._energy==9700, "direct energy and blast energy add");
+    Check(enemy._energy==9800, "other targets take blast energy");
+    missile._isArtilleryShellProjectile=true;
+    Check(missile.IsArtilleryAlly(&ally) && !missile.IsArtilleryAlly(&enemy), "artillery recognises allies");
+    Check(missile.GetAreaPushSkipReason(&ally) && !missile.GetAreaPushSkipReason(&enemy), "artillery never pushes allies");
+    missile._isArtilleryShellProjectile=false;
+    Check(!missile.GetAreaPushSkipReason(&ally), "other weapons keep their push rule");
+    enemy._energy=10000;
     world._cells(3,3).PurposeType=cellArea::PT_POWERSTATION;
     world._cells(4,3).PurposeType=cellArea::PT_NONE;
     missile.ApplyBlastToBuildings(); missile.ApplyBlastToSectors();

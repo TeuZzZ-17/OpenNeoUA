@@ -1358,6 +1358,13 @@ struct TWeapProto
     // projectile successfully attaches to a unit. 0 means disabled.
     int delay_time_debuff_id = 0;
     TWeaponDebuffConfig delay_time_debuff;
+    // OpenNeoUA custom: optional Debuff applied by the blast to enemies inside Blast_radius.
+    // debuff_id stays on the direct target. 0 means disabled.
+    int blast_debuff_id = 0;
+    TWeaponDebuffConfig blast_debuff;
+    // new_debuff names written in place of an ID. Links resolve them to the IDs above.
+    std::string debuff_name;
+    std::string blast_debuff_name;
     float adistSector = 0;
     float adistBact = 0;
     int shot_time = 0;
@@ -1386,7 +1393,7 @@ struct TWeapProto
     // OpenNeoUA: generic multi-target count for compatible homing weapon models.
     // Consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
     int multi_target = 0;
-    int guide_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
+    int homing_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
     // OpenNeoUA custom: extra turn speed (rad/s) toward a live target for missile/homing_bomb,
     // active while guidance lasts. 0 = vanilla.
     float homing_force = 0.0f;

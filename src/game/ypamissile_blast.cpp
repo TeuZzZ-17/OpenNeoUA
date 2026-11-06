@@ -317,17 +317,22 @@ int NC_STACK_ypamissile::CalcEnergyForBact(NC_STACK_ypabact *bct, int baseEnergy
     return ceil(shieldedDamage / divisor);
 }
 
+// Artillery keeps its normal terminal collision and explosion, but never damages
+// or pushes units owned by the shell's emitter.
+bool NC_STACK_ypamissile::IsArtilleryAlly(NC_STACK_ypabact *bct) const
+{
+    return _isArtilleryShellProjectile && bct && _mislEmitter &&
+           bct->_owner == _mislEmitter->_owner;
+}
+
 int NC_STACK_ypamissile::ApplyEnergyToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier, bool applyDebuff)
 {
     if ( !bct )
         return 0;
 
-    // Artillery keeps its normal terminal collision and explosion, but never
-    // damages units owned by the shell's emitter. This central unit-damage
-    // guard covers both the direct-hit and blast paths without affecting enemy
-    // units, buildings, sectors, or other projectile models.
-    if ( _isArtilleryShellProjectile && _mislEmitter &&
-         bct->_owner == _mislEmitter->_owner )
+    // This central unit-damage guard covers both the direct-hit and blast paths
+    // without affecting enemy units, buildings, sectors, or other projectile models.
+    if ( IsArtilleryAlly(bct) )
         return 0;
 
     NC_STACK_ypabact *userHost = _world ? _world->getYW_userHostStation() : nullptr;
@@ -524,6 +529,10 @@ const char *NC_STACK_ypamissile::GetBlastEnergySkipReason(NC_STACK_ypabact *bct,
         return "emitter";
     }
 
+    // A direct hit that carries energy replaces blast damage on that target.
+    if ( _energy > 0 && IsDirectHitUnit(bct) )
+        return "direct_hit";
+
     if ( bct->_bact_type == BACT_TYPES_MISSLE )
         return "missile";
 
@@ -581,6 +590,9 @@ const char *NC_STACK_ypamissile::GetAreaPushSkipReason(NC_STACK_ypabact *bct) co
 {
     if ( !bct || bct == this || bct == _mislEmitter )
         return "self";
+
+    if ( IsArtilleryAlly(bct) )
+        return "artillery_ally";
 
     // Physical Chain FX already receive their launch velocity when they spawn.
     // Weapon push must not add a second impulse to those fragments.
@@ -776,7 +788,7 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
     bool doBlastPush   = isfinite(_mislBlastPush) && _mislBlastPush > 0;
     World::TWeapProto *proto = _world && (size_t)_vehicleID < _world->GetWeaponsProtos().size()
         ? &_world->GetWeaponsProtos().at(_vehicleID) : nullptr;
-    const bool hasDebuff = proto && proto->debuff.valid;
+    const bool hasDebuff = proto && proto->blast_debuff.valid;
 
     if ( !isfinite(_mislBlastRadius) || _mislBlastRadius <= 0.0 || (!doBlastDamage && !doBlastPush && !hasDebuff) || !_world )
         return;
@@ -823,7 +835,12 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
                      bct->_owner == _mislEmitter->_owner )
                     pushSkip = "friendly";
 
+                // blast_debuff_id reaches enemies only. Same rule as energy and push: a
+                // direct debuff replaces the area one on the struck target; without
+                // debuff_id that target gets the area one.
                 const bool applyDebuff = hasDebuff && bct && bct != this &&
+                    bct->_owner != _owner &&
+                    !(proto->debuff.valid && IsDirectHitUnit(bct)) &&
                     bct->_bact_type != BACT_TYPES_MISSLE && bct->_energy > 0 &&
                     bct->_status != BACT_STATUS_DEAD &&
                     !(bct->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
@@ -896,10 +913,9 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
                     }
                 }
 
-                // A blast also affects the direct target. Debuff coverage is
-                // independent of energy/push and includes allied units.
+                // Debuff coverage is independent of energy and push.
                 if ( applyDebuff )
-                    bct->ApplyDebuff(proto->debuff, _mislEmitter);
+                    bct->ApplyDebuff(proto->blast_debuff, _mislEmitter);
                 if ( areaEnergy > 0 )
                     ApplyEnergyToBact(bct, areaEnergy, deflectEndDamageMultiplier, false);
 

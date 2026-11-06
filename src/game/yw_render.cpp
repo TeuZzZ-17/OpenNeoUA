@@ -87,8 +87,13 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
             bs77->excludeSectorTerrainFromTint = false;
         }
 
+        // Terrain and buildings of the sector receive decals, its units do not.
+        const uint32_t oldFlags = bs77->flags;
+        bs77->flags |= GFX::RFLAGS_DECAL_RECEIVER;
+
         base->Render(bs77, instance);
 
+        bs77->flags = oldFlags;
         bs77->tint = oldTint;
         bs77->particleTint = oldParticleTint;
         bs77->colorizeTint = oldColorizeTint;
@@ -392,6 +397,9 @@ void NC_STACK_ypaworld::PrepareAllFillers()
 
 void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
 {
+    const uint32_t oldFlags = arg->flags;
+    arg->flags |= GFX::RFLAGS_DECAL_RECEIVER;
+
     //Render landscape linking parts
     for (int i = 0; i < _renderSectors; i++)
     {
@@ -438,6 +446,8 @@ void NC_STACK_ypaworld::RenderFillers(baseRender_msg *arg)
             }
         }
     }
+
+    arg->flags = oldFlags;
 }
 
 void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
@@ -496,6 +506,19 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     // doing so exposes black gaps between the terrain and the sky.
     const int renderRadius = v29;
 
+    // Strict draw-distance sphere: a sector is only prepared and drawn when some part of it
+    // can lie inside the visible-world sphere (the diamond window of sectors is wider).
+    const float drawLimit = GetEffectDrawDistance();
+    const vec3d viewPos = v5 ? v5->CalcPos : _viewerBact->_position;
+    const float sectorReach = World::CVSectorLength * 0.7072f; // half diagonal of a sector
+    const auto sectorInSphere = [&](const Common::Point &pt)
+    {
+        const vec3d center = World::SectorIDToCenterPos3(pt);
+        const float dx = center.x - viewPos.x;
+        const float dz = center.z - viewPos.z;
+        return std::sqrt(dx * dx + dz * dz) - sectorReach <= drawLimit;
+    };
+
     for (int i = 0; i <= renderRadius; i++)
     {
         int v28 = renderRadius - i;
@@ -504,8 +527,15 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
         {
             TRenderingSector *sct = &rendering_sectors[v29 + j][v29 - v28];
 
-            RenderAdditionalBeeBox( _viewerBact->_cellId + Common::Point(j, -v28),
-                                    sct, &rndrs);
+            const Common::Point sectPt = _viewerBact->_cellId + Common::Point(j, -v28);
+            if ( !sectorInSphere(sectPt) )
+            {
+                sct->dword4 = 0;
+                sct->dword8 = 0;
+                continue;
+            }
+
+            RenderAdditionalBeeBox( sectPt, sct, &rndrs);
 
             if ( sct->dword4 )
                 RenderSector(sct, &rndrs);
@@ -518,8 +548,15 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
             {
                 TRenderingSector *sct = &rendering_sectors[v29 + j][v29 + v28];
 
-                RenderAdditionalBeeBox( _viewerBact->_cellId + Common::Point(j, v28),
-                                        sct, &rndrs);
+                const Common::Point sectPt = _viewerBact->_cellId + Common::Point(j, v28);
+                if ( !sectorInSphere(sectPt) )
+                {
+                    sct->dword4 = 0;
+                    sct->dword8 = 0;
+                    continue;
+                }
+
+                RenderAdditionalBeeBox( sectPt, sct, &rndrs);
 
                 if ( sct->dword4 )
                     RenderSector(sct, &rndrs);
@@ -550,10 +587,10 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
     rrg.timeStamp = GetGameplayRenderTimeStamp();
     rrg.frameTime = bs64->DTime;
     rrg.minZ = 1.0;
-    // Particles outlive their emitter's visibility; use the visible limit,
-    // not the extra sectors prepared behind the horizon.
-    rrg.maxZ = (float)_normalVizLimit;
-    rrg.fadeStart = (float)(_normalVizLimit - _normalFadeLength);
+    // Particles outlive their emitter's visibility; use the visible-world limit
+    // (sky horizon), not the CPU budget or the extra sectors behind the horizon.
+    rrg.maxZ = drawLimit;
+    rrg.fadeStart = drawLimit - (float)_normalFadeLength;
     rrg.fadeLength = (float)_normalFadeLength;
     rrg.ViewTForm = TF::Engine.GetViewPoint();
     rrg.OwnerTForm = nullptr;

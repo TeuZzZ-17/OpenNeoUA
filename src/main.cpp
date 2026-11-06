@@ -736,6 +736,19 @@ void ShutdownWorld()
 
 } // namespace
 
+#ifdef _WIN32
+// Laptops with two graphics chips give an old OpenGL program the integrated one
+// unless the program asks for the fast one. These two exported names are what
+// the NVIDIA and AMD drivers look for when the process starts, so they cannot
+// be a setting: the choice is already made before any file is read. Machines
+// with a single graphics chip ignore them.
+extern "C"
+{
+    __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     const int dumpWriter = CrashDiag::RunDumpWriter(argc, argv);

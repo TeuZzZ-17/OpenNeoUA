@@ -160,6 +160,7 @@ protected:
     bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
     int CalcEnergyForBact(NC_STACK_ypabact *bct, int baseEnergy);
     int ApplyEnergyToBact(NC_STACK_ypabact *bct, int baseEnergy, float damageMultiplier = 1.0f, bool applyDebuff = true);
+    bool IsArtilleryAlly(NC_STACK_ypabact *bct) const;
     void ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool applyDamage = true, float damageMultiplier = 1.0f);
     void DeflectFromUnitCollision(NC_STACK_ypabact *target,
                                   const vec3d &targetCenter, float targetRadius,

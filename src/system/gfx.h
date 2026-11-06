@@ -17,6 +17,7 @@
 #include "common/common.h"
 #include "common/cachestor.h"
 #include "common/line.h"
+#include "decalshader.h"
 
 
 #define GFX_MAX_VERTEX 12
@@ -127,6 +128,8 @@ enum RFLAGS
     RFLAGS_DISABLE_ZWRITE = (1 << 10),
     RFLAGS_ALPHA_FOG =      (1 << 11),
     RFLAGS_ALPHABLEND =     (1 << 12),
+    // World surface (terrain, buildings): drawn before the decals so it receives them.
+    RFLAGS_DECAL_RECEIVER = (1 << 13),
 };
 
 // OpenNeoUA extended projection limits.
@@ -323,6 +326,23 @@ enum
     DEFAULT_HEIGHT = 480,
 };
 
+// One projected decal of the current frame (see decalshader.h). Position and
+// axes use world axes relative to the camera, so large maps keep their precision.
+struct TDecalDraw
+{
+    vec3f Origin;
+    vec3f AxisT;
+    vec3f AxisB;
+    vec3f AxisN;
+    float SizeT = 0.0f;
+    float SizeB = 0.0f;
+    float EdgeFade = 0.0f;
+    const float *Shape = nullptr;   // DECAL_SHAPE_SAMPLES radii, owned by the caller.
+    ResBitmap *Tex = nullptr;
+    TGLColor Tint = TGLColor(1.0, 1.0, 1.0, 1.0);
+    bool Colorize = false;
+};
+
 struct TShaderProg
 {
     uint32_t ID = 0;
@@ -332,6 +352,32 @@ struct TShaderProg
 
     TShaderProg() = default;
     TShaderProg(uint32_t id);
+};
+
+struct TDecalProg : TShaderProg
+{
+    int32_t ImageLoc = -1;
+    int32_t SceneDepthLoc = -1;
+    int32_t ScreenInvLoc = -1;
+    int32_t ProjectLoc = -1;
+    int32_t ViewToWorldLoc = -1;
+    int32_t FogLoc = -1;
+    int32_t AlphaFogLoc = -1;
+    int32_t FogColorLoc = -1;
+    int32_t AtmosphereColorLoc = -1;
+    int32_t OriginLoc = -1;
+    int32_t AxisTLoc = -1;
+    int32_t AxisBLoc = -1;
+    int32_t AxisNLoc = -1;
+    int32_t SizeLoc = -1;
+    int32_t EdgeFadeLoc = -1;
+    int32_t ShapeLoc = -1;
+    int32_t TintLoc = -1;
+    int32_t ColorizeLoc = -1;
+    int32_t TexturedLoc = -1;
+
+    TDecalProg() = default;
+    TDecalProg(uint32_t id);
 };
 
 struct TColorEffectsProg : TShaderProg
@@ -789,6 +835,10 @@ public:
     void Rasterize(uint32_t RasterEtapes = RASTER_ALL);
 
     void QueueRenderMesh(TRenderNode *mesh);
+    // Projected decals of this frame, painted over the world before the units.
+    void SetDecalView(const mat3x3 &worldToView, uint32_t renderFlags,
+                      float fogStart, float fogLength);
+    void QueueRenderDecal(const TDecalDraw &decal);
     TRenderNode &AllocRenderNode() { return _renderNodesCache.GetNext(); };
 
     float GetAlpha() const { return _alpha / 255.0; };
@@ -836,11 +886,23 @@ protected:
     bool LoadVhsFilterShader();
     void FreeVhsFilterShader();
     bool EnsureVhsFilterTexture(const Common::Point &scrSz);
+    void ApplyFogStates(uint32_t flags, float fogStart, float fogLength);
+    void ReportGraphicsChip();
+    void ReadGraphicsChip();
+    bool EnsureDecalDepthTexture(const Common::Point &scrSz);
+    void DrawDecalPass();
 
 
 public:
     //Data
     //static constexpr const char * __ClassName = ;
+
+    // Graphics chip in use (OpenGL strings) and whether it is a chip built into the
+    // processor. Read lazily; call only with the GL context current (render thread).
+    const std::string &GpuRenderer() { ReadGraphicsChip(); return _gpuRenderer; }
+    const std::string &GpuVendor() { ReadGraphicsChip(); return _gpuVendor; }
+    const std::string &GpuGlVersion() { ReadGraphicsChip(); return _gpuGlVersion; }
+    bool GpuIsIntegrated() { ReadGraphicsChip(); return _gpuIntegrated; }
 
 
 public:
@@ -897,6 +959,7 @@ public:
     std::vector<TRenderNode *> _renderSkyBoxList;
     std::vector<TRenderNode *> _renderZeroTracyList;
     std::vector<TRenderNode *> _renderLumaTracyList;
+    std::vector<TDecalDraw> _renderDecalList;
 
     Common::CacheStorage<TRenderNode> _renderNodesCache;
 
@@ -1055,6 +1118,23 @@ protected:
     bool _vhsFboReady = false;
     TVhsFilterProg _vhsFilterProg;
     TVhsBlendProg _vhsBlendProg;
+
+    bool _graphicsChipReported = false;
+
+    // Filled once by ReadGraphicsChip (debug overlay and the startup log).
+    bool _graphicsChipRead = false;
+    std::string _gpuRenderer, _gpuVendor, _gpuGlVersion;
+    bool _gpuIntegrated = false;
+
+    TDecalProg _decalProg;
+    uint32_t _decalVsShader = 0;
+    uint32_t _decalPsShader = 0;
+    uint32_t _decalDepthTex = 0;
+    Common::Point _decalDepthTexSize;
+    mat3x3 _decalWorldToView;
+    uint32_t _decalRenderFlags = 0;
+    float _decalFogStart = 0.0f;
+    float _decalFogLength = 0.0f;
     bool _vhsFilterActive = false;
     float _vhsFilterStrength = 0.0f;
     std::string _vhsFilterShaderPath;

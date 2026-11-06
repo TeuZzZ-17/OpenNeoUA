@@ -1653,6 +1653,49 @@ void GFXEngine::RenderingMeshOld(TRenderNode *nod)
     glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, mesh->Indixes.data());
 }
 
+// Fog of a node: the same result for meshes and for the decals painted on them.
+void GFXEngine::ApplyFogStates(uint32_t flags, float fogStart, float fogLength)
+{
+    if ( (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) )
+    {
+        _states.Fog = true;
+        _states.FogStart = fogStart;
+        _states.FogLength = fogLength;
+        _states.FogStrength = 1.0f;
+        _states.FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
+    }
+
+    if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && fogLength > 0.0f)
+    {
+        const bool atmosphereFog = HorizonAlphaFogEnabled(fogLength);
+        const bool darkFog = HorizonDarkFogEnabled(fogLength);
+
+        _states.Fog = false;
+        _states.AFog = (atmosphereFog || darkFog)
+                     ? (gHorizonFogConfig.ClassicFade ? 2 : 1) : 0;
+
+        if (_states.AFog)
+        {
+            _states.AFogStart = HorizonAlphaFogStart(fogStart, fogLength);
+            _states.AFogLength = HorizonAlphaFogLength(fogLength);
+            _states.AFogStrength = atmosphereFog ? gHorizonFogConfig.FogStrength : 0.0f;
+            _states.AFogColor = gHorizonFogConfig.FogColor;
+        }
+
+        if (darkFog)
+        {
+            _states.Fog = true;
+            _states.FogStart = HorizonDarkFogStart(fogStart, fogLength);
+            _states.FogLength = HorizonDarkFogLength(fogLength);
+            _states.FogStrength = gHorizonFogConfig.DarkStrength;
+            _states.FogColor = gHorizonFogConfig.DarkColor;
+        }
+
+        // Atmosphere V2 blends RGB and preserves the original alpha/depth.
+        // Do not force transparent sorting/blending for opaque world geometry.
+    }
+}
+
 void GFXEngine::RenderingMesh(TRenderNode *nod)
 {
     if ( !_sceneBeginned )
@@ -1692,15 +1735,6 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
     {
         _states.TexBlend = 2; //MODULATE
         _states.Shaded = true;
-    }
-
-    if ( flags & RFLAGS_FOG )
-    {
-        _states.Fog = true;
-        _states.FogStart = nod->FogStart;
-        _states.FogLength = nod->FogLength;
-        _states.FogStrength = 1.0f;
-        _states.FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
     }
 
     if ( flags & RFLAGS_LUMTRACY )
@@ -1756,44 +1790,12 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
     }
 
     if (flags & RFLAGS_SKY)
-    {
-        _states.Fog = false;
         _states.Shaded = true;
-    }
-
 
     if (flags & RFLAGS_DISABLE_ZWRITE)
         _states.Zwrite = false;
 
-    if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && nod->FogLength > 0.0f)
-    {
-        const bool atmosphereFog = HorizonAlphaFogEnabled(nod->FogLength);
-        const bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
-
-        _states.Fog = false;
-        _states.AFog = (atmosphereFog || darkFog)
-                     ? (gHorizonFogConfig.ClassicFade ? 2 : 1) : 0;
-
-        if (_states.AFog)
-        {
-            _states.AFogStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
-            _states.AFogLength = HorizonAlphaFogLength(nod->FogLength);
-            _states.AFogStrength = atmosphereFog ? gHorizonFogConfig.FogStrength : 0.0f;
-            _states.AFogColor = gHorizonFogConfig.FogColor;
-        }
-
-        if (darkFog)
-        {
-            _states.Fog = true;
-            _states.FogStart = HorizonDarkFogStart(nod->FogStart, nod->FogLength);
-            _states.FogLength = HorizonDarkFogLength(nod->FogLength);
-            _states.FogStrength = gHorizonFogConfig.DarkStrength;
-            _states.FogColor = gHorizonFogConfig.DarkColor;
-        }
-
-        // Atmosphere V2 blends RGB and preserves the original alpha/depth.
-        // Do not force transparent sorting/blending for opaque world geometry.
-    }
+    ApplyFogStates(flags, nod->FogStart, nod->FogLength);
 
     TGLColor effectiveColorMul = nod->ColorMul;
     float vpFadeFactor = nod->VPFadeFactor;
@@ -1915,6 +1917,241 @@ void GFXEngine::QueueRenderMesh(TRenderNode *nod)
         _renderSolidList.push_back(nod);
 }
 
+void GFXEngine::SetDecalView(const mat3x3 &worldToView, uint32_t renderFlags,
+                             float fogStart, float fogLength)
+{
+    _decalWorldToView = worldToView;
+    _decalRenderFlags = renderFlags;
+    _decalFogStart = fogStart;
+    _decalFogLength = fogLength;
+}
+
+void GFXEngine::QueueRenderDecal(const TDecalDraw &decal)
+{
+    _renderDecalList.push_back(decal);
+}
+
+bool GFXEngine::EnsureDecalDepthTexture(const Common::Point &scrSz)
+{
+    if (scrSz.x <= 0 || scrSz.y <= 0)
+        return false;
+
+    if (!_decalDepthTex)
+    {
+        glGenTextures(1, &_decalDepthTex);
+        _decalDepthTexSize = Common::Point();
+    }
+    if (!_decalDepthTex)
+        return false;
+
+    Glext::GLActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, _decalDepthTex);
+
+    if (_decalDepthTexSize.x != scrSz.x || _decalDepthTexSize.y != scrSz.y)
+    {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, scrSz.x, scrSz.y, 0,
+                     GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+        _decalDepthTexSize = scrSz;
+    }
+
+    // Works the same on the scene FBO and on the window: the copy reads the
+    // depth of whichever framebuffer is being drawn.
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, scrSz.x, scrSz.y);
+
+    Glext::GLActiveTexture(GL_TEXTURE0);
+    return true;
+}
+
+// Screen rectangle of the box around a decal. False when the box is off screen.
+static bool DecalScreenRect(const TDecalDraw &decal, const mat3x3 &worldToView,
+                            const mat4x4f &projection, float nearZ,
+                            const Common::Point &scrSz, Common::Rect *out)
+{
+    const float reach = 0.5f * std::sqrt(decal.SizeT * decal.SizeT + decal.SizeB * decal.SizeB);
+    const vec3d origin(decal.Origin.x, decal.Origin.y, decal.Origin.z);
+    const vec3d t = vec3d(decal.AxisT.x, decal.AxisT.y, decal.AxisT.z) * reach;
+    const vec3d b = vec3d(decal.AxisB.x, decal.AxisB.y, decal.AxisB.z) * reach;
+    // Small decals still reach the surface when collision and visuals differ a
+    // little: same height limit of the shader.
+    const vec3d n = vec3d(decal.AxisN.x, decal.AxisN.y, decal.AxisN.z) * std::max(reach, 12.0f);
+
+    float left = 2.0f, right = -2.0f, bottom = 2.0f, top = -2.0f;
+    bool behind = false;
+    bool front = false;
+
+    for (int corner = 0; corner < 8; ++corner)
+    {
+        const vec3d world = origin + t * ((corner & 1) ? 1.0 : -1.0)
+                                   + b * ((corner & 2) ? 1.0 : -1.0)
+                                   + n * ((corner & 4) ? 1.0 : -1.0);
+        const vec3d view = worldToView.Transform(world);
+        if (view.z <= nearZ)
+        {
+            behind = true;
+            continue;
+        }
+
+        front = true;
+        const float x = projection.m00 * (float)view.x / (float)view.z;
+        const float y = projection.m11 * (float)view.y / (float)view.z;
+        left = std::min(left, x);
+        right = std::max(right, x);
+        bottom = std::min(bottom, y);
+        top = std::max(top, y);
+    }
+
+    if (!front)
+        return false;
+
+    // A box crossing the camera plane has no usable projection: use the full screen.
+    if (behind)
+    {
+        *out = Common::Rect(0, 0, scrSz.x, scrSz.y);
+        return true;
+    }
+
+    if (right <= -1.0f || left >= 1.0f || top <= -1.0f || bottom >= 1.0f)
+        return false;
+
+    const auto pixel = [](float ndc, int size)
+    {
+        return (std::max(-1.0f, std::min(ndc, 1.0f)) + 1.0f) * 0.5f * (float)size;
+    };
+
+    out->left = (int)std::floor(pixel(left, scrSz.x));
+    out->right = (int)std::ceil(pixel(right, scrSz.x));
+    out->top = (int)std::floor(pixel(bottom, scrSz.y));
+    out->bottom = (int)std::ceil(pixel(top, scrSz.y));
+    return out->right > out->left && out->bottom > out->top;
+}
+
+// Inverse of the view rotation. The view may carry a scale, so no transpose.
+static mat3x3 DecalInverse(const mat3x3 &m)
+{
+    const double c00 = m.m11 * m.m22 - m.m12 * m.m21;
+    const double c01 = m.m12 * m.m20 - m.m10 * m.m22;
+    const double c02 = m.m10 * m.m21 - m.m11 * m.m20;
+    const double det = m.m00 * c00 + m.m01 * c01 + m.m02 * c02;
+    const double inv = det != 0.0 ? 1.0 / det : 0.0;
+
+    mat3x3 out;
+    out.m00 = c00 * inv;
+    out.m01 = (m.m02 * m.m21 - m.m01 * m.m22) * inv;
+    out.m02 = (m.m01 * m.m12 - m.m02 * m.m11) * inv;
+    out.m10 = c01 * inv;
+    out.m11 = (m.m00 * m.m22 - m.m02 * m.m20) * inv;
+    out.m12 = (m.m02 * m.m10 - m.m00 * m.m12) * inv;
+    out.m20 = c02 * inv;
+    out.m21 = (m.m01 * m.m20 - m.m00 * m.m21) * inv;
+    out.m22 = (m.m00 * m.m11 - m.m01 * m.m10) * inv;
+    return out;
+}
+
+// Paints the queued decals over the world drawn so far. No unit is in the depth
+// buffer yet, so they can never receive a decal.
+void GFXEngine::DrawDecalPass()
+{
+    if (_renderDecalList.empty())
+        return;
+
+    const Common::Point scrSz = System::GetResolution();
+    if (!_decalProg.ID || !EnsureDecalDepthTexture(scrSz))
+    {
+        _renderDecalList.clear();
+        return;
+    }
+
+    const GfxStates saved = _states;
+
+    _states.Fog = false;
+    _states.AFog = 0;
+    ApplyFogStates(_decalRenderFlags | RFLAGS_FOG, _decalFogStart, _decalFogLength);
+
+    _states.Prog = _decalProg;
+    _states.DepthTest = false;
+    _states.Zwrite = false;
+    _states.AlphaTest = false;
+    _states.AlphaBlend = true;
+    _states.SrcBlend = GL_SRC_ALPHA;
+    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    _states.LinearFilter = (_filter != 0);
+    _states.Tex = 0;
+    SetRenderStates(0);
+
+    const mat3x3 viewToWorld = DecalInverse(_decalWorldToView);
+    const GLfloat viewToWorldColumns[9] = {
+        (GLfloat)viewToWorld.m00, (GLfloat)viewToWorld.m10, (GLfloat)viewToWorld.m20,
+        (GLfloat)viewToWorld.m01, (GLfloat)viewToWorld.m11, (GLfloat)viewToWorld.m21,
+        (GLfloat)viewToWorld.m02, (GLfloat)viewToWorld.m12, (GLfloat)viewToWorld.m22};
+
+    Glext::GLUniform1i(_decalProg.ImageLoc, 0);
+    Glext::GLUniform1i(_decalProg.SceneDepthLoc, 1);
+    Glext::GLUniform2f(_decalProg.ScreenInvLoc, 1.0f / (float)scrSz.x, 1.0f / (float)scrSz.y);
+    Glext::GLUniform4f(_decalProg.ProjectLoc, 1.0f / _frustum.m00, 1.0f / _frustum.m11,
+                       _frustum.m22, _frustum.m23);
+    Glext::GLUniformMatrix3fv(_decalProg.ViewToWorldLoc, 1, GL_FALSE, viewToWorldColumns);
+    Glext::GLUniform4f(_decalProg.FogLoc, _states.Fog ? 1.0f : 0.0f, _states.FogStart,
+                       _states.FogLength, _states.FogStrength);
+    Glext::GLUniform4f(_decalProg.AlphaFogLoc, (float)_states.AFog, _states.AFogStart,
+                       _states.AFogLength, _states.AFogStrength);
+    Glext::GLUniform3f(_decalProg.FogColorLoc, _states.FogColor.r, _states.FogColor.g,
+                       _states.FogColor.b);
+    Glext::GLUniform3f(_decalProg.AtmosphereColorLoc, _states.AFogColor.r, _states.AFogColor.g,
+                       _states.AFogColor.b);
+
+    static const std::array<TVertex, 4> quad = {
+        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 0.0) ),
+        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(0.0, 0.0) )
+    };
+
+    glEnable(GL_SCISSOR_TEST);
+    bool quadUploaded = false;
+
+    // Oldest first: the newest impact ends on top.
+    for (const TDecalDraw &decal : _renderDecalList)
+    {
+        Common::Rect rect;
+        if (!decal.Shape ||
+            !DecalScreenRect(decal, _decalWorldToView, _frustum, _frustumNear, scrSz, &rect))
+            continue;
+
+        glScissor(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+
+        _states.Tex = decal.Tex ? decal.Tex->hwTex : 0;
+        SetRenderStates(0);
+
+        Glext::GLUniform3f(_decalProg.OriginLoc, decal.Origin.x, decal.Origin.y, decal.Origin.z);
+        Glext::GLUniform3f(_decalProg.AxisTLoc, decal.AxisT.x, decal.AxisT.y, decal.AxisT.z);
+        Glext::GLUniform3f(_decalProg.AxisBLoc, decal.AxisB.x, decal.AxisB.y, decal.AxisB.z);
+        Glext::GLUniform3f(_decalProg.AxisNLoc, decal.AxisN.x, decal.AxisN.y, decal.AxisN.z);
+        Glext::GLUniform2f(_decalProg.SizeLoc, decal.SizeT, decal.SizeB);
+        Glext::GLUniform1f(_decalProg.EdgeFadeLoc, decal.EdgeFade);
+        Glext::GLUniform1fv(_decalProg.ShapeLoc, DECAL_SHAPE_SAMPLES, decal.Shape);
+        Glext::GLUniform4f(_decalProg.TintLoc, decal.Tint.r, decal.Tint.g, decal.Tint.b, decal.Tint.a);
+        Glext::GLUniform1f(_decalProg.ColorizeLoc, decal.Colorize ? 1.0f : 0.0f);
+        Glext::GLUniform1f(_decalProg.TexturedLoc, _states.Tex ? 1.0f : 0.0f);
+
+        // The quad never changes: once in the buffer, only the draw call repeats.
+        if (_vbo && quadUploaded)
+            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
+        else
+            DrawVtxQuad(quad);
+        quadUploaded = true;
+    }
+
+    glDisable(GL_SCISSOR_TEST);
+    _renderDecalList.clear();
+
+    _states = saved;
+    SetRenderStates(0);
+}
+
 void GFXEngine::Rasterize(uint32_t RasterEtapes)
 {
     if (RasterEtapes & RASTER_SKY)
@@ -1959,21 +2196,48 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
     }
 
     if (RasterEtapes & RASTER_SOLID)
-    {
         std::stable_sort(_renderSolidList.begin(), _renderSolidList.end(),
                          TRenderNode::CompareSolid);
 
-        for (size_t nodeIndex = 0; nodeIndex < _renderSolidList.size(); nodeIndex++)
+    if (RasterEtapes & RASTER_ZEROTR)
+        std::stable_sort(_renderZeroTracyList.begin(), _renderZeroTracyList.end(),
+                         TRenderNode::CompareSolid);
+
+    // With decals in the frame the world goes first, then the decals, then
+    // everything else: the depth buffer they read holds world surfaces only.
+    size_t receiverSolids = 0;
+    size_t receiverZeroTracy = 0;
+
+    if (!_renderDecalList.empty() && (RasterEtapes & RASTER_SOLID) && (RasterEtapes & RASTER_ZEROTR))
+    {
+        const auto receives = [](const TRenderNode *node)
+        {
+            return (node->Flags & RFLAGS_DECAL_RECEIVER) != 0;
+        };
+
+        receiverSolids = std::stable_partition(_renderSolidList.begin(), _renderSolidList.end(),
+                                               receives) - _renderSolidList.begin();
+        receiverZeroTracy = std::stable_partition(_renderZeroTracyList.begin(), _renderZeroTracyList.end(),
+                                                  receives) - _renderZeroTracyList.begin();
+
+        for (size_t nodeIndex = 0; nodeIndex < receiverSolids; nodeIndex++)
+            RenderNode(_renderSolidList[nodeIndex]);
+        for (size_t nodeIndex = 0; nodeIndex < receiverZeroTracy; nodeIndex++)
+            RenderNode(_renderZeroTracyList[nodeIndex]);
+
+        DrawDecalPass();
+    }
+
+    if (RasterEtapes & RASTER_SOLID)
+    {
+        for (size_t nodeIndex = receiverSolids; nodeIndex < _renderSolidList.size(); nodeIndex++)
             RenderNode(_renderSolidList[nodeIndex]);
         _renderSolidList.clear();
     }
 
     if (RasterEtapes & RASTER_ZEROTR)
     {
-        std::stable_sort(_renderZeroTracyList.begin(), _renderZeroTracyList.end(),
-                         TRenderNode::CompareSolid);
-
-        for (size_t nodeIndex = 0; nodeIndex < _renderZeroTracyList.size(); nodeIndex++)
+        for (size_t nodeIndex = receiverZeroTracy; nodeIndex < _renderZeroTracyList.size(); nodeIndex++)
             RenderNode(_renderZeroTracyList[nodeIndex]);
         _renderZeroTracyList.clear();
     }
@@ -2591,6 +2855,7 @@ void GFXEngine::EndScene()
     _renderSolidList.clear();
     _renderZeroTracyList.clear();
     _renderLumaTracyList.clear();
+    _renderDecalList.clear();
 
     _renderNodesCache.Rewind();
 }
@@ -2625,8 +2890,77 @@ void GFXEngine::raster_func221(const Common::Rect &arg)
     _inverseClip.bottom = _field_550 + arg.bottom;
 }
 
+// Which graphics chip really got the window. On a machine with two of them the
+// program asks for the fast one (see the exported names in main.cpp), but a
+// system setting can still override that, so say plainly what is in use: a slow
+// chip explains far more frame drops than any game setting. Written on the first
+// frame because the log files are emptied while the graphics are starting.
+void GFXEngine::ReportGraphicsChip()
+{
+    if ( _graphicsChipReported )
+        return;
+    _graphicsChipReported = true;
+
+    ReadGraphicsChip();
+    ypa_log_out("Graphics chip in use: %s (%s)\n", _gpuRenderer.c_str(), _gpuVendor.c_str());
+
+    const bool integrated = _gpuIntegrated;
+
+    if ( integrated )
+    {
+#ifdef _WIN32
+        ypa_log_out("WARNING: this looks like a built-in graphics chip, which is much slower "
+                    "than a graphics card.\n"
+                    "         If this computer has one, choose it for OpenNeoUA.exe in "
+                    "Settings, System, Display, Graphics, and pick High performance.\n");
+#else
+        // An NVIDIA card is asked for in System::Init; reaching here with a
+        // built-in chip means there is none, so the advice is the Mesa one.
+        ypa_log_out("WARNING: this looks like a built-in graphics chip, which is much slower "
+                    "than a graphics card.\n"
+                    "         If this computer has one, start the game with DRI_PRIME=1 "
+                    "(AMD or Intel card) or with prime-run (NVIDIA card).\n");
+#endif
+    }
+}
+
+// Reads the OpenGL strings once and decides whether the chip is built into the processor.
+void GFXEngine::ReadGraphicsChip()
+{
+    if ( _graphicsChipRead )
+        return;
+    _graphicsChipRead = true;
+
+    const char *renderer = (const char *)glGetString(GL_RENDERER);
+    const char *vendor = (const char *)glGetString(GL_VENDOR);
+    const char *version = (const char *)glGetString(GL_VERSION);
+    _gpuRenderer = renderer ? renderer : "unknown";
+    _gpuVendor = vendor ? vendor : "unknown";
+    _gpuGlVersion = version ? version : "unknown";
+
+    std::string name = _gpuRenderer;
+    for (char &letter : name)
+        letter = (char)std::tolower((unsigned char)letter);
+
+    // Intel Arc is a real graphics card: do not confuse it with an Intel chip
+    // built into the processor.
+    _gpuIntegrated =
+        (name.find("arc") == std::string::npos) &&
+        (name.find("intel") != std::string::npos ||
+         name.find("uhd graphics") != std::string::npos ||
+         name.find("hd graphics") != std::string::npos ||
+         name.find("iris") != std::string::npos ||
+         name.find("radeon(tm) graphics") != std::string::npos ||
+         name.find("vega") != std::string::npos ||
+         name.find("llvmpipe") != std::string::npos ||
+         name.find("softpipe") != std::string::npos ||
+         name.find("microsoft basic") != std::string::npos);
+}
+
 void GFXEngine::BeginFrame()
 {
+    ReportGraphicsChip();
+
     setViewZoom(1.0f);
     SDL_FillRect(Screen(), nullptr, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
 
@@ -3780,6 +4114,28 @@ void GFXEngine::Init()
         BindVBOParameters(_stdShaderProg);
     }
 
+    if (_glext)
+    {
+        _decalPsShader = CompileShader(GL_FRAGMENT_SHADER, DecalFragmentShaderText());
+        _decalVsShader = CompileShader(GL_VERTEX_SHADER, DecalVertexShaderText(_vbo));
+
+        uint32_t progID = Glext::GLCreateProgram();
+
+        Glext::GLAttachShader(progID, _decalPsShader);
+        Glext::GLAttachShader(progID, _decalVsShader);
+        Glext::GLLinkProgram(progID);
+
+        GLint linked = GL_FALSE;
+        Glext::GLGetProgramiv(progID, GL_LINK_STATUS, &linked);
+        if (linked == GL_TRUE)
+            _decalProg = TDecalProg(progID);
+        else
+        {
+            Glext::GLDeleteProgram(progID);
+            log_d3dlog("Decal shader failed to link: ground decals are disabled\n");
+        }
+    }
+
     if (_colorEffects > 0)
     {
         Glext::GLGenFramebuffers(1, &_fbo);
@@ -3895,6 +4251,21 @@ void GFXEngine::Deinit()
     _stdShaderProg.ID = 0;
     _stdVsShader = 0;
     _stdPsShader = 0;
+
+    if (_decalProg.ID)
+        Glext::GLDeleteProgram(_decalProg.ID);
+    if (_decalPsShader)
+        Glext::GLDeleteShader(_decalPsShader);
+    if (_decalVsShader)
+        Glext::GLDeleteShader(_decalVsShader);
+    if (_decalDepthTex)
+        glDeleteTextures(1, &_decalDepthTex);
+
+    _decalProg = TDecalProg();
+    _decalPsShader = 0;
+    _decalVsShader = 0;
+    _decalDepthTex = 0;
+    _decalDepthTexSize = Common::Point();
 
     // The atmospheric program reuses the color-effects vertex shader, so
     // release its program before deleting that shared shader object.
@@ -6462,6 +6833,30 @@ TShaderProg::TShaderProg(uint32_t id)
     PosLoc = Glext::GLGetAttribLocation(ID, "vPos");
     UVLoc  = Glext::GLGetAttribLocation(ID, "vUV");
     ColorLoc = Glext::GLGetAttribLocation(ID, "vColor");
+}
+
+TDecalProg::TDecalProg(uint32_t id)
+: TShaderProg(id)
+{
+    ImageLoc = Glext::GLGetUniformLocation(ID, "uImage");
+    SceneDepthLoc = Glext::GLGetUniformLocation(ID, "uSceneDepth");
+    ScreenInvLoc = Glext::GLGetUniformLocation(ID, "uScreenInv");
+    ProjectLoc = Glext::GLGetUniformLocation(ID, "uProject");
+    ViewToWorldLoc = Glext::GLGetUniformLocation(ID, "uViewToWorld");
+    FogLoc = Glext::GLGetUniformLocation(ID, "uFog");
+    AlphaFogLoc = Glext::GLGetUniformLocation(ID, "uAlphaFog");
+    FogColorLoc = Glext::GLGetUniformLocation(ID, "uFogColor");
+    AtmosphereColorLoc = Glext::GLGetUniformLocation(ID, "uAtmosphereColor");
+    OriginLoc = Glext::GLGetUniformLocation(ID, "uOrigin");
+    AxisTLoc = Glext::GLGetUniformLocation(ID, "uAxisT");
+    AxisBLoc = Glext::GLGetUniformLocation(ID, "uAxisB");
+    AxisNLoc = Glext::GLGetUniformLocation(ID, "uAxisN");
+    SizeLoc = Glext::GLGetUniformLocation(ID, "uSize");
+    EdgeFadeLoc = Glext::GLGetUniformLocation(ID, "uEdgeFade");
+    ShapeLoc = Glext::GLGetUniformLocation(ID, "uShape");
+    TintLoc = Glext::GLGetUniformLocation(ID, "uTint");
+    ColorizeLoc = Glext::GLGetUniformLocation(ID, "uColorize");
+    TexturedLoc = Glext::GLGetUniformLocation(ID, "uTextured");
 }
 
 TColorEffectsProg::TColorEffectsProg(uint32_t id)

@@ -11,6 +11,7 @@ public:
     virtual size_t Init(IDVList &stak) override;
     virtual size_t Deinit() override;
     virtual size_t SetParameters(IDVList &stak) override;
+    virtual void AI_layer2(update_msg *arg) override;
     virtual void AI_layer3(update_msg *arg) override;
     virtual void User_layer(update_msg *arg) override;
     virtual void FightWithBact(bact_arg75 *arg) override;
@@ -97,6 +98,11 @@ public:
 
 
     bool CheckPedestal();
+
+private:
+    void UpdateRadarScan(const update_msg *arg);
+
+public:
 
     //Data
     static constexpr const char * __ClassName = "ypagun.class";

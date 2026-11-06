@@ -429,6 +429,8 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
             fil->printf("    energy         = %d\n", proto.energy);
             if ( proto.debuff_id >= 0 )
                 fil->printf("    ;#!debuff_id       = %d\n", proto.debuff_id);
+            if ( proto.blast_debuff_id > 0 )
+                fil->printf("    ;#!blast_debuff_id = %d\n", proto.blast_debuff_id);
             fil->printf("end\n\n");
         }
 

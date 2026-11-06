@@ -98,6 +98,11 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
 
     namespace GDS = World::GroundDecalSmoke;
 
+    // Puffs follow the visible-world limit and fade out inside the fade length, like every other effect.
+    const float drawLimit = GetEffectDrawDistance();
+    const float fadeLength = (float)std::max(0, _normalFadeLength);
+    const float fadeStart = std::max(0.0f, drawLimit - fadeLength);
+
     // Render a rise mesh facing the camera, with the puff's tint and opacity.
     const auto queueDisc = [&](GFX::TMesh *mesh, float meshUnit, const vec3d &worldPos,
                                float size, float red, float green, float blue, float alpha)
@@ -107,6 +112,12 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
             return;
 
         const vec3d viewPos = view->CalcSclRot.Transform(worldPos - view->CalcPos);
+        const float distance = viewPos.length();
+        if ( distance >= drawLimit )
+            return;
+        alpha = GroundDecalSmokeClampUnit(alpha * World::ComputeSpatialFalloff(distance - fadeStart, fadeLength));
+        if ( alpha <= 0.0f )
+            return;
         mat4x4 transform(mat3x3::Scale(vec3d(size / meshUnit, size / meshUnit, 1.0f)));
         transform.m03 = viewPos.x;
         transform.m13 = viewPos.y;
@@ -126,8 +137,8 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
         render.Distance = viewPos.length();
         render.TimeStamp = arg->globTime;
         render.FrameTime = arg->frameTime;
-        render.FogStart = (float)(_normalVizLimit - _normalFadeLength);
-        render.FogLength = (float)_normalFadeLength;
+        render.FogStart = fadeStart;
+        render.FogLength = fadeLength;
 
         arg->adeCount += mesh->Indixes.size() / 3;
         GFX::Engine.QueueRenderMesh(&render);
@@ -145,7 +156,7 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
         // Rising puffs climb well above the decal, so the visibility margin is
         // wider than the decal radius.
         const vec3d centerView = view->CalcSclRot.Transform(it->pos - view->CalcPos);
-        if ( centerView.length() <= (float)_normalVizLimit + it->radius * 4.0f )
+        if ( centerView.length() <= drawLimit + it->radius * 4.0f )
         {
             const World::TGroundDecalSmoke &params = it->params;
             const float gain = params.intensity * 0.01f;
@@ -189,7 +200,25 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
                 continue;
             }
             GFX::TMesh *plumeMesh = &model->Meshes.front();
-            const float meshUnit = 1.0f / params.mesh_scale;
+            // The puff mesh is normalised by its own width, so effect_size alone gives
+            // the on-screen size whatever units the 3ds file uses (no effect_scale here).
+            float minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
+            bool first = true;
+            for (const GFX::TVertex &v : plumeMesh->Vertexes)
+            {
+                if ( first )
+                {
+                    minX = maxX = v.Pos.x;
+                    minY = maxY = v.Pos.y;
+                    first = false;
+                    continue;
+                }
+                minX = std::min(minX, (float)v.Pos.x);
+                maxX = std::max(maxX, (float)v.Pos.x);
+                minY = std::min(minY, (float)v.Pos.y);
+                maxY = std::max(maxY, (float)v.Pos.y);
+            }
+            const float meshUnit = std::max(std::max(maxX - minX, maxY - minY), 0.001f);
             GDS::Puff puff;
 
             for (int slot = 0; slot < it->count; ++slot)

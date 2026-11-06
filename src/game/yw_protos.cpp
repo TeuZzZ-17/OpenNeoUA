@@ -355,15 +355,42 @@ void NC_STACK_ypaworld::ResolveStatusProfileLinks()
         resolved = it->second;
     };
 
+    // Names ignore case; the lowest ID wins when two profiles share one.
+    auto resolveDebuffName = [this](size_t weaponId, const std::string &name,
+                                    int32_t disabledId, const char *parameterName,
+                                    int32_t &profileId)
+    {
+        if ( name.empty() )
+            return;
+
+        for ( const auto &profile : _debuffProfiles )
+        {
+            if ( !StriCmp(profile.second.name, name) )
+            {
+                profileId = profile.first;
+                return;
+            }
+        }
+
+        profileId = disabledId;
+        ypa_log_out("WARNING: weapon %u references missing %s '%s'; Debuff disabled.\n",
+                    (unsigned)weaponId, parameterName, name.c_str());
+    };
+
     for (size_t i = 0; i < _weaponProtos.size(); ++i)
     {
         World::TWeapProto &proto = _weaponProtos[i];
 
+        resolveDebuffName(i, proto.debuff_name, -1, "debuff_id", proto.debuff_id);
+        resolveDebuffName(i, proto.blast_debuff_name, 0, "blast_debuff_id", proto.blast_debuff_id);
+
         // debuff_id keeps its legacy rule where ID 0 is valid. The delayed
-        // attachment parameter is explicitly opt-in, so 0 means disabled.
+        // attachment and blast parameters are opt-in, so 0 means disabled.
         resolveWeaponDebuff(i, proto.debuff_id, 0, "debuff_id", proto.debuff);
         resolveWeaponDebuff(i, proto.delay_time_debuff_id, 1,
                             "delay_time_debuff_id", proto.delay_time_debuff);
+        resolveWeaponDebuff(i, proto.blast_debuff_id, 1,
+                            "blast_debuff_id", proto.blast_debuff);
     }
 
     ResolveDecalProfileLinks();

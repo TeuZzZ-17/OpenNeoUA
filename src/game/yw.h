@@ -2431,6 +2431,7 @@ public:
     virtual void setYW_doEnergyRecalc(int);
     virtual void setYW_visSectors(int);
     int32_t GetSkyHorizonDistance() const;
+    float GetEffectDrawDistance() const;
     void UpdateSkyHorizonRenderSectors();
     virtual void setYW_userHostStation(NC_STACK_ypabact *);
     virtual void setYW_userVehicle(NC_STACK_ypabact *);
@@ -2485,7 +2486,7 @@ public:
     bool IsDebugGameplayFastMotionEnabled() const { return _debugGameplayFastMotion; }
     bool IsDebugHostStationCheatEnabled() const { return _debugHostStationCheat; }
     bool IsDebugGlobalInvulnerabilityEnabled() const { return _debugGlobalInvulnerability; }
-    bool IsDebugDpsEnabled() const { return _debugDpsEnabled; }
+    bool IsDebugInfoEnabled() const { return _debugInfoEnabled; }
     float GetUfoSpyUiRadius() const;
     bool IsUfoSpyUiControlContext() const;
     bool IsUfoSpyUiEnabled() const { return _ufoSpyUiEnabled; }
@@ -2649,9 +2650,7 @@ public:
     void debug_info_draw(TInputState *inpt);
     void debug_count_units();
     void debug_draw_coll_spheres();
-    void DebugRecordDpsDamage(NC_STACK_ypabact *attacker, NC_STACK_ypabact *target, int rawDamage);
-    void DebugResetDpsMeter();
-    void DebugUpdateDpsSource();
+    void DebugDrawInfoOverlay();
     void ExpireDebugBlastRings();
     void DebugAddBlastRing(const vec3d &pos, float radius, uint8_t r, uint8_t g, uint8_t b);
     void DebugAddAtDeathSphere(const vec3d &pos, float radius);
@@ -3092,18 +3091,21 @@ public:
     struct TGroundDecal
     {
         vec3d pos;
+        vec3d axisT;    // Decal plane, with the authored rotation already applied.
+        vec3d axisB;
+        vec3d axisN;    // Impact surface normal, toward where the impact came from.
+        float sizeT = 0.0f;
+        float sizeB = 0.0f;
         float radius = 0.0f;
+        float edgeFade = 0.0f;
+        std::array<float, GFX::DECAL_SHAPE_SAMPLES> shape{};
+        ResBitmap *texture = nullptr;
         int32_t startTime = 0;
         int32_t duration = 0;
         int32_t fadeIn = 0;
         int32_t fadeOut = 0;
         bool permanent = false;
         World::TVisualTint tint;
-        GFX::TMesh mesh;
-
-        TGroundDecal() = default;
-        TGroundDecal(const TGroundDecal &) = delete;
-        TGroundDecal &operator=(const TGroundDecal &) = delete;
     };
 
     struct TProceduralEnergyFX
@@ -3364,19 +3366,7 @@ public:
     int8_t _showDebugMode = 0; // debug info draw modes
     bool _showCollDebug = false; // F9: draw collision sphere overlay
     bool _hideHudForScreenshots = false; // F10: hide gameplay HUD/screenshots UI
-    bool _debugDpsEnabled = false; // F1: rolling effective DPS meter for the controlled player unit
-    uint32_t _debugDpsSourceGid = 0;
-    int64_t _debugDpsPeakRaw = 0; // Highest rolling 1-second DPS reached during the current firing burst.
-    int64_t _debugDpsSessionDamageRaw = 0; // Total recorded damage in the current firing burst.
-    int32_t _debugDpsSessionStartStamp = 0; // First recorded damage time for DPS AVG.
-    int32_t _debugDpsLastDamageStamp = 0; // Resets DPS AVG/PEAK after a short period without recorded damage.
-
-    struct DebugDpsSample
-    {
-        int32_t stamp = 0;
-        int32_t rawDamage = 0;
-    };
-    std::vector<DebugDpsSample> _debugDpsSamples;
+    bool _debugInfoEnabled = false; // F1: F3-style information overlay (new debug)
 
     // F9 debug: transient debug spheres (blast area, at-death volume). Recorded on weapon detonation,
     // fade out after a short time. Only populated while _showCollDebug is on.

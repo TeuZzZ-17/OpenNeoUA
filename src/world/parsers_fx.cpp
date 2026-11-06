@@ -1348,7 +1348,7 @@ struct DecalEffectKey
 const DecalEffectKey kDecalEffectKeys[] = {
     {"effect_mode", EFFECT_KEY_BOTH},
     {"effect_3ds", EFFECT_KEY_BOTH},
-    {"effect_scale", EFFECT_KEY_BOTH},
+    {"effect_scale", EFFECT_KEY_GROUND_PULSE},
     {"effect_active_time", EFFECT_KEY_BOTH},
     {"effect_chance", EFFECT_KEY_BOTH},
     {"effect_spread", EFFECT_KEY_BOTH},

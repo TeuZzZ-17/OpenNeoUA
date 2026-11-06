@@ -1361,22 +1361,9 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
     if ( arg->energy < 0 && !arg->bypassAttackerDamageModifiers && arg->unit )
         arg->energy = arg->unit->GetEffectiveOutgoingEnergy(arg->energy);
 
+    // Invulnerable units (debug dummies) ignore every hit.
     if ( IsInvulnerableToDamage() && arg->energy < 0 )
-    {
-        // F3 debug uses invulnerable friendly units as repeatable test dummies.
-        // At this point the normal weapon path has already applied target shield/
-        // debuff handling and the attacker modifier above. Record the effective
-        // damage the hit would have caused, then keep invulnerability unchanged.
-        if ( _world && arg->unit )
-        {
-            const int attemptedDamage = arg->energy == std::numeric_limits<int>::min()
-                ? std::numeric_limits<int>::max()
-                : -arg->energy;
-            if ( attemptedDamage > 0 )
-                _world->DebugRecordDpsDamage(arg->unit, this, attemptedDamage);
-        }
         return;
-    }
 
     if (_world && (_oflags & BACT_OFLAG_VIEWER))
     {
@@ -1466,16 +1453,6 @@ void NC_STACK_ypabact::ModifyEnergy(bact_arg84 *arg)
         if ( arg->energy < 0 && _world )
         {
             _world->NoteUserDamageHover(arg->unit, this);
-
-            // F3 DPS debug records real HP loss on vulnerable targets. Invulnerable
-            // debug dummies are recorded earlier as effective attempted damage, so
-            // they can be fired on indefinitely without forcing the meter to zero.
-            const int incomingDamage = arg->energy == std::numeric_limits<int>::min()
-                ? std::numeric_limits<int>::max()
-                : -arg->energy;
-            const int actualDamage = std::min(incomingDamage, std::max(_energy, 0));
-            if ( actualDamage > 0 )
-                _world->DebugRecordDpsDamage(arg->unit, this, actualDamage);
         }
 
         _energy += arg->energy;

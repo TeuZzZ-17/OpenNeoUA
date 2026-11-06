@@ -516,7 +516,7 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
         return;
 
     RenderMeshBeamSegment(arg, start, end, renderConfig, _timeStamp,
-                          (float)_normalVizLimit, (float)_normalFadeLength,
+                          GetEffectDrawDistance(), (float)_normalFadeLength,
                           tailFactor, headFactor, visualSeed, nullptr, externalMesh);
 }
 
@@ -566,7 +566,7 @@ void NC_STACK_ypaworld::RenderLaserMeshSegment(
     if ( !useImpactFade )
     {
         RenderMeshBeamSegment(arg, start, end, renderConfig, _timeStamp,
-                              (float)_normalVizLimit, (float)_normalFadeLength,
+                              GetEffectDrawDistance(), (float)_normalFadeLength,
                               0.0f, 1.0f, visualSeed, &orientationHint, externalMesh);
         return;
     }
@@ -579,7 +579,7 @@ void NC_STACK_ypaworld::RenderLaserMeshSegment(
     if ( fadeStartFactor > 0.0001f )
     {
         RenderMeshBeamSegment(arg, start, fadeStart, renderConfig, _timeStamp,
-                              (float)_normalVizLimit, (float)_normalFadeLength,
+                              GetEffectDrawDistance(), (float)_normalFadeLength,
                               0.0f, fadeStartFactor, visualSeed, &orientationHint, externalMesh);
     }
 
@@ -592,7 +592,7 @@ void NC_STACK_ypaworld::RenderLaserMeshSegment(
     fadeConfig.minSubdivisions = 8;
 
     RenderMeshBeamSegment(arg, fadeStart, end, fadeConfig, _timeStamp,
-                          (float)_normalVizLimit, (float)_normalFadeLength,
+                          GetEffectDrawDistance(), (float)_normalFadeLength,
                           fadeStartFactor, 1.0f, visualSeed, &orientationHint, externalMesh);
 }
 

@@ -1736,6 +1736,15 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     if ( IsInvisibleUnrevealed() )
         return;
 
+    // Nothing is drawn beyond the visible-world sphere (performance): the unit's logic keeps
+    // running elsewhere, only its visual body is skipped.
+    if ( _world )
+    {
+        TF::TForm3D *view = TF::Engine.GetViewPoint();
+        if ( view && (_position - view->CalcPos).length() - _radius > _world->GetEffectDrawDistance() )
+            return;
+    }
+
     auto *worldRender=arg;
     auto actorRender=*arg;
     actorRender.debugPlayerParticles=IsPlayerTimeOwner();

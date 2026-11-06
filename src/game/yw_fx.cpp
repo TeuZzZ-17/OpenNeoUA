@@ -720,9 +720,7 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
         // With the sky dome active the visible world ends at the sky horizon.
         // _normalVizLimit is only a CPU-side budget (diamond window plus hidden
         // safety sectors), several times larger than the horizon.
-        float vizLimit = (float)world->_normalVizLimit;
-        if ( world->_skyRender && world->_skyObject )
-            vizLimit = std::min(vizLimit, (float)world->GetSkyHorizonDistance());
+        const float vizLimit = world->GetEffectDrawDistance();
         const float distance = arg->particleSystem ? 0.0f
             : (it->pos - TF::Engine.GetViewPoint()->CalcPos).length();
         const float fadeLength = std::max(0, world->_normalFadeLength);

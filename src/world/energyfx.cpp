@@ -488,7 +488,7 @@ void NC_STACK_ypaworld::RenderProceduralEnergyFX(baseRender_msg *arg)
         const vec3d viewPos = view->CalcSclRot.Transform(worldPos - view->CalcPos);
         const float distance = viewPos.length();
 
-        if ( distance <= (float)_normalVizLimit + it->size )
+        if ( distance <= GetEffectDrawDistance() + it->size )
         {
             const float fade = World::ComputeVPFadeEnvelope((double)age,
                                                              (double)it->duration,
@@ -517,7 +517,7 @@ void NC_STACK_ypaworld::RenderProceduralEnergyFX(baseRender_msg *arg)
                 render.Distance = distance;
                 render.TimeStamp = arg->globTime;
                 render.FrameTime = arg->frameTime;
-                render.FogStart = (float)(_normalVizLimit - _normalFadeLength);
+                render.FogStart = GetEffectDrawDistance() - (float)_normalFadeLength;
                 render.FogLength = (float)_normalFadeLength;
 
                 arg->adeCount += _proceduralEnergyFXQuadMesh.Indixes.size() / 3;
