@@ -334,17 +334,17 @@ std::string yw_OrderTemplateCanonicalPath(YwOrderTemplateId templateId)
     switch ( templateId )
     {
     case YW_ORDER_TEMPLATE_ATTACK:
-        return "Interface/Actions/AttackOrder/attack_order.svg";
+        return "Graphics/Actions/AttackOrder/attack_order.svg";
 
     case YW_ORDER_TEMPLATE_ROBO_MOVE:
-        return "Interface/Actions/MoveOrder/robo_move_order.svg";
+        return "Graphics/Actions/MoveOrder/robo_move_order.svg";
 
     case YW_ORDER_TEMPLATE_MAP_MARKER:
-        return "Interface/Actions/MapMarker/map_marker.svg";
+        return "Graphics/Actions/MapMarker/map_marker.svg";
 
     case YW_ORDER_TEMPLATE_MOVE:
     default:
-        return "Interface/Actions/MoveOrder/move_order.svg";
+        return "Graphics/Actions/MoveOrder/move_order.svg";
     }
 }
 

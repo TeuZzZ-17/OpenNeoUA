@@ -92,7 +92,7 @@ int main()
         const auto isDecal = [](const World::TChainFXConfig &fx) { return fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL; };
         const auto electric = world._decalProfiles.find(2);
         Check(electric != world._decalProfiles.end() &&
-              electric->second.fx.ground_decal_texture == "Interface/GroundDecals/Mykonian_Electric_02.png" &&
+              electric->second.fx.ground_decal_texture == "Graphics/GroundDecals/Mykonian_Electric_02.png" &&
               electric->second.fx.ground_decal_smoke.enabled,
               "live electric profile has its revised texture and smoke");
         for (int id : {17,18,58,63,64,65,66,67,68,69,70,76,97,113,145,150})

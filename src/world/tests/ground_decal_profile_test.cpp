@@ -17,7 +17,7 @@ int main()
             new World::Parsers::VhclProtoParser(world.get()),new World::Parsers::WeaponProtoParser(world.get())};
         return ScriptParser::ParseStringList(lines,handlers,ScriptParser::FLAG_NO_SCOPE_SKIP);
     };
-    check(parse({"new_decal 1","texture = Interface/GroundDecals/impact_01.png","duration = permanent","end"}),"plain decal parse");
+    check(parse({"new_decal 1","texture = Graphics/GroundDecals/impact_01.png","duration = permanent","end"}),"plain decal parse");
     const auto &fx=world->_decalProfiles[1].fx;
     check(!fx.ground_decal_smoke.enabled,"decal without smoke keys emits no smoke");
     check(fx.ground_decal_size_min==0&&fx.ground_decal_size_max==0,"profile has no implicit size");
