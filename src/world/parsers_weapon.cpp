@@ -1283,7 +1283,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "artillery_shell_marker_path") )
     {
-        // Author relative to Data/Interface/Map/Markers. Empty/invalid/missing
+        // Author relative to Data/Graphics/Map/Markers. Empty/invalid/missing
         // assets are handled by the UI loader with the canonical classic SVG fallback.
         _wpn->artillery_shell_marker_path = p2;
     }

@@ -139,7 +139,7 @@ void yw_RenderArtilleryShellCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0,
 }
 
 // OpenNeoUA custom: artillery bombardment marker artwork is fully asset-driven.
-// Weapon scripts author a SVG relative to Data/Interface/Map/Markers.  The same
+// Weapon scripts author a SVG relative to Data/Graphics/Map/Markers.  The same
 // white/alpha artwork is color-modulated at runtime for faction/queued/invalid
 // states, so one vector asset is the single visual source of truth.
 const char *yw_ArtilleryShellDefaultMarkerFile()
@@ -149,8 +149,8 @@ const char *yw_ArtilleryShellDefaultMarkerFile()
 
 std::string yw_ResolveArtilleryShellMarkerAsset(const std::string &authored)
 {
-    static const std::string ROOT = "Interface/Map/Markers/";
-    static const std::string DATA_ROOT = "Data/Interface/Map/Markers/";
+    static const std::string ROOT = "Graphics/Map/Markers/";
+    static const std::string DATA_ROOT = "Data/Graphics/Map/Markers/";
 
     std::string relative = authored.empty() ? yw_ArtilleryShellDefaultMarkerFile() : authored;
     std::replace(relative.begin(), relative.end(), '\\', '/');

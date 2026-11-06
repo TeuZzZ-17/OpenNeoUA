@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pixel-accurate simulation of the depth-projected decal shader (system/decalshader.h).
 
-Usage: decal_projection_sim.py output.png Interface/GroundDecals/Impact_01.png
+Usage: decal_projection_sim.py output.png Graphics/GroundDecals/Impact_01.png
 The exit code is not zero when the final mapping stretches or shrinks the decal.
 map_final() must stay a line by line copy of the GLSL mapping.
 

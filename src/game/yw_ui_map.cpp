@@ -192,7 +192,7 @@ bool yw_RenderFactionToolbarIcon(NC_STACK_ypaworld *yw,
     // Faction artwork keeps the original owner-authored layered SVGs. Missing
     // custom assets safely fall back to the existing vector glyph.
     YwLoadedUiBitmap icon = yw_LoadFactionToolbarIcon(
-        owner, "Interface/Map/Buttons", iconName, active, iconSize);
+        owner, "Graphics/Map/Buttons", iconName, active, iconSize);
     if ( !icon.bitmap || !icon.bitmap->GetBitmap() )
         return false;
 
@@ -407,7 +407,7 @@ YwLoadedUiBitmap yw_LoadRoboMapMarkerBitmap(NC_STACK_ypaworld *yw, int markerSiz
     {
         // Reuse the owner-authored marker asset from the strategic-map toolbar.
         return yw_LoadFactionToolbarIcon(
-            owner, "Interface/Map/Buttons", "marker", true, markerSize);
+            owner, "Graphics/Map/Buttons", "marker", true, markerSize);
     }
 
     return YwLoadedUiBitmap();
