@@ -15,7 +15,7 @@
 // mode 0 = default, 1 = no scene FBO, 2 = legacy GL (gfx.vbo off);
 // plan "stations" = every power station type, "all" = also city, units, stress,
 // "taer" = the real decal block of Weapon 38 (20 Tons Taerbomb) dropped from above.
-// Needs Data/Interface/GroundDecals/_capture_checker.png (any checkerboard): the
+// Needs Data/Graphics/GroundDecals/_capture_checker.png (any checkerboard): the
 // checker pass is what shows stretching. Back up Data/Save first: starting a
 // level from the shell rewrites the player files. Remove the PNG afterwards.
 // Use a build folder of your own: objects left by another build of a changed
@@ -365,8 +365,8 @@ void PrepareDecals(NC_STACK_ypaworld *w, const Shot &shot, int currentPass)
     World::TChainFXConfig fx;
     fx.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
     fx.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
-    fx.ground_decal_texture = currentPass == 1 ? "Interface/GroundDecals/Impact_01.png"
-                                               : "Interface/GroundDecals/_capture_checker.png";
+    fx.ground_decal_texture = currentPass == 1 ? "Graphics/GroundDecals/Impact_01.png"
+                                               : "Graphics/GroundDecals/_capture_checker.png";
     fx.ground_decal_permanent = true;
     fx.ground_decal_size_min = fx.ground_decal_size_max = shot.size;
     fx.ground_decal_tint = World::TVisualTint();
@@ -387,7 +387,7 @@ void PrepareDecals(NC_STACK_ypaworld *w, const Shot &shot, int currentPass)
         }
         fx.ground_decal_smoke.enabled = false;  // Smoke would only hide the decal.
         if (currentPass == 2)
-            fx.ground_decal_texture = "Interface/GroundDecals/_capture_checker.png";
+            fx.ground_decal_texture = "Graphics/GroundDecals/_capture_checker.png";
 
         ypaworld_arg136 hit;
         for (double y = shot.dropPos.y - 2600.0; y < shot.dropPos.y + 800.0 && !hit.isect; y += 200.0)

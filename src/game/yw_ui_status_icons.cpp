@@ -133,7 +133,7 @@ const std::string &StatusIconPlasmaPath(const NC_STACK_ypaworld *yw)
     if ( cached != g_statusIconConfiguredPathCache.end() )
         return cached->second;
 
-    std::string path = "Interface/Plasma/owner_" + std::to_string(owner) + "/plasma.png";
+    std::string path = "Graphics/Plasma/owner_" + std::to_string(owner) + "/plasma.png";
     std::string resolved;
     if ( StatusIconResourceExists(path) )
         resolved = path;

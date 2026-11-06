@@ -94,7 +94,7 @@ bool yw_RenderSquadronManagerIcon(NC_STACK_ypaworld *yw,
     // StatusIconLoad resolves Data-relative paths. Squadron buttons keep the
     // original owner-authored layered SVGs for maximum small-size definition.
     YwLoadedUiBitmap icon = yw_LoadFactionToolbarIcon(
-        owner, "Interface/Squad/Buttons", iconName, active, iconSize);
+        owner, "Graphics/Squad/Buttons", iconName, active, iconSize);
     if ( !icon.bitmap || !icon.bitmap->GetBitmap() )
         return false;
 
