@@ -171,6 +171,12 @@ Each parameter is one line: marker, `name = value`, em dash and description.
  substantially change vanilla systems.
 ```
 
+### Studio: models without copies of set textures
+
+A `.BASE` model can keep its own skeletons and animations without local copies of the original textures. In **Import Model**, select the installed set's `Set.BAS`: existing loose files take precedence, and missing resources are resolved from the archive. This includes textures referenced by `.ANM` animation frames. If local copies are removed while Studio is open, deleted paths are ignored the next time the model is imported or reopened.
+
+The palette and rendering tables are read from the installed set's folders (`PALETTE` and `REMAP`), rather than necessarily from inside `Set.BAS`. They must remain available in the installation. Resolving these resources does not copy them into the model folder. **Export Asset Family** creates a complete package, including textures and the rendering profile: before publishing it, exclude original resources you do not intend to distribute. A custom texture absent from the set still needs its own file.
+
 ### Sound pitch and effect radius
 
 Many sound pitch parameters accept `min~max`, allowing one event to choose a different pitch each time and reducing repetition without duplicating assets.
