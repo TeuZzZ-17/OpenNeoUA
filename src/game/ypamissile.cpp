@@ -1409,6 +1409,7 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 // Ground decals consume the actual collision data before a
                 // later trace can mutate a shared filler/slurp skeleton.
                 StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD, &arg136);
+                MakeImpactCrater(arg136);
 
                 AlignMissileByNormal( impactNormal );
 
@@ -1626,6 +1627,7 @@ void NC_STACK_ypamissile::Renew()
     _artilleryShellFlightTime = 0;
     _artilleryShellArcHeight  = 0.0;
     _artilleryShellImpactOnSurface = false;
+    _impactCraterMade = false;
     _artilleryShellVerticalBarrage = false;
     _artilleryShellVerticalTransferred = false;
     _artilleryShellVerticalApexOffset = vec3d(0.0, 0.0, 0.0);
@@ -1926,6 +1928,24 @@ void NC_STACK_ypamissile::DetonateKamikazePayload(NC_STACK_ypabact *directHit)
     StartDestFXByType(World::DestFX::FX_MEGADETH);
 }
 
+bool NC_STACK_ypamissile::HasImpactCrater() const
+{
+    return _world && _vehicleID >= 0 &&
+           (size_t)_vehicleID < _world->GetWeaponsProtos().size() &&
+           _world->GetWeaponsProtos().at(_vehicleID).crater.defined;
+}
+
+// OpenNeoUA custom: crater_radius / crater_depth dig the ground at a real
+// world hit, once per shot. SpawnTerrainCrater refuses roofs, walls and netgames.
+void NC_STACK_ypamissile::MakeImpactCrater(const ypaworld_arg136 &hit)
+{
+    if ( _impactCraterMade || !HasImpactCrater() )
+        return;
+
+    _impactCraterMade = true;
+    _world->SpawnTerrainCrater(_world->GetWeaponsProtos().at(_vehicleID).crater, hit);
+}
+
 void NC_STACK_ypamissile::AlignMissile(float dtime)
 {
     if ( _fly_dir != vec3d(0.0, 0.0, 0.0) )
@@ -2004,6 +2024,7 @@ NC_STACK_ypamissile::NC_STACK_ypamissile()
     _mislBlastFalloff = 0;
     _mislClusterGeneration = 0;
     _artilleryShellImpactOnSurface = false;
+    _impactCraterMade = false;
 }
 
 void NC_STACK_ypamissile::setBACT_viewer(bool vwr)

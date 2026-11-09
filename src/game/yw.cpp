@@ -578,6 +578,7 @@ size_t NC_STACK_ypaworld::Init(IDVList &stak)
     _nextTransientVPId = 1;
     _proceduralEnergyFX.reserve(512);
     ClearGroundDecals();
+    ClearTerrainCraters();
     _damageHoverTargets.clear();
     _fxLimit = 16;
     _renderSectors = yw_ClampRenderSectors(stak.Get<int32_t>(YW_ATT_VISSECTORS, 9));
@@ -681,6 +682,7 @@ size_t NC_STACK_ypaworld::Deinit()
     _debugBlastRings.clear();
     ClearProceduralEnergyFX();
     ClearGroundDecals();
+    ClearTerrainCraters();
     // Transient instances may reference BASE objects owned by either external
     // visual cache. Destroy the instances before releasing those caches.
     _transientVPs.clear();
@@ -2604,7 +2606,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         // alongside the compound set. The prototype default radius remains
         // available to non-collision systems without silently becoming a hitbox.
         bacto->_disableCollision = vhcl.disable_collision;
-        bacto->_weapon_use_vehicle_fire = vhcl.weapon_use_vehicle_fire;
         bacto->_disable_genesis = vhcl.disable_genesis;
         bacto->ApplyCompoundCollision(vhcl.coll, vhcl.radius_defined);
 
@@ -3630,6 +3631,7 @@ void NC_STACK_ypaworld::BeginLevelTeardown()
     _nextTransientVPId = 1;
     ClearProceduralEnergyFX();
     ClearGroundDecals();
+    ClearTerrainCraters();
     _damageHoverTargets.clear();
     _inBuildProcess.clear();
     _debugBlastRings.clear();

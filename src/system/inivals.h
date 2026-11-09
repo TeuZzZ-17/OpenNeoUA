@@ -234,6 +234,9 @@ public:
     static Common::Ini::Key GamePlayerMaxAltitudeAboveGround;
     static Common::Ini::Key GameAiMaxAltitudeAboveGround;
     static Common::Ini::Key GameAiAirVerticalForce;
+    static Common::Ini::Key GameDeformationGroundLimit;
+    static Common::Ini::Key GameDeformationBuildingLimit;
+    static Common::Ini::Key GameDeformationMaxCraters; // game.deformation_max_craters: kept terrain craters, 0 = off
     static Common::Ini::Key GameAiBomberExtraAltitude;
     static Common::Ini::Key GameSprintForceUp;
     static Common::Ini::Key GameSprintPitchUp;

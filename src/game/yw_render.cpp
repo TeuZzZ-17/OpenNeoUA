@@ -236,8 +236,19 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 
                     NC_STACK_base::CheckOpts( &pcell->BldVPOpts.At(xx, zz), bld );
 
+                    // OpenNeoUA custom: a piece reached by a terrain crater
+                    // draws its own dug copy instead of the shared model.
+                    NC_STACK_base::Instance *pieceOpts = pcell->BldVPOpts.At(xx, zz);
+                    if ( pieceOpts )
+                        pieceOpts->meshOverride = transformBorderWall
+                            ? nullptr
+                            : TerrainCraterPieceMeshes(*pcell, xx, zz, legoId, pos);
+
                     renderBuilding(bld, pcell->BldVPOpts.At(xx, zz),
                                    hasBuildingVisual ? buildingTint : World::TVisualTint());
+
+                    if ( pieceOpts )
+                        pieceOpts->meshOverride = nullptr;
 
                     if ( transformBorderWall )
                     {
@@ -315,9 +326,13 @@ void NC_STACK_ypaworld::PrepareFiller(cellArea *sct, cellArea *sct2, float v9h, 
     int x = _secTypeArray[ sct->type_id ].SurfaceType;
     int y = _secTypeArray[ sct2->type_id ].SurfaceType;
 
-    if (!force && (out->Id1 == x && out->Id2 == y &&
+    const bool cached = out->Id1 == x && out->Id2 == y &&
         out->Heights[0] == sct->height && out->Heights[1] == sct2->height &&
-        out->Heights[2] == v8h && out->Heights[3] == v9h))
+        out->Heights[2] == v8h && out->Heights[3] == v9h;
+
+    // OpenNeoUA custom: a seam changed by a terrain crater keeps its old shape
+    // while this frame's crater rebuild budget is spent.
+    if (!force && cached && (!out->craterStale || !TerrainCraterRebuildAllowed()))
         return;
 
     NC_STACK_base *bs;
@@ -347,6 +362,7 @@ void NC_STACK_ypaworld::PrepareFiller(cellArea *sct, cellArea *sct2, float v9h, 
     out->FreeVBO();
 
     bs->MakeCache(out);
+    ApplyTerrainCratersToFiller(out);
 
     out->MakeVBO();
 
@@ -356,6 +372,7 @@ void NC_STACK_ypaworld::PrepareFiller(cellArea *sct, cellArea *sct2, float v9h, 
     out->Heights[1] = sct2->height;
     out->Heights[2] = v8h;
     out->Heights[3] = v9h;
+    out->craterStale = false;
 }
 
 void NC_STACK_ypaworld::PrepareAllFillers()
@@ -454,6 +471,9 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 {
     if ( !_viewerBact )
         return;
+
+    // Crater copies replaced last frame are no longer referenced.
+    ReleaseRetiredTerrainCraters();
 
     TF::TForm3D *v5 = TF::Engine.GetViewPoint();
 

@@ -97,6 +97,7 @@ set(SOURCES
     world/energyfx.cpp
     world/grounddecal.cpp
     world/grounddecal_smoke.cpp
+    world/terraincrater.cpp
     world/collision_shape.cpp
     world/weapontracer.cpp
     world/luaevents.cpp

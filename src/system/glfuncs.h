@@ -43,6 +43,8 @@ public:
     static PFNGLUNIFORM1FPROC GLUniform1f;
     static PFNGLUNIFORM1IPROC GLUniform1i;
     static PFNGLUNIFORM1FVPROC GLUniform1fv;
+    static PFNGLUNIFORM3FVPROC GLUniform3fv;
+    static PFNGLUNIFORM4FVPROC GLUniform4fv;
     static PFNGLUNIFORM2FPROC GLUniform2f;
     static PFNGLUNIFORM2IPROC GLUniform2i;
     static PFNGLUNIFORM3FPROC GLUniform3f;

@@ -453,7 +453,8 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
         }
     }
 
-    if ( !CollisionsDisabled() && _artilleryShellImpactOnSurface && !_world->_isNetGame && hasGroundDecalChainFX )
+    if ( !CollisionsDisabled() && _artilleryShellImpactOnSurface && !_world->_isNetGame &&
+         (hasGroundDecalChainFX || HasImpactCrater()) )
     {
         ypaworld_arg136 groundHit;
         groundHit.stPos = vec3d(_position.x, -30000.0, _position.z);
@@ -462,8 +463,12 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
         _world->ypaworld_func136(&groundHit);
 
         if ( groundHit.isect && std::fabs(groundHit.isectPos.y - _position.y) <= 5.0 )
-            StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
-                                  &groundHit);
+        {
+            if ( hasGroundDecalChainFX )
+                StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
+                                      &groundHit);
+            MakeImpactCrater(groundHit);
+        }
     }
 
     // Timed impact: reuse the same path a normal bomb uses on contact for blast

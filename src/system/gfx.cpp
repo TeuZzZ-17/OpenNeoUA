@@ -1977,7 +1977,9 @@ static bool DecalScreenRect(const TDecalDraw &decal, const mat3x3 &worldToView,
     const vec3d b = vec3d(decal.AxisB.x, decal.AxisB.y, decal.AxisB.z) * reach;
     // Small decals still reach the surface when collision and visuals differ a
     // little: same height limit of the shader.
-    const vec3d n = vec3d(decal.AxisN.x, decal.AxisN.y, decal.AxisN.z) * std::max(reach, 12.0f);
+    const vec3d n = vec3d(decal.AxisN.x, decal.AxisN.y, decal.AxisN.z) *
+                    std::max(std::max(reach, 12.0f),
+                             (decal.Field ? decal.Field->largest : 0.0f) * 1.25f + 4.0f);
 
     float left = 2.0f, right = -2.0f, bottom = 2.0f, top = -2.0f;
     bool behind = false;
@@ -2132,6 +2134,20 @@ void GFXEngine::DrawDecalPass()
         Glext::GLUniform3f(_decalProg.AxisNLoc, decal.AxisN.x, decal.AxisN.y, decal.AxisN.z);
         Glext::GLUniform2f(_decalProg.SizeLoc, decal.SizeT, decal.SizeB);
         Glext::GLUniform1f(_decalProg.EdgeFadeLoc, decal.EdgeFade);
+        static const TDecalField noField;
+        const TDecalField &field = decal.Field ? *decal.Field : noField;
+        Glext::GLUniform1i(_decalProg.FieldShapesLoc, field.shapes);
+        if ( field.shapes > 0 )
+        {
+            Glext::GLUniform4fv(_decalProg.FieldPosLoc, field.shapes, &field.pos[0][0]);
+            Glext::GLUniform4fv(_decalProg.FieldSizeLoc, field.shapes, &field.size[0][0]);
+            Glext::GLUniform3fv(_decalProg.FieldDirLoc, field.shapes, &field.dir[0][0]);
+            Glext::GLUniform1i(_decalProg.FieldFootprintsLoc, field.footprints);
+            if ( field.footprints > 0 )
+                Glext::GLUniform4fv(_decalProg.FieldFootprintLoc, field.footprints, &field.footprint[0][0]);
+            Glext::GLUniform2f(_decalProg.FieldLimitsLoc, field.limits[0], field.limits[1]);
+            Glext::GLUniform2f(_decalProg.FieldLatticeLoc, field.lattice[0], field.lattice[1]);
+        }
         Glext::GLUniform1fv(_decalProg.ShapeLoc, DECAL_SHAPE_SAMPLES, decal.Shape);
         Glext::GLUniform4f(_decalProg.TintLoc, decal.Tint.r, decal.Tint.g, decal.Tint.b, decal.Tint.a);
         Glext::GLUniform1f(_decalProg.ColorizeLoc, decal.Colorize ? 1.0f : 0.0f);
@@ -6853,6 +6869,14 @@ TDecalProg::TDecalProg(uint32_t id)
     AxisNLoc = Glext::GLGetUniformLocation(ID, "uAxisN");
     SizeLoc = Glext::GLGetUniformLocation(ID, "uSize");
     EdgeFadeLoc = Glext::GLGetUniformLocation(ID, "uEdgeFade");
+    FieldShapesLoc = Glext::GLGetUniformLocation(ID, "uFieldShapes");
+    FieldPosLoc = Glext::GLGetUniformLocation(ID, "uFieldPos");
+    FieldSizeLoc = Glext::GLGetUniformLocation(ID, "uFieldSize");
+    FieldDirLoc = Glext::GLGetUniformLocation(ID, "uFieldDir");
+    FieldFootprintsLoc = Glext::GLGetUniformLocation(ID, "uFieldFootprints");
+    FieldFootprintLoc = Glext::GLGetUniformLocation(ID, "uFieldFootprint");
+    FieldLimitsLoc = Glext::GLGetUniformLocation(ID, "uFieldLimits");
+    FieldLatticeLoc = Glext::GLGetUniformLocation(ID, "uFieldLattice");
     ShapeLoc = Glext::GLGetUniformLocation(ID, "uShape");
     TintLoc = Glext::GLGetUniformLocation(ID, "uTint");
     ColorizeLoc = Glext::GLGetUniformLocation(ID, "uColorize");

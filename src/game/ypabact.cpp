@@ -2312,7 +2312,6 @@ void NC_STACK_ypabact::Renew()
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _collisionShape.reset();
     _disableCollision = false;
-    _weapon_use_vehicle_fire = false;
     _disable_genesis = false;
     _shapeCollisionDamageStamp = -1;
     ClearPlayerSprintPitchExtra();

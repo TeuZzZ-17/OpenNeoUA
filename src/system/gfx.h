@@ -326,6 +326,21 @@ enum
     DEFAULT_HEIGHT = 480,
 };
 
+// Craters and dents under a decal, for its shader (see decalshader.h), with
+// positions from the decal origin in world axes.
+struct TDecalField
+{
+    int shapes = 0;
+    float pos[DECAL_FIELD_SHAPES][4] = {};      // xyz, w: copies (> 0 crater, < 0 dent)
+    float size[DECAL_FIELD_SHAPES][4] = {};     // radius, depth, rim, band
+    float dir[DECAL_FIELD_SHAPES][3] = {};      // dent: direction into the surface
+    int footprints = 0;
+    float footprint[DECAL_FIELD_FOOTPRINTS][4] = {};   // min x, min z, max x, max z
+    float limits[2] = {-1.0f, -1.0f};           // ground, building (< 0: none)
+    float lattice[2] = {0.0f, 0.0f};            // Origin x, z modulo DECAL_FIELD_STEP.
+    float largest = 0.0f;                       // Largest move, for the screen rectangle.
+};
+
 // One projected decal of the current frame (see decalshader.h). Position and
 // axes use world axes relative to the camera, so large maps keep their precision.
 struct TDecalDraw
@@ -337,6 +352,7 @@ struct TDecalDraw
     float SizeT = 0.0f;
     float SizeB = 0.0f;
     float EdgeFade = 0.0f;
+    const TDecalField *Field = nullptr;   // Craters and dents under it, owned by the caller.
     const float *Shape = nullptr;   // DECAL_SHAPE_SAMPLES radii, owned by the caller.
     ResBitmap *Tex = nullptr;
     TGLColor Tint = TGLColor(1.0, 1.0, 1.0, 1.0);
@@ -371,6 +387,14 @@ struct TDecalProg : TShaderProg
     int32_t AxisNLoc = -1;
     int32_t SizeLoc = -1;
     int32_t EdgeFadeLoc = -1;
+    int32_t FieldShapesLoc = -1;
+    int32_t FieldPosLoc = -1;
+    int32_t FieldSizeLoc = -1;
+    int32_t FieldDirLoc = -1;
+    int32_t FieldFootprintsLoc = -1;
+    int32_t FieldFootprintLoc = -1;
+    int32_t FieldLimitsLoc = -1;
+    int32_t FieldLatticeLoc = -1;
     int32_t ShapeLoc = -1;
     int32_t TintLoc = -1;
     int32_t ColorizeLoc = -1;

@@ -9,6 +9,7 @@
 #include <string.h>
 #include <math.h>
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <limits>
@@ -64,13 +65,8 @@ struct PlayerSprintConfig
     World::TAbsoluteOrPercent energyCost;
 };
 
-struct yw_ModelPointCloud
-{
-    std::vector<vec3d> points;
-    vec3d min;
-    vec3d max;
-    bool valid = false;
-};
+// One triangle of the geometry used to build an attached FX silhouette.
+typedef std::array<vec3d, 3> yw_AttachedFXTriangle;
 
 // ---- globals defined in the core file ----
 extern yw_infolog info_log;
@@ -119,17 +115,10 @@ void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw, int32_t frameT
 int yw_SelectMimicVehicleID(const std::vector<World::TVhclProto> &protos, int shellVehicleId);
 mat3x3 yw_BuildVPRotationMatrix(const vec3d &degrees);
 vec3d yw_SafeVPScale(const vec3d &scale);
-void yw_AddModelPoint(yw_ModelPointCloud *cloud, const vec3d &point);
-vec3d yw_Cross3(const vec3d &a, const vec3d &b);
 bool yw_IsFinitePoint(const vec3d &point);
-void yw_AddAttachedFXTriangle(NC_STACK_ypaworld::TAttachedFXGeometryCache *cache, yw_ModelPointCloud *bounds, const vec3d &a, const vec3d &b, const vec3d &c);
-void yw_CollectAttachedFXTriangles(NC_STACK_base *base, const mat3x3 &rot, const vec3d &pos, NC_STACK_ypaworld::TAttachedFXGeometryCache *cache, yw_ModelPointCloud *bounds);
-int yw_GetWeldedVertexID(const vec3d &point, double weld, std::map<std::tuple<int64_t, int64_t, int64_t>, int> *vertices);
-bool yw_IsClosedAttachedFXMesh(const NC_STACK_ypaworld::TAttachedFXGeometryCache &cache, const yw_ModelPointCloud &bounds);
-bool yw_RayIntersectsAttachedFXTriangle(const vec3d &origin, const vec3d &direction, const NC_STACK_ypaworld::TAttachedFXTriangle &triangle);
-bool yw_IsPointInsideAttachedFXMesh(const vec3d &point, const NC_STACK_ypaworld::TAttachedFXGeometryCache &cache);
-float yw_NextAttachedFXCacheRandom(uint32_t *state);
-void yw_BuildAttachedFXVolumeCache(NC_STACK_ypaworld::TAttachedFXGeometryCache *cache, const yw_ModelPointCloud &bounds);
+void yw_CollectAttachedFXTriangles(NC_STACK_base *base, const mat3x3 &rot, const vec3d &pos, std::vector<yw_AttachedFXTriangle> *triangles);
+void yw_CollectAttachedFXShapeTriangles(const Collision::Shape &shape, std::vector<yw_AttachedFXTriangle> *triangles);
+void yw_BuildAttachedFXSilhouette(const std::vector<yw_AttachedFXTriangle> &triangles, bool dropThinParts, NC_STACK_ypaworld::TAttachedFXGeometryCache *cache);
 bool yw_SameAttachedFXTransform(const vec3d &a, const vec3d &b);
 bool yw_ParseOptionalInt(std::string s, int32_t *out);
 bool yw_ParseOptionalBool(std::string s, bool *out);

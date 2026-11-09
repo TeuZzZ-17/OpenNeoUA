@@ -152,6 +152,9 @@ public:
         std::vector<Instance *> KidsOpts;
         std::vector<NC_STACK_ade::InstanceOpts *> Particles;
         bool skipGeometry = false; // Per-instance root mesh suppression; particles and child instances still render.
+        // OpenNeoUA custom: meshes drawn in place of the shared root meshes for
+        // this instance only (terrain craters); nullptr = the shared ones.
+        std::list<GFX::TMesh> *meshOverride = nullptr;
     };
 
 public:
@@ -223,6 +226,8 @@ public:
 
     virtual Instance *GenRenderInstance();
     static void CheckOpts(Instance **vpOpts, NC_STACK_base *bas);
+    // Sector ground surface of a LEGO/building BASE (BODEN1..BODEN5 textures).
+    static bool IsSectorTerrainMesh(const GFX::TMesh &mesh);
 
     static GFX::TMesh *FindMeshByRenderParams(std::list<GFX::TMesh> *list, const GFX::TRenderParams &p);
 

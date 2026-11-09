@@ -1,0 +1,25 @@
+begin_collision_shape
+version = 1
+source = VP_BLUSH.sklt
+source_hash = 0ff86d55063f361d2b1a103651e7bce9d5e205d9f4824d9f3115861f581f0d34
+scale = 0.45000000000000001|0.45000000000000001|0.45000000000000001
+rotation = 0|0|0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root/kid[0]/kid[157]#component:a649f261a3212421"],"disabled_hulls":[]}
+begin_hull
+vertex = 27|27|0
+vertex = 0|0|10.800000160932541
+vertex = 27|-27|0
+vertex = 0|0|-10.800000160932541
+vertex = -27|27|0
+vertex = -27|-27|0
+face = 0|1|2
+face = 0|2|3
+face = 0|3|4
+face = 0|4|1
+face = 1|4|5
+face = 1|5|2
+face = 2|5|3
+face = 3|5|4
+end
+end

@@ -28,6 +28,8 @@ PFNGLUSEPROGRAMPROC Glext::GLUseProgram = nullptr;
 PFNGLGETUNIFORMLOCATIONPROC Glext::GLGetUniformLocation = nullptr;
 PFNGLUNIFORM1FPROC Glext::GLUniform1f = nullptr;
 PFNGLUNIFORM1FVPROC Glext::GLUniform1fv = nullptr;
+PFNGLUNIFORM3FVPROC Glext::GLUniform3fv = nullptr;
+PFNGLUNIFORM4FVPROC Glext::GLUniform4fv = nullptr;
 PFNGLUNIFORM1IPROC Glext::GLUniform1i = nullptr;
 PFNGLUNIFORM2FPROC Glext::GLUniform2f = nullptr;
 PFNGLUNIFORM2IPROC Glext::GLUniform2i = nullptr;
@@ -117,6 +119,8 @@ bool Glext::init()
 
     SetGLFunc(GLUniform1f, "glUniform1f");
     SetGLFunc(GLUniform1fv, "glUniform1fv");
+    SetGLFunc(GLUniform3fv, "glUniform3fv");
+    SetGLFunc(GLUniform4fv, "glUniform4fv");
     SetGLFunc(GLUniform1i, "glUniform1i");
     SetGLFunc(GLUniform2f, "glUniform2f");
     SetGLFunc(GLUniform2i, "glUniform2i");

@@ -6,6 +6,8 @@
 
 namespace World { struct TVisualTint; }
 
+namespace World { namespace Crater { class PolygonGrid; } }
+
 struct TSectorCollision
 {
     NC_STACK_skeleton *sklt = nullptr;
@@ -13,6 +15,9 @@ struct TSectorCollision
     Common::Point Cell;
     int16_t CollisionType = 0;
     int16_t Flags = 0;
+    // OpenNeoUA custom: set on a terrain crater copy; finds the polygons under a
+    // ray or sphere so the many small crater polygons are not all tested.
+    const World::Crater::PolygonGrid *craterGrid = nullptr;
 };
 
 // For rendering

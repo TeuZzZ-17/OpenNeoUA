@@ -644,6 +644,27 @@ int SaveExtraViewParser::Handle(ScriptParser::Parser &parser, const std::string 
 }
 
 
+int SaveCraterParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
+{
+    if ( !StriCmp(p1, "end") )
+        return ScriptParser::RESULT_SCOPE_END;
+
+    if ( !StriCmp(p1, "crater") )
+    {
+        if ( !_o.ReadTerrainCrater(p2) )
+            ypa_log_out("WARNING: invalid saved crater '%s' ignored\n", p2.c_str());
+    }
+    else if ( !StriCmp(p1, "dent") )
+    {
+        if ( !_o.ReadTerrainDent(p2) )
+            ypa_log_out("WARNING: invalid saved dent '%s' ignored\n", p2.c_str());
+    }
+    else
+        return ScriptParser::RESULT_UNKNOWN;
+    return ScriptParser::RESULT_OK;
+}
+
+
 int SaveKwFactorParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
     if ( !StriCmp(p1, "end") )
