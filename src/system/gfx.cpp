@@ -2143,8 +2143,10 @@ void GFXEngine::DrawDecalPass()
             Glext::GLUniform4fv(_decalProg.FieldSizeLoc, field.shapes, &field.size[0][0]);
             Glext::GLUniform3fv(_decalProg.FieldDirLoc, field.shapes, &field.dir[0][0]);
             Glext::GLUniform1i(_decalProg.FieldFootprintsLoc, field.footprints);
-            if ( field.footprints > 0 )
-                Glext::GLUniform4fv(_decalProg.FieldFootprintLoc, field.footprints, &field.footprint[0][0]);
+            Glext::GLUniform1i(_decalProg.FieldFrozenLoc, field.frozen);
+            if ( field.frozen + field.footprints > 0 )
+                Glext::GLUniform4fv(_decalProg.FieldFootprintLoc, field.frozen + field.footprints,
+                                    &field.footprint[0][0]);
             Glext::GLUniform2f(_decalProg.FieldLimitsLoc, field.limits[0], field.limits[1]);
             Glext::GLUniform2f(_decalProg.FieldLatticeLoc, field.lattice[0], field.lattice[1]);
         }
@@ -6874,6 +6876,7 @@ TDecalProg::TDecalProg(uint32_t id)
     FieldSizeLoc = Glext::GLGetUniformLocation(ID, "uFieldSize");
     FieldDirLoc = Glext::GLGetUniformLocation(ID, "uFieldDir");
     FieldFootprintsLoc = Glext::GLGetUniformLocation(ID, "uFieldFootprints");
+    FieldFrozenLoc = Glext::GLGetUniformLocation(ID, "uFieldFrozen");
     FieldFootprintLoc = Glext::GLGetUniformLocation(ID, "uFieldFootprint");
     FieldLimitsLoc = Glext::GLGetUniformLocation(ID, "uFieldLimits");
     FieldLatticeLoc = Glext::GLGetUniformLocation(ID, "uFieldLattice");

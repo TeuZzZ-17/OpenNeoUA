@@ -48,7 +48,12 @@ struct Spot
     vec3d rayStart, rayDir, focus;
 };
 
-enum Stage { STAGE_MENU, STAGE_WAIT_LEVEL, STAGE_SETTLE, STAGE_RUN, STAGE_BOMB, STAGE_GAP, STAGE_TURRET, STAGE_PERF, STAGE_DONE };
+enum Stage { STAGE_MENU, STAGE_WAIT_LEVEL, STAGE_SETTLE, STAGE_RUN, STAGE_BOMB, STAGE_GAP, STAGE_TURRET, STAGE_PERF,
+             STAGE_TANKBOMB, STAGE_DONE };
+
+// Camera of the stages that look at something moving (plan "tankbomb").
+bool freeCamera = false;
+vec3d freeEye, freeTarget;
 
 Stage stage = STAGE_MENU;
 int frames = 0;
@@ -90,7 +95,10 @@ void Check(bool ok, const std::string &label)
 // checker decal on every weapon, then the run ends (no bomb, gap, turret, perf).
 std::string cfgPlan;
 // "decalsflat": the same run with the decals only, no crater (reference).
-bool DecalsPlan() { return cfgPlan == "decals" || cfgPlan == "decalsflat"; }
+// "userarea": the user's test area left of the host station (see PlanSpots).
+// "userreal": the same with the real weapon decal instead of the checker.
+bool UserArea() { return cfgPlan == "userarea" || cfgPlan == "userreal"; }
+bool DecalsPlan() { return cfgPlan == "decals" || cfgPlan == "decalsflat" || UserArea(); }
 
 void LoadConfig()
 {
@@ -421,7 +429,57 @@ void PlanSpots(NC_STACK_ypaworld *w)
         spots.insert(spots.end(), pikes.begin(), pikes.end());
     }
 
-    if (DecalsPlan())
+    // Plan "userarea": where the user tests, the sectors left of the host
+    // station (Taer bomb, three close hits as in play, buildings from above)
+    // and a crater on the map border.
+    if (UserArea())
+    {
+        spots.clear();
+        const Common::Point robo = World::PositionToSectorID(w->_userRobo->_position);
+        for (int dx = 1; dx <= 3; ++dx)
+            for (int dy = -1; dy <= 1; ++dy)
+            {
+                const Common::Point id(robo.x - dx, robo.y + dy);
+                if (!w->IsGamePlaySector(id))
+                    continue;
+                const cellArea &area = w->_cells(id);
+                const vec3d c = area.CenterPos;
+                const std::string tag = std::to_string(id.x) + "_" + std::to_string(id.y);
+                for (int k = 0; k < 9; ++k)
+                {
+                    const double px = c.x + (k % 3 - 1) * 300.0 + 75.0, pz = c.z + (k / 3 - 1) * 300.0 + 40.0;
+                    if (Accepted(w, px, pz, area.height))
+                    {
+                        Spot s; s.name = "user_ground_" + tag; s.cell = id;
+                        s.digs = {vec3d(px, 0, pz), vec3d(px + 120.0, 0, pz + 40.0), vec3d(px - 60.0, 0, pz + 90.0)};
+                        spots.push_back(s);
+                        break;
+                    }
+                }
+                if (area.PurposeType != cellArea::PT_NONE)
+                    RoofShot(w, "user_roof_" + tag, id, 40.0);
+            }
+        // Map border: the leftmost playable sector of the host station row.
+        for (int x = 1; x < robo.x; ++x)
+        {
+            const Common::Point id(x, robo.y);
+            if (!w->IsGamePlaySector(id))
+                continue;
+            const cellArea &area = w->_cells(id);
+            for (double inset = 450.0; inset >= 150.0; inset -= 100.0)
+            {
+                const double px = area.CenterPos.x - inset, pz = area.CenterPos.z;
+                if (Accepted(w, px, pz, area.height))
+                {
+                    Spot s; s.name = "user_border"; s.cell = id; s.digs = {vec3d(px, 0, pz)};
+                    spots.push_back(s);
+                    break;
+                }
+            }
+            break;
+        }
+    }
+    else if (DecalsPlan())
     {
         std::vector<Spot> kept;
         for (const Spot &s : spots)
@@ -463,7 +521,7 @@ std::vector<vec3d> Probes(const Spot &s, double radius, int direction)
 int DigAll(NC_STACK_ypaworld *w, const Spot &s, bool withDecal)
 {
     weaponId = s.weapon;
-    checkerDecal = withDecal && (s.weapon != 38 || DecalsPlan());
+    checkerDecal = withDecal && cfgPlan != "userreal" && (s.weapon != 38 || DecalsPlan());
     const cellArea &area = w->_cells(s.cell);
     int made = 0;
     for (const vec3d &d : s.digs)
@@ -499,7 +557,7 @@ void Dig(NC_STACK_ypaworld *w, const Spot &s, bool withDecal, bool check)
     w->ClearGroundDecals();
     const int made = DigAll(w, s, withDecal);
     // The decal pass also stresses accumulation with twenty identical impacts.
-    if (withDecal) {
+    if (withDecal && !UserArea()) {
         const auto initial = w->_terrainCraters.craters;
         for (int repeat = 0; repeat < 19; ++repeat)
             for (const auto &shape : initial) w->AddTerrainCrater(shape);
@@ -594,14 +652,34 @@ void Dig(NC_STACK_ypaworld *w, const Spot &s, bool withDecal, bool check)
     char text[256];
     snprintf(text, sizeof(text), "%s: centre lower by %.1f (depth %.1f), rim higher by %.1f, at 2r %.2f",
              s.name.c_str(), centreDrop, shape.depth, rimRise, farDrop);
+    // Next to the map border the crater fades out on purpose (frozen boxes).
+    const auto rimLimits = w->TerrainCraterLimits(probes[4]);
+    const double frozenAtRim = World::Crater::DeformationLimits::Influence(rimLimits.frozen, probes[4].x, probes[4].z);
+    fprintf(logFile, "%s frozen boxes %d, at rim %.2f\n", s.name.c_str(), (int)rimLimits.frozen.size(), frozenAtRim);
+    for (const auto &box : rimLimits.frozen)
+        fprintf(logFile, "  frozen %.0f %.0f .. %.0f %.0f\n", box.minX, box.minZ, box.maxX, box.maxZ);
     if (s.digs.size() == 1)
     {
         Check(std::fabs(centreDrop - shape.depth) < 0.08 * shape.depth + 2.0, std::string(text) + " [centre]");
-        Check(rimRise > 0.0, std::string(text) + " [rim]");
+        Check(rimRise > 0.0 || frozenAtRim > 0.0, std::string(text) + " [rim]");
         Check(std::fabs(farDrop) < 0.5, std::string(text) + " [outside untouched]");
     }
     else
-        Check(centreDrop > shape.depth * 0.9 && centreDrop <= 1.75 * 80.0 + 1.0, std::string(text) + " [overlap capped]");
+    {
+        double deepest = 0.0;
+        for (const World::Crater::Shape &c : w->_terrainCraters.craters)
+            deepest = std::max(deepest, c.depth);
+        const auto centreLimits = w->TerrainCraterLimits(probes[0]);
+        const auto expected = centreLimits.Apply(
+            World::Crater::SampleAt(w->_terrainCraters.craters, probes[0].x, probes[0].z, flat[0]),
+            probes[0].x, probes[0].z);
+        fprintf(logFile, "%s overlap: deepest %.1f, field drop at centre %.1f, measured %.1f, craters %d\n",
+                s.name.c_str(), deepest, expected.OffsetY(), centreDrop, (int)w->_terrainCraters.craters.size());
+        // In the user's area the probe may land on a building slab (capped
+        // apart): there the line above is the record, not a check.
+        if (!UserArea())
+            Check(centreDrop > shape.depth * 0.9 && centreDrop <= 1.75 * deepest + 1.0, std::string(text) + " [overlap capped]");
+    }
 }
 
 void SavePixels(const std::string &path)
@@ -691,7 +769,9 @@ void Advance()
         {
             w->_hideHudForScreenshots = true;
             PlanSpots(w);
-            stage = spots.empty() ? STAGE_DONE : STAGE_RUN;
+            // Plan "tankbomb": a real bomb on a ground unit, then the run ends.
+            stage = spots.empty() ? STAGE_DONE : (cfgPlan == "tankbomb" ? STAGE_TANKBOMB : STAGE_RUN);
+            frames = 0;
             spotIndex = 0;
             view = 0;
             pass = 0;
@@ -1097,6 +1177,124 @@ void Advance()
         break;
     }
 
+    case STAGE_TANKBOMB:
+    {
+        // A real Weapon 38 bomb on a ground unit (IsGroundUnit): the unit gets
+        // neither crater nor decal, the ground right under it gets both.
+        static NC_STACK_ypamissile *bomb = nullptr;
+        static NC_STACK_ypabact *unit = nullptr;
+        static vec3d last;
+        static int settle = 0;
+        const auto bombAlive = [&]()
+        {
+            if (!bomb || !w->_userRobo)
+                return false;
+            for (NC_STACK_ypabact *m : w->_userRobo->_missiles_list)
+                if (m == bomb)
+                    return bomb->_status != BACT_STATUS_DEAD;
+            return false;
+        };
+        if (frames == 1)
+        {
+            w->ClearTerrainCraters();
+            w->ClearGroundDecals();
+            unit = nullptr;
+            for (int y = 1; y < w->_mapSize.y - 1 && !unit; ++y)
+                for (int x = 1; x < w->_mapSize.x - 1 && !unit; ++x)
+                    for (NC_STACK_ypabact *bact : w->_cells(x, y).unitsList)
+                        if (bact->IsGroundUnit() && bact->_status == BACT_STATUS_NORMAL && bact != w->_viewerBact)
+                        {
+                            unit = bact;
+                            break;
+                        }
+            // None on the map: a tank of another owner on the first spot.
+            for (size_t id = 0; !unit && id < w->_vhclProtos.size(); ++id)
+            {
+                if (w->_vhclProtos[id].model_id != BACT_TYPES_TANK)
+                    continue;
+                const vec3d at = spots.front().digs.front();
+                ypaworld_arg146 request;
+                request.vehicle_id = (int)id;
+                request.pos = vec3d(at.x, GroundY(w, at.x, at.z, w->_cells(spots.front().cell).height) - 60.0, at.z);
+                unit = w->ypaworld_func146(&request);
+                if (unit)
+                {
+                    unit->_owner = w->_userRobo ? (w->_userRobo->_owner % 7) + 1 : 2;
+                    w->ypaworld_func134(unit);
+                    bact_arg80 placement;
+                    placement.pos = request.pos;
+                    placement.field_C = 1;
+                    unit->SetPosition(&placement);
+                }
+            }
+            Check(unit != nullptr, "a ground unit found for the bomb");
+            if (!unit)
+            {
+                stage = STAGE_DONE;
+                break;
+            }
+            last = unit->_position;
+            ypaworld_arg146 arg;
+            arg.vehicle_id = 38;
+            arg.pos = vec3d(last.x, last.y - 700.0, last.z);
+            bomb = w->_userRobo ? w->ypaworld_func147(&arg) : nullptr;
+            if (bomb)
+            {
+                bomb->SetLauncherBact(w->_userRobo);
+                bomb->SetStartHeight(arg.pos.y);
+                bomb->_owner = w->_userRobo->_owner;
+                bomb->_fly_dir = vec3d(0.0, 1.0, 0.0);
+                bomb->_fly_dir_length = 0.0;
+                bomb->_kidRef.Detach();
+                bomb->_parent = nullptr;
+                w->_userRobo->_missiles_list.push_back(bomb);
+            }
+            fprintf(logFile, "TANKBOMB unit type=%d vehicle=%d at %.0f %.0f %.0f bomb=%p\n", unit->_bact_type,
+                    unit->_vehicleID, last.x, last.y, last.z, (void *)bomb);
+            Check(bomb != nullptr, "real Weapon 38 bomb created over the ground unit");
+            freeCamera = true;
+            freeEye = last + vec3d(700.0, -450.0, 500.0);
+            freeTarget = last;
+        }
+        else if (bombAlive() && frames < 2400)
+        {
+            // Keep the bomb over the unit: it may drive on.
+            if (unit->_status != BACT_STATUS_DEAD)
+                last = unit->_position;
+            bomb->_position.x = last.x;
+            bomb->_position.z = last.z;
+            freeTarget = last;
+        }
+        else if (++settle == 60)
+            captureName = "tankbomb_after";
+        else if (settle > 62)
+        {
+            const size_t count = w->_terrainCraters.craters.size();
+            double distance = -1.0, below = 0.0;
+            int kind = -1;
+            if (count)
+            {
+                const World::Crater::Shape &c = w->_terrainCraters.craters.front();
+                distance = std::hypot(c.x - last.x, c.z - last.z);
+                below = c.y - last.y;
+                kind = c.kind;
+            }
+            fprintf(logFile, "TANKBOMB frames=%d craters=%d kind=%d distance=%.1f below unit=%.1f decals=%d\n",
+                    frames, (int)count, kind, distance, below, (int)w->_groundDecals.size());
+            Check(count == 1, "the bomb on the ground unit dug one crater");
+            Check(count == 1 && kind == World::Crater::Shape::GROUND, "the crater is in the ground, not a dent");
+            Check(count == 1 && distance < 80.0, "the crater is right under the unit");
+            // The bomb decal (big), not the small one of the wrecked unit.
+            bool bombDecal = false;
+            for (const auto &decal : w->_groundDecals)
+                if (decal.radius > 300.0f && std::hypot(decal.pos.x - last.x, decal.pos.z - last.z) < 80.0)
+                    bombDecal = true;
+            Check(bombDecal, "the ground under the unit got the bomb decal");
+            stage = STAGE_DONE;
+        }
+        break;
+    }
+
     case STAGE_DONE:
         if (capturePending)
             break;
@@ -1185,7 +1383,8 @@ extern "C" bool __wrap__ZN6System13ProcessEventsEv()
 extern "C" void __real__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(NC_STACK_ypaworld *, base_64arg *, int);
 extern "C" void __wrap__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(NC_STACK_ypaworld *w, base_64arg *arg, int a2)
 {
-    if ((stage != STAGE_RUN && stage != STAGE_BOMB && stage != STAGE_GAP && stage != STAGE_PERF && stage != STAGE_DONE) ||
+    if ((stage != STAGE_RUN && stage != STAGE_BOMB && stage != STAGE_GAP && stage != STAGE_PERF && stage != STAGE_DONE &&
+         stage != STAGE_TANKBOMB) ||
         spots.empty() || !w->_viewerBact)
     {
         __real__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(w, arg, a2);
@@ -1206,7 +1405,12 @@ extern "C" void __wrap__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(NC_STAC
     const vec3d oldPosition = w->_viewerBact->_position;
 
     vec3d eye = spot.eye[v], target = spot.target[v];
-    if (stage != STAGE_RUN && stage != STAGE_GAP)
+    if (freeCamera)
+    {
+        eye = freeEye;
+        target = freeTarget;
+    }
+    else if (stage != STAGE_RUN && stage != STAGE_GAP)
     {
         // Wide view over the whole dug area.
         eye = spot.digs.front() + vec3d(1500.0, w->_cells(spot.cell).height - 1500.0, 1300.0);
@@ -1219,7 +1423,7 @@ extern "C" void __wrap__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(NC_STAC
     camera.Scale = vec3d(1.0, 1.0, 1.0);
     camera.SclRot = LookAt(eye, target);
     TF::Engine.SetViewPoint(&camera);
-    w->_viewerBact->_cellId = spot.cell;
+    w->_viewerBact->_cellId = freeCamera ? World::PositionToSectorID(eye) : spot.cell;
     w->_viewerBact->_position = eye;
 
     const uint64_t start = SDL_GetPerformanceCounter();

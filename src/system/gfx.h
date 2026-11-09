@@ -334,7 +334,8 @@ struct TDecalField
     float pos[DECAL_FIELD_SHAPES][4] = {};      // xyz, w: copies (> 0 crater, < 0 dent)
     float size[DECAL_FIELD_SHAPES][4] = {};     // radius, depth, rim, band
     float dir[DECAL_FIELD_SHAPES][3] = {};      // dent: direction into the surface
-    int footprints = 0;
+    int frozen = 0;                             // Map border boxes first (nothing moves there),
+    int footprints = 0;                         // then building footprints.
     float footprint[DECAL_FIELD_FOOTPRINTS][4] = {};   // min x, min z, max x, max z
     float limits[2] = {-1.0f, -1.0f};           // ground, building (< 0: none)
     float lattice[2] = {0.0f, 0.0f};            // Origin x, z modulo DECAL_FIELD_STEP.
@@ -392,6 +393,7 @@ struct TDecalProg : TShaderProg
     int32_t FieldSizeLoc = -1;
     int32_t FieldDirLoc = -1;
     int32_t FieldFootprintsLoc = -1;
+    int32_t FieldFrozenLoc = -1;
     int32_t FieldFootprintLoc = -1;
     int32_t FieldLimitsLoc = -1;
     int32_t FieldLatticeLoc = -1;

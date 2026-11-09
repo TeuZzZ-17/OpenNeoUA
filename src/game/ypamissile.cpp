@@ -1381,6 +1381,8 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                     return;
                 }
 
+                MakeGroundMarksUnder(hitTarget);
+
                 setState_msg arg78;
                 Impact();
                 arg78.newStatus = BACT_STATUS_DEAD;
@@ -1944,6 +1946,40 @@ void NC_STACK_ypamissile::MakeImpactCrater(const ypaworld_arg136 &hit)
 
     _impactCraterMade = true;
     _world->SpawnTerrainCrater(_world->GetWeaponsProtos().at(_vehicleID).crater, hit);
+}
+
+// OpenNeoUA custom: a hit on a ground unit (IsGroundUnit: tanks, cars and any
+// class driving on the ground) leaves the world-impact decal and the crater on
+// the ground right under the hit, never on the unit itself. Same blocks and
+// keys as a ground hit: nothing happens when the weapon has neither.
+void NC_STACK_ypamissile::MakeGroundMarksUnder(NC_STACK_ypabact *target)
+{
+    if ( !_world || !target || !target->IsGroundUnit() || CollisionsDisabled() )
+        return;
+
+    std::vector<World::TChainFXConfig> decals;
+    for (const World::TChainFXConfig &fx : _chainFX)
+        if ( fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL &&
+             fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD )
+            decals.push_back(fx);
+    if ( decals.empty() && !HasImpactCrater() )
+        return;
+
+    // The ground under the unit: a little above the hit (World Y points down),
+    // no further below than a unit can stand over it.
+    const double lift = 20.0;
+    const double below = std::max(150.0, 3.0 * (double)target->_radius);
+    ypaworld_arg136 ground;
+    ground.stPos = vec3d(_position.x, _position.y - lift, _position.z);
+    ground.vect = vec3d(0.0, lift + below, 0.0);
+    ground.flags = 0;
+    _world->ypaworld_func136(&ground);
+    if ( !ground.isect )
+        return;
+
+    if ( !decals.empty() )
+        StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD, &ground, &decals);
+    MakeImpactCrater(ground);
 }
 
 void NC_STACK_ypamissile::AlignMissile(float dtime)

@@ -388,25 +388,38 @@ inline Sample SampleAt(const std::vector<Shape> &craters, double x, double z, do
 // Shared by rendering and collision. Building footprints also constrain the
 // ground at their base; a smooth 150-unit band joins it to open terrain.
 struct BuildingFootprint { double minX, minZ, maxX, maxZ; };
+constexpr double FOOTPRINT_BLEND = 150.0;
 struct DeformationLimits
 {
     double ground = -1.0, building = -1.0; // Negative means the old, unlimited path.
     std::vector<BuildingFootprint> buildings;
+    // Map border pieces: never dug (their walls are scaled), so nothing moves
+    // on them and the ground next to them fades back over the same band.
+    std::vector<BuildingFootprint> frozen;
+
+    // 1 on a box, 0 from FOOTPRINT_BLEND away, smooth in between.
+    static double Influence(const std::vector<BuildingFootprint> &boxes, double x, double z)
+    {
+        double influence = 0.0;
+        for (const auto &box : boxes)
+        {
+            const double dx = std::max(0.0, std::max(box.minX - x, x - box.maxX));
+            const double dz = std::max(0.0, std::max(box.minZ - z, z - box.maxZ));
+            const double t = std::min(1.0, std::sqrt(dx * dx + dz * dz) / FOOTPRINT_BLEND);
+            influence = std::max(influence, 1.0 - t * t * (3.0 - 2.0 * t));
+        }
+        return influence;
+    }
+
     double At(double x, double z, double uncapped) const
     {
         const double g = ground < 0.0 ? uncapped : ground;
         const double b = building < 0.0 ? uncapped : building;
-        double influence = 0.0;
-        for (const auto &box : buildings)
-        {
-            const double dx = std::max(0.0, std::max(box.minX - x, x - box.maxX));
-            const double dz = std::max(0.0, std::max(box.minZ - z, z - box.maxZ));
-            const double t = std::min(1.0, std::sqrt(dx * dx + dz * dz) / 150.0);
-            influence = std::max(influence, 1.0 - t * t * (3.0 - 2.0 * t));
-        }
+        const double influence = Influence(buildings, x, z);
         // The building cap applies at the shared foundation.
         const double base = b;
-        return influence == 0.0 ? g : (influence == 1.0 ? base : g + (base - g) * influence);
+        const double cap = influence == 0.0 ? g : (influence == 1.0 ? base : g + (base - g) * influence);
+        return frozen.empty() ? cap : cap * (1.0 - Influence(frozen, x, z));
     }
     Sample Apply(Sample sample, double x, double z) const
     {
