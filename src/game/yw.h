@@ -2896,7 +2896,8 @@ public:
     void ClearGroundDecalSmoke();
 
     // OpenNeoUA custom: terrain craters (world/terraincrater.cpp).
-    World::Crater::DeformationLimits TerrainCraterLimits(const vec3d &position);
+    // ring: sectors around position (1 = the 3x3 block).
+    World::Crater::DeformationLimits TerrainCraterLimits(const vec3d &position, int ring = 1);
     bool SpawnTerrainCrater(const World::TCraterConfig &config, const ypaworld_arg136 &hit);
     void AddTerrainCrater(const World::Crater::Shape &shape);
     void ClearTerrainCratersInCell(const Common::Point &cellId);

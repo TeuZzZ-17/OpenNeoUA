@@ -262,7 +262,7 @@ bool SavedNumbers(const std::string &value, size_t count, std::vector<double> *n
 
 // A single world-space footprint rule prevents material boundaries and sector
 // boundaries from giving a shared point two different displacements.
-World::Crater::DeformationLimits NC_STACK_ypaworld::TerrainCraterLimits(const vec3d &position)
+World::Crater::DeformationLimits NC_STACK_ypaworld::TerrainCraterLimits(const vec3d &position, int ring)
 {
     Cr::DeformationLimits limits;
     const auto read = [](Common::Ini::Key &key) -> double
@@ -279,36 +279,45 @@ World::Crater::DeformationLimits NC_STACK_ypaworld::TerrainCraterLimits(const ve
     };
     limits.ground = read(System::IniConf::GameDeformationGroundLimit);
     limits.building = read(System::IniConf::GameDeformationBuildingLimit);
-    if (limits.building < 0.0)
-        return limits;
-    const Common::Point centre = World::PositionToSectorID(position);
-    for (int y = centre.y - 1; y <= centre.y + 1; ++y)
-        for (int x = centre.x - 1; x <= centre.x + 1; ++x)
+
+    // XZ box of one lego piece: its buildings only, or everything on it.
+    const auto pieceBox = [this](const cellArea &cell, int xx, int zz, bool withTerrain)
+    {
+        Cr::BuildingFootprint box{1e30, 1e30, -1e30, -1e30};
+        const int id = GetLegoBld(&cell, xx, zz);
+        if (id < 0 || (size_t)id >= _legoArray.size() || !_legoArray[id].Base) return box;
+        const bool single = cell.SectorType == 1;
+        const vec3d origin = cell.CenterPos + (single ? vec3d() : vec3d((xx - 1) * 300.0, 0, (zz - 1) * 300.0));
+        for (const auto &mesh : _legoArray[id].Base->Meshes)
         {
-            if (!IsGamePlaySector(Common::Point(x, y))) continue;
+            if (!withTerrain && NC_STACK_base::IsSectorTerrainMesh(mesh)) continue;
+            for (const auto index : mesh.Indixes)
+            {
+                const auto &p = mesh.Vertexes[index].Pos;
+                box.minX = std::min(box.minX, origin.x + p.x);
+                box.maxX = std::max(box.maxX, origin.x + p.x);
+                box.minZ = std::min(box.minZ, origin.z + p.z);
+                box.maxZ = std::max(box.maxZ, origin.z + p.z);
+            }
+        }
+        return box;
+    };
+
+    const Common::Point centre = World::PositionToSectorID(position);
+    for (int y = centre.y - ring; y <= centre.y + ring; ++y)
+        for (int x = centre.x - ring; x <= centre.x + ring; ++x)
+        {
+            if (x < 0 || y < 0 || x >= _mapSize.x || y >= _mapSize.y) continue;
             const cellArea &cell = _cells(x, y);
-            const bool single = cell.SectorType == 1;
-            const int count = single ? 1 : 3;
+            const bool border = !IsGamePlaySector(Common::Point(x, y));
+            if (!border && limits.building < 0.0) continue;
+            const int count = cell.SectorType == 1 ? 1 : 3;
             for (int zz = 0; zz < count; ++zz)
                 for (int xx = 0; xx < count; ++xx)
                 {
-                    const int id = GetLegoBld(&cell, xx, zz);
-                    if (id < 0 || (size_t)id >= _legoArray.size() || !_legoArray[id].Base) continue;
-                    const vec3d origin = cell.CenterPos + (single ? vec3d() : vec3d((xx - 1) * 300.0, 0, (zz - 1) * 300.0));
-                    Cr::BuildingFootprint box{1e30, 1e30, -1e30, -1e30};
-                    for (const auto &mesh : _legoArray[id].Base->Meshes)
-                    {
-                        if (NC_STACK_base::IsSectorTerrainMesh(mesh)) continue;
-                        for (const auto index : mesh.Indixes)
-                        {
-                            const auto &p = mesh.Vertexes[index].Pos;
-                            box.minX = std::min(box.minX, origin.x + p.x);
-                            box.maxX = std::max(box.maxX, origin.x + p.x);
-                            box.minZ = std::min(box.minZ, origin.z + p.z);
-                            box.maxZ = std::max(box.maxZ, origin.z + p.z);
-                        }
-                    }
-                    if (box.minX <= box.maxX) limits.buildings.push_back(box);
+                    const Cr::BuildingFootprint box = pieceBox(cell, xx, zz, border);
+                    if (box.minX <= box.maxX)
+                        (border ? limits.frozen : limits.buildings).push_back(box);
                 }
         }
     return limits;
@@ -530,12 +539,41 @@ vec3d NC_STACK_ypaworld::TerrainCraterRestore(const vec3d &pos, vec3d *normal)
     }
 
     // Ground facing up (World Y points down) dug by craters only: y = f(x, z),
-    // normal (fx, -1, fz); take the crater slope out of fx and fz.
-    if ( normal && normal->y < -0.3 && sample.moveX == 0.0 && sample.moveY == 0.0 && sample.moveZ == 0.0 )
+    // normal (fx, -1, fz). The hit normal is the one of a collision facet, flat
+    // between the points of the collision lattice: take that facet's own slope
+    // out (the curved field's slope at the hit is off by degrees on a crater
+    // wall, enough to tilt a big decal off the ground it was on).
+    if ( normal && normal->y < -0.3 && sample.moveX == 0.0 && sample.moveY == 0.0 && sample.moveZ == 0.0 &&
+         (old - pos).length() > 0.5 )
     {
-        const double fx = -normal->x / normal->y - sample.slopeX;
-        const double fz = -normal->z / normal->y - sample.slopeZ;
-        *normal = vec3d::Normalise(vec3d(fx, -1.0, fz));
+        const double fx = -normal->x / normal->y;
+        const double fz = -normal->z / normal->y;
+        const double step = Cr::COLLISION_STEP;
+        const double x0 = std::floor(pos.x / step) * step, z0 = std::floor(pos.z / step) * step;
+        const auto drop = [&](double x, double z)
+        {
+            return limits.Apply(Cr::SampleAt(nearby, x, z, old.y), x, z).OffsetY();
+        };
+        const double d00 = drop(x0, z0), d10 = drop(x0 + step, z0);
+        const double d01 = drop(x0, z0 + step), d11 = drop(x0 + step, z0 + step);
+        const double u = (pos.x - x0) / step, v = (pos.z - z0) / step;
+        // The facet under the hit for each way the square can be split.
+        const double splits[2][2] = {
+            {u >= v ? d10 - d00 : d11 - d01, u >= v ? d11 - d10 : d01 - d00},
+            {u + v <= 1.0 ? d10 - d00 : d11 - d01, u + v <= 1.0 ? d01 - d00 : d11 - d10}};
+        // The split matching the hit facet best (the ground before was level-ish).
+        int best = 0;
+        double bestError = 1e30;
+        for (int i = 0; i < 2; ++i)
+        {
+            const double ex = fx - splits[i][0] / step, ez = fz - splits[i][1] / step;
+            if ( ex * ex + ez * ez < bestError )
+            {
+                bestError = ex * ex + ez * ez;
+                best = i;
+            }
+        }
+        *normal = vec3d::Normalise(vec3d(fx - splits[best][0] / step, -1.0, fz - splits[best][1] / step));
     }
     return old;
 }
@@ -607,6 +645,7 @@ void NC_STACK_ypaworld::TerrainCraterDecalField(const vec3d &centre, float reach
     }
 
     static_assert(GFX::DECAL_FIELD_STEP == Cr::VISUAL_STEP, "decal lattice must be the visual one");
+    static_assert(GFX::DECAL_FOOTPRINT_BLEND == Cr::FOOTPRINT_BLEND, "decal footprint band must be the engine one");
     const auto phase = [](double value)
     {
         const double rest = std::fmod(value, Cr::VISUAL_STEP);
@@ -615,47 +654,55 @@ void NC_STACK_ypaworld::TerrainCraterDecalField(const vec3d &centre, float reach
     field->lattice[0] = phase(centre.x);
     field->lattice[1] = phase(centre.z);
 
-    const Cr::DeformationLimits limits = TerrainCraterLimits(centre);
+    // Sectors far enough for every box that can touch the decal.
+    const int ring = 1 + (int)std::ceil((reach + Cr::FOOTPRINT_BLEND) / 1200.0);
+    const Cr::DeformationLimits limits = TerrainCraterLimits(centre, ring);
     field->limits[0] = (float)limits.ground;
     field->limits[1] = (float)limits.building;
-    // Footprints that change a cap where the decal is and a shape moves the
-    // surface (150 = the blend), closest first.
+    // Boxes that change a cap where the decal is and a shape moves the
+    // surface, closest first: map border pieces, then building footprints.
     const auto boxDistance = [](const Cr::BuildingFootprint &box, double x, double z)
     {
         const double dx = std::max(0.0, std::max(box.minX - x, x - box.maxX));
         const double dz = std::max(0.0, std::max(box.minZ - z, z - box.maxZ));
         return std::sqrt(dx * dx + dz * dz);
     };
-    std::vector<std::pair<double, const Cr::BuildingFootprint *>> boxes;
-    for (const Cr::BuildingFootprint &box : limits.buildings)
+    const auto add = [&](const std::vector<Cr::BuildingFootprint> &list, int *count)
     {
-        const double dx = std::max(0.0, std::max(box.minX - centre.x - reach, centre.x - reach - box.maxX));
-        const double dz = std::max(0.0, std::max(box.minZ - centre.z - reach, centre.z - reach - box.maxZ));
-        if ( dx * dx + dz * dz >= 150.0 * 150.0 )
-            continue;
-        bool moved = false;
-        for (const auto &entry : reaching)
-            if ( boxDistance(box, entry.first->x, entry.first->z) < Cr::Reach(*entry.first) + 150.0 )
-            {
-                moved = true;
+        std::vector<std::pair<double, const Cr::BuildingFootprint *>> boxes;
+        for (const Cr::BuildingFootprint &box : list)
+        {
+            const double dx = std::max(0.0, std::max(box.minX - centre.x - reach, centre.x - reach - box.maxX));
+            const double dz = std::max(0.0, std::max(box.minZ - centre.z - reach, centre.z - reach - box.maxZ));
+            if ( dx * dx + dz * dz >= Cr::FOOTPRINT_BLEND * Cr::FOOTPRINT_BLEND )
+                continue;
+            bool moved = false;
+            for (const auto &entry : reaching)
+                if ( boxDistance(box, entry.first->x, entry.first->z) < Cr::Reach(*entry.first) + Cr::FOOTPRINT_BLEND )
+                {
+                    moved = true;
+                    break;
+                }
+            if ( moved )
+                boxes.push_back(std::make_pair(boxDistance(box, centre.x, centre.z), &box));
+        }
+        std::stable_sort(boxes.begin(), boxes.end(),
+                         [](const std::pair<double, const Cr::BuildingFootprint *> &a,
+                            const std::pair<double, const Cr::BuildingFootprint *> &b) { return a.first < b.first; });
+        for (const auto &entry : boxes)
+        {
+            const int i = field->frozen + field->footprints;
+            if ( i >= GFX::DECAL_FIELD_FOOTPRINTS )
                 break;
-            }
-        if ( moved )
-            boxes.push_back(std::make_pair(boxDistance(box, centre.x, centre.z), &box));
-    }
-    std::stable_sort(boxes.begin(), boxes.end(),
-                     [](const std::pair<double, const Cr::BuildingFootprint *> &a,
-                        const std::pair<double, const Cr::BuildingFootprint *> &b) { return a.first < b.first; });
-    for (const auto &entry : boxes)
-    {
-        if ( field->footprints >= GFX::DECAL_FIELD_FOOTPRINTS )
-            break;
-        const int i = field->footprints++;
-        field->footprint[i][0] = (float)(entry.second->minX - centre.x);
-        field->footprint[i][1] = (float)(entry.second->minZ - centre.z);
-        field->footprint[i][2] = (float)(entry.second->maxX - centre.x);
-        field->footprint[i][3] = (float)(entry.second->maxZ - centre.z);
-    }
+            (*count)++;
+            field->footprint[i][0] = (float)(entry.second->minX - centre.x);
+            field->footprint[i][1] = (float)(entry.second->minZ - centre.z);
+            field->footprint[i][2] = (float)(entry.second->maxX - centre.x);
+            field->footprint[i][3] = (float)(entry.second->maxZ - centre.z);
+        }
+    };
+    add(limits.frozen, &field->frozen);
+    add(limits.buildings, &field->footprints);
 }
 
 std::list<GFX::TMesh> *NC_STACK_ypaworld::TerrainCraterPieceMeshes(const cellArea &cell, int bldX,

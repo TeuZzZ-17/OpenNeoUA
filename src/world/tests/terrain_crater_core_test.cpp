@@ -322,6 +322,30 @@ int main()
     Check(noGround.drop == 0 && length(noGround) > 0 && length(noGround) <= 40.000001, "zero ground keeps building dents enabled");
     DeformationLimits absent;
     Check(length(absent.Apply(large, 0, 0)) == length(large), "missing limits preserve the old shape");
+
+    // Map border pieces: nothing moves on them, the ground next to them fades
+    // back smoothly over the footprint band, with or without other limits.
+    DeformationLimits mapEdge;
+    mapEdge.frozen.push_back({0, -1200, 1200, 0});
+    Check(length(mapEdge.Apply(large, 600, -600)) == 0, "nothing moves on a map border piece");
+    Check(length(mapEdge.Apply(large, 1200 + FOOTPRINT_BLEND, -600)) == length(large),
+          "past the band the border leaves the crater whole");
+    double before = 0;
+    bool smooth = true;
+    for (int x = 1200; x <= 1200 + (int)FOOTPRINT_BLEND; ++x) {
+        const double moved = length(mapEdge.Apply(large, x, -600));
+        smooth = smooth && moved >= before - 1e-8 && moved - before < 15.0;
+        before = moved;
+    }
+    Check(smooth, "the crater fades in continuously next to the border");
+    DeformationLimits buildingOnly;
+    buildingOnly.ground = 1000; buildingOnly.building = 40;
+    buildingOnly.buildings.push_back({1300, -700, 1400, -500});
+    DeformationLimits both = buildingOnly;
+    both.frozen = mapEdge.frozen;
+    const double together = length(both.Apply(large, 1250, -600));
+    Check(together > 0.0 && together < length(buildingOnly.Apply(large, 1250, -600)) &&
+          together < length(mapEdge.Apply(large, 1250, -600)), "border and building caps both hold");
     std::printf("CRATER CORE CHECKS %d FAILURES %d\n", checks, failures);
     return failures ? 1 : 0;
 }
