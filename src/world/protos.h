@@ -309,6 +309,21 @@ struct TDecalSizeOverride
     float size_max = 0.0f;
 };
 
+// OpenNeoUA custom: terrain crater dug where a weapon hits the ground.
+// crater_radius / crater_depth in world units, crater_rim in % of the depth;
+// each one is a fixed value or "min~max". Off unless radius and depth are set.
+struct TCraterConfig
+{
+    bool defined = false;
+    bool invalid = false;   // One of the three keys was invalid: no crater at all.
+    float radius_min = 0.0f;
+    float radius_max = 0.0f;
+    float depth_min = 0.0f;
+    float depth_max = 0.0f;
+    float rim_min = 20.0f;
+    float rim_max = 20.0f;
+};
+
 struct TChainFXConfig
 {
     enum Mode
@@ -1117,9 +1132,6 @@ struct TVhclProto
     rbcolls coll;                           // OpenNeoUA: universal compound collision spheres (coll_*)
     bool disable_collision = false;         // Opt-in: no physical contacts for this actor.
     std::string collision_shape;            // Optional baked convex vehicle body; absent keeps existing collisions.
-    // OpenNeoUA custom, Vehicle-side: whenever this Vehicle or its attached Unit Guns fire,
-    // the Vehicle temporarily uses its own fire visual. Missing/0 keeps vanilla behavior.
-    bool weapon_use_vehicle_fire = false;
     // OpenNeoUA custom: 1 removes the Genesis of this Vehicle, both when it is created
     // (plasma, scale-in, genesis sound) and when it dies (death plasma). Missing/0 = vanilla.
     bool disable_genesis = false;
@@ -1305,6 +1317,7 @@ struct TWeapProto
     // the resolved copy lives in chain_fx.
     int ground_decal_id = -1;
     TDecalSizeOverride ground_decal_size; // ground_decal_size
+    TCraterConfig crater; // crater_radius, crater_depth, crater_rim
 
     // OpenNeoUA custom: data-driven Debuff link. debuff_id resolves a reusable
     // new_debuff profile into this runtime copy; -1 means no Debuff.
@@ -1496,6 +1509,8 @@ struct TWeapProto
     float trigger_radius = 0.0;
     float fire_time_scale = 1.0f; // model=kamikaze/player: one FIRE press latches slowdown; 1.0 disables the sequence
     TAbsoluteOrPercent fire_time_scale_hp_drain; // absolute HP/sec or explicit max-HP percentage/sec; zero/absent disables it
+    // Show the carrier Vehicle's fire visual when this Weapon fires. Missing/0 keeps vanilla behavior.
+    bool weapon_use_vehicle_fire_state = false;
     // OpenNeoUA custom: 1 plays snd_launch from the shooter's fixed MGUN-style sound pool instead of
     // from the moving projectile, so fast bullets get no Doppler/pan drift. Missing/0 = vanilla.
     bool snd_launch_at_muzzle = false;

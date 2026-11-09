@@ -704,6 +704,7 @@ int NC_STACK_ypaworld::LoadingParseSaveFile(const std::string &filename)
         new World::Parsers::SaveHistoryParser(this),
         new World::Parsers::SaveMasksParser(this),
         new World::Parsers::SaveSuperBombParser(this),
+        new World::Parsers::SaveCraterParser(this),
     };
 
     parsers.push_back( new World::Parsers::SaveLuaScriptParser(this) );
@@ -964,6 +965,7 @@ size_t NC_STACK_ypaworld::SaveGame(const std::string &saveFile)
             yw_write_ownermap(this, fil);
             yw_write_buildmap(this, fil);
             yw_write_energymap(this, fil);
+            WriteTerrainCraters(fil);
 
             if ( yw_write_units(fil) )
             {

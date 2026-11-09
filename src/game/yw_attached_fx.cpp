@@ -1,4 +1,4 @@
-// Attached FX volumes: model triangles, closed-mesh tests and random position sampling.
+// Attached FX silhouettes: voxel body from the collision profile or the visual model, plus random sampling.
 #include <inttypes.h>
 #include <string.h>
 #include <math.h>
@@ -57,68 +57,23 @@ vec3d yw_SafeVPScale(const vec3d &scale)
                  scale.z > 0.001 ? scale.z : 1.0);
 }
 
-void yw_AddModelPoint(yw_ModelPointCloud *cloud, const vec3d &point)
-{
-    if ( !cloud->valid )
-    {
-        cloud->min = point;
-        cloud->max = point;
-        cloud->valid = true;
-    }
-    else
-    {
-        cloud->min.x = std::min(cloud->min.x, point.x);
-        cloud->min.y = std::min(cloud->min.y, point.y);
-        cloud->min.z = std::min(cloud->min.z, point.z);
-        cloud->max.x = std::max(cloud->max.x, point.x);
-        cloud->max.y = std::max(cloud->max.y, point.y);
-        cloud->max.z = std::max(cloud->max.z, point.z);
-    }
-
-    cloud->points.push_back(point);
-}
-
-vec3d yw_Cross3(const vec3d &a, const vec3d &b)
-{
-    return vec3d(a.y * b.z - a.z * b.y,
-                 a.z * b.x - a.x * b.z,
-                 a.x * b.y - a.y * b.x);
-}
-
 bool yw_IsFinitePoint(const vec3d &point)
 {
     return isfinite(point.x) && isfinite(point.y) && isfinite(point.z);
 }
 
-void yw_AddAttachedFXTriangle(NC_STACK_ypaworld::TAttachedFXGeometryCache *cache,
-                                     yw_ModelPointCloud *bounds,
-                                     const vec3d &a, const vec3d &b, const vec3d &c)
+static void yw_PushAttachedFXTriangle(std::vector<yw_AttachedFXTriangle> *triangles,
+                                      const vec3d &a, const vec3d &b, const vec3d &c)
 {
-    if ( !cache || !bounds || !yw_IsFinitePoint(a) || !yw_IsFinitePoint(b) || !yw_IsFinitePoint(c) )
-        return;
-
-    float area = (float)yw_Cross3(b - a, c - a).length() * 0.5f;
-    if ( !isfinite(area) || area <= 0.0001f )
-        return;
-
-    cache->totalArea += area;
-    NC_STACK_ypaworld::TAttachedFXTriangle triangle;
-    triangle.a = a;
-    triangle.b = b;
-    triangle.c = c;
-    triangle.cumulativeArea = cache->totalArea;
-    cache->triangles.push_back(triangle);
-
-    yw_AddModelPoint(bounds, a);
-    yw_AddModelPoint(bounds, b);
-    yw_AddModelPoint(bounds, c);
+    if ( yw_IsFinitePoint(a) && yw_IsFinitePoint(b) && yw_IsFinitePoint(c) )
+        triangles->push_back(yw_AttachedFXTriangle{a, b, c});
 }
 
+// Visual model triangles (all kids), in actor-local coordinates.
 void yw_CollectAttachedFXTriangles(NC_STACK_base *base, const mat3x3 &rot, const vec3d &pos,
-                                          NC_STACK_ypaworld::TAttachedFXGeometryCache *cache,
-                                          yw_ModelPointCloud *bounds)
+                                   std::vector<yw_AttachedFXTriangle> *triangles)
 {
-    if ( !base || !cache || !bounds )
+    if ( !base || !triangles )
         return;
 
     for (const GFX::TMesh &mesh : base->Meshes)
@@ -131,10 +86,10 @@ void yw_CollectAttachedFXTriangles(NC_STACK_base *base, const mat3x3 &rot, const
             if ( ia >= mesh.Vertexes.size() || ib >= mesh.Vertexes.size() || ic >= mesh.Vertexes.size() )
                 continue;
 
-            vec3d a = pos + rot.Transform(static_cast<vec3d>(mesh.Vertexes[ia].Pos));
-            vec3d b = pos + rot.Transform(static_cast<vec3d>(mesh.Vertexes[ib].Pos));
-            vec3d c = pos + rot.Transform(static_cast<vec3d>(mesh.Vertexes[ic].Pos));
-            yw_AddAttachedFXTriangle(cache, bounds, a, b, c);
+            yw_PushAttachedFXTriangle(triangles,
+                pos + rot.Transform(static_cast<vec3d>(mesh.Vertexes[ia].Pos)),
+                pos + rot.Transform(static_cast<vec3d>(mesh.Vertexes[ib].Pos)),
+                pos + rot.Transform(static_cast<vec3d>(mesh.Vertexes[ic].Pos)));
         }
     }
 
@@ -143,140 +98,215 @@ void yw_CollectAttachedFXTriangles(NC_STACK_base *base, const mat3x3 &rot, const
         TF::TForm3D &transform = kid->TForm();
         mat3x3 kidRot = rot * transform.SclRot;
         vec3d kidPos = pos + rot.Transform(transform.Pos);
-        yw_CollectAttachedFXTriangles(kid, kidRot, kidPos, cache, bounds);
+        yw_CollectAttachedFXTriangles(kid, kidRot, kidPos, triangles);
     }
 }
 
-int yw_GetWeldedVertexID(const vec3d &point, double weld,
-                                std::map<std::tuple<int64_t, int64_t, int64_t>, int> *vertices)
+// Collision profile hull faces. Vertices are already actor-local, with the
+// visual scale/rotation baked in, so no transform is applied here.
+void yw_CollectAttachedFXShapeTriangles(const Collision::Shape &shape,
+                                        std::vector<yw_AttachedFXTriangle> *triangles)
 {
-    std::tuple<int64_t, int64_t, int64_t> key(
-        (int64_t)llround(point.x / weld),
-        (int64_t)llround(point.y / weld),
-        (int64_t)llround(point.z / weld));
+    if ( !triangles )
+        return;
 
-    auto found = vertices->find(key);
-    if ( found != vertices->end() )
-        return found->second;
+    for (const Collision::Part &part : shape.parts)
+    {
+        for (const std::array<int, 3> &face : part.faces)
+        {
+            if ( face[0] < 0 || face[1] < 0 || face[2] < 0 ||
+                 (size_t)face[0] >= part.vertices.size() ||
+                 (size_t)face[1] >= part.vertices.size() ||
+                 (size_t)face[2] >= part.vertices.size() )
+                continue;
 
-    int id = (int)vertices->size();
-    (*vertices)[key] = id;
-    return id;
+            yw_PushAttachedFXTriangle(triangles, part.vertices[face[0]],
+                                      part.vertices[face[1]], part.vertices[face[2]]);
+        }
+    }
 }
 
-bool yw_IsClosedAttachedFXMesh(const NC_STACK_ypaworld::TAttachedFXGeometryCache &cache,
-                                      const yw_ModelPointCloud &bounds)
+// Builds the body silhouette as a voxel grid (longest side = 24 cells):
+// 1. every cell touched by a triangle is a "surface" cell;
+// 2. an empty cell is "inside" when surface cells surround it in at least 5 of
+//    the 6 axis directions. This fills vanilla models too, which are often open
+//    (no bottom, single-sided faces, small gaps), where a strict closed-mesh
+//    test would fail;
+// 3. optionally (visual models only) cells with few solid neighbours are
+//    dropped: rotor blades, antennas, flat fins and other one-cell-thin parts.
+//    If that would leave too little of the body, the full set is kept.
+// The result is a list of cell centres plus their mean (the body centre).
+void yw_BuildAttachedFXSilhouette(const std::vector<yw_AttachedFXTriangle> &triangles,
+                                  bool dropThinParts,
+                                  NC_STACK_ypaworld::TAttachedFXGeometryCache *cache)
 {
-    if ( !bounds.valid || cache.triangles.size() < 4 )
-        return false;
+    if ( !cache )
+        return;
 
-    double weld = std::max(0.001, (double)(bounds.max - bounds.min).length() * 0.00001);
-    std::map<std::tuple<int64_t, int64_t, int64_t>, int> vertices;
-    std::map<std::pair<int, int>, int> edges;
+    cache->cells.clear();
+    cache->centre = vec3d(0.0, 0.0, 0.0);
+    cache->cellSize = 0.0f;
+    if ( triangles.empty() )
+        return;
 
-    for (const NC_STACK_ypaworld::TAttachedFXTriangle &triangle : cache.triangles)
+    vec3d boundsMin = triangles[0][0];
+    vec3d boundsMax = triangles[0][0];
+    for (const yw_AttachedFXTriangle &triangle : triangles)
     {
-        int ids[3] = {
-            yw_GetWeldedVertexID(triangle.a, weld, &vertices),
-            yw_GetWeldedVertexID(triangle.b, weld, &vertices),
-            yw_GetWeldedVertexID(triangle.c, weld, &vertices)
-        };
-
-        for (int edge = 0; edge < 3; edge++)
+        for (const vec3d &point : triangle)
         {
-            int first = ids[edge];
-            int second = ids[(edge + 1) % 3];
-            if ( first == second )
-                return false;
-            if ( first > second )
-                std::swap(first, second);
-            edges[std::make_pair(first, second)]++;
+            boundsMin.x = std::min(boundsMin.x, point.x);
+            boundsMin.y = std::min(boundsMin.y, point.y);
+            boundsMin.z = std::min(boundsMin.z, point.z);
+            boundsMax.x = std::max(boundsMax.x, point.x);
+            boundsMax.y = std::max(boundsMax.y, point.y);
+            boundsMax.z = std::max(boundsMax.z, point.z);
         }
     }
 
-    if ( edges.empty() )
-        return false;
-
-    for (const auto &edge : edges)
-    {
-        if ( edge.second != 2 )
-            return false;
-    }
-
-    return true;
-}
-
-bool yw_RayIntersectsAttachedFXTriangle(const vec3d &origin, const vec3d &direction,
-                                                const NC_STACK_ypaworld::TAttachedFXTriangle &triangle)
-{
-    const double epsilon = 0.000001;
-    vec3d edge1 = triangle.b - triangle.a;
-    vec3d edge2 = triangle.c - triangle.a;
-    vec3d p = yw_Cross3(direction, edge2);
-    double determinant = edge1.dot(p);
-    if ( fabs(determinant) <= epsilon )
-        return false;
-
-    double inverse = 1.0 / determinant;
-    vec3d t = origin - triangle.a;
-    double u = t.dot(p) * inverse;
-    if ( u < 0.0 || u > 1.0 )
-        return false;
-
-    vec3d q = yw_Cross3(t, edge1);
-    double v = direction.dot(q) * inverse;
-    if ( v < 0.0 || u + v > 1.0 )
-        return false;
-
-    return edge2.dot(q) * inverse > epsilon;
-}
-
-bool yw_IsPointInsideAttachedFXMesh(const vec3d &point,
-                                           const NC_STACK_ypaworld::TAttachedFXGeometryCache &cache)
-{
-    const vec3d rayDirection(0.922766, 0.342094, 0.174731);
-    int intersections = 0;
-    for (const NC_STACK_ypaworld::TAttachedFXTriangle &triangle : cache.triangles)
-    {
-        if ( yw_RayIntersectsAttachedFXTriangle(point, rayDirection, triangle) )
-            intersections++;
-    }
-    return (intersections & 1) != 0;
-}
-
-float yw_NextAttachedFXCacheRandom(uint32_t *state)
-{
-    *state = *state * 1664525u + 1013904223u;
-    return (float)((*state >> 8) & 0x00ffffffu) / 16777216.0f;
-}
-
-void yw_BuildAttachedFXVolumeCache(NC_STACK_ypaworld::TAttachedFXGeometryCache *cache,
-                                          const yw_ModelPointCloud &bounds)
-{
-    if ( !cache || !yw_IsClosedAttachedFXMesh(*cache, bounds) )
+    const int gridCells = 24;
+    const vec3d size = boundsMax - boundsMin;
+    const double extent = std::max(size.x, std::max(size.y, size.z));
+    if ( !isfinite(extent) || extent <= 0.001 )
         return;
 
-    vec3d size = bounds.max - bounds.min;
-    if ( size.x <= 0.001 || size.y <= 0.001 || size.z <= 0.001 )
-        return;
+    // One empty padding cell on every side keeps the outside reachable.
+    const double cell = extent / gridCells;
+    const int nx = std::max(1, std::min(gridCells, (int)ceil(size.x / cell))) + 2;
+    const int ny = std::max(1, std::min(gridCells, (int)ceil(size.y / cell))) + 2;
+    const int nz = std::max(1, std::min(gridCells, (int)ceil(size.z / cell))) + 2;
+    const vec3d origin = boundsMin - vec3d(cell, cell, cell);
+    auto cellIndex = [&](int x, int y, int z) { return (size_t)((z * ny + y) * nx + x); };
 
-    const size_t targetPoints = 2048;
-    const int maxAttempts = 65536;
-    uint32_t randomState = 0x9e3779b9u ^ (uint32_t)cache->triangles.size();
-    cache->volumePoints.reserve(targetPoints);
-
-    for (int attempt = 0; attempt < maxAttempts && cache->volumePoints.size() < targetPoints; attempt++)
+    std::vector<uint8_t> surface((size_t)nx * ny * nz, 0);
+    for (const yw_AttachedFXTriangle &triangle : triangles)
     {
-        vec3d point(bounds.min.x + size.x * yw_NextAttachedFXCacheRandom(&randomState),
-                    bounds.min.y + size.y * yw_NextAttachedFXCacheRandom(&randomState),
-                    bounds.min.z + size.z * yw_NextAttachedFXCacheRandom(&randomState));
-        if ( yw_IsPointInsideAttachedFXMesh(point, *cache) )
-            cache->volumePoints.push_back(point);
+        const vec3d &a = triangle[0];
+        const vec3d ab = triangle[1] - triangle[0];
+        const vec3d ac = triangle[2] - triangle[0];
+        const double longestEdge = std::max(ab.length(), std::max(ac.length(), (triangle[2] - triangle[1]).length()));
+        // Sample the triangle every half cell, so no touched cell is skipped.
+        const int steps = std::max(1, std::min(96, (int)ceil(longestEdge / (cell * 0.5))));
+        for (int i = 0; i <= steps; i++)
+        {
+            for (int j = 0; i + j <= steps; j++)
+            {
+                const vec3d point = a + ab * ((double)i / steps) + ac * ((double)j / steps);
+                const int x = std::max(0, std::min(nx - 1, (int)floor((point.x - origin.x) / cell)));
+                const int y = std::max(0, std::min(ny - 1, (int)floor((point.y - origin.y) / cell)));
+                const int z = std::max(0, std::min(nz - 1, (int)floor((point.z - origin.z) / cell)));
+                surface[cellIndex(x, y, z)] = 1;
+            }
+        }
     }
 
-    // Sparse or anomalous results are not a trustworthy occupied-volume cache.
-    if ( cache->volumePoints.size() < 64 )
-        cache->volumePoints.clear();
+    // Count, for every cell, the axis directions in which a surface cell lies.
+    std::vector<uint8_t> votes(surface.size(), 0);
+    const int dims[3] = {nx, ny, nz};
+    for (int axis = 0; axis < 3; axis++)
+    {
+        const int u = (axis + 1) % 3;
+        const int v = (axis + 2) % 3;
+        for (int iu = 0; iu < dims[u]; iu++)
+        {
+            for (int iv = 0; iv < dims[v]; iv++)
+            {
+                auto lineIndex = [&](int along) {
+                    int coords[3];
+                    coords[axis] = along;
+                    coords[u] = iu;
+                    coords[v] = iv;
+                    return cellIndex(coords[0], coords[1], coords[2]);
+                };
+
+                bool seen = false;
+                for (int along = 0; along < dims[axis]; along++)
+                {
+                    const size_t index = lineIndex(along);
+                    if ( seen )
+                        votes[index]++;
+                    if ( surface[index] )
+                        seen = true;
+                }
+
+                seen = false;
+                for (int along = dims[axis] - 1; along >= 0; along--)
+                {
+                    const size_t index = lineIndex(along);
+                    if ( seen )
+                        votes[index]++;
+                    if ( surface[index] )
+                        seen = true;
+                }
+            }
+        }
+    }
+
+    std::vector<uint8_t> solid(surface.size(), 0);
+    size_t solidCount = 0;
+    for (size_t index = 0; index < surface.size(); index++)
+    {
+        solid[index] = surface[index] || votes[index] >= 5;
+        solidCount += solid[index];
+    }
+
+    std::vector<uint8_t> keep = solid;
+    if ( dropThinParts )
+    {
+        // A cell inside a one-cell-thin plate has at most 8 solid neighbours
+        // out of 26; body surfaces have 11 or more.
+        const int minNeighbours = 12;
+        size_t keptCount = 0;
+        for (int z = 1; z < nz - 1; z++)
+        {
+            for (int y = 1; y < ny - 1; y++)
+            {
+                for (int x = 1; x < nx - 1; x++)
+                {
+                    const size_t index = cellIndex(x, y, z);
+                    if ( !solid[index] )
+                        continue;
+
+                    int neighbours = 0;
+                    for (int dz = -1; dz <= 1; dz++)
+                        for (int dy = -1; dy <= 1; dy++)
+                            for (int dx = -1; dx <= 1; dx++)
+                                neighbours += solid[cellIndex(x + dx, y + dy, z + dz)];
+                    neighbours -= 1; // The cell itself.
+
+                    keep[index] = neighbours >= minNeighbours;
+                    keptCount += keep[index];
+                }
+            }
+        }
+
+        // Thin-only models (or very small bodies): keep the whole silhouette.
+        if ( keptCount < std::max<size_t>(8, solidCount / 4) )
+            keep = solid;
+    }
+
+    vec3d centreSum(0.0, 0.0, 0.0);
+    for (int z = 0; z < nz; z++)
+    {
+        for (int y = 0; y < ny; y++)
+        {
+            for (int x = 0; x < nx; x++)
+            {
+                if ( !keep[cellIndex(x, y, z)] )
+                    continue;
+
+                const vec3d centre = origin + vec3d((x + 0.5) * cell, (y + 0.5) * cell, (z + 0.5) * cell);
+                cache->cells.push_back(centre);
+                centreSum += centre;
+            }
+        }
+    }
+
+    if ( cache->cells.empty() )
+        return;
+
+    cache->centre = centreSum * (1.0 / (double)cache->cells.size());
+    cache->cellSize = (float)cell;
 }
 
 bool yw_SameAttachedFXTransform(const vec3d &a, const vec3d &b)
@@ -321,71 +351,62 @@ bool NC_STACK_ypaworld::SampleAttachedFXLocalPosition(NC_STACK_ypabact *owner,
 
     float randomOffsetPercent = std::min(randomMaxOffset.value, 100.0f);
 
-    NC_STACK_base *source = owner->_vp_normal;
-    if ( !source ) source = owner->_vp_wait;
-    if ( !source ) source = owner->_vp_fire;
-    if ( !source ) source = owner->_vp_genesis;
-    if ( !source )
-        return false;
+    NC_STACK_base *visual = owner->_vp_normal;
+    if ( !visual ) visual = owner->_vp_wait;
+    if ( !visual ) visual = owner->_vp_fire;
+    if ( !visual ) visual = owner->_vp_genesis;
 
-    TAttachedFXGeometryCache *cache = nullptr;
-    for (TAttachedFXGeometryCache &candidate : _attachedFXGeometryCache)
-    {
-        if ( candidate.source == source &&
-             yw_SameAttachedFXTransform(candidate.scale, owner->_vp_scale) &&
-             yw_SameAttachedFXTransform(candidate.orientation, owner->_vp_rotation) )
+    // Finds or builds the silhouette of one source. A valid collision profile
+    // wins (structural hulls, already actor-local); the visual model is the
+    // fallback that works for every unit, vanilla scripts included.
+    auto findOrBuild = [&](const void *source, bool fromProfile) -> TAttachedFXGeometryCache * {
+        for (TAttachedFXGeometryCache &candidate : _attachedFXGeometryCache)
         {
-            cache = &candidate;
-            break;
+            if ( candidate.source == source &&
+                 (fromProfile ||
+                  (yw_SameAttachedFXTransform(candidate.scale, owner->_vp_scale) &&
+                   yw_SameAttachedFXTransform(candidate.orientation, owner->_vp_rotation))) )
+                return &candidate;
         }
-    }
 
-    if ( !cache )
-    {
         _attachedFXGeometryCache.emplace_back();
-        cache = &_attachedFXGeometryCache.back();
+        TAttachedFXGeometryCache *cache = &_attachedFXGeometryCache.back();
         cache->source = source;
         cache->scale = owner->_vp_scale;
         cache->orientation = owner->_vp_rotation;
 
-        yw_ModelPointCloud bounds;
-        mat3x3 transform = yw_BuildVPRotationMatrix(owner->_vp_rotation);
-        transform *= mat3x3::Scale(yw_SafeVPScale(owner->_vp_scale));
-        yw_CollectAttachedFXTriangles(source, transform, vec3d(0.0, 0.0, 0.0), cache, &bounds);
-        if ( !cache->triangles.empty() )
-            yw_BuildAttachedFXVolumeCache(cache, bounds);
-    }
-
-    if ( !cache->volumePoints.empty() )
-    {
-        size_t index = (size_t)(rand() % (int)cache->volumePoints.size());
-        *localPosition = cache->volumePoints[index];
-    }
-    else
-    {
-        if ( cache->triangles.empty() || cache->totalArea <= 0.0f )
-            return false;
-
-        float selectedArea = ((float)rand() / ((float)RAND_MAX + 1.0f)) * cache->totalArea;
-        const TAttachedFXTriangle *selected = &cache->triangles.back();
-        for (const TAttachedFXTriangle &triangle : cache->triangles)
+        std::vector<yw_AttachedFXTriangle> triangles;
+        if ( fromProfile )
         {
-            if ( selectedArea < triangle.cumulativeArea )
-            {
-                selected = &triangle;
-                break;
-            }
+            yw_CollectAttachedFXShapeTriangles(*static_cast<const Collision::Shape *>(source), &triangles);
         }
+        else
+        {
+            mat3x3 transform = yw_BuildVPRotationMatrix(owner->_vp_rotation);
+            transform *= mat3x3::Scale(yw_SafeVPScale(owner->_vp_scale));
+            yw_CollectAttachedFXTriangles(visual, transform, vec3d(0.0, 0.0, 0.0), &triangles);
+        }
+        yw_BuildAttachedFXSilhouette(triangles, !fromProfile, cache);
+        return cache;
+    };
 
-        float r1 = (float)rand() / ((float)RAND_MAX + 1.0f);
-        float r2 = (float)rand() / ((float)RAND_MAX + 1.0f);
-        float root = sqrt(r1);
-        *localPosition = selected->a * (1.0f - root) +
-                         selected->b * (root * (1.0f - r2)) +
-                         selected->c * (root * r2);
-    }
+    TAttachedFXGeometryCache *cache = nullptr;
+    if ( owner->_collisionShape && !owner->_collisionShape->parts.empty() )
+        cache = findOrBuild(owner->_collisionShape.get(), true);
+    if ( (!cache || cache->cells.empty()) && visual )
+        cache = findOrBuild(visual, false);
+    if ( !cache || cache->cells.empty() )
+        return false;
 
-    *localPosition = *localPosition * (randomOffsetPercent / 100.0f);
+    // Random point inside a random body cell, then pulled toward the body
+    // centre: 100% = whole body, 25% = only its central core.
+    const vec3d &cellCentre = cache->cells[(size_t)rand() % cache->cells.size()];
+    vec3d jitter;
+    jitter.x = ((float)rand() / ((float)RAND_MAX + 1.0f) - 0.5f) * cache->cellSize;
+    jitter.y = ((float)rand() / ((float)RAND_MAX + 1.0f) - 0.5f) * cache->cellSize;
+    jitter.z = ((float)rand() / ((float)RAND_MAX + 1.0f) - 0.5f) * cache->cellSize;
+    const vec3d point = cellCentre + jitter;
+    *localPosition = cache->centre + (point - cache->centre) * (randomOffsetPercent / 100.0f);
 
     return true;
 }

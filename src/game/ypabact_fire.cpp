@@ -139,16 +139,14 @@ void ypabact_StartVehicleFireVP(NC_STACK_ypabact *bact, int now)
     }
 }
 
-void ypabact_StartVehicleFireVPIfEnabled(NC_STACK_ypabact *bact, int now)
+void ypabact_StartVehicleFireVPIfEnabled(NC_STACK_ypabact *bact, const World::TWeapProto &weapon, int now)
 {
-    if ( !bact )
+    if ( !bact || !weapon.weapon_use_vehicle_fire_state )
         return;
 
-    // An attached Unit Gun shows the fire visual on its carrier Vehicle, so only
-    // the carrier's weapon_use_vehicle_fire counts for it.
+    // An attached Unit Gun shows the fire visual on its carrier Vehicle.
     NC_STACK_ypabact *vehicle = (bact->_isUnitGunChild && bact->_parent) ? bact->_parent : bact;
-    if ( vehicle->_weapon_use_vehicle_fire )
-        ypabact_StartVehicleFireVP(vehicle, now);
+    ypabact_StartVehicleFireVP(vehicle, now);
 }
 
 size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
@@ -512,7 +510,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
             soundEnabledProjectiles++;
 
         if ( i == 0 )
-            ypabact_StartVehicleFireVPIfEnabled(this, arg->g_time);
+            ypabact_StartVehicleFireVPIfEnabled(this, wproto, arg->g_time);
 
         ypabact_ConsumeProjectileFireX(this);
 
@@ -1234,9 +1232,8 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
             if ( emitLocalMgunPulse && vehicleTimedMgun )
                 ypabact_StartVehicleFireVP(this, arg->field_10);
 
-            // weapon_use_vehicle_fire: an attached MGUN gun pulse also shows its carrier's fire visual.
-            if ( emitLocalMgunPulse )
-                ypabact_StartVehicleFireVPIfEnabled(this, arg->field_10);
+            if ( emitLocalMgunPulse && mgunProto )
+                ypabact_StartVehicleFireVPIfEnabled(this, *mgunProto, arg->field_10);
 
             // One cockpit shake per shot, so the shake follows the fire rate.
             if ( emitLocalMgunPulse )

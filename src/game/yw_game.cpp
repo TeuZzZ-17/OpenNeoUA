@@ -1182,6 +1182,11 @@ TSectorCollision NC_STACK_ypaworld::sub_44DBF8(int _dx, int _dz, int _dxx, int _
         }
     }
 
+    // OpenNeoUA custom: sector pieces reached by a terrain crater collide with
+    // their dug copy. Seams get theirs in sub_44E07C, once their heights are set.
+    if ( tmp.CollisionType == 1 )
+        ApplyTerrainCraterCollision(tmp);
+
     return tmp;
 }
 
@@ -1325,6 +1330,9 @@ void NC_STACK_ypaworld::sub_44E07C(TSectorCollision &arg)
             sub_44DF60(skel, 3);
         }
     }
+
+    // OpenNeoUA custom: seams reached by a terrain crater collide with their dug copy.
+    ApplyTerrainCraterCollision(arg);
 }
 
 int sub_44D36C(const vec3d &v, int id, NC_STACK_skeleton *skeleton)
@@ -1404,7 +1412,7 @@ int sub_44D36C(const vec3d &v, int id, NC_STACK_skeleton *skeleton)
 void NC_STACK_ypaworld::sub_44D8B8(ypaworld_arg136 *arg, const TSectorCollision &loc)
 {
     UAskeleton::Data *skel = loc.sklt->GetSkelet();
-    for ( size_t i = 0; i < skel->polygons.size(); i++)
+    const auto testPolygon = [&](size_t i)
     {
         UAskeleton::Polygon &tr = skel->polygons[i];
         vec3d norm = tr.Normal();
@@ -1430,7 +1438,20 @@ void NC_STACK_ypaworld::sub_44D8B8(ypaworld_arg136 *arg, const TSectorCollision 
                 }
             }
         }
+    };
+
+    // OpenNeoUA custom: a terrain crater surface tests only the polygons under the ray.
+    if ( loc.craterGrid )
+    {
+        const vec3d end = arg->stPos + arg->vect;
+        if ( loc.craterGrid->Query(std::min(arg->stPos.x, end.x), std::min(arg->stPos.z, end.z),
+                                   std::max(arg->stPos.x, end.x), std::max(arg->stPos.z, end.z),
+                                   testPolygon) )
+            return;
     }
+
+    for ( size_t i = 0; i < skel->polygons.size(); i++)
+        testPolygon(i);
 }
 
 void NC_STACK_ypaworld::FFeedback_VehicleChanged()
@@ -2148,6 +2169,8 @@ bool NC_STACK_ypaworld::BuildingConstructBegin(cellArea *cell, uint8_t buildID, 
     bldProc.Owner = owner;
 
     cell->PurposeType = cellArea::PT_CONSTRUCTING;
+    // OpenNeoUA custom: a new building levels the ground of its sector.
+    ClearTerrainCratersInCell(cell->CellId);
 
     for (NC_STACK_ypabact * &unit : _unitsList)
     {
@@ -2186,7 +2209,7 @@ int ypaworld_func137__sub0__sub0(UAskeleton::Data *skl, int id, const vec3d &v, 
 
 void NC_STACK_ypaworld::ypaworld_func137__sub0(ypaworld_arg137 *arg, const TSectorCollision &a2)
 {
-    for (size_t i = 0; i < a2.sklt->GetSkelet()->polygons.size(); i++)
+    const auto testPolygon = [&](size_t i)
     {
         const UAskeleton::Polygon &tria = a2.sklt->GetSkelet()->polygons[i];
 
@@ -2228,7 +2251,20 @@ void NC_STACK_ypaworld::ypaworld_func137__sub0(ypaworld_arg137 *arg, const TSect
                 }
             }
         }
+    };
+
+    // OpenNeoUA custom: a terrain crater surface tests only the polygons near the
+    // sphere (a contact can come from a polygon centre up to two radii away).
+    if ( a2.craterGrid )
+    {
+        const double reach = 2.0 * std::fabs(arg->radius);
+        if ( a2.craterGrid->Query(arg->pos.x - reach, arg->pos.z - reach,
+                                  arg->pos.x + reach, arg->pos.z + reach, testPolygon) )
+            return;
     }
+
+    for (size_t i = 0; i < a2.sklt->GetSkelet()->polygons.size(); i++)
+        testPolygon(i);
 }
 
 NC_STACK_ypabact * NC_STACK_ypaworld::FindBactByCmdOwn(uint32_t commandID, char owner)

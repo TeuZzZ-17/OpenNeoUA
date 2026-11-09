@@ -159,6 +159,17 @@ protected:
     int _id;
 };
 
+// OpenNeoUA custom: terrain craters, written behind ;#! (comments for vanilla).
+class SaveCraterParser : public ScriptParser::DataHandler
+{
+public:
+    SaveCraterParser(NC_STACK_ypaworld *o) : _o(*o) {} ;
+    virtual int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override;
+    virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override { return !StriCmp(word, "begin_craters"); };
+protected:
+    NC_STACK_ypaworld &_o;
+};
+
 class SaveLuaScriptParser : public ScriptParser::DataHandler
 {
 public:

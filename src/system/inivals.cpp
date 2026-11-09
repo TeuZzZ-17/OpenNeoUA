@@ -279,6 +279,11 @@ Common::Ini::Key IniConf::GameAiMaxAltitudeAboveGround("game.ai_max_altitude_abo
 // Optional AI flight controls. Missing or invalid values keep vanilla behavior.
 Common::Ini::Key IniConf::GameAiAirVerticalForce("game.ai_air_vertical_force", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GameAiBomberExtraAltitude("game.ai_bomber_extra_altitude", Common::Ini::KT_WORD, std::string("0"));
+// OpenNeoUA custom: terrain craters kept at once (weapons with crater_radius and
+// crater_depth); the oldest goes first. 0 disables them, the maximum is 2000.
+Common::Ini::Key IniConf::GameDeformationGroundLimit("game.deformation_ground_limit", Common::Ini::KT_WORD, std::string(""));
+Common::Ini::Key IniConf::GameDeformationBuildingLimit("game.deformation_building_limit", Common::Ini::KT_WORD, std::string(""));
+Common::Ini::Key IniConf::GameDeformationMaxCraters("game.deformation_max_craters", Common::Ini::KT_DIGIT, (int32_t)128);
 // OpenNeoUA custom: the player Sprint exists only when all three Sprint values are
 // explicitly present in OpenNeoUA.ini. Missing any one of them disables Sprint.
 Common::Ini::Key IniConf::GameSprintForceUp("game.sprint_force_up", Common::Ini::KT_WORD, std::string("0"));
@@ -687,6 +692,9 @@ void IniConf::Init()
         , &GameAiMaxAltitudeAboveGround
         , &GameAiAirVerticalForce
         , &GameAiBomberExtraAltitude
+        , &GameDeformationGroundLimit
+        , &GameDeformationBuildingLimit
+        , &GameDeformationMaxCraters
         , &GameSprintForceUp
         , &GameSprintPitchUp
         , &GameSprintRampTime
@@ -882,6 +890,10 @@ bool IniConf::ReadFromNucleusIni()
     // shipped configuration is the engine default (also for keys that only enable a
     // feature when they are written).
     Common::Ini::ParseIniTextOverlay(OPENNEOUA_DEFAULT_INI, &_varList);
+    // These optional geometry caps must be authored by the user. An older INI
+    // without them retains its original geometry rather than the embedded caps.
+    GameDeformationGroundLimit.Value = std::string("");
+    GameDeformationBuildingLimit.Value = std::string("");
 
     // OpenNeoUA custom settings are the user layer above Nucleus + the default profile.
     Common::Ini::ParseIniFileOverlay(uaDataFirstOpenNeoUAIniPath(), &_varList);

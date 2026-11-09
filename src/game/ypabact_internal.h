@@ -414,7 +414,7 @@ vec3d ypabact_LaserVisualScale(const World::TWeapProto &wproto);
 void ypabact_SpawnWeaponImpactVisual(NC_STACK_ypaworld *world, const World::TWeapProto &wproto, bool preferMegadeth, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime);
 void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto, const vec3d &beamStart, const vec3d &beamEnd);
 void ypabact_StartVehicleFireVP(NC_STACK_ypabact *bact, int now);
-void ypabact_StartVehicleFireVPIfEnabled(NC_STACK_ypabact *bact, int now);
+void ypabact_StartVehicleFireVPIfEnabled(NC_STACK_ypabact *bact, const World::TWeapProto &weapon, int now);
 float ypabact_AiVerticalFireTriggerRadius(const World::TWeapProto &wproto);
 vec3d ypabact_VerticalLaserSourceOrigin(NC_STACK_ypabact *bact, const bact_arg79 *arg);
 bool ypabact_IsInVerticalLaserFireZone(const TFireTriggerArea *box, const vec3d &origin, float aiTriggerRadius, const vec3d &pos, float radius);

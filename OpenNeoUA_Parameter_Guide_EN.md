@@ -290,7 +290,7 @@ The engine recognizes these fixed WAV stems: unit_ready, unit_idle, order_ack_fr
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `radius = 20`           — Physical collision radius of the unit. It decides collisions, hit detection and how much space the unit occupies.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `overeof = 10`          — Vertical offset used by the ground collision, meaning the distance between the unit center and its lowest point.
+- 🔵 `overeof = 10`          — Vertical offset used by ground collision: the distance between the unit origin and the ground. Studio's Ground Alignment tab shows a schematic 2D profile of the model surfaces against flat ground. The profile and Auto exclude particles and, when other surfaces exist, additive effects; an additive-only estimate is marked. Scroll over the profile to adjust `overeof`. Verify contact in-game.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `vwr_radius = 20`       — Collision radius used by the viewer / player camera while the unit is controlled or observed.
 ------------------------------------------------------------------------------------------------------------------------
@@ -399,8 +399,6 @@ Compound collision spheres replace the limitations of a single legacy radius wit
 - 🔵 `kill_after_shot = 1`         — The unit dies right after firing. Useful for one-shot or suicide units.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `kamikaze = 5000`             — Car class only: the unit explodes on contact. The value is the energy of the blast. It is not the same as kill_after_shot.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `weapon_use_vehicle_fire = 1` — Vehicle only: 1 makes the Vehicle temporarily use its own fire-state visual (VP, BASE or 3DS) whenever it fires, and whenever one of its attached Unit Guns fires. 0, absent or invalid keeps vanilla behavior. It is a Vehicle parameter only: the former Weapon-side key has been removed, with no fallback.
 ------------------------------------------------------------------------------------------------------------------------
 
 MGUN is OpenNeoUA's shared hitscan machine-gun path. The same system is used Restored cut-content behavior: the flak uses MGUN as its primary weapon. Effective range follows game.mgun_range. recoil timing, tracer rendering and decal behavior.
@@ -818,7 +816,7 @@ Damaged-state visuals are coupled to optional gameplay penalties. This means the
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `damaged_fx_interval = 500~1500`                  — Random interval in milliseconds between damaged-FX triggers. A single value gives a fixed interval.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `damaged_fx_random_max_offset = 25%`              — Maximum random offset from the unit center. With %, uses unit size; without %, uses a fixed distance.
+- 🟢 `damaged_fx_random_max_offset = 25%`              — Maximum random offset from the unit center. With %, effects spawn inside the unit silhouette (its `collision_shape` profile when present, otherwise the visual model, vanilla scripts included, without rotor blades and thin parts): 100% = whole body, 25% = central core only; without %, uses a fixed distance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `damaged_fx_trail_only = 1`                       — 1 hides the main VP model while keeping its trails, particles and child effects active.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1164,6 +1162,8 @@ Proximity Defense is an autonomous secondary Weapon system. "classic" reacts to 
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `type_icon = M`                    — Character selecting the Weapon icon, mapped through TYPE_NS.FON into the H_FINDER graphic.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `weapon_use_vehicle_fire_state = 1` — When this Weapon fires, its carrier Vehicle temporarily shows its own fire-state visual (VP, BASE or 3DS). For an attached Unit Gun, the parent Vehicle shows it. 0, absent or invalid keeps vanilla behavior. The former Vehicle key `weapon_use_vehicle_fire` has been removed, with no fallback.
+------------------------------------------------------------------------------------------------------------------------
 
 ### Special projectile classes
 
@@ -1424,7 +1424,7 @@ Spiral and Chaos are alternative projectile-motion modifiers. If both are config
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ai_fire_trigger_box_below_xyz = 200|1200|400`  — AI only: finite downward box for bomb, homing_bomb and vertical laser. Format: total_width_vertical_depth_total_horizontal_length (X|Y|Z). The volume starts at the muzzle, follows heading and remains vertical despite pitch or roll. Width covers the complete fire_x interval plus the configured padding. Y is finite downward depth, independent of terrain height. Unit acquisition uses sphere contact at sides and end cap; sector targets use point containment. A single 0, absent or invalid values retain legacy fire control.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ai_fire_trigger_cone_below_xyz = 30|20|1200`   — AI only: downward elliptical cone for bomb, homing_bomb and vertical laser. Format: full_lateral_angle_full_fore_aft_angle_vertical_depth. Both full angles are in degrees, strictly between 0 and 180. The third value is finite axial depth vertically downward. The cone remains vertical and follows heading only, while its origin follows the muzzle. Reuses the complete fire_x interval and the shared finite-cone contact test.
+- 🟢 `ai_fire_trigger_cone_below_xyz = 30|20|1200`   — AI only: downward elliptical cone for bomb, homing_bomb and vertical laser. Format: full_lateral_angle_full_fore_aft_angle_vertical_depth. Both full angles are in degrees, strictly between 0 and 180. The third value is finite axial depth vertically downward. The cone remains vertical and follows heading only, while its origin follows the muzzle. Reuses the complete fire_x interval and the shared finite-cone contact test. In Studio, opposite handles adjust the same symmetric angles.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ai_fire_trigger_box_forward_xyz = 100|80|1200` — Downward cone acquisition, secondary-target selection and continuous vertical-laser retention share the configured volume; actual beam reach still applies. It retains existing projectile counts, fire_x modes/racks, direction patterns, spread, multi_target and firing cadence. Both downward shapes have finite depth and share the same sphere-contact and beam-reach rules. AI only: muzzle-local forward box, specified as total_width_total_height_axial_depth. Width and height are centred on the firing axis; the volume follows pitch and roll. Supported models: rocket, missile, grenade, arc_grenade and non-vertical laser.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1501,6 +1501,16 @@ Weapon Ground Decal profiles paint a persistent or timed footprint on the world 
 - 🟢 `ground_decal_id = 1`        — ID of the reusable new_decal profile. Vehicles spawn on grounded destruction; Weapons spawn on real world impact. -1, absent or unknown ID = no decal.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ground_decal_size = 80~120` — Manual diameter range in world units, 0..12000. Absent, zero or invalid disables the decal.
+------------------------------------------------------------------------------------------------------------------------
+
+Craters and dents (Weapons only): a real impact on the world really deforms what it hits, both visually and in the collision. On sector ground and on the seams between sectors (slopes up to about 50 degrees) it digs a crater: units drive down into it and the lower parts of nearby buildings bend with the ground. On roofs, walls and steeper slopes it makes a crumpled dent instead, pushed into the surface that was hit, with the same radius and depth: this works on every building, classic and special (power stations, flak, radar, gates and the others). Host Stations and units are never deformed. Overlapping hits add up, to at most 1.75 times the strongest one. They last for the whole mission, are stored in the saved game and are removed only when a building is built in that sector. They are disabled in multiplayer. The weapon decal follows the crater or dent as if it had been painted before the hit and then dug with the surface: it stays whole on the bottom and on the steep walls of the pit, on dented walls and under many overlapping hits. game.deformation_max_craters sets how many are kept.
+
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `crater_radius = 260~320`    — Radius of the crater (and of the dent on buildings) in world units, fixed value or `min~max` (0..12000). Works together with crater_depth: if either is absent, zero or invalid there is no crater (vanilla behavior).
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `crater_depth = 60~80`       — Depth of the crater centre (or how far the dent goes in) in world units, fixed value or `min~max` (0..12000). Never more than half the radius: walls stay below about 37 degrees, so tanks can drive in and out.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `crater_rim = 20`            — Raised rim around the crater (ground only), in % of the depth, fixed value or `min~max` (0..100). Absent = 20; 0 = no rim; invalid = no crater.
 ------------------------------------------------------------------------------------------------------------------------
 
 Weapons can also use state-based external visuals. As elsewhere, 3DS has priority over BASE, and BASE falls back to the corresponding VP.
@@ -2128,7 +2138,7 @@ Debuffs are reusable top-level profiles. A Weapon links to one with debuff_id; S
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `scale = 1.0`                                  — Uniform scale applied to debuff VP and 3DS visuals. Visual only: no effect on debuff gameplay values.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `random_max_offset = 25%`                      — Maximum random visual offset from unit center. With %, uses unit size; without %, uses a fixed distance.
+- 🟢 `random_max_offset = 25%`                      — Maximum random visual offset from unit center. With %, effects spawn inside the unit silhouette (its `collision_shape` profile when present, otherwise the visual model, vanilla scripts included, without rotor blades and thin parts): 100% = whole body, 25% = central core only; without %, uses a fixed distance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `vp_trail_tint = 0|255|0|255`                  — RGBA tint applied only to VP trails, particles and child effects belonging to the debuff.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2498,6 +2508,12 @@ OpenNeoUA uses .cfg files as the modern script/Game Config layout while retainin
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.ai_bomber_extra_altitude = 100`                          — Global OpenNeoUA.ini setting for AI aircraft carrying bomb, homing_bomb or vertical_laser. They try to fly this far above an airborne target or building roof. Ground-unit targets are excluded. Applies to every eligible aircraft; maximum 3000. Absent, zero or invalid preserves vanilla behavior.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `game.deformation_max_craters = 128`                                     — OpenNeoUA.ini: how many craters and dents (Weapons with crater_radius and crater_depth) are kept at once. Past the limit the oldest one goes and the ground or building there returns to its original shape. 0 disables craters; negative = 128; maximum 2000.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `game.deformation_ground_limit = 10` — Maximum terrain displacement: value × 100 world units. Decimal 0..10; 0 stops terrain movement. Missing/invalid retains the old behavior.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `game.deformation_building_limit = 0.4` — Maximum total displacement of buildings and their foundations: 0.4 = 40 world units. Decimal 0..10; 0 stops building movement. Nearby ground joins the foundation limit over 150 units. Graphics and collision share the limit, including overlapping hits and loaded saves. Missing/invalid retains the old behavior.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.briefing_text_render = no`                               — Briefing unit presentation: yes = show text instead of the unit visual; no/0 or absent = render the available VP/BASE/3DS model.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.robo_building_collision_energy = 5%`                     — Energy removed from each building the Host Station destroys in a collision. With %, uses a percentage of maximum HP; without %, uses a fixed amount. Shield reduces the energy loss. 0 or absent = no energy removed.
@@ -2680,7 +2696,7 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals. When no custom vi
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_count = 2~4`                                        — Random number of Regen effects created per trigger. A single value gives a fixed count. Runtime maximum: 32.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_fx_random_max_offset = 80%`                            — Maximum random offset from the unit center. With %, uses the unit size; without %, uses a fixed world-space distance.
+- 🟢 `gfx.regen_fx_random_max_offset = 80%`                            — Maximum random offset from the unit center. With %, effects spawn inside the unit silhouette (its `collision_shape` profile when present, otherwise the visual model, vanilla scripts included, without rotor blades and thin parts): 100% = whole body, 25% = central core only; without %, uses a fixed world-space distance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_mesh_size = 30`                                        — Size of the procedural mesh-generated + symbols.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2708,7 +2724,7 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals. When no custom vi
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_count = 2~4`                                        — Random number of Drain effects created per trigger. A single value gives a fixed count. Runtime maximum: 32.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_fx_random_max_offset = 80%`                            — Maximum random offset from the unit center. With %, uses the unit size; without %, uses a fixed world-space distance.
+- 🟢 `gfx.drain_fx_random_max_offset = 80%`                            — Maximum random offset from the unit center. With %, effects spawn inside the unit silhouette (its `collision_shape` profile when present, otherwise the visual model, vanilla scripts included, without rotor blades and thin parts): 100% = whole body, 25% = central core only; without %, uses a fixed world-space distance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_mesh_size = 30`                                        — Size of the procedural mesh-generated - symbols.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3717,3 +3733,13 @@ Use 3-256 distinct vertices forming a simple, non-zero-area polygon. Concave pol
 ------------------------------------------------------------------------------------------------------------------------
 
 F2 and F3 are mutually exclusive; enabling one disables the other. F4 can freeze time while it is slowed or accelerated. Slowdown effects already provided by the game take priority over debug acceleration.
+
+### Integrated example: Mykonian Bomber and KNOCKER (ID 70)
+
+This is a mod configuration, not a new engine default. The Bomber uses `num_weapons = 3` to drop three bombs **simultaneously**, rather than `salve_shots`, which defines a timed burst. `num_weapons_snd_events = 1` prevents three overlapping launch sounds. Launch points use `fire_x = 45`, `fire_y = 75`, `fire_z = 0`, below the hull's lower bound (+Y points down). `weapon_spread_xyz = 3|0|3` adds slight ground-plane scatter.
+
+Weapon 70 keeps the KNOCKER name and uses `model = homing_bomb`, `multi_target = 3`, `force = 2500`, `homing_force = 1.5` and `homing_time = 5000`. The existing targeting system searches for up to three targets; three distinct targets are not guaranteed when fewer are available. Lifetime is 8000 ms, including shots without a target. The downward AI cone is `60|60|1500`, with a dead zone of 150. Additional player guidance retains the lock requirement documented under `homing_force`.
+
+Each bomb has `energy = 18000`, down from 60000: 54000 per drop before class multipliers and shields. Area damage uses `Blast_energy = 10000`, radius 130 and distance falloff. Do not automatically add direct and area damage for the directly hit target: engine damage rules apply. Drop interval is 2800 ms for AI and 2200 ms for the player. `weapon_energy_cost = 0.4%` is paid once per drop, not three times.
+
+The carrier has 40000 energy, production cost 800, shield 5 and a cap of five active units. Below 20% energy it emits smoke/electrical damage effects and applies the existing `damaged_*` penalties. External collision: `Data/Collisions/Bomber.collision`, a simple envelope matching the original model bounds. Destruction and impact effects reuse Mykonian electrical VPs; ground-only effects use `impact_world`, while contact effects also use `detonate`. No new parameter, model or save format change is introduced.

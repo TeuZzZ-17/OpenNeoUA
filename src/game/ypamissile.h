@@ -68,6 +68,8 @@ public:
     virtual void DetonateKamikazePayload(NC_STACK_ypabact *directHit);
     virtual void AlignMissile(float dtime = 0.0);
     virtual void AlignMissileByNormal(const vec3d &normal);
+    void MakeImpactCrater(const ypaworld_arg136 &hit);
+    bool HasImpactCrater() const;
 
     NC_STACK_ypamissile();
     virtual ~NC_STACK_ypamissile() {};
@@ -326,6 +328,8 @@ protected:
     int   _artilleryShellFlightTime = 0;
     float _artilleryShellArcHeight  = 0.0;
     bool  _artilleryShellImpactOnSurface = false;
+    // OpenNeoUA custom: a shot digs at most one terrain crater.
+    bool  _impactCraterMade = false;
     bool  _artilleryShellVerticalBarrage = false;
     bool  _artilleryShellVerticalTransferred = false;
     vec3d _artilleryShellVerticalApexOffset;

@@ -23,6 +23,11 @@ namespace GFX
 
 // Radii of the jagged decal outline, equally spaced around the centre.
 constexpr int DECAL_SHAPE_SAMPLES = 24;
+// Craters/dents and building footprints a decal knows about (TDecalField).
+constexpr int DECAL_FIELD_SHAPES = 16;
+constexpr int DECAL_FIELD_FOOTPRINTS = 16;
+// World lattice the engine cuts dug surfaces on (World::Crater::VISUAL_STEP).
+constexpr double DECAL_FIELD_STEP = 300.0 / 16.0;
 
 // #version 120 is the only level that exists on both GL paths (gfx.vbo on/off).
 inline std::string DecalVertexShaderText(bool vbo)
@@ -41,7 +46,10 @@ inline std::string DecalVertexShaderText(bool vbo)
 inline std::string DecalFragmentShaderText()
 {
     return std::string("#version 120\n#define SHAPE_SAMPLES ") +
-           std::to_string(DECAL_SHAPE_SAMPLES) + R"GLSL(
+           std::to_string(DECAL_SHAPE_SAMPLES) + "\n#define FIELD_SHAPES " +
+           std::to_string(DECAL_FIELD_SHAPES) + "\n#define FIELD_FOOTPRINTS " +
+           std::to_string(DECAL_FIELD_FOOTPRINTS) + "\n#define FIELD_STEP " +
+           std::to_string(DECAL_FIELD_STEP) + R"GLSL(
 uniform sampler2D uImage;       // Decal image (unused when uTextured is 0).
 uniform sampler2D uSceneDepth;  // Depth of the world, without any unit.
 uniform vec2 uScreenInv;        // 1 / screen size.
@@ -57,6 +65,17 @@ uniform vec3 uAxisT;            // Decal plane axes and surface normal.
 uniform vec3 uAxisB;
 uniform vec3 uAxisN;
 uniform vec2 uSize;             // Decal size along T and B.
+// Craters and dents under the decal (world/terraincrater_core.h), positions
+// from the decal origin in world axes. The same field the engine dug with, so
+// a pixel can be taken back to where its point was before the hits.
+uniform int uFieldShapes;
+uniform vec4 uFieldPos[FIELD_SHAPES];        // xyz, w: copies (> 0 crater, < 0 dent)
+uniform vec4 uFieldSize[FIELD_SHAPES];       // radius, depth, rim, band
+uniform vec3 uFieldDir[FIELD_SHAPES];        // dent: direction into the surface
+uniform int uFieldFootprints;
+uniform vec4 uFieldFootprint[FIELD_FOOTPRINTS];   // building boxes: min x, min z, max x, max z
+uniform vec2 uFieldLimits;                   // game.deformation_ground/building_limit (< 0: none)
+uniform vec2 uFieldLattice;                  // Decal origin x, z modulo FIELD_STEP.
 uniform float uEdgeFade;        // 0 = hard edge, 1 = fades across the whole decal.
 uniform float uShape[SHAPE_SAMPLES];
 uniform vec4 uTint;
@@ -100,6 +119,95 @@ vec3 surfaceNormal(vec2 frag, vec3 view, float invZ)
     return cross(uViewToWorld * alongX, uViewToWorld * alongY);
 }
 
+// DeformationLimits::At: the largest move allowed at a place.
+float fieldCap(vec2 xz, float uncapped)
+{
+    float ground = uFieldLimits.x < 0.0 ? uncapped : uFieldLimits.x;
+    float building = uFieldLimits.y < 0.0 ? uncapped : uFieldLimits.y;
+    float influence = 0.0;
+    for (int i = 0; i < FIELD_FOOTPRINTS; ++i)
+    {
+        if (i >= uFieldFootprints)
+            break;
+        vec4 box = uFieldFootprint[i];
+        vec2 outside = max(vec2(0.0), max(box.xy - xz, xz - box.zw));
+        float t = min(1.0, length(outside) / 150.0);
+        influence = max(influence, 1.0 - t * t * (3.0 - 2.0 * t));
+    }
+    return mix(ground, building, influence);
+}
+
+// How far the craters and dents moved the point that was at p (SampleAt and
+// DeformationLimits::Apply, without the dent folds: *dent is their size).
+vec3 fieldMove(vec3 p, out float dent)
+{
+    float drop = 0.0, deepest = 0.0, highestRim = 0.0, strongest = 0.0;
+    vec3 push = vec3(0.0);
+    for (int i = 0; i < FIELD_SHAPES; ++i)
+    {
+        if (i >= uFieldShapes)
+            break;
+        vec4 size = uFieldSize[i];
+        vec3 rel = p - uFieldPos[i].xyz;
+        // Identical hits come as one shape: they add up just the same.
+        float copies = abs(uFieldPos[i].w);
+        if (uFieldPos[i].w > 0.0)
+        {
+            float reachC = size.x * (size.z > 0.0 ? 1.6 : 1.0);
+            float distance = length(rel.xz);
+            float keep = 1.0 - smoothstep(size.w, size.w * 1.25, abs(rel.y));
+            if (distance >= reachC || keep <= 0.0)
+                continue;
+            float d = distance / size.x;
+            float one = 0.0;
+            if (d < 1.0)
+            {
+                float inside = 1.0 - d * d;
+                one = size.y * inside * inside;
+            }
+            if (size.z > 0.0)
+            {
+                float ridge = (d - 1.0) / 0.22;
+                if (ridge > -3.5)
+                    one -= size.y * size.z * exp(-ridge * ridge) * (1.0 - smoothstep(1.3, 1.6, d));
+            }
+            drop += one * keep * copies;
+            deepest = max(deepest, size.y);
+            highestRim = max(highestRim, size.y * size.z);
+        }
+        else
+        {
+            float distance = length(rel);
+            if (distance >= size.x)
+                continue;
+            float d = distance / size.x;
+            float inside = 1.0 - d * d;
+            push += uFieldDir[i] * (size.y * inside * inside * copies);
+            strongest = max(strongest, size.y * 1.6);
+        }
+    }
+    drop = clamp(drop, -highestRim, deepest * 1.75);
+    float pushed = length(push);
+    if (pushed > strongest * 1.75 && pushed > 0.0)
+        push *= strongest * 1.75 / pushed;
+    if (uFieldLimits.x >= 0.0)
+        drop = clamp(drop, -uFieldLimits.x, uFieldLimits.x);
+    vec3 move = vec3(0.0, drop, 0.0) + push;     // World Y points down.
+    float moved = length(move);
+    float cap = fieldCap(p.xz, moved);
+    float scale = moved > cap && moved > 0.0 ? cap / moved : 1.0;
+    dent = length(push) * scale;
+    return move * scale;
+}
+
+// Height over the decal plane of the place a pixel had before the hits, if
+// the surface moved there as the lattice point at corner (x, z) did.
+float cornerHeight(vec3 here, vec2 corner, float y)
+{
+    float unused;
+    return dot(here - fieldMove(vec3(corner.x, y, corner.y), unused), uAxisN);
+}
+
 float horizonFogFactor(float distanceValue, float startValue, float lengthValue, float strengthValue)
 {
     if (lengthValue <= 0.0 || strengthValue <= 0.0) return 0.0;
@@ -114,20 +222,52 @@ void main()
     vec3 view = viewPosition(frag, invZ);
     vec3 world = uViewToWorld * view;
 
+    // Craters and dents moved the surface after (or before) the decal: take the
+    // pixel back to where its point was before them (fixed point of the same
+    // field the engine dug with), then map the decal there.
+    vec3 here = world - uOrigin;
+    vec3 offset = here;
+    float dent = 0.0;
+    if (uFieldShapes > 0)
+    {
+        for (int i = 0; i < 3; ++i)
+            offset = here - fieldMove(offset, dent);
+    }
+    bool movedPixel = length(here - offset) > 0.5;
+
     // Up to this height a level surface counts as the hit surface itself: the
     // impact point comes from collision, which never matches the visuals exactly.
     // The mismatch has nothing to do with the decal size, hence the upper limit.
-    vec3 offset = world - uOrigin;
     float reach = 0.5 * length(uSize);
     float sameSurface = clamp(reach * 0.25, 8.0, 40.0);
+    float height = dot(offset, uAxisN);
 
     // Cheap rejection first: most pixels of the rectangle are not in the box.
-    float height = dot(offset, uAxisN);
     float heightAbs = abs(height);
     vec2 along = vec2(dot(offset, uAxisT), dot(offset, uAxisB));
     float distanceOnPlane = length(along);
     if (heightAbs > max(reach, sameSurface * 1.5) || distanceOnPlane > reach)
         discard;
+
+    // A moved point that was on the hit surface was painted there: it keeps its
+    // place on the image and its cover, whatever shape it has now. The dent
+    // folds are not in the field: their size is the doubt on its old place.
+    float paintedLimit = sameSurface + 0.6 * dent + 2.0;
+    bool painted = movedPixel && heightAbs <= paintedLimit;
+    if (movedPixel && !painted)
+    {
+        // The engine cut the dug surface on a world lattice and it is flat
+        // between the points: on a steep wall the true old place of the pixel
+        // can be anywhere between those its square's corners give.
+        vec2 cell = floor((offset.xz + uFieldLattice) / FIELD_STEP) * FIELD_STEP - uFieldLattice;
+        float h00 = cornerHeight(here, cell, offset.y);
+        float h10 = cornerHeight(here, cell + vec2(FIELD_STEP, 0.0), offset.y);
+        float h01 = cornerHeight(here, cell + vec2(0.0, FIELD_STEP), offset.y);
+        float h11 = cornerHeight(here, cell + vec2(FIELD_STEP), offset.y);
+        float lowest = min(min(h00, h10), min(h01, h11));
+        float highest = max(max(h00, h10), max(h01, h11));
+        painted = lowest <= paintedLimit && highest >= -paintedLimit;
+    }
 
     vec3 normal = surfaceNormal(frag, view, invZ);
     float normalLength = length(normal);
@@ -135,6 +275,20 @@ void main()
     normal = normalLength > 0.000001 ? normal / normalLength : uAxisN;
     if (dot(normal, world) > 0.0)
         normal = -normal;
+    if (movedPixel && !painted)
+    {
+        // Normal the surface had before the hits: its tangents moved with the
+        // field, so it goes back through the transpose of the field's change
+        // (taken over one lattice step, as the surface is flat between points).
+        float unused;
+        float halfStep = 0.5 * FIELD_STEP;
+        vec3 alongX = (fieldMove(offset + vec3(halfStep, 0.0, 0.0), unused) - fieldMove(offset - vec3(halfStep, 0.0, 0.0), unused)) / FIELD_STEP;
+        vec3 alongY = (fieldMove(offset + vec3(0.0, halfStep, 0.0), unused) - fieldMove(offset - vec3(0.0, halfStep, 0.0), unused)) / FIELD_STEP;
+        vec3 alongZ = (fieldMove(offset + vec3(0.0, 0.0, halfStep), unused) - fieldMove(offset - vec3(0.0, 0.0, halfStep), unused)) / FIELD_STEP;
+        vec3 before = normal + vec3(dot(alongX, normal), dot(alongY, normal), dot(alongZ, normal));
+        if (length(before) > 0.000001)
+            normal = normalize(before);
+    }
 
     float facing = clamp(dot(normal, uAxisN), -0.95, 1.0);
     vec3 leanWorld = normal - uAxisN * facing;
@@ -150,6 +304,7 @@ void main()
     vec2 unfolded = along - lean * (height / (1.0 + facing));
     unfolded += outward * level * min(distanceOnPlane, max(heightAbs - sameSurface, 0.0));
 
+
     // Undersides and steep surfaces turned away from the impact stay clean.
     float steep = smoothstep(0.35, 0.60, leanLength);
     float away = leanLength > 0.0001 ? dot(lean / leanLength, outward) * sign(height) : 0.0;
@@ -159,6 +314,11 @@ void main()
     // A level surface far above or below is another floor, not a continuation.
     float band = max(reach * 0.6, sameSurface * 1.5);
     coverage *= 1.0 - level * smoothstep(band * 0.6, band, heightAbs);
+    if (painted)
+    {
+        unfolded = along;
+        coverage = 1.0;
+    }
     if (coverage <= 0.0)
         discard;
 

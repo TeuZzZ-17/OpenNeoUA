@@ -21,22 +21,6 @@
 
 namespace
 {
-static bool BaseTintMeshIsSectorTerrain(const GFX::TMesh &mesh)
-{
-    // Vanilla UA sector surfaces embedded in LEGO/building BASEs consistently
-    // use BODEN1..BODEN5. Match the material source, not vertex height: flat
-    // foundations/ramps are building geometry and must still receive tint.
-    if ( !mesh.Mat.TexSource )
-        return false;
-
-    std::string name = mesh.Mat.TexSource->getRsrc_name();
-    const size_t slash = name.find_last_of("/\\");
-    if ( slash != std::string::npos )
-        name.erase(0, slash + 1);
-
-    return name.size() >= 5 && !StriCmp(name.substr(0, 5), "BODEN");
-}
-
 class SetLooseBaseObjectScope
 {
 public:
@@ -603,13 +587,13 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
             GFX::GFXEngine::Instance.QueueRenderMesh(&rend);
         };
 
-        for(GFX::TMesh &msh : Meshes)
+        for(GFX::TMesh &msh : (inst && inst->meshOverride) ? *inst->meshOverride : Meshes)
         {
             if ( inst && inst->skipGeometry )
                 break;
 
             const bool applyTint =
-                !arg->excludeSectorTerrainFromTint || !BaseTintMeshIsSectorTerrain(msh);
+                !arg->excludeSectorTerrainFromTint || !IsSectorTerrainMesh(msh);
             queueMesh(msh, applyTint);
         }
 
@@ -709,13 +693,13 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             GFX::GFXEngine::Instance.RenderNode(&rend);
         };
 
-        for(GFX::TMesh &msh : Meshes)
+        for(GFX::TMesh &msh : (inst && inst->meshOverride) ? *inst->meshOverride : Meshes)
         {
             if ( inst && inst->skipGeometry )
                 break;
 
             const bool applyTint =
-                !arg->excludeSectorTerrainFromTint || !BaseTintMeshIsSectorTerrain(msh);
+                !arg->excludeSectorTerrainFromTint || !IsSectorTerrainMesh(msh);
             renderMesh(msh, applyTint);
         }
 
@@ -1059,6 +1043,22 @@ GFX::TMesh *NC_STACK_base::FindMeshByRenderParams(std::list<GFX::TMesh> *list, c
     }
 
     return nullptr;
+}
+
+bool NC_STACK_base::IsSectorTerrainMesh(const GFX::TMesh &mesh)
+{
+    // Vanilla UA sector surfaces embedded in LEGO/building BASEs consistently
+    // use BODEN1..BODEN5. Match the material source, not vertex height: flat
+    // foundations/ramps are building geometry and must still receive tint.
+    if ( !mesh.Mat.TexSource )
+        return false;
+
+    std::string name = mesh.Mat.TexSource->getRsrc_name();
+    const size_t slash = name.find_last_of("/\\");
+    if ( slash != std::string::npos )
+        name.erase(0, slash + 1);
+
+    return name.size() >= 5 && !StriCmp(name.substr(0, 5), "BODEN");
 }
 
 void NC_STACK_base::GenerateMeshCoordsCache(GFX::TMesh *mesh)

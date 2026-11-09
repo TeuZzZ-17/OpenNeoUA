@@ -41,6 +41,7 @@
 #include "world/nparticle.h"
 #include "world/grounddecal_smoke.h"
 #include "world/grounddecal_profile.h"
+#include "world/terraincrater.h"
 
 #include "gui/uamsgbox.h"
 
@@ -1356,6 +1357,9 @@ struct TCellFillerCh : TObjectCache
     int8_t Id1 = -1;
     int8_t Id2 = -1;
     float  Heights[4] = {0.};
+    // OpenNeoUA custom: a terrain crater came or went near this seam. The old
+    // shape is drawn until the rebuild fits the frame's crater budget.
+    bool   craterStale = false;
 
     void FreeVBO();
     void MakeVBO();
@@ -2890,6 +2894,26 @@ public:
     bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius, uint32_t seed);
     void RenderGroundDecalSmoke(baseRender_msg *arg);
     void ClearGroundDecalSmoke();
+
+    // OpenNeoUA custom: terrain craters (world/terraincrater.cpp).
+    World::Crater::DeformationLimits TerrainCraterLimits(const vec3d &position);
+    bool SpawnTerrainCrater(const World::TCraterConfig &config, const ypaworld_arg136 &hit);
+    void AddTerrainCrater(const World::Crater::Shape &shape);
+    void ClearTerrainCratersInCell(const Common::Point &cellId);
+    void ClearTerrainCraters();
+    void ReleaseRetiredTerrainCraters();
+    bool TerrainCraterRebuildAllowed() const;
+    void RetireTerrainCraterCopies(const World::Crater::Shape &shape);
+    std::list<GFX::TMesh> *TerrainCraterPieceMeshes(const cellArea &cell, int bldX, int bldY,
+                                                    int legoId, const vec3d &position);
+    void ApplyTerrainCratersToFiller(TCellFillerCh *filler);
+    void ApplyTerrainCraterCollision(TSectorCollision &location);
+    void WriteTerrainCraters(FSMgr::FileHandle *file);
+    bool ReadTerrainCrater(const std::string &value);
+    bool ReadTerrainDent(const std::string &value);
+    size_t TerrainCraterCount() const { return _terrainCraters.craters.size(); }
+    void TerrainCraterDecalField(const vec3d &centre, float reach, GFX::TDecalField *field);
+    vec3d TerrainCraterRestore(const vec3d &pos, vec3d *normal);
     void RenderWeaponTracerSegment(baseRender_msg *arg, const vec3d &start,
                                    const vec3d &end,
                                    const World::TWeaponTracerConfig &config,
@@ -3064,22 +3088,18 @@ public:
         {};
     };
 
-    struct TAttachedFXTriangle
-    {
-        vec3d a;
-        vec3d b;
-        vec3d c;
-        float cumulativeArea = 0.0f;
-    };
-
+    // Voxel silhouette of a unit body, built once per model and used to place
+    // attached status FX (damaged, debuff, regen, drain...) with % offsets.
+    // Source is the unit's collision profile when it has one, otherwise its
+    // visual model (vanilla units included).
     struct TAttachedFXGeometryCache
     {
-        NC_STACK_base *source = nullptr;
+        const void *source = nullptr; // NC_STACK_base (visual) or Collision::Shape (profile)
         vec3d scale = vec3d(1.0, 1.0, 1.0);
         vec3d orientation = vec3d(0.0, 0.0, 0.0);
-        std::vector<TAttachedFXTriangle> triangles;
-        std::vector<vec3d> volumePoints;
-        float totalArea = 0.0f;
+        std::vector<vec3d> cells;     // Centres of the occupied body voxels, actor-local.
+        vec3d centre = vec3d(0.0, 0.0, 0.0); // Mean of the cells: the % offset shrinks toward it.
+        float cellSize = 0.0f;
     };
 
     struct TDamageHoverTarget
@@ -3098,6 +3118,10 @@ public:
         float sizeB = 0.0f;
         float radius = 0.0f;
         float edgeFade = 0.0f;
+        // Craters and dents under the decal, for its shader; made again when a
+        // crater that reaches it comes or goes (RetireTerrainCraterCopies).
+        GFX::TDecalField field;
+        bool fieldDirty = true;
         std::array<float, GFX::DECAL_SHAPE_SAMPLES> shape{};
         ResBitmap *texture = nullptr;
         int32_t startTime = 0;
@@ -3199,6 +3223,7 @@ public:
     std::list<TTransientVP> _transientVPs;
     int32_t _nextTransientVPId = 1;
     std::list<TGroundDecal> _groundDecals;
+    World::Crater::State _terrainCraters;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;
     std::vector<World::GroundDecalSmoke::Emitter> _groundDecalSmoke;
     std::map<std::string, NC_STACK_base *> _sharedExternalMeshes;
