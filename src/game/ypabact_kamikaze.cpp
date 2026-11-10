@@ -631,21 +631,36 @@ bool NC_STACK_ypabact::TriggerKamikazeDetonation(NC_STACK_ypabact *directHit)
     payload->_parent = nullptr;
     ypabact_GetKamikazePayloadListOwner(mount.payloadSource)->_missiles_list.push_back(payload);
 
-    // Positive trigger_radius gives the kamikaze its own terrain-decal rule.
+    // A positive trigger_radius places the decals and deformation on the same surface.
     // Check at the explosion position, before blast damage can kill the carrier
     // or its mounted payload source. The later wreck impact must not repeat it.
     if ( !_world->IsDebugGlobalInvulnerabilityEnabled() &&
          std::isfinite(mount.weapon->trigger_radius) && mount.weapon->trigger_radius > 0.0f )
     {
         _kamikaze_ground_decals_handled = true;
-        for (const World::TChainFXConfig &fx : _chainFX)
+        const auto isDestroyedDecal = [](const World::TChainFXConfig &fx)
         {
-            if ( fx.trigger == World::TChainFXConfig::TRIGGER_DESTROYED &&
-                 fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
-            {
-                _world->SpawnGroundDecalInSphere(
-                    fx, _position, mount.weapon->trigger_radius);
-            }
+            return fx.trigger == World::TChainFXConfig::TRIGGER_DESTROYED &&
+                   fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL;
+        };
+        const auto isPayloadDecal = [](const World::TChainFXConfig &fx)
+        {
+            return fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
+                   fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL;
+        };
+        ypaworld_arg136 hit;
+        if ( !_world->_isNetGame &&
+             (payload->HasImpactCrater() ||
+              std::any_of(_chainFX.begin(), _chainFX.end(), isDestroyedDecal) ||
+              std::any_of(mount.weapon->chain_fx.begin(), mount.weapon->chain_fx.end(),
+                          isPayloadDecal)) &&
+             _world->FindWorldSurfaceInSphere(_position, mount.weapon->trigger_radius, hit) )
+        {
+            for (const World::TChainFXConfig &fx : _chainFX)
+                if ( isDestroyedDecal(fx) )
+                    _world->SpawnGroundDecal(fx, hit);
+            payload->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD, &hit);
+            payload->MakeImpactCrater(hit);
         }
     }
 
