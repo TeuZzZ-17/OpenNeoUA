@@ -1730,6 +1730,7 @@ void NC_STACK_ypaworld::sb_0x456384(const Common::Point &cellId, int ownerid2, i
 
     if ( cell.IsGamePlaySector() )
     {
+        ClearBuildingImpactFX(cellId);
         _lvlBuildingsMap(cellId) = blg_id;
         _lvlTypeMap(cellId) = bld->SecType;
 

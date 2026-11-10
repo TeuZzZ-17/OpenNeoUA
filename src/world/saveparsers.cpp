@@ -656,7 +656,7 @@ int SaveCraterParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     }
     else if ( !StriCmp(p1, "dent") )
     {
-        if ( !_o.ReadTerrainDent(p2) )
+        if ( !_o.ReadTerrainDent(parser.FullLineValue()) )
             ypa_log_out("WARNING: invalid saved dent '%s' ignored\n", p2.c_str());
     }
     else

@@ -587,6 +587,11 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     const float decalRadius = 0.5f * std::sqrt(decalSizeX * decalSizeX +
                                                decalSizeZ * decalSizeZ);
 
+    // Place the decal where the impact surface was before deformation.
+    vec3d placed = hit.isectPos;
+    TerrainCraterRestHit(hit, &placed, &normal);
+    const World::BuildingPiece building = ImpactBuildingPiece(hit, placed, normal);
+
     const auto addDecal = [&](const vec3d &position, const vec3d &surfaceNormal)
     {
         while ( _groundDecals.size() >= (size_t)limit )
@@ -595,6 +600,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
         _groundDecals.emplace_back();
         TGroundDecal &decal = _groundDecals.back();
         decal.pos = position;
+        decal.building = building;
         decal.axisN = surfaceNormal;
         GroundDecalAxes(surfaceNormal, angle, &decal.axisT, &decal.axisB);
         decal.sizeT = decalSizeX;
@@ -620,11 +626,6 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
         decal.tint.Clamp();
     };
 
-    // Craters and dents already there moved the surface: the decal is placed
-    // where the hit point was before them, the same place its shader maps the
-    // dug pixels at (decalshader.h).
-    vec3d placed = hit.isectPos;
-    TerrainCraterRestHit(hit, &placed, &normal);
     addDecal(placed, normal);
 
     // A decal follows the surfaces, so from a roof it would use up its size going
@@ -647,7 +648,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     }
     SpawnGroundDecalSmoke(config.ground_decal_smoke, hit.isectPos, decalRadius,
                           (uint32_t)(GroundDecalRandomUnit(this, hit, 0x534d4f4bu) * 16777216.0f),
-                          decalEndTime);
+                          decalEndTime, building);
     return true;
 }
 
@@ -720,6 +721,24 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
 
         ++it;
     }
+}
+
+void NC_STACK_ypaworld::ClearBuildingImpactFX(const Common::Point &cellId, int slot)
+{
+    const auto belongsToBuilding = [&](const World::BuildingPiece &piece)
+    {
+        return piece.Matches(cellId.x, cellId.y, slot);
+    };
+    _groundDecals.remove_if([&](const TGroundDecal &decal) { return belongsToBuilding(decal.building); });
+    _groundDecalSmoke.erase(
+        std::remove_if(_groundDecalSmoke.begin(), _groundDecalSmoke.end(),
+                       [&](const World::GroundDecalSmoke::Emitter &emitter)
+                       {
+                           return belongsToBuilding(emitter.building);
+                       }),
+        _groundDecalSmoke.end());
+    _transientVPs.remove_if([&](const TTransientVP &fx) { return belongsToBuilding(fx.decalBuilding); });
+    ClearBuildingDents(cellId, slot);
 }
 
 void NC_STACK_ypaworld::ClearGroundDecals()

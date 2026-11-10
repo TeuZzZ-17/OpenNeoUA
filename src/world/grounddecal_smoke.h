@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 
+#include "building_piece.h"
 #include "protos.h"
 #include "common/vectors.h"
 
@@ -20,6 +21,7 @@ struct Emitter
 {
     TGroundDecalSmoke params;   // Copy of the block's smoke settings.
     vec3d pos;
+    BuildingPiece building;
     float radius = 0.0f;
     int32_t startTime = 0;
     int32_t duration = 0;

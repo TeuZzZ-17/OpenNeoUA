@@ -26,6 +26,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "building_piece.h"
+
 namespace World
 {
 namespace Crater
@@ -70,6 +72,7 @@ struct Shape
     // Dent: two directions along the surface, square to nx/ny/nz (for the folds).
     double t1x = 1.0, t1y = 0.0, t1z = 0.0;
     double t2x = 0.0, t2y = 0.0, t2z = 1.0;
+    BuildingPiece building;
 };
 
 // An authored crater made safe: no negative or non-finite value, depth limited.

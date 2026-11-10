@@ -1991,6 +1991,8 @@ void NC_STACK_ypaworld::ApplyBuildingHealthChange(cellArea *cell, int bldX, int 
     }
 
     cell->buildings_health.At(bldX, bldY) = targetHealth;
+    if ( currentHealth > 0 && targetHealth == 0 )
+        ClearBuildingImpactFX(cell->CellId, bldX + 3 * bldY);
     ypaworld_func129__sub0(this, *cell, arg);
     CellCheckHealth(cell, arg->OwnerID, arg->unit);
 
