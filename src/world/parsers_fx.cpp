@@ -1350,6 +1350,7 @@ const DecalEffectKey kDecalEffectKeys[] = {
     {"effect_3ds", EFFECT_KEY_BOTH},
     {"effect_scale", EFFECT_KEY_GROUND_PULSE},
     {"effect_active_time", EFFECT_KEY_BOTH},
+    {"effect_retrigger_interval", EFFECT_KEY_BOTH},
     {"effect_chance", EFFECT_KEY_BOTH},
     {"effect_spread", EFFECT_KEY_BOTH},
     {"effect_tint", EFFECT_KEY_BOTH},
@@ -1446,6 +1447,10 @@ static bool ParseGroundDecalSmokeParam(ScriptParser::Parser &parser,
     else if ( !StriCmp(p1, "effect_active_time") )
         readIntRange("effect_active_time", 0, 3600000, defaults.active_time_min, defaults.active_time_max,
                      smoke.active_time_min, smoke.active_time_max);
+    else if ( !StriCmp(p1, "effect_retrigger_interval") )
+        readIntRange("effect_retrigger_interval", 0, 3600000,
+                     defaults.retrigger_min, defaults.retrigger_max,
+                     smoke.retrigger_min, smoke.retrigger_max);
     else if ( !StriCmp(p1, "effect_fade_inout") )
     {
         std::string fade[2];

@@ -357,7 +357,7 @@ void ypaworld_func158__sub4__sub1__sub4__sub11(NC_STACK_ypaworld *yw, TInputStat
         int v13 = yw->_buildProtos[pGem->BuildingID].SecType;
 
         yw->BriefingSetObject( TBriefObject( TBriefObject::TYPE_SECTOR, v13, ps.x, ps.y, 26, 144, 25,
-                                            Locale::Text::Brief(Locale::BRIEF_TECH2) ),
+                                            Locale::Text::Brief(Locale::BRIEF_TECH2), 0, pGem->BuildingID ),
                                brf->AddObjectsFlag);
     }
 }
@@ -582,7 +582,7 @@ void ypaworld_func158__sub4__sub1__sub4__sub19(NC_STACK_ypaworld *yw, TInputStat
         int v13 = yw->_buildProtos[ pGate->ClosedBldID ].SecType;
 
         yw->BriefingSetObject( TBriefObject( TBriefObject::TYPE_SECTOR, v13, ps.x, ps.y, 26, 145, 25,
-                                            Locale::Text::Brief(Locale::BRIEF_GATE2) ),
+                                            Locale::Text::Brief(Locale::BRIEF_GATE2), 0, pGate->ClosedBldID ),
                                brf->AddObjectsFlag);
     }
 }

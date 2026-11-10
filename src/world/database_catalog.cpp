@@ -127,6 +127,7 @@ void DescribeBuilding(Card &card, const TBuildingProto &b, const std::vector<TVh
     card.healingPower=b.Power;
     card.guardians=b.spawn_count_defined?std::max(0,b.spawn_count):0;
     for (const TBuildingProto::TGun &gun : b.Guns) {
+        if (!gun.VhclID) break;
         ++card.guns;
         if (Valid(gun.VhclID, vehicles.size())) {
             const TVhclProto &v = vehicles[static_cast<size_t>(gun.VhclID)];
@@ -135,11 +136,13 @@ void DescribeBuilding(Card &card, const TBuildingProto &b, const std::vector<TVh
         }
     }
     int attack = 0;
-    for (const TBuildingProto::TGun &gun : b.Guns)
+    for (const TBuildingProto::TGun &gun : b.Guns) {
+        if (!gun.VhclID) break;
         if (Valid(gun.VhclID, vehicles.size())) {
             std::set<int> stack;
             attack += AttackForVehicle(gun.VhclID, vehicles, weapons, stack);
         }
+    }
     AddRating(card, Metric::Attack, attack, -2);
 }
 
@@ -291,7 +294,11 @@ void SetQuality(Card &card,const NC_STACK_ypaworld &world,int category,int id)
         const auto &b=world.GetBuildProtos()[id];
         card.quality[1]=EffectiveDurability(b.Energy,b.shield);
         card.quality[3]=Positive(b.Power)+std::max(0,b.radar-1)*25.0;
-        for(const auto &gun:b.Guns)card.quality[0]+=VehicleQuality(gun.VhclID,vehicles,weapons,stack)[0];
+        for (const auto &gun : b.Guns)
+        {
+            if (!gun.VhclID) break;
+            card.quality[0] += VehicleQuality(gun.VhclID, vehicles, weapons, stack)[0];
+        }
         if(b.spawn_units&&b.spawn_count>0&&b.spawn_vehicle>0&&b.spawn_interval>0)
         {
             const auto spawned=VehicleQuality(b.spawn_vehicle,vehicles,weapons,stack);

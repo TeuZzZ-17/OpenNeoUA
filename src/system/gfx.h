@@ -245,6 +245,12 @@ public:
 
     std::vector<TCoordsCache> CoordsCache;
 
+    // OpenNeoUA custom: where each vertex was before terrain craters and dents
+    // moved it (same count as Vertexes). Empty on a mesh that was never dug.
+    // The decals read it to stay painted on a surface that changed shape.
+    std::vector<vec3f> Rest;
+    int32_t RestBufferPos = 0;   // Place of Rest inside glDataBuf.
+
     TBoundBox BoundBox;
 
     TMesh() = default;
@@ -326,22 +332,6 @@ enum
     DEFAULT_HEIGHT = 480,
 };
 
-// Craters and dents under a decal, for its shader (see decalshader.h), with
-// positions from the decal origin in world axes.
-struct TDecalField
-{
-    int shapes = 0;
-    float pos[DECAL_FIELD_SHAPES][4] = {};      // xyz, w: copies (> 0 crater, < 0 dent)
-    float size[DECAL_FIELD_SHAPES][4] = {};     // radius, depth, rim, band
-    float dir[DECAL_FIELD_SHAPES][3] = {};      // dent: direction into the surface
-    int frozen = 0;                             // Map border boxes first (nothing moves there),
-    int footprints = 0;                         // then building footprints.
-    float footprint[DECAL_FIELD_FOOTPRINTS][4] = {};   // min x, min z, max x, max z
-    float limits[2] = {-1.0f, -1.0f};           // ground, building (< 0: none)
-    float lattice[2] = {0.0f, 0.0f};            // Origin x, z modulo DECAL_FIELD_STEP.
-    float largest = 0.0f;                       // Largest move, for the screen rectangle.
-};
-
 // One projected decal of the current frame (see decalshader.h). Position and
 // axes use world axes relative to the camera, so large maps keep their precision.
 struct TDecalDraw
@@ -353,7 +343,7 @@ struct TDecalDraw
     float SizeT = 0.0f;
     float SizeB = 0.0f;
     float EdgeFade = 0.0f;
-    const TDecalField *Field = nullptr;   // Craters and dents under it, owned by the caller.
+    float Moved = 0.0f;   // How far craters and dents may have moved the surface under it.
     const float *Shape = nullptr;   // DECAL_SHAPE_SAMPLES radii, owned by the caller.
     ResBitmap *Tex = nullptr;
     TGLColor Tint = TGLColor(1.0, 1.0, 1.0, 1.0);
@@ -388,15 +378,8 @@ struct TDecalProg : TShaderProg
     int32_t AxisNLoc = -1;
     int32_t SizeLoc = -1;
     int32_t EdgeFadeLoc = -1;
-    int32_t FieldShapesLoc = -1;
-    int32_t FieldPosLoc = -1;
-    int32_t FieldSizeLoc = -1;
-    int32_t FieldDirLoc = -1;
-    int32_t FieldFootprintsLoc = -1;
-    int32_t FieldFrozenLoc = -1;
-    int32_t FieldFootprintLoc = -1;
-    int32_t FieldLimitsLoc = -1;
-    int32_t FieldLatticeLoc = -1;
+    int32_t RestLoc = -1;
+    int32_t RestOnLoc = -1;
     int32_t ShapeLoc = -1;
     int32_t TintLoc = -1;
     int32_t ColorizeLoc = -1;
@@ -404,6 +387,20 @@ struct TDecalProg : TShaderProg
 
     TDecalProg() = default;
     TDecalProg(uint32_t id);
+};
+
+// Rest pass of the decals (see decalshader.h).
+struct TDecalRestProg : TShaderProg
+{
+    int32_t RestAttrLoc = -1;
+    int32_t ProjLoc = -1;
+    int32_t ViewLoc = -1;
+    int32_t ImageLoc = -1;
+    int32_t CutLoc = -1;
+    int32_t ViewToWorldLoc = -1;
+
+    TDecalRestProg() = default;
+    TDecalRestProg(uint32_t id);
 };
 
 struct TColorEffectsProg : TShaderProg
@@ -916,6 +913,7 @@ protected:
     void ReportGraphicsChip();
     void ReadGraphicsChip();
     bool EnsureDecalDepthTexture(const Common::Point &scrSz);
+    bool DrawDecalRest(const Common::Point &scrSz, const float *viewToWorldColumns);
     void DrawDecalPass();
 
 
@@ -1157,6 +1155,15 @@ protected:
     uint32_t _decalPsShader = 0;
     uint32_t _decalDepthTex = 0;
     Common::Point _decalDepthTexSize;
+    // Rest pass: its program, its float texture and the dug meshes of the frame.
+    TDecalRestProg _decalRestProg;
+    uint32_t _decalRestVsShader = 0;
+    uint32_t _decalRestPsShader = 0;
+    uint32_t _decalRestFbo = 0;
+    uint32_t _decalRestTex = 0;
+    Common::Point _decalRestTexSize;
+    bool _decalRestUnusable = false;   // No float render target on this GL.
+    std::vector<TRenderNode *> _decalDugList;
     mat3x3 _decalWorldToView;
     uint32_t _decalRenderFlags = 0;
     float _decalFogStart = 0.0f;

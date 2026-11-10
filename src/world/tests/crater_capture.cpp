@@ -7,13 +7,22 @@
 //   - saves what the real renderer drew, with and without the weapon decal;
 //   - writes the craters to a save file and reads them back;
 //   - times drawing and ray tests with the limit full of craters.
-// Run from "UA Rising"; <folder>/../cap_cfg.txt holds "level mode plan" (plan
-// is ignored). Back up Data/Save first: starting a level from the shell
-// rewrites the player files.
+// Run from "UA Rising"; <folder>/../cap_cfg.txt holds "level mode plan".
+// Mode 1 = no colour effects, 2 = old OpenGL path (no VBO). Plans:
+//   (any other word)   everything above;
+//   decals, decalsflat decals on dug and dented surfaces / the same with no crater;
+//   userarea, userreal the user's test area, checker / real decal;
+//   stress, stressreal the same area bombed fourteen times in a row, as in play;
+//   cracks, cracksfree no gap may open between surfaces that touched before the
+//                      hits, also when the buildings break (free: no INI limits);
+//   tankbomb           a real bomb on a ground unit;
+//   perfnear           the timings only, with the camera low over the dug ground.
+// Back up Data/Save first: starting a level from the shell rewrites the player files.
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <SDL2/SDL_opengl.h>
@@ -97,7 +106,10 @@ std::string cfgPlan;
 // "decalsflat": the same run with the decals only, no crater (reference).
 // "userarea": the user's test area left of the host station (see PlanSpots).
 // "userreal": the same with the real weapon decal instead of the checker.
-bool UserArea() { return cfgPlan == "userarea" || cfgPlan == "userreal"; }
+// "stress" / "stressreal": the user's area again, but bombed as in play: many
+// hits one after the other, each decal landing on the craters already there.
+bool Stress() { return cfgPlan == "stress" || cfgPlan == "stressreal"; }
+bool UserArea() { return cfgPlan == "userarea" || cfgPlan == "userreal" || Stress(); }
 bool DecalsPlan() { return cfgPlan == "decals" || cfgPlan == "decalsflat" || UserArea(); }
 
 void LoadConfig()
@@ -452,6 +464,18 @@ void PlanSpots(NC_STACK_ypaworld *w)
                     {
                         Spot s; s.name = "user_ground_" + tag; s.cell = id;
                         s.digs = {vec3d(px, 0, pz), vec3d(px + 120.0, 0, pz + 40.0), vec3d(px - 60.0, 0, pz + 90.0)};
+                        if (Stress())
+                        {
+                            // Fourteen bombs scattered over the spot, some on the same hole.
+                            uint32_t seed = 0x1234567u + (uint32_t)(id.x * 31 + id.y);
+                            const auto roll = [&seed]()
+                            {
+                                seed = seed * 1664525u + 1013904223u;
+                                return (double)((seed >> 8) & 0xffff) / 65535.0 * 2.0 - 1.0;
+                            };
+                            for (int n = 0; n < 11; ++n)
+                                s.digs.push_back(vec3d(px + roll() * 420.0, 0, pz + roll() * 420.0));
+                        }
                         spots.push_back(s);
                         break;
                     }
@@ -521,7 +545,7 @@ std::vector<vec3d> Probes(const Spot &s, double radius, int direction)
 int DigAll(NC_STACK_ypaworld *w, const Spot &s, bool withDecal)
 {
     weaponId = s.weapon;
-    checkerDecal = withDecal && cfgPlan != "userreal" && (s.weapon != 38 || DecalsPlan());
+    checkerDecal = withDecal && cfgPlan != "userreal" && cfgPlan != "stressreal" && (s.weapon != 38 || DecalsPlan());
     const cellArea &area = w->_cells(s.cell);
     int made = 0;
     for (const vec3d &d : s.digs)
@@ -579,6 +603,19 @@ void Dig(NC_STACK_ypaworld *w, const Spot &s, bool withDecal, bool check)
     if ( !check )
         return;
 
+    // Bombs on open ground dig craters, however steep the pit already is: a
+    // dent (pushed sideways) is only for what was steep before any hit.
+    if ( Stress() && !s.building )
+    {
+        int dents = 0;
+        for (const World::Crater::Shape &c : w->_terrainCraters.craters)
+            dents += c.kind == World::Crater::Shape::DENT ? 1 : 0;
+        fprintf(logFile, "%s: %d shapes, %d of them dents\n", s.name.c_str(),
+                (int)w->_terrainCraters.craters.size(), dents);
+        Check(dents * 3 <= (int)w->_terrainCraters.craters.size(),
+              s.name + ": bombs on a pit keep digging craters, not dents");
+    }
+
     Check(made == (int)s.digs.size(), s.name + ": every bomb dug a crater (" + std::to_string(made) + ")");
     if ( s.weapon != 38 )
         return;
@@ -597,7 +634,10 @@ void Dig(NC_STACK_ypaworld *w, const Spot &s, bool withDecal, bool check)
         snprintf(text, sizeof(text), "%s: dent r=%.0f depth=%.0f dir=(%.2f %.2f %.2f), collision %.1f deeper",
                  s.name.c_str(), shape.radius, shape.depth, shape.nx, shape.ny, shape.nz, dented - intact);
         Check(shape.kind == World::Crater::Shape::DENT, std::string(text) + " [is a dent]");
-        Check(dented - intact > 0.25 * shape.depth && dented - intact < 3.0 * shape.depth,
+        // A building moves no further than game.deformation_building_limit allows.
+        const double cap = w->TerrainCraterLimits(vec3d(shape.x, shape.y, shape.z)).building;
+        const double least = cap >= 0.0 ? std::min(0.25 * shape.depth, 0.8 * cap) : 0.25 * shape.depth;
+        Check(dented - intact > least && dented - intact < 3.0 * shape.depth,
               std::string(text) + " [collision follows the dent]");
         return;
     }
@@ -645,6 +685,48 @@ void Dig(NC_STACK_ypaworld *w, const Spot &s, bool withDecal, bool check)
         line += text;
     }
     fprintf(logFile, "%s\n", line.c_str());
+    // The collision must have no hole: every probe finds ground before and after.
+    for (size_t i = 0; i < probes.size(); ++i)
+        if ( !std::isfinite(dug[i]) || !std::isfinite(flat[i]) )
+        {
+            // Same place a hair to the side: a ray exactly on the line between
+            // two surfaces can miss both, with or without craters.
+            const double beside = GroundY(w, probes[i].x + 0.013, probes[i].z + 0.017, top);
+            fprintf(logFile, "%s probe %d at (%.3f %.3f): before=%.1f after=%.1f, a hair beside after=%.1f\n", s.name.c_str(),
+                    (int)i, probes[i].x, probes[i].z, flat[i], dug[i], beside);
+            Check(std::isfinite(beside) && (std::isfinite(dug[i]) || !std::isfinite(flat[i])),
+                  s.name + ": the crater opened no hole in the collision");
+            // Which dug surfaces lie under the probe, and whose they are.
+            int dents = 0;
+            for (const World::Crater::Shape &c : w->_terrainCraters.craters)
+                dents += c.kind == World::Crater::Shape::DENT ? 1 : 0;
+            fprintf(logFile, "  dents among the %d shapes: %d\n", (int)w->_terrainCraters.craters.size(), dents);
+            for (const auto &entry : w->_terrainCraters.collision)
+            {
+                if (!entry.second || entry.second->empty)
+                    continue;
+                const double ox = (double)std::get<0>(entry.first), oz = (double)std::get<1>(entry.first);
+                const UAskeleton::Data &data = entry.second->data;
+                int covering = 0;
+                for (const UAskeleton::Polygon &polygon : data.polygons)
+                {
+                    if (polygon.num_vertices != 3)
+                        continue;
+                    const double px = probes[i].x - ox, pz = probes[i].z - oz;
+                    const vec3d &a0 = data.POO[polygon.v[0]], &b0 = data.POO[polygon.v[1]], &c0 = data.POO[polygon.v[2]];
+                    const double d = (b0.x - a0.x) * (c0.z - a0.z) - (b0.z - a0.z) * (c0.x - a0.x);
+                    if (std::fabs(d) < 1e-9)
+                        continue;
+                    const double w1 = ((b0.x - px) * (c0.z - pz) - (b0.z - pz) * (c0.x - px)) / d;
+                    const double w2 = ((c0.x - px) * (a0.z - pz) - (c0.z - pz) * (a0.x - px)) / d;
+                    if (w1 >= 0 && w2 >= 0 && w1 + w2 <= 1)
+                        ++covering;
+                }
+                if (covering)
+                    fprintf(logFile, "  copy at (%.0f %.0f) type %d: %d triangles over the probe (probe is %.0f %.0f from its centre)\n",
+                            ox, oz, std::get<3>(entry.first), covering, probes[i].x - ox, probes[i].z - oz);
+            }
+        }
 
     const double centreDrop = dug[0] - flat[0];
     const double rimRise = flat[4] - dug[4];
@@ -746,6 +828,220 @@ double RayMs(NC_STACK_ypaworld *w, const Spot &s)
     return (double)(SDL_GetPerformanceCounter() - start) * 1000.0 / (double)SDL_GetPerformanceFrequency();
 }
 
+// ---- Plan "cracks": does the drawn world stay in one piece? ---------------
+// Every point that touched a polygon edge before the craters and dents (rest
+// places, TMesh::Rest) must still touch it after them. The distance it ends up
+// from the edge is a gap the player can look through.
+struct CrackPoint
+{
+    vec3d now, rest;
+    int piece = 0;      // cell x * 1000 + cell y * 10 + piece, for the log
+    int mesh = 0;
+    bool dug = false;
+};
+
+struct CrackEdge
+{
+    vec3d now[2], rest[2];
+    int piece = 0, mesh = 0;
+    bool dug = false;
+};
+
+void CrackCollect(NC_STACK_ypaworld *w, const Common::Point &centre, std::vector<CrackPoint> *points,
+                  std::vector<CrackEdge> *edges)
+{
+    // As RenderGame does every frame: copies near a piece that changed model are made again.
+    w->RefreshTerrainCraterFootprints();
+    for (int cy = centre.y - 1; cy <= centre.y + 1; ++cy)
+        for (int cx = centre.x - 1; cx <= centre.x + 1; ++cx)
+        {
+            const Common::Point id(cx, cy);
+            if (!w->IsGamePlaySector(id))
+                continue;
+            const cellArea &area = w->_cells(id);
+            const bool single = area.SectorType == 1;
+            for (int zz = 0; zz < (single ? 1 : 3); ++zz)
+                for (int xx = 0; xx < (single ? 1 : 3); ++xx)
+                {
+                    const int legoId = w->GetLegoBld(&area, xx, zz);
+                    if (legoId < 0 || !w->_legoArray[legoId].Base)
+                        continue;
+                    const vec3d origin = area.CenterPos + (single ? vec3d() : vec3d((xx - 1) * 300.0, 0, (zz - 1) * 300.0));
+                    // Outside the frame budget: every copy is made now.
+                    w->_terrainCraters.rebuiltThisFrame = 0;
+                    w->_terrainCraters.rebuildMs = 0.0;
+                    std::list<GFX::TMesh> *copy = w->TerrainCraterPieceMeshes(area, xx, zz, legoId, origin);
+                    const std::list<GFX::TMesh> &meshes = copy ? *copy : w->_legoArray[legoId].Base->Meshes;
+                    int meshIndex = 0;
+                    for (const GFX::TMesh &mesh : meshes)
+                    {
+                        const bool dug = mesh.Rest.size() == mesh.Vertexes.size();
+                        const auto place = [&](GFX::IndexType i, vec3d *now, vec3d *rest)
+                        {
+                            const vec3f &p = mesh.Vertexes[i].Pos;
+                            *now = origin + vec3d(p.x, p.y, p.z);
+                            *rest = dug ? origin + vec3d(mesh.Rest[i].x, mesh.Rest[i].y, mesh.Rest[i].z) : *now;
+                        };
+                        for (size_t i = 0; i + 2 < mesh.Indixes.size(); i += 3)
+                            for (int k = 0; k < 3; ++k)
+                            {
+                                CrackPoint point;
+                                place(mesh.Indixes[i + k], &point.now, &point.rest);
+                                point.piece = cx * 1000 + cy * 10 + (single ? 9 : xx + zz * 3);
+                                point.mesh = meshIndex;
+                                point.dug = dug;
+                                points->push_back(point);
+
+                                CrackEdge edge;
+                                edge.now[0] = point.now;
+                                edge.rest[0] = point.rest;
+                                place(mesh.Indixes[i + (k + 1) % 3], &edge.now[1], &edge.rest[1]);
+                                edge.piece = point.piece;
+                                edge.mesh = meshIndex;
+                                edge.dug = dug;
+                                edges->push_back(edge);
+                            }
+                        ++meshIndex;
+                    }
+                }
+        }
+}
+
+void CrackReport(NC_STACK_ypaworld *w, const Common::Point &centre, const std::string &label)
+{
+    std::vector<CrackPoint> points;
+    std::vector<CrackEdge> edges;
+    CrackCollect(w, centre, &points, &edges);
+
+    // Points sorted in squares of their rest place (top view).
+    const double square = 40.0;
+    const auto key = [&](double x, double z)
+    {
+        return ((int64_t)std::floor(x / square) << 32) ^ (int64_t)(uint32_t)(int32_t)std::floor(z / square);
+    };
+    std::unordered_map<int64_t, std::vector<uint32_t>> grid;
+    for (size_t i = 0; i < points.size(); ++i)
+        grid[key(points[i].rest.x, points[i].rest.z)].push_back((uint32_t)i);
+
+    struct Found { double gap; CrackPoint point; CrackEdge edge; double t; };
+    std::vector<Found> worst;
+    double largest = 0.0;
+    int over1 = 0, over5 = 0;
+    for (const CrackEdge &edge : edges)
+    {
+        const vec3d along = edge.rest[1] - edge.rest[0];
+        const double length2 = along.dot(along);
+        if (length2 < 1e-9)
+            continue;
+        const double minX = std::min(edge.rest[0].x, edge.rest[1].x) - 0.05, maxX = std::max(edge.rest[0].x, edge.rest[1].x) + 0.05;
+        const double minZ = std::min(edge.rest[0].z, edge.rest[1].z) - 0.05, maxZ = std::max(edge.rest[0].z, edge.rest[1].z) + 0.05;
+        for (double gx = std::floor(minX / square); gx <= std::floor(maxX / square); gx += 1.0)
+            for (double gz = std::floor(minZ / square); gz <= std::floor(maxZ / square); gz += 1.0)
+            {
+                auto cell = grid.find(key(gx * square + 1.0, gz * square + 1.0));
+                if (cell == grid.end())
+                    continue;
+                for (uint32_t index : cell->second)
+                {
+                    const CrackPoint &point = points[index];
+                    double t = (point.rest - edge.rest[0]).dot(along) / length2;
+                    if (t < -1e-6 || t > 1.0 + 1e-6)
+                        continue;
+                    t = std::max(0.0, std::min(1.0, t));
+                    if ((edge.rest[0] + along * t - point.rest).length() > 0.02)
+                        continue;
+                    const double gap = (edge.now[0] + (edge.now[1] - edge.now[0]) * t - point.now).length();
+                    if (gap > 1.0) ++over1;
+                    if (gap > 5.0) ++over5;
+                    if (gap > largest)
+                    {
+                        largest = gap;
+                        worst.push_back({gap, point, edge, t});
+                    }
+                }
+            }
+    }
+    fprintf(logFile, "CRACKS %s: triangles=%d largest gap=%.2f, pairs over 1 unit=%d, over 5 units=%d\n", label.c_str(),
+            (int)(edges.size() / 3), largest, over1, over5);
+    for (size_t i = worst.size() > 4 ? worst.size() - 4 : 0; i < worst.size(); ++i)
+    {
+        const Found &f = worst[i];
+        fprintf(logFile, "  gap %.2f at rest (%.1f %.1f %.1f): point piece %d mesh %d dug=%d moved %.2f | edge piece %d mesh %d dug=%d "
+                "t=%.3f length=%.1f ends moved %.2f %.2f\n", f.gap, f.point.rest.x, f.point.rest.y, f.point.rest.z,
+                f.point.piece, f.point.mesh, f.point.dug ? 1 : 0, (f.point.now - f.point.rest).length(),
+                f.edge.piece, f.edge.mesh, f.edge.dug ? 1 : 0, f.t, (f.edge.rest[1] - f.edge.rest[0]).length(),
+                (f.edge.now[0] - f.edge.rest[0]).length(), (f.edge.now[1] - f.edge.rest[1]).length());
+    }
+    fflush(logFile);
+}
+
+void CrackPlan(NC_STACK_ypaworld *w)
+{
+    // Lego models with child objects: their meshes are not in the dug copy.
+    int withKids = 0;
+    for (const auto &lego : w->_legoArray)
+        if (lego.Base && !lego.Base->_KIDS.empty())
+            ++withKids;
+    fprintf(logFile, "CRACKS lego models with child objects: %d of %d\n", withKids, (int)w->_legoArray.size());
+
+    weaponId = 38;
+    int done = 0;
+    for (int y = 2; y < w->_mapSize.y - 2 && done < 8; ++y)
+        for (int x = 2; x < w->_mapSize.x - 2 && done < 8; ++x)
+        {
+            const Common::Point id(x, y);
+            cellArea &area = w->_cells(id);
+            if (!w->IsGamePlaySector(id) || area.SectorType == 1)
+                continue;
+            // A sector with something tall on it.
+            double tallest = 0.0;
+            for (int k = 0; k < 9; ++k)
+            {
+                const ypaworld_arg136 hit = Drop(w, area.CenterPos.x + (k % 3 - 1) * 300.0, area.CenterPos.z + (k / 3 - 1) * 300.0, area.height);
+                if (hit.isect)
+                    tallest = std::max(tallest, (double)area.height - hit.isectPos.y);
+            }
+            if (tallest < 120.0)
+                continue;
+            ++done;
+
+            w->ClearTerrainCraters();
+            const std::string name = "cell " + std::to_string(x) + "," + std::to_string(y) + " purpose " +
+                                     std::to_string((int)area.PurposeType) + " tallest " + std::to_string((int)tallest);
+            CrackReport(w, id, name + " intact");
+
+            uint32_t seed = 0x51ed27u + (uint32_t)(x * 131 + y);
+            const auto roll = [&seed]()
+            {
+                seed = seed * 1664525u + 1013904223u;
+                return (double)((seed >> 8) & 0xffff) / 65535.0 * 2.0 - 1.0;
+            };
+            int craters = 0, dents = 0;
+            for (int n = 0; n < 10; ++n)
+            {
+                const ypaworld_arg136 hit = Drop(w, area.CenterPos.x + roll() * 520.0, area.CenterPos.z + roll() * 520.0, area.height);
+                if (hit.isect && w->SpawnTerrainCrater(TaerCrater(w), hit))
+                    (w->_terrainCraters.craters.back().kind == World::Crater::Shape::DENT ? dents : craters)++;
+            }
+            CrackReport(w, id, name + " after " + std::to_string(craters) + " craters " + std::to_string(dents) + " dents");
+
+            // The building breaks: its pieces change model one after the other.
+            std::vector<int16_t> saved(area.buildings_health.begin(), area.buildings_health.end());
+            int step = 0;
+            for (int16_t &h : area.buildings_health)
+            {
+                h = (step++ % 2) ? 60 : 0;
+                if (step == 4)
+                    CrackReport(w, id, name + " half damaged");
+            }
+            CrackReport(w, id, name + " all damaged");
+            size_t i = 0;
+            for (int16_t &h : area.buildings_health)
+                h = saved[i++];
+            w->ClearTerrainCraters();
+        }
+}
+
 void Advance()
 {
     NC_STACK_ypaworld *w = World_();
@@ -768,9 +1064,28 @@ void Advance()
         if (frames > 90)
         {
             w->_hideHudForScreenshots = true;
+            if (cfgPlan == "cracks" || cfgPlan == "cracksfree")
+            {
+                // "cracksfree": without the limits of game.deformation_*_limit (an INI without them).
+                if (cfgPlan == "cracksfree")
+                {
+                    System::IniConf::GameDeformationBuildingLimit.Value = std::string("");
+                    System::IniConf::GameDeformationGroundLimit.Value = std::string("");
+                }
+                CrackPlan(w);
+                stage = STAGE_DONE;
+                break;
+            }
             PlanSpots(w);
             // Plan "tankbomb": a real bomb on a ground unit, then the run ends.
             stage = spots.empty() ? STAGE_DONE : (cfgPlan == "tankbomb" ? STAGE_TANKBOMB : STAGE_RUN);
+            // Plan "perfnear": the timings only, seen from low over the dug ground
+            // (big decals all around the camera, as when flying over a battlefield).
+            if (cfgPlan == "perfnear" && !spots.empty())
+            {
+                stage = STAGE_PERF;
+                perfStep = 0;
+            }
             frames = 0;
             spotIndex = 0;
             view = 0;
@@ -1113,14 +1428,19 @@ void Advance()
     case STAGE_PERF:
     {
         // Step 0: none. Step 1: the limit full of craters around the first spot.
+        // Step 2: the same craters, each bomb with its real decal (the decal
+        // pass over dug ground, as after a long fight).
         const Spot &s = spots.front();
         if (frames == 1)
         {
             w->ClearTerrainCraters();
             w->ClearGroundDecals();
-            if (perfStep == 1)
+            if (perfStep >= 1)
             {
-                const int limit = System::IniConf::GameDeformationMaxCraters.Get<int32_t>();
+                // The perf stage fills the limit on purpose; "no_limit" must not
+                // ask a capture run for billions of craters.
+                const int limit = std::min(
+                    System::IniConf::GameDeformationMaxCraters.Get<int32_t>(), 2000);
                 const uint64_t start = SDL_GetPerformanceCounter();
                 int made = 0;
                 for (int i = 0; i < limit * 4 && made < limit; ++i)
@@ -1128,12 +1448,23 @@ void Advance()
                     const double x = s.digs.front().x + ((i * 173) % 2400) - 1200.0;
                     const double z = s.digs.front().z + ((i * 311) % 2400) - 1200.0;
                     const ypaworld_arg136 hit = Drop(w, x, z, w->_cells(s.cell).height);
-                    if (hit.isect && w->SpawnTerrainCrater(TaerCrater(w), hit))
+                    if (!hit.isect)
+                        continue;
+                    if (perfStep == 2)
+                        for (const World::TChainFXConfig &entry : w->_weaponProtos[38].chain_fx)
+                            if (entry.mode == World::TChainFXConfig::MODE_GROUND_DECAL &&
+                                entry.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD)
+                            {
+                                World::TChainFXConfig fx = entry;
+                                fx.ground_decal_smoke.enabled = false;
+                                w->SpawnGroundDecal(fx, hit);
+                            }
+                    if (w->SpawnTerrainCrater(TaerCrater(w), hit))
                         ++made;
                 }
-                fprintf(logFile, "PERF spawned %d craters in %.2f ms (kept %d)\n", made,
+                fprintf(logFile, "PERF spawned %d craters in %.2f ms (kept %d), decals %d\n", made,
                         (double)(SDL_GetPerformanceCounter() - start) * 1000.0 / (double)SDL_GetPerformanceFrequency(),
-                        (int)w->_terrainCraters.craters.size());
+                        (int)w->_terrainCraters.craters.size(), (int)w->_groundDecals.size());
             }
             rasterMs = 0.0;
             rasterCount = 0;
@@ -1156,14 +1487,17 @@ void Advance()
             fprintf(logFile, "PERF step=%d slowest frame of crater rebuilds=%.2f ms\n", perfStep, rebuildMaxMs);
             fprintf(logFile, "PERF slowest piece %s, slowest seam %.2f ms%c", slowestPiece.c_str(), slowestSeamMs, 10);
             const double firstRays = RayMs(w, s);
-            fprintf(logFile, "PERF step=%d craters=%d raster=%.3f ms over %d frames, RenderGame cpu=%.2f ms (max %.2f), "
+            fprintf(logFile, "PERF step=%d craters=%d decals=%d raster=%.3f ms over %d frames, RenderGame cpu=%.2f ms (max %.2f), "
                     "4000 rays first=%.2f ms again=%.2f ms, copies pieces=%d collision=%d\n",
-                    perfStep, (int)w->_terrainCraters.craters.size(), rasterCount ? rasterMs / rasterCount : 0.0,
+                    perfStep, (int)w->_terrainCraters.craters.size(), (int)w->_groundDecals.size(),
+                    rasterCount ? rasterMs / rasterCount : 0.0,
                     rasterCount, renderGameMs, renderGameMaxMs, firstRays, RayMs(w, s),
                     (int)w->_terrainCraters.pieces.size(), (int)w->_terrainCraters.collision.size());
             if (perfStep == 0)
                 captureName = "perf_view_2_after_bomb_no_craters";
             if (perfStep == 1)
+                captureName = "perf_craters_no_decals";
+            if (perfStep == 2)
             {
                 capturePending = true;
                 stage = STAGE_DONE;
@@ -1415,6 +1749,11 @@ extern "C" void __wrap__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(NC_STAC
         // Wide view over the whole dug area.
         eye = spot.digs.front() + vec3d(1500.0, w->_cells(spot.cell).height - 1500.0, 1300.0);
         target = vec3d(spot.digs.front().x, w->_cells(spot.cell).height, spot.digs.front().z);
+        if (cfgPlan == "perfnear")
+        {
+            eye = vec3d(spot.digs.front().x + 500.0, w->_cells(spot.cell).height - 260.0, spot.digs.front().z + 420.0);
+            target = vec3d(spot.digs.front().x - 600.0, w->_cells(spot.cell).height + 80.0, spot.digs.front().z - 500.0);
+        }
     }
 
     camera.Parent = nullptr;

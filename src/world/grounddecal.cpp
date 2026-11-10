@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <set>
 #include <tuple>
 #include <vector>
@@ -577,20 +578,14 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     const float decalRadius = 0.5f * std::sqrt(decalSizeX * decalSizeX +
                                                decalSizeZ * decalSizeZ);
 
-    // onSurface: the point is on the surface as it is now. Craters and dents
-    // already there moved it: the decal is placed where it was before them, the
-    // same place its shader takes the pixels back to (decalshader.h).
-    const auto addDecal = [&](const vec3d &position, const vec3d &hitNormal, bool onSurface)
+    const auto addDecal = [&](const vec3d &position, const vec3d &surfaceNormal)
     {
-        vec3d surfaceNormal = hitNormal;
-        const vec3d placed = onSurface ? TerrainCraterRestore(position, &surfaceNormal) : position;
-
         while ( _groundDecals.size() >= (size_t)limit )
             _groundDecals.pop_front();
 
         _groundDecals.emplace_back();
         TGroundDecal &decal = _groundDecals.back();
-        decal.pos = placed;
+        decal.pos = position;
         decal.axisN = surfaceNormal;
         GroundDecalAxes(surfaceNormal, angle, &decal.axisT, &decal.axisB);
         decal.sizeT = decalSizeX;
@@ -616,20 +611,34 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
         decal.tint.Clamp();
     };
 
-    addDecal(hit.isectPos, normal, true);
+    // Craters and dents already there moved the surface: the decal is placed
+    // where the hit point was before them, the same place its shader maps the
+    // dug pixels at (decalshader.h).
+    vec3d placed = hit.isectPos;
+    TerrainCraterRestHit(hit, &placed, &normal);
+    addDecal(placed, normal);
 
     // A decal follows the surfaces, so from a roof it would use up its size going
     // down the walls. When the ground is well within reach, a big impact also
     // marks it, with a second decal that climbs the same walls from below.
-    const double aboveGround = _cells(hit.hitCell).height - hit.isectPos.y;
+    const double aboveGround = _cells(hit.hitCell).height - placed.y;
     if ( normal.y < -0.7 && aboveGround > GROUND_DECAL_SAME_SURFACE_MAX &&
          aboveGround < decalRadius * GROUND_DECAL_GROUND_REACH )
-        addDecal(vec3d(hit.isectPos.x, _cells(hit.hitCell).height, hit.isectPos.z),
-                 vec3d(0.0, -1.0, 0.0), false);
+        addDecal(vec3d(placed.x, _cells(hit.hitCell).height, placed.z), vec3d(0.0, -1.0, 0.0));
 
     // Optional smoke rising from the fresh decal (off unless the block has smoke = 1).
+    // A retriggered effect stops with the decal, not at the end of one activation.
+    int32_t decalEndTime = 0;
+    if ( !config.ground_decal_permanent )
+    {
+        const long long end = (long long)_timeStamp + (long long)config.duration;
+        decalEndTime = end > std::numeric_limits<int32_t>::max()
+                           ? std::numeric_limits<int32_t>::max()
+                           : (int32_t)end;
+    }
     SpawnGroundDecalSmoke(config.ground_decal_smoke, hit.isectPos, decalRadius,
-                          (uint32_t)(GroundDecalRandomUnit(this, hit, 0x534d4f4bu) * 16777216.0f));
+                          (uint32_t)(GroundDecalRandomUnit(this, hit, 0x534d4f4bu) * 16777216.0f),
+                          decalEndTime);
     return true;
 }
 
@@ -678,11 +687,10 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
                                                (double)it->fadeIn,
                                                (double)it->fadeOut);
 
-            if ( it->fieldDirty )
+            if ( it->movedVersion != _terrainCraters.version )
             {
-                TerrainCraterDecalField(it->pos, 0.5f * std::sqrt(it->sizeT * it->sizeT + it->sizeB * it->sizeB),
-                                        &it->field);
-                it->fieldDirty = false;
+                it->moved = TerrainCraterMoveNear(it->pos, it->radius);
+                it->movedVersion = _terrainCraters.version;
             }
 
             GFX::TDecalDraw draw;
@@ -693,7 +701,7 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
             draw.SizeT = it->sizeT;
             draw.SizeB = it->sizeB;
             draw.EdgeFade = it->edgeFade;
-            draw.Field = &it->field;
+            draw.Moved = it->moved;
             draw.Shape = it->shape.data();
             draw.Tex = it->texture;
             draw.Tint = GFX::TGLColor(it->tint.r, it->tint.g, it->tint.b, it->tint.a * fade);

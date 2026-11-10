@@ -1409,6 +1409,44 @@ int sub_44D36C(const vec3d &v, int id, NC_STACK_skeleton *skeleton)
     return v7;
 }
 
+// OpenNeoUA custom: is a point of a dug triangle's plane inside the triangle?
+// Unlike sub_44D36C its border counts as inside. A dug surface has hundreds of
+// small triangles on a regular lattice, so a ray often comes down exactly on a
+// line or a corner they share: with the original rule each neighbour can leave
+// that point to the other and the ray falls through the ground.
+static bool DugTriangleHolds(const vec3d &p, const UAskeleton::Polygon &tr, const UAskeleton::Data *skel)
+{
+    // Seen along the axis the triangle faces most, as sub_44D36C does.
+    const double nX = std::fabs(tr.A), nY = std::fabs(tr.B), nZ = std::fabs(tr.C);
+    const int drop = (nX >= nY && nX >= nZ) ? 0 : (nY >= nZ ? 1 : 2);
+    const auto flat = [drop](const vec3d &v, double *u, double *w)
+    {
+        *u = drop == 0 ? v.y : v.x;
+        *w = drop == 2 ? v.y : v.z;
+    };
+
+    double u[3], w[3], pu, pw;
+    for (int i = 0; i < 3; ++i)
+        flat(skel->POO[tr.v[i]], &u[i], &w[i]);
+    flat(p, &pu, &pw);
+
+    // Signed distance from each side, with a hair of margin.
+    const double margin = 0.02;
+    bool left = true, right = true;
+    for (int i = 0; i < 3; ++i)
+    {
+        const int next = (i + 1) % 3;
+        const double eu = u[next] - u[i], ew = w[next] - w[i];
+        const double length = std::sqrt(eu * eu + ew * ew);
+        if ( length <= 0.0 )
+            continue;
+        const double side = (eu * (pw - w[i]) - ew * (pu - u[i])) / length;
+        left = left && side >= -margin;
+        right = right && side <= margin;
+    }
+    return left || right;
+}
+
 void NC_STACK_ypaworld::sub_44D8B8(ypaworld_arg136 *arg, const TSectorCollision &loc)
 {
     UAskeleton::Data *skel = loc.sklt->GetSkelet();
@@ -1425,7 +1463,11 @@ void NC_STACK_ypaworld::sub_44D8B8(ypaworld_arg136 *arg, const TSectorCollision 
             {
                 vec3d px = arg->vect * v19 + arg->stPos;
 
-                if ( sub_44D36C(px, i, loc.sklt) )
+                // Triangles of a crater copy: see DugTriangleHolds.
+                const bool inside = loc.craterGrid && tr.num_vertices == 3
+                    ? DugTriangleHolds(px, tr, skel)
+                    : sub_44D36C(px, i, loc.sklt) != 0;
+                if ( inside )
                 {
                     arg->isect = 1;
                     arg->tVal = v19;

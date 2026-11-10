@@ -279,6 +279,10 @@ struct TGroundDecalSmoke
     int chance = 100;
     int active_time_min = 20000;
     int active_time_max = 25000;
+    // 0 = the effect runs once for active_time. A positive min~max restarts
+    // the whole effect every rolled interval for as long as the decal lives.
+    int retrigger_min = 0;
+    int retrigger_max = 0;
     int fade_in = 3000;
     int fade_out = 20000;
     int count_min = 10;         // Puffs at the same time for a decal of radius 50,
@@ -1625,6 +1629,8 @@ struct TBuildingProto
     TVisualTint tint;
     TDecorationFXConfig DecorationFX;
     TVhclSound SndFX;
+    float briefing_size = 0.0f;
+    vec3d briefing_xyz;
     std::vector<TGun> Guns;
     int spawn_units = 0;
     int16_t spawn_vehicle = 0;

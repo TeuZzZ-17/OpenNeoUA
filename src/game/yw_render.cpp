@@ -474,6 +474,7 @@ void NC_STACK_ypaworld::RenderGame(base_64arg *bs64, int a2)
 
     // Crater copies replaced last frame are no longer referenced.
     ReleaseRetiredTerrainCraters();
+    RefreshTerrainCraterFootprints();
 
     TF::TForm3D *v5 = TF::Engine.GetViewPoint();
 

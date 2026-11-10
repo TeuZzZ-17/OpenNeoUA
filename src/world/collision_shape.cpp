@@ -140,7 +140,7 @@ bool HorizontalContact(const btCollisionObjectWrapper *a, const btCollisionObjec
         axis.setY(0);
         if (axis.length2()<1e-12) axis=btVector3(1,0,0);
         axis.normalize();
-        // All touching parts of a Robo use one outward body direction.
+        // Use one outward body direction for compound contacts when asked.
         // Opposing leaf normals can otherwise keep an embedded unit trapped.
         out->normal=V(axis);
         out->depth=support(b,bp,axis)+support(a,ap,-axis);
@@ -727,6 +727,7 @@ struct Body
     bool hasUnitContact = false;
     bool touchedUnit = false;
     double clearanceUsed = 0;
+    double genesisSeparationUsed = 0;
     bool residue = false;
     int stamp = -1;
     uint64_t signature = 0;
@@ -825,6 +826,7 @@ struct Scene::Impl
             body.hasUnitContact = false;
             body.touchedUnit = false;
             body.clearanceUsed = 0;
+            body.genesisSeparationUsed = 0;
         }
         const btTransform pose = Pose(a->GetBodyPosition(), a->_rotation);
         if (!newFrame && body.object.getWorldTransform() == pose) return;
@@ -1900,7 +1902,9 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
             const auto supportHeights=body->terrain&&GroundDrive(a)?
                 TerrainSupportHeights(*body,supportNormal):std::vector<double>();
             ContactCollector result(&self.object, HorizontalPair(a, body->actor),
-                a->_bact_type == BACT_TYPES_ROBO || (body->actor && body->actor->_bact_type == BACT_TYPES_ROBO),
+                a->_bact_type == BACT_TYPES_ROBO || (body->actor &&
+                    (body->actor->_bact_type == BACT_TYPES_ROBO ||
+                     (a->_status == BACT_STATUS_CREATE && body->actor->_status == BACT_STATUS_CREATE))),
                 body->terrain ? &body->triangleNormals : nullptr,
                 body->terrain&&GroundDrive(a)?&supportHeights:nullptr,
                 (supportPoint-body->object.getWorldTransform().getOrigin()).dot(supportNormal)-tolerance);
@@ -1919,6 +1923,24 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
         {
             const double need = c.depth - tolerance - correction.dot(c.normal);
             if (need > 0) correction += c.normal * need;
+        }
+        // Two units growing at the same production point can have deeply
+        // overlapping compound hulls. Limit their positional correction per
+        // actor frame so Genesis does not visibly jump or shake as it turns.
+        const bool genesisPair = a->_status == BACT_STATUS_CREATE &&
+            std::all_of(contacts.begin(), contacts.end(), [](const Contact &c) {
+                return c.actor && c.actor->_status == BACT_STATUS_CREATE;
+            });
+        if (genesisPair)
+        {
+            const double frameScale = impl->world._frameTime > 0
+                ? std::max(0.25, std::min(double(impl->world._frameTime) / 18.0, 2.0))
+                : 1.0;
+            const double remaining = std::max(0.0, 10.0 * frameScale - self.genesisSeparationUsed);
+            const double length = correction.length();
+            if (remaining <= 1e-7) break;
+            if (length > remaining) correction *= remaining / length;
+            self.genesisSeparationUsed += correction.length();
         }
         if (correction.length() <= 1e-7) break;
         a->_position = ConstrainPosition(a, a->_position + correction);

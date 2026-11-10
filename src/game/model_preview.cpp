@@ -203,7 +203,8 @@ bool ModelPreview::Select(NC_STACK_ypaworld &resources, const NC_STACK_ypaworld 
         for (auto &part : parts_) part.tint = p.tint;
         for (const auto &gun : p.Guns)
         {
-            if (gun.VhclID <= 0 || gun.VhclID >= (int)source.GetVhclProtos().size()) continue;
+            if (!gun.VhclID) break;
+            if (gun.VhclID < 0 || gun.VhclID >= (int)source.GetVhclProtos().size()) continue;
             const auto &g = source.GetVhclProtos()[gun.VhclID];
             const auto rotation=World::InitialGunRotation(gun.Dir).Transpose();
             const size_t before=parts_.size();

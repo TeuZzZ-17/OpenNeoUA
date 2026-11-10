@@ -1634,6 +1634,7 @@ struct TBriefObject
     vec2d Pos;
     int16_t ObjType = TYPE_NONE;
     int16_t ID = 0;
+    int BuildingID = -1;
     int TileSet = 0;
     int TileID = 0;
     int Color = 0;
@@ -1645,12 +1646,13 @@ struct TBriefObject
     TBriefObject() = default;
 
     TBriefObject(int16_t tp, int16_t oid, float sx, float sy, int tset, int tid,
-                 int clr, const std::string &ttl, int owner = 0)
+                 int clr, const std::string &ttl, int owner = 0, int building = -1)
     {
 		Pos.x = sx;
         Pos.y = sy;
         ObjType = tp;
         ID = oid;
+        BuildingID = building;
         TileSet = tset;
         TileID = tid;
         Color = clr;
@@ -1659,13 +1661,13 @@ struct TBriefObject
     }
 
     TBriefObject(const TBriefObject &b)
-        : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), TileSet(b.TileSet),
+        : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), BuildingID(b.BuildingID), TileSet(b.TileSet),
           TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title)
     {
     }
 
     TBriefObject(TBriefObject &&b) noexcept
-        : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), TileSet(b.TileSet),
+        : Pos(b.Pos), ObjType(b.ObjType), ID(b.ID), BuildingID(b.BuildingID), TileSet(b.TileSet),
           TileID(b.TileID), Color(b.Color), Owner(b.Owner), Title(b.Title), Preview(std::move(b.Preview))
     {
     }
@@ -1677,6 +1679,7 @@ struct TBriefObject
             Pos = b.Pos;
             ObjType = b.ObjType;
             ID = b.ID;
+            BuildingID = b.BuildingID;
             TileSet = b.TileSet;
             TileID = b.TileID;
             Color = b.Color;
@@ -1694,6 +1697,7 @@ struct TBriefObject
             Pos = b.Pos;
             ObjType = b.ObjType;
             ID = b.ID;
+            BuildingID = b.BuildingID;
             TileSet = b.TileSet;
             TileID = b.TileID;
             Color = b.Color;
@@ -1706,7 +1710,7 @@ struct TBriefObject
 
     bool operator==(const TBriefObject &b) const
     {
-        return ObjType == b.ObjType && ID == b.ID && Pos == b.Pos;
+        return ObjType == b.ObjType && ID == b.ID && BuildingID == b.BuildingID && Pos == b.Pos;
     }
 
     operator bool() const
@@ -2891,7 +2895,8 @@ public:
     bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
-    bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius, uint32_t seed);
+    bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius,
+                               uint32_t seed, int32_t decalEndTime = 0);
     void RenderGroundDecalSmoke(baseRender_msg *arg);
     void ClearGroundDecalSmoke();
 
@@ -2905,6 +2910,9 @@ public:
     void ReleaseRetiredTerrainCraters();
     bool TerrainCraterRebuildAllowed() const;
     void RetireTerrainCraterCopies(const World::Crater::Shape &shape);
+    void RetireTerrainCraterCopiesNear(double x, double z, double reach);
+    void RefreshTerrainCraterFootprints();
+    int TerrainCraterSpill(int microX, int microZ);
     std::list<GFX::TMesh> *TerrainCraterPieceMeshes(const cellArea &cell, int bldX, int bldY,
                                                     int legoId, const vec3d &position);
     void ApplyTerrainCratersToFiller(TCellFillerCh *filler);
@@ -2913,8 +2921,8 @@ public:
     bool ReadTerrainCrater(const std::string &value);
     bool ReadTerrainDent(const std::string &value);
     size_t TerrainCraterCount() const { return _terrainCraters.craters.size(); }
-    void TerrainCraterDecalField(const vec3d &centre, float reach, GFX::TDecalField *field);
-    vec3d TerrainCraterRestore(const vec3d &pos, vec3d *normal);
+    bool TerrainCraterRestHit(const ypaworld_arg136 &hit, vec3d *pos, vec3d *normal);
+    float TerrainCraterMoveNear(const vec3d &centre, float reach) const;
     void RenderWeaponTracerSegment(baseRender_msg *arg, const vec3d &start,
                                    const vec3d &end,
                                    const World::TWeaponTracerConfig &config,
@@ -3119,10 +3127,10 @@ public:
         float sizeB = 0.0f;
         float radius = 0.0f;
         float edgeFade = 0.0f;
-        // Craters and dents under the decal, for its shader; made again when a
-        // crater that reaches it comes or goes (RetireTerrainCraterCopies).
-        GFX::TDecalField field;
-        bool fieldDirty = true;
+        // How far craters and dents may have moved the surface under the decal
+        // (TerrainCraterMoveNear), worked out again when their version changes.
+        float moved = 0.0f;
+        uint32_t movedVersion = 0xffffffffu;
         std::array<float, GFX::DECAL_SHAPE_SAMPLES> shape{};
         ResBitmap *texture = nullptr;
         int32_t startTime = 0;

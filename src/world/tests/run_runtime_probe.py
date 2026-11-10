@@ -39,21 +39,21 @@ def main():
     globals_obj = build / "runtime_probe_globals.obj"
     globals_source.write_text('#define GLOBAL\n#include "common/includes.h"\n', encoding="utf-8")
     globals_compile = compile_command.copy()
-    globals_compile[globals_compile.index("-o") + 1] = str(globals_obj)
-    globals_compile[globals_compile.index("-c") + 1] = str(globals_source)
+    globals_compile[globals_compile.index("-o") + 1] = "runtime_probe_globals.obj"
+    globals_compile[globals_compile.index("-c") + 1] = "runtime_probe_globals.cpp"
     subprocess.run(globals_compile, cwd=build, check=True)
     for name in sys.argv[2:]:
         source = Path(name).resolve()
         obj = build / (source.stem + ".obj")
         exe = build / (source.stem + ".exe")
         compile_args = compile_command.copy()
-        compile_args[compile_args.index("-o") + 1] = str(obj)
+        compile_args[compile_args.index("-o") + 1] = source.stem + ".obj"
         compile_args[compile_args.index("-c") + 1] = str(source)
         subprocess.run(compile_args, cwd=build, check=True)
-        args = [str(obj) if item.replace("\\", "/").endswith("/main.cpp.obj") else item
+        args = [source.stem + ".obj" if item.replace("\\", "/").endswith("/main.cpp.obj") else item
                 for item in link if item != "-mwindows"]
-        args[args.index("-o") + 1] = str(exe)
-        args.append(str(globals_obj))
+        args[args.index("-o") + 1] = source.stem + ".exe"
+        args.append("runtime_probe_globals.obj")
         args = [f"-Wl,--out-implib,{source.stem}.dll.a" if item.startswith("-Wl,--out-implib,")
                 else item for item in args]
         response = build / (source.stem + ".rsp")

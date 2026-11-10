@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 
 #include "terraincrater.h"
 #include "common/common.h"
@@ -44,6 +45,8 @@ double MsSince(const std::chrono::steady_clock::time_point &start)
 int CraterLimit()
 {
     const int value = System::IniConf::GameDeformationMaxCraters.Get<int32_t>();
+    if ( value == std::numeric_limits<int32_t>::max() )
+        return value;
     if ( value < 0 )
         return 128;
     return std::min(value, 2000);
@@ -71,14 +74,19 @@ float Between(float minimum, float maximum, uint32_t *seed)
     return minimum + (maximum - minimum) * Roll(seed);
 }
 
-// Does a crater reach the square (or rectangle) centred on a point?
+// Is the square (or rectangle) centred on a point within reach of a place?
+bool Reaches(double x, double z, double reach, double centreX, double centreZ, double halfX, double halfZ)
+{
+    const double nearX = std::max(centreX - halfX, std::min(x, centreX + halfX));
+    const double nearZ = std::max(centreZ - halfZ, std::min(z, centreZ + halfZ));
+    const double dx = nearX - x, dz = nearZ - z;
+    return dx * dx + dz * dz < reach * reach;
+}
+
+// Does a crater reach it?
 bool Reaches(const Cr::Shape &shape, double centreX, double centreZ, double halfX, double halfZ)
 {
-    const double reach = Cr::Reach(shape);
-    const double nearX = std::max(centreX - halfX, std::min(shape.x, centreX + halfX));
-    const double nearZ = std::max(centreZ - halfZ, std::min(shape.z, centreZ + halfZ));
-    const double dx = nearX - shape.x, dz = nearZ - shape.z;
-    return dx * dx + dz * dz < reach * reach;
+    return Reaches(shape.x, shape.z, Cr::Reach(shape), centreX, centreZ, halfX, halfZ);
 }
 
 // Craters that can change something inside a square.
@@ -122,6 +130,7 @@ bool DigMesh(const GFX::TMesh &source, const vec3d &origin,
     out->Mat = source.Mat;
     out->Vertexes.clear();
     out->Indixes.clear();
+    out->Rest.clear();
 
     Cr::PointIndex index;
     uint32_t texCoordId = 0;
@@ -143,10 +152,13 @@ bool DigMesh(const GFX::TMesh &source, const vec3d &origin,
                                              Unit(p.computed[2] * shade), p.computed[3]);
         vertex.TexCoordId = texCoordId;
         out->Vertexes.push_back(vertex);
+        // Where the point was: the decals are mapped there (decalshader.h).
+        out->Rest.push_back(vec3f(p.x - origin.x, p.y - origin.y, p.z - origin.z));
         return (uint32_t)(out->Vertexes.size() - 1);
     };
 
     std::vector<Cr::Polygon> pieces;
+    Cr::HeightRanges heights;
     for (size_t i = 0; i + 2 < source.Indixes.size(); i += 3)
     {
         const GFX::TVertex &a = source.Vertexes[source.Indixes[i]];
@@ -157,9 +169,8 @@ bool DigMesh(const GFX::TMesh &source, const vec3d &origin,
         const Cr::Polygon triangle = {PointOf(a, origin), PointOf(b, origin), PointOf(c, origin)};
         if ( Cr::Touching(craters, triangle, &local) )
         {
-            double heightFrom = 1.0, heightTo = 0.0;
-            Cr::DentHeights(local, triangle, &heightFrom, &heightTo);
-            Cr::CutOnLattice(triangle, Cr::VISUAL_STEP, &pieces, heightFrom, heightTo);
+            Cr::WallHeights(local, triangle, &heights);
+            Cr::CutOnLattice(triangle, Cr::VISUAL_STEP, &pieces, heights);
             changed = true;
         }
         else
@@ -179,16 +190,19 @@ bool DigMesh(const GFX::TMesh &source, const vec3d &origin,
         }
     }
 
+    // Nothing reached: an ordinary mesh, with no rest places to draw.
+    if ( !changed )
+        out->Rest.clear();
     out->RecalcBoundBox();
     return changed;
 }
 
-// Is the visible surface under a point sector ground (BODEN textures)? A crater
-// is dug only there; a roof or a wall takes a dent instead. The ground counts
-// as it is now, with the craters already in it.
+// Is the visible surface at a point sector ground (BODEN textures)? A crater
+// is dug only there; a roof or a wall takes a dent instead. The point is where
+// the hit was before any crater or dent (TerrainCraterRestHit), so the model
+// is looked at as it was made.
 bool VisibleGroundAt(const std::list<GFX::TMesh> &meshes, const vec3d &origin, const vec3d &point,
-                     double tolerance, const std::vector<Cr::Shape> &craters,
-                     const Cr::DeformationLimits &limits)
+                     double tolerance)
 {
     const double x = point.x - origin.x;
     const double z = point.z - origin.z;
@@ -210,8 +224,7 @@ bool VisibleGroundAt(const std::list<GFX::TMesh> &meshes, const vec3d &origin, c
             if ( w1 < -1e-4 || w2 < -1e-4 || w3 < -1e-4 )
                 continue;
             const double height = origin.y + a.y * w1 + b.y * w2 + c.y * w3;
-            const double now = height + limits.Apply(Cr::SampleAt(craters, point.x, point.z, height), point.x, point.z).OffsetY();
-            if ( std::fabs(now - point.y) <= tolerance )
+            if ( std::fabs(height - point.y) <= tolerance )
                 return true;
         }
     }
@@ -260,25 +273,27 @@ bool SavedNumbers(const std::string &value, size_t count, std::vector<double> *n
 
 }
 
+// game.deformation_*_limit in world units, or -1 when not authored (no limit).
+static double AuthoredLimit(Common::Ini::Key &key)
+{
+    const std::string raw = key.Get<std::string>();
+    try {
+        size_t used = 0;
+        const double value = std::stod(raw, &used);
+        if (raw.find_first_not_of(" \t\r\n", used) != std::string::npos ||
+            !std::isfinite(value) || value < 0.0 || value > 10.0)
+            return -1.0;
+        return value * 100.0;
+    } catch (...) { return -1.0; }
+}
+
 // A single world-space footprint rule prevents material boundaries and sector
 // boundaries from giving a shared point two different displacements.
 World::Crater::DeformationLimits NC_STACK_ypaworld::TerrainCraterLimits(const vec3d &position, int ring)
 {
     Cr::DeformationLimits limits;
-    const auto read = [](Common::Ini::Key &key) -> double
-    {
-        const std::string raw = key.Get<std::string>();
-        try {
-            size_t used = 0;
-            const double value = std::stod(raw, &used);
-            if (raw.find_first_not_of(" \t\r\n", used) != std::string::npos ||
-                !std::isfinite(value) || value < 0.0 || value > 10.0)
-                return -1.0;
-            return value * 100.0;
-        } catch (...) { return -1.0; }
-    };
-    limits.ground = read(System::IniConf::GameDeformationGroundLimit);
-    limits.building = read(System::IniConf::GameDeformationBuildingLimit);
+    limits.ground = AuthoredLimit(System::IniConf::GameDeformationGroundLimit);
+    limits.building = AuthoredLimit(System::IniConf::GameDeformationBuildingLimit);
 
     // XZ box of one lego piece: its buildings only, or everything on it.
     const auto pieceBox = [this](const cellArea &cell, int xx, int zz, bool withTerrain)
@@ -356,7 +371,13 @@ bool NC_STACK_ypaworld::SpawnTerrainCrater(const World::TCraterConfig &config,
     // between sectors are ground by definition, inside a sector the visible
     // model must have ground there. Anything else (roof, wall, steep side)
     // takes a dent pushed into it.
-    bool ground = normal.y >= MIN_UP;
+    // The slope is the one the surface had before any hit: the walls of a pit
+    // dug by many bombs get steeper than that, but they are still ground. A
+    // dent there would push the ground sideways into flaps, and off the square
+    // its collision is looked up in.
+    vec3d restPos = hit.isectPos, restNormal = normal;
+    TerrainCraterRestHit(hit, &restPos, &restNormal);
+    bool ground = restNormal.y >= MIN_UP;
     if ( ground && hit.hitCollisionType == 1 )
     {
         const cellArea &cell = _cells(hit.hitCell);
@@ -371,8 +392,7 @@ bool NC_STACK_ypaworld::SpawnTerrainCrater(const World::TCraterConfig &config,
         const int legoId = GetLegoBld(&cell, bldX, bldY);
         if ( legoId < 0 || (size_t)legoId >= _legoArray.size() || !_legoArray[legoId].Base )
             return false;
-        ground = VisibleGroundAt(_legoArray[legoId].Base->Meshes, hit.hitSkelPos, hit.isectPos,
-                                 12.0, _terrainCraters.craters, TerrainCraterLimits(hit.hitSkelPos));
+        ground = VisibleGroundAt(_legoArray[legoId].Base->Meshes, hit.hitSkelPos, restPos, 12.0);
     }
 
     const World::Crater::Shape shape = ground
@@ -450,17 +470,67 @@ void NC_STACK_ypaworld::ReleaseRetiredTerrainCraters()
 // Throws away every copy a crater can change, so the next use rebuilds it.
 void NC_STACK_ypaworld::RetireTerrainCraterCopies(const World::Crater::Shape &shape)
 {
-    World::Crater::State &state = _terrainCraters;
+    _terrainCraters.version++;
+    RetireTerrainCraterCopiesNear(shape.x, shape.z, Cr::Reach(shape));
+}
 
-    // Decals this crater reaches make their shader field again.
-    for (TGroundDecal &decal : _groundDecals)
+// Buildings limit how far the ground moves under and next to them
+// (TerrainCraterLimits), so a copy also depends on the models standing near
+// it. When a piece changes model (a building is damaged, destroyed or built),
+// every copy its footprint can reach is made again: otherwise the piece made
+// with the new footprint and its neighbours made with the old one would no
+// longer meet, and the gap between them shows what is behind.
+void NC_STACK_ypaworld::RefreshTerrainCraterFootprints()
+{
+    World::Crater::State &state = _terrainCraters;
+    if ( state.craters.empty() || AuthoredLimit(System::IniConf::GameDeformationBuildingLimit) < 0.0 )
     {
-        const double decalReach = 0.5 * std::sqrt(decal.sizeT * decal.sizeT + decal.sizeB * decal.sizeB);
-        const double dx = decal.pos.x - shape.x, dz = decal.pos.z - shape.z;
-        const double limit = decalReach + Cr::Reach(shape) + 150.0;
-        if ( dx * dx + dz * dz < limit * limit )
-            decal.fieldDirty = true;
+        state.cellModels.clear();
+        return;
     }
+
+    // Only the sectors a crater can have a copy in.
+    Common::Point low(_mapSize.x, _mapSize.y), high(-1, -1);
+    for (const Cr::Shape &shape : state.craters)
+    {
+        const Common::Point id = World::PositionToSectorID(vec3d(shape.x, shape.y, shape.z));
+        low.x = std::min(low.x, id.x - 2); low.y = std::min(low.y, id.y - 2);
+        high.x = std::max(high.x, id.x + 2); high.y = std::max(high.y, id.y + 2);
+    }
+    low.x = std::max(low.x, 0); low.y = std::max(low.y, 0);
+    high.x = std::min(high.x, _mapSize.x - 1); high.y = std::min(high.y, _mapSize.y - 1);
+
+    const size_t count = (size_t)_mapSize.x * _mapSize.y;
+    if ( state.cellModels.size() != count )
+        state.cellModels.assign(count, 0);
+
+    for (int y = low.y; y <= high.y; ++y)
+        for (int x = low.x; x <= high.x; ++x)
+        {
+            const cellArea &cell = _cells(x, y);
+            uint32_t models = Mix(0x4c45474fu, (uint32_t)cell.type_id);
+            const int pieces = cell.SectorType == 1 ? 1 : 3;
+            for (int zz = 0; zz < pieces; ++zz)
+                for (int xx = 0; xx < pieces; ++xx)
+                    models = Mix(models, (uint32_t)GetLegoBld(&cell, xx, zz));
+            if ( models == 0 )
+                models = 1;
+
+            uint32_t &kept = state.cellModels[(size_t)y * _mapSize.x + x];
+            // 0: not seen yet, its copies (if any) were made with these models.
+            if ( kept != 0 && kept != models )
+                // The whole sector square, a model reaching a little past it,
+                // and the band where its footprint still changes the limit.
+                RetireTerrainCraterCopiesNear(cell.CenterPos.x, cell.CenterPos.z,
+                                              600.0 * 1.4143 + (SINGLE_HALF - 450.0) + Cr::FOOTPRINT_BLEND);
+            kept = models;
+        }
+}
+
+// Throws away every copy within reach of a place.
+void NC_STACK_ypaworld::RetireTerrainCraterCopiesNear(double placeX, double placeZ, double reach)
+{
+    World::Crater::State &state = _terrainCraters;
 
     for (auto it = state.pieces.begin(); it != state.pieces.end(); )
     {
@@ -476,7 +546,7 @@ void NC_STACK_ypaworld::RetireTerrainCraterCopies(const World::Crater::Shape &sh
             half = PIECE_HALF;
         }
         // Kept and drawn until its new copy is made.
-        if ( Reaches(shape, x, z, half, half) )
+        if ( Reaches(placeX, placeZ, reach, x, z, half, half) )
             it->second->stale = true;
         ++it;
     }
@@ -485,7 +555,7 @@ void NC_STACK_ypaworld::RetireTerrainCraterCopies(const World::Crater::Shape &sh
     {
         const double x = (double)std::get<0>(it->first);
         const double z = (double)std::get<1>(it->first);
-        if ( Reaches(shape, x, z, SINGLE_HALF, SINGLE_HALF) )
+        if ( Reaches(placeX, placeZ, reach, x, z, SINGLE_HALF, SINGLE_HALF) )
         {
             state.retiredCollision.push_back(std::move(it->second));
             it = state.collision.erase(it);
@@ -495,10 +565,10 @@ void NC_STACK_ypaworld::RetireTerrainCraterCopies(const World::Crater::Shape &sh
     }
 
     // Seams are rebuilt from scratch by PrepareFiller when their cache is reset.
-    const int minX = std::max(0, (int)std::floor((shape.x - Cr::Reach(shape)) / 1200.0) - 1);
-    const int maxX = (int)std::floor((shape.x + Cr::Reach(shape)) / 1200.0) + 1;
-    const int minY = std::max(0, (int)std::floor((-shape.z - Cr::Reach(shape)) / 1200.0) - 1);
-    const int maxY = (int)std::floor((-shape.z + Cr::Reach(shape)) / 1200.0) + 1;
+    const int minX = std::max(0, (int)std::floor((placeX - reach) / 1200.0) - 1);
+    const int maxX = (int)std::floor((placeX + reach) / 1200.0) + 1;
+    const int minY = std::max(0, (int)std::floor((-placeZ - reach) / 1200.0) - 1);
+    const int maxY = (int)std::floor((-placeZ + reach) / 1200.0) + 1;
     for (Common::PlaneVector<TCellFillerCh> *caches : {&_cellsHFCache, &_cellsVFCache})
     {
         for (int y = minY; y <= maxY && y < (int)caches->Height(); ++y)
@@ -509,200 +579,76 @@ void NC_STACK_ypaworld::RetireTerrainCraterCopies(const World::Crater::Shape &sh
 
 // --------------------------------------------------------------- drawing ---
 
-// The craters and dents a decal's shader needs to take its pixels back to
-// where they were before the hits: the strongest ones reaching it, the
-// deformation limits and the building footprints next to it, all from the
-// decal origin. Same field as SampleAt + DeformationLimits::Apply.
-// Where a point on the surface was before the craters and dents moved it:
-// fixed point of the same field they dug with. *normal (optional) loses the
-// crater slope too, so a decal on dug ground lies as on the ground it was.
-vec3d NC_STACK_ypaworld::TerrainCraterRestore(const vec3d &pos, vec3d *normal)
+// Where a hit was before the craters and dents moved the surface it landed
+// on, and the normal the surface had there: a decal is placed there, where its
+// shader maps the dug pixels (decalshader.h). The hit polygon of a dug
+// collision copy carries the answer: the rest places of its points. False,
+// changing nothing, when the hit is not on a dug polygon.
+bool NC_STACK_ypaworld::TerrainCraterRestHit(const ypaworld_arg136 &hit, vec3d *pos, vec3d *normal)
 {
-    // Shapes that can have moved a point to here: the old place is at most a
-    // few depths away (1.75 cap), well inside this margin.
-    constexpr double MARGIN = 1000.0;
-    std::vector<Cr::Shape> nearby;
-    for (const Cr::Shape &shape : _terrainCraters.craters)
-        if ( Cr::ShapeReachesBox(shape, pos.x - MARGIN, pos.y - MARGIN, pos.z - MARGIN,
-                                 pos.x + MARGIN, pos.y + MARGIN, pos.z + MARGIN) )
-            nearby.push_back(shape);
-    if ( nearby.empty() )
-        return pos;
+    if ( !hit.skel || hit.polyID < 0 )
+        return false;
 
-    const Cr::DeformationLimits limits = TerrainCraterLimits(pos);
-    vec3d old = pos;
-    Cr::Sample sample;
-    for (int i = 0; i < 4; ++i)
-    {
-        sample = limits.Apply(Cr::SampleAt(nearby, old.x, old.z, old.y), old.x, old.z);
-        old = vec3d(pos.x - sample.OffsetX(), pos.y - sample.OffsetY(), pos.z - sample.OffsetZ());
-    }
+    const World::Crater::CollisionCopy *copy = nullptr;
+    for (const auto &entry : _terrainCraters.collision)
+        if ( entry.second && &entry.second->data == hit.skel )
+            copy = entry.second.get();
+    // A copy thrown away in this frame may still be the one that was hit.
+    for (const auto &entry : _terrainCraters.retiredCollision)
+        if ( entry && &entry->data == hit.skel )
+            copy = entry.get();
+    if ( !copy || (size_t)hit.polyID >= copy->data.polygons.size() )
+        return false;
 
-    // Ground facing up (World Y points down) dug by craters only: y = f(x, z),
-    // normal (fx, -1, fz). The hit normal is the one of a collision facet, flat
-    // between the points of the collision lattice: take that facet's own slope
-    // out (the curved field's slope at the hit is off by degrees on a crater
-    // wall, enough to tilt a big decal off the ground it was on).
-    if ( normal && normal->y < -0.3 && sample.moveX == 0.0 && sample.moveY == 0.0 && sample.moveZ == 0.0 &&
-         (old - pos).length() > 0.5 )
-    {
-        const double fx = -normal->x / normal->y;
-        const double fz = -normal->z / normal->y;
-        const double step = Cr::COLLISION_STEP;
-        const double x0 = std::floor(pos.x / step) * step, z0 = std::floor(pos.z / step) * step;
-        const auto drop = [&](double x, double z)
-        {
-            return limits.Apply(Cr::SampleAt(nearby, x, z, old.y), x, z).OffsetY();
-        };
-        const double d00 = drop(x0, z0), d10 = drop(x0 + step, z0);
-        const double d01 = drop(x0, z0 + step), d11 = drop(x0 + step, z0 + step);
-        const double u = (pos.x - x0) / step, v = (pos.z - z0) / step;
-        // The facet under the hit for each way the square can be split.
-        const double splits[2][2] = {
-            {u >= v ? d10 - d00 : d11 - d01, u >= v ? d11 - d10 : d01 - d00},
-            {u + v <= 1.0 ? d10 - d00 : d11 - d01, u + v <= 1.0 ? d01 - d00 : d11 - d10}};
-        // The split matching the hit facet best (the ground before was level-ish).
-        int best = 0;
-        double bestError = 1e30;
-        for (int i = 0; i < 2; ++i)
-        {
-            const double ex = fx - splits[i][0] / step, ez = fz - splits[i][1] / step;
-            if ( ex * ex + ez * ez < bestError )
-            {
-                bestError = ex * ex + ez * ez;
-                best = i;
-            }
-        }
-        *normal = vec3d::Normalise(vec3d(fx - splits[best][0] / step, -1.0, fz - splits[best][1] / step));
-    }
-    return old;
+    // Dug polygons are triangles; the others were copied as they were.
+    const UAskeleton::Polygon &polygon = copy->data.polygons[hit.polyID];
+    if ( polygon.num_vertices != 3 )
+        return false;
+    for (int i = 0; i < 3; ++i)
+        if ( polygon.v[i] < 0 || (size_t)polygon.v[i] >= copy->rest.size() ||
+             (size_t)polygon.v[i] >= copy->data.POO.size() )
+            return false;
+
+    const vec3d p0 = copy->data.POO[polygon.v[0]], p1 = copy->data.POO[polygon.v[1]];
+    const vec3d p2 = copy->data.POO[polygon.v[2]];
+    const vec3d &r0 = copy->rest[polygon.v[0]], &r1 = copy->rest[polygon.v[1]], &r2 = copy->rest[polygon.v[2]];
+
+    // The hit inside the triangle as it is now, as weights of its points.
+    const vec3d e1 = p1 - p0, e2 = p2 - p0, at = hit.isectPos - hit.hitSkelPos - p0;
+    const double d11 = e1.dot(e1), d12 = e1.dot(e2), d22 = e2.dot(e2);
+    const double den = d11 * d22 - d12 * d12;
+    if ( !(std::fabs(den) > 1e-12) )
+        return false;
+    const double w1 = (d22 * at.dot(e1) - d12 * at.dot(e2)) / den;
+    const double w2 = (d11 * at.dot(e2) - d12 * at.dot(e1)) / den;
+    if ( w1 < -0.05 || w2 < -0.05 || w1 + w2 > 1.05 )
+        return false;
+
+    // Same winding as the plane of the dug triangle (ApplyTerrainCraterCollision):
+    // the rest normal is on the side the given normal is on now.
+    vec3d rest = (r1 - r0) * (r2 - r1);
+    vec3d now = (p1 - p0) * (p2 - p1);
+    if ( rest.normalise() <= 1e-9 || now.normalise() <= 1e-9 )
+        return false;
+    if ( now.dot(*normal) < 0.0 )
+        rest = rest * -1.0;
+
+    *pos = hit.hitSkelPos + r0 + (r1 - r0) * w1 + (r2 - r0) * w2;
+    *normal = rest;
+    return true;
 }
 
-void NC_STACK_ypaworld::TerrainCraterDecalField(const vec3d &centre, float reach, GFX::TDecalField *field)
+// How far craters and dents can have moved a surface within reach of a point
+// (0 = none there): the decal passes this to its screen rectangle.
+float NC_STACK_ypaworld::TerrainCraterMoveNear(const vec3d &centre, float reach) const
 {
-    *field = GFX::TDecalField();
-    if ( _terrainCraters.craters.empty() || !(reach > 0.0f) )
-        return;
-
-    // Shapes reaching the decal; the very same hit repeated (a burst on one
-    // spot) is one shape with its number of copies, as they simply add up.
-    std::vector<std::pair<const Cr::Shape *, int>> reaching;
-    const auto same = [](const Cr::Shape &a, const Cr::Shape &b)
-    {
-        const double close = 0.01 * a.radius;
-        return a.kind == b.kind && std::fabs(a.x - b.x) <= close && std::fabs(a.y - b.y) <= close &&
-               std::fabs(a.z - b.z) <= close && std::fabs(a.radius - b.radius) <= close &&
-               std::fabs(a.depth - b.depth) <= close && std::fabs(a.rim - b.rim) <= 0.01 &&
-               a.nx * b.nx + a.ny * b.ny + a.nz * b.nz >= 0.9999;
-    };
+    double largest = 0.0;
     for (const Cr::Shape &shape : _terrainCraters.craters)
-    {
-        if ( !Cr::ShapeReachesBox(shape, centre.x - reach, centre.y - reach, centre.z - reach,
-                                  centre.x + reach, centre.y + reach, centre.z + reach) )
-            continue;
-        bool merged = false;
-        for (auto &entry : reaching)
-            if ( same(*entry.first, shape) )
-            {
-                entry.second++;
-                merged = true;
-                break;
-            }
-        if ( !merged )
-            reaching.push_back(std::make_pair(&shape, 1));
-    }
-    if ( reaching.empty() )
-        return;
-    // Too many: the ones moving the surface most shape it (copies past the
-    // 1.75 cap add nothing more).
-    const auto weight = [](const std::pair<const Cr::Shape *, int> &entry)
-    {
-        return entry.first->depth * std::min(entry.second, 4);
-    };
-    std::stable_sort(reaching.begin(), reaching.end(),
-                     [&](const std::pair<const Cr::Shape *, int> &a, const std::pair<const Cr::Shape *, int> &b)
-                     { return weight(a) > weight(b); });
-    if ( (int)reaching.size() > GFX::DECAL_FIELD_SHAPES )
-        reaching.resize(GFX::DECAL_FIELD_SHAPES);
-
-    for (const auto &entry : reaching)
-    {
-        const Cr::Shape *shape = entry.first;
-        const int i = field->shapes++;
-        const bool dent = shape->kind == Cr::Shape::DENT;
-        field->pos[i][0] = (float)(shape->x - centre.x);
-        field->pos[i][1] = (float)(shape->y - centre.y);
-        field->pos[i][2] = (float)(shape->z - centre.z);
-        field->pos[i][3] = dent ? -(float)entry.second : (float)entry.second;
-        field->size[i][0] = (float)shape->radius;
-        field->size[i][1] = (float)shape->depth;
-        field->size[i][2] = (float)shape->rim;
-        field->size[i][3] = (float)Cr::Band(*shape);
-        field->dir[i][0] = (float)shape->nx;
-        field->dir[i][1] = (float)shape->ny;
-        field->dir[i][2] = (float)shape->nz;
-        field->largest = std::max(field->largest, (float)(shape->depth * 1.75 * (1.0 + Cr::CRUMPLE)));
-    }
-
-    static_assert(GFX::DECAL_FIELD_STEP == Cr::VISUAL_STEP, "decal lattice must be the visual one");
-    static_assert(GFX::DECAL_FOOTPRINT_BLEND == Cr::FOOTPRINT_BLEND, "decal footprint band must be the engine one");
-    const auto phase = [](double value)
-    {
-        const double rest = std::fmod(value, Cr::VISUAL_STEP);
-        return (float)(rest < 0.0 ? rest + Cr::VISUAL_STEP : rest);
-    };
-    field->lattice[0] = phase(centre.x);
-    field->lattice[1] = phase(centre.z);
-
-    // Sectors far enough for every box that can touch the decal.
-    const int ring = 1 + (int)std::ceil((reach + Cr::FOOTPRINT_BLEND) / 1200.0);
-    const Cr::DeformationLimits limits = TerrainCraterLimits(centre, ring);
-    field->limits[0] = (float)limits.ground;
-    field->limits[1] = (float)limits.building;
-    // Boxes that change a cap where the decal is and a shape moves the
-    // surface, closest first: map border pieces, then building footprints.
-    const auto boxDistance = [](const Cr::BuildingFootprint &box, double x, double z)
-    {
-        const double dx = std::max(0.0, std::max(box.minX - x, x - box.maxX));
-        const double dz = std::max(0.0, std::max(box.minZ - z, z - box.maxZ));
-        return std::sqrt(dx * dx + dz * dz);
-    };
-    const auto add = [&](const std::vector<Cr::BuildingFootprint> &list, int *count)
-    {
-        std::vector<std::pair<double, const Cr::BuildingFootprint *>> boxes;
-        for (const Cr::BuildingFootprint &box : list)
-        {
-            const double dx = std::max(0.0, std::max(box.minX - centre.x - reach, centre.x - reach - box.maxX));
-            const double dz = std::max(0.0, std::max(box.minZ - centre.z - reach, centre.z - reach - box.maxZ));
-            if ( dx * dx + dz * dz >= Cr::FOOTPRINT_BLEND * Cr::FOOTPRINT_BLEND )
-                continue;
-            bool moved = false;
-            for (const auto &entry : reaching)
-                if ( boxDistance(box, entry.first->x, entry.first->z) < Cr::Reach(*entry.first) + Cr::FOOTPRINT_BLEND )
-                {
-                    moved = true;
-                    break;
-                }
-            if ( moved )
-                boxes.push_back(std::make_pair(boxDistance(box, centre.x, centre.z), &box));
-        }
-        std::stable_sort(boxes.begin(), boxes.end(),
-                         [](const std::pair<double, const Cr::BuildingFootprint *> &a,
-                            const std::pair<double, const Cr::BuildingFootprint *> &b) { return a.first < b.first; });
-        for (const auto &entry : boxes)
-        {
-            const int i = field->frozen + field->footprints;
-            if ( i >= GFX::DECAL_FIELD_FOOTPRINTS )
-                break;
-            (*count)++;
-            field->footprint[i][0] = (float)(entry.second->minX - centre.x);
-            field->footprint[i][1] = (float)(entry.second->minZ - centre.z);
-            field->footprint[i][2] = (float)(entry.second->maxX - centre.x);
-            field->footprint[i][3] = (float)(entry.second->maxZ - centre.z);
-        }
-    };
-    add(limits.frozen, &field->frozen);
-    add(limits.buildings, &field->footprints);
+        if ( Cr::ShapeReachesBox(shape, centre.x - reach, centre.y - reach, centre.z - reach,
+                                 centre.x + reach, centre.y + reach, centre.z + reach) )
+            // Overlap limit of SampleAt, with the dent folds.
+            largest = std::max(largest, shape.depth * 1.75 * (1.0 + Cr::CRUMPLE));
+    return (float)largest;
 }
 
 std::list<GFX::TMesh> *NC_STACK_ypaworld::TerrainCraterPieceMeshes(const cellArea &cell, int bldX,
@@ -797,6 +743,7 @@ void NC_STACK_ypaworld::ApplyTerrainCratersToFiller(TCellFillerCh *filler)
         DigMesh(mesh, origin, nearby, limits, &dug);
         mesh.Vertexes = std::move(dug.Vertexes);
         mesh.Indixes = std::move(dug.Indixes);
+        mesh.Rest = std::move(dug.Rest);
         mesh.RecalcBoundBox();
     }
     _terrainCraters.rebuiltThisFrame++;
@@ -804,6 +751,52 @@ void NC_STACK_ypaworld::ApplyTerrainCratersToFiller(TCellFillerCh *filler)
 }
 
 // ------------------------------------------------------------- collision ---
+
+// The collision of the world is looked up by squares of 300 units: a ray only
+// meets the surfaces of the piece standing on its square. A crater moves the
+// ground straight down, so every square keeps its own ground. A dent pushes
+// what it reaches sideways too: near one, the ground of a square can move on
+// over the next square, and a ray coming down there would find nothing (units
+// would fall through the world). For a square (as sub_44DBF8 numbers them)
+// this tells how many squares around it a ray that found nothing must also
+// try: 0 where no dent is near.
+int NC_STACK_ypaworld::TerrainCraterSpill(int microX, int microZ)
+{
+    World::Crater::State &state = _terrainCraters;
+    if ( state.craters.empty() )
+        return 0;
+
+    const int width = 4 * _mapSize.x, height = 4 * _mapSize.y;
+    if ( state.spillVersion != state.version || state.spillWidth != width )
+    {
+        state.spillVersion = state.version;
+        state.spillWidth = width;
+        state.spill.assign((size_t)width * height, 0);
+        for (const Cr::Shape &shape : state.craters)
+        {
+            if ( shape.kind != Cr::Shape::DENT )
+                continue;
+            // The furthest a dent moves a point (overlap limit of SampleAt, with the folds).
+            const double move = shape.depth * 1.75 * (1.0 + Cr::CRUMPLE);
+            const uint8_t ring = (uint8_t)std::max(1, std::min(2, (int)std::ceil(move / 300.0)));
+            const double reach = shape.radius + move;
+            const int x0 = std::max(0, (int)std::floor((shape.x - reach + 150.0) / 300.0));
+            const int x1 = std::min(width - 1, (int)std::floor((shape.x + reach + 150.0) / 300.0));
+            const int z0 = std::max(0, (int)std::floor((-shape.z - reach + 150.0) / 300.0));
+            const int z1 = std::min(height - 1, (int)std::floor((-shape.z + reach + 150.0) / 300.0));
+            for (int z = z0; z <= z1; ++z)
+                for (int x = x0; x <= x1; ++x)
+                {
+                    uint8_t &square = state.spill[(size_t)z * width + x];
+                    square = std::max(square, ring);
+                }
+        }
+    }
+
+    if ( microX < 0 || microZ < 0 || microX >= width || microZ >= height )
+        return 0;
+    return state.spill[(size_t)microZ * width + microX];
+}
 
 void NC_STACK_ypaworld::ApplyTerrainCraterCollision(TSectorCollision &location)
 {
@@ -842,10 +835,12 @@ void NC_STACK_ypaworld::ApplyTerrainCraterCollision(TSectorCollision &location)
                 vertex.y = p.y + sample.OffsetY() - location.pos.y;
                 vertex.z = p.z + sample.OffsetZ() - location.pos.z;
                 out.POO.push_back(vertex);
+                entry->rest.push_back(vec3d(p.x - location.pos.x, p.y - location.pos.y, p.z - location.pos.z));
                 return (uint32_t)(out.POO.size() - 1);
             };
 
             std::vector<Cr::Polygon> pieces;
+            Cr::HeightRanges heights;
             for (const UAskeleton::Polygon &polygon : source->polygons)
             {
                 Cr::Polygon points;
@@ -870,9 +865,8 @@ void NC_STACK_ypaworld::ApplyTerrainCraterCollision(TSectorCollision &location)
                 }
 
                 changed = true;
-                double heightFrom = 1.0, heightTo = 0.0;
-                Cr::DentHeights(local, points, &heightFrom, &heightTo);
-                Cr::CutOnLattice(points, Cr::COLLISION_STEP, &pieces, heightFrom, heightTo);
+                Cr::WallHeights(local, points, &heights);
+                Cr::CutOnLattice(points, Cr::COLLISION_STEP, &pieces, heights);
                 for (const Cr::Polygon &piece : pieces)
                 {
                     const uint32_t first = index.Find(piece[0], add);

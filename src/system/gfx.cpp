@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <utility>
 
@@ -1973,13 +1974,14 @@ static bool DecalScreenRect(const TDecalDraw &decal, const mat3x3 &worldToView,
 {
     const float reach = 0.5f * std::sqrt(decal.SizeT * decal.SizeT + decal.SizeB * decal.SizeB);
     const vec3d origin(decal.Origin.x, decal.Origin.y, decal.Origin.z);
-    const vec3d t = vec3d(decal.AxisT.x, decal.AxisT.y, decal.AxisT.z) * reach;
-    const vec3d b = vec3d(decal.AxisB.x, decal.AxisB.y, decal.AxisB.z) * reach;
+    // The box is around the decal as it was painted: a dug surface under it is
+    // drawn up to decal.Moved away from there.
+    const vec3d t = vec3d(decal.AxisT.x, decal.AxisT.y, decal.AxisT.z) * (reach + decal.Moved);
+    const vec3d b = vec3d(decal.AxisB.x, decal.AxisB.y, decal.AxisB.z) * (reach + decal.Moved);
     // Small decals still reach the surface when collision and visuals differ a
     // little: same height limit of the shader.
     const vec3d n = vec3d(decal.AxisN.x, decal.AxisN.y, decal.AxisN.z) *
-                    std::max(std::max(reach, 12.0f),
-                             (decal.Field ? decal.Field->largest : 0.0f) * 1.25f + 4.0f);
+                    (std::max(reach, 12.0f) + decal.Moved);
 
     float left = 2.0f, right = -2.0f, bottom = 2.0f, top = -2.0f;
     bool behind = false;
@@ -2053,6 +2055,135 @@ static mat3x3 DecalInverse(const mat3x3 &m)
     return out;
 }
 
+// Draws the dug meshes of the frame (_decalDugList) once more into the rest
+// texture: for each of their visible pixels, where its point was before the
+// craters and dents, and the normal it had (see decalshader.h). The depth
+// copied for the decals is the depth buffer of this pass, so only what is
+// really visible is written. False when nothing was written.
+bool GFXEngine::DrawDecalRest(const Common::Point &scrSz, const float *viewToWorldColumns)
+{
+    if (_decalDugList.empty() || !_decalRestProg.ID || _decalRestUnusable)
+        return false;
+
+    GLint sceneFbo = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &sceneFbo);
+
+    if (!_decalRestFbo)
+    {
+        Glext::GLGenFramebuffers(1, &_decalRestFbo);
+        glGenTextures(1, &_decalRestTex);
+        _decalRestTexSize = Common::Point();
+    }
+    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _decalRestFbo);
+
+    if (_decalRestTexSize.x != scrSz.x || _decalRestTexSize.y != scrSz.y)
+    {
+        Glext::GLActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, _decalRestTex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        // Full floats: the alpha carries a packed normal of 24 bits.
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, scrSz.x, scrSz.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+        Glext::GLActiveTexture(GL_TEXTURE0);
+
+        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _decalRestTex, 0);
+        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _decalDepthTex, 0);
+        _decalRestTexSize = scrSz;
+
+        if (Glext::GLCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            // Decals still work: on dug surfaces they are projected as on any other.
+            _decalRestUnusable = true;
+            log_d3dlog("Decal rest target not available: decals do not follow craters\n");
+            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, (GLuint)sceneFbo);
+            return false;
+        }
+    }
+
+    GLfloat oldClear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, oldClear);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(oldClear[0], oldClear[1], oldClear[2], oldClear[3]);
+
+    _states.Prog = _decalRestProg;
+    _states.DepthTest = true;
+    _states.Zwrite = false;
+    _states.AlphaTest = false;
+    _states.AlphaBlend = false;
+    _states.Fog = false;
+    _states.AFog = 0;
+    _states.TexBlend = 0;
+    _states.LinearFilter = false;
+    _states.Tex = 0;
+    SetRenderStates(0);
+
+    Glext::GLUniform1i(_decalRestProg.ImageLoc, 0);
+    Glext::GLUniformMatrix3fv(_decalRestProg.ViewToWorldLoc, 1, GL_FALSE, viewToWorldColumns);
+    if (_vbo)
+    {
+        Glext::GLUniformMatrix4fv(_decalRestProg.ProjLoc, 1, GL_FALSE, &_vboStatesBlock.Proj.m00);
+        Glext::GLEnableVertexAttribArray(_decalRestProg.RestAttrLoc);
+    }
+    else
+        glEnableClientState(GL_NORMAL_ARRAY);
+
+    // The same triangles were drawn by another program: a small pull toward the
+    // camera keeps them in front of their own depth.
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1.0f, -1.0f);
+
+    for (TRenderNode *node : _decalDugList)
+    {
+        TMesh *mesh = node->Mesh;
+        // Holes of a cut-out texture show what is behind: nothing is written there.
+        const bool cut = (node->Flags & RFLAGS_ZEROTRACY) && node->Tex && node->Tex->hwTex;
+
+        _states.Tex = cut ? node->Tex->hwTex : 0;
+        if (_vbo)
+        {
+            _states.DataBuf = mesh->glDataBuf;
+            _states.IndexBuf = mesh->glIndexBuf;
+        }
+        SetRenderStates(0);
+        Glext::GLUniform1f(_decalRestProg.CutLoc, cut ? 1.0f : 0.0f);
+
+        if (_vbo)
+        {
+            const mat4x4f view = mat4x4f(node->TForm).Transpose();
+            Glext::GLUniformMatrix4fv(_decalRestProg.ViewLoc, 1, GL_FALSE, &view.m00);
+            Glext::GLVertexAttribPointer(_decalRestProg.PosLoc, 3, GL_FLOAT, GL_FALSE, sizeof(TVertex),
+                                         (void *)offsetof(TVertex, Pos));
+            Glext::GLVertexAttribPointer(_decalRestProg.RestAttrLoc, 3, GL_FLOAT, GL_FALSE, sizeof(vec3f),
+                                         (void *)(size_t)mesh->RestBufferPos);
+            if (cut)
+                Glext::GLVertexAttribPointer(_decalRestProg.UVLoc, 2, GL_FLOAT, GL_FALSE, sizeof(TVertex),
+                                             (void *)offsetof(TVertex, TexCoord));
+            glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, nullptr);
+        }
+        else
+        {
+            SetModelViewMatrix(node->TForm);
+            glVertexPointer(3, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].Pos);
+            glNormalPointer(GL_FLOAT, sizeof(vec3f), mesh->Rest.data());
+            if (cut)
+                glTexCoordPointer(2, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].TexCoord);
+            glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, mesh->Indixes.data());
+        }
+    }
+
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    if (_vbo)
+        Glext::GLDisableVertexAttribArray(_decalRestProg.RestAttrLoc);
+    else
+        glDisableClientState(GL_NORMAL_ARRAY);
+
+    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, (GLuint)sceneFbo);
+    return true;
+}
+
 // Paints the queued decals over the world drawn so far. No unit is in the depth
 // buffer yet, so they can never receive a decal.
 void GFXEngine::DrawDecalPass()
@@ -2069,6 +2200,14 @@ void GFXEngine::DrawDecalPass()
 
     const GfxStates saved = _states;
 
+    const mat3x3 viewToWorld = DecalInverse(_decalWorldToView);
+    const GLfloat viewToWorldColumns[9] = {
+        (GLfloat)viewToWorld.m00, (GLfloat)viewToWorld.m10, (GLfloat)viewToWorld.m20,
+        (GLfloat)viewToWorld.m01, (GLfloat)viewToWorld.m11, (GLfloat)viewToWorld.m21,
+        (GLfloat)viewToWorld.m02, (GLfloat)viewToWorld.m12, (GLfloat)viewToWorld.m22};
+
+    const bool restOn = DrawDecalRest(scrSz, viewToWorldColumns);
+
     _states.Fog = false;
     _states.AFog = 0;
     ApplyFogStates(_decalRenderFlags | RFLAGS_FOG, _decalFogStart, _decalFogLength);
@@ -2084,14 +2223,17 @@ void GFXEngine::DrawDecalPass()
     _states.Tex = 0;
     SetRenderStates(0);
 
-    const mat3x3 viewToWorld = DecalInverse(_decalWorldToView);
-    const GLfloat viewToWorldColumns[9] = {
-        (GLfloat)viewToWorld.m00, (GLfloat)viewToWorld.m10, (GLfloat)viewToWorld.m20,
-        (GLfloat)viewToWorld.m01, (GLfloat)viewToWorld.m11, (GLfloat)viewToWorld.m21,
-        (GLfloat)viewToWorld.m02, (GLfloat)viewToWorld.m12, (GLfloat)viewToWorld.m22};
+    if (restOn)
+    {
+        Glext::GLActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, _decalRestTex);
+        Glext::GLActiveTexture(GL_TEXTURE0);
+    }
 
     Glext::GLUniform1i(_decalProg.ImageLoc, 0);
     Glext::GLUniform1i(_decalProg.SceneDepthLoc, 1);
+    Glext::GLUniform1i(_decalProg.RestLoc, 2);
+    Glext::GLUniform1f(_decalProg.RestOnLoc, restOn ? 1.0f : 0.0f);
     Glext::GLUniform2f(_decalProg.ScreenInvLoc, 1.0f / (float)scrSz.x, 1.0f / (float)scrSz.y);
     Glext::GLUniform4f(_decalProg.ProjectLoc, 1.0f / _frustum.m00, 1.0f / _frustum.m11,
                        _frustum.m22, _frustum.m23);
@@ -2134,22 +2276,6 @@ void GFXEngine::DrawDecalPass()
         Glext::GLUniform3f(_decalProg.AxisNLoc, decal.AxisN.x, decal.AxisN.y, decal.AxisN.z);
         Glext::GLUniform2f(_decalProg.SizeLoc, decal.SizeT, decal.SizeB);
         Glext::GLUniform1f(_decalProg.EdgeFadeLoc, decal.EdgeFade);
-        static const TDecalField noField;
-        const TDecalField &field = decal.Field ? *decal.Field : noField;
-        Glext::GLUniform1i(_decalProg.FieldShapesLoc, field.shapes);
-        if ( field.shapes > 0 )
-        {
-            Glext::GLUniform4fv(_decalProg.FieldPosLoc, field.shapes, &field.pos[0][0]);
-            Glext::GLUniform4fv(_decalProg.FieldSizeLoc, field.shapes, &field.size[0][0]);
-            Glext::GLUniform3fv(_decalProg.FieldDirLoc, field.shapes, &field.dir[0][0]);
-            Glext::GLUniform1i(_decalProg.FieldFootprintsLoc, field.footprints);
-            Glext::GLUniform1i(_decalProg.FieldFrozenLoc, field.frozen);
-            if ( field.frozen + field.footprints > 0 )
-                Glext::GLUniform4fv(_decalProg.FieldFootprintLoc, field.frozen + field.footprints,
-                                    &field.footprint[0][0]);
-            Glext::GLUniform2f(_decalProg.FieldLimitsLoc, field.limits[0], field.limits[1]);
-            Glext::GLUniform2f(_decalProg.FieldLatticeLoc, field.lattice[0], field.lattice[1]);
-        }
         Glext::GLUniform1fv(_decalProg.ShapeLoc, DECAL_SHAPE_SAMPLES, decal.Shape);
         Glext::GLUniform4f(_decalProg.TintLoc, decal.Tint.r, decal.Tint.g, decal.Tint.b, decal.Tint.a);
         Glext::GLUniform1f(_decalProg.ColorizeLoc, decal.Colorize ? 1.0f : 0.0f);
@@ -2238,12 +2364,22 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
         receiverZeroTracy = std::stable_partition(_renderZeroTracyList.begin(), _renderZeroTracyList.end(),
                                                   receives) - _renderZeroTracyList.begin();
 
+        // Receivers dug by craters or dents also go in the rest pass of the decals.
+        const auto drawReceiver = [this](TRenderNode *node)
+        {
+            RenderNode(node);
+            if (node->Type == TRenderNode::TYPE_MESH && node->Mesh && !node->Mesh->Indixes.empty() &&
+                node->Mesh->Rest.size() == node->Mesh->Vertexes.size())
+                _decalDugList.push_back(node);
+        };
+
         for (size_t nodeIndex = 0; nodeIndex < receiverSolids; nodeIndex++)
-            RenderNode(_renderSolidList[nodeIndex]);
+            drawReceiver(_renderSolidList[nodeIndex]);
         for (size_t nodeIndex = 0; nodeIndex < receiverZeroTracy; nodeIndex++)
-            RenderNode(_renderZeroTracyList[nodeIndex]);
+            drawReceiver(_renderZeroTracyList[nodeIndex]);
 
         DrawDecalPass();
+        _decalDugList.clear();
     }
 
     if (RasterEtapes & RASTER_SOLID)
@@ -4152,6 +4288,35 @@ void GFXEngine::Init()
             Glext::GLDeleteProgram(progID);
             log_d3dlog("Decal shader failed to link: ground decals are disabled\n");
         }
+
+        // Rest pass of the decals: it needs a float render target, which a GL
+        // older than 3.0 has only with these two extensions.
+        const char *glVersion = (const char *)glGetString(GL_VERSION);
+        const char *glExtensions = (const char *)glGetString(GL_EXTENSIONS);
+        const bool floatTarget = (glVersion && std::atoi(glVersion) >= 3) ||
+            (glExtensions && std::strstr(glExtensions, "GL_ARB_texture_float") &&
+             std::strstr(glExtensions, "GL_ARB_color_buffer_float"));
+        _decalRestUnusable = !floatTarget;
+        if (_decalProg.ID && floatTarget)
+        {
+            _decalRestPsShader = CompileShader(GL_FRAGMENT_SHADER, DecalRestFragmentShaderText());
+            _decalRestVsShader = CompileShader(GL_VERTEX_SHADER, DecalRestVertexShaderText(_vbo));
+
+            progID = Glext::GLCreateProgram();
+            Glext::GLAttachShader(progID, _decalRestPsShader);
+            Glext::GLAttachShader(progID, _decalRestVsShader);
+            Glext::GLLinkProgram(progID);
+
+            linked = GL_FALSE;
+            Glext::GLGetProgramiv(progID, GL_LINK_STATUS, &linked);
+            if (linked == GL_TRUE)
+                _decalRestProg = TDecalRestProg(progID);
+            else
+            {
+                Glext::GLDeleteProgram(progID);
+                log_d3dlog("Decal rest shader failed to link: decals do not follow craters\n");
+            }
+        }
     }
 
     if (_colorEffects > 0)
@@ -4278,12 +4443,25 @@ void GFXEngine::Deinit()
         Glext::GLDeleteShader(_decalVsShader);
     if (_decalDepthTex)
         glDeleteTextures(1, &_decalDepthTex);
+    if (_decalRestProg.ID)
+        Glext::GLDeleteProgram(_decalRestProg.ID);
+    if (_decalRestPsShader)
+        Glext::GLDeleteShader(_decalRestPsShader);
+    if (_decalRestVsShader)
+        Glext::GLDeleteShader(_decalRestVsShader);
+    if (_decalRestTex)
+        glDeleteTextures(1, &_decalRestTex);
 
     _decalProg = TDecalProg();
     _decalPsShader = 0;
     _decalVsShader = 0;
     _decalDepthTex = 0;
     _decalDepthTexSize = Common::Point();
+    _decalRestProg = TDecalRestProg();
+    _decalRestPsShader = 0;
+    _decalRestVsShader = 0;
+    _decalRestTex = 0;
+    _decalRestTexSize = Common::Point();
 
     // The atmospheric program reuses the color-effects vertex shader, so
     // release its program before deleting that shared shader object.
@@ -6667,6 +6845,7 @@ TMesh::TMesh(const TMesh &b)
     Vertexes = b.Vertexes;
     Indixes = b.Indixes;
     CoordsCache = b.CoordsCache;
+    Rest = b.Rest;
     BoundBox = b.BoundBox;
 
     glDataBuf = 0;
@@ -6679,6 +6858,8 @@ TMesh::TMesh(TMesh &&b) noexcept
     Vertexes = std::move(b.Vertexes);
     Indixes = std::move(b.Indixes);
     CoordsCache = std::move(b.CoordsCache);
+    Rest = std::move(b.Rest);
+    RestBufferPos = b.RestBufferPos;
     BoundBox = std::move(b.BoundBox);
 
     glDataBuf = b.glDataBuf;
@@ -6698,6 +6879,7 @@ TMesh &TMesh::operator=(const TMesh& b)
     Vertexes = b.Vertexes;
     Indixes = b.Indixes;
     CoordsCache = b.CoordsCache;
+    Rest = b.Rest;
     BoundBox = b.BoundBox;
 
     glDataBuf = 0;
@@ -6717,6 +6899,8 @@ TMesh &TMesh::operator=(TMesh &&b) noexcept
     Vertexes = std::move(b.Vertexes);
     Indixes = std::move(b.Indixes);
     CoordsCache = std::move(b.CoordsCache);
+    Rest = std::move(b.Rest);
+    RestBufferPos = b.RestBufferPos;
     BoundBox = std::move(b.BoundBox);
 
     glDataBuf = b.glDataBuf;
@@ -6752,7 +6936,8 @@ void GFXEngine::MeshMakeVBO(TMesh *mesh)
         Glext::GLBindBuffer(GL_ARRAY_BUFFER, mesh->glDataBuf);
         int32_t vtxDataSz = mesh->Vertexes.size() * sizeof(TVertex);
         int32_t coordDataSz = mesh->Vertexes.size() * sizeof(tUtV);
-        Glext::GLBufferData(GL_ARRAY_BUFFER, vtxDataSz + mesh->CoordsCache.size() * coordDataSz, nullptr, GL_STATIC_DRAW);
+        int32_t restDataSz = mesh->Rest.size() * sizeof(vec3f);
+        Glext::GLBufferData(GL_ARRAY_BUFFER, vtxDataSz + mesh->CoordsCache.size() * coordDataSz + restDataSz, nullptr, GL_STATIC_DRAW);
 
         int32_t off = 0;
         Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, vtxDataSz, mesh->Vertexes.data());
@@ -6765,6 +6950,11 @@ void GFXEngine::MeshMakeVBO(TMesh *mesh)
 
             off += coordDataSz;
         }
+
+        // OpenNeoUA custom: rest places of a dug mesh, for the decals.
+        mesh->RestBufferPos = off;
+        if (restDataSz)
+            Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, restDataSz, mesh->Rest.data());
 
         Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _lastStates.IndexBuf);
         Glext::GLBindBuffer(GL_ARRAY_BUFFER, _lastStates.DataBuf);
@@ -6871,19 +7061,23 @@ TDecalProg::TDecalProg(uint32_t id)
     AxisNLoc = Glext::GLGetUniformLocation(ID, "uAxisN");
     SizeLoc = Glext::GLGetUniformLocation(ID, "uSize");
     EdgeFadeLoc = Glext::GLGetUniformLocation(ID, "uEdgeFade");
-    FieldShapesLoc = Glext::GLGetUniformLocation(ID, "uFieldShapes");
-    FieldPosLoc = Glext::GLGetUniformLocation(ID, "uFieldPos");
-    FieldSizeLoc = Glext::GLGetUniformLocation(ID, "uFieldSize");
-    FieldDirLoc = Glext::GLGetUniformLocation(ID, "uFieldDir");
-    FieldFootprintsLoc = Glext::GLGetUniformLocation(ID, "uFieldFootprints");
-    FieldFrozenLoc = Glext::GLGetUniformLocation(ID, "uFieldFrozen");
-    FieldFootprintLoc = Glext::GLGetUniformLocation(ID, "uFieldFootprint");
-    FieldLimitsLoc = Glext::GLGetUniformLocation(ID, "uFieldLimits");
-    FieldLatticeLoc = Glext::GLGetUniformLocation(ID, "uFieldLattice");
+    RestLoc = Glext::GLGetUniformLocation(ID, "uRest");
+    RestOnLoc = Glext::GLGetUniformLocation(ID, "uRestOn");
     ShapeLoc = Glext::GLGetUniformLocation(ID, "uShape");
     TintLoc = Glext::GLGetUniformLocation(ID, "uTint");
     ColorizeLoc = Glext::GLGetUniformLocation(ID, "uColorize");
     TexturedLoc = Glext::GLGetUniformLocation(ID, "uTextured");
+}
+
+TDecalRestProg::TDecalRestProg(uint32_t id)
+: TShaderProg(id)
+{
+    RestAttrLoc = Glext::GLGetAttribLocation(ID, "vRest");
+    ProjLoc = Glext::GLGetUniformLocation(ID, "uProj");
+    ViewLoc = Glext::GLGetUniformLocation(ID, "uView");
+    ImageLoc = Glext::GLGetUniformLocation(ID, "uImage");
+    CutLoc = Glext::GLGetUniformLocation(ID, "uCut");
+    ViewToWorldLoc = Glext::GLGetUniformLocation(ID, "uViewToWorld");
 }
 
 TColorEffectsProg::TColorEffectsProg(uint32_t id)

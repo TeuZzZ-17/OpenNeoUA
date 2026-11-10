@@ -84,6 +84,11 @@ int main()
     check(parse({"new_decal 11", "duration = permanent", "effect_3ds = Data/Models/3ds/Smoke.3ds", "effect_mode = plume", "end"}) &&
           world->_decalProfiles[11].fx.ground_decal_smoke.mode==World::TGroundDecalSmoke::MODE_NONE,
           "old effect_mode names are rejected");
+    check(parse({"new_decal 12", "duration = permanent", "effect_3ds = Data/Models/3ds/Smoke.3ds",
+                 "effect_mode = rise", "effect_retrigger_interval = 9000~7000", "end"}) &&
+          world->_decalProfiles[12].fx.ground_decal_smoke.retrigger_min==7000 &&
+          world->_decalProfiles[12].fx.ground_decal_smoke.retrigger_max==9000,
+          "effect_retrigger_interval accepts a reversed min~max");
     {
         World::TGroundDecalSmoke ranged;
         ranged.pulse_interval_min=700;ranged.pulse_interval_max=1500;
@@ -93,6 +98,16 @@ int main()
         check(inside&&varies,"pulse interval rolls inside min~max per pulse");
         ranged.pulse_interval_max=700;
         check(World::GroundDecalSmoke::PulseInterval(ranged,77,3)==700,"fixed pulse interval stays constant");
+    }
+    {
+        World::TGroundDecalSmoke retrigger;
+        retrigger.retrigger_min=7000;retrigger.retrigger_max=9000;
+        bool inside=true,varies=false;int first=World::GroundDecalSmoke::RetriggerInterval(retrigger,0);
+        for(int seed=0;seed<50;++seed){const int v=World::GroundDecalSmoke::RetriggerInterval(retrigger,(uint32_t)seed);
+            inside=inside&&v>=7000&&v<=9000;varies=varies||v!=first;}
+        check(inside&&varies,"retrigger interval rolls inside min~max per decal");
+        retrigger.retrigger_max=0;
+        check(World::GroundDecalSmoke::RetriggerInterval(retrigger,77)==0,"zero retrigger keeps one activation");
     }
     std::printf("DECAL PROFILE CHECKS %d FAILURES %d\n",checks,failures);
     return failures?1:0;
