@@ -106,6 +106,7 @@ public:
     virtual void SetLifeTime(int);
     virtual void SetDelay(int);
     virtual void SetDriveTime(int);
+    void SetHomingBombDriveLimit(bool enabled) { _mislHomingBombDriveLimit = enabled; }
     void SetHomingTime(int time);
     void SetHomingForce(float turnRate);
     virtual void SetIgnoreBuilds(int);
@@ -252,6 +253,7 @@ protected:
     vec3d _boomerangFireLocal;
     std::vector<int32_t> _boomerangReturnHitGids;
     int _mislDriveTime  = 0;
+    bool _mislHomingBombDriveLimit = false;
     int _mislHomingTimeRemaining = -1; // -1: disabled; 0: guidance has expired
     float _mislHomingForce = 0.0f;     // extra turn speed (rad/s) toward the target; 0 = vanilla
     int _mislDelayTime  = 0;

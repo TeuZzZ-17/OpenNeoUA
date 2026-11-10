@@ -1300,13 +1300,13 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             {
             case MISL_BOMB:
                 arg74.field_0 = v38;
-                arg74.flag = _mislHomingTimeRemaining == 0 ? 2 : 1;
-                if ( arg74.flag != 2 )
+                arg74.flag = 1;
+                if ( _mislHomingTimeRemaining != 0 )
                 {
                     // Homing bomb: force pushes toward the target like a missile, and
                     // homing_force adds the extra steering. A missile whose engine has
                     // burned out is also a MISL_BOMB and keeps homing_force until it explodes.
-                    if ( _force > 0.0 && ypamissile_HasHomingBombTarget(this) )
+                    if ( _force > 0.0 && (!_mislHomingBombDriveLimit || _mislDriveTime >= 0) && ypamissile_HasHomingBombTarget(this) )
                     {
                         arg74.flag = 0;
                         ApplyHomingForce(v38);
@@ -1329,8 +1329,8 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
             case MISL_TARGETED:
                 arg74.field_0 = v38;
-                arg74.flag = _mislHomingTimeRemaining == 0 ? 2 : 0;
-                if ( arg74.flag != 2 )
+                arg74.flag = _mislHomingTimeRemaining == 0 ? 1 : 0;
+                if ( _mislHomingTimeRemaining != 0 )
                 {
                     ApplyHomingForce(v38);
                     arg74.vec = CalcForceVector();
@@ -1537,8 +1537,7 @@ void NC_STACK_ypamissile::Move(move_msg *arg)
 {
     _old_pos = _position;
 
-    // An expired homing timer keeps the current velocity while the shared
-    // movement, collision and lifetime paths continue to run.
+    // Movement, collision and lifetime remain active after guidance expires.
     if ( arg->flag != 2 )
     {
         float v8;
@@ -1605,6 +1604,7 @@ void NC_STACK_ypamissile::Renew()
     _mislFlags  = 0;
     _mislDelayTime = 0;
     _mislHomingTimeRemaining = -1;
+    _mislHomingBombDriveLimit = false;
     _mislHomingForce = 0.0f;
     _mislBlastFalloff = 0;
     _mislBlastPush = 0.0f;

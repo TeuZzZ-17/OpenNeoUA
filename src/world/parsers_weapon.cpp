@@ -115,6 +115,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->life_time_nt_min = 0;
         _wpn->life_time_nt_max = 0;
         _wpn->drive_time = 7000;
+        _wpn->drive_time_explicit = false;
         _wpn->shot_time = 3000;
         _wpn->shot_time_user = 1000;
         _wpn->ramp_up_time = 0;
@@ -791,7 +792,20 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "drive_time") )
     {
-        _wpn->drive_time = parser.stol(p2, nullptr, 0);
+        const int positiveTime = ParsePositiveIntOrZero(p2);
+        if ( positiveTime > 0 )
+            _wpn->drive_time = positiveTime;
+        else
+        {
+            // Preserve legacy zero/negative values without opening a parser error
+            // dialog for malformed or overflowing values.
+            char *end = nullptr;
+            errno = 0;
+            const long value = std::strtol(p2.c_str(), &end, 0);
+            _wpn->drive_time = errno == 0 && end != p2.c_str() && *end == '\0' && value <= 0
+                ? (int)value : 0;
+        }
+        _wpn->drive_time_explicit = positiveTime > 0;
     }
     else if ( !StriCmp(p1, "delay_time") )
     {
