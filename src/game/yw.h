@@ -2893,6 +2893,7 @@ public:
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
     bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
     bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
+    bool FindWorldSurfaceInSphere(const vec3d &center, float radius, ypaworld_arg136 &hit);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
     bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius,

@@ -701,7 +701,7 @@ Universal Unit Guns generalize the original robo-mounted-gun concept so guns and
 
 Inline Physical FX support the normal, goingdown and explode event families. Their `snd_*`, `pal_*` and `shk_*` suffixes use the same semantics as the existing effect system. Vanilla compatibility: physical_vehicle with offset_xyz remains readable for legacy data only. Do not mix physical_vehicle/`offset_*` with inline physical keys in the same block.
 
-Kamikaze exception: when a model = kamikaze Weapon detonates with a positive trigger_radius, the carrier's destroyed Ground Decals are checked immediately. Any contact between that XYZ sphere and a world surface (terrain or building), including tangency, creates the decal at the nearest surface point. No contact = no decal, including the later wreck impact. size controls decal dimensions, not the contact radius. Absent/zero/invalid trigger_radius retains the ordinary Vehicle decal behavior. Decal limits apply. Vehicle Ground Decals use the same projected renderer as Weapon/MGUN decals. For Tank and Car, if death begins while the vehicle is airborne, no Vehicle Ground Decal is created for that death, including the later crash/death2 path.
+Kamikaze exception: when a model = kamikaze Weapon detonates with a positive trigger_radius, the carrier's destroyed Ground Decals are checked immediately. Any contact between that XYZ sphere and a world surface (terrain or building), including tangency, creates the decal at the nearest surface point. No contact = no decal, including the later wreck impact. size controls decal dimensions, not the contact radius. The payload's ground decal and configured crater or dent use that same nearest surface point. The deformation also works with no decal configured. Absent/zero/invalid trigger_radius retains the ordinary Vehicle decal behavior. Decal limits apply. Vehicle Ground Decals use the same projected renderer as Weapon/MGUN decals. For Tank and Car, if death begins while the vehicle is airborne, no Vehicle Ground Decal is created for that death, including the later crash/death2 path.
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ground_decal_id = 1`               — ID of the reusable new_decal profile. Vehicles spawn on grounded destruction; Weapons spawn on real world impact. -1, absent or unknown ID = no decal.
@@ -1189,6 +1189,8 @@ New Weapon models are selected with the existing model field, keeping the system
 - 🟢 `grenade_arc_gravity = 35` — Gravity applied during projectile flight, controlling how quickly it falls. 0/absent/invalid = engine-standard gravity.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `model = kamikaze`         — Kamikaze Weapon class: converts the firing unit into a kamikaze that approaches enemies and then detonates.
+
+    In OpenNeoUA Studio, **Visuals & FX** opens **Payload effects** to preview and edit the charge effects in place. Use the menu to switch to the carrier model and its destruction sequence.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `trigger_radius = 360`     — Kamikaze only: XYZ fuse radius. Detonates when this sphere touches an enemy's collision surface or the active sector target's geometry, including contact during movement.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1517,6 +1519,10 @@ Craters and dents (Weapons only): a real impact on the world really deforms what
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `crater_radius = 260~320`    — Radius of the crater (and of the dent on buildings) in world units, fixed value or `min~max` (0..12000). Works together with crater_depth: if either is absent, zero or invalid there is no crater (vanilla behavior). In Studio use the Crater row; values typed in a new effect are transferred there while retaining the other existing values.
+
+    **Delete** removes Crater and Ground decal settings from the definition's scripts, including `modify_*` blocks. When a cluster weapon spawns itself, both crater rows share the same settings.
+
+    The **Visuals & FX** timeline starts at 0.25×. Use its speed menu to change playback speed.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `crater_depth = 60~80`       — Depth of the crater centre (or how far the dent goes in) in world units, fixed value or `min~max` (0..12000). Never more than half the radius: walls stay below about 37 degrees, so tanks can drive in and out.
 ------------------------------------------------------------------------------------------------------------------------

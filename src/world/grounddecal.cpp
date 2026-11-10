@@ -405,8 +405,16 @@ bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &co
 {
     if ( _isNetGame || World::GroundDecalLimit() <= 0 ||
          config.mode != World::TChainFXConfig::MODE_GROUND_DECAL ||
-         config.trigger != World::TChainFXConfig::TRIGGER_DESTROYED ||
-         !GroundDecalFinitePoint(center) || !std::isfinite(radius) || radius <= 0.0f ||
+         config.trigger != World::TChainFXConfig::TRIGGER_DESTROYED )
+        return false;
+    ypaworld_arg136 hit;
+    return FindWorldSurfaceInSphere(center, radius, hit) && SpawnGroundDecal(config, hit);
+}
+
+bool NC_STACK_ypaworld::FindWorldSurfaceInSphere(const vec3d &center, float radius,
+                                                 ypaworld_arg136 &surfaceHit)
+{
+    if ( !GroundDecalFinitePoint(center) || !std::isfinite(radius) || radius <= 0.0f ||
          _mapSize.x <= 0 || _mapSize.y <= 0 )
         return false;
 
@@ -509,7 +517,8 @@ bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &co
     if ( bestLocation.CollisionType != 1 )
         sub_44E07C(bestLocation);
     bestHit.skel = bestLocation.sklt ? bestLocation.sklt->GetSkelet() : nullptr;
-    return SpawnGroundDecal(config, bestHit);
+    surfaceHit = bestHit;
+    return surfaceHit.skel != nullptr;
 }
 
 

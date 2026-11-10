@@ -97,6 +97,13 @@ int main()
     world->_fillerSide = &filler;
     for (int y = 0; y < 4; ++y) world->_cells.At(1, y).height = -300;
     const vec3d slopeCenter(2400, -160, -1800);
+    ypaworld_arg136 contact;
+    Check(world->FindWorldSurfaceInSphere(slopeCenter, 8, contact) &&
+          contact.isect && contact.skel && contact.polyID >= 0 &&
+          (contact.isectPos - vec3d(2395, -155, -1800)).length() < 1e-8,
+          "shared contact provides position and collision polygon for deformation");
+    Check(!world->FindWorldSurfaceInSphere(slopeCenter, 7, contact),
+          "deformation contact rejects a surface outside the fuse radius");
     Check(world->SpawnGroundDecalInSphere(fx, slopeCenter, 8), "real terrain filler accepts side contact beyond vertical reach");
     if ( !world->_groundDecals.empty() )
         Check((world->_groundDecals.back().pos - vec3d(2395, -155, -1800)).length() < 1e-8,
