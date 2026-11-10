@@ -2884,8 +2884,118 @@ void BuildingBenchmark(std::shared_ptr<Collision::Shape> profile) {
     }
 }
 }
+void GenesisBomberOverlapRegression() {
+    std::string error;
+    auto bomber = Collision::Load("Collisions/Bomber.collision", &error);
+    Check(bomber != nullptr, "real Bomber collision profile loads");
+    if (!bomber) return;
+    for (int dt : {10, 20, 36}) for (double offset : {0.0, 2.0}) {
+        TestWorld world; world._mapSize=Common::Point(8,8); world._cells.Resize(world._mapSize);
+        world._collisionScene.reset(new Collision::Scene(world));
+        world._frameTime=dt;
+        Actor<> first, second;
+        const vec3d origin(2400,-400,-2400);
+        first.Bind(world,101,origin,bomber); second.Bind(world,102,origin+vec3d(offset,0,0),bomber);
+        first._bact_type=second._bact_type=BACT_TYPES_FLYER;
+        first._status=second._status=BACT_STATUS_CREATE;
+        first._wrldSize=second._wrldSize=vec2d(9600,-9600);
+        double largestStep=0, lastStep=0;
+        for (int frame=0; frame<100; ++frame) {
+            world._timeStamp+=dt;
+            for (auto *actor : {&first, &second}) {
+                const vec3d before=actor->_position;
+                const mat3x3 oldRotation=actor->_rotation;
+                actor->_rotation=mat3x3::RotateY(.0025*dt)*actor->_rotation;
+                world._collisionScene->Resolve(actor,before,oldRotation,0);
+                world._collisionScene->Resolve(actor,actor->_position,actor->_rotation,0);
+                const double step=(actor->_position-before).length();
+                largestStep=std::max(largestStep,step);
+                if(frame>=70) lastStep=std::max(lastStep,step);
+            }
+        }
+        Collision::Contact contact;
+        const bool overlap=Collision::ContactShapes(*bomber, first._position, first._rotation,
+                                                     *bomber, second._position, second._rotation, &contact);
+        std::printf("GENESIS_BOMBER dt=%d offset=%.1f max_step=%.3f late_step=%.3f separation=%.3f\n",
+                    dt,offset,largestStep,lastStep,(first._position-second._position).length());
+        Check(largestStep <= 15.0*dt/18.0+.1,
+              "Genesis movement stays bounded across both solver calls and rotation clearance");
+        Check(lastStep < .1 && (!overlap || contact.depth < .2),
+              "rotating Genesis bombers separate and settle without repeated corrections");
+        world._collisionScene.reset();
+    }
+    {
+        TestWorld world; world._mapSize=Common::Point(8,8); world._cells.Resize(world._mapSize);
+        world._collisionScene.reset(new Collision::Scene(world)); world._frameTime=20;
+        const vec3d origin(2400,-400,-2400);
+        Actor<> units[5];
+        for(int i=0;i<5;++i) {
+            units[i].Bind(world,101+i,origin,bomber);
+            units[i]._bact_type=BACT_TYPES_FLYER;
+            units[i]._status=BACT_STATUS_CREATE;
+            units[i]._wrldSize=vec2d(9600,-9600);
+        }
+        double maximumStep=0, lateStep=0;
+        for(int frame=0;frame<200;++frame) {
+            world._timeStamp+=20;
+            for(auto &actor:units) {
+                const auto before=actor._position;
+                const auto rotation=actor._rotation;
+                actor._rotation=mat3x3::RotateY(.05)*rotation;
+                world._collisionScene->Resolve(&actor,before,rotation,0);
+                const double step=(actor._position-before).length();
+                maximumStep=std::max(maximumStep,step);
+                if(frame>=150) lateStep=std::max(lateStep,step);
+            }
+        }
+        bool clear=true;
+        for(int i=0;i<5;++i) for(int j=0;j<i;++j) {
+            Collision::Contact contact;
+            if(Collision::ContactShapes(*bomber,units[i]._position,units[i]._rotation,
+                                        *bomber,units[j]._position,units[j]._rotation,&contact) &&
+               contact.depth>.2) clear=false;
+        }
+        std::printf("GENESIS_GROUP max_step=%.3f late_step=%.3f clear=%d\n",maximumStep,lateStep,clear);
+        Check(clear && lateStep<.1,"five overlapping Genesis bombers separate and settle");
+        Check(maximumStep<18,"group Genesis separation avoids abrupt jumps");
+        world._collisionScene.reset();
+    }
+    {
+        TestWorld world; world._mapSize=Common::Point(8,8); world._cells.Resize(world._mapSize);
+        world._collisionScene.reset(new Collision::Scene(world)); world._frameTime=20;
+        const vec3d origin(2400,-400,-2400);
+        Actor<> shaped, legacy;
+        shaped.Bind(world,201,origin,bomber); legacy.Bind(world,202,origin);
+        legacy._radius=35;
+        shaped._bact_type=legacy._bact_type=BACT_TYPES_FLYER;
+        shaped._status=legacy._status=BACT_STATUS_CREATE;
+        shaped._wrldSize=legacy._wrldSize=vec2d(9600,-9600);
+        double lateStep=0;
+        for(int frame=0;frame<150;++frame) {
+            world._timeStamp+=20;
+            for(auto *actor : {&shaped,&legacy}) {
+                const auto before=actor->_position;
+                const auto rotation=actor->_rotation;
+                actor->_rotation=mat3x3::RotateY(.05)*rotation;
+                world._collisionScene->Resolve(actor,before,rotation,0);
+                if(frame>=100) lateStep=std::max(lateStep,double((actor->_position-before).length()));
+            }
+        }
+        Collision::Contact contact;
+        const bool overlap=world._collisionScene->PairContact(&shaped,&legacy,&contact);
+        Check(lateStep<.1 && (!overlap || contact.depth<.2),
+              "shaped and legacy Genesis units also separate and settle");
+        world._collisionScene.reset();
+    }
+}
 int main(int argc,char **argv) {
     std::setvbuf(stdout,nullptr,_IONBF,0);
+    if (argc>1 && std::string(argv[1])=="--genesis-bomber-overlap") {
+        FSMgr::iDir::setBaseDir("");
+        GenesisBomberOverlapRegression();
+        std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
+        return failures ? 1 : 0;
+    }
     if(argc>1&&std::string(argv[1])=="--tank-cliff") {
         FSMgr::iDir::setBaseDir("");TankCliffRegression();TankSlopingRoofRegression();TankVanillaFallRegression();
         std::printf("CHECKS=%d FAILED=%d\n",checks,failures);return failures?1:0;

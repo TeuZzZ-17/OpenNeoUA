@@ -2185,6 +2185,37 @@ void NC_STACK_ypaworld::ypaworld_func136(ypaworld_arg136 *arg)
                 break;
         }
     }
+
+    // OpenNeoUA custom: next to a dent the ground of a neighbouring square can
+    // lie over this one (see TerrainCraterSpill). A ray that found nothing
+    // also tries the dug surfaces of the squares around.
+    if ( !arg->isect )
+    {
+        const int ring = std::max(TerrainCraterSpill(dx, dz), TerrainCraterSpill(dxx, dzz));
+        if ( ring > 0 )
+        {
+            const vec3d unchanged = arg->stPos;
+            for (int nz = std::min(dz, dzz) - ring; nz <= std::max(dz, dzz) + ring && !arg->isect; ++nz)
+                for (int nx = std::min(dx, dxx) - ring; nx <= std::max(dx, dxx) + ring && !arg->isect; ++nx)
+                {
+                    // The ray's own squares were tried above.
+                    if ( (nx == dx || nx == dxx) && (nz == dz || nz == dzz) )
+                        continue;
+                    TSectorCollision around = sub_44DBF8(dx, dz, nx, nz, arg->flags);
+                    if ( !around.CollisionType )
+                        continue;
+                    if ( around.CollisionType != 1 )
+                        sub_44E07C(around);
+                    // Only a dug surface can have moved.
+                    if ( !around.craterGrid )
+                        continue;
+                    arg->stPos = stpos - around.pos;
+                    sub_44D8B8(arg, around);
+                }
+            if ( !arg->isect )
+                arg->stPos = unchanged;
+        }
+    }
 }
 
 void NC_STACK_ypaworld::ypaworld_func137(ypaworld_arg137 *arg)

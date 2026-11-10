@@ -253,10 +253,12 @@ int main()
     // near the dent, and the whole wall is still there.
     const Polygon tallWall = {At(0, 0, 50), At(300, 0, 50), At(300, -600, 50), At(0, -600, 50)};
     const std::vector<Shape> wallDent(1, MakeDent(150, -300, 50, 90, 25, 0, 0, 1));
-    double from = 1.0, to = 0.0;
-    Check(DentHeights(wallDent, tallWall, &from, &to) && from == -390 && to == -210,
+    const double from = -390, to = -210;
+    HeightRanges wallRanges;
+    Check(WallHeights(wallDent, tallWall, &wallRanges) && wallRanges.size() == 1 &&
+          wallRanges[0].from == from && wallRanges[0].to == to,
           "the dent asks for height cuts around itself only");
-    CutOnLattice(tallWall, VISUAL_STEP, &pieces, from, to);
+    CutOnLattice(tallWall, VISUAL_STEP, &pieces, wallRanges);
     double tallArea = 0.0, tallestPiece = 0.0;
     for (const Polygon &p : pieces)
     {
@@ -274,6 +276,73 @@ int main()
     Check(tallestPiece <= 2 * VISUAL_STEP + 1e-9, "near the dent the wall is in small pieces");
     Check(pieces.size() < 16 * 33, "far from the dent the wall is not cut in height");
 
+    // The points a cut wall has on one upright line (x, z), where they end up.
+    typedef std::map<long, std::tuple<long, long, long>> Line;
+    const auto lineOf = [&](const Polygon &wall, const std::vector<Shape> &shapes, double x, double z)
+    {
+        std::vector<Shape> reaching;
+        HeightRanges ranges;
+        std::vector<Polygon> cut;
+        Touching(shapes, wall, &reaching);
+        WallHeights(reaching, wall, &ranges);
+        CutOnLattice(wall, VISUAL_STEP, &cut, ranges);
+        Line line;
+        for (const Polygon &p : cut)
+            for (const Point &q : p)
+                if ( std::fabs(q.x - x) < 1e-9 && std::fabs(q.z - z) < 1e-9 )
+                {
+                    const Sample s = SampleAt(reaching, q.x, q.z, q.y);
+                    line[std::lround(q.y * 1000)] = std::make_tuple(std::lround((q.x + s.OffsetX()) * 1000),
+                                                                     std::lround((q.y + s.OffsetY()) * 1000),
+                                                                     std::lround((q.z + s.OffsetZ()) * 1000));
+                }
+        return line;
+    };
+    // Where a line (drawn straight between its points) is at a height.
+    const auto lineAt = [](const Line &line, long y, double out[3])
+    {
+        auto after = line.lower_bound(y);
+        if ( after == line.end() )
+            --after;
+        auto before = after == line.begin() ? after : std::prev(after);
+        const double span = (double)(after->first - before->first);
+        const double t = span > 0.0 ? (double)(y - before->first) / span : 0.0;
+        out[0] = std::get<0>(before->second) + (std::get<0>(after->second) - std::get<0>(before->second)) * t;
+        out[1] = std::get<1>(before->second) + (std::get<1>(after->second) - std::get<1>(before->second)) * t;
+        out[2] = std::get<2>(before->second) + (std::get<2>(after->second) - std::get<2>(before->second)) * t;
+    };
+    // Largest distance (in thousandths) between two walls along their common line.
+    const auto gapOf = [&](const Line &a, const Line &b)
+    {
+        double worst = 0.0;
+        for (int side = 0; side < 2; ++side)
+            for (const auto &entry : side ? b : a)
+            {
+                double here[3], there[3];
+                lineAt(side ? b : a, entry.first, here);
+                lineAt(side ? a : b, entry.first, there);
+                worst = std::max(worst, std::fabs(here[0] - there[0]) + std::fabs(here[1] - there[1]) +
+                                        std::fabs(here[2] - there[2]));
+            }
+        return worst;
+    };
+
+    // A crater at the foot of a corner bends both walls, but only up to a
+    // height. A dent reaching one wall alone must not open the corner: both
+    // walls need the same points where the crater's pull fades out.
+    {
+        const Polygon cornerA = {At(0, 0, 0), At(300, 0, 0), At(300, -600, 0), At(0, -600, 0)};
+        const Polygon cornerB = {At(300, 0, 0), At(300, 0, 300), At(300, -600, 300), At(300, -600, 0)};
+        std::vector<Shape> shapes;
+        shapes.push_back(Make(330, 0, -30, 200, 80, 0.2));
+        shapes.push_back(MakeDent(100, -400, 0, 90, 25, 0, 0, 1));
+        std::vector<Shape> reachB;
+        Check(Touching(shapes, cornerB, &reachB) && reachB.size() == 1, "the dent reaches one wall of the corner only");
+        const Line lineA = lineOf(cornerA, shapes, 300, 0), lineB = lineOf(cornerB, shapes, 300, 0);
+        Check(lineA.size() > 3 && lineB.size() > 3, "both walls are cut where the crater's pull fades");
+        Check(gapOf(lineA, lineB) < 1.0, "a corner over a crater stays closed when a dent reaches one wall only");
+    }
+
     // Two walls meeting at a corner, both near the dent: they get the very same
     // points on their common edge, so the dented corner does not open.
     const Polygon wallA = {At(0, 0, 0), At(300, 0, 0), At(300, -300, 0), At(0, -300, 0)};
@@ -283,9 +352,9 @@ int main()
     for (int side = 0; side < 2; ++side)
     {
         const Polygon &wall = side ? wallB : wallA;
-        double lo = 1.0, hi = 0.0;
-        DentHeights(cornerDent, wall, &lo, &hi);
-        CutOnLattice(wall, VISUAL_STEP, &pieces, lo, hi);
+        HeightRanges ranges;
+        WallHeights(cornerDent, wall, &ranges);
+        CutOnLattice(wall, VISUAL_STEP, &pieces, ranges);
         for (const Polygon &p : pieces)
             for (const Point &q : p)
                 if ( std::fabs(q.x - 300) < 1e-9 && std::fabs(q.z) < 1e-9 )

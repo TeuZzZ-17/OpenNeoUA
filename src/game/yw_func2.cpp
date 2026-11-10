@@ -96,9 +96,15 @@ void DrawBriefingObject(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState
     if ( !object || (!isSector && object.ObjType != TBriefObject::TYPE_VEHICLE) )
         return;
 
+    const auto *building = isSector && object.BuildingID >= 0
+        && (size_t)object.BuildingID < yw->_buildProtos.size()
+        ? &yw->_buildProtos[object.BuildingID] : nullptr;
+    const float buildingScale = building && building->briefing_size > 0.0f
+        ? 100.0f / building->briefing_size : 1.0f;
+
     // Camera distance at the start and at the end of the fly-in.
-    float farDistance = 9600.0;
-    float nearDistance = 3600.0;
+    float farDistance = 9600.0f * buildingScale;
+    float nearDistance = 3600.0f * buildingScale;
     if ( !isSector )
     {
         // Keep briefing framing independent of physical collision volumes.
@@ -127,6 +133,8 @@ void DrawBriefingObject(NC_STACK_ypaworld *yw, TBriefengScreen *brf, TInputState
         const auto &proto = yw->_vhclProtos[object.ID];
         pos += proto.briefing_xyz * (proto.BriefingRadius() / std::max(.001f, proto.radius));
     }
+    else if ( building )
+        pos += building->briefing_xyz * buildingScale;
 
     DrawBriefingPreview(yw, tilt, pos, &brf->ObjRenderParams);
 }

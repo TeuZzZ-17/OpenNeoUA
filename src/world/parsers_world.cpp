@@ -147,6 +147,25 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         _bld->SecType = parser.stol(p2, nullptr, 0);
     }
+    else if ( !StriCmp(p1, "briefing_size") )
+    {
+        const float size = ParseFiniteFloatOrFallback(parser, p2, 0.0f);
+        _bld->briefing_size = size >= 1.0f && size <= 10000.0f ? size : 0.0f;
+    }
+    else if ( !StriCmp(p1, "briefing_xyz") )
+    {
+        std::string axis[3];
+        if ( ReadTuple(p1, p2, 3, axis) )
+        {
+            const float invalid = 100001.0f;
+            const vec3d offset(ParseFiniteFloatOrFallback(parser, axis[0], invalid),
+                               ParseFiniteFloatOrFallback(parser, axis[1], invalid),
+                               ParseFiniteFloatOrFallback(parser, axis[2], invalid));
+            if ( std::abs(offset.x) <= 100000.0 && std::abs(offset.y) <= 100000.0
+                 && std::abs(offset.z) <= 100000.0 )
+                _bld->briefing_xyz = offset;
+        }
+    }
     else if ( !StriCmp(p1, "type_icon") )
     {
         uint32_t glyph;

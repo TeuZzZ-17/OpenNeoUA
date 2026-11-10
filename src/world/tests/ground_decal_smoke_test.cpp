@@ -111,6 +111,22 @@ int main()
     Check(activeEarly == e.count && activeLate > 0 && activeLate < activeEarly,
           "fewer puffs near the end of the smoke");
 
+    // A retriggered emitter survives its activation and stops with the decal.
+    GDS::Emitter retriggered = e;
+    retriggered.startTime = 1000;
+    retriggered.duration = 1000;
+    retriggered.activeDuration = 1000;
+    retriggered.retrigger = 5000;
+    retriggered.endTime = 0;
+    Check(!GDS::EmitterExpired(retriggered, 2500), "retriggered smoke waits after its activation");
+    Check(!GDS::EmitterExpired(retriggered, 6000), "retriggered smoke starts again at the next interval");
+    retriggered.endTime = 5500;
+    Check(GDS::EmitterExpired(retriggered, 6000), "retriggered smoke stops with the decal");
+    GDS::Emitter single = e;
+    single.startTime = 1000;
+    single.duration = 1000;
+    Check(GDS::EmitterExpired(single, 2000), "an effect without retrigger still stops at its lifetime");
+
     // Authored values really change the result: intensity-independent geometry follows the radius.
     GDS::Emitter big = e;
     big.radius = 300.0f;

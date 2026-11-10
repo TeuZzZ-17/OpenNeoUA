@@ -15,6 +15,7 @@ enum KEYTYPE
     KT_WORD  = 0x1, // std::string
     KT_BOOL  = 0x2, // bool
     KT_STRING = 0x3, // std::string
+    KT_LIMIT = 0x4, // int32_t or "no_limit" (stored as INT32_MAX)
 };
 
 struct Key

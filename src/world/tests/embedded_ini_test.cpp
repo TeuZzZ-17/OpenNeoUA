@@ -2,7 +2,9 @@
 #include "common/ini.h"
 #include "openneoua_default_ini.h"
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #undef main
 int main()
 {
@@ -13,7 +15,8 @@ int main()
     Common::Ini::Key cursors("ui.retro_cursors", Common::Ini::KT_BOOL, false);
     Common::Ini::Key missing("game.not_a_real_key", Common::Ini::KT_WORD, std::string("vanilla"));
     Common::Ini::Key diagnostics("game.crash_diagnostics", Common::Ini::KT_BOOL, false);
-    Common::Ini::PKeyList keys{&sprint, &cursors, &missing, &diagnostics};
+    Common::Ini::Key craters("game.deformation_max_craters", Common::Ini::KT_LIMIT, (int32_t)128);
+    Common::Ini::PKeyList keys{&sprint, &cursors, &missing, &diagnostics, &craters};
 
     check(std::strlen(OPENNEOUA_DEFAULT_INI) > 1000, "the ini is embedded");
     Common::Ini::ParseIniTextOverlay(OPENNEOUA_DEFAULT_INI, &keys);
@@ -27,6 +30,13 @@ int main()
     check(diagnostics.Get<bool>(), "explicit yes enables diagnostics");
     Common::Ini::ParseIniTextOverlay("game.crash_diagnostics = no\n", &keys);
     check(!diagnostics.Get<bool>(), "explicit no disables diagnostics");
+    Common::Ini::ParseIniTextOverlay("game.deformation_max_craters = no_limit\n", &keys);
+    check(craters.WasSet && craters.Get<int32_t>() == std::numeric_limits<int32_t>::max(),
+          "no_limit is accepted by a limit key");
+    Common::Ini::ParseIniTextOverlay("game.deformation_max_craters = 64\n", &keys);
+    check(craters.Get<int32_t>() == 64, "a number still sets a limit key");
+    Common::Ini::ParseIniTextOverlay("game.deformation_max_craters = banana\n", &keys);
+    check(craters.Get<int32_t>() == 64, "an invalid limit value keeps the previous one");
 
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);
     return failures ? 1 : 0;

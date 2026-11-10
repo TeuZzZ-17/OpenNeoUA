@@ -552,20 +552,30 @@ inline double Area(const Polygon &polygon)
     return std::sqrt(nx * nx + ny * ny + nz * nz);
 }
 
+// A stretch of height where a shape bends what stands upright (see WallHeights).
+struct HeightRange
+{
+    double from, to;
+};
+typedef std::vector<HeightRange> HeightRanges;
+
 // Cut a convex polygon on the world lattice. Each piece is convex and keeps the
 // winding of the original, so the triangles made from it face the same way.
-// Lines across the height are added only between heightFrom and heightTo
-// (where a dent is): elsewhere the ground needs none.
+// Lines across the height are added only in the given ranges: elsewhere a
+// surface moves evenly along its height and needs none. Each range also gets
+// the first line past each of its ends: two surfaces sharing an upright edge
+// then have a common point where the move is even again, whatever other
+// points each of them has further on (no gap between them).
 inline void CutOnLattice(const Polygon &polygon, double step, std::vector<Polygon> *pieces,
-                         double heightFrom = 1.0, double heightTo = 0.0)
+                         const HeightRanges &ranges = HeightRanges())
 {
     pieces->clear();
     if ( polygon.size() < 3 || !(step > 0.0) )
         return;
 
-    // Height lines inside the polygon and inside the asked range.
+    // Height lines inside the polygon and inside the asked ranges.
     std::vector<double> heights;
-    if ( heightFrom <= heightTo )
+    if ( !ranges.empty() )
     {
         double minY = polygon[0].y, maxY = minY;
         for (const Point &p : polygon)
@@ -576,11 +586,19 @@ inline void CutOnLattice(const Polygon &polygon, double step, std::vector<Polygo
         // Twice the step across the height: dents are wide and soft, and walls
         // would get too many pieces. Every surface uses the same lines.
         const double rise = step * 2.0;
-        const long first = (long)std::ceil(std::max(minY, heightFrom) / rise);
-        const long last = (long)std::floor(std::min(maxY, heightTo) / rise);
-        for (long row = first; row <= last; ++row)
-            if ( row * rise > minY && row * rise < maxY )
-                heights.push_back(row * rise);
+        std::vector<long> rows;
+        for (const HeightRange &range : ranges)
+        {
+            const long first = (long)std::floor(range.from / rise);
+            const long last = (long)std::ceil(range.to / rise);
+            for (long row = first; row <= last; ++row)
+                if ( row * rise > minY && row * rise < maxY )
+                    rows.push_back(row);
+        }
+        std::sort(rows.begin(), rows.end());
+        rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+        for (long row : rows)
+            heights.push_back(row * rise);
     }
 
     double minX = polygon[0].x, maxX = minX, minZ = polygon[0].z, maxZ = minZ;
@@ -633,38 +651,6 @@ inline void CutOnLattice(const Polygon &polygon, double step, std::vector<Polygo
     }
 }
 
-// The height range the dents touching a polygon need cut, as heightFrom and
-// heightTo for CutOnLattice. False when no dent touches the polygon.
-inline bool DentHeights(const std::vector<Shape> &craters, const Polygon &polygon,
-                        double *heightFrom, double *heightTo)
-{
-    if ( polygon.empty() )
-        return false;
-    double minX = polygon[0].x, maxX = minX, minY = polygon[0].y, maxY = minY;
-    double minZ = polygon[0].z, maxZ = minZ;
-    for (const Point &p : polygon)
-    {
-        minX = std::min(minX, p.x); maxX = std::max(maxX, p.x);
-        minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
-        minZ = std::min(minZ, p.z); maxZ = std::max(maxZ, p.z);
-    }
-
-    bool any = false;
-    for (const Shape &shape : craters)
-    {
-        if ( shape.kind != Shape::DENT || !Valid(shape) )
-            continue;
-        const double r = shape.radius;
-        if ( maxX < shape.x - r || minX > shape.x + r || maxY < shape.y - r || minY > shape.y + r ||
-             maxZ < shape.z - r || minZ > shape.z + r )
-            continue;
-        *heightFrom = any ? std::min(*heightFrom, shape.y - r) : shape.y - r;
-        *heightTo = any ? std::max(*heightTo, shape.y + r) : shape.y + r;
-        any = true;
-    }
-    return any;
-}
-
 // Whether a polygon can be changed by any crater: it reaches into a crater from
 // the side, and it is not entirely above or below the ground the crater hit.
 // Whether one crater or dent can change something inside a box. Exact for the
@@ -690,6 +676,44 @@ inline bool ShapeReachesBox(const Shape &shape, double minX, double minY, double
 
     const double band = Band(shape) * 1.25;
     return !(maxY < shape.y - band || minY > shape.y + band);
+}
+
+// The heights where the shapes touching a polygon need it cut, for
+// CutOnLattice. False when there is none.
+//  - A dent bends everything inside its sphere.
+//  - A crater moves what stands on its ground by the same amount at every
+//    height (no cut needed), except where its pull fades out above and below
+//    (Band): there an upright surface bends.
+inline bool WallHeights(const std::vector<Shape> &craters, const Polygon &polygon, HeightRanges *ranges)
+{
+    ranges->clear();
+    if ( polygon.empty() )
+        return false;
+    double minX = polygon[0].x, maxX = minX, minY = polygon[0].y, maxY = minY;
+    double minZ = polygon[0].z, maxZ = minZ;
+    for (const Point &p : polygon)
+    {
+        minX = std::min(minX, p.x); maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y); maxY = std::max(maxY, p.y);
+        minZ = std::min(minZ, p.z); maxZ = std::max(maxZ, p.z);
+    }
+
+    for (const Shape &shape : craters)
+    {
+        if ( !ShapeReachesBox(shape, minX, minY, minZ, maxX, maxY, maxZ) )
+            continue;
+        if ( shape.kind == Shape::DENT )
+        {
+            ranges->push_back({shape.y - shape.radius, shape.y + shape.radius});
+            continue;
+        }
+        const double band = Band(shape);
+        if ( minY < shape.y - band )
+            ranges->push_back({shape.y - band * 1.25, shape.y - band});
+        if ( maxY > shape.y + band )
+            ranges->push_back({shape.y + band, shape.y + band * 1.25});
+    }
+    return !ranges->empty();
 }
 
 // The craters and dents that reach a polygon, into *out. False if none.

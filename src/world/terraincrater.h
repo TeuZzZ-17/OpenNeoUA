@@ -46,6 +46,8 @@ struct CollisionCopy
 {
     bool empty = true;
     UAskeleton::Data data;
+    // Where each point of data.POO was before the craters and dents moved it.
+    std::vector<vec3d> rest;
     NC_STACK_skeleton skeleton;
     PolygonGrid grid;   // Which polygons lie under a short ray (see sub_44D8B8).
 
@@ -71,6 +73,19 @@ struct State
     // Pieces rebuilt in the current frame and the time spent on them.
     int rebuiltThisFrame = 0;
     double rebuildMs = 0.0;
+
+    // Goes up whenever a crater or dent comes or goes.
+    uint32_t version = 0;
+
+    // The models standing on each sector when its copies were last checked
+    // (see RefreshTerrainCraterFootprints).
+    std::vector<uint32_t> cellModels;
+
+    // Squares of 300 units next to a dent (see TerrainCraterSpill): how many
+    // squares around a ray must also look, 0 where no dent is near.
+    std::vector<uint8_t> spill;
+    int spillWidth = 0;
+    uint32_t spillVersion = 0xffffffffu;
 };
 
 }

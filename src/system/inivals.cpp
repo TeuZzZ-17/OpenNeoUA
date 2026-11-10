@@ -283,7 +283,7 @@ Common::Ini::Key IniConf::GameAiBomberExtraAltitude("game.ai_bomber_extra_altitu
 // crater_depth); the oldest goes first. 0 disables them, the maximum is 2000.
 Common::Ini::Key IniConf::GameDeformationGroundLimit("game.deformation_ground_limit", Common::Ini::KT_WORD, std::string(""));
 Common::Ini::Key IniConf::GameDeformationBuildingLimit("game.deformation_building_limit", Common::Ini::KT_WORD, std::string(""));
-Common::Ini::Key IniConf::GameDeformationMaxCraters("game.deformation_max_craters", Common::Ini::KT_DIGIT, (int32_t)128);
+Common::Ini::Key IniConf::GameDeformationMaxCraters("game.deformation_max_craters", Common::Ini::KT_LIMIT, (int32_t)128);
 // OpenNeoUA custom: the player Sprint exists only when all three Sprint values are
 // explicitly present in OpenNeoUA.ini. Missing any one of them disables Sprint.
 Common::Ini::Key IniConf::GameSprintForceUp("game.sprint_force_up", Common::Ini::KT_WORD, std::string("0"));
@@ -490,9 +490,9 @@ Common::Ini::Key IniConf::NetKickoff("net.kickoff", Common::Ini::KT_DIGIT, (int3
 Common::Ini::Key IniConf::GfxParticlesLimit("gfx.particles.limit", Common::Ini::KT_DIGIT, (int32_t)9000);
 // OpenNeoUA custom: bounded world-side terrain decals. Zero disables the system;
 // the generated mesh uses a fixed internal triangle cap.
-Common::Ini::Key IniConf::GfxGroundDecalLimit("gfx.ground_decal_limit", Common::Ini::KT_DIGIT, (int32_t)256);
+Common::Ini::Key IniConf::GfxGroundDecalLimit("gfx.ground_decal_limit", Common::Ini::KT_LIMIT, (int32_t)256);
 // OpenNeoUA custom: global cap of ground decals that smoke at the same time (smoke is set per decal block).
-Common::Ini::Key IniConf::GfxGroundDecalEffectLimit("gfx.ground_decal_effect_limit", Common::Ini::KT_DIGIT, (int32_t)256);
+Common::Ini::Key IniConf::GfxGroundDecalEffectLimit("gfx.ground_decal_effect_limit", Common::Ini::KT_LIMIT, (int32_t)256);
 
 Common::Ini::Key IniConf::MenuWindowed("menu.windowed", Common::Ini::KT_BOOL, false);
 

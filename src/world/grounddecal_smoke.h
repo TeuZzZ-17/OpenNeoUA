@@ -25,6 +25,9 @@ struct Emitter
     int32_t duration = 0;
     uint32_t seed = 0;
     int count = 0;
+    int32_t activeDuration = 0; // Rolled effect_active_time, reused by every activation.
+    int32_t retrigger = 0;      // Ms between activations; 0 = one activation only.
+    int32_t endTime = 0;        // Decal end in world time; 0 = no end (permanent).
     int32_t meshCycle = -1;
     int32_t meshCycleStart = 0; // Start time of the current pulse interval.
     int32_t meshCycleLen = 0;   // Length of the current pulse interval; 0 = not rolled yet.
@@ -78,6 +81,35 @@ inline int PulseInterval(const TGroundDecalSmoke &p, uint32_t seed, int cycle)
     return std::max(200, (int)RangeFrom(Hash(seed, (uint32_t)cycle, 0x494e5456u),
                                         (float)p.pulse_interval_min,
                                         (float)p.pulse_interval_max));
+}
+
+// Delay between two activations of the whole effect. 0 means one activation.
+// A configured range is rolled once per decal, like effect_active_time.
+inline int RetriggerInterval(const TGroundDecalSmoke &p, uint32_t seed)
+{
+    if ( p.retrigger_max <= 0 )
+        return 0;
+    const int low = std::max(0, p.retrigger_min);
+    const int high = std::max(low, p.retrigger_max);
+    if ( high <= low )
+        return std::max(200, low);
+    return std::max(200, (int)RangeFrom(Hash(seed, 0x52545247u, 0u),
+                                        (float)low, (float)high));
+}
+
+// An emitter is removed only when it cannot activate again. With a retrigger
+// interval it stays alive (possibly waiting) until the decal itself ends.
+inline bool EmitterExpired(const Emitter &e, int32_t now)
+{
+    if ( e.retrigger > 0 && e.endTime != 0 && now >= e.endTime )
+        return true;
+
+    const int32_t age = now - e.startTime;
+    if ( age < 0 )
+        return true;
+    if ( age < e.duration )
+        return false;
+    return e.retrigger <= 0;
 }
 
 // Life shape: linear fade-in, full strength, then a linear fade-out that ends

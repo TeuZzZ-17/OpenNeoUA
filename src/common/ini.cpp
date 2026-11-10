@@ -22,6 +22,7 @@ Key::Key(const std::string &k, KEYTYPE t)
     {
         default:
         case KT_DIGIT:
+        case KT_LIMIT:
             Value = (int32_t)0;
             break;
 
@@ -143,11 +144,16 @@ void ParseLine(std::string line, std::vector<T> *lst)
                 switch ( key.Type )
                 {
                 case KT_DIGIT:
+                case KT_LIMIT:
                 {
                     int32_t value = 0;
-                    if ( splt.GetNext(&tmp) && ParseInt32(tmp, &value) )
+                    if ( splt.GetNext(&tmp) &&
+                         ((key.Type == KT_LIMIT && !StriCmp(tmp, "no_limit")) ||
+                          ParseInt32(tmp, &value)) )
                     {
-                        key.Value = value;
+                        key.Value = key.Type == KT_LIMIT && !StriCmp(tmp, "no_limit")
+                                      ? std::numeric_limits<int32_t>::max()
+                                      : value;
                         parsed = true;
                     }
                     break;
@@ -186,7 +192,8 @@ void ParseLine(std::string line, std::vector<T> *lst)
 
                 if ( parsed )
                     key.WasSet = true;
-                else if ( key.Type == KT_DIGIT || key.Type == KT_BOOL || key.Type == KT_WORD )
+                else if ( key.Type == KT_DIGIT || key.Type == KT_LIMIT ||
+                          key.Type == KT_BOOL || key.Type == KT_WORD )
                     WarnInvalidValue(key, tmp);
             }
         }

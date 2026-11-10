@@ -1,6 +1,7 @@
 // Smoke rising from ground decals: emitter list and billboard rendering.
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "grounddecal_limit.h"
 #include "grounddecal_smoke.h"
@@ -11,9 +12,12 @@ namespace
 {
 
 // Cap active decal effects at the global decal limit; 0 disables them.
+// "no_limit" on the effect key is still capped by gfx.ground_decal_limit.
 static int GroundDecalSmokeLimit()
 {
     const int value = System::IniConf::GfxGroundDecalEffectLimit.Get<int32_t>();
+    if ( value == std::numeric_limits<int32_t>::max() )
+        return World::GroundDecalLimit();
     return std::max(0, std::min(value, World::GroundDecalLimit()));
 }
 
@@ -30,7 +34,8 @@ static bool GroundDecalSmokeFinite(const vec3d &value)
 }
 
 bool NC_STACK_ypaworld::SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke,
-                                              const vec3d &pos, float radius, uint32_t seed)
+                                              const vec3d &pos, float radius, uint32_t seed,
+                                              int32_t decalEndTime)
 {
     namespace GDS = World::GroundDecalSmoke;
 
@@ -70,12 +75,19 @@ bool NC_STACK_ypaworld::SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &sm
     if ( emitter.duration <= 0 || (rise && emitter.count <= 0) )
         return false;
 
+    // The effect can restart for as long as the decal lives. One activation
+    // never lasts longer than the retrigger interval.
+    emitter.activeDuration = emitter.duration;
+    emitter.retrigger = GDS::RetriggerInterval(smoke, seed);
+    if ( emitter.retrigger > 0 )
+        emitter.duration = std::min(emitter.duration, emitter.retrigger);
+    emitter.endTime = decalEndTime;
+
     _groundDecalSmoke.erase(
         std::remove_if(_groundDecalSmoke.begin(), _groundDecalSmoke.end(),
                        [this](const GDS::Emitter &old)
                        {
-                           const int32_t age = _timeStamp - old.startTime;
-                           return age < 0 || age >= old.duration;
+                           return GDS::EmitterExpired(old, _timeStamp);
                        }),
         _groundDecalSmoke.end());
 
@@ -146,11 +158,34 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
 
     for (auto it = _groundDecalSmoke.begin(); it != _groundDecalSmoke.end(); )
     {
-        const int32_t age = _timeStamp - it->startTime;
-        if ( age < 0 || age >= it->duration )
+        int32_t age = _timeStamp - it->startTime;
+        if ( GDS::EmitterExpired(*it, _timeStamp) )
         {
             it = _groundDecalSmoke.erase(it);
             continue;
+        }
+        if ( age >= it->duration )
+        {
+            // Waiting between two activations.
+            if ( age < it->retrigger )
+            {
+                ++it;
+                continue;
+            }
+
+            // Jump to the activation that contains the current time; a long
+            // frame never replays every missed activation.
+            it->startTime += (age / it->retrigger) * it->retrigger;
+            it->duration = std::min(it->activeDuration, it->retrigger);
+            it->meshCycle = -1;
+            it->meshCycleStart = 0;
+            it->meshCycleLen = 0;
+            age = _timeStamp - it->startTime;
+            if ( age >= it->duration )
+            {
+                ++it;
+                continue;
+            }
         }
 
         // Rising puffs climb well above the decal, so the visibility margin is
