@@ -3107,6 +3107,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
     wobj->SetLifeTime(wproto.RollLifeTime());
     wobj->SetDelay(wproto.delay_time);
     wobj->SetDriveTime(wproto.drive_time);
+    wobj->SetHomingBombDriveLimit(wproto.IsHomingBomb() && wproto.drive_time_explicit);
     const bool canHome = wproto._weaponFlags == World::TWeapProto::WEAPON_FLAGS_MISSILE || wproto.IsHomingBomb();
     wobj->SetHomingTime(canHome ? wproto.homing_time : 0);
     wobj->SetHomingForce(canHome ? wproto.homing_force : 0.0f);

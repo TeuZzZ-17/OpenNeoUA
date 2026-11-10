@@ -1579,6 +1579,13 @@ struct BoomerangMissileProbe : NC_STACK_ypamissile {
         _position += vec3d(0, 0, 100);
         _old_pos = _position;
     }
+    void PrepareHomingBomb(int driveTime, bool limited) {
+        _mislType = MISL_BOMB; _mislLifeTime = 8000; _mislDriveTime = driveTime;
+        _mislHomingBombDriveLimit = limited; _mislHomingTimeRemaining = -1;
+        _force = 2500; _mass = 250; _airconst = 2;
+        _primTtype = BACT_TGT_TYPE_CELL; _target_vec = vec3d(0, 0, 1000);
+        _target_dir = vec3d(0, 0, 1);
+    }
 };
 
 void TestBoomerangLifetimeReturn() {
@@ -1655,6 +1662,55 @@ void TestBoomerangLifetimeReturn() {
     Check(up && down, "ejection samples both vertical directions");
 }
 
+void TestExpiredHomingFalls() {
+    BoomerangWorld world;
+    Unit emitter;
+    emitter.Bind(world, 1, 970, vec3d(2400, -500, -2400));
+    BoomerangMissileProbe projectile;
+    projectile.Bind(world, emitter, 208);
+    projectile.SetMissileType(NC_STACK_ypamissile::MISL_BOMB);
+    projectile.SetLifeTime(8000);
+    projectile.SetHomingTime(1);
+    update_msg frame{};
+    frame.frameTime = 16;
+    projectile.AI_layer3(&frame);
+    Check(projectile._fly_dir.y > 0, "expired homing continues falling under gravity");
+    BoomerangMissileProbe missile;
+    missile.Bind(world, emitter, 208);
+    missile.SetMissileType(NC_STACK_ypamissile::MISL_TARGETED);
+    missile.SetLifeTime(8000);
+    missile.SetHomingTime(1);
+    missile.AI_layer3(&frame);
+    Check(missile._fly_dir.y > 0, "missile with expired homing continues falling under gravity");
+}
+
+void TestHomingBombDriveLimit() {
+    BoomerangWorld world;
+    Check(ParseWeapons(world, {"new_weapon 208", "model = homing_bomb", "drive_time = 1000", "end",
+                              "new_weapon 209", "model = homing_bomb", "end",
+                              "new_weapon 210", "model = homing_bomb", "drive_time = 0", "end",
+                              "new_weapon 211", "model = homing_bomb", "drive_time = invalid", "end"}),
+          "homing bomb drive fixture parsed");
+    Unit emitter;
+    emitter.Bind(world, 1, 971, vec3d(2400, -500, -2400));
+    BoomerangMissileProbe powered, expired, legacy, zero, invalid;
+    powered.Bind(world, emitter, 208); powered.PrepareHomingBomb(1000, world._weaponProtos[208].drive_time_explicit);
+    expired.Bind(world, emitter, 208); expired.PrepareHomingBomb(-1, world._weaponProtos[208].drive_time_explicit);
+    legacy.Bind(world, emitter, 209); legacy.PrepareHomingBomb(-1, world._weaponProtos[209].drive_time_explicit);
+    zero.Bind(world, emitter, 210); zero.PrepareHomingBomb(-1, world._weaponProtos[210].drive_time_explicit);
+    invalid.Bind(world, emitter, 211); invalid.PrepareHomingBomb(-1, world._weaponProtos[211].drive_time_explicit);
+    update_msg frame{}; frame.frameTime = 16;
+    powered.AI_layer3(&frame); expired.AI_layer3(&frame); legacy.AI_layer3(&frame); zero.AI_layer3(&frame); invalid.AI_layer3(&frame);
+    Check(powered._fly_dir_length > expired._fly_dir_length,
+          "homing bomb stops thrust after explicit drive time");
+    Check(Near(powered._fly_dir_length, legacy._fly_dir_length),
+          "homing bomb without explicit drive time retains thrust");
+    Check(Near(powered._fly_dir_length, zero._fly_dir_length),
+          "zero drive time keeps legacy homing bomb thrust");
+    Check(Near(powered._fly_dir_length, invalid._fly_dir_length),
+          "invalid drive time keeps legacy homing bomb thrust");
+}
+
 int main() {
     WorldProbe w;
     Check(ParseWeapons(w, {"new_weapon 1", "model = bomb", "ai_fire_trigger_box_below_xyz = 200|1200|400", "end",
@@ -1711,6 +1767,8 @@ int main() {
     TestImplicitFeatureGroups();
     TestSmartClusterPriority();
     TestBoomerangLifetimeReturn();
+    TestExpiredHomingFalls();
+    TestHomingBombDriveLimit();
     TestFrontVolumes(w, wp.data());
     TestArcFallback();
     TestTurretSlotsAndCadence();
