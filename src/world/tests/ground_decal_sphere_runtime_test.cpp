@@ -9,6 +9,12 @@
 
 namespace
 {
+class TerrainTexture : public NC_STACK_bitmap
+{
+public:
+    const std::string getRsrc_name() const override { return "BODEN1"; }
+};
+
 int checks = 0, failures = 0;
 void Check(bool result, const char *label)
 {
@@ -114,6 +120,112 @@ int main()
     world->_isNetGame = false;
     fx.trigger = World::TChainFXConfig::TRIGGER_AIR_DESTROYED;
     Check(!world->SpawnGroundDecalInSphere(fx, center, 10), "only destroyed decal blocks accepted");
+
+    // Two buildings share a sector. The wall overhangs the next slot, so its
+    // actual collision origin is needed to identify which building was hit.
+    world->ClearGroundDecals();
+    cellArea &cell = world->_cells.At(1, 1);
+    cell.CellId = Common::Point(1, 1);
+    cell.SectorType = 0;
+    cell.height = 0;
+    cell.buildings_health.At(0, 1) = 255;
+    cell.buildings_health.At(1, 1) = 255;
+    TerrainTexture groundTexture;
+    NC_STACK_base base;
+    base.Meshes.emplace_back();
+    GFX::TMesh &ground = base.Meshes.back();
+    ground.Mat.TexSource = &groundTexture;
+    ground.Vertexes.resize(3);
+    ground.Vertexes[0].Pos = vec3f(-600, 0, -600);
+    ground.Vertexes[1].Pos = vec3f(600, 0, -600);
+    ground.Vertexes[2].Pos = vec3f(0, 0, 600);
+    ground.Indixes = {0, 1, 2};
+    world->_legoArray[0].Base = &base;
+    world->_vhclModels.resize(2);
+    world->_vhclModels[1] = &base;
+
+    fx.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
+    auto &smoke = fx.ground_decal_smoke;
+    smoke.enabled = true;
+    smoke.chance = 100;
+    smoke.active_time_min = smoke.active_time_max = 3000;
+    smoke.mode = World::TGroundDecalSmoke::MODE_GROUND_PULSE;
+    smoke.pulse_vp = 1;
+    smoke.pulse_time = 500;
+    smoke.pulse_interval_min = smoke.pulse_interval_max = 500;
+    World::TCraterConfig crater;
+    crater.defined = true;
+    crater.radius_min = crater.radius_max = 100;
+    crater.depth_min = crater.depth_max = 30;
+
+    ypaworld_arg136 impact;
+    impact.isect = true;
+    impact.hitCell = cell.CellId;
+    impact.hitCollisionType = 1;
+    impact.hitSkelPos = vec3d(1500, 0, -1800);
+    impact.isectPos = vec3d(1740, -4, -1800);
+    impact.vect = vec3d(1, 0, 0);
+    impact.skel = &data;
+    data.polygons[0].A = 1;
+    data.polygons[0].B = 0;
+    Check(world->SpawnGroundDecal(fx, impact) && world->SpawnTerrainCrater(crater, impact) &&
+          world->_groundDecals.back().building.slot == 3 &&
+          world->_terrainCraters.craters.back().building.slot == 3,
+          "wall at ground height belongs to its collision piece, even across a slot boundary");
+
+    impact.hitSkelPos.x = 1800;
+    impact.isectPos = vec3d(1900, -100, -1800);
+    Check(world->SpawnGroundDecal(fx, impact) && world->SpawnTerrainCrater(crater, impact),
+          "neighboring building receives its own decal, smoke and dent");
+    data.polygons[0].A = 0;
+    data.polygons[0].B = 1;
+    impact.hitSkelPos.x = 1500;
+    impact.isectPos = vec3d(1500, 0, -1800);
+    impact.vect = vec3d(0, 1, 0);
+    Check(world->SpawnGroundDecal(fx, impact) && world->SpawnTerrainCrater(crater, impact) &&
+          world->_groundDecals.back().building.slot == -1 &&
+          world->_terrainCraters.craters.back().kind == World::Crater::Shape::GROUND,
+          "ground inside a building slot has its own decal, smoke and crater");
+
+    TF::TForm3D view;
+    view.CalcPos = impact.isectPos;
+    view.CalcSclRot = mat3x3::Ident();
+    world->_normalVizLimit = 3000;
+    auto *previousView = TF::Engine.GetViewPoint();
+    TF::Engine.SetViewPoint(&view);
+    baseRender_msg render{};
+    world->RenderGroundDecalSmoke(&render);
+    TF::Engine.SetViewPoint(previousView);
+    Check(world->_transientVPs.size() == 3, "each smoke emitter has a visible pulse");
+
+    yw_arg129 damage{};
+    damage.OwnerID = World::OWNER_NOCHANGE;
+    world->ApplyBuildingHealthChange(&cell, 0, 1, 50, &damage);
+    Check(world->_groundDecals.size() == 3 && world->_groundDecalSmoke.size() == 3 &&
+          world->_transientVPs.size() == 3 && world->TerrainCraterCount() == 3,
+          "partial damage keeps all the impact effects");
+    world->ApplyBuildingHealthChange(&cell, 0, 1, 0, &damage);
+    Check(world->_groundDecals.size() == 2 && world->_groundDecalSmoke.size() == 2 &&
+          world->_transientVPs.size() == 2 && world->TerrainCraterCount() == 2 &&
+          world->_groundDecals.front().building.slot == 4 &&
+          world->_groundDecals.back().building.slot == -1,
+          "destruction clears only the matching decal, emitter, active pulse and dent");
+
+    Engine::StringList save = {"begin_craters",
+        "dent = 1740|-4|-1800|100|30|1|0|0 |1|1|3",
+        "dent = 1740|-4|-1800|100|30|1|0|0 |1|1|4",
+        "end"};
+    ScriptParser::HandlersList handlers{new World::Parsers::SaveCraterParser(world.get())};
+    Check(ScriptParser::ParseStringList(save, handlers, ScriptParser::FLAG_NO_SCOPE_SKIP) &&
+          world->TerrainCraterCount() == 3 && world->_terrainCraters.craters.back().building.slot == 4,
+          "save reader restores the exact live slot and skips a destroyed owner");
+    world->ApplyBuildingHealthChange(&cell, 1, 1, 0, &damage);
+    Check(world->TerrainCraterCount() == 1 && world->_groundDecals.size() == 1 &&
+          world->_groundDecalSmoke.size() == 1 && world->_transientVPs.size() == 1,
+          "ground effects survive destruction of both buildings");
+    world->_transientVPs.clear();
+    world->_vhclModels[1] = nullptr;
+    world->_legoArray[0].Base = nullptr;
     world->_legoArray[0].CollisionSkelet = nullptr;
     world->_fillerSide = nullptr;
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);

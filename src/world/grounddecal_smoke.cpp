@@ -35,7 +35,7 @@ static bool GroundDecalSmokeFinite(const vec3d &value)
 
 bool NC_STACK_ypaworld::SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke,
                                               const vec3d &pos, float radius, uint32_t seed,
-                                              int32_t decalEndTime)
+                                              int32_t decalEndTime, World::BuildingPiece building)
 {
     namespace GDS = World::GroundDecalSmoke;
 
@@ -61,6 +61,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &sm
     GDS::Emitter emitter;
     emitter.params = smoke;
     emitter.pos = pos;
+    emitter.building = building;
     emitter.radius = radius;
     emitter.startTime = _timeStamp;
     emitter.seed = seed;
@@ -219,11 +220,12 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
                                                      std::sin(angle) * spread);
                     const float size = params.mesh_scale * it->radius / 50.0f;
                     const int life = std::min(params.pulse_time, interval);
-                    SpawnTransientVisual(params.pulse_vp, params.mesh3ds, params.base_model,
-                                         pos, mat3x3::RotateZ(angle), life,
-                                         std::max(0.01f, size), params.tint,
-                                         vec3d(1.0, 1.0, 1.0), vec3d(),
-                                         TTransientVPParticleControls(), 10, life / 2);
+                    if ( SpawnTransientVisual(params.pulse_vp, params.mesh3ds, params.base_model,
+                                              pos, mat3x3::RotateZ(angle), life,
+                                              std::max(0.01f, size), params.tint,
+                                              vec3d(1.0, 1.0, 1.0), vec3d(),
+                                              TTransientVPParticleControls(), 10, life / 2) )
+                        _transientVPs.back().decalBuilding = it->building;
                 }
                 ++it;
                 continue;

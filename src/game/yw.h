@@ -2896,8 +2896,10 @@ public:
     bool FindWorldSurfaceInSphere(const vec3d &center, float radius, ypaworld_arg136 &hit);
     void RenderGroundDecals(baseRender_msg *arg);
     void ClearGroundDecals();
+    void ClearBuildingImpactFX(const Common::Point &cellId, int slot = -1);
     bool SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke, const vec3d &pos, float radius,
-                               uint32_t seed, int32_t decalEndTime = 0);
+                               uint32_t seed, int32_t decalEndTime = 0,
+                               World::BuildingPiece building = {});
     void RenderGroundDecalSmoke(baseRender_msg *arg);
     void ClearGroundDecalSmoke();
 
@@ -2907,6 +2909,9 @@ public:
     bool SpawnTerrainCrater(const World::TCraterConfig &config, const ypaworld_arg136 &hit);
     void AddTerrainCrater(const World::Crater::Shape &shape);
     void ClearTerrainCratersInCell(const Common::Point &cellId);
+    void ClearBuildingDents(const Common::Point &cellId, int slot);
+    World::BuildingPiece ImpactBuildingPiece(const ypaworld_arg136 &hit, const vec3d &restPos,
+                                              const vec3d &normal, bool *onGround = nullptr);
     void ClearTerrainCraters();
     void ReleaseRetiredTerrainCraters();
     bool TerrainCraterRebuildAllowed() const;
@@ -3051,6 +3056,7 @@ public:
     struct TTransientVP
     {
         std::unique_ptr<NC_STACK_base::Instance> vp;
+        World::BuildingPiece decalBuilding;
         int32_t id = 0;
         vec3d pos;
         mat3x3 rot;
@@ -3121,6 +3127,7 @@ public:
     struct TGroundDecal
     {
         vec3d pos;
+        World::BuildingPiece building;
         vec3d axisT;    // Decal plane, with the authored rotation already applied.
         vec3d axisB;
         vec3d axisN;    // Impact surface normal, toward where the impact came from.

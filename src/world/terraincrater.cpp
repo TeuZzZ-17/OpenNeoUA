@@ -202,7 +202,7 @@ bool DigMesh(const GFX::TMesh &source, const vec3d &origin,
 // the hit was before any crater or dent (TerrainCraterRestHit), so the model
 // is looked at as it was made.
 bool VisibleGroundAt(const std::list<GFX::TMesh> &meshes, const vec3d &origin, const vec3d &point,
-                     double tolerance)
+                     const vec3d &normal)
 {
     const double x = point.x - origin.x;
     const double z = point.z - origin.z;
@@ -224,8 +224,13 @@ bool VisibleGroundAt(const std::list<GFX::TMesh> &meshes, const vec3d &origin, c
             if ( w1 < -1e-4 || w2 < -1e-4 || w3 < -1e-4 )
                 continue;
             const double height = origin.y + a.y * w1 + b.y * w2 + c.y * w3;
-            if ( std::fabs(height - point.y) <= tolerance )
-                return true;
+            if ( std::fabs(height - point.y) <= 12.0 )
+            {
+                // A wall can meet the ground at this point. Match the plane too.
+                vec3d groundNormal = vec3d(b - a) * vec3d(c - a);
+                if ( groundNormal.normalise() > 0.0 && std::fabs(groundNormal.dot(normal)) >= 0.7 )
+                    return true;
+            }
         }
     }
     return false;
@@ -340,6 +345,45 @@ World::Crater::DeformationLimits NC_STACK_ypaworld::TerrainCraterLimits(const ve
 
 // ------------------------------------------------------------- spawning ---
 
+static int BuildingSlot(const cellArea &cell, const Common::Point &cellId, const vec3d &position)
+{
+    if ( cell.SectorType == 1 )
+        return 0;
+
+    const vec3d centre = World::SectorIDToCenterPos3(cellId);
+    const int x = 1 + (int)std::round(std::max(-1.0, std::min(1.0, (position.x - centre.x) / 300.0)));
+    const int y = 1 + (int)std::round(std::max(-1.0, std::min(1.0, (position.z - centre.z) / 300.0)));
+    return x + 3 * y;
+}
+
+World::BuildingPiece NC_STACK_ypaworld::ImpactBuildingPiece(const ypaworld_arg136 &hit,
+                                                            const vec3d &restPos, const vec3d &normal,
+                                                            bool *onGround)
+{
+    // A sector seam is terrain. In a LEGO piece, terrain and building can share
+    // the same collision skeleton, so check the visible ground at the hit.
+    if ( onGround )
+        *onGround = true;
+    if ( hit.hitCollisionType != 1 )
+        return {};
+
+    const cellArea &cell = _cells(hit.hitCell);
+    const int slot = BuildingSlot(cell, hit.hitCell, hit.hitSkelPos);
+    const int x = slot % 3, y = slot / 3;
+    const bool alive = cell.buildings_health.Get(x, y) > 0;
+    if ( !onGround && !alive )
+        return {};
+    const int legoId = GetLegoBld(&cell, x, y);
+    const NC_STACK_base *base = legoId >= 0 && (size_t)legoId < _legoArray.size()
+        ? _legoArray[legoId].Base : nullptr;
+    const bool ground = base && VisibleGroundAt(base->Meshes, hit.hitSkelPos, restPos, normal);
+    if ( onGround )
+        *onGround = ground;
+    if ( !ground && alive )
+        return {hit.hitCell.x, hit.hitCell.y, slot};
+    return {};
+}
+
 bool NC_STACK_ypaworld::SpawnTerrainCrater(const World::TCraterConfig &config,
                                            const ypaworld_arg136 &hit)
 {
@@ -377,31 +421,18 @@ bool NC_STACK_ypaworld::SpawnTerrainCrater(const World::TCraterConfig &config,
     // its collision is looked up in.
     vec3d restPos = hit.isectPos, restNormal = normal;
     TerrainCraterRestHit(hit, &restPos, &restNormal);
-    bool ground = restNormal.y >= MIN_UP;
-    if ( ground && hit.hitCollisionType == 1 )
-    {
-        const cellArea &cell = _cells(hit.hitCell);
-        int bldX = 0, bldY = 0;
-        if ( cell.SectorType != 1 )
-        {
-            const int dxx = (int)std::lround(hit.hitSkelPos.x / 300.0);
-            const int dzz = (int)std::lround(-hit.hitSkelPos.z / 300.0);
-            bldX = dxx % 4 - 1;
-            bldY = 2 - (dzz % 4 - 1);
-        }
-        const int legoId = GetLegoBld(&cell, bldX, bldY);
-        if ( legoId < 0 || (size_t)legoId >= _legoArray.size() || !_legoArray[legoId].Base )
-            return false;
-        ground = VisibleGroundAt(_legoArray[legoId].Base->Meshes, hit.hitSkelPos, restPos, 12.0);
-    }
+    bool onGround;
+    const World::BuildingPiece building = ImpactBuildingPiece(hit, restPos, restNormal, &onGround);
+    const bool ground = onGround && restNormal.y >= MIN_UP;
 
-    const World::Crater::Shape shape = ground
+    World::Crater::Shape shape = ground
         ? World::Crater::Make(hit.isectPos.x, hit.isectPos.y, hit.isectPos.z, radius, depth, rim)
         : World::Crater::MakeDent(hit.isectPos.x, hit.isectPos.y, hit.isectPos.z, radius, depth,
                                   normal.x, normal.y, normal.z);
     if ( !World::Crater::Valid(shape) )
         return false;
 
+    shape.building = building;
     AddTerrainCrater(shape);
     return true;
 }
@@ -439,6 +470,19 @@ void NC_STACK_ypaworld::ClearTerrainCratersInCell(const Common::Point &cellId)
         else
             ++i;
     }
+}
+
+void NC_STACK_ypaworld::ClearBuildingDents(const Common::Point &cellId, int slot)
+{
+    auto &craters = _terrainCraters.craters;
+    const auto removed = std::remove_if(craters.begin(), craters.end(), [&](const Cr::Shape &shape)
+    {
+        if ( !shape.building.Matches(cellId.x, cellId.y, slot) )
+            return false;
+        RetireTerrainCraterCopies(shape);
+        return true;
+    });
+    craters.erase(removed, craters.end());
 }
 
 void NC_STACK_ypaworld::ClearTerrainCraters()
@@ -936,8 +980,10 @@ void NC_STACK_ypaworld::WriteTerrainCraters(FSMgr::FileHandle *file)
     for (const World::Crater::Shape &shape : _terrainCraters.craters)
     {
         if ( shape.kind == World::Crater::Shape::DENT )
-            file->printf(";#!    dent = %.2f|%.2f|%.2f|%.2f|%.2f|%.4f|%.4f|%.4f\n", shape.x, shape.y,
-                         shape.z, shape.radius, shape.depth, shape.nx, shape.ny, shape.nz);
+            // Older engines read only the first token, which still holds the whole dent.
+            file->printf(";#!    dent = %.2f|%.2f|%.2f|%.2f|%.2f|%.4f|%.4f|%.4f |%d|%d|%d\n",
+                         shape.x, shape.y, shape.z, shape.radius, shape.depth, shape.nx, shape.ny,
+                         shape.nz, shape.building.cellX, shape.building.cellY, shape.building.slot);
         else
             file->printf(";#!    crater = %.2f|%.2f|%.2f|%.2f|%.2f|%.4f\n", shape.x, shape.y, shape.z,
                          shape.radius, shape.depth, shape.rim);
@@ -962,14 +1008,49 @@ bool NC_STACK_ypaworld::ReadTerrainCrater(const std::string &value)
 bool NC_STACK_ypaworld::ReadTerrainDent(const std::string &value)
 {
     std::vector<double> numbers;
-    if ( !SavedNumbers(value, 8, &numbers) )
+    const bool hasOwner = SavedNumbers(value, 11, &numbers);
+    if ( !hasOwner && !SavedNumbers(value, 8, &numbers) )
         return false;
 
-    const World::Crater::Shape shape = World::Crater::MakeDent(numbers[0], numbers[1], numbers[2],
-                                                              numbers[3], numbers[4], numbers[5],
-                                                              numbers[6], numbers[7]);
+    World::Crater::Shape shape = World::Crater::MakeDent(numbers[0], numbers[1], numbers[2],
+                                                        numbers[3], numbers[4], numbers[5],
+                                                        numbers[6], numbers[7]);
     if ( !World::Crater::Valid(shape) )
         return false;
+
+    if ( hasOwner && (numbers[8] != -1 || numbers[9] != -1 || numbers[10] != -1) )
+    {
+        const double x = numbers[8], y = numbers[9], slot = numbers[10];
+        if ( !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(slot) ||
+             x != std::floor(x) || y != std::floor(y) || slot != std::floor(slot) ||
+             x < 1 || x >= _mapSize.x - 1 || y < 1 || y >= _mapSize.y - 1 || slot < 0 || slot > 8 )
+            return false;
+        const cellArea &cell = _cells((int)x, (int)y);
+        if ( cell.SectorType == 1 && slot != 0 )
+            return false;
+        if ( cell.buildings_health.Get((int)slot % 3, (int)slot / 3) <= 0 )
+            return true; // The saved owner has already been destroyed.
+        shape.building = {(int)x, (int)y, (int)slot};
+    }
+    else if ( !hasOwner && shape.x >= 0.0 && shape.x < _mapSize.x * World::CVSectorLength &&
+              shape.z <= 0.0 && -shape.z < _mapSize.y * World::CVSectorLength )
+    {
+        // Old saves stored only the impact point. Use the piece under it
+        // when the slot belongs to a destructible building.
+        const vec3d pos(shape.x, shape.y, shape.z);
+        const Common::Point id = World::PositionToSectorID(pos);
+        if ( IsGamePlaySector(id) )
+        {
+            const cellArea &cell = _cells(id);
+            const int slot = BuildingSlot(cell, id, pos);
+            const int x = slot % 3, y = slot / 3;
+            const TSubSectorDesc *piece = _secTypeArray[cell.type_id].SubSectors.Get(x, y);
+            if ( cell.buildings_health.Get(x, y) > 0 )
+                shape.building = {id.x, id.y, slot};
+            else if ( piece && piece->StartHealth > 0 )
+                return true;
+        }
+    }
     AddTerrainCrater(shape);
     return true;
 }
