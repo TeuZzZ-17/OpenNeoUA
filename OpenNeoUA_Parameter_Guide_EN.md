@@ -1346,7 +1346,7 @@ Weapon Blast uses one shared radius for units, buildings and sector structures.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `Blast_energy = 4000` — Energy removed from all three target categories. When energy is above 0, the unit, building or sector struck directly takes only energy and no Blast_energy; with energy = 0 it takes Blast_energy like the others. Range: 0..100000000. The damage shown in the interface (DMG row, briefing, Database) is always the higher of energy and Blast_energy; Blast_energy counts only when Blast_radius is active and the weapon is not a laser.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `Blast_Push = 0.65`   — Radial push intensity 0..10. Keeps the existing target filters and push_resistance. When push is above 0, the unit struck directly takes only push and no Blast_Push; with push = 0 it takes Blast_Push like the others. GUN actors remain excluded. The displacement is 100 x (intensity x (1 - push_resistance))^2 world units, so halving the intensity cuts the displacement to a quarter. Reference used by the modernized weapons: Blast_Push is about 70% of push (half the displacement), except bombs and kamikaze where it equals push.
+- 🟢 `Blast_Push = 1.05`   — Radial push intensity 0..10. Keeps the existing target filters and push_resistance. When push is above 0, the unit struck directly takes only push and no Blast_Push; with push = 0 it takes Blast_Push like the others. GUN actors remain excluded. The displacement is 100 x (intensity x (1 - push_resistance))^2 world units, so halving the intensity cuts the displacement to a quarter. Reference used by the modernized weapons: Blast_Push is about 70% of push (half the displacement), except bombs and kamikaze where it equals push.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `blast_debuff_id = 2` — ID or name of the new_debuff profile applied by the explosion to all enemies inside Blast_radius (for example `blast_debuff_id = shock`). 0, absent, invalid, or an unknown ID or name = no area Debuff. When debuff_id is set, the unit struck directly takes only debuff_id; without debuff_id it takes blast_debuff_id like the others.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1355,7 +1355,7 @@ Weapon Blast uses one shared radius for units, buildings and sector structures.
 
 Balance reference used for the modernized weapons (`max_active_at_once = 5` units and their weapons). These are rules of thumb, not engine limits.
 
-- Direct push: displacement on a light tank (push_resistance 0.2) = 3.5 x (damage / 1000)^0.75 x min(1, shot_time / 1000)^0.8 world units; `push` is then sqrt(displacement / 100) / 0.8, rounded to 0.05. Fast-firing weapons therefore push very little per hit.
+- Direct push: displacement on a light tank (push_resistance 0.2) = 9 x (damage / 1000)^0.75 x min(1, shot_time / 1000)^0.8 world units; `push` is then sqrt(displacement / 100) / 0.8, rounded to 0.05. Fast-firing weapons therefore push very little per hit.
 - AOE damage: `Blast_energy` = 50% of `energy`. Exceptions: kamikaze and the 20 Tons Taerbomb keep 100%; cluster bomblets keep 25% because many blasts overlap.
 - AOE radius: `Blast_radius` = 0.36 x average ground_decal_size x (1.4 + 0.6 x t), where t grows from 0 to 1 with the damage between 5000 and 100000 (cluster and salvo weapons use 80% of it, maximum 650). A weapon whose result is below 45 units is precise: it has no AOE at all.
 - Precise weapons without AOE (visible explosion too small): Foxxer Dart, Small Choomba and the cluster Bomblets.
@@ -2941,8 +2941,8 @@ Palette calibration used by the modernized units. The screen is the scene times 
 
 - One colour per faction, for vehicle events (explode, goingdown, airexplode) and weapon events (launch, hit, normal, cluster): Resistance slot 11 (light blue), Ghorkov slot 1 (red), Taerkasten slot 8 (yellow), Mykonians slot 2 (blue), Sulgogar slot 16 (green).
 - Slots are scaled to look equally strong: slot 11 x1.0, slot 8 x0.94, slot 16 x0.78, slot 1 x0.74, slot 2 x0.59 (their colours are far from white and overshoot 1).
-- Vehicle explode/airexplode peak by class, before the slot scaling: tiny 0.08, light 0.12, medium 0.20, heavy 0.28, super-heavy 0.36; it fades to half of the peak. goingdown is a faint constant glow (0.03-0.07) and never lasts more than 10 seconds.
-- Weapon hit peak = 0.055 x sqrt(damage / 2000) x min(1, shot_time / 600)^0.7; kamikaze and the 20 Tons Taerbomb x1.5, salvos of 10 or more x0.7. launch is 35% of it, normal (in-flight glow) is a constant 0.02, cluster is 60% of the parent hit.
+- Vehicle explode/airexplode peak by class, before the slot scaling: tiny 0.40, light 0.60, medium 1.0, heavy 1.0, super-heavy 1.0 (capped at 1.0); it fades to half of the peak. goingdown is a faint constant glow (0.03-0.07) and never lasts more than 10 seconds.
+- Weapon hit peak = 0.28 x sqrt(damage / 2000) x min(1, shot_time / 600)^0.7; kamikaze and the 20 Tons Taerbomb x1.5, salvos of 10 or more x0.7. launch is 35% of it, normal (in-flight glow) is a constant 0.08, cluster is 60% of the parent hit.
 
 ## World.ini
 
