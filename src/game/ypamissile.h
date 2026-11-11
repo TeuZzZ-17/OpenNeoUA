@@ -69,7 +69,6 @@ public:
     virtual void AlignMissile(float dtime = 0.0);
     virtual void AlignMissileByNormal(const vec3d &normal);
     void MakeImpactCrater(const ypaworld_arg136 &hit);
-    void MakeGroundMarksUnder(NC_STACK_ypabact *target);
     bool HasImpactCrater() const;
 
     NC_STACK_ypamissile();

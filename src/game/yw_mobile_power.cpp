@@ -466,7 +466,10 @@ uint8_t NC_STACK_ypaworld::GetUnitEnergyVisualState(NC_STACK_ypabact *target)
         {
             if ( target->_owner == cell->owner )
             {
-                if ( target->_energy < target->_energy_max )
+                // GUN actors (turrets, flak, Robo-Guns) never regenerate, so
+                // they must not show the Regen Status Icon or its particles.
+                if ( target->_energy < target->_energy_max &&
+                     target->_bact_type != BACT_TYPES_GUN )
                     state |= UNIT_ENERGY_VISUAL_REGEN;
             }
             else

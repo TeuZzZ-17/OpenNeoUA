@@ -1,0 +1,39 @@
+begin_collision_shape
+version = 1
+source = VP_BSHOT.sklt
+source_hash = 108749d3e8fc4a84c11ddfaffdbcce8ea823d3e18291ad01d6767bea62a4a899
+scale = 1|1|1
+rotation = 0|0|0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root/kid[0]/kid[190]#component:b1a61ba282ba0713","root/kid[0]/kid[190]#component:b407b4961d275b5b","root/kid[0]/kid[190]#component:f5c5b78aa0858815"],"disabled_hulls":[]}
+begin_hull
+vertex = -30|7.0000000596046448|-26
+vertex = -32.000000238418579|10.999608397483826|-26
+vertex = -27.999999761581421|11.999999940395355|-26
+vertex = -30|9.9997063130140305|22
+face = 0|1|2
+face = 0|2|3
+face = 0|3|1
+face = 1|3|2
+end
+begin_hull
+vertex = 0|-22.999999940395355|-26
+vertex = -2.0000002384185791|-19.000391602516174|-26
+vertex = 2.0000002384185791|-18.000000059604645|-26
+vertex = 0|-20.00029368698597|22
+face = 0|1|2
+face = 0|2|3
+face = 0|3|1
+face = 1|3|2
+end
+begin_hull
+vertex = 30|7.0000000596046448|-26
+vertex = 27.999999761581421|10.999608397483826|-26
+vertex = 32.000000238418579|11.999999940395355|-26
+vertex = 30|9.9997063130140305|22
+face = 0|1|2
+face = 0|2|3
+face = 0|3|1
+face = 1|3|2
+end
+end

@@ -39,8 +39,10 @@ int main()
     if (loaded)
     {
         const auto &weapon = world.GetWeaponsProtos()[3];
-        Check(weapon.blast_radius == 160.0f && weapon.blast_energy == 20000 &&
-              weapon.blast_push == 4.0f && weapon.blast_falloff == 1,
+        // Pocket_Rocket after the push/AOE rebalance: AOE damage = 50% of energy, radius from
+        // the visible explosion, falloff on.
+        Check(weapon.blast_radius == 90.0f && weapon.blast_energy == 18000 &&
+              weapon.blast_push == 0.65f && weapon.blast_falloff == 1,
               "live Weapon blast fields");
 
         // Muzzle visuals are begin_fx trigger = launch blocks (Weapon 1: VP 99 at scale 0.6).
