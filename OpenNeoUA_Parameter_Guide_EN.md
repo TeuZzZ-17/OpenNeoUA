@@ -237,6 +237,8 @@ Radius parameters localize sound, palette and shake events in world space. Setti
 - 🔵 `wpn_wireframe_2 = wireless/wpn2.skl`   — Wireframe of weapon 2 shown in the interface.
 ------------------------------------------------------------------------------------------------------------------------
 
+In OpenNeoUA Studio, the Wireframe Editor can preview components from other entities or files and save them as separate files linked to the vehicle or weapon definition.
+
 OpenNeoUA adds new vehicle models/aliases and extends existing vehicle definitions with AI affinities, per-event speech, custom visuals, collision behavior, status systems and other optional capabilities.
 
 ------------------------------------------------------------------------------------------------------------------------
