@@ -101,6 +101,12 @@ public:
 
 private:
     void UpdateRadarScan(const update_msg *arg);
+    // game.gun_support_tolerance > 0: compares the surface under the turret (centre + 4
+    // footprint points) with the one measured when the turret was first checked.
+    bool CheckPedestalSupport(const ypaworld_arg136 &centerHit, float tolerance);
+
+    float _pedestalBase[5] = { -1.0f, -1.0f, -1.0f, -1.0f, -1.0f }; // <0 = no surface at baseline
+    bool _pedestalBaseReady = false;
 
 public:
 

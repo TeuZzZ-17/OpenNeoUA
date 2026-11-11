@@ -176,7 +176,66 @@ bool NC_STACK_ypagun::CheckPedestal()
 
     TraceWorldCollision(&arg136);
 
-    return arg136.isect != 0;
+    if ( !arg136.isect )
+        return false;
+
+    // Vanilla-safe: with the key absent/0 the single centre ray above decides.
+    const int tolerance = System::IniConf::GameGunSupportTolerance.Get<int32_t>();
+    if ( tolerance <= 0 || _gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_LEVITATE) )
+        return true;
+
+    return CheckPedestalSupport(arg136, (float)tolerance);
+}
+
+bool NC_STACK_ypagun::CheckPedestalSupport(const ypaworld_arg136 &centerHit, float tolerance)
+{
+    // The first measurement is the "supported" reference: a turret that was placed
+    // on a roof keeps its authored clearance, only a LATER sinking counts as loss.
+    float dist[5];
+    dist[0] = (centerHit.isectPos - centerHit.stPos).length();
+
+    // Footprint samples: the four horizontal directions at ~60% of the turret radius.
+    float footprint = (_viewer_radius > 0.0f ? _viewer_radius : 30.0f) * 0.6f;
+    footprint = std::max(15.0f, std::min(footprint, 90.0f));
+    static const float offX[4] = { 1.0f, -1.0f, 0.0f, 0.0f };
+    static const float offZ[4] = { 0.0f, 0.0f, 1.0f, -1.0f };
+
+    for (int i = 0; i < 4; i++)
+    {
+        ypaworld_arg136 side;
+        side.stPos = centerHit.stPos + vec3d(offX[i] * footprint, 0.0f, offZ[i] * footprint);
+        side.vect = centerHit.vect;
+        side.flags = 0;
+        TraceWorldCollision(&side);
+        dist[i + 1] = side.isect ? (side.isectPos - side.stPos).length() : -1.0f;
+    }
+
+    if ( !_pedestalBaseReady )
+    {
+        for (int i = 0; i < 5; i++)
+            _pedestalBase[i] = dist[i];
+        _pedestalBaseReady = true;
+        return true;
+    }
+
+    // The point right under the turret must still be there...
+    if ( _pedestalBase[0] >= 0.0f && dist[0] > _pedestalBase[0] + tolerance )
+        return false;
+
+    // ...and at least half of the footprint points that were supported at the start.
+    int measured = 0;
+    int stillSupported = 0;
+    for (int i = 1; i < 5; i++)
+    {
+        if ( _pedestalBase[i] < 0.0f )
+            continue;
+
+        measured++;
+        if ( dist[i] >= 0.0f && dist[i] <= _pedestalBase[i] + tolerance )
+            stillSupported++;
+    }
+
+    return measured == 0 || stillSupported * 2 >= measured;
 }
 
 void NC_STACK_ypagun::UpdateRadarScan(const update_msg *arg)
@@ -880,13 +939,15 @@ void NC_STACK_ypagun::EnergyInteract(update_msg *arg)
     {
         const float powerEnergyMultiplier = ReadPowerStationEnergyMultiplier();
 
-        if ( _pSector->owner == _owner )
-            _energy += powerEnergyMultiplier * _energy_max * (arg->frameTime / 1000.0) * _pSector->energy_power / 40000.0;
-
+        // OpenNeoUA rule: every GUN actor (Host Station Robo-Guns, building
+        // turrets, Unit Guns/flak mounted on vehicles) can never regenerate,
+        // not even inside a powered sector or near an allied mobile generator.
+        // The sector/allied power is therefore NOT added any more; only the
+        // enemy drain below can still lower their energy, exactly as before.
         TMobilePowerInfluence mobilePower = _world->FindMobilePowerInfluenceForUnit(this);
-        float mobileDelta = powerEnergyMultiplier * _energy_max * (arg->frameTime / 1000.0) * (mobilePower.AlliedEnergyPower - mobilePower.EnemyEnergyPower) / 40000.0;
+        float mobileDelta = powerEnergyMultiplier * _energy_max * (arg->frameTime / 1000.0) * (-mobilePower.EnemyEnergyPower) / 40000.0;
 
-        if ( mobileDelta >= 0.0 || !IsInvulnerableToDamage() )
+        if ( mobileDelta < 0.0 && !IsInvulnerableToDamage() )
             _energy += mobileDelta;
 
         if ( _energy < 0 )
