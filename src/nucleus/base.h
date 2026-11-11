@@ -104,6 +104,8 @@ struct baseRender_msg
     // When enabled, keep the canonical BODEN*.ILBM sector surface neutral while
     // tinting the rest of the root building BASE, including flat foundations.
     bool excludeSectorTerrainFromTint = false;
+    // Construction-only material reference; its first atlas frame stays frozen.
+    const GFX::TMesh *genesisReference = nullptr;
 };
 
 
@@ -155,6 +157,11 @@ public:
         // OpenNeoUA custom: meshes drawn in place of the shared root meshes for
         // this instance only (terrain craters); nullptr = the shared ones.
         std::list<GFX::TMesh> *meshOverride = nullptr;
+        // Lazy per-instance material variants. Shared BASEs and source textures stay untouched.
+        std::list<GFX::TMesh> genesisMeshes;
+        const GFX::TMesh *genesisReference = nullptr;
+        const std::list<GFX::TMesh> *genesisSource = nullptr;
+        bool genesisExcludesTerrain = false;
     };
 
 public:
@@ -228,6 +235,9 @@ public:
     static void CheckOpts(Instance **vpOpts, NC_STACK_base *bas);
     // Sector ground surface of a LEGO/building BASE (BODEN1..BODEN5 textures).
     static bool IsSectorTerrainMesh(const GFX::TMesh &mesh);
+    std::list<GFX::TMesh> &GetRenderMeshes(Instance *instance,
+                                          const GFX::TMesh *genesisReference,
+                                          bool excludeTerrain);
 
     static GFX::TMesh *FindMeshByRenderParams(std::list<GFX::TMesh> *list, const GFX::TRenderParams &p);
 

@@ -1371,6 +1371,7 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
         sstate.unsetFlags = 0;
 
         bacto->SetStateInternal(&sstate);
+        bacto->_scale_time = bacto->GetCreationTime(0);
 
         NC_STACK_ypabact *host_node = yw->yw_getHostByOwner(nvMsg->owner);
 
@@ -2042,6 +2043,7 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
                 ssms.setFlags = 0;
                 ssms.unsetFlags = 0;
                 kmnd->SetStateInternal(&ssms);
+                kmnd->_scale_time = kmnd->GetCreationTime(0);
 
                 kmnd->_gid = bvMsg->vhcl[0].id;
                 kmnd->_owner = bvMsg->owner;
@@ -2070,6 +2072,7 @@ size_t yw_handleNormMsg(NC_STACK_ypaworld *yw, windp_recvMsg *msg, size_t remain
                         ssms.setFlags = 0;
                         ssms.unsetFlags = 0;
                         slv->SetStateInternal(&ssms);
+                        slv->_scale_time = slv->GetCreationTime(0);
 
                         slv->_gid = bvMsg->vhcl[idid].id;
                         slv->_owner = bvMsg->owner;

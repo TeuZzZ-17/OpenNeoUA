@@ -460,7 +460,7 @@ void NC_STACK_yparobo::InitForce(NC_STACK_ypabact *unit)
     arg78.newStatus = BACT_STATUS_CREATE;
     newUnit->SetState(&arg78);
 
-    newUnit->_scale_time = newUnit->_energy_max * 0.2;
+    newUnit->_scale_time = newUnit->GetCreationTime(newUnit->_energy_max * 0.2);
     _roboDockTime = newUnit->_scale_time + 2000;
     _roboDockCnt++;
 

@@ -373,39 +373,9 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         ParseDebuffLink(parser, p2, 1, 0, _wpn->blast_debuff_id, _wpn->blast_debuff_name);
     else if ( !StriCmp(p1, "ground_decal_size") )
         ParseDecalSizeOverride("ground_decal_size", p2, _wpn->ground_decal_size);
-    else if ( !StriCmp(p1, "crater_radius") || !StriCmp(p1, "crater_depth") ||
-              !StriCmp(p1, "crater_rim") )
+    else if ( ParseCraterParam(p1, p2, _wpn->crater) )
     {
-        // OpenNeoUA custom: terrain crater. A bad value switches the crater off.
-        const bool rim = !StriCmp(p1, "crater_rim");
-        const float limit = rim ? 100.0f : 12000.0f;
-        float minValue = 0.0f;
-        float maxValue = 0.0f;
-        const bool ok = World::ParseFloatRangeValue(p2, minValue, maxValue) &&
-                        minValue >= 0.0f && maxValue <= limit && minValue <= maxValue;
-        TCraterConfig &crater = _wpn->crater;
-        if ( !ok )
-        {
-            ypa_log_out("WARNING: invalid %s '%s'; crater disabled\n", p1.c_str(), p2.c_str());
-            minValue = maxValue = 0.0f;
-        }
-        if ( rim )
-        {
-            crater.rim_min = minValue;
-            crater.rim_max = maxValue;
-        }
-        else if ( !StriCmp(p1, "crater_radius") )
-        {
-            crater.radius_min = minValue;
-            crater.radius_max = maxValue;
-        }
-        else
-        {
-            crater.depth_min = minValue;
-            crater.depth_max = maxValue;
-        }
-        crater.invalid = crater.invalid || !ok;
-        crater.defined = !crater.invalid && crater.radius_max > 0.0f && crater.depth_max > 0.0f;
+        // OpenNeoUA custom: terrain crater (shared with vehicles).
     }
     else if ( !StriCmp(p1, "ground_decal_id") )
     {

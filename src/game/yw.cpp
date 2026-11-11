@@ -2640,6 +2640,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         // available to non-collision systems without silently becoming a hitbox.
         bacto->_disableCollision = vhcl.disable_collision;
         bacto->_disable_genesis = vhcl.disable_genesis;
+        bacto->_building_time = vhcl.building_time;
         bacto->ApplyCompoundCollision(vhcl.coll, vhcl.radius_defined);
 
         bacto->_overeof = vhcl.overeof;
@@ -2849,6 +2850,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_proximity_defense_at_death_done = false;
         bacto->_kamikaze_triggered = false;
         bacto->_kamikaze_ground_decals_handled = false;
+        bacto->_destroyedCraterMade = false;
+        bacto->_craterConfig = vhcl.crater;
         bacto->SetUnitGuns(vhcl_id->skip_unit_guns ? std::vector<World::TRoboGun>() : vhcl.unit_guns);
 
         bacto->_destroyFX = vhcl.dest_fx;
@@ -2892,9 +2895,14 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
             smpl_inf->Volume = vhcl.sndFX[i].volume;
 
-            if ( i == World::TVhclProto::SND_GENESIS && vhcl.sndFX[i].auto_pitch )
+            if ( i == World::TVhclProto::SND_GENESIS && (vhcl.building_time >= 0.0f || vhcl.sndFX[i].auto_pitch) )
             {
-                const int genesisPitch = yw_GetAutomaticGenesisPitch(vhcl.energy);
+                // Displayed vehicle cost is internal energy / 50. A second equals
+                // legacy cost 100, with pitch capped at the cost-1000 reference.
+                const int pitchEnergy = vhcl.building_time >= 0.0f
+                    ? (int)std::lround(std::min(vhcl.building_time, 10.0f) * 5000.0f)
+                    : vhcl.energy;
+                const int genesisPitch = yw_GetAutomaticGenesisPitch(pitchEnergy);
                 smpl_inf->ConfigurePitchRange(genesisPitch, genesisPitch);
             }
             else

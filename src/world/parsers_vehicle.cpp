@@ -28,6 +28,11 @@ namespace Parsers
 
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( !StriCmp(p1, "building_time") )
+    {
+        _vhcl->building_time = ParseBuildingTime(p2);
+        return ScriptParser::RESULT_OK;
+    }
     if ( !StriCmp(p1.substr(0, 6), "spawn_") )
         _vhcl->spawn_units = 1;
     if ( !StriCmp(p1.substr(0, 15), "at_death_spawn_") )
@@ -367,6 +372,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "ground_decal_size") )
         ParseDecalSizeOverride("ground_decal_size", p2, _vhcl->ground_decal_size);
+    else if ( ParseCraterParam(p1, p2, _vhcl->crater) )
+    {
+        // OpenNeoUA custom: crater dug where the wreck ends on the ground.
+    }
     else if ( !StriCmp(p1, "ground_decal_id") )
     {
         const long value = parser.stol(p2, nullptr, 0);
@@ -1910,6 +1919,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->buff_id = -1;
         _vhcl->ground_decal_id = -1;
         _vhcl->ground_decal_size = TDecalSizeOverride();
+        _vhcl->crater = TCraterConfig();
         _vhcl->buff = TVehicleBuffConfig();
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;

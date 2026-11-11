@@ -49,6 +49,32 @@ void NC_STACK_ypaworld::RenderAdditionalBeeBox(Common::Point sect, TRenderingSec
     }
 }
 
+namespace {
+// animatedOnly: first pass looks for the animated plasma mesh (the one the
+// vehicle Genesis cycles through), second pass accepts any textured mesh.
+const GFX::TMesh *FindBuildingGenesisReference(NC_STACK_base *base, bool animatedOnly)
+{
+    if (!base) return nullptr;
+    for (const auto &mesh : base->Meshes)
+    {
+        const bool animated = (mesh.Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) &&
+                              mesh.Mat.TexSource && !mesh.CoordsCache.empty();
+        if ((mesh.Mat.Flags & GFX::RFLAGS_TEXTURED) && (!animatedOnly || animated) &&
+            (mesh.Mat.Tex || mesh.Mat.TexSource || !mesh.CoordsCache.empty()))
+            return &mesh;
+    }
+    for (auto *kid : base->GetKidList())
+        if (const auto *reference = FindBuildingGenesisReference(kid, animatedOnly)) return reference;
+    return nullptr;
+}
+
+const GFX::TMesh *FindBuildingGenesisReference(NC_STACK_base *base)
+{
+    if (const auto *animated = FindBuildingGenesisReference(base, true)) return animated;
+    return FindBuildingGenesisReference(base, false);
+}
+}
+
 void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77)
 {
     cellArea *pcell = sct->p_cell;
@@ -56,13 +82,15 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
     // Buildings share the same render-message tint path as Vehicle/Weapon VPs.
     // Keep it strictly per draw because the BASE models and render message are
     // shared; leaking these values would tint unrelated sectors or actors.
-    auto renderBuilding = [bs77](NC_STACK_base *base,
+    auto renderBuilding = [this, bs77](NC_STACK_base *base,
                                  NC_STACK_base::Instance *instance,
-                                 const World::TVisualTint &tint)
+                                 const World::TVisualTint &tint,
+                                 const GFX::TMesh *genesis = nullptr, int owner = 0)
     {
         if ( !base )
             return;
 
+        const GFX::TMesh *oldGenesis = bs77->genesisReference;
         const GFX::TGLColor oldTint = bs77->tint;
         const GFX::TGLColor oldParticleTint = bs77->particleTint;
         const bool oldColorizeTint = bs77->colorizeTint;
@@ -87,12 +115,25 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
             bs77->excludeSectorTerrainFromTint = false;
         }
 
+        bs77->genesisReference = genesis;
+        if (genesis)
+        {
+            GFX::TGLColor plasmaTint(1.0f, 1.0f, 1.0f, 1.0f);
+            const bool colorize = GetPlasmaFactionTint(owner, &plasmaTint);
+            bs77->tint = plasmaTint;
+            bs77->particleTint = plasmaTint;
+            bs77->colorizeTint = colorize;
+            bs77->particleColorizeTint = colorize;
+            bs77->excludeSectorTerrainFromTint = true;
+        }
+
         // Terrain and buildings of the sector receive decals, its units do not.
         const uint32_t oldFlags = bs77->flags;
         bs77->flags |= GFX::RFLAGS_DECAL_RECEIVER;
 
         base->Render(bs77, instance);
 
+        bs77->genesisReference = oldGenesis;
         bs77->flags = oldFlags;
         bs77->tint = oldTint;
         bs77->particleTint = oldParticleTint;
@@ -112,6 +153,9 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
     if ( renderSectorContents || scanBorderWalls )
     {
         int v22 = 0;
+        int constructionOwner = 0;
+        const GFX::TMesh *constructionGenesis = nullptr;
+        int constructionGround = -1;
         World::TVisualTint buildingTint;
         bool hasBuildingVisual = pcell->PurposeType != cellArea::PT_NONE;
 
@@ -123,12 +167,18 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
             {
                 TConstructInfo &bldProc = it->second;
 
-                scel = vec3d::OY((float)bldProc.Time / (float)bldProc.EndTime);
+                scel = vec3d::OY(bldProc.EndTime > 0 ? (float)bldProc.Time / (float)bldProc.EndTime : 1.0f);
 
                 const World::TBuildingProto &proto = _buildProtos[ bldProc.BuildID ];
                 pcell->type_id = proto.SecType;
                 pcell->SectorType = _secTypeArray[ pcell->type_id ].SectorType;
                 buildingTint = proto.tint;
+                constructionOwner = bldProc.Owner;
+                if (System::IniConf::GameBuildingVisualGenesis.Get<bool>() && _vhclModels.size() > 5)
+                {
+                    constructionGenesis = FindBuildingGenesisReference(_vhclModels[5]);
+                    constructionGround = bldProc.GroundSecType;
+                }
 
                 v22 = 1;
             }
@@ -142,6 +192,30 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
             // sb_0x456384 stores this before special systems repurpose
             // PurposeIndex for a gate/gem/super-item index.
             buildingTint = pcell->BuildingTint;
+        }
+
+        // The construction plasma is transparent: under the building footprint
+        // there is no ground, only the black void. Draw a plain-ground sector of
+        // the set there, a little lower so the building's own ground and floor
+        // stay on top of it, until construction completes.
+        if ( v22 && constructionGenesis && constructionGround >= 0 && renderSectorContents )
+        {
+            static constexpr float kConstructionGroundDrop = 4.0f; // y grows downward
+            TSectorDesc &groundDesc = _secTypeArray[ constructionGround ];
+            for (int zz = 0; zz < 3; zz++)
+            {
+                for (int xx = 0; xx < 3; xx++)
+                {
+                    const TSubSectorDesc *sub = groundDesc.SubSectors.At(xx, zz);
+                    NC_STACK_base *ground = sub ? _legoArray[ sub->HPModels[0] ].Base : nullptr;
+                    if ( !ground )
+                        continue;
+
+                    ground->SetPosition(sct->p_cell->CenterPos +
+                                        vec3d((xx - 1) * 300.0, kConstructionGroundDrop, (zz - 1) * 300.0));
+                    renderBuilding(ground, nullptr, World::TVisualTint());
+                }
+            }
         }
 
         int v17, v20;
@@ -177,7 +251,8 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
 
                     NC_STACK_base::CheckOpts( &pcell->BldVPOpts.At(xx, zz), bld );
 
-                    renderBuilding(bld, pcell->BldVPOpts.At(xx, zz), buildingTint);
+                    renderBuilding(bld, pcell->BldVPOpts.At(xx, zz), buildingTint,
+                                   constructionGenesis, constructionOwner);
 
                     bld->SetStatic(true);
                 }

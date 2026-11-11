@@ -392,7 +392,7 @@ NC_STACK_ypabact *yw_CreateBuildingSpawnedUnit(NC_STACK_ypaworld *world, cellAre
         state.newStatus = BACT_STATUS_CREATE;
         unit->SetState(&state);
 
-        unit->_scale_time = unit->_energy_max * 0.2;
+        unit->_scale_time = unit->GetCreationTime(unit->_energy_max * 0.2);
     }
 
     world->HistoryAktCreate(unit);

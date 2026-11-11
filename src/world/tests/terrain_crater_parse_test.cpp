@@ -70,6 +70,26 @@ int main()
           "modify_weapon with depth 0 switches the crater off");
     check(parse({"new_weapon 1", "end"}) && !weapons[1].crater.defined, "new_weapon starts from no crater");
 
+    // ---------------------------------------------------------- vehicle keys ---
+    auto parseVehicle = [&](Engine::StringList lines)
+    {
+        ScriptParser::HandlersList handlers{new World::Parsers::VhclProtoParser(world.get())};
+        return ScriptParser::ParseStringList(lines, handlers, ScriptParser::FLAG_NO_SCOPE_SKIP);
+    };
+    const auto &vehicles = world->_vhclProtos;
+    check(parseVehicle({"new_vehicle 1", "crater_radius = 120~160", "crater_depth = 40~25", "crater_rim = 30", "end"}) &&
+          vehicles[1].crater.defined && vehicles[1].crater.radius_min == 120 &&
+          vehicles[1].crater.depth_max == 40 && vehicles[1].crater.rim_max == 30, "vehicle crater keys read");
+    check(parseVehicle({"new_vehicle 2", "crater_radius = 200", "end"}) && !vehicles[2].crater.defined,
+          "vehicle radius without depth makes no crater");
+    check(parseVehicle({"new_vehicle 3", "crater_radius = 100", "crater_depth = abc", "end"}) &&
+          !vehicles[3].crater.defined, "vehicle invalid depth disables the crater");
+    check(parseVehicle({"new_vehicle 4", "end"}) && !vehicles[4].crater.defined,
+          "vehicle with no keys: no crater (vanilla)");
+    check(parseVehicle({"modify_vehicle 1", "crater_depth = 0", "end"}) && !vehicles[1].crater.defined,
+          "modify_vehicle with depth 0 switches the crater off");
+    check(parseVehicle({"new_vehicle 1", "end"}) && !vehicles[1].crater.defined, "new_vehicle starts from no crater");
+
     // ----------------------------------------------------------- saved lines ---
     System::IniConf::GameDeformationMaxCraters.Value = (int32_t)128;
     world->ClearTerrainCraters();

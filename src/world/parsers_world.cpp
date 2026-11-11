@@ -40,6 +40,9 @@ bool BuildProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &
         _bld->Energy = 50000;
         _bld->TypeIcon = 65;
         _bld->SndFX.volume = 120;
+        // Same defaults as vehicle sound events: without the shake axes (0.2) and
+        // mute (0.02) an authored shk_genesis_* would move the camera by zero.
+        InitStatusSoundFXDefaults(_bld->GenesisFX, 120);
         _bld->Guns.clear();
         return true;
     }
@@ -67,6 +70,49 @@ bool BuildProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &
 
 int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if (!StriCmp(p1.substr(0, 12), "snd_genesis_") ||
+        !StriCmp(p1.substr(0, 12), "pal_genesis_") ||
+        !StriCmp(p1.substr(0, 12), "shk_genesis_"))
+    {
+        // Optional construction values must fail softly, without Parser's modal errors.
+        const std::string suffix = p1.substr(12);
+        // Palette and shake always last the whole construction (start -> completion),
+        // so buildings have no pal_genesis_time / shk_genesis_time key.
+        if (suffix == "time" && StriCmp(p1.substr(0, 4), "snd_"))
+            return ScriptParser::RESULT_UNKNOWN;
+        if (suffix == "volume" || suffix == "slot")
+        {
+            try {
+                size_t end = 0;
+                const long long number = std::stoll(p2, &end, 0);
+                if (end != p2.size() || number < 0 || number > std::numeric_limits<int>::max() ||
+                    (suffix == "volume" && number > std::numeric_limits<int16_t>::max()))
+                    return ScriptParser::RESULT_OK;
+            } catch (...) { return ScriptParser::RESULT_OK; }
+        }
+        else if (suffix == "mag0" || suffix == "mag1")
+        {
+            char *end = nullptr;
+            errno = 0;
+            const float number = std::strtof(p2.c_str(), &end);
+            if (end == p2.c_str() || end != p2.c_str() + p2.size() || errno == ERANGE ||
+                !std::isfinite(number) || number < 0.0f)
+                return ScriptParser::RESULT_OK;
+        }
+        const int result = ParseSndFX(parser, p1, p2);
+        if (result == ScriptParser::RESULT_OK)
+        {
+            _bld->genesis_effects_defined = true;
+            if (!StriCmp(p1.substr(0, 4), "snd_")) _bld->genesis_sound_defined = true;
+            if (!StriCmp(p1, "snd_genesis_sample") && p2 == "0") _bld->GenesisFX.MainSample.Name.clear();
+        }
+        return result;
+    }
+    if ( !StriCmp(p1, "building_time") )
+    {
+        _bld->building_time = ParseBuildingTime(p2);
+        return ScriptParser::RESULT_OK;
+    }
     if ( !StriCmp(p1.substr(0, 6), "spawn_") )
         _bld->spawn_units = 1;
 

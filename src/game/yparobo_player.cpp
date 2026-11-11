@@ -676,7 +676,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
 
                 newbact->SetState(&arg78);
 
-                newbact->_scale_time = newbact->_energy_max * 0.2;
+                newbact->_scale_time = newbact->GetCreationTime(newbact->_energy_max * 0.2);
                 newbact->_commandID = dword_5B1128;
                 dword_5B1128++;
 
@@ -735,7 +735,7 @@ void NC_STACK_yparobo::doUserCommands(update_msg *arg)
                 arg78.unsetFlags = 0;
                 newbact2->SetState(&arg78);
 
-                newbact2->_scale_time = newbact2->_energy_max * 0.2;
+                newbact2->_scale_time = newbact2->GetCreationTime(newbact2->_energy_max * 0.2);
                 newbact2->_owner = _owner;
                 newbact2->_commandID = arg->selectBact->_commandID;
 

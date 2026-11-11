@@ -152,3 +152,14 @@ void NC_STACK_ypaworld::CommitPlasmaCurrency()
     _plasmaCurrencyBank += std::min(_plasmaCurrency, available);
     ResetPlasmaCurrencyRuntime();
 }
+
+// Shared by unit Genesis and optional building construction plasma.
+bool NC_STACK_ypaworld::GetPlasmaFactionTint(int owner, GFX::TGLColor *outTint)
+{
+    if (!outTint || owner < World::OWNER_SULG || owner > World::OWNER_GHOR)
+        return false; // Resistance retains the original cyan Genesis material.
+    const SDL_Color color = GetColor(owner);
+    constexpr float inv255 = 1.0f / 255.0f;
+    *outTint = GFX::TGLColor(color.r * inv255, color.g * inv255, color.b * inv255, 1.0f);
+    return true;
+}

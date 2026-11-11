@@ -843,6 +843,14 @@ public:
     bool _disableCollision = false;
     // Copied from the Vehicle proto: instant creation (no plasma, scale-in or genesis sound) and no death plasma.
     bool _disable_genesis = false;
+    float _building_time = -1.0f;
+    int GetCreationTime(int vanillaTime) const
+    {
+        if (!std::isfinite(_building_time) || _building_time < 0.0f || _building_time > 100.0f)
+            return vanillaTime;
+        if (_disable_genesis) return 0;
+        return (int)std::lround(_building_time * 1000.0f);
+    }
     void TraceWorldCollision(ypaworld_arg136 *query, bool exact = false);
     void QueryWorldCollisions(ypaworld_arg137 *query);
 
@@ -1381,6 +1389,10 @@ public:
     std::vector<TLaserBeamRuntime> _vertical_laser_beams;
     bool _kamikaze_triggered;
     bool _kamikaze_ground_decals_handled = false;
+    // OpenNeoUA custom: vehicle crater_* (copied from the proto), dug once when the wreck ends.
+    World::TCraterConfig _craterConfig;
+    bool _destroyedCraterMade = false;
+    void MakeDestroyedCrater();
     std::vector<World::TRoboGun> _unitGuns;
     std::string _gunDisplayName;
     mat3x3 _unitGunsParentRotation;
