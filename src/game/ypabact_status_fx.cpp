@@ -875,27 +875,8 @@ void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
 bool ypabact_GetPlasmaFactionTint(NC_STACK_ypabact *bact,
                                             GFX::TGLColor *outTint)
 {
-    if ( !bact || !outTint ||
-         bact->_owner < World::OWNER_SULG || bact->_owner > World::OWNER_GHOR )
-    {
-        return false;
-    }
-
-    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
-    if ( !world )
-        return false;
-
-    // Use the owner palette already loaded from WORLD.INI. The renderer
-    // colorizes the cyan source VP by luminance instead of multiplying RGB,
-    // so red/yellow/white factions retain their actual hue. Resistance never
-    // enters this helper and keeps the original cyan plasma unchanged.
-    const SDL_Color factionColor = world->GetColor(bact->_owner);
-    constexpr float inv255 = 1.0f / 255.0f;
-    *outTint = GFX::TGLColor((float)factionColor.r * inv255,
-                             (float)factionColor.g * inv255,
-                             (float)factionColor.b * inv255,
-                             1.0f);
-    return true;
+    return bact && bact->getBACT_pWorld() &&
+           bact->getBACT_pWorld()->GetPlasmaFactionTint(bact->_owner, outTint);
 }
 
 bool NC_STACK_ypabact::IsActiveDebuffStunning(bool requireMovementLevel) const

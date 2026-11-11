@@ -44,6 +44,7 @@ Common::Ini::Key IniConf::GfxHorizonDarkStrength("gfx.horizon_dark_strength", Co
 Common::Ini::Key IniConf::GfxHorizonDarkColor("gfx.horizon_dark_color", Common::Ini::KT_WORD, std::string("0|0|0"));
 Common::Ini::Key IniConf::GfxSkyHeight("gfx.sky_height", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxSkyRender("gfx.sky_render", Common::Ini::KT_WORD, std::string());
+Common::Ini::Key IniConf::GameBuildingVisualGenesis("game.building_visual_genesis", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GfxHideMapBorderWalls("gfx.hide_map_border_walls", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GfxAdditionalModes("gfx.custommodes", Common::Ini::KT_STRING);
 
@@ -536,6 +537,7 @@ void IniConf::Init()
         , &GfxHorizonDarkColor
         , &GfxSkyHeight
         , &GfxSkyRender
+        , &GameBuildingVisualGenesis
         , &GfxHideMapBorderWalls
         , &GfxMode
         , &GfxXRes
@@ -897,6 +899,9 @@ bool IniConf::ReadFromNucleusIni()
     Common::Ini::ParseIniTextOverlay(OPENNEOUA_DEFAULT_INI, &_varList);
     // These optional geometry caps must be authored by the user. An older INI
     // without them retains its original geometry rather than the embedded caps.
+    // Building Genesis is opt-in in the local INI, even if the build machine enabled it.
+    GameBuildingVisualGenesis.Value = false;
+    GameBuildingVisualGenesis.WasSet = false;
     GameDeformationGroundLimit.Value = std::string("");
     GameDeformationBuildingLimit.Value = std::string("");
 

@@ -289,7 +289,7 @@ NC_STACK_ypabact *ypabact_CreateCarrierSpawnedUnit(NC_STACK_ypabact *carrier, co
         state.newStatus = BACT_STATUS_CREATE;
         unit->SetState(&state);
 
-        unit->_scale_time = unit->_energy_max * 0.2;
+        unit->_scale_time = unit->GetCreationTime(unit->_energy_max * 0.2);
     }
 
     world->HistoryAktCreate(unit);
@@ -475,7 +475,7 @@ NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const
         state.unsetFlags = 0;
         state.newStatus = BACT_STATUS_CREATE;
         unit->SetState(&state);
-        unit->_scale_time = unit->_energy_max * 0.2;
+        unit->_scale_time = unit->GetCreationTime(unit->_energy_max * 0.2);
     }
 
     ypabact_ApplyEjectForce(unit, parent->_eject_force);

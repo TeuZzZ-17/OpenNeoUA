@@ -587,7 +587,7 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
             GFX::GFXEngine::Instance.QueueRenderMesh(&rend);
         };
 
-        for(GFX::TMesh &msh : (inst && inst->meshOverride) ? *inst->meshOverride : Meshes)
+        for(GFX::TMesh &msh : GetRenderMeshes(inst, arg->genesisReference, arg->excludeSectorTerrainFromTint))
         {
             if ( inst && inst->skipGeometry )
                 break;
@@ -597,7 +597,7 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
             queueMesh(msh, applyTint);
         }
 
-        if (inst)
+        if (inst && !arg->genesisReference)
         {
             for (NC_STACK_ade::InstanceOpts *ade : inst->Particles)
             {
@@ -607,7 +607,9 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
         }
     }
 
-    const bool rootOnlyTerrainExclusion = arg->excludeSectorTerrainFromTint;
+    // Ordinary building tint excludes terrain only on the root. Construction
+    // plasma must also preserve terrain embedded in child BASEs.
+    const bool rootOnlyTerrainExclusion = arg->excludeSectorTerrainFromTint && !arg->genesisReference;
     if ( rootOnlyTerrainExclusion )
         arg->excludeSectorTerrainFromTint = false;
 
@@ -682,6 +684,21 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             rend.Colorize = applyTint && arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags | arg->flags;
+            if (arg->genesisReference)
+            {
+                // Animated construction plasma: same frame choice as Render().
+                rend.Tex = msh.Mat.Tex;
+                if ((msh.Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) && msh.Mat.TexSource)
+                {
+                    msh.Mat.TexSource->SetTime(arg->globTime, arg->frameTime);
+                    const uint32_t frameid = msh.Mat.TexSource->GetCurrentFrameID();
+                    if (frameid < msh.CoordsCache.size())
+                    {
+                        rend.Tex = msh.CoordsCache[frameid].Tex;
+                        rend.coordsID = frameid;
+                    }
+                }
+            }
 
             rend.Mesh = &msh;
             rend.TForm = skel132.tform;
@@ -693,7 +710,7 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             GFX::GFXEngine::Instance.RenderNode(&rend);
         };
 
-        for(GFX::TMesh &msh : (inst && inst->meshOverride) ? *inst->meshOverride : Meshes)
+        for(GFX::TMesh &msh : GetRenderMeshes(inst, arg->genesisReference, arg->excludeSectorTerrainFromTint))
         {
             if ( inst && inst->skipGeometry )
                 break;
@@ -703,7 +720,7 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             renderMesh(msh, applyTint);
         }
 
-        if (inst)
+        if (inst && !arg->genesisReference)
         {
             for (NC_STACK_ade::InstanceOpts *ade : inst->Particles)
             {
@@ -713,7 +730,9 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
         }
     }
 
-    const bool rootOnlyTerrainExclusion = arg->excludeSectorTerrainFromTint;
+    // Ordinary building tint excludes terrain only on the root. Construction
+    // plasma must also preserve terrain embedded in child BASEs.
+    const bool rootOnlyTerrainExclusion = arg->excludeSectorTerrainFromTint && !arg->genesisReference;
     if ( rootOnlyTerrainExclusion )
         arg->excludeSectorTerrainFromTint = false;
 
@@ -1059,6 +1078,109 @@ bool NC_STACK_base::IsSectorTerrainMesh(const GFX::TMesh &mesh)
         name.erase(0, slash + 1);
 
     return name.size() >= 5 && !StriCmp(name.substr(0, 5), "BODEN");
+}
+
+std::list<GFX::TMesh> &NC_STACK_base::GetRenderMeshes(Instance *inst,
+                                                       const GFX::TMesh *reference,
+                                                       bool excludeTerrain)
+{
+    auto &source = (inst && inst->meshOverride) ? *inst->meshOverride : Meshes;
+    if (!inst) return source;
+    if (!reference)
+    {
+        inst->genesisMeshes.clear();
+        inst->genesisReference = nullptr;
+        inst->genesisSource = nullptr;
+        return source;
+    }
+    if (inst->genesisReference == reference && inst->genesisSource == &source &&
+        inst->genesisExcludesTerrain == excludeTerrain)
+        return inst->genesisMeshes;
+
+    inst->genesisMeshes = source;
+    inst->genesisReference = reference;
+    inst->genesisSource = &source;
+    inst->genesisExcludesTerrain = excludeTerrain;
+
+    // UV box of one Genesis frame (whole texture when the reference has no frames).
+    struct TUVBox { float left = 0.0f, right = 1.0f, top = 0.0f, bottom = 1.0f; };
+    const auto frameBox = [](const std::vector<tUtV> &uv)
+    {
+        TUVBox box;
+        if (uv.empty()) return box;
+        box.left = box.right = uv.front().tu; box.top = box.bottom = uv.front().tv;
+        for (const auto &p : uv)
+        {
+            box.left = std::min(box.left, p.tu); box.right = std::max(box.right, p.tu);
+            box.top = std::min(box.top, p.tv); box.bottom = std::max(box.bottom, p.tv);
+        }
+        return box;
+    };
+    const auto remap = [](const TUVBox &box, float u, float t)
+    { return tUtV(box.left + u * (box.right - box.left), box.top + t * (box.bottom - box.top)); };
+
+    // Animated like the vehicle Genesis: keep the reference texture source and
+    // give every copied mesh one UV set per Genesis frame. Render() then picks
+    // the current frame exactly as it does for the vehicle plasma.
+    const bool animated = (reference->Mat.Flags & GFX::RFLAGS_DYNAMIC_TEXTURE) &&
+                          reference->Mat.TexSource && !reference->CoordsCache.empty();
+    std::vector<TUVBox> frames;
+    for (const auto &frame : reference->CoordsCache)
+        frames.push_back(frameBox(frame.Coords));
+    const TUVBox first = frames.empty() ? TUVBox() : frames.front();
+
+    for (auto &mesh : inst->genesisMeshes)
+    {
+        if (excludeTerrain && IsSectorTerrainMesh(mesh)) continue;
+        mesh.Mat = reference->Mat;
+        mesh.Mat.Flags &= ~GFX::RFLAGS_COMPUTED_COLOR;
+        if (!animated)
+        {
+            mesh.Mat.Flags &= ~GFX::RFLAGS_DYNAMIC_TEXTURE;
+            mesh.Mat.Tex = !reference->CoordsCache.empty() ? reference->CoordsCache.front().Tex
+                : reference->Mat.TexSource ? reference->Mat.TexSource->GetBitmap(0) : reference->Mat.Tex;
+            mesh.Mat.TexSource = nullptr;
+        }
+        mesh.CoordsCache.clear();
+        if (mesh.Vertexes.empty()) continue;
+        float minU = mesh.Vertexes.front().TexCoord.tu, maxU = minU;
+        float minV = mesh.Vertexes.front().TexCoord.tv, maxV = minV;
+        for (const auto &v : mesh.Vertexes)
+        {
+            minU = std::min(minU, v.TexCoord.tu); maxU = std::max(maxU, v.TexCoord.tu);
+            minV = std::min(minV, v.TexCoord.tv); maxV = std::max(maxV, v.TexCoord.tv);
+        }
+        // Normalized position of each vertex inside its own UV box.
+        std::vector<tUtV> unit(mesh.Vertexes.size());
+        for (size_t i = 0; i < mesh.Vertexes.size(); i++)
+        {
+            const tUtV &tc = mesh.Vertexes[i].TexCoord;
+            unit[i] = tUtV(maxU > minU ? (tc.tu - minU) / (maxU - minU) : 0.5f,
+                           maxV > minV ? (tc.tv - minV) / (maxV - minV) : 0.5f);
+        }
+        for (size_t i = 0; i < mesh.Vertexes.size(); i++)
+        {
+            auto &v = mesh.Vertexes[i];
+            v.TexCoord = remap(first, unit[i].tu, unit[i].tv);
+            v.Color = reference->Vertexes.empty() ? reference->Mat.Color : reference->Vertexes.front().Color;
+        }
+        if (animated)
+        {
+            mesh.CoordsCache.resize(frames.size());
+            for (size_t f = 0; f < frames.size(); f++)
+            {
+                mesh.CoordsCache[f].Tex = reference->CoordsCache[f].Tex;
+                mesh.CoordsCache[f].Coords.resize(unit.size());
+                for (size_t i = 0; i < unit.size(); i++)
+                    mesh.CoordsCache[f].Coords[i] = remap(frames[f], unit[i].tu, unit[i].tv);
+            }
+        }
+    }
+    // Copies deliberately have no GPU buffers. Upload every copied mesh,
+    // including unchanged terrain, before the VBO renderer can draw it.
+    for (auto &mesh : inst->genesisMeshes)
+        GFX::Engine.MeshMakeVBO(&mesh);
+    return inst->genesisMeshes;
 }
 
 void NC_STACK_base::GenerateMeshCoordsCache(GFX::TMesh *mesh)

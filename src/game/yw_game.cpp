@@ -1839,7 +1839,7 @@ void NC_STACK_ypaworld::sb_0x456384(const Common::Point &cellId, int ownerid2, i
 
                         gunn->SetStateInternal(&v34);
 
-                        gun_obj->_scale_time = 500;
+                        gun_obj->_scale_time = gun_obj->GetCreationTime(500);
                         gun_obj->_scale = vec3d(1.0, 1.0, 1.0);
 
                         gun_obj->_host_station = robo;
@@ -2192,6 +2192,49 @@ void NC_STACK_ypaworld::DestroyAllGunsInSector(cellArea *cell)
     }
 }
 
+extern int yw_GetAutomaticGenesisPitch(int energy);
+
+int NC_STACK_ypaworld::FindPlainGroundSecType(uint8_t surfaceType)
+{
+    // True when the model and its children hold only sector ground (BODEN).
+    std::function<bool(NC_STACK_base *, size_t &)> onlyGround = [&](NC_STACK_base *base, size_t &meshes)
+    {
+        if (!base) return false;
+        for (const GFX::TMesh &mesh : base->Meshes)
+        {
+            if (!NC_STACK_base::IsSectorTerrainMesh(mesh)) return false;
+            meshes++;
+        }
+        for (NC_STACK_base *kid : base->GetKidList())
+            if (!onlyGround(kid, meshes)) return false;
+        return true;
+    };
+
+    const auto isPlainGround = [&](TSectorDesc &desc)
+    {
+        if (desc.SectorType == 1) return false; // need the full 3x3 layout
+        size_t meshes = 0;
+        for (int zz = 0; zz < 3; zz++)
+            for (int xx = 0; xx < 3; xx++)
+            {
+                const TSubSectorDesc *sub = desc.SubSectors.At(xx, zz);
+                if (!sub || sub->HPModels[0] >= _legoArray.size() ||
+                    !onlyGround(_legoArray[sub->HPModels[0]].Base, meshes))
+                    return false;
+            }
+        return meshes > 0;
+    };
+
+    int anySurface = -1;
+    for (size_t i = 0; i < _secTypeArray.size(); i++)
+    {
+        if (!isPlainGround(_secTypeArray[i])) continue;
+        if (_secTypeArray[i].SurfaceType == surfaceType) return (int)i;
+        if (anySurface < 0) anySurface = (int)i;
+    }
+    return anySurface;
+}
+
 bool NC_STACK_ypaworld::BuildingConstructBegin(cellArea *cell, uint8_t buildID, int owner, int cTime)
 {
     if (!cell)
@@ -2207,17 +2250,78 @@ bool NC_STACK_ypaworld::BuildingConstructBegin(cellArea *cell, uint8_t buildID, 
     TConstructInfo &bldProc = _inBuildProcess[cell->Id];
     bldProc.CellID = cell->CellId;
     bldProc.Time = 0;
-    bldProc.EndTime = cTime;
+    const float seconds = _buildProtos[buildID].building_time;
+    bldProc.EndTime = seconds >= 0.0f ? (int)std::lround(seconds * 1000.0f) : cTime;
     bldProc.BuildID = buildID;
     bldProc.Owner = owner;
+    if (System::IniConf::GameBuildingVisualGenesis.Get<bool>())
+        bldProc.GroundSecType = FindPlainGroundSecType(_secTypeArray[_buildProtos[buildID].SecType].SurfaceType);
 
     cell->PurposeType = cellArea::PT_CONSTRUCTING;
     // OpenNeoUA custom: a new building levels the ground of its sector.
     ClearTerrainCratersInCell(cell->CellId);
 
+    auto &proto = _buildProtos[buildID];
+    if (proto.genesis_effects_defined && bldProc.EndTime > 0)
+    {
+        // Owns the carrier plus per-construction copies of the palette/shake
+        // parameters: their duration is this construction (placement -> completion).
+        struct TBuildingGenesisFx
+        {
+            TSndCarrier Carrier;
+            TSndFXParam Pal;
+            TSndFxPosParam Shk;
+        };
+        auto fx = std::shared_ptr<TBuildingGenesisFx>(new TBuildingGenesisFx(), [](TBuildingGenesisFx *owned) {
+            SFXEngine::SFXe.StopCarrier(&owned->Carrier);
+            delete owned;
+        });
+        bldProc.GenesisCarrier = std::shared_ptr<TSndCarrier>(fx, &fx->Carrier);
+
+        proto.GenesisFX.LoadSamples();
+        auto &carrier = fx->Carrier;
+        // Sound 0: looping sample until completion (the deleter stops it).
+        // Sound 1: palette/shake, ramping mag0 -> mag1 over the whole construction.
+        carrier.Resize(2);
+        carrier.Position = cell->CenterPos;
+        carrier.Vector = vec3d(0.0, 0.0, 0.0);
+        auto &sound = carrier.Sounds[0];
+        auto &event = proto.GenesisFX;
+        sound.PSample = event.MainSample.Sample ? event.MainSample.Sample->GetSampleData() : nullptr;
+        sound.Volume = event.volume;
+        sound.Radius = event.radius;
+        sound.SetLoop(true);
+        if (proto.building_time >= 0.0f || event.auto_pitch)
+        {
+            const int referenceEnergy = proto.building_time >= 0.0f
+                ? (int)std::lround(std::min(proto.building_time, 10.0f) * 5000.0f) : proto.Energy;
+            const int pitch = yw_GetAutomaticGenesisPitch(referenceEnergy);
+            sound.ConfigurePitchRange(pitch, pitch);
+        }
+        else event.ConfigureSoundSourcePitch(sound);
+
+        auto &effects = carrier.Sounds[1];
+        fx->Pal = event.sndPrm;
+        fx->Pal.time = bldProc.EndTime;
+        fx->Shk = event.sndPrm_shk;
+        fx->Shk.time = bldProc.EndTime;
+        if (fx->Pal.slot > 0)
+        {
+            effects.PPFx = &fx->Pal;
+            effects.SetPFx(true);
+        }
+        if (fx->Shk.slot > 0)
+        {
+            effects.PShkFx = &fx->Shk;
+            effects.SetShk(true);
+        }
+        SFXEngine::SFXe.startSound(&carrier, 0);
+        SFXEngine::SFXe.startSound(&carrier, 1);
+    }
+
     for (NC_STACK_ypabact * &unit : _unitsList)
     {
-        if ( unit->_bact_type == BACT_TYPES_ROBO && owner == unit->_owner )
+        if ( !proto.genesis_sound_defined && unit->_bact_type == BACT_TYPES_ROBO && owner == unit->_owner )
         {
             SFXEngine::SFXe.startSound(&unit->_soundcarrier, 11);
             break;
@@ -2348,6 +2452,8 @@ void NC_STACK_ypaworld::BuildingConstructUpdate(int dtime)
     {
         TConstructInfo &bldProc = it->second;
         bldProc.Time += dtime;
+        if (bldProc.GenesisCarrier)
+            SFXEngine::SFXe.UpdateSoundCarrier(bldProc.GenesisCarrier.get());
 
         if ( bldProc.Time >= bldProc.EndTime )
         {
@@ -3563,8 +3669,13 @@ void NC_STACK_ypaworld::ProtosFreeSounds()
         wep.blast_debuff.tick_snd.ClearSounds();
     }
 
+    for (auto &process : _inBuildProcess)
+        process.second.GenesisCarrier.reset();
     for (World::TBuildingProto &proto : _buildProtos)
+    {
         proto.SndFX.ClearSounds();
+        proto.GenesisFX.ClearSounds();
+    }
 }
 
 void NC_STACK_ypaworld::FFeedback_Update()

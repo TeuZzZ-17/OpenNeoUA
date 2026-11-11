@@ -1174,7 +1174,7 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
         _roboDockUser = newUnit->_commandID;
         _roboDockEnerg = arg->energ - producedUnitCost;
 
-        newUnit->_scale_time = (float)newUnit->_energy_max * 0.2;
+        newUnit->_scale_time = newUnit->GetCreationTime(newUnit->_energy_max * 0.2);
 
         _roboDockTime = newUnit->_scale_time + 2000;
 

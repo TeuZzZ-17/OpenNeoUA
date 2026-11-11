@@ -298,7 +298,7 @@ protected:
     int32_t _collID;
 };
 
-class BuildProtoParser : public ScriptParser::DataHandler
+class BuildProtoParser : public ScriptParser::DataHandler, public FxParser
 {
 public:
     BuildProtoParser(NC_STACK_ypaworld *o) : _o(*o), _bld(nullptr), _bldID(-1), _isModify(false), _gunID(-1) {} ;
@@ -306,6 +306,8 @@ public:
     virtual bool IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt) override;
 protected:
     NC_STACK_ypaworld &_o;
+    TVhclSound *GetSndFxByName(const std::string &name) override
+    { return !StriCmp(name, "genesis") ? &_bld->GenesisFX : nullptr; }
     TBuildingProto *_bld;
     int32_t _bldID;
     bool _isModify;

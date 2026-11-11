@@ -380,6 +380,29 @@ bool ypabact_HasGroundDecalSupport(NC_STACK_ypabact *unit)
            support.isectPos.y >= unit->_position.y - 0.25f;
 }
 
+// OpenNeoUA custom: crater_radius / crater_depth of a vehicle dig the ground
+// below the wreck, once, where the "destroyed" ground decal would go.
+// SpawnTerrainCrater refuses roofs, walls and netgames; no terrain right below
+// the body (still airborne) means no crater. Off unless both keys are set.
+void NC_STACK_ypabact::MakeDestroyedCrater()
+{
+    if ( _destroyedCraterMade || !_craterConfig.defined || !_world || _world->_isNetGame ||
+         _kamikaze_ground_decals_handled || !ypabact_HasGroundDecalSupport(this) )
+        return;
+
+    ypaworld_arg136 groundHit;
+    groundHit.stPos = vec3d(_position.x, -30000.0, _position.z);
+    groundHit.vect = vec3d(0.0, 50000.0, 0.0);
+    groundHit.flags = 0;
+    _world->ypaworld_func136(&groundHit);
+
+    if ( groundHit.isect )
+    {
+        _destroyedCraterMade = true;
+        _world->SpawnTerrainCrater(_craterConfig, groundHit);
+    }
+}
+
 void NC_STACK_ypabact::Die()
 {
     if ( _status_flg & BACT_STFLAG_DEATH1 )

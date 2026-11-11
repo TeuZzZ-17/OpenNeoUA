@@ -964,7 +964,11 @@ struct TVhclProto
     // ground_decal_size and MGUN equivalent: per-unit decal size.
     TDecalSizeOverride ground_decal_size;
     TDecalSizeOverride mgun_ground_decal_size;
+    // OpenNeoUA custom: crater_radius / crater_depth / crater_rim dug where the
+    // wreck ends on the ground (same moment as the "destroyed" ground decal).
+    TCraterConfig crater;
     TVehicleBuffConfig buff;
+    float building_time = -1.0f; // Seconds, 0..100; negative preserves vanilla timing and pitch.
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost
     int mimic_energy_cost_min = 0;
@@ -1612,6 +1616,7 @@ struct TBuildingProto
     uint8_t Power = 0;
     uint32_t TypeIcon = 0;
     std::string Name;
+    float building_time = -1.0f; // Seconds to emerge and become operational; negative keeps vanilla.
     int Energy = 0;
     int production_cost = 0; // OpenNeoUA: displayed Genesis price; 0 keeps vanilla Energy-as-cost
     int GetProductionCost() const
@@ -1630,6 +1635,9 @@ struct TBuildingProto
     TVisualTint tint;
     TDecorationFXConfig DecorationFX;
     TVhclSound SndFX;
+    TVhclSound GenesisFX;
+    bool genesis_sound_defined = false;
+    bool genesis_effects_defined = false;
     float briefing_size = 0.0f;
     vec3d briefing_xyz;
     std::vector<TGun> Guns;

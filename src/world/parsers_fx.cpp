@@ -577,6 +577,18 @@ bool ParseVPSpinParam(ScriptParser::Parser &parser,
     return true;
 }
 
+float ParseBuildingTime(const std::string &value)
+{
+    // Unlike Parser::stof, malformed optional data must not open a modal dialog.
+    char *end = nullptr;
+    errno = 0;
+    const float seconds = std::strtof(value.c_str(), &end);
+    if (end == value.c_str() || end != value.c_str() + value.size() ||
+        errno == ERANGE || !std::isfinite(seconds) || seconds < 0.0f || seconds > 100.0f)
+        return -1.0f;
+    return seconds;
+}
+
 float ParseFiniteFloatOrFallback(ScriptParser::Parser &parser,
                                  const std::string &value,
                                  float fallback)
@@ -2031,6 +2043,43 @@ static bool ParseDecalSizeRange(const std::string &value, float &minValue, float
 }
 
 // Invalid values disable the decal without changing its linked profile.
+bool ParseCraterParam(const std::string &p1, const std::string &p2, TCraterConfig &crater)
+{
+    const bool rim = !StriCmp(p1, "crater_rim");
+    const bool radius = !StriCmp(p1, "crater_radius");
+    if ( !rim && !radius && StriCmp(p1, "crater_depth") )
+        return false;
+
+    const float limit = rim ? 100.0f : 12000.0f;
+    float minValue = 0.0f;
+    float maxValue = 0.0f;
+    const bool ok = World::ParseFloatRangeValue(p2, minValue, maxValue) &&
+                    minValue >= 0.0f && maxValue <= limit && minValue <= maxValue;
+    if ( !ok )
+    {
+        ypa_log_out("WARNING: invalid %s '%s'; crater disabled\n", p1.c_str(), p2.c_str());
+        minValue = maxValue = 0.0f;
+    }
+    if ( rim )
+    {
+        crater.rim_min = minValue;
+        crater.rim_max = maxValue;
+    }
+    else if ( radius )
+    {
+        crater.radius_min = minValue;
+        crater.radius_max = maxValue;
+    }
+    else
+    {
+        crater.depth_min = minValue;
+        crater.depth_max = maxValue;
+    }
+    crater.invalid = crater.invalid || !ok;
+    crater.defined = !crater.invalid && crater.radius_max > 0.0f && crater.depth_max > 0.0f;
+    return true;
+}
+
 void ParseDecalSizeOverride(const char *key, const std::string &value,
                             TDecalSizeOverride &out)
 {

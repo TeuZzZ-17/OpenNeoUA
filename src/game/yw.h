@@ -2301,6 +2301,11 @@ public:
         int EndTime = 0;
         int Owner = 0;
         uint8_t BuildID = 0;
+        // Plain-ground sector type drawn under the transparent construction
+        // plasma (game.building_visual_genesis); -1 = none found.
+        int GroundSecType = -1;
+        // Owns the event until construction ends; its deleter stops all sound/FX references.
+        std::shared_ptr<TSndCarrier> GenesisCarrier;
     };
 
     struct TNetGameEvent
@@ -2530,6 +2535,7 @@ public:
 
 
     SDL_Color GetColor(int color_id);
+    bool GetPlasmaFactionTint(int owner, GFX::TGLColor *outTint);
     SDL_Color GetFactionBoxTextColor() const;
     bool ParseColorString(int color_id, const std::string &color_string);
 
@@ -2651,6 +2657,9 @@ public:
     void DestroyAllGunsInSector(cellArea *cell);
     void DestroyUnitsCoveredByBuilding(cellArea *cell, uint8_t buildingID);
     bool BuildingConstructBegin(cellArea *cell, uint8_t buildingID, int owner, int cTime);
+    // 3x3 sector type made only of ground (BODEN) meshes, preferring the given
+    // surface type; -1 when the set has none.
+    int FindPlainGroundSecType(uint8_t surfaceType);
     void BuildingConstructUpdate(int dtime);
     void BuildingDecorationFXUpdate();
     bool IsAnyBuildingProcess(int owner) const;

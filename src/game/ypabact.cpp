@@ -386,6 +386,7 @@ void NC_STACK_ypabact::ResetFeatureRuntimeState()
     StopVerticalLaser();
     _kamikaze_triggered = false;
     _kamikaze_ground_decals_handled = false;
+    _destroyedCraterMade = false;
 }
 
 NC_STACK_ypabact::NC_STACK_ypabact()
@@ -1078,7 +1079,7 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
                 createState.unsetFlags = 0;
                 createState.newStatus = BACT_STATUS_CREATE;
                 gunObj->SetState(&createState);
-                gunObj->_scale_time = gunObj->_energy_max * 0.2;
+                gunObj->_scale_time = gunObj->GetCreationTime(gunObj->_energy_max * 0.2);
             }
             else
             {
@@ -2313,6 +2314,7 @@ void NC_STACK_ypabact::Renew()
     _collisionShape.reset();
     _disableCollision = false;
     _disable_genesis = false;
+    _building_time = -1.0f;
     _shapeCollisionDamageStamp = -1;
     ClearPlayerSprintPitchExtra();
     if ( _inlinePhysicalFX )
@@ -2448,6 +2450,7 @@ void NC_STACK_ypabact::Renew()
 
     _extDestroyFX.clear();
     _chainFX.clear();
+    _craterConfig = World::TCraterConfig();
 
     for (extra_vproto &vp : _vp_extra)
         vp = extra_vproto();
@@ -3237,6 +3240,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
                 SFXEngine::SFXe.startSound(&_soundcarrier, World::TVhclProto::SND_EXPLODE);
 
             StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DESTROYED);
+            MakeDestroyedCrater();
             StartDestFXByType(World::DestFX::FX_MEGADETH);
 
             _fly_dir_length = 0;

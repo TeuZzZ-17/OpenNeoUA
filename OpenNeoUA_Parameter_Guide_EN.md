@@ -170,6 +170,7 @@ Each parameter is one line: marker, `name = value`, em dash and description.
  In Model Editor, Copy Emitter duplicates an emitter and Cut Emitter moves it. Both immediately start an animated gray preview: click a point to place it. During Cut, the original circle disappears unless other emitters share that point. Esc or right-click cancels placement without changing the model.
  In Entity Designer, Add accepts supported effects and routes model, decal and crater keys to their respective rows while retaining other existing values. Unknown keys inside `begin_fx` are preserved in the saved text, even when Studio cannot interpret them yet. Keys of several rows (for example `crater_*` with `ground_decal_id`) can be written in one Add: the editor keeps the first row, the others are filled and saved together with it. Model, decal and crater keys cannot share an effect with `begin_fx`, `dest_fx` or sound keys; a key Studio does not know, a crater key on a vehicle or an unknown sound event gets a message that names the key.
  The Visuals & FX list shows only existing items or drafts being created; craters and decals are marked red because vanilla does not support them. The weapon preview starts at Projectile altitude 300; an artillery shell uses its configured arc height.
+ In Visuals & FX you can click an effect directly in the 3D view (model, decal, crater, smoke, particles): its row is selected in the list and the effect gets a white border. When effects overlap, the smallest one wins. Double-clicking away from every effect deselects them all. Dragging still orbits the camera; the unit and hidden effects cannot be clicked.
  For cluster weapons, configure craters on the child weapon that hits the ground. The cluster preview shows child craters and a read-only row with their IDs when configured; open the child weapon to edit them. A parent projectile's crater applies to its own impact, if any, and is not inherited by its children.
  previews and copies selected faces' texture mappings to chosen loose BASE
  states. Faces must match uniquely and the destination must resolve the same
@@ -270,6 +271,8 @@ The engine recognizes these fixed WAV stems: unit_ready, unit_idle, order_ack_fr
 - 🟢 `add_max_active_at_once = 3`               — GEM upgrade value used inside modify_vehicle to increase and persist max_active_at_once.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `production_cost = 150`                    — Displayed Genesis price for this vehicle. Overrides the vanilla energy-derived price (energy x 2 / 100) without changing hit points. The Genesis list is sorted by this final price. 0 or absent = vanilla behavior.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `building_time = 4.4` — Construction duration in real seconds, from 0 to 100, including decimals (use a dot). 0 completes on the first simulation update. Missing, negative, above 100, or invalid values preserve vanilla timing. Vehicles use this duration for Genesis and its production wait; their Genesis pitch overrides snd_genesis_pitch and follows the legacy displayed vehicle cost: 4.4 = cost 440, 10 = cost 1000. Above 10 only duration grows; pitch stays at 10. Cost, health and death plasma are unchanged. disable_genesis = 1 still creates instantly. Buildings use the same seconds for emerging from the terrain and becoming operational; they have no Genesis pitch. Preplaced/instant scripted buildings remain instant.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `vehicle_description = Heavy assault unit` — Optional vehicle description shown in the Database. If absent, the Description row is not shown.
 ------------------------------------------------------------------------------------------------------------------------
@@ -711,6 +714,12 @@ Kamikaze exception: when a model = kamikaze Weapon detonates with a positive tri
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ground_decal_size = 80~120`        — Manual diameter range in world units, 0..12000. Absent, zero or invalid disables the decal.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `crater_radius = 120~160`        — Vehicle: radius of the crater dug under the wreck when it ends on the ground (same moment as the destruction decal), in world units, fixed value or `min~max` (0..12000). Needs crater_depth: if either is missing, zero or invalid there is no crater (vanilla behaviour). A vehicle still in the air, or a multiplayer game, digs nothing. In Studio use the Crater row.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `crater_depth = 40~60`           — Vehicle: depth of the crater centre, `min~max` (0..12000). Never more than half the radius.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `crater_rim = 20`                — Vehicle: raised rim in % of the depth (0..100). Absent = 20; invalid = no crater.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `cockpit_camera_offset_xyz = 0|0|0` — Cockpit camera X|Y|Z offset. Format: x|y|z.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `cockpit_gun_camera_recoil = 2.0`   — 0..5 multiplier for cockpit camera recoil from the gun. Does not alter physics, aiming or projectile origin.
@@ -1089,7 +1098,7 @@ Vehicle Chain FX can replace the old single-purpose dest_fx relationship with an
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_airexplode_radius = 5000`                        — Maximum air-explosion sound radius. Volume decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_genesis_pitch = auto`                            — Automatic Genesis sound pitch: the higher the unit's HP, the lower the generated pitch. The automatic mode is opt-in and only active with the exact value "auto"; an explicit numeric value or `min~max` range overrides it, while a missing pitch keeps the normal default.
+- 🟢 `snd_genesis_pitch = auto`                            — Without building_time, automatic Genesis sound pitch: the higher the unit's HP, the lower the generated pitch. The automatic mode is opt-in and only active with the exact value "auto"; an explicit numeric value or `min~max` range overrides it, while a missing pitch keeps the normal default. An explicit building_time overrides this setting and caps the automatic pitch at the 10-second reference.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### OpenNeoUA special features
@@ -1938,6 +1947,26 @@ Cluster Weapons split into child Weapons either after a timer or on impact. Chil
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `production_cost = 1400`                 — Displayed Genesis price for this building. Overrides the vanilla Energy-derived price without changing hit points. 0 or absent = vanilla behavior (Energy / 100).
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `building_time = 4.4` — Construction duration in real seconds, from 0 to 100, including decimals (use a dot). 0 completes on the first simulation update. Missing, negative, above 100, or invalid values preserve vanilla timing. Vehicles use this duration for Genesis and its production wait; their Genesis pitch overrides snd_genesis_pitch and follows the legacy displayed vehicle cost: 4.4 = cost 440, 10 = cost 1000. Above 10 only duration grows; pitch stays at 10. Cost, health and death plasma are unchanged. disable_genesis = 1 still creates instantly. Buildings use the same seconds for emerging from the terrain and becoming operational; they have no Genesis pitch. Preplaced/instant scripted buildings remain instant.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_genesis_sample = sounds/lowapp.wav` — Construction sound specific to this building, emitted at its position. It loops from placement until the building is complete, then stops. Overrides the Host Station snd_build only when a snd_genesis_* key is authored. 0 disables the sample. Without Genesis parameters, the legacy Host Station sound is preserved. Independent of game.building_visual_genesis.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_genesis_volume = 120` — Volume of this building’s construction sound.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_genesis_pitch = 0` — Fixed pitch, min~max range, or auto. An explicit building_time owns pitch: 4.4 matches legacy displayed vehicle cost 440, 10 matches cost 1000; values above 10 keep the same pitch. Without building_time, numeric/range pitch stays explicit; auto uses energy.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_genesis_slot = 1` — Construction palette slot for this building. 0 or absent disables the effect. The effect lasts the whole construction, from placement to completion (building_time, or the vanilla time), going from mag0 to mag1; there is no time key. Independent of audio and visual plasma.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_genesis_mag0 = 0.25` — Initial palette effect intensity.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_genesis_mag1 = 0` — Final palette effect intensity.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_genesis_slot = 1` — Enables this building’s construction camera shake. 0 or absent disables it. Like the palette it lasts the whole construction, from mag0 to mag1, with no time key. Shake axes and distance fade use the same defaults as vehicle sound events.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_genesis_mag0 = 0.5` — Initial shake intensity.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_genesis_mag1 = 0` — Final shake intensity.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `building_description = Defense outpost` — Optional building description shown in the Database. If absent, the Description row is not shown.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `type_icon = V`                          — Building icon (a .FON glyph key). A Unicode symbol is also accepted, e.g. ∆ or U+2206, linked in the .FON to the icon coordinates. Any value other than I lists the building in the Database. Vanilla compatibility: vanilla reads only the first byte of the value, so use a plain ASCII character (letters, digits or symbols such as ] or `). U+XXXX values and Unicode symbols are OpenNeoUA-only; vanilla reads U+2206 as the letter U (the Radar Station icon). When a non-ASCII symbol is needed, write it as U+XXXX: a pasted symbol can be corrupted by the editor's text encoding, and an unreadable icon falls back to the default A icon. In the .FON, write new keys as a single byte; a U+XXXX line must stay above the U line, otherwise vanilla replaces the Radar Station icon. The replacement character U+FFFD is rejected.
@@ -1958,7 +1987,9 @@ Cluster Weapons split into child Weapons either after a timer or on impact. Chil
 ### Briefing model settings for buildings
 
 - 🟢 `briefing_size = 100` sets the size of a building shown by its prototype in the briefing or debriefing, for example a gate or tech building. 100 keeps the classic framing, higher values enlarge the model and lower values shrink it. Valid range is 1–10000. Zero, missing or invalid uses classic framing.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `briefing_xyz = 0|0|0` moves that preview in the same screen axes as the vehicle setting. Positive X moves right, positive Y down and positive Z away. Zero keeps the original position. These are optional OpenNeoUA parameters.
+------------------------------------------------------------------------------------------------------------------------
 
 ### Flaks mounted on the building
 
@@ -2262,12 +2293,19 @@ SuperItem profiles are defined by new_superitem `<id>` in scripts loaded by Star
 - 🟢 `superitem_id = 1` — ID of the new_superitem profile linked by the level begin_item block. -1, absent or unknown ID = vanilla SuperItem.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `sec_x = 1`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `sec_y = 12`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `inactive_bp = 35`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `active_bp = 36`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `trigger_bp = 37`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `type = 1`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `countdown = 998000`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end`
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `new_superitem 1`                                   — Reusable SuperItem profile linked by its numeric ID.
@@ -2475,8 +2513,11 @@ Define profiles in scripts loaded by Startup.cfg; the filename is organizational
 - 🟢 `new_decal 2` — ground_pulse example: intermittent electric discharges, with no rise-only keys.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `name = mykonian_electric`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `texture = Graphics/GroundDecals/Mykonian_Electric_02.png`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `duration = permanent`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_mode = ground_pulse`
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_vp = 2`                    — Set VP. Alternatively effect_3ds or effect_base.
@@ -2486,19 +2527,29 @@ Define profiles in scripts loaded by Startup.cfg; the filename is organizational
 - 🟢 `effect_pulse_time = 180`          — How long each flash stays lit.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_scale = 0.08`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_active_time = 7000~11000`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_spread = 30`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_tint = 255|255|255|230`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end`
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `new_decal 4` — Smoke-free MGUN example referenced by mgun_ground_decal_id = 4.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `name = mgun_hit`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `texture = Graphics/GroundDecals/impact_01.png`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `random_rotation = 1`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `edge_fade = 5~10`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `duration = 60000`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `fade_inout = 0|2000`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end`
 ------------------------------------------------------------------------------------------------------------------------
 
@@ -2525,6 +2576,10 @@ OpenNeoUA uses .cfg files as the modern script/Game Config layout while retainin
 ------------------------------------------------------------------------------------------------------------------------
 
 ## OpenNeoUA.ini
+
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `game.building_visual_genesis = 1` — Optional visual construction plasma for every building. 1 uses the animated Genesis plasma of the vehicles (same frames and speed) with the constructor’s faction color while retaining the existing emergence. Under the transparent plasma the set’s plain ground (an empty 3x3 sector of the same surface) is drawn, so the footprint never shows the black void. Normal materials return on completion; terrain and gameplay are unchanged. Missing/0/invalid = disabled, including built-in defaults. This does not enable or disable per-building sound/palette/shake. Supports both classic and VBO rendering.
+------------------------------------------------------------------------------------------------------------------------
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.new.debug = yes` — OpenNeoUA.ini is loaded as a custom configuration layer after Nucleus.ini. When the same key exists in both files, the OpenNeoUA.ini value takes priority. Settings managed by Advanced Graphics Settings are documented separately under Graphic Profiles. Enables the new debug controls (F1 through F12). When disabled, normal key behavior is preserved.
@@ -3740,7 +3795,9 @@ These optional blocks belong in an LDF, never in OpenNeoUA.ini or Nucleus. Witho
 - 🟢 `point = 4800|-6000`                     — Polygon vertex in world-space X|Z coordinates. Repeat for each vertex.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `point = 8400|-6000`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `point = 9600|-8400`
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `point = 4800|-8400`
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end` — Implicitly joins the last vertex to the first.
