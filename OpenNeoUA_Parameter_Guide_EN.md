@@ -2941,8 +2941,8 @@ Palette calibration used by the modernized units. The screen is the scene times 
 
 - One colour per faction, for vehicle events (explode, goingdown, airexplode) and weapon events (launch, hit, normal, cluster): Resistance slot 11 (light blue), Ghorkov slot 1 (red), Taerkasten slot 8 (yellow), Mykonians slot 2 (blue), Sulgogar slot 16 (green).
 - Slots are scaled to look equally strong: slot 11 x1.0, slot 8 x0.94, slot 16 x0.78, slot 1 x0.74, slot 2 x0.59 (their colours are far from white and overshoot 1).
-- Vehicle explode/airexplode peak by class, before the slot scaling: tiny 0.40, light 0.60, medium 1.0, heavy 1.0, super-heavy 1.0 (capped at 1.0); it fades to half of the peak. goingdown is a faint constant glow (0.03-0.07) and never lasts more than 10 seconds.
-- Weapon hit peak = 0.28 x sqrt(damage / 2000) x min(1, shot_time / 600)^0.7; kamikaze and the 20 Tons Taerbomb x1.5, salvos of 10 or more x0.7. launch is 35% of it, normal (in-flight glow) is a constant 0.08, cluster is 60% of the parent hit.
+- Vehicle explode/airexplode peak by class, before the slot scaling: tiny 0.80, light 1.2, medium 2.0, heavy 2.0, super-heavy 2.0 (capped at 2.0); it fades to half of the peak. goingdown is a faint constant glow (0.03-0.07) and never lasts more than 10 seconds.
+- Weapon hit peak = 0.56 x sqrt(damage / 2000) x min(1, shot_time / 600)^0.7; kamikaze and the 20 Tons Taerbomb x1.5, salvos of 10 or more x0.7. launch is 35% of it, normal (in-flight glow) is a constant 0.16, cluster is 60% of the parent hit.
 
 ## World.ini
 
