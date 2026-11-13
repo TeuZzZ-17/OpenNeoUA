@@ -29,6 +29,7 @@ void AddWeaponIds(const TVhclProto &v, std::vector<int> &out, size_t count,
     for (int id : v.extra_weapons) if (id > 0) add(id);
     if (v.mgun_set) add(v.mgun);
     if (v.proximity_defense_enable) add(v.proximity_defense_weapon);
+    if (v.orbiter_weapon > 0) add(v.orbiter_weapon); // OpenNeoUA Orbiter guardians
     auto mounts = [&](const std::vector<TRoboGun> &guns) {
         for (const TRoboGun &gun : guns)
             if (Valid(gun.robo_gun_type, vehicles.size()))
@@ -56,6 +57,7 @@ int AttackForVehicle(int id, const std::vector<TVhclProto> &vehicles,
     if (v.mgun_set&&Valid(v.mgun,weapons.size()))addWeapon(v.mgun);
     else if(v.mgun_energy_set)total+=std::max(0.0,(double)v.mgun_energy);
     if (v.proximity_defense_enable) addWeapon(v.proximity_defense_weapon);
+    if (v.orbiter_weapon > 0) addWeapon(v.orbiter_weapon); // OpenNeoUA Orbiter guardians
     auto mounts = [&](const std::vector<TRoboGun> &guns) {
         for (const TRoboGun &gun : guns)
             if (Valid(gun.robo_gun_type, vehicles.size()))

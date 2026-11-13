@@ -826,6 +826,13 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->snd_mimic.volume = parser.stol(p2, nullptr, 0);
     }
+    else if ( !StriCmp(p1, "orbiter_weapon") )
+    {
+        // OpenNeoUA Orbiter carrier link. The id is checked at runtime
+        // (must be a "model = orbiter" Weapon); 0/negative/invalid = off.
+        int weaponId = parser.stol(p2, nullptr, 0);
+        _vhcl->orbiter_weapon = weaponId > 0 ? weaponId : 0;
+    }
     else if ( !StriCmp(p1, "proximity_defense_weapon") )
     {
         int weaponId = parser.stol(p2, nullptr, 0);

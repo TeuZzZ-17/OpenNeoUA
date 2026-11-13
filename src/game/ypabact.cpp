@@ -352,6 +352,9 @@ void NC_STACK_ypabact::ResetFeatureRuntimeState()
     _carrier_spawn_root_gid = 0;
     _carrier_spawn_root_vehicle = 0;
     _carrier_spawned_gids.clear();
+    _orbiter_weapon = 0;
+    _orbiter_count = -1;
+    _orbiter_next_spawn_time = 0;
     _proximity_defense_enable = 0;
     _proximity_defense_weapon = 0;
     _proximity_defense_trigger_radius = 0.0;
@@ -1555,6 +1558,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateDecorationFX(arg);
     UpdateCarrierSpawn(arg);
     UpdateProximityDefense(arg);
+    UpdateOrbiters(arg);
     UpdateArtilleryShell(arg);
     ResolveGenesisCompoundOverlap(arg->frameTime);
     UpdateKamikaze(arg);
@@ -1777,6 +1781,9 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         effectiveTint.a *= _active_debuff.target_tint.a;
         effectiveTint.Clamp();
     }
+
+    // OpenNeoUA Orbiter fade-in (render-only, 1 = unchanged for every other unit).
+    effectiveTint.a *= GetRenderFadeAlpha();
 
     auto shouldApplyVPScale = [this](NC_STACK_base *base)
     {
