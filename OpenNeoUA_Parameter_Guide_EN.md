@@ -1160,6 +1160,8 @@ Proximity Defense is an autonomous secondary Weapon system. "classic" reacts to 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `proximity_defense_horizontal_angle = 0~360`                                — Projectile horizontal angle. Single value = fixed angle; `min~max` = random angle in range. If absent, projectiles are distributed uniformly across 360 degrees.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_weapon = 11` — Orbiter carrier link: Weapon ID of a `model = orbiter` Weapon. The unit keeps its guardian orbiters around itself and sends them against an enemy unit. Independent of weapon/weapon_2..4/mgun (the primary Weapon is unchanged). 0, absent or a Weapon that is not an orbiter = off (vanilla). Local games only: no orbiters in network games.
+------------------------------------------------------------------------------------------------------------------------
 
 ## Weapons (Weapons.cfg)
 
@@ -1284,6 +1286,26 @@ Laser replaces a physical projectile with a continuous beam. Damage is tick- bas
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `laser_mesh_impact_fade_length = 150`         — Fade length near real contact with units, terrain or buildings. 0/invalid = no fade. Does not modify hits, damage or collision.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `model = orbiter` — Guardian projectiles. They are carried by a Vehicle through orbiter_weapon, never fired from a weapon slot. They appear one at a time around the carrier with a fade-in and circle it slowly and irregularly, never passing through it. When the carrier attacks an enemy unit (AI: fires its weapon at it or hits it with the mgun; player: hits it with the weapon, laser or mgun) they leave the carrier, dance around the enemy, pass through it on every strike (normal hit damage, hit sound and detonate effects) and explode on the last strike with the normal impact/blast. Allies, buildings and terrain never trigger them. Target lost = back to guard; carrier destroyed = they explode where they are. Speed comes from start_speed, damage from energy (and blast_* on the last strike), visuals and sounds from the usual vp_*/snd_* keys; life_time is the safety limit of one siege. Every orbiter_* key is optional.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_count = 2~3` — Maximum orbiters alive around the carrier, 1..8 (`min~max` rolled once per unit). Default 1.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_respawn_time = 4000~6000` — Milliseconds before a missing orbiter is replaced, 100..600000 (`min~max` rolled for each orbiter). Default 4000.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_fade_in = 800` — Fade-in time in milliseconds when an orbiter appears, 0..10000 (single value). An orbiter attacks only after its fade-in. Default 800.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_guard_radius = 60~90` — Distance of the guard orbit from the carrier centre (`min~max` rolled for each orbiter). 0 or absent = automatic from the carrier size. Never closer than the carrier body.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_siege_radius = 100~160` — Size of the dance around the target (`min~max` rolled for each siege). 0 or absent = automatic from the target size. Never smaller than the target body.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_first_strike_delay = 1200~2000` — Milliseconds of dance around the target before the first strike, 0..60000 (`min~max` rolled for each siege). Default 1500.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_strikes = 3` — Strikes through the target, 1..20 (`min~max` rolled for each siege). The last strike detonates the orbiter. Default 3.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_strike_interval = 700~1100` — Milliseconds of dance between two strikes, 100..60000 (`min~max` rolled for each pause). Default 900.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_energy_mult = 1.25` — Damage cascade between consecutive strikes, 0.05..10 (single value). Strike N deals energy × mult^N: 1 = always the same; 0.4 = each strike deals 40% of the previous one; 1.25 = each strike deals 25% more than the previous one. Default 1.
+------------------------------------------------------------------------------------------------------------------------
 
 ### Damage and targets
 
@@ -1379,7 +1401,7 @@ Chain Weapon propagation continues a hit from one enemy unit to another nearby t
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `chain_radius = 1400`      — Search radius for the next enemy target after each impact.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `chain_energy_mult = 0.75` — Damage retained at each jump. 1.0 = no loss; 0.75 = each jump deals 75% of the previous jump's damage.
+- 🟢 `chain_energy_mult = 0.75` — Damage cascade at each jump. 1.0 = no change; 0.75 = each jump deals 75% of the previous jump's damage; values above 1 increase it (1.5 = each jump deals 50% more).
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `chain_jump_delay = 120`   — Delay in milliseconds between an impact and the next chain jump. 0 = immediate propagation.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3860,3 +3882,17 @@ COHEN remains weapon 27, retaining projectile VP316, nominal direct energy 31000
 Launch audio exactly matches BIG_KYT_FLAK weapon 84, used by the Turantul II mounted guns: `snd_launch_sample = sounds/shot1.wav`, volume 210 and pitch 1000. `snd_launch_at_muzzle = 1` anchors the launch sound to the shooter rather than the projectile. The secondary machine gun retains its own audio. COHEN is also shared by Gigant Alpha, so weapon changes apply to both users.
 
 Gigant_2, vehicle 27, was removed from `Vehicles.cfg`, without aliases or replacements. No other IDs were renumbered. Existing saves containing that unit require separate compatibility checks. No engine features or parameter syntax were changed. Live gameplay verification remains necessary for audio, balance, camera placement and the complete destruction sequence.
+
+
+## Slime Lord and Answinist restoration, November 13, 2026
+
+Vehicle 72 retains its original energy, shield, cost, movement and damage. It has a five-unit cap, a six-second build time, push resistance and a destruction push. `Data/Collisions/Slime_Lord.collision` approximates the body and central tip with two convex hulls; thin tendrils are excluded.
+
+Answinist, weapon 72, retains VP 144 and uses VP 145 for green launch and detonation effects, with spores and a wave on world impact. The projectile uses `Data/Collisions/Answinist.collision`, a 0.5% energy cost per shot, 0.5 recoil, 1 push and a 4000 ms player interval; nominal damage and AI cadence remain unchanged. The weapon is shared with Slime Lord Alpha and SULG_HS_FLAK, so those users receive the same weapon changes.
+
+Weapon 11 orbiters retain their existing behavior and gain a green tint and contact effect. They are available only in local games. On destruction the Lord produces a green core, spores and Sulgogar fragments. Colors, effect sizes, collisions and balance require in-game verification. No new parameters were introduced.
+
+
+### Slime Lord Sulgogar debris
+
+When vehicle 72 is destroyed, its existing effects remain and it also spawns 3–5 small fragments, 2–3 medium fragments and one large fragment. All three use the Sulgogar organic texture; the medium and large models contain an original VP 213 emitter. The fragments use the Slime Lord material, portions of its texture atlas and shading values taken from the original model. Each group randomizes all three launch axes and initial rotation; larger pieces have a narrower spread. Trails and trajectories require in-game verification.

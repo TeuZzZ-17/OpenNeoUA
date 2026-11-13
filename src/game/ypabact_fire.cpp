@@ -216,6 +216,16 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     if ( cooldownProto.IsKamikaze() )
         return 0;
 
+    // OpenNeoUA Orbiter: an orbiter Weapon is carried through orbiter_weapon,
+    // never fired from a weapon slot.
+    if ( cooldownProto.IsOrbiter() )
+        return 0;
+
+    // OpenNeoUA Orbiter: an AI carrier that attacks an enemy unit with its
+    // weapon also sends its orbiters (the player sends them on a hit instead).
+    if ( !getBACT_inputting() && weaponTarget )
+        EngageOrbiters(weaponTarget);
+
     const bool cockpitDirectAim =
         arg && arg->tgType == BACT_TGT_TYPE_DRCT && IsCockpitCameraActive();
     const vec3d cockpitRequestedViewDir = cockpitDirectAim ? arg->direction : vec3d();
@@ -1462,6 +1472,10 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                                 // so tracer/impact presentation stays unchanged.
                                                 if ( energ && !cellUnit->HasDeflectBuff() )
                                                     cellUnit->ModifyEnergy(&v86);
+
+                                                // OpenNeoUA Orbiter: an mgun hit on an enemy unit
+                                                // sends the orbiters (AI and player alike).
+                                                EngageOrbiters(cellUnit);
                                             }
 
                                             v22 = 1;

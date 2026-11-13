@@ -352,6 +352,11 @@ void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapProto &wp
         dmg.unit = shooter;
         target->ModifyEnergy(&dmg);
 
+        // OpenNeoUA Orbiter: a player laser hit sends the orbiters (the AI
+        // already sent them when it opened fire through LaunchMissile).
+        if ( playerControlled )
+            shooter->EngageOrbiters(target);
+
         if ( wproto.debuff.valid && target->_energy > 0 && target->_status != BACT_STATUS_DEAD )
             target->ApplyDebuff(wproto.debuff, shooter);
     }

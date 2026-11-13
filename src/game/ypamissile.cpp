@@ -1,7 +1,8 @@
 // NC_STACK_ypamissile core: construction, parameters, AI layers, movement, state changes, impact and the property
 // getters/setters. Feature files: ypamissile_blast.cpp (blast, push, armor penetration, direct hits),
 // ypamissile_chain.cpp (chain and cluster projectiles), ypamissile_flight.cpp (arc grenade, artillery shell,
-// homing bomb), ypamissile_tracer.cpp (weapon tracer visuals). Shared helpers: ypamissile_internal.h.
+// homing bomb), ypamissile_tracer.cpp (weapon tracer visuals), ypamissile_orbiter.cpp (guardian orbiters).
+// Shared helpers: ypamissile_internal.h.
 #include <inttypes.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -75,6 +76,7 @@ size_t NC_STACK_ypamissile::Init(IDVList &stak)
     _mislType = MISL_BOMB;
     _mislBlastPush = 0.0f;
     ResetRuntimeBlastState();
+    ResetOrbiterState();
     _mislClusterSoundCarrier.Clear();
     _mislArmorPenetrationSoundCarrier.Clear();
     _weaponTracer = World::TWeaponTracerConfig();
@@ -1197,6 +1199,12 @@ void NC_STACK_ypamissile::UpdateBoomerangReturn(update_msg *arg)
 
 void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 {
+    // OpenNeoUA Orbiter: guard/siege flight is fully isolated (ypamissile_orbiter.cpp).
+    if (_orbiterState != ORBITER_OFF && _status == BACT_STATUS_NORMAL)
+    {
+        UpdateOrbiter(arg);
+        return;
+    }
     if (_boomerangReturning && _status == BACT_STATUS_NORMAL)
     {
         UpdateBoomerangReturn(arg);
@@ -1608,6 +1616,7 @@ void NC_STACK_ypamissile::Renew()
     _mislBlastPush = 0.0f;
     _mislDirectPush = 0.0f;
     ResetRuntimeBlastState();
+    ResetOrbiterState();
     SFXEngine::SFXe.StopCarrier(&_mislClusterSoundCarrier);
     _mislClusterSoundCarrier.Clear();
     _weaponTracer = World::TWeaponTracerConfig();

@@ -186,6 +186,7 @@ set(SOURCES
     game/ypamissile_chain.cpp
     game/ypamissile_blast.cpp
     game/ypamissile_flight.cpp
+    game/ypamissile_orbiter.cpp
     game/yparobo.cpp
     game/yparobo_player.cpp
     game/yparobo_ai.cpp

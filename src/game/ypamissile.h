@@ -8,6 +8,7 @@
 
 #include "nucleus/nucleas.h"
 #include "game/ypabact.h"
+#include "world/orbiter_motion.h"
 
 class NC_STACK_ypamissile: public NC_STACK_ypabact
 {
@@ -36,6 +37,7 @@ public:
         MISL_OBSAVOID   = 5, // Obstacle avoiding
         MISL_INTERNAL   = 6, // Only for internal use
         MISL_ARC_GRENADE= 7, // OpenNeoUA: dedicated ballistic arc grenade
+        MISL_ORBITER    = 8, // OpenNeoUA: guardian projectile (ypamissile_orbiter.cpp)
     };
 
 public:
@@ -159,6 +161,14 @@ public:
     bool WeaponSoundEventsEnabled() const
     { return _weaponSoundEventsEnabled; }
 
+    // OpenNeoUA Orbiter (ypamissile_orbiter.cpp). The carrier spawns the
+    // projectile with BeginOrbiterGuard() and sends it with BeginOrbiterSiege().
+    void BeginOrbiterGuard(NC_STACK_ypabact *carrier, const World::TWeapProto &proto);
+    bool BeginOrbiterSiege(NC_STACK_ypabact *target);
+    bool IsOrbiterAlive() const;    // guarding or besieging, not yet spent
+    bool IsOrbiterGuarding() const; // guarding and fully faded in: ready to attack
+    virtual float GetRenderFadeAlpha() const override;
+
 protected:
     bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
     int CalcEnergyForBact(NC_STACK_ypabact *bct, int baseEnergy);
@@ -214,6 +224,12 @@ protected:
     void RememberChainHit(NC_STACK_ypabact *target);
     bool IsChainHit(NC_STACK_ypabact *target) const;
     void UpdateArtilleryShellBallistic(update_msg *arg); // OpenNeoUA custom: ballistic shell flight + timed impact
+    void ResetOrbiterState();
+    void UpdateOrbiter(update_msg *arg);
+    void UpdateOrbiterGuard(NC_STACK_ypabact *carrier, float dt);
+    void OrbiterStrike(NC_STACK_ypabact *target, bool final);
+    void OrbiterDetonate();
+    void KeepOrbiterAboveWorld();
     bool BeginBoomerangReturn();
     void UpdateBoomerangReturn(update_msg *arg);
     void FinishBoomerangReturn();
@@ -338,6 +354,21 @@ protected:
     int   _artilleryShellVerticalAscentTime = 0;
     int   _artilleryShellVerticalFallStartTime = 0;
     int   _artilleryShellVerticalDescentTime = 0;
+    // OpenNeoUA Orbiter state (meaningful only while _orbiterState != ORBITER_OFF).
+    enum OrbiterState { ORBITER_OFF = 0, ORBITER_GUARD, ORBITER_SIEGE };
+    int _orbiterState = ORBITER_OFF;
+    int32_t _orbiterCarrierGid = 0;
+    int32_t _orbiterTargetGid = 0;
+    int _orbiterFadeIn = 0;
+    int _orbiterFadeElapsed = 0;
+    int _orbiterBaseEnergy = 0;
+    int _orbiterStrikeIndex = 0;
+    int _orbiterSiegeElapsed = 0;
+    int _orbiterSiegeTimeLimit = 0;
+    World::Orbiter::Rng _orbiterRng;
+    World::Orbiter::Guard _orbiterGuard;
+    World::Orbiter::Siege _orbiterSiege;
+
     World::TWeaponTracerConfig _weaponTracer;
     bool _weaponTracerStarted = false;
     uint32_t _weaponTracerVisualSeed = 0;

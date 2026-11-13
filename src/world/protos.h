@@ -711,6 +711,30 @@ struct TWeaponChainConfig
     int jump_delay = 0;
 };
 
+// OpenNeoUA Orbiter ("model = orbiter"): guardian projectiles that circle their
+// carrier, then besiege an enemy, pass through it several times and detonate on
+// the last strike. Every *_min/*_max pair comes from a fixed value or "min~max"
+// and is rolled at use time. Values are sanitized by the parser.
+struct TWeaponOrbiterConfig
+{
+    int count_min = 1;               // live orbiters kept around the carrier
+    int count_max = 1;
+    int respawn_time_min = 4000;     // ms before a missing orbiter is replaced
+    int respawn_time_max = 4000;
+    int fade_in = 800;               // ms of alpha fade when an orbiter appears
+    float guard_radius_min = 0.0f;   // 0 = automatic from the carrier size
+    float guard_radius_max = 0.0f;
+    float siege_radius_min = 0.0f;   // 0 = automatic from the target size
+    float siege_radius_max = 0.0f;
+    int first_strike_delay_min = 1500; // ms of dance around the target before the first strike
+    int first_strike_delay_max = 1500;
+    int strikes_min = 3;             // passes through the target; the last one detonates
+    int strikes_max = 3;
+    int strike_interval_min = 900;   // ms between two strikes
+    int strike_interval_max = 900;
+    float energy_mult = 1.0f;        // damage of strike N = energy * energy_mult^N (cascade)
+};
+
 struct TRoboGun
 {
     vec3d pos;
@@ -926,6 +950,9 @@ struct TVhclProto
     int at_death_spawn_instant = 0;
     int at_death_spawn_immunity_time = 0;
     float eject_force = 0.0f;
+    // OpenNeoUA Orbiter: weapon id of a "model = orbiter" Weapon carried as
+    // guardian projectiles. 0 = off (vanilla). Independent of weapon/mgun slots.
+    int orbiter_weapon = 0;
     int proximity_defense_enable = 0;
     int proximity_defense_weapon = 0;
     float proximity_defense_trigger_radius = 0.0;
@@ -1201,6 +1228,7 @@ struct TWeapProto
         WEAPON_FLAG_LASER = 128, // OpenNeoUA custom: continuous targeted beam weapon
         WEAPON_FLAG_KAMIKAZE = 512, // OpenNeoUA custom: carrier-mounted detonation payload
         WEAPON_FLAG_ARC_GRENADE = 1024, // OpenNeoUA custom: dedicated ballistic arc-grenade identity
+        WEAPON_FLAG_ORBITER = 2048, // OpenNeoUA custom: guardian projectiles (model = orbiter)
 
         WEAPON_FLAGS_BOMB = WEAPON_FLAG_PROJECTILE,
         WEAPON_FLAGS_ROCKET = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT,
@@ -1214,7 +1242,8 @@ struct TWeapProto
         // like a normal targeted weapon, but the LASER bit reroutes firing to the
         // continuous-beam path (UpdateLaser) instead of spawning a projectile.
         WEAPON_FLAGS_LASER = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_DIRECT | WEAPON_FLAG_TARGETED | WEAPON_FLAG_LASER,
-        WEAPON_FLAGS_KAMIKAZE = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_KAMIKAZE
+        WEAPON_FLAGS_KAMIKAZE = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_KAMIKAZE,
+        WEAPON_FLAGS_ORBITER = WEAPON_FLAG_PROJECTILE | WEAPON_FLAG_ORBITER
     };
 
     int8_t unitID = 0;
@@ -1253,6 +1282,13 @@ struct TWeapProto
 
     // OpenNeoUA custom: true only for carrier payloads declared as
     // "model = kamikaze". They are mounted but never fired as projectiles.
+    // OpenNeoUA custom: true only for "model = orbiter". Orbiters are spawned
+    // by their carrier (orbiter_weapon), never fired from a weapon slot.
+    bool IsOrbiter() const
+    {
+        return (_weaponFlags & WEAPON_FLAG_ORBITER) != 0;
+    }
+
     bool IsKamikaze() const
     {
         return (_weaponFlags & WEAPON_FLAG_KAMIKAZE) != 0;
@@ -1343,6 +1379,7 @@ struct TWeapProto
     // Show the higher of direct and active blast energy. Gameplay is unchanged.
     int GetDisplayEnergy(const std::vector<TWeapProto> *weapons = nullptr) const;
     TWeaponChainConfig chain;
+    TWeaponOrbiterConfig orbiter;
     TDecorationFXConfig decoration_fx;
     int energy = 0;
     int blast_energy = 0;

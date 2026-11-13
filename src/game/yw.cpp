@@ -2822,6 +2822,9 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_carrier_spawn_root_gid = 0;
         bacto->_carrier_spawn_root_vehicle = 0;
         bacto->_carrier_spawned_gids.clear();
+        bacto->_orbiter_weapon = vhcl.orbiter_weapon;
+        bacto->_orbiter_count = -1;
+        bacto->_orbiter_next_spawn_time = 0;
         bacto->_proximity_defense_enable = vhcl.proximity_defense_enable;
         bacto->_proximity_defense_weapon = vhcl.proximity_defense_weapon;
         bacto->_proximity_defense_trigger_radius = vhcl.proximity_defense_trigger_radius > 0.0 ? vhcl.proximity_defense_trigger_radius : 0.0;
@@ -3105,6 +3108,10 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
 
     case World::TWeapProto::WEAPON_FLAGS_ARC_GRENADE:
         missileType = NC_STACK_ypamissile::MISL_ARC_GRENADE;
+        break;
+
+    case World::TWeapProto::WEAPON_FLAGS_ORBITER:
+        missileType = NC_STACK_ypamissile::MISL_ORBITER;
         break;
 
     default:

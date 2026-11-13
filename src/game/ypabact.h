@@ -552,6 +552,12 @@ public:
     void UpdateCarrierSpawn(update_msg *arg);
     bool CanUseCarrierSpawn();
     void UpdateProximityDefense(update_msg *arg);
+    // OpenNeoUA Orbiter: keep guardian projectiles alive around this unit and
+    // send them against an enemy unit this unit attacks (or, as player, hits).
+    void UpdateOrbiters(update_msg *arg);
+    void EngageOrbiters(NC_STACK_ypabact *enemy);
+    // Render-only alpha multiplier (1 = opaque). Used by appearing orbiters.
+    virtual float GetRenderFadeAlpha() const { return 1.0f; }
     void UpdateArtilleryShell(update_msg *arg); // OpenNeoUA custom: radar-guided artillery shell barrage AI
     bool StartArtilleryShellBarrage(const vec3d &targetCenter); // OpenNeoUA custom: begin a barrage at a point
     bool CanManualArtilleryShell(const vec3d &targetPos, int *outWeaponId, bool *outReadyNow = nullptr); // OpenNeoUA custom: manual-call validity (+ ready-now flag)
@@ -1303,6 +1309,11 @@ public:
     int _carrier_spawn_root_gid;
     int _carrier_spawn_root_vehicle;
     std::vector<int32_t> _carrier_spawned_gids;
+    // OpenNeoUA Orbiter carrier state (ypabact_orbiter.cpp). The orbiters
+    // themselves live in _missiles_list, so no separate pointer list is kept.
+    int _orbiter_weapon;
+    int _orbiter_count;           // rolled max live orbiters; -1 = not rolled yet
+    int _orbiter_next_spawn_time; // _clock of the next spawn; 0 = not scheduled
     int _proximity_defense_enable;
     int _proximity_defense_weapon;
     float _proximity_defense_trigger_radius;

@@ -47,6 +47,78 @@ static void ParseDebuffLink(ScriptParser::Parser &parser, const std::string &val
         : disabledId;
 }
 
+// OpenNeoUA Orbiter: one parser for every orbiter_* key. Range keys accept a
+// fixed value or "min~max"; an invalid, out-of-range or empty value keeps the
+// previous (default) value and logs a warning, so a typo never breaks the weapon.
+bool ParseOrbiterParam(const std::string &p1, const std::string &p2,
+                       TWeaponOrbiterConfig &orbiter)
+{
+    auto intRange = [&](const char *key, int lo, int hi, int &outMin, int &outMax) -> bool
+    {
+        if ( StriCmp(p1, key) )
+            return false;
+        int a = 0, b = 0;
+        if ( ParseScriptIntRange(p2, a, b) && a >= lo && b <= hi )
+        {
+            outMin = a;
+            outMax = b;
+        }
+        else
+            ypa_log_out("WARNING: %s = %s is invalid (allowed %d..%d, value or min~max); previous value retained.\n",
+                        key, p2.c_str(), lo, hi);
+        return true;
+    };
+
+    // Radii: 0 (or a 0~0 range) means automatic size; otherwise 1..5000.
+    auto radiusRange = [&](const char *key, float &outMin, float &outMax) -> bool
+    {
+        if ( StriCmp(p1, key) )
+            return false;
+        float a = 0.0f, b = 0.0f;
+        if ( ParseScriptFloatRange(p2, a, b) &&
+             ((a == 0.0f && b == 0.0f) || (a >= 1.0f && b <= 5000.0f)) )
+        {
+            outMin = a;
+            outMax = b;
+        }
+        else
+            ypa_log_out("WARNING: %s = %s is invalid (0 = automatic, or 1..5000, value or min~max); previous value retained.\n",
+                        key, p2.c_str());
+        return true;
+    };
+
+    if ( intRange("orbiter_count", 1, 8, orbiter.count_min, orbiter.count_max) ||
+         intRange("orbiter_respawn_time", 100, 600000, orbiter.respawn_time_min, orbiter.respawn_time_max) ||
+         intRange("orbiter_first_strike_delay", 0, 60000, orbiter.first_strike_delay_min, orbiter.first_strike_delay_max) ||
+         intRange("orbiter_strikes", 1, 20, orbiter.strikes_min, orbiter.strikes_max) ||
+         intRange("orbiter_strike_interval", 100, 60000, orbiter.strike_interval_min, orbiter.strike_interval_max) ||
+         radiusRange("orbiter_guard_radius", orbiter.guard_radius_min, orbiter.guard_radius_max) ||
+         radiusRange("orbiter_siege_radius", orbiter.siege_radius_min, orbiter.siege_radius_max) )
+        return true;
+
+    if ( !StriCmp(p1, "orbiter_fade_in") )
+    {
+        int a = 0, b = 0;
+        if ( ParseScriptIntRange(p2, a, b) && a == b && a >= 0 && a <= 10000 )
+            orbiter.fade_in = a;
+        else
+            ypa_log_out("WARNING: orbiter_fade_in = %s is invalid (0..10000 ms); previous value retained.\n", p2.c_str());
+        return true;
+    }
+
+    if ( !StriCmp(p1, "orbiter_energy_mult") )
+    {
+        float a = 0.0f, b = 0.0f;
+        if ( ParseScriptFloatRange(p2, a, b) && a == b && a >= 0.05f && a <= 10.0f )
+            orbiter.energy_mult = a;
+        else
+            ypa_log_out("WARNING: orbiter_energy_mult = %s is invalid (0.05..10); previous value retained.\n", p2.c_str());
+        return true;
+    }
+
+    return false;
+}
+
 TVhclSound *WeaponProtoParser::GetSndFxByName(const std::string &sndname)
 {
     if ( !StriCmp(sndname, "normal") )
@@ -307,6 +379,8 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_LASER;
         else if ( !StriCmp(p2, "kamikaze") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_KAMIKAZE;
+        else if ( !StriCmp(p2, "orbiter") )
+            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_ORBITER;
         else if ( !StriCmp(p2, "bomb") || !StriCmp(p2, "special") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_BOMB;
         else
@@ -707,6 +781,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         int delay = parser.stol(p2, nullptr, 0);
         _wpn->chain.jump_delay = delay > 0 ? delay : 0;
+    }
+    else if ( ParseOrbiterParam(p1, p2, _wpn->orbiter) )
+    {
+        // orbiter_* keys are fully handled (and validated) by ParseOrbiterParam().
     }
     else if ( !StriCmp(p1, "boomerang_return_mode") )
     {

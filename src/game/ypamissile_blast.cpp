@@ -383,6 +383,12 @@ void NC_STACK_ypamissile::ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool apply
     bct->_status_flg &= ~BACT_STFLAG_LAND;
     RememberDirectHitUnit(bct);
 
+    // OpenNeoUA Orbiter: a player's weapon hit on an enemy unit sends the
+    // carrier's orbiters. Orbiter strikes themselves never re-trigger it.
+    if ( applyDamage && _mislType != MISL_ORBITER && _mislEmitter &&
+         _mislEmitter->getBACT_inputting() )
+        _mislEmitter->EngageOrbiters(bct);
+
     NC_STACK_ypabact *pushRecipient = ypamissile_ResolveDirectPushRecipient(bct);
     bool wasAlive = pushRecipient == bct && ypamissile_IsAliveForDeathPush(bct);
     vec3d pushDir(0.0, 0.0, 0.0);

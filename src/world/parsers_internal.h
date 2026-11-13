@@ -62,6 +62,8 @@ bool ParseExternalVisualParam(const std::string &p1,
                               World::TExternalVisualSet &visuals);
 bool ParseScriptIntRange(const std::string &value, int &minValue, int &maxValue);
 bool ParseScriptFloatRange(const std::string &value, float &minValue, float &maxValue);
+bool ParseOrbiterParam(const std::string &p1, const std::string &p2,
+                       TWeaponOrbiterConfig &orbiter);
 bool ParseNumWeaponsRange(const std::string &value,
                           int &minCount,
                           int &maxCount);
