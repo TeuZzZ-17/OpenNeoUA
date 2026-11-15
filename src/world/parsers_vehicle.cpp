@@ -1274,6 +1274,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->scope_angle_min_max = {{minimum, maximum}};
         _vhcl->scope_angle_min_max_set = true;
     }
+    else if ( !StriCmp(p1, "num_targets") )
+    {
+        int minimum = 0, maximum = 0;
+        _vhcl->num_targets = ParseScriptIntRange(p2, minimum, maximum) && minimum == maximum && minimum > 0
+            ? std::min(minimum, 255) : 0;
+    }
     else if ( !StriCmp(p1, "num_weapons") )
     {
         int minCount = 0;
@@ -1829,6 +1835,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->model_id = BACT_TYPES_TANK;
         _vhcl->weapon = -1;
         _vhcl->extra_weapons = {0, 0, 0};
+        _vhcl->num_targets = 0;
         _vhcl->extra_num_weapons = {0, 0, 0};
         _vhcl->extra_num_weapons_min = {0, 0, 0};
         _vhcl->extra_num_weapons_max = {0, 0, 0};

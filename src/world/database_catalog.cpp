@@ -201,7 +201,6 @@ double WeaponQuality(const TWeapProto &w,double count)
     if(w.IsLaser())
     {
         interval=std::max(1,w.laser_energy_tick_time);
-        count=std::max(1,w.laser_beam_count);
     }
     if(w.IsArtilleryShell())
     {

@@ -1,114 +1,5 @@
-// Laser and vertical laser weapons: targeting, damage ticks, sound and beam visuals.
+// Laser weapons: targeting, damage ticks, sound and beam visuals.
 #include "game/ypabact_internal.h"
-
-vec3d ypabact_LaserViewerVisualStart(
-    const NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
-    const vec3d &beamStart, const vec3d &beamEnd)
-{
-    if ( !bact || (!bact->getBACT_viewer() && !bact->getBACT_inputting()) )
-        return beamStart;
-
-    vec3d span = beamEnd - beamStart;
-    float len = span.length();
-    if ( !std::isfinite(len) || len < 1.0f )
-        return beamStart;
-
-    vec3d dir = span / len;
-    float lead = ypabact_LaserClampVisualSpacing(wproto.laser_spacing) * 0.5f;
-    if ( lead < 16.0f )
-        lead = 16.0f;
-    if ( lead > len * 0.25f )
-        lead = len * 0.25f;
-
-    return beamStart + dir * lead;
-}
-
-bool ypabact_IsLaserMeshUsable(
-    NC_STACK_ypabact *bact, const World::TWeapProto &wproto)
-{
-    NC_STACK_ypaworld *world = bact ? bact->getBACT_pWorld() : nullptr;
-    if ( !world || world->_isNetGame ||
-         !wproto.IsLaser() ||
-         !wproto.laser_mesh.enabled )
-        return false;
-
-    const World::TWeapProto::TLaserMeshConfig &config = wproto.laser_mesh;
-    const float sizeY = config.ResolveSizeY();
-    return !config.mesh_path.empty() &&
-           std::isfinite(config.size_x) && config.size_x > 0.01f &&
-           std::isfinite(sizeY) && sizeY > 0.01f &&
-           std::isfinite(config.tint.r) && std::isfinite(config.tint.g) &&
-           std::isfinite(config.tint.b) && std::isfinite(config.tint.a) &&
-           config.tint.a > 0.0f;
-}
-
-uint32_t ypabact_LaserMeshSeed(const NC_STACK_ypabact *bact,
-                                      size_t beamIndex, uint32_t domain)
-{
-    const uint32_t actor = bact ? bact->_gid : 0u;
-    return actor ^ domain ^
-           ((uint32_t)(beamIndex + 1u) * 0x9e3779b9u);
-}
-
-void ypabact_RenderLaserMeshes(NC_STACK_ypabact *bact,
-                                      baseRender_msg *arg)
-{
-    if ( !bact || !arg )
-        return;
-
-    NC_STACK_ypaworld *world = bact->getBACT_pWorld();
-    if ( !world )
-        return;
-
-    if ( bact->_laser_active && bact->_laser_weapon >= 0 &&
-         (size_t)bact->_laser_weapon < world->GetWeaponsProtos().size() )
-    {
-        const World::TWeapProto &wproto =
-            world->GetWeaponsProtos().at(bact->_laser_weapon);
-        if ( ypabact_IsLaserMeshUsable(bact, wproto) )
-        {
-            for (size_t i = 0; i < bact->_laser_beams.size(); i++)
-            {
-                const NC_STACK_ypabact::TLaserBeamRuntime &beam =
-                    bact->_laser_beams[i];
-                // Match the legacy VP viewer lead. A crossed-ribbon beam that
-                // starts almost inside the first-person camera can project its two
-                // planes as a temporally unstable/doubled primary laser. Advancing
-                // only the rendered tail keeps gameplay start/end untouched while
-                // avoiding that near-view artifact.
-                const vec3d renderStart = (i == 0)
-                    ? ypabact_LaserViewerVisualStart(bact, wproto, beam.start, beam.end)
-                    : beam.start;
-                world->RenderLaserMeshSegment(
-                    arg, renderStart, beam.end, wproto.laser_mesh,
-                    beam.has_contact, bact->_rotation,
-                    ypabact_LaserMeshSeed(bact, i, 0x4c415352u));
-            }
-        }
-    }
-
-    if ( bact->_vertical_laser_active && bact->_vertical_laser_weapon >= 0 &&
-         (size_t)bact->_vertical_laser_weapon < world->GetWeaponsProtos().size() )
-    {
-        const World::TWeapProto &wproto =
-            world->GetWeaponsProtos().at(bact->_vertical_laser_weapon);
-        if ( ypabact_IsLaserMeshUsable(bact, wproto) )
-        {
-            for (size_t i = 0; i < bact->_vertical_laser_beams.size(); i++)
-            {
-                const NC_STACK_ypabact::TLaserBeamRuntime &beam =
-                    bact->_vertical_laser_beams[i];
-                const vec3d renderStart = (i == 0)
-                    ? ypabact_LaserViewerVisualStart(bact, wproto, beam.start, beam.end)
-                    : beam.start;
-                world->RenderLaserMeshSegment(
-                    arg, renderStart, beam.end, wproto.laser_mesh,
-                    beam.has_contact, bact->_rotation,
-                    ypabact_LaserMeshSeed(bact, i, 0x5652544cu));
-            }
-        }
-    }
-}
 
 bool ypabact_IsLaserDamageTarget(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit)
 {
@@ -161,10 +52,13 @@ int ypabact_GetActiveAILaserWeaponSlot(NC_STACK_ypabact *bact, int *outSourceSlo
     if ( !bact || !bact->getBACT_pWorld() || (bact->_oflags & BACT_OFLAG_USERINPT) )
         return -1;
 
-    const int candidates[2] = {
-        bact->_laser_active ? bact->_laser_weapon : -1,
-        bact->_vertical_laser_active ? bact->_vertical_laser_weapon : -1
-    };
+    if ( bact->_laser_active &&
+         ypabact_GetWeaponIdForSourceSlot(bact, bact->_laser_source_slot) == bact->_laser_weapon )
+    {
+        if ( outSourceSlot ) *outSourceSlot = bact->_laser_source_slot;
+        return bact->_laser_weapon;
+    }
+    const int candidates[] = {bact->_laser_active ? bact->_laser_weapon : -1};
 
     for (int weaponId : candidates)
     {
@@ -220,8 +114,7 @@ bool ypabact_HasActiveAILaserSectorFocus(const NC_STACK_ypabact *bact)
          bact->_laser_beams[0].target_gid < 0 )
         return true;
 
-    return bact->_vertical_laser_active && !bact->_vertical_laser_beams.empty() &&
-           bact->_vertical_laser_beams[0].target_gid < 0;
+    return false;
 }
 
 // ============================ OpenNeoUA custom: model = laser ============================
@@ -307,7 +200,8 @@ int ypabact_LaserTickDamage(NC_STACK_ypabact *shooter,
         return 0;
 
     float divisor = ( target->getBACT_inputting() || target->getBACT_viewer() ) ? 250.0f : 100.0f;
-    int tickDamage = (int)ceil(damage * (100.0f - shield) / divisor);
+    // Saturate amplified chain damage before converting to the integer damage API.
+    int tickDamage = (int)std::min(100000000.0, ceil((double)damage * (100.0f - shield) / divisor));
     return tickDamage > 0 ? tickDamage : 0;
 }
 
@@ -357,9 +251,10 @@ void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapProto &wp
         if ( playerControlled )
             shooter->EngageOrbiters(target);
 
-        if ( wproto.debuff.valid && target->_energy > 0 && target->_status != BACT_STATUS_DEAD )
-            target->ApplyDebuff(wproto.debuff, shooter);
     }
+    if ( !aiFriendlyContact && ypabact_CanApplyLaserDamage(shooter) &&
+         wproto.debuff.valid && target->_energy > 0 && target->_status != BACT_STATUS_DEAD )
+        target->ApplyDebuff(wproto.debuff, shooter);
 
     beam.energy_ticks++;
     beam.next_damage_time = shooter->_clock + ypabact_LaserDamageInterval(wproto, playerControlled);
@@ -698,6 +593,14 @@ NC_STACK_ypabact *ypabact_FindNearestLaserMultiTarget(NC_STACK_ypabact *shooter,
                     continue;
                 if ( ypabact_LaserTargetInList(bct, excluded) )
                     continue;
+                if ( !(shooter->_oflags & BACT_OFLAG_USERINPT) && shooter->_laser_weapon >= 0 )
+                {
+                    const auto &proto = world->GetWeaponsProtos().at(shooter->_laser_weapon);
+                    TFireTriggerArea area;
+                    if ( !shooter->GetAIFireTriggerArea(proto, &area) ||
+                         !ypabact_FireTriggerAreaContains(area, bct->_position, bct->GetCollisionBroadRadius()) )
+                        continue;
+                }
 
                 vec3d to = bct->_position - origin;
                 float dist = to.length();
@@ -770,50 +673,38 @@ void ypabact_AddLaserMultiTargetRequests(NC_STACK_ypabact *shooter, const World:
                                                 std::vector<NC_STACK_ypabact::TLaserBeamRequest> *requests,
                                                 float range, bool friendlyTargets, bool playerControlled)
 {
-    if ( !shooter || !requests || requests->empty() || wproto.laser_beam_count <= 1 )
+    if ( !shooter || !requests || requests->empty() )
         return;
-    if ( friendlyTargets && !playerControlled )
+    const int limit = std::max(1, ypabact_GetMultiTargetLimit(shooter, wproto, (int)requests->size()));
+    NC_STACK_ypabact *primary = requests->front().target;
+    if ( !primary || (friendlyTargets && !playerControlled) )
         return;
-
-    size_t originalRequestCount = requests->size();
-    if ( originalRequestCount >= (size_t)wproto.laser_beam_count )
-        return;
-
-    std::vector<NC_STACK_ypabact *> selectedTargets;
-    selectedTargets.reserve((size_t)wproto.laser_beam_count);
-
-    for (const NC_STACK_ypabact::TLaserBeamRequest &request : *requests)
+    std::vector<NC_STACK_ypabact *> targets{primary};
+    while ( (int)targets.size() < limit )
     {
-        if ( request.target && ypabact_IsLaserSecondaryTargetCandidate(shooter, request.target, friendlyTargets) &&
-             !ypabact_LaserTargetInList(request.target, selectedTargets) )
-            selectedTargets.push_back(request.target);
-    }
-
-    while ( requests->size() < (size_t)wproto.laser_beam_count )
-    {
-        size_t sourceIndex = (requests->size() - originalRequestCount) % originalRequestCount;
-        const NC_STACK_ypabact::TLaserBeamRequest &source = requests->at(sourceIndex);
-        vec3d primaryAim = requests->front().dir;
-        if ( primaryAim.normalise() < 0.001f )
-            primaryAim = shooter->_rotation.AxisZ();
-
-        NC_STACK_ypabact *target = ypabact_FindNearestLaserMultiTarget(shooter, source.start, primaryAim,
-            range, friendlyTargets, selectedTargets,
-            !playerControlled && wproto.HasAIFireTriggerArea() && !wproto.IsBombLike());
+        NC_STACK_ypabact *target = nullptr;
+        if ( wproto.IsDownwardLaser() && !playerControlled )
+        {
+            TFireTriggerArea area;
+            if ( shooter->GetAIFireTriggerArea(wproto, &area) )
+                target = ypabact_FindNearestDownwardLaserTarget(shooter,
+                    requests->front().start, range, area, friendlyTargets, targets);
+        }
+        else
+            target = ypabact_FindNearestLaserMultiTarget(
+                shooter, requests->front().start, requests->front().dir, range,
+                friendlyTargets, targets, !playerControlled);
         if ( !target )
             break;
-
-        NC_STACK_ypabact::TLaserBeamRequest request;
-        request.target = target;
-        request.start = source.start;
-        request.dir = target->_position - request.start;
+        targets.push_back(target);
+    }
+    for (size_t i = 0; i < requests->size(); ++i)
+    {
+        auto &request = requests->at(i);
+        request.target = targets[i % targets.size()];
+        request.dir = request.target->_position - request.start;
         if ( request.dir.normalise() < 0.001f )
-            request.dir = source.dir;
-        if ( request.dir.normalise() < 0.001f )
-            request.dir = shooter->_rotation.AxisZ();
-
-        requests->push_back(request);
-        selectedTargets.push_back(target);
+            request.dir = requests->front().dir;
     }
 }
 
@@ -1053,7 +944,7 @@ void ypabact_UpdateHUDLaserMultiLockTargets(NC_STACK_ypabact *shooter, const bac
     if ( !shooter || !arg || !shooter->getBACT_pWorld() || !(shooter->_oflags & BACT_OFLAG_USERINPT) )
         return;
 
-    if ( !wproto.IsLaser() || wproto.laser_beam_count <= 1 )
+    if ( !wproto.IsLaser() || shooter->_num_targets <= 1 )
     {
         shooter->getBACT_pWorld()->_hudMissileMultiLockTargets.clear();
         return;
@@ -1066,7 +957,7 @@ void ypabact_UpdateHUDLaserMultiLockTargets(NC_STACK_ypabact *shooter, const bac
     }
 
     std::vector<NC_STACK_ypabact::TLaserBeamRequest> requests;
-    requests.resize(1);
+    requests.resize(shooter->GetCurrentWeaponProjectileCount());
     requests[0].target = arg->target.pbact;
     requests[0].start = ypabact_LaserSourceOrigin(shooter);
     requests[0].dir = arg->target.pbact->_position - requests[0].start;
@@ -1074,6 +965,8 @@ void ypabact_UpdateHUDLaserMultiLockTargets(NC_STACK_ypabact *shooter, const bac
     if ( requests[0].dir.normalise() < 0.001f )
         requests[0].dir = shooter->_rotation.AxisZ();
 
+    for (size_t i = 1; i < requests.size(); ++i)
+        requests[i] = requests[0];
     ypabact_AddLaserMultiTargetRequests(shooter, wproto, &requests, ypabact_LaserRange(wproto), false, true);
     ypabact_StoreHUDLaserMultiLockTargets(shooter, requests);
 }
@@ -1095,9 +988,7 @@ vec3d ypabact_LaserSourceOrigin(NC_STACK_ypabact *bact)
 
     vec3d localOffset = bact->_fire_pos;
 
-    // First-person/viewer fire originates from the actual view point plus the single
-    // configured fire_x/fire_y/fire_z muzzle offset. num_weapons never expands this
-    // into multiple laser sources.
+    // Reference origin for target-lock preview. Runtime beams use their own muzzle positions.
     if ( bact->getBACT_viewer() )
         return bact->GetBodyPosition() + bact->_rotation.Transpose().Transform(bact->_viewer_position + localOffset);
 
@@ -1187,6 +1078,102 @@ mat3x3 ypabact_LaserRotationFromDir(const vec3d &beamDir, const mat3x3 &fallback
     return rot;
 }
 
+// True for the ground decal blocks a burning laser paints itself as a strip.
+static bool ypabact_LaserBurnOwnsDecal(const World::TWeapProto &wproto, const World::TChainFXConfig &fx)
+{
+    return wproto.laser_burn_decal_frequency > 0.0f &&
+           fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
+           fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL;
+}
+
+void ypabact_LaserBurnTrail(NC_STACK_ypabact *shooter, const World::TWeapProto &wproto,
+                            NC_STACK_ypabact::TLaserBeamRuntime &beam, bool worldContact)
+{
+    // Not touching the world (or burn off): the strip ends here, the next contact starts a new one.
+    if ( !shooter || !worldContact || wproto.laser_burn_decal_frequency <= 0.0f )
+    {
+        beam.burn_active = false;
+        return;
+    }
+    NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
+    if ( !world )
+        return;
+
+    std::vector<World::TChainFXConfig> decals;
+    for (const World::TChainFXConfig &fx : wproto.chain_fx)
+    {
+        if ( !ypabact_LaserBurnOwnsDecal(wproto, fx) )
+            continue;
+        decals.push_back(fx);
+        // A strip has one constant width: no random size between stamps.
+        decals.back().ground_decal_size_max = decals.back().ground_decal_size_min;
+        decals.back().ground_decal_stretch_z_max = decals.back().ground_decal_stretch_z_min;
+    }
+    const World::TCraterConfig &craterBase = wproto.crater;
+    const bool crater = craterBase.defined && !craterBase.invalid;
+    if ( decals.empty() && !crater )
+    {
+        beam.burn_active = false;
+        return;
+    }
+
+    // Frequency is decals per 100 world units: the distance between two stamps.
+    const float step = 100.0f / wproto.laser_burn_decal_frequency;
+    // Overlapping craters add up (about 1.07 * radius / step at the centre): scale the
+    // depth of each stamp so the trench ends up as deep as crater_depth says.
+    World::TCraterConfig stampCrater = craterBase;
+    if ( crater )
+    {
+        const float radius = 0.5f * (craterBase.radius_min + craterBase.radius_max);
+        const float scale = radius > 0.0f
+                          ? std::max(0.05f, std::min(step / (1.07f * radius), 1.0f)) : 1.0f;
+        stampCrater.depth_min *= scale;
+        stampCrater.depth_max *= scale;
+    }
+
+    const auto stamp = [&](const vec3d &point, const World::TDecalStroke *stroke)
+    {
+        ypaworld_arg136 hit;
+        if ( !world->FindWorldSurfaceInSphere(point, step + 30.0f, hit) )
+            return;
+        // Decal geometry preparation can reuse temporary collision data: look the
+        // surface up again before the crater.
+        for (const World::TChainFXConfig &fx : decals)
+            world->SpawnGroundDecal(fx, hit, stroke);
+        if ( crater && !world->FindWorldSurfaceInSphere(point, step + 30.0f, hit) )
+            return;
+        if ( crater )
+            world->SpawnTerrainCrater(stampCrater, hit);
+    };
+
+    if ( !beam.burn_active )
+    {
+        // First contact: a round stamp (no travel direction yet).
+        stamp(beam.end, nullptr);
+        beam.burn_active = true;
+        beam.burn_last = beam.end;
+        return;
+    }
+
+    vec3d travel = beam.end - beam.burn_last;
+    float remaining = travel.normalise();
+    if ( !std::isfinite(remaining) || remaining < step )
+        return;
+
+    // A fast sweep fills the gap with evenly spaced stamps (at most 12 per frame).
+    vec3d from = beam.burn_last;
+    World::TDecalStroke stroke;
+    stroke.dir = travel;
+    stroke.length = step * 1.6f;
+    for (int i = 0; i < 12 && remaining >= step; ++i)
+    {
+        from += travel * step;
+        remaining -= step;
+        stamp(from, &stroke);
+    }
+    beam.burn_last = remaining >= step ? beam.end : from;
+}
+
 void ypabact_SpawnLaserImpactChainFX(
     NC_STACK_ypabact *shooter, int weaponId, World::TWeapProto &wproto,
     const NC_STACK_ypabact::TLaserBeamRuntime &beam, const vec3d &dir,
@@ -1195,8 +1182,19 @@ void ypabact_SpawnLaserImpactChainFX(
     if ( !shooter || wproto.chain_fx.empty() )
         return;
 
+    // With laser_burn_decal_frequency the ground decals are painted by ypabact_LaserBurnTrail.
+    std::vector<World::TChainFXConfig> otherFX;
+    const std::vector<World::TChainFXConfig> *fxList = &wproto.chain_fx;
+    if ( wproto.laser_burn_decal_frequency > 0.0f )
+    {
+        for (const World::TChainFXConfig &fx : wproto.chain_fx)
+            if ( !ypabact_LaserBurnOwnsDecal(wproto, fx) )
+                otherFX.push_back(fx);
+        fxList = &otherFX;
+    }
+
     bool relevant = false;
-    for (const World::TChainFXConfig &fx : wproto.chain_fx)
+    for (const World::TChainFXConfig &fx : *fxList)
         if ( fx.trigger == World::TChainFXConfig::TRIGGER_DETONATE ||
              (worldContact && fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD) )
             relevant = true;
@@ -1213,7 +1211,7 @@ void ypabact_SpawnLaserImpactChainFX(
     {
         // Decals need the short-lived collision polygon, not just beam.end.
         bool needsWorldHit = false;
-        for (const World::TChainFXConfig &fx : wproto.chain_fx)
+        for (const World::TChainFXConfig &fx : *fxList)
             if ( fx.trigger == World::TChainFXConfig::TRIGGER_IMPACT_WORLD &&
                  fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL )
                 needsWorldHit = true;
@@ -1231,13 +1229,13 @@ void ypabact_SpawnLaserImpactChainFX(
         }
 
         shooter->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD,
-                                       hit, &wproto.chain_fx, &beam.end, &rotation);
+                                       hit, fxList, &beam.end, &rotation);
     }
 
     // Laser contact is the projectile-equivalent detonation event. The same
     // authored trigger works for unit and world hits without a new parser name.
     shooter->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE,
-                                   nullptr, &wproto.chain_fx, &beam.end, &rotation);
+                                   nullptr, fxList, &beam.end, &rotation);
 }
 
 float ypabact_LaserClampVisualSpacing(float spacing)
@@ -1259,17 +1257,13 @@ vec3d ypabact_LaserVisualScale(const World::TWeapProto &wproto)
 }
 
 void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
-                                      const vec3d &beamStart, const vec3d &beamEnd)
+                                      const vec3d &beamStart, const vec3d &beamEnd,
+                                      bool hasContact)
 {
     if ( !bact )
         return;
 
-    // Enabling the external laser mesh explicitly replaces the continuous
-    // normal-state segmented body. The external 3DS is mandatory in this mode: missing or
-    // invalid geometry intentionally leaves the beam body invisible rather
-    // than falling back to the normal visual or hidden procedural geometry.
-    if ( wproto.laser_mesh.enabled ||
-         (wproto.vp_normal <= 0 && wproto.visual_3ds.normal.empty() &&
+    if ( (wproto.vp_normal <= 0 && wproto.visual_3ds.normal.empty() &&
           wproto.visual_base.normal.empty()) )
         return;
 
@@ -1315,53 +1309,70 @@ void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapPro
     {
         float t = ((float)i + 0.5f) / (float)count;
         vec3d pos = visualStart + span * t;
+        float alpha = 1.0f;
+        if ( wproto.laser_fade_in > 0.0f )
+            alpha = std::min(alpha, (t * len) / wproto.laser_fade_in);
+        if ( hasContact && wproto.laser_fade_out > 0.0f )
+            alpha = std::min(alpha, ((1.0f - t) * len) / wproto.laser_fade_out);
+        alpha = std::max(0.0f, std::min(alpha, 1.0f));
+        World::TVisualTint tint = wproto.visual_tint;
+        tint.a *= alpha;
+        if ( tint.a <= 0.0f )
+            continue;
         // OpenNeoUA custom: the laser beam body uses vp_normal, so honour the weapon's
         // main VP controls here. Impact/launch FX below deliberately stay neutral.
-        world->SpawnTransientVisual(wproto.vp_normal, wproto.visual_3ds.normal,
+        const int32_t id = world->SpawnTransientVisual(wproto.vp_normal, wproto.visual_3ds.normal,
                                     wproto.visual_base.normal, pos, rot, 45, 1.0,
-                                    wproto.visual_tint, axisScale, wproto.visual_spin);
+                                    tint, axisScale, wproto.visual_spin);
+        // Additive beam surfaces ignore alpha: also dim their brightness with the same fade.
+        if ( id != 0 && !world->_transientVPs.empty() && world->_transientVPs.back().id == id )
+            world->_transientVPs.back().intensity = alpha;
     }
 }
 
-void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg)
+void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg, int sourceSlot)
 {
-    // OpenNeoUA invisible: firing the continuous laser is a real attack -> reveal now,
-    // in the same frame the beam is requested.
+    if ( !arg || !_world )
+        return;
     RevealInvisibleOnAttack();
-
-    _laser_weapon = weaponId;
-    _laser_fire_request = true;
-
-    ypabact_StartVehicleFireVPIfEnabled(this, _world->GetWeaponsProtos().at(weaponId), _clock);
-
-    TLaserBeamRequest request;
-    request.target = (arg->tgType == BACT_TGT_TYPE_UNIT) ? arg->target.pbact : nullptr;
-
-    // Stable laser source: model=laser ignores num_weapons as a beam count, but
-    // still honours fire_x/fire_y/fire_z as one muzzle/source offset.
-    request.start = ypabact_LaserSourceOrigin(this);
-
-    request.dir = arg->direction;
-
-    if ( request.dir.normalise() < 0.001 )
+    const auto &proto = _world->GetWeaponsProtos().at(weaponId);
+    if ( _laser_weapon != weaponId || _laser_source_slot != sourceSlot )
+        StopLaser();
+    if ( _laser_muzzle_x.empty() )
     {
-        if ( arg->tgType == BACT_TGT_TYPE_UNIT && arg->target.pbact )
-            request.dir = arg->target.pbact->_position - request.start;
+        const int count = ypabact_RollWeaponProjectileCountForSourceSlot(this, sourceSlot);
+        for (int i = 0; i < count; ++i)
+        {
+            const float span = fabs(arg->start_point.x);
+            const float vanillaX = count == 1 ? arg->start_point.x : (i * 2.0f * span / (count - 1) - span);
+            _laser_muzzle_x.push_back(ypabact_GetProjectileFireX(this, vanillaX, i, count));
+            ypabact_ConsumeProjectileFireX(this);
+        }
+        if ( _fire_x_mode == World::TVhclProto::FIRE_X_MODE_SALVE_SEQUENCE )
+            _fire_x_slot_index = (_fire_x_slot_index + 1) & 1;
+    }
+    _laser_weapon = weaponId;
+    _laser_source_slot = sourceSlot;
+    _laser_fire_request = true;
+    _laser_requests.clear();
+    ypabact_StartVehicleFireVPIfEnabled(this, proto, _clock);
+    for (float x : _laser_muzzle_x)
+    {
+        TLaserBeamRequest request;
+        request.target = arg->tgType == BACT_TGT_TYPE_UNIT ? arg->target.pbact : nullptr;
+        request.start = GetBodyPosition() + _rotation.Transpose().Transform(vec3d(x, arg->start_point.y, arg->start_point.z));
+        request.dir = proto.IsDownwardLaser() ? vec3d(0, 1, 0) : arg->direction;
+        if ( request.target )
+            request.dir = request.target->_position - request.start;
         else if ( arg->tgType == BACT_TGT_TYPE_CELL )
             request.dir = arg->tgt_pos - request.start;
-        else if ( arg->tgType == BACT_TGT_TYPE_DRCT )
-            request.dir = arg->tgt_pos;
+        if ( request.dir.normalise() < 0.001f )
+            request.dir = proto.IsDownwardLaser() ? vec3d(0, 1, 0) : _rotation.AxisZ();
+        _laser_requests.push_back(request);
     }
-
-    if ( request.dir.normalise() < 0.001 )
-        request.dir = _rotation.AxisZ();
-
-    _laser_requests.push_back(request);
-
-    // Compatibility mirror for older single-beam debug/UI code paths.
-    _laser_target = request.target;
-    _laser_request_start = request.start;
-    _laser_request_dir = request.dir;
+    _laser_target = _laser_requests.front().target;
+    _laser_request_start = _laser_requests.front().start;
+    _laser_request_dir = _laser_requests.front().dir;
 }
 
 void NC_STACK_ypabact::StopLaser()
@@ -1393,6 +1404,8 @@ void NC_STACK_ypabact::StopLaser()
     _laser_next_fx_time = 0;
     _laser_next_beam_vp_time = 0;
     _laser_requests.clear();
+    _laser_muzzle_x.clear();
+    _laser_source_slot = 0;
     _laser_beams.clear();
 }
 
@@ -1428,6 +1441,29 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
     float range = ypabact_LaserRange(wproto);
     bool playerControlled = getBACT_inputting() || getBACT_viewer();
     const bool useNativeLimits = !playerControlled && wproto.HasAIFireTriggerArea() && !wproto.IsBombLike();
+
+    auto &primary = requests.front();
+    if ( !primary.target || !ypabact_IsLaserDamageTarget(this, primary.target) )
+    {
+        primary.target = nullptr;
+        if ( _laser_active && !_laser_beams.empty() && playerControlled )
+            primary.target = ypabact_RetainPlayerLaserTarget(this, primary.start, primary.dir, range, _laser_beams[0].target_gid);
+        if ( !primary.target )
+            primary.target = ypabact_LaserAutoTarget(this, primary.start, primary.dir, range,
+                playerControlled ? PLAYER_LASER_ACQUIRE_ALIGNMENT : 0.4f, useNativeLimits);
+    }
+    if ( !playerControlled && primary.target )
+    {
+        TFireTriggerArea area;
+        if ( !GetAIFireTriggerArea(wproto, &area) ||
+             !ypabact_FireTriggerAreaContains(area, primary.target->_position, primary.target->GetCollisionBroadRadius()) )
+            primary.target = nullptr;
+    }
+    for (auto &request : requests)
+        request.target = primary.target;
+    ypabact_AddLaserMultiTargetRequests(this, wproto, &requests, range,
+        ypabact_IsLaserFriendlyToShooter(this, primary.target), playerControlled);
+    ypabact_StoreHUDLaserMultiLockTargets(this, requests);
 
     bool wasActive = _laser_active;
     size_t oldBeamCount = _laser_beams.size();
@@ -1481,23 +1517,6 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             // fire paths. Only automatic acquisition below is enemy-only.
             aimTarget = request.target;
         }
-        else if ( playerControlled )
-        {
-            if ( beamWasActive && beam.target_gid > 0 )
-            {
-                aimTarget = ypabact_RetainPlayerLaserTarget(this, request.start, dir,
-                                                            range, beam.target_gid);
-            }
-
-            if ( !aimTarget )
-                aimTarget = ypabact_LaserAutoTarget(this, request.start, dir, range,
-                                                     PLAYER_LASER_ACQUIRE_ALIGNMENT);
-        }
-        else
-        {
-            aimTarget = ypabact_LaserAutoTarget(this, request.start, dir, range, 0.4f, useNativeLimits);
-        }
-
         if ( aimTarget )
         {
             vec3d toT = aimTarget->_position - request.start;
@@ -1555,13 +1574,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             primaryChainGroupTarget = requestedGroupTarget ? requestedGroupTarget : target;
             request.target = target;
 
-            if ( primaryChainGroupTarget && primaryChainGroupTarget->_owner != World::OWNER_0 )
-            {
-                bool friendlyMultiTargets = ypabact_IsLaserFriendlyToShooter(this, primaryChainGroupTarget);
-                ypabact_AddLaserMultiTargetRequests(this, wproto, &requests, range,
-                                                    friendlyMultiTargets, playerControlled);
-            }
-            ypabact_StoreHUDLaserMultiLockTargets(this, requests);
+
         }
 
         if ( useWorldHit )
@@ -1581,7 +1594,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         }
 
         if ( spawnBeamVPs )
-            ypabact_SpawnLaserBeamVisuals(this, wproto, beam.start, beam.end);
+            ypabact_SpawnLaserBeamVisuals(this, wproto, beam.start, beam.end, beam.has_contact);
 
         if ( target )
         {
@@ -1593,6 +1606,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
                 beam.next_fx_time = 0;
             }
             beam.target_gid = target->_gid;
+            beam.burn_active = false;   // a unit hit ends the burn strip
 
             if ( target->_owner != World::OWNER_0 && ypabact_IsLaserDamageTarget(this, target) &&
                  !ypabact_LaserTargetInList(target, directHitTargets) )
@@ -1664,6 +1678,9 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
                                                    ypabact_LaserRotationFromDir(dir, _rotation), 90);
                 beam.next_fx_time = _clock + 160;
             }
+
+            // Continuous burn strip (laser_burn_decal_frequency): every frame, not on the FX throttle.
+            ypabact_LaserBurnTrail(this, wproto, beam, useWorldHit);
         }
     }
 
@@ -1724,7 +1741,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
                 chainDamageMult *= perJumpMult;
 
                 if ( spawnBeamVPs )
-                    ypabact_SpawnLaserBeamVisuals(this, wproto, beam.start, beam.end);
+                    ypabact_SpawnLaserBeamVisuals(this, wproto, beam.start, beam.end, true);
 
                 ypabact_ApplyLaserUnitTick(this, wproto, target, beam, playerControlled, chainDamageMult);
 
@@ -1768,34 +1785,9 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
                                    _laser_beam_start, _fly_dir * _fly_dir_length);
 }
 
-vec3d ypabact_VerticalLaserSourceOrigin(NC_STACK_ypabact *bact, const bact_arg79 *arg)
-{
-    if ( !bact )
-        return vec3d(0.0, 0.0, 0.0);
-
-    vec3d localOffset = arg ? arg->start_point : bact->_fire_pos;
-    return bact->GetBodyPosition() + bact->_rotation.Transpose().Transform(localOffset);
-}
-
-// AI fire zone of the vertical laser: the fire trigger area when the weapon has one,
-// otherwise the legacy cylinder of vertical_laser_ai_trigger_radius. Both need
-// the centre below the fire point (+Y is down).
-bool ypabact_IsInVerticalLaserFireZone(const TFireTriggerArea *box, const vec3d &origin,
-                                              float aiTriggerRadius, const vec3d &pos, float radius)
-{
-    if ( box )
-        return ypabact_FireTriggerAreaContains(*box, pos, radius);
-
-    if ( pos.y < origin.y )
-        return false;
-
-    return (pos.XZ() - origin.XZ()).length() <= aiTriggerRadius;
-}
-
-bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit,
+bool ypabact_IsDownwardLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit,
                                                   bool friendlyTargets, const vec3d &origin,
-                                                  float range, float aiTriggerRadius,
-                                                  const TFireTriggerArea *box,
+                                                  float range, const TFireTriggerArea &box,
                                                   const std::vector<NC_STACK_ypabact *> &excluded)
 {
     if ( !ypabact_IsLaserSecondaryTargetCandidate(shooter, unit, friendlyTargets) )
@@ -1803,27 +1795,24 @@ bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_y
     if ( ypabact_LaserTargetInList(unit, excluded) )
         return false;
 
-    if ( unit->_position.y - origin.y > range )
-        return false;
-    if ( box && (unit->_position - origin).length() > range )
+    if ( (unit->_position - origin).length() > range )
         return false;
 
-    return ypabact_IsInVerticalLaserFireZone(box, origin, aiTriggerRadius, unit->_position,
-                                             box ? unit->GetCollisionBroadRadius() : 0.0f);
+    return ypabact_FireTriggerAreaContains(box, unit->_position,
+                                           unit->GetCollisionBroadRadius());
 }
 
-NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shooter,
+NC_STACK_ypabact *ypabact_FindNearestDownwardLaserTarget(NC_STACK_ypabact *shooter,
                                                                const vec3d &origin,
-                                                               float range, float aiTriggerRadius,
-                                                               const TFireTriggerArea *box,
+                                                               float range, const TFireTriggerArea &box,
                                                                bool friendlyTargets,
                                                                const std::vector<NC_STACK_ypabact *> &excluded)
 {
-    if ( !shooter || !shooter->getBACT_pWorld() || range <= 0.0f || (!box && aiTriggerRadius <= 0.0f) )
+    if ( !shooter || !shooter->getBACT_pWorld() || range <= 0.0f )
         return nullptr;
 
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
-    const float searchRadius = box ? ypabact_FireTriggerAreaSearchRadius(*box) : aiTriggerRadius;
+    const float searchRadius = ypabact_FireTriggerAreaSearchRadius(box);
     const Common::Point mapSize = world->GetMapSize();
     const int sectorRadius = (int)std::min((double)searchRadius / World::CVSectorLength + 2,
                                          (double)std::max(mapSize.x, mapSize.y));
@@ -1844,8 +1833,8 @@ NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shoot
 
             for (NC_STACK_ypabact *bct : cell.unitsList)
             {
-                if ( !ypabact_IsVerticalLaserMultiCandidate(shooter, bct, friendlyTargets,
-                                                            origin, range, aiTriggerRadius, box, excluded) )
+                if ( !ypabact_IsDownwardLaserMultiCandidate(shooter, bct, friendlyTargets,
+                                                            origin, range, box, excluded) )
                     continue;
 
                 float dist = (bct->_position.XZ() - origin.XZ()).length();
@@ -1859,450 +1848,6 @@ NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shoot
     }
 
     return best;
-}
-
-NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter,
-                                                        World::TWeapProto &wproto,
-                                                        NC_STACK_ypabact::TLaserBeamRuntime &beam,
-                                                        const vec3d &start, const vec3d &down,
-                                                        float range, bool beamWasActive,
-                                                        bool spawnBeamVPs, bool playerControlled,
-                                                        float damageMult,
-                                                        std::vector<vec3d> &chainFXPoints)
-{
-    NC_STACK_ypaworld *world = shooter ? shooter->getBACT_pWorld() : nullptr;
-    if ( !world )
-        return nullptr;
-
-    TLaserUnitHit unitHit;
-    bool hasUnitHit = ypabact_LaserHitscan(shooter, wproto, start, down, range, &unitHit);
-
-    vec3d worldHitPoint;
-    bool worldHit = !wproto.disable_collision && ypabact_LaserWorldHit(shooter, start, down, range, &worldHitPoint);
-    float worldAlong = range + 1.0f;
-    if ( worldHit )
-    {
-        worldAlong = (worldHitPoint - start).dot(down);
-        if ( worldAlong < 0.0f )
-            worldHit = false;
-    }
-
-    bool useWorldHit = worldHit && (!hasUnitHit || worldAlong <= unitHit.along);
-    NC_STACK_ypabact *target = (!useWorldHit && hasUnitHit) ? unitHit.target : nullptr;
-
-    beam.start = start;
-    if ( target )
-        beam.end = unitHit.hitPoint;
-    else if ( useWorldHit )
-        beam.end = worldHitPoint;
-    else
-        beam.end = start + down * range;
-    beam.has_contact = target != nullptr || useWorldHit;
-
-    if ( !beamWasActive )
-    {
-        const mat3x3 launchRot = ypabact_LaserRotationFromDir(down, shooter->_rotation);
-        shooter->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
-                                       &wproto.chain_fx, &beam.start, &launchRot);
-    }
-
-    if ( spawnBeamVPs )
-        ypabact_SpawnLaserBeamVisuals(shooter, wproto, beam.start, beam.end);
-
-    if ( target )
-    {
-        if ( !beamWasActive || target->_gid != beam.target_gid )
-        {
-            beam.energy_ticks = 0;
-            beam.next_damage_time = 0;
-            beam.next_fx_time = 0;
-        }
-
-        beam.target_gid = target->_gid;
-        ypabact_ApplyLaserUnitTick(shooter, wproto, target, beam, playerControlled, damageMult);
-
-        if ( shooter->_clock >= beam.next_fx_time )
-        {
-            ypabact_SpawnLaserImpactChainFX(shooter, shooter->_vertical_laser_weapon, wproto, beam, down,
-                                            false, chainFXPoints);
-            ypabact_SpawnWeaponImpactVisual(world, wproto, false, beam.end,
-                                               ypabact_LaserRotationFromDir(down, shooter->_rotation), 90);
-            beam.next_fx_time = shooter->_clock + 160;
-        }
-    }
-    else
-    {
-        TLaserWorldHit sectorHit;
-        bool hasSectorHit = false;
-
-        if ( useWorldHit )
-        {
-            hasSectorHit = ypabact_LaserGetSectorHit(world, worldHitPoint + down * 5.0f, &sectorHit);
-            if ( !hasSectorHit )
-                hasSectorHit = ypabact_LaserGetSectorHit(world, worldHitPoint, &sectorHit);
-        }
-
-        if ( hasSectorHit )
-        {
-            int32_t sectorTargetId = ypabact_LaserSectorTargetId(sectorHit);
-            if ( !beamWasActive || sectorTargetId != beam.target_gid )
-            {
-                beam.energy_ticks = 0;
-                beam.next_damage_time = 0;
-                beam.next_fx_time = 0;
-            }
-            beam.target_gid = sectorTargetId;
-
-            if ( beam.next_damage_time <= 0 || shooter->_clock >= beam.next_damage_time )
-            {
-                int applyNow = ypabact_LaserTickSectorEnergy(wproto, beam.energy_ticks);
-
-                NC_STACK_ypabact *userHost = world->getYW_userHostStation();
-                bool canApplyDamage = !world->_isNetGame ||
-                                      (userHost && userHost->_owner == shooter->_owner);
-
-                if ( applyNow > 0 && canApplyDamage )
-                {
-                    yw_arg129 dmg;
-                    dmg.field_0 = 0;
-                    dmg.pos = sectorHit.damagePos;
-                    dmg.field_10 = applyNow;
-                    dmg.unit = shooter;
-                    shooter->ChangeSectorEnergy(&dmg);
-                }
-
-                beam.energy_ticks++;
-                beam.next_damage_time = shooter->_clock + ypabact_LaserDamageInterval(wproto, playerControlled);
-            }
-        }
-        else
-        {
-            beam.energy_ticks = 0;
-            beam.target_gid = 0;
-            beam.next_damage_time = 0;
-        }
-
-        if ( useWorldHit && shooter->_clock >= beam.next_fx_time )
-        {
-            ypabact_SpawnLaserImpactChainFX(shooter, shooter->_vertical_laser_weapon, wproto, beam, down,
-                                            true, chainFXPoints);
-            ypabact_SpawnWeaponImpactVisual(world, wproto, true, beam.end,
-                                               ypabact_LaserRotationFromDir(down, shooter->_rotation), 90);
-            beam.next_fx_time = shooter->_clock + 160;
-        }
-    }
-
-    return target;
-}
-
-void NC_STACK_ypabact::RequestVerticalLaserFire(int weaponId, bact_arg79 *arg)
-{
-    // OpenNeoUA invisible: firing the vertical laser is a real attack -> reveal now.
-    RevealInvisibleOnAttack();
-
-    _vertical_laser_weapon = weaponId;
-    _vertical_laser_fire_request = true;
-
-    ypabact_StartVehicleFireVPIfEnabled(this, _world->GetWeaponsProtos().at(weaponId), _clock);
-    _vertical_laser_request_target = (arg && arg->tgType == BACT_TGT_TYPE_UNIT) ? arg->target.pbact : nullptr;
-    _vertical_laser_request_start = ypabact_VerticalLaserSourceOrigin(this, arg);
-}
-
-void NC_STACK_ypabact::StopVerticalLaser()
-{
-    if ( !_vertical_laser_soundcarrier.Sounds.empty() &&
-         (_vertical_laser_soundcarrier.Sounds[0].IsEnabled() ||
-          _vertical_laser_soundcarrier.Sounds[0].IsPFxEnabled() ||
-          _vertical_laser_soundcarrier.Sounds[0].IsShkEnabled() ||
-          (_vertical_laser_soundcarrier.Sounds.size() > 1 &&
-           (_vertical_laser_soundcarrier.Sounds[1].IsPFxEnabled() ||
-            _vertical_laser_soundcarrier.Sounds[1].IsShkEnabled()))) )
-    {
-        SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
-    }
-    if ( !_vertical_laser_hit_soundcarrier.Sounds.empty() &&
-         _vertical_laser_hit_soundcarrier.Sounds[0].IsEnabled() )
-    {
-        SFXEngine::SFXe.StopCarrier(&_vertical_laser_hit_soundcarrier);
-    }
-
-    _vertical_laser_active = false;
-    _vertical_laser_fire_request = false;
-    _vertical_laser_weapon = -1;
-    _vertical_laser_request_target = nullptr;
-    _vertical_laser_request_start = vec3d(0.0, 0.0, 0.0);
-    _vertical_laser_next_beam_vp_time = 0;
-    _vertical_laser_beam = TLaserBeamRuntime();
-    _vertical_laser_beams.clear();
-}
-
-void NC_STACK_ypabact::UpdateVerticalLaser(update_msg *arg)
-{
-    if ( IsActiveDebuffStunFireBlocked() )
-    {
-        StopVerticalLaser();
-        return;
-    }
-
-    bool requested = _vertical_laser_fire_request;
-    _vertical_laser_fire_request = false;
-
-    if ( !requested || !_world || _vertical_laser_weapon < 0 ||
-         (size_t)_vertical_laser_weapon >= _world->GetWeaponsProtos().size() )
-    {
-        StopVerticalLaser();
-        return;
-    }
-
-    World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vertical_laser_weapon);
-    if ( !wproto.IsVerticalLaser() )
-    {
-        StopVerticalLaser();
-        return;
-    }
-
-    // UA world coordinates use +Y as "down" toward terrain/buildings.
-    const vec3d down(0.0, 1.0, 0.0);
-    float range = ypabact_LaserRange(wproto);
-    float aiTriggerRadius = ypabact_AiVerticalFireTriggerRadius(wproto);
-    TFireTriggerArea triggerArea;
-    const TFireTriggerArea *aiTriggerArea = GetAIFireTriggerArea(wproto, &triggerArea) ? &triggerArea : nullptr;
-    bool playerControlled = getBACT_inputting() || getBACT_viewer();
-    bool wasActive = _vertical_laser_active;
-    size_t oldBeamCount = _vertical_laser_beams.size();
-    bool spawnBeamVPs = (_vertical_laser_next_beam_vp_time <= 0 ||
-                         _clock >= _vertical_laser_next_beam_vp_time);
-
-    _vertical_laser_active = true;
-
-    if ( !wasActive )
-        ypabact_PlayLaserLaunchSound(this, wproto, _vertical_laser_request_start, down);
-
-    if ( _vertical_laser_beams.empty() )
-        _vertical_laser_beams.resize(1);
-
-    size_t activeBeamCount = 0;
-    std::vector<NC_STACK_ypabact *> directHitTargets;
-    directHitTargets.reserve((size_t)wproto.laser_beam_count + 1);
-    std::vector<vec3d> chainFXPoints;
-
-    // Vertical Laser shares the same aggressive player targeting as the normal
-    // Laser. vertical_laser_ai_trigger_radius remains AI-only: player acquisition uses
-    // the common laser range and a downward aim cone, not the AI fire cylinder.
-    NC_STACK_ypabact *primaryAimTarget = nullptr;
-    vec3d primaryDir = down;
-
-    if ( playerControlled )
-    {
-        if ( _vertical_laser_request_target &&
-             ypabact_IsLaserDamageTarget(this, _vertical_laser_request_target) )
-        {
-            primaryAimTarget = _vertical_laser_request_target;
-        }
-        else
-        {
-            if ( wasActive && !_vertical_laser_beams.empty() &&
-                 _vertical_laser_beams[0].target_gid > 0 )
-            {
-                primaryAimTarget = ypabact_RetainPlayerLaserTarget(
-                    this, _vertical_laser_request_start, down, range,
-                    _vertical_laser_beams[0].target_gid);
-            }
-
-            if ( !primaryAimTarget )
-                primaryAimTarget = ypabact_LaserAutoTarget(
-                    this, _vertical_laser_request_start, down, range,
-                    PLAYER_LASER_ACQUIRE_ALIGNMENT);
-        }
-    }
-
-    if ( primaryAimTarget )
-    {
-        vec3d toTarget = primaryAimTarget->_position - _vertical_laser_request_start;
-        const float targetDistance = toTarget.length();
-        if ( targetDistance > 0.001f && targetDistance <= range )
-            primaryDir = toTarget / targetDistance;
-        else
-            primaryAimTarget = nullptr;
-    }
-
-    NC_STACK_ypabact *primaryHitTarget =
-        ypabact_UpdateVerticalLaserBeam(this, wproto, _vertical_laser_beams[0],
-                                        _vertical_laser_request_start, primaryDir, range,
-                                        wasActive && oldBeamCount > 0,
-                                        spawnBeamVPs, playerControlled, 1.0f, chainFXPoints);
-    activeBeamCount = 1;
-
-    NC_STACK_ypabact *primaryChainGroupTarget = nullptr;
-    if ( playerControlled )
-    {
-        primaryChainGroupTarget = primaryAimTarget ? primaryAimTarget : primaryHitTarget;
-    }
-    else
-    {
-        // Preserve the proven AI Vertical Laser path exactly: its requested target
-        // remains only the grouping reference while the primary beam stays vertical.
-        primaryChainGroupTarget =
-            (_vertical_laser_request_target && _vertical_laser_request_target->_owner != World::OWNER_0 &&
-             ypabact_IsLaserDamageTarget(this, _vertical_laser_request_target))
-                ? _vertical_laser_request_target
-                : primaryHitTarget;
-    }
-
-    if ( primaryHitTarget && primaryHitTarget->_owner != World::OWNER_0 &&
-         ypabact_IsLaserDamageTarget(this, primaryHitTarget) )
-    {
-        directHitTargets.push_back(primaryHitTarget);
-    }
-
-    bool friendlyMultiTargets = ypabact_IsLaserFriendlyToShooter(this, primaryChainGroupTarget);
-    bool allowFriendlyExtraTargets = !friendlyMultiTargets || playerControlled;
-
-    if ( primaryChainGroupTarget && primaryChainGroupTarget->_owner != World::OWNER_0 &&
-         wproto.laser_beam_count > 1 && allowFriendlyExtraTargets )
-    {
-        std::vector<NC_STACK_ypabact *> selectedTargets = directHitTargets;
-
-        while ( activeBeamCount < (size_t)wproto.laser_beam_count )
-        {
-            NC_STACK_ypabact *extraTarget = nullptr;
-
-            if ( playerControlled )
-            {
-                // Player Vertical Laser uses the same common multi-beam acquisition
-                // as model=laser. The vertical fire radius is deliberately not used
-                // here; it remains only an AI decision threshold.
-                extraTarget = ypabact_FindNearestLaserMultiTarget(
-                    this, _vertical_laser_request_start, primaryDir, range,
-                    friendlyMultiTargets, selectedTargets);
-            }
-            else
-            {
-                extraTarget = ypabact_FindNearestVerticalLaserTarget(
-                    this, _vertical_laser_request_start, range, aiTriggerRadius, aiTriggerArea,
-                    friendlyMultiTargets, selectedTargets);
-            }
-
-            if ( !extraTarget )
-                break;
-
-            if ( _vertical_laser_beams.size() <= activeBeamCount )
-                _vertical_laser_beams.resize(activeBeamCount + 1);
-
-            vec3d extraDir = extraTarget->_position - _vertical_laser_request_start;
-            if ( extraDir.normalise() < 0.001f )
-                extraDir = down;
-
-            NC_STACK_ypabact *hitTarget =
-                ypabact_UpdateVerticalLaserBeam(this, wproto, _vertical_laser_beams[activeBeamCount],
-                                                _vertical_laser_request_start, extraDir, range,
-                                                wasActive && activeBeamCount < oldBeamCount,
-                                                spawnBeamVPs, playerControlled, 1.0f, chainFXPoints);
-
-            selectedTargets.push_back(extraTarget);
-            if ( hitTarget && hitTarget->_owner != World::OWNER_0 &&
-                 ypabact_IsLaserDamageTarget(this, hitTarget) &&
-                 !ypabact_LaserTargetInList(hitTarget, directHitTargets) )
-            {
-                directHitTargets.push_back(hitTarget);
-            }
-
-            activeBeamCount++;
-        }
-    }
-
-
-    if ( wproto.laser_chain_allow && wproto.laser_chain_max_jumps > 0 &&
-         wproto.laser_chain_radius > 0.0f && primaryHitTarget &&
-         primaryHitTarget->_owner != World::OWNER_0 &&
-         ypabact_IsLaserDamageTarget(this, primaryHitTarget) )
-    {
-        NC_STACK_ypabact *chainGroupTarget = primaryChainGroupTarget ? primaryChainGroupTarget : primaryHitTarget;
-        bool friendlyChain = ypabact_IsLaserFriendlyToShooter(this, chainGroupTarget);
-        bool canRunChain = (!friendlyChain || playerControlled) &&
-                           ypabact_IsLaserSecondaryTargetCandidate(this, primaryHitTarget, friendlyChain);
-
-        if ( canRunChain )
-        {
-            std::vector<NC_STACK_ypabact *> chainHits = directHitTargets;
-            if ( !ypabact_LaserTargetInList(primaryHitTarget, chainHits) )
-                chainHits.push_back(primaryHitTarget);
-
-            NC_STACK_ypabact *from = primaryHitTarget;
-            float chainDamageMult = 1.0f;
-            float perJumpMult = wproto.laser_chain_energy_mult > 0.0f ? wproto.laser_chain_energy_mult : 1.0f;
-
-            for (int jump = 0; jump < wproto.laser_chain_max_jumps; jump++)
-            {
-                NC_STACK_ypabact *chainTarget =
-                    ypabact_FindLaserChainTarget(this, from, wproto.laser_chain_radius,
-                                                 friendlyChain, chainHits);
-                if ( !chainTarget )
-                    break;
-
-                if ( _vertical_laser_beams.size() <= activeBeamCount )
-                    _vertical_laser_beams.resize(activeBeamCount + 1);
-
-                TLaserBeamRuntime &chainBeam = _vertical_laser_beams[activeBeamCount];
-                bool beamWasActive = wasActive && activeBeamCount < oldBeamCount;
-
-                chainBeam.start = from->_position;
-                chainBeam.end = chainTarget->_position;
-                chainBeam.has_contact = true;
-
-                vec3d chainDir = chainBeam.end - chainBeam.start;
-                if ( chainDir.normalise() < 0.001f )
-                    chainDir = _rotation.AxisZ();
-
-                if ( !beamWasActive || chainTarget->_gid != chainBeam.target_gid )
-                {
-                    chainBeam.energy_ticks = 0;
-                    chainBeam.next_damage_time = 0;
-                    chainBeam.next_fx_time = 0;
-                }
-                chainBeam.target_gid = chainTarget->_gid;
-
-                chainDamageMult *= perJumpMult;
-
-                if ( spawnBeamVPs )
-                    ypabact_SpawnLaserBeamVisuals(this, wproto, chainBeam.start, chainBeam.end);
-
-                ypabact_ApplyLaserUnitTick(this, wproto, chainTarget, chainBeam,
-                                           playerControlled, chainDamageMult);
-
-                if ( _clock >= chainBeam.next_fx_time )
-                {
-                    ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, chainBeam,
-                                                    chainDir, false, chainFXPoints);
-                    ypabact_SpawnWeaponImpactVisual(_world, wproto, false, chainBeam.end,
-                                                       ypabact_LaserRotationFromDir(chainDir, _rotation), 90);
-                    chainBeam.next_fx_time = _clock + 160;
-                }
-
-                chainHits.push_back(chainTarget);
-                from = chainTarget;
-                activeBeamCount++;
-            }
-        }
-    }
-
-    if ( _vertical_laser_beams.size() > activeBeamCount )
-        _vertical_laser_beams.resize(activeBeamCount);
-
-    if ( !_vertical_laser_beams.empty() )
-        _vertical_laser_beam = _vertical_laser_beams[0];
-
-    if ( spawnBeamVPs )
-        _vertical_laser_next_beam_vp_time = _clock + 1;
-
-    ypabact_UpdateLaserHitSound(this, wproto, &_vertical_laser_hit_soundcarrier,
-                                _vertical_laser_beams);
-
-    ypabact_UpdateLaserNormalSound(this, wproto, &_vertical_laser_soundcarrier,
-                                   _vertical_laser_beams.empty()
-                                       ? _vertical_laser_request_start
-                                       : _vertical_laser_beams[0].start,
-                                   down);
 }
 
 bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
@@ -2321,14 +1866,8 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
                                                wproto.HasAIFireTriggerArea() && !wproto.IsBombLike()) )
         return false;
 
-    const bool activeNormal =
-        wproto.IsLaser() && !wproto.IsVerticalLaser() &&
-        bact->_laser_active && bact->_laser_weapon == weaponId;
-    const bool activeVertical =
-        wproto.IsVerticalLaser() && bact->_vertical_laser_active &&
-        bact->_vertical_laser_weapon == weaponId;
-
-    if ( !activeNormal && !activeVertical )
+    const bool activeVertical = wproto.IsDownwardLaser();
+    if ( !wproto.IsLaser() || !bact->_laser_active || bact->_laser_weapon != weaponId )
         return false;
 
     // A dead/invalid unit is never retained merely because the trigger was held.
@@ -2342,14 +1881,11 @@ bool ypabact_ShouldPersistAILaserFire(NC_STACK_ypabact *bact, int weaponId,
         const vec3d fireOrigin =
             bact->_position + bact->_rotation.Transpose().Transform(bact->_fire_pos);
 
-        // The target must remain inside the AI fire zone (fire trigger area or legacy
-        // cylinder). Also stop when it has moved beyond the beam's real
-        // life_time-derived reach.
+        // The target stays inside the configured fire volume and beam reach.
         TFireTriggerArea triggerArea;
-        const TFireTriggerArea *box = bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos, ypabact_IsGroundFireQuery(*arg)) ? &triggerArea : nullptr;
-        if ( !ypabact_IsInVerticalLaserFireZone(box, fireOrigin,
-                                                ypabact_AiVerticalFireTriggerRadius(wproto),
-                                                arg->pos, box && arg->unkn == 2 ? arg->radius : 0.0f) )
+        if ( !bact->GetAIFireTriggerArea(wproto, &triggerArea, &arg->pos, ypabact_IsGroundFireQuery(*arg)) ||
+             !ypabact_FireTriggerAreaContains(triggerArea, arg->pos,
+                                              arg->unkn == 2 ? arg->radius : 0.0f) )
             return false;
 
         return (arg->pos - fireOrigin).length() <= ypabact_LaserRange(wproto);

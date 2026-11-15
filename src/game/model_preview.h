@@ -18,7 +18,7 @@ public:
     bool Select(NC_STACK_ypaworld &resources, const NC_STACK_ypaworld &source,
                 int category, int id);
     bool SelectSector(NC_STACK_ypaworld &resources, int sector);
-    bool Available() const { return !parts_.empty() || laser_; }
+    bool Available() const { return !parts_.empty(); }
     float Radius() const { return radius_; }
     vec3d FitPosition(const vec3d &position,const vec2d &halfSize,int yaw,int tilt) const;
     size_t PartCount() const { return parts_.size(); }
@@ -53,8 +53,6 @@ private:
     static mat3x3 ViewOrientation(const vec3d &position,int yaw,int tilt,bool faceCamera);
     std::vector<Part> parts_;
     NC_STACK_ypaworld *resources_ = nullptr;
-    World::TWeapProto::TLaserMeshConfig laserConfig_;
-    bool laser_ = false;
     float radius_ = 25.0f;
     vec3d center_;
     std::vector<vec3d> framePoints_;

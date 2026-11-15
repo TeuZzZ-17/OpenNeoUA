@@ -88,13 +88,12 @@ int main() {
         actor->_weapon_time = 123;
         actor->_salve_counter = 2;
         actor->_laser_fire_request = false;
-        actor->_vertical_laser_fire_request = false;
         const auto missileCount = actor->_missiles_list.size();
         bact_arg79 request{};
         request.direction = Aim(0); // Player permission must follow the reticle, not this request.
         actor->LaunchMissile(&request);
         Check(actor->_energy == 777 && actor->_weapon_time == 123 && actor->_salve_counter == 2 &&
-              !actor->_laser_fire_request && !actor->_vertical_laser_fire_request && actor->_missiles_list.size() == missileCount,
+              !actor->_laser_fire_request && actor->_missiles_list.size() == missileCount,
               "blocked player fire has no projectile energy cadence or laser side effects");
         actor->_oflags = 0;
         actor->_gun_angle_user = 0.0;

@@ -584,11 +584,8 @@ public:
     // static tick damage, beam state and serialized snd_normal playback each frame;
     // the firing paths only register a per-frame request via RequestLaserFire().
     void UpdateLaser(update_msg *arg);
-    void RequestLaserFire(int weaponId, bact_arg79 *arg);
+    void RequestLaserFire(int weaponId, bact_arg79 *arg, int sourceSlot = 0);
     void StopLaser(); // disconnect: reset tick state, stop active snd_normal/snd_hit, hide beam
-    void UpdateVerticalLaser(update_msg *arg); // OpenNeoUA custom: downward mode of model = laser
-    void RequestVerticalLaserFire(int weaponId, bact_arg79 *arg);
-    void StopVerticalLaser();
     // Default state of the per-unit OpenNeoUA feature fields (constructor, Init and Renew share it).
     void ResetFeatureRuntimeState();
     void UpdateDamageFX(update_msg *arg);
@@ -1162,10 +1159,8 @@ public:
     TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: first-person MGUN shake, scaled from mgun_cockpit_camera_recoil
     TSndCarrier _mgun_recoil_shake_carrier;
     TSndCarrier _laser_soundcarrier; // OpenNeoUA custom: ordered snd_normal playback while model=laser is firing
-    TSndCarrier _vertical_laser_soundcarrier; // OpenNeoUA custom: same snd_normal path for laser vertical mode
     TSndCarrier _laser_launch_soundcarrier; // OpenNeoUA custom: one non-overlapping snd_launch event per laser activation
     TSndCarrier _laser_hit_soundcarrier; // OpenNeoUA custom: serialized one-shot snd_hit while any laser beam is in contact
-    TSndCarrier _vertical_laser_hit_soundcarrier; // OpenNeoUA custom: same snd_hit path for laser vertical mode
     TSndCarrier _mgun_soundcarrier; // OpenNeoUA custom: one-shot pulse sound for vehicle-controlled MG
     TSndCarrier _mimic_soundcarrier; // OpenNeoUA custom: persistent loop for model = mimic shell
     int _mgun_sound_index;
@@ -1240,6 +1235,7 @@ public:
     float _mgun_spread_x;
     float _mgun_spread_y;
     uint8_t _num_weapons;
+    uint8_t _num_targets = 0;
     float _mgun_fire_energy_cost;
     bool _mgun_fire_energy_cost_defined;
     uint8_t _num_weapons_snd_events;
@@ -1369,10 +1365,13 @@ public:
         int energy_ticks = 0;
         int next_damage_time = 0;
         int next_fx_time = 0;
+        // Continuous burn (laser_burn_decal_frequency): last stamped ground point of the current strip.
+        bool burn_active = false;
+        vec3d burn_last;
     };
 
     // OpenNeoUA custom: laser beam runtime state (transient, per shooter/weapon/target;
-    // never saved per instance). Supports direct laser_beam_count beams and chain
+    // never saved per instance). Supports num_weapons direct beams and chain
     // segments, while keeping the first beam in the legacy fields for older debug/UI paths.
     bool _laser_active = false;            // beam currently firing/visible
     bool _laser_fire_request = false;      // set by RequestLaserFire() each firing frame, consumed by UpdateLaser()
@@ -1387,17 +1386,11 @@ public:
     int _laser_next_damage_time = 0;       // next _clock at which static tick damage may apply
     int _laser_next_fx_time = 0;           // next _clock at which a throttled impact VP may spawn
     int _laser_next_beam_vp_time = 0;      // next _clock at which the VP beam body may be refreshed
+    // Chosen once per continuous firing activation, shared with normal fire_x modes.
+    std::vector<float> _laser_muzzle_x;
+    int _laser_source_slot = 0;
     std::vector<TLaserBeamRequest> _laser_requests;
     std::vector<TLaserBeamRuntime> _laser_beams;
-    // OpenNeoUA custom: separate downward-beam runtime used by model=laser vertical mode.
-    bool _vertical_laser_active = false;
-    bool _vertical_laser_fire_request = false;
-    int _vertical_laser_weapon = -1;
-    NC_STACK_ypabact *_vertical_laser_request_target = nullptr;
-    vec3d _vertical_laser_request_start;
-    int _vertical_laser_next_beam_vp_time = 0;
-    TLaserBeamRuntime _vertical_laser_beam;
-    std::vector<TLaserBeamRuntime> _vertical_laser_beams;
     bool _kamikaze_triggered;
     bool _kamikaze_ground_decals_handled = false;
     // OpenNeoUA custom: vehicle crater_* (copied from the proto), dug once when the wreck ends.

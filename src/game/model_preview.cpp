@@ -56,8 +56,6 @@ void ModelPreview::Clear()
 {
     parts_.clear();
     resources_ = nullptr;
-    laser_ = false;
-    laserConfig_ = World::TWeapProto::TLaserMeshConfig();
     radius_ = 25.0f;
     center_ = visualRotation_ = vec3d();
     framePoints_.clear();fitToView_=false;
@@ -169,14 +167,6 @@ bool ModelPreview::Select(NC_STACK_ypaworld &resources, const NC_STACK_ypaworld 
             motion._fly_dir=vec3d(0,0,1);
             motion._fly_dir_length=p.start_speed>0?p.start_speed:(p.airconst>0?p.force/p.airconst:0);
         }
-        if (p.IsLaser() && p.laser_mesh.enabled)
-        {
-            // Reuse the real mesh beam renderer, without a shooter or damage tick.
-            laserConfig_ = p.laser_mesh;
-            laser_ = !p.laser_mesh.mesh_path.empty() && resources.GetSharedExternalMesh(p.laser_mesh.mesh_path);
-            radius_ = 240.0f;
-        }
-        else
         {
             auto *body = Resolve(resources,p.vp_normal,p.visual_3ds.normal,p.visual_base.normal);
             const int count = p.IsLaser() ? std::max(2,std::min(80,(int)(400.0f / std::max(5.0f,p.laser_spacing)))) : 1;
@@ -283,7 +273,7 @@ void ModelPreview::FitBounds()
     if (measured)
     {
         center_ = (minimum + maximum) * 0.5;
-        radius_ = std::max(laser_?240.0f:1.0f,(float)((maximum - minimum) * 0.5).length());
+        radius_ = std::max(1.0f,(float)((maximum - minimum) * 0.5).length());
     }
     if(tracer_.enabled)radius_=std::max(radius_,(float)tracer_.pos.length()+tracer_.size_z);
     if(effects_->motion)radius_+=effects_->motion->_chaos_radius;
@@ -362,9 +352,6 @@ void ModelPreview::Render(baseRender_msg &arg, const vec3d &position, int yaw, i
         resources_->RenderWeaponTracerSegment(&renderContext,end-rotation.Transform(motionRotation.Transform(vec3d(0,0,tracer_.size_z))),
                                                end,tracer_,0.0f,1.0f,0x44425052u);
     }
-    if (laser_ && resources_)
-        resources_->RenderLaserMeshSegment(&renderContext,position + rotation.Transform(vec3d(-200,0,0)),
-            position + rotation.Transform(vec3d(200,0,0)),laserConfig_,false,rotation,0x44425052u);
     for (auto &part : parts_)
     {
         auto *base = part.base;

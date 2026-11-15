@@ -333,10 +333,10 @@ void Init()
                           System::IniConf::GfxRegenFXInterval,
                           System::IniConf::GfxRegenFXCount,
                           System::IniConf::GfxRegenFXRandomMaxOffset,
-                          System::IniConf::GfxRegenMeshSize,
-                          System::IniConf::GfxRegenMeshThickness,
-                          System::IniConf::GfxRegenMeshRiseSpeed,
-                          System::IniConf::GfxRegenMeshFade,
+                          System::IniConf::GfxRegenSymbolSize,
+                          System::IniConf::GfxRegenSymbolThickness,
+                          System::IniConf::GfxRegenSymbolRiseSpeed,
+                          System::IniConf::GfxRegenSymbolFade,
                           true);
 
     s_drain = BuildConfig(System::IniConf::GfxDrainFXVP,
@@ -349,10 +349,10 @@ void Init()
                           System::IniConf::GfxDrainFXInterval,
                           System::IniConf::GfxDrainFXCount,
                           System::IniConf::GfxDrainFXRandomMaxOffset,
-                          System::IniConf::GfxDrainMeshSize,
-                          System::IniConf::GfxDrainMeshThickness,
-                          System::IniConf::GfxDrainMeshRiseSpeed,
-                          System::IniConf::GfxDrainMeshFade,
+                          System::IniConf::GfxDrainSymbolSize,
+                          System::IniConf::GfxDrainSymbolThickness,
+                          System::IniConf::GfxDrainSymbolRiseSpeed,
+                          System::IniConf::GfxDrainSymbolFade,
                           false);
 }
 

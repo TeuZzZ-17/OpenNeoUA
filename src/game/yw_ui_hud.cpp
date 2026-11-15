@@ -900,8 +900,11 @@ std::string yw_BuildInfoWeaponDamageText(NC_STACK_ypabact *bact,
         if ( weap->laser_energy_increment_rate > 0.0f )
             txt2 += " +";
 
-        if ( weap->laser_beam_count > 1 )
-            txt2 += fmt::sprintf(" x%d", weap->laser_beam_count);
+        int lo = 1, hi = 1;
+        if ( bact ) bact->GetCurrentWeaponProjectileCountRange(&lo, &hi);
+        else if ( vhcl ) vhcl->GetWeaponProjectileCountRange(0, lo, hi);
+        if ( hi > 1 )
+            txt2 += lo == hi ? fmt::sprintf(" x%d", hi) : fmt::sprintf(" x%d~%d", lo, hi);
     }
     else
     {

@@ -2082,16 +2082,6 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
         }
     }
 
-    if ( v22 && v22->IsVerticalLaser() )
-    {
-        vec3d fireOrigin = _position + _rotation.Transpose().Transform(_fire_pos);
-        if ( arg->pos.y < fireOrigin.y )
-            return 0;
-
-        return (arg->pos.XZ() - fireOrigin.XZ()).length() <=
-               (v22->vertical_laser_ai_trigger_radius > 0.0f ? v22->vertical_laser_ai_trigger_radius : 300.0f);
-    }
-
     float v38 = 0.0;
 
     if ( v34.XZ() != vec2d(0.0, 0.0) )

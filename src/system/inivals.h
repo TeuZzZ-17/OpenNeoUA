@@ -333,10 +333,10 @@ public:
     static Common::Ini::Key GfxRegenFXInterval;
     static Common::Ini::Key GfxRegenFXCount;
     static Common::Ini::Key GfxRegenFXRandomMaxOffset;
-    static Common::Ini::Key GfxRegenMeshSize;
-    static Common::Ini::Key GfxRegenMeshThickness;
-    static Common::Ini::Key GfxRegenMeshRiseSpeed;
-    static Common::Ini::Key GfxRegenMeshFade;
+    static Common::Ini::Key GfxRegenSymbolSize;
+    static Common::Ini::Key GfxRegenSymbolThickness;
+    static Common::Ini::Key GfxRegenSymbolRiseSpeed;
+    static Common::Ini::Key GfxRegenSymbolFade;
 
     static Common::Ini::Key GfxDrainFXVP;
     static Common::Ini::Key GfxDrainFX3DS;
@@ -348,10 +348,10 @@ public:
     static Common::Ini::Key GfxDrainFXInterval;
     static Common::Ini::Key GfxDrainFXCount;
     static Common::Ini::Key GfxDrainFXRandomMaxOffset;
-    static Common::Ini::Key GfxDrainMeshSize;
-    static Common::Ini::Key GfxDrainMeshThickness;
-    static Common::Ini::Key GfxDrainMeshRiseSpeed;
-    static Common::Ini::Key GfxDrainMeshFade;
+    static Common::Ini::Key GfxDrainSymbolSize;
+    static Common::Ini::Key GfxDrainSymbolThickness;
+    static Common::Ini::Key GfxDrainSymbolRiseSpeed;
+    static Common::Ini::Key GfxDrainSymbolFade;
 
     // OpenNeoUA: opt-in global asset paths for automatically rendered status icons.
     // Paths are relative to Data/. Missing, empty or invalid paths disable only

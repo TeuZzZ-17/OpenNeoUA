@@ -152,10 +152,6 @@ struct TLaserUnitHit
 
 // ---- functions that used to be file-static ----
 double ypabact_GetArcGrenadeGravity(const World::TWeapProto &wproto);
-vec3d ypabact_LaserViewerVisualStart( const NC_STACK_ypabact *bact, const World::TWeapProto &wproto, const vec3d &beamStart, const vec3d &beamEnd);
-bool ypabact_IsLaserMeshUsable( NC_STACK_ypabact *bact, const World::TWeapProto &wproto);
-uint32_t ypabact_LaserMeshSeed(const NC_STACK_ypabact *bact, size_t beamIndex, uint32_t domain);
-void ypabact_RenderLaserMeshes(NC_STACK_ypabact *bact, baseRender_msg *arg);
 bool ypabact_BeginUnitCollisionEvent(NC_STACK_ypabact *first, NC_STACK_ypabact *second, int frameTime);
 bool ypabact_IsGenesisSeparationVehicle(const NC_STACK_ypabact *unit);
 float ypabact_ReadNonNegativeFloatIni(Common::Ini::Key &key, float dflt);
@@ -330,7 +326,7 @@ int ypabact_GetCurrentPrimaryWeaponSourceSlot(NC_STACK_ypabact *bact);
 bool ypabact_IsHomingBombWeapon(const World::TWeapProto &wproto);
 bool ypabact_UsesMissileTargeting(const World::TWeapProto &wproto);
 bool ypabact_IsCompatibleMultiTargetWeapon(const World::TWeapProto &wproto);
-int ypabact_GetMultiTargetLimit(const World::TWeapProto &wproto, int weaponCount);
+int ypabact_GetMultiTargetLimit(const NC_STACK_ypabact *launcher, const World::TWeapProto &wproto, int weaponCount);
 bool ypabact_IsMissileMultiTargetUnitType(NC_STACK_ypabact *target);
 bool ypabact_IsValidMissileMultiTarget(NC_STACK_ypabact *launcher, NC_STACK_ypabact *target);
 bool ypabact_GetMissileMultiTargetScore(NC_STACK_ypabact *launcher, NC_STACK_ypabact *target, const vec3d &aimDir, float weaponRadius, float *outScore);
@@ -408,18 +404,18 @@ NC_STACK_ypabact *ypabact_FindLaserChainTarget(NC_STACK_ypabact *shooter, NC_STA
 vec3d ypabact_LaserSourceOrigin(NC_STACK_ypabact *bact);
 bool ypabact_LaserWorldHit(NC_STACK_ypabact *shooter, const vec3d &origin, const vec3d &dir, float range, vec3d *outHitPoint, ypaworld_arg136 *outHit = nullptr);
 mat3x3 ypabact_LaserRotationFromDir(const vec3d &beamDir, const mat3x3 &fallback);
+// Continuous burn: stamps ground decals / craters along the path of the beam's ground contact.
+void ypabact_LaserBurnTrail( NC_STACK_ypabact *shooter, const World::TWeapProto &wproto, NC_STACK_ypabact::TLaserBeamRuntime &beam, bool worldContact);
 void ypabact_SpawnLaserImpactChainFX( NC_STACK_ypabact *shooter, World::TWeapProto &wproto, const NC_STACK_ypabact::TLaserBeamRuntime &beam, const vec3d &dir, bool worldContact, std::vector<vec3d> &spawnedPoints);
 float ypabact_LaserClampVisualSpacing(float spacing);
 vec3d ypabact_LaserVisualScale(const World::TWeapProto &wproto);
 void ypabact_SpawnWeaponImpactVisual(NC_STACK_ypaworld *world, const World::TWeapProto &wproto, bool preferMegadeth, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime);
-void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto, const vec3d &beamStart, const vec3d &beamEnd);
+void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto, const vec3d &beamStart, const vec3d &beamEnd, bool hasContact);
 void ypabact_StartVehicleFireVP(NC_STACK_ypabact *bact, int now);
 void ypabact_StartVehicleFireVPIfEnabled(NC_STACK_ypabact *bact, const World::TWeapProto &weapon, int now);
-float ypabact_AiVerticalFireTriggerRadius(const World::TWeapProto &wproto);
-vec3d ypabact_VerticalLaserSourceOrigin(NC_STACK_ypabact *bact, const bact_arg79 *arg);
-bool ypabact_IsInVerticalLaserFireZone(const TFireTriggerArea *box, const vec3d &origin, float aiTriggerRadius, const vec3d &pos, float radius);
-bool ypabact_IsVerticalLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit, bool friendlyTargets, const vec3d &origin, float range, float aiTriggerRadius, const TFireTriggerArea *box, const std::vector<NC_STACK_ypabact *> &excluded);
-NC_STACK_ypabact *ypabact_FindNearestVerticalLaserTarget(NC_STACK_ypabact *shooter, const vec3d &origin, float range, float aiTriggerRadius, const TFireTriggerArea *box, bool friendlyTargets, const std::vector<NC_STACK_ypabact *> &excluded);
+vec3d ypabact_DownwardLaserSourceOrigin(NC_STACK_ypabact *bact, const bact_arg79 *arg);
+bool ypabact_IsDownwardLaserMultiCandidate(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit, bool friendlyTargets, const vec3d &origin, float range, const TFireTriggerArea &box, const std::vector<NC_STACK_ypabact *> &excluded);
+NC_STACK_ypabact *ypabact_FindNearestDownwardLaserTarget(NC_STACK_ypabact *shooter, const vec3d &origin, float range, const TFireTriggerArea &box, bool friendlyTargets, const std::vector<NC_STACK_ypabact *> &excluded);
 bool ypabact_FireTriggerAreaContains(const TFireTriggerArea &box, const vec3d &pos, float radius);
 bool ypabact_IsGroundFireTarget(NC_STACK_ypabact *unit);
 bool ypabact_IsGroundFireQuery(const bact_arg101 &arg);
@@ -427,7 +423,6 @@ float ypabact_FireTriggerAreaSearchRadius(const TFireTriggerArea &box);
 NC_STACK_ypabact *ypabact_FindFireTriggerAreaEnemy(NC_STACK_ypabact *shooter, const TFireTriggerArea &box, const World::TWeapProto *wproto = nullptr);
 int ypabact_CountFireTriggerAreaEnemies(NC_STACK_ypabact *shooter, const TFireTriggerArea &box, const World::TWeapProto *wproto, int limit);
 void ypabact_AimAtFireTriggerAreaTarget(const bact_arg101 &fireTest, bact_arg79 *shot);
-NC_STACK_ypabact *ypabact_UpdateVerticalLaserBeam(NC_STACK_ypabact *shooter, World::TWeapProto &wproto, NC_STACK_ypabact::TLaserBeamRuntime &beam, const vec3d &start, const vec3d &down, float range, bool beamWasActive, bool spawnBeamVPs, bool playerControlled, float damageMult, std::vector<vec3d> &chainFXPoints);
 void ypabact_EnsureFireXRandomSeeded(NC_STACK_ypabact *unit);
 uint32_t ypabact_PeekFireXRandom(NC_STACK_ypabact *unit);
 uint32_t ypabact_NextFireXRandom(NC_STACK_ypabact *unit);

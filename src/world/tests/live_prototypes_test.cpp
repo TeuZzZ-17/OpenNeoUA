@@ -38,6 +38,15 @@ int main()
     Check(loaded, "live Startup.cfg parsed");
     if (loaded)
     {
+        const auto &ying = world.GetVhclProtos()[171];
+        const auto &laser = world.GetWeaponsProtos()[114];
+        Check(ying.name == "Ying Overcharged" && ying.vp_normal == 242 && ying.weapon == 114,
+              "overcharged Ying has its dedicated model and laser");
+        Check(laser.IsLaser() && !laser.IsDownwardLaser() &&
+              laser.laser_chain_max_jumps == 0 && laser.laser_fade_in > 0 && laser.laser_fade_out > 0 &&
+              laser.visual_tint.r > laser.visual_tint.g && !laser.visual_base.normal.empty(),
+              "red forward BASE laser with aggregate spatial fades");
+
         const auto &weapon = world.GetWeaponsProtos()[3];
         // Pocket_Rocket after the push/AOE rebalance: AOE damage = 50% of energy, radius from
         // the visible explosion, falloff on.
@@ -111,6 +120,14 @@ int main()
             Check(proto.ground_decal_id == 2 && fx != proto.chain_fx.end() &&
                   fx->ground_decal_smoke.enabled, "live Mykonian impact uses smoking electric decal");
         }
+        // Laser burn strip: decal 5 and the weapon that paints it.
+        const auto burn = world._decalProfiles.find(5);
+        const auto &burnLaser = world.GetWeaponsProtos()[114];
+        Check(burn != world._decalProfiles.end() &&
+              burn->second.fx.ground_decal_texture == "Graphics/GroundDecals/Laser_Burn_01.png" &&
+              burnLaser.laser_burn_decal_frequency == 5 && burnLaser.ground_decal_id == 5 &&
+              std::count_if(burnLaser.chain_fx.begin(), burnLaser.chain_fx.end(), isDecal) == 1,
+              "live laser burn decal and weapon 114");
         const auto &decalVehicle = world.GetVhclProtos()[1];
         const auto &decalWeapon = world.GetWeaponsProtos()[3];
         Check(decalVehicle.ground_decal_id == 1 &&

@@ -500,7 +500,7 @@ void NC_STACK_ypaworld::UpdateSuperItemFalloutAtmosphericFX()
 
             const int32_t lifeTime = yw_RandomInRange(profile.lifetime_min,
                                                       profile.lifetime_max);
-            const int32_t id = SpawnTransientVisual(0, profile.mesh3ds, pos,
+            const int32_t id = SpawnTransientVisual(profile.vp, profile.mesh3ds, profile.basePath, pos,
                                                     mat3x3::Ident(), lifeTime,
                                                     1.0, profile.tint,
                                                     profile.scale, profile.spin,

@@ -2900,7 +2900,7 @@ public:
     int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0);
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
-    bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit);
+    bool SpawnGroundDecal(const World::TChainFXConfig &config, const ypaworld_arg136 &hit, const World::TDecalStroke *stroke = nullptr);
     bool SpawnGroundDecalInSphere(const World::TChainFXConfig &config, const vec3d &center, float radius);
     bool FindWorldSurfaceInSphere(const vec3d &center, float radius, ypaworld_arg136 &hit);
     void RenderGroundDecals(baseRender_msg *arg);
@@ -2943,11 +2943,6 @@ public:
                                    const World::TWeaponTracerConfig &config,
                                    float tailFactor, float headFactor,
                                    uint32_t visualSeed);
-    void RenderLaserMeshSegment(baseRender_msg *arg, const vec3d &start,
-                                const vec3d &end,
-                                const World::TWeapProto::TLaserMeshConfig &config,
-                                bool impactContact, const mat3x3 &orientationHint,
-                                uint32_t visualSeed);
     NC_STACK_base *GetSharedExternalMesh(const std::string &path);
     void ClearSharedExternalMeshes();
     NC_STACK_base *GetSharedExternalBase(const std::string &path);
@@ -3106,6 +3101,9 @@ public:
         int32_t endingFadeOut = 0;
         int32_t endingParticleFadeOut = 0;
         World::TVisualTint tint; // OpenNeoUA custom: VP tint for this spawned model (e.g. laser beam body)
+        // Extra brightness multiplier (0..1), separate from tint alpha. Feeds vpFadeFactor so
+        // additive (GL_ONE/GL_ONE) surfaces dim too. 1 = neutral for every other effect.
+        float intensity = 1.0f;
         TTransientVPParticleControls particleControls;
 
         TTransientVP(NC_STACK_base *base, const vec3d &p, const mat3x3 &r, int32_t life)

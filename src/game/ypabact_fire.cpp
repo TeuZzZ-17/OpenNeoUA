@@ -244,15 +244,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     // by shot_time. It registers a per-frame fire request that UpdateLaser() turns into
     // a continuous beam (static tick damage + VP beam visual + serialized snd_normal). Bail out here,
     // before the cooldown gate and the normal missile-spawn path.
-    if ( cooldownProto.IsVerticalLaser() )
-    {
-        RequestVerticalLaserFire(cooldownWeapon, arg);
-        return 0;
-    }
-
     if ( cooldownProto.IsLaser() )
     {
-        RequestLaserFire(cooldownWeapon, arg);
+        RequestLaserFire(cooldownWeapon, arg, usePlayerRandomSlots ? _current_weapon_source_slot : selectedWeaponSourceSlot);
         return 0;
     }
 
@@ -379,7 +373,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     }
 
     // homing_force needs a real crosshair lock when the player fires: arg->tgType is UNIT only
-    // when UserTargeting() locked an enemy (red crosshair). Without it the automatic multi_target
+    // when UserTargeting() locked an enemy (red crosshair). Without it the automatic num_targets
     // search below may still hand targets to the missiles, but they must not get the extra
     // steering. AI-controlled units always fire at an assigned target, so they are unchanged.
     const bool suppressHomingForce =
@@ -388,7 +382,7 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
 
     bool homingBomb = ypabact_IsHomingBombWeapon(wproto);
     bool missileTargeting = ypabact_UsesMissileTargeting(wproto);
-    int maxTargets = ypabact_GetMultiTargetLimit(wproto, v13);
+    int maxTargets = ypabact_GetMultiTargetLimit(this, wproto, v13);
     bool missileMultiTarget = maxTargets > 1 && missileTargeting;
     bool bombMultiTarget = maxTargets > 1 && homingBomb;
     std::vector<NC_STACK_ypabact *> weaponTargets;

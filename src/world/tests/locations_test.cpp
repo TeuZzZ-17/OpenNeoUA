@@ -62,6 +62,14 @@ int main()
     ScriptParser::HandlersList saved{new World::Parsers::LevelLocationParser(&values,true)};
     CHECK(ScriptParser::Parser::ParseStringList(lines,saved,ScriptParser::FLAG_NO_SCOPE_SKIP));
     CHECK(values.size()==1); // Save blocks replace the original LDF definitions.
+
+    std::vector<World::Location> underscoreValues;
+    ScriptParser::HandlersList underscoreHandlers{new World::Parsers::LevelLocationParser(&underscoreValues)};
+    Engine::StringList underscoreLines={"begin_location 8", "name = Underscore City",
+        "point = 0_0", "point = 4_0", "point = 4_-4", "end"};
+    CHECK(ScriptParser::Parser::ParseStringList(underscoreLines,underscoreHandlers,ScriptParser::FLAG_NO_SCOPE_SKIP));
+    CHECK(underscoreValues.size()==1 && underscoreValues[0].name=="Underscore City");
+    CHECK(underscoreValues[0].points.size()==3);
     std::printf("Locations: %d checks, %d failures.\n",checks,failures);
     return failures ? 1 : 0;
 }

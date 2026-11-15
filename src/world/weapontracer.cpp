@@ -88,11 +88,7 @@ static mat3x3 WeaponTracerRotationFromDir(const vec3d &direction,
 
     if ( orientationHint )
     {
-        // Continuous laser beams are redrawn every frame. Anchor their ribbon
-        // basis to the firing actor instead of switching abruptly between world
-        // X/Y at |dir.y| = 0.9, which can look like lateral wobble even when
-        // laser_mesh_noise_rate is exactly zero. Tracers pass no hint and keep
-        // their existing orientation path unchanged.
+        // An optional local basis stabilizes geometry orientation.
         x = orientationHint->AxisX();
         x -= z * x.dot(z);
 
@@ -213,11 +209,7 @@ struct TMeshBeamRenderConfig
     float pulseSpeed = 0.0f;
     // Laser-only terminal alpha envelope. The generic tracer path leaves these
     // at their neutral defaults. Factors use the full original beam 0..1 span.
-    float impactFadeStartFactor = 1.0f;
-    float impactFadeEndAlpha = 1.0f;
-    int minSubdivisions = 1;
     bool pulseGeometry = false;
-    bool pulseBrightness = false;
 };
 
 static World::TVisualTint MeshBeamTintAt(const TMeshBeamRenderConfig &config,
@@ -397,7 +389,7 @@ static void RenderMeshBeamSegment(
         WeaponTracerPulseFactor(pulseRate, pulseSpeed, timeStamp);
     const float geometryPulse = config.pulseGeometry ? pulseValue : 1.0f;
 
-    int desiredSamples = std::max(1, config.minSubdivisions);
+    int desiredSamples = 1;
     if ( std::fabs(config.headSizeX - config.tailSizeX) > 0.0001f ||
          std::fabs(config.headSizeY - config.tailSizeY) > 0.0001f ||
          MeshBeamHasTintGradient(config) )
@@ -438,26 +430,6 @@ static void RenderMeshBeamSegment(
 
         World::TVisualTint tint = MeshBeamTintAt(config, middle);
 
-        if ( config.impactFadeStartFactor < 1.0f &&
-             middle > config.impactFadeStartFactor )
-        {
-            const float denom = std::max(0.0001f,
-                                         1.0f - config.impactFadeStartFactor);
-            const float fadeU = WeaponTracerClamp01(
-                (middle - config.impactFadeStartFactor) / denom);
-            const float endAlpha = WeaponTracerClamp01(config.impactFadeEndAlpha);
-            tint.a *= WeaponTracerLerp(1.0f, endAlpha, fadeU);
-        }
-
-        if ( config.pulseBrightness )
-        {
-            // Laser pulse is intentionally a luminance multiplier only. The
-            // segment dimensions stay on the authored size_x/size_y values.
-            tint.r *= pulseValue;
-            tint.g *= pulseValue;
-            tint.b *= pulseValue;
-        }
-
         WeaponTracerQueueGeometry(arg, externalMesh, view,
                                   partStart, partEnd, sizeX, sizeY,
                                   tint, 1.0f, vizLimit, fadeLength,
@@ -466,8 +438,6 @@ static void RenderMeshBeamSegment(
         if ( glowRate > 0.0f )
         {
             float glowAlpha = std::min(1.0f, glowRate * 0.1f);
-            if ( config.pulseBrightness )
-                glowAlpha *= pulseValue;
 
             WeaponTracerQueueGeometry(arg, externalMesh, view,
                                       partStart, partEnd, sizeX, sizeY,
@@ -508,92 +478,16 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
     // Tracer geometry is fully externalized. No path (or an invalid mesh) means
     // no tracer render; the old crossed-ribbon procedural geometry is not used
     // as a hidden fallback.
-    if ( config.mesh_path.empty() )
+    if ( config.path_3ds.empty() )
         return;
 
-    NC_STACK_base *externalMesh = GetSharedExternalMesh(config.mesh_path);
+    NC_STACK_base *externalMesh = GetSharedExternalMesh(config.path_3ds);
     if ( !externalMesh || externalMesh->Meshes.empty() )
         return;
 
     RenderMeshBeamSegment(arg, start, end, renderConfig, _timeStamp,
                           GetEffectDrawDistance(), (float)_normalFadeLength,
                           tailFactor, headFactor, visualSeed, nullptr, externalMesh);
-}
-
-void NC_STACK_ypaworld::RenderLaserMeshSegment(
-    baseRender_msg *arg, const vec3d &start, const vec3d &end,
-    const World::TWeapProto::TLaserMeshConfig &config, bool impactContact,
-    const mat3x3 &orientationHint, uint32_t visualSeed)
-{
-    const float sizeY = config.ResolveSizeY();
-    if ( !arg || _isNetGame || !config.enabled ||
-         !WeaponTracerFinite(start) || !WeaponTracerFinite(end) ||
-         !WeaponTracerFinite(config.tint) || config.tint.a <= 0.0f ||
-         !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
-         !std::isfinite(sizeY) || sizeY <= 0.01f )
-        return;
-
-    if ( config.mesh_path.empty() )
-        return;
-
-    NC_STACK_base *externalMesh = GetSharedExternalMesh(config.mesh_path);
-    if ( !externalMesh || externalMesh->Meshes.empty() )
-        return;
-
-    vec3d beamDirection = end - start;
-    const float beamLength = beamDirection.length();
-    if ( !std::isfinite(beamLength) || beamLength <= 0.01f )
-        return;
-
-    TMeshBeamRenderConfig renderConfig;
-    renderConfig.tailSizeX = config.size_x;
-    renderConfig.headSizeX = config.size_x;
-    renderConfig.tailSizeY = sizeY;
-    renderConfig.headSizeY = sizeY;
-    renderConfig.tailTint = config.tint;
-    renderConfig.headTint = config.tint;
-    renderConfig.glowRate = config.glow_rate;
-    renderConfig.noiseRate = config.noise_rate;
-    renderConfig.pulseRate = config.pulse_rate;
-    renderConfig.pulseSpeed = config.pulse_speed;
-    // Laser pulse changes only the body/glow luminance; geometry remains fixed.
-    renderConfig.pulseBrightness = true;
-
-    const bool useImpactFade = impactContact &&
-                               std::isfinite(config.impact_fade_length) &&
-                               config.impact_fade_length > 0.01f;
-
-    if ( !useImpactFade )
-    {
-        RenderMeshBeamSegment(arg, start, end, renderConfig, _timeStamp,
-                              GetEffectDrawDistance(), (float)_normalFadeLength,
-                              0.0f, 1.0f, visualSeed, &orientationHint, externalMesh);
-        return;
-    }
-
-    const float terminalLength = std::min(config.impact_fade_length, beamLength);
-    const float fadeStartFactor = WeaponTracerClamp01(
-        1.0f - terminalLength / beamLength);
-    const vec3d fadeStart = start + beamDirection * fadeStartFactor;
-
-    if ( fadeStartFactor > 0.0001f )
-    {
-        RenderMeshBeamSegment(arg, start, fadeStart, renderConfig, _timeStamp,
-                              GetEffectDrawDistance(), (float)_normalFadeLength,
-                              0.0f, fadeStartFactor, visualSeed, &orientationHint, externalMesh);
-    }
-
-    TMeshBeamRenderConfig fadeConfig = renderConfig;
-    fadeConfig.impactFadeStartFactor = fadeStartFactor;
-    fadeConfig.impactFadeEndAlpha = 0.02f;
-    // Keep the terminal envelope visually smooth even when it occupies only a
-    // tiny fraction of a long beam. This affects laser only; tracer sampling is
-    // unchanged.
-    fadeConfig.minSubdivisions = 8;
-
-    RenderMeshBeamSegment(arg, fadeStart, end, fadeConfig, _timeStamp,
-                          GetEffectDrawDistance(), (float)_normalFadeLength,
-                          fadeStartFactor, 1.0f, visualSeed, &orientationHint, externalMesh);
 }
 
 NC_STACK_base *NC_STACK_ypaworld::GetSharedExternalMesh(

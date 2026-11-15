@@ -349,7 +349,7 @@ void NC_STACK_ypaworld::UpdateAtmosphericFX()
         velocity.z += yw_RandomFloatSigned(profile.velocity_random.z);
 
         const int32_t lifeTime = yw_RandomInRange(profile.lifetime_min, profile.lifetime_max);
-        const int32_t id = SpawnTransientVisual(0, profile.mesh3ds, pos, mat3x3::Ident(),
+        const int32_t id = SpawnTransientVisual(profile.vp, profile.mesh3ds, profile.basePath, pos, mat3x3::Ident(),
                                                 lifeTime, 1.0, profile.tint,
                                                 profile.scale, profile.spin,
                                                 TTransientVPParticleControls(),
@@ -730,6 +730,9 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
             : World::ComputeSpatialFalloff(distance - fadeStart, fadeLength);
         fadeFactor *= distanceFade;
         renderTint.a *= distanceFade;
+        // Per-effect brightness (laser spatial fade): dims additive surfaces, alpha already handled by tint.
+        if ( std::isfinite(it->intensity) )
+            fadeFactor *= std::max(0.0f, std::min(it->intensity, 1.0f));
 
         // OpenNeoUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.

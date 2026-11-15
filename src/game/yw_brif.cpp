@@ -10,6 +10,8 @@
 #include "gui/font.h"
 #include "common/env.h"
 #include "system/inivals.h"
+#include "system/system.h"
+#include "world/locations.h"
 
 extern GuiList stru_5C91D0;
 
@@ -798,14 +800,14 @@ void ypaworld_func158__sub4__sub1__sub4__sub0(NC_STACK_ypaworld *yw)
 
     int v34 = w * 0.03125;
     int v35 = w * -0.934375;
-    int v37 = h * -0.9333333333333333;
+    int v37 = h * -0.985; // level name as high as possible, clear of the map grid
 
     CmdStream buf;
     buf.reserve(260);
 
     FontUA::select_tileset(&buf, 16);
     FontUA::set_center_xpos(&buf, v35);
-    FontUA::set_center_ypos(&buf, 4 + v37);
+    FontUA::set_center_ypos(&buf, v37);
     FontUA::set_txtColor(&buf, yw->_iniColors[66].r, yw->_iniColors[66].g, yw->_iniColors[66].b);
 
     const std::string v7 = yw->GetLevelName(yw->_levelInfo);
@@ -913,6 +915,336 @@ void ypaworld_func158__sub4__sub1__sub4__sub2(NC_STACK_ypaworld *yw, TBriefengSc
                 GFX::Engine.ProcessDrawSeq(cmdbuf);
             }
         }
+    }
+}
+
+static void yw_BriefingBlendRow(SDL_Surface *surface, int y, int x0, int x1,
+                                uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha)
+{
+    if (!surface || y < 0 || y >= surface->h || x0 > x1 || alpha == 0) return;
+    const int bpp = surface->format->BytesPerPixel;
+    uint8_t *pixelPtr = static_cast<uint8_t *>(surface->pixels) + y * surface->pitch + x0 * bpp;
+    const uint32_t invAlpha = 255u - alpha;
+
+    if (bpp == 4) {
+        uint32_t *p = reinterpret_cast<uint32_t *>(pixelPtr);
+        for (int x = x0; x <= x1; ++x, ++p) {
+            uint8_t dr, dg, db;
+            SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+            const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
+            const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
+            const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
+            *p = SDL_MapRGB(surface->format, nr, ng, nb);
+        }
+    } else if (bpp == 2) {
+        uint16_t *p = reinterpret_cast<uint16_t *>(pixelPtr);
+        for (int x = x0; x <= x1; ++x, ++p) {
+            uint8_t dr, dg, db;
+            SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+            const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
+            const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
+            const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
+            *p = static_cast<uint16_t>(SDL_MapRGB(surface->format, nr, ng, nb));
+        }
+    }
+}
+
+static void yw_BriefingBlendPixel(SDL_Surface *surface, int x, int y,
+                                  uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha)
+{
+    if (!surface || x < 0 || x >= surface->w || y < 0 || y >= surface->h || alpha == 0) return;
+    const int bpp = surface->format->BytesPerPixel;
+    uint8_t *pixelPtr = static_cast<uint8_t *>(surface->pixels) + y * surface->pitch + x * bpp;
+    const uint32_t invAlpha = 255u - alpha;
+
+    if (bpp == 4) {
+        uint32_t *p = reinterpret_cast<uint32_t *>(pixelPtr);
+        uint8_t dr, dg, db;
+        SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+        const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
+        const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
+        const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
+        *p = SDL_MapRGB(surface->format, nr, ng, nb);
+    } else if (bpp == 2) {
+        uint16_t *p = reinterpret_cast<uint16_t *>(pixelPtr);
+        uint8_t dr, dg, db;
+        SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+        const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
+        const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
+        const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
+        *p = static_cast<uint16_t>(SDL_MapRGB(surface->format, nr, ng, nb));
+    }
+}
+
+static void yw_BriefingDrawClippedLine(SDL_Surface *surface, int x0, int y0, int x1, int y1,
+                                      int clipL, int clipT, int clipR, int clipB,
+                                      uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha)
+{
+    auto computeCode = [clipL, clipT, clipR, clipB](int x, int y) -> int {
+        int code = 0;
+        if (x < clipL) code |= 1;
+        else if (x > clipR) code |= 2;
+        if (y < clipT) code |= 4;
+        else if (y > clipB) code |= 8;
+        return code;
+    };
+
+    int code0 = computeCode(x0, y0);
+    int code1 = computeCode(x1, y1);
+    bool accept = false;
+
+    while (true) {
+        if (!(code0 | code1)) {
+            accept = true;
+            break;
+        } else if (code0 & code1) {
+            break;
+        } else {
+            const int codeOut = code0 ? code0 : code1;
+            int x = 0, y = 0;
+            if (codeOut & 8) {
+                x = x0 + static_cast<int>(std::llround(static_cast<double>(x1 - x0) * (clipB - y0) / (y1 - y0)));
+                y = clipB;
+            } else if (codeOut & 4) {
+                x = x0 + static_cast<int>(std::llround(static_cast<double>(x1 - x0) * (clipT - y0) / (y1 - y0)));
+                y = clipT;
+            } else if (codeOut & 2) {
+                y = y0 + static_cast<int>(std::llround(static_cast<double>(y1 - y0) * (clipR - x0) / (x1 - x0)));
+                x = clipR;
+            } else if (codeOut & 1) {
+                y = y0 + static_cast<int>(std::llround(static_cast<double>(y1 - y0) * (clipL - x0) / (x1 - x0)));
+                x = clipL;
+            }
+
+            if (codeOut == code0) {
+                x0 = x; y0 = y;
+                code0 = computeCode(x0, y0);
+            } else {
+                x1 = x; y1 = y;
+                code1 = computeCode(x1, y1);
+            }
+        }
+    }
+
+    if (!accept) return;
+
+    const int dx = std::abs(x1 - x0);
+    const int dy = std::abs(y1 - y0);
+    const int sx = (x0 < x1) ? 1 : -1;
+    const int sy = (y0 < y1) ? 1 : -1;
+    int err = dx - dy;
+
+    while (true) {
+        yw_BriefingBlendPixel(surface, x0, y0, cr, cg, cb, alpha);
+        if (x0 == x1 && y0 == y1) break;
+        const int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x0 += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+// Briefing: locations come only from the level file read for this screen (never stale world data).
+// Debriefing: the played level's locations, falling back to the file ones.
+// pass 0 = translucent fill + perimeter (under the map icons); pass 1 = name labels (drawn last, above the icons).
+static void yw_RenderBriefingLocations(NC_STACK_ypaworld *yw, TBriefengScreen *brf, bool debrief, int pass)
+{
+    const bool drawAreas = (pass == 0);
+    const bool drawLabels = (pass == 1);
+    if (!yw || !brf || !brf->MbmapImg) return;
+    const auto &locations = (debrief && !yw->_locations.empty()) ? yw->_locations : brf->Desc.Locations;
+    if (locations.empty()) return;
+
+    SDL_Surface *canvas = GFX::Engine.Screen();
+    if (!canvas || canvas->w <= 0 || canvas->h <= 0 || !canvas->pixels) return;
+
+    const Common::FRect &mapRect = brf->MapBlitParams.float14;
+    const float mapW = mapRect.Width();
+    const float mapH = mapRect.Height();
+    if (mapW <= 0.0f || mapH <= 0.0f) return;
+    if (yw->_mapLength.x <= 0.0f || yw->_mapLength.y <= 0.0f) return;
+
+    const int clipLeft = std::max(0, int((mapRect.left + 1.0f) * 0.5f * canvas->w + 0.5f));
+    const int clipTop = std::max(0, int((mapRect.top + 1.0f) * 0.5f * canvas->h + 0.5f));
+    const int clipRight = std::min(canvas->w, int((mapRect.right + 1.0f) * 0.5f * canvas->w + 0.5f));
+    const int clipBottom = std::min(canvas->h, int((mapRect.bottom + 1.0f) * 0.5f * canvas->h + 0.5f));
+    if (clipRight <= clipLeft || clipBottom <= clipTop) return;
+
+    // 0..1: current map size relative to its final size (1 when the map is fully open).
+    float labelScale = 1.0f;
+    const float finalW = brf->MapBlitEnd.Width();
+    if (finalW > 0.0f) labelScale = std::max(0.0f, std::min(1.0f, mapW / finalW));
+
+    const int fontHeight = std::max(11, int(canvas->h * 0.022f));
+    static TTF_Font *s_briefLocationFont = nullptr;
+    static int s_briefLocationFontHeight = 0;
+    if (s_briefLocationFont && s_briefLocationFontHeight != fontHeight) {
+        TTF_CloseFont(s_briefLocationFont);
+        s_briefLocationFont = nullptr;
+        s_briefLocationFontHeight = 0;
+    }
+    if (!s_briefLocationFont) {
+        s_briefLocationFont = System::LoadFont("xolonium bold", fontHeight);
+        s_briefLocationFontHeight = fontHeight;
+    }
+    TTF_Font *font = s_briefLocationFont ? s_briefLocationFont : GFX::Engine._font.ttfFont;
+
+    struct LocationRenderItem {
+        const World::Location *area = nullptr;
+        std::vector<vec2d> poly;
+        float minPx = 0, maxPx = 0, minPy = 0, maxPy = 0;
+    };
+    std::vector<LocationRenderItem> renderItems;
+    renderItems.reserve(locations.size());
+
+    if (drawAreas && SDL_MUSTLOCK(canvas)) {
+        if (SDL_LockSurface(canvas) < 0) return;
+    }
+
+    std::vector<float> nodeX;
+    nodeX.reserve(32);
+
+    for (const auto &area : locations) {
+        if (area.points.size() < 3) continue;
+
+        LocationRenderItem item;
+        item.area = &area;
+        item.poly.reserve(area.points.size());
+        item.minPx = item.minPy = 1e9f;
+        item.maxPx = item.maxPy = -1e9f;
+
+        for (const auto &p : area.points) {
+            const float normX = mapRect.left + float(p.x / yw->_mapLength.x) * mapW;
+            const float normY = mapRect.top + float(-p.z / yw->_mapLength.y) * mapH;
+            const float px = (normX + 1.0f) * 0.5f * canvas->w;
+            const float py = (normY + 1.0f) * 0.5f * canvas->h;
+            item.poly.push_back(vec2d(px, py));
+            item.minPx = std::min(item.minPx, px);
+            item.maxPx = std::max(item.maxPx, px);
+            item.minPy = std::min(item.minPy, py);
+            item.maxPy = std::max(item.maxPy, py);
+        }
+
+        const World::LocationColorRgb rgb = World::LocationTextColor(area.color);
+        const uint8_t cr = rgb.r, cg = rgb.g, cb = rgb.b;
+
+        // 1. Scanline polygon translucent fill (light opacity ~16%)
+        const int startScanY = std::max(clipTop, int(std::floor(item.minPy)));
+        const int endScanY = std::min(clipBottom - 1, int(std::ceil(item.maxPy)));
+        const size_t numPoints = item.poly.size();
+        const uint8_t fillAlpha = 42;
+
+        for (int y = startScanY; drawAreas && y <= endScanY; ++y) {
+            nodeX.clear();
+            const float yCenter = float(y) + 0.5f;
+            for (size_t i = 0; i < numPoints; ++i) {
+                const vec2d &p1 = item.poly[i];
+                const vec2d &p2 = item.poly[(i + 1) % numPoints];
+                if ((p1.y < yCenter && p2.y >= yCenter) || (p2.y < yCenter && p1.y >= yCenter)) {
+                    const float t = (yCenter - p1.y) / (p2.y - p1.y);
+                    nodeX.push_back(p1.x + t * (p2.x - p1.x));
+                }
+            }
+            if (nodeX.empty()) continue;
+            std::sort(nodeX.begin(), nodeX.end());
+            for (size_t i = 0; i + 1 < nodeX.size(); i += 2) {
+                const int x0 = std::max(clipLeft, int(std::ceil(nodeX[i])));
+                const int x1 = std::min(clipRight - 1, int(std::floor(nodeX[i + 1])));
+                if (x0 <= x1) {
+                    yw_BriefingBlendRow(canvas, y, x0, x1, cr, cg, cb, fillAlpha);
+                }
+            }
+        }
+
+        // 2. Crisp perimeter lines (2px wide)
+        const uint8_t lineAlpha = 225;
+        for (size_t i = 0; drawAreas && i < numPoints; ++i) {
+            const vec2d &p1 = item.poly[i];
+            const vec2d &p2 = item.poly[(i + 1) % numPoints];
+            const int x0 = int(std::round(p1.x));
+            const int y0 = int(std::round(p1.y));
+            const int x1 = int(std::round(p2.x));
+            const int y1 = int(std::round(p2.y));
+            yw_BriefingDrawClippedLine(canvas, x0, y0, x1, y1, clipLeft, clipTop, clipRight - 1, clipBottom - 1, cr, cg, cb, lineAlpha);
+            if (std::abs(x1 - x0) >= std::abs(y1 - y0)) {
+                yw_BriefingDrawClippedLine(canvas, x0, y0 + 1, x1, y1 + 1, clipLeft, clipTop, clipRight - 1, clipBottom - 1, cr, cg, cb, lineAlpha);
+            } else {
+                yw_BriefingDrawClippedLine(canvas, x0 + 1, y0, x1 + 1, y1, clipLeft, clipTop, clipRight - 1, clipBottom - 1, cr, cg, cb, lineAlpha);
+            }
+        }
+
+        renderItems.push_back(std::move(item));
+    }
+
+    if (drawAreas && SDL_MUSTLOCK(canvas)) {
+        SDL_UnlockSurface(canvas);
+    }
+
+    // 3. Render tactical HUD badges with location names
+    for (const auto &item : renderItems) {
+        if (!drawLabels || !font || item.area->name.empty()) continue;
+        const World::LocationColorRgb rgb = World::LocationTextColor(item.area->color);
+        const uint8_t cr = rgb.r, cg = rgb.g, cb = rgb.b;
+        const std::string displayName = World::LocationDisplayName(item.area->name);
+
+        SDL_Surface *textSurf = TTF_RenderUTF8_Blended(font, displayName.c_str(), SDL_Color{cr, cg, cb, 255});
+        if (!textSurf) continue;
+
+        int textW = textSurf->w;
+        int textH = textSurf->h;
+        const int maxTextW = std::max(20, (clipRight - clipLeft) - 16);
+        if (textW > maxTextW) {
+            textH = std::max(8, int(textH * float(maxTextW) / float(textW)));
+            textW = maxTextW;
+        }
+        // While the map is still scaling up, shrink the label in proportion to the map.
+        if (labelScale < 1.0f) {
+            textW = int(textW * labelScale);
+            textH = int(textH * labelScale);
+            if (textW < 4 || textH < 3) { SDL_FreeSurface(textSurf); continue; }
+        }
+
+        const float centerX = (item.minPx + item.maxPx) * 0.5f;
+        int labelX = int(centerX - textW * 0.5f);
+        int labelY = int(item.minPy + 3);
+        if (labelY + textH + 4 > int(item.maxPy)) {
+            labelY = int(item.minPy - textH - 3);
+        }
+        labelX = std::max(clipLeft + 4, std::min(clipRight - textW - 5, labelX));
+        labelY = std::max(clipTop + 4, std::min(clipBottom - textH - 5, labelY));
+
+        const int padX = std::max(1, int(std::max(3, int(fontHeight * 0.22f)) * labelScale));
+        const int padY = std::max(1, int(std::max(1, int(fontHeight * 0.12f)) * labelScale));
+        const int boxX0 = std::max(clipLeft, labelX - padX);
+        const int boxY0 = std::max(clipTop, labelY - padY);
+        const int boxX1 = std::min(clipRight - 1, labelX + textW + padX);
+        const int boxY1 = std::min(clipBottom - 1, labelY + textH + padY);
+
+        if (SDL_MUSTLOCK(canvas)) SDL_LockSurface(canvas);
+        // Translucent dark plate (75% opacity)
+        for (int by = boxY0; by <= boxY1; ++by) {
+            yw_BriefingBlendRow(canvas, by, boxX0, boxX1, 8, 12, 16, 190);
+        }
+        // 1px border in location color
+        yw_BriefingDrawClippedLine(canvas, boxX0, boxY0, boxX1, boxY0, clipLeft, clipTop, clipRight - 1, clipBottom - 1, cr, cg, cb, 210);
+        yw_BriefingDrawClippedLine(canvas, boxX1, boxY0, boxX1, boxY1, clipLeft, clipTop, clipRight - 1, clipBottom - 1, cr, cg, cb, 210);
+        yw_BriefingDrawClippedLine(canvas, boxX1, boxY1, boxX0, boxY1, clipLeft, clipTop, clipRight - 1, clipBottom - 1, cr, cg, cb, 210);
+        yw_BriefingDrawClippedLine(canvas, boxX0, boxY1, boxX0, boxY0, clipLeft, clipTop, clipRight - 1, clipBottom - 1, cr, cg, cb, 210);
+        if (SDL_MUSTLOCK(canvas)) SDL_UnlockSurface(canvas);
+
+        SDL_Rect dstRect{labelX, labelY, textW, textH};
+        SDL_SetSurfaceBlendMode(textSurf, SDL_BLENDMODE_BLEND);
+        if (textW == textSurf->w && textH == textSurf->h) {
+            SDL_BlitSurface(textSurf, nullptr, canvas, &dstRect);
+        } else {
+            SDL_BlitScaled(textSurf, nullptr, canvas, &dstRect);
+        }
+        SDL_FreeSurface(textSurf);
     }
 }
 
@@ -1087,6 +1419,7 @@ void ypaworld_func158__sub4__sub1__sub4(NC_STACK_ypaworld *yw, UserData *usr, TI
         }
 
         GFX::Engine.raster_func204(&brf->MapBlitParams);
+        yw_RenderBriefingLocations(yw, brf, false, 0);
 
         GFX::Engine.draw2DandFlush();
 
@@ -1099,6 +1432,9 @@ void ypaworld_func158__sub4__sub1__sub4(NC_STACK_ypaworld *yw, UserData *usr, TI
         GFX::Engine.ProcessDrawSeq(stru_5C91D0.cmdCommands, &stru_5C91D0.cmdInclude);
 
         ypaworld_func158__sub4__sub1__sub4__sub2(yw, brf, inpt, 0, 2);
+
+        // Location names last, so no map icon covers them.
+        yw_RenderBriefingLocations(yw, brf, false, 1);
     }
 }
 
@@ -1457,7 +1793,7 @@ void ypaworld_func158__sub4__sub1__sub6__sub3__sub6(NC_STACK_ypaworld *yw, TBrie
 {
     int v14 = (yw->_screenSize.x / 2) * -0.934375;
     int v13 = (yw->_screenSize.x / 2) * 0.03125;
-    int v16 = (yw->_screenSize.y / 2) * -0.9333333333333333;
+    int v16 = (yw->_screenSize.y / 2) * -0.985; // level name as high as possible, clear of the map grid
 
     const std::string v7 = yw->GetLevelName(yw->_levelInfo);
 
@@ -2245,6 +2581,7 @@ void yw_debriefUpdate(NC_STACK_ypaworld *yw, TInputState *inpt)
         }
 
         GFX::Engine.raster_func204(&brf->MapBlitParams);
+        yw_RenderBriefingLocations(yw, brf, true, 0);
     }
 
     switch ( brf->Stage )
@@ -2274,4 +2611,7 @@ void yw_debriefUpdate(NC_STACK_ypaworld *yw, TInputState *inpt)
         break;
     }
 
+    // Location names last, so no map icon covers them.
+    if ( brf->Stage != TBriefengScreen::STAGE_LOADED )
+        yw_RenderBriefingLocations(yw, brf, true, 1);
 }

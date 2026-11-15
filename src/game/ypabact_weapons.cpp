@@ -397,16 +397,16 @@ bool ypabact_UsesMissileTargeting(const World::TWeapProto &wproto)
 
 bool ypabact_IsCompatibleMultiTargetWeapon(const World::TWeapProto &wproto)
 {
-    return ypabact_UsesMissileTargeting(wproto) ||
+    return wproto.IsLaser() || ypabact_UsesMissileTargeting(wproto) ||
            ypabact_IsHomingBombWeapon(wproto);
 }
 
-int ypabact_GetMultiTargetLimit(const World::TWeapProto &wproto, int weaponCount)
+int ypabact_GetMultiTargetLimit(const NC_STACK_ypabact *launcher, const World::TWeapProto &wproto, int weaponCount)
 {
-    if ( !ypabact_IsCompatibleMultiTargetWeapon(wproto) || wproto.multi_target <= 1 || weaponCount <= 1 )
+    if ( !launcher || !ypabact_IsCompatibleMultiTargetWeapon(wproto) || launcher->_num_targets <= 1 || weaponCount <= 1 )
         return 0;
 
-    int maxTargets = wproto.multi_target;
+    int maxTargets = launcher->_num_targets;
     if ( maxTargets > weaponCount )
         maxTargets = weaponCount;
 
@@ -669,7 +669,7 @@ void ypabact_UpdateHUDWeaponMultiLockTargets(NC_STACK_ypabact *launcher, const b
     if ( !launcher || !launcher->getBACT_pWorld() || !(launcher->_oflags & BACT_OFLAG_USERINPT) )
         return;
 
-    int maxTargets = ypabact_GetMultiTargetLimit(wproto, weaponCount);
+    int maxTargets = ypabact_GetMultiTargetLimit(launcher, wproto, weaponCount);
     if ( maxTargets <= 1 )
     {
         launcher->getBACT_pWorld()->_hudMissileMultiLockTargets.clear();
@@ -745,7 +745,7 @@ NC_STACK_ypabact *ypabact_SelectNextHomingCycleTarget(NC_STACK_ypabact *launcher
     collectArg.tgType = BACT_TGT_TYPE_DRCT;
     collectArg.tgt_pos = launcher->_position + targetingArg->field_4 * YPA_MISSILE_MULTI_TARGET_RANGE;
 
-    // Cycle Target traverses the full natural candidate list. multi_target is
+    // Cycle Target traverses the full natural candidate list. num_targets is
     // volley fan-out only and does not limit manual cycling.
     std::vector<NC_STACK_ypabact *> rawTargets = ypabact_CollectMissileMultiTargets(
         launcher, &collectArg, wproto, YPA_HOMING_TARGET_CYCLE_MAX);

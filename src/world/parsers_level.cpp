@@ -689,7 +689,8 @@ int LevelLocationParser::Handle(ScriptParser::Parser &parser, const std::string 
                 ypa_log_out("WARNING: ignored invalid location sound path.\n");
             }
         } else if (!StriCmp(key,"point")) {
-            const size_t split=text.find('|');
+            size_t split=text.find('|');
+            if (split==std::string::npos) split=text.find('_');
             if (split==std::string::npos || _value.points.size()>=256) _valid=false;
             else {
                 size_t usedX=0, usedZ=0;

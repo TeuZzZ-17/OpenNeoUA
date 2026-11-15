@@ -84,7 +84,7 @@ void NC_STACK_ypaworld::WriteLocations(FSMgr::FileHandle *file)
         if (!area.sound.empty()) file->printf("   sound = %s\n",area.sound.c_str());
         file->printf("   fade_in_ms = %d\n   hold_ms = %d\n   fade_out_ms = %d\n",
                      area.fadeIn,area.hold,area.fadeOut);
-        for (const auto &p:area.points) file->printf("   point = %.5f_%.5f\n",p.x,p.z);
+        for (const auto &p:area.points) file->printf("   point = %.5f|%.5f\n",p.x,p.z);
         file->printf("end\n");
     }
 }

@@ -189,13 +189,13 @@ void TestBelowCompatibility(WorldProbe &w, const World::TWeapProto *wp) {
           miss.fire_trigger_area_target == &enemy, "fallback acquires enemy sphere touching the below cap");
     const std::vector<NC_STACK_ypabact *> excluded;
     enemy._position = top + vec3d(0, 1200, 0);
-    Check(ypabact_IsVerticalLaserMultiCandidate(&shooter, &enemy, false, top, 2000, 0, &box, excluded),
+    Check(ypabact_IsDownwardLaserMultiCandidate(&shooter, &enemy, false, top, 2000, box, excluded),
           "vertical laser secondary selection shares finite below-box geometry");
     enemy._position.y += 11;
-    Check(!ypabact_IsVerticalLaserMultiCandidate(&shooter, &enemy, false, top, 2000, 0, &box, excluded),
+    Check(!ypabact_IsDownwardLaserMultiCandidate(&shooter, &enemy, false, top, 2000, box, excluded),
           "vertical laser cannot select secondary targets beyond below-box cap");
     enemy._position = top + vec3d(100, 100, 0);
-    Check(!ypabact_IsVerticalLaserMultiCandidate(&shooter, &enemy, false, top, 120, 0, &box, excluded),
+    Check(!ypabact_IsDownwardLaserMultiCandidate(&shooter, &enemy, false, top, 120, box, excluded),
           "finite below-box secondary selection respects actual beam reach as well as volume depth");
 
     shooter._rotation = mat3x3::RotateY(C_PI_2);
@@ -220,7 +220,7 @@ void TestTankElevation() {
                            "new_weapon 13", "model = laser", "life_time = 6000", "ai_fire_trigger_box_forward_xyz = 60|40|900", "end",
                            "new_weapon 14", "model = rocket", "ai_fire_trigger_box_forward_xyz = 1000|1000|900", "end",
                            "new_weapon 15", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 170|170|900", "end",
-                           "new_weapon 16", "model = missile", "multi_target = 4", "ai_fire_trigger_box_forward_xyz = 1000|1000|900", "end"}),
+                           "new_weapon 16", "model = missile", "ai_fire_trigger_box_forward_xyz = 1000|1000|900", "end"}),
           "tank elevation weapon fixtures parsed");
     TankProbe tank; tank.Bind(w);
     Unit enemy; enemy.Bind(w, 2, 500, tank._position + vec3d(0, -300, 500));
@@ -373,7 +373,7 @@ void TestDownwardCone(WorldProbe &w) {
     Check(ParseWeapons(w, {
         "new_weapon 22", "ai_fire_trigger_cone_below_xyz = 90|60|500", "model = bomb", "end",
         "new_weapon 23", "model = homing_bomb", "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
-        "new_weapon 24", "model = vertical_laser", "life_time = 2000",
+        "new_weapon 24", "model = laser", "life_time = 2000",
         "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
         "new_weapon 25", "model = rocket", "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
         "new_weapon 26", "model = laser", "ai_fire_trigger_cone_below_xyz = 90|60|500", "end",
@@ -383,10 +383,10 @@ void TestDownwardCone(WorldProbe &w) {
         "new_weapon 29", "model = bomb", "ai_fire_trigger_cone_below_xyz = 90|nan|500", "end",
         "new_weapon 30", "model = bomb", "ai_fire_trigger_cone_below_xyz = 0", "end"
     }), "downward-cone parser fixtures loaded");
-    for (int weapon : {22, 23, 24})
+    for (int weapon : {22, 23, 24, 26})
         Check(w._weaponProtos[weapon].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_CONE_BELOW,
               "bomb, homing bomb and vertical laser accept the downward cone");
-    for (int weapon : {25, 26, 27, 28, 29, 30})
+    for (int weapon : {25, 27, 28, 29, 30})
         Check(!w._weaponProtos[weapon].HasAIFireTriggerArea(),
               "unsupported, conflicting, invalid or disabled downward cone retains legacy control");
     Check(ParseWeapons(w, {"modify_weapon 27", "ai_fire_trigger_box_below_xyz = 0", "end"}) &&
@@ -430,18 +430,18 @@ void TestDownwardCone(WorldProbe &w) {
           "downward-cone fallback reaches the common launch target");
 
     const std::vector<NC_STACK_ypabact *> excluded;
-    Check(ypabact_IsVerticalLaserMultiCandidate(&shooter, &enemy, false, area.top, 1000, 0, &area, excluded),
+    Check(ypabact_IsDownwardLaserMultiCandidate(&shooter, &enemy, false, area.top, 1000, area, excluded),
           "vertical laser accepts secondary targets through the shared downward cone");
-    Check(ypabact_FindNearestVerticalLaserTarget(&shooter, area.top, 1000, 0, &area, false, excluded) == &enemy,
+    Check(ypabact_FindNearestDownwardLaserTarget(&shooter, area.top, 1000, area, false, excluded) == &enemy,
           "configured downward cone replaces the legacy laser trigger radius during target search");
     enemy._position = area.top + area.forward*600;
-    Check(!ypabact_IsVerticalLaserMultiCandidate(&shooter, &enemy, false, area.top, 1000, 0, &area, excluded),
+    Check(!ypabact_IsDownwardLaserMultiCandidate(&shooter, &enemy, false, area.top, 1000, area, excluded),
           "vertical laser does not select secondary targets past the cone cap");
     TFireTriggerArea wide = area; wide.coneX = 4;
     enemy._position = area.top + area.forward*100 + area.right*200;
-    Check(!ypabact_IsVerticalLaserMultiCandidate(&shooter, &enemy, false, area.top, 150, 0, &wide, excluded),
+    Check(!ypabact_IsDownwardLaserMultiCandidate(&shooter, &enemy, false, area.top, 150, wide, excluded),
           "downward-cone secondary target still respects the beam's physical reach");
-    shooter._vertical_laser_active = true; shooter._vertical_laser_weapon = 24;
+    shooter._laser_active = true; shooter._laser_weapon = 24;
     bact_arg101 held{}; held.unkn = 1; held.pos = area.top + area.forward*100;
     Check(ypabact_ShouldPersistAILaserFire(&shooter, 24, &held, nullptr),
           "vertical laser remains active while its target is inside the downward cone");
@@ -777,6 +777,7 @@ LaunchSnapshot RunLaunchSequence(WorldProbe &world, Unit &launcher, Unit &primar
                                  const World::TWeapProto &weapon,
                                  const LaunchScenario &scenario, bool withGate) {
     ResetLaunchState(launcher, scenario);
+        launcher._num_targets = scenario.expectMultiTarget ? 3 : 1;
     constexpr unsigned int seed = 915723;
     std::srand(seed);
     LaunchSnapshot result;
@@ -1343,11 +1344,11 @@ void TestRealLaunchGateParity() {
         "shot_time_user = 200", "salve_shots = 2", "salve_delay = 300", "end",
         "new_weapon 31", "model = rocket", "start_speed = 100",
         "ai_fire_trigger_cone_forward_xyz = 80|40|600", "end",
-        "new_weapon 32", "model = missile", "start_speed = 100", "multi_target = 3",
+        "new_weapon 32", "model = missile", "start_speed = 100",
         "ai_fire_trigger_cone_forward_xyz = 80|40|600", "end",
-        "new_weapon 33", "model = homing_bomb", "multi_target = 3",
+        "new_weapon 33", "model = homing_bomb",
         "ai_fire_trigger_box_below_xyz = 400|1200|400", "end",
-        "new_weapon 34", "model = homing_bomb", "multi_target = 3",
+        "new_weapon 34", "model = homing_bomb",
         "ai_fire_trigger_cone_below_xyz = 80|60|600", "end"}),
         "real-launch fixture weapons parsed");
     Nucleus::ClassList.push_back(Nucleus::MakeClassDescr<NC_STACK_ypamissile>());
@@ -1380,6 +1381,7 @@ void TestRealLaunchGateParity() {
     for (const LaunchScenario &scenario : scenarios) {
         Unit launcher; launcher.Bind(world, 1, gid++, vec3d(2400, 0, -2400));
         ResetLaunchState(launcher, scenario);
+        launcher._num_targets = scenario.expectMultiTarget ? 3 : 1;
         const World::TWeapProto &weapon = world._weaponProtos[scenario.weapon];
         TFireTriggerArea area;
         Check(launcher.GetAIFireTriggerArea(weapon, &area), "real-launch weapon exposes its configured trigger shape");
@@ -1509,21 +1511,29 @@ void TestSmartClusterPriority() {
 
 void TestImplicitFeatureGroups() {
     WorldProbe w;
+    Check(!ParseWeapons(w, {"new_weapon 207", "model = laser", "end"}),
+          "laser without a fire volume is a script error");
+    Check(!ParseWeapons(w, {"new_weapon 207", "model = laser", "ai_fire_trigger_box_forward_xyz = 0", "end"}),
+          "disabled laser volume is a script error");
+    Check(!ParseWeapons(w, {"new_weapon 207", "model = laser", "ai_fire_trigger_box_forward_xyz = 80|80|500",
+                           "ai_fire_trigger_cone_below_xyz = 30|30|500", "end"}),
+          "conflicting laser volumes are a script error");
+
     Check(ParseWeapons(w, {
         "new_weapon 200", "model = missile", "cluster_count = 2", "cluster_weapon_id = 1", "end",
         "new_weapon 201", "model = missile", "chain_max_jumps = 2", "chain_radius = 300", "end",
-        "new_weapon 202", "model = laser", "laser_chain_max_jumps = 2", "laser_chain_radius = 300", "end",
-        "new_weapon 203", "model = missile", "mesh_tracer_path = Data/Models/3ds/Tracer.3ds", "mesh_tracer_size_xyz = 1|1|80", "end",
-        "new_weapon 204", "model = laser", "laser_mesh_path = Data/Models/3ds/laser.3ds", "end",
-        "new_weapon 205", "model = laser", "end",
+        "new_weapon 202", "model = laser", "laser_chain_max_jumps = 2", "laser_chain_radius = 300", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "end",
+        "new_weapon 203", "model = missile", "tracer_3ds = Data/Models/3ds/Tracer.3ds", "tracer_size_xyz = 1|1|80", "end",
+        "new_weapon 204", "model = laser", "laser_fade_inout = 100|200", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "end",
+        "new_weapon 205", "model = laser", "ai_fire_trigger_box_forward_xyz = 80|80|1000", "end",
         "new_weapon 206", "model = missile", "cluster_count = 2", "end"
     }), "implicit weapon fixtures parsed");
     Check(w._weaponProtos[200].cluster.enable, "cluster child definitions activate cluster");
     Check(w._weaponProtos[201].chain.allow, "chain child definitions activate chain");
     Check(w._weaponProtos[202].laser_chain_allow, "laser chain child definitions activate laser chain");
     Check(w._weaponProtos[203].tracer.enabled, "tracer child definitions activate tracer");
-    Check(w._weaponProtos[204].laser_mesh.enabled, "laser mesh child definitions activate laser mesh");
-    Check(!w._weaponProtos[205].IsVerticalLaser(), "normal laser stays normal without vertical model");
+    Check(w._weaponProtos[204].laser_fade_in == 100 && w._weaponProtos[204].laser_fade_out == 200, "laser spatial fades parsed");
+    Check(!w._weaponProtos[205].IsDownwardLaser(), "normal laser stays normal without vertical model");
     Check(w._weaponProtos[206].cluster.enable && w._weaponProtos[206].cluster.weapon_id == 0,
           "incomplete cluster requests activation but has no valid child weapon");
 
@@ -1720,7 +1730,7 @@ int main() {
                            "new_weapon 5", "model = bomb", "ai_fire_trigger_box_below_xyz = -1|1200|100", "end",
                            "new_weapon 6", "model = bomb", "ai_fire_trigger_box_below_xyz = nan|1200|100", "end",
                            "new_weapon 7", "model = bomb", "end",
-                           "new_weapon 8", "model = vertical_laser", "ai_fire_trigger_box_below_xyz = 300|1200|300", "end",
+                           "new_weapon 8", "model = laser", "ai_fire_trigger_box_below_xyz = 300|1200|300", "end",
                            "new_weapon 9", "model = laser", "ai_fire_trigger_box_below_xyz = 300|1200|300", "end",
                            "new_weapon 10", "ai_fire_trigger_box_forward_xyz = 200|100|500", "model = rocket", "end",
                            "new_weapon 11", "model = rocket", "ai_fire_trigger_cone_forward_xyz = 90|30|500", "end",
@@ -1747,7 +1757,7 @@ int main() {
     Check(wp[6].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_NONE, "non-finite below dimension disables shape");
     Check(wp[7].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_NONE, "absent shape keeps legacy fire control");
     Check(wp[8].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_BOX_BELOW, "vertical laser accepts below shape");
-    Check(wp[9].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_NONE, "normal laser rejects below shape");
+    Check(wp[9].IsDownwardLaser(), "laser below shape selects downward fire");
     Check(wp[10].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_BOX_FORWARD, "forward shape before model is accepted at block end");
     Check(wp[11].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_CONE_FORWARD, "cone shape after model is accepted");
     Check(wp[12].GetAIFireTriggerShape() == World::TWeapProto::AI_TRIGGER_NONE, "bomb rejects forward shape");

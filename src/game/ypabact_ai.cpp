@@ -1938,11 +1938,6 @@ bool NC_STACK_ypabact::HasVerticalPursuitTarget()
     return _primTtype == BACT_TGT_TYPE_UNIT && isEligible(_primT.pbact);
 }
 
-float ypabact_AiVerticalFireTriggerRadius(const World::TWeapProto &wproto)
-{
-    return wproto.vertical_laser_ai_trigger_radius > 0.0f ? wproto.vertical_laser_ai_trigger_radius : 300.0f;
-}
-
 bool NC_STACK_ypabact::IsAnyKidWithoutSecondUnitTarget() const
 {
     for ( NC_STACK_ypabact* node : _kidList )
@@ -2508,15 +2503,6 @@ size_t NC_STACK_ypabact::CheckFireAI(bact_arg101 *arg)
             // AI movement and weapon-selection logic keep repositioning.
             return 0;
         }
-    }
-
-    if ( v8 && v8->IsVerticalLaser() )
-    {
-        vec3d fireOrigin = _position + _rotation.Transpose().Transform(_fire_pos);
-        if ( arg->pos.y < fireOrigin.y )
-            return 0;
-
-        return (arg->pos.XZ() - fireOrigin.XZ()).length() <= ypabact_AiVerticalFireTriggerRadius(*v8);
     }
 
     if ( arg->unkn == 2 )

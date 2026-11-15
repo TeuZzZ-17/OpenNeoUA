@@ -271,7 +271,7 @@ void NC_STACK_ypaworld::UpdateMobilePowerFX()
 
             const int32_t lifeTime = yw_RandomInRange(profile.lifetime_min,
                                                       profile.lifetime_max);
-            const int32_t id = SpawnAttachedTransientVP(0, generator, local,
+            const int32_t id = SpawnAttachedTransientVP(profile.vp, generator, local,
                                                         lifeTime, 1.0, false,
                                                         profile.tint,
                                                         profile.scale,
@@ -282,7 +282,8 @@ void NC_STACK_ypaworld::UpdateMobilePowerFX()
                                                         false,
                                                         profile.fade_in,
                                                         profile.fade_out,
-                                                        profile.mesh3ds);
+                                                        profile.mesh3ds,
+                                                        profile.basePath);
             if ( id > 0 && !_transientVPs.empty() && _transientVPs.back().id == id )
             {
                 TTransientVP &fx = _transientVPs.back();

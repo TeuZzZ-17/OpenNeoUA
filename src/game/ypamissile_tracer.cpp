@@ -55,7 +55,7 @@ void NC_STACK_ypamissile::StartWeaponTracer()
     if ( !_weaponTracerStarted )
         return;
 
-    // mesh_tracer_pos_* is a projectile-local visual offset. Apply it to every
+    // tracer_pos_* is a projectile-local visual offset. Apply it to every
     // sampled tracer point, starting here at launch, so the complete trail stays
     // attached to the authored position relative to the projectile transform.
     const vec3d point = GetWeaponTracerPosition();

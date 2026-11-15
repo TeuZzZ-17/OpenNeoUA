@@ -998,7 +998,7 @@ float ParseBoundedNonNegativeFiniteOrFallback(
     return result > maximum ? maximum : result;
 }
 
-static bool ParseMeshTracerUniformSize(ScriptParser::Parser &parser,
+static bool ParseTracerUniformSize(ScriptParser::Parser &parser,
                                        const std::string &value,
                                        float &result)
 {
@@ -1014,7 +1014,7 @@ static bool ParseMeshTracerUniformSize(ScriptParser::Parser &parser,
     return true;
 }
 
-bool ParseMeshTracerParam(ScriptParser::Parser &parser,
+bool ParseTracerParam(ScriptParser::Parser &parser,
                             const std::string &p1,
                             const std::string &p2,
                             World::TWeaponTracerConfig &config,
@@ -1059,9 +1059,9 @@ bool ParseMeshTracerParam(ScriptParser::Parser &parser,
         return true;
     }
 
-    if ( !StriCmp(p1, key("path")) )
+    if ( !StriCmp(p1, key("3ds")) )
     {
-        config.mesh_path = p2;
+        config.path_3ds = p2;
         return true;
     }
 
@@ -1080,7 +1080,7 @@ bool ParseMeshTracerParam(ScriptParser::Parser &parser,
     if ( !StriCmp(p1, key("head_size")) )
     {
         float size = 0.0f;
-        config.has_head_size = ParseMeshTracerUniformSize(parser, p2, size);
+        config.has_head_size = ParseTracerUniformSize(parser, p2, size);
         config.head_size = config.has_head_size ? size : 0.0f;
         return true;
     }
@@ -1088,7 +1088,7 @@ bool ParseMeshTracerParam(ScriptParser::Parser &parser,
     if ( !StriCmp(p1, key("tail_size")) )
     {
         float size = 0.0f;
-        config.has_tail_size = ParseMeshTracerUniformSize(parser, p2, size);
+        config.has_tail_size = ParseTracerUniformSize(parser, p2, size);
         config.tail_size = config.has_tail_size ? size : 0.0f;
         return true;
     }
@@ -1118,81 +1118,6 @@ bool ParseMeshTracerParam(ScriptParser::Parser &parser,
     {
         config.pulse_speed = ParseBoundedNonNegativeFiniteOrFallback(
             parser, p2, 10.0f, 0.0f);
-        return true;
-    }
-
-    return false;
-}
-
-bool ParseLaserMeshParam(
-    ScriptParser::Parser &parser, const std::string &p1,
-    const std::string &p2, World::TWeapProto::TLaserMeshConfig &config)
-{
-    if ( !StriCmp(p1.substr(0, 11), "laser_mesh_") )
-        config.enabled = true;
-
-    if ( !StriCmp(p1, "laser_mesh_path") )
-    {
-        config.mesh_path = p2;
-        return true;
-    }
-
-    if ( ParseTintParam(parser, "laser_mesh_tint", p1, p2, config.tint, true) )
-        return true;
-
-    if ( !StriCmp(p1, "laser_mesh_size_xy") )
-    {
-        std::string size[2];
-        if ( ReadTuple(p1, p2, 2, size) )
-        {
-            // A non-positive or malformed primary size leaves the external mesh
-            // renderer disabled for this weapon; no hidden geometry is substituted.
-            config.size_x = ParseBoundedPositiveFiniteOrZero(parser, size[0], 100.0f);
-
-            // The secondary axis is optional. Zero, negative and malformed values
-            // deliberately clear the override so it inherits size_x.
-            const float sizeY = ParseBoundedNonNegativeFiniteOrFallback(
-                parser, size[1], 100.0f, -1.0f);
-            config.has_size_y = sizeY > 0.0f;
-            config.size_y = config.has_size_y ? sizeY : 0.0f;
-        }
-        return true;
-    }
-
-    if ( !StriCmp(p1, "laser_mesh_glow_rate") )
-    {
-        config.glow_rate = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 10.0f, 0.0f);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "laser_mesh_pulse_rate") )
-    {
-        config.pulse_rate = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 10.0f, 0.0f);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "laser_mesh_pulse_speed") )
-    {
-        config.pulse_speed = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 10.0f, 0.0f);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "laser_mesh_noise_rate") )
-    {
-        config.noise_rate = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 10.0f, 0.0f);
-        return true;
-    }
-
-    if ( !StriCmp(p1, "laser_mesh_impact_fade_length") )
-    {
-        // World-space distance over which the laser body fades only when the
-        // beam has a real unit/terrain/building contact. Zero/invalid disables.
-        config.impact_fade_length = ParseBoundedNonNegativeFiniteOrFallback(
-            parser, p2, 12000.0f, 0.0f);
         return true;
     }
 

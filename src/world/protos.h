@@ -116,16 +116,16 @@ struct TWeaponTracerConfig
     float size_z = 300.0f;
     float size_x = 3.0f;
     // Runtime dimensions/effects are independent from geometry. Tracer geometry
-    // is authored externally through mesh_path; there is no procedural fallback.
+    // is authored externally through path_3ds; there is no procedural fallback.
     bool has_size_y = false;
     float size_y = 0.0f;
     vec3d pos = vec3d(0.0, 0.0, 0.0);
 
     // Required external geometry for visible tracers. The authoring prefix
-    // exposes this as mesh_tracer_path. Canonical paths are Data-relative
+    // exposes this as tracer_3ds. Canonical paths are Data-relative
     // (for example Data/Models/3ds/tracer_cross.3ds). Empty or
     // failed paths intentionally render no tracer.
-    std::string mesh_path;
+    std::string path_3ds;
 
     bool has_tint_head = false;
     bool has_tint_tail = false;
@@ -215,7 +215,7 @@ struct TChainFXVisual
 
 struct TChainFXPhysical;
 
-// One new_cloud profile: a volume of floating 3DS meshes around the viewer, a SuperItem
+// One new_cloud profile: a volume of floating models (VP, BASE or 3DS) around the viewer, a SuperItem
 // fallout or a Mobile Power generator (rain of radiation, spores, snow, power aura...).
 struct TAtmosphericFXProfile
 {
@@ -224,7 +224,10 @@ struct TAtmosphericFXProfile
     std::string name;
     std::string loop_sound;
     int loop_sound_volume = 100;
+    // Visual source: any of VP number, 3DS path, BASE path (3DS wins, then BASE, then VP).
+    int vp = 0;
     std::string mesh3ds;
+    std::string basePath;
     int count = 0;
     vec3d spawn_radius = vec3d(0.0, 0.0, 0.0);
     vec3d spawn_offset = vec3d(0.0, 0.0, 0.0);
@@ -311,6 +314,15 @@ struct TDecalSizeOverride
     bool defined = false;
     float size_min = 0.0f;
     float size_max = 0.0f;
+};
+
+// One brush stamp of a continuous burn (laser_burn_decal_frequency): the decal is laid along `dir`
+// (travel direction, projected on the surface) and made `length` units long, so
+// consecutive stamps overlap into one strip. The width is the profile's own size.
+struct TDecalStroke
+{
+    vec3d dir;
+    float length = 0.0f;
 };
 
 // OpenNeoUA custom: terrain crater dug where a weapon hits the ground.
@@ -1097,6 +1109,7 @@ struct TVhclProto
     bool fire_x_step_defined = false;
     bool fire_x_slots_defined = false;
     bool fire_x_advanced = false;
+    int16_t num_targets = 0; // Vehicle target capacity; 0/1 concentrates compatible weapons.
     int16_t num_weapons = 0;
     int16_t num_weapons_min = 0;
     int16_t num_weapons_max = 0;
@@ -1177,35 +1190,6 @@ struct TVhclProto
 struct TWeapProto
 {
 
-    // OpenNeoUA custom: optional external 3DS body for continuous laser beams.
-    // The configuration is nested in the weapon prototype so normal and vertical
-    // lasers share one data-driven visual path without changing gameplay state.
-    // When enabled, external geometry is mandatory: empty/failed mesh paths render
-    // no beam body and never fall back to procedural or vp_normal geometry.
-    struct TLaserMeshConfig
-    {
-        bool enabled = false;
-        std::string mesh_path;
-        TVisualTint tint;
-        float size_x = 5.0f;
-        bool has_size_y = false;
-        float size_y = 0.0f;
-        float glow_rate = 1.0f;
-        float pulse_rate = 0.0f;
-        float pulse_speed = 0.0f;
-        float noise_rate = 0.0f;
-        // Visual-only fade distance before a real unit/world contact. Zero keeps
-        // the current constant-alpha beam; the endpoint itself becomes nearly
-        // transparent without changing the gameplay hit point.
-        float impact_fade_length = 0.0f;
-
-        float ResolveSizeY() const
-        {
-            return has_size_y && std::isfinite(size_y) && size_y > 0.0f
-                       ? size_y
-                       : size_x;
-        }
-    };
 
     enum
     {
@@ -1274,10 +1258,13 @@ struct TWeapProto
         return (_weaponFlags & WEAPON_FLAG_LASER) != 0;
     }
 
-    // Both laser model names share the continuous-beam implementation.
-    bool IsVerticalLaser() const
+    // The downward fire volume selects bomber behavior for the one laser model.
+    bool IsDownwardLaser() const
     {
-        return IsLaser() && vertical_laser_enable;
+        if ( !IsLaser() )
+            return false;
+        const AIFireTriggerShape shape = GetAIFireTriggerShape();
+        return shape == AI_TRIGGER_BOX_BELOW || shape == AI_TRIGGER_CONE_BELOW;
     }
 
     // OpenNeoUA custom: true only for carrier payloads declared as
@@ -1311,7 +1298,7 @@ struct TWeapProto
 
     bool IsBombLike() const
     {
-        return _weaponFlags == WEAPON_FLAGS_BOMB || IsHomingBomb() || IsVerticalLaser();
+        return _weaponFlags == WEAPON_FLAGS_BOMB || IsHomingBomb() || IsDownwardLaser();
     }
 
     int GetFireControlFlags() const
@@ -1449,15 +1436,12 @@ struct TWeapProto
     std::string ramp_up_overheat_icon;
     int salve_shots = 0;
     int salve_delay = 0;
-    // OpenNeoUA: generic multi-target count for compatible homing weapon models.
-    // Consumed by missile and homing_bomb; 0/1 keeps single-target behaviour.
-    int multi_target = 0;
     int homing_time = 0; // ms of guidance for missile/homing_bomb; 0 keeps existing behavior
     // OpenNeoUA custom: extra turn speed (rad/s) toward a live target for missile/homing_bomb,
     // active while guidance lasts. 0 = vanilla.
     float homing_force = 0.0f;
     // OpenNeoUA custom: shared continuous beam parameters for model = laser.
-    // The vertical_laser model selects downward fire. "energy" is static base damage per tick; the class
+    // The fire volume selects beam direction. "energy" is static base damage per tick; the class
     // multipliers below (energy_heli/tank/flyer/robo) are applied like normal weapons.
     int   laser_energy_tick_time = 250;        // ms between damage ticks for AI/non-player fire
     int   laser_energy_tick_time_user = 150;   // ms between damage ticks for player-controlled fire
@@ -1468,10 +1452,12 @@ struct TWeapProto
     int   laser_chain_max_jumps = 0;           // max unit-to-unit chain segments after the primary hit
     float laser_chain_radius = 0.0;            // search radius around the last chained unit
     float laser_chain_energy_mult = 1.0;       // cumulative damage multiplier per chain jump
-    int   laser_beam_count = 1;                // total direct shooter-to-target laser beams (<=1 = off)
-    bool  vertical_laser_enable = false;          // 1 = model=laser uses the downward vertical-fire mode
-    float vertical_laser_ai_trigger_radius = 300.0; // X/Z distance required before AI fires downward
-    TLaserMeshConfig laser_mesh;                    // visual-only mesh body for laser, including vertical mode
+    float laser_fade_in = 0.0f;             // world units faded in from the muzzle; 0 disables
+    float laser_fade_out = 0.0f;            // world units faded out toward contact; 0 disables
+    // Continuous burn: decals per 100 world units of path while the beam's ground contact
+    // point moves (0.05..10, fractions allowed). Paints the ground_decal impact_world block
+    // as a strip, and digs crater_* along it; 0 = off.
+    float laser_burn_decal_frequency = 0.0f;
     // Optional AI acquisition volumes. Forward dimensions use muzzle-local axes;
     // cones store two full angles in degrees followed by axial depth.
     vec3d ai_fire_trigger_box_below; // X width, Y downward depth, Z horizontal length
@@ -1492,7 +1478,10 @@ struct TWeapProto
         // select one of two differently authored volumes.
         if ( (int)below + (int)forward + (int)cone + (int)coneBelow != 1 )
             return AI_TRIGGER_NONE;
-        if ( IsBombLike() )
+        if ( IsLaser() )
+            return below ? AI_TRIGGER_BOX_BELOW : coneBelow ? AI_TRIGGER_CONE_BELOW :
+                   forward ? AI_TRIGGER_BOX_FORWARD : cone ? AI_TRIGGER_CONE_FORWARD : AI_TRIGGER_NONE;
+        if ( _weaponFlags == WEAPON_FLAGS_BOMB || IsHomingBomb() )
             return below ? AI_TRIGGER_BOX_BELOW : coneBelow ? AI_TRIGGER_CONE_BELOW : AI_TRIGGER_NONE;
         if ( !(_weaponFlags & WEAPON_FLAG_PROJECTILE) || IsKamikaze() || IsArtilleryShell() )
             return AI_TRIGGER_NONE;

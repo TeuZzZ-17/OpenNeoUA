@@ -702,9 +702,9 @@ void AtmosphericFXProfileParser::Finish()
 {
     TAtmosphericFXProfile &profile = _work;
 
-    if ( profile.mesh3ds.empty() || profile.count <= 0 )
+    if ( (profile.vp <= 0 && profile.mesh3ds.empty() && profile.basePath.empty()) || profile.count <= 0 )
     {
-        ypa_log_out("WARNING: new_cloud %d is missing mesh_3ds or has count <= 0; profile ignored.\n", _profileID);
+        ypa_log_out("WARNING: new_cloud %d has no vp, 3ds or base, or has count <= 0; profile ignored.\n", _profileID);
         return;
     }
 
@@ -779,8 +779,12 @@ int AtmosphericFXProfileParser::Handle(ScriptParser::Parser &parser,
         _profile.loop_sound = parser.FullLineValue(); // Whole line: file names may contain spaces.
     else if ( !StriCmp(p1, "loop_sound_volume") )
         _profile.loop_sound_volume = parser.stol(p2, nullptr, 0);
-    else if ( !StriCmp(p1, "mesh_3ds") )
+    else if ( !StriCmp(p1, "vp") )
+        _profile.vp = parser.stol(p2, nullptr, 0);
+    else if ( !StriCmp(p1, "3ds") )
         _profile.mesh3ds = parser.FullLineValue(); // Whole line: file names may contain spaces.
+    else if ( !StriCmp(p1, "base") )
+        _profile.basePath = parser.FullLineValue();
     else if ( !StriCmp(p1, "count") )
         _profile.count = parser.stol(p2, nullptr, 0);
     else if ( !StriCmp(p1, "spawn_radius_xyz") )

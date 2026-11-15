@@ -110,6 +110,20 @@ static void GroundDecalAxes(const vec3d &normal, float angle, vec3d *axisT, vec3
     *axisB = baseT * -sine + baseB * cosine;
 }
 
+// Angle that turns axisT (see GroundDecalAxes) onto the travel direction projected on
+// the surface. Zero when the direction is parallel to the normal.
+static float GroundDecalStrokeAngle(const vec3d &normal, const vec3d &direction)
+{
+    vec3d baseT = std::fabs(normal.x) < 0.9 ? vec3d(1.0, 0.0, 0.0) : vec3d(0.0, 0.0, 1.0);
+    baseT = baseT - normal * baseT.dot(normal);
+    baseT.normalise();
+    const vec3d baseB = normal * baseT;
+    vec3d flat = direction - normal * direction.dot(normal);
+    if ( flat.normalise() <= 0.001f )
+        return 0.0f;
+    return (float)std::atan2(flat.dot(baseB), flat.dot(baseT));
+}
+
 static uint32_t GroundDecalMixSeed(uint32_t seed, uint32_t value)
 {
     seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
@@ -523,7 +537,8 @@ bool NC_STACK_ypaworld::FindWorldSurfaceInSphere(const vec3d &center, float radi
 
 
 bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
-                                         const ypaworld_arg136 &hit)
+                                         const ypaworld_arg136 &hit,
+                                         const World::TDecalStroke *stroke)
 {
     const int limit = World::GroundDecalLimit();
     const bool supportedTrigger =
@@ -548,8 +563,13 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     const float decalSize = GroundDecalResolvedSize(this, hit, config);
     const float decalStretchX = GroundDecalResolvedStretchX(this, hit, config);
     const float decalStretchZ = GroundDecalResolvedStretchZ(this, hit, config);
-    const float decalSizeX = decalSize * decalStretchX;
+    float decalSizeX = decalSize * decalStretchX;
     const float decalSizeZ = decalSize * decalStretchZ;
+    // Burn strip stamp: the long side follows the travel direction.
+    const bool isStroke = stroke && std::isfinite(stroke->length) && stroke->length > 0.0f &&
+                          GroundDecalFinitePoint(stroke->dir);
+    if ( isStroke )
+        decalSizeX = std::max(stroke->length, decalSizeZ * 0.5f);
 
     float edgeFade = std::isfinite(config.ground_decal_edge_fade)
                        ? std::max(0.0f, std::min(config.ground_decal_edge_fade, 10.0f))
@@ -580,10 +600,13 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     }
 
     std::vector<TGroundDecalShapePoint> shape;
-    GroundDecalBuildShape(decalPoints, decalJaggedness,
+    // A strip keeps a smooth outline: ragged ends would show as a dotted line.
+    GroundDecalBuildShape(decalPoints, isStroke ? 0.0f : decalJaggedness,
                           GroundDecalShapeSeed(hit, decalPoints), &shape);
 
-    const float angle = GroundDecalRotation(this, hit, config.ground_decal_random_rotation);
+    float angle = GroundDecalRotation(this, hit, config.ground_decal_random_rotation);
+    if ( isStroke )
+        angle = GroundDecalStrokeAngle(normal, stroke->dir);
     const float decalRadius = 0.5f * std::sqrt(decalSizeX * decalSizeX +
                                                decalSizeZ * decalSizeZ);
 
@@ -646,6 +669,9 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
                            ? std::numeric_limits<int32_t>::max()
                            : (int32_t)end;
     }
+    // Strip stamps are too many to each carry their own smoke.
+    if ( isStroke )
+        return true;
     SpawnGroundDecalSmoke(config.ground_decal_smoke, hit.isectPos, decalRadius,
                           (uint32_t)(GroundDecalRandomUnit(this, hit, 0x534d4f4bu) * 16777216.0f),
                           decalEndTime, building);

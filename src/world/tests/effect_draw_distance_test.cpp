@@ -1,5 +1,5 @@
 // Exercise the production transient renderer without a graphics context.
-#include "game/yw.h"
+#include "game/ypabact_internal.h"
 #include "game/yw_game_impl.h"
 #include "common/global.h"
 #include <cstdio>
@@ -9,8 +9,9 @@ struct CaptureEffect : NC_STACK_base
 {
     int calls=0;
     baseRender_msg captured;
+    std::vector<baseRender_msg> samples;
     size_t Render(baseRender_msg *arg,Instance *,bool) override
-    {++calls;captured=*arg;return 1;}
+    {++calls;captured=*arg;samples.push_back(*arg);return 1;}
 };
 int main()
 {
@@ -22,6 +23,28 @@ int main()
     auto *saved=TF::Engine.GetViewPoint();TF::Engine.SetViewPoint(&view);
     int checks=0,failures=0;
     auto check=[&](bool ok,const char *name){++checks;if(!ok){++failures;std::printf("FAIL %s\n",name);}};
+    // Exercise the real laser spawn -> transient render -> additive fade handoff.
+    {
+        struct Shooter : NC_STACK_ypabact { using NC_STACK_ypabact::_world; } shooter;
+        shooter._world=&world;shooter._oflags=0;shooter._rotation=mat3x3::Ident();
+        World::TWeapProto laser;
+        laser.vp_normal=1;laser.laser_spacing=20;laser.laser_fade_in=200;laser.laser_fade_out=200;
+        ypabact_SpawnLaserBeamVisuals(&shooter,laser,vec3d(0,0,1000),vec3d(0,0,2000),true);
+        baseRender_msg beamArg;beamArg.frameTime=0;
+        yw_RenderTransientVPs(&world,&world._transientVPs,&beamArg);
+        check(model.samples.size()>2,"laser body reaches the real transient renderer");
+        if(model.samples.size()>2)
+        {
+            const auto &first=model.samples.front(), &last=model.samples.back();
+            check(first.tint.a<0.1f && last.tint.a<0.1f,"spatial fade lowers endpoint opacity");
+            check(std::abs(first.vpFadeFactor-first.tint.a)<1e-5 &&
+                  std::abs(last.vpFadeFactor-last.tint.a)<1e-5,
+                  "spatial fade also attenuates additive endpoint intensity");
+            check(model.samples[model.samples.size()/2].vpFadeFactor==1.0f,
+                  "spatial fade leaves beam middle at full intensity");
+        }
+        world._transientVPs.clear();model.samples.clear();model.calls=0;
+    }
     for(float distance:{1000.f,3000.f,4000.f,4999.f,5000.f,9000.f})
     {
         world._transientVPs.clear();model.calls=0;

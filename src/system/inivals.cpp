@@ -447,10 +447,10 @@ Common::Ini::Key IniConf::GfxRegenFXDuration("gfx.regen_fx_duration", Common::In
 Common::Ini::Key IniConf::GfxRegenFXInterval("gfx.regen_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXCount("gfx.regen_fx_count", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXRandomMaxOffset("gfx.regen_fx_random_max_offset", Common::Ini::KT_WORD, std::string("25%"));
-Common::Ini::Key IniConf::GfxRegenMeshSize("gfx.regen_mesh_size", Common::Ini::KT_WORD, std::string("30"));
-Common::Ini::Key IniConf::GfxRegenMeshThickness("gfx.regen_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
-Common::Ini::Key IniConf::GfxRegenMeshRiseSpeed("gfx.regen_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxRegenMeshFade("gfx.regen_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
+Common::Ini::Key IniConf::GfxRegenSymbolSize("gfx.regen_symbol_size", Common::Ini::KT_WORD, std::string("30"));
+Common::Ini::Key IniConf::GfxRegenSymbolThickness("gfx.regen_symbol_thickness", Common::Ini::KT_WORD, std::string("5"));
+Common::Ini::Key IniConf::GfxRegenSymbolRiseSpeed("gfx.regen_symbol_rise_speed", Common::Ini::KT_WORD, std::string("100"));
+Common::Ini::Key IniConf::GfxRegenSymbolFade("gfx.regen_symbol_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
 
 Common::Ini::Key IniConf::GfxDrainFXVP("gfx.drain_fx_vp", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFX3DS("gfx.drain_fx_3ds", Common::Ini::KT_WORD, std::string(""));
@@ -462,10 +462,10 @@ Common::Ini::Key IniConf::GfxDrainFXDuration("gfx.drain_fx_duration", Common::In
 Common::Ini::Key IniConf::GfxDrainFXInterval("gfx.drain_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXCount("gfx.drain_fx_count", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXRandomMaxOffset("gfx.drain_fx_random_max_offset", Common::Ini::KT_WORD, std::string("25%"));
-Common::Ini::Key IniConf::GfxDrainMeshSize("gfx.drain_mesh_size", Common::Ini::KT_WORD, std::string("30"));
-Common::Ini::Key IniConf::GfxDrainMeshThickness("gfx.drain_mesh_thickness", Common::Ini::KT_WORD, std::string("5"));
-Common::Ini::Key IniConf::GfxDrainMeshRiseSpeed("gfx.drain_mesh_rise_speed", Common::Ini::KT_WORD, std::string("100"));
-Common::Ini::Key IniConf::GfxDrainMeshFade("gfx.drain_mesh_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
+Common::Ini::Key IniConf::GfxDrainSymbolSize("gfx.drain_symbol_size", Common::Ini::KT_WORD, std::string("30"));
+Common::Ini::Key IniConf::GfxDrainSymbolThickness("gfx.drain_symbol_thickness", Common::Ini::KT_WORD, std::string("5"));
+Common::Ini::Key IniConf::GfxDrainSymbolRiseSpeed("gfx.drain_symbol_rise_speed", Common::Ini::KT_WORD, std::string("100"));
+Common::Ini::Key IniConf::GfxDrainSymbolFade("gfx.drain_symbol_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
 
 // OpenNeoUA custom: opt-in Data/-relative paths used by the automatic status-icon
 // renderer. Missing, empty or invalid paths disable only that icon category.
@@ -782,10 +782,10 @@ void IniConf::Init()
         , &GfxRegenFXInterval
         , &GfxRegenFXCount
         , &GfxRegenFXRandomMaxOffset
-        , &GfxRegenMeshSize
-        , &GfxRegenMeshThickness
-        , &GfxRegenMeshRiseSpeed
-        , &GfxRegenMeshFade
+        , &GfxRegenSymbolSize
+        , &GfxRegenSymbolThickness
+        , &GfxRegenSymbolRiseSpeed
+        , &GfxRegenSymbolFade
         , &GfxDrainFXVP
         , &GfxDrainFX3DS
         , &GfxDrainFXBase
@@ -796,10 +796,10 @@ void IniConf::Init()
         , &GfxDrainFXInterval
         , &GfxDrainFXCount
         , &GfxDrainFXRandomMaxOffset
-        , &GfxDrainMeshSize
-        , &GfxDrainMeshThickness
-        , &GfxDrainMeshRiseSpeed
-        , &GfxDrainMeshFade
+        , &GfxDrainSymbolSize
+        , &GfxDrainSymbolThickness
+        , &GfxDrainSymbolRiseSpeed
+        , &GfxDrainSymbolFade
         , &UiStatusIconRegen
         , &UiStatusIconDrain
         , &UiStatusIconDamaged

@@ -199,7 +199,6 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->ramp_up_overheat_icon.clear();
         _wpn->salve_delay = 0;
         _wpn->salve_shots = 0;
-        _wpn->multi_target = 0;
         // OpenNeoUA custom: model = laser defaults (vanilla-safe / disabled by default)
         _wpn->laser_energy_tick_time = 250;
         _wpn->laser_energy_tick_time_user = 150;
@@ -210,9 +209,9 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->laser_chain_max_jumps = 0;
         _wpn->laser_chain_radius = 0.0;
         _wpn->laser_chain_energy_mult = 1.0;
-        _wpn->laser_beam_count = 1;
-        _wpn->vertical_laser_enable = false;
-        _wpn->vertical_laser_ai_trigger_radius = 300.0f;
+        _wpn->laser_fade_in = 0.0f;
+        _wpn->laser_fade_out = 0.0f;
+        _wpn->laser_burn_decal_frequency = 0.0f;
         _wpn->ai_fire_trigger_box_below = vec3d();
         _wpn->ai_fire_trigger_box_forward = vec3d();
         _wpn->ai_fire_trigger_cone_forward = vec3d();
@@ -241,7 +240,6 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->vp_trail_spin = vec3d(0.0, 0.0, 0.0);
         _wpn->vp_trail_tint = TVisualTint();
         _wpn->tracer = TWeaponTracerConfig();
-        _wpn->laser_mesh = TWeapProto::TLaserMeshConfig();
         _wpn->type_icon = 65;
         _wpn->debuff_id = -1;
         _wpn->debuff_name.clear();
@@ -329,6 +327,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
 
     if ( !StriCmp(p1, "end") )
     {
+        if ( _wpn->IsLaser() && ! _wpn->HasAIFireTriggerArea() )
+        {
+            ypa_log_out("ERROR: weapon %d model = laser requires exactly one valid AI fire box or cone.\n", _wpnID);
+            return ScriptParser::RESULT_BAD_DATA;
+        }
         if ( !_wpn->HasAIFireTriggerArea() &&
              (_wpn->ai_fire_trigger_box_below.x > 0.0f || _wpn->ai_fire_trigger_box_forward.x > 0.0 ||
               _wpn->ai_fire_trigger_cone_forward.x > 0.0 || _wpn->ai_fire_trigger_cone_below.x > 0.0) )
@@ -360,7 +363,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
 
     if ( !StriCmp(p1, "model") )
     {
-        _wpn->vertical_laser_enable = !StriCmp(p2, "vertical_laser");
         if ( !StriCmp(p2, "grenade") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_GRENADE;
         else if ( !StriCmp(p2, "arc_grenade") )
@@ -374,8 +376,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         else if ( !StriCmp(p2, "artillery_shell") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_ARTILLERY_SHELL;
         else if ( !StriCmp(p2, "laser") )
-            _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_LASER;
-        else if ( !StriCmp(p2, "vertical_laser") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_LASER;
         else if ( !StriCmp(p2, "kamikaze") )
             _wpn->_weaponFlags = TWeapProto::WEAPON_FLAGS_KAMIKAZE;
@@ -951,11 +951,6 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->salve_delay = parser.stol(p2, nullptr, 0);
     }
-    else if ( !StriCmp(p1, "multi_target") )
-    {
-        int maxTargets = parser.stol(p2, nullptr, 0);
-        _wpn->multi_target = maxTargets > 0 ? maxTargets : 0;
-    }
     else if ( !StriCmp(p1, "homing_time") )
     {
         _wpn->homing_time = ParsePositiveIntOrZero(p2);
@@ -998,6 +993,43 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             spacing = 500.0;
         _wpn->laser_spacing = spacing;
     }
+    else if ( !StriCmp(p1, "laser_fade_inout") )
+    {
+        _wpn->laser_fade_in = _wpn->laser_fade_out = 0.0f;
+        std::string lengths[2];
+        if ( ReadTuple(p1, p2, 2, lengths) )
+        {
+            float parsed[2] = {};
+            bool valid = true;
+            for (int i = 0; i < 2; ++i)
+            {
+                try
+                {
+                    size_t used = 0;
+                    const float value = std::stof(lengths[i], &used);
+                    if ( used != lengths[i].size() || !std::isfinite(value) || value < 0.0f )
+                        valid = false;
+                    else
+                        parsed[i] = std::min(value, 50000.0f);
+                }
+                catch (const std::exception &) { valid = false; }
+            }
+            if ( valid )
+            {
+                _wpn->laser_fade_in = parsed[0];
+                _wpn->laser_fade_out = parsed[1];
+            }
+        }
+    }
+    else if ( !StriCmp(p1, "laser_burn_decal_frequency") )
+    {
+        // Decals per 100 world units of beam path (fractions allowed: 0.5 = one every 200).
+        // Missing, zero, negative or non-finite = off (vanilla-safe). Positive values are
+        // kept between 0.05 and 10 so one sweep cannot flood the decal list.
+        float frequency = parser.stof(p2, 0);
+        _wpn->laser_burn_decal_frequency = std::isfinite(frequency) && frequency > 0.0f
+                              ? std::max(0.05f, std::min(frequency, 10.0f)) : 0.0f;
+    }
     else if ( !StriCmp(p1, "laser_chain_max_jumps") )
     {
         int maxJumps = parser.stol(p2, nullptr, 0);
@@ -1011,17 +1043,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( !StriCmp(p1, "laser_chain_energy_mult") )
     {
         float mult = parser.stof(p2, 0);
-        _wpn->laser_chain_energy_mult = mult > 0.0 ? mult : 1.0;
-    }
-    else if ( !StriCmp(p1, "laser_beam_count") )
-    {
-        int maxTargets = parser.stol(p2, nullptr, 0);
-        _wpn->laser_beam_count = maxTargets > 1 ? maxTargets : 1;
-    }
-    else if ( !StriCmp(p1, "vertical_laser_ai_trigger_radius") )
-    {
-        float radius = parser.stof(p2, 0);
-        _wpn->vertical_laser_ai_trigger_radius = std::isfinite(radius) && radius > 0.0f ? radius : 300.0f;
+        _wpn->laser_chain_energy_mult = std::isfinite(mult) && mult > 0.0f ? mult : 1.0f;
     }
     else if ( !StriCmp(p1, "ai_fire_trigger_box_below_xyz") ||
               !StriCmp(p1, "ai_fire_trigger_box_forward_xyz") ||
@@ -1217,10 +1239,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     else if ( ParseTintParam(parser, "vp_trail_tint", p1, p2, _wpn->vp_trail_tint) )
     {
     }
-    else if ( ParseMeshTracerParam(parser, p1, p2, _wpn->tracer, "mesh_tracer_") )
-    {
-    }
-    else if ( ParseLaserMeshParam(parser, p1, p2, _wpn->laser_mesh) )
+    else if ( ParseTracerParam(parser, p1, p2, _wpn->tracer, "tracer_") )
     {
     }
     else if ( ParseDecorationFXParam(parser, p1, p2, _wpn->decoration_fx) )

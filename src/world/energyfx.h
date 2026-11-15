@@ -54,8 +54,8 @@ struct Config
     }
 };
 
-// Read and validate the global gfx.regen_fx_*/gfx.regen_mesh_* and
-// gfx.drain_fx_*/gfx.drain_mesh_* profiles after Nucleus.ini has been parsed.
+// Read and validate the global gfx.regen_fx_*/gfx.regen_symbol_* and
+// gfx.drain_fx_*/gfx.drain_symbol_* profiles after Nucleus.ini has been parsed.
 // Idempotent and safe to call again after a configuration reload.
 void Init();
 

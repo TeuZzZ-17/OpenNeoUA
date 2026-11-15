@@ -93,14 +93,11 @@ float ParseBoundedPositiveFiniteOrZero(ScriptParser::Parser &parser,
 float ParseBoundedNonNegativeFiniteOrFallback(
     ScriptParser::Parser &parser, const std::string &value,
     float maximum, float fallback);
-bool ParseMeshTracerParam(ScriptParser::Parser &parser,
+bool ParseTracerParam(ScriptParser::Parser &parser,
                             const std::string &p1,
                             const std::string &p2,
                             World::TWeaponTracerConfig &config,
                             const std::string &prefix);
-bool ParseLaserMeshParam(
-    ScriptParser::Parser &parser, const std::string &p1,
-    const std::string &p2, World::TWeapProto::TLaserMeshConfig &config);
 void ParseDecalSizeOverride(const char *key, const std::string &value,
                             TDecalSizeOverride &out);
 // crater_radius / crater_depth / crater_rim of a weapon or a vehicle. Returns

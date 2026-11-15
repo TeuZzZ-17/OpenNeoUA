@@ -386,7 +386,6 @@ void NC_STACK_ypabact::ResetFeatureRuntimeState()
     _artillery_shell_has_pending = false;
     _artillery_shell_pending_target = vec3d(0.0, 0.0, 0.0);
     StopLaser();
-    StopVerticalLaser();
     _kamikaze_triggered = false;
     _kamikaze_ground_decals_handled = false;
     _destroyedCraterMade = false;
@@ -564,6 +563,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _mgun_spread_x = 0.0;
     _mgun_spread_y = 0.0;
     _num_weapons = 0;
+    _num_targets = 0;
     _mgun_fire_energy_cost = 0.0f;
     _mgun_fire_energy_cost_defined = false;
     _num_weapons_snd_events = 0;
@@ -881,9 +881,7 @@ size_t NC_STACK_ypabact::Deinit()
     SFXEngine::SFXe.StopCarrier(&_mgun_recoil_shake_carrier);
     SFXEngine::SFXe.StopCarrier(&_laser_launch_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
-    SFXEngine::SFXe.StopCarrier(&_vertical_laser_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_laser_hit_soundcarrier);
-    SFXEngine::SFXe.StopCarrier(&_vertical_laser_hit_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mgun_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mimic_soundcarrier);
     _active_debuff.Clear();
@@ -1429,8 +1427,8 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     }
     const bool debugRealtime=UsesDebugRealtime();
     for(auto *carrier:{&_soundcarrier,&_mgun_soundcarrier,&_laser_soundcarrier,
-        &_vertical_laser_soundcarrier,&_laser_launch_soundcarrier,&_laser_hit_soundcarrier,
-        &_vertical_laser_hit_soundcarrier,&_mimic_soundcarrier,&_debuff_soundcarrier,
+        &_laser_launch_soundcarrier,&_laser_hit_soundcarrier,
+        &_mimic_soundcarrier,&_debuff_soundcarrier,
         &_player_launch_shake_carrier,&_mgun_recoil_shake_carrier})
         carrier->DebugRealtime=debugRealtime;
     ClearPlayerSprintPitchExtra();
@@ -1573,7 +1571,6 @@ void NC_STACK_ypabact::Update(update_msg *arg)
 
     UpdateEnergyStatusFX(arg);
     UpdateLaser(arg); // OpenNeoUA custom: process this frame's laser fire request (must run after AI_layer1 firing)
-    UpdateVerticalLaser(arg);
     UpdateConfiguredPush(arg);
     UpdateRecoilPush(arg);
     ResolveShapeMovement(shapeOldPosition, shapeOldRotation, arg->frameTime);
@@ -2021,9 +2018,6 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         }
     }
 
-    // Continuous laser bodies are queued from the authoritative runtime beam
-    // endpoints. The helper keeps the legacy VP path available as fallback.
-    ypabact_RenderLaserMeshes(this, arg);
     worldRender->adeCount=arg->adeCount;
 }
 
