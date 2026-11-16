@@ -68,7 +68,7 @@ int main()
           world->_decalProfiles[5].fx.ground_decal_smoke.pulse_vp==2, "original VP pulse parses");
     check(parse({"new_decal 6", "duration = permanent", "effect_vp = 0", "end"}) &&
           world->_decalProfiles[6].fx.ground_decal_smoke.pulse_vp==0, "zero VP keeps smoke mode");
-    check(parse({"new_decal 7", "duration = permanent", "effect_base = Data/Models/Base/New/Effect_Smoke/Effect_Smoke.BASE", "end"}) &&
+    check(parse({"new_decal 7", "duration = permanent", "effect_base = Data/Models/Base/New/Shared/Effect_Smoke/Effect_Smoke.BASE", "end"}) &&
           !world->_decalProfiles[7].fx.ground_decal_smoke.base_model.empty(), "external BASE effect parses");
     check(parse({"new_decal 8", "duration = permanent", "effect_3ds = Data/Models/3ds/Smoke.3ds", "effect_mode = rise", "effect_size = 30~45", "end"}) &&
           world->_decalProfiles[8].fx.ground_decal_smoke.mode==World::TGroundDecalSmoke::MODE_RISE &&

@@ -239,6 +239,34 @@ int main() {
         Check(actor->LaunchMissile(&blocked) == 0 && actor->_energy == energy &&
               actor->_missiles_list.size() == missiles, "target direction cannot bypass valid player reticle scope");
     }
+    // Lock reach: a Laser locks at its beam range (life_time), the same limit its multi-lock
+    // secondaries and beam use; every other weapon keeps the classic 2000 reach.
+    {
+        world.GetWeaponsProtos().resize(3);
+        auto &laser = world.GetWeaponsProtos()[2];
+        laser._weaponFlags = World::TWeapProto::WEAPON_FLAGS_LASER;
+        laser.life_time = 1100;
+        NC_STACK_ypabact *actor = &tank;
+        actor->_rotation = mat3x3::Ident();
+        actor->_gun_leftright = actor->_gun_angle_user = 0;
+        actor->_owner = 1;
+        actor->_old_pos = actor->_position;
+        actor->_oflags = BACT_OFLAG_USERINPT;
+        bact_arg106 targeting{};
+        targeting.field_0 = 5;
+        targeting.field_4 = actor->GetUserWeaponAimDirection();
+        auto lockAt = [&](int weapon, double distance) {
+            actor->_weapon = actor->_current_weapon_id = weapon;
+            flyer._position = actor->_position + vec3d(0, 0, distance);
+            return actor->UserTargeting(&targeting) == 1 && world._guiVisor.field_18 == &flyer;
+        };
+        Check(lockAt(2, 1000), "laser locks inside its beam range");
+        Check(!lockAt(2, 1500), "laser does not lock beyond its beam range, even inside the old 2000 reach");
+        laser.life_time = 3000;
+        Check(lockAt(2, 2500), "laser lock reach follows a longer beam range");
+        Check(!lockAt(2, 3200), "laser does not lock beyond a longer beam range");
+        Check(lockAt(1, 1500) && !lockAt(1, 2500), "non-laser weapons keep the classic 2000 lock reach");
+    }
     std::printf("CHECKS %d FAILURES %d\n", checks, failures);
     return failures ? 1 : 0;
 }

@@ -77,6 +77,67 @@ float ypamissile_OrbiterSpeed(const World::TWeapProto &proto)
 
 } // namespace
 
+// First point where the segment from -> to meets the unit's real collision: its
+// collision shape when it has one, otherwise its collision spheres (the same
+// surface a normal projectile hits).
+bool ypamissile_OrbiterSurfaceHit(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to, vec3d *point)
+{
+    if ( !target || !point )
+        return false;
+
+    if ( target->HasCollisionShape() )
+    {
+        Collision::Scene *scene = target->getBACT_pWorld()->_collisionScene.get();
+        Collision::Contact contact;
+        if ( !scene || !scene->Trace(target, from, to, 0.0, &contact) )
+            return false;
+        *point = contact.point;
+        return true;
+    }
+
+    std::vector<NC_STACK_ypabact::TCollisionSphereWorld> spheres;
+    target->GetCollisionSpheres(spheres, target->_position, target->_rotation, false);
+
+    bool found = false;
+    float best = 2.0f;
+    for (const auto &sphere : spheres)
+    {
+        vec3d hit;
+        float time = 2.0f;
+        if ( ypamissile_GetCompoundImpactPoint(from, to, 0.0f, sphere.center, sphere.radius, &hit, &time) &&
+             time < best )
+        {
+            best = time;
+            *point = hit;
+            found = true;
+        }
+    }
+    return found;
+}
+
+// True while the point is inside the unit's collision (shape or spheres).
+bool ypamissile_OrbiterInsideTarget(NC_STACK_ypabact *target, const vec3d &point)
+{
+    if ( !target )
+        return false;
+
+    if ( target->HasCollisionShape() )
+    {
+        Collision::Scene *scene = target->getBACT_pWorld()->_collisionScene.get();
+        Collision::Contact contact;
+        return scene && scene->Trace(target, point, point, 1.0, &contact);
+    }
+
+    std::vector<NC_STACK_ypabact::TCollisionSphereWorld> spheres;
+    target->GetCollisionSpheres(spheres, target->_position, target->_rotation, false);
+    for (const auto &sphere : spheres)
+    {
+        if ( (point - sphere.center).length() < sphere.radius )
+            return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Carrier side
 // ---------------------------------------------------------------------------
@@ -238,6 +299,10 @@ bool NC_STACK_ypamissile::BeginOrbiterSiege(NC_STACK_ypabact *target)
     _orbiterTargetGid = target->_gid;
     _orbiterStrikeIndex = 0;
     _orbiterSiegeElapsed = 0;
+    _orbiterInside = false;
+    _orbiterPassStruck = false;
+    _orbiterFinalPass = false;
+    _orbiterExiting = false;
     // life_time is the safety limit of one siege (target too fast to reach).
     _orbiterSiegeTimeLimit = std::max(1000, proto.RollLifeTime());
     return true;
@@ -289,7 +354,9 @@ void NC_STACK_ypamissile::KeepOrbiterAboveWorld()
     }
 }
 
-void NC_STACK_ypamissile::OrbiterStrike(NC_STACK_ypabact *target, bool final)
+// One hit of a pass: entering and leaving the body are two hits with identical damage and effects
+// (a strike's cascade step advances after its second hit). `final` detonates here.
+void NC_STACK_ypamissile::OrbiterStrike(NC_STACK_ypabact *target, bool final, bool advance)
 {
     const World::TWeapProto &proto = _world->GetWeaponsProtos().at(_vehicleID);
 
@@ -297,7 +364,8 @@ void NC_STACK_ypamissile::OrbiterStrike(NC_STACK_ypabact *target, bool final)
     const double energy = (double)_orbiterBaseEnergy *
                           std::pow((double)proto.orbiter.energy_mult, (double)_orbiterStrikeIndex);
     _energy = (int)std::max(0.0, std::min(energy + 0.5, 100000000.0));
-    _orbiterStrikeIndex++;
+    if ( advance )
+        _orbiterStrikeIndex++;
     _mislDirectHitUnits.clear();
 
     // Same Deflect Buff rule as a normal projectile hit.
@@ -328,6 +396,67 @@ void NC_STACK_ypamissile::OrbiterStrike(NC_STACK_ypabact *target, bool final)
     }
 
     OrbiterDetonate();
+}
+
+// Strikes happen on the besieged unit's collision surface, like a normal weapon that
+// penetrates: the dive meets the surface (entry hit: damage and every hit effect there),
+// the orbiter flies through the body, and where it leaves the surface it hits again with
+// the same damage and the same effects (exit hit). The last strike detonates at the exit.
+// `before` is the position before this frame's step, `_position` the one after it.
+void NC_STACK_ypamissile::OrbiterSurfacePass(NC_STACK_ypabact *target, const vec3d &before, bool wasDiving,
+                                             World::Orbiter::SiegeEvent event)
+{
+    const vec3d after = _position;
+
+    if ( !_orbiterInside )
+    {
+        vec3d entry;
+        if ( !wasDiving || !ypamissile_OrbiterSurfaceHit(target, before, after, &entry) )
+            return;
+
+        _orbiterInside = true;
+        _orbiterPassStruck = true;
+
+        // The step may already have counted this pass (event); otherwise the pass
+        // is the last one when a single strike is left.
+        _orbiterFinalPass = event == World::Orbiter::SIEGE_FINAL_STRIKE ||
+                            (event == World::Orbiter::SIEGE_NONE && _orbiterSiege.strikesLeft <= 1);
+        _position = entry;
+        _world->ypaworld_func145(this);
+        OrbiterStrike(target, false, false);
+        _position = after;
+        _world->ypaworld_func145(this);
+        return;
+    }
+
+    if ( ypamissile_OrbiterInsideTarget(target, after) )
+        return;
+
+    // Left the body: exit hit at the surface where it comes out.
+    vec3d exitPoint = after;
+    if ( !ypamissile_OrbiterSurfaceHit(target, after, before, &exitPoint) )
+        exitPoint = after;
+    OrbiterExitHit(target, exitPoint, after);
+}
+
+// Exit hit: same damage and effects as the entry hit, then the pass is over. The last
+// strike detonates here with the normal impact and blast.
+void NC_STACK_ypamissile::OrbiterExitHit(NC_STACK_ypabact *target, const vec3d &exitPoint, const vec3d &resumePos)
+{
+    const bool final = _orbiterFinalPass;
+    _orbiterInside = false;
+    _orbiterFinalPass = false;
+    _orbiterExiting = false;
+    _orbiterExitTravel = 0.0f;
+
+    _position = exitPoint;
+    _world->ypaworld_func145(this);
+    OrbiterStrike(target, final, true);
+    if ( _orbiterState == ORBITER_OFF )
+        return;
+
+    _position = resumePos;
+    _world->ypaworld_func145(this);
 }
 
 void NC_STACK_ypamissile::OrbiterDetonate()
@@ -369,6 +498,10 @@ void NC_STACK_ypamissile::UpdateOrbiter(update_msg *arg)
             // Target gone: back to guarding the carrier.
             _orbiterState = ORBITER_GUARD;
             _orbiterTargetGid = 0;
+            _orbiterInside = false;
+            _orbiterPassStruck = false;
+            _orbiterFinalPass = false;
+            _orbiterExiting = false;
         }
         else
         {
@@ -379,19 +512,68 @@ void NC_STACK_ypamissile::UpdateOrbiter(update_msg *arg)
                 return;
             }
 
-            const World::Orbiter::SiegeEvent event = World::Orbiter::StepSiege(
-                _orbiterSiege, dt, target->_position, ypamissile_OrbiterBodyRadius(target));
-            _position = _orbiterSiege.pos;
-            _fly_dir = _orbiterSiege.dir;
-            _fly_dir_length = _orbiterSiege.speed / 6.0f;
-
-            if ( event != World::Orbiter::SIEGE_NONE )
+            if ( _orbiterExiting )
             {
-                // Sector membership must match the strike point (Impact() uses it).
-                _world->ypaworld_func145(this);
-                OrbiterStrike(target, event == World::Orbiter::SIEGE_FINAL_STRIKE);
+                // Last strike, already inside: fly straight on through the body to the exit.
+                const vec3d before = _position;
+                const float step = _orbiterSiege.speed * dt;
+                vec3d dir = _orbiterSiege.dir;
+                if ( dir.normalise() <= 0.001 )
+                    dir = _fly_dir;
+                _position += dir * step;
+                _orbiterSiege.pos = _position;
+                _fly_dir = dir;
+                _fly_dir_length = _orbiterSiege.speed / 6.0f;
+                _orbiterExitTravel += step;
+
+                OrbiterSurfacePass(target, before, false, World::Orbiter::SIEGE_NONE);
                 if ( _orbiterState == ORBITER_OFF )
                     return;
+
+                // Safety: never fly on forever inside a body (huge or odd collision).
+                if ( _orbiterExiting && _orbiterInside &&
+                     _orbiterExitTravel > std::max(400.0f, ypamissile_OrbiterBodyRadius(target) * 4.0f) )
+                {
+                    OrbiterExitHit(target, _position, _position);
+                    if ( _orbiterState == ORBITER_OFF )
+                        return;
+                }
+            }
+            else
+            {
+                const vec3d before = _position;
+                const bool wasDiving = _orbiterSiege.diving;
+                const World::Orbiter::SiegeEvent event = World::Orbiter::StepSiege(
+                    _orbiterSiege, dt, target->_position, ypamissile_OrbiterBodyRadius(target));
+                _position = _orbiterSiege.pos;
+                _fly_dir = _orbiterSiege.dir;
+                _fly_dir_length = _orbiterSiege.speed / 6.0f;
+
+                // Entry hit where the dive meets the collision surface (exit hit follows later).
+                OrbiterSurfacePass(target, before, wasDiving, event);
+                if ( _orbiterState == ORBITER_OFF )
+                    return;
+
+                if ( event != World::Orbiter::SIEGE_NONE )
+                {
+                    // The pass reached the body centre.
+                    if ( !_orbiterPassStruck )
+                    {
+                        // Fallback: the surface was never found. Entry and exit hit happen here.
+                        _world->ypaworld_func145(this);
+                        OrbiterStrike(target, false, false);
+                        OrbiterStrike(target, event == World::Orbiter::SIEGE_FINAL_STRIKE, true);
+                        if ( _orbiterState == ORBITER_OFF )
+                            return;
+                    }
+                    else if ( event == World::Orbiter::SIEGE_FINAL_STRIKE )
+                    {
+                        // Last strike: go on through the body, detonate at the exit surface.
+                        _orbiterExiting = true;
+                        _orbiterExitTravel = 0.0f;
+                    }
+                    _orbiterPassStruck = false;
+                }
             }
         }
     }

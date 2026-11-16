@@ -38,8 +38,8 @@ int main()
         for (const char *path : {
             "Data/Models/Base/New/Hourglass/Hourglass_Dead/Hourglass_Dead.BASE",
             "Data/Models/Base/New/Static/Static_Dead/Static_Dead.BASE",
-            "Data/Models/Base/New/Taer_Radar/Taer_Radar_Normal/Taer_Radar_Normal.BASE",
-            "Data/Models/Base/New/Taer_Radar/Taer_Radar_Genesis/Taer_Radar_Genesis.BASE"})
+            "Data/Models/Base/New/Taerkasten/Taer_Radar/Taer_Radar_Normal/Taer_Radar_Normal.BASE",
+            "Data/Models/Base/New/Taerkasten/Taer_Radar/Taer_Radar_Genesis/Taer_Radar_Genesis.BASE"})
         {
             NC_STACK_base *model = NC_STACK_base::LoadBaseFromFile(path);
             check(model && model->GetSkeleton(), path);

@@ -731,13 +731,44 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
             pCells[1] = arg130.pcell;
         }
 
-        for (int i = 0; i < 3; i++)
+        // Lock reach. A Laser locks at its beam range (life_time), the same limit the
+        // multi-lock secondaries and the beam use, so every locked target of a multi-laser
+        // appears at the same distance. Every other weapon keeps the classic 2000.
+        const bool laserLock = targetingProto->IsLaser();
+        const float lockRange = laserLock ? ypabact_LaserRange(*targetingProto) : 2000.0f;
+        const vec3d lockOrigin = laserLock ? ypabact_LaserSourceOrigin(this) : _old_pos;
+
+        std::vector<cellArea *> scanCells(pCells, pCells + 3);
+        if ( laserLock )
         {
-            if ( i <= 0 || pCells[i] != pCells[i - 1] )
+            // Walk the aim axis in half-sector steps up to the beam range, so a long beam
+            // is not limited to the three default sectors.
+            scanCells.clear();
+            vec2d axis = _rotation.AxisZ().XZ();
+            const float axisLen = axis.length();
+            if ( axisLen > 0.001f )
+                axis = axis * (1.0f / axisLen);
+            const float step = World::CVSectorLength * 0.5f;
+            for (float d = 0.0f; ; d += step)
             {
-                if ( pCells[i] )
+                const float dist = d < lockRange ? d : lockRange;
+                const vec2d p = _position.XZ() + axis * dist;
+                arg130.pos_x = p.x;
+                arg130.pos_z = p.y;
+                _world->GetSectorInfo(&arg130);
+                scanCells.push_back(arg130.pcell);
+                if ( d >= lockRange )
+                    break;
+            }
+        }
+
+        for (size_t i = 0; i < scanCells.size(); i++)
+        {
+            if ( i == 0 || scanCells[i] != scanCells[i - 1] )
+            {
+                if ( scanCells[i] )
                 {
-                    for ( NC_STACK_ypabact* &bct : pCells[i]->unitsList )
+                    for ( NC_STACK_ypabact* &bct : scanCells[i]->unitsList )
                     {
                         if ( bct != this )
                         {
@@ -764,7 +795,7 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
                                         {
                                             if ( arg->field_0 & 4 || bct->_owner )
                                             {
-                                                vec3d mv = bct->_position - _old_pos;
+                                                vec3d mv = bct->_position - lockOrigin;
 
                                                 if ( mv.dot( _rotation.AxisZ() ) >= 0.0 )
                                                 {
@@ -777,7 +808,7 @@ size_t NC_STACK_ypabact::UserTargeting(bact_arg106 *arg)
 
                                                     if ( ((mvd_len < v59 && ((targetingWeaponFlags & 4) || usesMissileTargeting)) ||
                                                          (bct->_radius + v55 > mvd_len && !(targetingWeaponFlags & 4) && !usesMissileTargeting) )
-                                                            && mv_len < 2000.0
+                                                            && mv_len < lockRange
                                                             && (v56 > mvd_len || !targeto) )
                                                     {
                                                         targeto = bct;

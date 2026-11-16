@@ -227,8 +227,10 @@ protected:
     void ResetOrbiterState();
     void UpdateOrbiter(update_msg *arg);
     void UpdateOrbiterGuard(NC_STACK_ypabact *carrier, float dt);
-    void OrbiterStrike(NC_STACK_ypabact *target, bool final);
+    void OrbiterStrike(NC_STACK_ypabact *target, bool final, bool advance);
+    void OrbiterExitHit(NC_STACK_ypabact *target, const vec3d &exitPoint, const vec3d &resumePos);
     void OrbiterDetonate();
+    void OrbiterSurfacePass(NC_STACK_ypabact *target, const vec3d &before, bool wasDiving, World::Orbiter::SiegeEvent event);
     void KeepOrbiterAboveWorld();
     bool BeginBoomerangReturn();
     void UpdateBoomerangReturn(update_msg *arg);
@@ -368,6 +370,11 @@ protected:
     World::Orbiter::Rng _orbiterRng;
     World::Orbiter::Guard _orbiterGuard;
     World::Orbiter::Siege _orbiterSiege;
+    bool _orbiterInside = false;      // the orbiter is inside the besieged unit's collision (entered, not yet left)
+    bool _orbiterPassStruck = false;  // the current pass already struck at the entry surface
+    bool _orbiterFinalPass = false;   // this pass is the last strike: it detonates where it leaves the surface
+    bool _orbiterExiting = false;     // last pass: flying straight on through the body towards the exit surface
+    float _orbiterExitTravel = 0.0f;  // distance flown since the last centre crossing (safety limit)
 
     World::TWeaponTracerConfig _weaponTracer;
     bool _weaponTracerStarted = false;

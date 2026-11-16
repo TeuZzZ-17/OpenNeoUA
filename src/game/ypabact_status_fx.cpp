@@ -719,6 +719,12 @@ void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
     if ( !world )
         return;
 
+    // Regen/Drain marks float around the unit, so in the player's own first-person
+    // view (classic or cockpit camera) they would sit right in front of the lens.
+    // They stay visible on every other unit and in every other view.
+    if ( bact->IsPlayerFirstPersonCameraActive() || bact->IsCockpitCameraActive() )
+        return;
+
     int spawnCount = World::RandomIntRangeInclusive(config.count_min, config.count_max);
     const vec3d axisScale(config.scale, config.scale, config.scale);
 

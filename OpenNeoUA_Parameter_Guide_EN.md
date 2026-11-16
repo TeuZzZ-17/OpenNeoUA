@@ -1070,10 +1070,10 @@ Laser rules:
 - The beam count is the Vehicle's `num_weapons` (or `num_weapons_2/3/4` of the slot). Every beam starts at its own `fire_x/y/z` muzzle using the vanilla distribution and `fire_x` modes, and a ranged count is rolled once when continuous fire starts. Every direct beam applies its own damage ticks, so concentrating beams raises the total damage.
 - `num_targets` limits distinct direct targets, not chain jumps. A chain multiplier above 1 amplifies damage cumulatively after the `laser_max_energy` clamp.
 - A direct `debuff_id` applies on contact ticks even when energy is 0 or armor blocks damage. AI lasers still cannot debuff allies.
-- `shot_time` does not control beam density: `laser_spacing` and the model scale do. A ready-made animated tube is `Data/Models/Base/New/Laser_Tube/VP_LASER_TUBE.BASE`.
+- `shot_time` does not control beam density: `laser_spacing` and the model scale do. A ready-made animated tube is `Data/Models/Base/New/Shared/Laser_Tube/VP_LASER_TUBE.BASE`.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `model = orbiter` — Guardian projectile carried by a Vehicle through `orbiter_weapon`, never fired from a weapon slot. Orbiters appear one at a time around the carrier and circle it slowly. When the carrier attacks an enemy unit (AI: weapon or MGUN; player: weapon, laser or MGUN) they leave it, dance around the enemy, pass through it on every strike (normal hit damage, hit sound and detonate effects) and explode on the last strike with the normal impact and blast. Allies, buildings and terrain never trigger them. Target lost = back to guard; carrier destroyed = they explode in place. Speed comes from `start_speed`, damage from `energy` (and `blast_*` on the last strike), visuals and sounds from the usual `vp_*`/`snd_*` keys; `life_time` is the safety limit of one siege. Every `orbiter_*` key is optional.
+- 🟢 `model = orbiter` — Guardian projectile carried by a Vehicle through `orbiter_weapon`, never fired from a weapon slot. Orbiters appear one at a time around the carrier and circle it slowly. When the carrier attacks an enemy unit (AI: weapon or MGUN; player: weapon, laser or MGUN) they leave it, dance around the enemy and dive through it. Each strike goes through the enemy's collision surface (collision shape, or collision radius without one) like a normal penetrating weapon: when it enters and again when it leaves, it deals its full `energy` and triggers every hit effect (hit sound, detonate effects, shake, palette) at that surface point. The last strike explodes where it leaves the surface, with the normal impact and blast. Allies, buildings and terrain never trigger them. Target lost = back to guard; carrier destroyed = they explode in place. Speed comes from `start_speed`, damage from `energy` (and `blast_*` on the last strike), visuals and sounds from the usual `vp_*`/`snd_*` keys; `life_time` is the safety limit of one siege. Every `orbiter_*` key is optional.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_count = 2~3` — Maximum orbiters alive around the carrier, 1..8 (`min~max` rolled once per unit). Default 1.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1091,7 +1091,7 @@ Laser rules:
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_strike_interval = 700~1100` — Milliseconds of dance between two strikes, 100..60000 (`min~max` rolled for each pause). Default 900.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_energy_mult = 1.25` — Damage cascade between consecutive strikes, 0.05..10 (single value). Strike N deals energy × mult^N: 1 = always the same; 0.4 = each strike deals 40% of the previous one; 1.25 = each strike deals 25% more than the previous one. Default 1.
+- 🟢 `orbiter_energy_mult = 1.25` — Damage cascade between consecutive strikes, 0.05..10 (single value). Strike N (its entry and its exit hit) deals energy × mult^N: 1 = always the same; 0.4 = each strike deals 40% of the previous one; 1.25 = each strike deals 25% more than the previous one. Default 1.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Damage and targets
@@ -1210,7 +1210,7 @@ Chain Weapon propagation continues a hit from one enemy unit to another nearby t
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `drive_time = 1200` — Duration of the engine thrust in milliseconds. Afterwards a missile enters its falling phase and a homing_bomb stops using `force` to pursue; both can still turn with `homing_force` while `homing_time` runs. A homing_bomb applies it only when given a positive value. Other weapons default to 7000; arc grenades do not use this phase.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵🟢 `life_time = 1300` — Maximum lifetime in milliseconds of a projectile fired at a target; it detonates when it expires. Accepts `min~max`, rolled independently for each projectile. For `model = laser` it also limits the beam duration and length.
+- 🔵🟢 `life_time = 1300` — Maximum lifetime in milliseconds of a projectile fired at a target; it detonates when it expires. Accepts `min~max`, rolled independently for each projectile. For `model = laser` it also limits the beam duration and length, and it is the player's lock reach: the primary lock and every multi-lock target appear at the same distance (other weapons lock up to 2000).
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `life_time_nt = 1300` — Same as `life_time`, used when the projectile is fired without a unit target (free fire, or a num_targets missile or homing_bomb slot with no target). Accepts `min~max`. 0 or absent = `life_time` is used.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2539,7 +2539,7 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 
 ### Regen and Drain effects
 
-Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, OpenNeoUA falls back to procedural + and - symbols. These effects are presentation only: gameplay comes from the Regen and Drain systems of the unit.
+Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, OpenNeoUA falls back to procedural + and - symbols. These effects are presentation only: gameplay comes from the Regen and Drain systems of the unit. They are not shown on the unit you drive while you look through it (first-person or cockpit camera), where they would sit in front of the lens; other units and other views show them normally.
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_vp = 0` — Legacy VP for the Regen effect; final fallback before the procedural + symbol.

@@ -48,7 +48,7 @@ int main()
         check(world.GetVhclProtos()[170].visual_base.normal.find("Taer_Radar_Normal") != std::string::npos,
               "Taerkasten module uses its dedicated model");
         check(world.GetVhclProtos()[63].visual_base.dead ==
-              R"(Data\Models\Base\Original_Refined\Hourglass\Hourglass_Dead\Hourglass_Dead.BASE)" &&
+              R"(Data\Models\Base\Original_Refined\Mykonian\Hourglass\Hourglass_Dead\Hourglass_Dead.BASE)" &&
               world.GetVhclProtos()[63].vp_normal == 271,
               "Hourglass overrides only the dead model");
         check(world.GetVhclProtos()[66].visual_base.dead ==

@@ -36,5 +36,7 @@ bool ypamissile_IsHomingBomb(NC_STACK_ypamissile *missile);
 bool ypamissile_HasLiveGuidanceTarget(NC_STACK_ypamissile *missile);
 bool ypamissile_HasHomingBombTarget(NC_STACK_ypamissile *missile);
 bool ypamissile_IsUsableSuicideReturn(NC_STACK_ypabact *candidate);
+bool ypamissile_OrbiterSurfaceHit(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to, vec3d *point);
+bool ypamissile_OrbiterInsideTarget(NC_STACK_ypabact *target, const vec3d &point);
 
 #endif // YPAMISSILE_INTERNAL_H_INCLUDED
