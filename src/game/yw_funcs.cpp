@@ -1016,6 +1016,7 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
         bs->SetStatic(true);
         id++;
     }
+    yw->_setLegoCount = id;
 
     id = 0;
     std::string line;
@@ -1027,7 +1028,7 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
 
         Stok parse(line, " \t");
         std::string token;
-        if ( parse.GetNext(&token) ) // ignore base file name
+        if ( parse.GetNext(&token) ) // base file name: only a label, kept for .sector lookups
         {
             if ( (size_t)id >= yw->_legoArray.size() )
             {
@@ -1035,9 +1036,11 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
                 return 0;
             }
             TLego &lego = yw->_legoArray[id];
+            lego.Name = token;
             if ( !parse.GetNext(&token) )
                 return 0;
 
+            lego.CollisionName = token;
             NC_STACK_sklt *skelet = Nucleus::CInit<NC_STACK_sklt>({{NC_STACK_rsrc::RSRC_ATT_NAME, token}});
             if ( !skelet )
             {
@@ -1065,7 +1068,9 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
             if ( !parse.GetNext(&token) )
                 return 0;
 
-            switch( std::stol(token, nullptr, 0) )
+            const long collisionMode = std::stol(token, nullptr, 0);
+            lego.CollisionMode = collisionMode == 1 || collisionMode == 2 ? (uint8_t)collisionMode : 0;
+            switch( collisionMode )
             {
             default:
             case 0:
@@ -1110,6 +1115,7 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
             id++;
         }
     }
+    yw->_setLegoCount = std::max(yw->_setLegoCount, (size_t)id);
     return 1;
 }
 
@@ -1161,6 +1167,7 @@ int yw_parse_subSect(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
             id++;
         }
     }
+    yw->_setPieceCount = id;
     return 1;
 }
 
@@ -1396,7 +1403,11 @@ int NC_STACK_ypaworld::yw_LoadSet(int setID)
     Common::Env.SetPrefix("rsrc", fmt::sprintf("data:set%d", setID));
 
     if ( setID != _setId )
+    {
+        // External sectors hold SET textures too: release them before the SET changes.
+        ClearExternalSectors();
         ClearSharedExternalBases();
+    }
 
     if ( !GFX::Engine.LoadPalette("palette/standard.pal") )
         ypa_log_out("WARNING: Could not load set default palette!\n");
@@ -1429,6 +1440,7 @@ int NC_STACK_ypaworld::yw_LoadSet(int setID)
 
     if ( setID != 46 )
     {
+        ClearExternalSectors();
         FSMgr::FileHandle* fil = uaOpenFileAlloc("rsrc:scripts/set.sdf", "r");
         if ( !fil )
         {
@@ -1483,6 +1495,7 @@ int NC_STACK_ypaworld::yw_LoadSet(int setID)
         delete fil;
 
         LoadOverrideModels();
+        LoadExternalSectors();
     }
 
     _tracyBitmap = Utils::ProxyLoadImage( {{NC_STACK_rsrc::RSRC_ATT_NAME, std::string("remap/tracyrmp.ilbm")}} );
@@ -1627,6 +1640,7 @@ void NC_STACK_ypaworld::FreeFillers()
 
 void NC_STACK_ypaworld::FreeLegos()
 {
+    ClearExternalSectors();
     for (TLego &lego : _legoArray)
     {
         if (lego.CollisionSkelet)
@@ -3701,6 +3715,7 @@ void NC_STACK_ypaworld::LoadOverrideModels()
             if (id < _legoArray.size())
             {
                 _legoArray[id].Base = model;
+                _legoArray[id].OverrideName = tokens[2];
                 model->SetStatic(true);
                 assigned = true;
             }

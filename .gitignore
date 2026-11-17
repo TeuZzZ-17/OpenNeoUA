@@ -83,9 +83,14 @@
 !/Models/
 /Models/*
 !/Models/3ds/
+!/Models/Sectors/
 !/Models/Base/
 /Models/Base/*
 !/Models/Base/new/
+
+# Lavoro in corso: texture con provenienza non verificata (derivate dall'aspetto di quelle originali).
+# Non pubblicare finche' non sono rifatte con pixel interamente nostri.
+/Models/Base/New/Sulgogar/Sulg_Power_Station/
 
 # ============================================================
 # FILE ROOT

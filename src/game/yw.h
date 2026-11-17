@@ -2073,6 +2073,12 @@ struct TLego
     NC_STACK_skeleton *UseCollisionSkelet = nullptr;
     uint8_t Shield = 0; // Percents
     uint8_t GUIElementID = 0;
+    uint8_t CollisionMode = 0; // 0 own skeleton, 1 colsub, 2 colcomp
+    // Names from SET.SDF / override.lst, used by external .sector files to
+    // reuse a model of the active SET by name.
+    std::string Name;
+    std::string OverrideName;
+    std::string CollisionName;
 
     /* Explode object and position */
     struct ExFX
@@ -2979,6 +2985,12 @@ public:
     void ClearOverrideModels();
     void LoadOverrideModels();
 
+    // External .sector files (sec_type = Data/....sector). They are installed in free
+    // LEGO, piece and sector slots of the active SET; SET.BAS itself is never changed.
+    int ResolveExternalSector(const std::string &path);
+    void LoadExternalSectors();
+    void ClearExternalSectors();
+
     std::string GetVehicleName(uint32_t id) const;
     std::string GetVehicleName(const World::TVhclProto &proto) const;
     std::string GetBuildingName(uint32_t id, bool net = false) const;
@@ -3207,6 +3219,14 @@ public:
     std::array<TLego, SET_LEGO_LIMIT> _legoArray;
     std::array<TSubSectorDesc, SET_SUBSECTOR_LIMIT> _subSectorArray;
     std::array<TSectorDesc, 256> _secTypeArray;
+    size_t _setLegoCount = 0;   // LEGO rows owned by the active SET.SDF
+    size_t _setPieceCount = 0;  // piece (sub sector) rows owned by the active SET.SDF
+    struct TExternalSectors
+    {
+        std::map<std::string, int> slots; // normalized .sector path -> sector slot (-1 = failed)
+        std::map<std::string, NC_STACK_base *> bases; // owned BASE/3DS models of installed sectors
+        std::vector<size_t> legos, pieces, sectors;
+    } _externalSectors;
 
     std::vector<World::TVhclProto> _vhclProtos;
     std::vector<World::TWeapProto> _weaponProtos;

@@ -1628,7 +1628,9 @@ struct TBuildingProto
     };
 
     int32_t Index = -1;
-    uint8_t SecType = 0;
+    uint8_t SecType = 0;            // Active SET sector slot (resolved again on every SET load).
+    std::string sector_file;        // OpenNeoUA: external .sector definition (Data/...); empty = vanilla.
+    uint8_t sector_fallback = 0;    // SET sector used when sector_file is missing or invalid.
     std::string description;
     std::string script_class;
     bool energy_defined = false;

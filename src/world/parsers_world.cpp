@@ -191,7 +191,37 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     }
     else if ( !StriCmp(p1, "sec_type") )
     {
-        _bld->SecType = parser.stol(p2, nullptr, 0);
+        // Vanilla: a SET sector number. OpenNeoUA: a Data/....sector file, optionally
+        // followed by a SET sector number used if that file cannot be loaded.
+        std::string file;
+        long fallback = 0;
+        bool valid = true;
+        for (const std::string &token : Stok::Split(p2, "|"))
+        {
+            char *end = nullptr;
+            const long number = std::strtol(token.c_str(), &end, 0);
+            if ( !token.empty() && end && !*end )
+            {
+                valid = valid && number >= 0 && number <= 255;
+                fallback = number;
+            }
+            else if ( file.empty() && token.size() > 7 &&
+                      !StriCmp(token.substr(token.size() - 7), ".sector") &&
+                      uaNormalizeDataAssetPath(token, &file, false) )
+            {
+            }
+            else
+                valid = false;
+        }
+
+        if ( valid )
+        {
+            _bld->sector_file = file;
+            _bld->sector_fallback = (uint8_t)fallback;
+            _bld->SecType = (uint8_t)fallback;
+        }
+        else
+            ypa_log_out("WARNING: invalid sec_type '%s'; previous sector retained.\n", p2.c_str());
     }
     else if ( !StriCmp(p1, "briefing_size") )
     {

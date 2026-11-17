@@ -49,6 +49,7 @@ Each parameter is one line: marker, `name = value`, em dash, short description. 
   - [Briefing model settings for buildings](#briefing-model-settings-for-buildings)
   - [Flaks mounted on the building](#flaks-mounted-on-the-building)
   - [Appearance](#appearance)
+  - [External sector files (.sector)](#external-sector-files-sector)
   - [Sounds](#sounds)
   - [OpenNeoUA special features](#openneoua-special-features-2)
 - [Buffs (Buffs.cfg)](#buffs-buffscfg)
@@ -647,7 +648,7 @@ Inline physical FX (`begin_fx` with `mode = physical`) support the normal, going
 Each lifecycle state can have its own external visual. External assets extend, never remove, the original VP states.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `base_<state> = Data/Models/Base/VEHICLE.BASE` — External BASE model for a lifecycle state (normal, fire, wait, dead, megadeth, genesis); falls back to `vp_<state>`. If the resolved dead visual has no persistent geometry, the normal visual is reused during DEATH1 so the wreck stays visible while it falls.
+- 🟢 `base_<state> = Data/Models/Base/VEHICLE.BASE` — External BASE model for a lifecycle state (normal, fire, wait, dead, megadeth, genesis); falls back to `vp_<state>`. If the resolved dead visual has no persistent geometry, the normal visual is reused during DEATH1 so the wreck stays visible while it falls. When faction plasma tint is enabled, use a separate file for genesis: sharing it with a regular state also applies the plasma tint to that state.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `3ds_<state> = Data/Models/3ds/vehicle.3ds` — External 3DS model for a lifecycle state (same states as `base_<state>`); takes priority over `base_<state>` and `vp_<state>`.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1715,7 +1716,7 @@ Cluster Weapons split into child Weapons after a timer or on impact. Child count
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `name = Power_Station` — Name of the Building. Underscores are shown as spaces.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `sec_type = 20` — Links the Building to a sector type of the map set. typ_map defines the visual sector, blg_map places functional buildings on top, and sec_type ties the two together.
+- 🔵🟢 `sec_type = 20` — Sector of the Building: a sector number of the map set (vanilla), or a `Data/....sector` file, optionally followed by a set sector used when that file cannot be loaded (`sec_type = Data/Models/Sectors/Sulg_Power/Sulg_Power.sector|50`). See [External sector files (.sector)](#external-sector-files-sector). An invalid value is ignored and the previous sector is kept; a file without fallback falls back to sector 0.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `type_icon = P` — Icon glyph key of the Building, mapped through TYPE_NS.FON into the H_FINDER graphic. Same syntax as the Vehicle `type_icon`.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1825,6 +1826,69 @@ Building decorations can be periodic (spawned at intervals) or persistent (activ
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tint = 60|255|60|255` — RGBA tint applied to the building's main visual.
 ------------------------------------------------------------------------------------------------------------------------
+
+### External sector files (.sector)
+
+A `.sector` file describes one complete sector outside SET.BAS: cells, damage states, models, collision, map symbols and explosions. A Building uses it through `sec_type`.
+
+- The sector lives in its own folder, normally `Data/Models/Sectors/<Name>/<Name>.sector`, with only the files made for it.
+- Every file is searched beside the .sector first. Anything missing (models, skeletons, textures, animations) comes from the set of the map being played, so a Set3 map shows the Set3 look. Names already loaded from SET.BAS win over local files with the same name.
+- On every set load the sector is installed in free model, piece and sector slots (highest free sector slot from 247 down); SET.BAS and SET.SDF are not changed. The slot can change when the set or the scripts change.
+- Any error (syntax, unknown key, missing model, no free slot) skips the whole file, logs a warning and uses the fallback set sector.
+- Cells of a map placed without an owner keep the sector written in typ_map; external sectors appear on owned buildings and on buildings constructed in game.
+- Syntax: `;` starts a comment, one `key = value` per line, blocks can be in any order.
+
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `begin_sector` — Opens the sector block (exactly one per file). Close it with `end`.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `cells = G|G|G|G|CORE|G|G|G|G` — Piece names of the cells: 9 for a 3x3 sector (same order as SET.SDF, far row first) or 1 for one large cell. Required.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `ground = 0` — Connection family 0-5 (SET.SDF surface type): picks the transition strip to the neighbouring sectors. Required.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `map_symbol = 3` — Map symbol 0-255 of the sector. Default 0. Inside a `begin_model` block it is the symbol of that model, default inherited from the set model or 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `begin_piece CORE` — Opens a piece: what fills one cell, with its four damage states. The name is unique among pieces and has no spaces. Close it with `end`.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `states = ok|hit|heavy|flat` — Model names for intact, damaged, heavily damaged and destroyed. One name = the same model for all four states. Two or three names are invalid.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `destructible = 1` — 1 = the piece is a target with hit points, 0 = ground that cannot be destroyed. Default 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `begin_model ok` — Opens a model: one visual with its collision. The name is unique among models (a piece may use the same name). Close it with `end`.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `visual = KRAFT_OK.BASE` — Visual of the model: a VP number of the set, a `.BASE` or `.3ds` file (beside the .sector, or a `Data/...` path), or the name of a set model (SET.SDF or override.lst name). A file that is not beside the .sector falls back to the set model with the same name; a set model also gives the defaults of collision, collision_mode, map_symbol, shield and explosion. Required.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `collision = KRAFT_OK.sklt` — Collision skeleton: a file beside the .sector, else a resource of the set. Default: the collision of the set model named in `visual`. Required when `visual` is a file or a VP.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `collision_mode = 0` — 0 = own collision skeleton, 1 = the set's simple sub-sector collision, 2 = the set's complex collision. Default inherited or 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shield = 60` — Damage reduction 0-100 % of the model. Default inherited or 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `explosion = 49|0|0|100` — Destruction explosion `VP|x|y|z` (same numbers as a SET.SDF effect group, z = height). Repeat the line for more explosions; the first line replaces the inherited ones and `explosion = none` removes them.
+------------------------------------------------------------------------------------------------------------------------
+
+```
+begin_sector
+    cells = G|G|G|G|CORE|G|G|G|G
+    ground = 0
+    map_symbol = 3
+end
+begin_piece G
+    states = ground
+end
+begin_piece CORE
+    states = core|core|core|ground
+    destructible = 1
+end
+begin_model ground
+    visual = ST_EMPTY.base
+end
+begin_model core
+    visual = Kyt_Post.BASE
+    collision = KYTPOST.sklt
+    shield = 40
+    explosion = 49|0|0|100
+end
+```
 
 ### Sounds
 
@@ -3653,6 +3717,9 @@ How the parameters above are handled in OpenNeoUA Studio. They do not change the
 - **Models without copies of set textures:** in Import Model, select the installed set's `Set.BAS`. Existing loose files win and missing resources, including textures referenced by `.ANM` frames, are resolved from the archive. The palette and rendering tables (`PALETTE`, `REMAP`) are read from the installed set's folders and must stay in the installation. Export Asset Family writes a complete package with textures and rendering profile: remove the original resources you do not intend to distribute. A custom texture absent from the set needs its own file.
 - **Apply to States** (Model Editor toolbar, or File > Apply Changes to Other States): finds the other states of the open model through Entity List, folder names, Bas Manager and similar shape, shows each one with the changes applied and writes only the ticked states. Faces are paired by position; animated faces and faces of one state only are left alone. Nothing is ticked automatically, Genesis included.
 - **Texture mapping copy:** previews and copies the selected faces' mappings to chosen loose BASE states. Faces must match uniquely and the destination must resolve the same texture.
+- **MCP texture coordinates:** `studio_set_uvs` edits ordinary AMESH faces and static ILBM AREA terrain faces. Animated AREA faces retain their animation coordinates. Explicit UV lists are supplied per selected polygon, or in a dictionary keyed by polygon ID.
+- **MCP emitter settings:** `set_emitter` changes any particle emitter setting (acceleration and magnify vectors, start speed, birth rate, lifetime, sizes, noise) of a loose model; `use_set_animation` points a loose `.ANM` at the same animation of the installed `Set.BAS`, so no copy of the original file is needed.
+- **Sulgogar terrain textures:** the infected ground, the station skin and the strips between ground families are not shipped. Run `tools/build_sulg_terrain_textures.py --data "<Data folder>"` from the Studio folder: it builds them from your own `Set1` and `Set3` `Set.BAS` files into `Sets/Set3/Loose/ILBM`. The models only reference the names.
 - **Emitters:** deleting geometry keeps particle emitter source points and updates their references; it is refused if a source point is already invalid. Copy Emitter duplicates and Cut Emitter moves an emitter: both start an animated gray preview, click a point to place it, Esc or right-click cancels. During Cut the original circle disappears unless other emitters share that point.
 - **Ground Alignment tab:** a schematic 2D profile of the model surfaces against flat ground. The profile and Auto exclude particles and, when other surfaces exist, additive effects (an additive-only estimate is marked). Scroll over the profile to adjust `overeof`, then verify the contact in-game.
 
@@ -3664,6 +3731,12 @@ How the parameters above are handled in OpenNeoUA Studio. They do not change the
 - **Kamikaze payload:** Visuals & FX opens Payload effects to edit the charge effects in place; the menu switches to the carrier model and its destruction sequence.
 - **Wireframe Editor:** previews components from other entities or files and saves them as separate files linked to the vehicle or weapon. Right-click a file and choose Copy Path to copy its path.
 - **Fire volumes:** for a downward cone, opposite handles adjust the same symmetric angles.
+
+### Sectors
+
+- **External sectors (Sector Editor, Sector menu):** Export external sector writes the current sector as a folder (`Data/Models/Sectors/<Name>/<Name>.sector`) or as a `.onua` archive of that folder. Models, skeletons and textures that exist in `Set.BAS` are written by name only; only your own loose files are copied. Import external sector opens a `.sector` file or a `.onua` archive (unpacked into `Data/Models/Sectors/<Name>` first) in a free slot for editing. Its own models are never saved into the set: export it again, then clear or wipe the slot before Overwrite Set (the save is refused while a sector still uses them).
+- **Map Editor and Entity Designer:** building previews of an external `sec_type` show that sector; map tiles, icons and typ_map still use the fallback set sector.
+- **MCP:** `export_external_sector` and `import_external_sector` operations of `studio_set_edit` (see `studio_help('sets')`).
 
 ### Gun points
 

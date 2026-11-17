@@ -94,7 +94,11 @@ int yw_MBLoadSet(NC_STACK_ypaworld *yw, int setID)
     std::string oldRsrc = Common::Env.SetPrefix("rsrc", fmt::sprintf("data:set%d:", setID));
 
     if ( setID != yw->_setId )
+    {
+        // External sectors hold SET textures too: release them before the SET changes.
+        yw->ClearExternalSectors();
         yw->ClearSharedExternalBases();
+    }
 
     if ( setID != yw->_setId && setID != 46 )
     {
@@ -122,6 +126,7 @@ int yw_MBLoadSet(NC_STACK_ypaworld *yw, int setID)
 
     if ( setID != 46 )
     {
+        yw->ClearExternalSectors();
         FSMgr::FileHandle *fil = uaOpenFileAlloc("rsrc:scripts/set.sdf", "r");
         if ( !fil )
         {
@@ -176,6 +181,7 @@ int yw_MBLoadSet(NC_STACK_ypaworld *yw, int setID)
         delete fil;
 
         yw->LoadOverrideModels();
+        yw->LoadExternalSectors();
     }
 
     Common::Env.SetPrefix("rsrc", oldRsrc);

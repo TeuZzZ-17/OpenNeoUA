@@ -1,0 +1,52 @@
+; Authored geometry; installed set textures remain references.
+; Files are searched beside this file first, then in the SET of the map.
+
+begin_sector
+    cells = piece1
+    ground = 5
+    map_symbol = 24
+end
+
+begin_piece piece1
+    states = SR_MOUNT|SRxMOUNT|SRyMOUNT|SRzMOUNT
+    destructible = 1
+end
+
+begin_model SR_MOUNT
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Radar_Station/Intact/SR_MOUNT.BASE
+    collision = SRCOL000.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 172|0|0|90
+    explosion = 173|60|40|35
+end
+
+begin_model SRxMOUNT
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Radar_Station/Damaged/SRxMOUNT.BASE
+    collision = SRCOL001.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 172|0|0|90
+    explosion = 173|60|40|35
+end
+
+begin_model SRyMOUNT
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Radar_Station/Heavy/SRyMOUNT.BASE
+    collision = SRCOL002.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 172|0|0|90
+    explosion = 173|60|40|35
+end
+
+begin_model SRzMOUNT
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Radar_Station/Destroyed/SRzMOUNT.BASE
+    collision = SRCOL003.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 0
+    explosion = none
+end

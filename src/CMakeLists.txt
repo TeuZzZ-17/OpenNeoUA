@@ -141,6 +141,7 @@ set(SOURCES
     game/yw_building_spawn.cpp
     game/yw_mobile_power.cpp
     game/yw_fx.cpp
+    game/yw_external_sector.cpp
     game/yw_render.cpp
     game/yw_recorder.cpp
     game/yw_debug.cpp

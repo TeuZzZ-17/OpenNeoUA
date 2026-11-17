@@ -188,7 +188,9 @@ bool ModelPreview::Select(NC_STACK_ypaworld &resources, const NC_STACK_ypaworld 
     {
         const auto &p = source.GetBuildProtos()[id];
         if (p.Index < 0) return false;
-        AddSector(resources,p.SecType);
+        // External sectors get their slot from the preview world's own SET.
+        const int external = p.sector_file.empty() ? -1 : resources.ResolveExternalSector(p.sector_file);
+        AddSector(resources, external >= 0 ? external : (p.sector_file.empty() ? p.SecType : p.sector_fallback));
         AddDecoration(p.DecorationFX,vec3d(),mat3x3::Ident());
         for (auto &part : parts_) part.tint = p.tint;
         for (const auto &gun : p.Guns)

@@ -1,0 +1,82 @@
+; Authored geometry; installed set textures remain references.
+; Files are searched beside this file first, then in the SET of the map.
+
+begin_sector
+    cells = piece1
+    ground = 5
+    map_symbol = 23
+end
+
+begin_piece piece1
+    states = SG_POWER|SGxPOWER|SGyPOWER|SGzPOWER
+    destructible = 1
+end
+
+begin_model SG_POWER
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Power_Station/Intact/SG_POWER.BASE
+    collision = SGCOL000.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 177|0|0|300
+    explosion = 178|13|-373|20
+    explosion = 178|-316|20|213
+    explosion = 180|356|273|146
+    explosion = 178|-26|0|460
+    explosion = 179|20|-196|73
+    explosion = 178|-263|-370|286
+    explosion = 179|346|30|60
+    explosion = 178|296|306|440
+end
+
+begin_model SGxPOWER
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Power_Station/Damaged/SGxPOWER.BASE
+    collision = SGCOL001.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 176|43|236|280
+    explosion = 175|30|-193|366
+    explosion = 180|234|234|218
+    explosion = 176|0|0|400
+    explosion = 180|0|-328|218
+    explosion = 178|-312|-102|0
+    explosion = 182|-193|-180|206
+    explosion = 180|76|234|218
+end
+
+begin_model SGyPOWER
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Power_Station/Heavy/SGyPOWER.BASE
+    collision = SGCOL002.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 176|10|10|220
+    explosion = 175|-226|-153|160
+    explosion = 177|-103|200|180
+    explosion = 180|-323|280|366
+    explosion = 176|373|-246|133
+    explosion = 179|233|180|246
+    explosion = 182|-303|30|500
+    explosion = 179|130|-233|246
+    explosion = 177|-190|66|340
+    explosion = 179|-310|40|146
+    explosion = 182|313|-333|20
+    explosion = 181|180|223|320
+    explosion = 178|213|30|146
+    explosion = 183|6|-40|440
+end
+
+begin_model SGzPOWER
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Power_Station/Destroyed/SGzPOWER.BASE
+    collision = Skeleton/BP_MMMMM.sklt
+    collision_mode = 0
+    map_symbol = 8
+    shield = 0
+    explosion = 178|0|0|60
+    explosion = 179|33|33|100
+    explosion = 179|-44|44|80
+    explosion = 181|55|-55|50
+    explosion = 182|-74|13|70
+    explosion = 179|100|100|60
+end
