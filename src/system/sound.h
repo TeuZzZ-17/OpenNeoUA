@@ -17,6 +17,9 @@ struct TSndFXParam
     float mag0 = 0.0;
     float mag1 = 0.0;
     float radius = 0.0f;
+    // <pal|shk>_<event>_fade_inout = in|out (ms). 0 = no fade (vanilla).
+    int fade_in = 0;
+    int fade_out = 0;
 };
 
 struct TSndFxPosParam : TSndFXParam
@@ -76,6 +79,9 @@ struct TSoundSource
     // Optional per-event sound attenuation. Temporal fade is global per SFX
     // channel and is applied centrally by SFXEngine.
     float Radius = 0.0f;
+    // snd_<event>_fade_inout = in|out (ms) volume fade. 0 = no fade (vanilla).
+    int FadeIn = 0;
+    int FadeOut = 0;
     // Optional runtime lifetime for finite looped effects whose sample itself
     // has no natural end (for example a propagating SuperItem wave).
     double FadeDuration = 0.0;
@@ -104,7 +110,8 @@ struct TSoundSource
     int ResultRate = 0;
 
     void ConfigurePitchRange(int minPitch, int maxPitch);
-    void CopyPitchConfig(const TSoundSource &source);
+    // Copies pitch and volume fade of another sound.
+    void CopyConfig(const TSoundSource &source);
 
     inline bool IsLoop()
     {
@@ -355,10 +362,6 @@ public:
     float timeScale;
     bool forceAllTimeScaled;
     int dword_546F14;
-    int globalShkFadeIn;
-    int globalShkFadeOut;
-    int globalPalFadeIn;
-    int globalPalFadeOut;
     float globalShkFalloffPower;
     float globalPalFalloffPower;
     float globalSndFalloffPower;

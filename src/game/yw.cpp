@@ -2515,7 +2515,7 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
         definition.LoadSamples();
         TSoundSource &sound = fragment->_soundcarrier.Sounds[event];
         sound.Volume = definition.volume;
-        definition.ConfigureSoundSourcePitch(sound);
+        definition.ConfigureSoundSource(sound);
         sound.Radius = definition.radius;
         sound.SetLoop(World::TVhclProto::IsLoopingSnd(event));
         sound.PSample = definition.MainSample.Sample ?
@@ -2899,6 +2899,8 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
 
             smpl_inf->Volume = vhcl.sndFX[i].volume;
 
+            vhcl.sndFX[i].ConfigureSoundSource(*smpl_inf);
+
             if ( i == World::TVhclProto::SND_GENESIS && (vhcl.building_time >= 0.0f || vhcl.sndFX[i].auto_pitch) )
             {
                 // Displayed vehicle cost is internal energy / 50. A second equals
@@ -2908,10 +2910,6 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
                     : vhcl.energy;
                 const int genesisPitch = yw_GetAutomaticGenesisPitch(pitchEnergy);
                 smpl_inf->ConfigurePitchRange(genesisPitch, genesisPitch);
-            }
-            else
-            {
-                vhcl.sndFX[i].ConfigureSoundSourcePitch(*smpl_inf);
             }
 
             smpl_inf->Radius = vhcl.sndFX[i].radius;
@@ -2981,7 +2979,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
                 TSoundSource &snd = bacto->_mimic_soundcarrier.Sounds[0];
                 snd.PSample = requestedVhcl.snd_mimic.MainSample.Sample->GetSampleData();
                 snd.Volume = requestedVhcl.snd_mimic.volume;
-                requestedVhcl.snd_mimic.ConfigureSoundSourcePitch(snd);
+                requestedVhcl.snd_mimic.ConfigureSoundSource(snd);
                 snd.PriorityBias = 0;
                 snd.SetLoop(true);
                 snd.SetPFx(false);
@@ -3157,7 +3155,7 @@ NC_STACK_ypamissile * NC_STACK_ypaworld::ypaworld_func147(ypaworld_arg146 *arg)
             TSoundSource *v25 = &wobj->_soundcarrier.Sounds[i];
 
             v25->Volume = wproto.sndFXes[i].volume;
-            wproto.sndFXes[i].ConfigureSoundSourcePitch(*v25);
+            wproto.sndFXes[i].ConfigureSoundSource(*v25);
             v25->Radius = wproto.sndFXes[i].radius;
 
             if ( i == 0 )

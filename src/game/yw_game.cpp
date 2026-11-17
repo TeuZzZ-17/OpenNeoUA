@@ -2291,6 +2291,7 @@ bool NC_STACK_ypaworld::BuildingConstructBegin(cellArea *cell, uint8_t buildID, 
         sound.Volume = event.volume;
         sound.Radius = event.radius;
         sound.SetLoop(true);
+        event.ConfigureSoundSource(sound);
         if (proto.building_time >= 0.0f || event.auto_pitch)
         {
             const int referenceEnergy = proto.building_time >= 0.0f
@@ -2298,7 +2299,6 @@ bool NC_STACK_ypaworld::BuildingConstructBegin(cellArea *cell, uint8_t buildID, 
             const int pitch = yw_GetAutomaticGenesisPitch(referenceEnergy);
             sound.ConfigurePitchRange(pitch, pitch);
         }
-        else event.ConfigureSoundSourcePitch(sound);
 
         auto &effects = carrier.Sounds[1];
         fx->Pal = event.sndPrm;

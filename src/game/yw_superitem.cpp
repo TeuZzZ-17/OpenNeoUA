@@ -643,7 +643,7 @@ void NC_STACK_ypaworld::StartCustomSuperItemDetonation(int id)
                   ? profile.detonate_snd.MainSample.Sample->GetSampleData()
                   : nullptr;
     sound.Volume = profile.detonate_snd.volume;
-    profile.detonate_snd.ConfigureSoundSourcePitch(sound);
+    profile.detonate_snd.ConfigureSoundSource(sound);
     sound.Radius = profile.detonate_snd.radius;
     sound.SetLoop(false);
     sound.SetFragmented(false);
@@ -702,7 +702,7 @@ void NC_STACK_ypaworld::StartCustomSuperItemWaveEffects(int id)
                   ? profile.wave_snd.MainSample.Sample->GetSampleData()
                   : nullptr;
     audio.Volume = profile.wave_snd.volume;
-    profile.wave_snd.ConfigureSoundSourcePitch(audio);
+    profile.wave_snd.ConfigureSoundSource(audio);
     audio.Radius = profile.wave_snd.radius;
     const double maximumAudioRadius = yw_SuperItemMapRadius(_mapLength);
     audio.FadeDuration = yw_SuperItemWaveTravelTimeMs(profile, maximumAudioRadius);

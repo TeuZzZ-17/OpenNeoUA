@@ -400,9 +400,11 @@ void TVhclSound::SetPitchRange(int minPitch, int maxPitch)
     pitch_max = std::max(minPitch, maxPitch);
 }
 
-void TVhclSound::ConfigureSoundSourcePitch(TSoundSource &sound) const
+void TVhclSound::ConfigureSoundSource(TSoundSource &sound) const
 {
     sound.ConfigurePitchRange(pitch_min, pitch_max);
+    sound.FadeIn = fade_in;
+    sound.FadeOut = fade_out;
 }
 
 void TVhclSound::LoadSamples()

@@ -194,7 +194,7 @@ bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
             TSoundSource &snd = child->_mislClusterSoundCarrier.Sounds[0];
             snd.PSample = clusterSample;
             snd.Volume = cluster.snd.volume ? cluster.snd.volume : 120;
-            cluster.snd.ConfigureSoundSourcePitch(snd);
+            cluster.snd.ConfigureSoundSource(snd);
             snd.Radius = cluster.snd.radius;
             snd.SetLoop(false);
             snd.SetFragmented(false);

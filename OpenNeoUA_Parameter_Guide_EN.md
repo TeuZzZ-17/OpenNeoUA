@@ -16,7 +16,7 @@ Each parameter is one line: marker, `name = value`, em dash, short description. 
   - [Compatibility rules](#compatibility-rules)
   - [Value syntax](#value-syntax)
   - [Paths and visual models](#paths-and-visual-models)
-  - [Sound pitch and effect radius](#sound-pitch-and-effect-radius)
+  - [Sound pitch, effect radius and fades](#sound-pitch-effect-radius-and-fades)
 - [Vehicles (Vehicles.cfg)](#vehicles-vehiclescfg)
   - [Identity, class and production](#identity-class-and-production)
   - [Stats and physics](#stats-and-physics)
@@ -146,7 +146,7 @@ This guide is a reference catalog, not a configuration to copy: add only the par
 - Visual priority is `3ds_*` first, then `base_*`, then `vp_*`. A `3ds_*` asset replaces the matching `base_*` and `vp_*` when it loads; a `base_*` asset falls back to its VP.
 - A `base_*` path points to one `.BASE` file, the entry point of a model family. The loader resolves KIDS/SKLT, ILBM textures, ANM/VANM animations and embedded assets from the file's folder and its subfolders.
 
-### Sound pitch and effect radius
+### Sound pitch, effect radius and fades
 
 Any pitch parameter accepts `min~max`, so one event can pick a different pitch each time without duplicating assets. Radius parameters localize sound, palette and shake events in world space; `0` or absent keeps the legacy behavior.
 
@@ -158,6 +158,12 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 - 🟢 `pal_<event>_radius = 4000` — Maximum radius of a palette flash. Intensity falls linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_<event>_radius = 4000` — Maximum radius of a camera shake. Intensity falls linearly to 0 at the limit. 0 or absent = legacy behavior based on `shk_<event>_mute`.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of a palette flash in milliseconds (format in|out). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of a camera shake in milliseconds (format in|out). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 
 ## Vehicles (Vehicles.cfg)
@@ -208,6 +214,8 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 - 🟢 `snd_mimic_volume = 120` — Mimic sound volume.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_mimic_pitch = 4500~5500` — Mimic sound pitch. Single value = fixed; `min~max` = random pitch selected on each playback.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_mimic_fade_inout = 150|300` — Volume fade-in and fade-out of the mimic sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `speech_voicepack = Data/Sounds/Speech/Voicepacks/resistance-tank-medium` — Unit event voices inside new_vehicle: point directly to the final pack directory. Direct pack path under Data. Missing or 0 uses vanilla voices.
 ------------------------------------------------------------------------------------------------------------------------
@@ -812,15 +820,15 @@ Chain FX (`begin_fx`) replace the old `dest_fx` + `scale_fx` pair with an explic
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `impact_energy_radius = 0` — Additional 3D radius for energy removal on impact. 0 = direct target only; a positive value removes the same energy from nearby units. Each fragment can remove energy only once.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_normal_sample = Data/Sounds/shot7.wav` — Sound played when the fragment is created. `snd_<event>_volume`, `_pitch` and `_radius` are supported for every event.
+- 🟢 `snd_normal_sample = Data/Sounds/shot7.wav` — Sound played when the fragment is created. `snd_<event>_volume`, `_pitch`, `_radius` and `_fade_inout` are supported for every event.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_goingdown_sample = Data/Sounds/fall.wav` — Sound of the goingdown (falling) phase.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_explode_sample = Data/Sounds/impact.wav` — Sound played when the fragment lands or impacts.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_explode_slot = 1` — Palette flash on explode; `pal_goingdown_*` works the same. Also supported: `mag0`, `mag1`, `time` and `radius`. 0 = disabled.
+- 🟢 `pal_explode_slot = 1` — Palette flash on explode; `pal_goingdown_*` works the same. Also supported: `mag0`, `mag1`, `time`, `radius` and `fade_inout`. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_explode_slot = 1` — Camera shake on explode. Also supported: `mag0`, `mag1`, `time`, `radius`, `mute` and `x`, `y`, `z`. 0 = disabled.
+- 🟢 `shk_explode_slot = 1` — Camera shake on explode. Also supported: `mag0`, `mag1`, `time`, `radius`, `fade_inout`, `mute` and `x`, `y`, `z`. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end` — Closes the block.
 ------------------------------------------------------------------------------------------------------------------------
@@ -870,6 +878,8 @@ Chain FX (`begin_fx`) replace the old `dest_fx` + `scale_fx` pair with an explic
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `snd_<event>_ext = 1_100_22050_0_0_sounds/extra.wav` — Additional sample for the event. Format loop_volume_sampleRate_offset_sampleCount_file.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_slot = 1` — Screen color flash: effect type (1 red, 2 blue, 3 green, 4 inverse, 5 dark inverse, 6 black and white, 7 turquoise inverse). Events are the same as for snd_.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_time = 500` — Duration of the color flash in milliseconds.
@@ -877,6 +887,8 @@ Chain FX (`begin_fx`) replace the old `dest_fx` + `scale_fx` pair with an explic
 - 🔵 `pal_<event>_mag0 = 1` — Starting intensity of the flash.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_mag1 = 0` — Final intensity of the flash. The intensity fades linearly from mag0 to mag1.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of the color flash in milliseconds (format in|out). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_slot = 1` — Camera shake: shake slot / type.
 ------------------------------------------------------------------------------------------------------------------------
@@ -893,6 +905,8 @@ Chain FX (`begin_fx`) replace the old `dest_fx` + `scale_fx` pair with an explic
 - 🔵 `shk_<event>_z = 1` — Shake strength on the Z axis.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_mute = 0` — How much the audio is attenuated while the shake plays.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of the camera shake in milliseconds (format in|out). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `snd_genesis_pitch = auto` — `auto` = automatic Genesis sound pitch: the higher the unit's HP, the lower the pitch (opt-in, exact value `auto`). A number or `min~max` overrides it; absent = normal default. An explicit `building_time` overrides this setting and caps the automatic pitch at the 10-second reference.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1066,7 +1080,7 @@ Continuous beam instead of a physical projectile. Damage is tick-based, can ramp
 Laser rules:
 
 - Weapon `coll_*` spheres repeat at direct-beam visual positions and hit units, terrain and buildings. An explicitly defined positive `radius` also repeats as a central sphere. Zero-radius spheres do not collide. With no `coll_*` spheres, the original continuous collision trace is unchanged. Chain jumps keep their target-based behavior.
-- `pal_normal_*` and `shk_normal_*` stay active until the beam stops (their `*_normal_time` is ignored); launch and hit effects keep their timing.
+- `pal_normal_*` and `shk_normal_*` stay active until the beam stops (their `*_normal_time` is ignored, so only the fade-in applies); launch and hit effects keep their timing.
 - In `begin_fx`, `impact_world` runs on world contact and `detonate` on unit or world contact, both at the real hit point.
 - AI beams cannot damage or debuff allies or remove their Deflect Buff; player beams can still damage allies.
 - The beam count is the Vehicle's `num_weapons` (or `num_weapons_2/3/4` of the slot). Every beam starts at its own `fire_x/y/z` muzzle using the vanilla distribution and `fire_x` modes, and a ranged count is rolled once when continuous fire starts. Every direct beam applies its own damage ticks, so concentrating beams raises the total damage.
@@ -1555,11 +1569,11 @@ Weapon Chain FX work like Vehicle Chain FX but are triggered by projectile event
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_explode_sample = Data/Sounds/impact.wav` — Optional finish/impact sound.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_goingdown_slot = 1` — Example goingdown PAL event; mag0, mag1, time and radius are also supported.
+- 🟢 `pal_goingdown_slot = 1` — Example goingdown PAL event; mag0, mag1, time, radius and fade_inout are also supported.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_explode_slot = 1` — Example explode PAL event; mag0, mag1, time and radius are also supported.
+- 🟢 `pal_explode_slot = 1` — Example explode PAL event; mag0, mag1, time, radius and fade_inout are also supported.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_explode_slot = 1` — Example explode SHK event; mag0, mag1, time, radius/mute and x/y/z are also supported.
+- 🟢 `shk_explode_slot = 1` — Example explode SHK event; mag0, mag1, time, radius/mute, fade_inout and x/y/z are also supported.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end` — Closes the block.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1581,6 +1595,8 @@ Weapon Chain FX work like Vehicle Chain FX but are triggered by projectile event
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `snd_<event>_ext = 1_100_22050_0_0_sounds/extra.wav` — Additional sample. Format loop_volume_sampleRate_offset_sampleCount_file.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_slot = 2` — Screen color flash: effect type (1 red, 2 blue, 3 green, 4 inverse, 5 dark inverse, 6 black and white, 7 turquoise inverse).
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_time = 500` — Duration of the flash in milliseconds.
@@ -1588,6 +1604,8 @@ Weapon Chain FX work like Vehicle Chain FX but are triggered by projectile event
 - 🔵 `pal_<event>_mag0 = 2` — Starting intensity of the flash.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_mag1 = 1` — Final intensity of the flash.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of the color flash in milliseconds (format in|out). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_slot = 1` — Camera shake: shake type.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1604,6 +1622,8 @@ Weapon Chain FX work like Vehicle Chain FX but are triggered by projectile event
 - 🔵 `shk_<event>_z = 1` — Shake strength on the Z axis.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_mute = 0` — How much the audio is attenuated during the shake.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of the camera shake in milliseconds (format in|out). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `snd_launch_sample = sounds/Laser.WAV` — Laser-specific behavior: non-looping launch sound played when FIRE begins/is held.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1637,6 +1657,8 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_launch_player_mag1 = 0.5` — Final player-only launch-shake intensity.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_launch_player_fade_inout = 150|300` — Fade-in and fade-out of the player-only launch shake in milliseconds (format in|out). The fade-out ends together with `shk_launch_player_time`; a looping effect only fades in. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_cluster_slot = 4` — Palette slot used at split. 0/absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_cluster_mag0 = 5` — Initial split palette intensity. Default: 1.
@@ -1647,6 +1669,8 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_cluster_radius = 4000` — Maximum cluster palette-effect radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_cluster_fade_inout = 150|300` — Fade-in and fade-out of the cluster split palette effect in milliseconds (format in|out). The fade-out ends together with `pal_cluster_time`; a looping effect only fades in. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_cluster_slot = 1` — Shake slot used at split. 0/absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_cluster_mag0 = 2` — Initial split-shake intensity. Default: 1.
@@ -1656,6 +1680,8 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 - 🟢 `shk_cluster_time = 5000` — Split-shake duration in milliseconds. Default: 1000.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_cluster_radius = 4000` — Maximum cluster-shake radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_cluster_fade_inout = 150|300` — Fade-in and fade-out of the cluster split shake in milliseconds (format in|out). The fade-out ends together with `shk_cluster_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_cluster_mute = 0.02` — Legacy cluster-shake distance attenuation factor used only when shk_cluster_radius = 0.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1668,6 +1694,8 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 - 🟢 `snd_cluster_volume = 120` — Split sound volume.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_cluster_radius = 4000` — Maximum cluster-sound radius. Volume decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_cluster_fade_inout = 150|300` — Volume fade-in and fade-out of the cluster split sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### OpenNeoUA special features
@@ -1731,17 +1759,23 @@ Cluster Weapons split into child Weapons after a timer or on impact. Child count
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_genesis_pitch = 0` — Fixed pitch, `min~max` range or `auto`. With `building_time` the time sets the pitch (4.4 = cost 440, 10 = cost 1000; above 10 unchanged); without it a number or range is used as written and `auto` follows the energy.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_genesis_fade_inout = 150|300` — Volume fade-in and fade-out of the construction sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_genesis_slot = 1` — Construction palette slot of this building. 0 or absent = off. The effect lasts the whole construction (`building_time`, or the vanilla time), going from `mag0` to `mag1`; there is no time key. Independent of audio and visual plasma.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_genesis_mag0 = 0.25` — Initial palette effect intensity.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_genesis_mag1 = 0` — Final palette effect intensity.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_genesis_fade_inout = 150|300` — Fade-in and fade-out of the construction palette effect in milliseconds (format in|out). The fade-out ends when the construction ends. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_genesis_slot = 1` — Enables the construction camera shake of this building. 0 or absent = off. Like the palette it lasts the whole construction, from `mag0` to `mag1`, with no time key; axes and distance fade use the same defaults as vehicle sound events.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_genesis_mag0 = 0.5` — Initial shake intensity.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_genesis_mag1 = 0` — Final shake intensity.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_genesis_fade_inout = 150|300` — Fade-in and fade-out of the construction shake in milliseconds (format in|out). The fade-out ends when the construction ends. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `building_description = Defense outpost` — Optional building description shown in the Database. If absent, the Description row is not shown.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1902,6 +1936,8 @@ end
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `snd_normal_pitch = 0` — Pitch of the Building sound. Ranges with `min~max` are accepted.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_normal_fade_inout = 150|300` — Volume fade-in and fade-out of the Building sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 
 ### OpenNeoUA special features
 
@@ -2032,6 +2068,8 @@ Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_radius = 3000` — Maximum debuff-sound radius. Volume decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_fade_inout = 150|300` — Volume fade-in and fade-out of the debuff sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_slot = 4` — Palette-effect slot used by the debuff.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_mag0 = 5` — Initial debuff palette intensity.
@@ -2042,6 +2080,8 @@ Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_radius = 3000` — Maximum debuff palette-effect radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_fade_inout = 150|300` — Fade-in and fade-out of the debuff palette effect in milliseconds (format in|out). The fade-out ends together with `pal_time`; a looping effect only fades in. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_slot = 1` — Shake slot used by the debuff.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_mag0 = 2` — Initial debuff-shake intensity.
@@ -2051,6 +2091,8 @@ Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems 
 - 🟢 `shk_time = 1500` — Debuff-shake duration in milliseconds.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_radius = 3000` — Maximum debuff-shake radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_fade_inout = 150|300` — Fade-in and fade-out of the debuff shake in milliseconds (format in|out). The fade-out ends together with `shk_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_mute = 0.02` — Legacy debuff-shake distance attenuation factor used only when shk_radius = 0.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2154,6 +2196,8 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_detonate_radius = 10000` — Maximum detonation-sound hearing radius. 0 = legacy attenuation behavior.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_detonate_fade_inout = 150|300` — Volume fade-in and fade-out of the detonation sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_detonate_slot = 1` — Palette-effect slot activated at detonation. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_detonate_mag0 = 20` — Initial palette intensity for detonation.
@@ -2163,6 +2207,8 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 - 🟢 `pal_detonate_time = 6000` — Detonation palette-effect duration in milliseconds.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_detonate_radius = 10000` — Maximum radius of the detonation palette effect.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_detonate_fade_inout = 150|300` — Fade-in and fade-out of the detonation palette effect in milliseconds (format in|out). The fade-out ends together with `pal_detonate_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_detonate_slot = 1` — Shake slot activated at detonation. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2175,6 +2221,8 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 - 🟢 `shk_detonate_radius = 10000` — Maximum radius of the detonation shake.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_detonate_mute = 0.02` — Legacy distance attenuation factor used only when shk_detonate_radius = 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_detonate_fade_inout = 150|300` — Fade-in and fade-out of the detonation shake in milliseconds (format in|out). The fade-out ends together with `shk_detonate_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_detonate_x = 0.2` — Random shake strength multiplier on the X axis.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2190,6 +2238,8 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_wave_radius = 2000` — Maximum hearing radius measured from the wave front. 0 = legacy attenuation behavior.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_wave_fade_inout = 150|300` — Volume fade-in and fade-out of the wave sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_wave_slot = 1` — Palette-effect slot activated when the wave front enters the listener radius. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_wave_mag0 = 10` — Initial palette intensity of the wave.
@@ -2199,6 +2249,8 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 - 🟢 `pal_wave_time = 12000` — Wave palette-effect duration in milliseconds.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_wave_radius = 2000` — Distance from the front within which the palette effect may activate. 0 or absent uses 2400 as the front activation threshold while preserving legacy radius behavior for the effect.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `pal_wave_fade_inout = 150|300` — Fade-in and fade-out of the wave palette effect in milliseconds (format in|out). The fade-out ends together with `pal_wave_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_wave_slot = 1` — Shake slot activated when the wave front enters the listener radius. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2211,6 +2263,8 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 - 🟢 `shk_wave_radius = 2000` — Distance from the front within which wave shake may activate. 0 or absent uses 2400 as the front activation threshold while preserving legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_wave_mute = 0.02` — Legacy distance attenuation factor used only when shk_wave_radius = 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `shk_wave_fade_inout = 150|300` — Fade-in and fade-out of the wave shake in milliseconds (format in|out). The fade-out ends together with `shk_wave_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_wave_x = 0.2` — Random wave-shake strength multiplier on the X axis.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2550,10 +2604,6 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 
 ### Audio and effect falloff
 
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.global_shk_fade_inout = 50|500` — Global fade-in and fade-out in milliseconds for SHK shake effects (format in|out). The fade-out applies only to finite-duration SHK effects.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.global_pal_fade_inout = 50|500` — Global fade-in and fade-out in milliseconds for PAL palette effects (format in|out). The fade-out applies only to finite-duration PAL effects.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.global_shk_falloff_power = 1` — Curve of the distance attenuation of SHK shake effects that author a radius (`shk_*_radius`). 1 = linear, same as before; below 1 the shake stays stronger at a distance and still reaches 0 at the radius; above 1 it fades sooner. Range 0.1-4; missing or invalid = 1. Effects without a radius keep the legacy attenuation.
 ------------------------------------------------------------------------------------------------------------------------

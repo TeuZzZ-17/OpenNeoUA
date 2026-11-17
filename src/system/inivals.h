@@ -300,8 +300,6 @@ public:
     static Common::Ini::Key GameAiTargetAcquisitionRange;
     static Common::Ini::Key GameMgunRange;
     static Common::Ini::Key GameMgunAiFireAlignment;
-    static Common::Ini::Key GameGlobalShkFade;
-    static Common::Ini::Key GameGlobalPalFade;
     static Common::Ini::Key GameGlobalShkFalloffPower;
     static Common::Ini::Key GameGlobalPalFalloffPower;
     static Common::Ini::Key GameGlobalSndFalloffPower;

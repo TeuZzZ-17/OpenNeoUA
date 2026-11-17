@@ -66,63 +66,6 @@ static float SFX_EffectTemporalFactor(TSoundSource &sound, size_t now,
     return SFX_TemporalFactor(sound.StartTime, now, duration, fadeIn, fadeOut);
 }
 
-static int SFX_ReadGlobalFadeMilliseconds(Common::Ini::Key &key, const std::string &value)
-{
-    if ( value.empty() || value.find(',') != std::string::npos )
-    {
-        if ( key.WasSet )
-            ypa_log_out("Warning: invalid %s '%s', using 0\n",
-                        key.Name.c_str(), value.c_str());
-        return 0;
-    }
-
-    try
-    {
-        size_t pos = 0;
-        const double milliseconds = std::stod(value, &pos);
-        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
-             !std::isfinite(milliseconds) || milliseconds <= 0.0 )
-        {
-            if ( key.WasSet && milliseconds != 0.0 )
-                ypa_log_out("Warning: invalid %s '%s', using 0\n",
-                            key.Name.c_str(), value.c_str());
-            return 0;
-        }
-
-        const double maximum = (double)std::numeric_limits<int>::max();
-        if ( milliseconds >= maximum )
-            return std::numeric_limits<int>::max();
-
-        return (int)std::lround(milliseconds);
-    }
-    catch (...)
-    {
-        if ( key.WasSet )
-            ypa_log_out("Warning: invalid %s '%s', using 0\n",
-                        key.Name.c_str(), value.c_str());
-        return 0;
-    }
-}
-
-// game.global_*_fade_inout = in|out (milliseconds). A malformed value disables both fades.
-static void SFX_ReadGlobalFade(Common::Ini::Key &key, int &fadeIn, int &fadeOut)
-{
-    const std::string value = key.Get<std::string>();
-    std::string parts[2];
-    if ( !World::SplitTupleValue(value, 2, parts) )
-    {
-        if ( key.WasSet )
-            ypa_log_out("Warning: invalid %s '%s', using 0|0\n",
-                        key.Name.c_str(), value.c_str());
-        fadeIn = 0;
-        fadeOut = 0;
-        return;
-    }
-
-    fadeIn = SFX_ReadGlobalFadeMilliseconds(key, parts[0]);
-    fadeOut = SFX_ReadGlobalFadeMilliseconds(key, parts[1]);
-}
-
 // game.global_*_falloff_power: 0.1 to 4. Missing, malformed or out of range = 1 (linear).
 static float SFX_ReadFalloffPower(Common::Ini::Key &key)
 {
@@ -183,10 +126,6 @@ int SFXEngine::init()
     timeScale = 1.0f;
     forceAllTimeScaled = false;
     dword_546F14 = 0;
-    globalShkFadeIn = 0;
-    globalShkFadeOut = 0;
-    globalPalFadeIn = 0;
-    globalPalFadeOut = 0;
     globalShkFalloffPower = 1.0f;
     globalPalFalloffPower = 1.0f;
     globalSndFalloffPower = 1.0f;
@@ -209,8 +148,6 @@ int SFXEngine::init()
     audio_volume    = System::IniConf::AudioVolume.Get<int>();
     audio_num_palfx = System::IniConf::AudioNumPalfx.Get<int>();
     audio_rev_stereo = System::IniConf::AudioRevStereo.Get<bool>();
-    SFX_ReadGlobalFade(System::IniConf::GameGlobalShkFade, globalShkFadeIn, globalShkFadeOut);
-    SFX_ReadGlobalFade(System::IniConf::GameGlobalPalFade, globalPalFadeIn, globalPalFadeOut);
     globalShkFalloffPower = SFX_ReadFalloffPower(System::IniConf::GameGlobalShkFalloffPower);
     globalPalFalloffPower = SFX_ReadFalloffPower(System::IniConf::GameGlobalPalFalloffPower);
     globalSndFalloffPower = SFX_ReadFalloffPower(System::IniConf::GameGlobalSndFalloffPower);
@@ -340,8 +277,10 @@ void TSoundSource::ConfigurePitchRange(int minPitch, int maxPitch)
     PitchConfigured = true;
 }
 
-void TSoundSource::CopyPitchConfig(const TSoundSource &source)
+void TSoundSource::CopyConfig(const TSoundSource &source)
 {
+    FadeIn = source.FadeIn;
+    FadeOut = source.FadeOut;
     Pitch = source.Pitch;
     PitchBase = source.PitchBase;
     PitchMin = source.PitchMin;
@@ -706,6 +645,20 @@ void SFXEngine::SoundCarrierProcessSounds(TSndCarrier *smpls, float distance)
                             snd.ResultVol /= legacyDistance;
                     }
 
+                    // snd_<event>_fade_inout: volume envelope. A one-shot sample
+                    // fades out over its real length; loops need FadeDuration.
+                    if ( snd.FadeIn > 0 || snd.FadeOut > 0 )
+                    {
+                        int duration = 0;
+                        const int playRate = snd.Pitch + (snd.PSample ? snd.PSample->SampleRate : 0);
+                        if ( !snd.IsLoop() && !snd.IsFragmented() && snd.PSample && playRate > 0 )
+                            duration = (int)((int64_t)SFX_SampleFrameCount(snd.PSample) * 1024 / playRate);
+
+                        snd.ResultVol = (int16_t)floorf((float)snd.ResultVol *
+                            SFX_EffectTemporalFactor(snd, currentTime, duration,
+                                                     snd.FadeIn, snd.FadeOut) + 0.5f);
+                    }
+
                     if ( snd.ResultVol > 4 )
                     {
                         snd.Priority = snd.ResultVol + snd.PriorityBias;
@@ -788,10 +741,10 @@ void SFXEngine::SoundCarrierProcessPFx(TSndCarrier *smpls, float distance)
                         snd.PFxMag /= legacyDistance;
                 }
 
-                if ( globalPalFadeIn > 0 || globalPalFadeOut > 0 )
+                if ( snd.PPFx->fade_in > 0 || snd.PPFx->fade_out > 0 )
                     snd.PFxMag *= SFX_EffectTemporalFactor(
                         snd, currentTime, snd.PPFx->time,
-                        globalPalFadeIn, globalPalFadeOut);
+                        snd.PPFx->fade_in, snd.PPFx->fade_out);
 
                 audio_InsertPalFX(&snd);
             }
@@ -870,10 +823,10 @@ void SFXEngine::SoundCarrierProcessShake(TSndCarrier *smpls, float distance)
                         snd.ShkMag /= legacyDistance;
                 }
 
-                if ( globalShkFadeIn > 0 || globalShkFadeOut > 0 )
+                if ( snd.PShkFx->fade_in > 0 || snd.PShkFx->fade_out > 0 )
                     snd.ShkMag *= SFX_EffectTemporalFactor(
                         snd, currentTime, snd.PShkFx->time,
-                        globalShkFadeIn, globalShkFadeOut);
+                        snd.PShkFx->fade_in, snd.PShkFx->fade_out);
 
                 InsertShakeFX(&snd);
             }

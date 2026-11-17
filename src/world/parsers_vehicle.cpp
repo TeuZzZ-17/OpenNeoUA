@@ -826,6 +826,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->snd_mimic.volume = parser.stol(p2, nullptr, 0);
     }
+    else if ( !StriCmp(p1, "snd_mimic_fade_inout") )
+    {
+        ParseFadeInOut(parser, p1, p2, _vhcl->snd_mimic.fade_in, _vhcl->snd_mimic.fade_out);
+    }
     else if ( !StriCmp(p1, "orbiter_weapon") )
     {
         // OpenNeoUA Orbiter carrier link. The id is checked at runtime

@@ -886,7 +886,7 @@ bool ypabact_PrepareLaserSoundSource(TSoundSource &snd, World::TVhclSound &fx)
     snd.PSample = mainSample;
 
     snd.Volume = fx.volume;
-    fx.ConfigureSoundSourcePitch(snd);
+    fx.ConfigureSoundSource(snd);
     snd.Radius = fx.radius;
     snd.PriorityBias = 0;
     snd.SetLoop(false);
@@ -1062,7 +1062,7 @@ void ypabact_UpdateLaserHitSound(
     TSoundSource &snd = carrier->Sounds[0];
     snd.PSample = sample;
     snd.Volume = hitFx.volume;
-    hitFx.ConfigureSoundSourcePitch(snd);
+    hitFx.ConfigureSoundSource(snd);
     snd.Radius = hitFx.radius;
     snd.PriorityBias = 0;
     snd.SetLoop(false);

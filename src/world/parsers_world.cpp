@@ -321,6 +321,10 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     {
         ParseSoundPitchRange(p2, _bld->SndFX);
     }
+    else if ( !StriCmp(p1, "snd_normal_fade_inout") )
+    {
+        ParseFadeInOut(parser, p1, p2, _bld->SndFX.fade_in, _bld->SndFX.fade_out);
+    }
     else if ( !StriCmp(p1, "sbact_act") )
     {
         _gunID = parser.stol(p2, nullptr, 0);
@@ -1072,6 +1076,12 @@ static bool ParseSuperItemSoundEventParam(ScriptParser::Parser &parser,
         ParseSoundPitchRange(p2, sound);
     else if ( !StriCmp(p1, sndPrefix + "radius") )
         sound.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, sndPrefix + "fade_inout") )
+        ParseFadeInOut(parser, p1, p2, sound.fade_in, sound.fade_out);
+    else if ( !StriCmp(p1, palPrefix + "fade_inout") )
+        ParseFadeInOut(parser, p1, p2, sound.sndPrm.fade_in, sound.sndPrm.fade_out);
+    else if ( !StriCmp(p1, shkPrefix + "fade_inout") )
+        ParseFadeInOut(parser, p1, p2, sound.sndPrm_shk.fade_in, sound.sndPrm_shk.fade_out);
     else if ( !StriCmp(p1, palPrefix + "slot") )
         sound.sndPrm.slot = parser.stol(p2, nullptr, 0);
     else if ( !StriCmp(p1, palPrefix + "time") )

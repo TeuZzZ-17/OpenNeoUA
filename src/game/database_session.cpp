@@ -111,7 +111,7 @@ void DatabaseSession::SelectAudio(const World::TVhclSound *definition, bool loop
     output.PFragments = sound.extS.empty() ? nullptr : &sound.extS;
     output.SetFragmented(output.PFragments != nullptr);
     output.SetLoop(loop);
-    sound.ConfigureSoundSourcePitch(output);
+    sound.ConfigureSoundSource(output);
     // Menu previews have no world-space attenuation, shakes or palette effects.
     if (output.PSample || output.PFragments) SFXEngine::SFXe.startSound(&carrier,0);
 }

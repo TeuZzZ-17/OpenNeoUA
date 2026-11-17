@@ -495,12 +495,14 @@ struct TVhclSound
     int pitch_max = 0;
     bool auto_pitch = false;
     float radius = 0.0f;
+    int fade_in = 0;  // snd_<event>_fade_inout = in|out (ms); 0 = off
+    int fade_out = 0;
     TSndFXParam sndPrm;
     TSndFxPosParam sndPrm_shk;
     std::vector<TSampleParams> extS;
 
     void SetPitchRange(int minPitch, int maxPitch);
-    void ConfigureSoundSourcePitch(TSoundSource &sound) const;
+    void ConfigureSoundSource(TSoundSource &sound) const;
     void LoadSamples();
     void ClearSounds();
 };

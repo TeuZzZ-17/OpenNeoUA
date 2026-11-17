@@ -465,7 +465,7 @@ void NC_STACK_ypamissile::ApplyArmorPenetrationUnitImpactFX(
             snd.Volume = src.Volume;
             snd.Radius = src.Radius;
             snd.FadeDuration = src.FadeDuration;
-            snd.CopyPitchConfig(src);
+            snd.CopyConfig(src);
             snd.AllowExtendedRate = src.AllowExtendedRate;
             snd.PriorityBias = src.PriorityBias;
             snd.IgnoreTimeScale = src.IgnoreTimeScale;

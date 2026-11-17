@@ -38,6 +38,13 @@ bool ReadTuple(const std::string &key,
                const std::string &value,
                size_t count,
                std::string *parts);
+// <snd|pal|shk>_<event>_fade_inout = in|out (milliseconds, 0 = no fade). A wrong
+// shape is logged and leaves fadeIn/fadeOut untouched; negative parts become 0.
+bool ParseFadeInOut(ScriptParser::Parser &parser,
+                    const std::string &key,
+                    const std::string &value,
+                    int &fadeIn,
+                    int &fadeOut);
 bool ParseVPScaleParam(ScriptParser::Parser &parser,
                        const std::string &prefix,
                        const std::string &p1,

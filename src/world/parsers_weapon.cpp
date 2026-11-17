@@ -708,6 +708,18 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         _wpn->cluster.snd.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     }
+    else if ( !StriCmp(p1, "snd_cluster_fade_inout") )
+    {
+        ParseFadeInOut(parser, p1, p2, _wpn->cluster.snd.fade_in, _wpn->cluster.snd.fade_out);
+    }
+    else if ( !StriCmp(p1, "pal_cluster_fade_inout") )
+    {
+        ParseFadeInOut(parser, p1, p2, _wpn->cluster.snd.sndPrm.fade_in, _wpn->cluster.snd.sndPrm.fade_out);
+    }
+    else if ( !StriCmp(p1, "shk_cluster_fade_inout") )
+    {
+        ParseFadeInOut(parser, p1, p2, _wpn->cluster.snd.sndPrm_shk.fade_in, _wpn->cluster.snd.sndPrm_shk.fade_out);
+    }
     else if ( !StriCmp(p1, "pal_cluster_slot") )
     {
         _wpn->cluster.snd.sndPrm.slot = parser.stol(p2, nullptr, 0);
@@ -942,6 +954,10 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     {
         const float mag = parser.stof(p2, 0);
         _wpn->shk_launch_player.mag1 = std::isfinite(mag) && mag >= 0.0f ? mag : 0.0f;
+    }
+    else if ( !StriCmp(p1, "shk_launch_player_fade_inout") )
+    {
+        ParseFadeInOut(parser, p1, p2, _wpn->shk_launch_player.fade_in, _wpn->shk_launch_player.fade_out);
     }
     else if ( !StriCmp(p1, "salve_shots") )
     {

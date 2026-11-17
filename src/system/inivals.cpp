@@ -408,8 +408,6 @@ Common::Ini::Key IniConf::GameMgunAiFireAlignment("game.ai_mgun_fire_alignment",
 // OpenNeoUA: global temporal envelopes are limited to SHK and PAL.
 // Event-specific fade keys are intentionally unsupported; missing, malformed,
 // negative or zero means no additional fade. SND keeps its legacy behavior.
-Common::Ini::Key IniConf::GameGlobalShkFade("game.global_shk_fade_inout", Common::Ini::KT_WORD, std::string("0|0"));
-Common::Ini::Key IniConf::GameGlobalPalFade("game.global_pal_fade_inout", Common::Ini::KT_WORD, std::string("0|0"));
 // OpenNeoUA: curve of the distance attenuation of SHK, PAL and SND effects that
 // author a radius. 1 (default, missing or invalid) = linear; below 1 = softer.
 Common::Ini::Key IniConf::GameGlobalShkFalloffPower("game.global_shk_falloff_power", Common::Ini::KT_WORD, std::string("1"));
@@ -761,8 +759,6 @@ void IniConf::Init()
         , &GameAiTargetAcquisitionRange
         , &GameMgunRange
         , &GameMgunAiFireAlignment
-        , &GameGlobalShkFade
-        , &GameGlobalPalFade
         , &GameGlobalShkFalloffPower
         , &GameGlobalPalFalloffPower
         , &GameGlobalSndFalloffPower

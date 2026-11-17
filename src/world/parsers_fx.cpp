@@ -139,6 +139,8 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
             }
             else if ( !StriCmp(val, "radius") )
                 sndfx->radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+            else if ( !StriCmp(val, "fade_inout") )
+                ParseFadeInOut(parser, p1, p2, sndfx->fade_in, sndfx->fade_out);
             else if ( !StriCmp(val, "ext") )
             {
                 if ( !ParseExtSampleDef(parser, sndfx, p2) )
@@ -161,6 +163,8 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
                 sndfx->sndPrm.time = parser.stol(p2, nullptr, 0);
             else if ( !StriCmp(val, "radius") )
                 sndfx->sndPrm.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+            else if ( !StriCmp(val, "fade_inout") )
+                ParseFadeInOut(parser, p1, p2, sndfx->sndPrm.fade_in, sndfx->sndPrm.fade_out);
             else
                 return ScriptParser::RESULT_UNKNOWN;
         }
@@ -178,6 +182,8 @@ int FxParser::ParseSndFX(ScriptParser::Parser &parser, const std::string &p1, co
                 sndfx->sndPrm_shk.time = parser.stol(p2, nullptr, 0);
             else if ( !StriCmp(val, "radius") )
                 sndfx->sndPrm_shk.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+            else if ( !StriCmp(val, "fade_inout") )
+                ParseFadeInOut(parser, p1, p2, sndfx->sndPrm_shk.fade_in, sndfx->sndPrm_shk.fade_out);
             else if ( !StriCmp(val, "mute") )
                 sndfx->sndPrm_shk.mute = parser.stof(p2, 0);
             else if ( !StriCmp(val, "x") )
@@ -226,6 +232,21 @@ bool ReadTuple(const std::string &key,
     ypa_log_out("WARNING: invalid %s '%s': expected %u values separated by '|'.\n",
                 key.c_str(), value.c_str(), (unsigned)count);
     return false;
+}
+
+bool ParseFadeInOut(ScriptParser::Parser &parser,
+                    const std::string &key,
+                    const std::string &value,
+                    int &fadeIn,
+                    int &fadeOut)
+{
+    std::string fade[2];
+    if ( !ReadTuple(key, value, 2, fade) )
+        return false;
+
+    fadeIn = std::max(0, (int)parser.stol(fade[0], nullptr, 0));
+    fadeOut = std::max(0, (int)parser.stol(fade[1], nullptr, 0));
+    return true;
 }
 
 // <prefix>_scale_xyz = x|y|z
@@ -408,6 +429,12 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.tick_snd.volume = parser.stol(p2, nullptr, 0);
     else if ( !StriCmp(p1, "snd_radius") )
         debuff.tick_snd.radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "snd_fade_inout") )
+        ParseFadeInOut(parser, p1, p2, debuff.tick_snd.fade_in, debuff.tick_snd.fade_out);
+    else if ( !StriCmp(p1, "pal_fade_inout") )
+        ParseFadeInOut(parser, p1, p2, debuff.tick_snd.sndPrm.fade_in, debuff.tick_snd.sndPrm.fade_out);
+    else if ( !StriCmp(p1, "shk_fade_inout") )
+        ParseFadeInOut(parser, p1, p2, debuff.tick_snd.sndPrm_shk.fade_in, debuff.tick_snd.sndPrm_shk.fade_out);
     else if ( !StriCmp(p1, "pal_slot") )
         debuff.tick_snd.sndPrm.slot = parser.stol(p2, nullptr, 0);
     else if ( !StriCmp(p1, "pal_mag0") )
@@ -2218,6 +2245,7 @@ bool IsMimicVehicleShellParam(const std::string &p1)
            !StriCmp(p1, "snd_mimic_sample") ||
            !StriCmp(p1, "snd_mimic_pitch") ||
            !StriCmp(p1, "snd_mimic_volume") ||
+           !StriCmp(p1, "snd_mimic_fade_inout") ||
            !StriCmp(p1, "job_fightrobo") ||
            !StriCmp(p1, "job_fightflyer") ||
            !StriCmp(p1, "job_fighthelicopter") ||

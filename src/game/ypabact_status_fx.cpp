@@ -346,7 +346,7 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
 
         snd.PSample = _active_debuff.snd_sample;
         snd.Volume = _active_debuff.snd_volume;
-        debuff.tick_snd.ConfigureSoundSourcePitch(snd);
+        debuff.tick_snd.ConfigureSoundSource(snd);
         snd.Radius = debuff.tick_snd.radius;
         snd.PriorityBias = 0;
         snd.SetLoop(loopDebuffSound);
@@ -426,7 +426,7 @@ void NC_STACK_ypabact::InheritActiveDebuffFromParent(NC_STACK_ypabact *parent)
     sound.PSample = sourceSound ? sourceSound->PSample : _active_debuff.snd_sample;
     sound.Volume = sourceSound ? sourceSound->Volume : _active_debuff.snd_volume;
     if ( sourceSound )
-        sound.CopyPitchConfig(*sourceSound);
+        sound.CopyConfig(*sourceSound);
     else
         sound.ConfigurePitchRange(_active_debuff.snd_pitch, _active_debuff.snd_pitch);
     sound.Radius = sourceSound ? sourceSound->Radius : 0.0f;

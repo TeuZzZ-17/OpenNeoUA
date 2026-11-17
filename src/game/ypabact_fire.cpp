@@ -1005,7 +1005,7 @@ void ypabact_PlayMuzzleSound(NC_STACK_ypabact *bact, const TSoundSource &src)
     snd.PPFx = nullptr;
     snd.PShkFx = nullptr;
     snd.Volume = src.Volume;
-    snd.CopyPitchConfig(src);
+    snd.CopyConfig(src);
     snd.PriorityBias = src.PriorityBias;
     snd.SetLoop(false);
     snd.SetFragmented(false);
