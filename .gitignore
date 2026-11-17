@@ -91,6 +91,8 @@
 # Lavoro in corso: texture con provenienza non verificata (derivate dall'aspetto di quelle originali).
 # Non pubblicare finche' non sono rifatte con pixel interamente nostri.
 /Models/Base/New/Sulgogar/Sulg_Power_Station/
+# Radar_Organ rimossa dal repo (scelta utente, 17/11/2026): resta solo su disco per il gioco locale.
+/Models/Base/New/Sulgogar/Sulg_Radar_Organ/
 # Stesse texture derivate: bloccate per nome ovunque finiscano (anche copie in altre cartelle).
 [Ss][Gg][Gg][Rr][Nn][Dd].*
 [Ss][Gg][Ss][Kk][Ii][Nn].*
