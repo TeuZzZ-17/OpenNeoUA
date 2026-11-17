@@ -1,5 +1,6 @@
 // Laser weapons: targeting, damage ticks, sound and beam visuals.
 #include "game/ypabact_internal.h"
+#include <limits>
 
 bool ypabact_IsLaserDamageTarget(NC_STACK_ypabact *shooter, NC_STACK_ypabact *unit)
 {
@@ -317,6 +318,170 @@ int ypabact_LaserTickSectorEnergy(const World::TWeapProto &wproto, int connected
     return baseEnergy > 0.0f ? (int)ceil(baseEnergy) : 0;
 }
 
+// Keep the collision samples and the repeated visuals on the same fixed grid.
+// The grid uses the full weapon range so a contact does not move the samples.
+struct TLaserSphereGrid
+{
+    float lead = 0.0f;
+    float step = 0.0f;
+    int count = 0;
+};
+
+static TLaserSphereGrid ypabact_LaserSphereGrid(NC_STACK_ypabact *shooter,
+                                                const World::TWeapProto &weapon,
+                                                float range)
+{
+    TLaserSphereGrid grid;
+    const float spacing = ypabact_LaserClampVisualSpacing(
+        std::isfinite(weapon.laser_spacing) ? weapon.laser_spacing : 0.0f);
+    if ( shooter->getBACT_viewer() || shooter->getBACT_inputting() )
+        grid.lead = std::min(range * 0.25f, std::max(16.0f, spacing * 0.5f));
+    const float length = std::max(0.0f, range - grid.lead);
+    grid.count = std::max(2, std::min(320, int(length / spacing) + 2));
+    grid.step = length / grid.count;
+    return grid;
+}
+
+static bool ypabact_LaserCompoundHitscan(NC_STACK_ypabact *shooter,
+                                         const World::TWeapProto &weapon,
+                                         const vec3d &origin, const vec3d &dir,
+                                         float range, TLaserUnitHit *out)
+{
+    auto *world = shooter->getBACT_pWorld();
+    const TLaserSphereGrid grid = ypabact_LaserSphereGrid(shooter, weapon, range);
+    if ( grid.step <= 0.0f || !std::isfinite(grid.step) ) return false;
+    const mat3x3 rotation = ypabact_LaserRotationFromDir(dir, shooter->_rotation).Transpose();
+    float extent = 0.0f;
+    for (const auto &sphere : weapon.coll.roboColls)
+        if ( sphere.robo_coll_radius > 0.01f && std::isfinite(sphere.robo_coll_radius) )
+            extent = std::max(extent, float(sphere.coll_pos.length() + sphere.robo_coll_radius));
+    if ( weapon.radius_defined && weapon.radius > 0.01f && std::isfinite(weapon.radius) )
+        extent = std::max(extent, weapon.radius);
+
+    NC_STACK_ypabact *best = nullptr;
+    float bestAlong = range + 1.0f;
+    vec3d bestPoint;
+    const auto testTarget = [&](NC_STACK_ypabact *target)
+    {
+        if ( !ypabact_IsLaserDamageTarget(shooter, target) ) return;
+        std::vector<NC_STACK_ypabact::TCollisionSphereWorld> targetSpheres;
+        const bool shape = target->HasCollisionShape();
+        if ( shape && !world->_collisionScene ) return;
+        if ( !shape ) target->GetCollisionSpheres(targetSpheres, target->_position, target->_rotation, false);
+        const auto testSphere = [&](const vec3d &offset, float radius)
+        {
+            if ( radius <= 0.01f || !std::isfinite(radius) ||
+                 !std::isfinite(offset.x) || !std::isfinite(offset.y) || !std::isfinite(offset.z) ) return;
+            const vec3d base = origin + rotation.Transform(offset);
+            const vec3d toTarget = target->_position - base;
+            const float projection = toTarget.dot(dir);
+            const float broad = target->GetCollisionBroadRadius() + radius;
+            if ( !std::isfinite(projection) || !std::isfinite(broad) ) return;
+            if ( (toTarget - dir * projection).length() > broad ) return;
+            const float firstIndex = (projection - broad - grid.lead) / grid.step - 0.5f;
+            const float lastIndex = (projection + broad - grid.lead) / grid.step - 0.5f;
+            if ( firstIndex > grid.count - 1 || lastIndex < 0.0f ) return;
+            int first = int(std::ceil(std::max(0.0f, firstIndex)));
+            int last = int(std::floor(std::min(float(grid.count - 1), lastIndex)));
+            for (int i = first; i <= last; ++i)
+            {
+                const float along = grid.lead + (i + 0.5f) * grid.step;
+                if ( along >= bestAlong ) break;
+                const vec3d center = base + dir * along;
+                if ( shape )
+                {
+                    Collision::Contact contact;
+                    if ( world->_collisionScene->Trace(target, center, center, radius, &contact) )
+                    { best = target; bestAlong = along; bestPoint = contact.point; }
+                }
+                else for (const auto &body : targetSpheres)
+                {
+                    const vec3d delta = center - body.center;
+                    const float distance = delta.length();
+                    if ( distance <= body.radius + radius )
+                    {
+                        best = target;
+                        bestAlong = along;
+                        bestPoint = distance > 0.001f ? body.center + delta * (body.radius / distance) : center;
+                        break;
+                    }
+                }
+            }
+        };
+        if ( weapon.radius_defined ) testSphere(vec3d(0, 0, 0), weapon.radius);
+        for (const auto &sphere : weapon.coll.roboColls)
+            testSphere(sphere.coll_pos, sphere.robo_coll_radius);
+    };
+
+    const float mapReach = float(std::max(world->_mapSize.x, world->_mapSize.y));
+    const float maximumExtent = (mapReach * 2.0f + 2.0f) * World::CVSectorLength + range;
+    extent = std::min(extent, maximumExtent);
+    if ( world->_collisionScene )
+        for (auto *target : world->_collisionScene->ShapeTargets(origin, origin + dir * range, extent))
+            testTarget(target);
+    const Common::Point center = World::PositionToSectorID(origin);
+    const int sectorRadius = int(std::min(mapReach, (range + extent) / World::CVSectorLength)) + 2;
+    for (int y = std::max(0, center.y - sectorRadius); y <= std::min(world->_mapSize.y - 1, center.y + sectorRadius); ++y)
+        for (int x = std::max(0, center.x - sectorRadius); x <= std::min(world->_mapSize.x - 1, center.x + sectorRadius); ++x)
+            for (auto *target : world->SectorAt(Common::Point(x, y)).unitsList)
+                if ( !target->HasCollisionShape() ) testTarget(target);
+
+    if ( best && out ) { out->target = best; out->along = bestAlong; out->hitPoint = bestPoint; }
+    return best != nullptr;
+}
+
+static bool ypabact_LaserCompoundWorldHit(NC_STACK_ypabact *shooter,
+                                         const World::TWeapProto &weapon,
+                                         const vec3d &origin, const vec3d &dir,
+                                         float range, float limit, vec3d *point,
+                                         float *hitAlong)
+{
+    auto *world = shooter->getBACT_pWorld();
+    const TLaserSphereGrid grid = ypabact_LaserSphereGrid(shooter, weapon, range);
+    const mat3x3 rotation = ypabact_LaserRotationFromDir(dir, shooter->_rotation).Transpose();
+    // These four directions cover every nonzero face normal for func137's
+    // one-sided normal test, without querying all six cardinal directions.
+    const vec3d directions[] = {vec3d(1,1,1), vec3d(1,-1,-1),
+                                vec3d(-1,1,-1), vec3d(-1,-1,1)};
+    for (int i = 0; i < grid.count; ++i)
+    {
+        const float along = grid.lead + (i + 0.5f) * grid.step;
+        if ( along > limit ) break;
+        const auto testSphere = [&](const vec3d &offset, float radius)
+        {
+            if ( radius <= 0.01f || !std::isfinite(radius) ||
+                 !std::isfinite(offset.x) || !std::isfinite(offset.y) || !std::isfinite(offset.z) ) return false;
+            yw_137col contact;
+            ypaworld_arg137 query{};
+            query.pos = origin + dir * along + rotation.Transform(offset);
+            query.radius = radius;
+            // The legacy world query converts coordinates and radius to ints.
+            const double safeCoordinate = std::numeric_limits<int>::max() / 4.0;
+            if ( !std::isfinite(query.pos.x) || !std::isfinite(query.pos.y) ||
+                 !std::isfinite(query.pos.z) || std::fabs(query.pos.x) + radius > safeCoordinate ||
+                 std::fabs(query.pos.z) + radius > safeCoordinate ) return false;
+            query.collisions = &contact;
+            query.coll_max = 1;
+            for (const vec3d &direction : directions)
+            {
+                query.pos2 = direction;
+                world->ypaworld_func137(&query);
+                if ( query.coll_count > 0 )
+                {
+                    if ( point ) *point = contact.pos1;
+                    if ( hitAlong ) *hitAlong = along;
+                    return true;
+                }
+            }
+            return false;
+        };
+        if ( weapon.radius_defined && testSphere(vec3d(0, 0, 0), weapon.radius) ) return true;
+        for (const auto &sphere : weapon.coll.roboColls)
+            if ( testSphere(sphere.coll_pos, sphere.robo_coll_radius) ) return true;
+    }
+    return false;
+}
+
 // Hitscan along the forward beam: returns the nearest valid damage target whose
 // body the beam passes through, within range. This is the final damage trace, so
 // it intentionally includes allies/friendly fire; AI target selection is filtered
@@ -331,6 +496,8 @@ bool ypabact_LaserHitscan(NC_STACK_ypabact *shooter, const World::TWeapProto &wp
     NC_STACK_ypaworld *world = shooter->getBACT_pWorld();
     if ( !world || wproto.disable_collision )
         return false;
+    if ( !wproto.coll.roboColls.empty() )
+        return ypabact_LaserCompoundHitscan(shooter, wproto, origin, dir, range, outHit);
 
     // Scan the whole square of sectors covering the beam, so off-axis bodies are found.
     int sectorRadius = (int)(range / World::CVSectorLength) + 2;
@@ -1256,9 +1423,9 @@ vec3d ypabact_LaserVisualScale(const World::TWeapProto &wproto)
                  wproto.visual_scale.z > 0.0f ? wproto.visual_scale.z : 1.0f);
 }
 
-void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
+static void ypabact_SpawnLaserBeamVisualsImpl(NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
                                       const vec3d &beamStart, const vec3d &beamEnd,
-                                      bool hasContact)
+                                      bool hasContact, bool useCompoundGrid)
 {
     if ( !bact )
         return;
@@ -1286,7 +1453,17 @@ void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapPro
     float spacing = ypabact_LaserClampVisualSpacing(wproto.laser_spacing);
 
     vec3d visualStart = beamStart;
-    if ( bact->getBACT_viewer() || bact->getBACT_inputting() )
+    const bool compound = useCompoundGrid && !wproto.coll.roboColls.empty();
+    TLaserSphereGrid fixedGrid;
+    if ( compound )
+    {
+        fixedGrid = ypabact_LaserSphereGrid(bact, wproto, ypabact_LaserRange(wproto));
+        visualStart += dir * fixedGrid.lead;
+        span = beamEnd - visualStart;
+        len -= fixedGrid.lead;
+        if ( len <= 0.0f ) return;
+    }
+    else if ( bact->getBACT_viewer() || bact->getBACT_inputting() )
     {
         float lead = spacing * 0.5f;
         if ( lead < 16.0f )
@@ -1301,14 +1478,26 @@ void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapPro
             return;
     }
 
-    int count = (int)(len / spacing) + 2;
+    int count = compound ? fixedGrid.count : (int)(len / spacing) + 2;
     if ( count < 2 ) count = 2;
     if ( count > 320 ) count = 320;
 
     for (int i = 0; i < count; i++)
     {
-        float t = ((float)i + 0.5f) / (float)count;
-        vec3d pos = visualStart + span * t;
+        float t;
+        vec3d pos;
+        if ( compound )
+        {
+            const float distance = (i + 0.5f) * fixedGrid.step;
+            if ( distance > len + 0.001f ) break;
+            t = distance / len;
+            pos = visualStart + dir * distance;
+        }
+        else
+        {
+            t = ((float)i + 0.5f) / (float)count;
+            pos = visualStart + span * t;
+        }
         float alpha = 1.0f;
         if ( wproto.laser_fade_in > 0.0f )
             alpha = std::min(alpha, (t * len) / wproto.laser_fade_in);
@@ -1328,6 +1517,12 @@ void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapPro
         if ( id != 0 && !world->_transientVPs.empty() && world->_transientVPs.back().id == id )
             world->_transientVPs.back().intensity = alpha;
     }
+}
+
+void ypabact_SpawnLaserBeamVisuals(NC_STACK_ypabact *bact, const World::TWeapProto &wproto,
+                                   const vec3d &beamStart, const vec3d &beamEnd, bool hasContact)
+{
+    ypabact_SpawnLaserBeamVisualsImpl(bact, wproto, beamStart, beamEnd, hasContact, true);
 }
 
 void NC_STACK_ypabact::RequestLaserFire(int weaponId, bact_arg79 *arg, int sourceSlot)
@@ -1532,13 +1727,21 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
         bool hasUnitHit = ypabact_LaserHitscan(this, wproto, request.start, dir, range, &unitHit);
 
         vec3d worldHitPoint;
-        bool worldHit = !wproto.disable_collision && ypabact_LaserWorldHit(this, request.start, dir, range, &worldHitPoint);
         float worldAlong = range + 1.0f;
-        if ( worldHit )
+        const bool compound = !wproto.coll.roboColls.empty();
+        bool worldHit = false;
+        if ( !wproto.disable_collision && compound )
+            worldHit = ypabact_LaserCompoundWorldHit(this, wproto, request.start, dir, range,
+                                                      hasUnitHit ? unitHit.along : range,
+                                                      &worldHitPoint, &worldAlong);
+        else if ( !wproto.disable_collision )
         {
-            worldAlong = (worldHitPoint - request.start).dot(dir);
-            if ( worldAlong < 0.0f )
-                worldHit = false;
+            worldHit = ypabact_LaserWorldHit(this, request.start, dir, range, &worldHitPoint);
+            if ( worldHit )
+            {
+                worldAlong = (worldHitPoint - request.start).dot(dir);
+                if ( worldAlong < 0.0f ) worldHit = false;
+            }
         }
 
         bool useWorldHit = worldHit && (!hasUnitHit || worldAlong <= unitHit.along);
@@ -1550,9 +1753,9 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
 
         beam.start = request.start;
         if ( target )
-            beam.end = hitPoint;
+            beam.end = compound ? request.start + dir * unitHit.along : hitPoint;
         else if ( useWorldHit )
-            beam.end = worldHitPoint;
+            beam.end = compound ? request.start + dir * worldAlong : worldHitPoint;
         else
             beam.end = request.start + dir * range;
         beam.has_contact = target != nullptr || useWorldHit;
@@ -1617,9 +1820,11 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             // ---- Throttled impact/contact FX ----
             if ( _clock >= beam.next_fx_time )
             {
-                ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, beam, dir,
+                TLaserBeamRuntime impactBeam = beam;
+                if ( !wproto.coll.roboColls.empty() ) impactBeam.end = hitPoint;
+                ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, impactBeam, dir,
                                                 false, chainFXPoints);
-                ypabact_SpawnWeaponImpactVisual(_world, wproto, false, beam.end,
+                ypabact_SpawnWeaponImpactVisual(_world, wproto, false, impactBeam.end,
                                                    ypabact_LaserRotationFromDir(dir, _rotation), 90);
                 beam.next_fx_time = _clock + 160;
             }
@@ -1672,15 +1877,25 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
             // vp_dead so old test weapons still show something instead of nothing.
             if ( useWorldHit && _clock >= beam.next_fx_time )
             {
-                ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, beam, dir,
+                TLaserBeamRuntime impactBeam = beam;
+                if ( compound ) impactBeam.end = worldHitPoint;
+                ypabact_SpawnLaserImpactChainFX(this, _laser_weapon, wproto, impactBeam, dir,
                                                 true, chainFXPoints);
-                ypabact_SpawnWeaponImpactVisual(_world, wproto, true, beam.end,
+                ypabact_SpawnWeaponImpactVisual(_world, wproto, true, impactBeam.end,
                                                    ypabact_LaserRotationFromDir(dir, _rotation), 90);
                 beam.next_fx_time = _clock + 160;
             }
 
             // Continuous burn strip (laser_burn_decal_frequency): every frame, not on the FX throttle.
-            ypabact_LaserBurnTrail(this, wproto, beam, useWorldHit);
+            if ( compound && useWorldHit )
+            {
+                TLaserBeamRuntime impactBeam = beam;
+                impactBeam.end = worldHitPoint;
+                ypabact_LaserBurnTrail(this, wproto, impactBeam, true);
+                beam.burn_active = impactBeam.burn_active;
+                beam.burn_last = impactBeam.burn_last;
+            }
+            else ypabact_LaserBurnTrail(this, wproto, beam, useWorldHit);
         }
     }
 
@@ -1741,7 +1956,7 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
                 chainDamageMult *= perJumpMult;
 
                 if ( spawnBeamVPs )
-                    ypabact_SpawnLaserBeamVisuals(this, wproto, beam.start, beam.end, true);
+                    ypabact_SpawnLaserBeamVisualsImpl(this, wproto, beam.start, beam.end, true, false);
 
                 ypabact_ApplyLaserUnitTick(this, wproto, target, beam, playerControlled, chainDamageMult);
 

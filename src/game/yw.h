@@ -2079,6 +2079,9 @@ struct TLego
     std::string Name;
     std::string OverrideName;
     std::string CollisionName;
+    // External .sector only: map icon per lego zoom (map zoom 2, 3, 4), Data-relative
+    // PNG/SVG paths. Empty = the vanilla GUIElementID glyph.
+    std::array<std::string, 3> MapIcon;
 
     /* Explode object and position */
     struct ExFX
@@ -2106,6 +2109,8 @@ struct TSectorDesc
     uint8_t SurfaceType = 0;
     uint8_t GUIElementID = 0;
     Common::PlaneArray<TSubSectorDesc *, 3, 3> SubSectors = Common::PlaneArray<TSubSectorDesc *, 3, 3>::ArrayInit(0);
+    // External .sector only: sector map icon for map zoom 0 and 1 (see TLego::MapIcon).
+    std::array<std::string, 2> MapIcon;
 };
 
 
@@ -3226,6 +3231,7 @@ public:
         std::map<std::string, int> slots; // normalized .sector path -> sector slot (-1 = failed)
         std::map<std::string, NC_STACK_base *> bases; // owned BASE/3DS models of installed sectors
         std::vector<size_t> legos, pieces, sectors;
+        bool mapIcons = false; // any installed sector or model has a map_icon
     } _externalSectors;
 
     std::vector<World::TVhclProto> _vhclProtos;

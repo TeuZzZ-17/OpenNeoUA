@@ -50,19 +50,21 @@ int main(int, char **)
     CreateDirectoryA(DIR, nullptr);
     const std::string model = "Data/Models/Base/New/Ghorkov/Kyt_Flak/Kyt_Flak_Normal/";
     bool fixture = CopyFile2(model + "Kyt_Flak_Normal.BASE", std::string(DIR) + "/Kyt_Flak_Normal.BASE") &&
-                   CopyFile2(model + "KYTFLKN1.sklt", std::string(DIR) + "/KYTFLKN1.sklt");
+                   CopyFile2(model + "KYTFLKN1.sklt", std::string(DIR) + "/KYTFLKN1.sklt") &&
+                   CopyFile2("Data/Fonts/Sec4.PNG", std::string(DIR) + "/icon.png");
     Write("test.sector",
         "; test sector\n"
-        "begin_sector\n    cells = G|G|G|G|CORE|G|G|G|G\n    ground = 0\n    map_symbol = 3\nend\n"
+        "begin_sector\n    cells = G|G|G|G|CORE|G|G|G|G\n    ground = 0\n    map_symbol = 3\n    map_icon = icon.png|icon.png\nend\n"
         "begin_piece G\n    states = ground\nend\n"
         "begin_piece CORE\n    states = core|core|core|ground\n    destructible = 1\nend\n"
         "begin_model ground\n    visual = ST_EMPTY.base\nend\n"
         "begin_model core\n    visual = Kyt_Flak_Normal.BASE\n    collision = KYTFLKN1.sklt\n"
-        "    shield = 40\n    explosion = 49|0|0|100\nend\n");
+        "    shield = 40\n    explosion = 49|0|0|100\n    map_icon = icon.png\nend\n");
     Write("single.sector",
         "begin_sector\n    cells = C\n    ground = 2\nend\n"
         "begin_piece C\n    states = city\n    destructible = 1\nend\n"
-        "begin_model city\n    visual = ST_CITY1.BASE ; not beside the file: SET model by name\nend\n");
+        "begin_model city\n    visual = ST_CITY1.BASE ; not beside the file: SET model by name\n"
+        "    map_icon = missing.png\nend\n");
     Write("broken.sector",
         "begin_sector\n    cells = C\n    ground = 0\nend\n"
         "begin_piece C\n    states = m\nend\n"
@@ -134,6 +136,15 @@ int main(int, char **)
               "inherited collision is an own skeleton object");
     }
     check(p[2].SecType == 7, "missing model falls back to the SET sector");
+    if (core && corner)
+    {
+        const std::string icon = "Models/Sectors/_ExtSectorTest/icon.png";
+        const TLego &coreLego = world->_legoArray[core->HPModels[0]];
+        check(coreLego.MapIcon[0] == icon && coreLego.MapIcon[2] == icon, "model map_icon for every lego zoom");
+        check(world->_legoArray[corner->HPModels[0]].MapIcon[0].empty(), "SET model keeps its map symbol");
+        check(desc.MapIcon[0] == icon && desc.MapIcon[1] == icon && world->_externalSectors.mapIcons,
+              "sector map_icon for zoom 0 and 1");
+    }
     check(p[4].SecType == 9, "unknown key falls back to the SET sector");
     TSectorDesc &single = world->_secTypeArray[p[3].SecType];
     const int city = FindLego(world.get(), "ST_CITY1.base");
@@ -142,6 +153,9 @@ int main(int, char **)
           world->_legoArray[single.SubSectors.At(0, 0)->HPModels[0]].Base == world->_legoArray[city].Base &&
           world->_legoArray[single.SubSectors.At(0, 0)->HPModels[0]].Explosions.size() ==
           world->_legoArray[city].Explosions.size(), "one large cell inherits a SET model");
+    check(single.SubSectors.At(0, 0) &&
+          world->_legoArray[single.SubSectors.At(0, 0)->HPModels[0]].MapIcon[0].empty(),
+          "a missing map_icon keeps the map symbol and the sector");
 
     const size_t legos = world->_externalSectors.legos.size();
     check(world->yw_LoadSet(3) && p[1].SecType == slot && world->_externalSectors.legos.size() == legos,
@@ -152,7 +166,7 @@ int main(int, char **)
     check(world->_externalSectors.legos.empty(), "external sectors released");
 
     for (const char *f : {"test.sector", "single.sector", "broken.sector", "badkey.sector",
-                          "Kyt_Flak_Normal.BASE", "KYTFLKN1.sklt"})
+                          "Kyt_Flak_Normal.BASE", "KYTFLKN1.sklt", "icon.png"})
         std::remove((base + f).c_str());
     RemoveDirectoryA(DIR);
     RemoveDirectoryA("Data/Models/Sectors");

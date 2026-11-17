@@ -1,0 +1,58 @@
+; Authored Sulgogar rooted turret platform. Four states; installed textures stay references.
+; Files are searched beside this file first, then in the SET of the map.
+
+begin_sector
+    cells = CORE
+    ground = 5
+    map_symbol = 23
+end
+
+begin_piece CORE
+    states = intact|damaged|heavy|destroyed
+    destructible = 1
+end
+
+begin_model intact
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Turret_Platform_Light/Intact/SV_LIGHT_0.BASE
+    collision = SV0P0000.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 175|0|0|150
+    explosion = 184|0|0|150
+    explosion = 176|100|70|110
+    explosion = 182|-90|-80|90
+end
+
+begin_model damaged
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Turret_Platform_Light/Damaged/SV_LIGHT_1.BASE
+    collision = SV0P0001.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 175|0|0|150
+    explosion = 184|0|0|150
+    explosion = 176|100|70|110
+    explosion = 182|-90|-80|90
+end
+
+begin_model heavy
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Turret_Platform_Light/Heavy/SV_LIGHT_2.BASE
+    collision = SV0P0002.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 175|0|0|150
+    explosion = 184|0|0|150
+    explosion = 176|100|70|110
+    explosion = 182|-90|-80|90
+end
+
+begin_model destroyed
+    visual = Data/Models/Base/New/Sulgogar/Sulg_Turret_Platform_Light/Destroyed/SV_LIGHT_3.BASE
+    collision = SV0P0003.sklt
+    collision_mode = 0
+    map_symbol = 8
+    shield = 0
+    explosion = none
+end

@@ -91,6 +91,12 @@
 # Lavoro in corso: texture con provenienza non verificata (derivate dall'aspetto di quelle originali).
 # Non pubblicare finche' non sono rifatte con pixel interamente nostri.
 /Models/Base/New/Sulgogar/Sulg_Power_Station/
+# Stesse texture derivate: bloccate per nome ovunque finiscano (anche copie in altre cartelle).
+[Ss][Gg][Gg][Rr][Nn][Dd].*
+[Ss][Gg][Ss][Kk][Ii][Nn].*
+[Ss][Gg][Tt][Oo][Rr][Nn].*
+[Ss][Gg][Aa][Ss][Hh]1.*
+[Ss][Gg][Tt][0-9][0-9][HhVv].*
 
 # ============================================================
 # FILE ROOT

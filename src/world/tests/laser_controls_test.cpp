@@ -3,6 +3,8 @@
 #include "game/yw_internal.h"
 #include "game/ypatank.h"
 #include "game/ypacar.h"
+#include "world/collision_shape.h"
+#include "nucleus/sklt.h"
 #include "../parsers.h"
 #include <cmath>
 #include <cstdio>
@@ -21,6 +23,8 @@ bool Near(float a, float b) { return std::fabs(a - b) < 1e-3f; }
 
 struct WorldProbe : NC_STACK_ypaworld {
     NC_STACK_base visual;
+    bool testSphereWorld = false;
+    int sphereWorldQueries = 0;
     WorldProbe() {
         _vhclModels.resize(256, &visual);
         _mapSize = Common::Point(8, 8); _cells.Resize(_mapSize);
@@ -31,6 +35,47 @@ struct WorldProbe : NC_STACK_ypaworld {
     void ypaworld_func136(ypaworld_arg136 *arg) override { arg->isect = false; }
     void ypaworld_func180(yw_arg180 *) override {}
     void ypaworld_func149(ypaworld_arg136 *arg) override { arg->isect = false; }
+    void ypaworld_func137(ypaworld_arg137 *arg) override {
+        ++sphereWorldQueries;
+        arg->coll_count = 0;
+        if (testSphereWorld && std::fabs(arg->pos.x - 2500) <= arg->radius &&
+            std::fabs(arg->pos.z + 2250) <= arg->radius && arg->coll_max > 0) {
+            arg->collisions[0].pos1 = vec3d(2500, arg->pos.y, -2250);
+            arg->collisions[0].pos2 = vec3d(0, 0, -1);
+            arg->coll_count = 1;
+        }
+    }
+};
+struct GroundProbe : WorldProbe {
+    UAskeleton::Data floorData, sideData, crossData;
+    NC_STACK_skeleton floor, side, cross;
+    TSubSectorDesc subsection;
+    GroundProbe() {
+        for (auto &sector : _secTypeArray)
+            for (int x = 0; x < 3; ++x) for (int y = 0; y < 3; ++y)
+                sector.SubSectors.At(x, y) = &subsection;
+        floorData.POO = {vec3d(-150,0,-150), vec3d(-150,0,150),
+                         vec3d(150,0,150), vec3d(150,0,-150)};
+        UAskeleton::Polygon face; face.num_vertices = 4;
+        face.v[0]=0; face.v[1]=1; face.v[2]=2; face.v[3]=3; face.B=1;
+        floorData.polygons.push_back(face); floor._resData = &floorData;
+        _legoArray[0].CollisionSkelet = _legoArray[0].UseCollisionSkelet = &floor;
+        sideData = floorData; side._resData = &sideData; _fillerSide = &side;
+        crossData.POO = floorData.POO; crossData.POO.push_back(vec3d(0,0,0));
+        for (int i = 0; i < 4; ++i) {
+            UAskeleton::Polygon triangle; triangle.num_vertices = 3;
+            triangle.v[0]=i; triangle.v[1]=(i+1)%4; triangle.v[2]=4;
+            crossData.polygons.push_back(triangle);
+        }
+        cross._resData = &crossData; _fillerCross = &cross;
+    }
+    ~GroundProbe() {
+        _legoArray[0].CollisionSkelet = _legoArray[0].UseCollisionSkelet = nullptr;
+        _fillerSide = _fillerCross = nullptr;
+    }
+    void ypaworld_func137(ypaworld_arg137 *arg) override {
+        NC_STACK_ypaworld::ypaworld_func137(arg);
+    }
 };
 bool ParseWeapons(WorldProbe &w, Engine::StringList lines) {
     ScriptParser::HandlersList handlers{new World::Parsers::WeaponProtoParser(&w)};
@@ -147,6 +192,111 @@ int main() {
     Unit ally; ally.Bind(w, 1, 104, enemy._position); beam = {};
     ypabact_ApplyLaserUnitTick(&shooter, proto, &ally, beam, false, 1.0f);
     Check(!ally.Debuffed(), "AI debuff laser preserves allies");
+
+    // Weapon spheres follow each repeated beam visual, including lateral offsets.
+    auto sphereWorld = std::unique_ptr<WorldProbe>(new WorldProbe());
+    Unit sphereShooter, sphereTarget;
+    sphereShooter.Bind(*sphereWorld, 1, 201, vec3d(2400, -100, -2400));
+    sphereTarget.Bind(*sphereWorld, 2, 202, vec3d(2500, -100, -2250));
+    sphereTarget._radius = 2;
+    World::TWeapProto sphereLaser;
+    sphereLaser.radius = 0;
+    sphereLaser.laser_spacing = 40;
+    sphereLaser.coll.roboColls.resize(1);
+    sphereLaser.coll.roboColls[0].coll_pos = vec3d(100, 0, 0);
+    sphereLaser.coll.roboColls[0].robo_coll_radius = 2;
+    TLaserUnitHit sphereHit;
+    Check(ypabact_LaserHitscan(&sphereShooter, sphereLaser, sphereShooter._position,
+                               vec3d(0, 0, 1), 400, &sphereHit) && sphereHit.target == &sphereTarget,
+          "laser weapon sphere contacts target beside repeated beam segment");
+    sphereTarget._position.z += 16.6667f;
+    Check(!ypabact_LaserHitscan(&sphereShooter, sphereLaser, sphereShooter._position,
+                                vec3d(0, 0, 1), 400, &sphereHit),
+          "laser weapon sphere preserves gaps between repeated beam segments");
+    sphereTarget._position = sphereShooter._position + vec3d(0, 0, 150);
+    Check(!ypabact_LaserHitscan(&sphereShooter, sphereLaser, sphereShooter._position,
+                                vec3d(0, 0, 1), 400, &sphereHit),
+          "unconfigured legacy radius does not add a central laser sphere");
+    sphereLaser.radius_defined = true;
+    sphereLaser.radius = 5;
+    Check(ypabact_LaserHitscan(&sphereShooter, sphereLaser, sphereShooter._position,
+                               vec3d(0, 0, 1), 400, &sphereHit),
+          "explicit legacy radius remains alongside laser weapon spheres");
+    sphereLaser.radius_defined = false;
+    sphereTarget._position = sphereShooter._position + vec3d(100, 0, 150);
+    sphereLaser.coll.roboColls[0].robo_coll_radius = 0;
+    Check(!ypabact_LaserHitscan(&sphereShooter, sphereLaser, sphereShooter._position,
+                                vec3d(0, 0, 1), 400, &sphereHit),
+          "zero-radius laser sphere does not collide");
+    sphereLaser.coll.roboColls[0].robo_coll_radius = 2;
+    auto shape = std::make_shared<Collision::Shape>();
+    Collision::Part cube;
+    for (const auto &v : {vec3d(-2,-2,-2), vec3d(2,-2,-2), vec3d(2,2,-2), vec3d(-2,2,-2),
+                           vec3d(-2,-2,2), vec3d(2,-2,2), vec3d(2,2,2), vec3d(-2,2,2)})
+        cube.vertices.push_back(v);
+    cube.faces = {{{0,2,1}},{{0,3,2}},{{4,5,6}},{{4,6,7}},{{0,1,5}},{{0,5,4}},
+                  {{3,7,6}},{{3,6,2}},{{0,4,7}},{{0,7,3}},{{1,2,6}},{{1,6,5}}};
+    shape->parts.push_back(cube);
+    Check(Collision::Build(*shape), "laser target collision shape fixture builds");
+    sphereWorld->_collisionScene.reset(new Collision::Scene(*sphereWorld));
+    sphereTarget._collisionShape = shape;
+    sphereWorld->_collisionScene->UpdateActor(&sphereTarget);
+    Check(ypabact_LaserHitscan(&sphereShooter, sphereLaser, sphereShooter._position,
+                               vec3d(0, 0, 1), 400, &sphereHit) && sphereHit.target == &sphereTarget,
+          "laser weapon sphere contacts target collision shape");
+    sphereTarget._collisionShape.reset();
+    sphereWorld->_collisionScene.reset();
+    sphereLaser.vp_normal = 1;
+    sphereLaser.life_time = 400;
+    const float visualRange = ypabact_LaserRange(sphereLaser);
+    ypabact_SpawnLaserBeamVisuals(&sphereShooter, sphereLaser, sphereShooter._position,
+                                 sphereShooter._position + vec3d(0, 0, visualRange), false);
+    Check(sphereWorld->_transientVPs.size() >= 3, "compound laser spawns repeated visual segments");
+    if (sphereWorld->_transientVPs.size() >= 3) {
+        auto visual = sphereWorld->_transientVPs.begin();
+        const vec3d firstVisual = visual->pos;
+        ++visual;
+        const vec3d secondVisual = visual->pos;
+        sphereTarget._position = firstVisual + vec3d(100, 0, 0);
+        Check(ypabact_LaserHitscan(&sphereShooter, sphereLaser, sphereShooter._position,
+                                   vec3d(0, 0, 1), visualRange, &sphereHit),
+              "weapon sphere aligns with repeated visual position");
+        sphereWorld->_transientVPs.clear();
+        ypabact_SpawnLaserBeamVisuals(&sphereShooter, sphereLaser, sphereShooter._position,
+                                     sphereShooter._position + vec3d(0, 0, visualRange * .5f), true);
+        auto shortened = sphereWorld->_transientVPs.begin();
+        bool stable = sphereWorld->_transientVPs.size() >= 2 && Near(shortened->pos, firstVisual);
+        if (stable) { ++shortened; stable = Near(shortened->pos, secondVisual); }
+        Check(stable, "collision and visual samples stay fixed when beam shortens");
+    }
+    sphereWorld->_transientVPs.clear();
+    sphereTarget._disableCollision = true;
+    sphereWorld->testSphereWorld = true;
+    sphereLaser.life_time = 400;
+    sphereLaser.coll.roboColls[0].robo_coll_radius = 15;
+    sphereWorld->_weaponProtos[1] = sphereLaser;
+    sphereWorld->_weaponProtos[1]._weaponFlags = World::TWeapProto::WEAPON_FLAGS_LASER;
+    sphereShooter._laser_weapon = 1;
+    sphereShooter._laser_fire_request = true;
+    sphereShooter._laser_requests.resize(1);
+    sphereShooter._laser_requests[0].start = sphereShooter._position;
+    sphereShooter._laser_requests[0].dir = vec3d(0, 0, 1);
+    sphereShooter.UpdateLaser(&update);
+    Check(sphereWorld->sphereWorldQueries > 0 && sphereShooter._laser_beams[0].has_contact,
+          "laser weapon sphere contacts terrain beside beam axis");
+    auto groundWorld = std::unique_ptr<GroundProbe>(new GroundProbe());
+    Unit groundShooter;
+    groundShooter.Bind(*groundWorld, 1, 203, vec3d(2400, -4, -2400));
+    groundWorld->_weaponProtos[1] = sphereLaser;
+    groundWorld->_weaponProtos[1]._weaponFlags = World::TWeapProto::WEAPON_FLAGS_LASER;
+    groundShooter._laser_weapon = 1;
+    groundShooter._laser_fire_request = true;
+    groundShooter._laser_requests.resize(1);
+    groundShooter._laser_requests[0].start = groundShooter._position;
+    groundShooter._laser_requests[0].dir = vec3d(0, 0, 1);
+    groundShooter.UpdateLaser(&update);
+    Check(groundShooter._laser_beams[0].has_contact,
+          "laser weapon sphere contacts real terrain collision geometry");
     std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
     return failures ? 1 : 0;
 }

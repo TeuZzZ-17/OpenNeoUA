@@ -85,6 +85,9 @@ int main()
     CHECK(world._buildProtos[1].TypeIcon == 0x2605);
     CHECK(ScriptParser::Parser::ParseStringList({"modify_vehicle 1", "type_icon = U+D800", "end"}, handlers, ScriptParser::FLAG_NO_SCOPE_SKIP));
     CHECK(world._vhclProtos[1].type_icon == 0x2206);
+    // A lone '\' is the symbol, not a line continuation: the next line must stay readable.
+    CHECK(ScriptParser::Parser::ParseStringList({"modify_vehicle 1", "type_icon = \\", "energy = 777", "end"}, handlers, ScriptParser::FLAG_NO_SCOPE_SKIP));
+    CHECK(world._vhclProtos[1].type_icon == '\\' && world._vhclProtos[1].energy == 777);
 
     auto *legacyFont = NC_STACK_ypaworld::yw_LoadFont("__ONUA_ICON_PROBE.FON");
     std::remove(probePath);

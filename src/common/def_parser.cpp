@@ -49,7 +49,9 @@ bool Parser::ParseNextLine(std::string *p1, std::string *p2)
             if (stok.GetNext(&word))
             {
                 (*p2) += word;
-                if (p2->back() == '\\')
+                // A trailing '\' continues the value on the next line. A value that is
+                // only "\" is a plain symbol (type_icon = \), never a continuation.
+                if (p2->size() > 1 && p2->back() == '\\')
                 {
                     p2->back() = '\n';
                     loop = true;

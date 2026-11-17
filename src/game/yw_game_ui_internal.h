@@ -325,6 +325,7 @@ int sub_4F5FE0(NC_STACK_ypaworld *yw, int x, int y);
 int sub_4F5CEC(NC_STACK_ypaworld *yw, int x, int y);
 void sb_0x4f6650__sub0(NC_STACK_ypaworld *yw, CmdStream *cmdbuf, int xpos, int ypos, int w, int h);
 void sb_0x4f6650(NC_STACK_ypaworld *yw, CmdStream *cmdbuf, int x, int y);
+void yw_RenderExternalSectorMapIcons(NC_STACK_ypaworld *yw);
 void sub_4C1814(NC_STACK_ypaworld *yw, int a2, int a3);
 void MapRoboUpdateMapInt(NC_STACK_ypaworld *yw);
 void yw_RebuildRoboMapLayout(NC_STACK_ypaworld *yw);

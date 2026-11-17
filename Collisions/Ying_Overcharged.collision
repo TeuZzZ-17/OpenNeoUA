@@ -1,0 +1,41 @@
+begin_collision_shape
+version = 1
+source = VPFKUFO.sklt
+source_hash = 59301c4107afb244a6ea41a38a4805f16e9b496e96d09e32b916e750a00e7d61
+scale = 1|1|1
+rotation = 0|0|0
+asset_set = 1
+; studio_metadata = {"quality":"low","components":["root/kid[0]/kid[242]#component:4c6e6475623a28a2","root/kid[0]/kid[242]#component:77cbbb3a892db061"],"disabled_hulls":[]}
+begin_hull
+vertex = 14.999999046325684|-0.00078308582305908203|-0.00078308582305908203
+vertex = 0|7|-0.00078308582305908203
+vertex = 0|-0.00078308582305908203|15
+vertex = 0|-9|-1.9992169141769409
+vertex = 0|1.9992170333862305|-17
+vertex = -14.999999046325684|-0.00078308582305908203|-0.00078308582305908203
+face = 0|1|2
+face = 0|2|3
+face = 0|3|4
+face = 0|4|1
+face = 1|4|5
+face = 1|5|2
+face = 2|5|3
+face = 3|5|4
+end
+begin_hull
+vertex = 20.000000566244125|-0.0014683641493320465|-0.0015662387013435364
+vertex = 0|8.9999998807907104|-0.0015662387013435364
+vertex = 0|-0.0014683641493320465|20
+vertex = 0|-11.99999988079071|-1.9966719029471278
+vertex = 0|1.9986295029520988|-23
+vertex = -20.000000566244125|-0.0014683641493320465|-0.0015662387013435364
+face = 0|1|2
+face = 0|2|3
+face = 0|3|4
+face = 0|4|1
+face = 1|4|5
+face = 1|5|2
+face = 2|5|3
+face = 3|5|4
+end
+end

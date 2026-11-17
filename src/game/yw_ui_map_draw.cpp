@@ -1796,7 +1796,14 @@ int sub_4F5FE0(NC_STACK_ypaworld *yw, int x, int y)
         cellArea &v6 = yw->_cells(x, y);
 
         if ( robo_map.MapViewMask & v6.view_mask )
-            return yw->_secTypeArray[v6.type_id].GUIElementID;
+        {
+            // External sector map icons are drawn by yw_RenderExternalSectorMapIcons().
+            const TSectorDesc &desc = yw->_secTypeArray[v6.type_id];
+            const int zoom = robo_map.field_1EE;
+            if ( zoom >= 0 && zoom < (int)desc.MapIcon.size() && !desc.MapIcon[zoom].empty() )
+                return 0;
+            return desc.GUIElementID;
+        }
     }
 
     return 0;
@@ -1819,15 +1826,20 @@ int sub_4F5CEC(NC_STACK_ypaworld *yw, int x, int y)
 
     if ( v8 && v27 )
     {
+        const size_t iconZoom = (size_t)std::max(0, robo_map.field_1EE - 2);
         if ( v12.SectorType == 1 )
         {
             TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, 0, 0) ];
+            if ( iconZoom < v26->MapIcon.size() && !v26->MapIcon[iconZoom].empty() )
+                return 0;
             int v25 = (16 * (v27 - 1) + v8 - 1 + v26->GUIElementID) & 0xFF;
             return v25;
         }
         else
         {
             TLego *v26 = &yw->_legoArray[ yw->GetLegoBld(&v12, v8 - 1, 2 - (v27 - 1))  ];
+            if ( iconZoom < v26->MapIcon.size() && !v26->MapIcon[iconZoom].empty() )
+                return 0;
             return v26->GUIElementID;
         }
     }
@@ -1836,6 +1848,83 @@ int sub_4F5CEC(NC_STACK_ypaworld *yw, int x, int y)
         // OpenNeoUA: hide only the strategic-map grid/elevation-boundary layer.
         // LEGO terrain and building glyphs are returned by the branch above.
         return 0;
+    }
+}
+
+// External .sector map icons (map_icon). Same cell layout as the glyph layers above:
+// zoom 0/1 draw one icon per sector, zoom 2-4 one per building cell (border cell left
+// empty), following the current damage state of each LEGO. Requires the map clip rect.
+void yw_RenderExternalSectorMapIcons(NC_STACK_ypaworld *yw)
+{
+    if ( !yw || !yw->_externalSectors.mapIcons || robo_map.field_1EE < 0 || robo_map.field_1EE > 4 )
+        return;
+
+    const int zoom = robo_map.field_1EE;
+    const int sectorPx = 4 << zoom;
+    const int contentW = robo_map.w - robo_map.field_24C;
+    const int contentH = robo_map.h - robo_map.field_250;
+    const int originX = (int)(robo_map.field_1D8 / robo_map.field_1E0) - contentW / 2;
+    const int originY = (int)(-robo_map.field_1DC / robo_map.field_1E4) - contentH / 2;
+    const int screenX = robo_map.x + robo_map.field_244 - originX;
+    const int screenY = robo_map.y + robo_map.field_23C - originY;
+    const float halfW = (float)yw->_screenSize.x * 0.5f;
+    const float halfH = (float)yw->_screenSize.y * 0.5f;
+
+    auto draw = [&](const std::string &file, int left, int top, int size)
+    {
+        NC_STACK_bitmap *bitmap = StatusIconLoad(file, size, size);
+        if ( !bitmap || !bitmap->GetBitmap() )
+            return;
+        GFX::rstr_arg204 arg;
+        arg.pbitm = bitmap->GetBitmap();
+        arg.float4 = Common::FRect(-1.0, -1.0, 1.0, 1.0);
+        arg.float14 = Common::FRect(left / halfW - 1.0f, top / halfH - 1.0f,
+                                    (left + size) / halfW - 1.0f, (top + size) / halfH - 1.0f);
+        arg.opacity = 255;
+        GFX::Engine.raster_func204(&arg);
+    };
+
+    const int firstX = std::max(0, originX / sectorPx - 1);
+    const int firstY = std::max(0, originY / sectorPx - 1);
+    const int lastX = std::min(yw->_mapSize.x - 1, (originX + contentW) / sectorPx + 1);
+    const int lastY = std::min(yw->_mapSize.y - 1, (originY + contentH) / sectorPx + 1);
+    for (int y = firstY; y <= lastY; ++y)
+    {
+        for (int x = firstX; x <= lastX; ++x)
+        {
+            if ( !yw->IsSector({x, y}) )
+                continue;
+            cellArea &cell = yw->_cells(x, y);
+            if ( !(robo_map.MapViewMask & cell.view_mask) )
+                continue;
+            const TSectorDesc &desc = yw->_secTypeArray[cell.type_id];
+            if ( zoom < 2 )
+            {
+                if ( !desc.MapIcon[zoom].empty() )
+                    draw(desc.MapIcon[zoom], screenX + x * sectorPx, screenY + y * sectorPx, sectorPx);
+                continue;
+            }
+
+            // Building cells k = 1..3 of the 4-cell sector strip, shifted by half a cell.
+            const int cellPx = sectorPx / 4;
+            const int left = screenX + x * sectorPx + cellPx - cellPx / 2;
+            const int top = screenY + y * sectorPx + cellPx - cellPx / 2;
+            const size_t iconZoom = zoom - 2;
+            if ( cell.SectorType == 1 )
+            {
+                const TLego &lego = yw->_legoArray[yw->GetLegoBld(&cell, 0, 0)];
+                if ( !lego.MapIcon[iconZoom].empty() )
+                    draw(lego.MapIcon[iconZoom], left, top, cellPx * 3);
+                continue;
+            }
+            for (int by = 0; by < 3; ++by)
+                for (int bx = 0; bx < 3; ++bx)
+                {
+                    const TLego &lego = yw->_legoArray[yw->GetLegoBld(&cell, bx, by)];
+                    if ( !lego.MapIcon[iconZoom].empty() )
+                        draw(lego.MapIcon[iconZoom], left + bx * cellPx, top + (2 - by) * cellPx, cellPx);
+                }
+        }
     }
 }
 

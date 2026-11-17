@@ -37,6 +37,7 @@ struct SectorModelDef
     int shield = -1;
     bool explosionsSet = false;
     std::vector<std::array<long, 4>> explosions; // VP|x|y|z as in SET.SDF
+    std::vector<std::string> mapIcon; // 1 file, or 3 for map zoom 2|3|4
 };
 
 struct SectorPieceDef
@@ -52,6 +53,7 @@ struct SectorDef
     std::vector<std::string> cells; // 1 (one large cell) or 9 (3x3, SET.SDF order)
     int ground = -1;
     int mapSymbol = 0;
+    std::vector<std::string> mapIcon; // 1 file, or 2 for map zoom 0|1
     std::vector<SectorModelDef> models;
     std::vector<SectorPieceDef> pieces;
 };
@@ -143,7 +145,7 @@ public:
         if ( !StriCmp(p1, "end") )
             return ScriptParser::RESULT_SCOPE_END;
         if ( _inSector )
-            return HandleSector(p1, p2);
+            return HandleSector(parser, p1, p2);
         if ( _model )
             return HandleModel(parser, p1, p2);
         if ( _piece )
@@ -152,9 +154,25 @@ public:
     }
 
 private:
-    int HandleSector(const std::string &p1, const std::string &p2)
+    // map_icon = file or file|file...: PNG/SVG beside the .sector or Data/...
+    static int ParseMapIcon(ScriptParser::Parser &parser, size_t perZoom, std::vector<std::string> *out)
+    {
+        *out = Stok::Split(parser.FullLineValue(), "|");
+        for (std::string &file : *out)
+        {
+            file.erase(0, file.find_first_not_of(" \t"));
+            file.erase(file.find_last_not_of(" \t") + 1);
+            if ( file.empty() || !(EndsWith(file, ".png") || EndsWith(file, ".svg")) )
+                return ScriptParser::RESULT_BAD_DATA;
+        }
+        return out->size() == 1 || out->size() == perZoom ? ScriptParser::RESULT_OK : ScriptParser::RESULT_BAD_DATA;
+    }
+
+    int HandleSector(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
     {
         long value = 0;
+        if ( !StriCmp(p1, "map_icon") )
+            return ParseMapIcon(parser, 2, &_def.mapIcon);
         if ( !StriCmp(p1, "cells") )
         {
             _def.cells = Stok::Split(p2, "|");
@@ -189,6 +207,8 @@ private:
             _model->collision = parser.FullLineValue();
             return _model->collision.empty() ? ScriptParser::RESULT_BAD_DATA : ScriptParser::RESULT_OK;
         }
+        if ( !StriCmp(p1, "map_icon") )
+            return ParseMapIcon(parser, 3, &_model->mapIcon);
         if ( !StriCmp(p1, "collision_mode") )
         {
             if ( !ParseInt(p2, 0, 2, &value) ) return ScriptParser::RESULT_BAD_DATA;
@@ -407,6 +427,31 @@ int NC_STACK_ypaworld::ResolveExternalSector(const std::string &path)
         return skeleton;
     };
 
+    // Map icons: Data-relative paths for the UI image cache. A missing file only
+    // drops that icon (the vanilla map symbol stays); it never rejects the sector.
+    auto resolveIcons = [&](const std::vector<std::string> &files, std::string *out, size_t zooms,
+                            const std::string &owner) -> void
+    {
+        for (size_t z = 0; z < zooms; ++z)
+            out[z].clear();
+        for (size_t z = 0; z < zooms && !files.empty(); ++z)
+        {
+            const std::string &file = files[files.size() == 1 ? 0 : z];
+            const bool dataRooted = file.size() > 5 && !StriCmp(file.substr(0, 5), "Data/");
+            std::string dataPath;
+            if ( !uaNormalizeDataAssetPath(dataRooted ? file : folder + "/" + file, &dataPath, false) ||
+                 !FSMgr::iDir::fileExist(dataPath) )
+            {
+                ypa_log_out("WARNING: external sector %s: map_icon %s of %s not found; map symbol kept.\n",
+                            path.c_str(), file.c_str(), owner.c_str());
+                for (size_t k = 0; k < zooms; ++k)
+                    out[k].clear();
+                return;
+            }
+            out[z] = dataPath.substr(5);
+        }
+    };
+
     std::vector<TLego> legos(def.models.size());
     auto releaseLegos = [&]()
     {
@@ -504,6 +549,7 @@ int NC_STACK_ypaworld::ResolveExternalSector(const std::string &path)
                 lego.Explosions.push_back(fx);
             }
         }
+        resolveIcons(model.mapIcon, lego.MapIcon.data(), lego.MapIcon.size(), "model '" + model.name + "'");
         lego.UseCollisionSkelet = lego.CollisionMode == 1 ? _colsubSkeleton
                                 : lego.CollisionMode == 2 ? _colcompSkeleton
                                 : lego.CollisionSkelet;
@@ -545,6 +591,10 @@ int NC_STACK_ypaworld::ResolveExternalSector(const std::string &path)
     sector.SectorType = def.cells.size() == 1 ? 1 : 0;
     sector.SurfaceType = (uint8_t)def.ground;
     sector.GUIElementID = (uint8_t)def.mapSymbol;
+    resolveIcons(def.mapIcon, sector.MapIcon.data(), sector.MapIcon.size(), "the sector");
+    for (size_t id : legoIds)
+        _externalSectors.mapIcons |= !_legoArray[id].MapIcon[0].empty();
+    _externalSectors.mapIcons |= !sector.MapIcon[0].empty();
     for (size_t i = 0; i < def.cells.size(); ++i)
     {
         TSubSectorDesc *piece = &_subSectorArray[firstPiece + FindByName(def.pieces, def.cells[i])];

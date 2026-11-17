@@ -753,6 +753,8 @@ void yw_RenderLegacyStrategicMap(NC_STACK_ypaworld *yw)
 
     GFX::Engine.raster_func211(rect);
 
+    yw_RenderExternalSectorMapIcons(yw);
+
     int v33 = robo_map.field_1F0 >> v39;
     int v38 = robo_map.field_1F4 >> v39;
     int v43 = (robo_map.field_1F8 + robo_map.field_1F0) >> v39;
