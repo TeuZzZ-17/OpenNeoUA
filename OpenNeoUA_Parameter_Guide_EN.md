@@ -255,7 +255,7 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `force = 20000` — Engine thrust. Higher values accelerate the unit faster and raise its top speed together with airconst.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `maxrot = 1.0` — Maximum turn rate of the unit. Higher values let it steer and rotate faster. For `gun_type = radar`, it sets the continuous rotation in radians per second.
+- 🔵🟢 `maxrot = 1.0` — Maximum turn rate of the unit. Higher values let it steer and rotate faster. For `gun_type = radar` and `gun_type = spawner`, it sets continuous rotation around the mount axis in radians per second. Missing, zero, negative, or non-finite values stop continuous rotation.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `airconst = 500` — Air resistance / drag. Higher values brake the unit harder and lower its top speed; top speed is roughly where drag balances force.
 ------------------------------------------------------------------------------------------------------------------------
@@ -528,7 +528,7 @@ Three-stage attack loop replacing the old sector/bact pairs: attack, retreat whe
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gun_type = power` — Compatible with power and power_radius. The gun does not attack but supplies energy to nearby units.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gun_type = spawner` — Passive gun that uses the vehicle spawn settings. It does not aim or fire. With a valid spawn setup, it can show the world cooldown bar.
+- 🟢 `gun_type = spawner` — Passive gun that uses the vehicle spawn settings. It can rotate continuously around its mount with `maxrot`. It does not aim or fire. With a valid spawn setup, it can show the world cooldown bar.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gun_levitate = 0` — gun/flak classes only: 1 prevents falling without a supporting surface. 0, absent or invalid = normal falling behavior.
 ------------------------------------------------------------------------------------------------------------------------
@@ -963,7 +963,7 @@ Artillery Shell supports both a real ballistic trajectory and an emulated vertic
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_manual_mode_only = 0` — 1 leaves only player manual targeting available; 0 also permits automatic acquisition.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `artillery_shell_marker_path = artillery_ring_classic.svg` — SVG marker path relative to Data/Graphics/Map/Markers. Empty/missing/invalid falls back to artillery_ring_classic.svg.
+- 🟢 `artillery_shell_marker_path = Data/Graphics/Map/Markers/artillery_ring_classic.svg` — SVG or PNG attack-area marker for the map and minimap. Use `Data/` followed by the file path inside Data. Bare filenames still resolve in `Data/Graphics/Map/Markers`. Empty/missing/invalid falls back to artillery_ring_classic.svg.
 ------------------------------------------------------------------------------------------------------------------------
 
 Continuous beam instead of a physical projectile. Damage is tick-based, can ramp against the same target and can chain to nearby units. The beam is built from the normal-state visual (`vp_normal`, `base_normal` or `3ds_normal`) repeated every `laser_spacing`. A laser needs exactly one valid AI fire volume (`ai_fire_trigger_box_forward_xyz`, `ai_fire_trigger_cone_forward_xyz`, `ai_fire_trigger_box_below_xyz` or `ai_fire_trigger_cone_below_xyz`): a missing, invalid or duplicate volume is a script error at startup. Forward volumes use normal vehicle combat; downward volumes give aircraft bomber behavior and world-down firing.
@@ -2578,7 +2578,7 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.world_new_shield_bar_tint = 0|137|170|255` — RGBA tint and opacity of the shield bar fill. Defaults to the same teal as the cockpit shield squares. The missing portion is drawn as a semi-transparent track of the same color.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.world_new_cooldown_bar_enable = no` — Set to yes to show a cooldown bar above the energy bar for active spawners and use the same style for mortar cooldowns. With no or when omitted, mortars keep their classic bar.
+- 🟢 `gfx.world_new_cooldown_bar_enable = no` — Set to yes to show a cooldown bar above the energy bar for visible active spawners and mortars of any faction. With no or when omitted, mortars keep their classic bar.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.world_new_cooldown_bar_tint = 255|255|255|255` — Cooldown bar tint and opacity in `R|G|B|A` (0–255). The track uses the same tint at reduced opacity. Missing or invalid values use white.
 ------------------------------------------------------------------------------------------------------------------------

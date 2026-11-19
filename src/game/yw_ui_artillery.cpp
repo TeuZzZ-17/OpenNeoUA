@@ -155,15 +155,15 @@ const char *yw_ArtilleryShellDefaultMarkerFile()
 std::string yw_ResolveArtilleryShellMarkerAsset(const std::string &authored)
 {
     static const std::string ROOT = "Graphics/Map/Markers/";
-    static const std::string DATA_ROOT = "Data/Graphics/Map/Markers/";
+    static const std::string DATA_ROOT = "Data/";
 
     std::string relative = authored.empty() ? yw_ArtilleryShellDefaultMarkerFile() : authored;
     std::replace(relative.begin(), relative.end(), '\\', '/');
 
-    if ( relative.rfind(DATA_ROOT, 0) == 0 )
+    const bool dataRelative = relative.size() >= DATA_ROOT.size() &&
+                              !StriCmp(relative.substr(0, DATA_ROOT.size()), DATA_ROOT);
+    if ( dataRelative )
         relative.erase(0, DATA_ROOT.size());
-    else if ( relative.rfind(ROOT, 0) == 0 )
-        relative.erase(0, ROOT.size());
 
     const size_t dot = relative.find_last_of('.');
     const bool safe = !relative.empty() && relative.front() != '/' &&
@@ -172,15 +172,19 @@ std::string yw_ResolveArtilleryShellMarkerAsset(const std::string &authored)
                       relative.find("/..") == std::string::npos &&
                       relative != "." && relative != ".." &&
                       dot != std::string::npos && dot + 1 < relative.size() &&
-                      !StriCmp(relative.substr(dot + 1), "svg");
+                      (!StriCmp(relative.substr(dot + 1), "svg") ||
+                       !StriCmp(relative.substr(dot + 1), "png"));
 
     if ( !safe )
-        relative = yw_ArtilleryShellDefaultMarkerFile();
+        return ROOT + yw_ArtilleryShellDefaultMarkerFile();
+
+    if ( dataRelative || relative.rfind(ROOT, 0) == 0 )
+        return relative;
 
     return ROOT + relative;
 }
 
-NC_STACK_bitmap *yw_LoadArtilleryShellMarkerSvg(const std::string &authored,
+NC_STACK_bitmap *yw_LoadArtilleryShellMarkerBitmap(const std::string &authored,
                                                         int width, int height)
 {
     const std::string requested = yw_ResolveArtilleryShellMarkerAsset(authored);
@@ -196,7 +200,7 @@ NC_STACK_bitmap *yw_LoadArtilleryShellMarkerSvg(const std::string &authored,
     return nullptr;
 }
 
-bool yw_RenderArtilleryShellMarkerSvg(NC_STACK_ypaworld *yw,
+bool yw_RenderArtilleryShellMarkerBitmap(NC_STACK_ypaworld *yw,
                                               const vec3d &pos, float radius,
                                               const std::string &markerPath,
                                               const SDL_Color &color)
@@ -211,7 +215,7 @@ bool yw_RenderArtilleryShellMarkerSvg(NC_STACK_ypaworld *yw,
     const int width = radiusX * 2;
     const int height = radiusY * 2;
 
-    NC_STACK_bitmap *bitmap = yw_LoadArtilleryShellMarkerSvg(markerPath, width, height);
+    NC_STACK_bitmap *bitmap = yw_LoadArtilleryShellMarkerBitmap(markerPath, width, height);
     if ( !bitmap || !bitmap->GetBitmap() || !bitmap->GetBitmap()->swTex )
         return false;
 
@@ -308,7 +312,7 @@ void NC_STACK_ypaworld::RenderArtilleryShellMapMarkers()
         SDL_Color clr = marker.pending
             ? SDL_Color{128, 128, 128, 255}
             : GetColor(marker.owner);
-        yw_RenderArtilleryShellMarkerSvg(this, marker.pos, marker.radius,
+        yw_RenderArtilleryShellMarkerBitmap(this, marker.pos, marker.radius,
                                          marker.markerPath, clr);
     }
 
@@ -343,7 +347,7 @@ void NC_STACK_ypaworld::RenderArtilleryShellMapMarkers()
             const std::string markerPath = artilleryShell
                 ? artilleryShell->GetArtilleryShellMarkerPath()
                 : std::string();
-            yw_RenderArtilleryShellMarkerSvg(this, previewTarget,
+            yw_RenderArtilleryShellMarkerBitmap(this, previewTarget,
                                               _artilleryShellManualRadius,
                                               markerPath, previewColor);
         }

@@ -292,8 +292,8 @@ void yw_RenderArtilleryShellCooldownRadarBar(NC_STACK_ypaworld *yw, NC_STACK_ypa
 void yw_RenderArtilleryShellCooldownRadarBars(NC_STACK_ypaworld *yw, int cellX0, int cellY0, int cellX1, int cellY1);
 const char *yw_ArtilleryShellDefaultMarkerFile();
 std::string yw_ResolveArtilleryShellMarkerAsset(const std::string &authored);
-NC_STACK_bitmap *yw_LoadArtilleryShellMarkerSvg(const std::string &authored, int width, int height);
-bool yw_RenderArtilleryShellMarkerSvg(NC_STACK_ypaworld *yw, const vec3d &pos, float radius, const std::string &markerPath, const SDL_Color &color);
+NC_STACK_bitmap *yw_LoadArtilleryShellMarkerBitmap(const std::string &authored, int width, int height);
+bool yw_RenderArtilleryShellMarkerBitmap(NC_STACK_ypaworld *yw, const vec3d &pos, float radius, const std::string &markerPath, const SDL_Color &color);
 bool yw_IsArtilleryShellMarkerVisible(NC_STACK_ypaworld *yw, const NC_STACK_ypaworld::ArtilleryShellMarker &marker, const Common::Point &cellId);
 bool yw_GetArtilleryShellMapCursorTarget(NC_STACK_ypaworld *yw, vec3d *outTarget);
 bool yw_ReadSurfacePixel(SDL_Surface *surface, int x, int y, Uint32 *out);

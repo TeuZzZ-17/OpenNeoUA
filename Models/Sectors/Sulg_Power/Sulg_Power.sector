@@ -18,14 +18,14 @@ begin_model SG_POWER
     collision_mode = 0
     map_symbol = 112
     shield = 30
-    explosion = 175|0|0|370
-    explosion = 184|0|0|370
-    explosion = 176|115|-80|290
-    explosion = 180|-130|-65|250
-    explosion = 178|0|0|340
-    explosion = 181|90|120|190
-    explosion = 182|-100|60|250
-    explosion = 179|80|-70|120
+    explosion = 175|0|0|555
+    explosion = 184|0|0|555
+    explosion = 176|173|-120|435
+    explosion = 180|-195|-98|375
+    explosion = 178|0|0|510
+    explosion = 181|135|180|285
+    explosion = 182|-150|90|375
+    explosion = 179|120|-105|180
 end
 
 begin_model SGxPOWER
@@ -34,15 +34,15 @@ begin_model SGxPOWER
     collision_mode = 0
     map_symbol = 112
     shield = 30
-    explosion = 175|20|0|290
-    explosion = 184|20|0|290
-    explosion = 176|-100|-100|210
-    explosion = 180|145|-70|180
-    explosion = 180|-130|60|170
-    explosion = 178|25|0|290
-    explosion = 181|-90|120|160
-    explosion = 182|100|-120|180
-    explosion = 179|0|90|110
+    explosion = 175|30|0|435
+    explosion = 184|30|0|435
+    explosion = 176|-150|-150|315
+    explosion = 180|218|-105|270
+    explosion = 180|-195|90|255
+    explosion = 178|38|0|435
+    explosion = 181|-135|180|240
+    explosion = 182|150|-180|270
+    explosion = 179|0|135|165
 end
 
 begin_model SGyPOWER
@@ -51,16 +51,16 @@ begin_model SGyPOWER
     collision_mode = 0
     map_symbol = 112
     shield = 30
-    explosion = 183|30|0|160
-    explosion = 184|30|0|160
-    explosion = 175|-80|-40|130
-    explosion = 176|125|-80|100
-    explosion = 180|-140|70|80
-    explosion = 178|20|0|150
-    explosion = 181|95|110|100
-    explosion = 182|-95|-110|100
-    explosion = 179|110|-40|60
-    explosion = 178|-90|70|70
+    explosion = 183|45|0|240
+    explosion = 184|45|0|240
+    explosion = 175|-120|-60|195
+    explosion = 176|188|-120|150
+    explosion = 180|-210|105|120
+    explosion = 178|30|0|225
+    explosion = 181|143|165|150
+    explosion = 182|-143|-165|150
+    explosion = 179|165|-60|90
+    explosion = 178|-135|105|105
 end
 
 begin_model SGzPOWER

@@ -1716,12 +1716,9 @@ bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
            yw_GetUfoSpyWorldOpacity(yw, bact) > 0;
 }
 
-static bool yw_GetWorldCooldownProgress(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+static bool yw_GetWorldCooldownProgress(NC_STACK_ypabact *bact,
                                         float &progress, bool &waiting)
 {
-    if ( !yw_CanSeeUnitCooldown(yw, bact) )
-        return false;
-
     const auto *gun = dynamic_cast<const NC_STACK_ypagun *>(bact);
     if ( gun && gun->IsSpawner() )
         return bact->GetCarrierSpawnCountdown(progress, waiting);
@@ -1878,7 +1875,7 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                             {
                                 float progress = 0.0f;
                                 bool waiting = false;
-                                if ( yw_GetWorldCooldownProgress(yw, bact, progress, waiting) )
+                                if ( yw_GetWorldCooldownProgress(bact, progress, waiting) )
                                 {
                                     int barLeft, width, shieldThickness;
                                     yw_GetWorldShieldBarRect(v42, lifeTop, v43, barHeight, hideWorldShield,

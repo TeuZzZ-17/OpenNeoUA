@@ -52,6 +52,18 @@ int main()
     Check(std::fabs(building._rotation.AxisZ().y) < 1e-6,
           "building radar has no vertical tilt");
 
+    NC_STACK_ypagun spawner;
+    Prepare(spawner, NC_STACK_ypagun::GUN_TYPE_SPAWNER, 0, 0.5f);
+    spawner._status = BACT_STATUS_IDLE;
+    const mat3x3 spawnerExpected = spawner._rotation * mat3x3(spawner._gunRott, 0.5);
+    spawner.AI_layer3(&second);
+    Check(Near(spawner._rotation.AxisZ(), spawnerExpected.AxisZ()),
+          "idle spawner rotates using maxrot without radar");
+    spawner._maxrot = 0.0f;
+    spawner.AI_layer3(&second);
+    Check(Near(spawner._rotation.AxisZ(), spawnerExpected.AxisZ()),
+          "zero maxrot stops the spawner");
+
     NC_STACK_ypagun radar;
     Prepare(radar, NC_STACK_ypagun::GUN_TYPE_RADAR, 0, 0.55f);
     radar.AI_layer3(&second);

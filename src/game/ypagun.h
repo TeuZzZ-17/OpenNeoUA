@@ -103,7 +103,8 @@ public:
     bool CheckPedestal();
 
 private:
-    void UpdateRadarScan(const update_msg *arg);
+    bool UsesContinuousRotation() const { return _gunType == GUN_TYPE_RADAR || IsSpawner(); }
+    void UpdateContinuousRotation(const update_msg *arg);
     // game.gun_support_tolerance > 0: compares the surface under the turret (centre + 4
     // footprint points) with the one measured when the turret was first checked.
     bool CheckPedestalSupport(const ypaworld_arg136 &centerHit, float tolerance);

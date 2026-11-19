@@ -238,7 +238,7 @@ bool NC_STACK_ypagun::CheckPedestalSupport(const ypaworld_arg136 &centerHit, flo
     return measured == 0 || stillSupported * 2 >= measured;
 }
 
-void NC_STACK_ypagun::UpdateRadarScan(const update_msg *arg)
+void NC_STACK_ypagun::UpdateContinuousRotation(const update_msg *arg)
 {
     if ( !arg || arg->frameTime <= 0 )
         return;
@@ -276,13 +276,13 @@ void NC_STACK_ypagun::UpdateRadarScan(const update_msg *arg)
 
 void NC_STACK_ypagun::AI_layer2(update_msg *arg)
 {
-    if ( _gunType != GUN_TYPE_RADAR )
+    if ( !UsesContinuousRotation() )
     {
         NC_STACK_ypabact::AI_layer2(arg);
         return;
     }
 
-    // A radar scans continuously and does not select or follow a target.
+    // Continuously rotating modules do not select or follow a gun target.
     if ( _secndTtype != BACT_TGT_TYPE_NONE )
     {
         if ( _secndTtype != BACT_TGT_TYPE_UNIT || _secndT.pbact )
@@ -302,13 +302,13 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 {
     if ( IsPassiveModule() )
     {
-        // Passive modules do not aim or fire. Radar modules additionally scan;
+        // Passive modules do not aim or fire. Radar and spawner modules can rotate;
         // ordinary Unit Gun attachments must not run the ground pedestal test.
         switch ( _status )
         {
         case BACT_STATUS_NORMAL:
         case BACT_STATUS_IDLE:
-            if ( _gunType == GUN_TYPE_RADAR || IsSpawner() ||
+            if ( UsesContinuousRotation() ||
                  (_gunType == GUN_TYPE_DUMMY && _spawn_units) )
             {
                 // Preserve the legacy building-gun support check. Mounted and
@@ -324,8 +324,8 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
                         break;
                     }
                 }
-                if ( _gunType == GUN_TYPE_RADAR )
-                    UpdateRadarScan(arg);
+                if ( UsesContinuousRotation() )
+                    UpdateContinuousRotation(arg);
             }
             break;
 
@@ -582,7 +582,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
 
 void NC_STACK_ypagun::User_layer(update_msg *arg)
 {
-    if ( _gunType == GUN_TYPE_RADAR )
+    if ( UsesContinuousRotation() )
     {
         AI_layer3(arg);
         return;
