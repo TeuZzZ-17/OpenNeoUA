@@ -1764,6 +1764,35 @@ void TestSpawnerCountdown()
     Check(!gun->GetCarrierSpawnCountdown(progress, waiting), "dead spawners hide cooldown");
 }
 
+void TestSpawnerImmobileByDefault()
+{
+    auto world = std::make_unique<WorldProbe>();
+    Check(ParseVehicles(*world, {"new_vehicle 220", "model = gun", "gun_type = spawner",
+                                 "spawn_vehicle = 71", "end",
+                                 "new_vehicle 221", "model = gun", "gun_type = spawner",
+                                 "maxrot = 0.4", "spawn_vehicle = 71", "end",
+                                 "new_vehicle 222", "model = gun", "gun_type = radar", "end"}),
+          "spawner maxrot fixture parses");
+    world->_vhclProtos[220].disable_collision = true;
+    world->_vhclProtos[221].disable_collision = true;
+    world->_vhclProtos[222].disable_collision = true;
+
+    ypaworld_arg146 req220; req220.vehicle_id = 220; req220.pos = vec3d(2400, -100, -2400);
+    auto *spawner = world->ypaworld_func146(&req220);
+    Check(spawner && Near(spawner->_maxrot, 0.0f) && Near(spawner->_base_maxrot, 0.0f),
+          "spawner without maxrot stays immobile");
+
+    ypaworld_arg146 req221; req221.vehicle_id = 221; req221.pos = vec3d(2500, -100, -2400);
+    auto *explicitSpawner = world->ypaworld_func146(&req221);
+    Check(explicitSpawner && Near(explicitSpawner->_maxrot, 0.4f),
+          "spawner with explicit maxrot keeps the authored value");
+
+    ypaworld_arg146 req222; req222.vehicle_id = 222; req222.pos = vec3d(2600, -100, -2400);
+    auto *radar = world->ypaworld_func146(&req222);
+    Check(radar && Near(radar->_maxrot, 0.8f),
+          "radar without maxrot keeps the vanilla default rotation speed");
+}
+
 void TestMortarCountdown()
 {
     auto world = std::make_unique<WorldProbe>();
@@ -1892,6 +1921,7 @@ void TestSpawnStateSound()
 int main() {
     TestSpawnVisual();
     TestSpawnerCountdown();
+    TestSpawnerImmobileByDefault();
     TestMortarCountdown();
     TestSpawnStateSound();
     WorldProbe w;

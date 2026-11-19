@@ -3042,6 +3042,16 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
 
         bacto->SetParameters(vhcl.initParams);
 
+        // OpenNeoUA: gun_type = spawner defaults to immobile unless the script
+        // explicitly authors maxrot; only an authored value opts it into the
+        // vanilla turret rotation speed.
+        if ( vhcl.model_id == BACT_TYPES_GUN && !vhcl.maxrot_defined &&
+             static_cast<NC_STACK_ypagun *>(bacto)->IsSpawner() )
+        {
+            bacto->_maxrot = 0.0f;
+            bacto->_base_maxrot = 0.0f;
+        }
+
         bact_arg80 arg80;
         arg80.pos = vhcl_id->pos;
         arg80.field_C = 0;

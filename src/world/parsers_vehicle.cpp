@@ -397,6 +397,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "maxrot") )
     {
         _vhcl->maxrot = parser.stof(p2, 0);
+        _vhcl->maxrot_defined = true;
     }
     else if ( !StriCmp(p1, "airconst") )
     {
@@ -1988,6 +1989,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->force = 5000.0;
         _vhcl->airconst = 80.0;
         _vhcl->maxrot = 0.8;
+        _vhcl->maxrot_defined = false;
         _vhcl->height = 150.0;
         _vhcl->radius = 25.0;
         _vhcl->radius_defined = false;

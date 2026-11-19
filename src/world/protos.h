@@ -1079,6 +1079,10 @@ struct TVhclProto
     float force = 0.0;
     float airconst = 0.0;
     float maxrot = 0.0;
+    // Tracks whether the script explicitly authored maxrot. gun_type = spawner
+    // uses this to stay immobile unless maxrot was really present in the script,
+    // instead of inheriting the vanilla default turret rotation speed.
+    bool maxrot_defined = false;
     float height = 0.0;
     float radius = 0.0;
     // Tracks whether the script explicitly authored radius. The numeric value
