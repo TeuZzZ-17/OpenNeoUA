@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <memory>
 #undef main
 
 namespace {
@@ -50,7 +51,7 @@ struct Unit : NC_STACK_ypabact {
         _bact_type = BACT_TYPES_FLYER; _status = BACT_STATUS_NORMAL;
         _status_flg = 0; _oflags = 0; _radius = _viewer_radius = 30;
         _energy = _energy_max = 1000;
-        _vp_normal = _vp_genesis = nullptr; _soundcarrier.Resize(7);
+        _vp_normal = _vp_fire = _vp_wait = _vp_dead = _vp_megadeth = _vp_genesis = nullptr; _soundcarrier.Resize(7);
         _fire_pos = vec3d(0, 0, 0);
         _fire_x_mode = World::TVhclProto::FIRE_X_MODE_VANILLA; _fire_x_advanced = false;
         _fire_x_start = 0; _fire_x_step = 0; _fire_x_slots = 0; _fire_x_slot_index = 0;
@@ -1554,9 +1555,8 @@ void TestImplicitFeatureGroups() {
           w._vhclProtos[205].eject_force == 10 && w._vhclProtos[206].eject_force == 0,
           "ejection force clamps valid values and disables invalid input");
 
-    Check(ParseBuildings(w, {"new_building 200", "model = building", "spawn_vehicle = 1", "spawn_interval = 5000", "end"}),
-          "implicit building fixture parsed");
-    Check(w._buildProtos[200].spawn_units, "building spawn child definition activates spawn");
+    Check(!ParseBuildings(w, {"new_building 200", "model = building", "spawn_vehicle = 1", "end"}),
+          "removed building spawner parameter is rejected");
     Check(!ParseWeapons(w, {"new_weapon 207", "model = missile", "spiral_speed = 2", "end"}),
           "removed Spiral parameter is rejected");
     Check(ParseWeapons(w, {"new_weapon 208", "model = missile", "boomerang_return_mode = lifetime", "end",
@@ -1721,7 +1721,109 @@ void TestHomingBombDriveLimit() {
           "invalid drive time keeps legacy homing bomb thrust");
 }
 
+void TestSpawnVisual()
+{
+    // Heap objects: several probes on the stack overflow the default 2 MB stack.
+    auto worldPtr = std::make_unique<WorldProbe>();
+    WorldProbe &world = *worldPtr;
+    Check(ParseVehicles(world, {"new_vehicle 200", "model = gun", "gun_type = dummy",
+                                "spawn_vehicle = 71", "vp_spawn = 42",
+                                "base_spawn = Data/test.BASE", "3ds_spawn = Data/test.3ds", "end"}),
+          "vehicle spawn sources parse");
+    const auto &proto = world._vhclProtos[200];
+    Check(proto.vp_spawn == 42 && proto.base_spawn == "Data/test.BASE" &&
+          proto.model3ds_spawn == "Data/test.3ds", "all spawn sources retained");
+
+    auto parentPtr = std::make_unique<Unit>();
+    auto firstPtr = std::make_unique<Unit>();
+    auto secondPtr = std::make_unique<Unit>();
+    Unit &parent = *parentPtr, &first = *firstPtr, &second = *secondPtr;
+    parent.Bind(world, 1, 10, vec3d(3000, -300, -3000));
+    first.Bind(world, 1, 11, vec3d(3100, -300, -3000));
+    second.Bind(world, 1, 12, vec3d(3200, -300, -3000));
+    first._kidRef = world._unitsList.push_back(&first);
+    second._kidRef = world._unitsList.push_back(&second);
+    parent._carrier_spawned_gids = {int32_t(first._gid), int32_t(second._gid)};
+    first._status = second._status = BACT_STATUS_CREATE;
+    first._scale_time = second._scale_time = 1000;
+    Check(parent.HasSpawningChild(), "creating direct children show the spawn visual");
+    first._status = BACT_STATUS_NORMAL;
+    Check(parent.HasSpawningChild(), "spawn visual lasts until the last Genesis");
+    second._disable_genesis = true;
+    Check(!parent.HasSpawningChild(), "disabled Genesis does not keep the visual active");
+    second._disable_genesis = false;
+    parent._spawn_instant = true;
+    Check(!parent.HasSpawningChild(), "instant spawner does not show the Genesis visual");
+    parent._spawn_instant = false;
+    parent._status = BACT_STATUS_DEAD;
+    Check(!parent.HasSpawningChild(), "death takes priority over spawn");
+    parent._status = BACT_STATUS_NORMAL;
+    second._status = BACT_STATUS_NORMAL;
+    Check(!parent.HasSpawningChild(), "completed Genesis clears the visual");
+}
+
+void TestSpawnStateSound()
+{
+    // Heap objects: several probes on the stack overflow the default 2 MB stack.
+    auto worldPtr = std::make_unique<WorldProbe>();
+    WorldProbe &world = *worldPtr;
+    Check(ParseVehicles(world, {"new_vehicle 201", "model = gun", "gun_type = dummy",
+                                "snd_spawn_sample = sounds/test.wav", "snd_spawn_volume = 90",
+                                "snd_spawn_fade_inout = 150|300",
+                                "pal_spawn_slot = 3", "pal_spawn_mag0 = 0.5", "pal_spawn_time = 400",
+                                "shk_spawn_slot = 1", "shk_spawn_mag0 = 0.2", "shk_spawn_x = 0.3", "end",
+                                "new_vehicle 202", "model = gun", "gun_type = dummy", "end"}),
+          "snd/pal/shk_spawn keys parse");
+    const World::TVhclSound &spawnFx = world._vhclProtos[201].sndFX[World::TVhclProto::SND_SPAWN];
+    Check(spawnFx.MainSample.Name == "sounds/test.wav" && spawnFx.volume == 90 &&
+          spawnFx.fade_in == 150 && spawnFx.fade_out == 300, "spawn sound fields retained");
+    Check(spawnFx.sndPrm.slot == 3 && Near(spawnFx.sndPrm.mag0, 0.5f) && spawnFx.sndPrm.time == 400,
+          "spawn palette fields retained");
+    Check(spawnFx.sndPrm_shk.slot == 1 && Near(spawnFx.sndPrm_shk.mag0, 0.2f) &&
+          Near(spawnFx.sndPrm_shk.pos.x, 0.3f), "spawn shake fields retained");
+    Check(World::TVhclProto::IsLoopingSnd(World::TVhclProto::SND_SPAWN),
+          "spawn effects loop for the whole spawn state");
+    const World::TVhclSound &plainFx = world._vhclProtos[202].sndFX[World::TVhclProto::SND_SPAWN];
+    Check(plainFx.MainSample.Name.empty() && plainFx.sndPrm.slot == 0 && plainFx.sndPrm_shk.slot == 0,
+          "absent spawn keys leave the slot empty");
+
+    auto parentPtr = std::make_unique<Unit>();
+    auto childPtr = std::make_unique<Unit>();
+    Unit &parent = *parentPtr;
+    Unit &child = *childPtr;
+    parent.Bind(world, 1, 20, vec3d(3000, -300, -3000));
+    child.Bind(world, 1, 21, vec3d(3100, -300, -3000));
+    child._kidRef = world._unitsList.push_back(&child);
+    parent._carrier_spawned_gids = {int32_t(child._gid)};
+    parent._soundcarrier.Resize(World::TVhclProto::SND_MAX);
+    TSoundSource &spawnSnd = parent._soundcarrier.Sounds[World::TVhclProto::SND_SPAWN];
+    World::TVhclSound fxCopy = spawnFx;
+    spawnSnd.PPFx = &fxCopy.sndPrm;
+    spawnSnd.SetPFx(true);
+    spawnSnd.PShkFx = &fxCopy.sndPrm_shk;
+    spawnSnd.SetShk(true);
+
+    parent.UpdateSpawnStateSound();
+    Check(!spawnSnd.IsPFxEnabled() && !spawnSnd.IsShkEnabled(), "no spawn effects without a Genesis child");
+    child._status = BACT_STATUS_CREATE;
+    child._scale_time = 1000;
+    parent.UpdateSpawnStateSound();
+    Check(spawnSnd.IsPFxEnabled() && spawnSnd.IsShkEnabled(), "spawn effects start with the spawn state");
+    parent.UpdateSpawnStateSound();
+    Check(spawnSnd.IsPFxEnabled() && spawnSnd.IsShkEnabled(), "spawn effects keep running during the state");
+    child._status = BACT_STATUS_NORMAL;
+    parent.UpdateSpawnStateSound();
+    Check(!spawnSnd.IsPFxEnabled() && !spawnSnd.IsShkEnabled(), "spawn effects stop with the spawn state");
+    child._status = BACT_STATUS_CREATE;
+    parent.UpdateSpawnStateSound();
+    parent._status = BACT_STATUS_DEAD;
+    parent.UpdateSpawnStateSound();
+    Check(!spawnSnd.IsPFxEnabled() && !spawnSnd.IsShkEnabled(), "death stops the spawn effects");
+}
+
 int main() {
+    TestSpawnVisual();
+    TestSpawnStateSound();
     WorldProbe w;
     Check(ParseWeapons(w, {"new_weapon 1", "model = bomb", "ai_fire_trigger_box_below_xyz = 200|1200|400", "end",
                            "new_weapon 2", "model = homing_bomb", "ai_fire_trigger_box_below_xyz = 100|1200|50", "end",

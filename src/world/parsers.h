@@ -272,6 +272,7 @@ protected:
     TVhclProto *_vhcl;
     int32_t _vhclID;
     bool _isModify;
+    bool _isBruch = false;
     int32_t _gunID;
     int32_t _unitGunID;
     int32_t _collID;

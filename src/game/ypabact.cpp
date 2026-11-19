@@ -209,13 +209,15 @@ bool ypabact_IsMainVPBase(NC_STACK_ypabact *bact, NC_STACK_base *base)
     if ( bact->_bact_type == BACT_TYPES_MISSLE )
         return base == bact->_vp_normal || base == bact->_vp_fire || base == bact->_vp_wait;
 
-    return base == bact->_vp_normal || base == bact->_vp_fire || base == bact->_vp_wait || base == bact->_vp_genesis;
+    return base == bact->_vp_normal || base == bact->_vp_fire || base == bact->_vp_wait || base == bact->_vp_genesis ||
+           (bact->_spawn_visual.vp && base == bact->_spawn_visual.vp->Bas);
 }
 
 bool ypabact_IsTintableVisualBase(NC_STACK_ypabact *bact, NC_STACK_base *base)
 {
     return base == bact->_vp_normal || base == bact->_vp_fire || base == bact->_vp_wait ||
-           base == bact->_vp_dead || base == bact->_vp_megadeth || base == bact->_vp_genesis;
+           base == bact->_vp_dead || base == bact->_vp_megadeth || base == bact->_vp_genesis ||
+           (bact->_spawn_visual.vp && base == bact->_spawn_visual.vp->Bas);
 }
 
 mat3x3 ypabact_BuildProjectileVisualTangent(const NC_STACK_ypabact *bact,
@@ -1670,6 +1672,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
             sound.AllowExtendedRate = sprintRate > legacyMaxRate;
         }
     }
+    UpdateSpawnStateSound();
     BeforeSoundCarrierUpdate();
 
     // OpenNeoUA invisible: a still-cloaked stealth unit emits no loop/idle/engine/ambient
@@ -1791,7 +1794,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
     };
 
     // OpenNeoUA custom visual tint: all authored visual-state bodies are eligible
-    // (normal/fire/wait/dead/megadeth/genesis), independently from scale/spin rules.
+    // (normal/fire/wait/dead/megadeth/genesis/spawn), independently from scale/spin rules.
     // RGB is rendered as a target hue while preserving source intensity; alpha remains
     // multiplicative. effectiveTint already includes Black Sect/mimic/debuff composition.
     auto shouldApplyVPTint = [this, &effectiveTint](NC_STACK_base *base)
@@ -1884,38 +1887,42 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         }
     };
 
-    if ( _current_vp )
+    auto *body = _current_vp;
+    if ( _spawn_visual.vp && HasSpawningChild() )
+        body = _spawn_visual.vp;
+
+    if ( body )
     {
         if ( !(_status_flg & BACT_STFLAG_NORENDER) )
         {
             if ( !IsCockpitCameraSilhouetteHidden() &&
                  (!(_oflags & BACT_OFLAG_VIEWER) || _oflags & BACT_OFLAG_ALWAYSREND || ShouldRenderCockpitCameraBody()) )
             {
-                _current_vp->Bas->TForm().Pos = _tForm.Pos;
-                if ( ypabact_IsMainVPBase(this, _current_vp->Bas) &&
+                body->Bas->TForm().Pos = _tForm.Pos;
+                if ( ypabact_IsMainVPBase(this, body->Bas) &&
                      ypabact_ShouldRenderRecoilVisualOffset(this) )
                 {
                     vec3d recoilVisualOffset;
                     ypabact_EvaluateRecoilVisual(this, &recoilVisualOffset, nullptr);
-                    _current_vp->Bas->TForm().Pos += recoilVisualOffset;
+                    body->Bas->TForm().Pos += recoilVisualOffset;
                 }
-                _current_vp->Bas->TForm().SclRot = _tForm.SclRot;
+                body->Bas->TForm().SclRot = _tForm.SclRot;
 
-                bool scaled = shouldApplyVPScale(_current_vp->Bas);
-                if ( ypabact_ShouldApplyVPRotation(this, _current_vp->Bas) )
-                    _current_vp->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_rotation);
+                bool scaled = shouldApplyVPScale(body->Bas);
+                if ( ypabact_ShouldApplyVPRotation(this, body->Bas) )
+                    body->Bas->TForm().SclRot *= ypabact_BuildVPRotationMatrix(_vp_rotation);
 
                 const float visualRecoilPitch = ypabact_GetRecoilVisualPitch(this);
-                if ( visualRecoilPitch != 0.0f && ypabact_IsMainVPBase(this, _current_vp->Bas) )
-                    _current_vp->Bas->TForm().SclRot *= mat3x3::RotateX(visualRecoilPitch);
+                if ( visualRecoilPitch != 0.0f && ypabact_IsMainVPBase(this, body->Bas) )
+                    body->Bas->TForm().SclRot *= mat3x3::RotateX(visualRecoilPitch);
 
-                ypabact_ApplyProjectileVisualMotion(this, _current_vp->Bas);
+                ypabact_ApplyProjectileVisualMotion(this, body->Bas);
 
-                if ( ypabact_ShouldApplyVPSpin(this, _current_vp->Bas) )
-                    _current_vp->Bas->TForm().SclRot *= World::Spin::BuildMatrix(_vp_spin_strength, _clock);
+                if ( ypabact_ShouldApplyVPSpin(this, body->Bas) )
+                    body->Bas->TForm().SclRot *= World::Spin::BuildMatrix(_vp_spin_strength, _clock);
 
                 if ( scaled )
-                    _current_vp->Bas->TForm().SclRot *= mat3x3::Scale(_vp_scale);
+                    body->Bas->TForm().SclRot *= mat3x3::Scale(_vp_scale);
 
                 GFX::TGLColor oldTint = arg->tint;
                 GFX::TGLColor oldParticleTint = arg->particleTint;
@@ -1924,12 +1931,16 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 vec3d oldParticleScale = arg->particleScale;
                 vec3d oldParticleSpin = arg->particleSpin;
                 float oldParticleLifetimeScale = arg->particleLifetimeScale;
-                applyRenderControls(_current_vp->Bas);
+                applyRenderControls(body->Bas);
 
-                // The genesis VP is the faction plasma visual wherever the
-                // existing runtime uses it (creation, death or other genesis FX).
-                // Tint only this render call; shared VP prototypes stay untouched.
-                if ( _current_vp->Bas == _vp_genesis )
+                // A BASE may be shared by Genesis and ordinary body states.
+                // In that case only actual Genesis or beam playback receives plasma tint.
+                const bool genesisShared = _vp_genesis == _vp_normal || _vp_genesis == _vp_fire ||
+                    _vp_genesis == _vp_wait || _vp_genesis == _vp_dead || _vp_genesis == _vp_megadeth;
+                const bool genesisState = (_status == BACT_STATUS_CREATE && !_disable_genesis) ||
+                    _status == BACT_STATUS_BEAM;
+                if ( body == _current_vp && body->Bas == _vp_genesis &&
+                     (!genesisShared || genesisState) )
                 {
                     GFX::TGLColor plasmaTint;
                     if ( ypabact_GetPlasmaFactionTint(this, &plasmaTint) )
@@ -1941,7 +1952,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                     }
                 }
 
-                _current_vp->Bas->Render(arg, _current_vp);
+                body->Bas->Render(arg, body);
                 arg->tint = oldTint;
                 arg->particleTint = oldParticleTint;
                 arg->colorizeTint = oldColorizeTint;
@@ -2309,6 +2320,9 @@ void NC_STACK_ypabact::ypabact_func95(IDVPair *arg)
 void NC_STACK_ypabact::Renew()
 {
     _spawnSeparationPending = false;
+    if ( _spawn_sound_active )
+        SFXEngine::SFXe.sub_424000(&_soundcarrier, World::TVhclProto::SND_SPAWN);
+    _spawn_sound_active = false;
     _eject_force = 0.0f;
     _debugIgnoredByAI = false;
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
@@ -2453,6 +2467,7 @@ void NC_STACK_ypabact::Renew()
     _chainFX.clear();
     _craterConfig = World::TCraterConfig();
 
+    _spawn_visual.SetVP(static_cast<NC_STACK_base *>(nullptr));
     for (extra_vproto &vp : _vp_extra)
         vp = extra_vproto();
 

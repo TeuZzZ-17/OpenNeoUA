@@ -308,7 +308,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
         {
         case BACT_STATUS_NORMAL:
         case BACT_STATUS_IDLE:
-            if ( _gunType == GUN_TYPE_RADAR )
+            if ( _gunType == GUN_TYPE_RADAR || (_gunType == GUN_TYPE_DUMMY && _spawn_units) )
             {
                 // Preserve the legacy building-gun support check. Mounted and
                 // levitating modules have their support supplied by the parent.
@@ -323,7 +323,8 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
                         break;
                     }
                 }
-                UpdateRadarScan(arg);
+                if ( _gunType == GUN_TYPE_RADAR )
+                    UpdateRadarScan(arg);
             }
             break;
 

@@ -345,7 +345,7 @@ struct TChainFXConfig
     enum Mode
     {
         MODE_VISUAL = 0,
-        MODE_PHYSICAL,
+        MODE_BRUCH,
         MODE_GROUND_DECAL
     };
 
@@ -381,7 +381,8 @@ struct TChainFXConfig
     int fade_out = 0;
     bool ground_decal_permanent = false;
     std::vector<TChainFXVisual> visuals;
-    int physical_vehicle = 0;
+    int bruch_id = 0;
+    bool has_launch = false;
     std::shared_ptr<TChainFXPhysical> physical_inline;
     vec3d launch_min = vec3d(0.0, 0.0, 0.0);
     vec3d launch_max = vec3d(0.0, 0.0, 0.0);
@@ -796,6 +797,9 @@ struct TRoboGun
 
 struct TVhclProto
 {
+    // Present only in Bruch entries that use the modern fragment fields.
+    std::shared_ptr<TChainFXPhysical> bruch_physics;
+    std::shared_ptr<TChainFXConfig> bruch_visual;
     enum WeaponPlayerSwitchMode
     {
         WEAPON_PLAYER_SWITCH_MODE_SEQUENCE = 0,
@@ -840,8 +844,9 @@ struct TVhclProto
         SND_PICKUP = 14,
         SND_SPY_UI = 15,
         SND_ZOOM_STEP = 16,
+        SND_SPAWN = 17, // OpenNeoUA: loops while the spawn state (vp/base/3ds_spawn) is active
 
-        SND_MAX     = 17
+        SND_MAX     = 18
     };
 
     inline static bool IsLoopingSnd(int i)
@@ -857,6 +862,7 @@ struct TVhclProto
             case SND_GENESIS:
             case SND_GODOWN:
             case SND_COCKPIT:
+            case SND_SPAWN:
                 return true;
         }
         return false;
@@ -923,6 +929,9 @@ struct TVhclProto
     int16_t vp_wait = 0;
     int16_t vp_megadeth = 0;
     int16_t vp_genesis = 0;
+    int32_t vp_spawn = -1;
+    std::string base_spawn;
+    std::string model3ds_spawn;
     TExternalVisualSet visual_3ds;
     TExternalVisualSet visual_base;
     vec3d visual_scale = vec3d(1.0, 1.0, 1.0);
@@ -1574,6 +1583,7 @@ struct TWeapProto
     };
     int   artillery_shell_mode = ARTILLERY_SHELL_MODE_BALLISTIC; // ballistic arc, or vertical_barrage mortar-style ascent/fall
     int   artillery_shell_fall_delay = 0;           // vertical_barrage only: ms from launch before vertical descent may begin
+    std::array<int, 2> artillery_shell_transfer_fade_inout{}; // ms: descent fade-in, ascent fade-out
     float artillery_shell_min_range = 0.0;          // min distance from artillery shell to target zone
     float artillery_shell_max_range = 0.0;          // max distance for manual fire and automatic target search (<=0 = disabled)
     int   artillery_shell_requires_radar = 1;       // 1 = target sector must be visible to the owner faction
@@ -1671,20 +1681,7 @@ struct TBuildingProto
     float briefing_size = 0.0f;
     vec3d briefing_xyz;
     std::vector<TGun> Guns;
-    int spawn_units = 0;
-    int16_t spawn_vehicle = 0;
-    int spawn_interval = 0;
-    float spawn_trigger_radius = 0.0;
-    // Preserve the current OpenNeoUA Building-spawner placement when the
-    // new data-driven positioning parameters are absent.
-    float spawn_random_pos = 340.0f;
-    vec3d spawn_offset = vec3d(37.0, 0.0, -41.0);
-    float spawn_height_min = 650.0f;
-    float spawn_height_max = 900.0f;
-    int spawn_max_active = 0;
-    int spawn_count = 1;
-    bool spawn_count_defined = false;
-    int spawn_instant = 0;
+
 };
 
 struct TRoboProto

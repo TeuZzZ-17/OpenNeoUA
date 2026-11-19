@@ -138,7 +138,6 @@ set(SOURCES
     game/yw_game.cpp
     game/yw_spectator.cpp
     game/yw_superitem.cpp
-    game/yw_building_spawn.cpp
     game/yw_mobile_power.cpp
     game/yw_fx.cpp
     game/yw_external_sector.cpp

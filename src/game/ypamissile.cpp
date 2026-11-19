@@ -262,7 +262,15 @@ void NC_STACK_ypamissile::Render(baseRender_msg *arg)
 {
     // Preserve the complete existing projectile VP path, including particles,
     // tint, scale and projectile visual motion. The procedural tracer is queued in addition.
-    NC_STACK_ypabact::Render(arg);
+    // Additive VP materials need brightness attenuation as well as alpha.
+    const float transferFade = GetArtilleryTransferFadeAlpha();
+    if ( transferFade > 0.0f )
+    {
+        const float previousFade = arg->vpFadeFactor;
+        arg->vpFadeFactor *= transferFade;
+        NC_STACK_ypabact::Render(arg);
+        arg->vpFadeFactor = previousFade;
+    }
     RenderWeaponTracer(arg);
 }
 
@@ -1643,6 +1651,7 @@ void NC_STACK_ypamissile::Renew()
     _artilleryShellVerticalAscentTime = 0;
     _artilleryShellVerticalFallStartTime = 0;
     _artilleryShellVerticalDescentTime = 0;
+    _artilleryShellTransferFadeInOut = {};
 
     setBACT_yourLastSeconds(3000);
 }
@@ -1685,9 +1694,11 @@ size_t NC_STACK_ypamissile::SetStateInternal(setState_msg *arg, bool allowConfig
             std::vector<World::TChainFXConfig> visualFX;
             for (const World::TChainFXConfig &fx : _chainFX)
             {
-                if ( fx.trigger == World::TChainFXConfig::TRIGGER_DETONATE &&
-                     fx.mode == World::TChainFXConfig::MODE_VISUAL )
-                    visualFX.push_back(fx);
+                if ( fx.trigger != World::TChainFXConfig::TRIGGER_DETONATE )
+                    continue;
+                World::TChainFXConfig playback;
+                if ( _world->ResolveChainVisualFX(fx, playback) )
+                    visualFX.push_back(std::move(playback));
             }
             StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_DETONATE,
                                   nullptr, &visualFX);

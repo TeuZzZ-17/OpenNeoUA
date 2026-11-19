@@ -127,7 +127,6 @@ void DescribeBuilding(Card &card, const TBuildingProto &b, const std::vector<TVh
     card.radarPower=b.radar_defined?b.radar:0;
     if (b.energy_defined && b.Energy >= 0) AddRating(card, Metric::Health, b.Energy, -2);
     card.healingPower=b.Power;
-    card.guardians=b.spawn_count_defined?std::max(0,b.spawn_count):0;
     for (const TBuildingProto::TGun &gun : b.Guns) {
         if (!gun.VhclID) break;
         ++card.guns;
@@ -299,11 +298,6 @@ void SetQuality(Card &card,const NC_STACK_ypaworld &world,int category,int id)
         {
             if (!gun.VhclID) break;
             card.quality[0] += VehicleQuality(gun.VhclID, vehicles, weapons, stack)[0];
-        }
-        if(b.spawn_units&&b.spawn_count>0&&b.spawn_vehicle>0&&b.spawn_interval>0)
-        {
-            const auto spawned=VehicleQuality(b.spawn_vehicle,vehicles,weapons,stack);
-            card.quality[3]+=std::sqrt(spawned[0]*spawned[1])*b.spawn_count*1000.0/b.spawn_interval;
         }
     }
 }

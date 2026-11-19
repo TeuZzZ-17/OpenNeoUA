@@ -2,7 +2,6 @@
 // Areas split into their own files:
 //   yw_spectator.cpp ....... spectator mode and follow camera
 //   yw_superitem.cpp ....... super items (custom waves, detonation, front)
-//   yw_building_spawn.cpp .. buildings that spawn units
 //   yw_mobile_power.cpp .... power stations, mobile power generators and sector energy
 //   yw_fx.cpp .............. transient visuals, chain/decoration/atmospheric FX
 //   yw_render.cpp .......... rendering of sectors, fillers, sky, transient VPs and the game view
@@ -882,8 +881,6 @@ void NC_STACK_ypaworld::CellSetOwner(cellArea *cell, uint8_t owner)
 {
     if ( cell->owner != owner )
     {
-        uint8_t oldOwner = cell->owner;
-
         HistoryEventAdd( World::History::Conq(cell->CellId.x, cell->CellId.y, owner) );
 
         if ( cell->PurposeType == cellArea::PT_POWERSTATION )
@@ -893,15 +890,6 @@ void NC_STACK_ypaworld::CellSetOwner(cellArea *cell, uint8_t owner)
         _countSectorsPerOwner[owner]++;
 
         cell->owner = owner;
-
-        // Building spawners belong to the original owner of the cell.
-        // When the building/sector is conquered, stop the previous spawner state
-        // and do not let the new owner inherit that spawner.
-        if ( cell->BuildingSpawnInitialOwner == 0 )
-            cell->BuildingSpawnInitialOwner = oldOwner;
-
-        cell->BuildingSpawnLastTime = 0;
-        cell->BuildingSpawnedGids.clear();
     }
 }
 
@@ -1767,22 +1755,6 @@ void NC_STACK_ypaworld::sb_0x456384(const Common::Point &cellId, int ownerid2, i
             SetupPowerStationInfo(&cell, bld->Power, blg_id);
 
         CellSetOwner(&cell, ownerid2);
-
-        // Building spawner runtime ownership must be tied to the building that
-        // has just been created, not to a previous owner stored when the sector
-        // was conquered before construction.
-        if ( bld->spawn_units )
-        {
-            cell.BuildingSpawnInitialOwner = ownerid2;
-            cell.BuildingSpawnLastTime = 0;
-            cell.BuildingSpawnedGids.clear();
-        }
-        else
-        {
-            cell.BuildingSpawnInitialOwner = 0;
-            cell.BuildingSpawnLastTime = 0;
-            cell.BuildingSpawnedGids.clear();
-        }
 
         for( NC_STACK_ypabact * &unit: _unitsList )
         {
@@ -3657,6 +3629,14 @@ void NC_STACK_ypaworld::ProtosFreeSounds()
     {
         for (World::TVhclSound &sfx : vhcl.sndFX)
             sfx.ClearSounds();
+    }
+    for (auto &effect : _bruchProtos)
+    {
+        for (World::TVhclSound &sfx : effect.second.sndFX)
+            sfx.ClearSounds();
+        if ( effect.second.bruch_physics )
+            for (World::TVhclSound &sfx : effect.second.bruch_physics->sounds)
+                sfx.ClearSounds();
     }
 
     for (World::TWeapProto &wep : _weaponProtos)

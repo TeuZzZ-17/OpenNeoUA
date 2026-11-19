@@ -638,7 +638,7 @@ bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, const Worl
             wproto.artillery_shell_arc_height, wproto.artillery_shell_speed,
             wproto.artillery_shell_vertical_spread_x,
             wproto.artillery_shell_vertical_spread_z,
-            !wproto.artillery_shell_airburst);
+            !wproto.artillery_shell_airburst, wproto.artillery_shell_transfer_fade_inout);
     }
     else
     {
@@ -649,6 +649,7 @@ bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, const Worl
             wproto.artillery_shell_speed, !wproto.artillery_shell_airburst);
     }
     shell->StartWeaponTracer();
+    unit->ApplyRecoil(-shell->_fly_dir, wproto.recoil);
 
     shell->_kidRef.Detach();
     shell->_parent = nullptr;

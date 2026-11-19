@@ -976,6 +976,7 @@ void ypabact_UpdateLaserNormalSound(NC_STACK_ypabact *bact,
 
     // A looped, sample-free source holds mag0 until the laser stops; the sound
     // engine ignores authored normal PAL/SHK times for this source.
+    sustained.Releasing = false; // firing again: cancel a running fade-out
     if ( (normalFx.sndPrm.slot || normalFx.sndPrm_shk.slot) &&
          !sustained.IsPFxEnabled() && !sustained.IsShkEnabled() )
     {
@@ -1580,7 +1581,11 @@ void NC_STACK_ypabact::StopLaser()
           (_laser_soundcarrier.Sounds.size() > 1 &&
            (_laser_soundcarrier.Sounds[1].IsPFxEnabled() ||
             _laser_soundcarrier.Sounds[1].IsShkEnabled()))) )
-        SFXEngine::SFXe.StopCarrier(&_laser_soundcarrier);
+    {
+        // PAL/SHK with fade_out keep playing their fade-out after the beam stops.
+        if ( SFXEngine::SFXe.ReleaseCarrier(&_laser_soundcarrier) )
+            SFXEngine::SFXe.UpdateSoundCarrier(&_laser_soundcarrier);
+    }
     if ( !_laser_hit_soundcarrier.Sounds.empty() &&
          _laser_hit_soundcarrier.Sounds[0].IsEnabled() )
         SFXEngine::SFXe.StopCarrier(&_laser_hit_soundcarrier);

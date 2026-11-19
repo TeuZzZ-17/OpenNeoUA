@@ -28,6 +28,9 @@ namespace Parsers
 
 int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
 {
+    if ( _isBruch && !StriCmp(p1, "begin_effect") )
+        return ParseBruchEffectBlock(parser, _vhcl);
+
     if ( !StriCmp(p1, "building_time") )
     {
         _vhcl->building_time = ParseBuildingTime(p2);
@@ -556,6 +559,18 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "vp_genesis") )
     {
         _vhcl->vp_genesis = parser.stol(p2, nullptr, 0);
+    }
+    else if ( !StriCmp(p1, "vp_spawn") )
+    {
+        _vhcl->vp_spawn = ParsePositiveIntOrZero(p2);
+    }
+    else if ( !StriCmp(p1, "base_spawn") )
+    {
+        _vhcl->base_spawn = p2;
+    }
+    else if ( !StriCmp(p1, "3ds_spawn") )
+    {
+        _vhcl->model3ds_spawn = p2;
     }
     else if ( ParseExternalVisualParam(p1, p2, "3ds", _vhcl->visual_3ds) )
     {
@@ -1822,7 +1837,9 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
 
 bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt)
 {
-    if ( !StriCmp(word, "new_vehicle") )
+    const bool bruch = !StriCmp(word, "new_bruch");
+    _isBruch = bruch;
+    if ( bruch || !StriCmp(word, "new_vehicle") )
     {
         _isModify = false;
         _roboTmp = TRoboProto();
@@ -1830,7 +1847,9 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _unitGunID = -1;
         _collID = -1;
         _vhclID = _forcedVhclID >= 0 ? _forcedVhclID : parser.stol(opt, nullptr, 0);
-        _vhcl = &_o._vhclProtos.at(_vhclID);
+        if ( bruch && (_vhclID <= 0 || _vhclID > 65535) )
+            return false;
+        _vhcl = bruch ? &_o._bruchProtos[_vhclID] : &_o._vhclProtos.at(_vhclID);
 
         *_vhcl = TVhclProto();
 
@@ -1879,6 +1898,9 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->vp_wait = 3;
         _vhcl->vp_dead = 4;
         _vhcl->vp_genesis = 5;
+        _vhcl->vp_spawn = -1;
+        _vhcl->base_spawn.clear();
+        _vhcl->model3ds_spawn.clear();
         _vhcl->visual_3ds = TExternalVisualSet();
         _vhcl->visual_base = TExternalVisualSet();
         _vhcl->visual_scale = vec3d(1.0, 1.0, 1.0);

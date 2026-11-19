@@ -788,6 +788,13 @@ void NC_STACK_ypamissile::RememberDirectHitSectorAt(const vec3d &pos)
         _mislDirectHitSectors.push_back(hit);
 }
 
+static bool CanReceiveBlastDebuff(const NC_STACK_ypabact *target)
+{
+    return target && target->_bact_type != BACT_TYPES_MISSLE && target->_energy > 0 &&
+           target->_status != BACT_STATUS_DEAD &&
+           !(target->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
+}
+
 void NC_STACK_ypamissile::ApplyBlastToUnits()
 {
     bool doBlastDamage = (_mislBlastEnergy > 0);
@@ -844,12 +851,9 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
                 // blast_debuff_id reaches enemies only. Same rule as energy and push: a
                 // direct debuff replaces the area one on the struck target; without
                 // debuff_id that target gets the area one.
-                const bool applyDebuff = hasDebuff && bct && bct != this &&
+                const bool applyDebuff = hasDebuff && CanReceiveBlastDebuff(bct) && bct != this &&
                     bct->_owner != _owner &&
-                    !(proto->debuff.valid && IsDirectHitUnit(bct)) &&
-                    bct->_bact_type != BACT_TYPES_MISSLE && bct->_energy > 0 &&
-                    bct->_status != BACT_STATUS_DEAD &&
-                    !(bct->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
+                    !(proto->debuff.valid && IsDirectHitUnit(bct));
                 if ( dmgSkip && pushSkip && !applyDebuff )
                     continue;
 

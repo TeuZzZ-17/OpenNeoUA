@@ -265,11 +265,13 @@ int NC_STACK_ypamissile::SetupArtilleryShell(const vec3d &startPos, const vec3d 
 
 int NC_STACK_ypamissile::SetupArtilleryShellVerticalBarrage(const vec3d &startPos, const vec3d &targetPos,
                                                             int fallDelay, float fallHeight, float verticalSpeed,
-                                                            float spreadX, float spreadZ, bool impactOnSurface)
+                                                            float spreadX, float spreadZ, bool impactOnSurface,
+                                                            const std::array<int, 2> &transferFade)
 {
     _isArtilleryShellProjectile = true;
     _artilleryShellVerticalBarrage = true;
     _artilleryShellVerticalTransferred = false;
+    _artilleryShellTransferFadeInOut = transferFade;
     _artilleryShellStartPos = startPos;
     _artilleryShellTargetPos = targetPos;
     _artilleryShellArcHeight = (std::isfinite(fallHeight) && fallHeight > 0.0f) ? fallHeight : 0.0f;
@@ -323,6 +325,23 @@ int NC_STACK_ypamissile::SetupArtilleryShellVerticalBarrage(const vec3d &startPo
     _rotation.SetY(_fly_dir * x);
 
     return _artilleryShellFlightTime;
+}
+
+float NC_STACK_ypamissile::GetArtilleryTransferFadeAlpha() const
+{
+    if ( !_artilleryShellVerticalBarrage || _status != BACT_STATUS_NORMAL )
+        return 1.0f;
+
+    if ( _artilleryShellElapsed >= _artilleryShellVerticalFallStartTime )
+        return World::ComputeTemporalEnvelope(_artilleryShellElapsed - _artilleryShellVerticalFallStartTime,
+                                              _artilleryShellVerticalDescentTime,
+                                              _artilleryShellTransferFadeInOut[0], 0);
+
+    const int fadeOut = _artilleryShellTransferFadeInOut[1];
+    if ( fadeOut > 0 && _artilleryShellElapsed >= _artilleryShellVerticalAscentTime )
+        return 0.0f; // Stay hidden during the wait at the top of the ascent.
+
+    return World::ComputeTemporalEnvelope(_artilleryShellElapsed, _artilleryShellVerticalAscentTime, 0, fadeOut);
 }
 
 void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)

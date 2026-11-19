@@ -36,7 +36,7 @@ struct SectorModelDef
     int mapSymbol = -1;
     int shield = -1;
     bool explosionsSet = false;
-    std::vector<std::array<long, 4>> explosions; // VP|x|y|z as in SET.SDF
+    std::vector<std::array<long, 4>> explosions; // effect ID|x|z|height, as in SET.SDF
     std::vector<std::string> mapIcon; // 1 file, or 3 for map zoom 2|3|4
 };
 
@@ -237,7 +237,7 @@ private:
                 return ScriptParser::RESULT_OK;
             const std::vector<std::string> parts = Stok::Split(p2, "|");
             std::array<long, 4> fx {};
-            if ( parts.size() != 4 || !ParseInt(parts[0], 0, 255, &fx[0]) ||
+            if ( parts.size() != 4 || !ParseInt(parts[0], 0, 65535, &fx[0]) ||
                  !ParseInt(parts[1], -100000, 100000, &fx[1]) ||
                  !ParseInt(parts[2], -100000, 100000, &fx[2]) ||
                  !ParseInt(parts[3], -100000, 100000, &fx[3]) )
@@ -543,7 +543,7 @@ int NC_STACK_ypaworld::ResolveExternalSector(const std::string &path)
             {
                 TLego::ExFX fx;
                 fx.Index = (uint8_t)i;
-                fx.ObjectID = (uint8_t)model.explosions[i][0];
+                fx.ObjectID = static_cast<uint16_t>(model.explosions[i][0]);
                 // Same axes as SET.SDF effect groups (yw_parse_lego).
                 fx.Position = vec3d(model.explosions[i][1], -model.explosions[i][3], -model.explosions[i][2]);
                 lego.Explosions.push_back(fx);

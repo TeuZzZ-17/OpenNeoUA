@@ -948,7 +948,8 @@ public:
     void sub_4843BC(NC_STACK_ypabact *bact2, int a3);
     void sub_493480(NC_STACK_ypabact *bact2, int mode);
     void StartDestFX(const World::DestFX &fx, const vec3d *impactPos = nullptr,
-                     const mat3x3 *impactRot = nullptr, bool randomRotation = false);
+                     const mat3x3 *impactRot = nullptr, bool randomRotation = false,
+                     const World::TChainFXConfig &chain = {});
     bool StartChainFXByTrigger(uint8_t trigger, const ypaworld_arg136 *worldHit = nullptr,
                                const std::vector<World::TChainFXConfig> *fxOverride = nullptr,
                                const vec3d *impactPos = nullptr, const mat3x3 *impactRot = nullptr);
@@ -1138,6 +1139,11 @@ public:
     NC_STACK_base *_vp_dead;
     NC_STACK_base *_vp_megadeth;
     NC_STACK_base *_vp_genesis;
+    extra_vproto _spawn_visual;
+    bool HasSpawningChild() const;
+    // OpenNeoUA: snd/pal/shk_spawn_* loop runs while HasSpawningChild() is true.
+    bool _spawn_sound_active = false;
+    void UpdateSpawnStateSound();
     World::TDamagedFXConfig _damaged_fx;
     int32_t _damaged_fx_next_time;
     World::TDecorationFXConfig _decoration_fx;

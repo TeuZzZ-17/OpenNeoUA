@@ -235,6 +235,9 @@ bool NC_STACK_ypamissile::IsOrbiterGuarding() const
 
 float NC_STACK_ypamissile::GetRenderFadeAlpha() const
 {
+    if ( _artilleryShellVerticalBarrage )
+        return GetArtilleryTransferFadeAlpha();
+
     if ( _orbiterState == ORBITER_OFF || _orbiterFadeIn <= 0 ||
          _orbiterFadeElapsed >= _orbiterFadeIn )
         return 1.0f;

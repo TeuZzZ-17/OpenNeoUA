@@ -110,6 +110,7 @@ void ParseDecalSizeOverride(const char *key, const std::string &value,
 // crater_radius / crater_depth / crater_rim of a weapon or a vehicle. Returns
 // false when p1 is none of the three keys. A bad value switches the crater off.
 bool ParseCraterParam(const std::string &p1, const std::string &p2, TCraterConfig &crater);
+int ParseBruchEffectBlock(ScriptParser::Parser &parser, TVhclProto *profile);
 int ParseVehicleChainFXBlock(ScriptParser::Parser &parser, TVhclProto *vhcl);
 int ParseWeaponChainFXBlock(ScriptParser::Parser &parser, TWeapProto *wpn);
 int ParseSuperItemChainFXBlock(ScriptParser::Parser &parser, TSuperItemProfile *profile);

@@ -1861,7 +1861,7 @@ bool ypabact_GetCompoundFXGeometry(NC_STACK_ypabact *bact,
 
 void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx,
                                   const vec3d *impactPos, const mat3x3 *impactRot,
-                                  bool randomRotation)
+                                  bool randomRotation, const World::TChainFXConfig &chain)
 {
     ypaworld_arg146 arg146;
 
@@ -1896,9 +1896,30 @@ void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx,
         }
     }
 
-    NC_STACK_ypabact *bah = _world->ypaworld_func146(&arg146);
+    BruchEmission emission;
+    emission.rotation = impactRot ? *impactRot : _rotation;
+    emission.position = (impactPos ? *impactPos : _position) + emission.rotation.Transform(fx.Pos);
+    emission.visualPosition = impactPos ? *impactPos : _position;
+    emission.visualRotation = emission.rotation;
+    if ( hasCompoundFXGeometry )
+        emission.visualPosition += _rotation.Transpose().Transform(compoundCenter);
+    vec3d visualOffset;
+    mat3x3 visualRotationDelta;
+    if ( !impactPos && GetProjectileVisualMotionDelta(&visualOffset, &visualRotationDelta) )
+    {
+        emission.visualPosition += visualOffset;
+        emission.visualRotation = (_rotation.Transpose() * visualRotationDelta).Transpose();
+    }
+    emission.visualPosition += emission.visualRotation.Transform(fx.Pos);
+    if ( chain.has_launch )
+        emission.launch = World::RandomVec3RangeInclusive(chain.launch_min, chain.launch_max);
+    else if ( chain.mode != World::TChainFXConfig::MODE_BRUCH )
+        emission.launch = fx.Pos;
+    emission.owner = _owner;
+    emission.wreck = this;
+    NC_STACK_ypabact *bah = _world->SpawnBruchEffect(&arg146, emission, chain);
 
-    if ( bah )
+    if ( bah && !bah->_inlinePhysicalFX )
     {
         if ( randomRotation )
             bah->_rotation = World::RandomFXRotation(bah->_rotation, true);
@@ -1912,7 +1933,7 @@ void NC_STACK_ypabact::StartDestFX(const World::DestFX &fx,
 
         bah->SetStateInternal(&v18);
 
-        bah->_fly_dir = (impactRot ? *impactRot : _rotation).Transform(fx.Pos);
+        bah->_fly_dir = emission.rotation.Transform(chain.has_launch ? emission.launch : fx.Pos);
 
         if ( fx.Accel )
             bah->_fly_dir += _fly_dir * _fly_dir_length;
@@ -2045,28 +2066,18 @@ bool NC_STACK_ypabact::StartChainFXByTrigger(
             for (int i = 0; i < count; ++i)
                 _world->SpawnChainFX(fx, visualPos, visualRot);
         }
-        else if ( fx.mode == World::TChainFXConfig::MODE_PHYSICAL )
+        else if ( fx.mode == World::TChainFXConfig::MODE_BRUCH )
         {
             const int count = World::RandomIntRangeInclusive(fx.count_min, fx.count_max);
             for (int i = 0; i < count; ++i)
             {
-                if ( fx.physical_inline )
-                {
-                    const vec3d launch = World::RandomVec3RangeInclusive(fx.launch_min,
-                                                                          fx.launch_max);
-                    const vec3d pos = impactPos ? *impactPos : _position;
-                    const mat3x3 &rot = impactRot ? *impactRot : _rotation;
-                    _world->SpawnInlinePhysicalFX(fx, pos, rot, launch, _owner, this);
-                    continue;
-                }
-
-                World::DestFX tempFx;
-                tempFx.ModelID = fx.physical_vehicle;
-                // Offset min~max is rolled independently for every generated instance.
-                tempFx.Pos = World::RandomVec3RangeInclusive(fx.offset_min, fx.offset_max);
-                StartDestFX(tempFx, impactPos, impactRot, fx.random_rotation);
+                World::DestFX emission;
+                emission.ModelID = fx.bruch_id;
+                emission.Pos = World::RandomVec3RangeInclusive(fx.offset_min, fx.offset_max);
+                StartDestFX(emission, impactPos, impactRot, fx.random_rotation, fx);
             }
         }
+
 
         spawned = true;
     }

@@ -66,6 +66,13 @@ static float SFX_EffectTemporalFactor(TSoundSource &sound, size_t now,
     return SFX_TemporalFactor(sound.StartTime, now, duration, fadeIn, fadeOut);
 }
 
+// 1 -> 0 over fadeOut ms after the release started; <= 0 means the source is over.
+static float SFX_ReleaseFactor(const TSoundSource &sound, size_t now, int fadeOut)
+{
+    const double elapsed = now >= sound.ReleaseTime ? (double)(now - sound.ReleaseTime) : 0.0;
+    return (float)(1.0 - elapsed / (double)fadeOut);
+}
+
 // game.global_*_falloff_power: 0.1 to 4. Missing, malformed or out of range = 1 (linear).
 static float SFX_ReadFalloffPower(Common::Ini::Key &key)
 {
@@ -316,6 +323,7 @@ void SFXEngine::startSound(TSndCarrier *smpls, size_t id)
     }
 
     result->StartTime = currentTime;
+    result->Releasing = false;
 
     if ( result->IsFragmented() || result->PSample )
     {
@@ -453,6 +461,31 @@ void SFXEngine::StopCarrier(TSndCarrier *carr)
         snd.SetPFxEnable(false);
         snd.SetEnabled(false);
     }
+}
+
+bool SFXEngine::ReleaseCarrier(TSndCarrier *carr)
+{
+    bool releasing = false;
+
+    for (TSoundSource &snd : carr->Sounds)
+    {
+        const bool fadePfx = snd.IsPFxEnabled() && snd.PPFx && snd.PPFx->fade_out > 0;
+        const bool fadeShk = snd.IsShkEnabled() && snd.PShkFx && snd.PShkFx->fade_out > 0;
+
+        if ( snd.IsLoop() && !snd.IsEnabled() && (fadePfx || fadeShk) )
+        {
+            if ( !snd.Releasing )
+            {
+                snd.Releasing = true;
+                snd.ReleaseTime = currentTime;
+            }
+            releasing = true;
+        }
+        else if ( snd.IsEnabled() || snd.IsPFxEnabled() || snd.IsShkEnabled() )
+            StopSource(&snd);
+    }
+
+    return releasing;
 }
 
 void SFXEngine::StopSource(TSoundSource *snd)
@@ -746,6 +779,18 @@ void SFXEngine::SoundCarrierProcessPFx(TSndCarrier *smpls, float distance)
                         snd, currentTime, snd.PPFx->time,
                         snd.PPFx->fade_in, snd.PPFx->fade_out);
 
+                if ( snd.Releasing )
+                {
+                    const float release = SFX_ReleaseFactor(snd, currentTime, snd.PPFx->fade_out);
+                    if ( release <= 0.0f )
+                    {
+                        snd.Releasing = false;
+                        snd.SetPFxEnable(false);
+                        continue;
+                    }
+                    snd.PFxMag *= release;
+                }
+
                 audio_InsertPalFX(&snd);
             }
         }
@@ -827,6 +872,18 @@ void SFXEngine::SoundCarrierProcessShake(TSndCarrier *smpls, float distance)
                     snd.ShkMag *= SFX_EffectTemporalFactor(
                         snd, currentTime, snd.PShkFx->time,
                         snd.PShkFx->fade_in, snd.PShkFx->fade_out);
+
+                if ( snd.Releasing )
+                {
+                    const float release = SFX_ReleaseFactor(snd, currentTime, snd.PShkFx->fade_out);
+                    if ( release <= 0.0f )
+                    {
+                        snd.Releasing = false;
+                        snd.SetShkEnable(false);
+                        continue;
+                    }
+                    snd.ShkMag *= release;
+                }
 
                 InsertShakeFX(&snd);
             }

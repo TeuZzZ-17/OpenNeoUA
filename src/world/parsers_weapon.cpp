@@ -1356,6 +1356,13 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int v = parser.stol(p2, nullptr, 0);
         _wpn->artillery_shell_fall_delay = v > 0 ? v : 0;
     }
+    else if ( !StriCmp(p1, "artillery_shell_transfer_fade_inout") )
+    {
+        std::vector<int16_t> fade;
+        _wpn->artillery_shell_transfer_fade_inout = {};
+        if ( ParseNonNegativeInt16ListValue(p2, fade, 2) && fade.size() == 2 )
+            _wpn->artillery_shell_transfer_fade_inout = {{fade[0], fade[1]}};
+    }
     else if ( !StriCmp(p1, "artillery_shell_range_minmax") )
     {
         std::string range[2];

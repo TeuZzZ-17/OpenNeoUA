@@ -113,9 +113,6 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
         _bld->building_time = ParseBuildingTime(p2);
         return ScriptParser::RESULT_OK;
     }
-    if ( !StriCmp(p1.substr(0, 6), "spawn_") )
-        _bld->spawn_units = 1;
-
     if ( !StriCmp(p1, "end") )
         return ScriptParser::RESULT_SCOPE_END;
 
@@ -253,62 +250,6 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
         else
             ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
     }
-    else if ( !StriCmp(p1, "spawn_vehicle") )
-    {
-        _bld->spawn_vehicle = parser.stol(p2, nullptr, 0);
-    }
-    else if ( !StriCmp(p1, "spawn_interval") )
-    {
-        int interval = parser.stol(p2, nullptr, 0);
-        _bld->spawn_interval = interval > 0 ? interval : 0;
-    }
-    else if ( !StriCmp(p1, "spawn_trigger_radius") )
-    {
-        float radius = parser.stof(p2, 0);
-        _bld->spawn_trigger_radius = radius > 0.0 ? radius : 0.0;
-    }
-    else if ( !StriCmp(p1, "spawn_random_pos") )
-    {
-        float radius = ParseFiniteFloatOrFallback(parser, p2, 340.0f);
-        _bld->spawn_random_pos = radius >= 0.0 ? radius : 340.0f;
-    }
-    else if ( !StriCmp(p1, "spawn_offset_xz") )
-    {
-        std::string axis[2];
-        if ( ReadTuple(p1, p2, 2, axis) )
-        {
-            _bld->spawn_offset.x = ParseFiniteFloatOrFallback(parser, axis[0], 37.0f);
-            _bld->spawn_offset.z = ParseFiniteFloatOrFallback(parser, axis[1], -41.0f);
-        }
-    }
-    else if ( !StriCmp(p1, "spawn_height") )
-    {
-        float minHeight = 650.0f;
-        float maxHeight = 900.0f;
-        if ( !ParseScriptFloatRange(p2, minHeight, maxHeight) ||
-             minHeight < 0.0f || maxHeight < 0.0f )
-        {
-            minHeight = 650.0f;
-            maxHeight = 900.0f;
-        }
-        _bld->spawn_height_min = minHeight;
-        _bld->spawn_height_max = maxHeight;
-    }
-    else if ( !StriCmp(p1, "spawn_max_active") )
-    {
-        int maxActive = parser.stol(p2, nullptr, 0);
-        _bld->spawn_max_active = maxActive > 0 ? maxActive : 0;
-    }
-    else if ( !StriCmp(p1, "spawn_count") )
-    {
-        int count = parser.stol(p2, nullptr, 0);
-        _bld->spawn_count = count > 0 ? count : 1;
-        _bld->spawn_count_defined = true;
-    }
-    else if ( !StriCmp(p1, "spawn_instant") )
-    {
-        _bld->spawn_instant = parser.stol(p2, nullptr, 0) ? 1 : 0;
-    }
     else if ( !StriCmp(p1, "snd_normal_sample") )
     {
         _bld->SndFX.MainSample.Name = p2;
@@ -333,6 +274,9 @@ int BuildProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1
     }
     else
     {
+        if ( _gunID >= _bld->Guns.size() )
+            return ScriptParser::RESULT_UNKNOWN;
+
         TBuildingProto::TGun &pGun = _bld->Guns.at(_gunID);
         if ( !StriCmp(p1, "sbact_vehicle") )
         {

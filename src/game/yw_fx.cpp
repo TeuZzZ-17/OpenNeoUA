@@ -114,6 +114,31 @@ int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, c
     return SpawnTransientVisualBase(_vhclModels.at(modelId), pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
 }
 
+bool NC_STACK_ypaworld::ResolveChainVisualFX(
+    const World::TChainFXConfig &config, World::TChainFXConfig &playback) const
+{
+    if ( config.mode == World::TChainFXConfig::MODE_VISUAL )
+    {
+        playback = config;
+        return true;
+    }
+    if ( config.mode != World::TChainFXConfig::MODE_BRUCH )
+        return false;
+
+    const auto effect = _bruchProtos.find(config.bruch_id);
+    if ( effect == _bruchProtos.end() || !effect->second.bruch_visual )
+        return false;
+
+    playback = *effect->second.bruch_visual;
+    playback.trigger = config.trigger;
+    playback.count_min = config.count_min;
+    playback.count_max = config.count_max;
+    playback.offset_min = config.offset_min;
+    playback.offset_max = config.offset_max;
+    playback.random_rotation = config.random_rotation;
+    return true;
+}
+
 void NC_STACK_ypaworld::SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot)
 {
     if ( config.duration <= 0 || config.visuals.empty() )
@@ -825,22 +850,18 @@ void NC_STACK_ypaworld::BuildingDecorationFXUpdate()
 {
     for (cellArea &cell : _cells)
     {
-        if ( !yw_IsActiveBuildingSpawnerCell(cell) )
+        if ( (cell.PurposeType != cellArea::PT_BUILDINGS &&
+              cell.PurposeType != cellArea::PT_POWERSTATION) || cell.GetEnergy() <= 0 )
         {
             RemoveTransientVP(cell.DecorationFXPersistentId,
                               cell.DecorationFX.fade_out,
                               cell.DecorationFX.vp_trail_fade_out);
             cell.DecorationFXPersistentId = 0;
             cell.DecorationFXNextTime = 0;
-            cell.BuildingSpawnLastTime = 0;
-            cell.BuildingSpawnedGids.clear();
             continue;
         }
 
         UpdateDecorationFX(cell.DecorationFX, cell.DecorationFXNextTime, cell.CenterPos, &cell.DecorationFXPersistentId);
-
-        if ( cell.PurposeIndex >= 0 && (size_t)cell.PurposeIndex < _buildProtos.size() )
-            yw_UpdateBuildingSpawner(this, cell, _buildProtos[cell.PurposeIndex]);
     }
 }
 

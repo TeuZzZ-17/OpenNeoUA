@@ -107,9 +107,9 @@ void TestScoreAndClassNames() {
     Check(catalog.Describe(w,0,7).score==0,"invalid cards have no score");
     for(const auto &item:std::vector<std::pair<std::string,std::string>>{{"kraftwerk","Power Station"},{"defcenter","Flak Station"},{"radar","Radar Station"},{"building","building"}})
     {b.script_class=item.first;Check(catalog.Describe(w,2,1).className==item.second&&b.script_class==item.first,"building class uses display alias without changing its model");}
-    auto &support=w._buildProtos[2];support=b;support.Index=2;support.Power=100;support.spawn_count_defined=true;support.spawn_count=4;support.radar_defined=true;support.radar=5;
+    auto &support=w._buildProtos[2];support=b;support.Index=2;support.Power=100;support.radar_defined=true;support.radar=5;
     catalog.Build(w);
-    Check(catalog.Describe(w,2,2).score>catalog.Describe(w,2,1).score,"healing guardians and radar contribute to score");
+    Check(catalog.Describe(w,2,2).score>catalog.Describe(w,2,1).score,"power and radar contribute to score");
     WorldProbe empty;catalog.Build(empty);Check(catalog.Entries(0).empty(),"empty catalog resets score references safely");
 }
 void TestSustainedQuality() {

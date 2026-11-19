@@ -51,7 +51,7 @@ Each parameter is one line: marker, `name = value`, em dash, short description. 
   - [Appearance](#appearance)
   - [External sector files (.sector)](#external-sector-files-sector)
   - [Sounds](#sounds)
-  - [OpenNeoUA special features](#openneoua-special-features-2)
+- [Bruch (Bruch.cfg)](#bruch-bruchcfg)
 - [Buffs (Buffs.cfg)](#buffs-buffscfg)
 - [Debuffs (Debuffs.cfg)](#debuffs-debuffscfg)
 - [Clouds (Clouds.cfg)](#clouds-cloudscfg)
@@ -522,7 +522,7 @@ Three-stage attack loop replacing the old sector/bact pairs: attack, retreat whe
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `gun_type = mg` — Restored cut-content behavior: the flak uses MGUN as its primary weapon. Effective range follows game.mgun_range.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gun_type = dummy` — Decorative/defensive role: does not interact and its interfaces are disabled.
+- 🟢 `gun_type = dummy` — Passive module. Attached Unit Guns and dummy guns configured as vehicle spawners do not aim or fire. A dummy spawner needs no radar or power role.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gun_type = radar` — Rotates continuously through 360 degrees around its mount without pitching; it does not search or attack. Speed is `maxrot` in radians per second (a turn takes about 6.283 / maxrot seconds); zero, negative or non-finite stops it. `gun_*_angle` limits do not restrict the scan. `radar` still sets the visibility range.
 ------------------------------------------------------------------------------------------------------------------------
@@ -627,7 +627,7 @@ Universal Unit Guns extend the Host Station gun system so guns and functional mo
 - 🔵 `vp_genesis = 15` — ID of the model used for the creation (beam-in / Genesis) effect.
 ------------------------------------------------------------------------------------------------------------------------
 
-Inline physical FX (`begin_fx` with `mode = physical`) support the normal, goingdown and explode event families; their `snd_*`, `pal_*` and `shk_*` keys work as in the sounds section. The legacy `physical_vehicle` with `offset_xyz` is still readable; do not mix it with inline physical keys in the same block.
+Physical Bruch fragments use the normal, goingdown and explode sound events. See [Bruch](#bruch-bruchcfg).
 
 **Kamikaze decals.** When a `model = kamikaze` Weapon detonates with a positive `trigger_radius`:
 
@@ -656,7 +656,7 @@ Inline physical FX (`begin_fx` with `mode = physical`) support the normal, going
 Each lifecycle state can have its own external visual. External assets extend, never remove, the original VP states.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `base_<state> = Data/Models/Base/VEHICLE.BASE` — External BASE model for a lifecycle state (normal, fire, wait, dead, megadeth, genesis); falls back to `vp_<state>`. If the resolved dead visual has no persistent geometry, the normal visual is reused during DEATH1 so the wreck stays visible while it falls. When faction plasma tint is enabled, use a separate file for genesis: sharing it with a regular state also applies the plasma tint to that state.
+- 🟢 `base_<state> = Data/Models/Base/VEHICLE.BASE` — External BASE model for a lifecycle state (normal, fire, wait, dead, megadeth, genesis); falls back to `vp_<state>`. If the resolved dead visual has no persistent geometry, the normal visual is reused during DEATH1 so the wreck stays visible while it falls. A BASE shared by Genesis and a regular state only receives faction plasma tint during Genesis or beam playback.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `3ds_<state> = Data/Models/3ds/vehicle.3ds` — External 3DS model for a lifecycle state (same states as `base_<state>`); takes priority over `base_<state>` and `vp_<state>`.
 ------------------------------------------------------------------------------------------------------------------------
@@ -730,136 +730,39 @@ Damaged-state visuals are coupled to optional gameplay penalties. This means the
 ### Destruction and effects
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `dest_fx = death_46_0_0_0` — Effect spawned on destruction. Format `type_ID_X_Y_Z`: `death` (normal destruction) or `megadeth` (heavy crash or surface hit), the ID of the effect vehicle (effects are ordinary Vehicles.cfg entries), then the X, Y, Z offset from the unit center. A fifth number can enable acceleration. `|` is also accepted as separator.
+- 🔵 `dest_fx = death_46_0_0_0` — Effect spawned on destruction. Format `type_ID_X_Y_Z`: `death` (normal destruction) or `megadeth` (heavy crash or surface hit), the effect ID (Bruch first, then a legacy Vehicle), then the X, Y, Z offset from the unit center. A fifth number can enable acceleration. `|` is also accepted as separator.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `ext_dest_fx = death_46_0_0_0` — Extended variant of dest_fx, with the same format. Rarely used. Alias: extended_dest_fx.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `scale_fx = 1_5_2.5_1500_292_291_290_289` — Scaled animation effect, usually referenced by dest_fx. Format start_unused_speed_duration_modelIDs: the first value is where the animation starts (0 = from the beginning), the second is unused, then playback speed (negative plays backwards), the duration in ms and finally the IDs of the model sequence.
+- 🔵 `scale_fx = 1_5_2.5_1500_292_291_290_289` — Scaled animation effect, usually referenced by dest_fx. Legacy format `start_speed_accel_duration_vp1_vp2`. The first three values set initial scale, scale velocity and scale acceleration. Duration is in milliseconds. Use a Bruch profile for new effects.
 ------------------------------------------------------------------------------------------------------------------------
 
-Chain FX (`begin_fx`) replace the old `dest_fx` + `scale_fx` pair with an explicit sequence. `mode = visual` creates scalable visuals; `mode = physical` creates an autonomous inline fragment with its own visual and physics, so no Vehicle ID has to be reserved for debris.
+A Vehicle `begin_fx` block references a [Bruch](#bruch-bruchcfg) profile and controls when and where it spawns.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `begin_fx` — Visual vehicle Chain FX, replacing a dest_fx that points to a scale_fx.
+- 🟢 `begin_fx` — Starts an effect reference. Close the block with `end`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `trigger = destroyed|air_destroyed` — Trigger: destroyed = vehicle destroyed on the ground; air_destroyed = vehicle destroyed in flight. Several triggers can be joined with | (e.g. destroyed|air_destroyed): the block runs on each one, exactly as if it were written twice. Any unknown name rejects the whole block.
+- 🟢 `trigger = destroyed|air_destroyed` — Runs on ground or air destruction. Join multiple events with `|`. Any unknown trigger rejects the block.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mode = visual` — Visual mode uses start_size/end_size/duration and the VP/BASE/3DS visual definitions below.
+- 🟢 `bruch_id = 1000` — Looks up a profile in Bruch first. If the same ID has no Bruch entry, uses the legacy Vehicle if it exists. Valid IDs are 1–65535. An invalid or missing ID disables a reference block.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `random_rotation = 0` — 1 assigns a random X/Y/Z orientation once at spawn, independently per instance; 0, omitted or invalid = normal orientation. Spawn position and launch direction are unchanged.
+- 🟢 `count = 2~4` — Number emitted per event. Use a fixed value or `min~max`. Maximum 32. Missing or invalid = 1.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `count = 2~4` — Number of effect instances generated per activation. Single value = fixed amount; `min~max` = random amount rolled per activation. Maximum 32; invalid = 1. With count > 1 each instance rolls its own `min~max` offset. Supported only with mode = visual and mode = physical; not available in SuperItem Chain FX blocks.
+- 🟢 `offset_xyz = -20|0|20` — Local X/Y/Z spawn offset. Each axis accepts a fixed value or `min~max`. It rolls independently for each instance. Legacy physical effects retain their original radius-based offset.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `offset_xyz = -20|0|20` — Effect X|Y|Z offset. Single value = fixed; `min~max` = random offset rolled at every activation. Format: x|y|z; each axis takes a single value or `min~max`.
+- 🟢 `launch_xyz = -30~30|-20|-30~30` — Local initial velocity for physical effects. Each axis accepts a fixed value or `min~max`. Omitted = zero initial velocity. Legacy Vehicle-style effects keep their original launch from the offset.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spin_xyz = 0|0|10` — X|Y|Z spin intensity of the Chain FX VP/BASE/3DS visuals: 0-10, decimals allowed; 0 = no spin. Applies to every model in the block. Format: x|y|z.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `start_size = 0.1` — Initial effect size. 1 = original visual size.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end_size = 2` — Final effect size.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mid_size = 1` — Intermediate effect size.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `duration = 1000` — Effect duration in milliseconds.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `fade_inout = 500|1000` — Visual fade-in and fade-out in milliseconds (format in|out). 0 or absent = immediate.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 229` — First legacy VP visual in the sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `base_model = Data/Models/Base/FX/CHAIN_FX.BASE` — Optional BASE family for the same element. Place after vp_model to keep that VP as fallback.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `3ds_model = Data/Models/3ds/FX/chain_fx.3ds` — Optional 3DS model for the same element; takes priority over base_model and vp_model.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 80|160|255|180` — RGBA tint for all models in the visual block, regardless of position. The last value wins; omitted tint preserves original colours.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 230` — Second visual in the sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 231` — Third visual in the sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end` — Closes the block.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `begin_fx` — Autonomous inline Physical FX; defines the fragment directly without consuming a Vehicle ID.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `trigger = destroyed|air_destroyed` — Vehicle trigger: destroyed = killed on the ground; air_destroyed = killed in flight.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mode = physical` — Enables the modern inline physical fragment path. physical_vehicle is not required.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `random_rotation = 0` — 1 assigns a random X/Y/Z orientation once at spawn, independently per instance; 0, omitted or invalid = normal orientation. Spawn position and launch direction are unchanged.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `follow_carcass = 1` — 1 = this fragment mirrors the position and rotation of the destroyed unit's falling wreck (the wreck keeps its own physics) until the wreck lands, then continues with its own physics. 0 or absent = the fragment uses its own physics. Applies to every fragment with follow_carcass = 1, including those from other blocks or with count > 1. Mainly meaningful with air_destroyed, where the wreck is still in flight.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `lifetime = 30000` — Maximum time in milliseconds that the Physical Fragment may remain in flight before it is removed. Single value = fixed lifetime; `min~max` = a lifetime rolled independently for each fragment. 0, absent or invalid = 30000. Ground contact still removes the fragment immediately.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `count = 1~4` — Number of fragments created per activation. Single value = fixed; `min~max` = random. Runtime maximum: 32. Each fragment independently selects its own VP entry from vp_model.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `launch_xyz = -30~30|-20|-30~30` — Initial local X|Y|Z velocity (format x|y|z). Each axis takes a single value (fixed) or `min~max` (randomized independently for each fragment). Inline fragments spawn at the event position rather than using offset_xyz.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 138|193` — One or more legacy moving-fragment VP IDs separated by |. Each spawned fragment randomly selects one entry; a single value preserves the previous behavior. VP remains the final fallback after 3DS/BASE.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `base_model = Data/Models/Base/FX/FRAGMENT.BASE` — Optional BASE family; falls back to vp_model.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `3ds_model = Data/Models/3ds/FX/fragment.3ds` — Optional 3DS fragment model; takes priority over BASE and VP.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_impact = 140|69` — Positional impact-VP list paired with vp_model. The selected model index always uses the impact at the same index, so 138 -> 140 and 193 -> 69. When present, the list must contain the same number of entries as vp_model; 0 disables the impact VP for that position.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 255|255|255|255` — Entries may be repeated to weight random selection. For example, vp_model = 138|138|193 makes 138 twice as likely; vp_impact must repeat the matching impacts in the same order. RGBA tint applied to the fragment visual.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `scale = 1.0` — Uniform VP/BASE/3DS fragment scale. <= 0 or invalid = 1.0.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mass = 150` — Fragment mass. Must be positive.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `airconst = 40.0` — Air resistance used by fragment physics. 0 is valid.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `force = 6000` — Additional impulse along the launch direction. 0 is valid.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `maxrot = 3.0` — Fragment rotation intensity. 0 disables additional rotation.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `radius = 1.0` — Physical/collision radius. Must be positive.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `impact_energy = 200` — Energy removed once from the first unit hit by this physical fragment. Respects shield and invulnerability. 0 or absent = disabled. Single-player only.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `impact_energy_radius = 0` — Additional 3D radius for energy removal on impact. 0 = direct target only; a positive value removes the same energy from nearby units. Each fragment can remove energy only once.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_normal_sample = Data/Sounds/shot7.wav` — Sound played when the fragment is created. `snd_<event>_volume`, `_pitch`, `_radius` and `_fade_inout` are supported for every event.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_goingdown_sample = Data/Sounds/fall.wav` — Sound of the goingdown (falling) phase.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_explode_sample = Data/Sounds/impact.wav` — Sound played when the fragment lands or impacts.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_explode_slot = 1` — Palette flash on explode; `pal_goingdown_*` works the same. Also supported: `mag0`, `mag1`, `time`, `radius` and `fade_inout`. 0 = disabled.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_explode_slot = 1` — Camera shake on explode. Also supported: `mag0`, `mag1`, `time`, `radius`, `fade_inout`, `mute` and `x`, `y`, `z`. 0 = disabled.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end` — Closes the block.
+- 🟢 `random_rotation = 0` — 1 rolls a random orientation per instance. 0, absent or invalid preserves the normal orientation. Spawn position and launch direction stay independent.
 ------------------------------------------------------------------------------------------------------------------------
 
-`at_death_*` effects are independent death-triggered systems. They can be used separately or combined on the same Vehicle.
-
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_push_force = 1.0` — AOE push intensity 0-10 generated when the unit dies. 0 or absent = no death push. A neighbour is displaced by 100 x (force x falloff x (1 - push_resistance))^2 world units. Reference used by the modernized units: tiny 0.55, light 0.75, medium 1.0, heavy 1.25, super-heavy 1.5.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_push_radius = 1200` — 3D radius of the death AOE push. 0 or absent = radial death push disabled.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_push_falloff = 1` — 1 decreases death-push strength progressively with distance from the epicenter; 0 keeps the same strength throughout the radius.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_energy = 1000` — Energy removed in an area when the unit dies, including from allies. Respects shield and invulnerability. 0 or absent = disabled. Lethal hits can trigger another unit's at_death_energy and therefore create chain reactions. Single-player only.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_energy_radius = 700` — 3D radius used by at_death_energy. 0 or absent = death energy removal disabled.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_energy_falloff = 1` — 1 reduces energy removal linearly with distance from the epicenter; 0 keeps the same energy loss throughout the radius.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_spawn_vehicle = 5` — Vehicle ID generated at death.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_spawn_count = 3` — Number of child units generated simultaneously at death. Minimum/default: 1. Runtime maximum: 8.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_spawn_random_pos = 30` — XZ position randomization applied to child units generated at death.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_spawn_instant = 1` — 1 generates child units immediately without the classic Genesis sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_spawn_immunity_time = 2000` — Damage-immunity time in milliseconds granted to newly generated child units.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `at_death_spawn_units_eject_force = 4` — Push strength applied to units spawned at death, in a random direction (same 0-10 scale and push system as at_death_push_force; flying air units are pushed horizontally only). Range 0-10; decimals allowed. 0, missing or invalid = no ejection. Periodic spawning is unaffected.
-------------------------------------------------------------------------------------------------------------------------
+```
+begin_fx
+    trigger = air_destroyed
+    bruch_id = 1000
+    count = 1~4
+    launch_xyz = -15~15|-30~-15|-15~15
+end
+```
 
 ### Buffs
 
@@ -870,7 +773,7 @@ Chain FX (`begin_fx`) replace the old `dest_fx` + `scale_fx` pair with an explic
 ### Sounds, palette flashes and shakes
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `snd_<event>_sample = sounds/engine.wav` — Sound file played for the event. Events: normal (engine loop), fire, wait, genesis, explode, airexplode (OpenNeoUA: explosion in flight), crashland (hits the ground), crashvhcl (hits a vehicle), goingdown (falling), cockpit, beamin, beamout, build.
+- 🔵 `snd_<event>_sample = sounds/engine.wav` — Sound file played for the event. Events: normal (engine loop), fire, wait, genesis, explode, airexplode (OpenNeoUA: explosion in flight), crashland (hits the ground), crashvhcl (hits a vehicle), goingdown (falling), cockpit, beamin, beamout, build, spawn (OpenNeoUA: loops while the spawn state of `vp_spawn` is active, see below).
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `snd_<event>_volume = 120` — Volume of the event sound.
 ------------------------------------------------------------------------------------------------------------------------
@@ -923,7 +826,7 @@ Chain FX (`begin_fx`) replace the old `dest_fx` + `scale_fx` pair with an explic
 - 🟢 `zoom_step_sound = sounds/new/spy_zoom.wav` — UFO classes only: optional one-shot played whenever an optical zoom step is actually applied. No sound is played when input is received at an already reached zoom limit. Empty/absent/unloadable = silent.
 ------------------------------------------------------------------------------------------------------------------------
 
-Mobile spawners work like building spawners, with spawn positions relative to the parent unit. Spawned units inherit the source's primary command, waypoint route and aggression, and reuse Genesis overlap separation, including instant spawns.
+Vehicle spawners position spawned units relative to the parent unit. Spawned units inherit the source's primary command, waypoint route and aggression, and reuse Genesis overlap separation, including instant spawns.
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `spawn_vehicle = 5` — Vehicle ID spawned by this unit.
@@ -941,6 +844,14 @@ Mobile spawners work like building spawners, with spawn positions relative to th
 - 🟢 `spawn_max_active = 9` — Maximum number of children generated by this unit that may be active simultaneously.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `spawn_instant = 1` — 1 spawns children immediately without the classic Genesis sequence.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `vp_spawn = 42` — Optional VP used while at least one direct child created by periodic spawning is in Genesis. 0, absent or invalid = no VP fallback. Instant spawns do not activate this visual.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `base_spawn = Data/Models/Base/Effects/SPAWN.BASE` — External BASE for the same spawn state. Used when no valid 3DS is available. Missing or invalid falls back to `vp_spawn`.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `3ds_spawn = Data/Models/3ds/SPAWN.3ds` — External 3DS for the same spawn state. Takes priority over BASE and VP. If no source resolves, the regular visual state is used.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_spawn_sample = sounds/new/spawn.wav` — Sound, palette flash and camera shake of the spawn state: all `snd_spawn_*`, `pal_spawn_*` and `shk_spawn_*` keys of "Sounds, palette flashes and shakes" are accepted. They start when the spawn state begins and loop until it ends (last Genesis child done, death); palette and shake hold `mag0` while looping. They follow the spawn state even when no spawn model is set. Absent = silent, no flash, no shake.
 ------------------------------------------------------------------------------------------------------------------------
 
 Proximity Defense is an autonomous secondary Weapon system. "classic" reacts to nearby enemies repeatedly; "at_death" fires once on unit death.
@@ -1025,6 +936,8 @@ Artillery Shell supports both a real ballistic trajectory and an emulated vertic
 - 🟢 `artillery_shell_mode = vertical_barrage` — ballistic = projectile reaches the target area along a real arc; vertical_barrage = emulated barrage where rounds climb out of view and descend vertically.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_fall_delay = 2500` — vertical_barrage only: delay before projectiles begin descending from the sky toward targets.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `artillery_shell_transfer_fade_inout = 900|1200` — `vertical_barrage` only. Milliseconds in `in|out` order: fade in from the start of descent over the target, fade out at the end of ascent over the launcher. A shell that fades out remains hidden while waiting at the top. Each fade is limited to its own flight phase. Each value accepts 0–32767; 0 disables that side. Missing or invalid = no fades. Visual only.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_vertical_spread_xz = 2|2` — vertical_barrage only: X|Z spread while projectiles rise vertically. Format: x|z.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1169,7 +1082,7 @@ Damage multipliers can distinguish newer/specialized model classes while preserv
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `push = 4` — Target push intensity 0-10. Standalone GUNs remain excluded; when an attached GUN is hit, push is transferred once to its valid parent and uses the parent's push_resistance.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `recoil = 0.5` — Primary Weapon recoil, 0-10. Compatible vehicles keep their recoil behavior; on `model = gun` flaks only the firing gun model slides back along its barrel axis, with no tilt or physical displacement. 0 or absent = off.
+- 🟢 `recoil = 0.5` — Primary Weapon recoil, 0-10. Also works on artillery shots. On `model = gun` flaks the model slides back along its barrel axis without tilting or moving its collision. 0 or absent = off.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `armor_penetration_targets = 2` — Number of units the Weapon may penetrate before stopping.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1354,7 +1267,7 @@ Optional overheat behavior starts only after the Weapon has reached and then mai
 - 🔵 `vp_genesis = 22` — ID of the creation model. Usually has no visible effect.
 ------------------------------------------------------------------------------------------------------------------------
 
-Inline physical fragments (`begin_fx` with `mode = physical`) use the same `snd_*`, `pal_*` and `shk_*` event families as Vehicles. The legacy `physical_vehicle` with `offset_xyz` is still readable, but new content should use the inline format.
+Physical Bruch fragments use the same sound, palette and shake families as Vehicles. See [Bruch](#bruch-bruchcfg).
 
 Weapon Ground Decal profiles paint a persistent or timed footprint on the world around the impact: terrain and buildings, never units. The decal is created only after a real projectile/world collision.
 
@@ -1477,105 +1390,19 @@ Weapon decorations use the same periodic/persistent system as Vehicles, with off
 ### Impact effects
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `dest_fx = death_46_0_0_0` — Effect spawned on impact. Format type_ID_X_Y_Z: death when it hits a unit, megadeth when it hits terrain or buildings, then the ID of the effect vehicle (effects are entries of Vehicles.cfg) and its X, Y and Z offset. The | separator is also accepted.
+- 🔵 `dest_fx = death_46_0_0_0` — Effect spawned on impact. Format type_ID_X_Y_Z: death when it hits a unit, megadeth when it hits terrain or buildings, then the effect ID (Bruch first, then a legacy Vehicle) and its X, Y and Z offset. The | separator is also accepted.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `ext_dest_fx = megadeth_17_10_-20_0` — Extended variant of dest_fx with the same format. Rarely used. Alias: extended_dest_fx.
 ------------------------------------------------------------------------------------------------------------------------
 
-Weapon Chain FX work like Vehicle Chain FX but are triggered by projectile events, so richer explosions do not need the old `dest_fx` + `scale_fx` pair.
+Weapon `begin_fx` uses the same Bruch reference and emission fields as [Vehicle effects](#destruction-and-effects).
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `begin_fx` — Visual Chain FX replacing a dest_fx that points to scale_fx.
+- 🟢 `begin_fx` — Starts an effect reference. Close the block with `end`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `trigger = impact_world|detonate` — Event that runs the block: `impact_world` (hits terrain or buildings), `detonate` (hits a unit or detonates), `launch` (fired: projectile launch point, or beam start for lasers; `offset_xyz` follows the projectile rotation). Several triggers can be joined with `|` and the block runs once per trigger (an event matching two plays twice). For lasers, `detonate` also runs on world contact at the real beam endpoint. An unknown name rejects the whole block.
+- 🟢 `trigger = impact_world|detonate|launch` — Runs on terrain or building impact, detonation or launch. Laser detonation on world contact uses the real beam endpoint. Launch starts at the projectile or beam origin. Join events with `|`. Any unknown trigger rejects the block.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mode = visual` — Uses start_size/end_size/duration and VP/BASE/3DS visuals.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `random_rotation = 0` — 1 assigns a random X/Y/Z orientation once at spawn, independently per instance; 0, omitted or invalid = normal orientation. Spawn position and launch direction are unchanged.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `count = 2~4` — Number of effect instances generated per activation. Single value = fixed amount; `min~max` = random amount rolled per activation. Maximum 32; invalid = 1. With count > 1 each instance rolls its own `min~max` offset. Supported only with mode = visual and mode = physical; not available in SuperItem Chain FX blocks.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `offset_xyz = -20|0|20` — Effect X|Y|Z offset. Single value = fixed; `min~max` = random offset rolled at every activation. Format: x|y|z; each axis takes a single value or `min~max`.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spin_xyz = 0|0|10` — X|Y|Z spin intensity of the Chain FX VP/BASE/3DS visuals: 0-10, decimals allowed; 0 = no spin. Applies to every model in the block. Format: x|y|z.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `start_size = 0.1` — Initial effect size. 1 = original visual size.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mid_size = 1` — Intermediate effect size.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end_size = 2` — Final effect size.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `duration = 1000` — Effect duration in milliseconds.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `fade_inout = 500|1000` — Visual fade-in and fade-out in milliseconds (format in|out). 0 or absent = immediate.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 229` — First legacy VP visual in the sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `base_model = Data/Models/Base/FX/CHAIN_FX.BASE` — Optional BASE family for the same element. Place after vp_model to preserve VP fallback.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `3ds_model = Data/Models/3ds/FX/chain_fx.3ds` — Optional 3DS model for the same element; takes priority over BASE and VP.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 80|160|255|180` — RGBA tint for all models in the visual block, regardless of position. The last value wins; omitted tint preserves original colours.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 230` — Second visual in the sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 231` — Third visual in the sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end` — Closes the block.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `begin_fx` — Autonomous inline Physical FX generated by a Weapon event.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `trigger = impact_world|detonate|launch` — Event that runs the block: `impact_world`, `detonate` or `launch`, joined with `|` as in the visual block.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mode = physical` — Uses the modern inline physical fragment path rather than a Vehicle effect ID.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `random_rotation = 0` — 1 assigns a random X/Y/Z orientation once at spawn, independently per instance; 0, omitted or invalid = normal orientation. Spawn position and launch direction are unchanged.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `lifetime = 30000` — Maximum time in milliseconds that the Physical Fragment may remain in flight before it is removed. Single value = fixed lifetime; `min~max` = a lifetime rolled independently for each fragment. 0, absent or invalid = 30000. Ground contact still removes the fragment immediately.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `count = 1~4` — Number of fragments created. Single value = fixed; `min~max` = random. Runtime maximum: 32. Each fragment independently selects its own VP entry from vp_model.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `launch_xyz = -30~30|-20|-30~30` — Initial local X|Y|Z velocity (format x|y|z). Each axis takes a single value (fixed) or `min~max` (randomized independently for each fragment). Inline fragments spawn at the event position rather than using offset_xyz.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 138|193` — One or more legacy fragment VP IDs separated by |. Each spawned fragment randomly selects one entry; a single value preserves the previous behavior. VP remains the final fallback after 3DS/BASE.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `base_model = Data/Models/Base/FX/FRAGMENT.BASE` — Optional BASE fragment family.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `3ds_model = Data/Models/3ds/FX/fragment.3ds` — Optional 3DS fragment model; highest visual priority.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_impact = 140|69` — Positional impact-VP list paired with vp_model. The selected model index always uses the impact at the same index. When present, the list must contain the same number of entries; 0 disables the impact VP for that position.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 255|255|255|255` — Entries may be repeated to weight random selection, with vp_impact repeated in the same positional order. Fragment RGBA tint.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `scale = 1.0` — Uniform fragment scale. <= 0 or invalid = 1.0.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mass = 150` — Fragment mass. Must be positive.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `airconst = 40.0` — Air resistance. 0 is valid.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `force = 6000` — Additional impulse along the launch direction. 0 is valid.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `maxrot = 3.0` — Rotation intensity. 0 disables additional rotation.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `radius = 1.0` — Physical/collision radius. Must be positive.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `impact_energy = 200` — Energy removed once from the first unit hit by this physical fragment. Respects shield and invulnerability. 0 or absent = disabled. Single-player only.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `impact_energy_radius = 0` — Additional 3D radius for energy removal on impact. 0 = direct target only; a positive value removes the same energy from nearby units. Each fragment can remove energy only once.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_normal_sample = Data/Sounds/shot7.wav` — Optional fragment-spawn sound.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_goingdown_sample = Data/Sounds/fall.wav` — Optional goingdown sound.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_explode_sample = Data/Sounds/impact.wav` — Optional finish/impact sound.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_goingdown_slot = 1` — Example goingdown PAL event; mag0, mag1, time, radius and fade_inout are also supported.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_explode_slot = 1` — Example explode PAL event; mag0, mag1, time, radius and fade_inout are also supported.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_explode_slot = 1` — Example explode SHK event; mag0, mag1, time, radius/mute, fade_inout and x/y/z are also supported.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end` — Closes the block.
+- 🟢 `bruch_id = 1001` — Uses the same [Bruch lookup](#bruch-bruchcfg) as Vehicle effects.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Debuffs
@@ -1900,7 +1727,7 @@ A `.sector` file describes one complete sector outside SET.BAS: cells, damage st
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shield = 60` — Damage reduction 0-100 % of the model. Default inherited or 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `explosion = 49|0|0|100` — Destruction explosion `VP|x|y|z` (same numbers as a SET.SDF effect group, z = height). Repeat the line for more explosions; the first line replaces the inherited ones and `explosion = none` removes them.
+- 🟢 `explosion = 49|0|0|100` — Destruction effect `ID|x|z|height` with the same numeric order as a SET.SDF effect group. The ID resolves Bruch first, then the legacy Vehicle. Repeat the line for more explosions; the first line replaces the inherited ones and `explosion = none` removes them.
 ------------------------------------------------------------------------------------------------------------------------
 
 ```
@@ -1939,29 +1766,75 @@ end
 - 🟢 `snd_normal_fade_inout = 150|300` — Volume fade-in and fade-out of the Building sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 
-### OpenNeoUA special features
+## Bruch (Bruch.cfg)
 
-Building spawners create vehicles dynamically instead of placing every unit in the level data. Spawned units inherit the source's primary command, waypoint route and aggression, belong to the owning Host Station and reuse Genesis overlap separation, including instant spawns. A spawner needs a valid Vehicle ID; the other settings alone create nothing.
+Bruch profiles share the visuals and physics formerly defined inline in Vehicle and Weapon effects. The same profile can be used by many emitters. Legacy Bruch definitions keep the original Vehicle-style fields where they reproduce retail flight, state visuals, audio and chained effects. `scale_fx`, inline `mode = visual` and `mode = physical`, and `physical_vehicle` remain readable for older content.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_vehicle = 5` — Vehicle ID generated by this building.
+- 🟢 `new_bruch 1000` — Defines an effect without a Vehicle slot. Profile IDs range from 1 to 65535. `SET.SDF` and external sector explosion groups keep their original tuple format and accept the same profile IDs. Numeric references resolve Bruch first, then the legacy Vehicle.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_count = 3` — Number of units generated at each spawner activation.
+- 🟢 `begin_effect` — Starts the shared profile body. Duration and visual sources define a timed animation. A physical fragment needs positive mass and radius plus a visual source. If both are defined, the animation and the fragment spawn together. Close this block and the outer definition with separate `end` lines.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_interval = 6000` — Interval in milliseconds between spawner activations.
+- 🟢 `duration = 1000` — Timed animation duration in milliseconds. Must be positive. Ordered visuals divide this duration evenly.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_trigger_radius = 1800` — XZ radius within which enemy presence activates the spawner.
+- 🟢 `start_size = 0.1` — Initial timed animation scale. Default = 1.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_random_pos = 340` — XZ position randomization around the building center.
+- 🟢 `mid_size = 1` — Optional scale at half the animation duration. Without it, scale changes linearly from start to end.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_offset_xz = 37|-41` — X|Z offset applied to the center of the building spawn area. Format: x|z.
+- 🟢 `end_size = 2` — Final animation scale. Default = 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_height = 650~900` — Random additional height above the real surface at which the unit is created. A single value gives a fixed height.
+- 🟢 `fade_inout = 500|1000` — Timed animation fade in/out in milliseconds. Absent or 0 makes that edge immediate.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_instant = 1` — 1 creates units instantly without the classic Genesis sequence.
+- 🟢 `spin_xyz = 0|0|10` — Timed animation spin strength per local axis. Range 0–10. 0 disables spin on that axis.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_max_active = 9` — Maximum number of units generated by this building that may remain active at the same time.
+- 🟢 `vp_model = 138|193` — VP choices from the active set. For a timed animation, values play in order and repeated lines add frames. For a fragment, the last list supplies up to 32 random choices. Repeated entries increase their weight.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `base_model = Data/Models/Base/FX/FRAGMENT.BASE` — Optional BASE visual. In a timed sequence, put it after the matching VP to retain the VP fallback.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `3ds_model = Data/Models/3ds/FX/fragment.3ds` — Optional 3DS visual. It takes precedence over BASE and VP alternatives for the same element.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `tint = 255|255|255|255` — RGBA tint for timed visuals and fragment bodies. The last value applies to all elements. Omitted = original colours.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `vp_impact = 140|69` — One impact VP per physical VP choice, in the same order. 0 disables that impact visual. An external-only model can use one impact VP.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `scale = 1.0` — Uniform physical model scale. Nonpositive or invalid = 1.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `mass = 150` — Physical fragment mass. Must be positive.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `radius = 1.0` — Physical fragment collision radius. Must be positive.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `airconst = 40.0` — Physical fragment air resistance. Nonnegative, default 500.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `force = 6000` — Added impulse in the launch direction. Nonnegative, default 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `maxrot = 3.0` — Physical fragment rotation intensity. Nonnegative, default 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `follow_carcass = 1` — 1 lets each fragment follow the falling wreck until it lands. 0, absent or invalid gives the fragment independent flight.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `lifetime = 30000` — Maximum fragment flight time in milliseconds. Fixed or `min~max` per fragment. Missing, zero or invalid = 30000. Contact can end flight sooner.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `impact_energy = 200` — Damage on the first unit hit. Respects shields and invulnerability. 0 or absent disables damage. Single-player only.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `impact_energy_radius = 0` — Radius for additional impact damage. 0 restricts damage to the first direct target.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `snd_normal_sample = Data/Sounds/shot7.wav` — Optional fragment spawn sample. The same sound, palette and shake families support `normal`, `goingdown` and `explode`.
+------------------------------------------------------------------------------------------------------------------------
+
+```
+new_bruch 1000
+    name = Landing_Debris
+    begin_effect
+        vp_model = 138
+        vp_impact = 140
+        mass = 60
+        airconst = 1
+        force = 1200
+        maxrot = 3
+        radius = 10
+        lifetime = 30000
+    end
+end
+```
 
 ## Buffs (Buffs.cfg)
 
@@ -2272,37 +2145,11 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_wave_z = 1.0` — Random wave-shake strength multiplier on the Z axis.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `begin_fx` — Additional visual Chain FX executed once when detonation starts.
+- 🟢 `begin_fx` — Starts an additional visual effect reference at the SuperItem detonation.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `trigger = detonate` — SuperItems currently support detonate as the Chain FX trigger.
+- 🟢 `trigger = detonate` — Runs when detonation begins.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mode = visual` — SuperItems currently support visual as the Chain FX mode.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `random_rotation = 0` — 1 assigns a random X/Y/Z orientation once at spawn, independently per instance; 0, omitted or invalid = normal orientation. Spawn position and launch direction are unchanged.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `offset_xyz = 0|0|0` — X|Y|Z offset from the bomb's native center. Single value = fixed; `min~max` = random offset rolled at every activation. Format: x|y|z; each axis takes a single value or `min~max`.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spin_xyz = 0|0|10` — X|Y|Z spin intensity of the Chain FX VP/BASE/3DS visuals: 0-10, decimals allowed; 0 = no spin. Applies to every model in the block. Format: x|y|z.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `start_size = 0` — Initial Chain FX scale.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mid_size = 10` — Optional intermediate scale. If absent/invalid, direct start_size -> end_size interpolation is used.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end_size = 20` — Final Chain FX scale.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `duration = 6000` — Total Chain FX duration in milliseconds. Must be positive.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `fade_inout = 500|1000` — Visual fade-in and fade-out in milliseconds (format in|out). 0 or absent = immediate.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_model = 254` — Legacy VP visual for this Chain FX element. The line may be repeated to build a sequence.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `base_model = Data/Models/Base/FX/CHAIN_FX.BASE` — Optional BASE family for the same element. Place it after vp_model to keep that VP as fallback.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `3ds_model = Data/Models/3ds/FX/chain_fx.3ds` — Optional 3DS model for the same element; takes priority over base_model and vp_model.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 255|255|255|255` — RGBA tint for all models in the visual block, regardless of position. The last value wins; omitted tint preserves original colours.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `end` — Closes the block.
+- 🟢 `bruch_id = 1002` — Plays the timed visual portion of a [Bruch](#bruch-bruchcfg). Uses offset and random rotation from the caller and emits one instance.
 ------------------------------------------------------------------------------------------------------------------------
 
 ## Ground Decals (Ground_Decals.cfg)
@@ -2413,9 +2260,7 @@ end
 OpenNeoUA uses .cfg files as the modern script/Game Config layout while retaining the original .scr entrypoints only where vanilla levels or data reference them.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `Data/Scripts/Startup.cfg` — Canonical OpenNeoUA script entrypoint. The engine prefers this file and it loads Buffs, Debuffs, Ground_Decals, Clouds, SuperItems, Weapons, Buildings and Vehicles. If it is absent, the engine falls back to the real vanilla Data/Scripts/Startup.scr.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `Data/Scripts/Effects.cfg` — Separate compatibility catalog for legacy Vehicle definitions that are actually physical effects. Modern inline Physical FX do not require Vehicle IDs.
+- 🟢 `Data/Scripts/Startup.cfg` — Canonical OpenNeoUA script entrypoint. The engine prefers this file and it loads Buffs, Debuffs, Ground_Decals, Clouds, SuperItems, Weapons, Buildings, Bruch and Vehicles. If it is absent, the engine falls back to the real vanilla Data/Scripts/Startup.scr.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `Data/Scripts/Multiplayer.cfg` — Standard multiplayer Game Config. Loads Startup.cfg and directly contains the definitions/overrides formerly split across Net_bldg.scr, Net_robo.scr and Netrflak.scr.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3763,6 +3608,8 @@ Nucleus.ini also keeps a few keys of the original graphics driver that nothing r
 
 ## OpenNeoUA Studio notes
 
+The vehicle Model row can edit the optional Spawn state. The asset browser lists its resolved 3DS, BASE or VP source.
+
 How the parameters above are handled in OpenNeoUA Studio. They do not change the engine.
 
 ### Models
@@ -3777,6 +3624,8 @@ How the parameters above are handled in OpenNeoUA Studio. They do not change the
 - **Ground Alignment tab:** a schematic 2D profile of the model surfaces against flat ground. The profile and Auto exclude particles and, when other surfaces exist, additive effects (an additive-only estimate is marked). Scroll over the profile to adjust `overeof`, then verify the contact in-game.
 
 ### Entities and effects
+
+OpenNeoUA Studio resolves Bruch IDs for entity and sector effect previews using the installed script catalog. The entity effect editor preserves the `bruch_id` reference when saving.
 
 - **Entity Designer, Add:** accepts supported effects and routes model, decal and crater keys to their rows. Unknown keys inside `begin_fx` are preserved in the saved text. Several rows (for example `crater_*` with `ground_decal_id`) can be written in one Add. Model, decal and crater keys cannot share an effect with `begin_fx`, `dest_fx` or sound keys; an unknown key, a crater key on a vehicle or an unknown sound event gets a message that names the key.
 - **Visuals & FX:** lists existing items or drafts; craters and decals are marked red because vanilla does not support them. Each `begin_fx` row shows its header comment, the number and IDs of its VPs and any BASE or 3DS names. Click an effect in the 3D view to select its row (white border; the smallest wins when they overlap); double-click away to deselect; dragging orbits; the unit and hidden effects cannot be clicked. The timeline starts at 0.25x, with a speed menu. The flight altitude starts at 300 for flying units and the weapon preview starts at 300 (an artillery shell uses its arc height).
@@ -3799,6 +3648,7 @@ How the parameters above are handled in OpenNeoUA Studio. They do not change the
 
 - **Host Stations:** gun points accept only vehicles with `model = gun`, the `unit_*` family included. In Gun Points the Move strength starts at 50.
 - **Buildings:** choose Buildings in Entity List; buildings with mounts expose Gun Points. Show Mounted Flak toggles the 3D models while the direction markers stay; Restore Loaded Position restores the script coordinates of the selected mount; Move to 0 / 0 / 0 places it at the model origin. Edits write the vanilla `sbact_*` fields. The Vehicle menu lists only Flak vehicles of the catalog (`model = gun`), so adding a gun point needs at least one Flak. A zero `sbact_vehicle` ends the active list, inherited slots in `modify_building` included.
+- **Numeric script output:** Generated numeric fields use at most two decimal places. The Fire Area dead zone uses whole units. The Fire Area preview and script export share the same output.
 - **Briefing Model Settings:** turrets mounted on Host Stations and buildings rotate with the model, in Debriefing mode too.
 
 ### Levels

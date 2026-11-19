@@ -1895,9 +1895,14 @@ void sub_44FD6C(NC_STACK_ypaworld *yw, const cellArea &cell, int bldX, int bldY)
             arg146.vehicle_id = fx.ObjectID;
             arg146.pos = fx.Position + ttt;
 
-            NC_STACK_ypabact *boom = yw->ypaworld_func146(&arg146);
+            BruchEmission emission;
+            emission.position = arg146.pos;
+            emission.visualPosition = arg146.pos;
+            const vec3d direction(fx.Position.x, -150.0, fx.Position.z);
+            emission.launch = direction / direction.length() * 30.0;
+            NC_STACK_ypabact *boom = yw->SpawnBruchEffect(&arg146, emission);
 
-            if ( boom )
+            if ( boom && !boom->_inlinePhysicalFX )
             {
                 boom->_owner = 0;
 
@@ -2420,9 +2425,9 @@ size_t NC_STACK_ypaworld::ypaworld_func145(NC_STACK_ypabact *bact)
 NC_STACK_ypabact *NC_STACK_ypaworld::SpawnInlinePhysicalFX(
     const World::TChainFXConfig &config, const vec3d &pos,
     const mat3x3 &rot, const vec3d &launch, int16_t owner,
-    NC_STACK_ypabact *deadWreck)
+    NC_STACK_ypabact *deadWreck, const std::shared_ptr<World::TChainFXPhysical> &profile)
 {
-    const std::shared_ptr<World::TChainFXPhysical> &physical = config.physical_inline;
+    const auto &physical = profile ? profile : config.physical_inline;
     if ( !physical )
         return nullptr;
 
@@ -2597,8 +2602,44 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
     if ( vhcl_id->vehicle_id <= 0 || (size_t)vhcl_id->vehicle_id >= _vhclProtos.size() )
         return nullptr;
 
-    World::TVhclProto &requestedVhcl = _vhclProtos[vhcl_id->vehicle_id];
-    int mimicDisguiseVehicleId = requestedVhcl.is_mimic ?
+    return SpawnVehiclePrototype(vhcl_id, _vhclProtos[vhcl_id->vehicle_id], false);
+}
+
+NC_STACK_ypabact *NC_STACK_ypaworld::SpawnBruchEffect(
+    ypaworld_arg146 *request, const BruchEmission &emission, const World::TChainFXConfig &config)
+{
+    // Old inline blocks provide a local profile. Sector IDs and modern Chain FX
+    // references both look up the profile in the same table.
+    const auto effect = _bruchProtos.find(request->vehicle_id);
+    if ( effect != _bruchProtos.end() )
+    {
+        const auto &visual = effect->second.bruch_visual;
+        if ( visual )
+        {
+            World::TChainFXConfig playback = *visual;
+            playback.random_rotation = config.random_rotation;
+            SpawnChainFX(playback, emission.visualPosition, emission.visualRotation);
+            // Keep the authored positional sound on the legacy carrier.
+            const auto &sound = effect->second.sndFX[World::TVhclProto::SND_EXPLODE];
+            if ( !effect->second.bruch_physics && sound.MainSample.Name.empty() )
+                return nullptr;
+        }
+    }
+
+    const auto &profile = effect == _bruchProtos.end() ?
+        config.physical_inline : effect->second.bruch_physics;
+    if ( profile )
+        return SpawnInlinePhysicalFX(config, emission.position, emission.rotation,
+                                     emission.launch, emission.owner, emission.wreck, profile);
+    if ( effect != _bruchProtos.end() )
+        return SpawnVehiclePrototype(request, effect->second, true);
+    return ypaworld_func146(request);
+}
+
+NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl_id,
+                                                       World::TVhclProto &requestedVhcl, bool bruch)
+{
+    int mimicDisguiseVehicleId = !bruch && requestedVhcl.is_mimic ?
         yw_SelectMimicVehicleID(_vhclProtos, vhcl_id->vehicle_id) :
         0;
     World::TVhclProto *spawnProto = mimicDisguiseVehicleId > 0 ?
@@ -2659,7 +2700,7 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_gun_radius = vhcl.gun_radius;
         bacto->_gun_power = vhcl.gun_power;
         bacto->_pitch_max = vhcl.max_pitch;
-        bacto->_vehicleID = vhcl_id->vehicle_id;
+        bacto->_vehicleID = bruch ? 0 : vhcl_id->vehicle_id;
         bacto->_mimic_disguise_vehicleID = mimicDisguiseVehicleId > 0 ? mimicDisguiseVehicleId : 0;
         bacto->_isDummy = false; // set by gun_type for BACT_TYPES_GUN
         bacto->_weapon = vhcl.weapon;
@@ -2742,6 +2783,14 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_vp_wait = ResolveVisualModel(vhcl.vp_wait, vhcl.visual_3ds.wait, vhcl.visual_base.wait);
         bacto->_vp_megadeth = ResolveVisualModel(vhcl.vp_megadeth, vhcl.visual_3ds.megadeth, vhcl.visual_base.megadeth);
         bacto->_vp_genesis = ResolveVisualModel(vhcl.vp_genesis, vhcl.visual_3ds.genesis, vhcl.visual_base.genesis);
+        NC_STACK_base *spawnVisual = nullptr;
+        if ( !vhcl.model3ds_spawn.empty() )
+            spawnVisual = GetSharedExternalMesh(vhcl.model3ds_spawn);
+        if ( !spawnVisual && !vhcl.base_spawn.empty() )
+            spawnVisual = GetSharedExternalBase(vhcl.base_spawn);
+        if ( !spawnVisual && vhcl.vp_spawn > 0 && size_t(vhcl.vp_spawn) < _vhclModels.size() )
+            spawnVisual = _vhclModels[vhcl.vp_spawn];
+        bacto->_spawn_visual.SetVP(spawnVisual);
         bacto->_vp_scale = vhcl.visual_scale;
         bacto->_vp_tint = vhcl.visual_tint;
         if ( requestedVhcl.is_mimic && !requestedVhcl.mimic_tint.IsNeutral() )
@@ -2881,10 +2930,12 @@ NC_STACK_ypabact * NC_STACK_ypaworld::ypaworld_func146(ypaworld_arg146 *vhcl_id)
         bacto->_buff_invisible_reveal_3ds = vhcl.buff.invisible_reveal_3ds;
         bacto->_buff_invisible_reveal_base = vhcl.buff.invisible_reveal_base;
 
-        for (int i = 0; vhcl.scale_fx_pXX[ i ]; i++ )
+        for (size_t i = 0; i < vhcl.scale_fx_pXX.size(); ++i)
         {
-            bacto->_vp_fx_models[i] = _vhclModels.at( vhcl.scale_fx_pXX[ i ] );
-
+            const int vp = vhcl.scale_fx_pXX[i];
+            if ( vp <= 0 || static_cast<size_t>(vp) >= _vhclModels.size() )
+                break;
+            bacto->_vp_fx_models[i] = _vhclModels[vp];
             bacto->_status_flg |= BACT_STFLAG_SEFFECT;
         }
 

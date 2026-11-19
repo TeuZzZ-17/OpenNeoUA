@@ -566,6 +566,43 @@ void NC_STACK_ypabact::BeforeSoundCarrierUpdate()
 {
 }
 
+bool NC_STACK_ypabact::HasSpawningChild() const
+{
+    if ( !_world || _spawn_instant ||
+         (_status != BACT_STATUS_NORMAL && _status != BACT_STATUS_IDLE) ||
+         (_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) )
+        return false;
+
+    for (int32_t gid : _carrier_spawned_gids)
+    {
+        auto *child = _world->FindLiveBactByGid(gid);
+        if ( ypabact_IsCarrierSpawnAliveUnit(child) &&
+             child->_status == BACT_STATUS_CREATE && !child->_disable_genesis &&
+             child->_scale_time > 0 )
+            return true;
+    }
+    return false;
+}
+
+// snd/pal/shk_spawn_*: one looping slot started when the spawn state begins and
+// stopped as soon as it ends (last Genesis child done, death, instant spawner).
+// Without spawn keys the slot is empty and startSound plays nothing.
+void NC_STACK_ypabact::UpdateSpawnStateSound()
+{
+    if ( _soundcarrier.Sounds.size() <= World::TVhclProto::SND_SPAWN )
+        return;
+
+    const bool active = HasSpawningChild();
+    if ( active == _spawn_sound_active )
+        return;
+
+    _spawn_sound_active = active;
+    if ( active )
+        SFXEngine::SFXe.startSound(&_soundcarrier, World::TVhclProto::SND_SPAWN);
+    else
+        SFXEngine::SFXe.sub_424000(&_soundcarrier, World::TVhclProto::SND_SPAWN);
+}
+
 void NC_STACK_ypabact::UpdateCarrierSpawn(update_msg *)
 {
     if ( !ypabact_CanCarrierSpawn(this) )

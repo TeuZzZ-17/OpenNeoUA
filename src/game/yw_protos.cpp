@@ -466,6 +466,7 @@ bool NC_STACK_ypaworld::ProtosInit()
     _decalProfiles.clear();
     _superItemDefs.clear();
     _cloudProfiles.clear();
+    _bruchProtos.clear();
     _vhclProtos.resize(NUM_VHCL_PROTO);
     _weaponProtos.resize(NUM_WEAPON_PROTO);
     _buildProtos.resize(NUM_BUILD_PROTO);
@@ -479,6 +480,7 @@ bool NC_STACK_ypaworld::ProtosInit()
     DatabaseSession scripts;
     if(!scripts.LoadDefinitions(*this))return false;
     _vhclProtos.swap(scripts.definitions->_vhclProtos);
+    _bruchProtos.swap(scripts.definitions->_bruchProtos);
     _weaponProtos.swap(scripts.definitions->_weaponProtos);
     _buildProtos.swap(scripts.definitions->_buildProtos);
     ResolveStatusProfileLinks();
@@ -541,7 +543,8 @@ bool NC_STACK_ypaworld::PrepareSuperItemProfile(int32_t id, World::TSuperItemPro
     for (auto chainIt = profile.detonate_chain_fx.begin();
          chainIt != profile.detonate_chain_fx.end(); )
     {
-        World::TChainFXConfig &chain = *chainIt;
+        World::TChainFXConfig chain;
+        const bool hasTimedVisual = ResolveChainVisualFX(*chainIt, chain);
         chain.visuals.erase(
             std::remove_if(chain.visuals.begin(), chain.visuals.end(),
                            [](const World::TChainFXVisual &visual) {
@@ -549,7 +552,7 @@ bool NC_STACK_ypaworld::PrepareSuperItemProfile(int32_t id, World::TSuperItemPro
                            }),
             chain.visuals.end());
 
-        if ( chain.mode != World::TChainFXConfig::MODE_VISUAL ||
+        if ( !hasTimedVisual ||
              chain.trigger != World::TChainFXConfig::TRIGGER_DETONATE ||
              chain.duration <= 0 || chain.visuals.empty() ||
              !std::isfinite(chain.start_size) || !std::isfinite(chain.end_size) ||
@@ -565,7 +568,10 @@ bool NC_STACK_ypaworld::PrepareSuperItemProfile(int32_t id, World::TSuperItemPro
             chainIt = profile.detonate_chain_fx.erase(chainIt);
         }
         else
+        {
+            *chainIt = std::move(chain);
             ++chainIt;
+        }
     }
 
     // Keep loaded sample ownership out of temporary profiles. TVhclSound owns

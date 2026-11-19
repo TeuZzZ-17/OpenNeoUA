@@ -65,7 +65,8 @@ public:
                             float arcHeight, float shellSpeed, bool impactOnSurface);
     int SetupArtilleryShellVerticalBarrage(const vec3d &startPos, const vec3d &targetPos,
                                            int fallDelay, float fallHeight, float verticalSpeed,
-                                           float spreadX, float spreadZ, bool impactOnSurface);
+                                           float spreadX, float spreadZ, bool impactOnSurface,
+                                           const std::array<int, 2> &transferFade = {});
     virtual void DetonateAtContact(NC_STACK_ypabact *directHit);
     virtual void DetonateKamikazePayload(NC_STACK_ypabact *directHit);
     virtual void AlignMissile(float dtime = 0.0);
@@ -168,6 +169,7 @@ public:
     bool IsOrbiterAlive() const;    // guarding or besieging, not yet spent
     bool IsOrbiterGuarding() const; // guarding and fully faded in: ready to attack
     virtual float GetRenderFadeAlpha() const override;
+    float GetArtilleryTransferFadeAlpha() const;
 
 protected:
     bool TryGetSpecificEnergyForTarget(NC_STACK_ypabact *bct, float *outEnergy) const;
@@ -356,6 +358,7 @@ protected:
     int   _artilleryShellVerticalAscentTime = 0;
     int   _artilleryShellVerticalFallStartTime = 0;
     int   _artilleryShellVerticalDescentTime = 0;
+    std::array<int, 2> _artilleryShellTransferFadeInOut{};
     // OpenNeoUA Orbiter state (meaningful only while _orbiterState != ORBITER_OFF).
     enum OrbiterState { ORBITER_OFF = 0, ORBITER_GUARD, ORBITER_SIEGE };
     int _orbiterState = ORBITER_OFF;

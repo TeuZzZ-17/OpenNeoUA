@@ -93,7 +93,7 @@ public:
     bool IsPassiveModule() const
     {
         return _gunType == GUN_TYPE_RADAR || _gunType == GUN_TYPE_POWER ||
-               (_gunType == GUN_TYPE_DUMMY && _isUnitGunChild);
+               (_gunType == GUN_TYPE_DUMMY && (_isUnitGunChild || _spawn_units));
     }
 
 

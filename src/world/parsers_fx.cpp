@@ -49,6 +49,7 @@ TVhclSound *VhclProtoParser::GetSndFxByName(const std::string &sndname)
         {"beamout",    10},
         {"build",      11},
         {"airexplode", 12},
+        {"spawn",      TVhclProto::SND_SPAWN},
     };
 
     for (const SoundType &t : CmpVals)
@@ -1155,7 +1156,8 @@ enum ChainFXParseContext
 {
     CHAIN_FX_VEHICLE,
     CHAIN_FX_WEAPON,
-    CHAIN_FX_SUPERITEM
+    CHAIN_FX_SUPERITEM,
+    CHAIN_FX_BRUCH
 };
 
 static const char *ChainFXContextName(ChainFXParseContext context)
@@ -1237,7 +1239,7 @@ static World::TChainFXConfig::Mode ParseChainFXMode(const std::string &name)
         return World::TChainFXConfig::MODE_VISUAL;
 
     if ( !StriCmp(name, "physical") )
-        return World::TChainFXConfig::MODE_PHYSICAL;
+        return World::TChainFXConfig::MODE_BRUCH;
 
     return World::TChainFXConfig::MODE_VISUAL;
 }
@@ -1478,7 +1480,14 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                              std::vector<World::TChainFXConfig> *out,
                              ChainFXParseContext context)
 {
+    const bool profile = context == CHAIN_FX_BRUCH;
     World::TChainFXConfig::Mode mode = World::TChainFXConfig::MODE_VISUAL;
+    bool hasPhysicsFields = false;
+    bool hasExplicitMode = false;
+    int bruchId = 0;
+    bool hasBruchId = false;
+    bool hasLaunch = false;
+    bool legacyPhysical = false;
     float startSize = 1.0;
     float midSize = 0.0;
     float endSize = 0.0;
@@ -1548,7 +1557,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             if ( badTrigger || badMode )
                 return ScriptParser::RESULT_OK;
 
-            if ( !hasTrigger )
+            if ( !profile && !hasTrigger )
             {
                 ypa_log_out("WARNING: begin_fx without trigger ignored for %s prototype\n",
                             ChainFXContextName(context));
@@ -1557,6 +1566,11 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
 
             if ( !hasEndSize )
                 endSize = 0.0;
+
+            if ( hasBruchId && !hasExplicitMode )
+                mode = World::TChainFXConfig::MODE_BRUCH;
+            if ( hasBruchId && mode != World::TChainFXConfig::MODE_BRUCH )
+                return ScriptParser::RESULT_OK;
 
             if ( mode == World::TChainFXConfig::MODE_VISUAL )
             {
@@ -1583,11 +1597,14 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                         visual.tint = visualTint;
                         visual.has_tint = hasVisualTint;
                     }
-                    chain.visuals = visuals;
-                    pushPerTrigger(chain);
+                    chain.visuals = std::move(visuals);
+                    if ( profile )
+                        out->push_back(std::move(chain));
+                    else
+                        pushPerTrigger(chain);
                 }
             }
-            else if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
+            if ( mode == World::TChainFXConfig::MODE_BRUCH || (profile && hasPhysicsFields) )
             {
                 const bool hasPositiveVP = std::find_if(
                     physical->vp_models.begin(), physical->vp_models.end(),
@@ -1597,7 +1614,29 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     physical->vp_impacts.size() == physical->vp_models.size() ||
                     (physical->vp_models.empty() && physical->vp_impacts.size() == 1);
 
-                if ( physicalVehicle > 0 && !hasInlinePhysicalKey )
+                if ( !profile && !legacyPhysical )
+                {
+                    if ( bruchId > 0 && !hasInlinePhysicalKey && !hasPhysicalVehicleKey &&
+                         duration == 0 && !hasMidSize && !hasEndSize && startSize == 1.0f &&
+                         fadeIn == 0 && fadeOut == 0 && !hasVisualTint && !World::Spin::HasStrength(spin) )
+                    {
+                        World::TChainFXConfig chain;
+                        chain.mode = mode;
+                        chain.bruch_id = bruchId;
+                        chain.random_rotation = randomRotation;
+                        chain.count_min = countMin;
+                        chain.count_max = countMax;
+                        chain.offset_min = offsetMin;
+                        chain.offset_max = offsetMax;
+                        chain.launch_min = launchMin;
+                        chain.launch_max = launchMax;
+                        chain.has_launch = hasLaunch;
+                        pushPerTrigger(chain);
+                    }
+                    else
+                        ypa_log_out("WARNING: begin_fx bruch requires bruch_id and emission fields only; block ignored\n");
+                }
+                else if ( physicalVehicle > 0 && !hasInlinePhysicalKey && !hasLaunch && !hasBruchId )
                 {
                     World::TChainFXConfig chain;
                     chain.mode = mode;
@@ -1606,15 +1645,17 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                     chain.count_max = countMax;
                     chain.offset_min = offsetMin;
                     chain.offset_max = offsetMax;
-                    chain.physical_vehicle = physicalVehicle;
+                    chain.bruch_id = physicalVehicle;
                     pushPerTrigger(chain);
                 }
-                else if ( hasPhysicalVehicleKey || hasOffset )
+                else if ( hasPhysicalVehicleKey || hasOffset || hasBruchId )
                 {
                     ypa_log_out("WARNING: begin_fx physical mixes legacy and inline keys; block ignored\n");
                 }
                 else if ( !vpPairsValid )
                 {
+                    if ( profile )
+                        return ScriptParser::RESULT_BAD_DATA;
                     ypa_log_out("WARNING: begin_fx physical vp_model/vp_impact list sizes differ; block ignored\n");
                 }
                 else if ( !invalidInlinePhysical &&
@@ -1623,19 +1664,23 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                            !physical->base_model.empty()) )
                 {
                     World::TChainFXConfig chain;
-                    chain.mode = mode;
+                    chain.mode = World::TChainFXConfig::MODE_BRUCH;
                     chain.random_rotation = randomRotation;
                     chain.count_min = countMin;
                     chain.count_max = countMax;
                     chain.launch_min = launchMin;
                     chain.launch_max = launchMax;
+                    chain.has_launch = hasLaunch;
                     chain.physical_inline = physical;
-                    pushPerTrigger(chain);
+                    if ( profile )
+                        out->push_back(chain);
+                    else
+                        pushPerTrigger(chain);
                 }
+                else if ( profile )
+                    return ScriptParser::RESULT_BAD_DATA;
                 else
-                {
                     ypa_log_out("WARNING: incomplete or invalid begin_fx physical fragment ignored\n");
-                }
             }
 
             return ScriptParser::RESULT_OK;
@@ -1644,11 +1689,19 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         if ( badMode )
             continue;
 
+        if ( profile && (!StriCmp(p1, "mode") || !StriCmp(p1, "trigger") ||
+                         !StriCmp(p1, "count") || !StriCmp(p1, "offset_xyz") ||
+                         !StriCmp(p1, "launch_xyz") || !StriCmp(p1, "random_rotation") ||
+                         !StriCmp(p1, "bruch_id") || !StriCmp(p1, "physical_vehicle")) )
+            return ScriptParser::RESULT_BAD_DATA;
+
         if ( !StriCmp(p1, "mode") )
         {
+            hasExplicitMode = true;
             if ( !StriCmp(p2, "visual") || !StriCmp(p2, "physical") )
             {
                 mode = ParseChainFXMode(p2);
+                legacyPhysical = !StriCmp(p2, "physical");
                 if ( context == CHAIN_FX_SUPERITEM && mode != World::TChainFXConfig::MODE_VISUAL )
                 {
                     ypa_log_out("WARNING: SuperItem begin_fx supports only visual mode; block ignored\n");
@@ -1726,7 +1779,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "launch_xyz") )
         {
-            hasInlinePhysicalKey = true;
+            hasLaunch = true;
             ParseChainFXRangeTuple(p1, p2, launchMin, launchMax);
         }
         else if ( ParseVPSpinParam(parser, "", p1, p2, spin) )
@@ -1735,7 +1788,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         else if ( !StriCmp(p1, "vp_model") )
         {
             hasInlinePhysicalKey = true;
-            if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
+            if ( profile || mode == World::TChainFXConfig::MODE_BRUCH )
             {
                 if ( p2 == "0" )
                     physical->vp_models.assign(1, 0);
@@ -1743,8 +1796,20 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 {
                     physical->vp_models.clear();
                     invalidInlinePhysical = true;
-                    ypa_log_out("WARNING: invalid begin_fx physical vp_model list '%s'\n",
-                                p2.c_str());
+                    if ( !profile )
+                        ypa_log_out("WARNING: invalid begin_fx physical vp_model list '%s'\n",
+                                    p2.c_str());
+                }
+                if ( !profile )
+                    continue;
+
+                // In a reusable profile a VP list supplies the ordered visual frames
+                // and, when physics is authored, the random body choices.
+                for (int16_t model : physical->vp_models)
+                {
+                    World::TChainFXVisual visual;
+                    visual.vp = model;
+                    visuals.push_back(visual);
                 }
                 continue;
             }
@@ -1785,17 +1850,19 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "tint") )
         {
-            if ( mode == World::TChainFXConfig::MODE_PHYSICAL )
+            if ( profile || mode == World::TChainFXConfig::MODE_BRUCH )
             {
                 hasInlinePhysicalKey = true;
                 ParseTintParam(parser, "tint", p1, p2, physical->tint, true);
-                continue;
+                if ( !profile )
+                    continue;
             }
             ParseTintParam(parser, "tint", p1, p2, visualTint, true);
             hasVisualTint = true;
         }
         else if ( !StriCmp(p1, "vp_impact") )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
             if ( !World::ParseNonNegativeInt16ListValue(p2, physical->vp_impacts, 32) )
             {
@@ -1807,22 +1874,26 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "scale") )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
             physical->visual_scale = ParseVPScaleValue(parser, p2);
         }
         else if ( !StriCmp(p1, "impact_energy") )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
             const int damage = parser.stol(p2, nullptr, 0);
             physical->impact_energy = damage > 0 ? damage : 0;
         }
         else if ( !StriCmp(p1, "impact_energy_radius") )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
             physical->impact_energy_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
         }
         else if ( !StriCmp(p1, "lifetime") )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
             int lifetimeMin = 0;
             int lifetimeMax = 0;
@@ -1842,14 +1913,17 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         }
         else if ( !StriCmp(p1, "follow_carcass") )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
-            size_t parsed = 0;
-            physical->follow_carcass = parser.stol(p2, &parsed, 0) == 1 && parsed == p2.size();
+            char *end = nullptr;
+            const long flag = std::strtol(p2.c_str(), &end, 0);
+            physical->follow_carcass = flag == 1 && end == p2.c_str() + p2.size();
         }
         else if ( !StriCmp(p1, "mass") || !StriCmp(p1, "airconst") ||
                   !StriCmp(p1, "force") || !StriCmp(p1, "maxrot") ||
                   !StriCmp(p1, "radius") )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
             size_t parsed = 0;
             const float value = parser.stof(p2, &parsed);
@@ -1879,6 +1953,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                   p1.compare(0, 4, "pal_") == 0 ||
                   p1.compare(0, 4, "shk_") == 0 )
         {
+            hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
             std::string soundValue = p2;
             if ( p1.size() >= 7 && p1.compare(p1.size() - 7, 7, "_sample") == 0 )
@@ -1896,6 +1971,13 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
             const int result = physicalSounds.Parse(parser, p1, soundValue);
             if ( result != ScriptParser::RESULT_OK )
                 return result;
+        }
+        else if ( !StriCmp(p1, "bruch_id") )
+        {
+            hasBruchId = true;
+            size_t parsed = 0;
+            const long id = parser.stol(p2, &parsed, 0);
+            bruchId = parsed == p2.size() && id > 0 && id <= 65535 ? id : 0;
         }
         else if ( !StriCmp(p1, "physical_vehicle") )
         {
@@ -2211,6 +2293,28 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
     else
         return ScriptParser::RESULT_UNKNOWN;
 
+    return ScriptParser::RESULT_OK;
+}
+
+int ParseBruchEffectBlock(ScriptParser::Parser &parser, TVhclProto *profile)
+{
+    std::vector<TChainFXConfig> fields;
+    const int result = ParseChainFXBlock(parser, &fields, CHAIN_FX_BRUCH);
+    if ( result != ScriptParser::RESULT_OK )
+        return result;
+    if ( fields.empty() )
+        return ScriptParser::RESULT_BAD_DATA;
+
+    for (TChainFXConfig &part : fields)
+    {
+        if ( part.physical_inline )
+        {
+            profile->bruch_physics = std::move(part.physical_inline);
+            continue;
+        }
+
+        profile->bruch_visual = std::make_shared<TChainFXConfig>(std::move(part));
+    }
     return ScriptParser::RESULT_OK;
 }
 

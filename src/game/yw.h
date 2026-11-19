@@ -1267,9 +1267,6 @@ struct cellArea
     World::TDecorationFXConfig DecorationFX;
     int32_t DecorationFXNextTime = 0;
     int32_t DecorationFXPersistentId = 0;
-    int32_t BuildingSpawnLastTime = 0;
-    std::vector<int32_t> BuildingSpawnedGids;
-    uint8_t BuildingSpawnInitialOwner = 0;
     uint8_t view_mask = 0; // Who can view this sector (mask)
     uint8_t UnhideMask = 0; // Who can unhide other fractions (mask)
 
@@ -2087,7 +2084,7 @@ struct TLego
     struct ExFX
     {
         uint8_t Index = 0;
-        uint8_t ObjectID = 0;
+        uint16_t ObjectID = 0;
         vec3d Position;
     };
 
@@ -2132,6 +2129,17 @@ struct yw_arg161
     int lvlID;
     int field_4;
     bool freshStart = false;
+};
+
+struct BruchEmission
+{
+    vec3d position;
+    mat3x3 rotation = mat3x3::Ident();
+    vec3d visualPosition;
+    mat3x3 visualRotation = mat3x3::Ident();
+    vec3d launch = vec3d(0.0, 0.0, 0.0);
+    int16_t owner = 0;
+    NC_STACK_ypabact *wreck = nullptr;
 };
 
 struct ypaworld_arg146
@@ -2347,6 +2355,12 @@ public:
     virtual void ypaworld_func144(NC_STACK_ypabact *bacto);
     virtual size_t ypaworld_func145(NC_STACK_ypabact *bact);
     virtual NC_STACK_ypabact * ypaworld_func146(ypaworld_arg146 *vhcl_id);
+    bool ResolveChainVisualFX(const World::TChainFXConfig &config,
+                              World::TChainFXConfig &playback) const;
+    NC_STACK_ypabact *SpawnBruchEffect(ypaworld_arg146 *request,
+                                      const BruchEmission &emission,
+                                      const World::TChainFXConfig &config = {});
+    NC_STACK_ypabact *SpawnVehiclePrototype(ypaworld_arg146 *request, World::TVhclProto &prototype, bool bruch);
     int GetVehicleProductionLimitRemaining(int owner, int vehicleId);
     bool IsVehicleProductionLimitReached(int owner, int vehicleId);
     virtual NC_STACK_ypamissile * ypaworld_func147(ypaworld_arg146 *arg);
@@ -2658,7 +2672,8 @@ public:
     NC_STACK_ypabact *SpawnInlinePhysicalFX(const World::TChainFXConfig &config,
                                             const vec3d &pos, const mat3x3 &rot,
                                             const vec3d &launch, int16_t owner,
-                                            NC_STACK_ypabact *deadWreck = nullptr);
+                                            NC_STACK_ypabact *deadWreck = nullptr,
+                                            const std::shared_ptr<World::TChainFXPhysical> &profile = {});
     void sb_0x456384(const Common::Point &cellId, int ownerid2, int blg_id, int a7);
     void SetupPowerStationInfo(cellArea *cell, int power, int buildingId);
     void ResetAccumMap();
@@ -3235,6 +3250,7 @@ public:
     } _externalSectors;
 
     std::vector<World::TVhclProto> _vhclProtos;
+    std::map<int, World::TVhclProto> _bruchProtos;
     std::vector<World::TWeapProto> _weaponProtos;
     std::vector<World::TBuildingProto> _buildProtos;
     std::vector<World::TRoboProto> _roboProtos;

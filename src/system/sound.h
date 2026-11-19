@@ -85,6 +85,10 @@ struct TSoundSource
     // Optional runtime lifetime for finite looped effects whose sample itself
     // has no natural end (for example a propagating SuperItem wave).
     double FadeDuration = 0.0;
+    // Release phase of a looping PAL/SHK source (see SFXEngine::ReleaseCarrier):
+    // the loop is already told to stop and only plays its fade_out.
+    bool Releasing = false;
+    size_t ReleaseTime = 0;
     uint16_t Flags = 0;
     int Pitch = 0;
     // OpenNeoUA authored pitch range. Fixed values use min == max; min~max
@@ -289,6 +293,10 @@ public:
     void sub_424000(TSndCarrier *smpls, size_t);
     void StopCarrier(TSndCarrier *smpls);
     void StopSource(TSoundSource *snd);
+    // Like StopCarrier, but a looping PAL/SHK source with fade_out > 0 keeps
+    // playing for its fade-out first. Returns true while any source is releasing
+    // (the owner must keep calling UpdateSoundCarrier for it).
+    bool ReleaseCarrier(TSndCarrier *carr);
     void StopPlayingSounds();
 
     void ForceStopSource(TSndCarrier *smpls, size_t id)

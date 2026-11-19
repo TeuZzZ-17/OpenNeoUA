@@ -1098,7 +1098,9 @@ int yw_parse_lego(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil, NC_STACK_base *
                 TLego::ExFX &fx = lego.Explosions.back();
 
                 fx.Index = fxindex;
-                fx.ObjectID = std::stol(token, nullptr, 0);
+                const long effectId = std::stol(token, nullptr, 0);
+                fx.ObjectID = effectId >= 0 && effectId <= 65535 ?
+                    static_cast<uint16_t>(effectId) : 0;
 
                 if ( parse.GetNext(&token) )
                     fx.Position.x = std::stof(token, 0);
