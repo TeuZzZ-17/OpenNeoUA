@@ -1145,6 +1145,11 @@ public:
     // OpenNeoUA: snd/pal/shk_spawn_* loop runs while HasSpawningChild() is true.
     bool _spawn_sound_active = false;
     void UpdateSpawnStateSound();
+    // OpenNeoUA: rearms the spawn-state visual's particle emitters each time
+    // HasSpawningChild() turns true again, otherwise they only ever fire on
+    // the very first spawn (see NC_STACK_base::Instance::RearmParticles).
+    bool _spawn_particles_active = false;
+    void UpdateSpawnStateParticles();
     World::TDamagedFXConfig _damaged_fx;
     int32_t _damaged_fx_next_time;
     World::TDecorationFXConfig _decoration_fx;

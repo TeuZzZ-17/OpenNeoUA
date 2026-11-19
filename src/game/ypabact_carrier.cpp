@@ -603,6 +603,20 @@ void NC_STACK_ypabact::UpdateSpawnStateSound()
         SFXEngine::SFXe.sub_424000(&_soundcarrier, World::TVhclProto::SND_SPAWN);
 }
 
+// base_spawn/3ds_spawn/vp_spawn particle emitters: not gated on snd_spawn_*
+// being configured, unlike UpdateSpawnStateSound above, so a spawn visual
+// with no spawn sound still gets its particles rearmed every time.
+void NC_STACK_ypabact::UpdateSpawnStateParticles()
+{
+    const bool active = HasSpawningChild();
+    if ( active == _spawn_particles_active )
+        return;
+
+    _spawn_particles_active = active;
+    if ( active && _spawn_visual.vp )
+        _spawn_visual.vp->RearmParticles();
+}
+
 static int ypabact_GetCarrierSpawnInterval(int interval)
 {
     return interval > 0 ? std::max(1000, interval) : 5000;

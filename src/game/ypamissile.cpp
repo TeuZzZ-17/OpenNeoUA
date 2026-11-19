@@ -1249,7 +1249,10 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
         if ( _mislHomingTimeRemaining > 0 )
         {
             if ( arg->frameTime >= _mislHomingTimeRemaining )
+            {
                 _mislHomingTimeRemaining = 0;
+                _mislHomingExitDirection = _fly_dir;
+            }
             else
                 _mislHomingTimeRemaining -= arg->frameTime;
         }
@@ -1345,8 +1348,10 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
             case MISL_TARGETED:
                 arg74.field_0 = v38;
-                arg74.flag = _mislHomingTimeRemaining == 0 ? 1 : 0;
-                if ( _mislHomingTimeRemaining != 0 )
+                arg74.flag = 0;
+                if ( _mislHomingTimeRemaining == 0 )
+                    arg74.vec = _mislHomingExitDirection;
+                else
                 {
                     ApplyHomingForce(v38);
                     arg74.vec = CalcForceVector();

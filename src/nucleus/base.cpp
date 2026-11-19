@@ -1053,6 +1053,35 @@ NC_STACK_base::Instance::~Instance()
         delete opt;
 }
 
+// OpenNeoUA: particle generation timing is absolute (NC_STACK_particle::Emit,
+// Age = currentTime - TimeStamp, wrapped modulo max(genLifeTime, genEnd)) and
+// TimeStamp is stamped once, on this Instance's first Emit() call, then kept
+// for the Instance's whole lifetime (e.g. a vehicle's spawn-state visual,
+// built once at vehicle creation and reused for every later spawn). Without a
+// reset, only the very first time this Instance becomes relevant again lines
+// up with its [genStart, genEnd) window by chance; every later time the
+// wrapped Age has usually drifted outside it, so the particles silently stop
+// firing. RearmParticles() restarts every particle's clock so it begins a
+// fresh [genStart, genEnd) window from the next Emit() call, matching how it
+// behaved the first time.
+void NC_STACK_base::Instance::RearmParticles()
+{
+    for (NC_STACK_ade::InstanceOpts *opt : Particles)
+    {
+        if (!opt)
+            continue;
+        auto *spawn = static_cast<NC_STACK_particle::SpawnOpts *>(opt);
+        spawn->TimeStamp = -1;
+        spawn->Time = 0;
+        spawn->Age = 0;
+    }
+    for (Instance *kd : KidsOpts)
+    {
+        if (kd)
+            kd->RearmParticles();
+    }
+}
+
 GFX::TMesh *NC_STACK_base::FindMeshByRenderParams(std::list<GFX::TMesh> *list, const GFX::TRenderParams &p)
 {
     for(GFX::TMesh &m : *list)

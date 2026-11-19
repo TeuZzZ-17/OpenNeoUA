@@ -1674,6 +1674,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
         }
     }
     UpdateSpawnStateSound();
+    UpdateSpawnStateParticles();
     BeforeSoundCarrierUpdate();
 
     // OpenNeoUA invisible: a still-cloaked stealth unit emits no loop/idle/engine/ambient

@@ -149,6 +149,11 @@ public:
         Instance(NC_STACK_base *bas) : Bas(bas) {};
         virtual ~Instance();
 
+        // Restart every particle emitter's generation clock (this Instance's
+        // own Particles, recursively into KidsOpts) so the next Emit() call
+        // begins a fresh [genStart, genEnd) window, as if freshly created.
+        void RearmParticles();
+
     public:
         NC_STACK_base *Bas = nullptr;
         std::vector<Instance *> KidsOpts;
