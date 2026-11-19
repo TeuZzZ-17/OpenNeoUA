@@ -734,6 +734,9 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
         left = yw->_screenSize.x - iconBlockWidth - 4;
     if ( top < 4 )
         top = 4;
+    // The screen-edge clamp must not push icons into the bars or kill marks.
+    if ( top + STATUS_ICON_SIZE > barTop - bottomReserve )
+        return;
 
     if ( markerCenterX )
         *markerCenterX = left + iconBlockWidth / 2 - yw->_screenSize.x / 2;
@@ -778,6 +781,8 @@ const YWProceduralStatusBarConfig &yw_GetProceduralStatusBarConfig()
         out.hpEmptyTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewHpBarEmptyTint, out.hpEmptyTint);
         out.shieldEnabled = System::IniConf::GfxWorldNewShieldBarEnable.Get<bool>();
         out.shieldTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewShieldBarTint, out.shieldTint);
+        out.cooldownEnabled = System::IniConf::GfxWorldNewCooldownBarEnable.Get<bool>();
+        out.cooldownTint = yw_ReadStatusBarTint(System::IniConf::GfxWorldNewCooldownBarTint, out.cooldownTint);
         return out;
     }();
     return config;
@@ -885,20 +890,27 @@ void yw_RenderProceduralShieldBar(int left, int top, int width, int height,
                                          int value, int maxValue, uint8_t opacity)
 {
     const YWProceduralStatusBarConfig &config = yw_GetProceduralStatusBarConfig();
-    if ( !config.shieldEnabled || width <= 0 || height <= 0 || maxValue <= 0 )
+    if ( config.shieldEnabled && maxValue > 0 )
+        yw_RenderProceduralProgressBar(left, top, width, height, float(value) / maxValue,
+                                       config.shieldTint, opacity, 1.0f);
+}
+
+void yw_RenderProceduralProgressBar(int left, int top, int width, int height, float ratio,
+                                    const GFX::TGLColor &tint, uint8_t opacity, float fillAlpha)
+{
+    if ( width <= 0 || height <= 0 )
         return;
 
-    value = std::max(0, std::min(value, maxValue));
-    const float ratio = (float)value / (float)maxValue;
+    ratio = std::max(0.0f, std::min(1.0f, ratio));
     const float opacityMul = opacity / 255.0f;
 
     // Keep the empty track clearly readable without competing with the fill.
     constexpr float trackAlpha = 0.4f;
 
-    GFX::TGLColor trackTint = config.shieldTint;
+    GFX::TGLColor trackTint = tint;
     trackTint.a *= trackAlpha * opacityMul;
-    GFX::TGLColor fillTint = config.shieldTint;
-    fillTint.a *= opacityMul;
+    GFX::TGLColor fillTint = tint;
+    fillTint.a *= opacityMul * fillAlpha;
 
     const float barLeft = (float)left;
     const float barRight = (float)(left + width);

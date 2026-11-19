@@ -317,6 +317,8 @@ public:
     // in both HP styles; disabled/absent keeps the vanilla Shield row.
     static Common::Ini::Key GfxWorldNewShieldBarEnable;
     static Common::Ini::Key GfxWorldNewShieldBarTint;
+    static Common::Ini::Key GfxWorldNewCooldownBarEnable;
+    static Common::Ini::Key GfxWorldNewCooldownBarTint;
 
     // OpenNeoUA: global opt-in visual profiles for units currently under the same
     // regen/drain conditions used by the automatic Status Icons. A missing or

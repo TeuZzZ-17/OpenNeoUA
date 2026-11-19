@@ -528,6 +528,8 @@ Three-stage attack loop replacing the old sector/bact pairs: attack, retreat whe
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gun_type = power` — Compatible with power and power_radius. The gun does not attack but supplies energy to nearby units.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `gun_type = spawner` — Passive gun that uses the vehicle spawn settings. It does not aim or fire. With a valid spawn setup, it can show the world cooldown bar.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gun_levitate = 0` — gun/flak classes only: 1 prevents falling without a supporting surface. 0, absent or invalid = normal falling behavior.
 ------------------------------------------------------------------------------------------------------------------------
 
@@ -2576,6 +2578,10 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.world_new_shield_bar_tint = 0|137|170|255` — RGBA tint and opacity of the shield bar fill. Defaults to the same teal as the cockpit shield squares. The missing portion is drawn as a semi-transparent track of the same color.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `gfx.world_new_cooldown_bar_enable = no` — Set to yes to show a cooldown bar above the energy bar for active spawners and use the same style for mortar cooldowns. With no or when omitted, mortars keep their classic bar.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `gfx.world_new_cooldown_bar_tint = 255|255|255|255` — Cooldown bar tint and opacity in `R|G|B|A` (0–255). The track uses the same tint at reduced opacity. Missing or invalid values use white.
+------------------------------------------------------------------------------------------------------------------------
 
 ### User interface
 
@@ -3563,7 +3569,7 @@ Location blocks belong in an LDF, never in OpenNeoUA.ini or Nucleus.ini. Without
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `F8` — New debug mode: toggles invulnerability for all units.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `F9` — New debug mode: displays legacy collisions, main compound spheres and below/forward box and cone AI fire volumes. The selected Weapon slot is drawn in orange without a dimension label. Invisible bridges are not shown.
+- 🟢 `F9` — New debug mode: displays legacy collisions, main compound spheres, projectile blast spheres on impact and below/forward box and cone AI fire volumes. The selected Weapon slot is drawn in orange without a dimension label. Invisible bridges are not shown.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `F10` — New debug mode: toggles the in-game HUD visibility; useful for screenshots and video capture.
 ------------------------------------------------------------------------------------------------------------------------

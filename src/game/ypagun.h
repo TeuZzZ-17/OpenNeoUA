@@ -60,7 +60,8 @@ public:
         GUN_TYPE_REAL   = 1, // flak
         GUN_TYPE_PROTO  = 2, // mg
         GUN_TYPE_RADAR  = 3, // passive, damageable/targetable radar module
-        GUN_TYPE_POWER  = 4  // passive, damageable/targetable power module
+        GUN_TYPE_POWER  = 4, // passive, damageable/targetable power module
+        GUN_TYPE_SPAWNER = 5 // passive vehicle spawner
     };
 
     enum GUN_FLAGS
@@ -90,9 +91,11 @@ public:
     virtual bool getGUN_setGround();
     virtual bool IsRoboGun();
     bool IsPrimaryWeaponElevationAllowed(const vec3d &direction, bool useNativeLimits = false) const override;
+    bool IsSpawner() const { return _gunType == GUN_TYPE_SPAWNER; }
+
     bool IsPassiveModule() const
     {
-        return _gunType == GUN_TYPE_RADAR || _gunType == GUN_TYPE_POWER ||
+        return _gunType == GUN_TYPE_RADAR || _gunType == GUN_TYPE_POWER || IsSpawner() ||
                (_gunType == GUN_TYPE_DUMMY && (_isUnitGunChild || _spawn_units));
     }
 

@@ -2847,6 +2847,7 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
         bacto->_spawn_count = vhcl.spawn_count > 0 ? vhcl.spawn_count : 1;
         bacto->_spawn_instant = vhcl.spawn_instant ? 1 : 0;
         bacto->_spawn_last_time = 0;
+        bacto->_spawn_waiting = true;
         bacto->_at_death_spawn_units = deathProto.at_death_spawn_units;
         bacto->_at_death_spawn_vehicle = deathProto.at_death_spawn_vehicle;
         bacto->_at_death_spawn_count = deathProto.at_death_spawn_count > 0 ? deathProto.at_death_spawn_count : 1;

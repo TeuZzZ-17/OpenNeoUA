@@ -1716,6 +1716,24 @@ bool yw_ShouldRenderUfoSpyWorldStatus(NC_STACK_ypaworld *yw,
            yw_GetUfoSpyWorldOpacity(yw, bact) > 0;
 }
 
+static bool yw_GetWorldCooldownProgress(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
+                                        float &progress, bool &waiting)
+{
+    if ( !yw_CanSeeUnitCooldown(yw, bact) )
+        return false;
+
+    const auto *gun = dynamic_cast<const NC_STACK_ypagun *>(bact);
+    if ( gun && gun->IsSpawner() )
+        return bact->GetCarrierSpawnCountdown(progress, waiting);
+
+    if ( !bact->IsArtilleryShellPlatform() )
+        return false;
+
+    progress = bact->GetArtilleryShellReadinessRatio();
+    waiting = false;
+    return true;
+}
+
 void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact)
 {
     if ( yw_ShouldHideControlledUnitWorldUi(yw, bact) )
@@ -1856,7 +1874,33 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
 
                             int statusAnchorTop = lifeTop;
                             int artilleryShellCooldownTop = lifeTop - barHeight - 1;
-                            if ( artilleryShellCooldownTop >= 0 &&
+                            if ( statusBarConfig.cooldownEnabled )
+                            {
+                                float progress = 0.0f;
+                                bool waiting = false;
+                                if ( yw_GetWorldCooldownProgress(yw, bact, progress, waiting) )
+                                {
+                                    int barLeft, width, shieldThickness;
+                                    yw_GetWorldShieldBarRect(v42, lifeTop, v43, barHeight, hideWorldShield,
+                                                             &barLeft, nullptr, &width, &shieldThickness);
+                                    int energyTop = lifeTop;
+                                    int energyThickness = barHeight;
+                                    if ( hideWorldShield )
+                                        yw_GetProceduralHpStripRect(lifeTop, barHeight, &energyTop, &energyThickness);
+                                    const int thickness = (shieldThickness + energyThickness + 1) / 2;
+                                    const int top = energyTop - thickness - 1;
+                                    const bool overlapsMap = v30 && barLeft < v33 && barLeft + width > v11 &&
+                                                             top < v34 && top + thickness > v36;
+                                    if ( top >= 0 && !overlapsMap )
+                                    {
+                                        yw_RenderProceduralProgressBar(barLeft, top, width, thickness, progress,
+                                                                       statusBarConfig.cooldownTint, worldUiOpacity,
+                                                                       waiting ? 0.45f : 1.0f);
+                                        statusAnchorTop = std::min(lifeTop, top);
+                                    }
+                                }
+                            }
+                            else if ( artilleryShellCooldownTop >= 0 &&
                                  yw_RenderArtilleryShellCooldownBar(yw, cur, bact, v42, artilleryShellCooldownTop, v13) )
                             {
                                 statusAnchorTop = artilleryShellCooldownTop;

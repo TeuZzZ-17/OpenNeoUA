@@ -1906,8 +1906,8 @@ void NC_STACK_ypamissile::Impact()
     // impact/detonation path. Positive times are handled only by AI_layer3.
     TryClusterSplit(true);
 
-    // F10 shows the one shared blast radius used by all target categories.
-    if ( _world && _world->_showCollDebug && !_isArtilleryShellProjectile )
+    // F9 shows the shared blast radius at the impact position.
+    if ( _world && _world->_showCollDebug )
         _world->DebugAddBlastRing(_position, _mislBlastRadius, 255, 40, 40);
 
     _mislDirectHitUnits.clear();

@@ -1468,6 +1468,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         {
             gun_type = NC_STACK_ypagun::GUN_TYPE_POWER;
         }
+        else if ( !StriCmp(p2, "spawner") )
+        {
+            gun_type = NC_STACK_ypagun::GUN_TYPE_SPAWNER;
+        }
         else
         {
             recognized = false;

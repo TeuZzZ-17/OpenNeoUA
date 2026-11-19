@@ -491,9 +491,7 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
     }
 
     // Timed impact: reuse the same path a normal bomb uses on contact for blast
-    // damage/push, building/sector damage, VP dead/megadeth and chain FX. The artillery shell
-    // F10 blast rings are suppressed in Impact() so they do not look like target
-    // markers in the 3D view.
+    // damage/push, building/sector damage, VP dead/megadeth, chain FX and F9 debug rings.
     bool applySectorDamage = !CollisionsDisabled() && (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) ||
                               (_pSector && _pSector->PurposeType == cellArea::PT_NONE)) &&
                              (_world->_userRobo->_owner == _owner || !_world->_isNetGame);

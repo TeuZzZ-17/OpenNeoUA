@@ -603,6 +603,24 @@ void NC_STACK_ypabact::UpdateSpawnStateSound()
         SFXEngine::SFXe.sub_424000(&_soundcarrier, World::TVhclProto::SND_SPAWN);
 }
 
+static int ypabact_GetCarrierSpawnInterval(int interval)
+{
+    return interval > 0 ? std::max(1000, interval) : 5000;
+}
+
+bool NC_STACK_ypabact::GetCarrierSpawnCountdown(float &progress, bool &waiting)
+{
+    if ( !CanUseCarrierSpawn() || _world->_isNetGame )
+        return false;
+
+    const int interval = ypabact_GetCarrierSpawnInterval(_spawn_interval);
+    progress = _spawn_last_time
+        ? std::max(0.0f, std::min(1.0f, float(_clock - _spawn_last_time) / interval))
+        : 1.0f;
+    waiting = progress >= 1.0f && _spawn_waiting;
+    return true;
+}
+
 void NC_STACK_ypabact::UpdateCarrierSpawn(update_msg *)
 {
     if ( !ypabact_CanCarrierSpawn(this) )
@@ -612,19 +630,16 @@ void NC_STACK_ypabact::UpdateCarrierSpawn(update_msg *)
     if ( _world->_isNetGame )
         return;
 
-    int interval = _spawn_interval > 0 ? _spawn_interval : 5000;
-    if ( interval < 1000 )
-        interval = 1000;
+    const int interval = ypabact_GetCarrierSpawnInterval(_spawn_interval);
 
     if ( _spawn_last_time && _clock - _spawn_last_time < interval )
         return;
 
     int maxActive = _spawn_max_active > 0 ? _spawn_max_active : 1;
     int activeCount = ypabact_CountCarrierSpawnedUnits(this);
-    if ( activeCount >= maxActive )
-        return;
-
-    if ( !ypabact_CarrierHasEnemyNearby(this) )
+    // Cache the result for the HUD, which must not scan or change gameplay state.
+    _spawn_waiting = activeCount >= maxActive || !ypabact_CarrierHasEnemyNearby(this);
+    if ( _spawn_waiting )
         return;
 
     _spawn_last_time = _clock;

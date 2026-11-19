@@ -428,6 +428,8 @@ Common::Ini::Key IniConf::GfxWorldNewHpBarEmptyTint("gfx.world_new_hp_bar_empty_
 // the same color. Disabled/absent preserves the classic world Shield row.
 Common::Ini::Key IniConf::GfxWorldNewShieldBarEnable("gfx.world_new_shield_bar_enable", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GfxWorldNewShieldBarTint("gfx.world_new_shield_bar_tint", Common::Ini::KT_WORD, std::string("0|137|170|255"));
+Common::Ini::Key IniConf::GfxWorldNewCooldownBarEnable("gfx.world_new_cooldown_bar_enable", Common::Ini::KT_BOOL, false);
+Common::Ini::Key IniConf::GfxWorldNewCooldownBarTint("gfx.world_new_cooldown_bar_tint", Common::Ini::KT_WORD, std::string("255|255|255|255"));
 
 // OpenNeoUA custom: opt-in regen/drain unit FX. Shared state/VP controls use
 // gfx.*_fx_* while procedural-only geometry controls use gfx.*_mesh_*.
@@ -768,6 +770,8 @@ void IniConf::Init()
         , &GfxWorldNewHpBarEmptyTint
         , &GfxWorldNewShieldBarEnable
         , &GfxWorldNewShieldBarTint
+        , &GfxWorldNewCooldownBarEnable
+        , &GfxWorldNewCooldownBarTint
         , &GfxRegenFXVP
         , &GfxRegenFX3DS
         , &GfxRegenFXBase

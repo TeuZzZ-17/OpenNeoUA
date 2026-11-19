@@ -21,15 +21,20 @@
 #include "system/inivals.h"
 #include "game/yw_game_ui_internal.h"
 
-bool yw_ShouldRenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+bool yw_CanSeeUnitCooldown(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
 {
-    if ( !yw || !bact || !bact->IsArtilleryShellPlatform() )
+    if ( !yw || !bact )
         return false;
 
     if ( yw->IsSpectatorControlled() )
         return bact->_owner != World::OWNER_0 && !yw->IsSpectatorBact(bact);
 
     return yw->_userRobo && bact->_owner == yw->_userRobo->_owner;
+}
+
+bool yw_ShouldRenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact)
+{
+    return yw_CanSeeUnitCooldown(yw, bact) && bact->IsArtilleryShellPlatform();
 }
 
 bool yw_RenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact,

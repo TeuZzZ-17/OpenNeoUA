@@ -551,6 +551,7 @@ public:
     void ClearPlayerSprintPitchExtra();
     void UpdateCarrierSpawn(update_msg *arg);
     bool CanUseCarrierSpawn();
+    bool GetCarrierSpawnCountdown(float &progress, bool &waiting);
     void UpdateProximityDefense(update_msg *arg);
     // OpenNeoUA Orbiter: keep guardian projectiles alive around this unit and
     // send them against an enemy unit this unit attacks (or, as player, hits).
@@ -1292,6 +1293,7 @@ public:
     int _spawn_count;
     int _spawn_instant;
     int _spawn_last_time;
+    bool _spawn_waiting = true;
     int _at_death_spawn_units;
     int _at_death_spawn_vehicle;
     int _at_death_spawn_count;

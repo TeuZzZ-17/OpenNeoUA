@@ -1721,6 +1721,74 @@ void TestHomingBombDriveLimit() {
           "invalid drive time keeps legacy homing bomb thrust");
 }
 
+void TestSpawnerCountdown()
+{
+    auto world = std::make_unique<WorldProbe>();
+    Check(ParseVehicles(*world, {"new_vehicle 200", "model = gun", "gun_type = spawner",
+                                 "spawn_vehicle = 71", "spawn_interval = 8000",
+                                 "spawn_trigger_radius = 3600", "end"}),
+          "spawner gun type parses");
+    auto &proto = world->_vhclProtos[200];
+    const auto type = proto.initParams.Get<int32_t>(NC_STACK_ypagun::GUN_ATT_FIRETYPE, -1);
+    Check(type == NC_STACK_ypagun::GUN_TYPE_SPAWNER, "spawner has a distinct gun type");
+
+    auto gun = std::make_unique<GunProbe>();
+    gun->Bind(*world, proto, 1, 10, vec3d(3000, -300, -3000));
+    gun->setGUN_fireType(type);
+    Check(gun->IsSpawner() && gun->IsPassiveModule(), "spawner is passive without spawn data");
+
+    float progress = 0.0f;
+    bool waiting = false;
+    gun->_spawn_units = true;
+    gun->_spawn_vehicle = 0;
+    Check(!gun->GetCarrierSpawnCountdown(progress, waiting), "invalid spawn vehicle hides cooldown");
+    gun->_spawn_vehicle = proto.spawn_vehicle;
+    gun->_spawn_trigger_radius = proto.spawn_trigger_radius;
+    gun->_spawn_interval = proto.spawn_interval;
+    gun->_spawn_last_time = 1000;
+    gun->_clock = 1000;
+    Check(gun->GetCarrierSpawnCountdown(progress, waiting) && Near(progress, 0.0f) && !waiting,
+          "spawn cooldown starts empty");
+    gun->_clock = 5000;
+    Check(gun->GetCarrierSpawnCountdown(progress, waiting) && Near(progress, 0.5f) && !waiting,
+          "spawn cooldown uses the configured interval");
+    gun->_clock = 9000;
+    gun->UpdateCarrierSpawn(nullptr);
+    Check(gun->GetCarrierSpawnCountdown(progress, waiting) && Near(progress, 1.0f) && waiting,
+          "elapsed cooldown is still waiting without nearby enemies");
+    gun->_spawn_interval = 100;
+    gun->_clock = 1500;
+    Check(gun->GetCarrierSpawnCountdown(progress, waiting) && Near(progress, 0.5f) && !waiting,
+          "cooldown observes the runtime minimum interval");
+    gun->_status = BACT_STATUS_DEAD;
+    Check(!gun->GetCarrierSpawnCountdown(progress, waiting), "dead spawners hide cooldown");
+}
+
+void TestMortarCountdown()
+{
+    auto world = std::make_unique<WorldProbe>();
+    Check(ParseWeapons(*world, {"new_weapon 10", "model = artillery_shell",
+                                "artillery_shell_barrage_cooldown = 14000", "end"}),
+          "mortar cooldown parses");
+
+    auto gun = std::make_unique<GunProbe>();
+    world->_vhclProtos[200].weapon = 10;
+    gun->Bind(*world, world->_vhclProtos[200], 1, 10, vec3d(3000, -300, -3000));
+    gun->_clock = 1000;
+    gun->_artillery_shell_barrage_active = true;
+    gun->_artillery_shell_shots_remaining = 2;
+    Check(gun->IsArtilleryShellPlatform() && Near(gun->GetArtilleryShellReadinessRatio(), 0.0f),
+          "mortar readiness stays empty during the barrage");
+    gun->_artillery_shell_barrage_active = false;
+    gun->_artillery_shell_shots_remaining = 0;
+    gun->_artillery_shell_next_activation_time = 15000;
+    gun->_clock = 8000;
+    Check(Near(gun->GetArtilleryShellReadinessRatio(), 0.5f),
+          "mortar readiness fills over the cooldown after the last shot");
+    gun->_clock = 15000;
+    Check(Near(gun->GetArtilleryShellReadinessRatio(), 1.0f), "mortar readiness reaches full");
+}
+
 void TestSpawnVisual()
 {
     // Heap objects: several probes on the stack overflow the default 2 MB stack.
@@ -1823,6 +1891,8 @@ void TestSpawnStateSound()
 
 int main() {
     TestSpawnVisual();
+    TestSpawnerCountdown();
+    TestMortarCountdown();
     TestSpawnStateSound();
     WorldProbe w;
     Check(ParseWeapons(w, {"new_weapon 1", "model = bomb", "ai_fire_trigger_box_below_xyz = 200|1200|400", "end",

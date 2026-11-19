@@ -115,6 +115,8 @@ struct YWProceduralStatusBarConfig
     // Same teal as the classic Shield squares in MAPMISC, so the world Shield
     // bar matches the cockpit Shield display.
     GFX::TGLColor shieldTint = GFX::TGLColor(0.0f, 137.0f / 255.0f, 170.0f / 255.0f, 1.0f);
+    bool cooldownEnabled = false;
+    GFX::TGLColor cooldownTint = GFX::TGLColor(1.0f, 1.0f, 1.0f, 1.0f);
 };
 
 struct TPlasmaCurrencyHudLayout
@@ -236,6 +238,9 @@ bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int value, int
 void yw_GetWorldShieldBarRect(int hpLeft, int hpTop, int hpWidth, int cellHeight, bool proceduralHp, int *outLeft, int *outTop, int *outWidth, int *outHeight);
 void yw_RenderProceduralShieldBar(int left, int top, int width, int height, int value, int maxValue, uint8_t opacity);
 void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile, uint8_t opacity = 255);
+void yw_RenderProceduralProgressBar(int left, int top, int width, int height, float ratio,
+                                    const GFX::TGLColor &tint, uint8_t opacity, float fillAlpha);
+bool yw_CanSeeUnitCooldown(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact);
 bool yw_ShouldRenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact);
 bool yw_RenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact, int left, int top, int squareCount);
 bool StatusIconCanRenderCockpitUnit(NC_STACK_ypabact *bact);

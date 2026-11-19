@@ -1047,7 +1047,8 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
                     // gun_type comes from the referenced vehicle prototype.
                     // Dummy stays excluded from voluntary AI targeting; radar
                     // and power are passive but remain normal damageable targets.
-                    gunObj->_isDummy = attachedGun->getGUN_fireType() == NC_STACK_ypagun::GUN_TYPE_DUMMY;
+                    gunObj->_isDummy = attachedGun->getGUN_fireType() == NC_STACK_ypagun::GUN_TYPE_DUMMY ||
+                                       attachedGun->IsSpawner();
 
                     if ( attachedGun->IsPassiveModule() )
                     {
