@@ -3351,9 +3351,19 @@ bool GFXEngine::AllocTexture(ResBitmap *bitm)
 
 void GFXEngine::FreeTexture(ResBitmap *bitm)
 {
-    if ( bitm->hwTex )
-        glDeleteTextures(1, &bitm->hwTex);
+    if ( !bitm->hwTex )
+        return;
 
+    // OpenGL can reuse the name after deletion. Clear the cached binding and
+    // its shader state while the old texture is still valid.
+    if ( _lastStates.Tex == bitm->hwTex || _states.Tex == bitm->hwTex )
+    {
+        _states.Tex = 0;
+        if ( _lastStates.Tex == bitm->hwTex )
+            SetRenderStates(0);
+    }
+
+    glDeleteTextures(1, &bitm->hwTex);
     bitm->hwTex = 0;
 }
 

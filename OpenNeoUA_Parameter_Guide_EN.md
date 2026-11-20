@@ -598,7 +598,7 @@ Universal Unit Guns extend the Host Station gun system so guns and functional mo
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `unit_act_gun = 0` — Selects the mounted gun being defined (0, 1, ...). Repeat the `unit_gun_*` lines for each gun.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `unit_gun_icon = Graphics/StatusIcons/mobile_flak.png` — Optional Data-relative icon assigned to gun 0 and shown on the parent unit.
+- 🟢 `unit_gun_icon = Graphics/StatusIcons/mobile_flak.svg` — Optional Data-relative icon assigned to gun 0 and shown on the parent unit.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `unit_gun_pos_xyz = 0.0|-200.0|55.0` — Mounted gun local X|Y|Z position. Format: x|y|z.
 ------------------------------------------------------------------------------------------------------------------------
@@ -656,6 +656,18 @@ Physical Bruch fragments use the normal, goingdown and explode sound events. See
 ------------------------------------------------------------------------------------------------------------------------
 
 Each lifecycle state can have its own external visual. External assets extend, never remove, the original VP states.
+
+- Keep related BASE states and their skeleton and animation files in one model folder. Name each BASE after its state.
+- Add a `Textures/SetN/` subfolder beside the BASE to enable set-specific ILBM textures. The BASE and its animations can use the same texture name across sets.
+- ILBM texture lookup (same order in the game and in OpenNeoUA Studio), stopping at the first file found:
+  - `Textures/SetN/` of the active set.
+  - The BASE folder, then its `Textures/` folder.
+  - Any subfolder of the model folder, even another set's. If several files share the name, the active set's folder wins, then alphabetical order. The game logs a warning when it uses another set's folder or must choose among several files.
+  - `Models/Sector/SetN/Textures/` (shared textures of the active set).
+  - A PNG with the same name in the model folders.
+  - The active `SET.BAS`.
+  - The `SET.BAS` of Set1 as the last resort (logged as a warning).
+- The lookup never leaves the model folder, except for the shared set textures and the two `SET.BAS` files.
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `base_<state> = Data/Models/Base/VEHICLE.BASE` — External BASE model for a lifecycle state (normal, fire, wait, dead, megadeth, genesis); falls back to `vp_<state>`. If the resolved dead visual has no persistent geometry, the normal visual is reused during DEATH1 so the wreck stays visible while it falls. A BASE shared by Genesis and a regular state only receives faction plasma tint during Genesis or beam playback.
@@ -930,7 +942,11 @@ OpenNeoUA adds projectile classes through the existing `model` field.
 - 🟢 `trigger_radius = 360` — Kamikaze only: XYZ fuse radius. Detonates when this sphere touches an enemy's collision surface or the active sector target's geometry, including contact during movement.
 ------------------------------------------------------------------------------------------------------------------------
 
-Artillery Shell supports both a real ballistic trajectory and an emulated vertical-barrage mode. Manual targeting is integrated with the Tactical Map; automatic targeting remains available unless explicitly disabled.
+Artillery Shell supports both a real ballistic trajectory and an emulated vertical-barrage mode.
+
+- Automatic targeting checks range, elevation limits and any radar requirement. It prefers enemy Host Stations, then enemy functional buildings, then enemy units. It picks the nearest valid target within each category, using horizontal distance. A building target defaults to the center of a surviving building slot.
+- Manual Tactical Map orders use the selected position. A barrage keeps the position chosen when it was aimed.
+- A shell's direct and blast damage both spare functional buildings owned by the firing faction, including power stations, radars and other special buildings. Ordinary sector structures can still take damage regardless of ownership.
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `model = artillery_shell` — Artillery/mortar Weapon class with barrage fire, manually controllable from the Tactical Map or managed automatically.
@@ -953,13 +969,15 @@ Artillery Shell supports both a real ballistic trajectory and an emulated vertic
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_barrage_shots = 5` — Total number of projectiles available per barrage.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `artillery_shell_barrage_shot_delay = 550` — Time in milliseconds between successive shots in a barrage.
+- 🟢 `artillery_shell_barrage_shot_time = 550` — Time in milliseconds between successive shots in a barrage. Default: 250. Zero or negative adds no delay.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_barrage_cooldown = 14000` — Mortar cooldown in milliseconds, starting after the last projectile of the barrage is launched.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `artillery_shell_arc_height = 3300` — ballistic: maximum projectile arc height; vertical_barrage: climb/descent altitude used above the target.
+- 🟢 `artillery_shell_arc_height = 3300` — `ballistic` only. Maximum arc height above the line from launch to impact, in game units. Default: 2500. Zero, negative or invalid values give no extra height.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `artillery_shell_airburst = 0` — 1 detonates rounds at target altitude (airburst); 0 waits for the real terrain impact point.
+- 🟢 `artillery_shell_vertical_height = 3300` — `vertical_barrage` only. Height climbed above the launcher and starting height above the target for descent, in game units. Default: 2500. Zero, negative or invalid values give no vertical travel. The engine logs a warning and ignores either height key when it does not match the selected mode.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `artillery_shell_airburst = 1` — 1 (default) detonates rounds at the selected target's world Y, even after terminal unit contact. For automatic fire at a functional building, an eligible defending turret supplies the aim point and height. Barrage spread affects X and Z. 0 uses the world surface at each round's own landing point.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_manual_mode_only = 0` — 1 leaves only player manual targeting available; 0 also permits automatic acquisition.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1088,7 +1106,7 @@ Damage multipliers can distinguish newer/specialized model classes while preserv
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `armor_penetration_targets = 2` — Number of units the Weapon may penetrate before stopping.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `armor_penetration_icon = Data/Graphics/StatusIcons/armor_penetration.png` — Optional Data-relative icon shown next to the Weapon damage while armor_penetration_targets is active.
+- 🟢 `armor_penetration_icon = Data/Graphics/StatusIcons/armor_penetration.svg` — Optional Data-relative icon shown next to the Weapon damage while armor_penetration_targets is active.
 ------------------------------------------------------------------------------------------------------------------------
 
 Weapon Blast uses one shared radius for units, buildings and sector structures.
@@ -1230,7 +1248,7 @@ Optional overheat behavior starts only after the Weapon has reached and then mai
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ramp_up_overheat_time = 5000` — Time in milliseconds spent at ramp_up_max_shot_time before overheat damage begins.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ramp_up_overheat_icon = Graphics/StatusIcons/overheat.png` — Data-relative icon shown while the unit is overheating.
+- 🟢 `ramp_up_overheat_icon = Graphics/StatusIcons/overheat.svg` — Data-relative icon shown while the unit is overheating.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Collisions
@@ -1574,7 +1592,7 @@ Cluster Weapons split into child Weapons after a timer or on impact. Child count
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `name = Power_Station` — Name of the Building. Underscores are shown as spaces.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵🟢 `sec_type = 20` — Sector of the Building: a sector number of the map set (vanilla), or a `Data/....sector` file, optionally followed by a set sector used when that file cannot be loaded (`sec_type = Data/Models/Sectors/Sulg_Power/Sulg_Power.sector|50`). See [External sector files (.sector)](#external-sector-files-sector). An invalid value is ignored and the previous sector is kept; a file without fallback falls back to sector 0.
+- 🔵🟢 `sec_type = 20` — Sector of the Building: a sector number of the map set (vanilla), or a `Data/....sector` file, optionally followed by a set sector used when that file cannot be loaded (`sec_type = Data/Models/Sector/Sulg_Power/Sulg_Power.sector|50`). See [External sector files (.sector)](#external-sector-files-sector). An invalid value is ignored and the previous sector is kept; a file without fallback falls back to sector 0.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `type_icon = P` — Icon glyph key of the Building, mapped through TYPE_NS.FON into the H_FINDER graphic. Same syntax as the Vehicle `type_icon`.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1693,10 +1711,12 @@ Building decorations can be periodic (spawned at intervals) or persistent (activ
 
 ### External sector files (.sector)
 
+Each sector has a folder under `Data/Models/Sector`. Put the four damage-state visuals and their collisions in the sector folder, or group them in subfolders by piece. Shared ILBM textures for the active set can still live in `Data/Models/Sector/SetN/Textures`.
+
 A `.sector` file describes one complete sector outside SET.BAS: cells, damage states, models, collision, map symbols and explosions. A Building uses it through `sec_type`.
 
-- The sector lives in its own folder, normally `Data/Models/Sectors/<Name>/<Name>.sector`, with only the files made for it.
-- Every file is searched beside the .sector first. Anything missing (models, skeletons, textures, animations) comes from the set of the map being played, so a Set3 map shows the Set3 look. Names already loaded from SET.BAS win over local files with the same name.
+- The sector lives in its own folder, normally `Data/Models/Sector/<Name>/<Name>.sector`, with only the files made for it.
+- A local BASE is resolved relative to the `.sector`, or by its explicit `Data/...` path. It uses the same ILBM lookup order as a vehicle BASE (see the model folder rules above), starting with `Textures/SetN/` beside that BASE. Collision files resolve relative to the `.sector` and fall back to the active set.
 - On every set load the sector is installed in free model, piece and sector slots (highest free sector slot from 247 down); SET.BAS and SET.SDF are not changed. The slot can change when the set or the scripts change.
 - Any error (syntax, unknown key, missing model, no free slot) skips the whole file, logs a warning and uses the fallback set sector.
 - Cells of a map placed without an owner keep the sector written in typ_map; external sectors appear on owned buildings and on buildings constructed in game.
@@ -1847,7 +1867,7 @@ Buffs are reusable profiles linked from a Vehicle with `buff_id`. `new_buff` may
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `name = armored` — Internal Buff name. This identifier does not change gameplay by itself; it labels the reusable Buff profile.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `icon = Graphics/StatusIcons/deflect.png` — Data-relative Status Icon selected directly by this Vehicle's Buff. Empty/invalid = no Buff icon.
+- 🟢 `icon = Graphics/StatusIcons/deflect.svg` — Data-relative Status Icon selected directly by this Vehicle's Buff. Empty/invalid = no Buff icon.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `glow_intensity = 0.20` — Full-model Buff glow intensity, range 0..1, while at least one Buff property remains active. 0 or absent = no glow.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1891,7 +1911,7 @@ Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `allow_on_children = 0` — Automatically propagates the active Debuff to child units generated directly by the affected unit. 0 or absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `icon = Graphics/StatusIcons/electrified.png` — Data-relative icon shown while the unit is debuffed. Empty/invalid = no icon.
+- 🟢 `icon = Graphics/StatusIcons/electrified.svg` — Data-relative icon shown while the unit is debuffed. Empty/invalid = no icon.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `name = electrified` — Name of the debuff. debuff_id and blast_debuff_id can use it in place of the ID, so it must start with a letter.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2596,21 +2616,21 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ui.wireframe_tints_owner_<0..7> = 50|150|255|255` — RGBA tint of the in-game wireframe silhouettes (vehicle, projectile, MGUN) in the info panel, per owner 0-7. 0 or absent = original colors. Reticles, lock markers, visor overlays, text and notifications are not tinted. `ui.wireframe_tints_owner_01` equals `ui.wireframe_tints_owner_1`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_regen = Graphics/StatusIcons/regen.png` — Data-relative Regen icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_regen = Graphics/StatusIcons/regen.svg` — Data-relative Regen icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_drain = Graphics/StatusIcons/drain.png` — Data-relative Drain icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_drain = Graphics/StatusIcons/drain.svg` — Data-relative Drain icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_damaged = Graphics/StatusIcons/damaged.png` — Data-relative damaged-state icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_damaged = Graphics/StatusIcons/damaged.svg` — Data-relative damaged-state icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_spawn = Graphics/StatusIcons/mobile_spawner.png` — Data-relative Mobile Spawner icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_spawn = Graphics/StatusIcons/mobile_spawner.svg` — Data-relative Mobile Spawner icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_radar = Graphics/StatusIcons/mobile_radar.png` — Data-relative Mobile Radar icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_radar = Graphics/StatusIcons/mobile_radar.svg` — Data-relative Mobile Radar icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_power = Graphics/StatusIcons/mobile_power.png` — Data-relative Mobile Power icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_power = Graphics/StatusIcons/mobile_power.svg` — Data-relative Mobile Power icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_sprint = Graphics/StatusIcons/sprint.png` — Data-relative Sprint icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_sprint = Graphics/StatusIcons/sprint.svg` — Data-relative Sprint icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.status_icon_handbrake = Graphics/StatusIcons/handbrake.png` — Data-relative Handbrake icon path. Empty/invalid = disables only this icon.
+- 🟢 `ui.status_icon_handbrake = Graphics/StatusIcons/handbrake.svg` — Data-relative Handbrake icon path. Empty/invalid = disables only this icon.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ui.map_marker_sound = sounds/alarm.wav` — Sound played once after a map marker is created successfully. Empty/unloadable = no sound.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3620,17 +3640,20 @@ How the parameters above are handled in OpenNeoUA Studio. They do not change the
 
 ### Models
 
-- **Models without copies of set textures:** in Import Model, select the installed set's `Set.BAS`. Existing loose files win and missing resources, including textures referenced by `.ANM` frames, are resolved from the archive. The palette and rendering tables (`PALETTE`, `REMAP`) are read from the installed set's folders and must stay in the installation. Export Asset Family writes a complete package with textures and rendering profile: remove the original resources you do not intend to distribute. A custom texture absent from the set needs its own file.
-- **Apply to States** (Model Editor toolbar, or File > Apply Changes to Other States): finds the other states of the open model through Entity List, folder names, Bas Manager and similar shape, shows each one with the changes applied and writes only the ticked states. Faces are paired by position; animated faces and faces of one state only are left alone. Nothing is ticked automatically, Genesis included.
+- **Missing texture fallback:** Import Model and the Studio preview try the first readable same-named file in the model folder and its subfolders after a normal lookup reports a missing texture. The orange Loaded (fallback) status warns that it is outside the active set lookup and may display different colors. Choose Source can override it. Resources > Model Resources reopens the importer with the open external model, its current archive and manual choices.
+- **Models without copies of set textures:** in Import Model, select the installed set's `Set.BAS`. Existing loose files win and missing resources, including textures referenced by `.ANM` frames, are resolved from the archive. The palette and rendering tables (`PALETTE`, `REMAP`) are read from the installed set's folders and must stay in the installation. The Export Model button writes a complete package with textures and rendering profile: remove the original resources you do not intend to distribute. A custom texture absent from the set needs its own file.
+- **Apply to States** (Model Editor toolbar, or File > Apply Changes to Other States): finds the other states of the open model through Entity List, folder names, Bas Manager and similar shape, shows each one with the changes applied and writes only the ticked states. Faces are paired by position; animated faces and faces of one state only are left alone. Nothing is ticked automatically.
+- **Viewport context menu:** Select All Emitters and Deselect All Emitters operate on the current model's emitter anchor vertices. Clear the selection to use Add Texture, Add ANM or Add Emitter. Add Texture places a static, rectangular face with the chosen bitmap and its aspect ratio. Replace Texture and Replace ANM follow the selected faces' material bindings.
+- **Generate Model Genesis:** converts every polygon surface of the current model, regardless of selection.
 - **Texture mapping copy:** previews and copies the selected faces' mappings to chosen loose BASE states. Faces must match uniquely and the destination must resolve the same texture.
 - **Replace Texture, Import External Texture:** the Choose Texture dialog can load a PNG or a loose `.ILBM` file from outside the set. An ILBM keeps its own palette. A PNG is accepted only if every pixel already matches a color of the replaced texture's palette (or the family's shared external palette); the shared SET palette is never changed, so a PNG with unmatched colors is refused rather than quantized. On an animated (`bmpanim`) binding the import replaces a single-image animation's picture only; an animation with more than one distinct frame image is refused.
 - **Emitter and ANM previews:** the Add Emitter dialog, the simulated emitter preview and the ANM/Emitter preview panel approximate additive (flat-tracy) particle stages with the engine's own HI/ALPHA effect PNG override when one exists, or otherwise with "luma" alpha (brightness-normalized color, alpha from the brightest channel) instead of the raw indexed palette colors - closer to the engine's additive glow while staying transparent. True additive compositing (`CompositionMode_Plus`) is not used for the preview: with many overlapping particles in one frame it saturates to an opaque black square instead of staying transparent, which "luma" avoids by design.
 - **MCP texture coordinates:** `studio_set_uvs` edits ordinary AMESH faces and static ILBM AREA terrain faces. Animated AREA faces retain their animation coordinates. Explicit UV lists are supplied per selected polygon, or in a dictionary keyed by polygon ID.
 - **MCP emitter settings:** `set_emitter` changes any particle emitter setting (acceleration and magnify vectors, start speed, birth rate, lifetime, sizes, noise) of a loose model; `use_set_animation` points a loose `.ANM` at the same animation of the installed `Set.BAS`, so no copy of the original file is needed.
-- **Sulgogar terrain textures:** the infected ground, the station skin and the strips between ground families are not shipped. Run `tools/build_sulg_terrain_textures.py --data "<Data folder>"` from the Studio folder: it builds them from your own `Set1` and `Set3` `Set.BAS` files into `Sets/Set3/Loose/ILBM`. The models only reference the names.
+- **Sulgogar terrain textures:** the infected ground, the station skin and the strips between ground families are local assets. From Studio, run `tools/build_sulg_terrain_textures.py --data "<Data folder>"` with your installed Set 3. It writes the textures to `Models/Sector/Set3/Textures`. The models reference them by name.
 - **Emitters:** deleting geometry keeps particle emitter source points and updates their references; it is refused if a source point is already invalid. Copy Emitter duplicates and Cut Emitter moves an emitter: both start an animated gray preview, click a point to place it, Esc or right-click cancels. During Cut the original circle disappears unless other emitters share that point.
 - **Ground Alignment tab:** a schematic 2D profile of the model surfaces against flat ground. The profile and Auto exclude particles and, when other surfaces exist, additive effects (an additive-only estimate is marked). Scroll over the profile to adjust `overeof`, then verify the contact in-game.
-- **Origin marker:** Edit Mode always shows the model's local origin (0, 0, 0) as the exact vanilla faction arrow (`Wireless/TRIANGLE.SKL`), tinted with the active theme's accent color. It is the point the game anchors the unit to (world position, faction marker, cockpit 000) regardless of mesh shape. It is a visual indicator only, not interactive or selectable; move the origin with **Set Origin to Model Center** (formerly "Center Model at Origin") or **Set Selection as Origin** (formerly "Center Selection at Origin"). Both always move every vertex by the same offset, so the model never deforms; only the bounding box the offset is computed from differs.
+- **Origin marker:** Edit Mode always shows the model's local origin (0, 0, 0) as the exact vanilla faction arrow (`Wireless/TRIANGLE.SKL`), tinted with the active theme's accent color. It is the point the game anchors the unit to (world position, faction marker, cockpit 000) regardless of mesh shape. It is a visual indicator only, not interactive or selectable; move the origin with **Set Origin to Model Center** (formerly "Center Model at Origin") or **Set Selection as Origin** (formerly "Center Selection at Origin"). Both apply the same offset to every local vertex, preserving the shape. Both commands keep the model in place on screen while moving the marker to the model bounds center, the selected point or the selection bounds center. Particle previews follow their anchor vertices. Overwrite automatically saves root origin changes to matching loose states in the model folder and its subfolders, including their emitter anchors and sensors. Undo before saving cancels the pending change. Both commands are in the Origin section and in the viewport context menu, including when an emitter anchor is selected.
 
 ### Entities and effects
 
@@ -3645,7 +3668,7 @@ OpenNeoUA Studio resolves Bruch IDs for entity and sector effect previews using 
 
 ### Sectors
 
-- **External sectors (Sector Editor, File menu):** Export Sector writes the current sector as a folder (`Data/Models/Sectors/<Name>/<Name>.sector`) or as a `.onua` archive of that folder. Models, skeletons and textures that exist in `Set.BAS` are written by name only; only your own loose files are copied. Import Sector opens a `.sector` file or a `.onua` archive (unpacked into `Data/Models/Sectors/<Name>` first) in a free slot for editing. Its own models are never saved into the set: export it again, then clear or wipe the slot before Overwrite Set (the save is refused while a sector still uses them).
+- **External sectors (Sector Editor, File menu):** Export Sector writes the current sector as a folder (`Data/Models/Sector/<Name>/<Name>.sector`) or as a `.onua` archive of that folder. Models, skeletons and textures that exist in `Set.BAS` are written by name only; only your own loose files are copied. Import Sector opens a `.sector` file or a `.onua` archive (unpacked into `Data/Models/Sector/<Name>` first) in a free slot for editing. Its own models are never saved into the set: export it again, then clear or wipe the slot before Overwrite Set (the save is refused while a sector still uses them).
 - **Map Editor and Entity Designer:** building previews of an external `sec_type` show that sector; map tiles, icons and typ_map still use the fallback set sector.
 - **Map icons tab:** the current sector at the five map zooms (own icons where set, vanilla symbols elsewhere). Generate icons draws them from the geometry of the sector's own models (every zoom and damage state); set models keep their vanilla symbol. Load cell icon / Load sector icon take your PNG or SVG; Generate missing icons on export is on by default. Icons go into the `map/` folder of the exported sector.
 - **Play:** The Sector Editor opens with playback enabled. Play/Pause keeps the same preview, camera, zoom and selection. All editors share the same Play/Pause button. Play, >> and Speed animate the entire sector in the main preview, including every cell's animated textures and emitters. The explicitly selected model preview still plays that model alone. Changing damage state while playing shows each cell's outgoing destruction effects at its sector position; an effect whose FX vehicle is not defined in the scripts is reported in the status bar.

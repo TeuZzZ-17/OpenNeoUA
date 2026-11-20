@@ -133,6 +133,8 @@ TVhclSound *WeaponProtoParser::GetSndFxByName(const std::string &sndname)
 
 bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &word, const std::string &opt)
 {
+    _pendingArtilleryArcHeight = -1.0f;
+    _pendingArtilleryVerticalHeight = -1.0f;
     if (!StriCmp(word, "new_weapon"))
     {
         _isModify = false;
@@ -336,6 +338,19 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
              (_wpn->ai_fire_trigger_box_below.x > 0.0f || _wpn->ai_fire_trigger_box_forward.x > 0.0 ||
               _wpn->ai_fire_trigger_cone_forward.x > 0.0 || _wpn->ai_fire_trigger_cone_below.x > 0.0) )
             ypa_log_out("WARNING: weapon %d AI fire volume ignored: select one volume compatible with its weapon model. Existing fire control retained.\n", _wpnID);
+        const bool vertical = _wpn->artillery_shell_mode == TWeapProto::ARTILLERY_SHELL_MODE_VERTICAL_BARRAGE;
+        const float height = vertical ? _pendingArtilleryVerticalHeight : _pendingArtilleryArcHeight;
+        if ( height >= 0.0f )
+        {
+            if ( vertical )
+                _wpn->artillery_shell_vertical_height = height;
+            else
+                _wpn->artillery_shell_arc_height = height;
+        }
+        if ( (vertical ? _pendingArtilleryArcHeight : _pendingArtilleryVerticalHeight) >= 0.0f )
+            ypa_log_out("WARNING: weapon %d %s ignored in %s mode.\n",
+                        _wpnID, vertical ? "artillery_shell_arc_height" : "artillery_shell_vertical_height",
+                        vertical ? "vertical_barrage" : "ballistic");
         return ScriptParser::RESULT_SCOPE_END;
     }
 
@@ -1392,18 +1407,20 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
         int v = parser.stol(p2, nullptr, 0);
         _wpn->artillery_shell_barrage_shots = v > 0 ? v : 0;
     }
-    else if ( !StriCmp(p1, "artillery_shell_barrage_shot_delay") )
+    else if ( !StriCmp(p1, "artillery_shell_barrage_shot_time") )
     {
-        _wpn->artillery_shell_barrage_shot_delay = parser.stol(p2, nullptr, 0);
+        _wpn->artillery_shell_barrage_shot_time = parser.stol(p2, nullptr, 0);
     }
     else if ( !StriCmp(p1, "artillery_shell_barrage_cooldown") )
     {
         _wpn->artillery_shell_barrage_cooldown = parser.stol(p2, nullptr, 0);
     }
-    else if ( !StriCmp(p1, "artillery_shell_arc_height") )
+    else if ( !StriCmp(p1, "artillery_shell_arc_height") || !StriCmp(p1, "artillery_shell_vertical_height") )
     {
-        float v = parser.stof(p2, 0);
-        _wpn->artillery_shell_arc_height = v > 0.0 ? v : 0.0;
+        const float v = parser.stof(p2, 0);
+        float &height = !StriCmp(p1, "artillery_shell_arc_height")
+            ? _pendingArtilleryArcHeight : _pendingArtilleryVerticalHeight;
+        height = std::isfinite(v) && v > 0.0f ? v : 0.0f;
     }
     else if ( !StriCmp(p1, "artillery_shell_speed") )
     {

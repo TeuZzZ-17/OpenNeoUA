@@ -650,20 +650,6 @@ void NC_STACK_ypamissile::RememberDirectPushRecipient(NC_STACK_ypabact *bct)
         _mislDirectPushRecipientGids.push_back(bct->_gid);
 }
 
-vec3d NC_STACK_ypamissile::GetBuildingSlotCenter(const cellArea &cell, int bldX, int bldY) const
-{
-    vec3d pos = World::SectorIDToCenterPos3(cell.CellId);
-    pos.y = cell.height;
-
-    if ( cell.SectorType != 1 )
-    {
-        pos.x += (bldX - 1) * 300.0;
-        pos.z += (bldY - 1) * 300.0;
-    }
-
-    return pos;
-}
-
 bool NC_STACK_ypamissile::GetBuildingSlotAtPosition(const vec3d &pos, Common::Point *cellId, int *bldX, int *bldY) const
 {
     Common::Point sec = World::PositionToSectorID(pos);
@@ -999,7 +985,7 @@ void NC_STACK_ypamissile::ApplyBlastToBuildings()
                     if ( GetAreaBuildingSkipReason(cell, bldX, bldY) )
                         continue;
 
-                    vec3d bldPos = GetBuildingSlotCenter(cell, bldX, bldY);
+                    vec3d bldPos = cell.GetBuildingSlotCenter(bldX, bldY);
                     float distance = GetBuildingBlastDistance(bldPos);
 
                     if ( distance > _mislBlastRadius )
@@ -1058,7 +1044,7 @@ void NC_STACK_ypamissile::ApplyBlastToSectors()
                     if ( GetAreaSectorSkipReason(cell, bldX, bldY) )
                         continue;
 
-                    vec3d sectorPos = GetBuildingSlotCenter(cell, bldX, bldY);
+                    vec3d sectorPos = cell.GetBuildingSlotCenter(bldX, bldY);
                     float distance = GetBuildingBlastDistance(sectorPos);
 
                     if ( distance > _mislBlastRadius )

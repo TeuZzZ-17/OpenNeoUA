@@ -450,7 +450,7 @@ void ypabact_TriggerArtilleryShellFireVisual(NC_STACK_ypabact *unit)
 }
 
 // A candidate is a valid artillery shell target only if it is a real, living enemy actor.
-bool ypabact_IsArtilleryShellEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand)
+static bool ypabact_IsArtilleryShellEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand)
 {
     if ( !cand || cand == unit )
         return false;
@@ -479,14 +479,7 @@ bool ypabact_IsArtilleryShellEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *can
     return true;
 }
 
-// V1 target selection: pick the nearest valid enemy within the min/max of
-// artillery_shell_range_minmax and use its position as the barrage center.
-//
-// onlyHostStation: when true, only enemy Host Stations (robo) are considered (used for
-// the built-in Host Station priority pass). The radar requirement is always
-// honoured in both passes: priority only chooses among radar-visible enemies.
-bool ypabact_ScanArtilleryShellTarget(NC_STACK_ypabact *unit, const World::TWeapProto &wproto,
-                                     bool onlyHostStation, vec3d *out)
+bool ypabact_FindArtilleryShellTargetZone(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, vec3d *out)
 {
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
     if ( !world )
@@ -503,61 +496,73 @@ bool ypabact_ScanArtilleryShellTarget(NC_STACK_ypabact *unit, const World::TWeap
     int sectorRadius = (int)(maxRange / World::CVSectorLength) + 2;
     Common::Point center = World::PositionToSectorID(unit->_position);
 
-    NC_STACK_ypabact *best = nullptr;
+    enum class Priority { HostStation, Building, Unit, None };
+    Priority bestPriority = Priority::None;
     float bestDistSq = 0.0;
+    auto consider = [&](Priority priority, const vec3d &pos)
+    {
+        if ( priority > bestPriority )
+            return false;
+
+        const auto offset = pos - unit->_position;
+        const float distSq = offset.XZ().square();
+        if ( distSq < minRangeSq || distSq > effRangeSq ||
+             !unit->IsPrimaryWeaponElevationAllowed(offset) )
+            return false;
+
+        if ( priority == bestPriority && distSq >= bestDistSq )
+            return true;
+
+        bestPriority = priority;
+        bestDistSq = distSq;
+        *out = pos;
+        return true;
+    };
 
     for (int y = center.y - sectorRadius; y <= center.y + sectorRadius; y++)
     {
         for (int x = center.x - sectorRadius; x <= center.x + sectorRadius; x++)
         {
             Common::Point cellId(x, y);
-            if ( !world->IsSector(cellId) )
+            if ( !world->IsGamePlaySector(cellId) )
                 continue;
 
             cellArea &cell = world->SectorAt(cellId);
 
-            // Radar requirement: the target sector must be visible to our faction.
-            // Always enforced, including the Host-Station priority pass.
+            // Radar visibility applies to every target category.
             if ( wproto.artillery_shell_requires_radar && !cell.IsCanSee(unit->_owner) )
                 continue;
 
+            const bool enemyBuilding = cell.HasFunctionalBuilding() &&
+                cell.owner != World::OWNER_0 && cell.owner != unit->_owner;
+            bool hasBuildingGunTarget = false;
             for (NC_STACK_ypabact *cand : cell.unitsList)
             {
                 if ( !ypabact_IsArtilleryShellEnemy(unit, cand) )
                     continue;
+                if ( cand->_bact_type == BACT_TYPES_ROBO )
+                    consider(Priority::HostStation, cand->_position);
+                else if ( wproto.artillery_shell_airburst && enemyBuilding &&
+                          cand->_owner == cell.owner && !cand->_isUnitGunChild &&
+                          cand->_bact_type == BACT_TYPES_GUN &&
+                          !static_cast<NC_STACK_ypagun *>(cand)->IsRoboGun() )
+                    hasBuildingGunTarget |= consider(Priority::Building, cand->_position);
+                else
+                    consider(Priority::Unit, cand->_position);
+            }
 
-                if ( onlyHostStation && cand->_bact_type != BACT_TYPES_ROBO )
-                    continue;
-
-                float distSq = (cand->_position.XZ() - unit->_position.XZ()).square();
-                if ( distSq < minRangeSq || distSq > effRangeSq )
-                    continue;
-
-                if ( !best || distSq < bestDistSq )
-                {
-                    best = cand;
-                    bestDistSq = distSq;
-                }
+            if ( bestPriority != Priority::HostStation && enemyBuilding && !hasBuildingGunTarget )
+            {
+                const int slots = cell.SectorType == 1 ? 1 : 3;
+                for (int slotY = 0; slotY < slots; ++slotY)
+                    for (int slotX = 0; slotX < slots; ++slotX)
+                        if ( cell.buildings_health.Get(slotX, slotY) > 0 )
+                            consider(Priority::Building, cell.GetBuildingSlotCenter(slotX, slotY));
             }
         }
     }
 
-    if ( !best )
-        return false;
-
-    *out = best->_position;
-    return true;
-}
-
-bool ypabact_FindArtilleryShellTargetZone(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, vec3d *out)
-{
-    // Artillery always gives first priority to an enemy Host Station (robo), while
-    // still honouring artillery_shell_requires_radar. If none is valid, fall back
-    // to the nearest normal enemy in range.
-    if ( ypabact_ScanArtilleryShellTarget(unit, wproto, true, out) )
-        return true;
-
-    return ypabact_ScanArtilleryShellTarget(unit, wproto, false, out);
+    return bestPriority != Priority::None;
 }
 
 // Fire a single ballistic artillery shell at the target zone (with per-shell spread).
@@ -635,7 +640,7 @@ bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, const Worl
         // controls both ascent and descent; fall_delay is the earliest descent start.
         flight = shell->SetupArtilleryShellVerticalBarrage(
             launchPos, landing, wproto.artillery_shell_fall_delay,
-            wproto.artillery_shell_arc_height, wproto.artillery_shell_speed,
+            wproto.artillery_shell_vertical_height, wproto.artillery_shell_speed,
             wproto.artillery_shell_vertical_spread_x,
             wproto.artillery_shell_vertical_spread_z,
             !wproto.artillery_shell_airburst, wproto.artillery_shell_transfer_fade_inout);
@@ -712,7 +717,7 @@ void ypabact_QueueArtilleryShellTarget(NC_STACK_ypabact *unit, const World::TWea
 void ypabact_FireArtilleryShellShotAndAdvance(NC_STACK_ypabact *unit, int weaponId,
                                              const World::TWeapProto &wproto)
 {
-    int delay    = wproto.artillery_shell_barrage_shot_delay > 0 ? wproto.artillery_shell_barrage_shot_delay : 0;
+    int delay    = wproto.artillery_shell_barrage_shot_time > 0 ? wproto.artillery_shell_barrage_shot_time : 0;
     int cooldown = wproto.artillery_shell_barrage_cooldown  > 0 ? wproto.artillery_shell_barrage_cooldown  : 10000;
 
     if ( !ypabact_FireArtilleryShell(unit, weaponId, wproto, unit->_artillery_shell_target_center) )

@@ -457,6 +457,11 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
         return;
     }
 
+    // Terminal unit contact may move the impact to the collision surface.
+    // Airbursts keep the target altitude even when that happens.
+    if ( !_artilleryShellImpactOnSurface )
+        _position.y = _artilleryShellTargetPos.y;
+
     // Ground-burst artillery shells land on a point previously snapped to world
     // collision geometry. Reacquire that same real surface at impact time so
     // ground decals receive valid, short-lived skeleton/poly data; airbursts
@@ -492,10 +497,12 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
 
     // Timed impact: reuse the same path a normal bomb uses on contact for blast
     // damage/push, building/sector damage, VP dead/megadeth, chain FX and F9 debug rings.
-    bool applySectorDamage = !CollisionsDisabled() && (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) ||
-                              (_pSector && _pSector->PurposeType == cellArea::PT_NONE)) &&
-                             (_world->_userRobo->_owner == _owner || !_world->_isNetGame);
-    vec3d directDamagePos = _position;
+    const vec3d directDamagePos = _position;
+    const Common::Point impactCell = World::PositionToSectorID(directDamagePos);
+    const bool applySectorDamage = !CollisionsDisabled() && _world->IsSector(impactCell) &&
+        (!_world->_isNetGame || _world->_userRobo->_owner == _owner) &&
+        (!(_mislFlags & FLAG_MISL_IGNOREBUILDS) ||
+         _world->SectorAt(impactCell).PurposeType == cellArea::PT_NONE);
 
     if ( applySectorDamage )
     {
@@ -516,9 +523,8 @@ void NC_STACK_ypamissile::UpdateArtilleryShellBallistic(update_msg *arg)
 
     if ( applySectorDamage )
     {
-        yw_arg129 v25;
-        v25.pos.x    = directDamagePos.x;
-        v25.pos.z    = directDamagePos.z;
+        yw_arg129 v25{};
+        v25.pos      = directDamagePos;
         v25.field_10 = _energy;
         v25.unit     = _mislEmitter;
 

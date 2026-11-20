@@ -17,6 +17,8 @@ struct rsrc
 
     int32_t ref_cnt;
     void *data;
+    int textureArchiveSet = 0;
+    std::string variantKey;
 
     rsrc(const std::string &_name, bool _shared):
         name(_name),
@@ -68,7 +70,9 @@ public:
         RSRC_ATT_PRIVATELIST = 0x80001007,
         RSRC_ATT_TOTAIL = 0x80001008,
         RSRC_ATT_SKIP_SET_LOOSE_OVERRIDE = 0x80001009,
-        RSRC_ATT_SET_LOOSE_PNG_PATH = 0x8000100A
+        RSRC_ATT_SET_LOOSE_PNG_PATH = 0x8000100A,
+        RSRC_ATT_EXTERNAL_TEXTURE_FILE = 0x8000100B,
+        RSRC_ATT_EXTERNAL_VARIANT_KEY = 0x8000100C
     };
 
     //Set
@@ -83,6 +87,11 @@ public:
     {
         return resource == res->resource;
     }
+
+    // Last-resort texture source for external BASEs: the SET.BAS of another set (Set1).
+    // The world installs these; Load fills the archive resources, Release frees what nobody uses.
+    static void (*FallbackArchiveLoad)(int setId);
+    static void (*FallbackArchiveRelease)();
 
     //Data
 public:

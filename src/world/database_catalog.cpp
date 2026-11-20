@@ -205,7 +205,7 @@ double WeaponQuality(const TWeapProto &w,double count)
     {
         if(w.artillery_shell_barrage_shots<=0||w.artillery_shell_max_range<=0)return 0;
         interval=(Positive(w.artillery_shell_barrage_cooldown)+
-                  (w.artillery_shell_barrage_shots-1.0)*Positive(w.artillery_shell_barrage_shot_delay))/w.artillery_shell_barrage_shots;
+                  (w.artillery_shell_barrage_shots-1.0)*Positive(w.artillery_shell_barrage_shot_time))/w.artillery_shell_barrage_shots;
     }
     const double damage=Positive(w.energy)*targetMultiplier+Positive(w.blast_energy);
     // Reach is a bounded advantage, not a claim that every shot connects.

@@ -239,12 +239,8 @@ rsrc * NC_STACK_ilbm::READ_ILBM(IDVList &stak, IFFile *mfil, int transp)
     BMHD_type bmhd;
     VBMP_type vbmp;
 
-    rsrc *res = NC_STACK_rsrc::rsrc_func64(stak);
     int convertColor = stak.Get<int32_t>(NC_STACK_bitmap::BMD_ATT_CONVCOLOR, 0);
     int alphaPalette = stak.Get<int32_t>(ATT_ALPHAPALETTE, 1);
-
-    if (!res)
-        return nullptr;
 
     ResBitmap *bitm = nullptr;
 
@@ -270,6 +266,10 @@ rsrc * NC_STACK_ilbm::READ_ILBM(IDVList &stak, IFFile *mfil, int transp)
         ypa_log_out("ilbm.class: Not an ILBM or VBMP file!\n");
         return nullptr;
     }
+
+    rsrc *res = NC_STACK_rsrc::rsrc_func64(stak);
+    if (!res)
+        return nullptr;
 
     while ( true )
     {
@@ -926,10 +926,23 @@ rsrc * NC_STACK_ilbm::rsrc_func64(IDVList &stak)
 {
     const std::string resName = stak.Get<std::string>(RSRC_ATT_NAME, "");
     const std::string setLoosePngPath = stak.Get<std::string>(RSRC_ATT_SET_LOOSE_PNG_PATH, "");
+    const std::string externalTextureFile = stak.Get<std::string>(RSRC_ATT_EXTERNAL_TEXTURE_FILE, "");
     const char *reassignName = nullptr;
 
     if ( resName.empty() )
         return nullptr;
+
+    if (!externalTextureFile.empty())
+    {
+        IFFile texture(FSMgr::iDir::openFile(externalTextureFile, "rb"));
+        rsrc *loaded = texture.OK() ? READ_ILBM(stak, &texture, 0) : nullptr;
+        if (loaded && (!loaded->data || !static_cast<ResBitmap *>(loaded->data)->swTex))
+        {
+            rsrc_func65(loaded);
+            loaded = nullptr;
+        }
+        return loaded;
+    }
 
     if ( !setLoosePngPath.empty() )
         return ILBM_ReadPngOverride(this, stak, setLoosePngPath, 0);

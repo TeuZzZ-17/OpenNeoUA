@@ -984,6 +984,39 @@ NC_STACK_base *load_set_base()
     return base;
 }
 
+// Last-resort texture source of an external BASE: the SET.BAS of another set (Set1). It is
+// loaded only when a texture is found nowhere else and released right after the lookup;
+// the texture that was taken stays alive through its own reference.
+static NC_STACK_base *g_fallbackArchive = nullptr;
+
+static void yw_FallbackArchiveLoad(int setId)
+{
+    if ( g_fallbackArchive )
+        return;
+
+    const std::vector<std::string> scopes = IFFile::SuspendExternalBaseResourceScopes();
+    const std::string previous = Common::Env.SetPrefix("rsrc", fmt::sprintf("data:set%d", setId));
+    g_fallbackArchive = NC_STACK_base::LoadBaseFromFile("rsrc:objects/set.base");
+    Common::Env.SetPrefix("rsrc", previous);
+    IFFile::RestoreExternalBaseResourceScopes(scopes);
+}
+
+static void yw_FallbackArchiveRelease()
+{
+    if ( !g_fallbackArchive )
+        return;
+
+    g_fallbackArchive->Delete();
+    g_fallbackArchive = nullptr;
+}
+
+static const bool g_fallbackArchiveHooks = []
+{
+    NC_STACK_rsrc::FallbackArchiveLoad = yw_FallbackArchiveLoad;
+    NC_STACK_rsrc::FallbackArchiveRelease = yw_FallbackArchiveRelease;
+    return true;
+}();
+
 int sub_44A12C(NC_STACK_ypaworld *yw, NC_STACK_base *base)
 {
     for( NC_STACK_base * kd : base->GetKidList() )
@@ -3687,7 +3720,9 @@ void NC_STACK_ypaworld::LoadOverrideModels()
 
         std::string basName = fmt::sprintf("rsrc:objects/%s", tokens[2]);
 
+        IFFile::BeginExternalBaseResourceScope(uaSetDirectoryResolvedReadPath(basName));
         NC_STACK_base *model = Utils::ProxyLoadBase(basName);
+        IFFile::EndExternalBaseResourceScope();
 
         if ( !model )
             continue;

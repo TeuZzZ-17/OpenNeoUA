@@ -1,0 +1,54 @@
+; Rooted Sulgogar mortar platform. Materials resolve from the installed Set3.
+
+begin_sector
+    cells = CORE
+    ground = 5
+    map_symbol = 23
+end
+
+begin_piece CORE
+    states = intact|damaged|heavy|destroyed
+    destructible = 1
+end
+
+begin_model intact
+    visual = Sulg_Mortar_Platform_Intact.BASE
+    collision = SMCOL000.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 175|0|0|165
+    explosion = 176|110|75|112
+    explosion = 182|-115|-70|102
+end
+
+begin_model damaged
+    visual = Sulg_Mortar_Platform_Damaged.BASE
+    collision = SMCOL001.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 175|0|0|160
+    explosion = 176|125|-80|94
+    explosion = 182|-105|65|87
+end
+
+begin_model heavy
+    visual = Sulg_Mortar_Platform_Heavy.BASE
+    collision = SMCOL002.sklt
+    collision_mode = 0
+    map_symbol = 112
+    shield = 30
+    explosion = 183|0|0|160
+    explosion = 184|0|0|158
+    explosion = 181|-80|45|75
+end
+
+begin_model destroyed
+    visual = Sulg_Mortar_Platform_Destroyed.BASE
+    collision = SMCOL003.sklt
+    collision_mode = 0
+    map_symbol = 8
+    shield = 0
+    explosion = none
+end

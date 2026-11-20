@@ -78,7 +78,7 @@ bool setLooseIsReadMode(const std::string &mode)
            mode.find('a') == std::string::npos;
 }
 
-int32_t setLooseCurrentSetId()
+int32_t currentResourceSetId()
 {
     std::string prefix = setLooseLower(setLooseNormalizeSlashes(Common::Env.GetPrefix("rsrc")));
     const std::string tag = "data:set";
@@ -93,14 +93,23 @@ int32_t setLooseCurrentSetId()
     while (pos < prefix.size() && std::isdigit((unsigned char)prefix[pos]))
     {
         hasDigit = true;
+        if (setId > INT32_MAX / 10 ||
+            (setId == INT32_MAX / 10 && prefix[pos] - '0' > INT32_MAX % 10))
+            return 0;
         setId = setId * 10 + (prefix[pos] - '0');
         pos++;
     }
 
-    if (!hasDigit || setId < 1 || setId > 7)
+    if (!hasDigit || setId < 1)
         return 0;
 
     return setId;
+}
+
+int32_t setLooseCurrentSetId()
+{
+    const int32_t setId = currentResourceSetId();
+    return setId <= 7 ? setId : 0;
 }
 
 std::string setLooseAssetFromRequest(const std::string &filename, int32_t setId)
@@ -188,6 +197,7 @@ bool externalBaseFindUniqueRecursive(const std::string &dirPath, const std::stri
 }
 
 std::string setLooseFileName(const std::string &path);
+std::string externalVariantTextureFolder();
 
 bool externalBaseResolveLocalResource(const std::string &filename, const std::string &mode,
                                       std::string *resolved)
@@ -217,10 +227,25 @@ bool externalBaseResolveLocalResource(const std::string &filename, const std::st
     }
 
     const std::string &root = g_externalBaseResourceRoots.back();
+    const std::string extension = setLooseExtension(assetPath);
+
+    // ILBM textures follow the one shared lookup order (see IFFile::ResolveExternalTexture).
+    if (extension == "ilbm")
+    {
+        const IFFile::ExternalTexture texture = IFFile::ResolveExternalTexture(assetPath);
+        if (texture.path.empty())
+            return false;
+        *resolved = texture.path;
+        return true;
+    }
+
+    const bool isTexture = extension == "png";
+    const bool textureVariantLayout = isTexture && !externalVariantTextureFolder().empty();
 
     // 1) Honor the path authored inside the BASE exactly, relative to its directory.
     const std::string exact = root + "/" + assetPath;
-    if (FSMgr::iDir::fileExist(exact))
+    if ((!textureVariantLayout || setLooseLower(assetPath).compare(0, 9, "textures/") != 0)
+        && FSMgr::iDir::fileExist(exact))
     {
         *resolved = exact;
         return true;
@@ -239,17 +264,36 @@ bool externalBaseResolveLocalResource(const std::string &filename, const std::st
         return true;
     }
 
+    // A model's standard texture folder belongs to that model, even when a
+    // nested piece package also happens to contain a texture with this name.
+    const std::string inTextures = root + "/Textures/" + basename;
+    if (isTexture && (!textureVariantLayout || extension == "png") && FSMgr::iDir::fileExist(inTextures))
+    {
+        *resolved = inTextures;
+        return true;
+    }
+
     // 3) Finally search the BASE family's subdirectories by basename. Only a unique
     // match is accepted so two identically named resources never resolve at random.
     std::string recursiveMatch;
     int matchCount = 0;
-    externalBaseFindUniqueRecursive(root, basename, &recursiveMatch, &matchCount);
+    if (textureVariantLayout)
+    {
+        FSMgr::DirIter dir = FSMgr::iDir::readDir(root);
+        FSMgr::iNode *node = nullptr;
+        while (dir.getNext(&node) && matchCount < 2)
+        {
+            if (node->getType() == FSMgr::iNode::NTYPE_DIR && StriCmp(node->getName(), "Textures"))
+                externalBaseFindUniqueRecursive(node->getVPath(), basename, &recursiveMatch, &matchCount);
+        }
+    }
+    else
+        externalBaseFindUniqueRecursive(root, basename, &recursiveMatch, &matchCount);
     if (matchCount == 1)
     {
         *resolved = recursiveMatch;
         return true;
     }
-
     return false;
 }
 
@@ -1499,6 +1543,177 @@ void IFFile::EndExternalBaseResourceScope()
 bool IFFile::IsExternalBaseResourceScopeActive()
 {
     return !g_externalBaseResourceRoots.empty();
+}
+
+int IFFile::ActiveResourceSet()
+{
+    return currentResourceSetId();
+}
+
+namespace
+{
+std::string externalVariantTextureFolder()
+{
+    if (g_externalBaseResourceRoots.empty())
+        return {};
+
+    const std::string textures = g_externalBaseResourceRoots.back() + "/Textures";
+    // A SetN subfolder opts in, even when the active variant is missing.
+    // Plain Textures folders keep the legacy resource order.
+    FSMgr::DirIter dir = FSMgr::iDir::readDir(textures);
+    FSMgr::iNode *node = nullptr;
+    while (dir && dir.getNext(&node))
+    {
+        const std::string folder = setLooseLower(node->getName());
+        if (node->getType() == FSMgr::iNode::NTYPE_DIR &&
+            folder.size() > 3 && folder.compare(0, 3, "set") == 0 &&
+            folder.find_first_not_of("0123456789", 3) == std::string::npos)
+            return textures;
+    }
+    return {};
+}
+}
+
+std::string IFFile::ExternalAnimationVariantKey()
+{
+    const std::string textures = externalVariantTextureFolder();
+    if (textures.empty())
+        return {};
+    return textures + "/Set" + std::to_string(currentResourceSetId());
+}
+
+namespace
+{
+// "Set3" -> 3, anything else -> 0.
+int setFolderNumber(const std::string &folder)
+{
+    const std::string lower = setLooseLower(folder);
+    if (lower.size() < 4 || lower.compare(0, 3, "set") != 0 ||
+        lower.find_first_not_of("0123456789", 3) != std::string::npos)
+        return 0;
+    return std::atoi(lower.c_str() + 3);
+}
+
+// Set number of the Set<N> folder that holds the file below root (0 when it sits in no set folder).
+int setFolderOfPath(const std::string &root, const std::string &path)
+{
+    std::string relative = setLooseNormalizeSlashes(path);
+    if (relative.size() > root.size() && !StriCmp(relative.substr(0, root.size()), root))
+        relative.erase(0, root.size() + 1);
+
+    size_t start = 0;
+    while (true)
+    {
+        const size_t slash = relative.find('/', start);
+        if (slash == std::string::npos)
+            return 0;
+        if (const int number = setFolderNumber(relative.substr(start, slash - start)))
+            return number;
+        start = slash + 1;
+    }
+}
+
+void collectNamedTextures(const std::string &dir, const std::string &lowerName, std::vector<std::string> *out)
+{
+    FSMgr::DirIter it = FSMgr::iDir::readDir(dir);
+    if (!it)
+        return;
+
+    FSMgr::iNode *node = nullptr;
+    while (it.getNext(&node))
+    {
+        if (!node)
+            continue;
+
+        const std::string child = setLooseNormalizeSlashes(node->getVPath());
+        if (node->getType() == FSMgr::iNode::NTYPE_DIR)
+            collectNamedTextures(child, lowerName, out);
+        else if (node->getType() == FSMgr::iNode::NTYPE_FILE && setLooseLower(node->getName()) == lowerName)
+            out->push_back(child);
+    }
+}
+}
+
+IFFile::ExternalTexture IFFile::ResolveExternalTexture(const std::string &filename)
+{
+    ExternalTexture result;
+    if (g_externalBaseResourceRoots.empty())
+        return result;
+
+    const std::string name = setLooseFileName(setLooseNormalizeSlashes(filename));
+    if (name.empty() || setLooseExtension(name) != "ilbm")
+        return result;
+
+    const std::string &root = g_externalBaseResourceRoots.back();
+    const int setId = currentResourceSetId();
+
+    // 1) Textures/Set<N>/ of the active set.
+    if (setId)
+    {
+        const std::string variant = root + "/Textures/Set" + std::to_string(setId) + "/" + name;
+        if (FSMgr::iDir::fileExist(variant))
+        {
+            result.source = ExternalTexture::SET_FOLDER;
+            result.path = variant;
+            return result;
+        }
+    }
+
+    // 2) The BASE folder, then its default Textures/ folder.
+    for (const std::string &candidate : {root + "/" + name, root + "/Textures/" + name})
+    {
+        if (FSMgr::iDir::fileExist(candidate))
+        {
+            result.source = ExternalTexture::MODEL_FOLDER;
+            result.path = candidate;
+            return result;
+        }
+    }
+
+    // 3) Any subfolder, even another set's: same-set folder first, then alphabetical.
+    std::vector<std::string> found;
+    collectNamedTextures(root, setLooseLower(name), &found);
+    if (!found.empty())
+    {
+        std::sort(found.begin(), found.end(), [&](const std::string &a, const std::string &b)
+        {
+            const bool sameA = setId && setFolderOfPath(root, a) == setId;
+            const bool sameB = setId && setFolderOfPath(root, b) == setId;
+            if (sameA != sameB)
+                return sameA;
+            return setLooseLower(a) < setLooseLower(b);
+        });
+        const int chosenSet = setFolderOfPath(root, found.front());
+        result.source = ExternalTexture::SUBFOLDER;
+        result.path = found.front();
+        result.candidates = (int)found.size();
+        result.otherSet = chosenSet != 0 && chosenSet != setId;
+        return result;
+    }
+
+    // 4) Shared textures of external models of the active set (Models/Sector/Set<N>/Textures).
+    if (setId >= 1 && setId <= 7)
+    {
+        const std::string shared = "Data/Models/Sector/Set" + std::to_string(setId) + "/Textures/" + name;
+        if (FSMgr::iDir::fileExist(shared))
+        {
+            result.source = ExternalTexture::SHARED_POOL;
+            result.path = shared;
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> IFFile::SuspendExternalBaseResourceScopes()
+{
+    std::vector<std::string> saved;
+    saved.swap(g_externalBaseResourceRoots);
+    return saved;
+}
+
+void IFFile::RestoreExternalBaseResourceScopes(std::vector<std::string> saved)
+{
+    g_externalBaseResourceRoots.swap(saved);
 }
 
 bool IFFile::IsSetLooseOverride() const

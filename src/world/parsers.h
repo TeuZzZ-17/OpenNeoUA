@@ -295,6 +295,8 @@ protected:
     NC_STACK_ypaworld &_o;
     TWeapProto *_wpn;
     int32_t _wpnID;
+    float _pendingArtilleryArcHeight = -1.0f;
+    float _pendingArtilleryVerticalHeight = -1.0f;
     bool _isModify;
     int32_t _collID;
 };

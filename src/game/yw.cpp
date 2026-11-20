@@ -2027,6 +2027,18 @@ void NC_STACK_ypaworld::ApplyBuildingHealthChange(cellArea *cell, int bldX, int 
     }
 }
 
+vec3d cellArea::GetBuildingSlotCenter(int x, int y) const
+{
+    vec3d pos = World::SectorIDToCenterPos3(CellId);
+    pos.y = height;
+    if ( SectorType != 1 )
+    {
+        pos.x += (x - 1) * 300.0;
+        pos.z += (y - 1) * 300.0;
+    }
+    return pos;
+}
+
 void NC_STACK_ypaworld::ypaworld_func129(yw_arg129 *arg)
 {
     if ( arg->unit && IsSpectatorBact(arg->unit) )

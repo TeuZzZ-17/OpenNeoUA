@@ -365,8 +365,6 @@ float ypabact_ClampArtilleryShellAimDelta(float delta, float maxRot);
 void ypabact_AimArtilleryShellLauncherVisual(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, const vec3d &targetCenter, int frameTime, bool instant);
 vec3d ypabact_GetArtilleryShellLaunchPosition(NC_STACK_ypabact *unit);
 void ypabact_TriggerArtilleryShellFireVisual(NC_STACK_ypabact *unit);
-bool ypabact_IsArtilleryShellEnemy(NC_STACK_ypabact *unit, NC_STACK_ypabact *cand);
-bool ypabact_ScanArtilleryShellTarget(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, bool onlyHostStation, vec3d *out);
 bool ypabact_FindArtilleryShellTargetZone(NC_STACK_ypabact *unit, const World::TWeapProto &wproto, vec3d *out);
 bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, const World::TWeapProto &wproto, const vec3d &targetCenter);
 void ypabact_RefreshPendingArtilleryShellMarker(NC_STACK_ypabact *unit, const World::TWeapProto &wproto);

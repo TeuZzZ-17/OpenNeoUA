@@ -1,6 +1,6 @@
 // External .sector files: sec_type parsing, installation in the active SET, SET fallbacks,
 // reload stability. Run from the game root ("UA Rising"); it writes and removes
-// Data/Models/Sectors/_ExtSectorTest using one of our own models.
+// Data/Models/Sector/_ExtSectorTest using one of our own models.
 #include <bits/stdc++.h>
 #include <windows.h>
 #define protected public
@@ -19,7 +19,7 @@
 
 extern int RegisterNucleusClasses();
 
-static const char *DIR = "Data/Models/Sectors/_ExtSectorTest";
+static const char *DIR = "Data/Models/Sector/_ExtSectorTest";
 
 static bool CopyFile2(const std::string &from, const std::string &to)
 {
@@ -46,9 +46,9 @@ int main(int, char **)
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     // Fixture files first: the virtual file system is scanned at start-up.
     // (Our own Kyt flak model; SET models are referenced by name only).
-    CreateDirectoryA("Data/Models/Sectors", nullptr);
+    CreateDirectoryA("Data/Models/Sector", nullptr);
     CreateDirectoryA(DIR, nullptr);
-    const std::string model = "Data/Models/Base/New/Ghorkov/Kyt_Flak/Kyt_Flak_Normal/";
+    const std::string model = "Data/Models/Base/New/Ghorkov/Kyt_Flak/";
     bool fixture = CopyFile2(model + "Kyt_Flak_Normal.BASE", std::string(DIR) + "/Kyt_Flak_Normal.BASE") &&
                    CopyFile2(model + "KYTFLKN1.sklt", std::string(DIR) + "/KYTFLKN1.sklt") &&
                    CopyFile2("Data/Fonts/Sec4.PNG", std::string(DIR) + "/icon.png");
@@ -138,7 +138,7 @@ int main(int, char **)
     check(p[2].SecType == 7, "missing model falls back to the SET sector");
     if (core && corner)
     {
-        const std::string icon = "Models/Sectors/_ExtSectorTest/icon.png";
+        const std::string icon = "Models/Sector/_ExtSectorTest/icon.png";
         const TLego &coreLego = world->_legoArray[core->HPModels[0]];
         check(coreLego.MapIcon[0] == icon && coreLego.MapIcon[2] == icon, "model map_icon for every lego zoom");
         check(world->_legoArray[corner->HPModels[0]].MapIcon[0].empty(), "SET model keeps its map symbol");
@@ -169,7 +169,7 @@ int main(int, char **)
                           "Kyt_Flak_Normal.BASE", "KYTFLKN1.sklt", "icon.png"})
         std::remove((base + f).c_str());
     RemoveDirectoryA(DIR);
-    RemoveDirectoryA("Data/Models/Sectors");
+    RemoveDirectoryA("Data/Models/Sector");
 
     std::printf("%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

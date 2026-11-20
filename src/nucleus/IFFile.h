@@ -3,6 +3,8 @@
 #define IFFile_H_INCLUDED
 
 #include <deque>
+#include <string>
+#include <vector>
 #include "system/fsmgr.h"
 
 class IFFile : public FSMgr::iFileHandle
@@ -141,6 +143,24 @@ public:
     static void BeginExternalBaseResourceScope(const std::string &baseFilePath);
     static void EndExternalBaseResourceScope();
     static bool IsExternalBaseResourceScopeActive();
+    // Texture lookup of an external BASE (shared rule, same order as OpenNeoUA Studio):
+    //   1 Textures/Set<N>/ of the active set, 2 the BASE folder (then its Textures/),
+    //   3 any subfolder (same-set folder first, then alphabetical), 4 shared Sector/Set<N>/Textures.
+    // The caller then tries the active SET.BAS and finally the Set1 SET.BAS.
+    struct ExternalTexture
+    {
+        enum Source { NONE, SET_FOLDER, MODEL_FOLDER, SUBFOLDER, SHARED_POOL };
+        Source source = NONE;
+        std::string path;
+        int candidates = 0;     // same-named files found in the subfolders
+        bool otherSet = false;  // picked from the Set<M> folder of another set
+    };
+    static int ActiveResourceSet();
+    static ExternalTexture ResolveExternalTexture(const std::string &filename);
+    // Hides the external BASE scopes while another resource (a SET.BAS) is loaded inside a load.
+    static std::vector<std::string> SuspendExternalBaseResourceScopes();
+    static void RestoreExternalBaseResourceScopes(std::vector<std::string> saved);
+    static std::string ExternalAnimationVariantKey();
     static bool FindExternalBasePngFallback(const std::string &filename, std::string *outPath);
 
 protected:

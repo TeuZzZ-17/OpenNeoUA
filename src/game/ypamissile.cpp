@@ -1044,6 +1044,27 @@ void NC_STACK_ypamissile::DetonateWeaponCollision(NC_STACK_ypamissile *other)
     SetStateInternal(&deathState, false);
 }
 
+void NC_STACK_ypamissile::ChangeSectorEnergy(yw_arg129 *arg)
+{
+    // Use the weapon model here: a deflected round can leave the artillery flight path
+    // and reach this same damage path as an ordinary projectile.
+    if ( arg->field_10 > 0 && _owner != World::OWNER_0 &&
+         (_isArtilleryShellProjectile ||
+          ((size_t)_vehicleID < _world->GetWeaponsProtos().size() &&
+           _world->GetWeaponsProtos()[_vehicleID].IsArtilleryShell())) )
+    {
+        const Common::Point cellId = World::PositionToSectorID(arg->pos);
+        if ( _world->IsSector(cellId) )
+        {
+            const cellArea &cell = _world->SectorAt(cellId);
+            if ( cell.owner == _owner && cell.HasFunctionalBuilding() )
+                return;
+        }
+    }
+
+    NC_STACK_ypabact::ChangeSectorEnergy(arg);
+}
+
 const char *NC_STACK_ypamissile::GetAreaBuildingSkipReason(const cellArea &cell, int bldX, int bldY) const
 {
     if ( !cell.IsGamePlaySector() || cell.PurposeType == cellArea::PT_NONE || cell.PurposeType == cellArea::PT_CONSTRUCTING )

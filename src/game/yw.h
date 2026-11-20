@@ -1347,6 +1347,13 @@ struct cellArea
     {
         return (Flags & CF_BORDER) == 0;
     }
+
+    bool HasFunctionalBuilding() const
+    {
+        return PurposeType != PT_NONE && PurposeType != PT_CONSTRUCTING;
+    }
+
+    vec3d GetBuildingSlotCenter(int x, int y) const;
 };
 
 struct TCellFillerCh : TObjectCache

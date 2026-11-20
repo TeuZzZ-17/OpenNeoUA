@@ -69,10 +69,128 @@ bool Parse(TestWorld &world, const Engine::StringList &lines) {
     };
     return ScriptParser::ParseStringList(lines, handlers, 0);
 }
+
+void CheckArtilleryRules()
+{
+    struct DamageWorld : TestWorld {
+        std::vector<vec3d> damagePositions;
+        void ypaworld_func129(yw_arg129 *arg) override { damagePositions.push_back(arg->pos); }
+    };
+    auto fixture = std::make_unique<DamageWorld>();
+    auto &world = *fixture;
+    struct Shell : Missile {
+        using NC_STACK_ypamissile::UpdateArtilleryShellBallistic;
+        void SetState(setState_msg *) override {}
+        void ChangeSectorEnergy(yw_arg129 *arg) override { NC_STACK_ypamissile::ChangeSectorEnergy(arg); }
+    };
+
+    Unit source, aircraft, host;
+    const vec3d launch = World::SectorIDToCenterPos3({2, 3});
+    const vec3d airborne = World::SectorIDToCenterPos3({3, 3}) - vec3d::OY(300);
+    source.Bind(world, 1, 1, launch);
+    aircraft.Bind(world, 2, 2, airborne);
+    host.Bind(world, 2, 3, World::SectorIDToCenterPos3({5, 3}) - vec3d::OY(450));
+    host._bact_type = BACT_TYPES_ROBO;
+    auto &building = world.SectorAt({4, 3});
+    auto &nearBuilding = world.SectorAt({4, 4});
+    building.PurposeType = cellArea::PT_POWERSTATION;
+    nearBuilding.PurposeType = cellArea::PT_BUILDINGS;
+    building.owner = nearBuilding.owner = 2;
+    building.AddToViewMask(1);
+    nearBuilding.AddToViewMask(1);
+    world.SectorAt({3, 3}).AddToViewMask(1);
+
+    Check(Parse(world, {"new_weapon 1", "model = artillery_shell", "end"}), "artillery model parses");
+    auto &weapon = world.GetWeaponsProtos()[1];
+    weapon.artillery_shell_max_range = 4100;
+    weapon.artillery_shell_min_range = 400;
+    vec3d target;
+    auto selects = [&](const vec3d &expected) {
+        return ypabact_FindArtilleryShellTargetZone(&source, weapon, &target) && target == expected;
+    };
+    weapon.artillery_shell_requires_radar = 0;
+    Check(selects(host._position), "farther host station outranks a building and aircraft");
+    weapon.artillery_shell_requires_radar = 1;
+    Check(selects(building.GetBuildingSlotCenter(0, 0)), "nearest visible functional building outranks an aircraft");
+    NC_STACK_ypagun turret;
+    turret._bact_type = BACT_TYPES_GUN;
+    turret._status = BACT_STATUS_NORMAL;
+    turret._status_flg = 0;
+    turret._owner = building.owner;
+    turret._position = building.GetBuildingSlotCenter(0, 0) + vec3d(75, -300, 0);
+    turret._cellRef = building.unitsList.push_back(&turret);
+    weapon.artillery_shell_airburst = 1;
+    Check(selects(turret._position), "airburst uses the raised turret position above the building slot");
+    weapon.artillery_shell_airburst = 0;
+    Check(selects(building.GetBuildingSlotCenter(0, 0)), "ground burst still aims at the building slot");
+    turret._cellRef.Detach();
+    building.buildings_health.At(0, 0) = 0;
+    Check(selects(nearBuilding.GetBuildingSlotCenter(0, 0)), "destroyed building is skipped");
+    nearBuilding.owner = source._owner;
+    Check(selects(airborne), "same-faction building is skipped and aircraft keeps world Y");
+    weapon.artillery_shell_min_range = 1300;
+    Check(!ypabact_FindArtilleryShellTargetZone(&source, weapon, &target), "minimum range rejects the aircraft");
+
+    auto &impact = world.SectorAt({3, 3});
+    impact.PurposeType = cellArea::PT_POWERSTATION;
+    impact.owner = source._owner;
+    aircraft._radius = 40;
+    world._userRobo = &source;
+    for (const bool vertical : {false, true})
+    {
+        Shell shell;
+        aircraft._position = airborne - vec3d::OY(20);
+        shell.Bind(world, source, launch);
+        shell._status = BACT_STATUS_NORMAL;
+        shell._wrldSize = vec2d(8400, -8400);
+        shell._radius = 40;
+        shell._energy = 5000;
+        shell._pSector = &impact;
+        shell.SetBlast(400, 5000, 0);
+        const auto initialEnergy = aircraft._energy;
+        const int flight = vertical
+            ? shell.SetupArtilleryShellVerticalBarrage(launch, airborne, 0, 600, 1000, 0, 0, false)
+            : shell.SetupArtilleryShell(launch, airborne, 600, 1000, false);
+        update_msg tick{};
+        tick.frameTime = flight - 100;
+        shell.UpdateArtilleryShellBallistic(&tick);
+        tick.frameTime = 100;
+        shell.UpdateArtilleryShellBallistic(&tick);
+        Check(aircraft._energy < initialEnergy, vertical
+            ? "vertical airburst terminal contact deals direct damage"
+            : "ballistic airburst terminal contact deals direct damage");
+        Check(shell._position.y == airborne.y, "terminal contact preserves selected airburst Y in both modes");
+        Check(world.damagePositions.empty(), "same-faction power station receives neither direct nor blast damage");
+        aircraft._energy = initialEnergy;
+    }
+
+    Shell shell;
+    shell.Bind(world, source, launch);
+    shell.SetBlast(400, 5000, 0);
+    shell._position = impact.GetBuildingSlotCenter(0, 0);
+    yw_arg129 damage{};
+    damage.pos = shell._position;
+    damage.field_10 = 5000;
+    damage.unit = &source;
+    shell.ChangeSectorEnergy(&damage);
+    shell.ApplyBlastToBuildings();
+    Check(world.damagePositions.empty(), "a deflected artillery round still spares friendly functional buildings");
+    impact.owner = 2;
+    shell.ChangeSectorEnergy(&damage);
+    shell.ApplyBlastToBuildings();
+    Check(world.damagePositions.size() == 2, "enemy functional buildings take direct and blast damage");
+    impact.owner = source._owner;
+    impact.PurposeType = cellArea::PT_NONE;
+    world.damagePositions.clear();
+    shell.ChangeSectorEnergy(&damage);
+    shell.ApplyBlastToSectors();
+    Check(world.damagePositions.size() == 2, "friendly ordinary sectors still take direct and blast damage");
+}
 }
 
 int main(int argc, char **argv) {
     System::IniConf::Init();
+    CheckArtilleryRules();
     const int perMedal = argc>1 ? std::max(1, std::atoi(argv[1])) : 5;
     System::IniConf::GameEliteUnitKillsPerMedal.Value=std::to_string(perMedal);
     TestWorld world;

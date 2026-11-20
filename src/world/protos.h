@@ -1594,9 +1594,10 @@ struct TWeapProto
     int   artillery_shell_manual_mode_only = 0;     // 1 = disable the auto AI; the artillery shell only fires via manual map-click
     float artillery_shell_barrage_radius = 0.0;     // bombardment zone radius (marker size)
     int   artillery_shell_barrage_shots = 0;        // shells per barrage (<=0 = no barrage)
-    int   artillery_shell_barrage_shot_delay = 250; // ms between shells in the same barrage
+    int   artillery_shell_barrage_shot_time = 250; // ms between shells in the same barrage
     int   artillery_shell_barrage_cooldown = 10000; // ms cooldown after a barrage ends
-    float artillery_shell_arc_height = 2500.0;      // extra ballistic arc height / vertical barrage ascent height (engine units)
+    float artillery_shell_arc_height = 2500.0;      // extra ballistic arc height (engine units)
+    float artillery_shell_vertical_height = 2500.0; // vertical barrage ascent/descent height (engine units)
     float artillery_shell_speed = 0.0;              // artillery trajectory speed; <=0 keeps the legacy-safe internal timing fallback
     float artillery_shell_vertical_spread_x = 0.0;  // vertical_barrage only: random ascent tilt toward +/- world X, in degrees
     float artillery_shell_vertical_spread_z = 0.0;  // vertical_barrage only: random ascent tilt toward +/- world Z, in degrees

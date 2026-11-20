@@ -84,14 +84,14 @@
 !/Models/
 /Models/*
 !/Models/3ds/
-!/Models/Sectors/
+!/Models/Sector/
 !/Models/Base/
 /Models/Base/*
-!/Models/Base/new/
+!/Models/Base/New/
 
 # Lavoro in corso: texture con provenienza non verificata (derivate dall'aspetto di quelle originali).
 # Non pubblicare finche' non sono rifatte con pixel interamente nostri.
-/Models/Base/New/Sulgogar/Sulg_Power_Station/
+/Models/Sector/Sulg_Power/Station/
 # Radar_Organ rimossa dal repo (scelta utente, 17/11/2026): resta solo su disco per il gioco locale.
 /Models/Base/New/Sulgogar/Sulg_Radar_Organ/
 # Stesse texture derivate: bloccate per nome ovunque finiscano (anche copie in altre cartelle).
@@ -100,6 +100,17 @@
 [Ss][Gg][Tt][Oo][Rr][Nn].*
 [Ss][Gg][Aa][Ss][Hh]1.*
 [Ss][Gg][Tt][0-9][0-9][HhVv].*
+
+# Texture locali con palette del gioco incorporata o provenienza non verificata.
+/Models/Base/New/Sulgogar/Sulg_Spawner_Globe/Textures/**/[Ss][Gg][Cc][Oo][Rr][Ee].*
+/Models/Base/New/Sulgogar/Sulg_Spawner_Globe/Textures/**/[Ss][Gg][Pp].*
+/Models/Base/New/Sulgogar/Sulg_Spawner_Globe/Textures/**/[Ss][Gg][Vv][Aa][Pp].*
+/Models/Base/New/Sulgogar/Sulg_Spawner_Globe/Textures/**/[Ss][Ss][Cc][Hh][Ii][Tt].*
+/Models/Base/New/Sulgogar/Sulg_Spawner_Globe/Textures/**/[Ss][Ss][Dd][Ii][Mm].*
+/Models/Base/New/Sulgogar/Sulg_Spore_Mortar/Textures/**/[Ss][Mm][Gg][Ll][Oo][Ww].*
+/Models/Base/New/Sulgogar/Sulg_Venom_Missile/Textures/**/[Ss][Vv][Gg].*
+/Models/3ds/Textures/**/[Ss]moke.[Pp][Nn][Gg]
+/Models/3ds/Textures/**/[Ss]peck.[Pp][Nn][Gg]
 
 # ============================================================
 # FILE ROOT
@@ -133,3 +144,7 @@
 !/Levels/Bg/
 /Levels/Bg/*
 !/Levels/Bg/Workshop.png
+
+# Local Set3 model textures. Keep derived game assets out of Git.
+/Models/Sector/Set3/Textures/
+/Models/Base/New/Sulgogar/Sulg_Spore_Mortar/Textures/Set3/SGSKIN.ILBM
