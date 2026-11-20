@@ -168,6 +168,11 @@ size_t NC_STACK_rsrc::Init(IDVList &stak)
     if (!res)
         res = rsrc_func64(stak);
 
+    // An animation that is no loose file of the model (variant key set because the model has
+    // Textures/Set<N>) is a resource of the active SET.BAS, registered without a variant key.
+    if (!res && reuse_loaded == 1 && resourceClass == "bmpanim.class" && externalReference)
+        res = rsrc_find(&publicList, res_name);
+
     if ( res )
     {
         res->ref_cnt++;
