@@ -2851,7 +2851,7 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
         bacto->_damaged_snd_pitch_multiplier = vhcl.damaged_snd_pitch_multiplier;
         bacto->_damaged_fx_active = false;
         bacto->_spawn_units = vhcl.spawn_units;
-        bacto->_spawn_vehicle = vhcl.spawn_vehicle;
+        bacto->_spawn_vehicle.assign(vhcl.spawn_vehicle.begin(), vhcl.spawn_vehicle.end());
         bacto->_spawn_interval = vhcl.spawn_interval > 0 ? vhcl.spawn_interval : 5000;
         bacto->_spawn_trigger_radius = vhcl.spawn_trigger_radius > 0.0 ? vhcl.spawn_trigger_radius : 0.0;
         bacto->_spawn_random_pos = vhcl.spawn_random_pos > 0.0 ? vhcl.spawn_random_pos : 0.0;

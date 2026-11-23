@@ -960,7 +960,8 @@ struct TVhclProto
     float damaged_shot_time_malus = 0.0;
     float damaged_snd_pitch_multiplier = 1.0;
     int spawn_units = 0;
-    int16_t spawn_vehicle = 0;
+    // spawn_vehicle = id|id|...: each spawned unit picks one entry at random. Empty = no spawn.
+    std::vector<int16_t> spawn_vehicle;
     int spawn_interval = 5000;
     float spawn_trigger_radius = 0.0;
     float spawn_random_pos = 0.0;

@@ -1740,9 +1740,9 @@ void TestSpawnerCountdown()
     float progress = 0.0f;
     bool waiting = false;
     gun->_spawn_units = true;
-    gun->_spawn_vehicle = 0;
+    gun->_spawn_vehicle.clear();
     Check(!gun->GetCarrierSpawnCountdown(progress, waiting), "invalid spawn vehicle hides cooldown");
-    gun->_spawn_vehicle = proto.spawn_vehicle;
+    gun->_spawn_vehicle.assign(proto.spawn_vehicle.begin(), proto.spawn_vehicle.end());
     gun->_spawn_trigger_radius = proto.spawn_trigger_radius;
     gun->_spawn_interval = proto.spawn_interval;
     gun->_spawn_last_time = 1000;
@@ -1762,6 +1762,24 @@ void TestSpawnerCountdown()
           "cooldown observes the runtime minimum interval");
     gun->_status = BACT_STATUS_DEAD;
     Check(!gun->GetCarrierSpawnCountdown(progress, waiting), "dead spawners hide cooldown");
+}
+
+void TestSpawnVehicleList()
+{
+    auto world = std::make_unique<WorldProbe>();
+    Check(ParseVehicles(*world, {"new_vehicle 230", "model = gun", "gun_type = spawner",
+                                 "spawn_vehicle = 188|21|0|bad|75", "end",
+                                 "new_vehicle 231", "model = gun", "gun_type = spawner",
+                                 "spawn_vehicle = 71", "end",
+                                 "new_vehicle 232", "model = gun", "gun_type = spawner",
+                                 "spawn_vehicle = 0", "end"}),
+          "spawn_vehicle list fixture parses");
+    const auto &list = world->_vhclProtos[230].spawn_vehicle;
+    Check(list.size() == 3 && list[0] == 188 && list[1] == 21 && list[2] == 75,
+          "spawn_vehicle list skips invalid entries");
+    Check(world->_vhclProtos[231].spawn_vehicle.size() == 1 && world->_vhclProtos[231].spawn_vehicle[0] == 71,
+          "single spawn_vehicle keeps vanilla-style syntax");
+    Check(world->_vhclProtos[232].spawn_vehicle.empty(), "zero spawn_vehicle disables spawning");
 }
 
 void TestSpawnerImmobileByDefault()
@@ -1921,6 +1939,7 @@ void TestSpawnStateSound()
 int main() {
     TestSpawnVisual();
     TestSpawnerCountdown();
+    TestSpawnVehicleList();
     TestSpawnerImmobileByDefault();
     TestMortarCountdown();
     TestSpawnStateSound();

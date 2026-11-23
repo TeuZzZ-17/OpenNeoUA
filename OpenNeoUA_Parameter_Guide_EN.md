@@ -847,7 +847,7 @@ end
 Vehicle spawners position spawned units relative to the parent unit. Spawned units inherit the source's primary command, waypoint route and aggression, and reuse Genesis overlap separation, including instant spawns.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_vehicle = 5` — Vehicle ID spawned by this unit.
+- 🟢 `spawn_vehicle = 188|21|75` — Vehicle ID spawned by this unit. With several IDs separated by `|`, each spawned unit picks one at random; repeat an ID to make it more likely. Invalid or non-positive entries are skipped; if none is valid, nothing spawns. A single ID works as before.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `spawn_count = 3` — Number of units spawned simultaneously per activation. Default: 1.
 ------------------------------------------------------------------------------------------------------------------------

@@ -751,8 +751,21 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "spawn_vehicle") )
     {
-        int vehicleId = parser.stol(p2, nullptr, 0);
-        _vhcl->spawn_vehicle = vehicleId > 0 ? vehicleId : 0;
+        // "188" or "188|21|75": invalid or non-positive entries are skipped; repeating an id raises its odds.
+        _vhcl->spawn_vehicle.clear();
+        size_t start = 0;
+        while ( start <= p2.size() )
+        {
+            size_t end = p2.find('|', start);
+            if ( end == std::string::npos )
+                end = p2.size();
+
+            const int vehicleId = parser.stol(p2.substr(start, end - start), nullptr, 0);
+            if ( vehicleId > 0 )
+                _vhcl->spawn_vehicle.push_back(vehicleId);
+
+            start = end + 1;
+        }
     }
     else if ( !StriCmp(p1, "spawn_interval") )
     {
@@ -1942,7 +1955,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->damaged_shot_time_malus = 0.0;
         _vhcl->damaged_snd_pitch_multiplier = 1.0;
         _vhcl->spawn_units = 0;
-        _vhcl->spawn_vehicle = 0;
+        _vhcl->spawn_vehicle.clear();
         _vhcl->spawn_interval = 5000;
         _vhcl->spawn_trigger_radius = 0.0;
         _vhcl->spawn_random_pos = 0.0;

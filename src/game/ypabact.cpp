@@ -326,7 +326,7 @@ NC_STACK_ypabact *ypabact_FindLiveBactByGid(World::RefBactList &list, int32_t gi
 void NC_STACK_ypabact::ResetFeatureRuntimeState()
 {
     _spawn_units = 0;
-    _spawn_vehicle = 0;
+    _spawn_vehicle.clear();
     _spawn_interval = 5000;
     _spawn_trigger_radius = 0.0;
     _spawn_random_pos = 0.0;

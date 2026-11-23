@@ -131,6 +131,34 @@ void NC_STACK_ypabact::InheritSpawnOrders(NC_STACK_ypabact *parent)
     _spawnSeparationPending = true;
 }
 
+// A candidate is usable when it is a real vehicle and not the chain root (no endless spawn loop).
+static bool ypabact_IsCarrierSpawnVehicleUsable(NC_STACK_ypabact *carrier, int vehicleId)
+{
+    if ( vehicleId <= 0 || (size_t)vehicleId >= carrier->getBACT_pWorld()->GetVhclProtos().size() )
+        return false;
+
+    return !(carrier->_carrier_spawn_root_vehicle > 0 && vehicleId == carrier->_carrier_spawn_root_vehicle);
+}
+
+// Random pick among the usable spawn_vehicle entries; 0 when none is usable.
+static int ypabact_PickCarrierSpawnVehicle(NC_STACK_ypabact *carrier)
+{
+    int usable = 0;
+    for (int id : carrier->_spawn_vehicle)
+        if ( ypabact_IsCarrierSpawnVehicleUsable(carrier, id) )
+            usable++;
+
+    if ( usable == 0 )
+        return 0;
+
+    int pick = usable > 1 ? rand() % usable : 0;
+    for (int id : carrier->_spawn_vehicle)
+        if ( ypabact_IsCarrierSpawnVehicleUsable(carrier, id) && pick-- == 0 )
+            return id;
+
+    return 0;
+}
+
 bool ypabact_CanCarrierSpawn(NC_STACK_ypabact *carrier)
 {
     if ( !carrier || !carrier->getBACT_pWorld() )
@@ -139,13 +167,18 @@ bool ypabact_CanCarrierSpawn(NC_STACK_ypabact *carrier)
     if ( !carrier->_spawn_units )
         return false;
 
-    if ( carrier->_spawn_vehicle <= 0 || (size_t)carrier->_spawn_vehicle >= carrier->getBACT_pWorld()->GetVhclProtos().size() )
+    bool anyUsable = false;
+    for (int id : carrier->_spawn_vehicle)
+        if ( ypabact_IsCarrierSpawnVehicleUsable(carrier, id) )
+        {
+            anyUsable = true;
+            break;
+        }
+
+    if ( !anyUsable )
         return false;
 
     if ( carrier->_spawn_trigger_radius <= 0.0 )
-        return false;
-
-    if ( carrier->_carrier_spawn_root_vehicle > 0 && carrier->_spawn_vehicle == carrier->_carrier_spawn_root_vehicle )
         return false;
 
     if ( carrier->_owner == World::OWNER_0 )
@@ -256,8 +289,12 @@ NC_STACK_ypabact *ypabact_CreateCarrierSpawnedUnit(NC_STACK_ypabact *carrier, co
     if ( !world )
         return nullptr;
 
+    const int vehicleId = ypabact_PickCarrierSpawnVehicle(carrier);
+    if ( vehicleId <= 0 )
+        return nullptr;
+
     ypaworld_arg146 arg146;
-    arg146.vehicle_id = carrier->_spawn_vehicle;
+    arg146.vehicle_id = vehicleId;
     arg146.pos = pos;
 
     NC_STACK_ypabact *unit = world->ypaworld_func146(&arg146);

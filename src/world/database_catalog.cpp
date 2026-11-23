@@ -274,10 +274,16 @@ std::array<double,4> VehicleQuality(int id,const std::vector<TVhclProto> &vehicl
         }
     };
     mounts(v.unit_guns);if(v.RoboProto)mounts(v.RoboProto->guns);
-    if(v.spawn_units&&v.spawn_count>0&&v.spawn_vehicle>0&&v.spawn_interval>0)
+    if(v.spawn_units&&v.spawn_count>0&&!v.spawn_vehicle.empty()&&v.spawn_interval>0)
     {
-        const auto spawned=VehicleQuality(v.spawn_vehicle,vehicles,weapons,stack);
-        result[3]+=std::sqrt(spawned[0]*spawned[1])*v.spawn_count*1000.0/v.spawn_interval;
+        // Random pick per spawn: average power over the candidates.
+        double power=0.0;
+        for(const auto spawnId:v.spawn_vehicle)
+        {
+            const auto spawned=VehicleQuality(spawnId,vehicles,weapons,stack);
+            power+=std::sqrt(spawned[0]*spawned[1]);
+        }
+        result[3]+=power/v.spawn_vehicle.size()*v.spawn_count*1000.0/v.spawn_interval;
     }
     stack.erase(id);
     for(auto &value:result)value=Positive(value);

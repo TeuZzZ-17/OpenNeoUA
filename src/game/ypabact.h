@@ -1292,7 +1292,7 @@ public:
     // squad members during the current/subsequent update frames.
     bool _suicide_handoff_wait_fire_release = false;
     int _spawn_units;
-    int _spawn_vehicle;
+    std::vector<int> _spawn_vehicle; // candidate ids, one picked at random per spawned unit
     int _spawn_interval;
     float _spawn_trigger_radius;
     float _spawn_random_pos;
