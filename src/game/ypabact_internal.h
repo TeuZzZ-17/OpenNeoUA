@@ -264,6 +264,7 @@ NC_STACK_yparobo *ypabact_GetSpawnAtDeathOwnerRobo(NC_STACK_ypabact *parent);
 NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const vec3d &pos);
 void ypabact_AttachSpawnAtDeathLeader(NC_STACK_ypabact *parent, NC_STACK_ypabact *leader);
 void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent);
+void ypabact_KillCarrierSpawnedUnits(NC_STACK_ypabact *carrier);
 bool ypabact_GetRandomFXSpawnCount(int configuredMin, int configuredMax, int &spawnCount);
 void ypabact_ShuffleDamagedVisuals(std::vector<TDamagedVisualRef> &visuals);
 void ypabact_SpawnSingleDamagedFX(NC_STACK_ypabact *bact, NC_STACK_ypaworld *world, const TDamagedVisualRef &visual);

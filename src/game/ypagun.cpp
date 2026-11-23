@@ -876,6 +876,10 @@ void NC_STACK_ypagun::Die()
 {
     if ( !(_status_flg & BACT_STFLAG_DEATH1) )
     {
+        // Before the base Die(), which forgets the spawned-unit list.
+        if ( IsSpawner() )
+            ypabact_KillCarrierSpawnedUnits(this);
+
         NC_STACK_ypabact::Die();
 
         int v6 = 1;

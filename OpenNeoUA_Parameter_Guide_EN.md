@@ -532,7 +532,7 @@ Three-stage attack loop replacing the old sector/bact pairs: attack, retreat whe
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gun_type = power` — Compatible with power and power_radius. The gun does not attack but supplies energy to nearby units.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gun_type = spawner` — Passive gun that uses the vehicle spawn settings. It is immobile unless `maxrot` is explicitly authored; only then does it rotate continuously around its mount. It does not aim or fire. With a valid spawn setup, it can show the world cooldown bar.
+- 🟢 `gun_type = spawner` — Passive gun that uses the vehicle spawn settings. It is immobile unless `maxrot` is explicitly authored; only then does it rotate continuously around its mount. It does not aim or fire. With a valid spawn setup, it can show the world cooldown bar. When the spawner dies, every unit it spawned and that is still alive dies with it, with no exception (invulnerable, spawn-protected, or still spawning); their at-death spawns are cancelled.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gun_levitate = 0` — gun/flak classes only: 1 prevents falling without a supporting surface. 0, absent or invalid = normal falling behavior.
 ------------------------------------------------------------------------------------------------------------------------

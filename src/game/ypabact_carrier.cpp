@@ -114,6 +114,34 @@ int ypabact_CountCarrierSpawnedUnits(NC_STACK_ypabact *carrier)
     return aliveCount;
 }
 
+// OpenNeoUA: a dying gun_type=spawner takes every unit it spawned with it, no exceptions
+// (invulnerable, spawn-protected or still in Genesis). Die() is called directly, so damage
+// rules cannot save a child; its at-death spawn is cancelled so nothing survives it. No
+// killer is passed: wiping a brood must not award kill marks per child. Skipped during level
+// teardown, which already owns the whole hierarchy.
+void ypabact_KillCarrierSpawnedUnits(NC_STACK_ypabact *carrier)
+{
+    NC_STACK_ypaworld *world = carrier->getBACT_pWorld();
+
+    if ( !world || world->IsLevelTeardownInProgress() )
+        return;
+
+    // Copy: Die() must not invalidate the iteration if it touches the carrier's list.
+    const std::vector<int32_t> gids = carrier->_carrier_spawned_gids;
+
+    for (int32_t gid : gids)
+    {
+        NC_STACK_ypabact *unit = ypabact_FindLiveBactByGid(world->_unitsList, gid);
+
+        if ( !ypabact_IsCarrierSpawnAliveUnit(unit) )
+            continue;
+
+        unit->_at_death_spawn_done = true;
+        unit->_energy = 0;
+        unit->Die();
+    }
+}
+
 void NC_STACK_ypabact::InheritSpawnOrders(NC_STACK_ypabact *parent)
 {
     if (!parent) return;
