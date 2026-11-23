@@ -1,73 +1,86 @@
-; External Sulgogar power station; impact bursts occur on state transitions.
+; Sulg_Power: sector 53 of Set3
 ; Files are searched beside this file first, then in the SET of the map.
 
 begin_sector
     cells = piece1
     ground = 5
     map_symbol = 23
+    map_icon = Map_Icons/sector_0.svg|Map_Icons/sector_1.svg
 end
 
 begin_piece piece1
-    states = SG_POWER|SGxPOWER|SGyPOWER|SGzPOWER
+    states = Sulg_Power_Station_Intact|Sulg_Power_Station_Damaged|Sulg_Power_Station_Heavy|Sulg_Power_Station_Destroyed
     destructible = 1
 end
 
-begin_model SG_POWER
-    visual = Station/Sulg_Power_Station_Intact.BASE
+begin_model Sulg_Power_Station_Intact
+    visual = Sulg_Power_Station_Intact.BASE
     collision = SPCX0000.sklt
     collision_mode = 0
     map_symbol = 112
     shield = 30
-    explosion = 175|0|0|555
-    explosion = 184|0|0|555
-    explosion = 176|173|-120|435
-    explosion = 180|-195|-98|375
-    explosion = 178|0|0|510
-    explosion = 181|135|180|285
-    explosion = 182|-150|90|375
-    explosion = 179|120|-105|180
+    map_icon = Map_Icons/Sulg_Power_Station_Intact_0.svg|Map_Icons/Sulg_Power_Station_Intact_1.svg|Map_Icons/Sulg_Power_Station_Intact_2.svg
+    begin_effects
+        explosion = 175|0|0|555
+        explosion = 184|0|0|555
+        explosion = 176|173|-120|435
+        explosion = 180|-195|-98|375
+        explosion = 178|0|0|510
+        explosion = 181|135|180|285
+        explosion = 182|-150|90|375
+        explosion = 179|120|-105|180
+    end
 end
 
-begin_model SGxPOWER
-    visual = Station/Sulg_Power_Station_Damaged.BASE
+begin_model Sulg_Power_Station_Damaged
+    visual = Sulg_Power_Station_Damaged.BASE
     collision = SPCX0001.sklt
     collision_mode = 0
     map_symbol = 112
     shield = 30
-    explosion = 175|30|0|435
-    explosion = 184|30|0|435
-    explosion = 176|-150|-150|315
-    explosion = 180|218|-105|270
-    explosion = 180|-195|90|255
-    explosion = 178|38|0|435
-    explosion = 181|-135|180|240
-    explosion = 182|150|-180|270
-    explosion = 179|0|135|165
+    map_icon = Map_Icons/Sulg_Power_Station_Damaged_0.svg|Map_Icons/Sulg_Power_Station_Damaged_1.svg|Map_Icons/Sulg_Power_Station_Damaged_2.svg
+    begin_effects
+        explosion = 175|30|0|435
+        explosion = 184|30|0|435
+        explosion = 176|-150|-150|315
+        explosion = 180|218|-105|270
+        explosion = 180|-195|90|255
+        explosion = 178|38|0|435
+        explosion = 181|-135|180|240
+        explosion = 182|150|-180|270
+        explosion = 179|0|135|165
+    end
 end
 
-begin_model SGyPOWER
-    visual = Station/Sulg_Power_Station_Heavy.BASE
+begin_model Sulg_Power_Station_Heavy
+    visual = Sulg_Power_Station_Heavy.BASE
     collision = SPCX0002.sklt
     collision_mode = 0
     map_symbol = 112
     shield = 30
-    explosion = 183|45|0|240
-    explosion = 184|45|0|240
-    explosion = 175|-120|-60|195
-    explosion = 176|188|-120|150
-    explosion = 180|-210|105|120
-    explosion = 178|30|0|225
-    explosion = 181|143|165|150
-    explosion = 182|-143|-165|150
-    explosion = 179|165|-60|90
-    explosion = 178|-135|105|105
+    map_icon = Map_Icons/Sulg_Power_Station_Heavy_0.svg|Map_Icons/Sulg_Power_Station_Heavy_1.svg|Map_Icons/Sulg_Power_Station_Heavy_2.svg
+    begin_effects
+        explosion = 183|45|0|240
+        explosion = 184|45|0|240
+        explosion = 175|-120|-60|195
+        explosion = 176|188|-120|150
+        explosion = 180|-210|105|120
+        explosion = 178|30|0|225
+        explosion = 181|143|165|150
+        explosion = 182|-143|-165|150
+        explosion = 179|165|-60|90
+        explosion = 178|-135|105|105
+    end
 end
 
-begin_model SGzPOWER
-    visual = Station/Sulg_Power_Station_Destroyed.BASE
+begin_model Sulg_Power_Station_Destroyed
+    visual = Sulg_Power_Station_Destroyed.BASE
     collision = Skeleton/BP_MMMMM.sklt
     collision_mode = 0
     map_symbol = 8
     shield = 0
-    explosion = none
+    map_icon = Map_Icons/Sulg_Power_Station_Destroyed_0.svg|Map_Icons/Sulg_Power_Station_Destroyed_1.svg|Map_Icons/Sulg_Power_Station_Destroyed_2.svg
+    begin_effects
+        explosion = none
+    end
 end

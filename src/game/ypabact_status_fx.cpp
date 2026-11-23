@@ -756,22 +756,25 @@ void ypabact_SpawnEnergyStatusFXEvent(NC_STACK_ypabact *bact,
         }
 
         // External visual priority matches the shared runtime rule:
-        // valid 3DS -> valid BASE -> legacy VP.
-        world->SpawnAttachedTransientVP(config.vp,
-                                        bact,
-                                        localOffset,
-                                        config.duration,
-                                        1.0,
-                                        true,
-                                        config.tint,
-                                        axisScale,
-                                        config.spin,
-                                        false,
-                                        vec3d(0.0, 0.0, 0.0),
-                                        true,
-                                        NC_STACK_ypaworld::TTransientVPParticleControls(),
-                                        true, 0, 0, config.mesh3ds,
-                                        config.basePath);
+        // valid 3DS -> valid BASE -> legacy VP. Same independent, rising,
+        // fading world-space particle as the procedural +/- symbol above,
+        // instead of an attached VP glued to (and rotating with) the unit.
+        const vec3d spawnPos = bact->_position +
+                               bact->_rotation.Transpose().Transform(localOffset);
+        world->SpawnTransientVisual(config.vp,
+                                    config.mesh3ds,
+                                    config.basePath,
+                                    spawnPos,
+                                    bact->_rotation,
+                                    config.duration,
+                                    1.0,
+                                    config.tint,
+                                    axisScale,
+                                    config.spin,
+                                    NC_STACK_ypaworld::TTransientVPParticleControls(),
+                                    config.fade_in,
+                                    config.fade_out,
+                                    vec3d(0.0, -(double)config.rise_speed, 0.0));
     }
 }
 

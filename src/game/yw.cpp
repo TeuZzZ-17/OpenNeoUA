@@ -2693,6 +2693,7 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
         // available to non-collision systems without silently becoming a hitbox.
         bacto->_disableCollision = vhcl.disable_collision;
         bacto->_disable_genesis = vhcl.disable_genesis;
+        bacto->_air_dead = vhcl.air_dead;
         bacto->_building_time = vhcl.building_time;
         bacto->ApplyCompoundCollision(vhcl.coll, vhcl.radius_defined);
 

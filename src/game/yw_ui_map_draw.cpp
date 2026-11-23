@@ -786,7 +786,12 @@ void sub_4F6DFC(NC_STACK_ypaworld *yw, CmdStream *cur, int height, int width, NC
 
         sub_4F6980(cur, bact->_position.x, bact->_position.z, v8, height, width);
 
-        if ( bact->_bact_type != BACT_TYPES_MISSLE && robo_map.field_1EE > 2 )
+        // map_direction = no (static units such as spawners): no view triangle.
+        const int dirProtoId = bact->_bact_type == BACT_TYPES_MISSLE ? -1
+                             : ResolveUnitDisplayVehicleProtoId(yw, bact);
+        const bool showDirection = dirProtoId < 0 || yw->_vhclProtos[dirProtoId].map_direction;
+
+        if ( bact->_bact_type != BACT_TYPES_MISSLE && robo_map.field_1EE > 2 && showDirection )
         {
             SDL_Color clr = yw->GetColor(bact->_owner);
 
@@ -1863,25 +1868,16 @@ void yw_RenderExternalSectorMapIcons(NC_STACK_ypaworld *yw)
     const int sectorPx = 4 << zoom;
     const int contentW = robo_map.w - robo_map.field_24C;
     const int contentH = robo_map.h - robo_map.field_250;
-    const int originX = (int)(robo_map.field_1D8 / robo_map.field_1E0) - contentW / 2;
-    const int originY = (int)(-robo_map.field_1DC / robo_map.field_1E4) - contentH / 2;
-    const int screenX = robo_map.x + robo_map.field_244 - originX;
-    const int screenY = robo_map.y + robo_map.field_23C - originY;
-    const float halfW = (float)yw->_screenSize.x * 0.5f;
-    const float halfH = (float)yw->_screenSize.y * 0.5f;
+    // Match sb_0x4f6650__sub0 integer origin math exactly so custom icons stay locked to the tile grid.
+    const int originX = (int)(robo_map.field_1D8 / robo_map.field_1E0 - (contentW / 2));
+    const int originY = (int)(-robo_map.field_1DC / robo_map.field_1E4 - (contentH / 2));
+    const int screenX = (robo_map.x + robo_map.field_244) - originX;
+    const int screenY = (robo_map.y + robo_map.field_23C) - originY;
 
     auto draw = [&](const std::string &file, int left, int top, int size)
     {
         NC_STACK_bitmap *bitmap = StatusIconLoad(file, size, size);
-        if ( !bitmap || !bitmap->GetBitmap() )
-            return;
-        GFX::rstr_arg204 arg;
-        arg.pbitm = bitmap->GetBitmap();
-        arg.float4 = Common::FRect(-1.0, -1.0, 1.0, 1.0);
-        arg.float14 = Common::FRect(left / halfW - 1.0f, top / halfH - 1.0f,
-                                    (left + size) / halfW - 1.0f, (top + size) / halfH - 1.0f);
-        arg.opacity = 255;
-        GFX::Engine.raster_func204(&arg);
+        StatusIconRenderBitmap(yw, bitmap, left, top, size, 255);
     };
 
     const int firstX = std::max(0, originX / sectorPx - 1);

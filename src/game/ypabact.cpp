@@ -1939,7 +1939,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 // In that case only actual Genesis or beam playback receives plasma tint.
                 const bool genesisShared = _vp_genesis == _vp_normal || _vp_genesis == _vp_fire ||
                     _vp_genesis == _vp_wait || _vp_genesis == _vp_dead || _vp_genesis == _vp_megadeth;
-                const bool genesisState = (_status == BACT_STATUS_CREATE && !_disable_genesis) ||
+                const bool genesisState = (_status == BACT_STATUS_CREATE && !DisableCreationGenesis()) ||
                     _status == BACT_STATUS_BEAM;
                 if ( body == _current_vp && body->Bas == _vp_genesis &&
                      (!genesisShared || genesisState) )
@@ -2330,7 +2330,8 @@ void NC_STACK_ypabact::Renew()
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _collisionShape.reset();
     _disableCollision = false;
-    _disable_genesis = false;
+    _disable_genesis = 0;
+    _air_dead = false;
     _building_time = -1.0f;
     _shapeCollisionDamageStamp = -1;
     ClearPlayerSprintPitchExtra();
@@ -2490,8 +2491,8 @@ void NC_STACK_ypabact::CreationTimeUpdate(update_msg *arg)
     if (!_genesisGroundChecked) PlaceGenesisAboveTerrain();
     if (ypabact_IsGenesisSeparationVehicle(this) && _host_station)
         _genesisExitPending = true;
-    // disable_genesis: no scale-in, the creation phase is over on the first update.
-    if ( _disable_genesis )
+    // disable_genesis = 1: no scale-in, the creation phase is over on the first update.
+    if ( DisableCreationGenesis() )
         _scale_time = 0;
     _scale_time -= arg->frameTime;
 
@@ -3101,8 +3102,8 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
     if ( arg->newStatus == BACT_STATUS_CREATE && 4 != _vp_active )
     {
         _vp_active = arg->newStatus;
-        // disable_genesis: the unit shows its normal model instead of the Genesis plasma.
-        SetVP(_disable_genesis ? _vp_normal : _vp_genesis);
+        // disable_genesis = 1: the unit shows its normal model instead of the Genesis plasma.
+        SetVP(DisableCreationGenesis() ? _vp_normal : _vp_genesis);
 
         if ( _soundFlags & 2 )
         {
@@ -3136,7 +3137,7 @@ size_t NC_STACK_ypabact::SetStateInternal(setState_msg *arg)
             SFXEngine::SFXe.sub_424000(&_soundcarrier, 7);
         }
 
-        if ( !(_soundFlags & 8) && !_disable_genesis )
+        if ( !(_soundFlags & 8) && !DisableCreationGenesis() )
         {
             _soundFlags |= 8;
             SFXEngine::SFXe.startSound(&_soundcarrier, 3);

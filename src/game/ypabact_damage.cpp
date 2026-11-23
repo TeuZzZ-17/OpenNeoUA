@@ -2192,7 +2192,8 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
     const int deadLifetimeMs = _inlinePhysicalFX ?
         (_inlinePhysicalLifetimeMs > 0 ? _inlinePhysicalLifetimeMs : 30000) : 5000;
 
-    if ( _status_flg & BACT_STFLAG_LAND ||
+    const bool airDead = _air_dead && ypabact_IsAirVehicle(this);
+    if ( airDead || _status_flg & BACT_STFLAG_LAND ||
          (_clock - _dead_time > deadLifetimeMs && _status_flg & BACT_STFLAG_DEATH1 ) )
     {
         if ( !(_status_flg & BACT_STFLAG_DEATH2) )
@@ -2207,8 +2208,8 @@ void NC_STACK_ypabact::DeadTimeUpdate(update_msg *arg)
 
         _status_flg |= BACT_STFLAG_LAND;
 
-        // disable_genesis: the wreck falls as usual but leaves no death plasma.
-        if ( _owner && _bact_type != BACT_TYPES_MISSLE && _vp_genesis && !_disable_genesis )
+        // disable_genesis (1 or at_death): the wreck falls as usual but leaves no death plasma.
+        if ( _owner && _bact_type != BACT_TYPES_MISSLE && _vp_genesis && !DisableDeathGenesis() )
         {
             int a2 = GetPlasmaDurationMs();
 

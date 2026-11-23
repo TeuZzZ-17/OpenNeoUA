@@ -187,6 +187,8 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `type_icon = A` — Icon glyph key of the unit in lists and on the map, mapped through TYPE_NS.FON into the H_FINDER graphic. Vanilla reads only the first byte, so use a plain ASCII character (letter, digit or a symbol such as `]`). A Unicode symbol or `U+XXXX` (for example `U+2206`) is OpenNeoUA-only: vanilla reads it as `U`, the Radar Station icon. Prefer `U+XXXX`, because a pasted symbol can be corrupted by the editor encoding. `;`, `=`, `#` and `\` cannot stand bare in a script: write `U+003B`, `U+003D`, `U+0023` and `U+005C`. An unreadable icon falls back to `A`; `U+FFFD` is rejected. In the .FON write new keys as a single byte and keep each `U+XXXX` line above the `U` line. The value `I` keeps the unit out of the Database.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `map_direction = yes` — no hides the view triangle (facing direction) of the unit on the map and minimap, for static units such as spawners. The unit icon stays. Missing or yes = vanilla.
+------------------------------------------------------------------------------------------------------------------------
 - 🔵 `vo_type = 1` — Selects the voice set used for the unit's spoken messages. It is read as a hexadecimal number.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `wireframe = wireless/tiger.skl` — Wireframe outline of the unit used by the in-game interface (unit list and wireless panel). Path to a skeleton file.
@@ -289,7 +291,9 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `push_resistance = 0.5` — Resistance to weapon and event push, 0-1 (above 1 is clamped). Push intensity is multiplied by (1 - push_resistance): 0 = full push, 0.5 = half intensity (a quarter of the displacement). Also applies to Host Stations; no use for static guns. Reference values: tiny scouts 0-0.10, light 0.15-0.30, medium 0.30-0.60, heavy 0.50-0.65, super-heavy 0.85-0.90.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `disable_genesis = 1` — Vehicle only: 1 removes the Genesis plasma. The unit appears instantly and fully formed (no plasma, scale-in or sound; its `dest_fx` create effects still play) and on death releases no plasma, while the wreck still falls and explodes. Works for every class, Host Stations included. 0, absent or invalid = vanilla.
+- 🟢 `disable_genesis = 1` — Vehicle only: `1` removes the Genesis plasma on both creation and death (the unit appears instantly and fully formed with no plasma, scale-in or sound, though its `dest_fx` create effects still play, and on death it releases no plasma while the wreck still falls and explodes); `at_death` (case-insensitive) removes only the death plasma while keeping normal creation Genesis. Works for every class, Host Stations included. `0`, absent or invalid = vanilla.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `air_dead = 1` — Flying Vehicles only (Flyer and UFO): `1` skips the falling wreck phase (`CrashOrLand`) on death so the unit triggers its terminal `DEATH2` state directly in mid-air at its death position (preserving the player destroyed-unit camera/message in the sky). Combine with `disable_genesis = at_death` to also suppress the mid-air death plasma. Ground vehicles ignore it; `0`, absent or invalid = vanilla.
 ------------------------------------------------------------------------------------------------------------------------
 
 Mobile Power turns a vehicle into an energy source for itself and nearby allies.
@@ -1731,7 +1735,7 @@ A `.sector` file describes one complete sector outside SET.BAS: cells, damage st
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `map_symbol = 3` — Map symbol 0-255 of the sector. Default 0. Inside a `begin_model` block it is the symbol of that model, default inherited from the set model or 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `map_icon = map/sector.png` — Optional PNG or SVG map icon replacing `map_symbol`, beside the .sector or a `Data/...` path. In `begin_sector`: the symbol of the whole sector at map zoom 1 and 2 (4 and 8 px); 1 file for both or 2 files `zoom1|zoom2`. In `begin_model`: the symbol of a building cell at map zoom 3, 4 and 5 (4, 8 and 16 px, 3 x 3 cells for one large cell), following the damage state; 1 file for all or 3 files `zoom3|zoom4|zoom5`. SVG is drawn at the exact size, PNG is scaled; transparent pixels show the map. Absent or missing file = the `map_symbol` glyph (logged).
+- 🟢 `map_icon = Map_Icons/sector.svg` — Optional PNG or SVG map icon replacing `map_symbol`, beside the .sector or a `Data/...` path. In `begin_sector`: the symbol of the whole sector at map zoom 1 and 2 (4 and 8 px); 1 file for both or 2 files `zoom1|zoom2`. In `begin_model`: the symbol of a building cell at map zoom 3, 4 and 5 (4, 8 and 16 px, 3 x 3 cells for one large cell), following the damage state; 1 file for all or 3 files `zoom3|zoom4|zoom5`. SVG is rasterized at each target pixel size (`StatusIconLoad`), PNG is scaled; transparent pixels show the map. Absent or missing file = the `map_symbol` glyph (logged).
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `begin_piece CORE` — Opens a piece: what fills one cell, with its four damage states. The name is unique among pieces and has no spaces. Close it with `end`.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1749,7 +1753,9 @@ A `.sector` file describes one complete sector outside SET.BAS: cells, damage st
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shield = 60` — Damage reduction 0-100 % of the model. Default inherited or 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `explosion = 49|0|0|100` — Destruction effect `ID|x|z|height` with the same numeric order as a SET.SDF effect group. The ID resolves Bruch first, then the legacy Vehicle. Repeat the line for more explosions; the first line replaces the inherited ones and `explosion = none` removes them.
+- 🟢 `begin_effects` — Optional block inside `begin_model` grouping its destruction `explosion = ...` lines (close with `end`). Opening it replaces inherited explosions (put `explosion = none` inside when no explosions are wanted). Legacy flat `explosion = ...` directly inside `begin_model` remains accepted.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `explosion = 49|0|0|100` — Destruction effect `ID|x|z|height` with the same numeric order as a SET.SDF effect group, placed inside `begin_effects` (or directly in `begin_model`). The ID resolves Bruch first, then the legacy Vehicle. Repeat the line for more explosions; the first line replaces the inherited ones and `explosion = none` removes them.
 ------------------------------------------------------------------------------------------------------------------------
 
 ```
@@ -1772,7 +1778,9 @@ begin_model core
     visual = Kyt_Post.BASE
     collision = KYTPOST.sklt
     shield = 40
-    explosion = 49|0|0|100
+    begin_effects
+        explosion = 49|0|0|100
+    end
 end
 ```
 
@@ -2523,7 +2531,7 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 
 ### Regen and Drain effects
 
-Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, OpenNeoUA falls back to procedural + and - symbols. These effects are presentation only: gameplay comes from the Regen and Drain systems of the unit. They are not shown on the unit you drive while you look through it (first-person or cockpit camera), where they would sit in front of the lens; other units and other views show them normally.
+Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, OpenNeoUA falls back to procedural + and - symbols. Either way each spawn is an independent, short-lived world-space mark: it rises away from its spawn point and fades in/out, and does not follow or rotate with the unit afterward. These effects are presentation only: gameplay comes from the Regen and Drain systems of the unit. They are not spawned on the unit you drive while you look through it (first-person or cockpit camera), where they would sit in front of the lens; other units and other views show them normally.
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_vp = 0` — Legacy VP for the Regen effect; final fallback before the procedural + symbol.
@@ -2532,7 +2540,7 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_3ds = Data/Models/3ds/FX/regen.3ds` — 3DS model for the Regen effect, relative to Data; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_fx_scale = 1.0` — Uniform X/Y/Z scale of the Regen VP/BASE/3DS visual. <= 0 or invalid = 1.0.
+- 🟢 `gfx.regen_fx_scale = 1.0` — Uniform scale of the Regen effect: the VP/BASE/3DS visual, or the generated + symbol (30 units at 1.0, max 500). <= 0 or invalid = 1.0.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_spin_xyz = 0|0|0` — X|Y|Z spin intensity for the Regen VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2546,13 +2554,11 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_random_max_offset = 80%` — Maximum random offset from the unit center: % of the unit silhouette (see `damaged_fx_random_max_offset`) or, without %, a fixed distance.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_symbol_size = 30` — Size of the generated + symbols, used only when none of gfx.regen_fx_3ds, gfx.regen_fx_base or gfx.regen_fx_vp is set.
+- 🟢 `gfx.regen_symbol_thickness = 5` — Bar thickness of the generated + symbols at scale 1.0 (multiplied by gfx.regen_fx_scale, never above the symbol size), used only when none of gfx.regen_fx_3ds, gfx.regen_fx_base or gfx.regen_fx_vp is set.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_symbol_thickness = 5` — Bar thickness of the generated + symbols, used only when none of gfx.regen_fx_3ds, gfx.regen_fx_base or gfx.regen_fx_vp is set.
+- 🟢 `gfx.regen_symbol_rise_speed = 100` — Upward movement speed of the Regen effect: the generated + symbol, or a configured gfx.regen_fx_3ds/base/vp. 0 = does not rise.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_symbol_rise_speed = 100` — Upward movement speed of the generated + symbols, used only when none of gfx.regen_fx_3ds, gfx.regen_fx_base or gfx.regen_fx_vp is set.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the generated + symbols (format in|out), used only when none of gfx.regen_fx_3ds, gfx.regen_fx_base or gfx.regen_fx_vp is set. 0 = immediate appearance/disappearance.
+- 🟢 `gfx.regen_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the Regen effect: the generated + symbol, or a configured gfx.regen_fx_3ds/base/vp (format in|out). 0 = immediate appearance/disappearance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_vp = 0` — Legacy VP for the Drain effect; final fallback before the procedural - symbol.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2560,7 +2566,7 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_3ds = Data/Models/3ds/FX/drain.3ds` — 3DS model for the Drain effect, relative to Data; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_fx_scale = 1.0` — Uniform X/Y/Z scale of the Drain VP/BASE/3DS visual. <= 0 or invalid = 1.0.
+- 🟢 `gfx.drain_fx_scale = 1.0` — Uniform scale of the Drain effect: the VP/BASE/3DS visual, or the generated - symbol (30 units at 1.0, max 500). <= 0 or invalid = 1.0.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_spin_xyz = 0|0|0` — X|Y|Z spin intensity for the Drain VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2574,13 +2580,11 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_random_max_offset = 80%` — Maximum random offset from the unit center: % of the unit silhouette (see `damaged_fx_random_max_offset`) or, without %, a fixed distance.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_symbol_size = 30` — Size of the generated - symbols, used only when none of gfx.drain_fx_3ds, gfx.drain_fx_base or gfx.drain_fx_vp is set.
+- 🟢 `gfx.drain_symbol_thickness = 5` — Bar thickness of the generated - symbols at scale 1.0 (multiplied by gfx.drain_fx_scale, never above the symbol size), used only when none of gfx.drain_fx_3ds, gfx.drain_fx_base or gfx.drain_fx_vp is set.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_symbol_thickness = 5` — Bar thickness of the generated - symbols, used only when none of gfx.drain_fx_3ds, gfx.drain_fx_base or gfx.drain_fx_vp is set.
+- 🟢 `gfx.drain_symbol_rise_speed = 100` — Upward movement speed of the Drain effect: the generated - symbol, or a configured gfx.drain_fx_3ds/base/vp. 0 = does not rise.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_symbol_rise_speed = 100` — Upward movement speed of the generated - symbols, used only when none of gfx.drain_fx_3ds, gfx.drain_fx_base or gfx.drain_fx_vp is set.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the generated - symbols (format in|out), used only when none of gfx.drain_fx_3ds, gfx.drain_fx_base or gfx.drain_fx_vp is set. 0 = immediate appearance/disappearance.
+- 🟢 `gfx.drain_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the Drain effect: the generated - symbol, or a configured gfx.drain_fx_3ds/base/vp (format in|out). 0 = immediate appearance/disappearance.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### World HP and shield bars
@@ -3660,8 +3664,9 @@ How the parameters above are handled in OpenNeoUA Studio. They do not change the
 OpenNeoUA Studio resolves Bruch IDs for entity and sector effect previews using the installed script catalog. The entity effect editor preserves the `bruch_id` reference when saving.
 
 - **Entity Designer, Add:** accepts supported effects and routes model, decal and crater keys to their rows. Unknown keys inside `begin_fx` are preserved in the saved text. Several rows (for example `crater_*` with `ground_decal_id`) can be written in one Add. Model, decal and crater keys cannot share an effect with `begin_fx`, `dest_fx` or sound keys; an unknown key, a crater key on a vehicle or an unknown sound event gets a message that names the key.
-- **Visuals & FX:** lists existing items or drafts; craters and decals are marked red because vanilla does not support them. Each `begin_fx` row shows its header comment, the number and IDs of its VPs and any BASE or 3DS names. Click an effect in the 3D view to select its row (white border; the smallest wins when they overlap); double-click away to deselect; dragging orbits; the unit and hidden effects cannot be clicked. The timeline starts at 0.25x, with a speed menu. The flight altitude starts at 300 for flying units and the weapon preview starts at 300 (an artillery shell uses its arc height).
+- **Visuals & FX:** lists existing items or drafts; craters, decals and Death behavior are marked red because vanilla does not support them. Each `begin_fx` row shows its header comment, the number and IDs of its VPs and any BASE or 3DS names. Click an effect in the 3D view to select its row (white border; the smallest wins when they overlap); double-click away to deselect; dragging orbits; the unit and hidden effects cannot be clicked. The timeline starts at 0.25x, with a speed menu. The flight altitude starts at 300 for flying units and the weapon preview starts at 300 (an artillery shell uses its arc height).
 - **Crater and Ground decal rows:** values typed in a new effect are transferred to the Crater row. Delete removes the Crater and Ground decal settings from the definition's scripts, `modify_*` blocks included. For cluster weapons put craters on the child that hits the ground: the cluster preview shows them read-only, and a parent's crater applies to its own impact only. When a cluster weapon spawns itself, both crater rows share the same settings.
+- **Death behavior row (vehicles only):** edits `disable_genesis` and `air_dead` as free text, like the Crater and Ground decal rows; values typed in a new effect are routed here. The death-sequence preview follows them: `air_dead = 1` on a Flyer or UFO model skips the falling wreck and plays the terminal state in place, in mid-air; `disable_genesis = 1` or `at_death` removes the death plasma from the preview (the row's tooltip explains both keys, and a note under the timeline confirms which rule fired). Weapons never show this row; saving either key on a weapon block is refused.
 - **Kamikaze payload:** Visuals & FX opens Payload effects to edit the charge effects in place; the menu switches to the carrier model and its destruction sequence.
 - **Wireframe Editor:** previews components from other entities or files and saves them as separate files linked to the vehicle or weapon. Right-click a file and choose Copy Path to copy its path.
 - **Fire volumes:** for a downward cone, opposite handles adjust the same symmetric angles.

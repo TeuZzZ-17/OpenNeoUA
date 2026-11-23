@@ -522,23 +522,16 @@ NC_STACK_bitmap *StatusIconLoad(const std::string &path, int width, int height)
 
 void StatusIconRenderBitmap(NC_STACK_ypaworld *yw, NC_STACK_bitmap *bitmap, int left, int top, int size, uint8_t opacity)
 {
-    if ( !bitmap || !bitmap->GetBitmap() )
+    (void)yw;
+    if ( !bitmap || !bitmap->GetBitmap() || size <= 0 )
         return;
 
-    const float halfW = (float)yw->_screenSize.x * 0.5;
-    const float halfH = (float)yw->_screenSize.y * 0.5;
-
-    GFX::rstr_arg204 arg;
-    arg.pbitm = bitmap->GetBitmap();
-    arg.float4 = Common::FRect(-1.0, -1.0, 1.0, 1.0);
-    arg.float14 = Common::FRect(
-        ((float)left / halfW) - 1.0,
-        ((float)top / halfH) - 1.0,
-        ((float)(left + size) / halfW) - 1.0,
-        ((float)(top + size) / halfH) - 1.0);
-    arg.opacity = opacity;
-
-    GFX::Engine.raster_func204(&arg);
+    ResBitmap *pbitm = bitmap->GetBitmap();
+    // Draw directly in pixel coordinates so scrolling maps never accumulate NDC float truncation jitter.
+    GFX::Engine.BlitPixelRect(pbitm,
+                              Common::Rect(0, 0, pbitm->width, pbitm->height),
+                              Common::Rect(left, top, left + size, top + size),
+                              opacity);
 }
 
 SDL_Color yw_GetUiOwnerTintColor(NC_STACK_ypaworld *yw, int owner)

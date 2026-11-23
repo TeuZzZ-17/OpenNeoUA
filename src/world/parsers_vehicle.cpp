@@ -50,7 +50,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     if ( !StriCmp(p1, "disable_genesis") )
     {
-        _vhcl->disable_genesis = p2 == "1";
+        if ( p2 == "1" )
+            _vhcl->disable_genesis = World::TVhclProto::DISABLE_GENESIS_ALL;
+        else if ( !StriCmp(p2, "at_death") )
+            _vhcl->disable_genesis = World::TVhclProto::DISABLE_GENESIS_AT_DEATH;
+        else
+            _vhcl->disable_genesis = World::TVhclProto::DISABLE_GENESIS_NONE;
+        return ScriptParser::RESULT_OK;
+    }
+    if ( !StriCmp(p1, "air_dead") )
+    {
+        _vhcl->air_dead = p2 == "1";
         return ScriptParser::RESULT_OK;
     }
     if ( !StriCmp(p1, "collision_shape") )
@@ -949,6 +959,10 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         }
         else
             ypa_log_out("WARNING: invalid type_icon; previous icon retained.\n");
+    }
+    else if ( !StriCmp(p1, "map_direction") )
+    {
+        _vhcl->map_direction = StrGetBool(p2);
     }
     else if ( !StriCmp(p1, "dest_fx") )
     {
@@ -1897,6 +1911,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->mgun_spread_x = 0.0;
         _vhcl->mgun_spread_y = 0.0;
         _vhcl->type_icon = 65;
+        _vhcl->map_direction = true;
         _vhcl->vp_normal = 0;
         _vhcl->vp_fire = 1;
         _vhcl->vp_megadeth = 2;

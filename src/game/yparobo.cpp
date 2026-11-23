@@ -2085,8 +2085,8 @@ void NC_STACK_yparobo::DeadTimeUpdate(update_msg *arg)
 
     _status_flg |= BACT_STFLAG_LAND;
 
-    // disable_genesis: the host station falls and explodes as usual but releases no death plasma.
-    if ( _owner == 0 || _vp_genesis == nullptr || _disable_genesis )
+    // disable_genesis (1 or at_death): the host station falls and explodes as usual but releases no death plasma.
+    if ( _owner == 0 || _vp_genesis == nullptr || DisableDeathGenesis() )
     {
         if ( a4 > 0 )
             return;

@@ -447,7 +447,6 @@ Common::Ini::Key IniConf::GfxRegenFXDuration("gfx.regen_fx_duration", Common::In
 Common::Ini::Key IniConf::GfxRegenFXInterval("gfx.regen_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXCount("gfx.regen_fx_count", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxRegenFXRandomMaxOffset("gfx.regen_fx_random_max_offset", Common::Ini::KT_WORD, std::string("25%"));
-Common::Ini::Key IniConf::GfxRegenSymbolSize("gfx.regen_symbol_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxRegenSymbolThickness("gfx.regen_symbol_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxRegenSymbolRiseSpeed("gfx.regen_symbol_rise_speed", Common::Ini::KT_WORD, std::string("100"));
 Common::Ini::Key IniConf::GfxRegenSymbolFade("gfx.regen_symbol_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
@@ -462,7 +461,6 @@ Common::Ini::Key IniConf::GfxDrainFXDuration("gfx.drain_fx_duration", Common::In
 Common::Ini::Key IniConf::GfxDrainFXInterval("gfx.drain_fx_interval", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXCount("gfx.drain_fx_count", Common::Ini::KT_WORD, std::string("0"));
 Common::Ini::Key IniConf::GfxDrainFXRandomMaxOffset("gfx.drain_fx_random_max_offset", Common::Ini::KT_WORD, std::string("25%"));
-Common::Ini::Key IniConf::GfxDrainSymbolSize("gfx.drain_symbol_size", Common::Ini::KT_WORD, std::string("30"));
 Common::Ini::Key IniConf::GfxDrainSymbolThickness("gfx.drain_symbol_thickness", Common::Ini::KT_WORD, std::string("5"));
 Common::Ini::Key IniConf::GfxDrainSymbolRiseSpeed("gfx.drain_symbol_rise_speed", Common::Ini::KT_WORD, std::string("100"));
 Common::Ini::Key IniConf::GfxDrainSymbolFade("gfx.drain_symbol_fade_inout", Common::Ini::KT_WORD, std::string("150|300"));
@@ -782,7 +780,6 @@ void IniConf::Init()
         , &GfxRegenFXInterval
         , &GfxRegenFXCount
         , &GfxRegenFXRandomMaxOffset
-        , &GfxRegenSymbolSize
         , &GfxRegenSymbolThickness
         , &GfxRegenSymbolRiseSpeed
         , &GfxRegenSymbolFade
@@ -796,7 +793,6 @@ void IniConf::Init()
         , &GfxDrainFXInterval
         , &GfxDrainFXCount
         , &GfxDrainFXRandomMaxOffset
-        , &GfxDrainSymbolSize
         , &GfxDrainSymbolThickness
         , &GfxDrainSymbolRiseSpeed
         , &GfxDrainSymbolFade

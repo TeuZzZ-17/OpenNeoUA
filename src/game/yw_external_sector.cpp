@@ -114,6 +114,7 @@ public:
         _model = nullptr;
         _piece = nullptr;
         _inSector = false;
+        _inEffects = false;
         if ( !StriCmp(word, "begin_sector") )
         {
             if ( _def.sectorSeen )
@@ -142,6 +143,17 @@ public:
 
     int Handle(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2) override
     {
+        if ( _inEffects )
+        {
+            if ( !StriCmp(p1, "end") )
+            {
+                _inEffects = false;
+                return ScriptParser::RESULT_OK;
+            }
+            if ( !StriCmp(p1, "explosion") )
+                return ParseExplosionLine(p2);
+            return ScriptParser::RESULT_UNKNOWN;
+        }
         if ( !StriCmp(p1, "end") )
             return ScriptParser::RESULT_SCOPE_END;
         if ( _inSector )
@@ -194,9 +206,36 @@ private:
         return ScriptParser::RESULT_UNKNOWN;
     }
 
+    int ParseExplosionLine(const std::string &p2)
+    {
+        // Repeatable. "explosion = none" or begin_effects clears explosions inherited from a SET model.
+        if ( !_model->explosionsSet )
+            _model->explosions.clear();
+        _model->explosionsSet = true;
+        if ( !StriCmp(p2, "none") )
+            return ScriptParser::RESULT_OK;
+        const std::vector<std::string> parts = Stok::Split(p2, "|");
+        std::array<long, 4> fx {};
+        if ( parts.size() != 4 || !ParseInt(parts[0], 0, 65535, &fx[0]) ||
+             !ParseInt(parts[1], -100000, 100000, &fx[1]) ||
+             !ParseInt(parts[2], -100000, 100000, &fx[2]) ||
+             !ParseInt(parts[3], -100000, 100000, &fx[3]) )
+            return ScriptParser::RESULT_BAD_DATA;
+        _model->explosions.push_back(fx);
+        return ScriptParser::RESULT_OK;
+    }
+
     int HandleModel(ScriptParser::Parser &parser, const std::string &p1, const std::string &p2)
     {
         long value = 0;
+        if ( !StriCmp(p1, "begin_effects") )
+        {
+            if ( !_model->explosionsSet )
+                _model->explosions.clear();
+            _model->explosionsSet = true;
+            _inEffects = true;
+            return ScriptParser::RESULT_OK;
+        }
         if ( !StriCmp(p1, "visual") )
         {
             _model->visual = parser.FullLineValue();
@@ -228,23 +267,7 @@ private:
             return ScriptParser::RESULT_OK;
         }
         if ( !StriCmp(p1, "explosion") )
-        {
-            // Repeatable. "explosion = none" clears explosions inherited from a SET model.
-            if ( !_model->explosionsSet )
-                _model->explosions.clear();
-            _model->explosionsSet = true;
-            if ( !StriCmp(p2, "none") )
-                return ScriptParser::RESULT_OK;
-            const std::vector<std::string> parts = Stok::Split(p2, "|");
-            std::array<long, 4> fx {};
-            if ( parts.size() != 4 || !ParseInt(parts[0], 0, 65535, &fx[0]) ||
-                 !ParseInt(parts[1], -100000, 100000, &fx[1]) ||
-                 !ParseInt(parts[2], -100000, 100000, &fx[2]) ||
-                 !ParseInt(parts[3], -100000, 100000, &fx[3]) )
-                return ScriptParser::RESULT_BAD_DATA;
-            _model->explosions.push_back(fx);
-            return ScriptParser::RESULT_OK;
-        }
+            return ParseExplosionLine(p2);
         return ScriptParser::RESULT_UNKNOWN;
     }
 
@@ -268,6 +291,7 @@ private:
 
     SectorDef &_def;
     bool _inSector = false;
+    bool _inEffects = false;
     SectorModelDef *_model = nullptr;
     SectorPieceDef *_piece = nullptr;
 };

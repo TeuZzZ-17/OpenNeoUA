@@ -845,14 +845,17 @@ public:
 
     bool CollisionsDisabled() const { return _disableCollision; }
     bool _disableCollision = false;
-    // Copied from the Vehicle proto: instant creation (no plasma, scale-in or genesis sound) and no death plasma.
-    bool _disable_genesis = false;
+    // Copied from the Vehicle proto: 0 = vanilla, 1 = no creation or death genesis, 2 = no death genesis only.
+    uint8_t _disable_genesis = 0;
+    bool _air_dead = false;
+    bool DisableCreationGenesis() const { return _disable_genesis == 1; }
+    bool DisableDeathGenesis() const { return _disable_genesis != 0; }
     float _building_time = -1.0f;
     int GetCreationTime(int vanillaTime) const
     {
         if (!std::isfinite(_building_time) || _building_time < 0.0f || _building_time > 100.0f)
             return vanillaTime;
-        if (_disable_genesis) return 0;
+        if (DisableCreationGenesis()) return 0;
         return (int)std::lround(_building_time * 1000.0f);
     }
     void TraceWorldCollision(ypaworld_arg136 *query, bool exact = false);

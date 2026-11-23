@@ -63,7 +63,7 @@ NC_STACK_base *NC_STACK_ypaworld::ResolveVisualModel(int32_t modelId,
     return _vhclModels.at(modelId);
 }
 
-int32_t NC_STACK_ypaworld::SpawnTransientVisualBase(NC_STACK_base *base, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+int32_t NC_STACK_ypaworld::SpawnTransientVisualBase(NC_STACK_base *base, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const vec3d &velocity)
 {
     if ( !base || lifeTime < 0 )
         return 0;
@@ -78,40 +78,41 @@ int32_t NC_STACK_ypaworld::SpawnTransientVisualBase(NC_STACK_base *base, const v
     fx.spin = spin;
     fx.tint = tint;
     fx.particleControls = particleControls;
+    fx.velocity = velocity;
     yw_ConfigureTransientVPFade(fx, fadeIn, fadeOut, (double)lifeTime);
     return fx.id;
 }
 
-int32_t NC_STACK_ypaworld::SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+int32_t NC_STACK_ypaworld::SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const vec3d &velocity)
 {
     return SpawnTransientVisual(modelId, external3dsPath, std::string(), pos, rot,
                                 lifeTime, scale, tint, axisScale, spin,
-                                particleControls, fadeIn, fadeOut);
+                                particleControls, fadeIn, fadeOut, velocity);
 }
 
-int32_t NC_STACK_ypaworld::SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+int32_t NC_STACK_ypaworld::SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const vec3d &velocity)
 {
     if ( !external3dsPath.empty() )
     {
         if ( NC_STACK_base *external = GetSharedExternalMesh(external3dsPath) )
-            return SpawnTransientVisualBase(external, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
+            return SpawnTransientVisualBase(external, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut, velocity);
     }
 
     if ( !externalBasePath.empty() )
     {
         if ( NC_STACK_base *external = GetSharedExternalBase(externalBasePath) )
-            return SpawnTransientVisualBase(external, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
+            return SpawnTransientVisualBase(external, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut, velocity);
     }
 
-    return SpawnTransientVP(modelId, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
+    return SpawnTransientVP(modelId, pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut, velocity);
 }
 
-int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut)
+int32_t NC_STACK_ypaworld::SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const vec3d &velocity)
 {
     if ( modelId <= 0 || modelId >= (int32_t)_vhclModels.size() )
         return 0;
 
-    return SpawnTransientVisualBase(_vhclModels.at(modelId), pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut);
+    return SpawnTransientVisualBase(_vhclModels.at(modelId), pos, rot, lifeTime, scale, tint, axisScale, spin, particleControls, fadeIn, fadeOut, velocity);
 }
 
 bool NC_STACK_ypaworld::ResolveChainVisualFX(

@@ -333,7 +333,6 @@ public:
     static Common::Ini::Key GfxRegenFXInterval;
     static Common::Ini::Key GfxRegenFXCount;
     static Common::Ini::Key GfxRegenFXRandomMaxOffset;
-    static Common::Ini::Key GfxRegenSymbolSize;
     static Common::Ini::Key GfxRegenSymbolThickness;
     static Common::Ini::Key GfxRegenSymbolRiseSpeed;
     static Common::Ini::Key GfxRegenSymbolFade;
@@ -348,7 +347,6 @@ public:
     static Common::Ini::Key GfxDrainFXInterval;
     static Common::Ini::Key GfxDrainFXCount;
     static Common::Ini::Key GfxDrainFXRandomMaxOffset;
-    static Common::Ini::Key GfxDrainSymbolSize;
     static Common::Ini::Key GfxDrainSymbolThickness;
     static Common::Ini::Key GfxDrainSymbolRiseSpeed;
     static Common::Ini::Key GfxDrainSymbolFade;

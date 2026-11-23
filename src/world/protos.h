@@ -922,6 +922,9 @@ struct TVhclProto
     float mgun_spread_x = 0.0;
     float mgun_spread_y = 0.0;
     uint32_t type_icon = 0;
+    // OpenNeoUA custom: no hides the map/minimap view triangle (direction) of
+    // this vehicle, for static units like spawners. Default yes = vanilla.
+    bool map_direction = true;
     std::string name;
     int16_t vp_normal = 0;
     int16_t vp_fire = 0;
@@ -1195,9 +1198,18 @@ struct TVhclProto
     rbcolls coll;                           // OpenNeoUA: universal compound collision spheres (coll_*)
     bool disable_collision = false;         // Opt-in: no physical contacts for this actor.
     std::string collision_shape;            // Optional baked convex vehicle body; absent keeps existing collisions.
-    // OpenNeoUA custom: 1 removes the Genesis of this Vehicle, both when it is created
-    // (plasma, scale-in, genesis sound) and when it dies (death plasma). Missing/0 = vanilla.
-    bool disable_genesis = false;
+    // OpenNeoUA custom: 1 removes the Genesis of this Vehicle both when it is created
+    // (plasma, scale-in, genesis sound) and when it dies (death plasma);
+    // at_death removes only the death plasma while keeping normal creation Genesis. Missing/0 = vanilla.
+    enum DisableGenesisMode : uint8_t
+    {
+        DISABLE_GENESIS_NONE = 0,
+        DISABLE_GENESIS_ALL = 1,
+        DISABLE_GENESIS_AT_DEATH = 2,
+    };
+    uint8_t disable_genesis = DISABLE_GENESIS_NONE;
+    // OpenNeoUA custom: 1 lets flying units (Flyer/UFO) die in mid-air without falling via CrashOrLand.
+    bool air_dead = false;
 
     ~TVhclProto();
 };

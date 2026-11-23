@@ -761,6 +761,7 @@ public:
     virtual size_t raster_func201(const Common::Line &r);
     virtual size_t raster_func202(rstr_arg204 *arg);
     virtual size_t raster_func204(rstr_arg204 *arg);
+    size_t BlitPixelRect(ResBitmap *pbitm, Common::Rect r1, Common::Rect r2, uint8_t opacity = 255);
     virtual void raster_func207(int id, TileMap *tiles);
     virtual TileMap *raster_func208(int id);
     virtual int raster_func208(TileMap *tiles);

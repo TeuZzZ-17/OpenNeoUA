@@ -240,7 +240,6 @@ static Config BuildConfig(Common::Ini::Key &vp,
                           Common::Ini::Key &interval,
                           Common::Ini::Key &count,
                           Common::Ini::Key &randomMaxOffset,
-                          Common::Ini::Key &size,
                           Common::Ini::Key &thickness,
                           Common::Ini::Key &riseSpeed,
                           Common::Ini::Key &fade,
@@ -288,15 +287,14 @@ static Config BuildConfig(Common::Ini::Key &vp,
             : authoredOffset.value;
     }
 
-    config.size = ReadFloat(size, 30.0f);
-    if ( config.size <= 0.0f )
-        config.size = 30.0f;
-    else if ( config.size > 500.0f )
-        config.size = 500.0f;
+    // One scale drives every source: the generated symbol is 30 units at scale 1
+    // and its bar thickness (authored at scale 1) follows the same multiplier.
+    config.size = std::min(30.0f * config.scale, 500.0f);
 
     config.thickness = ReadFloat(thickness, 5.0f);
     if ( config.thickness <= 0.0f )
         config.thickness = 5.0f;
+    config.thickness *= config.scale;
     if ( config.thickness > config.size )
         config.thickness = config.size;
 
@@ -333,7 +331,6 @@ void Init()
                           System::IniConf::GfxRegenFXInterval,
                           System::IniConf::GfxRegenFXCount,
                           System::IniConf::GfxRegenFXRandomMaxOffset,
-                          System::IniConf::GfxRegenSymbolSize,
                           System::IniConf::GfxRegenSymbolThickness,
                           System::IniConf::GfxRegenSymbolRiseSpeed,
                           System::IniConf::GfxRegenSymbolFade,
@@ -349,7 +346,6 @@ void Init()
                           System::IniConf::GfxDrainFXInterval,
                           System::IniConf::GfxDrainFXCount,
                           System::IniConf::GfxDrainFXRandomMaxOffset,
-                          System::IniConf::GfxDrainSymbolSize,
                           System::IniConf::GfxDrainSymbolThickness,
                           System::IniConf::GfxDrainSymbolRiseSpeed,
                           System::IniConf::GfxDrainSymbolFade,

@@ -59,7 +59,7 @@ int main(int, char **)
         "begin_piece CORE\n    states = core|core|core|ground\n    destructible = 1\nend\n"
         "begin_model ground\n    visual = ST_EMPTY.base\nend\n"
         "begin_model core\n    visual = Kyt_Flak_Normal.BASE\n    collision = KYTFLKN1.sklt\n"
-        "    shield = 40\n    explosion = 49|0|0|100\n    map_icon = icon.png\nend\n");
+        "    shield = 40\n    begin_effects\n        explosion = 49|0|0|100\n    end\n    map_icon = icon.png\nend\n");
     Write("single.sector",
         "begin_sector\n    cells = C\n    ground = 2\nend\n"
         "begin_piece C\n    states = city\n    destructible = 1\nend\n"

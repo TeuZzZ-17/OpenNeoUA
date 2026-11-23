@@ -31,6 +31,8 @@ void TestAuthoredParserFields() {
     const auto &v = w._vhclProtos[1];
     Check(v.script_class == "tank" && v.description == "Heavy probe", "vehicle class and description persist");
     Check(v.purchase_cost == 12345 && v.shield_defined && v.energy_defined && v.radar_defined && v.type_icon_defined, "vehicle authored flags persist");
+    Check(w._vhclProtos[1].map_direction, "map_direction defaults to yes");
+    Check(Parse(w, {"new_vehicle 5", "model = tank", "map_direction = no", "end"}, World::Database::Vehicle) && !w._vhclProtos[5].map_direction, "map_direction = no parses");
     Check(Parse(w, {"new_building 2", "model = building", "building_description = Relay", "energy = 77", "type_icon = B", "end"}, World::Database::Building), "building metadata parses");
     Check(w._buildProtos[2].script_class == "building" && w._buildProtos[2].description == "Relay" && w._buildProtos[2].energy_defined, "building metadata persists");
 }

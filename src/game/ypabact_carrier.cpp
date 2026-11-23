@@ -577,7 +577,7 @@ bool NC_STACK_ypabact::HasSpawningChild() const
     {
         auto *child = _world->FindLiveBactByGid(gid);
         if ( ypabact_IsCarrierSpawnAliveUnit(child) &&
-             child->_status == BACT_STATUS_CREATE && !child->_disable_genesis &&
+             child->_status == BACT_STATUS_CREATE && !child->DisableCreationGenesis() &&
              child->_scale_time > 0 )
             return true;
     }

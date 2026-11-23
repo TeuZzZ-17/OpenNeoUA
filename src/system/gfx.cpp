@@ -1012,19 +1012,10 @@ size_t GFXEngine::raster_func202(rstr_arg204 *arg)
     return 1;
 }
 
-size_t GFXEngine::raster_func204(rstr_arg204 *arg)
+size_t GFXEngine::BlitPixelRect(ResBitmap *pbitm, Common::Rect r1, Common::Rect r2, uint8_t opacity)
 {
-    Common::Rect r1;
-    r1.left   = (arg->float4.left   + 1.0) * (arg->pbitm->width / 2);
-    r1.top    = (arg->float4.top    + 1.0) * (arg->pbitm->height / 2);
-    r1.right  = (arg->float4.right  + 1.0) * (arg->pbitm->width / 2);
-    r1.bottom = (arg->float4.bottom + 1.0) * (arg->pbitm->height / 2);
-
-    Common::Rect r2;
-    r2.left   = _field_554 * (arg->float14.left   + 1.0);
-    r2.top    = _field_558 * (arg->float14.top    + 1.0);
-    r2.right  = _field_554 * (arg->float14.right  + 1.0);
-    r2.bottom = _field_558 * (arg->float14.bottom + 1.0);
+    if ( !pbitm || !pbitm->swTex || r1.IsEmpty() || r2.IsEmpty() )
+        return 0;
 
     if ( _clip.IsIntersects(r2) )
     {
@@ -1054,24 +1045,41 @@ size_t GFXEngine::raster_func204(rstr_arg204 *arg)
 
         SDL_Rect src = r1;
         SDL_Rect dst = r2;
-        if (arg->opacity == 255)
+        if (opacity == 255)
         {
-            SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
+            SDL_BlitScaled(pbitm->swTex, &src, Screen(), &dst);
             return 1;
         }
 
         uint8_t oldOpacity = 255;
         SDL_BlendMode oldBlendMode = SDL_BLENDMODE_NONE;
-        SDL_GetSurfaceAlphaMod(arg->pbitm->swTex, &oldOpacity);
-        SDL_GetSurfaceBlendMode(arg->pbitm->swTex, &oldBlendMode);
-        SDL_SetSurfaceAlphaMod(arg->pbitm->swTex, arg->opacity);
-        SDL_SetSurfaceBlendMode(arg->pbitm->swTex, SDL_BLENDMODE_BLEND);
-        SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
-        SDL_SetSurfaceAlphaMod(arg->pbitm->swTex, oldOpacity);
-        SDL_SetSurfaceBlendMode(arg->pbitm->swTex, oldBlendMode);
+        SDL_GetSurfaceAlphaMod(pbitm->swTex, &oldOpacity);
+        SDL_GetSurfaceBlendMode(pbitm->swTex, &oldBlendMode);
+        SDL_SetSurfaceAlphaMod(pbitm->swTex, opacity);
+        SDL_SetSurfaceBlendMode(pbitm->swTex, SDL_BLENDMODE_BLEND);
+        SDL_BlitScaled(pbitm->swTex, &src, Screen(), &dst);
+        SDL_SetSurfaceAlphaMod(pbitm->swTex, oldOpacity);
+        SDL_SetSurfaceBlendMode(pbitm->swTex, oldBlendMode);
     }
 
     return 1;
+}
+
+size_t GFXEngine::raster_func204(rstr_arg204 *arg)
+{
+    Common::Rect r1;
+    r1.left   = (arg->float4.left   + 1.0) * (arg->pbitm->width / 2);
+    r1.top    = (arg->float4.top    + 1.0) * (arg->pbitm->height / 2);
+    r1.right  = (arg->float4.right  + 1.0) * (arg->pbitm->width / 2);
+    r1.bottom = (arg->float4.bottom + 1.0) * (arg->pbitm->height / 2);
+
+    Common::Rect r2;
+    r2.left   = _field_554 * (arg->float14.left   + 1.0);
+    r2.top    = _field_558 * (arg->float14.top    + 1.0);
+    r2.right  = _field_554 * (arg->float14.right  + 1.0);
+    r2.bottom = _field_558 * (arg->float14.bottom + 1.0);
+
+    return BlitPixelRect(arg->pbitm, r1, r2, arg->opacity);
 }
 
 void GFXEngine::SetRenderStates(int setAll)
