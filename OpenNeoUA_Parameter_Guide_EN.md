@@ -185,7 +185,7 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `name = Tiger_Tank` — Display name of the Vehicle. Underscores are shown as spaces.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵🟢 `type_icon = A` — Icon glyph key of the unit in lists and on the map, mapped through TYPE_NS.FON into the H_FINDER graphic. Vanilla reads only the first byte, so use a plain ASCII character (letter, digit or a symbol such as `]`). A Unicode symbol or `U+XXXX` (for example `U+2206`) is OpenNeoUA-only: vanilla reads it as `U`, the Radar Station icon. Prefer `U+XXXX`, because a pasted symbol can be corrupted by the editor encoding. `;`, `=`, `#` and `\` cannot stand bare in a script: write `U+003B`, `U+003D`, `U+0023` and `U+005C`. An unreadable icon falls back to `A`; `U+FFFD` is rejected. In the .FON write new keys as a single byte and keep each `U+XXXX` line above the `U` line. The value `I` keeps the unit out of the Database.
+- 🔵🟢 `type_icon = A` — Icon glyph key of the unit in lists and on the map, mapped through TYPE_NS.FON into the H_FINDER graphic. Vanilla reads only the first byte, so use a plain ASCII character (letter, digit or a symbol such as `]`). A Unicode symbol or `U+XXXX` (for example `U+2206`) is OpenNeoUA-only: vanilla reads it as `U`, the Radar Station icon. Prefer `U+XXXX`, because a pasted symbol can be corrupted by the editor encoding. `;`, `=`, `#` and `\` cannot stand bare in a script: write `U+003B`, `U+003D`, `U+0023` and `U+005C`. An unreadable icon falls back to `A`; `U+FFFD` is rejected. In TYPE_NS.FON write new keys as a single byte and keep each `U+XXXX` line above the `U` line. OpenNeoUA also reads a second icon page, `Graphics/UnitIcons/H_FINDER_OpenNeoUA.PNG`, defined in `H_FINDER_OpenNeoUA.FON` (same line format: `key x y width`; keys as `U+XXXX` or `#number`). Its keys replace the same keys of TYPE_NS.FON and may be any `U+XXXX`; vanilla never reads that page. If the file is missing, only the original page is used. The value `I` keeps the unit out of the Database.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `map_direction = yes` — no hides the view triangle (facing direction) of the unit on the map and minimap, for static units such as spawners. The unit icon stays. Missing or yes = vanilla.
 ------------------------------------------------------------------------------------------------------------------------
@@ -684,7 +684,7 @@ Each lifecycle state can have its own external visual. External assets extend, n
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `rotation_xyz = 0|0|0` — Fixed visual rotation in degrees around the X|Y|Z axes of the active main VP/BASE/3DS model. 0 or absent = no rotation. Format: x|y|z.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 40|120|255|255` — RGBA tint applied to the active main VP/BASE/3DS visual.
+- 🟢 `tint = 40|120|255|255` — RGBA tint applied to the active main VP/BASE/3DS visual. It never tints the Genesis plasma: the Genesis uses the faction colour, and the Resistance keeps the original cyan.
 ------------------------------------------------------------------------------------------------------------------------
 
 Vehicle and Weapon decorations use the same periodic/persistent system as building decorations, with positions relative to the parent object.
@@ -1354,7 +1354,7 @@ Mesh tracers are an extra visual layer that follows the real projectile trajecto
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tracer_pulse_speed = 0` — Pulsation speed in cycles per second, range 0..10. 0 = disabled; requires tracer_pulse_rate > 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 40|120|255|255` — RGBA tint applied to the main VP/BASE/3DS visual.
+- 🟢 `tint = 40|120|255|255` — RGBA tint applied to the main VP/BASE/3DS visual. It never tints the Genesis plasma: the Genesis uses the faction colour, and the Resistance keeps the original cyan.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `spin_xyz = 0|0|10` — X|Y|Z spin intensity of the main VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3670,6 +3670,7 @@ OpenNeoUA Studio resolves Bruch IDs for entity and sector effect previews using 
 - **Kamikaze payload:** Visuals & FX opens Payload effects to edit the charge effects in place; the menu switches to the carrier model and its destruction sequence.
 - **Wireframe Editor:** previews components from other entities or files and saves them as separate files linked to the vehicle or weapon. Right-click a file and choose Copy Path to copy its path.
 - **Fire volumes:** for a downward cone, opposite handles adjust the same symmetric angles.
+- **Icon Selector:** the Page list switches between the original H_FINDER page and the OpenNeoUA page (`Graphics/UnitIcons`). New `type_icon` keys are written only to the OpenNeoUA page; the original page and TYPE_NS.FON are never changed. Cockpit View: with the camera offset disabled, the preview shows no unit.
 
 ### Sectors
 

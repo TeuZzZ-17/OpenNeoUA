@@ -2763,13 +2763,14 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
             else
                 srcR.right = chrr.x + x_off + 1;
 
-            SDL_Surface *source = tile->img->GetSwTex();
+            SDL_Surface *source = tile->Page(v13);
             // TYPE_NS also contains unit icons and health bars. Only its frame
             // glyphs belong to the UI theme; the other symbols keep their colours.
             const bool squadFrameGlyph = tileId == 28 &&
                 (v13 == '?' || v13 == '$' || v13 == '%' || v13 == '&' ||
                  v13 == '/' || v13 == '=' || v13 == '{' || v13 == '}');
-            if (uiAccent && (IsUiAccentTileset(tileId) || squadFrameGlyph))
+            // Accent surfaces are built from the main page only.
+            if (uiAccent && source == tile->img->GetSwTex() && (IsUiAccentTileset(tileId) || squadFrameGlyph))
                 source = GetUiAccentSurface(source, *uiAccent, tileId);
             if (opacity == 255)
                 DrawFill(source, srcR, Screen(), dstR);
@@ -3773,11 +3774,23 @@ SDL_Surface * GFXEngine::ConvertSDLSurface(SDL_Surface *src, const SDL_PixelForm
 
 const Common::PointRect &TileMap::Glyph(uint32_t key) const
 {
+    if (extraImg)
+    {
+        const auto extra = extraGlyphs.find(key);
+        if (extra != extraGlyphs.end()) return extra->second;
+    }
     if (key < map.size()) return map[key];
     const auto found = extendedGlyphs.find(key);
     if (found != extendedGlyphs.end()) return found->second;
     const uint32_t legacy = GlyphKey::LegacyAlias(key);
     return map[legacy < map.size() ? legacy : 0];
+}
+
+SDL_Surface *TileMap::Page(uint32_t key) const
+{
+    if (extraImg && extraGlyphs.count(key))
+        return extraImg->GetSwTex();
+    return img->GetSwTex();
 }
 
 TileMap::TileMap()
@@ -3790,6 +3803,8 @@ TileMap::~TileMap()
 {
     if (img)
         img->Delete();
+    if (extraImg)
+        extraImg->Delete();
 }
 
 void TileMap::Draw(SDL_Surface *surface, const Common::Point &pos, uint8_t c)

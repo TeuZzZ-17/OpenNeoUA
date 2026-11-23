@@ -9,6 +9,7 @@
 #include "game/yw.h"
 #include "game/ypabact.h"
 #include "game/yw_game_ui_internal.h"
+#include "game/ypabact_internal.h"
 #include "gui/font.h"
 #include "nucleus/bitmap.h"
 #include "system/inivals.h"
@@ -103,8 +104,11 @@ int main()
     CHECK(font != nullptr);
     if (font)
     {
-        CHECK(font->Glyph(0x2206).x == 1 && font->Glyph(0x2206).y == 86);
-        CHECK(font->Glyph(0x2206).w == font->map[0xa3].w);
+        // The custom Leopard icon comes from Graphics/UnitIcons (H_FINDER_OpenNeoUA); all its keys share one cell.
+        CHECK(font->extraImg != nullptr && font->Page(0x2206) == font->extraImg->GetSwTex());
+        CHECK(font->Glyph(0x2206).w == 20 && font->Glyph(0x2206).x == font->Glyph(0xa3).x && font->Glyph(0x2206).y == font->Glyph(0xa3).y);
+        // Vanilla keys that the OpenNeoUA sheet does not redefine still read the original page.
+        CHECK(font->Page('A') == font->img->GetSwTex());
         CHECK(font->Glyph(0x10fffd).w == font->map[0].w);
         auto &renderer = GFX::Engine;
         renderer.ScreenSurface = SDL_CreateRGBSurfaceWithFormat(0, 64, 32, 32, SDL_PIXELFORMAT_ARGB8888);
@@ -144,6 +148,17 @@ int main()
     ai.Bind(world, 2, 310); enemy.Bind(world, 3, 302); enemy._owner = 2;
     source.Bind(world, 4, 300); source.Residue(2); world._userUnit = &player;
     player._vehicleID = 1;
+    {
+        // Genesis plasma ignores the script tint: Resistance keeps the original cyan, factions use their colour.
+        GFX::TGLColor tint(1.0f, 0.2f, 0.2f, 1.0f), particleTint(1.0f, 0.2f, 0.2f, 1.0f);
+        bool colorize = true, particleColorize = true;
+        ypabact_ApplyGenesisPlasmaTint(&player, &tint, &particleTint, &colorize, &particleColorize);
+        CHECK(!colorize && !particleColorize);
+        CHECK(tint.r == 1.0f && tint.g == 1.0f && tint.b == 1.0f && particleTint.g == 1.0f);
+        tint = GFX::TGLColor(1.0f, 0.2f, 0.2f, 1.0f);
+        ypabact_ApplyGenesisPlasmaTint(&enemy, &tint, &particleTint, &colorize, &particleColorize);
+        CHECK(colorize && particleColorize);
+    }
     CHECK(yw_GetSquadronManagerUnitIcon(&world, &player, 0) == 0x2206);
     CHECK(ai.CanCreditPlasmaCurrencyFrom(&source));
     CHECK(!ai.CanRecoverPlasmaEnergyFrom(&source));

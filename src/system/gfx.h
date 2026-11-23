@@ -43,7 +43,11 @@ struct TileMap
     NC_STACK_bitmap *img = nullptr;
     std::array<Common::PointRect, 256> map;
     std::map<uint32_t, Common::PointRect> extendedGlyphs;
+    // Optional second sheet (OpenNeoUA icons): its keys win over the same keys of img.
+    NC_STACK_bitmap *extraImg = nullptr;
+    std::map<uint32_t, Common::PointRect> extraGlyphs;
     const Common::PointRect &Glyph(uint32_t key) const;
+    SDL_Surface *Page(uint32_t key) const; // surface that holds Glyph(key)
     int h = 0;
 
     TileMap();

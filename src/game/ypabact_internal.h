@@ -286,6 +286,8 @@ float ypabact_ClampRecoil(float recoil);
 bool ypabact_ConstrainRecoilStepToLevelBox(NC_STACK_ypabact *unit, const vec3d &requestedStep, vec3d *constrainedStep, bool *blockedX, bool *blockedZ);
 void ypabact_UpdateFakePushVel(NC_STACK_ypabact *unit, vec3d *pushVel, update_msg *arg, float tau, bool recoilMotion);
 bool ypabact_GetPlasmaFactionTint(NC_STACK_ypabact *bact, GFX::TGLColor *outTint);
+void ypabact_ApplyGenesisPlasmaTint(NC_STACK_ypabact *bact, GFX::TGLColor *tint, GFX::TGLColor *particleTint,
+                                    bool *colorize, bool *particleColorize);
 void ypabact_RunPlayerUserLayer(NC_STACK_ypabact *bact, update_msg *arg);
 bool ypabact_IsConfiguredAreaEffectTarget(const NC_STACK_ypabact *source, const NC_STACK_ypabact *target);
 void ypabact_ApplyConfiguredDamage(NC_STACK_ypabact *source, NC_STACK_ypabact *target, int rawDamage);

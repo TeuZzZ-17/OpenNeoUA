@@ -132,6 +132,79 @@ static NC_STACK_bitmap *FontPageLoadImage(const std::string &bitmapName, bool di
     return loadImage(bitmapName);
 }
 
+// Reads the "key x y width" lines of a .FON (key = byte, #number or U+XXXX).
+template <class Store>
+static void FontReadGlyphs(FSMgr::FileHandle *fil, Store store)
+{
+    std::string buf;
+    while ( fil->ReadLine(&buf) )
+    {
+        Utils::StringSetEnd(&buf, "\n\r");
+        Stok tkc(buf, " \t");
+
+        uint32_t chr = 0;
+        bool valid = false;
+        if (!buf.empty() && buf[0] == ' ')
+            valid = GlyphKey::Parse(" ", chr);
+        else
+        {
+            std::string token;
+            if (tkc.GetNext(&token)) valid = GlyphKey::Parse(token, chr, true);
+        }
+        if (valid)
+        {
+            std::string sX, sY, sW;
+            if (tkc.GetNext(&sX) && tkc.GetNext(&sY) && tkc.GetNext(&sW))
+                store(chr, (int)std::stol(sX, nullptr, 0), (int)std::stol(sY, nullptr, 0), (int)std::stol(sW, nullptr, 0));
+        }
+    }
+}
+
+// OpenNeoUA unit icons live in Graphics/UnitIcons, so Fonts/ keeps the original
+// H_FINDER. The .FON there uses the same format; its keys replace the same keys
+// of TYPE_NS. A missing or broken file leaves the vanilla icons untouched.
+static void FontLoadOpenUASheet(TileMap *tileset)
+{
+    FSMgr::FileHandle *fil = uaOpenFileAlloc("data:Graphics/UnitIcons/H_FINDER_OpenNeoUA.FON", "r");
+    if ( !fil )
+        return;
+
+    std::string buf, bitmap_name, fntHeight;
+    if ( fil->ReadLine(&buf) )
+    {
+        if (buf.compare(0, 3, "\xef\xbb\xbf") == 0) buf.erase(0, 3);
+        Utils::StringSetEnd(&buf, ";\n\r");
+    }
+    Stok tk(buf, " \t");
+
+    if ( tk.GetNext(&bitmap_name) && tk.GetNext(&fntHeight) )
+    {
+        const std::string oldRsrc = Common::Env.SetPrefix("rsrc", "data:Graphics/UnitIcons");
+        tileset->extraImg = FontPageLoadImage(bitmap_name, true);
+        Common::Env.SetPrefix("rsrc", oldRsrc);
+
+        if ( tileset->extraImg )
+        {
+            FontPageNormalizeSurface(tileset->extraImg->GetSwTex());
+            SDL_SetColorKey(tileset->extraImg->GetSwTex(), SDL_TRUE, SDL_MapRGB(tileset->extraImg->GetSwTex()->format, 255, 255, 0));
+
+            const int h = (int)std::stol(fntHeight, nullptr, 0);
+            FontReadGlyphs(fil, [&](uint32_t chr, int x, int y, int w)
+            {
+                Common::PointRect &glyph = tileset->extraGlyphs[chr];
+                glyph.x = x;
+                glyph.y = y;
+                glyph.w = w;
+                glyph.h = h;
+            });
+        }
+        else
+            ypa_log_out("yw_LoadFont(): OpenNeoUA icon sheet %s not loaded, vanilla icons only.\n", bitmap_name.c_str());
+    }
+
+    delete fil;
+}
+
 TileMap * NC_STACK_ypaworld::yw_LoadFont(const std::string &fontname)
 {
     FSMgr::FileHandle *fil = uaOpenFileAlloc("rsrc:hfonts/" + fontname, "r");
@@ -183,33 +256,20 @@ TileMap * NC_STACK_ypaworld::yw_LoadFont(const std::string &fontname)
 
     tileset->h = std::stol(fntHeight, nullptr, 0);
 
-    while ( fil->ReadLine(&buf) )
+    FontReadGlyphs(fil, [&](uint32_t chr, int x, int y, int w)
     {
-        Utils::StringSetEnd(&buf, "\n\r");
-        Stok tkc(buf, " \t");
+        Common::PointRect &glyph = chr < 256 ? tileset->map[chr] : tileset->extendedGlyphs[chr];
+        glyph.x = x;
+        glyph.y = y;
+        glyph.w = w;
+        glyph.h = tileset->h;
+    });
 
-        uint32_t chr = 0;
-        bool valid = false;
-        if (!buf.empty() && buf[0] == ' ')
-            valid = GlyphKey::Parse(" ", chr);
-        else
-        {
-            std::string token;
-            if (tkc.GetNext(&token)) valid = GlyphKey::Parse(token, chr, true);
-        }
-        if (valid)
-        {
-            std::string sX, sY, sW;
-            if (tkc.GetNext(&sX) && tkc.GetNext(&sY) && tkc.GetNext(&sW))
-            {
-                Common::PointRect &glyph = chr < 256 ? tileset->map[chr] : tileset->extendedGlyphs[chr];
-                glyph.x = std::stol(sX, nullptr, 0);
-                glyph.y = std::stol(sY, nullptr, 0);
-                glyph.w = std::stol(sW, nullptr, 0);
-                glyph.h = tileset->h;
-            }
-        }
-    }
+    // Only the gameplay unit icons (TYPE_NS) have an OpenNeoUA sheet.
+    std::string stem = fontname;
+    for (char &c : stem) c = (char)std::tolower((unsigned char)c);
+    if ( stem == "type_ns.font" || stem == "type_ns.fon" )
+        FontLoadOpenUASheet(tileset);
 
     // All empty to first non-empty
     for ( auto &i : tileset->map)

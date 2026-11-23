@@ -1944,14 +1944,8 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( body == _current_vp && body->Bas == _vp_genesis &&
                      (!genesisShared || genesisState) )
                 {
-                    GFX::TGLColor plasmaTint;
-                    if ( ypabact_GetPlasmaFactionTint(this, &plasmaTint) )
-                    {
-                        arg->tint = plasmaTint;
-                        arg->particleTint = plasmaTint;
-                        arg->colorizeTint = true;
-                        arg->particleColorizeTint = true;
-                    }
+                    ypabact_ApplyGenesisPlasmaTint(this, &arg->tint, &arg->particleTint,
+                                                   &arg->colorizeTint, &arg->particleColorizeTint);
                 }
 
                 body->Bas->Render(arg, body);
@@ -2009,14 +2003,8 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 // needed because the VP identity itself is the single condition.
                 if ( bd->vp->Bas == _vp_genesis )
                 {
-                    GFX::TGLColor plasmaTint;
-                    if ( ypabact_GetPlasmaFactionTint(this, &plasmaTint) )
-                    {
-                        arg->tint = plasmaTint;
-                        arg->particleTint = plasmaTint;
-                        arg->colorizeTint = true;
-                        arg->particleColorizeTint = true;
-                    }
+                    ypabact_ApplyGenesisPlasmaTint(this, &arg->tint, &arg->particleTint,
+                                                   &arg->colorizeTint, &arg->particleColorizeTint);
                 }
 
                 bd->vp->Bas->Render(arg, bd->vp);

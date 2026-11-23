@@ -421,7 +421,7 @@ void UserData::RenderDatabaseEntryMedia()
             const int size=std::max(l.line,2*l.detailLine);
             const int width=std::max(1,size*source.w/source.h);
             SDL_Rect target{l.right+l.previewWidth-width-6,l.previewTop+6,width,size};
-            SDL_BlitScaled(font.img->GetSwTex(),&source,surface,&target);
+            SDL_BlitScaled(font.Page(card.icon),&source,surface,&target);
         }
     }
     int statRow=0;

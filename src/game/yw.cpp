@@ -3530,7 +3530,10 @@ void NC_STACK_ypaworld::ypaworld_func150(yw_arg150 *arg)
         {
             for ( NC_STACK_ypabact* &sect_bacts : _cells(v29, v12).unitsList )
             {
-                if ( sect_bacts != arg->unit && sect_bacts->_status != BACT_STATUS_DEAD && !sect_bacts->_isDummy )
+                // Projectiles are never selectable, so the mouse ray passes through them: a spore stuck
+                // to an enemy (delay_time) must not hide the target behind it.
+                if ( sect_bacts != arg->unit && sect_bacts->_status != BACT_STATUS_DEAD && !sect_bacts->_isDummy &&
+                     sect_bacts->_bact_type != BACT_TYPES_MISSLE )
                 {
                     if ( !(arg->unit == _userUnit && _playerInHSGun) || sect_bacts != _userRobo )
                     {
