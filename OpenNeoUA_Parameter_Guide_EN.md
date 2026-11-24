@@ -786,7 +786,7 @@ end
 ### Buffs
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `buff_id = 1` — ID of the new_buff profile linked to this Vehicle. -1, absent or an unknown ID = no Buff.
+- 🟢 `buff_id = 1|3` — IDs of the new_buff profiles the unit is born with, separated by `|` (up to 16, repeated IDs count once). Born Buffs are permanent and never lost when something else buffs the unit. Invalid items and unknown IDs are skipped (unknown IDs also log a warning); -1, absent or nothing valid = no Buff.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Sounds, palette flashes and shakes
@@ -1435,7 +1435,7 @@ Weapon `begin_fx` uses the same Bruch reference and emission fields as [Vehicle 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `debuff_id = 1` — ID or name of the new_debuff profile applied to the target struck directly by this Weapon (for example `debuff_id = shock`). It does not reach the blast area: use blast_debuff_id for that. Names must start with a letter and ignore case; if two profiles share a name, the lowest ID is used. -1, absent, or an unknown ID or name = no Debuff.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ai_avoid_debuffed_target_change = 70%` — AI only: chance, 0%-100%, that a unit carrying this Weapon ignores a "taken" enemy when it picks a target on its own and attacks another one instead. An enemy is taken while it has an active Debuff, or as soon as another allied unit with a Debuff Weapon has chosen it as target (known at launch, not at impact). Works for `debuff_id` and `delay_time_debuff_id`. Rolled at each target search: in the remaining chance the unit picks as usual and may join the others. If no other enemy is in range, the taken one is still attacked. The unit's main and extra Weapons are checked and the highest value is used. It only affects the AI's own target search: attack orders from the player, the unit under direct control and fire volumes are unchanged, and below aggression 50 (no automatic search) it has no effect. Disabled in multiplayer. Missing, 0% or invalid (a number without `%`) = vanilla.
+- 🟢 `ai_avoid_debuffed_target_change = 70%` — AI only: chance, 0%-100%, that a unit carrying this Weapon ignores a "taken" enemy when it picks a target on its own and attacks another one instead. An enemy is taken while it carries a Debuff that one of this unit's Weapons applies (Debuffs of other profiles stack and do not count), or as soon as another allied unit with a Debuff Weapon has chosen it as target (known at launch, not at impact). Works for `debuff_id` and `delay_time_debuff_id`. Rolled at each target search: in the remaining chance the unit picks as usual and may join the others. If no other enemy is in range, the taken one is still attacked. The unit's main and extra Weapons are checked and the highest value is used. It only affects the AI's own target search: attack orders from the player, the unit under direct control and fire volumes are unchanged, and below aggression 50 (no automatic search) it has no effect. Disabled in multiplayer. Missing, 0% or invalid (a number without `%`) = vanilla.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Sounds, palette flashes and shakes
@@ -1873,6 +1873,8 @@ end
 
 Buffs are reusable profiles linked from a Vehicle with `buff_id`. `new_buff` may appear in any script under Data/Scripts (Buffs.cfg is the recommended file) and never inside `new_vehicle`.
 
+A unit can carry any number of different Buffs at once and they never replace each other, the same rule as Debuffs. Each profile keeps its own icon and look (only Buffs that are currently working show their icon and glow). Several Deflect Buffs add their charges together and are spent in the order the unit received them. An overload breaks only the Deflect in use, while laser contact breaks every Deflect. Invisibility and invulnerability are active as long as any Buff provides them.
+
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `new_buff 1` — Starts reusable Buff profile ID 1. Multiple Vehicles may reference the same ID through buff_id.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1915,6 +1917,8 @@ Buffs are reusable profiles linked from a Vehicle with `buff_id`. `new_buff` may
 
 Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems have their own `debuff_id`). `new_debuff` may appear in any script under Data/Scripts (Debuffs.cfg is the recommended file) and never inside `new_weapon`. Host Stations stay protected from mind control and stun even when Debuffs may affect Host Stations.
 
+A unit can carry any number of different Debuffs at once and they never cancel or replace each other. Each profile keeps its own duration, damage ticks, icon and visuals. A new hit by a profile the unit already carries only refreshes that one (and adds a layer with `stack_max`). The maluses of different Debuffs multiply, so they never pass 100% together. With several stuns the strongest `stun_motion_level` applies, and unit fire is blocked if any stun blocks it. The unit takes the tint of the newest Debuff that defines one. All Debuffs share one sound channel: the last one applied with a sound owns it.
+
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `new_debuff 1` — Starts reusable Debuff profile ID 1. Multiple Weapons and SuperItems may reference the same ID through debuff_id.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1922,7 +1926,7 @@ Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `allow_on_children = 0` — Automatically propagates the active Debuff to child units generated directly by the affected unit. 0 or absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `stack_max = 5` — Maximum number of layers, 1-99. Each new hit by this same profile on a unit that already carries it adds one layer of every malus (`force_malus`, `maxrot_malus`, `shield_malus`, `mgun_shot_time_malus`, `shot_time_malus`, `damage_malus`, `regen_malus`): with `shield_malus = -15%` two layers give -30%, each malus capped at -100%. Every hit renews `duration`. The layer count is shown as a small number at the bottom-right of the status icon. A different Debuff replaces this one and starts again from one layer. 0, absent or invalid = no stacking and no number.
+- 🟢 `stack_max = 5` — Maximum number of layers, 1-99. Each new hit by this same profile on a unit that already carries it adds one layer of every malus (`force_malus`, `maxrot_malus`, `shield_malus`, `mgun_shot_time_malus`, `shot_time_malus`, `damage_malus`, `regen_malus`): with `shield_malus = -15%` two layers give -30%, each malus capped at -100%. Every hit renews `duration`. The layer count is shown as a small number at the bottom-right of the status icon. Other Debuffs on the unit are not affected. 0, absent or invalid = no stacking and no number.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `icon = Graphics/StatusIcons/electrified.svg` — Data-relative icon shown while the unit is debuffed. Empty/invalid = no icon.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2377,7 +2381,7 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.push_at_death_mult = 2.0` — Multiplies push and Blast_Push only when the hit kills the target. Range: 0..10; final effective intensity remains capped at 10. Absent or 1.0 = no extra push. Does not increase damage.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.gun_support_tolerance = 60` — Building turrets (flak, radar and other GUN actors on a building): extra world units the surface under the turret may sink, compared with the first measurement, before the turret loses its base and is destroyed. Checked at the point under the turret plus four footprint points: the turret falls when the center sinks too much or half of the originally supported footprint is gone (dents, damaged building models). 0 or absent = vanilla single center ray. Host Station Robo-Guns and Unit Guns on vehicles are never affected.
+- 🟢 `game.gun_fall_tolerance = 3` — Building turrets (flaks, radars and other GUN actors on a building): how far the first surface under the turret may drop below its normal mount height before the turret loses its base and is destroyed. Range: 0..10, decimals allowed; each step adds 60 world units of reach (3 = 180, 10 = 600). 0 means no tolerance. Absent or invalid = 0 (vanilla). Host Station Robo-Guns and levitating guns are never affected.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.mgun_range = 1500` — Range of MGUN hit-scan fire in world units; also the range of `gun_type = mg` flaks. Default 1000; values above 6000 are capped.
 ------------------------------------------------------------------------------------------------------------------------

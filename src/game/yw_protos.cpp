@@ -238,19 +238,14 @@ bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()
     Common::Env.SetPrefix("rsrc", oldRsrc);
     if ( parsed )
     {
-        World::TVhclProto &spectatorProto = _vhclProtos[targetID];
-        spectatorProto.buff = World::TVehicleBuffConfig();
-        auto buffIt = _buffProfiles.find(spectatorProto.buff_id);
-        if ( buffIt != _buffProfiles.end() )
-            spectatorProto.buff = buffIt->second;
+        ResolveVehicleBuffs(_vhclProtos[targetID]);
     }
 
     if ( !parsed ||
          _vhclProtos[targetID].Index != targetID ||
          _vhclProtos[targetID].model_id != BACT_TYPES_UFO ||
          !_vhclProtos[targetID].hidden ||
-         !_vhclProtos[targetID].buff.valid ||
-         !_vhclProtos[targetID].buff.invulnerable )
+         !_vhclProtos[targetID].HasInvulnerableBuff() )
     {
         _vhclProtos[targetID] = previous;
         _spectatorVehicleProtoID = -1;
@@ -289,34 +284,29 @@ bool NC_STACK_ypaworld::LoadProtosScript(const std::string &filename)
     return res;
 }
 
+// Copies the Buff profiles named by buff_id into the vehicle; unknown IDs are skipped with a warning.
+void NC_STACK_ypaworld::ResolveVehicleBuffs(World::TVhclProto &proto)
+{
+    proto.buffs.clear();
+
+    for (int32_t buffId : proto.buff_ids)
+    {
+        auto it = _buffProfiles.find(buffId);
+        if ( it == _buffProfiles.end() )
+        {
+            ypa_log_out("WARNING: vehicle %d references missing buff_id %d; that Buff is ignored.\n",
+                        proto.Index, buffId);
+            continue;
+        }
+
+        proto.buffs.push_back(it->second);
+    }
+}
+
 void NC_STACK_ypaworld::ResolveStatusProfileLinks()
 {
     for (World::TVhclProto &proto : _vhclProtos)
-    {
-        if ( proto.buff_id < 0 )
-        {
-            if ( proto.buff.valid )
-                proto.buff = World::TVehicleBuffConfig();
-            continue;
-        }
-
-        auto it = _buffProfiles.find(proto.buff_id);
-        if ( it == _buffProfiles.end() )
-        {
-            if ( proto.buff.valid )
-                proto.buff = World::TVehicleBuffConfig();
-            ypa_log_out("WARNING: vehicle %d references missing buff_id %d; Buff disabled.\n",
-                        proto.Index, proto.buff_id);
-            continue;
-        }
-
-        if ( proto.buff.valid &&
-             proto.buff.profile_id == it->second.profile_id &&
-             proto.buff.revision == it->second.revision )
-            continue;
-
-        proto.buff = it->second;
-    }
+        ResolveVehicleBuffs(proto);
 
     auto resolveWeaponDebuff = [this](size_t weaponId, int32_t profileId,
                                       int32_t firstValidId, const char *parameterName,

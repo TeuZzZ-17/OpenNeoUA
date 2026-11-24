@@ -159,6 +159,31 @@ size_t NC_STACK_ypagun::SetParameters(IDVList &stak)
     return 1;
 }
 
+// game.gun_fall_tolerance, 0..10: how far the first surface under a building turret may drop
+// below its normal mount height before the turret loses its base. 0, absent or invalid = vanilla.
+static float ypagun_GetFallToleranceExtra()
+{
+    constexpr float unitsPerStep = 60.0f;
+    const std::string value = System::IniConf::GameGunFallTolerance.Get<std::string>();
+    if ( value.empty() )
+        return 0.0f;
+
+    try
+    {
+        size_t pos = 0;
+        const float tolerance = std::stof(value, &pos);
+        if ( value.find_first_not_of(" \t\r\n", pos) != std::string::npos ||
+             !std::isfinite(tolerance) || tolerance <= 0.0f )
+            return 0.0f;
+
+        return std::min(tolerance, 10.0f) * unitsPerStep;
+    }
+    catch (...)
+    {
+        return 0.0f;
+    }
+}
+
 bool NC_STACK_ypagun::CheckPedestal()
 {
     if (CollisionsDisabled()) return true;
@@ -166,76 +191,21 @@ bool NC_STACK_ypagun::CheckPedestal()
     arg136.stPos = _position;
     arg136.vect.x = 0;
 
+    // Host Station Robo-Guns and levitating guns keep the vanilla ray length.
+    const float reach = _height +
+        ((_gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_LEVITATE)) ? 0.0f : ypagun_GetFallToleranceExtra());
+
     if ( _gunFlags & GUN_FLAGS_FALLDOWN )
-        arg136.vect.y = -_height;
+        arg136.vect.y = -reach;
     else
-        arg136.vect.y = _height;
+        arg136.vect.y = reach;
 
     arg136.vect.z = 0;
     arg136.flags = 0;
 
     TraceWorldCollision(&arg136);
 
-    if ( !arg136.isect )
-        return false;
-
-    // Vanilla-safe: with the key absent/0 the single centre ray above decides.
-    const int tolerance = System::IniConf::GameGunSupportTolerance.Get<int32_t>();
-    if ( tolerance <= 0 || _gunFlags & (GUN_FLAGS_ROBO | GUN_FLAGS_LEVITATE) )
-        return true;
-
-    return CheckPedestalSupport(arg136, (float)tolerance);
-}
-
-bool NC_STACK_ypagun::CheckPedestalSupport(const ypaworld_arg136 &centerHit, float tolerance)
-{
-    // The first measurement is the "supported" reference: a turret that was placed
-    // on a roof keeps its authored clearance, only a LATER sinking counts as loss.
-    float dist[5];
-    dist[0] = (centerHit.isectPos - centerHit.stPos).length();
-
-    // Footprint samples: the four horizontal directions at ~60% of the turret radius.
-    float footprint = (_viewer_radius > 0.0f ? _viewer_radius : 30.0f) * 0.6f;
-    footprint = std::max(15.0f, std::min(footprint, 90.0f));
-    static const float offX[4] = { 1.0f, -1.0f, 0.0f, 0.0f };
-    static const float offZ[4] = { 0.0f, 0.0f, 1.0f, -1.0f };
-
-    for (int i = 0; i < 4; i++)
-    {
-        ypaworld_arg136 side;
-        side.stPos = centerHit.stPos + vec3d(offX[i] * footprint, 0.0f, offZ[i] * footprint);
-        side.vect = centerHit.vect;
-        side.flags = 0;
-        TraceWorldCollision(&side);
-        dist[i + 1] = side.isect ? (side.isectPos - side.stPos).length() : -1.0f;
-    }
-
-    if ( !_pedestalBaseReady )
-    {
-        for (int i = 0; i < 5; i++)
-            _pedestalBase[i] = dist[i];
-        _pedestalBaseReady = true;
-        return true;
-    }
-
-    // The point right under the turret must still be there...
-    if ( _pedestalBase[0] >= 0.0f && dist[0] > _pedestalBase[0] + tolerance )
-        return false;
-
-    // ...and at least half of the footprint points that were supported at the start.
-    int measured = 0;
-    int stillSupported = 0;
-    for (int i = 1; i < 5; i++)
-    {
-        if ( _pedestalBase[i] < 0.0f )
-            continue;
-
-        measured++;
-        if ( dist[i] >= 0.0f && dist[i] <= _pedestalBase[i] + tolerance )
-            stillSupported++;
-    }
-
-    return measured == 0 || stillSupported * 2 >= measured;
+    return arg136.isect;
 }
 
 void NC_STACK_ypagun::UpdateContinuousRotation(const update_msg *arg)

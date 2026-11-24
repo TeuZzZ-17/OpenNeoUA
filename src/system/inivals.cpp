@@ -326,10 +326,9 @@ Common::Ini::Key IniConf::GamePowerStationEnergyMultiplier("game.powerstation_en
 Common::Ini::Key IniConf::GameFallEnergy("game.fall_energy", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA custom: lethal-hit push multiplier, parsed and clamped to 0..10.
 Common::Ini::Key IniConf::GamePushAtDeathMultiplier("game.push_at_death_mult", Common::Ini::KT_WORD, std::string("1.0"));
-// OpenNeoUA custom: building-turret support check. 0/absent = vanilla (single ray under
-// the turret). > 0 = extra world units the surface under the turret may sink (building
-// dents, damaged models) before the turret loses its base and is destroyed.
-Common::Ini::Key IniConf::GameGunSupportTolerance("game.gun_support_tolerance", Common::Ini::KT_DIGIT, (int32_t)0);
+// OpenNeoUA custom: building-turret fall tolerance, 0..10 (60 world units per step). Absent,
+// 0 or invalid = vanilla single ray of the turret height under the turret.
+Common::Ini::Key IniConf::GameGunFallTolerance("game.gun_fall_tolerance", Common::Ini::KT_WORD, std::string());
 // OpenNeoUA: single Hand Brake intensity for braking strength and the normalized
 // recoil/random-spread reduction. Zero disables all three effects; values above
 // one may strengthen braking while weapon modifiers remain capped at 100%.
@@ -718,7 +717,7 @@ void IniConf::Init()
         , &GamePowerStationEnergyMultiplier
         , &GameFallEnergy
         , &GamePushAtDeathMultiplier
-        , &GameGunSupportTolerance
+        , &GameGunFallTolerance
         , &GameHandBrakePower
         , &GameRecoilKickTime
         , &GameRecoilHoldTime

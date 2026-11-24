@@ -2092,6 +2092,37 @@ static bool ypabact_HasDebuffWeapon(NC_STACK_ypabact *unit)
     return false;
 }
 
+// True if the enemy already carries a Debuff that one of the unit's own weapons would apply.
+// Debuffs of other profiles stack, so they do not make the enemy "taken".
+static bool ypabact_EnemyCarriesOwnDebuff(const NC_STACK_ypabact *unit, const NC_STACK_ypabact *enemy)
+{
+    const std::vector<World::TWeapProto> &weapons = const_cast<NC_STACK_ypabact *>(unit)->getBACT_pWorld()->GetWeaponsProtos();
+    const int weaponIds[4] = { unit->_weapon, unit->_extra_weapons[0], unit->_extra_weapons[1], unit->_extra_weapons[2] };
+
+    for ( int id : weaponIds )
+    {
+        if ( id <= 0 || (size_t)id >= weapons.size() )
+            continue;
+
+        const World::TWeaponDebuffConfig *configs[3] =
+            { &weapons[id].debuff, &weapons[id].delay_time_debuff, &weapons[id].blast_debuff };
+
+        for ( const World::TWeaponDebuffConfig *config : configs )
+        {
+            if ( !config->valid )
+                continue;
+
+            for ( const TActiveDebuffState &active : enemy->_debuff_list )
+            {
+                if ( active.profile_id == config->profile_id && active.expire_time > unit->_clock )
+                    return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &cell, float *radius, char *job, bool skipDebuffed) const
 {
     NC_STACK_ypabact *lastSelectedUnit = nullptr;
@@ -2132,11 +2163,11 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &c
         if ( cel_unit->_owner == _owner || cel_unit->_owner == World::OWNER_0 )
             continue;
 
-        // OpenNeoUA ai_avoid_debuffed_target_change: an enemy is "taken" while its debuff is active or
-        // as soon as an ally with a Debuff weapon aims at it (known at launch, not at impact).
+        // OpenNeoUA ai_avoid_debuffed_target_change: an enemy is "taken" while it carries a Debuff of
+        // this unit's weapons or as soon as an ally with a Debuff weapon aims at it (known at launch).
         if ( skipDebuffed )
         {
-            bool taken = cel_unit->_active_debuff.active && cel_unit->_active_debuff.expire_time > _clock;
+            bool taken = ypabact_EnemyCarriesOwnDebuff(this, cel_unit);
 
             for ( const TBactAttacker &ainf : cel_unit->_attackersList )
             {

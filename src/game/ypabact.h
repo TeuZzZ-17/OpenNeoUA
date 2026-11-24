@@ -170,6 +170,15 @@ struct TActiveDebuffState
     }
 };
 
+// One Buff on a unit, one entry per profile (same rule as Debuffs). Vehicle-born Buffs are
+// permanent; anything that applies a Buff later can give it a duration.
+struct TActiveBuffState
+{
+    World::TVehicleBuffConfig config; // profile copy; config.deflect_charges = charges left
+    int deflect_max = 0;              // Deflect charges when applied (save/load, "has Deflect")
+    int expire_time = 0;              // 0 = permanent
+};
+
 enum BACT_TGT_TYPE
 {
     BACT_TGT_TYPE_NONE = 0,
@@ -615,6 +624,8 @@ public:
     void InheritSpawnOrders(NC_STACK_ypabact *parent);
     void UpdateActiveDebuff(update_msg *arg);
     void ClearActiveDebuff();
+    void RebuildActiveDebuffAggregate();
+    void ResetDebuffState() { _active_debuff.Clear(); _debuff_list.clear(); _debuff_sound_owner = -1; }
     bool IsActiveDebuffStunning(bool requireMovementLevel = true) const;
     bool IsActiveDebuffStunFireBlocked() const;
     float GetActiveDebuffStunTraction(float currentTraction, bool supportsReverse) const;
@@ -624,21 +635,37 @@ public:
     virtual void ApplyImpulse(bact_arg83 *arg);
     virtual void ModifyEnergy(bact_arg84 *arg);
     bool IsInvulnerableToDamage() const;
-    bool HasActiveBuff() const
+    // Buffs: _buff_list holds every Buff of the unit (one entry per profile, they never
+    // replace each other). _buff is the combined view (total Deflect charges, any
+    // invisible/invulnerable) rebuilt by RebuildActiveBuffAggregate(); never write it directly.
+    void ApplyBuff(const World::TVehicleBuffConfig &buff, int duration = 0);
+    void UpdateActiveBuff(update_msg *arg);
+    void RebuildActiveBuffAggregate();
+    void ResetBuffState() { _buff = World::TVehicleBuffConfig(); _buff_list.clear(); _buff_deflect_charges_max = 0; }
+    void SetBuffDeflectChargesRemaining(int remaining);
+    // A Buff entry shows its icon and glow while something it provides is working: Deflect
+    // with charges, invisibility while cloaked, invulnerability; a Buff with only a look is always on.
+    bool IsBuffEntryActive(const TActiveBuffState &entry) const
     {
-        if ( !_buff.valid )
-            return false;
-
-        const bool hasGameplayFeature = _buff_deflect_charges_max > 0 ||
-                                        _buff.invisible || _buff.invulnerable;
-        if ( hasGameplayFeature )
+        const World::TVehicleBuffConfig &config = entry.config;
+        if ( entry.deflect_max > 0 || config.invisible || config.invulnerable )
         {
-            return _buff.deflect_charges > 0 ||
-                   (_buff.invisible && _invisibleUnrevealed) ||
-                   _buff.invulnerable;
+            return config.deflect_charges > 0 ||
+                   (config.invisible && _invisibleUnrevealed) ||
+                   config.invulnerable;
         }
 
-        return !_buff.name.empty() || !_buff.icon.empty() || _buff.glow_intensity > 0.0f;
+        return !config.name.empty() || !config.icon.empty() || config.glow_intensity > 0.0f;
+    }
+    bool HasActiveBuff() const
+    {
+        for ( const TActiveBuffState &entry : _buff_list )
+        {
+            if ( IsBuffEntryActive(entry) )
+                return true;
+        }
+
+        return false;
     }
     bool HasDeflectBuff() const { return _buff.valid && _buff.deflect_charges > 0; }
     int GetBuffDeflectChargesRemaining() const { return _buff.deflect_charges; }
@@ -652,7 +679,8 @@ public:
         return 1.0f - reduction;
     }
     bool ConsumeBuffDeflectCharge();
-    void ClearBuffDeflectCharges() { _buff.deflect_charges = 0; }
+    // Overload: the Deflect in use loses all its charges. all = true (laser) breaks every Deflect.
+    void ClearBuffDeflectCharges(bool all = false);
     void SpawnBuffDeflectVisual(const vec3d &pos, const mat3x3 &rot);
     // OpenNeoUA: transient single-player Elite medals. These helpers are the
     // single gameplay/UI source of truth and never mutate shared prototypes.
@@ -1050,8 +1078,9 @@ public:
     int _playerSprintPitchExtra = 0;
     int _energy;
     int _energy_max;
+    std::vector<TActiveBuffState> _buff_list;
     World::TVehicleBuffConfig _buff;
-    int _buff_deflect_charges_max;
+    int _buff_deflect_charges_max; // total Deflect charges of all Buffs when applied
     bool _invulnerable;
     bool _debugIgnoredByAI = false; // Runtime-only New Debug F9 toggle; never saved.
     bool _debugPlayerProjectile = false; // Runtime-only ownership captured when a projectile is fired.
@@ -1181,7 +1210,12 @@ public:
     float _damaged_shot_time_malus;
     float _damaged_snd_pitch_multiplier;
     bool _damaged_fx_active;
+    // Every Debuff on the unit, one entry per profile (a re-hit refreshes/stacks its entry).
+    // Entries never replace each other. _active_debuff is the combined view of all of them
+    // (maluses, stun, tint) rebuilt by RebuildActiveDebuffAggregate(); never write it directly.
+    std::vector<TActiveDebuffState> _debuff_list;
     TActiveDebuffState _active_debuff;
+    int32_t _debuff_sound_owner = -1; // profile_id whose sound currently owns the shared debuff channel
     TSndCarrier _debuff_soundcarrier;
     TSndCarrier _player_launch_shake_carrier; // OpenNeoUA custom: one local-player shake per successful weapon launch
     TSndFxPosParam _mgun_recoil_shake; // OpenNeoUA: first-person MGUN shake, scaled from mgun_cockpit_camera_recoil

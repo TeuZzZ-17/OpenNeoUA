@@ -279,11 +279,17 @@ bool StatusIconBlinkPhaseVisible(const StatusIconBlinkEntry &entry, uint32_t now
 // with stack_max show it; every other icon stays as it was.
 static void StatusIconApplyBadges(const NC_STACK_ypabact *bact, StatusIconBlinkRenderList &icons, int count)
 {
-    if ( !bact->_active_debuff.active || bact->_active_debuff.stack_max <= 0 )
-        return;
+    for (const TActiveDebuffState &debuff : bact->_debuff_list)
+    {
+        if ( debuff.stack_max <= 0 )
+            continue;
 
-    for (int i = 0; i < count; i++)
-        icons[i].badge = !StriCmp(icons[i].path, bact->_active_debuff.icon) ? bact->_active_debuff.stack_count : 0;
+        for (int i = 0; i < count; i++)
+        {
+            if ( !StriCmp(icons[i].path, debuff.icon) )
+                icons[i].badge = debuff.stack_count;
+        }
+    }
 }
 
 int StatusIconBuildBlinkRenderList(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
@@ -630,14 +636,17 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
 
     int iconCount = 0;
 
-    if ( bact->_active_debuff.active )
-        StatusIconAdd(icons, iconCount, bact->_active_debuff.icon);
+    for (const TActiveDebuffState &debuff : bact->_debuff_list)
+        StatusIconAdd(icons, iconCount, debuff.icon);
 
     if ( bact->_damaged_fx_active )
         StatusIconAdd(icons, iconCount, StatusIconDamagedPath());
 
-    if ( bact->HasActiveBuff() )
-        StatusIconAdd(icons, iconCount, bact->_buff.icon);
+    for ( const TActiveBuffState &buff : bact->_buff_list )
+    {
+        if ( bact->IsBuffEntryActive(buff) )
+            StatusIconAdd(icons, iconCount, buff.config.icon);
+    }
 
     StatusIconAdd(icons, iconCount, bact->GetProgressiveWeaponOverheatIcon());
 

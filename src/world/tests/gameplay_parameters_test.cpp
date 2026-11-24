@@ -36,6 +36,9 @@ struct Unit : NC_STACK_ypabact {
     }
     void ModifyEnergy(bact_arg84 *arg) override { _energy += arg->energy; }
     bool Debuffed() const { return _active_debuff.active; }
+    size_t DebuffCount() const { return _debuff_list.size(); }
+    float CombinedForceMalus() const { return _active_debuff.force_malus; }
+    size_t BuffCount() const { return _buff_list.size(); }
 };
 struct Missile : NC_STACK_ypamissile {
     using NC_STACK_ypamissile::ApplyBlastToUnits;
@@ -223,10 +226,15 @@ int main(int argc, char **argv) {
     Check(enemy.Debuffed() && !ally.Debuffed() && !source.Debuffed(), "blast_debuff reaches enemies only");
     Check(!outside.Debuffed(), "debuff respects radius");
     enemy.ClearActiveDebuff();
-    enemy._buff.valid=true; enemy._buff.deflect_charges=2;
+    World::TVehicleBuffConfig shield, ward, cloak;
+    shield.valid=ward.valid=cloak.valid=true;
+    shield.profile_id=1; shield.deflect_charges=2;
+    ward.profile_id=2; ward.deflect_charges=1;
+    cloak.profile_id=3; cloak.invulnerable=true;
+    enemy.ApplyBuff(shield);
     missile.ApplyBlastToUnits();
     Check(!enemy.Debuffed() && enemy.GetBuffDeflectChargesRemaining()==1, "Deflect stops debuff-only blast once");
-    enemy._buff.deflect_charges=0;
+    enemy.ClearBuffDeflectCharges(true);
     missile.RememberDirectHitUnit(&enemy);
     missile.ApplyBlastToUnits();
     Check(enemy.Debuffed(), "direct target without debuff_id takes blast_debuff");
@@ -235,6 +243,29 @@ int main(int argc, char **argv) {
     missile.ApplyBlastToUnits();
     Check(!enemy.Debuffed(), "debuff_id replaces blast_debuff on the direct target");
     weapon.debuff.valid=false; weapon.blast_debuff.valid=false;
+
+    // Debuffs of different profiles coexist; a re-hit only refreshes its own entry.
+    enemy.ClearActiveDebuff();
+    World::TWeaponDebuffConfig slow, burn;
+    slow.valid=burn.valid=true; slow.duration=burn.duration=10000;
+    slow.profile_id=1; burn.profile_id=2; slow.force_malus=0.5f; burn.force_malus=0.5f;
+    enemy.ApplyDebuff(slow,&source); enemy.ApplyDebuff(burn,&source); enemy.ApplyDebuff(slow,&source);
+    Check(enemy.DebuffCount()==2 && std::fabs(enemy.CombinedForceMalus()-0.75f)<0.001f,
+          "different Debuff profiles coexist and their maluses multiply");
+    enemy.ClearActiveDebuff();
+    Check(enemy.DebuffCount()==0 && !enemy.Debuffed(), "clearing removes every Debuff");
+
+    // Buffs of different profiles coexist; Deflects are spent in order and nothing is lost.
+    enemy.ResetBuffState();
+    enemy.ApplyBuff(shield); enemy.ApplyBuff(ward); enemy.ApplyBuff(cloak); enemy.ApplyBuff(shield);
+    Check(enemy.BuffCount()==3 && enemy.GetBuffDeflectChargesRemaining()==3 && enemy._invulnerable,
+          "different Buff profiles coexist and Deflect charges add up");
+    enemy.ConsumeBuffDeflectCharge(); enemy.ConsumeBuffDeflectCharge(); enemy.ConsumeBuffDeflectCharge();
+    Check(!enemy.HasDeflectBuff() && enemy.BuffCount()==3 && enemy._invulnerable && enemy.HasActiveBuff(),
+          "spent Deflects leave the other Buffs alone");
+    enemy.SetBuffDeflectChargesRemaining(1);
+    Check(enemy.GetBuffDeflectChargesRemaining()==1, "saved Deflect charges are restored");
+    enemy.ResetBuffState(); enemy._invulnerable=false;
 
     enemy._owner=2; enemy._energy=10000; missile.SetBlast(1500,200,0);
     missile._energy=100; missile.ApplyBlastToUnits();

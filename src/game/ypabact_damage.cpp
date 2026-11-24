@@ -1356,11 +1356,38 @@ int NC_STACK_ypabact::CalcShieldedCustomDamage(int rawDamage) const
 
 bool NC_STACK_ypabact::ConsumeBuffDeflectCharge()
 {
-    if ( !HasDeflectBuff() )
-        return false;
+    // Deflects are spent in the order the Buffs were applied.
+    for ( TActiveBuffState &entry : _buff_list )
+    {
+        if ( entry.config.deflect_charges > 0 )
+        {
+            --entry.config.deflect_charges;
+            RebuildActiveBuffAggregate();
+            return true;
+        }
+    }
 
-    --_buff.deflect_charges;
-    return true;
+    return false;
+}
+
+void NC_STACK_ypabact::ClearBuffDeflectCharges(bool all)
+{
+    bool changed = false;
+
+    for ( TActiveBuffState &entry : _buff_list )
+    {
+        if ( entry.config.deflect_charges > 0 )
+        {
+            entry.config.deflect_charges = 0;
+            changed = true;
+
+            if ( !all )
+                break;
+        }
+    }
+
+    if ( changed )
+        RebuildActiveBuffAggregate();
 }
 
 void NC_STACK_ypabact::SpawnBuffDeflectVisual(const vec3d &pos, const mat3x3 &rot)

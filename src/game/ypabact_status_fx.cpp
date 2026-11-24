@@ -91,41 +91,40 @@ int ypabact_GetDebuffFXLifetime(const TActiveDebuffState &debuff)
     return lifetime;
 }
 
-void ypabact_SpawnDebuffFXEvent(NC_STACK_ypabact *bact, int lifetime)
+void ypabact_SpawnDebuffFXEvent(NC_STACK_ypabact *bact, const TActiveDebuffState &debuff, int lifetime)
 {
-    if ( !bact || !bact->_active_debuff.active )
+    if ( !bact || !debuff.active )
         return;
 
     NC_STACK_ypaworld *world = bact->getBACT_pWorld();
     if ( !world )
         return;
 
-    const vec3d effectScale =
-        ypabact_BuildUniformStatusFXScale(bact->_active_debuff.visual_scale);
-    const World::TVisualTint *trailTint = bact->_active_debuff.has_vp_trail_tint
-        ? &bact->_active_debuff.vp_trail_tint : nullptr;
+    const vec3d effectScale = ypabact_BuildUniformStatusFXScale(debuff.visual_scale);
+    const World::TVisualTint *trailTint = debuff.has_vp_trail_tint
+        ? &debuff.vp_trail_tint : nullptr;
 
-    for (int16_t fxVp : bact->_active_debuff.vps)
+    for (int16_t fxVp : debuff.vps)
     {
         if ( fxVp <= 0 )
             continue;
 
         vec3d localOffset;
         bool rotateOffset = ypabact_BuildAttachedFXOffset(
-            bact, bact->_active_debuff.random_max_offset, &localOffset);
+            bact, debuff.random_max_offset, &localOffset);
         world->SpawnAttachedStatusTransientVP(fxVp, bact, localOffset, lifetime,
                                               false, rotateOffset, effectScale,
-                                              bact->_active_debuff.tint, trailTint);
+                                              debuff.tint, trailTint);
     }
 
-    if ( !bact->_active_debuff.mesh3ds.empty() )
+    if ( !debuff.mesh3ds.empty() )
     {
         vec3d localOffset;
         bool rotateOffset = ypabact_BuildAttachedFXOffset(
-            bact, bact->_active_debuff.random_max_offset, &localOffset);
+            bact, debuff.random_max_offset, &localOffset);
         world->SpawnAttachedStatusTransientMesh(
-            bact->_active_debuff.mesh3ds, bact, localOffset, lifetime,
-            rotateOffset, effectScale, bact->_active_debuff.tint);
+            debuff.mesh3ds, bact, localOffset, lifetime,
+            rotateOffset, effectScale, debuff.tint);
     }
 }
 
@@ -231,8 +230,79 @@ void ypabact_StartStatusSoundIfIdle(NC_STACK_ypabact *bact, TSndCarrier *carrier
 
 void NC_STACK_ypabact::ClearActiveDebuff()
 {
-    _active_debuff.Clear();
+    ResetDebuffState();
     SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
+}
+
+// Combined view of every Debuff on the unit: each malus is multiplied (several Debuffs never
+// pass 100%), the strongest stun wins, the newest tint wins. The stun runtime (phase, timers)
+// lives only here and survives a rebuild until the stun really starts or ends.
+void NC_STACK_ypabact::RebuildActiveDebuffAggregate()
+{
+    if ( _debuff_list.empty() )
+    {
+        _active_debuff.Clear();
+        return;
+    }
+
+    static float TActiveDebuffState::* const malusFields[] =
+    {
+        &TActiveDebuffState::force_malus, &TActiveDebuffState::maxrot_malus,
+        &TActiveDebuffState::shield_malus, &TActiveDebuffState::mgun_shot_time_malus,
+        &TActiveDebuffState::shot_time_malus, &TActiveDebuffState::damage_malus,
+        &TActiveDebuffState::regen_malus
+    };
+    constexpr int malusCount = sizeof(malusFields) / sizeof(malusFields[0]);
+
+    float mult[malusCount];
+    std::fill(mult, mult + malusCount, 1.0f);
+
+    float pitch = 1.0f;
+    bool stun = false;
+    bool stunUnitFire = true;
+    float stunLevel = 0.0f;
+    int expireTime = 0;
+    World::TVisualTint targetTint;
+
+    for (const TActiveDebuffState &entry : _debuff_list)
+    {
+        for (int i = 0; i < malusCount; i++)
+            mult[i] *= ypabact_DebuffMalusToMult(entry.*malusFields[i]);
+
+        pitch *= entry.snd_pitch_multiplier;
+        expireTime = std::max(expireTime, entry.expire_time);
+
+        if ( entry.stun )
+        {
+            stun = true;
+            stunLevel = std::max(stunLevel, entry.stun_motion_level);
+            stunUnitFire = stunUnitFire && entry.stun_unit_fire;
+        }
+
+        if ( !entry.target_tint.IsNeutral() )
+            targetTint = entry.target_tint;
+    }
+
+    TActiveDebuffState &agg = _active_debuff;
+    const bool wasStunMoving = agg.active && agg.stun && agg.stun_motion_level > 0.0f;
+
+    agg.active = true;
+    agg.expire_time = expireTime;
+    for (int i = 0; i < malusCount; i++)
+        agg.*malusFields[i] = 1.0f - mult[i];
+    agg.snd_pitch_multiplier = pitch;
+    agg.target_tint = targetTint;
+    agg.stun = stun;
+    agg.stun_unit_fire = stunUnitFire;
+    agg.stun_motion_level = stunLevel;
+
+    if ( stunLevel <= 0.0f || (stun && !wasStunMoving) )
+    {
+        agg.stun_move_phase = 0;
+        agg.stun_next_move_time = 0;
+        agg.stun_floor_close = false;
+        agg.stun_next_floor_check_time = 0;
+    }
 }
 
 void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_ypabact *source, int16_t sourceOwner)
@@ -247,18 +317,36 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     if ( !ypabact_CanUseGameplayStatusMechanics(this) )
         return;
 
-    // A Debuff re-applied while already active is a refresh. It must never
-    // delay or interrupt what the Debuff is already doing: damage ticks and
-    // sound keep running even while the target is under continuous fire.
-    const bool refreshActive = _active_debuff.active;
-    const int pendingTickTime = _active_debuff.next_tick_time;
+    // One entry per profile: another profile never replaces or cancels it. The same profile
+    // re-applied is a refresh. It must never delay or interrupt what the Debuff is already
+    // doing: damage ticks and sound keep running even while the target is under continuous fire.
+    size_t foundIndex = _debuff_list.size();
+    for (size_t i = 0; i < _debuff_list.size(); i++)
+    {
+        if ( _debuff_list[i].profile_id == debuff.profile_id )
+        {
+            foundIndex = i;
+            break;
+        }
+    }
+
+    const bool refreshActive = foundIndex < _debuff_list.size();
+    if ( refreshActive )
+    {
+        // The list is ordered by last application ("newest tint" and the sound owner follow it).
+        std::rotate(_debuff_list.begin() + foundIndex, _debuff_list.begin() + foundIndex + 1, _debuff_list.end());
+    }
+    else
+        _debuff_list.emplace_back();
+
+    TActiveDebuffState &entry = _debuff_list.back();
+    const int pendingTickTime = entry.next_tick_time;
 
     // stack_max: a hit by the same profile on a unit already carrying it adds one layer.
-    // Every malus is its per-layer value x layers, still capped at 100%. Another profile
-    // replaces the Debuff and starts again from one layer.
+    // Every malus is its per-layer value x layers, still capped at 100%.
     int stackLayers = 1;
-    if ( debuff.stack_max > 0 && refreshActive && _active_debuff.profile_id == debuff.profile_id )
-        stackLayers = std::min(_active_debuff.stack_count + 1, debuff.stack_max);
+    if ( debuff.stack_max > 0 && refreshActive )
+        stackLayers = std::min(entry.stack_count + 1, debuff.stack_max);
     const auto stackedMalus = [stackLayers](float perLayer)
     {
         return std::max(0.0f, std::min(perLayer * (float)stackLayers, 1.0f));
@@ -268,138 +356,114 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
                                ypabact_CanBeMindcontrolled(this, source);
     const float stunMotionLevel = hostStation ? 0.0f :
         std::max(0.0f, std::min(debuff.stun_motion_level, 1.0f));
-    const bool applyStun = !hostStation && debuff.stun;
-    const bool startStunMovement = applyStun && stunMotionLevel > 0.0f &&
-                                   (!_active_debuff.active ||
-                                    !_active_debuff.stun ||
-                                    _active_debuff.stun_motion_level <= 0.0f);
 
-    _active_debuff.active = true;
-    _active_debuff.allow_on_children = debuff.allow_on_children;
-    _active_debuff.name = debuff.name.empty() ? "debuff" : debuff.name;
-    _active_debuff.icon = debuff.icon;
-    _active_debuff.energy = debuff.energy;
-    _active_debuff.tick_time = debuff.tick_time > 0 ? debuff.tick_time : 1000;
-    _active_debuff.expire_time = _clock + debuff.duration;
-    _active_debuff.next_tick_time = _clock + _active_debuff.tick_time;
+    entry.active = true;
+    entry.allow_on_children = debuff.allow_on_children;
+    entry.name = debuff.name.empty() ? "debuff" : debuff.name;
+    entry.icon = debuff.icon;
+    entry.energy = debuff.energy;
+    entry.tick_time = debuff.tick_time > 0 ? debuff.tick_time : 1000;
+    entry.expire_time = _clock + debuff.duration;
+    entry.next_tick_time = _clock + entry.tick_time;
 
     // A refresh must never postpone a tick already scheduled: fast repeated
     // hits would keep pushing the damage tick away and the Debuff would never
     // deal its defined damage while the target is being hit. Keep the earliest
     // pending tick so the defined cadence always runs.
-    if ( refreshActive && pendingTickTime < _active_debuff.next_tick_time )
-        _active_debuff.next_tick_time = pendingTickTime;
+    if ( refreshActive && pendingTickTime < entry.next_tick_time )
+        entry.next_tick_time = pendingTickTime;
 
-    _active_debuff.stun = applyStun;
-    _active_debuff.stun_motion_level = stunMotionLevel;
-    _active_debuff.stun_unit_fire = hostStation ? true : debuff.stun_unit_fire;
-    if ( startStunMovement )
-    {
-        _active_debuff.stun_move_phase = 0;
-        _active_debuff.stun_next_move_time = 0;
-        _active_debuff.stun_floor_close = false;
-        _active_debuff.stun_next_floor_check_time = 0;
-    }
-    else if ( stunMotionLevel <= 0.0f )
-    {
-        _active_debuff.stun_move_phase = 0;
-        _active_debuff.stun_next_move_time = 0;
-        _active_debuff.stun_floor_close = false;
-        _active_debuff.stun_next_floor_check_time = 0;
-    }
-    _active_debuff.force_malus = stackedMalus(debuff.force_malus);
-    _active_debuff.maxrot_malus = stackedMalus(debuff.maxrot_malus);
-    _active_debuff.shield_malus = stackedMalus(debuff.shield_malus);
-    _active_debuff.mgun_shot_time_malus = stackedMalus(debuff.mgun_shot_time_malus);
-    _active_debuff.shot_time_malus = stackedMalus(debuff.shot_time_malus);
-    _active_debuff.damage_malus = stackedMalus(debuff.damage_malus);
-    _active_debuff.regen_malus = stackedMalus(debuff.regen_malus);
-    _active_debuff.profile_id = debuff.profile_id;
-    _active_debuff.stack_max = debuff.stack_max;
-    _active_debuff.stack_count = debuff.stack_max > 0 ? stackLayers : 0;
-    _active_debuff.snd_pitch_multiplier = ypabact_SafeDamageMult(debuff.snd_pitch_multiplier);
-    _active_debuff.target_tint = debuff.target_tint;
-    _active_debuff.vps = debuff.vps;
-    _active_debuff.mesh3ds = debuff.mesh3ds;
-    _active_debuff.visual_scale = debuff.visual_scale;
-    _active_debuff.tint = debuff.tint;
-    _active_debuff.random_max_offset = debuff.random_max_offset;
-    _active_debuff.vp_trail_tint = debuff.vp_trail_tint;
-    _active_debuff.has_vp_trail_tint = debuff.has_vp_trail_tint;
-    _active_debuff.source_gid = source ? source->_gid : 0;
+    entry.stun = !hostStation && debuff.stun;
+    entry.stun_motion_level = stunMotionLevel;
+    entry.stun_unit_fire = hostStation ? true : debuff.stun_unit_fire;
+    entry.force_malus = stackedMalus(debuff.force_malus);
+    entry.maxrot_malus = stackedMalus(debuff.maxrot_malus);
+    entry.shield_malus = stackedMalus(debuff.shield_malus);
+    entry.mgun_shot_time_malus = stackedMalus(debuff.mgun_shot_time_malus);
+    entry.shot_time_malus = stackedMalus(debuff.shot_time_malus);
+    entry.damage_malus = stackedMalus(debuff.damage_malus);
+    entry.regen_malus = stackedMalus(debuff.regen_malus);
+    entry.profile_id = debuff.profile_id;
+    entry.stack_max = debuff.stack_max;
+    entry.stack_count = debuff.stack_max > 0 ? stackLayers : 0;
+    entry.snd_pitch_multiplier = ypabact_SafeDamageMult(debuff.snd_pitch_multiplier);
+    entry.target_tint = debuff.target_tint;
+    entry.vps = debuff.vps;
+    entry.mesh3ds = debuff.mesh3ds;
+    entry.visual_scale = debuff.visual_scale;
+    entry.tint = debuff.tint;
+    entry.random_max_offset = debuff.random_max_offset;
+    entry.vp_trail_tint = debuff.vp_trail_tint;
+    entry.has_vp_trail_tint = debuff.has_vp_trail_tint;
+    entry.source_gid = source ? source->_gid : 0;
     int16_t resolvedSourceOwner = source ? source->_owner : sourceOwner;
     if ( resolvedSourceOwner < World::OWNER_0 || resolvedSourceOwner > World::OWNER_7 )
         resolvedSourceOwner = World::OWNER_0;
-    _active_debuff.source_owner = resolvedSourceOwner;
-    _active_debuff.snd_sample = nullptr;
-    _active_debuff.snd_volume = debuff.tick_snd.volume ? debuff.tick_snd.volume : 120;
-    _active_debuff.snd_pitch = debuff.tick_snd.pitch_min;
+    entry.source_owner = resolvedSourceOwner;
+    entry.snd_sample = nullptr;
+    entry.snd_volume = debuff.tick_snd.volume ? debuff.tick_snd.volume : 120;
+    entry.snd_pitch = debuff.tick_snd.pitch_min;
 
     if ( debuff.tick_snd.MainSample.Sample )
-        _active_debuff.snd_sample = debuff.tick_snd.MainSample.Sample->GetSampleData();
+        entry.snd_sample = debuff.tick_snd.MainSample.Sample->GetSampleData();
 
-    if ( _debuff_soundcarrier.Sounds.empty() )
-        _debuff_soundcarrier.Resize(1);
+    RebuildActiveDebuffAggregate();
 
-    TSoundSource &snd = _debuff_soundcarrier.Sounds[0];
-
-    const bool loopDebuffSound = !debuff.has_tick_time && _active_debuff.snd_sample;
-
-    // A refresh must not interrupt a Debuff sound already playing with the same
-    // setup: repeated hits would restart it every time and its defined sound
-    // would never really play. Only a real setup change rebuilds the carrier.
+    // All Debuffs share one sound channel, owned by the last one applied with a sound.
+    // A silent Debuff leaves the channel alone, so it can never cut another Debuff's sound.
     TSndFXParam *sndPFx = debuff.tick_snd.sndPrm.slot ? &debuff.tick_snd.sndPrm : nullptr;
     TSndFxPosParam *sndShkFx = debuff.tick_snd.sndPrm_shk.slot ? &debuff.tick_snd.sndPrm_shk : nullptr;
-    const bool soundRunning = snd.IsEnabled() || snd.IsPFxEnabled() || snd.IsShkEnabled();
-    const bool keepRunningSound = refreshActive && soundRunning &&
-                                  snd.PSample == _active_debuff.snd_sample &&
-                                  snd.IsLoop() == loopDebuffSound &&
-                                  snd.PPFx == sndPFx && snd.PShkFx == sndShkFx;
+    const bool loopDebuffSound = !debuff.has_tick_time && entry.snd_sample;
 
-    if ( !keepRunningSound )
+    if ( entry.snd_sample || sndPFx || sndShkFx )
     {
-        SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
+        if ( _debuff_soundcarrier.Sounds.empty() )
+            _debuff_soundcarrier.Resize(1);
 
-        snd.PSample = _active_debuff.snd_sample;
-        snd.Volume = _active_debuff.snd_volume;
-        debuff.tick_snd.ConfigureSoundSource(snd);
-        snd.Radius = debuff.tick_snd.radius;
-        snd.PriorityBias = 0;
-        snd.SetLoop(loopDebuffSound);
-        snd.SetFragmented(false);
+        TSoundSource &snd = _debuff_soundcarrier.Sounds[0];
 
-        if ( sndPFx )
+        // A refresh must not interrupt a Debuff sound already playing with the same
+        // setup: repeated hits would restart it every time and its defined sound
+        // would never really play. Only a real setup change rebuilds the carrier.
+        const bool soundRunning = snd.IsEnabled() || snd.IsPFxEnabled() || snd.IsShkEnabled();
+        const bool keepRunningSound = refreshActive && soundRunning &&
+                                      _debuff_sound_owner == entry.profile_id &&
+                                      snd.PSample == entry.snd_sample &&
+                                      snd.IsLoop() == loopDebuffSound &&
+                                      snd.PPFx == sndPFx && snd.PShkFx == sndShkFx;
+
+        if ( !keepRunningSound )
         {
+            SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
+
+            snd.PSample = entry.snd_sample;
+            snd.Volume = entry.snd_volume;
+            debuff.tick_snd.ConfigureSoundSource(snd);
+            snd.Radius = debuff.tick_snd.radius;
+            snd.PriorityBias = 0;
+            snd.SetLoop(loopDebuffSound);
+            snd.SetFragmented(false);
+
             snd.PPFx = sndPFx;
-            snd.SetPFx(true);
-        }
-        else
-        {
-            snd.PPFx = nullptr;
-            snd.SetPFx(false);
+            snd.SetPFx(sndPFx != nullptr);
+
+            snd.PShkFx = sndShkFx;
+            snd.SetShk(sndShkFx != nullptr);
         }
 
-        if ( sndShkFx )
-        {
-            snd.PShkFx = sndShkFx;
-            snd.SetShk(true);
-        }
-        else
-        {
-            snd.PShkFx = nullptr;
-            snd.SetShk(false);
-        }
+        _debuff_sound_owner = entry.profile_id;
     }
 
     if ( loopDebuffSound )
         ypabact_StartStatusSoundIfIdle(this, &_debuff_soundcarrier,
-                                       _active_debuff.snd_volume,
-                                       _active_debuff.snd_pitch);
+                                       entry.snd_volume,
+                                       entry.snd_pitch);
+
+    // Last use of the entry reference: mind control reshuffles ownership and unit lists.
+    ypabact_SpawnDebuffFXEvent(this, entry, ypabact_GetDebuffFXLifetime(entry));
 
     if ( canMindcontrol )
         ypabact_ApplyMindcontrol(this, source);
-
-    ypabact_SpawnDebuffFXEvent(this, ypabact_GetDebuffFXLifetime(_active_debuff));
 }
 
 void NC_STACK_ypabact::InheritActiveDebuffFromParent(NC_STACK_ypabact *parent)
@@ -410,64 +474,86 @@ void NC_STACK_ypabact::InheritActiveDebuffFromParent(NC_STACK_ypabact *parent)
          !world ||
          parent->getBACT_pWorld() != world ||
          world->_isNetGame ||
-         !parent->_active_debuff.active ||
-         !parent->_active_debuff.allow_on_children ||
+         parent->_debuff_list.empty() ||
          parent->_energy <= 0 ||
          parent->_status == BACT_STATUS_DEAD ||
          (parent->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
          !ypabact_CanUseGameplayStatusMechanics(this, true) )
         return;
 
-    const int remainingDuration = parent->_active_debuff.expire_time - parent->_clock;
-    if ( remainingDuration <= 0 )
+    std::vector<TActiveDebuffState> inherited;
+    for (const TActiveDebuffState &parentEntry : parent->_debuff_list)
+    {
+        const int remainingDuration = parentEntry.expire_time - parent->_clock;
+        if ( !parentEntry.allow_on_children || remainingDuration <= 0 )
+            continue;
+
+        const int remainingTickDelay = std::max(0, parentEntry.next_tick_time - parent->_clock);
+        inherited.push_back(parentEntry);
+        inherited.back().expire_time = _clock + remainingDuration;
+        inherited.back().next_tick_time = _clock + remainingTickDelay;
+    }
+
+    if ( inherited.empty() )
         return;
 
-    const int remainingTickDelay = std::max(0,
-        parent->_active_debuff.next_tick_time - parent->_clock);
     TSoundSource *sourceSound = parent->_debuff_soundcarrier.Sounds.empty()
         ? nullptr : &parent->_debuff_soundcarrier.Sounds[0];
 
     ClearActiveDebuff();
-    _active_debuff = parent->_active_debuff;
-    _active_debuff.expire_time = _clock + remainingDuration;
-    _active_debuff.next_tick_time = _clock + remainingTickDelay;
+    _debuff_list = inherited;
+    RebuildActiveDebuffAggregate();
 
-    if ( _debuff_soundcarrier.Sounds.empty() )
-        _debuff_soundcarrier.Resize(1);
-    else
-        SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
+    // The shared sound is copied only when the parent's channel owner is one of the inherited Debuffs.
+    const TActiveDebuffState *soundEntry = nullptr;
+    for (const TActiveDebuffState &entry : _debuff_list)
+    {
+        if ( entry.profile_id == parent->_debuff_sound_owner )
+            soundEntry = &entry;
+    }
 
-    TSoundSource &sound = _debuff_soundcarrier.Sounds[0];
-    sound.Flags = 0;
-    sound.PSample = sourceSound ? sourceSound->PSample : _active_debuff.snd_sample;
-    sound.Volume = sourceSound ? sourceSound->Volume : _active_debuff.snd_volume;
-    if ( sourceSound )
-        sound.CopyConfig(*sourceSound);
-    else
-        sound.ConfigurePitchRange(_active_debuff.snd_pitch, _active_debuff.snd_pitch);
-    sound.Radius = sourceSound ? sourceSound->Radius : 0.0f;
-    sound.FadeDuration = sourceSound ? sourceSound->FadeDuration : 0.0;
-    sound.AllowExtendedRate = sourceSound ? sourceSound->AllowExtendedRate : false;
-    sound.PriorityBias = sourceSound ? sourceSound->PriorityBias : 0;
-    sound.IgnoreTimeScale = sourceSound ? sourceSound->IgnoreTimeScale : false;
-    sound.SetLoop(sourceSound && sourceSound->IsLoop());
-    sound.SetFragmented(sourceSound && sourceSound->IsFragmented());
-    sound.PPFx = sourceSound ? sourceSound->PPFx : nullptr;
-    sound.SetPFx(sourceSound && sourceSound->IsPFx());
-    sound.PShkFx = sourceSound ? sourceSound->PShkFx : nullptr;
-    sound.SetShk(sourceSound && sourceSound->IsShk());
+    if ( soundEntry )
+    {
+        _debuff_sound_owner = soundEntry->profile_id;
 
-    if ( sound.IsLoop() && sound.PSample )
-        ypabact_StartStatusSoundIfIdle(this, &_debuff_soundcarrier,
-                                       _active_debuff.snd_volume,
-                                       _active_debuff.snd_pitch);
+        if ( _debuff_soundcarrier.Sounds.empty() )
+            _debuff_soundcarrier.Resize(1);
+        else
+            SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
 
-    ypabact_SpawnDebuffFXEvent(this, ypabact_GetDebuffFXLifetime(_active_debuff));
+        TSoundSource &sound = _debuff_soundcarrier.Sounds[0];
+        sound.Flags = 0;
+        sound.PSample = sourceSound ? sourceSound->PSample : soundEntry->snd_sample;
+        sound.Volume = sourceSound ? sourceSound->Volume : soundEntry->snd_volume;
+        if ( sourceSound )
+            sound.CopyConfig(*sourceSound);
+        else
+            sound.ConfigurePitchRange(soundEntry->snd_pitch, soundEntry->snd_pitch);
+        sound.Radius = sourceSound ? sourceSound->Radius : 0.0f;
+        sound.FadeDuration = sourceSound ? sourceSound->FadeDuration : 0.0;
+        sound.AllowExtendedRate = sourceSound ? sourceSound->AllowExtendedRate : false;
+        sound.PriorityBias = sourceSound ? sourceSound->PriorityBias : 0;
+        sound.IgnoreTimeScale = sourceSound ? sourceSound->IgnoreTimeScale : false;
+        sound.SetLoop(sourceSound && sourceSound->IsLoop());
+        sound.SetFragmented(sourceSound && sourceSound->IsFragmented());
+        sound.PPFx = sourceSound ? sourceSound->PPFx : nullptr;
+        sound.SetPFx(sourceSound && sourceSound->IsPFx());
+        sound.PShkFx = sourceSound ? sourceSound->PShkFx : nullptr;
+        sound.SetShk(sourceSound && sourceSound->IsShk());
+
+        if ( sound.IsLoop() && sound.PSample )
+            ypabact_StartStatusSoundIfIdle(this, &_debuff_soundcarrier,
+                                           soundEntry->snd_volume,
+                                           soundEntry->snd_pitch);
+    }
+
+    for (const TActiveDebuffState &entry : _debuff_list)
+        ypabact_SpawnDebuffFXEvent(this, entry, ypabact_GetDebuffFXLifetime(entry));
 }
 
 void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
 {
-    if ( !_active_debuff.active )
+    if ( _debuff_list.empty() )
         return;
 
     bool invalid = !_world ||
@@ -476,60 +562,228 @@ void NC_STACK_ypabact::UpdateActiveDebuff(update_msg *)
                    _status == BACT_STATUS_DEAD ||
                    (_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
 
-    if ( invalid || _clock >= _active_debuff.expire_time )
+    if ( invalid )
     {
         ClearActiveDebuff();
         return;
     }
 
-    if ( _clock < _active_debuff.next_tick_time )
+    bool expired = false;
+
+    for (size_t i = 0; i < _debuff_list.size(); )
+    {
+        TActiveDebuffState &entry = _debuff_list[i];
+
+        if ( _clock >= entry.expire_time )
+        {
+            if ( entry.profile_id == _debuff_sound_owner )
+            {
+                SFXEngine::SFXe.StopCarrier(&_debuff_soundcarrier);
+                _debuff_sound_owner = -1;
+            }
+
+            _debuff_list.erase(_debuff_list.begin() + i);
+            expired = true;
+            continue;
+        }
+
+        if ( _clock >= entry.next_tick_time )
+        {
+            entry.next_tick_time += entry.tick_time;
+            if ( entry.next_tick_time <= _clock )
+                entry.next_tick_time = _clock + entry.tick_time;
+
+            NC_STACK_ypabact *source = nullptr;
+            if ( entry.source_gid )
+                source = ypabact_FindLiveBactByGid(_world->_unitsList, entry.source_gid);
+
+            int tickDamage = 0;
+            if ( entry.energy.defined && entry.energy.value > 0.0f )
+            {
+                double rawDamage = entry.energy.percent
+                                 ? (double)_energy_max * ((double)entry.energy.value / 100.0)
+                                 : (double)entry.energy.value;
+                if ( std::isfinite(rawDamage) && rawDamage > 0.0 )
+                {
+                    rawDamage = std::min(rawDamage, (double)std::numeric_limits<int>::max());
+                    tickDamage = CalcShieldedCustomDamage((int)std::ceil(rawDamage));
+                }
+            }
+
+            if ( tickDamage > 0 )
+            {
+                const int32_t tickProfile = entry.profile_id;
+
+                bact_arg84 arg84;
+                arg84.energy = -tickDamage;
+                arg84.unit = source;
+                arg84.killerOwner = entry.source_owner;
+                // The tick deals exactly the damage defined by the Debuff profile:
+                // attacker-side damage multipliers belong to hits, not to status ticks.
+                arg84.bypassAttackerDamageModifiers = true;
+                ModifyEnergy(&arg84);
+
+                // A killing tick clears every Debuff: the list (and this entry) is gone.
+                if ( _energy <= 0 || _status == BACT_STATUS_DEAD )
+                {
+                    ClearActiveDebuff();
+                    return;
+                }
+
+                // The list must not change under a living unit; if anything did, drop the
+                // stale reference and let the next frame continue with the new list.
+                if ( i >= _debuff_list.size() || _debuff_list[i].profile_id != tickProfile )
+                    break;
+            }
+
+            TActiveDebuffState &current = _debuff_list[i];
+            ypabact_SpawnDebuffFXEvent(this, current, ypabact_GetDebuffFXLifetime(current));
+
+            // The shared channel plays the tick sound of its owner only.
+            if ( !_debuff_soundcarrier.Sounds.empty() && current.profile_id == _debuff_sound_owner )
+            {
+                TSoundSource &snd = _debuff_soundcarrier.Sounds[0];
+                snd.PSample = current.snd_sample;
+
+                ypabact_StartStatusSoundIfIdle(this, &_debuff_soundcarrier, current.snd_volume, current.snd_pitch);
+            }
+        }
+
+        ++i;
+    }
+
+    if ( expired )
+        RebuildActiveDebuffAggregate();
+}
+
+// Combined view of every Buff: Deflect charges add up, the Deflect parameters come from the one in
+// use (the first with charges left, or the last Deflect Buff once all are spent, so its visual still
+// plays on the final hit), invisible/invulnerable are on when any Buff provides them. The unit flags
+// follow the view only when it changes, so other users of those flags are never overridden.
+void NC_STACK_ypabact::RebuildActiveBuffAggregate()
+{
+    const bool wasInvisible = _buff.valid && _buff.invisible;
+    const bool wasInvulnerable = _buff.valid && _buff.invulnerable;
+
+    World::TVehicleBuffConfig combined;
+    int deflectMax = 0;
+    const TActiveBuffState *deflectEntry = nullptr;
+    const TActiveBuffState *invisibleEntry = nullptr;
+
+    for (const TActiveBuffState &entry : _buff_list)
+    {
+        const World::TVehicleBuffConfig &config = entry.config;
+
+        combined.valid = true;
+        combined.deflect_charges += config.deflect_charges;
+        combined.invulnerable = combined.invulnerable || config.invulnerable;
+        deflectMax += entry.deflect_max;
+
+        if ( config.invisible && !invisibleEntry )
+            invisibleEntry = &entry;
+
+        if ( entry.deflect_max > 0 && (!deflectEntry || deflectEntry->config.deflect_charges <= 0) )
+            deflectEntry = &entry;
+    }
+
+    if ( deflectEntry )
+    {
+        const World::TVehicleBuffConfig &config = deflectEntry->config;
+        combined.deflect_max_energy = config.deflect_max_energy;
+        combined.deflect_end_energy_reduction = config.deflect_end_energy_reduction;
+        combined.deflect_vp = config.deflect_vp;
+        combined.deflect_3ds = config.deflect_3ds;
+        combined.deflect_base = config.deflect_base;
+    }
+
+    combined.invisible = invisibleEntry != nullptr;
+    _buff = combined;
+    _buff_deflect_charges_max = deflectMax;
+
+    if ( combined.invulnerable != wasInvulnerable )
+        _invulnerable = combined.invulnerable;
+
+    if ( combined.invisible != wasInvisible )
+        _invisibleUnrevealed = combined.invisible;
+
+    if ( invisibleEntry )
+    {
+        _buff_invisible_reveal_vp = invisibleEntry->config.invisible_reveal_vp;
+        _buff_invisible_reveal_3ds = invisibleEntry->config.invisible_reveal_3ds;
+        _buff_invisible_reveal_base = invisibleEntry->config.invisible_reveal_base;
+    }
+}
+
+// One entry per profile; another profile never replaces it. duration 0 = permanent (vehicle-born
+// Buffs). A permanent entry stays permanent; re-applying refills its Deflect charges.
+void NC_STACK_ypabact::ApplyBuff(const World::TVehicleBuffConfig &buff, int duration)
+{
+    if ( !buff.valid )
         return;
 
-    _active_debuff.next_tick_time += _active_debuff.tick_time;
-    if ( _active_debuff.next_tick_time <= _clock )
-        _active_debuff.next_tick_time = _clock + _active_debuff.tick_time;
-
-    NC_STACK_ypabact *source = nullptr;
-    if ( _active_debuff.source_gid )
-        source = ypabact_FindLiveBactByGid(_world->_unitsList, _active_debuff.source_gid);
-
-    int tickDamage = 0;
-    if ( _active_debuff.energy.defined && _active_debuff.energy.value > 0.0f )
+    TActiveBuffState *found = nullptr;
+    for (TActiveBuffState &entry : _buff_list)
     {
-        double rawDamage = _active_debuff.energy.percent
-                         ? (double)_energy_max * ((double)_active_debuff.energy.value / 100.0)
-                         : (double)_active_debuff.energy.value;
-        if ( std::isfinite(rawDamage) && rawDamage > 0.0 )
+        if ( entry.config.profile_id == buff.profile_id )
         {
-            rawDamage = std::min(rawDamage, (double)std::numeric_limits<int>::max());
-            tickDamage = CalcShieldedCustomDamage((int)std::ceil(rawDamage));
+            found = &entry;
+            break;
         }
     }
 
-    if ( tickDamage > 0 )
+    const bool refresh = found != nullptr;
+    if ( !found )
     {
-        bact_arg84 arg84;
-        arg84.energy = -tickDamage;
-        arg84.unit = source;
-        arg84.killerOwner = _active_debuff.source_owner;
-        // The tick deals exactly the damage defined by the Debuff profile:
-        // attacker-side damage multipliers belong to hits, not to status ticks.
-        arg84.bypassAttackerDamageModifiers = true;
-        ModifyEnergy(&arg84);
+        _buff_list.emplace_back();
+        found = &_buff_list.back();
     }
 
-    ypabact_SpawnDebuffFXEvent(this, ypabact_GetDebuffFXLifetime(_active_debuff));
+    found->config = buff;
+    found->deflect_max = std::max(0, buff.deflect_charges);
 
-    if ( !_debuff_soundcarrier.Sounds.empty() )
+    if ( duration <= 0 )
+        found->expire_time = 0;
+    else if ( !refresh || found->expire_time != 0 )
+        found->expire_time = _clock + duration;
+
+    RebuildActiveBuffAggregate();
+}
+
+void NC_STACK_ypabact::UpdateActiveBuff(update_msg *)
+{
+    bool expired = false;
+
+    for (size_t i = 0; i < _buff_list.size(); )
     {
-        TSoundSource &snd = _debuff_soundcarrier.Sounds[0];
-        snd.PSample = _active_debuff.snd_sample;
+        const int expireTime = _buff_list[i].expire_time;
+        if ( expireTime != 0 && _clock >= expireTime )
+        {
+            _buff_list.erase(_buff_list.begin() + i);
+            expired = true;
+            continue;
+        }
 
-        ypabact_StartStatusSoundIfIdle(this, &_debuff_soundcarrier, _active_debuff.snd_volume, _active_debuff.snd_pitch);
+        ++i;
     }
 
-    if ( _energy <= 0 || _status == BACT_STATUS_DEAD )
-        ClearActiveDebuff();
+    if ( expired )
+        RebuildActiveBuffAggregate();
+}
+
+// Savegame restore: the saved total goes back to the Deflects in reverse order, because they
+// are spent front to back.
+void NC_STACK_ypabact::SetBuffDeflectChargesRemaining(int remaining)
+{
+    remaining = std::max(0, std::min(remaining, _buff_deflect_charges_max));
+
+    for (auto it = _buff_list.rbegin(); it != _buff_list.rend(); ++it)
+    {
+        const int charges = std::min(remaining, it->deflect_max);
+        it->config.deflect_charges = charges;
+        remaining -= charges;
+    }
+
+    RebuildActiveBuffAggregate();
 }
 
 void ypabact_ShuffleDamagedVisuals(std::vector<TDamagedVisualRef> &visuals)

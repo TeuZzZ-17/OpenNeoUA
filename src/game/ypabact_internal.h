@@ -231,7 +231,7 @@ vec3d ypabact_BuildLegacyAttachedFXOffset(float overeof);
 vec3d ypabact_BuildUniformStatusFXScale(float scale);
 bool ypabact_BuildAttachedFXOffset(NC_STACK_ypabact *bact, const World::TAbsoluteOrPercent &randomMaxOffset, vec3d *localOffset);
 int ypabact_GetDebuffFXLifetime(const TActiveDebuffState &debuff);
-void ypabact_SpawnDebuffFXEvent(NC_STACK_ypabact *bact, int lifetime);
+void ypabact_SpawnDebuffFXEvent(NC_STACK_ypabact *bact, const TActiveDebuffState &debuff, int lifetime);
 void ypabact_ApplyDamagedRuntime(NC_STACK_ypabact *bact, bool active);
 int ypabact_ScaledPitch(TSoundSource &snd, int basePitch, float mult);
 void ypabact_ApplyDamagedSoundPitch(NC_STACK_ypabact *bact);

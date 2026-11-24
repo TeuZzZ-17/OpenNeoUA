@@ -8,6 +8,7 @@
 #include "nucleus/skeleton.h"
 #include "speech.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <map>
@@ -1012,9 +1013,9 @@ struct TVhclProto
     int16_t field_1D6D = 0;
     int16_t field_1D6F = 0;
     int shield = 0;
-    // OpenNeoUA custom: data-driven Buff link. buff_id resolves a reusable
-    // new_buff profile into this runtime copy; -1 means no Buff.
-    int buff_id = -1;
+    // OpenNeoUA custom: data-driven Buff links. buff_id lists reusable new_buff profiles
+    // (a|b|c); the resolved copies live in `buffs`. Empty means no Buff.
+    std::vector<int32_t> buff_ids;
     // OpenNeoUA custom: ground_decal_id / mgun_ground_decal_id link a reusable new_decal profile.
     // The resolved copies live in chain_fx (destruction decal) and mgun_decal.
     int ground_decal_id = -1;
@@ -1025,7 +1026,17 @@ struct TVhclProto
     // OpenNeoUA custom: crater_radius / crater_depth / crater_rim dug where the
     // wreck ends on the ground (same moment as the "destroyed" ground decal).
     TCraterConfig crater;
-    TVehicleBuffConfig buff;
+    std::vector<TVehicleBuffConfig> buffs; // resolved from buff_ids; the unit is born with all of them
+    bool HasInvisibleBuff() const
+    {
+        return std::any_of(buffs.begin(), buffs.end(),
+                           [](const TVehicleBuffConfig &buff) { return buff.valid && buff.invisible; });
+    }
+    bool HasInvulnerableBuff() const
+    {
+        return std::any_of(buffs.begin(), buffs.end(),
+                           [](const TVehicleBuffConfig &buff) { return buff.valid && buff.invulnerable; });
+    }
     float building_time = -1.0f; // Seconds, 0..100; negative preserves vanilla timing and pitch.
     int energy = 0;
     int mimic_energy_cost = 0; // OpenNeoUA custom: current mimic shell production cost; 0 keeps vanilla energy-as-cost

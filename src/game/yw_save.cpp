@@ -401,8 +401,13 @@ int yw_write_item_modifers(NC_STACK_ypaworld *yw, FSMgr::FileHandle *fil)
                 fil->printf("    fire_x_slots   = %d\n", proto.fire_x_slots);
             if (proto.hidden)
                 fil->printf("    ;#!hidden      = %s\n", (proto.hidden ? "yes" : "no") );
-            if ( proto.buff_id >= 0 )
-                fil->printf("    ;#!buff_id         = %d\n", proto.buff_id);
+            if ( !proto.buff_ids.empty() )
+            {
+                std::string buffList;
+                for ( int32_t buffId : proto.buff_ids )
+                    buffList += (buffList.empty() ? "" : "|") + std::to_string(buffId);
+                fil->printf("    ;#!buff_id         = %s\n", buffList.c_str());
+            }
             if (proto.unhideRadar > 0)
                 fil->printf("    ;#!unhide_radar      = %d\n", proto.unhideRadar);
             fil->printf("end\n\n");
@@ -552,8 +557,7 @@ int yw_write_bact(NC_STACK_ypabact *bct, FSMgr::FileHandle *fil)
         uint8_t protoId = bct->_mimic_disguise_vehicleID ? bct->_mimic_disguise_vehicleID : bct->_vehicleID;
         if ( (size_t)protoId < world->GetVhclProtos().size() )
             saveInvisibleState = saveInvisibleState ||
-                                 (world->GetVhclProtos().at(protoId).buff.valid &&
-                                  world->GetVhclProtos().at(protoId).buff.invisible);
+                                 world->GetVhclProtos().at(protoId).HasInvisibleBuff();
     }
 
     if ( bct->getBACT_viewer() )

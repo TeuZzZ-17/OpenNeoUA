@@ -277,7 +277,7 @@ bool SaveBact::SaveBactParser(ScriptParser::Parser &parser, NC_STACK_ypabact *b,
     else if ( !StriCmp(p1, "buff_deflect_charges") )
     {
         const int remaining = parser.stoi(p2);
-        b->_buff.deflect_charges = std::max(0, std::min(remaining, b->_buff_deflect_charges_max));
+        b->SetBuffDeflectChargesRemaining(remaining);
     }
     else if ( !StriCmp(p1, "ident") )
     {

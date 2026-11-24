@@ -233,7 +233,7 @@ void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapProto &wp
     // Buff charges, then keep the normal laser damage/debuff path unchanged.
     if ( !aiFriendlyContact && target->HasDeflectBuff() &&
          ypabact_CanApplyLaserDamage(shooter) )
-        target->ClearBuffDeflectCharges();
+        target->ClearBuffDeflectCharges(true);
 
     if ( beam.next_damage_time > 0 && shooter->_clock < beam.next_damage_time )
         return;

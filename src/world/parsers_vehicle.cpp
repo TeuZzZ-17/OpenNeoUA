@@ -378,10 +378,28 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "buff_id") )
     {
-        const long value = parser.stol(p2, nullptr, 0);
-        _vhcl->buff_id = value >= 0 && value <= std::numeric_limits<int32_t>::max()
-            ? (int32_t)value
-            : -1;
+        // buff_id = 1|3|5: every valid ID is kept once (max 16); invalid items are skipped,
+        // so -1, empty or garbage means no Buff.
+        auto &ids = _vhcl->buff_ids;
+        ids.clear();
+        size_t start = 0;
+        while ( ids.size() < 16 )
+        {
+            const size_t separator = p2.find('|', start);
+            const std::string item = p2.substr(start, separator - start);
+            char *end = nullptr;
+            const long value = strtol(item.c_str(), &end, 0);
+            const char *tail = end;
+            while ( *tail == ' ' || *tail == '\t' )
+                ++tail;
+            const bool valid = end != item.c_str() && *tail == '\0' && value >= 0 &&
+                               value <= std::numeric_limits<int32_t>::max();
+            if ( valid && std::find(ids.begin(), ids.end(), (int32_t)value) == ids.end() )
+                ids.push_back((int32_t)value);
+            if ( separator == std::string::npos )
+                break;
+            start = separator + 1;
+        }
     }
     else if ( !StriCmp(p1, "ground_decal_size") )
         ParseDecalSizeOverride("ground_decal_size", p2, _vhcl->ground_decal_size);
@@ -1989,11 +2007,11 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->radial_shot_vertical_angle_max = 45.0;
         _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
-        _vhcl->buff_id = -1;
+        _vhcl->buff_ids.clear();
         _vhcl->ground_decal_id = -1;
         _vhcl->ground_decal_size = TDecalSizeOverride();
         _vhcl->crater = TCraterConfig();
-        _vhcl->buff = TVehicleBuffConfig();
+        _vhcl->buffs.clear();
         _vhcl->energy = 10000;
         _vhcl->mimic_energy_cost = 0;
         _vhcl->mimic_energy_cost_min = 0;

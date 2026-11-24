@@ -2583,6 +2583,7 @@ public:
     void sub_4491A0(const std::string &movie_fname);
     bool LoadProtosScript(const std::string &filename);
     void ResolveStatusProfileLinks();
+    void ResolveVehicleBuffs(World::TVhclProto &proto);
     void ResolveDecalProfileLinks();
     bool LoadSpectatorVehicleProto();
     bool sb_0x4e1a88__sub0__sub0(TLevelDescription *mapp, const std::string &fname);

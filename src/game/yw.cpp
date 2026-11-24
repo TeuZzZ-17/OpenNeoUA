@@ -2670,9 +2670,11 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
     {
         bacto->_energy = vhcl.energy;
         bacto->_energy_max = vhcl.energy;
-        bacto->_buff = vhcl.buff;
-        bacto->_buff_deflect_charges_max = vhcl.buff.valid ? vhcl.buff.deflect_charges : 0;
-        bacto->_invulnerable = vhcl.buff.valid && vhcl.buff.invulnerable;
+        // Born Buffs are permanent entries; invulnerability and the invisibility seed
+        // (cloaked until the first real attack) come from the same Buff list.
+        bacto->ResetBuffState();
+        for ( const World::TVehicleBuffConfig &bornBuff : vhcl.buffs )
+            bacto->ApplyBuff(bornBuff);
         bacto->_shield = vhcl.shield;
         bacto->_mass = vhcl.mass;
         bacto->_base_force = vhcl.force;
@@ -2936,13 +2938,6 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
 
         bacto->_hidden = vhcl.hidden;
         bacto->_unhideRadar = vhcl.unhideRadar;
-
-        // Buff invisibility is seeded once at spawn and remains active until the
-        // first real attack reveals the unit. Missing/disabled Buff stays vanilla.
-        bacto->_invisibleUnrevealed = vhcl.buff.valid && vhcl.buff.invisible;
-        bacto->_buff_invisible_reveal_vp = vhcl.buff.invisible_reveal_vp;
-        bacto->_buff_invisible_reveal_3ds = vhcl.buff.invisible_reveal_3ds;
-        bacto->_buff_invisible_reveal_base = vhcl.buff.invisible_reveal_base;
 
         for (size_t i = 0; i < vhcl.scale_fx_pXX.size(); ++i)
         {

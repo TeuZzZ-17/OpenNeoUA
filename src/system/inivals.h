@@ -259,7 +259,7 @@ public:
     static Common::Ini::Key GamePowerStationEnergyMultiplier;
     static Common::Ini::Key GameFallEnergy;
     static Common::Ini::Key GamePushAtDeathMultiplier;
-    static Common::Ini::Key GameGunSupportTolerance;
+    static Common::Ini::Key GameGunFallTolerance;
     static Common::Ini::Key GameHandBrakePower;
     static Common::Ini::Key GameRecoilKickTime;
     static Common::Ini::Key GameRecoilHoldTime;

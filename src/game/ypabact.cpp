@@ -415,8 +415,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _pitch_max = 0.0;
     _energy = 0;
     _energy_max = 0;
-    _buff = World::TVehicleBuffConfig();
-    _buff_deflect_charges_max = 0;
+    ResetBuffState();
     _invulnerable = false;
     _reload_const = 0;
     _shield = 0;
@@ -491,7 +490,7 @@ NC_STACK_ypabact::NC_STACK_ypabact()
     _damaged_shot_time_malus = 0.0;
     _damaged_snd_pitch_multiplier = 1.0;
     _damaged_fx_active = false;
-    _active_debuff.Clear();
+    ResetDebuffState();
     _debuff_soundcarrier.Clear();
     _player_launch_shake_carrier.Clear();
     _mgun_recoil_shake = TSndFxPosParam();
@@ -712,7 +711,7 @@ size_t NC_STACK_ypabact::Init(IDVList &stak)
     _damaged_shot_time_malus = 0.0;
     _damaged_snd_pitch_multiplier = 1.0;
     _damaged_fx_active = false;
-    _active_debuff.Clear();
+    ResetDebuffState();
     _fire_x_slot_index = 0;
     _fire_x_random_seeded = false;
     _fire_x_random_state = 0;
@@ -886,7 +885,7 @@ size_t NC_STACK_ypabact::Deinit()
     SFXEngine::SFXe.StopCarrier(&_laser_hit_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mgun_soundcarrier);
     SFXEngine::SFXe.StopCarrier(&_mimic_soundcarrier);
-    _active_debuff.Clear();
+    ResetDebuffState();
     _fire_x_mode = World::TVhclProto::FIRE_X_MODE_VANILLA;
     _fire_x_start = 0.0;
     _fire_x_step = 0.0;
@@ -1555,6 +1554,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     const vec3d shapeOldPosition = _position;
     const mat3x3 shapeOldRotation = _rotation;
     UpdateActiveDebuff(arg);
+    UpdateActiveBuff(arg);
     UpdateDamageFX(arg);
     UpdateDecorationFX(arg);
     UpdateCarrierSpawn(arg);
@@ -1850,9 +1850,16 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
 
         if ( tintBase && _energy > 0 )
         {
-            if ( HasActiveBuff() )
-                applyGlow(_buff.glow_intensity, _buff.glow_tint,
-                          _buff.glow_pulse_seconds);
+            // The first working Buff with a glow lights the unit.
+            for ( const TActiveBuffState &buffEntry : _buff_list )
+            {
+                if ( buffEntry.config.glow_intensity > 0.0f && IsBuffEntryActive(buffEntry) )
+                {
+                    applyGlow(buffEntry.config.glow_intensity, buffEntry.config.glow_tint,
+                              buffEntry.config.glow_pulse_seconds);
+                    break;
+                }
+            }
 
             const ypabact_TEliteUnitConfig &eliteConfig = ypabact_GetEliteUnitConfig();
             applyGlow(GetEliteGlowIntensity(), eliteConfig.glowTint,
@@ -2351,8 +2358,7 @@ void NC_STACK_ypabact::Renew()
 
     _commandID = 0;
     _mimic_disguise_vehicleID = 0;
-    _buff = World::TVehicleBuffConfig();
-    _buff_deflect_charges_max = 0;
+    ResetBuffState();
     _killer = nullptr;
     _sessionKillMarks = 0;
     _sessionKillsTowardMedal = 0;
@@ -2835,6 +2841,7 @@ void NC_STACK_ypabact::NetUpdate(update_msg *upd)
     ypabact_UpdateSpawnAtDeathProtection(this);
 
     UpdateActiveDebuff(upd);
+    UpdateActiveBuff(upd);
     UpdateDamageFX(upd);
     UpdateDecorationFX(upd);
     UpdateEnergyStatusFX(upd);
