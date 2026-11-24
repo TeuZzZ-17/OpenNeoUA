@@ -1309,6 +1309,7 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
                 _mislAttachTargetGid = 0;
             }
 
+            MakePendingWorldMark();
             Impact();
 
             _status = BACT_STATUS_DEAD;
@@ -1450,8 +1451,18 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
                 // Ground decals consume the actual collision data before a
                 // later trace can mutate a shared filler/slurp skeleton.
-                StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD, &arg136);
-                MakeImpactCrater(arg136);
+                // A shot that now waits delay_time on the surface marks it when it
+                // detonates instead (MakePendingWorldMark).
+                if ( _mislDelayTime > 0 )
+                {
+                    _pendingWorldMark = true;
+                    _pendingWorldMarkDir = arg136.vect;
+                }
+                else
+                {
+                    StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD, &arg136);
+                    MakeImpactCrater(arg136);
+                }
 
                 AlignMissileByNormal( impactNormal );
 
@@ -1671,6 +1682,7 @@ void NC_STACK_ypamissile::Renew()
     _artilleryShellArcHeight  = 0.0;
     _artilleryShellImpactOnSurface = false;
     _impactCraterMade = false;
+    _pendingWorldMark = false;
     _artilleryShellVerticalBarrage = false;
     _artilleryShellVerticalTransferred = false;
     _artilleryShellVerticalApexOffset = vec3d(0.0, 0.0, 0.0);
@@ -1992,6 +2004,35 @@ void NC_STACK_ypamissile::MakeImpactCrater(const ypaworld_arg136 &hit)
     _world->SpawnTerrainCrater(_world->GetWeaponsProtos().at(_vehicleID).crater, hit);
 }
 
+// OpenNeoUA custom: decal and crater of a shot that stayed stuck for delay_time, made when it
+// detonates. The surface is found again with a short trace along the flight direction, since the
+// collision data of the first contact must not be kept (it can be reused by later traces).
+void NC_STACK_ypamissile::MakePendingWorldMark()
+{
+    if ( !_pendingWorldMark )
+        return;
+
+    _pendingWorldMark = false;
+
+    vec3d dir = _pendingWorldMarkDir;
+    if ( dir.normalise() <= 0.001 )
+        return;
+
+    ypaworld_arg136 hit;
+    hit.stPos = _position - dir * 10.0;
+    hit.vect = dir * 30.0;
+    hit.flags = 0;
+
+    TraceWorldCollision(&hit);
+
+    // The surface may be gone (building destroyed meanwhile): then nothing is marked.
+    if ( !hit.isect )
+        return;
+
+    StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_IMPACT_WORLD, &hit);
+    MakeImpactCrater(hit);
+}
+
 void NC_STACK_ypamissile::AlignMissile(float dtime)
 {
     if ( _fly_dir != vec3d(0.0, 0.0, 0.0) )
@@ -2071,6 +2112,7 @@ NC_STACK_ypamissile::NC_STACK_ypamissile()
     _mislClusterGeneration = 0;
     _artilleryShellImpactOnSurface = false;
     _impactCraterMade = false;
+    _pendingWorldMark = false;
 }
 
 void NC_STACK_ypamissile::setBACT_viewer(bool vwr)

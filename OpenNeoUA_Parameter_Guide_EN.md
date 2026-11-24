@@ -1011,7 +1011,7 @@ Continuous beam instead of a physical projectile. Damage is tick-based, can ramp
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `laser_fade_inout = 90|90` — Spatial fades in world units: fade-in distance from the muzzle | fade-out distance toward a real impact. 0 disables that side. A missing or malformed group, or a negative or non-finite part, disables both; values are capped at 50000. The fade dims both the opacity and the brightness of additive (glowing) beam surfaces, so it is visible on glowing tubes too. Appearance only: damage, collision and impact position are unchanged.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `laser_burn_decal_frequency = 5` — Continuous burn: how many decals are laid per 100 world units of path while the beam's ground contact point moves (5 = one every 20 units; fractions such as 0.5 are allowed). With it, the weapon's `ground_decal_id` / `ground_decal_size` (impact_world decal) is painted as a strip instead of one decal every 160 ms: each decal is laid along the travel direction, with a smooth edge, the profile's width and a length that overlaps the next one. The classic `crater_radius` / `crater_depth` / `crater_rim` keys are unchanged: with the burn on they dig along the same path, each crater scaled so the trench is as deep as `crater_depth`. Missing, zero, negative or invalid = off: a laser without it never digs and keeps its old single decals. Positive values are kept between 0.05 and 10. A unit hit or no contact ends the strip. Strip decals have a constant width (the minimum of `ground_decal_size` and of the profile's `stretch_xz` Z range) and no smoke. Ready-made profile: `new_decal 5` (`laser_burn`, `Laser_Burn_01.png`: charred soot with a glowing seam, long side along the beam). Every decal / crater counts against `gfx.ground_decal_limit` and `game.deformation_max_craters`: raise them for long burns.
+- 🟢 `laser_burn_decal_frequency = 5` — Continuous burn: how many decals are laid per 100 world units of path while the beam's ground contact point moves (5 = one every 20 units; fractions such as 0.5 are allowed). With it, the weapon's `ground_decal_id` / `ground_decal_size` (impact_world decal) is painted as a strip instead of one decal every 160 ms: each decal is laid along the travel direction, with a smooth edge, the profile's width and a length that overlaps the next one. The classic `crater_radius` / `crater_depth` / `crater_rim` keys are unchanged: with the burn on they dig along the same path, each crater scaled so the trench is as deep as `crater_depth`. Missing, zero, negative or invalid = off: a laser without it never digs and keeps its old single decals. Positive values are kept between 0.05 and 10. A unit hit or no contact ends the strip. Strip decals have a constant width (the minimum of `ground_decal_size` and of the profile's `stretch_xz` Z range) and no smoke. Ready-made profile: `new_decal 5` (`laser_burn`, `Laser_Burn.png`: charred soot with a glowing seam, long side along the beam). Every decal / crater counts against `gfx.ground_decal_limit` and `game.deformation_max_craters`: raise them for long burns.
 ------------------------------------------------------------------------------------------------------------------------
 
 Laser rules:
@@ -1314,7 +1314,7 @@ Weapon Ground Decal profiles paint a persistent or timed footprint on the world 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `crater_radius = 260~320` — Radius of the crater (and of the dent on buildings) in world units; fixed value or `min~max` (0..12000). Needs `crater_depth`: if either is absent, zero or invalid there is no crater (vanilla).
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `crater_depth = 60~80` — Depth of the crater centre (or how far the dent goes in) in world units, fixed value or `min~max` (0..12000). Never more than half the radius: walls stay below about 37 degrees, so tanks can drive in and out.
+- 🟢 `crater_depth = 60~80` — Depth of the crater centre (or how far the dent goes in) in world units, fixed value or `min~max` (0..12000). Never more than half the radius: walls stay below about 37 degrees, so tanks can drive in and out. The dug ground is also darkened by baked light; craters shallower than 20 darken proportionally less, so a small crater leaves no dark patch.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `crater_rim = 20` — Raised rim around the crater (ground only), in % of the depth, fixed value or `min~max` (0..100). Absent = 20; 0 = no rim; invalid = no crater.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2215,7 +2215,7 @@ A key written for the other mode is ignored and logged. Invalid `effect_*` value
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_scale = 0.08` — ground_pulse only. Flash size at decal radius 50. Range 0.001-10; default 0.1. `rise` has no scale key: its size is set by `effect_size`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `texture = Graphics/GroundDecals/impact_01.png` — Optional Data-relative texture; empty = procedural shape, unloadable file = decal discarded.
+- 🟢 `texture = Graphics/GroundDecals/Impact.png` — Optional Data-relative texture; empty = procedural shape, unloadable file = decal discarded.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `stretch_xz = 0.8~1.2|0.8~1.2` — Local X|Z stretch (format x|z). Each axis takes a single value (fixed) or a random `min~max`. Default: 1|1; stretched axes rotate with the decal.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2263,7 +2263,7 @@ Examples:
 ```text
 new_decal 2
 name = mykonian_electric
-texture = Graphics/GroundDecals/Mykonian_Electric_02.png
+texture = Graphics/GroundDecals/Mykonian_Electric.png
 duration = permanent
 effect_mode = ground_pulse
 effect_vp = 2
@@ -2277,7 +2277,7 @@ end
 
 new_decal 4
 name = mgun_hit
-texture = Graphics/GroundDecals/impact_01.png
+texture = Graphics/GroundDecals/Impact.png
 random_rotation = 1
 edge_fade = 5~10
 duration = 60000
@@ -3670,7 +3670,7 @@ OpenNeoUA Studio resolves Bruch IDs for entity and sector effect previews using 
 - **Kamikaze payload:** Visuals & FX opens Payload effects to edit the charge effects in place; the menu switches to the carrier model and its destruction sequence.
 - **Wireframe Editor:** previews components from other entities or files and saves them as separate files linked to the vehicle or weapon. Right-click a file and choose Copy Path to copy its path.
 - **Fire volumes:** for a downward cone, opposite handles adjust the same symmetric angles.
-- **Icon Selector:** the Page list switches between the original H_FINDER page and the OpenNeoUA page (`Graphics/UnitIcons`). New `type_icon` keys are written only to the OpenNeoUA page; the original page and TYPE_NS.FON are never changed. Cockpit View: with the camera offset disabled, the preview shows no unit.
+- **Icon Selector:** the Page list switches between the original H_FINDER page and the OpenNeoUA page (`Graphics/UnitIcons`). New `type_icon` keys are written only to the OpenNeoUA page; the original page and TYPE_NS.FON are never changed. Clicking a cell with no symbol gives it a random free one; Random or the Symbol field change it. The Font Page box shows the path of the page on show. On Original it is the H_FINDER found in the game, fixed. On OpenNeoUA it is the datasheet (`Graphics/UnitIcons/H_FINDER_OpenNeoUA.PNG` and `.FON`, the only files the game reads): Browse checks that a PNG has the same grid as the original icons and copies it there; Create makes an empty one. The OpenNeoUA page can be opened even when the datasheet is missing. A `.FON` next to the chosen PNG is copied too, otherwise the current keys stay. Replaced files keep a `.bak` copy. Cockpit View: with the camera offset disabled, the preview shows no unit.
 
 ### Sectors
 

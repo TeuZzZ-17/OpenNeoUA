@@ -41,6 +41,9 @@ constexpr double COLLISION_STEP = 300.0 / 8.0;
 // The rim can reach past the crater radius; nothing changes beyond this.
 constexpr double REACH = 1.6;
 
+// Crater depth from which the baked light is applied in full (see ShadeOf).
+constexpr double SHADE_FULL_DEPTH = 20.0;
+
 // Deepest crater relative to its radius: keeps the walls at about 37 degrees, so
 // ground vehicles can still drive in and out.
 constexpr double MAX_DEPTH_RATIO = 0.5;
@@ -467,7 +470,13 @@ inline double ShadeOf(const Sample &sample)
         ? 1.0 - 0.30 * std::max(0.0, sample.drop) / sample.deepest
         : 1.0;
     const double light = lighting / 0.943;
-    return std::max(0.35, std::min(1.25, light * depthShade * sample.dentLight));
+    const double value = std::max(0.35, std::min(1.25, light * depthShade * sample.dentLight));
+
+    // The ground is lit on a 300/16 lattice, so the darkness of a small crater spreads into
+    // squares wider than the crater (and than a decal on it). Shallow craters therefore darken
+    // in proportion to their depth; from SHADE_FULL_DEPTH on the light is unchanged.
+    const double strength = sample.deepest > 0.0 ? std::min(1.0, sample.deepest / SHADE_FULL_DEPTH) : 1.0;
+    return 1.0 + (value - 1.0) * strength;
 }
 
 inline double Shade(const std::vector<Shape> &craters, double x, double z, double y)

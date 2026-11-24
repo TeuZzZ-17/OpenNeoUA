@@ -103,7 +103,7 @@ int main()
         const auto isDecal = [](const World::TChainFXConfig &fx) { return fx.mode == World::TChainFXConfig::MODE_GROUND_DECAL; };
         const auto electric = world._decalProfiles.find(2);
         Check(electric != world._decalProfiles.end() &&
-              electric->second.fx.ground_decal_texture == "Graphics/GroundDecals/Mykonian_Electric_02.png" &&
+              electric->second.fx.ground_decal_texture == "Graphics/GroundDecals/Mykonian_Electric.png" &&
               electric->second.fx.ground_decal_smoke.enabled,
               "live electric profile has its revised texture and smoke");
         for (int id : {17,18,58,63,64,65,66,67,68,69,70,76,97,113,145,150})
@@ -124,7 +124,7 @@ int main()
         const auto burn = world._decalProfiles.find(5);
         const auto &burnLaser = world.GetWeaponsProtos()[114];
         Check(burn != world._decalProfiles.end() &&
-              burn->second.fx.ground_decal_texture == "Graphics/GroundDecals/Laser_Burn_01.png" &&
+              burn->second.fx.ground_decal_texture == "Graphics/GroundDecals/Laser_Burn.png" &&
               burnLaser.laser_burn_decal_frequency == 5 && burnLaser.ground_decal_id == 5 &&
               std::count_if(burnLaser.chain_fx.begin(), burnLaser.chain_fx.end(), isDecal) == 1,
               "live laser burn decal and weapon 114");

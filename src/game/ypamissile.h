@@ -72,6 +72,7 @@ public:
     virtual void AlignMissile(float dtime = 0.0);
     virtual void AlignMissileByNormal(const vec3d &normal);
     void MakeImpactCrater(const ypaworld_arg136 &hit);
+    void MakePendingWorldMark();
     bool HasImpactCrater() const;
 
     NC_STACK_ypamissile();
@@ -353,6 +354,10 @@ protected:
     bool  _artilleryShellImpactOnSurface = false;
     // OpenNeoUA custom: a shot digs at most one terrain crater.
     bool  _impactCraterMade = false;
+    // OpenNeoUA custom: a shot stuck on a surface for delay_time marks the ground only when
+    // it detonates; this is the direction it flew, to find that surface again at the end.
+    bool  _pendingWorldMark = false;
+    vec3d _pendingWorldMarkDir;
     bool  _artilleryShellVerticalBarrage = false;
     bool  _artilleryShellVerticalTransferred = false;
     vec3d _artilleryShellVerticalApexOffset;

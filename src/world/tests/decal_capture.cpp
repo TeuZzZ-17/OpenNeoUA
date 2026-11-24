@@ -365,7 +365,7 @@ void PrepareDecals(NC_STACK_ypaworld *w, const Shot &shot, int currentPass)
     World::TChainFXConfig fx;
     fx.mode = World::TChainFXConfig::MODE_GROUND_DECAL;
     fx.trigger = World::TChainFXConfig::TRIGGER_IMPACT_WORLD;
-    fx.ground_decal_texture = currentPass == 1 ? "Graphics/GroundDecals/Impact_01.png"
+    fx.ground_decal_texture = currentPass == 1 ? "Graphics/GroundDecals/Impact.png"
                                                : "Graphics/GroundDecals/_capture_checker.png";
     fx.ground_decal_permanent = true;
     fx.ground_decal_size_min = fx.ground_decal_size_max = shot.size;
