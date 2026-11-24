@@ -42,11 +42,11 @@ int main() {
     squad._parent = &vehicle;
     squad._bact_type = BACT_TYPES_TANK;
 
-    System::IniConf::GameNewDebug.Value = std::string("no");
+    System::IniConf::GameNewDebug.Value = false;
     Check(!vehicle.IsIgnoredByAI() && vehicle.CanBeSeenByAIOrRadar(), "default vanilla visible");
     vehicle._debugIgnoredByAI = true;
     Check(!vehicle.IsIgnoredByAI(), "debug off disables exclusion");
-    System::IniConf::GameNewDebug.Value = std::string("yes");
+    System::IniConf::GameNewDebug.Value = true;
     Check(vehicle.IsIgnoredByAI() && !vehicle.CanBeSeenByAIOrRadar(), "debug on excludes vehicle");
     Check(child.IsIgnoredByAI() && !child.CanBeSeenByAIOrRadar(), "mounted gun inherits exclusion");
     Check(hostGun.IsIgnoredByAI(), "Host turret inherits exclusion");

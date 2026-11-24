@@ -174,6 +174,9 @@ inline double fSign(double x)
 std::string correctSeparatorAndExt(std::string str);
 
 int StriCmp(const std::string &a, const std::string &b);
+// Shared boolean reader for every script, ini and save value: yes/true/on, no/false/off or a whole number
+// (non-zero = true). Returns false when the text is none of these; StrGetBool then reads it as off.
+bool StrParseBool(const std::string &str, bool *out);
 bool StrGetBool(const std::string &str);
 // Copy of `str` without leading and trailing whitespace.
 std::string StrTrim(const std::string &str);

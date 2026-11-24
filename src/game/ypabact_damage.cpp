@@ -660,7 +660,7 @@ void NC_STACK_ypabact::Die()
     _secndTtype = BACT_TGT_TYPE_NONE;
     _primTtype = BACT_TGT_TYPE_NONE;
 
-    ypabact_FireProximityDefenseAtDeath(this);
+    ypabact_FireRadialShotAtDeath(this);
 
     _status = BACT_STATUS_DEAD;
     _commandID = 0;
@@ -917,13 +917,19 @@ void NC_STACK_ypabact::EnergyInteract(update_msg *arg)
             const float powerEnergyMultiplier = ReadPowerStationEnergyMultiplier();
             float denerg = powerEnergyMultiplier * _energy_max * v14 * _pSector->energy_power * arg176.field_4 / 7000.0;
 
+            // regen_malus (Debuff) lowers only what the unit gains; the drain of enemy power stays as it is.
+            const float regenMult = _active_debuff.active ? ypabact_DebuffMalusToMult(_active_debuff.regen_malus) : 1.0f;
+
             if ( _owner == _pSector->owner )
-                _energy += denerg;
+                _energy += denerg * regenMult;
             else if ( !IsInvulnerableToDamage() )
                 _energy -= denerg;
 
             TMobilePowerInfluence mobilePower = _world->FindMobilePowerInfluenceForUnit(this);
             float mobileDelta = powerEnergyMultiplier * 2.0 * _energy_max * v14 * (mobilePower.AlliedEnergyPower - mobilePower.EnemyEnergyPower) / 7000.0;
+
+            if ( mobileDelta > 0.0 )
+                mobileDelta *= regenMult;
 
             if ( mobileDelta >= 0.0 || !IsInvulnerableToDamage() )
                 _energy += mobileDelta;
@@ -1248,6 +1254,11 @@ int NC_STACK_ypabact::GetEffectiveOutgoingEnergy(int baseDamage) const
         return 0;
 
     float multiplier = GetEliteStatMultiplier();
+
+    // A Debuff with damage_malus lowers everything this unit deals, through the same single
+    // choke point as the Elite bonus (units, missiles, lasers, MGUN, blast, buildings).
+    if ( _active_debuff.active )
+        multiplier *= ypabact_DebuffMalusToMult(_active_debuff.damage_malus);
 
     if ( multiplier == 1.0f )
         return baseDamage;

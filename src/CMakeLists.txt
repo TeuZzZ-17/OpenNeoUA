@@ -169,7 +169,7 @@ set(SOURCES
     game/ypabact_artillery.cpp
     game/ypabact_kamikaze.cpp
     game/ypabact_carrier.cpp
-    game/ypabact_proximity.cpp
+    game/ypabact_radial_shot.cpp
     game/ypabact_projectile.cpp
     game/ypabact_fire_trigger_area.cpp
     game/ypabact_recoil.cpp

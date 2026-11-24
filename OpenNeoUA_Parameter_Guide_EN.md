@@ -139,6 +139,7 @@ This guide is a reference catalog, not a configuration to copy: add only the par
 - Compact parameters need every part: `spin_xyz = x|y|z`, `fade_inout = in|out`, `lifetime_minmax = min~max`. The old split names (`spin_x`, `fade_in`, ...) no longer exist.
 - `%` is a percentage only where the entry says so; some parameters accept both `5%` and a fixed number.
 - Time values are in milliseconds unless stated. "World units" is the engine distance scale (a sector is 1200 x 1200 units).
+- Yes/no values: scripts (Vehicles, Weapons, Buildings, Levels and similar) are written with `0` and `1`; configuration files (`OpenNeoUA.ini`, `Nucleus.ini`, `World.ini`, `USER.TXT`) with `yes` and `no`. Original Urban Assault keys keep their original form. Every yes/no value in every file is read the same way: `1`, `yes`, `true`, `on` or any non-zero number is yes; `0`, `no`, `false` or `off` is no; anything else counts as no (an invalid ini value uses the key's default).
 
 ### Paths and visual models
 
@@ -187,7 +188,7 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `type_icon = A` — Icon glyph key of the unit in lists and on the map, mapped through TYPE_NS.FON into the H_FINDER graphic. Vanilla reads only the first byte, so use a plain ASCII character (letter, digit or a symbol such as `]`). A Unicode symbol or `U+XXXX` (for example `U+2206`) is OpenNeoUA-only: vanilla reads it as `U`, the Radar Station icon. Prefer `U+XXXX`, because a pasted symbol can be corrupted by the editor encoding. `;`, `=`, `#` and `\` cannot stand bare in a script: write `U+003B`, `U+003D`, `U+0023` and `U+005C`. An unreadable icon falls back to `A`; `U+FFFD` is rejected. In TYPE_NS.FON write new keys as a single byte and keep each `U+XXXX` line above the `U` line. OpenNeoUA also reads a second icon page, `Graphics/UnitIcons/H_FINDER_OpenNeoUA.PNG`, defined in `H_FINDER_OpenNeoUA.FON` (same line format: `key x y width`; keys as `U+XXXX` or `#number`). Its keys replace the same keys of TYPE_NS.FON and may be any `U+XXXX`; vanilla never reads that page. If the file is missing, only the original page is used. The value `I` keeps the unit out of the Database.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `map_direction = yes` — no hides the view triangle (facing direction) of the unit on the map and minimap, for static units such as spawners. The unit icon stays. Missing or yes = vanilla.
+- 🟢 `map_direction = 1` — 0 hides the view triangle (facing direction) of the unit on the map and minimap, for static units such as spawners. The unit icon stays. Missing or 1 = vanilla.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `vo_type = 1` — Selects the voice set used for the unit's spoken messages. It is read as a hexadecimal number.
 ------------------------------------------------------------------------------------------------------------------------
@@ -872,32 +873,32 @@ Vehicle spawners position spawned units relative to the parent unit. Spawned uni
 - 🟢 `snd_spawn_sample = sounds/new/spawn.wav` — Sound, palette flash and camera shake of the spawn state: all `snd_spawn_*`, `pal_spawn_*` and `shk_spawn_*` keys of "Sounds, palette flashes and shakes" are accepted. They start when the spawn state begins and loop until it ends (last Genesis child done, death); palette and shake hold `mag0` while looping. They follow the spawn state even when no spawn model is set. Absent = silent, no flash, no shake.
 ------------------------------------------------------------------------------------------------------------------------
 
-Proximity Defense is an autonomous secondary Weapon system. "classic" reacts to nearby enemies repeatedly; "at_death" fires once on unit death.
+Radial Shot is an autonomous secondary Weapon system that fires projectiles in all directions. "classic" reacts to nearby enemies repeatedly; "at_death" fires once on unit death.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_mode = classic` — System mode: classic = activates around nearby enemies; at_death = activates once at unit death and fires all projectiles simultaneously.
+- 🟢 `radial_shot_mode = classic` — System mode: classic = activates around nearby enemies; at_death = activates once at unit death and fires all projectiles simultaneously.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_weapon = 2` — Weapon ID used by Proximity Defense.
+- 🟢 `radial_shot_weapon = 2` — Weapon ID used by Radial Shot.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_trigger_radius = 1200` — Enemy-presence distance that activates classic mode.
+- 🟢 `radial_shot_trigger_radius = 1200` — Enemy-presence distance that activates classic mode.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_interval = 5000` — Time in milliseconds between projectile bursts in classic mode.
+- 🟢 `radial_shot_interval = 5000` — Time in milliseconds between projectile bursts in classic mode.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_shots = 20` — Number of projectiles created per system activation.
+- 🟢 `radial_shot_shots = 20` — Number of projectiles created per system activation.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_fire_mode = all_at_once` — Classic firing mode: all_at_once = all projectiles together; sequential = one after another. at_death always uses all_at_once.
+- 🟢 `radial_shot_fire_mode = all_at_once` — Classic firing mode: all_at_once = all projectiles together; sequential = one after another. at_death always uses all_at_once.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_vp_launch = 70` — Legacy VP spawned when Proximity Defense projectiles launch; final fallback.
+- 🟢 `radial_shot_vp_launch = 70` — Legacy VP spawned when Radial Shot projectiles launch; final fallback.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_base_launch = Data/Models/Base/FX/PROXIMITY_LAUNCH.BASE` — BASE launch family, relative to Data; falls back to VP.
+- 🟢 `radial_shot_base_launch = Data/Models/Base/FX/RADIAL_SHOT_LAUNCH.BASE` — BASE launch family, relative to Data; falls back to VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_3ds_launch = Data/Models/3ds/FX/proximity_launch.3ds` — 3DS launch model; takes priority over BASE and VP.
+- 🟢 `radial_shot_3ds_launch = Data/Models/3ds/FX/radial_shot_launch.3ds` — 3DS launch model; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_sequence_delay = 100` — Delay in milliseconds between projectiles when fire_mode = sequential; ignored for all_at_once and at_death.
+- 🟢 `radial_shot_sequence_delay = 100` — Delay in milliseconds between projectiles when fire_mode = sequential; ignored for all_at_once and at_death.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_vertical_angle = -90~90` — Projectile vertical angle. Single value = fixed angle; `min~max` = random angle in range. Absent = 0.
+- 🟢 `radial_shot_vertical_angle = -90~90` — Projectile vertical angle. Single value = fixed angle; `min~max` = random angle in range. Absent = 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `proximity_defense_horizontal_angle = 0~360` — Projectile horizontal angle. Single value = fixed angle; `min~max` = random angle in range. If absent, projectiles are distributed uniformly across 360 degrees.
+- 🟢 `radial_shot_horizontal_angle = 0~360` — Projectile horizontal angle. Single value = fixed angle; `min~max` = random angle in range. If absent, projectiles are distributed uniformly across 360 degrees.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_weapon = 11` — Orbiter carrier link: Weapon ID of a `model = orbiter` Weapon. The unit keeps its guardian orbiters around itself and sends them against an enemy unit. Independent of weapon/weapon_2..4/mgun (the primary Weapon is unchanged). 0, absent or a Weapon that is not an orbiter = off (vanilla). Local games only: no orbiters in network games.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1434,6 +1435,8 @@ Weapon `begin_fx` uses the same Bruch reference and emission fields as [Vehicle 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `debuff_id = 1` — ID or name of the new_debuff profile applied to the target struck directly by this Weapon (for example `debuff_id = shock`). It does not reach the blast area: use blast_debuff_id for that. Names must start with a letter and ignore case; if two profiles share a name, the lowest ID is used. -1, absent, or an unknown ID or name = no Debuff.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `ai_avoid_debuffed_target_change = 70%` — AI only: chance, 0%-100%, that a unit carrying this Weapon ignores a "taken" enemy when it picks a target on its own and attacks another one instead. An enemy is taken while it has an active Debuff, or as soon as another allied unit with a Debuff Weapon has chosen it as target (known at launch, not at impact). Works for `debuff_id` and `delay_time_debuff_id`. Rolled at each target search: in the remaining chance the unit picks as usual and may join the others. If no other enemy is in range, the taken one is still attacked. The unit's main and extra Weapons are checked and the highest value is used. It only affects the AI's own target search: attack orders from the player, the unit under direct control and fire volumes are unchanged, and below aggression 50 (no automatic search) it has no effect. Disabled in multiplayer. Missing, 0% or invalid (a number without `%`) = vanilla.
+------------------------------------------------------------------------------------------------------------------------
 
 ### Sounds, palette flashes and shakes
 
@@ -1919,6 +1922,8 @@ Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `allow_on_children = 0` — Automatically propagates the active Debuff to child units generated directly by the affected unit. 0 or absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `stack_max = 5` — Maximum number of layers, 1-99. Each new hit by this same profile on a unit that already carries it adds one layer of every malus (`force_malus`, `maxrot_malus`, `shield_malus`, `mgun_shot_time_malus`, `shot_time_malus`, `damage_malus`, `regen_malus`): with `shield_malus = -15%` two layers give -30%, each malus capped at -100%. Every hit renews `duration`. The layer count is shown as a small number at the bottom-right of the status icon. A different Debuff replaces this one and starts again from one layer. 0, absent or invalid = no stacking and no number.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `icon = Graphics/StatusIcons/electrified.svg` — Data-relative icon shown while the unit is debuffed. Empty/invalid = no icon.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `name = electrified` — Name of the debuff. debuff_id and blast_debuff_id can use it in place of the ID, so it must start with a letter.
@@ -1946,6 +1951,10 @@ Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems 
 - 🟢 `mgun_shot_time_malus = -40%` — Modifier to the affected unit's MGUN fire rate.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shot_time_malus = -40%` — Modifier to the affected unit's primary Weapon fire rate.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `damage_malus = -20%` — Modifier to all damage the affected unit deals (weapons, missiles, lasers, MGUN, blast, buildings). Example: -20% reduces it by 20%. Every hit still deals at least 1. 0 or absent = unchanged.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `regen_malus = -50%` — Modifier to the energy the affected unit gains from friendly power stations and allied mobile generators (Host Stations only with `allow_on_host_station = 1`). Example: -50% halves the gain. The drain of enemy power stations is not changed. 0 or absent = unchanged.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_pitch_malus = -50%` — Pitch modifier for sounds emitted by the affected unit. Negative lowers pitch, positive raises it. 0 or absent = unchanged.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2320,7 +2329,7 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 - These are observations, not a save or a replay. A forced kill or power loss can prevent a report, logging costs disk space and session folders are never removed automatically. Keep the matching executable for source-line analysis.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.building_visual_genesis = 1` — 1 shows the animated Genesis plasma of the vehicles on every building under construction, in the constructor's faction color, keeping the existing emergence. The set's plain ground is drawn under the transparent plasma so the footprint never shows a black void. Terrain and gameplay are unchanged; classic and VBO rendering are supported. 0, absent or invalid = off. It does not toggle the per-building sound, palette or shake.
+- 🟢 `game.building_visual_genesis = yes` — yes shows the animated Genesis plasma of the vehicles on every building under construction, in the constructor's faction color, keeping the existing emergence. The set's plain ground is drawn under the transparent plasma so the footprint never shows a black void. Terrain and gameplay are unchanged; classic and VBO rendering are supported. no, absent or invalid = off. It does not toggle the per-building sound, palette or shake.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.new.debug = yes` — yes enables the new debug controls F1-F12 (see Debug controls). no or absent keeps normal key behavior.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2460,7 +2469,7 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 ### Plasma
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.plasma_currency_enable = 1` — Enables the global Plasma reserve in single-player. Absent/no/0 = disabled and vanilla behavior.
+- 🟢 `game.plasma_currency_enable = yes` — Enables the global Plasma reserve in single-player. Absent or no = disabled and vanilla behavior.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.plasma_currency_gain = 0.1%` — Plasma added to the global reserve when collected. With %, grants a fraction of the collected Plasma; without %, adds a fixed amount.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3383,7 +3392,7 @@ Level-side settings override broader defaults where explicitly documented. This 
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `saf_budget = 10` — AI budget for building flak defenses.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `cpl_budget = 10` — AI budget for building the defense center.
+- 🔵 `cpl_budget = 10` — AI budget for relocating the Host Station.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `con_delay = 0` — Delay in milliseconds before the AI starts spending its conquest budget.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3399,7 +3408,7 @@ Level-side settings override broader defaults where explicitly documented. This 
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `saf_delay = 0` — Delay before the flak budget.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `cpl_delay = 0` — Delay before the defense-center budget.
+- 🔵 `cpl_delay = 0` — Delay before the Host Station relocation budget.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `mb_status = known` — Briefing visibility: known (visible), unknown (marked but unidentified) or hidden.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3667,6 +3676,7 @@ OpenNeoUA Studio resolves Bruch IDs for entity and sector effect previews using 
 - **Visuals & FX:** lists existing items or drafts; craters, decals and Death behavior are marked red because vanilla does not support them. Each `begin_fx` row shows its header comment, the number and IDs of its VPs and any BASE or 3DS names. Click an effect in the 3D view to select its row (white border; the smallest wins when they overlap); double-click away to deselect; dragging orbits; the unit and hidden effects cannot be clicked. The timeline starts at 0.25x, with a speed menu. The flight altitude starts at 300 for flying units and the weapon preview starts at 300 (an artillery shell uses its arc height).
 - **Crater and Ground decal rows:** values typed in a new effect are transferred to the Crater row. Delete removes the Crater and Ground decal settings from the definition's scripts, `modify_*` blocks included. For cluster weapons put craters on the child that hits the ground: the cluster preview shows them read-only, and a parent's crater applies to its own impact only. When a cluster weapon spawns itself, both crater rows share the same settings.
 - **Death behavior row (vehicles only):** edits `disable_genesis` and `air_dead` as free text, like the Crater and Ground decal rows; values typed in a new effect are routed here. The death-sequence preview follows them: `air_dead = 1` on a Flyer or UFO model skips the falling wreck and plays the terminal state in place, in mid-air; `disable_genesis = 1` or `at_death` removes the death plasma from the preview (the row's tooltip explains both keys, and a note under the timeline confirms which rule fired). Weapons never show this row; saving either key on a weapon block is refused.
+- **Yes/no values:** Studio reads every yes/no form the engine accepts (`1`, `yes`, `true`, `on`, any non-zero number, and their opposites) in effect and Death behavior definitions, and saves scripts in the vanilla `0`/`1` form.
 - **Kamikaze payload:** Visuals & FX opens Payload effects to edit the charge effects in place; the menu switches to the carrier model and its destruction sequence.
 - **Wireframe Editor:** previews components from other entities or files and saves them as separate files linked to the vehicle or weapon. Right-click a file and choose Copy Path to copy its path.
 - **Fire volumes:** for a downward cone, opposite handles adjust the same symmetric angles.

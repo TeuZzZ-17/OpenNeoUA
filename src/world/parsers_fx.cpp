@@ -360,15 +360,20 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
                              TWeaponDebuffConfig &debuff)
 {
     if ( !StriCmp(p1, "allow_on_host_station") )
-        debuff.allow_on_host_station = parser.stol(p2, nullptr, 0) != 0;
+        debuff.allow_on_host_station = StrGetBool(p2);
     else if ( !StriCmp(p1, "allow_on_children") )
-        debuff.allow_on_children = parser.stol(p2, nullptr, 0) != 0;
+        debuff.allow_on_children = StrGetBool(p2);
+    else if ( !StriCmp(p1, "stack_max") )
+    {
+        const long value = parser.stol(p2, nullptr, 0);
+        debuff.stack_max = value >= 1 && value <= 99 ? (int)value : 0;
+    }
     else if ( !StriCmp(p1, "name") )
         debuff.name = p2;
     else if ( !StriCmp(p1, "energy") )
         ParseAbsoluteOrPercent(p2, debuff.energy, 100.0f);
     else if ( !StriCmp(p1, "mindcontrol") )
-        debuff.mindcontrol = parser.stol(p2, nullptr, 0) != 0;
+        debuff.mindcontrol = StrGetBool(p2);
     else if ( !StriCmp(p1, "tick_time") )
     {
         int tickTime = parser.stol(p2, nullptr, 0);
@@ -381,11 +386,11 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.duration = duration > 0 ? duration : 0;
     }
     else if ( !StriCmp(p1, "stun") )
-        debuff.stun = parser.stol(p2, nullptr, 0) != 0;
+        debuff.stun = StrGetBool(p2);
     else if ( !StriCmp(p1, "stun_motion_level") )
         debuff.stun_motion_level = ParseNormalizedOrPercent(p2);
     else if ( !StriCmp(p1, "stun_unit_fire") )
-        debuff.stun_unit_fire = parser.stol(p2, nullptr, 0) != 0;
+        debuff.stun_unit_fire = StrGetBool(p2);
     else if ( !StriCmp(p1, "force_malus") )
         debuff.force_malus = ParseMalusPercent(p2);
     else if ( !StriCmp(p1, "maxrot_malus") )
@@ -396,6 +401,10 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.mgun_shot_time_malus = ParseMalusPercent(p2);
     else if ( !StriCmp(p1, "shot_time_malus") )
         debuff.shot_time_malus = ParseMalusPercent(p2);
+    else if ( !StriCmp(p1, "damage_malus") )
+        debuff.damage_malus = ParseMalusPercent(p2);
+    else if ( !StriCmp(p1, "regen_malus") )
+        debuff.regen_malus = ParseMalusPercent(p2);
     else if ( !StriCmp(p1, "snd_pitch_malus") )
         debuff.snd_pitch_multiplier = ParseSignedPitchPercent(p2);
     else if ( ParseTintParam(parser, "target_tint", p1, p2,
@@ -1915,9 +1924,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
         {
             hasPhysicsFields = true;
             hasInlinePhysicalKey = true;
-            char *end = nullptr;
-            const long flag = std::strtol(p2.c_str(), &end, 0);
-            physical->follow_carcass = flag == 1 && end == p2.c_str() + p2.size();
+            physical->follow_carcass = StrGetBool(p2);
         }
         else if ( !StriCmp(p1, "mass") || !StriCmp(p1, "airconst") ||
                   !StriCmp(p1, "force") || !StriCmp(p1, "maxrot") ||
@@ -1991,7 +1998,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
                 physicalVehicle = parser.stol(p2, nullptr, 0);
         }
         else if ( !StriCmp(p1, "random_rotation") )
-            randomRotation = p2 == "1";
+            randomRotation = StrGetBool(p2);
         else
         {
             if ( context == CHAIN_FX_SUPERITEM )
@@ -2259,7 +2266,7 @@ int DecalProfileParser::Handle(ScriptParser::Parser &parser,
     {
     }
     else if ( !StriCmp(p1, "random_rotation") )
-        fx.random_rotation = p2 == "1";
+        fx.random_rotation = StrGetBool(p2);
     else if ( !StriCmp(p1, "edge_fade") )
         ParseDecalEdgeFade(parser, p2, fx);
     else if ( !StriCmp(p1, "duration") )

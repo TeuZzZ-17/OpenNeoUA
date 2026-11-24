@@ -60,7 +60,7 @@ bool SaveRoboParser::RoboParser(ScriptParser::Parser &parser, const std::string 
     }
     else if ( !StriCmp(p1, "is_user_robo") )
     {
-        if ( !StriCmp(p2, "yes") )
+        if ( StrGetBool(p2) )
             _o.setYW_userHostStation(_r);
     }
     else if ( !StriCmp(p1, "robostate") )

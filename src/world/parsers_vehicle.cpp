@@ -40,17 +40,17 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         _vhcl->spawn_units = 1;
     if ( !StriCmp(p1.substr(0, 15), "at_death_spawn_") )
         _vhcl->at_death_spawn_units = 1;
-    if ( !StriCmp(p1.substr(0, 18), "proximity_defense_") )
-        _vhcl->proximity_defense_enable = 1;
+    if ( !StriCmp(p1.substr(0, 12), "radial_shot_") )
+        _vhcl->radial_shot_enable = 1;
 
     if ( !StriCmp(p1, "disable_collision") )
     {
-        _vhcl->disable_collision = p2 == "1";
+        _vhcl->disable_collision = StrGetBool(p2);
         return ScriptParser::RESULT_OK;
     }
     if ( !StriCmp(p1, "disable_genesis") )
     {
-        if ( p2 == "1" )
+        if ( StrGetBool(p2) )
             _vhcl->disable_genesis = World::TVhclProto::DISABLE_GENESIS_ALL;
         else if ( !StriCmp(p2, "at_death") )
             _vhcl->disable_genesis = World::TVhclProto::DISABLE_GENESIS_AT_DEATH;
@@ -60,7 +60,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     if ( !StriCmp(p1, "air_dead") )
     {
-        _vhcl->air_dead = p2 == "1";
+        _vhcl->air_dead = StrGetBool(p2);
         return ScriptParser::RESULT_OK;
     }
     if ( !StriCmp(p1, "collision_shape") )
@@ -658,7 +658,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "damaged_fx_trail_only") )
     {
-        _vhcl->damaged_fx.trail_only = parser.stol(p2, nullptr, 0) != 0;
+        _vhcl->damaged_fx.trail_only = StrGetBool(p2);
     }
     else if ( ParseDecorationFXParam(parser, p1, p2, _vhcl->decoration_fx) )
     {
@@ -691,7 +691,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "power_falloff") )
     {
-        _vhcl->power_falloff = parser.stol(p2, nullptr, 0) ? 1 : 0;
+        _vhcl->power_falloff = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "power_cloud_id") )
     {
@@ -817,7 +817,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "spawn_instant") )
     {
-        _vhcl->spawn_instant = parser.stol(p2, nullptr, 0) ? 1 : 0;
+        _vhcl->spawn_instant = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "at_death_spawn_vehicle") )
     {
@@ -876,72 +876,72 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
         int weaponId = parser.stol(p2, nullptr, 0);
         _vhcl->orbiter_weapon = weaponId > 0 ? weaponId : 0;
     }
-    else if ( !StriCmp(p1, "proximity_defense_weapon") )
+    else if ( !StriCmp(p1, "radial_shot_weapon") )
     {
         int weaponId = parser.stol(p2, nullptr, 0);
-        _vhcl->proximity_defense_weapon = weaponId > 0 ? weaponId : 0;
+        _vhcl->radial_shot_weapon = weaponId > 0 ? weaponId : 0;
     }
-    else if ( !StriCmp(p1, "proximity_defense_trigger_radius") )
+    else if ( !StriCmp(p1, "radial_shot_trigger_radius") )
     {
         float radius = parser.stof(p2, 0);
-        _vhcl->proximity_defense_trigger_radius = radius > 0.0 ? radius : 0.0;
+        _vhcl->radial_shot_trigger_radius = radius > 0.0 ? radius : 0.0;
     }
-    else if ( !StriCmp(p1, "proximity_defense_interval") )
+    else if ( !StriCmp(p1, "radial_shot_interval") )
     {
         int interval = parser.stol(p2, nullptr, 0);
-        _vhcl->proximity_defense_interval = interval > 0 ? interval : 1000;
+        _vhcl->radial_shot_interval = interval > 0 ? interval : 1000;
     }
-    else if ( !StriCmp(p1, "proximity_defense_shots") )
+    else if ( !StriCmp(p1, "radial_shot_shots") )
     {
         int shots = parser.stol(p2, nullptr, 0);
-        _vhcl->proximity_defense_shots = shots > 0 ? shots : 1;
+        _vhcl->radial_shot_shots = shots > 0 ? shots : 1;
     }
-    else if ( !StriCmp(p1, "proximity_defense_vp_launch") )
+    else if ( !StriCmp(p1, "radial_shot_vp_launch") )
     {
         int vp = parser.stol(p2, nullptr, 0);
-        _vhcl->proximity_defense_vp_launch = vp > 0 ? vp : -1;
+        _vhcl->radial_shot_vp_launch = vp > 0 ? vp : -1;
     }
-    else if ( !StriCmp(p1, "proximity_defense_3ds_launch") )
+    else if ( !StriCmp(p1, "radial_shot_3ds_launch") )
     {
-        _vhcl->proximity_defense_3ds_launch = p2;
+        _vhcl->radial_shot_3ds_launch = p2;
     }
-    else if ( !StriCmp(p1, "proximity_defense_base_launch") )
+    else if ( !StriCmp(p1, "radial_shot_base_launch") )
     {
-        _vhcl->proximity_defense_base_launch = p2;
+        _vhcl->radial_shot_base_launch = p2;
     }
-    else if ( !StriCmp(p1, "proximity_defense_fire_mode") )
+    else if ( !StriCmp(p1, "radial_shot_fire_mode") )
     {
         if ( !StriCmp(p2, "sequential") )
-            _vhcl->proximity_defense_fire_mode = 1;
+            _vhcl->radial_shot_fire_mode = 1;
         else
-            _vhcl->proximity_defense_fire_mode = 0;
+            _vhcl->radial_shot_fire_mode = 0;
     }
-    else if ( !StriCmp(p1, "proximity_defense_sequence_delay") )
+    else if ( !StriCmp(p1, "radial_shot_sequence_delay") )
     {
         int delay = parser.stol(p2, nullptr, 0);
-        _vhcl->proximity_defense_sequence_delay = delay > 0 ? delay : 100;
+        _vhcl->radial_shot_sequence_delay = delay > 0 ? delay : 100;
     }
-    else if ( !StriCmp(p1, "proximity_defense_mode") )
+    else if ( !StriCmp(p1, "radial_shot_mode") )
     {
-        _vhcl->proximity_defense_mode = !StriCmp(p2, "at_death") ? 1 : 0;
+        _vhcl->radial_shot_mode = !StriCmp(p2, "at_death") ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "proximity_defense_horizontal_angle") )
+    else if ( !StriCmp(p1, "radial_shot_horizontal_angle") )
     {
         float angleMin = 0.0f;
         float angleMax = 360.0f;
-        _vhcl->proximity_defense_horizontal_angle_set =
+        _vhcl->radial_shot_horizontal_angle_set =
             ParseScriptFloatRange(p2, angleMin, angleMax);
-        _vhcl->proximity_defense_horizontal_angle_min = angleMin;
-        _vhcl->proximity_defense_horizontal_angle_max = angleMax;
+        _vhcl->radial_shot_horizontal_angle_min = angleMin;
+        _vhcl->radial_shot_horizontal_angle_max = angleMax;
     }
-    else if ( !StriCmp(p1, "proximity_defense_vertical_angle") )
+    else if ( !StriCmp(p1, "radial_shot_vertical_angle") )
     {
         float angleMin = -10.0f;
         float angleMax = 45.0f;
-        _vhcl->proximity_defense_vertical_angle_set =
+        _vhcl->radial_shot_vertical_angle_set =
             ParseScriptFloatRange(p2, angleMin, angleMax);
-        _vhcl->proximity_defense_vertical_angle_min = angleMin;
-        _vhcl->proximity_defense_vertical_angle_max = angleMax;
+        _vhcl->radial_shot_vertical_angle_min = angleMin;
+        _vhcl->radial_shot_vertical_angle_max = angleMax;
     }
     else if ( !StriCmp(p1, "max_active_at_once") )
     {
@@ -1288,7 +1288,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "cockpit_camera_hide_vehicle") )
     {
-        _vhcl->cockpit_camera_hide_vehicle = parser.stol(p2, nullptr, 0) ? 1 : 0;
+        _vhcl->cockpit_camera_hide_vehicle = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "gun_radius") )
     {
@@ -1393,7 +1393,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     }
     else if ( !StriCmp(p1, "kill_after_shot") )
     {
-        _vhcl->kill_after_shot = parser.stol(p2, nullptr, 0);
+        _vhcl->kill_after_shot = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "job_fighthelicopter") )
     {
@@ -1511,7 +1511,7 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "gun_levitate") )
     {
         if ( _vhcl->model_id == BACT_TYPES_GUN )
-            _vhcl->initParams.Add(NC_STACK_ypagun::GUN_ATT_LEVITATE, (int32_t)(p2 == "1"));
+            _vhcl->initParams.Add(NC_STACK_ypagun::GUN_ATT_LEVITATE, (int32_t)StrGetBool(p2));
     }
     else if ( !StriCmp(p1, "kamikaze") )
     {
@@ -1741,12 +1741,12 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     else if ( !StriCmp(p1, "unit_gun_protect") )
     {
         if (TRoboGun *gun = getUnitGun())
-            gun->protect = parser.stol(p2, nullptr, 0) ? 1 : 0;
+            gun->protect = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "unit_gun_no_switch") )
     {
         if (TRoboGun *gun = getUnitGun())
-            gun->noSwitch = parser.stol(p2, nullptr, 0) == 1 ? 1 : 0;
+            gun->noSwitch = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "robo_dock_x") )
     {
@@ -1970,23 +1970,23 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->at_death_spawn_instant = 0;
         _vhcl->at_death_spawn_immunity_time = 0;
         _vhcl->eject_force = 0.0f;
-        _vhcl->proximity_defense_enable = 0;
-        _vhcl->proximity_defense_weapon = 0;
-        _vhcl->proximity_defense_trigger_radius = 0.0;
-        _vhcl->proximity_defense_interval = 1000;
-        _vhcl->proximity_defense_shots = 12;
-        _vhcl->proximity_defense_vp_launch = -1;
-        _vhcl->proximity_defense_3ds_launch.clear();
-        _vhcl->proximity_defense_base_launch.clear();
-        _vhcl->proximity_defense_fire_mode = 0;
-        _vhcl->proximity_defense_sequence_delay = 100;
-        _vhcl->proximity_defense_mode = 0;
-        _vhcl->proximity_defense_horizontal_angle_set = false;
-        _vhcl->proximity_defense_horizontal_angle_min = 0.0;
-        _vhcl->proximity_defense_horizontal_angle_max = 360.0;
-        _vhcl->proximity_defense_vertical_angle_set = false;
-        _vhcl->proximity_defense_vertical_angle_min = -10.0;
-        _vhcl->proximity_defense_vertical_angle_max = 45.0;
+        _vhcl->radial_shot_enable = 0;
+        _vhcl->radial_shot_weapon = 0;
+        _vhcl->radial_shot_trigger_radius = 0.0;
+        _vhcl->radial_shot_interval = 1000;
+        _vhcl->radial_shot_shots = 12;
+        _vhcl->radial_shot_vp_launch = -1;
+        _vhcl->radial_shot_3ds_launch.clear();
+        _vhcl->radial_shot_base_launch.clear();
+        _vhcl->radial_shot_fire_mode = 0;
+        _vhcl->radial_shot_sequence_delay = 100;
+        _vhcl->radial_shot_mode = 0;
+        _vhcl->radial_shot_horizontal_angle_set = false;
+        _vhcl->radial_shot_horizontal_angle_min = 0.0;
+        _vhcl->radial_shot_horizontal_angle_max = 360.0;
+        _vhcl->radial_shot_vertical_angle_set = false;
+        _vhcl->radial_shot_vertical_angle_min = -10.0;
+        _vhcl->radial_shot_vertical_angle_max = 45.0;
         _vhcl->max_active_at_once = 0;
         _vhcl->shield = 50;
         _vhcl->buff_id = -1;

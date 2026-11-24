@@ -6369,6 +6369,22 @@ void GFXEngine::DrawVirtualUISolidRect(float left, float top, float right, float
     if ( a == 0 )
         return;
 
+    // DrawLine ignores zero-length lines, so a 1 px wide rect would vanish row by row.
+    // A single pixel is filled directly; a 1 px wide column is one vertical (blended) line.
+    if ( x1 - x0 == 1 )
+    {
+        if ( y1 - y0 == 1 )
+        {
+            SDL_Rect pixel = { x0, y0, 1, 1 };
+            SDL_FillRect(VirtualUISurface, &pixel, SDL_MapRGBA(VirtualUISurface->format, r, g, b, a));
+        }
+        else
+        {
+            DrawLine(VirtualUISurface, Common::Line(x0, y0, x0, y1 - 1), r, g, b, a, true);
+        }
+        return;
+    }
+
     for ( int y = y0; y < y1; ++y )
     {
         DrawLine(VirtualUISurface, Common::Line(x0, y, x1 - 1, y),

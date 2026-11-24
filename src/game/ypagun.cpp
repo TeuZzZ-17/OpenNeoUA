@@ -521,7 +521,7 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
             y_delta = -MaxRot;
 
         if ( fabs(y_delta) > 0.001 )
-            _rotation = mat3x3::RotateX(y_delta * 0.3) * _rotation;
+            _rotation = mat3x3::RotateX(y_delta) * _rotation;
 
         if ( stunned )
             break;
@@ -536,7 +536,19 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
         if ( _secndTtype != BACT_TGT_TYPE_UNIT || !_secndT.pbact )
             break;
 
-        if ( !TestTargetSector(_secndT.pbact) )
+        bool dropTarget = !TestTargetSector(_secndT.pbact);
+        if ( !dropTarget && !ypagun_UsesArtilleryShellWeapon(this) && (_clock - _search_time2 > 1000) )
+        {
+            _search_time2 = _clock;
+            bool isArc = false;
+            if ( _gunType == GUN_TYPE_REAL && _world && _weapon >= 0 &&
+                 (size_t)_weapon < _world->GetWeaponsProtos().size() )
+                isArc = _world->GetWeaponsProtos().at(_weapon).IsArcGrenade();
+            if ( !isArc && !HasDirectFireLineOfSight(GetBodyPosition(), _secndT.pbact->_position) )
+                dropTarget = true;
+        }
+
+        if ( dropTarget )
         {
             setTarget_msg arg67;
             arg67.tgt_type = BACT_TGT_TYPE_NONE;
@@ -805,8 +817,11 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
         }
     }
 
-    if ( usesTriggerArea ? triggerAreaFire != 0 :
-         (dist <= engagementRange && arcGrenadeReachable && vTgt.dot( _rotation.AxisZ() ) >= 0.95) )
+    const bool directFireLOS = usesArcGrenade || usesTriggerArea ||
+                               HasDirectFireLineOfSight(GetBodyPosition(), arg->target.pbact->_position);
+
+    if ( usesTriggerArea ? (triggerAreaFire != 0 && directFireLOS) :
+         (dist <= engagementRange && arcGrenadeReachable && directFireLOS && vTgt.dot( _rotation.AxisZ() ) >= 0.95) )
     {
         if ( _gunType == GUN_TYPE_REAL )
         {

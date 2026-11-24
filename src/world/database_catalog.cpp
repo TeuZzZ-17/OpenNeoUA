@@ -28,7 +28,7 @@ void AddWeaponIds(const TVhclProto &v, std::vector<int> &out, size_t count,
     add(v.weapon);
     for (int id : v.extra_weapons) if (id > 0) add(id);
     if (v.mgun_set) add(v.mgun);
-    if (v.proximity_defense_enable) add(v.proximity_defense_weapon);
+    if (v.radial_shot_enable) add(v.radial_shot_weapon);
     if (v.orbiter_weapon > 0) add(v.orbiter_weapon); // OpenNeoUA Orbiter guardians
     auto mounts = [&](const std::vector<TRoboGun> &guns) {
         for (const TRoboGun &gun : guns)
@@ -56,7 +56,7 @@ int AttackForVehicle(int id, const std::vector<TVhclProto> &vehicles,
     for (int wid : v.extra_weapons) if (wid > 0) addWeapon(wid);
     if (v.mgun_set&&Valid(v.mgun,weapons.size()))addWeapon(v.mgun);
     else if(v.mgun_energy_set)total+=std::max(0.0,(double)v.mgun_energy);
-    if (v.proximity_defense_enable) addWeapon(v.proximity_defense_weapon);
+    if (v.radial_shot_enable) addWeapon(v.radial_shot_weapon);
     if (v.orbiter_weapon > 0) addWeapon(v.orbiter_weapon); // OpenNeoUA Orbiter guardians
     auto mounts = [&](const std::vector<TRoboGun> &guns) {
         for (const TRoboGun &gun : guns)
@@ -251,13 +251,13 @@ std::array<double,4> VehicleQuality(int id,const std::vector<TVhclProto> &vehicl
         // MGUN damage comes from the vehicle, not the referenced visual weapon.
         result[0]+=v.mgun_energy_set?Positive(v.mgun_energy)*1000.0/std::max(1,cadence):Positive(v.gun_power);
     }
-    if(v.proximity_defense_enable&&Valid(v.proximity_defense_weapon,weapons.size()))
+    if(v.radial_shot_enable&&Valid(v.radial_shot_weapon,weapons.size()))
     {
-        const auto &defense=weapons[v.proximity_defense_weapon];
-        const double shots=std::max(1,v.proximity_defense_shots);
-        const double cycle=std::max(1.0,std::max((double)v.proximity_defense_interval,
-            shots*Positive(v.proximity_defense_sequence_delay)));
-        result[0]+=weapon(v.proximity_defense_weapon,shots)*std::max(1,defense.shot_time)/cycle;
+        const auto &defense=weapons[v.radial_shot_weapon];
+        const double shots=std::max(1,v.radial_shot_shots);
+        const double cycle=std::max(1.0,std::max((double)v.radial_shot_interval,
+            shots*Positive(v.radial_shot_sequence_delay)));
+        result[0]+=weapon(v.radial_shot_weapon,shots)*std::max(1,defense.shot_time)/cycle;
     }
     result[1]=EffectiveDurability(v.energy,v.shield);
     if(v.model_id!=BACT_TYPES_GUN&&v.airconst>0&&v.mass>0)

@@ -725,6 +725,8 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
     {
         if ( _clock - _newtarget_time > 500 )
         {
+            _newtarget_time = _clock;
+
             bact_arg110 arg110;
             bact_arg110 arg110_1;
 
@@ -734,8 +736,10 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
             arg110_1.tgType = _primTtype;
             arg110_1.priority = 0;
 
-            int v150 = TargetAssess(&arg110);
-            int v153 = TargetAssess(&arg110_1);
+            const int v150 = TargetAssess(&arg110);
+            const int v153 = TargetAssess(&arg110_1);
+            const bool secondaryNeedsAction = v150 == TA_MOVE || v150 == TA_FIGHT;
+            const bool primaryNeedsAction = v153 == TA_MOVE || v153 == TA_FIGHT;
 
             if ( v150 != TA_IGNORE || v153 != TA_IGNORE )
             {
@@ -759,7 +763,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
                     SetTarget(&arg67);
                 }
 
-                if ( _primTtype || _secndTtype )
+                if ( secondaryNeedsAction || primaryNeedsAction )
                 {
                     setState_msg arg78;
                     arg78.unsetFlags = BACT_STFLAG_LAND;
@@ -808,7 +812,7 @@ void NC_STACK_ypatank::AI_layer3(update_msg *arg)
 
                 if ( _tankFlags & FLAG_TANK_ROTWAIT )
                 {
-                    switch( ((size_t)this + _clock) % 7 ) //WAT!?
+                    switch( (_gid + _clock) % 7 )
                     {
                         case 0:
                             _status_flg |= BACT_STFLAG_DODGE_LEFT;
@@ -2069,6 +2073,9 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
     if ( v22 && !IsPrimaryWeaponElevationAllowed(v34) )
         return 0;
 
+    if ( !_tankExpectTgt && !(v22 && v22->IsArcGrenade()) )
+        return 0;
+
     if ( v22 && v22->IsArcGrenade() )
     {
         const vec3d launchPos = arg->has_launch_pos
@@ -2103,11 +2110,13 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
         v38 = 0.0;
     }
 
+    const float maxFireRange = ComputeAIEffectiveFireRange(v22);
+
     if ( arg->unkn == 2 )
     {
         if ( v43 )
         {
-            if ( v37 < World::CVSectorLength && v38 > 0.93 )
+            if ( v37 < maxFireRange && v38 > 0.93 )
             {
                 if ( (v22 && v22->IsArcGrenade()) ||
                      (v34.y > -0.85 && v34.y < 0.2) )
@@ -2123,7 +2132,7 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
     {
         if ( v43 )
         {
-            if ( v37 < World::CVSectorLength && v38 > 0.91 )
+            if ( v37 < maxFireRange && v38 > 0.91 )
             {
                 if ( (v22 && v22->IsArcGrenade()) ||
                      (v34.y > -0.4 && v34.y < 0.3) )

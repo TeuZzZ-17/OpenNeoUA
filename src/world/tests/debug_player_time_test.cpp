@@ -36,7 +36,7 @@ int main()
     for(auto *a:{&player,&ally,&mount})a->Bind(world);
     shot.Bind(world);enemyShot.Bind(world);
     world._userUnit=&player;mount._parent=&player;mount._isUnitGunChild=true;
-    System::IniConf::GameNewDebug.Value=std::string("yes");
+    System::IniConf::GameNewDebug.Value=true;
     TInputState input{};input.KbdLastHit=Input::KC_F2;world.HandleDebugTimeHotkeys(&input,true);
     System::GameClock.Reset();System::GameClock.BeginFrame(1000,50,0,.2f,false,true,true);
     int checks=0,failures=0;
@@ -88,7 +88,7 @@ int main()
     check(ally.GetDebugFrameTime(100)==100,"F3 keeps global acceleration");
     world._isNetGame=true;
     check(ally.GetDebugFrameTime(10)==10,"netplay never enables the exception");
-    world._isNetGame=false;System::IniConf::GameNewDebug.Value=std::string("no");
+    world._isNetGame=false;System::IniConf::GameNewDebug.Value=false;
     check(ally.GetDebugFrameTime(10)==10,"debug disabled keeps normal timing");
     std::printf("DEBUG PLAYER TIME: %d checks, %d failures\n",checks,failures);
     return failures!=0;

@@ -495,9 +495,37 @@ int StriCmp(const std::string &a, const std::string &b)
 	return strcasecmp(a.c_str(), b.c_str());
 }
 
+bool StrParseBool(const std::string &str, bool *out)
+{
+    if ( !StriCmp(str, "yes") || !StriCmp(str, "true") || !StriCmp(str, "on") )
+    {
+        *out = true;
+        return true;
+    }
+
+    if ( !StriCmp(str, "no") || !StriCmp(str, "false") || !StriCmp(str, "off") )
+    {
+        *out = false;
+        return true;
+    }
+
+    // Whole numbers keep the old "non-zero = on" meaning of the numeric booleans.
+    if ( str.empty() )
+        return false;
+
+    char *end = nullptr;
+    long value = std::strtol(str.c_str(), &end, 0);
+    if ( end != str.c_str() + str.size() )
+        return false;
+
+    *out = value != 0;
+    return true;
+}
+
 bool StrGetBool(const std::string &str)
 {
-    return !StriCmp(str, "yes") || !StriCmp(str, "true") || !StriCmp(str, "on") || !StriCmp(str, "1");
+    bool value = false;
+    return StrParseBool(str, &value) && value;
 }
 
 std::string StrTrim(const std::string &str)

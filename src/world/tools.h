@@ -354,7 +354,7 @@ inline vec3d RandomVec3RangeInclusive(const vec3d &minValue, const vec3d &maxVal
                  RandomFloatRangeInclusive(minValue.z, maxValue.z));
 }
 
-// Shared yaw/pitch direction used by Proximity Defense and Weapon Cluster.
+// Shared yaw/pitch direction used by Radial Shot and Weapon Cluster.
 // Authored angle ranges are sampled uniformly. Callers may instead request the
 // existing evenly-spaced full-circle distribution by supplying a valid shot
 // index/count and evenlyDistributeYaw=true.

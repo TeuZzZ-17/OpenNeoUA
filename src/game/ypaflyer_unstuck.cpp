@@ -45,10 +45,6 @@ void NC_STACK_ypaflyer::ResetUnstuck()
 
 void NC_STACK_ypaflyer::UpdateUnstuck(bool blocked)
 {
-    // Senza hull il comportamento resta quello vanilla (rimbalzo e micro-virate).
-    if ( !HasCollisionShape() )
-        return;
-
     if ( _unstuckPhase != UNSTUCK_NONE )
     {
         if ( _clock < _unstuckPhaseEnd )

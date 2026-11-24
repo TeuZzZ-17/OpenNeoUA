@@ -1082,9 +1082,9 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         if ( unit->_spawn_trigger_radius > 0.01f )
             drawFlatRing(pos, unit->_spawn_trigger_radius, 230, 220, 60);
 
-        // Magenta = proximity defense trigger radius.
-        if ( unit->_proximity_defense_trigger_radius > 0.01f )
-            drawFlatRing(pos, unit->_proximity_defense_trigger_radius, 230, 60, 200);
+        // Magenta = radial shot trigger radius.
+        if ( unit->_radial_shot_trigger_radius > 0.01f )
+            drawFlatRing(pos, unit->_radial_shot_trigger_radius, 230, 60, 200);
 
         // Cyan = model=kamikaze XYZ trigger sphere. Contact mode uses the
         // effective carrier collision bound; no flat/XZ-only fuse is implied.

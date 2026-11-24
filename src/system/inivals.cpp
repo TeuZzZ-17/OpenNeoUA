@@ -252,7 +252,7 @@ Common::Ini::Key IniConf::NetGmode("net.gmode",  Common::Ini::KT_DIGIT);
 Common::Ini::Key IniConf::NetVersionCheck("net.versioncheck", Common::Ini::KT_BOOL, true);
 
 Common::Ini::Key IniConf::GameDebug("game.debug", Common::Ini::KT_BOOL);
-Common::Ini::Key IniConf::GameNewDebug("game.new.debug", Common::Ini::KT_WORD, std::string("no"));
+Common::Ini::Key IniConf::GameNewDebug("game.new.debug", Common::Ini::KT_BOOL, false);
 Common::Ini::Key IniConf::GameCrashDiagnostics("game.crash_diagnostics", Common::Ini::KT_BOOL, false);
 // OpenNeoUA custom: optionally replace the original briefing model preview with text.
 // Missing parameter keeps the original Urban Assault model preview.
@@ -922,7 +922,7 @@ int IniConf::GetUiOpacity(Common::Ini::Key &key, int fallback)
 
 bool IniConf::IsGameNewDebugEnabled()
 {
-    return !StriCmp(GameNewDebug.Get<std::string>(), "yes");
+    return GameNewDebug.Get<bool>();
 }
 
 

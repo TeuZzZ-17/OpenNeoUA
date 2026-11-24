@@ -82,7 +82,7 @@ NC_STACK_ypabact *ypabact_GetDistributedMissileTarget(const std::vector<NC_STACK
     return targets[shotIndex % targets.size()];
 }
 
-bool ypabact_IsLiveProximityMissileOwner(NC_STACK_ypabact *candidate, NC_STACK_ypabact *unit)
+bool ypabact_IsLiveRadialShotMissileOwner(NC_STACK_ypabact *candidate, NC_STACK_ypabact *unit)
 {
     if ( !candidate || candidate == unit )
         return false;

@@ -275,6 +275,17 @@ bool StatusIconBlinkPhaseVisible(const StatusIconBlinkEntry &entry, uint32_t now
     return ((elapsed / STATUS_ICON_BLINK_PHASE_MS) & 1U) == 0U;
 }
 
+// Stack layers of the unit's Debuff become a small number on its icon. Only profiles
+// with stack_max show it; every other icon stays as it was.
+static void StatusIconApplyBadges(const NC_STACK_ypabact *bact, StatusIconBlinkRenderList &icons, int count)
+{
+    if ( !bact->_active_debuff.active || bact->_active_debuff.stack_max <= 0 )
+        return;
+
+    for (int i = 0; i < count; i++)
+        icons[i].badge = !StriCmp(icons[i].path, bact->_active_debuff.icon) ? bact->_active_debuff.stack_count : 0;
+}
+
 int StatusIconBuildBlinkRenderList(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact,
                                    const StatusIconList &desiredIcons, int desiredCount,
                                    StatusIconBlinkRenderList &renderIcons)
@@ -292,6 +303,7 @@ int StatusIconBuildBlinkRenderList(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact
             renderIcons[i].path = desiredIcons[i];
             renderIcons[i].visible = true;
         }
+        StatusIconApplyBadges(bact, renderIcons, desiredCount);
         return desiredCount;
     }
 
@@ -418,6 +430,7 @@ int StatusIconBuildBlinkRenderList(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact
     if ( state.entries.empty() )
         g_statusIconBlinkStates.erase(stateIt);
 
+    StatusIconApplyBadges(bact, renderIcons, renderCount);
     return renderCount;
 }
 
@@ -676,6 +689,57 @@ int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhc
     return iconCount;
 }
 
+// 3x5 digits, one row per 3 bits (bit 2 = left pixel). Drawn with solid rects so the
+// number needs no font stream.
+static const uint8_t g_statusIconBadgeDigits[10][5] = {
+    {7, 5, 5, 5, 7}, {2, 6, 2, 2, 7}, {7, 1, 7, 4, 7}, {7, 1, 7, 1, 7}, {5, 5, 7, 1, 1},
+    {7, 4, 7, 1, 7}, {7, 4, 7, 5, 7}, {7, 1, 1, 1, 1}, {7, 5, 7, 5, 7}, {7, 5, 7, 1, 7}
+};
+
+// Number in the bottom-right corner of an icon, dark outline first so it reads on any art.
+static void StatusIconRenderBadge(int left, int top, int size, int value, uint8_t opacity)
+{
+    value = std::max(1, std::min(value, 99));
+
+    int digits[2];
+    int count = 0;
+    if ( value >= 10 )
+        digits[count++] = value / 10;
+    digits[count++] = value % 10;
+
+    // Each digit pixel is 1 px on the 16 px icon (3x5 digit): small enough to leave the icon visible;
+    // the outline is a single real pixel (a wider one would fill the gaps and blur the digit).
+    const int unit = std::max(1, size / 16);
+    const int width = count * 3 * unit + (count - 1) * unit;
+    const int x0 = left + size - width;
+    const int y0 = top + size - 5 * unit;
+    const float alpha = opacity / 255.0f;
+    const GFX::TGLColor shadow(0.0f, 0.0f, 0.0f, alpha);
+    const GFX::TGLColor fill(1.0f, 1.0f, 0.6f, alpha);
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        for (int d = 0; d < count; d++)
+        {
+            for (int row = 0; row < 5; row++)
+            {
+                for (int col = 0; col < 3; col++)
+                {
+                    if ( !(g_statusIconBadgeDigits[digits[d]][row] & (4 >> col)) )
+                        continue;
+
+                    const float px = (float)(x0 + (d * 4 + col) * unit);
+                    const float py = (float)(y0 + row * unit);
+                    if ( pass == 0 )
+                        GFX::Engine.DrawVirtualUISolidRect(px - 1, py - 1, px + unit + 1, py + unit + 1, shadow);
+                    else
+                        GFX::Engine.DrawVirtualUISolidRect(px, py, px + unit, py + unit, fill);
+                }
+            }
+        }
+    }
+}
+
 void StatusIconRenderBlinkList(NC_STACK_ypaworld *yw, const StatusIconBlinkRenderList &icons,
                                int iconCount, int left, int top, int size,
                                uint8_t opacity)
@@ -686,7 +750,11 @@ void StatusIconRenderBlinkList(NC_STACK_ypaworld *yw, const StatusIconBlinkRende
         {
             NC_STACK_bitmap *bitmap = StatusIconLoad(icons[i].path);
             if ( bitmap )
+            {
                 StatusIconRenderBitmap(yw, bitmap, left, top, size, opacity);
+                if ( icons[i].badge > 0 )
+                    StatusIconRenderBadge(left, top, size, icons[i].badge, opacity);
+            }
         }
 
         left += size + STATUS_ICON_SPACING;
@@ -880,12 +948,26 @@ void yw_GetWorldShieldBarRect(int hpLeft, int hpTop, int hpWidth,
 // Single tint fill plus a translucent track of the same color, so the missing
 // part stays readable without adding a second color parameter.
 void yw_RenderProceduralShieldBar(int left, int top, int width, int height,
-                                         int value, int maxValue, uint8_t opacity)
+                                         int value, int maxValue, uint8_t opacity, int fullValue)
 {
     const YWProceduralStatusBarConfig &config = yw_GetProceduralStatusBarConfig();
-    if ( config.shieldEnabled && maxValue > 0 )
-        yw_RenderProceduralProgressBar(left, top, width, height, float(value) / maxValue,
-                                       config.shieldTint, opacity, 1.0f);
+    if ( !config.shieldEnabled || maxValue <= 0 )
+        return;
+
+    yw_RenderProceduralProgressBar(left, top, width, height, float(value) / maxValue,
+                                   config.shieldTint, opacity, 1.0f);
+
+    // Shield taken away by a Debuff: a red tail between the current and the normal value, at
+    // least 1 px wide so even a small malus is visible. Drawn only on the empty track.
+    if ( fullValue > value )
+    {
+        const float scale = (float)width / (float)maxValue;
+        const float lostLeft = (float)left + std::max(0, value) * scale;
+        const float lostRight = std::max(lostLeft + 1.0f, (float)left + std::min(fullValue, maxValue) * scale);
+        const GFX::TGLColor lostTint(1.0f, 0.3f, 0.2f, 0.9f * opacity / 255.0f);
+        GFX::Engine.DrawVirtualUISolidRect(lostLeft, (float)top, std::min(lostRight, (float)(left + width)),
+                                           (float)(top + height), lostTint);
+    }
 }
 
 void yw_RenderProceduralProgressBar(int left, int top, int width, int height, float ratio,

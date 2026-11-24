@@ -32,7 +32,7 @@ int main()
         ++checks;
         if (!ok) { ++failures; std::printf("FAIL %s\n", label); }
     };
-    System::IniConf::GameNewDebug.Value = std::string("yes");
+    System::IniConf::GameNewDebug.Value = true;
     check(world.IsVehicleProductionLimitReached(1, 5), "normal production respects the limit");
     world.Cheat(true);
     check(world.GetVehicleProductionLimitRemaining(1, 5) == -1, "Host cheat permits unlimited player production");

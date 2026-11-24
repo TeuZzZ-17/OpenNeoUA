@@ -253,6 +253,17 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     const bool refreshActive = _active_debuff.active;
     const int pendingTickTime = _active_debuff.next_tick_time;
 
+    // stack_max: a hit by the same profile on a unit already carrying it adds one layer.
+    // Every malus is its per-layer value x layers, still capped at 100%. Another profile
+    // replaces the Debuff and starts again from one layer.
+    int stackLayers = 1;
+    if ( debuff.stack_max > 0 && refreshActive && _active_debuff.profile_id == debuff.profile_id )
+        stackLayers = std::min(_active_debuff.stack_count + 1, debuff.stack_max);
+    const auto stackedMalus = [stackLayers](float perLayer)
+    {
+        return std::max(0.0f, std::min(perLayer * (float)stackLayers, 1.0f));
+    };
+
     const bool canMindcontrol = !hostStation && debuff.mindcontrol &&
                                ypabact_CanBeMindcontrolled(this, source);
     const float stunMotionLevel = hostStation ? 0.0f :
@@ -296,11 +307,16 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
         _active_debuff.stun_floor_close = false;
         _active_debuff.stun_next_floor_check_time = 0;
     }
-    _active_debuff.force_malus = std::max(0.0f, std::min(debuff.force_malus, 1.0f));
-    _active_debuff.maxrot_malus = std::max(0.0f, std::min(debuff.maxrot_malus, 1.0f));
-    _active_debuff.shield_malus = std::max(0.0f, std::min(debuff.shield_malus, 1.0f));
-    _active_debuff.mgun_shot_time_malus = std::max(0.0f, std::min(debuff.mgun_shot_time_malus, 1.0f));
-    _active_debuff.shot_time_malus = std::max(0.0f, std::min(debuff.shot_time_malus, 1.0f));
+    _active_debuff.force_malus = stackedMalus(debuff.force_malus);
+    _active_debuff.maxrot_malus = stackedMalus(debuff.maxrot_malus);
+    _active_debuff.shield_malus = stackedMalus(debuff.shield_malus);
+    _active_debuff.mgun_shot_time_malus = stackedMalus(debuff.mgun_shot_time_malus);
+    _active_debuff.shot_time_malus = stackedMalus(debuff.shot_time_malus);
+    _active_debuff.damage_malus = stackedMalus(debuff.damage_malus);
+    _active_debuff.regen_malus = stackedMalus(debuff.regen_malus);
+    _active_debuff.profile_id = debuff.profile_id;
+    _active_debuff.stack_max = debuff.stack_max;
+    _active_debuff.stack_count = debuff.stack_max > 0 ? stackLayers : 0;
     _active_debuff.snd_pitch_multiplier = ypabact_SafeDamageMult(debuff.snd_pitch_multiplier);
     _active_debuff.target_tint = debuff.target_tint;
     _active_debuff.vps = debuff.vps;

@@ -88,6 +88,7 @@ struct StatusIconBlinkRenderEntry
 {
     std::string path;
     bool visible = true;
+    int badge = 0; // stack layers drawn bottom-right of the icon; 0 = no number
 };
 
 struct EnemyIndicatorVisibilityState
@@ -236,7 +237,7 @@ GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &lowTint, const GFX::TGLC
 void yw_GetProceduralHpStripRect(int top, int cellHeight, int *outTop, int *outHeight);
 bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int value, int maxValue, int cellWidth, int cellHeight, uint8_t opacity, bool hideFilled = false, bool hideEmpty = false);
 void yw_GetWorldShieldBarRect(int hpLeft, int hpTop, int hpWidth, int cellHeight, bool proceduralHp, int *outLeft, int *outTop, int *outWidth, int *outHeight);
-void yw_RenderProceduralShieldBar(int left, int top, int width, int height, int value, int maxValue, uint8_t opacity);
+void yw_RenderProceduralShieldBar(int left, int top, int width, int height, int value, int maxValue, uint8_t opacity, int fullValue = 0);
 void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile, uint8_t opacity = 255);
 void yw_RenderProceduralProgressBar(int left, int top, int width, int height, float ratio,
                                     const GFX::TGLColor &tint, uint8_t opacity, float fillAlpha);

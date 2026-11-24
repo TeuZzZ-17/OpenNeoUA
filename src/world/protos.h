@@ -592,6 +592,8 @@ struct TWeaponDebuffConfig
     uint32_t revision = 0;
     bool allow_on_host_station = false;
     bool allow_on_children = false;
+    // Max layers: each re-hit by this profile adds one layer of every malus. 0 = no stacking.
+    int stack_max = 0;
     std::string name;
     std::string icon;
     TAbsoluteOrPercent energy;
@@ -607,6 +609,8 @@ struct TWeaponDebuffConfig
     float shield_malus = 0.0;
     float mgun_shot_time_malus = 0.0;
     float shot_time_malus = 0.0;
+    float damage_malus = 0.0;
+    float regen_malus = 0.0;
     float snd_pitch_multiplier = 1.0;
     TVisualTint target_tint;
     std::vector<int16_t> vps;
@@ -980,23 +984,23 @@ struct TVhclProto
     // OpenNeoUA Orbiter: weapon id of a "model = orbiter" Weapon carried as
     // guardian projectiles. 0 = off (vanilla). Independent of weapon/mgun slots.
     int orbiter_weapon = 0;
-    int proximity_defense_enable = 0;
-    int proximity_defense_weapon = 0;
-    float proximity_defense_trigger_radius = 0.0;
-    int proximity_defense_interval = 1000;
-    int proximity_defense_shots = 12;
-    int proximity_defense_vp_launch = -1;
-    std::string proximity_defense_3ds_launch;
-    std::string proximity_defense_base_launch;
-    int proximity_defense_fire_mode = 0;
-    int proximity_defense_sequence_delay = 100;
-    int proximity_defense_mode = 0;
-    bool proximity_defense_horizontal_angle_set = false;
-    float proximity_defense_horizontal_angle_min = 0.0;
-    float proximity_defense_horizontal_angle_max = 360.0;
-    bool proximity_defense_vertical_angle_set = false;
-    float proximity_defense_vertical_angle_min = -10.0;
-    float proximity_defense_vertical_angle_max = 45.0;
+    int radial_shot_enable = 0;
+    int radial_shot_weapon = 0;
+    float radial_shot_trigger_radius = 0.0;
+    int radial_shot_interval = 1000;
+    int radial_shot_shots = 12;
+    int radial_shot_vp_launch = -1;
+    std::string radial_shot_3ds_launch;
+    std::string radial_shot_base_launch;
+    int radial_shot_fire_mode = 0;
+    int radial_shot_sequence_delay = 100;
+    int radial_shot_mode = 0;
+    bool radial_shot_horizontal_angle_set = false;
+    float radial_shot_horizontal_angle_min = 0.0;
+    float radial_shot_horizontal_angle_max = 360.0;
+    bool radial_shot_vertical_angle_set = false;
+    float radial_shot_vertical_angle_min = -10.0;
+    float radial_shot_vertical_angle_max = 45.0;
     int max_active_at_once = 0;
     std::vector<DestFX> dest_fx;      // dest_fx
     std::vector<DestFX>    ExtDestroyFX; // ext_dest_fx
@@ -1494,6 +1498,9 @@ struct TWeapProto
     vec3d ai_fire_trigger_cone_below;
     float ai_fire_trigger_forward_max_inclination = 0.0f;
     float ai_fire_trigger_dead_zone = 0.0f;
+    // Percent chance (0..100) that an AI unit carrying this Weapon skips enemies that already
+    // have an active Debuff when picking a target. 0 = vanilla (disabled).
+    float ai_avoid_debuffed_target_change = 0.0f;
     enum AIFireTriggerShape { AI_TRIGGER_NONE, AI_TRIGGER_BOX_BELOW, AI_TRIGGER_BOX_FORWARD,
                               AI_TRIGGER_CONE_FORWARD, AI_TRIGGER_CONE_BELOW };
     AIFireTriggerShape GetAIFireTriggerShape() const

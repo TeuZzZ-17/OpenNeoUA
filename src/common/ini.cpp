@@ -76,25 +76,6 @@ static bool ParseInt32(const std::string &str, int32_t *out)
     }
 }
 
-static bool ParseBool(const std::string &str, bool *out)
-{
-    if ( !StriCmp(str, "yes") || !StriCmp(str, "true") ||
-         !StriCmp(str, "on") || !StriCmp(str, "1") )
-    {
-        *out = true;
-        return true;
-    }
-
-    if ( !StriCmp(str, "no") || !StriCmp(str, "false") ||
-         !StriCmp(str, "off") || !StriCmp(str, "0") )
-    {
-        *out = false;
-        return true;
-    }
-
-    return false;
-}
-
 static void WarnInvalidValue(const Key &key, const std::string &value)
 {
     ypa_log_out("WARNING: invalid INI value [%s=%s]; using the default value.\n",
@@ -162,7 +143,7 @@ void ParseLine(std::string line, std::vector<T> *lst)
                 case KT_BOOL:
                 {
                     bool value = false;
-                    if ( splt.GetNext(&tmp) && ParseBool(tmp, &value) )
+                    if ( splt.GetNext(&tmp) && StrParseBool(tmp, &value) )
                     {
                         key.Value = value;
                         parsed = true;

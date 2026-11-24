@@ -2889,32 +2889,32 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
         bacto->_orbiter_weapon = vhcl.orbiter_weapon;
         bacto->_orbiter_count = -1;
         bacto->_orbiter_next_spawn_time = 0;
-        bacto->_proximity_defense_enable = vhcl.proximity_defense_enable;
-        bacto->_proximity_defense_weapon = vhcl.proximity_defense_weapon;
-        bacto->_proximity_defense_trigger_radius = vhcl.proximity_defense_trigger_radius > 0.0 ? vhcl.proximity_defense_trigger_radius : 0.0;
-        bacto->_proximity_defense_interval = vhcl.proximity_defense_interval > 0 ? vhcl.proximity_defense_interval : 1000;
-        bacto->_proximity_defense_shots = vhcl.proximity_defense_shots > 0 ? vhcl.proximity_defense_shots : 1;
-        bacto->_proximity_defense_vp_launch = vhcl.proximity_defense_vp_launch;
-        bacto->_proximity_defense_3ds_launch = vhcl.proximity_defense_3ds_launch;
-        bacto->_proximity_defense_base_launch = vhcl.proximity_defense_base_launch;
-        bacto->_proximity_defense_fire_mode = vhcl.proximity_defense_fire_mode;
-        bacto->_proximity_defense_sequence_delay = vhcl.proximity_defense_sequence_delay > 0 ? vhcl.proximity_defense_sequence_delay : 100;
-        bacto->_proximity_defense_mode = vhcl.proximity_defense_mode;
-        bacto->_proximity_defense_horizontal_angle_set = vhcl.proximity_defense_horizontal_angle_set;
-        bacto->_proximity_defense_horizontal_angle_min = vhcl.proximity_defense_horizontal_angle_min;
-        bacto->_proximity_defense_horizontal_angle_max = vhcl.proximity_defense_horizontal_angle_max;
-        if ( bacto->_proximity_defense_horizontal_angle_min > bacto->_proximity_defense_horizontal_angle_max )
-            std::swap(bacto->_proximity_defense_horizontal_angle_min, bacto->_proximity_defense_horizontal_angle_max);
-        bacto->_proximity_defense_vertical_angle_set = vhcl.proximity_defense_vertical_angle_set;
-        bacto->_proximity_defense_vertical_angle_min = vhcl.proximity_defense_vertical_angle_min;
-        bacto->_proximity_defense_vertical_angle_max = vhcl.proximity_defense_vertical_angle_max;
-        if ( bacto->_proximity_defense_vertical_angle_min > bacto->_proximity_defense_vertical_angle_max )
-            std::swap(bacto->_proximity_defense_vertical_angle_min, bacto->_proximity_defense_vertical_angle_max);
-        bacto->_proximity_defense_sequence_active = false;
-        bacto->_proximity_defense_sequence_shots_fired = 0;
-        bacto->_proximity_defense_next_shot_time = 0;
-        bacto->_proximity_defense_next_activation_time = 0;
-        bacto->_proximity_defense_at_death_done = false;
+        bacto->_radial_shot_enable = vhcl.radial_shot_enable;
+        bacto->_radial_shot_weapon = vhcl.radial_shot_weapon;
+        bacto->_radial_shot_trigger_radius = vhcl.radial_shot_trigger_radius > 0.0 ? vhcl.radial_shot_trigger_radius : 0.0;
+        bacto->_radial_shot_interval = vhcl.radial_shot_interval > 0 ? vhcl.radial_shot_interval : 1000;
+        bacto->_radial_shot_shots = vhcl.radial_shot_shots > 0 ? vhcl.radial_shot_shots : 1;
+        bacto->_radial_shot_vp_launch = vhcl.radial_shot_vp_launch;
+        bacto->_radial_shot_3ds_launch = vhcl.radial_shot_3ds_launch;
+        bacto->_radial_shot_base_launch = vhcl.radial_shot_base_launch;
+        bacto->_radial_shot_fire_mode = vhcl.radial_shot_fire_mode;
+        bacto->_radial_shot_sequence_delay = vhcl.radial_shot_sequence_delay > 0 ? vhcl.radial_shot_sequence_delay : 100;
+        bacto->_radial_shot_mode = vhcl.radial_shot_mode;
+        bacto->_radial_shot_horizontal_angle_set = vhcl.radial_shot_horizontal_angle_set;
+        bacto->_radial_shot_horizontal_angle_min = vhcl.radial_shot_horizontal_angle_min;
+        bacto->_radial_shot_horizontal_angle_max = vhcl.radial_shot_horizontal_angle_max;
+        if ( bacto->_radial_shot_horizontal_angle_min > bacto->_radial_shot_horizontal_angle_max )
+            std::swap(bacto->_radial_shot_horizontal_angle_min, bacto->_radial_shot_horizontal_angle_max);
+        bacto->_radial_shot_vertical_angle_set = vhcl.radial_shot_vertical_angle_set;
+        bacto->_radial_shot_vertical_angle_min = vhcl.radial_shot_vertical_angle_min;
+        bacto->_radial_shot_vertical_angle_max = vhcl.radial_shot_vertical_angle_max;
+        if ( bacto->_radial_shot_vertical_angle_min > bacto->_radial_shot_vertical_angle_max )
+            std::swap(bacto->_radial_shot_vertical_angle_min, bacto->_radial_shot_vertical_angle_max);
+        bacto->_radial_shot_sequence_active = false;
+        bacto->_radial_shot_sequence_shots_fired = 0;
+        bacto->_radial_shot_next_shot_time = 0;
+        bacto->_radial_shot_next_activation_time = 0;
+        bacto->_radial_shot_at_death_done = false;
         bacto->_kamikaze_triggered = false;
         bacto->_kamikaze_ground_decals_handled = false;
         bacto->_destroyedCraterMade = false;

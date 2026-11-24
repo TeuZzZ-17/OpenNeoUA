@@ -5,7 +5,7 @@
 //   movement, collisions, crashes ... ypabact_physics.cpp
 //   damage, death, plasma, medals ... ypabact_damage.cpp
 //   weapons (missiles, minigun) ..... ypabact_weapons.cpp
-//   laser / artillery / kamikaze / carrier / proximity / fire trigger area / projectile / recoil / status FX / camera / control:
+//   laser / artillery / kamikaze / carrier / radial shot / fire trigger area / projectile / recoil / status FX / camera / control:
 //   ypabact_<feature>.cpp
 // Shared helpers and constants are declared in ypabact_internal.h.
 #include "game/ypabact_internal.h"
@@ -321,7 +321,7 @@ NC_STACK_ypabact *ypabact_FindLiveBactByGid(World::RefBactList &list, int32_t gi
     return nullptr;
 }
 
-// Puts the per-unit state of the OpenNeoUA features (spawning, at-death effects, proximity defense,
+// Puts the per-unit state of the OpenNeoUA features (spawning, at-death effects, radial shot,
 // artillery shell, laser, kamikaze) back to its defaults. Shared by the constructor, Init and Renew.
 void NC_STACK_ypabact::ResetFeatureRuntimeState()
 {
@@ -357,28 +357,28 @@ void NC_STACK_ypabact::ResetFeatureRuntimeState()
     _orbiter_weapon = 0;
     _orbiter_count = -1;
     _orbiter_next_spawn_time = 0;
-    _proximity_defense_enable = 0;
-    _proximity_defense_weapon = 0;
-    _proximity_defense_trigger_radius = 0.0;
-    _proximity_defense_interval = 1000;
-    _proximity_defense_shots = 12;
-    _proximity_defense_vp_launch = -1;
-    _proximity_defense_3ds_launch.clear();
-    _proximity_defense_base_launch.clear();
-    _proximity_defense_fire_mode = 0;
-    _proximity_defense_sequence_delay = 100;
-    _proximity_defense_mode = 0;
-    _proximity_defense_horizontal_angle_set = false;
-    _proximity_defense_horizontal_angle_min = 0.0;
-    _proximity_defense_horizontal_angle_max = 360.0;
-    _proximity_defense_vertical_angle_set = false;
-    _proximity_defense_vertical_angle_min = -10.0;
-    _proximity_defense_vertical_angle_max = 45.0;
-    _proximity_defense_sequence_active = false;
-    _proximity_defense_sequence_shots_fired = 0;
-    _proximity_defense_next_shot_time = 0;
-    _proximity_defense_next_activation_time = 0;
-    _proximity_defense_at_death_done = false;
+    _radial_shot_enable = 0;
+    _radial_shot_weapon = 0;
+    _radial_shot_trigger_radius = 0.0;
+    _radial_shot_interval = 1000;
+    _radial_shot_shots = 12;
+    _radial_shot_vp_launch = -1;
+    _radial_shot_3ds_launch.clear();
+    _radial_shot_base_launch.clear();
+    _radial_shot_fire_mode = 0;
+    _radial_shot_sequence_delay = 100;
+    _radial_shot_mode = 0;
+    _radial_shot_horizontal_angle_set = false;
+    _radial_shot_horizontal_angle_min = 0.0;
+    _radial_shot_horizontal_angle_max = 360.0;
+    _radial_shot_vertical_angle_set = false;
+    _radial_shot_vertical_angle_min = -10.0;
+    _radial_shot_vertical_angle_max = 45.0;
+    _radial_shot_sequence_active = false;
+    _radial_shot_sequence_shots_fired = 0;
+    _radial_shot_next_shot_time = 0;
+    _radial_shot_next_activation_time = 0;
+    _radial_shot_at_death_done = false;
     _artillery_shell_barrage_active = false;
     _artillery_shell_shots_remaining = 0;
     _artillery_shell_next_shot_time = 0;
@@ -1558,7 +1558,7 @@ void NC_STACK_ypabact::Update(update_msg *arg)
     UpdateDamageFX(arg);
     UpdateDecorationFX(arg);
     UpdateCarrierSpawn(arg);
-    UpdateProximityDefense(arg);
+    UpdateRadialShot(arg);
     UpdateOrbiters(arg);
     UpdateArtilleryShell(arg);
     ResolveGenesisCompoundOverlap(arg->frameTime);

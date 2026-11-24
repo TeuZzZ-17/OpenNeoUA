@@ -1862,10 +1862,19 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                             FontUA::set_opacity(cur, worldUiOpacity);
                             yw_RenderUnitSquareBar(yw, cur, v42, lifeTop, v13, bact->_energy, bact->_energy_max, 2, 6, worldUiOpacity);
                             if ( newWorldShieldBar )
+                            {
+                                // Shield without the Debuff malus, so the bar can show what the Debuff took away.
+                                const float shieldNow = bact->GetEffectiveShield();
+                                float shieldFull = shieldNow;
+                                const float shieldMalus = std::min(bact->_active_debuff.shield_malus, 1.0f);
+                                if ( bact->_active_debuff.active && shieldMalus > 0.0f )
+                                    shieldFull = shieldMalus < 1.0f ? shieldNow / (1.0f - shieldMalus) : (float)bact->_shield;
+
                                 yw_RenderProceduralShieldBar(shieldBarLeft, shieldBarTop,
                                                              shieldBarWidth, shieldBarHeight,
-                                                             (int)bact->GetEffectiveShield(), 100,
-                                                             worldUiOpacity);
+                                                             (int)shieldNow, 100,
+                                                             worldUiOpacity, (int)(shieldFull + 0.5f));
+                            }
                             else if ( !hideWorldShield )
                                 yw_RenderUnitSquareBar(yw, cur, v42, shieldTop, v13, (int)bact->GetEffectiveShield(), 100, 1, 5, worldUiOpacity);
 

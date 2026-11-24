@@ -220,6 +220,7 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->ai_fire_trigger_cone_below = vec3d();
         _wpn->ai_fire_trigger_forward_max_inclination = 0.0f;
         _wpn->ai_fire_trigger_dead_zone = 0.0f;
+        _wpn->ai_avoid_debuffed_target_change = 0.0f;
         _wpn->fire_time_scale = 1.0f;
         _wpn->fire_time_scale_hp_drain.Clear();
         _wpn->snd_launch_at_muzzle = false;
@@ -359,12 +360,12 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
 
     if ( !StriCmp(p1, "disable_collision") )
     {
-        _wpn->disable_collision = p2 == "1";
+        _wpn->disable_collision = StrGetBool(p2);
         return ScriptParser::RESULT_OK;
     }
     if ( !StriCmp(p1, "weapon_use_vehicle_fire_state") )
     {
-        _wpn->weapon_use_vehicle_fire_state = p2 == "1";
+        _wpn->weapon_use_vehicle_fire_state = StrGetBool(p2);
         return ScriptParser::RESULT_OK;
     }
     if ( !StriCmp(p1, "collision_shape") )
@@ -425,7 +426,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
 
     else if ( !StriCmp(p1, "blast_falloff") )
     {
-        _wpn->blast_falloff = parser.stol(p2, nullptr, 0) ? 1 : 0;
+        _wpn->blast_falloff = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "blast_push") )
     {
@@ -569,7 +570,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "snd_launch_at_muzzle") )
     {
-        _wpn->snd_launch_at_muzzle = p2 == "1";
+        _wpn->snd_launch_at_muzzle = StrGetBool(p2);
     }
     else if ( !StriCmp(p1, "blast_radius") )
     {
@@ -918,6 +919,19 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
             ypa_log_out("WARNING: weapon %d weapon_energy_cost='%s' is invalid; expected an explicit percentage in range 0%%-100%%. Falling back to legacy weapon energy drain.\n",
                         _wpnID, p2.c_str());
         }
+    }
+    else if ( !StriCmp(p1, "ai_avoid_debuffed_target_change") )
+    {
+        // Explicit percentage like weapon_energy_cost: a bare number is ambiguous.
+        TAuthoredScalar value;
+        _wpn->ai_avoid_debuffed_target_change = 0.0f;
+
+        if ( ParseAuthoredScalar(p2, value) && value.percent &&
+             std::isfinite(value.value) && value.value >= 0.0f )
+            _wpn->ai_avoid_debuffed_target_change = std::min(value.value, 100.0f);
+        else
+            ypa_log_out("WARNING: weapon %d ai_avoid_debuffed_target_change='%s' is invalid; expected a percentage in range 0%%-100%%. Disabled.\n",
+                        _wpnID, p2.c_str());
     }
     else if ( !StriCmp(p1, "ramp_up_time") )
     {
@@ -1391,11 +1405,11 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "artillery_shell_requires_radar") )
     {
-        _wpn->artillery_shell_requires_radar = parser.stol(p2, nullptr, 0) != 0 ? 1 : 0;
+        _wpn->artillery_shell_requires_radar = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "artillery_shell_manual_mode_only") )
     {
-        _wpn->artillery_shell_manual_mode_only = parser.stol(p2, nullptr, 0) != 0 ? 1 : 0;
+        _wpn->artillery_shell_manual_mode_only = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "artillery_shell_barrage_radius") )
     {
@@ -1440,7 +1454,7 @@ int WeaponProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p
     }
     else if ( !StriCmp(p1, "artillery_shell_airburst") )
     {
-        _wpn->artillery_shell_airburst = parser.stol(p2, nullptr, 0) != 0 ? 1 : 0;
+        _wpn->artillery_shell_airburst = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "artillery_shell_marker_path") )
     {

@@ -860,7 +860,7 @@ int SoundParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
     }
     else if ( !StriCmp(p1, "invertlr") )
     {
-        if ( !StriCmp(p2, "yes") )
+        if ( StrGetBool(p2) )
         {
             _o._GameShell->soundFlags |= World::SF_INVERTLR;
             SFXEngine::SFXe.setReverseStereo(true);
@@ -876,7 +876,7 @@ int SoundParser::Handle(ScriptParser::Parser &parser, const std::string &p1, con
     }
     else if ( !StriCmp(p1, "cdsound") )
     {
-        if ( !StriCmp(p2, "yes") )
+        if ( StrGetBool(p2) )
         {
             _o._GameShell->soundFlags |= World::SF_CDSOUND;
             _o._preferences |= World::PREF_CDMUSICDISABLE;

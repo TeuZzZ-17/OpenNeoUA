@@ -909,7 +909,7 @@ int MiscParser::Handle(ScriptParser::Parser &parser, const std::string &p1, cons
     }
     else if ( !StriCmp(p1, "easy_cheat_keys") )
     {
-        _o._easyCheatKeys = parser.stol(p2, nullptr, 0) != 0;
+        _o._easyCheatKeys = StrGetBool(p2);
     }
     else if ( !StriCmp(p1, "multi_building") )
     {
@@ -1124,8 +1124,7 @@ int SuperItemProfileParser::Handle(ScriptParser::Parser &parser,
         _profile->push_radius = NonNegativeFiniteOrZero(parser.stof(p2, 0));
     else if ( !StriCmp(p1, "push_falloff") )
     {
-        const int falloff = parser.stol(p2, nullptr, 0);
-        _profile->push_falloff = std::max(0, std::min(falloff, 1));
+        _profile->push_falloff = StrGetBool(p2) ? 1 : 0;
     }
     else if ( !StriCmp(p1, "wave_push_force") )
         _profile->wave_push_force = ClampPushIntensity(parser.stof(p2, 0));

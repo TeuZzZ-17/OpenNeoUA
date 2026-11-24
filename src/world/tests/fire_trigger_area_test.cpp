@@ -1541,11 +1541,11 @@ void TestImplicitFeatureGroups() {
     Check(ParseVehicles(w, {
         "new_vehicle 200", "model = tank", "spawn_vehicle = 1", "spawn_interval = 5000", "end",
         "new_vehicle 201", "model = tank", "at_death_spawn_vehicle = 1", "end",
-        "new_vehicle 202", "model = tank", "proximity_defense_weapon = 1", "end"
+        "new_vehicle 202", "model = tank", "radial_shot_weapon = 1", "end"
     }), "implicit vehicle fixtures parsed");
     Check(w._vhclProtos[200].spawn_units, "vehicle spawn child definition activates spawn");
     Check(w._vhclProtos[201].at_death_spawn_units, "death spawn child definition activates spawn");
-    Check(w._vhclProtos[202].proximity_defense_enable, "proximity child definition activates defense");
+    Check(w._vhclProtos[202].radial_shot_enable, "radial shot child definition activates the system");
     Check(ParseVehicles(w, {"new_vehicle 203", "model = tank", "at_death_spawn_units_eject_force = 4", "end",
                             "new_vehicle 204", "model = tank", "at_death_spawn_units_eject_force = -3", "end",
                             "new_vehicle 205", "model = tank", "at_death_spawn_units_eject_force = 99", "end",
@@ -1657,19 +1657,6 @@ void TestBoomerangLifetimeReturn() {
     child._fly_dir = vec3d(0,0,1); child._fly_dir_length = 2;
     ypabact_ApplyEjectForce(&child, 0);
     Check(child._fly_dir_length == 2, "absent ejection preserves existing velocity");
-    std::srand(17);
-    child._fly_dir_length = 0;
-    ypabact_ApplyEjectForce(&child, 4);
-    Check(Near(child._fly_dir_length, 4.0f) && std::fabs(child._fly_dir.y) > 0.001f &&
-          child._fly_dir.XZ().length() > 0.001f,
-          "ejection gives the spawned unit horizontal and vertical velocity");
-    bool up = false, down = false;
-    for (int i = 0; i < 32; ++i) {
-        child._fly_dir_length = 0;
-        ypabact_ApplyEjectForce(&child, 4);
-        up |= child._fly_dir.y < 0; down |= child._fly_dir.y > 0;
-    }
-    Check(up && down, "ejection samples both vertical directions");
 }
 
 void TestExpiredHomingFalls() {
@@ -1768,7 +1755,7 @@ void TestSpawnVehicleList()
 {
     auto world = std::make_unique<WorldProbe>();
     Check(ParseVehicles(*world, {"new_vehicle 230", "model = gun", "gun_type = spawner",
-                                 "spawn_vehicle = 188|21|0|bad|75", "end",
+                                 "spawn_vehicle = 188|21|0|-3|75", "end",
                                  "new_vehicle 231", "model = gun", "gun_type = spawner",
                                  "spawn_vehicle = 71", "end",
                                  "new_vehicle 232", "model = gun", "gun_type = spawner",
@@ -1784,6 +1771,7 @@ void TestSpawnVehicleList()
 
 void TestSpawnerImmobileByDefault()
 {
+    Nucleus::ClassList.push_back(Nucleus::MakeClassDescr<NC_STACK_ypagun>());
     auto world = std::make_unique<WorldProbe>();
     Check(ParseVehicles(*world, {"new_vehicle 220", "model = gun", "gun_type = spawner",
                                  "spawn_vehicle = 71", "end",

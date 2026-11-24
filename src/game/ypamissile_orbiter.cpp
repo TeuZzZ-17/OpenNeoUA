@@ -11,7 +11,7 @@
 //
 // Strikes reuse the existing hit path (ApplyDirectHitToBact + the armor
 // penetration hit FX/sound); the last strike reuses the normal Impact()/DEAD
-// detonation. Local games only, like proximity_defense: no orbiter is spawned
+// detonation. Local games only, like radial_shot: no orbiter is spawned
 // in a network game, so nothing can desync.
 #include "game/ypamissile_internal.h"
 

@@ -20,6 +20,43 @@
 #include <limits>
 #include "game/yparobo_internal.h"
 
+namespace
+{
+// Count allied commanders (including the one currently occupying the dock)
+// already targeting the given unit or sector.
+int CountCommandersTargeting(NC_STACK_yparobo *robo, int tgType, uint32_t primCommId, const Common::Point &tgSec)
+{
+    int count = 0;
+    for ( NC_STACK_ypabact *node : robo->_kidList )
+    {
+        if ( node->_status == BACT_STATUS_DEAD )
+            continue;
+        if ( node->_primTtype != tgType && robo->_roboDockTargetType != tgType )
+            continue;
+
+        Common::Point rbtg;
+        uint32_t cmdId = 0;
+        if ( node->_commandID == robo->_roboDockUser && robo->_roboDockUser )
+        {
+            rbtg = World::PositionToSectorID(robo->_roboDockTargetPos);
+            cmdId = robo->_roboDockTargetCommandID;
+        }
+        else
+        {
+            rbtg = World::PositionToSectorID(node->_primTpos);
+            cmdId = node->_primT_cmdID;
+        }
+
+        if ( (tgType == BACT_TGT_TYPE_UNIT && primCommId != 0 && cmdId == primCommId) ||
+             (tgType == BACT_TGT_TYPE_CELL && rbtg == tgSec) )
+        {
+            count++;
+        }
+    }
+    return count;
+}
+}
+
 void NC_STACK_yparobo::AI_layer1(update_msg *arg)
 {
     if ( _status == BACT_STATUS_DEAD )
@@ -1078,17 +1115,23 @@ NC_STACK_ypabact *NC_STACK_yparobo::AllocForce(robo_loct1 *arg)
     {
         if ( !(_roboState & ROBOSTATE_DOCKINUSE) )
         {
-            bact_arg81 arg81_3;
-            arg81_3.enrg_type = 1;
-            arg81_3.enrg_sum = 0;
-
-            selectedCommander->GetSummary(&arg81_3);
-
-            if ( arg81_3.enrg_sum < arg->energ )
+            // Only reinforce an existing idle commander at the dock if it is reasonably
+            // close to the Host Station, avoiding cross-map trickle reinforcements.
+            const float distToCmd = (selectedCommander->_position.XZ() - _position.XZ()).length();
+            if ( distToCmd <= World::CVSectorLength * 3.5f )
             {
-                _roboDockUser = selectedCommander->_commandID;
-                _roboDockEnerg = arg->energ - arg81_3.enrg_sum;
-                v72 = 1;
+                bact_arg81 arg81_3;
+                arg81_3.enrg_type = 1;
+                arg81_3.enrg_sum = 0;
+
+                selectedCommander->GetSummary(&arg81_3);
+
+                if ( arg81_3.enrg_sum < arg->energ )
+                {
+                    _roboDockUser = selectedCommander->_commandID;
+                    _roboDockEnerg = arg->energ - arg81_3.enrg_sum;
+                    v72 = 1;
+                }
             }
         }
     }
@@ -1270,34 +1313,44 @@ void NC_STACK_yparobo::buildConquer()
     _world->GetSectorInfo(&arg130);
 
     int enrg = 0;
+    NC_STACK_ypabact *bestDefender = nullptr;
+    int bestDefenderEnergy = -1;
 
     for ( NC_STACK_ypabact* &cell_unit : arg130.pcell->unitsList )
     {
-        if ( _owner != cell_unit->_owner && cell_unit->_bact_type == BACT_TYPES_GUN && (cell_unit->_weapon != -1 || cell_unit->HasMinigun()) )
+        if ( _owner != cell_unit->_owner && cell_unit->_owner != 0 &&
+             cell_unit->_status != BACT_STATUS_DEAD && !cell_unit->IsIgnoredByAI() &&
+             cell_unit->_bact_type != BACT_TYPES_MISSLE )
         {
-            NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( cell_unit );
-            int a4 = gun->IsRoboGun();
-
-            if ( !a4 )
+            if ( cell_unit->_energy > bestDefenderEnergy )
             {
-                for (NC_STACK_ypabact* &bctt : _world->_unitsList)
+                bestDefenderEnergy = cell_unit->_energy;
+                bestDefender = cell_unit;
+            }
+
+            if ( !enrg && cell_unit->_bact_type == BACT_TYPES_GUN && (cell_unit->_weapon != -1 || cell_unit->HasMinigun()) )
+            {
+                NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( cell_unit );
+                int a4 = gun->IsRoboGun();
+
+                if ( !a4 )
                 {
-                    if ( bctt->_bact_type == BACT_TYPES_ROBO && bctt->_status != BACT_STATUS_DEAD && cell_unit->_owner == bctt->_owner )
+                    for (NC_STACK_ypabact* &bctt : _world->_unitsList)
                     {
-                        int v6 = bctt->_energy_max / 2;
+                        if ( bctt->_bact_type == BACT_TYPES_ROBO && bctt->_status != BACT_STATUS_DEAD && cell_unit->_owner == bctt->_owner )
+                        {
+                            int v6 = bctt->_energy_max / 2;
 
-                        if ( v6 < 120000 )
-                            v6 = 120000;
+                            if ( v6 < 120000 )
+                                v6 = 120000;
 
-                        enrg = v6;
-                        break;
+                            enrg = v6;
+                            break;
+                        }
                     }
                 }
             }
         }
-
-        if ( enrg )
-            break;
     }
 
     if ( enrg > v20 )
@@ -1327,7 +1380,7 @@ void NC_STACK_yparobo::buildConquer()
         loct.distance = (arg92.pos.XZ() - _position.XZ()).length();
         loct.tgt_pos = arg92.pos.X0Z();
 
-        loct.tgt_bact = nullptr;
+        loct.tgt_bact = bestDefender;
 
         if ( v20 <= 20000 )
             loct.energ = 20000;
@@ -1346,6 +1399,26 @@ void NC_STACK_yparobo::buildConquer()
         loct.good = 130;
         loct.bad = 0;
         loct.job = 6;
+        if ( bestDefender )
+        {
+            switch ( bestDefender->_bact_type )
+            {
+            case BACT_TYPES_TANK:
+            case BACT_TYPES_CAR:
+                loct.job = 2;
+                break;
+            case BACT_TYPES_FLYER:
+            case BACT_TYPES_UFO:
+                loct.job = 3;
+                break;
+            case BACT_TYPES_ROBO:
+                loct.job = 1;
+                break;
+            default:
+                loct.job = 4;
+                break;
+            }
+        }
 
         AllocForce(&loct);
 
@@ -1374,6 +1447,7 @@ void NC_STACK_yparobo::buildDefense()
         if ( v18 < 15000 )
             v18 = 15000;
 
+        bool isStaticTurret = false;
         if ( arg132.tgt.pbact->_bact_type == BACT_TYPES_GUN && (arg132.tgt.pbact->_weapon != -1 || arg132.tgt.pbact->HasMinigun()) )
         {
             NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( arg132.tgt.pbact );
@@ -1381,6 +1455,7 @@ void NC_STACK_yparobo::buildDefense()
 
             if ( !a4 )
             {
+                isStaticTurret = true;
                 for (NC_STACK_ypabact* &node : _world->_unitsList)
                 {
                     if ( node->_bact_type == BACT_TYPES_ROBO && node->_status != BACT_STATUS_DEAD && arg132.tgt.pbact->_owner == node->_owner )
@@ -1420,8 +1495,10 @@ void NC_STACK_yparobo::buildDefense()
             loct.tgt_pos = arg132.tgt.pbact->_position;
 
             int v9 = v18;
-            if ( v9 >= 40000 )
+            if ( !isStaticTurret && v9 >= 40000 )
                 v9 = 40000;
+            else if ( isStaticTurret )
+                v9 = std::min(v9, std::max(120000, _energy_max / 2));
 
             loct.energ = v9;
             loct.tgType = BACT_TGT_TYPE_UNIT;
@@ -1519,8 +1596,12 @@ void NC_STACK_yparobo::buildRobo()
             _roboState |= ROBOSTATE_BUILDROBO;
 
             NC_STACK_ypabact *force = AllocForce(&loct);
+            _roboState &= ~ROBOSTATE_BUILDROBO;
             if ( force )
             {
+                if ( _roboDockUser == force->_commandID )
+                    _roboState |= ROBOSTATE_USEVHCLPARTS;
+
                 for ( robo_t1 &ataker : _roboAttackers )
                 {
                     if ( !ataker.field_0 )
@@ -2242,7 +2323,7 @@ void NC_STACK_yparobo::checkDanger()
                 for ( NC_STACK_ypabact* &v7 : _world->SectorAt(pt).unitsList )
                 {
                     if (v7->_owner != _owner && !v7->IsIgnoredByAI() &&
-                        v7->_status != BACT_STATUS_DEAD && v7->_weapon != -1 && v7->HasMinigun())
+                        v7->_status != BACT_STATUS_DEAD && (v7->_weapon != -1 || v7->HasMinigun()))
                     {
                         v11 = 1;
                         v12 = v7->_commandID;
@@ -2320,10 +2401,8 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub1(const Common::Point &sc)
     if ( cell.IsCanSee(_owner) )
         return -1;
 
-    float v13 = _cellId.LengthTo<float>( sc );
-
-    if ( v13 <= 0.01 )
-        v13 = 0.0;
+    float dist = _cellId.LengthTo<float>( sc );
+    float v13 = (dist <= 0.01f ? 500.0f : 100.0f / (dist + 1.0f));
 
     for (Common::Point ds : NearDxy)
     {
@@ -2361,9 +2440,15 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub2(const Common::Point &sc)
     {
         cellArea &cll = _world->SectorAt(sc + ds);
 
-        if ( cll.PurposeType != cellArea::PT_NONE && _owner == cll.owner)
-            v14 += 5.0;
-
+        if ( cll.PurposeType != cellArea::PT_NONE && _owner == cll.owner )
+        {
+            if ( cll.PurposeType == cellArea::PT_POWERSTATION )
+                v14 += 220.0f;
+            else if ( cll.PurposeType == cellArea::PT_GATEOPENED )
+                v14 += 120.0f;
+            else
+                v14 += 30.0f;
+        }
     }
 
     return v14;
@@ -2404,12 +2489,24 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub3(const Common::Point &sc)
             int v11 = cll.GetEnergy();
             v27 += (255 - v11) * 0.05 + 10.0;
         }
+        else if ( cll.owner != 0 )
+        {
+            v27 -= 80.0f;
+        }
 
         if ( cll.PurposeType == cellArea::PT_POWERSTATION )
             v27 *= 0.7;
     }
 
-    v27 -= 5.0 * cell.unitsList.size();
+    for ( NC_STACK_ypabact *bct : cell.unitsList )
+    {
+        if ( bct->_owner != _owner && bct->_owner != 0 &&
+             bct->_status != BACT_STATUS_DEAD && !bct->IsIgnoredByAI() &&
+             bct->_bact_type != BACT_TYPES_MISSLE )
+        {
+            v27 -= 200.0f;
+        }
+    }
 
     return v27;
 }
@@ -2432,11 +2529,13 @@ int32_t NC_STACK_yparobo::yparobo_func70__sub6__sub4(const Common::Point &sc)
     if ( cell.IsCanSee(_owner) )
     {
         if ( cell.PurposeType != cellArea::PT_NONE )
-            val = 20;
+            val += 20;
+        if ( cell.PurposeType == cellArea::PT_BUILDINGS )
+            val += 80;
         if ( cell.PurposeType == cellArea::PT_GATEOPENED )
-            val += 40;
+            val += 200;
         if ( cell.PurposeType == cellArea::PT_POWERSTATION )
-            val += 50;
+            val += 250;
     }
 
     for ( Common::Point ds : NearDxy )
@@ -2528,6 +2627,9 @@ int NC_STACK_yparobo::yparobo_func70__sub6__sub9()
 
 int NC_STACK_yparobo::yparobo_func70__sub6__sub10()
 {
+    if ( _owner < _world->_countSectorsPerOwner.size() )
+        return (int)_world->_countSectorsPerOwner[_owner];
+
     int v4 = 0;
 
     for (cellArea &cll : _world->Sectors())
@@ -2615,6 +2717,30 @@ float NC_STACK_yparobo::sub_4F4C6C(NC_STACK_ypabact *bact)
 
     if ( bact->_pSector->owner == _owner )
         v8 += 100.0;
+
+    float infraBonus = 0.0f;
+    for (int i = -1; i <= 1; i++)
+    {
+        for (int j = -1; j <= 1; j++)
+        {
+            Common::Point pt = bact->_cellId + Common::Point(i, j);
+            if ( !_world->IsGamePlaySector(pt) )
+                continue;
+
+            const cellArea &cll = _world->SectorAt(pt);
+            if ( cll.owner != _owner )
+                continue;
+
+            if ( cll.PurposeType == cellArea::PT_POWERSTATION )
+                infraBonus = std::max(infraBonus, 180.0f);
+            else if ( cll.PurposeType == cellArea::PT_GATEOPENED )
+                infraBonus = std::max(infraBonus, 100.0f);
+            else if ( cll.PurposeType == cellArea::PT_BUILDINGS )
+                infraBonus = std::max(infraBonus, 90.0f);
+        }
+    }
+    v8 += infraBonus;
+    v8 += std::min(80.0f, std::max(0.0f, (float)bact->_energy / 500.0f));
 
     return v8;
 }
@@ -2730,7 +2856,11 @@ int NC_STACK_yparobo::sub_4F4E48(const Common::Point &cellId)
     {
         for (int j = -1; j <= 1; j++)
         {
-            cellArea &cll = _world->SectorAt( cellId + Common::Point(i, j) );
+            Common::Point pt = cellId + Common::Point(i, j);
+            if ( !_world->IsGamePlaySector(pt) )
+                continue;
+
+            cellArea &cll = _world->SectorAt(pt);
 
             yw_arg176 arg176;
             arg176.owner = cll.owner;
@@ -2749,6 +2879,8 @@ int NC_STACK_yparobo::sub_4F4E48(const Common::Point &cellId)
             else
                 v14 -= cll.energy_power * arg176.field_4 + v15;
 
+            const bool canSeeCell = cll.IsCanSee(_owner);
+
             for ( NC_STACK_ypabact* &bct : cll.unitsList )
             {
                 float v16 = 0;
@@ -2757,15 +2889,18 @@ int NC_STACK_yparobo::sub_4F4E48(const Common::Point &cellId)
                 {
                     v16 = 5.0;
                 }
-                else
+                else if ( bct->_bact_type == BACT_TYPES_GUN )
                 {
-                    if ( bct->_bact_type == BACT_TYPES_GUN )
-                    {
-                        NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( bct );
+                    NC_STACK_ypagun *gun = dynamic_cast<NC_STACK_ypagun *>( bct );
 
-                        if ( !gun->IsRoboGun() )
-                            v16 = 1.0;
-                    }
+                    if ( !gun->IsRoboGun() )
+                        v16 = 1.0;
+                }
+                else if ( canSeeCell && bct->_owner != _owner && bct->_owner != 0 &&
+                          bct->_status != BACT_STATUS_DEAD && !bct->IsIgnoredByAI() &&
+                          bct->_bact_type != BACT_TYPES_MISSLE )
+                {
+                    v14 -= (i == 0 && j == 0) ? 4.0f : 2.0f;
                 }
 
                 if ( v16 > 0.0 )
@@ -2822,7 +2957,7 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
             {
                 _roboConqCellIndex = 0;
                 _roboState |= ROBOSTATE_READYCONQUER;
-                return;
+                break;
             }
 
             Common::Point pt (_roboConqCellIndex % _wrldSectors.x, _roboConqCellIndex / _wrldSectors.x);
@@ -2832,13 +2967,12 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
                 int v12 = yparobo_func70__sub6__sub4(pt);
                 if ( v12 > _roboConqValue )
                 {
-                    arg128.flags = 2;
-                    arg128.tgType = BACT_TGT_TYPE_CELL;
-                    arg128.tgt_pos = World::SectorIDToCenterPos3(pt);
+                    const cellArea &targetCell = _world->SectorAt(pt);
+                    const int maxSquads = (targetCell.IsCanSee(_owner) &&
+                        (targetCell.PurposeType == cellArea::PT_POWERSTATION ||
+                         targetCell.PurposeType == cellArea::PT_GATEOPENED)) ? 2 : 1;
 
-                    yparobo_func128(&arg128);
-
-                    if ( !arg128.comm_bacto )
+                    if ( CountCommandersTargeting(this, BACT_TGT_TYPE_CELL, 0, pt) < maxSquads )
                     {
                         _roboConqValue = v12;
                         _roboConqCellID = _roboConqCellIndex;
@@ -2918,14 +3052,7 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
 
         if ( v22 > _roboDangerValue )
         {
-            robo_arg128 arg128_1;
-            arg128_1.flags = 2;
-            arg128_1.tgType = BACT_TGT_TYPE_UNIT;
-            arg128_1.prim_comm_id = v91;
-
-            yparobo_func128(&arg128_1);
-
-            if ( !arg128_1.comm_bacto )
+            if ( CountCommandersTargeting(this, BACT_TGT_TYPE_UNIT, v91, cellId) < 2 )
             {
                 _roboDangerValue = v22;
                 _roboDangerCommandID = v91;
@@ -2949,6 +3076,9 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
             v6 = 0;
     }
 
+    if ( (_roboState & ROBOSTATE_DANGER) && _energy < (int)(_energy_max * 0.45f) )
+        v6 = 1;
+
     if ( _roboEpChangePlace && v6 )
     {
         int v25 = (_wrldSectors.x + _wrldSectors.y) / 10 + 1;
@@ -2959,7 +3089,7 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
             {
                 _roboPositionCellIndex = 0;
                 _roboState |= ROBOSTATE_FOUNDPLACE;
-                return;
+                break;
             }
 
             if ( _world->IsGamePlaySector( {_roboPositionCellIndex % _wrldSectors.x, _roboPositionCellIndex / _wrldSectors.x} ) )
@@ -3015,7 +3145,7 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
             {
                 _roboPowerCellIndex = 0;
                 _roboState |= ROBOSTATE_READYPOWER;
-                return;
+                break;
             }
 
             Common::Point pt(_roboPowerCellIndex % _wrldSectors.x, _roboPowerCellIndex / _wrldSectors.x);
@@ -3059,7 +3189,7 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
             {
                 _roboRadarCellIndex = 0;
                 _roboState |= ROBOSTATE_READYRADAR;
-                return;
+                break;
             }
 
             Common::Point pt(_roboRadarCellIndex % _wrldSectors.x, _roboRadarCellIndex / _wrldSectors.x);
@@ -3111,7 +3241,7 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
             {
                 _roboSafetyCellIndex = 0;
                 _roboState |= ROBOSTATE_READYSAFE;
-                return;
+                break;
             }
 
             Common::Point pt(_roboSafetyCellIndex % _wrldSectors.x, _roboSafetyCellIndex / _wrldSectors.x);
@@ -3157,7 +3287,7 @@ void NC_STACK_yparobo::AI_checkWorld(update_msg *arg)
             {
                 _roboExploreCellIndex = 0;
                 _roboState |= ROBOSTATE_READYRECON;
-                return;
+                break;
             }
 
             Common::Point pt(_roboExploreCellIndex % _wrldSectors.x, _roboExploreCellIndex / _wrldSectors.x);

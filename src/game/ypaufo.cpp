@@ -230,7 +230,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
 
                 TraceWorldCollision(&arg136_2);
 
-                if ( (arg136_2.isect && arg136_2.tVal * 300.0 < _radius) || (arg136.isect && arg136.tVal * 300.0 < _radius) )
+                if ( (arg136_2.isect && arg136_2.tVal * 300.0 < _radius) || (arg136.isect && arg136.tVal * _height < _radius) )
                 {
                     bact_arg88 arg88;
 
@@ -416,6 +416,8 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
     {
         if ( _clock - _newtarget_time > 500 )
         {
+            _newtarget_time = _clock;
+
             bact_arg110 arg110;
             bact_arg110 arg110_1;
 
@@ -425,9 +427,10 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
             arg110_1.tgType = _primTtype;
             arg110_1.priority = 0;
 
-            int v63 = TargetAssess(&arg110);
-
-            int v66 = TargetAssess(&arg110_1);
+            const int v63 = TargetAssess(&arg110);
+            const int v66 = TargetAssess(&arg110_1);
+            const bool secondaryNeedsAction = v63 == TA_MOVE || v63 == TA_FIGHT;
+            const bool primaryNeedsAction = v66 == TA_MOVE || v66 == TA_FIGHT;
 
             if ( v63 != TA_IGNORE || v66 != TA_IGNORE )
             {
@@ -451,7 +454,7 @@ void NC_STACK_ypaufo::AI_layer3(update_msg *arg)
                     SetTarget(&arg67);
                 }
 
-                if ( _primTtype || _secndTtype )
+                if ( secondaryNeedsAction || primaryNeedsAction )
                 {
                     setState_msg arg78;
                     arg78.unsetFlags = BACT_STFLAG_LAND;

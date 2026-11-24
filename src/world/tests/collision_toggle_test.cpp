@@ -81,12 +81,20 @@ int main() {
     Check(Parse(w, {"modify_vehicle 1", "gun_levitate = 0", "disable_collision = 0", "end"}), "disable values parse");
     gun.SetParameters(gunProto.initParams);
     Check(!gun.getGUN_levitate() && !gunProto.disable_collision, "zero reverses prior enable");
-    for (const char *value : {"2", "-1", "true", "1junk", "nan", ""}) {
+    for (const char *value : {"1junk", "nan", "maybe", ""}) {
         Check(Parse(w, {"modify_vehicle 1", std::string("gun_levitate = ")+value,
                        std::string("disable_collision = ")+value, "end"}), "invalid optional values parse safely");
         Check(!gunProto.disable_collision && gunProto.initParams.Get<int32_t>(NC_STACK_ypagun::GUN_ATT_LEVITATE,0) == 0,
-              "only literal one enables switches");
+              "invalid values keep switches off");
     }
+    // Shared boolean reader: yes/true/on and any non-zero number enable, so a switch is never silently left off.
+    for (const char *value : {"yes", "true", "on", "2"}) {
+        Check(Parse(w, {"modify_vehicle 1", std::string("gun_levitate = ")+value,
+                       std::string("disable_collision = ")+value, "end"}), "boolean words parse");
+        Check(gunProto.disable_collision && gunProto.initParams.Get<int32_t>(NC_STACK_ypagun::GUN_ATT_LEVITATE,0) == 1,
+              "boolean words enable switches");
+    }
+    Parse(w, {"modify_vehicle 1", "gun_levitate = 0", "disable_collision = 0", "end"});
     Check(Parse(w, {"new_weapon 1", "model = rocket", "end"}) && !w._weaponProtos[1].disable_collision,
           "absent weapon collision value defaults off");
     Check(Parse(w, {"modify_weapon 1", "disable_collision = 1", "end"}) && w._weaponProtos[1].disable_collision,
@@ -217,15 +225,15 @@ int main() {
     shooter._isUnitGunChild = false; shot.field_10 = 1800; shooter.FireMinigun(&shot);
     Check(victim.hits==3, "unmounted shooter still hits the same unit");
 
-    // unit_gun_no_switch accepts only the literal 1 and defaults to 0.
+    // unit_gun_no_switch reads every boolean form; an invalid value and an absent line stay off.
     Check(Parse(w, {"new_vehicle 3", "model = tank", "unit_num_guns = 3",
                     "unit_act_gun = 0", "unit_gun_no_switch = 1",
-                    "unit_act_gun = 1", "unit_gun_no_switch = 2",
+                    "unit_act_gun = 1", "unit_gun_no_switch = maybe",
                     "unit_act_gun = 2", "end"}), "unit_gun_no_switch parses");
     auto &mother = w._vhclProtos[3];
     Check(mother.unit_guns.size()==3 && mother.unit_guns[0].noSwitch==1 &&
           mother.unit_guns[1].noSwitch==0 && mother.unit_guns[2].noSwitch==0,
-          "unit_gun_no_switch literal one enables, invalid and absent stay off");
+          "unit_gun_no_switch enables on a true value, invalid and absent stay off");
     std::printf("CHECKS=%d FAILED=%d\n",checks,failures);
     return failures ? 1 : 0;
 }

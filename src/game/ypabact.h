@@ -105,6 +105,8 @@ struct TActiveDebuffState
     float shield_malus = 0.0f;
     float mgun_shot_time_malus = 0.0f;
     float shot_time_malus = 0.0f;
+    float damage_malus = 0.0f; // outgoing damage
+    float regen_malus = 0.0f;  // energy gained from power stations / allied generators
     float snd_pitch_multiplier = 1.0f;
     World::TVisualTint target_tint;
     std::vector<int16_t> vps;
@@ -119,6 +121,10 @@ struct TActiveDebuffState
     int snd_pitch = 0;
     int32_t source_gid = 0;
     int16_t source_owner = 0;
+    // stack_max: layers of the same profile hitting this unit (malus = per-layer value x layers)
+    int32_t profile_id = -1;
+    int stack_count = 0;
+    int stack_max = 0;
 
     void Clear()
     {
@@ -142,6 +148,8 @@ struct TActiveDebuffState
         shield_malus = 0.0f;
         mgun_shot_time_malus = 0.0f;
         shot_time_malus = 0.0f;
+        damage_malus = 0.0f;
+        regen_malus = 0.0f;
         snd_pitch_multiplier = 1.0f;
         target_tint = World::TVisualTint();
         vps.clear();
@@ -156,6 +164,9 @@ struct TActiveDebuffState
         snd_pitch = 0;
         source_gid = 0;
         source_owner = 0;
+        profile_id = -1;
+        stack_count = 0;
+        stack_max = 0;
     }
 };
 
@@ -552,7 +563,7 @@ public:
     void UpdateCarrierSpawn(update_msg *arg);
     bool CanUseCarrierSpawn();
     bool GetCarrierSpawnCountdown(float &progress, bool &waiting);
-    void UpdateProximityDefense(update_msg *arg);
+    void UpdateRadialShot(update_msg *arg);
     // OpenNeoUA Orbiter: keep guardian projectiles alive around this unit and
     // send them against an enemy unit this unit attacks (or, as player, hits).
     void UpdateOrbiters(update_msg *arg);
@@ -760,6 +771,8 @@ public:
     vec3d GetAlternativeViewAimDirection() const;
     mat3x3 GetAlternativeViewRotation();
     bool HasMinigun() const;
+    bool HasDirectFireLineOfSight(const vec3d &from, const vec3d &to) const;
+    float ComputeAIEffectiveFireRange(const World::TWeapProto *w) const;
     bool IsPlayerTimeOwner() const;
     bool UsesDebugRealtime() const;
     int GetDebugFrameTime(int worldFrameTime) const;
@@ -816,7 +829,7 @@ public:
     virtual void setBACT_extraViewer(bool);
     virtual void setBACT_alwaysRender(bool);
 
-    NC_STACK_ypabact * GetEnemyCandidateInSector(const cellArea &cell, float *radius, char *job) const;
+    NC_STACK_ypabact * GetEnemyCandidateInSector(const cellArea &cell, float *radius, char *job, bool skipDebuffed = false) const;
 
     virtual NC_STACK_ypaworld *getBACT_pWorld()
     { return _world; }
@@ -1326,28 +1339,28 @@ public:
     int _orbiter_weapon;
     int _orbiter_count;           // rolled max live orbiters; -1 = not rolled yet
     int _orbiter_next_spawn_time; // _clock of the next spawn; 0 = not scheduled
-    int _proximity_defense_enable;
-    int _proximity_defense_weapon;
-    float _proximity_defense_trigger_radius;
-    int _proximity_defense_interval;
-    int _proximity_defense_shots;
-    int _proximity_defense_vp_launch;
-    std::string _proximity_defense_3ds_launch;
-    std::string _proximity_defense_base_launch;
-    int _proximity_defense_fire_mode;
-    int _proximity_defense_sequence_delay;
-    int _proximity_defense_mode;
-    bool _proximity_defense_horizontal_angle_set;
-    float _proximity_defense_horizontal_angle_min;
-    float _proximity_defense_horizontal_angle_max;
-    bool _proximity_defense_vertical_angle_set;
-    float _proximity_defense_vertical_angle_min;
-    float _proximity_defense_vertical_angle_max;
-    bool _proximity_defense_sequence_active;
-    int _proximity_defense_sequence_shots_fired;
-    int _proximity_defense_next_shot_time;
-    int _proximity_defense_next_activation_time;
-    bool _proximity_defense_at_death_done;
+    int _radial_shot_enable;
+    int _radial_shot_weapon;
+    float _radial_shot_trigger_radius;
+    int _radial_shot_interval;
+    int _radial_shot_shots;
+    int _radial_shot_vp_launch;
+    std::string _radial_shot_3ds_launch;
+    std::string _radial_shot_base_launch;
+    int _radial_shot_fire_mode;
+    int _radial_shot_sequence_delay;
+    int _radial_shot_mode;
+    bool _radial_shot_horizontal_angle_set;
+    float _radial_shot_horizontal_angle_min;
+    float _radial_shot_horizontal_angle_max;
+    bool _radial_shot_vertical_angle_set;
+    float _radial_shot_vertical_angle_min;
+    float _radial_shot_vertical_angle_max;
+    bool _radial_shot_sequence_active;
+    int _radial_shot_sequence_shots_fired;
+    int _radial_shot_next_shot_time;
+    int _radial_shot_next_activation_time;
+    bool _radial_shot_at_death_done;
     // OpenNeoUA custom: artillery shell barrage runtime state (transient, not saved per instance)
     bool _artillery_shell_barrage_active = false;
     // Shots left in the CURRENT firing cycle. Once a barrage starts, its target is

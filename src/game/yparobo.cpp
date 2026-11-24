@@ -1767,6 +1767,11 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
 
         float v70 = powerStationEnergyMultiplier * v65 * v63 * v64 * arg176.field_4;
 
+        // regen_malus (Debuff, needs allow_on_host_station) lowers only what the Host Station gains
+        // from its own sector; the drain of an enemy sector is left alone.
+        const float regenMult = _active_debuff.active
+            ? std::max(0.0f, 1.0f - std::min(_active_debuff.regen_malus, 1.0f)) : 1.0f;
+
         if ( IsPlayerRobo() )
         {
             int v67 = 0;
@@ -1782,6 +1787,9 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
             {
                 v68 = 0.0;
             }
+
+            if ( v68 > 0.0 )
+                v68 *= regenMult;
 
             uint8_t playerFillMode = _roboFillMode;
 
@@ -1928,6 +1936,7 @@ void NC_STACK_yparobo::EnergyInteract(update_msg *arg)
             float v71 = v70 / 7000.0;
             if ( _owner == _pSector->owner )
             {
+                v71 *= regenMult;
                 _roboBuildSpare += v71 * 0.15;
                 _roboVehicleSpare += v71 * 0.7;
                 _energy += v71 * 0.7;

@@ -249,7 +249,7 @@ bool ypabact_IsCarrierSpawnEnemy(NC_STACK_ypabact *carrier, NC_STACK_ypabact *un
         return false;
 
     // OpenNeoUA invisible: cloaked stealth units are ignored by carrier spawn-trigger and
-    // proximity-defense scans (both go through this predicate).
+    // radial-shot scans (both go through this predicate).
     if ( !unit->CanBeSeenByAIOrRadar() )
         return false;
 
