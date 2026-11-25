@@ -517,11 +517,11 @@ Three-stage attack loop replacing the old sector/bact pairs: attack, retreat whe
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `gun_type = flak` — Turret type of a `model = gun` unit. The values are listed below.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `gun_side_angle = 60` — Flak turret: maximum sideways rotation in degrees.
+- 🔵 `gun_side_angle = 1570` — Turret: maximum turn to each side of the mount direction, in thousandths of a radian (1570 ≈ 90°). Above 3100 the turret turns freely all round. Absent = 0: it cannot turn.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `gun_up_angle = 60` — Flak turret: maximum upward elevation in degrees.
+- 🔵 `gun_up_angle = 1500` — Turret: maximum elevation above the mount plane, in thousandths of a radian (1500 ≈ 86°). Absent = 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `gun_down_angle = 10` — Flak turret: maximum downward angle in degrees.
+- 🔵 `gun_down_angle = 0` — Turret: maximum depression below the mount plane, in thousandths of a radian. Absent = 0: it cannot aim below its mount. A hanging turret is a normal turret whose model is drawn upside down, with a small `gun_up_angle` and a large `gun_down_angle`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `gun_type = flak` — Vanilla flak behavior; no OpenNeoUA role change.
 ------------------------------------------------------------------------------------------------------------------------
@@ -607,7 +607,7 @@ Universal Unit Guns extend the Host Station gun system so guns and functional mo
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `unit_gun_pos_xyz = 0.0|-200.0|55.0` — Mounted gun local X|Y|Z position. Format: x|y|z.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `unit_gun_dir_xyz = 0.0|0.0|1.0` — Mounted gun initial X|Y|Z direction component. Format: x|y|z.
+- 🟢 `unit_gun_dir_xyz = 0.0|0.0|1.0` — Mounted gun initial X|Y|Z direction component. Format: x|y|z. The turret's `gun_side_angle` is centred on this direction: point it away from the hull to keep the turret from swinging into it.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `unit_gun_type = 95` — Gun/module type ID.
 ------------------------------------------------------------------------------------------------------------------------
