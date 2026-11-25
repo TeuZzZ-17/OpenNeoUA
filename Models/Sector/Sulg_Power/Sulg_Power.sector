@@ -75,7 +75,7 @@ end
 
 begin_model Sulg_Power_Station_Destroyed
     visual = Sulg_Power_Station_Destroyed.BASE
-    collision = Skeleton/BP_MMMMM.sklt
+    collision = SPFX0003.sklt
     collision_mode = 0
     map_symbol = 8
     shield = 0

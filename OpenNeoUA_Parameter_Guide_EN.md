@@ -262,7 +262,7 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `airconst = 500` — Air resistance / drag. Higher values brake the unit harder and lower its top speed; top speed is roughly where drag balances force.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `height = 200` — Preferred flight height above the ground for flying classes (heli, plane, glider, zeppelin, ufo).
+- 🔵🟢 `height = 200` — Preferred flight height above the ground for flying classes (heli, plane, glider, zeppelin, ufo). On a GUN mounted on a building it is the reach of the ray that looks for its support, added to `game.gun_fall_tolerance`; with nothing under it inside that reach the gun is destroyed. Absent = 150.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `radius = 20` — Physical collision radius of the unit. It decides collisions, hit detection and how much space the unit occupies.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1168,7 +1168,7 @@ Chain Weapon propagation continues a hit from one enemy unit to another nearby t
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `life_time_nt = 1300` — Same as `life_time`, used when the projectile is fired without a unit target (free fire, or a num_targets missile or homing_bomb slot with no target). Accepts `min~max`. 0 or absent = `life_time` is used.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵🟢 `delay_time = 500` — Delay in milliseconds between impact and detonation (time-fused bombs); 0 = explodes on contact. Against units the projectile attaches to the target and explodes when the timer ends.
+- 🔵🟢 `delay_time = 500` — Delay in milliseconds between impact and detonation (time-fused bombs); 0 = explodes on contact. Against units the projectile attaches to the target and explodes when the timer ends; if the target dies or is removed first, the projectile disappears at once without exploding.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `homing_time = 3000` — Missile and homing_bomb only: guidance duration in ms. On expiry, a powered missile keeps thrusting along the direction it was flying when guidance ended until `drive_time` expires. A homing bomb stops steering and applying thrust, and continues under gravity and drag. 0, absent or invalid = no guidance time limit.
 ------------------------------------------------------------------------------------------------------------------------

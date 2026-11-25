@@ -1286,6 +1286,22 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 
         if ( _mislAttachedToTarget )
         {
+            // Host dead or removed: vanish at once, no blast and no direct hit
+            // (same silent death as a projectile-vs-projectile collision).
+            if ( !FindAttachedTarget() )
+            {
+                setState_msg deathState;
+                deathState.unsetFlags = 0;
+                deathState.setFlags = 0;
+                deathState.newStatus = BACT_STATUS_DEAD;
+
+                ResetViewing();
+                _mislAttachedToTarget = false;
+                _mislAttachTargetGid = 0;
+                SetStateInternal(&deathState, false);
+                return;
+            }
+
             UpdateAttachedDetonationPosition();
             _world->ypaworld_func145(this);
         }
