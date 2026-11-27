@@ -413,16 +413,16 @@ bool ypabact_IsSpawnAtDeathPositionValid(NC_STACK_ypabact *parent, const vec3d &
 
 bool ypabact_FindSpawnAtDeathPosition(NC_STACK_ypabact *parent, vec3d *outPos)
 {
-    int attempts = parent->_at_death_spawn_random_pos > 0.0 ? 8 : 1;
+    int attempts = parent->_at_death_spawn.random_pos > 0.0 ? 8 : 1;
 
     for (int i = 0; i < attempts; i++)
     {
         vec3d pos = parent->_position;
 
-        if ( parent->_at_death_spawn_random_pos > 0.0 )
+        if ( parent->_at_death_spawn.random_pos > 0.0 )
         {
             float angle = ((float)rand() / (float)RAND_MAX) * (2.0 * C_PI);
-            float dist = ((float)rand() / (float)RAND_MAX) * parent->_at_death_spawn_random_pos;
+            float dist = ((float)rand() / (float)RAND_MAX) * parent->_at_death_spawn.random_pos;
 
             pos.x += cos(angle) * dist;
             pos.z += sin(angle) * dist;
@@ -435,7 +435,7 @@ bool ypabact_FindSpawnAtDeathPosition(NC_STACK_ypabact *parent, vec3d *outPos)
         }
     }
 
-    if ( parent->_at_death_spawn_random_pos > 0.0 && ypabact_IsSpawnAtDeathPositionValid(parent, parent->_position) )
+    if ( parent->_at_death_spawn.random_pos > 0.0 && ypabact_IsSpawnAtDeathPositionValid(parent, parent->_position) )
     {
         *outPos = parent->_position;
         return true;
@@ -469,10 +469,20 @@ void ypabact_UpdateSpawnAtDeathProtection(NC_STACK_ypabact *unit)
     unit->_at_death_spawn_restore_vulnerable = false;
 }
 
+// A Debuff's spawn belongs to the side that applied the Debuff (like mind control); the
+// vehicle's own at_death_spawn_* belongs to the dead unit's side.
+static bool ypabact_IsForeignDeathSpawn(const NC_STACK_ypabact *parent)
+{
+    return parent->_at_death_spawn_owner >= 0 && parent->_at_death_spawn_owner != parent->_owner;
+}
+
 NC_STACK_yparobo *ypabact_GetSpawnAtDeathOwnerRobo(NC_STACK_ypabact *parent)
 {
     if ( !parent )
         return nullptr;
+
+    if ( ypabact_IsForeignDeathSpawn(parent) )
+        return ypabact_FindSpawnAtDeathOwnerRobo(parent->getBACT_pWorld(), (uint8_t)parent->_at_death_spawn_owner);
 
     if ( parent->_host_station &&
          parent->_host_station != parent &&
@@ -498,25 +508,27 @@ void ypabact_ApplyEjectForce(NC_STACK_ypabact *unit, float force)
     unit->ApplyConfiguredPush(direction, force);
 }
 
-NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const vec3d &pos)
+NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const vec3d &pos, int vehicleId)
 {
     NC_STACK_ypaworld *world = parent->getBACT_pWorld();
     if ( !world )
         return nullptr;
 
     ypaworld_arg146 arg146;
-    arg146.vehicle_id = parent->_at_death_spawn_vehicle;
+    arg146.vehicle_id = vehicleId;
     arg146.pos = pos;
 
     NC_STACK_ypabact *unit = world->ypaworld_func146(&arg146);
     if ( !unit )
         return nullptr;
 
-    unit->_owner = parent->_owner;
+    const bool foreign = ypabact_IsForeignDeathSpawn(parent);
+    unit->_owner = foreign ? (uint8_t)parent->_at_death_spawn_owner : parent->_owner;
     unit->_carrier_spawn_root_gid = 0;
     unit->_carrier_spawn_root_vehicle = 0;
-    unit->_aggr = parent->_aggr;
-    ypabact_EnableSpawnAtDeathProtection(unit, parent->_at_death_spawn_immunity_time);
+    if ( !foreign )
+        unit->_aggr = parent->_aggr;
+    ypabact_EnableSpawnAtDeathProtection(unit, parent->_at_death_spawn.immunity_time);
 
     if ( unit->_spawn_units )
         unit->_spawn_last_time = unit->_clock > 0 ? unit->_clock : 1;
@@ -531,9 +543,13 @@ NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const
 
     unit->InheritActiveDebuffFromParent(parent);
 
-    unit->InheritSpawnOrders(parent);
+    // The dead unit's orders mean nothing to a unit of another side: it keeps its own AI.
+    if ( foreign )
+        unit->_spawnSeparationPending = true;
+    else
+        unit->InheritSpawnOrders(parent);
 
-    if ( !parent->_at_death_spawn_instant )
+    if ( !parent->_at_death_spawn.instant )
     {
         setState_msg state;
         state.setFlags = 0;
@@ -543,7 +559,7 @@ NC_STACK_ypabact *ypabact_CreateSpawnAtDeathUnit(NC_STACK_ypabact *parent, const
         unit->_scale_time = unit->GetCreationTime(unit->_energy_max * 0.2);
     }
 
-    ypabact_ApplyEjectForce(unit, parent->_eject_force);
+    ypabact_ApplyEjectForce(unit, parent->_at_death_spawn.eject_force);
     world->HistoryAktCreate(unit);
 
     return unit;
@@ -560,6 +576,26 @@ void ypabact_AttachSpawnAtDeathLeader(NC_STACK_ypabact *parent, NC_STACK_ypabact
         ownerRobo->AddSubject(leader);
     else
         world->ypaworld_func134(leader);
+}
+
+// The newest Debuff with death_spawn_* replaces the unit's own at_death_spawn_*.
+// Runs in Die() while the Debuffs still exist; TrySpawnAtDeath reads the result.
+void ypabact_ApplyDebuffDeathSpawn(NC_STACK_ypabact *unit)
+{
+    if ( unit->_at_death_spawn_done )
+        return;
+
+    for (auto it = unit->_debuff_list.rbegin(); it != unit->_debuff_list.rend(); ++it)
+    {
+        if ( it->death_spawn.vehicles.empty() )
+            continue;
+
+        unit->_at_death_spawn = it->death_spawn;
+        unit->_at_death_spawn_units = 1;
+        unit->_at_death_spawn_owner = it->source_owner > World::OWNER_0 && it->source_owner <= World::OWNER_7
+            ? it->source_owner : -1;
+        return;
+    }
 }
 
 void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
@@ -579,16 +615,18 @@ void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
         return;
 
     const std::vector<World::TVhclProto> &protos = world->GetVhclProtos();
-    if ( parent->_at_death_spawn_vehicle <= 0 || (size_t)parent->_at_death_spawn_vehicle >= protos.size() )
+    // Each spawned unit picks one of the listed vehicles; invalid ids are dropped.
+    std::vector<int> candidates;
+    for (int16_t id : parent->_at_death_spawn.vehicles)
+    {
+        if ( id > 0 && (size_t)id < protos.size() && protos[id].model_id != BACT_TYPES_NOPE )
+            candidates.push_back(id);
+    }
+
+    if ( candidates.empty() )
         return;
 
-    const World::TVhclProto &proto = protos[parent->_at_death_spawn_vehicle];
-    if ( proto.model_id == BACT_TYPES_NOPE )
-        return;
-
-    int spawnCount = parent->_at_death_spawn_count > 0 ? parent->_at_death_spawn_count : 1;
-    if ( spawnCount > 8 )
-        spawnCount = 8;
+    const int spawnCount = parent->_at_death_spawn.count;
 
     NC_STACK_ypabact *squadLeader = nullptr;
     int squadCommandId = dword_5B1128;
@@ -600,7 +638,8 @@ void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
         if ( !ypabact_FindSpawnAtDeathPosition(parent, &spawnPos) )
             continue;
 
-        NC_STACK_ypabact *unit = ypabact_CreateSpawnAtDeathUnit(parent, spawnPos);
+        NC_STACK_ypabact *unit = ypabact_CreateSpawnAtDeathUnit(parent, spawnPos,
+                                                                candidates[rand() % candidates.size()]);
         if ( !unit )
             continue;
 
@@ -623,7 +662,8 @@ void ypabact_TrySpawnAtDeath(NC_STACK_ypabact *parent)
 
     // The player controlling the dying unit continues in one of its new units,
     // picked at random, instead of falling back to the Host Station.
-    if ( !spawned.empty() && (world->_userUnit == parent || world->_viewerBact == parent) )
+    if ( !spawned.empty() && !ypabact_IsForeignDeathSpawn(parent) &&
+         (world->_userUnit == parent || world->_viewerBact == parent) )
         ypabact_SafeDetachControlFrom(parent, spawned[rand() % spawned.size()]);
 }
 

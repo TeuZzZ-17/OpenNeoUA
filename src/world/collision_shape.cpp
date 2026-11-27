@@ -42,10 +42,6 @@ btTransform Pose(const vec3d &p, const mat3x3 &r)
     return btTransform(btMatrix3x3(t.m00, t.m01, t.m02, t.m10, t.m11, t.m12,
                                    t.m20, t.m21, t.m22), V(p));
 }
-bool Finite(const vec3d &v)
-{
-    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-}
 mat3x3 Rotation(const btQuaternion &q)
 {
     const btMatrix3x3 b(q);
@@ -153,7 +149,7 @@ bool Triple(const std::string &s, vec3d *v)
     std::replace(text.begin(), text.end(), '|', ' ');
     std::istringstream input(text);
     std::string extra;
-    return (input >> v->x >> v->y >> v->z) && !(input >> extra) && Finite(*v);
+    return (input >> v->x >> v->y >> v->z) && !(input >> extra) && v->IsFinite();
 }
 struct Detector
 {
@@ -526,7 +522,7 @@ bool Build(Shape &shape, std::string *error)
         vec3d center(0, 0, 0);
         for (const vec3d &v : part.vertices)
         {
-            if ( !Finite(v) || v.length() > 1e7 ) return fail("non-finite or oversized vertex");
+            if ( !v.IsFinite() || v.length() > 1e7 ) return fail("non-finite or oversized vertex");
             center += v;
             lo.x = std::min(lo.x, v.x); lo.y = std::min(lo.y, v.y); lo.z = std::min(lo.z, v.z);
             hi.x = std::max(hi.x, v.x); hi.y = std::max(hi.y, v.y); hi.z = std::max(hi.z, v.z);
@@ -1106,7 +1102,7 @@ bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
     // Mounted guns and dummy children inherit their parent pose; moving them
     // independently at birth would break the attachment transform.
     if (a->_isUnitGunChild || a->_isDummy) return false;
-    if (!a || !Finite(a->_position) ||
+    if (!a || !a->_position.IsFinite() ||
         (a->_bact_type != BACT_TYPES_BACT && a->_bact_type != BACT_TYPES_TANK &&
          a->_bact_type != BACT_TYPES_CAR && a->_bact_type != BACT_TYPES_FLYER &&
          a->_bact_type != BACT_TYPES_UFO && a->_bact_type != BACT_TYPES_ZEPP &&
@@ -1204,7 +1200,7 @@ bool Scene::PlaceAboveTerrain(NC_STACK_ypabact *a)
 }
 double Scene::RoboGroundPenetration(NC_STACK_yparobo *robo)
 {
-    if (!robo || robo->CollisionsDisabled() || !Finite(robo->_position) || robo->_status != BACT_STATUS_NORMAL)
+    if (!robo || robo->CollisionsDisabled() || !robo->_position.IsFinite() || robo->_status != BACT_STATUS_NORMAL)
         return 0.0;
 
     double penetration = 0.0;
@@ -1340,7 +1336,7 @@ std::vector<NC_STACK_ypabact *> Scene::ShapeTargets(const vec3d &from, const vec
 bool Scene::Trace(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to,
                   double radius, Contact *out)
 {
-    if (!target || target->CollisionsDisabled() || !target->HasCollisionShape() || !Finite(from) || !Finite(to)) return false;
+    if (!target || target->CollisionsDisabled() || !target->HasCollisionShape() || !from.IsFinite() || !to.IsFinite()) return false;
     btCollisionObject object;
     object.setCollisionShape(&target->_collisionShape->impl->compound);
     object.setWorldTransform(Pose(target->GetBodyPosition(), target->_rotation));
@@ -1380,7 +1376,7 @@ bool Scene::Trace(NC_STACK_ypabact *target, const vec3d &from, const vec3d &to,
 bool Scene::TraceSector(const vec3d &target, const vec3d &from, const vec3d &to,
                          double radius, Contact *out, bool singleSlot)
 {
-    if (!Finite(target) || !Finite(from) || !Finite(to) ||
+    if (!target.IsFinite() || !from.IsFinite() || !to.IsFinite() ||
         !std::isfinite(radius) || radius <= 0) return false;
     const Common::Point cell = World::PositionToSectorID(target);
     if (!impl->world.IsGamePlaySector(cell)) return false;
@@ -1557,7 +1553,7 @@ bool Scene::Resolve(NC_STACK_ypabact *a, const vec3d &oldPosition,
         UpdateActor(a);
         return false;
     }
-    if (!Live(a) || !Vehicle(a) || !Finite(oldPosition) || !Finite(a->_position) ||
+    if (!Live(a) || !Vehicle(a) || !oldPosition.IsFinite() || !a->_position.IsFinite() ||
         (!a->getBACT_bactCollisions() && !a->HasCollisionShape())) return false;
     if (impl->stamp != impl->world._timeStamp) lastContacts.clear();
     impl->Frame(); impl->Update(a);

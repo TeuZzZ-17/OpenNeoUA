@@ -1457,30 +1457,6 @@ FSMgr::FileHandle IFFile::UAOpenFileWithSetLooseEmbeddedOverride(const std::stri
     return FSMgr::FileHandle();
 }
 
-FSMgr::FileHandle IFFile::UAOpenFileWithSetLooseEmrsOverride(const std::string &filename, const std::string &mode, const std::string &className, const std::string &payload, SetLooseOverride *out, const char *sourceFunction, size_t currentOffset)
-{
-    SetLooseOverride overrideInfo;
-
-    if ( FindSetLooseEmrsOverride(filename, mode, className, payload, &overrideInfo, sourceFunction, currentOffset) )
-    {
-        FSMgr::FileHandle fil = FSMgr::iDir::openFile(overrideInfo.resolvedPath, mode);
-        if ( fil.OK() )
-        {
-            if (out)
-                *out = overrideInfo;
-
-            return fil;
-        }
-
-        setLooseLogFailed(overrideInfo, "loose EMRS override existed but failed to open; embedded payload fallback used.");
-    }
-
-    if (out)
-        *out = SetLooseOverride();
-
-    return FSMgr::FileHandle();
-}
-
 IFFile IFFile::UAOpenIFFile(const std::string &filename, const std::string &mode, const char *sourceFunction)
 {
     SetLooseOverride overrideInfo;

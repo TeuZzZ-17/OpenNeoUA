@@ -151,20 +151,6 @@ static bool ReadTupleParts(Common::Ini::Key &key, size_t count, std::string *par
 }
 
 
-static bool ParseTintComponent(const char *&pos, int *out)
-{
-    errno = 0;
-    char *end = nullptr;
-    long value = std::strtol(pos, &end, 10);
-
-    if ( end == pos || errno == ERANGE )
-        return false;
-
-    *out = (int)value;
-    pos = end;
-    return true;
-}
-
 static TVisualTint MakeTint(int r, int g, int b, int a)
 {
     auto clamp255 = [](int v) -> float
@@ -188,46 +174,15 @@ static TVisualTint ReadTint(Common::Ini::Key &key, const TVisualTint &fallback)
         return fallback;
 
     const std::string value = key.Get<std::string>();
-    const char *pos = value.c_str();
-    int component[4] = {255, 255, 255, 255};
-    bool valid = true;
-
-    for (int i = 0; i < 3; i++)
-    {
-        if ( !ParseTintComponent(pos, &component[i]) )
-        {
-            valid = false;
-            break;
-        }
-
-        if ( i < 2 )
-        {
-            if ( *pos != '|' )
-            {
-                valid = false;
-                break;
-            }
-            pos++;
-        }
-    }
-
-    if ( valid && *pos == '|' )
-    {
-        pos++;
-        valid = ParseTintComponent(pos, &component[3]);
-    }
-
-    if ( valid )
-        valid = *pos == '\0';
-
-    if ( !valid )
+    TVisualTint tint;
+    if ( !ParseVisualTint(value, &tint, true) )
     {
         ypa_log_out("Warning: invalid %s '%s', using profile default tint\n",
                     key.Name.c_str(), value.c_str());
         return fallback;
     }
 
-    return MakeTint(component[0], component[1], component[2], component[3]);
+    return tint;
 }
 
 static Config BuildConfig(Common::Ini::Key &vp,
@@ -370,18 +325,6 @@ namespace
 
 const size_t PROCEDURAL_ENERGY_FX_LIMIT = 512;
 
-static bool ProceduralEnergyFXFinite(const vec3d &value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) &&
-           std::isfinite(value.z);
-}
-
-static bool ProceduralEnergyFXFinite(const World::TVisualTint &tint)
-{
-    return std::isfinite(tint.r) && std::isfinite(tint.g) &&
-           std::isfinite(tint.b) && std::isfinite(tint.a);
-}
-
 static void ProceduralEnergyFXBuildQuadMesh(GFX::TMesh *mesh)
 {
     if ( !mesh || !mesh->Vertexes.empty() )
@@ -423,7 +366,7 @@ bool NC_STACK_ypaworld::SpawnProceduralEnergyFX(const vec3d &pos,
                                                  int32_t fadeOut,
                                                  const World::TVisualTint &tint)
 {
-    if ( !ProceduralEnergyFXFinite(pos) || !ProceduralEnergyFXFinite(tint) ||
+    if ( !pos.IsFinite() || !tint.IsFinite() ||
          duration <= 0 || !std::isfinite(size) || size <= 0.0f ||
          !std::isfinite(thickness) || thickness <= 0.0f ||
          !std::isfinite(riseSpeed) || riseSpeed < 0.0f || tint.a <= 0.0f )

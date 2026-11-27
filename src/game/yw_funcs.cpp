@@ -14,58 +14,12 @@
 #include "platform/windp.h"
 #include "common/env.h"
 #include "nucleus/loaders.h"
+#include "nucleus/ilbm.h"
 #include "system/inivals.h"
 #include "common/utils.h"
 
 extern GuiList stru_5C91D0;
 
-
-static void FontPageNormalizeSurface(SDL_Surface *s)
-{
-    if ( !s || !s->format )
-        return;
-
-    if ( s->format->BitsPerPixel != 32 || !s->format->Amask )
-    {
-        SDL_SetSurfaceBlendMode(s, SDL_BLENDMODE_NONE);
-        return;
-    }
-
-    bool locked = false;
-    if ( SDL_MUSTLOCK(s) )
-    {
-        if ( SDL_LockSurface(s) != 0 )
-        {
-            SDL_SetSurfaceBlendMode(s, SDL_BLENDMODE_NONE);
-            return;
-        }
-        locked = true;
-    }
-
-    const uint32_t colorKey = SDL_MapRGB(s->format, 255, 255, 0);
-
-    for (int y = 0; y < s->h; y++)
-    {
-        uint8_t *row = (uint8_t *)s->pixels + y * s->pitch;
-        uint32_t *pixel = (uint32_t *)row;
-
-        for (int x = 0; x < s->w; x++)
-        {
-            uint8_t r, g, b, a;
-            SDL_GetRGBA(pixel[x], s->format, &r, &g, &b, &a);
-
-            if ( a < 128 )
-                pixel[x] = colorKey;
-            else
-                pixel[x] = SDL_MapRGBA(s->format, r, g, b, 255);
-        }
-    }
-
-    if ( locked )
-        SDL_UnlockSurface(s);
-
-    SDL_SetSurfaceBlendMode(s, SDL_BLENDMODE_NONE);
-}
 
 static std::string FontPageMakePngName(const std::string &bitmapName)
 {
@@ -185,7 +139,7 @@ static void FontLoadOpenUASheet(TileMap *tileset)
 
         if ( tileset->extraImg )
         {
-            FontPageNormalizeSurface(tileset->extraImg->GetSwTex());
+            ILBM_NormalizeLegacyColorKeyPngSurface(tileset->extraImg->GetSwTex());
             SDL_SetColorKey(tileset->extraImg->GetSwTex(), SDL_TRUE, SDL_MapRGB(tileset->extraImg->GetSwTex()->format, 255, 255, 0));
 
             const int h = (int)std::stol(fntHeight, nullptr, 0);
@@ -251,7 +205,7 @@ TileMap * NC_STACK_ypaworld::yw_LoadFont(const std::string &fontname)
         return nullptr;
     }
 
-    FontPageNormalizeSurface(tileset->img->GetSwTex());
+    ILBM_NormalizeLegacyColorKeyPngSurface(tileset->img->GetSwTex());
     SDL_SetColorKey(tileset->img->GetSwTex(), SDL_TRUE, SDL_MapRGB(tileset->img->GetSwTex()->format, 255, 255, 0));
 
     tileset->h = std::stol(fntHeight, nullptr, 0);
@@ -303,7 +257,7 @@ TileMap * NC_STACK_ypaworld::yw_LoadTileSet(const std::string &bitmap, Common::P
         return nullptr;
     }
 
-    FontPageNormalizeSurface(tileset->img->GetSwTex());
+    ILBM_NormalizeLegacyColorKeyPngSurface(tileset->img->GetSwTex());
     SDL_SetColorKey(tileset->img->GetSwTex(), SDL_TRUE, SDL_MapRGB(tileset->img->GetSwTex()->format, 255, 255, 0));
 
     tileset->h = chrSz.y;

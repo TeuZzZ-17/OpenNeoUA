@@ -44,19 +44,9 @@ bool ypabact_ShouldApplyProjectileVisualMotion(NC_STACK_ypabact *bact, NC_STACK_
            (base == bact->_vp_dead || base == bact->_vp_megadeth);
 }
 
-uint32_t ypabact_ProjectileChaosHash(uint32_t value)
-{
-    value ^= value >> 16;
-    value *= 0x7feb352du;
-    value ^= value >> 15;
-    value *= 0x846ca68bu;
-    value ^= value >> 16;
-    return value;
-}
-
 double ypabact_ProjectileChaosUnit(uint32_t value)
 {
-    return (double)(ypabact_ProjectileChaosHash(value) & 0x00ffffffu) / 16777215.0;
+    return (double)(MixHash32(value) & 0x00ffffffu) / 16777215.0;
 }
 
 vec3d ypabact_GetProjectileChaosTarget(const NC_STACK_ypabact *bact, uint32_t segment)

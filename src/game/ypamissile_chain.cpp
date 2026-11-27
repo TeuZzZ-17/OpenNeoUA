@@ -18,12 +18,11 @@ bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
     if ( !_world || !_mislEmitter || _mislClusterDone || _mislClusterChild )
         return false;
 
-    std::vector<World::TWeapProto> &weapons = _world->GetWeaponsProtos();
-
-    if ( _vehicleID >= weapons.size() )
+    World::TWeapProto *ownProto = GetWeaponProto();
+    if ( !ownProto )
         return false;
 
-    World::TWeapProto &parentProto = weapons.at(_vehicleID);
+    World::TWeapProto &parentProto = *ownProto;
     World::TWeaponClusterConfig &cluster = parentProto.cluster;
 
     if ( !cluster.IsActive() )
@@ -42,13 +41,11 @@ bool NC_STACK_ypamissile::TryClusterSplit(bool impactOrDetonation)
         return false;
     }
 
-    if ( cluster.weapon_id >= weapons.size() )
+    World::TWeapProto *childLookup = _world->FindWeaponProto(cluster.weapon_id);
+    if ( !childLookup || !(childLookup->_weaponFlags & 1) )
         return false;
 
-    World::TWeapProto &childProto = weapons.at(cluster.weapon_id);
-
-    if ( !(childProto._weaponFlags & 1) )
-        return false;
+    World::TWeapProto &childProto = *childLookup;
 
     _mislClusterDone = true;
 
@@ -358,10 +355,11 @@ NC_STACK_ypabact *NC_STACK_ypamissile::FindNextChainTarget(NC_STACK_ypabact *cur
     if ( !_world || !currentHit )
         return nullptr;
 
-    if ( _vehicleID < 0 || (size_t)_vehicleID >= _world->GetWeaponsProtos().size() )
+    const World::TWeapProto *ownProto = GetWeaponProto();
+    if ( !ownProto )
         return nullptr;
 
-    const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vehicleID);
+    const World::TWeapProto &wproto = *ownProto;
     if ( wproto.chain.radius <= 0.0 )
         return nullptr;
 
@@ -407,10 +405,11 @@ bool NC_STACK_ypamissile::SpawnChainProjectile(const vec3d &originPos, float ori
     if ( !_world || !_mislEmitter || !nextTarget || childEnergy <= 0 )
         return false;
 
-    if ( _vehicleID < 0 || (size_t)_vehicleID >= _world->GetWeaponsProtos().size() )
+    World::TWeapProto *ownProto = GetWeaponProto();
+    if ( !ownProto )
         return false;
 
-    World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vehicleID);
+    World::TWeapProto &wproto = *ownProto;
 
     if ( !wproto.chain.allow || wproto.IsLaser() || wproto.IsArtilleryShell() ||
          wproto.IsKamikaze() ||
@@ -532,10 +531,11 @@ void NC_STACK_ypamissile::TrySpawnChainProjectile(NC_STACK_ypabact *currentHit, 
     if ( _mislChainSpawned || appliedDamage <= 0 || !CanChainToTarget(currentHit, nullptr) )
         return;
 
-    if ( !_world || _vehicleID < 0 || (size_t)_vehicleID >= _world->GetWeaponsProtos().size() )
+    World::TWeapProto *ownProto = GetWeaponProto();
+    if ( !ownProto )
         return;
 
-    World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vehicleID);
+    World::TWeapProto &wproto = *ownProto;
     const World::TWeaponChainConfig &chain = wproto.chain;
 
     if ( !chain.allow || chain.max_jumps <= 0 || chain.radius <= 0.0 || chain.energy_mult <= 0.0 )

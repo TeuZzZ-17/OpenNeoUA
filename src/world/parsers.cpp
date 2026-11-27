@@ -156,6 +156,45 @@ float ClampPushIntensity(float value)
     return std::min(value, 10.0f);
 }
 
+bool ParseDeathSpawnParam(ScriptParser::Parser &parser,
+                          const std::string &p1,
+                          const std::string &p2,
+                          TDeathSpawnConfig &out)
+{
+    if ( !StriCmp(p1, "at_death_spawn_vehicle") )
+    {
+        // "18" or "18|21": invalid or non-positive entries are skipped; repeating an id raises its odds.
+        out.vehicles.clear();
+        size_t start = 0;
+        while ( start <= p2.size() )
+        {
+            size_t end = p2.find('|', start);
+            if ( end == std::string::npos )
+                end = p2.size();
+
+            const long vehicleId = parser.stol(p2.substr(start, end - start), nullptr, 0);
+            if ( vehicleId > 0 && vehicleId <= std::numeric_limits<int16_t>::max() )
+                out.vehicles.push_back((int16_t)vehicleId);
+
+            start = end + 1;
+        }
+    }
+    else if ( !StriCmp(p1, "at_death_spawn_count") )
+        out.count = std::max(1, std::min((int)parser.stol(p2, nullptr, 0), 8));
+    else if ( !StriCmp(p1, "at_death_spawn_random_pos") )
+        out.random_pos = NonNegativeFiniteOrZero(parser.stof(p2, 0));
+    else if ( !StriCmp(p1, "at_death_spawn_instant") )
+        out.instant = StrGetBool(p2);
+    else if ( !StriCmp(p1, "at_death_spawn_immunity_time") )
+        out.immunity_time = std::max(0, (int)parser.stol(p2, nullptr, 0));
+    else if ( !StriCmp(p1, "at_death_spawn_units_eject_force") )
+        out.eject_force = ClampPushIntensity(parser.stof(p2, 0));
+    else
+        return false;
+
+    return true;
+}
+
 int NonNegativeFiniteMilliseconds(ScriptParser::Parser &parser,
                                   const std::string &value)
 {
@@ -192,7 +231,7 @@ float ClampProjectileVisualMotionRadius(float value)
     return std::min(value, 1000.0f);
 }
 
-void InitStatusSoundFXDefaults(World::TVhclSound &snd, int defaultVolume)
+void InitSoundFXDefaults(World::TVhclSound &snd, int defaultVolume)
 {
     snd.volume = defaultVolume;
     snd.sndPrm.mag0 = 1.0;

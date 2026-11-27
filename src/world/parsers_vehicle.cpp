@@ -837,39 +837,8 @@ int VhclProtoParser::Handle(ScriptParser::Parser &parser, const std::string &p1,
     {
         _vhcl->spawn_instant = StrGetBool(p2) ? 1 : 0;
     }
-    else if ( !StriCmp(p1, "at_death_spawn_vehicle") )
+    else if ( ParseDeathSpawnParam(parser, p1, p2, _vhcl->at_death_spawn) )
     {
-        int vehicleId = parser.stol(p2, nullptr, 0);
-        _vhcl->at_death_spawn_vehicle = vehicleId > 0 ? vehicleId : 0;
-    }
-    else if ( !StriCmp(p1, "at_death_spawn_count") )
-    {
-        int count = parser.stol(p2, nullptr, 0);
-
-        if ( count <= 0 )
-            count = 1;
-        else if ( count > 8 )
-            count = 8;
-
-        _vhcl->at_death_spawn_count = count;
-    }
-    else if ( !StriCmp(p1, "at_death_spawn_random_pos") )
-    {
-        float radius = parser.stof(p2, 0);
-        _vhcl->at_death_spawn_random_pos = radius > 0.0 ? radius : 0.0;
-    }
-    else if ( !StriCmp(p1, "at_death_spawn_instant") )
-    {
-        _vhcl->at_death_spawn_instant = parser.stol(p2, nullptr, 0) ? 1 : 0;
-    }
-    else if ( !StriCmp(p1, "at_death_spawn_immunity_time") )
-    {
-        int time = parser.stol(p2, nullptr, 0);
-        _vhcl->at_death_spawn_immunity_time = time > 0 ? time : 0;
-    }
-    else if ( !StriCmp(p1, "at_death_spawn_units_eject_force") )
-    {
-        _vhcl->eject_force = ClampPushIntensity(parser.stof(p2, 0));
     }
     else if ( !StriCmp(p1, "snd_mimic_sample") )
     {
@@ -1982,12 +1951,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->spawn_count = 1;
         _vhcl->spawn_instant = 0;
         _vhcl->at_death_spawn_units = 0;
-        _vhcl->at_death_spawn_vehicle = 0;
-        _vhcl->at_death_spawn_count = 1;
-        _vhcl->at_death_spawn_random_pos = 0.0;
-        _vhcl->at_death_spawn_instant = 0;
-        _vhcl->at_death_spawn_immunity_time = 0;
-        _vhcl->eject_force = 0.0f;
+        _vhcl->at_death_spawn = TDeathSpawnConfig();
         _vhcl->radial_shot_enable = 0;
         _vhcl->radial_shot_weapon = 0;
         _vhcl->radial_shot_trigger_radius = 0.0;
@@ -2058,17 +2022,7 @@ bool VhclProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &w
         _vhcl->job_conquer = 0;
 
         for (auto &x : _vhcl->sndFX)
-        {
-            x.sndPrm.mag0 = 1.0;
-            x.sndPrm_shk.mag0 = 1.0;
-            x.sndPrm_shk.mute = 0.02;
-            x.sndPrm_shk.pos.x = 0.2;
-            x.sndPrm_shk.pos.y = 0.2;
-            x.sndPrm_shk.pos.z = 0.2;
-            x.volume = 120;
-            x.sndPrm.time = 1000;
-            x.sndPrm_shk.time = 1000;
-        }
+            InitSoundFXDefaults(x, 120);
 
         // Pickup audio is global in Nucleus.ini rather than authored per Vehicle.
         // The event remains attached to the collecting unit so playback stays positional.

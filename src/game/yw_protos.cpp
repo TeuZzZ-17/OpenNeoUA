@@ -101,6 +101,10 @@ std::string NC_STACK_ypaworld::GetVehicleName(const World::TVhclProto &proto) co
 
 std::string NC_STACK_ypaworld::GetBuildingName(uint32_t id, bool net) const
 {
+    // HUD markers pass ids straight from map data: out of range shows no name.
+    if ( id >= _buildProtos.size() )
+        return std::string();
+
     return GetBuildingName(_buildProtos[id], net);
 }
 
@@ -138,36 +142,12 @@ std::string NC_STACK_ypaworld::GetLevelName(const TLevelInfo &lvl) const
     return Locale::Text::LevelName(lvl.LevelID, lvl.MapName);
 }
 
-std::string NC_STACK_ypaworld::ResolveGameplayVehicleName(uint32_t id) const
-{
-    if ( id < _vhclProtos.size() )
-        return ResolveGameplayVehicleName(_vhclProtos[id]);
-
-    return std::string();
-}
-
-std::string NC_STACK_ypaworld::ResolveGameplayVehicleName(const World::TVhclProto &proto) const
-{
-    if ( yw_IsUsableGameplayName(proto.name) )
-        return proto.name;
-
-    return GetVehicleName(proto);
-}
-
 std::string NC_STACK_ypaworld::ResolveGameplayVehicleName(const NC_STACK_ypabact *bact, const World::TVhclProto &proto) const
 {
     if ( bact && yw_IsUsableGameplayName(bact->_gunDisplayName) )
         return bact->_gunDisplayName;
 
-    return ResolveGameplayVehicleName(proto);
-}
-
-std::string NC_STACK_ypaworld::ResolveGameplayWeaponName(uint32_t id) const
-{
-    if ( id < _weaponProtos.size() )
-        return ResolveGameplayWeaponName(_weaponProtos[id]);
-
-    return std::string();
+    return GetVehicleName(proto);
 }
 
 std::string NC_STACK_ypaworld::ResolveGameplayWeaponName(const World::TWeapProto &proto) const
@@ -176,22 +156,6 @@ std::string NC_STACK_ypaworld::ResolveGameplayWeaponName(const World::TWeapProto
         return proto.name;
 
     return std::string();
-}
-
-std::string NC_STACK_ypaworld::ResolveGameplayBuildingName(uint32_t id, bool net) const
-{
-    if ( id < _buildProtos.size() )
-        return ResolveGameplayBuildingName(_buildProtos[id], net);
-
-    return std::string();
-}
-
-std::string NC_STACK_ypaworld::ResolveGameplayBuildingName(const World::TBuildingProto &proto, bool net) const
-{
-    if ( yw_IsUsableGameplayName(proto.Name) )
-        return proto.Name;
-
-    return GetBuildingName(proto, net);
 }
 
 bool NC_STACK_ypaworld::LoadSpectatorVehicleProto()

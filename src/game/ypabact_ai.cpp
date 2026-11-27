@@ -61,13 +61,21 @@ const TAiTargetRangeConfig &ypabact_GetAiTargetRangeConfig()
 
 bool ypabact_HasEnemyNearby(NC_STACK_ypabact *carrier, float radius)
 {
+    return carrier->FindNearestEnemy(radius) != nullptr;
+}
+
+// Nearest live enemy unit within radius (horizontal distance), or nullptr.
+NC_STACK_ypabact *NC_STACK_ypabact::FindNearestEnemy(float radius)
+{
+    NC_STACK_ypabact *carrier = this;
     NC_STACK_ypaworld *world = carrier->getBACT_pWorld();
     if ( !world )
-        return false;
+        return nullptr;
 
     if ( radius <= 0.0 )
-        return false;
+        return nullptr;
 
+    NC_STACK_ypabact *best = nullptr;
     float radiusSq = radius * radius;
     int sectorRadius = (int)(radius / World::CVSectorLength) + 2;
     Common::Point center = World::PositionToSectorID(carrier->_position);
@@ -88,13 +96,17 @@ bool ypabact_HasEnemyNearby(NC_STACK_ypabact *carrier, float radius)
                 if ( !ypabact_IsCarrierSpawnEnemy(carrier, unit) )
                     continue;
 
-                if ( (unit->_position.XZ() - carrier->_position.XZ()).square() <= radiusSq )
-                    return true;
+                const float distSq = (unit->_position.XZ() - carrier->_position.XZ()).square();
+                if ( distSq <= radiusSq )
+                {
+                    radiusSq = distSq;
+                    best = unit;
+                }
             }
         }
     }
 
-    return false;
+    return best;
 }
 
 void NC_STACK_ypabact::AI_layer1(update_msg *arg)
@@ -2128,14 +2140,13 @@ NC_STACK_ypabact * NC_STACK_ypabact::GetEnemyCandidateInSector(const cellArea &c
     NC_STACK_ypabact *lastSelectedUnit = nullptr;
     const TAiTargetRangeConfig &aiTargetRange = ypabact_GetAiTargetRangeConfig();
 
-    uint8_t protoId = _mimic_disguise_vehicleID ? _mimic_disguise_vehicleID : _vehicleID;
-    const World::TVhclProto &proto = _world->GetVhclProtos().at( protoId );
+    const World::TVhclProto &proto = _world->GetVhclProtos().at( GetRuntimeVehicleID() );
 
     bool isDirectFireGun = false;
-    if ( _bact_type == BACT_TYPES_GUN && _world && _weapon >= 0 &&
-         (size_t)_weapon < _world->GetWeaponsProtos().size() )
+    const World::TWeapProto *gunWeapon = _world ? _world->FindWeaponProto(_weapon) : nullptr;
+    if ( _bact_type == BACT_TYPES_GUN && gunWeapon )
     {
-        isDirectFireGun = !_world->GetWeaponsProtos().at(_weapon).IsArcGrenade();
+        isDirectFireGun = !gunWeapon->IsArcGrenade();
     }
     else if ( _bact_type == BACT_TYPES_GUN )
     {

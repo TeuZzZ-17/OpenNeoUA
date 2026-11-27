@@ -4,6 +4,10 @@
 
 #include "nucleus/bitmap.h"
 
+// Legacy colour-key PNG pages (fonts, ILBM replacements): alpha < 128 becomes the
+// 255|255|0 key colour and every other pixel turns opaque; blending is switched off.
+void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s);
+
 struct BMHD_type
 {
     uint16_t width;

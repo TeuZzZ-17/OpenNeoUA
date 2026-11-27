@@ -3,6 +3,7 @@
 #define VECTORS_H_INCLUDED
 
 #include <math.h>
+#include <cmath>
 
 
 template <typename T> struct Tvec2d;
@@ -245,6 +246,12 @@ struct Tvec3d
     T length() const
     {
         return sqrt( x * x + y * y + z * z );
+    }
+
+    // False when a component is NaN or infinite (corrupt script value or bad math).
+    bool IsFinite() const
+    {
+        return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
     }
 
     T square() const

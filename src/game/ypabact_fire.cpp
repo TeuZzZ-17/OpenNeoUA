@@ -221,9 +221,9 @@ size_t NC_STACK_ypabact::LaunchMissile(bact_arg79 *arg)
     if ( cooldownProto.IsOrbiter() )
         return 0;
 
-    // OpenNeoUA Orbiter: an AI carrier that attacks an enemy unit with its
-    // weapon also sends its orbiters (the player sends them on a hit instead).
-    if ( !getBACT_inputting() && weaponTarget )
+    // OpenNeoUA Orbiter: firing the primary weapon at an enemy unit sends the orbiters
+    // (AI, or the player with a locked target). This is their only trigger.
+    if ( weaponTarget )
         EngageOrbiters(weaponTarget);
 
     const bool cockpitDirectAim =
@@ -1466,10 +1466,6 @@ size_t NC_STACK_ypabact::FireMinigun(bact_arg105 *arg)
                                                 // so tracer/impact presentation stays unchanged.
                                                 if ( energ && !cellUnit->HasDeflectBuff() )
                                                     cellUnit->ModifyEnergy(&v86);
-
-                                                // OpenNeoUA Orbiter: an mgun hit on an enemy unit
-                                                // sends the orbiters (AI and player alike).
-                                                EngageOrbiters(cellUnit);
                                             }
 
                                             v22 = 1;

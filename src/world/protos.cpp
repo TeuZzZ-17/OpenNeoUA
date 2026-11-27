@@ -14,7 +14,7 @@
 
 namespace World
 {
-bool ParseVisualTint(const std::string &text, TVisualTint *out)
+bool ParseVisualTint(const std::string &text, TVisualTint *out, bool alphaOptional)
 {
     if ( !out )
         return false;
@@ -25,8 +25,8 @@ bool ParseVisualTint(const std::string &text, TVisualTint *out)
     for (int i = 0; i < 4; i++)
     {
         const size_t end = text.find('|', start);
-        if ( (i < 3 && end == std::string::npos) ||
-             (i == 3 && end != std::string::npos) )
+        const bool lastPart = end == std::string::npos;
+        if ( (lastPart && i < (alphaOptional ? 2 : 3)) || (!lastPart && i == 3) )
             return false;
 
         const std::string part = text.substr(start,
@@ -44,8 +44,9 @@ bool ParseVisualTint(const std::string &text, TVisualTint *out)
             return false;
 
         components[i] = std::max(0L, std::min(value, 255L));
-        if ( end != std::string::npos )
-            start = end + 1;
+        if ( lastPart )
+            break;
+        start = end + 1;
     }
 
     out->r = (float)components[0] / 255.0f;
@@ -357,25 +358,6 @@ bool TryGetSpecificWeaponEnergy(const TWeapProto &proto,
     return true;
 }
 
-static int SampleFrameSize(ALenum format)
-{
-    switch (format)
-    {
-        case AL_FORMAT_MONO8:
-            return 1;
-
-        case AL_FORMAT_STEREO8:
-        case AL_FORMAT_MONO16:
-            return 2;
-
-        case AL_FORMAT_STEREO16:
-            return 4;
-
-        default:
-            return 1;
-    }
-}
-
 uint8_t DestFX::ParseTypeName(const std::string &in)
 {
     if ( !StriCmp(in, "death") )
@@ -424,7 +406,7 @@ void TVhclSound::LoadSamples()
                 if ( ExtSamples.at(i).Sample )
                 {
                     TSampleData *sample = ExtSamples.at(i).Sample->GetSampleData();
-                    int frameSize = SampleFrameSize(sample->Format);
+                    int frameSize = SFX_SampleFrameSize(sample->Format);
 
                     pprm.Sample = sample;
                     pprm.rlOffset = (sample->SampleRate * pprm.Offset / 11000) * frameSize;

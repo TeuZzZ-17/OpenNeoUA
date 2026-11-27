@@ -2518,6 +2518,11 @@ public:
     const std::vector<World::TVhclProto> &GetVhclProtos() const { return _vhclProtos; }
     const std::vector<World::TWeapProto> &GetWeaponsProtos() const { return _weaponProtos; }
     const std::vector<World::TBuildingProto> &GetBuildProtos() const { return _buildProtos; }
+    // Weapon/vehicle proto by script id, or nullptr when the id is outside the script.
+    World::TWeapProto *FindWeaponProto(int id)
+    { return id >= 0 && id < (int)_weaponProtos.size() ? &_weaponProtos[id] : nullptr; }
+    World::TVhclProto *FindVhclProto(int id)
+    { return id >= 0 && id < (int)_vhclProtos.size() ? &_vhclProtos[id] : nullptr; }
     const TSectorDesc *GetSectorDescriptor(int id) const
     { return id >= 0 && id < (int)_secTypeArray.size() ? &_secTypeArray[id] : nullptr; }
     virtual int getYW_lvlFinished();
@@ -2877,7 +2882,6 @@ public:
 
     cellArea *GetSector(int32_t x, int32_t y);
     cellArea *GetSector(const Common::Point &sec);
-    cellArea *GetSector(size_t id);
     cellArea &SectorAt(int32_t x, int32_t y);
     cellArea &SectorAt(const Common::Point &sec);
     cellArea &SectorAt(size_t id);
@@ -2930,7 +2934,6 @@ public:
 
     NC_STACK_base *ResolveVisualModel(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath = std::string());
     int32_t SpawnTransientVisualBase(NC_STACK_base *base, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const vec3d &velocity = vec3d(0.0, 0.0, 0.0));
-    int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0, const vec3d &velocity = vec3d(0.0, 0.0, 0.0));
     int32_t SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0, const vec3d &velocity = vec3d(0.0, 0.0, 0.0));
     int32_t SpawnTransientVP(int32_t modelId, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale = 1.0, const World::TVisualTint &tint = World::TVisualTint(), const vec3d &axisScale = vec3d(1.0, 1.0, 1.0), const vec3d &spin = vec3d(0.0, 0.0, 0.0), const TTransientVPParticleControls &particleControls = TTransientVPParticleControls(), int32_t fadeIn = 0, int32_t fadeOut = 0, const vec3d &velocity = vec3d(0.0, 0.0, 0.0));
     void SpawnChainFX(const World::TChainFXConfig &config, const vec3d &pos, const mat3x3 &rot);
@@ -3008,7 +3011,6 @@ public:
     }
 
     int32_t GetLegoBld(const cellArea *cell, int bldX, int bldY);
-    int32_t GetLegoBld(const Common::Point &cell, int bldX, int bldY);
 
     void ClearOverrideModels();
     void LoadOverrideModels();
@@ -3024,13 +3026,11 @@ public:
     std::string GetBuildingName(uint32_t id, bool net = false) const;
     std::string GetBuildingName(const World::TBuildingProto &proto, bool net = false) const;
 
-    std::string ResolveGameplayVehicleName(uint32_t id) const;
-    std::string ResolveGameplayVehicleName(const World::TVhclProto &proto) const;
+    // Get*Name prefer the script name and fall back to the localized vanilla name.
+    // The unit overload also honours a per-unit display name (_gunDisplayName);
+    // weapons have no localized names, so a missing script name stays empty.
     std::string ResolveGameplayVehicleName(const NC_STACK_ypabact *bact, const World::TVhclProto &proto) const;
-    std::string ResolveGameplayWeaponName(uint32_t id) const;
     std::string ResolveGameplayWeaponName(const World::TWeapProto &proto) const;
-    std::string ResolveGameplayBuildingName(uint32_t id, bool net = false) const;
-    std::string ResolveGameplayBuildingName(const World::TBuildingProto &proto, bool net = false) const;
 
     uint32_t GetGemUnlockDuration() const;
     float GetGemPopupY() const;
@@ -3296,6 +3296,7 @@ public:
     std::list<NC_STACK_base *> _overrideModels;
     std::list<TTransientVP> _transientVPs;
     int32_t _nextTransientVPId = 1;
+
     std::list<TGroundDecal> _groundDecals;
     World::Crater::State _terrainCraters;
     std::map<std::string, NC_STACK_bitmap *> _groundDecalTextures;

@@ -26,11 +26,18 @@ bool ParseSmartVPList(const std::string &value, std::vector<int16_t> &out);
 float Clamp01(float value);
 float NonNegativeFiniteOrZero(float value);
 float ClampPushIntensity(float value);
+// at_death_spawn_* keys: one reader for Vehicles and Debuffs. False = not one of these keys.
+bool ParseDeathSpawnParam(ScriptParser::Parser &parser,
+                          const std::string &p1,
+                          const std::string &p2,
+                          TDeathSpawnConfig &out);
 int NonNegativeFiniteMilliseconds(ScriptParser::Parser &parser,
                                   const std::string &value);
 float ClampRecoilMultiplier(float value);
 float ClampProjectileVisualMotionRadius(float value);
-void InitStatusSoundFXDefaults(World::TVhclSound &snd, int defaultVolume);
+// Script defaults of one snd_/pal_/shk_ event package (palette 1 for 1000 ms,
+// shake 1 for 1000 ms on 0.2|0.2|0.2 with mute 0.02) before its keys are read.
+void InitSoundFXDefaults(World::TVhclSound &snd, int defaultVolume);
 int ClampSectorPower(int power);
 bool IsUsableScriptText(const std::string &text);
 void ResetVehicleScaleFX(TVhclProto *vhcl);

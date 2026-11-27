@@ -22,18 +22,6 @@ static bool NormalizeExternalBasePath(const std::string &path, std::string *norm
 }
 
 
-static bool WeaponTracerFinite(const vec3d &value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) &&
-           std::isfinite(value.z);
-}
-
-static bool WeaponTracerFinite(const World::TVisualTint &tint)
-{
-    return std::isfinite(tint.r) && std::isfinite(tint.g) &&
-           std::isfinite(tint.b) && std::isfinite(tint.a);
-}
-
 static float WeaponTracerClamp01(float value)
 {
     if ( value < 0.0f )
@@ -60,19 +48,9 @@ static World::TVisualTint WeaponTracerLerpTint(const World::TVisualTint &a,
     return result;
 }
 
-static uint32_t WeaponTracerHash(uint32_t value)
-{
-    value ^= value >> 16;
-    value *= 0x7feb352du;
-    value ^= value >> 15;
-    value *= 0x846ca68bu;
-    value ^= value >> 16;
-    return value;
-}
-
 static float WeaponTracerHashSigned(uint32_t seed, uint32_t key)
 {
-    const uint32_t hashed = WeaponTracerHash(seed ^ (key * 0x9e3779b9u));
+    const uint32_t hashed = MixHash32(seed ^ (key * 0x9e3779b9u));
     const float unit = (float)(hashed & 0x00ffffffu) / 16777215.0f;
     return unit * 2.0f - 1.0f;
 }
@@ -171,9 +149,9 @@ static vec3d WeaponTracerNoiseOffset(const vec3d &direction,
     const int32_t qx = (int32_t)std::floor(basePosition.x * 0.125);
     const int32_t qy = (int32_t)std::floor(basePosition.y * 0.125);
     const int32_t qz = (int32_t)std::floor(basePosition.z * 0.125);
-    uint32_t key = WeaponTracerHash((uint32_t)qx);
-    key = WeaponTracerHash(key ^ ((uint32_t)qy * 0x9e3779b9u));
-    key = WeaponTracerHash(key ^ ((uint32_t)qz * 0x85ebca6bu));
+    uint32_t key = MixHash32((uint32_t)qx);
+    key = MixHash32(key ^ ((uint32_t)qy * 0x9e3779b9u));
+    key = MixHash32(key ^ ((uint32_t)qz * 0x85ebca6bu));
 
     const float envelope = std::sin(WEAPON_TRACER_PI * u);
     const float n1 = WeaponTracerHashSigned(seed, key * 2u + 1u);
@@ -238,8 +216,8 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
                                      bool additive)
 {
     if ( !arg || !mesh || !view || mesh->Vertexes.empty() ||
-         !WeaponTracerFinite(start) || !WeaponTracerFinite(end) ||
-         !WeaponTracerFinite(tint) || !std::isfinite(sizeX) ||
+         !start.IsFinite() || !end.IsFinite() ||
+         !tint.IsFinite() || !std::isfinite(sizeX) ||
          !std::isfinite(sizeY) ||
          (sizeX <= 0.01f && sizeY <= 0.01f) ||
          !std::isfinite(alpha) || alpha <= 0.0f || tint.a <= 0.0f )
@@ -347,9 +325,9 @@ static void RenderMeshBeamSegment(
     NC_STACK_base *externalMesh)
 {
     if ( !arg || !externalMesh || externalMesh->Meshes.empty() ||
-         !WeaponTracerFinite(start) ||
-         !WeaponTracerFinite(end) || !WeaponTracerFinite(config.tailTint) ||
-         !WeaponTracerFinite(config.headTint) ||
+         !start.IsFinite() ||
+         !end.IsFinite() || !config.tailTint.IsFinite() ||
+         !config.headTint.IsFinite() ||
          !std::isfinite(config.tailSizeX) ||
          !std::isfinite(config.headSizeX) ||
          !std::isfinite(config.tailSizeY) ||
@@ -454,8 +432,8 @@ void NC_STACK_ypaworld::RenderWeaponTracerSegment(
     const World::TWeaponTracerConfig &config,
     float tailFactor, float headFactor, uint32_t visualSeed)
 {
-    if ( !arg || _isNetGame || !WeaponTracerFinite(start) ||
-         !WeaponTracerFinite(end) || !WeaponTracerFinite(config.tint) ||
+    if ( !arg || _isNetGame || !start.IsFinite() ||
+         !end.IsFinite() || !config.tint.IsFinite() ||
          !std::isfinite(config.size_z) || config.size_z <= 0.01f ||
          !std::isfinite(config.size_x) || config.size_x <= 0.01f ||
          !std::isfinite(config.ResolveSizeY()) || config.ResolveSizeY() < 0.0f ||

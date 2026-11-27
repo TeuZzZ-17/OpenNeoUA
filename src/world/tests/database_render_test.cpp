@@ -22,7 +22,6 @@
 extern int RegisterNucleusClasses();
 extern int yw_write_user(FSMgr::FileHandle *,UserData *);
 extern NC_STACK_bitmap *yw_LoadDatabaseBackground(bool);
-extern std::vector<std::string> db_wrap_text_columns(const std::string &,int,int);
 
 
 static void Capture(const std::string &path,int width,int height)

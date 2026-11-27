@@ -57,15 +57,10 @@ vec3d yw_SafeVPScale(const vec3d &scale)
                  scale.z > 0.001 ? scale.z : 1.0);
 }
 
-bool yw_IsFinitePoint(const vec3d &point)
-{
-    return isfinite(point.x) && isfinite(point.y) && isfinite(point.z);
-}
-
 static void yw_PushAttachedFXTriangle(std::vector<yw_AttachedFXTriangle> *triangles,
                                       const vec3d &a, const vec3d &b, const vec3d &c)
 {
-    if ( yw_IsFinitePoint(a) && yw_IsFinitePoint(b) && yw_IsFinitePoint(c) )
+    if ( a.IsFinite() && b.IsFinite() && c.IsFinite() )
         triangles->push_back(yw_AttachedFXTriangle{a, b, c});
 }
 

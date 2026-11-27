@@ -376,7 +376,7 @@ void sb_0x4d7c08__sub0__sub0__sub0__sub0(NC_STACK_ypaworld *yw, sklt_wis *wis, C
     {
         if ( yw->_timeStamp / 200 & 1 )
         {
-            std::string bldName = yw->ResolveGameplayBuildingName(bldId, yw->_isNetGame);
+            std::string bldName = yw->GetBuildingName(bldId, yw->_isNetGame);
 
             yw_RenderInfoVehicleName(yw, wis, cur, bldName, a4, a5);
         }

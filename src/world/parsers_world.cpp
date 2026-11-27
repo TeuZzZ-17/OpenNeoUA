@@ -42,7 +42,7 @@ bool BuildProtoParser::IsScope(ScriptParser::Parser &parser, const std::string &
         _bld->SndFX.volume = 120;
         // Same defaults as vehicle sound events: without the shake axes (0.2) and
         // mute (0.02) an authored shk_genesis_* would move the camera by zero.
-        InitStatusSoundFXDefaults(_bld->GenesisFX, 120);
+        InitSoundFXDefaults(_bld->GenesisFX, 120);
         _bld->Guns.clear();
         return true;
     }

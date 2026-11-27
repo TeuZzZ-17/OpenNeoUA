@@ -53,7 +53,6 @@ typedef std::vector<Key *> PKeyList;
 
 bool ParseIniFile(std::string iniFile, KeyList *lst);
 bool ParseIniFile(std::string iniFile, PKeyList *lst);
-bool ParseIniFileOverlay(std::string iniFile, KeyList *lst);
 bool ParseIniFileOverlay(std::string iniFile, PKeyList *lst);
 void ParseIniTextOverlay(const std::string &text, PKeyList *lst);
 void ApplyPredefinedIniKeys(KeyList *lst);

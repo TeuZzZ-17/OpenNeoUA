@@ -2,12 +2,16 @@
 // through "orbiter_weapon = <weapon id>" in its vehicle script.
 //
 //  Carrier side (NC_STACK_ypabact): keeps up to orbiter_count orbiters alive,
-//  replacing a spent one after orbiter_respawn_time, and sends the guarding ones
-//  against an enemy unit (EngageOrbiters):
-//    - AI: when the carrier fires its weapon at an enemy unit or hits one with its mgun;
-//    - player: when the player hits an enemy unit with the weapon, laser or mgun.
-//  Projectile side (NC_STACK_ypamissile): fade-in, guard orbit, siege dance and
-//  strikes. The flight math is the pure module world/orbiter_motion.h.
+//  replacing a spent one after orbiter_respawn_time. Firing the primary weapon at
+//  an enemy unit (AI, or the player with a locked target) starts an attack
+//  (EngageOrbiters): after orbiter_strike_first_delay the guarding orbiters are
+//  launched all at once, or one every shot_time of the orbiter Weapon.
+//  Projectile side (NC_STACK_ypamissile): fade-in and guard, then a launch that
+//  turns the orbiter into a classic guided projectile (every generic projectile key
+//  works). With orbiter_strike_count = 1 it ends with the classic impact; with more
+//  strikes the first unit hit becomes strike 1 and the orbiter goes on through the
+//  body, dances around that unit and dives through it until the last strike.
+//  The flight math is the pure module world/orbiter_motion.h.
 //
 // Strikes reuse the existing hit path (ApplyDirectHitToBact + the armor
 // penetration hit FX/sound); the last strike reuses the normal Impact()/DEAD
@@ -24,12 +28,8 @@ const World::TWeapProto *ypamissile_GetOrbiterProto(NC_STACK_ypabact *carrier)
     if ( !carrier || carrier->_orbiter_weapon <= 0 || !carrier->getBACT_pWorld() )
         return nullptr;
 
-    auto &protos = carrier->getBACT_pWorld()->GetWeaponsProtos();
-    if ( (size_t)carrier->_orbiter_weapon >= protos.size() )
-        return nullptr;
-
-    const World::TWeapProto &proto = protos.at(carrier->_orbiter_weapon);
-    return proto.IsOrbiter() ? &proto : nullptr;
+    const World::TWeapProto *proto = carrier->getBACT_pWorld()->FindWeaponProto(carrier->_orbiter_weapon);
+    return proto && proto->IsOrbiter() ? proto : nullptr;
 }
 
 bool ypamissile_IsDyingOrDead(NC_STACK_ypabact *unit)
@@ -142,6 +142,50 @@ bool ypamissile_OrbiterInsideTarget(NC_STACK_ypabact *target, const vec3d &point
 // Carrier side
 // ---------------------------------------------------------------------------
 
+// Running attack: launches the guarding orbiters when its delay or cadence allows.
+// all_at_once launches every ready one and ends; one_by_one launches the ready one
+// nearest the enemy and waits shot_time (shot_time_user when the player drives).
+// No ready orbiter or a lost enemy ends the attack; the next trigger starts a new one.
+static void ypamissile_UpdateOrbiterAttack(NC_STACK_ypabact *carrier, const World::TWeapProto &proto)
+{
+    if ( !carrier->_orbiter_attack_gid || carrier->_clock < carrier->_orbiter_next_launch_time )
+        return;
+
+    NC_STACK_ypabact *enemy = carrier->getBACT_pWorld()->FindLiveBactByGid(carrier->_orbiter_attack_gid);
+    if ( ypamissile_IsOrbiterEnemy(carrier, enemy) )
+    {
+        const bool oneByOne = proto.orbiter.strike_mode == World::TWeaponOrbiterConfig::STRIKE_ONE_BY_ONE;
+        NC_STACK_ypamissile *nearest = nullptr;
+        double nearestDist = 0.0;
+        for (NC_STACK_ypamissile *misl : carrier->_missiles_list)
+        {
+            if ( !misl->IsOrbiterGuarding() )
+                continue;
+            if ( !oneByOne )
+            {
+                misl->LaunchOrbiter(enemy);
+                continue;
+            }
+            const double dist = (misl->_position - enemy->_position).length();
+            if ( !nearest || dist < nearestDist )
+            {
+                nearest = misl;
+                nearestDist = dist;
+            }
+        }
+
+        if ( nearest && nearest->LaunchOrbiter(enemy) )
+        {
+            const int cadence = carrier->getBACT_inputting() ? proto.shot_time_user : proto.shot_time;
+            carrier->_orbiter_next_launch_time = carrier->_clock + std::max(1, cadence);
+            return;
+        }
+    }
+
+    carrier->_orbiter_attack_gid = 0;
+    carrier->_orbiter_next_launch_time = 0;
+}
+
 void NC_STACK_ypabact::UpdateOrbiters(update_msg *)
 {
     const World::TWeapProto *proto = ypamissile_GetOrbiterProto(this);
@@ -154,10 +198,17 @@ void NC_STACK_ypabact::UpdateOrbiters(update_msg *)
     if ( _orbiter_count < 0 )
         _orbiter_count = ypamissile_RollInt(proto->orbiter.count_min, proto->orbiter.count_max);
 
+    ypamissile_UpdateOrbiterAttack(this, *proto);
+
+    // Live orbiters and the ring places they hold.
     int alive = 0;
+    uint32_t usedSlots = 0;
     for (NC_STACK_ypamissile *misl : _missiles_list)
         if ( misl->IsOrbiterAlive() )
+        {
             alive++;
+            usedSlots |= 1u << (misl->GetOrbiterSlot() & 31);
+        }
 
     if ( alive >= _orbiter_count )
     {
@@ -178,6 +229,10 @@ void NC_STACK_ypabact::UpdateOrbiters(update_msg *)
 
     _orbiter_next_spawn_time = 0;
 
+    int slot = 0;
+    while ( slot < _orbiter_count - 1 && (usedSlots & (1u << slot)) )
+        slot++;
+
     ypaworld_arg146 spawn;
     spawn.vehicle_id = _orbiter_weapon;
     spawn.pos = GetBodyPosition();
@@ -190,19 +245,22 @@ void NC_STACK_ypabact::UpdateOrbiters(update_msg *)
     orbiter->_kidRef.Detach();
     orbiter->_parent = nullptr;
     _missiles_list.push_back(orbiter);
-    orbiter->BeginOrbiterGuard(this, *proto);
-
-    SFXEngine::SFXe.startSound(&orbiter->_soundcarrier, World::TWeapProto::SND_LAUNCH);
+    orbiter->BeginOrbiterGuard(this, *proto, slot, _orbiter_count);
+    // The launch sound belongs to the launch (LaunchOrbiter), not to the appearance.
 }
 
+// The only trigger: the carrier fires its primary weapon at an enemy unit. A trigger
+// during a running attack only re-aims it; the first delay runs once per attack.
 void NC_STACK_ypabact::EngageOrbiters(NC_STACK_ypabact *enemy)
 {
-    if ( _orbiter_weapon <= 0 || !ypamissile_IsOrbiterEnemy(this, enemy) )
+    const World::TWeapProto *proto = ypamissile_GetOrbiterProto(this);
+    if ( !proto || _world->_isNetGame || !ypamissile_IsOrbiterEnemy(this, enemy) )
         return;
 
-    for (NC_STACK_ypamissile *misl : _missiles_list)
-        if ( misl->IsOrbiterGuarding() )
-            misl->BeginOrbiterSiege(enemy);
+    if ( !_orbiter_attack_gid )
+        _orbiter_next_launch_time = _clock +
+            ypamissile_RollInt(proto->orbiter.strike_first_delay_min, proto->orbiter.strike_first_delay_max);
+    _orbiter_attack_gid = enemy->_gid;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +303,8 @@ float NC_STACK_ypamissile::GetRenderFadeAlpha() const
     return std::max(0.0f, (float)_orbiterFadeElapsed / (float)_orbiterFadeIn);
 }
 
-void NC_STACK_ypamissile::BeginOrbiterGuard(NC_STACK_ypabact *carrier, const World::TWeapProto &proto)
+void NC_STACK_ypamissile::BeginOrbiterGuard(NC_STACK_ypabact *carrier, const World::TWeapProto &proto,
+                                            int slot, int slotCount)
 {
     ResetOrbiterState();
     if ( !carrier )
@@ -257,25 +316,112 @@ void NC_STACK_ypamissile::BeginOrbiterGuard(NC_STACK_ypabact *carrier, const Wor
     _orbiterCarrierGid = carrier->_gid;
     _orbiterFadeIn = cfg.fade_in;
     _orbiterBaseEnergy = _energy;
+    _orbiterSlot = std::max(0, slot);
+    _orbiterSlotCount = std::max(1, slotCount);
     _primTtype = BACT_TGT_TYPE_NONE; // orbiters never use the vanilla guidance target
+    _chaos_factor = 0.0f;            // chaos_factor belongs to the classic flight after the launch
 
     // The orbit can never go inside the carrier (body + orbiter + margin).
     const float minRadius = ypamissile_OrbiterBodyRadius(carrier) + _radius + 10.0f;
-    const float radius = cfg.guard_radius_max > 0.0f
-        ? ypamissile_RollFloat(cfg.guard_radius_min, cfg.guard_radius_max)
-        : minRadius * 1.6f;
+    // The ring needs one radius for every place: the middle of the range.
+    const float radius = cfg.guard_radius_max <= 0.0f ? minRadius * 1.6f
+        : cfg.HasRingGuard() ? (cfg.guard_radius_min + cfg.guard_radius_max) * 0.5f
+        : ypamissile_RollFloat(cfg.guard_radius_min, cfg.guard_radius_max);
     _orbiterGuard = World::Orbiter::MakeGuard(_orbiterRng, radius, minRadius);
 
     // Appear directly on the orbit, then fade in there.
-    _position = carrier->GetBodyPosition() + World::Orbiter::GuardOffset(_orbiterGuard);
+    _position = OrbiterGuardTarget(carrier);
     _old_pos = _position;
     _fly_dir_length = 0.0f;
 }
 
-bool NC_STACK_ypamissile::BeginOrbiterSiege(NC_STACK_ypabact *target)
+// Guard position: the classic free orbit, or the place on the ring turned with the
+// carrier's heading (ring time is the carrier clock, shared by every place).
+vec3d NC_STACK_ypamissile::OrbiterGuardTarget(NC_STACK_ypabact *carrier) const
+{
+    const vec3d center = carrier->GetBodyPosition();
+    const World::TWeaponOrbiterConfig &cfg = _world->GetWeaponsProtos().at(_vehicleID).orbiter;
+    if ( !cfg.HasRingGuard() )
+        return center + World::Orbiter::GuardOffset(_orbiterGuard);
+
+    vec3d forward = carrier->_rotation.AxisZ();
+    forward.y = 0.0;
+    if ( forward.normalise() <= 0.001 )
+        forward = vec3d(0.0, 0.0, 1.0);
+    const vec3d right(forward.z, 0.0, -forward.x);
+
+    // Only one of the two given: the other keeps a value close to the classic orbit.
+    const vec3d local = World::Orbiter::RingGuardOffset(
+        _orbiterGuard, _orbiterSlot, _orbiterSlotCount,
+        cfg.guard_speed >= 0.0f ? cfg.guard_speed : 4.0f,
+        cfg.guard_chaos >= 0.0f ? cfg.guard_chaos : 5.0f,
+        carrier->_clock * 0.001f);
+    return center + right * local.x + forward * local.z + vec3d(0.0, local.y, 0.0);
+}
+
+// Launch: the orbiter becomes a classic guided projectile aimed at the enemy, so every
+// generic projectile key of its Weapon works (start_speed, homing_*, chaos_factor,
+// drive_time, life_time, tracer, launch FX and sound, impact, blast, debuffs...).
+bool NC_STACK_ypamissile::LaunchOrbiter(NC_STACK_ypabact *target)
 {
     NC_STACK_ypabact *carrier = _world->FindLiveBactByGid(_orbiterCarrierGid);
     if ( !IsOrbiterGuarding() || !ypamissile_IsOrbiterEnemy(carrier, target) )
+        return false;
+
+    const World::TWeapProto &proto = _world->GetWeaponsProtos().at(_vehicleID);
+    _orbiterState = ORBITER_FLIGHT;
+    _orbiterTargetGid = target->_gid;
+    _orbiterStrikeCount = ypamissile_RollInt(proto.orbiter.strike_count_min, proto.orbiter.strike_count_max);
+    _orbiterStrikeIndex = 0;
+
+    vec3d dir = target->_position - _position;
+    if ( dir.normalise() <= 0.001 )
+        dir = carrier->_rotation.AxisZ();
+
+    SetMissileType(MISL_TARGETED);
+    SetHomingTime(proto.homing_time);
+    SetHomingForce(proto.homing_force);
+    SetDriveTime(proto.drive_time);
+    SetLifeTime(proto.RollLifeTime());
+    _chaos_factor = proto.chaos_factor;
+    ResetProjectileVisualMotionFreeze();
+    SetLauncherBact(carrier);
+    SetStartHeight(_position.y);
+    _mislDirectHitUnits.clear();
+
+    _fly_dir = dir;
+    _fly_dir_length = carrier->_fly_dir_length + proto.start_speed;
+    _mislHomingExitDirection = dir;
+    _rotation.SetZ(dir);
+    _rotation.SetX(carrier->_rotation.AxisX());
+    _rotation.SetY(_rotation.AxisZ() * _rotation.AxisX());
+    _old_pos = _position;
+
+    setTarget_msg tgt;
+    tgt.tgt.pbact = target;
+    tgt.tgt_type = BACT_TGT_TYPE_UNIT;
+    tgt.priority = 0;
+    tgt.tgt_pos = target->_position;
+    SetTarget(&tgt);
+
+    StartWeaponTracer();
+    carrier->StartChainFXByTrigger(World::TChainFXConfig::TRIGGER_LAUNCH, nullptr,
+                                   &proto.chain_fx, &_position, &_rotation);
+    SFXEngine::SFXe.startSound(&_soundcarrier, World::TWeapProto::SND_LAUNCH);
+    return true;
+}
+
+// Classic flight hit a unit. With one strike the classic impact follows (false). With
+// more strikes this hit is strike 1: its entry hit has just been applied by the classic
+// hit path, so the orbiter goes on through the body to its exit hit and then dances
+// around the unit for the remaining strikes.
+bool NC_STACK_ypamissile::ContinueOrbiterSiege(NC_STACK_ypabact *target)
+{
+    if ( _orbiterState != ORBITER_FLIGHT || _orbiterStrikeCount <= 1 )
+        return false;
+
+    NC_STACK_ypabact *carrier = _world->FindLiveBactByGid(_orbiterCarrierGid);
+    if ( ypamissile_IsDyingOrDead(carrier) || !ypamissile_IsOrbiterEnemy(carrier, target) )
         return false;
 
     const World::TWeapProto &proto = _world->GetWeaponsProtos().at(_vehicleID);
@@ -294,31 +440,46 @@ bool NC_STACK_ypamissile::BeginOrbiterSiege(NC_STACK_ypabact *target)
     World::Orbiter::BeginSiege(
         _orbiterSiege, _orbiterRng, _position, dir, target->_position,
         ypamissile_OrbiterSpeed(proto), std::max(rolled, minRadius),
-        ypamissile_RollInt(cfg.first_strike_delay_min, cfg.first_strike_delay_max) * 0.001f,
-        ypamissile_RollInt(cfg.strikes_min, cfg.strikes_max),
+        ypamissile_RollInt(cfg.strike_interval_min, cfg.strike_interval_max) * 0.001f,
+        _orbiterStrikeCount - 1,
         cfg.strike_interval_min * 0.001f, cfg.strike_interval_max * 0.001f);
 
+    // Entry hit look (hit sound, detonate FX) while the orbiter flies on.
+    ApplyArmorPenetrationUnitImpactFX(&_position);
+
     _orbiterState = ORBITER_SIEGE;
+    _mislType = MISL_ORBITER;
+    _chaos_factor = 0.0f;
     _orbiterTargetGid = target->_gid;
-    _orbiterStrikeIndex = 0;
     _orbiterSiegeElapsed = 0;
-    _orbiterInside = false;
-    _orbiterPassStruck = false;
+    _orbiterInside = true;
+    _orbiterPassStruck = true;
     _orbiterFinalPass = false;
-    _orbiterExiting = false;
+    _orbiterExiting = true;
+    _orbiterExitTravel = 0.0f;
     // life_time is the safety limit of one siege (target too fast to reach).
     _orbiterSiegeTimeLimit = std::max(1000, proto.RollLifeTime());
     return true;
+}
+
+void NC_STACK_ypamissile::LeaveOrbiterFlight()
+{
+    if ( _orbiterState == ORBITER_FLIGHT )
+        _orbiterState = ORBITER_OFF;
 }
 
 void NC_STACK_ypamissile::UpdateOrbiterGuard(NC_STACK_ypabact *carrier, float dt)
 {
     _orbiterGuard.time += dt;
     const vec3d center = carrier->GetBodyPosition();
-    const vec3d desired = center + World::Orbiter::GuardOffset(_orbiterGuard);
+    const vec3d desired = OrbiterGuardTarget(carrier);
 
-    // Smooth follow: also brings a returning orbiter back onto its orbit.
-    _position += (desired - _position) * (1.0 - exp(-4.0 * dt));
+    // Smooth follow: also brings a returning orbiter back onto its orbit. An ordered
+    // ring follows tighter so it keeps its shape while the carrier moves.
+    const World::TWeaponOrbiterConfig &cfg = _world->GetWeaponsProtos().at(_vehicleID).orbiter;
+    const double follow = !cfg.HasRingGuard() ? 4.0
+        : 9.0 - 0.5 * (double)(cfg.guard_chaos >= 0.0f ? cfg.guard_chaos : 5.0f);
+    _position += (desired - _position) * (1.0 - exp(-follow * dt));
 
     // Hard rule: never inside the carrier, even while it moves or turns.
     vec3d out = _position - center;
@@ -365,7 +526,7 @@ void NC_STACK_ypamissile::OrbiterStrike(NC_STACK_ypabact *target, bool final, bo
 
     // Cascade: strike N deals energy * energy_mult^N (1 = always the same).
     const double energy = (double)_orbiterBaseEnergy *
-                          std::pow((double)proto.orbiter.energy_mult, (double)_orbiterStrikeIndex);
+                          std::pow((double)proto.orbiter.strike_energy_mult, (double)_orbiterStrikeIndex);
     _energy = (int)std::max(0.0, std::min(energy + 0.5, 100000000.0));
     if ( advance )
         _orbiterStrikeIndex++;

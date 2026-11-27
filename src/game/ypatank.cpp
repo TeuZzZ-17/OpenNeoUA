@@ -2039,15 +2039,12 @@ size_t NC_STACK_ypatank::CheckFireAI(bact_arg101 *arg)
         }
     }
 
-    World::TWeapProto *v22 = nullptr;
     int v43 = 0;
     int fireWeapon = arg->weapon >= 0 ? arg->weapon : GetCurrentWeaponId();
 
-    if ( fireWeapon >= 0 &&
-         fireWeapon < (int)_world->GetWeaponsProtos().size() )
+    World::TWeapProto *v22 = _world->FindWeaponProto(fireWeapon);
+    if ( v22 )
     {
-        v22 = &_world->GetWeaponsProtos().at( fireWeapon );
-
         if ( (v22->_weaponFlags & World::TWeapProto::WEAPON_FLAG_PROJECTILE) &&
              !v22->IsKamikaze() )
             v43 = v22->GetFireControlFlags();

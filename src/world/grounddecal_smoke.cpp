@@ -26,11 +26,6 @@ static float GroundDecalSmokeClampUnit(float value)
     return std::max(0.0f, std::min(value, 1.0f));
 }
 
-static bool GroundDecalSmokeFinite(const vec3d &value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
-}
-
 }
 
 bool NC_STACK_ypaworld::SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &smoke,
@@ -42,7 +37,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecalSmoke(const World::TGroundDecalSmoke &sm
     const int limit = GroundDecalSmokeLimit();
     if ( !smoke.enabled || limit <= 0 || smoke.chance <= 0 ||
          smoke.mode == World::TGroundDecalSmoke::MODE_NONE ||
-         !GroundDecalSmokeFinite(pos) || !std::isfinite(radius) || radius <= 0.0f )
+         !pos.IsFinite() || !std::isfinite(radius) || radius <= 0.0f )
         return false;
 
     // The effect always needs an authored model: rise draws only the 3DS,

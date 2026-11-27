@@ -395,6 +395,7 @@ void NC_STACK_ypabact::ApplyDebuff(World::TWeaponDebuffConfig &debuff, NC_STACK_
     entry.random_max_offset = debuff.random_max_offset;
     entry.vp_trail_tint = debuff.vp_trail_tint;
     entry.has_vp_trail_tint = debuff.has_vp_trail_tint;
+    entry.death_spawn = debuff.death_spawn;
     entry.source_gid = source ? source->_gid : 0;
     int16_t resolvedSourceOwner = source ? source->_owner : sourceOwner;
     if ( resolvedSourceOwner < World::OWNER_0 || resolvedSourceOwner > World::OWNER_7 )
@@ -691,6 +692,8 @@ void NC_STACK_ypabact::RebuildActiveBuffAggregate()
         const World::TVehicleBuffConfig &config = deflectEntry->config;
         combined.deflect_max_energy = config.deflect_max_energy;
         combined.deflect_end_energy_reduction = config.deflect_end_energy_reduction;
+        combined.deflect_to_enemy = config.deflect_to_enemy;
+        combined.deflect_weapon = config.deflect_weapon;
         combined.deflect_vp = config.deflect_vp;
         combined.deflect_3ds = config.deflect_3ds;
         combined.deflect_base = config.deflect_base;
@@ -751,22 +754,38 @@ void NC_STACK_ypabact::ApplyBuff(const World::TVehicleBuffConfig &buff, int dura
 
 void NC_STACK_ypabact::UpdateActiveBuff(update_msg *)
 {
-    bool expired = false;
+    bool changed = false;
 
     for (size_t i = 0; i < _buff_list.size(); )
     {
-        const int expireTime = _buff_list[i].expire_time;
+        TActiveBuffState &entry = _buff_list[i];
+        const int expireTime = entry.expire_time;
         if ( expireTime != 0 && _clock >= expireTime )
         {
             _buff_list.erase(_buff_list.begin() + i);
-            expired = true;
+            changed = true;
             continue;
         }
+
+        // stacks_recharge_time: one spent stack comes back at a time, up to `stacks`.
+        if ( entry.config.stacks_recharge_time > 0 && entry.config.deflect_charges < entry.deflect_max )
+        {
+            if ( entry.next_recharge_time == 0 )
+                entry.next_recharge_time = std::max(1, _clock + entry.config.stacks_recharge_time);
+            else if ( _clock >= entry.next_recharge_time )
+            {
+                entry.config.deflect_charges++;
+                entry.next_recharge_time = 0;
+                changed = true;
+            }
+        }
+        else
+            entry.next_recharge_time = 0;
 
         ++i;
     }
 
-    if ( expired )
+    if ( changed )
         RebuildActiveBuffAggregate();
 }
 

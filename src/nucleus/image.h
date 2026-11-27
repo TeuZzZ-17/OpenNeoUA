@@ -11,6 +11,8 @@ public:
     virtual rsrc * rsrc_func64(IDVList &stak) override;
 
     static bool SavePng(ResBitmap *bmp, const std::string &fname);
+    // SDL_RWops over an engine file handle; closing the RWops deletes the handle.
+    static SDL_RWops *OpenRWops(FSMgr::FileHandle *fil);
 
     NC_STACK_image();
     virtual ~NC_STACK_image();

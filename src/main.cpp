@@ -502,7 +502,6 @@ int RegisterNucleusClasses()
 {
     ypa_log__ypa_general_log();
     init_d3dlog();
-    init_dinputlog();
 
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_nucleus>() );
     Nucleus::ClassList.push_back( Nucleus::MakeClassDescr<NC_STACK_rsrc>() );

@@ -4,7 +4,7 @@
 bool ypabact_IsValidWeaponId(NC_STACK_ypabact *bact, int weaponId)
 {
     NC_STACK_ypaworld *world = bact->getBACT_pWorld();
-    return world && weaponId >= 0 && weaponId < (int)world->GetWeaponsProtos().size();
+    return world && world->FindWeaponProto(weaponId);
 }
 
 bool ypabact_IsValidFireWeaponId(NC_STACK_ypabact *bact, int weaponId)

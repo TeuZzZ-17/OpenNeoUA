@@ -123,14 +123,8 @@ bool ypamissile_IsHomingBombProto(const World::TWeapProto &wproto)
 
 bool ypamissile_IsHomingBomb(NC_STACK_ypamissile *missile)
 {
-    if ( !missile || !missile->getBACT_pWorld() || missile->_vehicleID < 0 )
-        return false;
-
-    std::vector<World::TWeapProto> &weapons = missile->getBACT_pWorld()->GetWeaponsProtos();
-    if ( (size_t)missile->_vehicleID >= weapons.size() )
-        return false;
-
-    return ypamissile_IsHomingBombProto(weapons.at(missile->_vehicleID));
+    const World::TWeapProto *proto = missile ? missile->GetWeaponProto() : nullptr;
+    return proto && ypamissile_IsHomingBombProto(*proto);
 }
 
 bool ypamissile_HasLiveGuidanceTarget(NC_STACK_ypamissile *missile)

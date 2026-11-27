@@ -160,11 +160,11 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_<event>_radius = 4000` — Maximum radius of a camera shake. Intensity falls linearly to 0 at the limit. 0 or absent = legacy behavior based on `shk_<event>_mute`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of a palette flash in milliseconds (format in|out). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of a palette flash in milliseconds (format `in|out`). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of a camera shake in milliseconds (format in|out). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of a camera shake in milliseconds (format `in|out`). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 
 ## Vehicles (Vehicles.cfg)
@@ -218,7 +218,7 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_mimic_pitch = 4500~5500` — Mimic sound pitch. Single value = fixed; `min~max` = random pitch selected on each playback.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_mimic_fade_inout = 150|300` — Volume fade-in and fade-out of the mimic sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_mimic_fade_inout = 150|300` — Volume fade-in and fade-out of the mimic sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `speech_voicepack = Data/Sounds/Speech/Voicepacks/resistance-tank-medium` — Unit event voices inside new_vehicle: point directly to the final pack directory. Direct pack path under Data. Missing or 0 uses vanilla voices.
 ------------------------------------------------------------------------------------------------------------------------
@@ -244,7 +244,7 @@ Any pitch parameter accepts `min~max`, so one event can pick a different pitch e
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `briefing_size = 100` — Size of the unit in the briefing and debriefing preview, 1-10000: larger = bigger model. 0, absent or invalid = classic radius framing. Gameplay geometry, collisions and saves are unchanged.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `briefing_xyz = 0|0|0` — Preview offset in camera axes (X right, Y down, Z away from the camera), independent of `briefing_size`. Applied after screen placement, so it does not rotate with the model. Each axis -100000..100000; an invalid group keeps the previous value; absent or 0|0|0 = classic placement.
+- 🟢 `briefing_xyz = 0|0|0` — Preview offset in camera axes (X right, Y down, Z away from the camera), independent of `briefing_size`. Applied after screen placement, so it does not rotate with the model. Each axis -100000..100000; an invalid group keeps the previous value; absent or `0|0|0` = classic placement.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Stats and physics
@@ -330,7 +330,7 @@ Up to 256 manually placed spheres replace the single legacy radius, which helps 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `coll_act = 0` — Selects the sphere being defined (0-255). Repeat the three `coll_*` lines for each sphere.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `coll_xyz = 50|0|0` — Sphere X|Y|Z position relative to unit center. Format: x|y|z.
+- 🟢 `coll_xyz = 50|0|0` — Sphere `X|Y|Z` position relative to unit center. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `coll_radius = 200` — Sphere radius.
 ------------------------------------------------------------------------------------------------------------------------
@@ -368,7 +368,7 @@ MGUN is the shared hit-scan machine-gun path. Its range is `game.mgun_range`. MG
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `mgun_wireframe = wireless/otlw38.sklt` — Wireframe skeleton of the MGUN shown in the interface.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `mgun_spread_xy = 20|20` — MGUN spread (format x|y): X horizontal left/right, Y vertical up/down.
+- 🟢 `mgun_spread_xy = 20|20` — MGUN spread (format `x|y`): X horizontal left/right, Y vertical up/down.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `mgun_cockpit_camera_recoil = 1.5` — 0-10 first-person MGUN shake intensity. One shake per shot, so it follows mgun_shot_time. Only active in the player's cockpit camera and never moves the vehicle. 0, absent or invalid = no shake.
 ------------------------------------------------------------------------------------------------------------------------
@@ -407,13 +407,13 @@ MGUN is the shared hit-scan machine-gun path. Its range is `game.mgun_range`. MG
 - Absent, 0 or invalid = no spread on that axis. The Hand Brake reduction applies to all classes; `ramp_up_max_weapon_spread_xy` applies to non-bomb weapons (its X also affects the X of a bomb's spread).
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `weapon_spread_xyz = 20|20|20` — Random spread of each projectile, in degrees (x|y|z): X horizontal, Y vertical, Z forward/back (bombs and homing bombs only). See the note above for what each weapon class uses. 0, absent or invalid = none. Also applied to player fire.
+- 🟢 `weapon_spread_xyz = 20|20|20` — Random spread of each projectile, in degrees (`x|y|z`): X horizontal, Y vertical, Z forward/back (bombs and homing bombs only). See the note above for what each weapon class uses. 0, absent or invalid = none. Also applied to player fire.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `weapon_arc_xy = 0|0` — Fixed arc offset for each projectile (format x|y): X horizontal, Y vertical. Applied the same way for the player.
+- 🟢 `weapon_arc_xy = 0|0` — Fixed arc offset for each projectile (format `x|y`): X horizontal, Y vertical. Applied the same way for the player.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `weapon_cone_xy = 0` — XY cone width for each generated projectile, using a uniform conical distribution.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `scope_angle_min_max = -100|100` — Tank/car only: inclusive min|max limits of vanilla aim travel (-100 down, 0 parallel, 100 up). Absent = vanilla; outside range, red reticle and firing/lock blocked; MG unchanged.
+- 🟢 `scope_angle_min_max = -100|100` — Tank/car only: inclusive `min|max` limits of vanilla aim travel (-100 down, 0 parallel, 100 up). Absent = vanilla; outside range, red reticle and firing/lock blocked; MG unchanged.
 ------------------------------------------------------------------------------------------------------------------------
 
 `fire_x_*` controls a virtual firing rack. It is useful for weapons that should visibly walk across multiple muzzle positions or alternate entire salvos.
@@ -469,7 +469,7 @@ A vehicle can expose up to four Weapon slots. Player and AI switching policies a
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `adist_bact = 1200` — Maximum distance at which the AI wants to engage another unit (a bact is any actor: vehicles, Host Stations, guns).
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `sdist_bact = 300` — Minimum safe distance from another unit. The ideal band is sdist <= target distance <= adist; too far and the AI approaches, too close and it repositions.
+- 🔵 `sdist_bact = 300` — Minimum safe distance from another unit. The ideal band is sdist `<=` target distance `<=` adist; too far and the AI approaches, too close and it repositions.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `job_fightrobo = 6` — AI suitability score against Host Stations. Job values do not change damage or speed; they only tell the AI and the Host Station how well the unit fits a task.
 ------------------------------------------------------------------------------------------------------------------------
@@ -605,11 +605,11 @@ Universal Unit Guns extend the Host Station gun system so guns and functional mo
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `unit_gun_icon = Graphics/StatusIcons/mobile_flak.svg` — Optional Data-relative icon assigned to gun 0 and shown on the parent unit.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `unit_gun_pos_xyz = 0.0|-200.0|55.0` — Mounted gun local X|Y|Z position. Format: x|y|z.
+- 🟢 `unit_gun_pos_xyz = 0.0|-200.0|55.0` — Mounted gun local `X|Y|Z` position. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `unit_gun_dir_xyz = 0.0|0.0|1.0` — Mounted gun initial X|Y|Z direction component. Format: x|y|z. The turret's `gun_side_angle` is centred on this direction: point it away from the hull to keep the turret from swinging into it.
+- 🟢 `unit_gun_dir_xyz = 0.0|0.0|1.0` — Mounted gun initial `X|Y|Z` direction component. Format: `x|y|z`. The turret's `gun_side_angle` is centred on this direction: point it away from the hull to keep the turret from swinging into it.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `unit_gun_type = 95` — Gun/module type ID.
+- 🟢 `unit_gun_type = 95` — Gun/module type ID. A gun mounted on a unit that is still in Genesis is born with it: same Genesis time and scale, on the scaled mount point, turning with the carrier.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `unit_gun_name = FLAK` — Display/internal name assigned to this mounted gun.
 ------------------------------------------------------------------------------------------------------------------------
@@ -653,7 +653,7 @@ Physical Bruch fragments use the normal, goingdown and explode sound events. See
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `crater_rim = 20` — Vehicle: raised rim in % of the depth (0..100). Absent = 20; invalid = no crater.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `cockpit_camera_offset_xyz = 0|0|0` — Cockpit camera X|Y|Z offset. Format: x|y|z.
+- 🟢 `cockpit_camera_offset_xyz = 0|0|0` — Cockpit camera `X|Y|Z` offset. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `cockpit_gun_camera_recoil = 2.0` — 0..5 multiplier for cockpit camera recoil from the gun. Does not alter physics, aiming or projectile origin.
 ------------------------------------------------------------------------------------------------------------------------
@@ -679,11 +679,11 @@ Each lifecycle state can have its own external visual. External assets extend, n
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `3ds_<state> = Data/Models/3ds/vehicle.3ds` — External 3DS model for a lifecycle state (same states as `base_<state>`); takes priority over `base_<state>` and `vp_<state>`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `scale_xyz = 1.0|1.0|3.0` — X|Y|Z visual scale of all VP/BASE/3DS states, including dead and megadeth. Does not change collision geometry. Default: 1.0. Format: x|y|z.
+- 🟢 `scale_xyz = 1.0|1.0|3.0` — `X|Y|Z` visual scale of all VP/BASE/3DS states, including dead and megadeth. Does not change collision geometry. Default: 1.0. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spin_xyz = 0|0|10` — X|Y|Z spin intensity of the active main VP/BASE/3DS model: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
+- 🟢 `spin_xyz = 0|0|10` — `X|Y|Z` spin intensity of the active main VP/BASE/3DS model: 0-10, decimals allowed; 0 = no spin. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `rotation_xyz = 0|0|0` — Fixed visual rotation in degrees around the X|Y|Z axes of the active main VP/BASE/3DS model. 0 or absent = no rotation. Format: x|y|z.
+- 🟢 `rotation_xyz = 0|0|0` — Fixed visual rotation in degrees around the `X|Y|Z` axes of the active main VP/BASE/3DS model. 0 or absent = no rotation. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tint = 40|120|255|255` — RGBA tint applied to the active main VP/BASE/3DS visual. It never tints the Genesis plasma: the Genesis uses the faction colour, and the Resistance keeps the original cyan.
 ------------------------------------------------------------------------------------------------------------------------
@@ -699,19 +699,19 @@ Vehicle and Weapon decorations use the same periodic/persistent system as buildi
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_3ds = Data/Models/3ds/FX/decoration.3ds` — 3DS decoration model; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_scale_xyz = 1.0|1.0|1.0` — X|Y|Z scale of the active decoration visual. Format: x|y|z.
+- 🟢 `decoration_fx_scale_xyz = 1.0|1.0|1.0` — `X|Y|Z` scale of the active decoration visual. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_spin_xyz = 0|0|0` — X|Y|Z spin intensity of the decoration VP/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
+- 🟢 `decoration_fx_spin_xyz = 0|0|0` — `X|Y|Z` spin intensity of the decoration VP/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_tint = 255|95|70|200` — RGBA tint applied to the main decoration visual.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_fade_inout = 500|500` — Main VP/3DS decoration fade-in and fade-out in milliseconds (format in|out). 0 or absent = immediate appearance/disappearance.
+- 🟢 `decoration_fx_fade_inout = 500|500` — Main VP/3DS decoration fade-in and fade-out in milliseconds (format `in|out`). 0 or absent = immediate appearance/disappearance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_vp_trail_tint = 255|255|255|255` — RGBA tint of VP decoration particles/trails. Alpha 0 = invisible.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_vp_trail_scale_xyz = 1.0|1.0|1.0` — X|Y scale of VP decoration particles/trails, plus a Z multiplier for particle/trail duration and therefore apparent trail length (format x|y|z).
+- 🟢 `decoration_fx_vp_trail_scale_xyz = 1.0|1.0|1.0` — `X|Y` scale of VP decoration particles/trails, plus a Z multiplier for particle/trail duration and therefore apparent trail length (format `x|y|z`).
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_vp_trail_fade_inout = 500|500` — Time in milliseconds (format in|out) for VP decoration particles/trails to fade in to their configured opacity (in) and to fade out to invisible (out). 0 or absent = immediate.
+- 🟢 `decoration_fx_vp_trail_fade_inout = 500|500` — Time in milliseconds (format `in|out`) for VP decoration particles/trails to fade in to their configured opacity (in) and to fade out to invisible (out). 0 or absent = immediate.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_duration = 1000` — Total duration in milliseconds of each periodic decoration.
 ------------------------------------------------------------------------------------------------------------------------
@@ -721,7 +721,7 @@ Vehicle and Weapon decorations use the same periodic/persistent system as buildi
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_random_pos = 90` — XYZ position randomization around the parent Vehicle/Weapon center.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_offset_xyz = 0|0|-40` — X|Y|Z offset from the parent Vehicle/Weapon center. Format: x|y|z.
+- 🟢 `decoration_fx_offset_xyz = 0|0|-40` — `X|Y|Z` offset from the parent Vehicle/Weapon center. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_mode = persistent` — Persistent mode: the decoration stays active while the parent Vehicle or Weapon is active. It uses `decoration_fx_vp`, `base`, `3ds`, `scale_xyz`, `spin_xyz`, `tint`, `fade_inout`, `vp_trail_*` and `offset_xyz`; `duration`, `interval`, `count` and `random_pos` are not used.
 ------------------------------------------------------------------------------------------------------------------------
@@ -729,7 +729,7 @@ Vehicle and Weapon decorations use the same periodic/persistent system as buildi
 Damaged-state visuals are coupled to optional gameplay penalties. This means the damaged state can be purely cosmetic, or it can also reduce movement, turning and weapon cadence once the configured HP threshold is crossed.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `damaged_fx_vp = 138|138|138` — VP visuals generated while the unit is damaged. Multiple VP IDs may be separated by |. Repeated damaged_fx_3ds lines can add 3DS visuals.
+- 🟢 `damaged_fx_vp = 138|138|138` — VP visuals generated while the unit is damaged. Multiple VP IDs may be separated by `|`. Repeated damaged_fx_3ds lines can add 3DS visuals.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `damaged_fx_3ds = Data/Models/3ds/FX/damaged.3ds` — Optional damaged-state 3DS model. Repeat the line to add multiple 3DS candidates to the random visual selection alongside VP entries.
 ------------------------------------------------------------------------------------------------------------------------
@@ -800,7 +800,7 @@ end
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `snd_<event>_ext = 1_100_22050_0_0_sounds/extra.wav` — Additional sample for the event. Format loop_volume_sampleRate_offset_sampleCount_file.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_slot = 1` — Screen color flash: effect type (1 red, 2 blue, 3 green, 4 inverse, 5 dark inverse, 6 black and white, 7 turquoise inverse). Events are the same as for snd_.
 ------------------------------------------------------------------------------------------------------------------------
@@ -810,7 +810,7 @@ end
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_mag1 = 0` — Final intensity of the flash. The intensity fades linearly from mag0 to mag1.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of the color flash in milliseconds (format in|out). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of the color flash in milliseconds (format `in|out`). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_slot = 1` — Camera shake: shake slot / type.
 ------------------------------------------------------------------------------------------------------------------------
@@ -828,7 +828,7 @@ end
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_mute = 0` — How much the audio is attenuated while the shake plays.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of the camera shake in milliseconds (format in|out). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of the camera shake in milliseconds (format `in|out`). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `snd_genesis_pitch = auto` — `auto` = automatic Genesis sound pitch: the higher the unit's HP, the lower the pitch (opt-in, exact value `auto`). A number or `min~max` overrides it; absent = normal default. An explicit `building_time` overrides this setting and caps the automatic pitch at the 10-second reference.
 ------------------------------------------------------------------------------------------------------------------------
@@ -858,7 +858,7 @@ Vehicle spawners position spawned units relative to the parent unit. Spawned uni
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `spawn_random_pos = 200` — XZ spawn-position randomization around the parent vehicle.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_offset_xyz = 0|0|0` — Spawn-position X|Y|Z offset from the parent vehicle. Format: x|y|z.
+- 🟢 `spawn_offset_xyz = 0|0|0` — Spawn-position `X|Y|Z` offset from the parent vehicle. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `spawn_max_active = 9` — Maximum number of children generated by this unit that may be active simultaneously.
 ------------------------------------------------------------------------------------------------------------------------
@@ -871,6 +871,22 @@ Vehicle spawners position spawned units relative to the parent unit. Spawned uni
 - 🟢 `3ds_spawn = Data/Models/3ds/SPAWN.3ds` — External 3DS for the same spawn state. Takes priority over BASE and VP. If no source resolves, the regular visual state is used.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_spawn_sample = sounds/new/spawn.wav` — Sound, palette flash and camera shake of the spawn state: all `snd_spawn_*`, `pal_spawn_*` and `shk_spawn_*` keys of "Sounds, palette flashes and shakes" are accepted. They start when the spawn state begins and loop until it ends (last Genesis child done, death); palette and shake hold `mag0` while looping. They follow the spawn state even when no spawn model is set. Absent = silent, no flash, no shake.
+------------------------------------------------------------------------------------------------------------------------
+
+A unit can spawn other units when it dies. The same `at_death_spawn_*` keys also work inside a Debuff (see Debuffs). The new units belong to the dead unit's side and inherit its orders. Not used in network games or for missiles.
+
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_vehicle = 18|21` — Vehicle ID spawned on death. With several IDs separated by `|`, each spawned unit picks one at random; repeat an ID to make it more likely. Invalid or non-positive entries are skipped; if none is valid, nothing spawns. Absent = no spawn.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_count = 2` — Number of units spawned, 1-8. Default 1.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_random_pos = 30` — Radius around the dead unit in which spawned units are placed at random. 0, negative or absent = on the spot.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_instant = 1` — 1 = units appear at once, without the classic Genesis sequence. 0 or absent = Genesis sequence.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_immunity_time = 2000` — Milliseconds the spawned units stay invulnerable. 0, negative or absent = no immunity.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_units_eject_force = 1` — Strength of the random push given to each spawned unit, 0-10. 0 or absent = no push.
 ------------------------------------------------------------------------------------------------------------------------
 
 Radial Shot is an autonomous secondary Weapon system that fires projectiles in all directions. "classic" reacts to nearby enemies repeatedly; "at_death" fires once on unit death.
@@ -900,7 +916,7 @@ Radial Shot is an autonomous secondary Weapon system that fires projectiles in a
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `radial_shot_horizontal_angle = 0~360` — Projectile horizontal angle. Single value = fixed angle; `min~max` = random angle in range. If absent, projectiles are distributed uniformly across 360 degrees.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_weapon = 11` — Orbiter carrier link: Weapon ID of a `model = orbiter` Weapon. The unit keeps its guardian orbiters around itself and sends them against an enemy unit. Independent of weapon/weapon_2..4/mgun (the primary Weapon is unchanged). 0, absent or a Weapon that is not an orbiter = off (vanilla). Local games only: no orbiters in network games.
+- 🟢 `orbiter_weapon = 63` — Orbiter carrier link: Weapon ID of a `model = orbiter` Weapon. The unit keeps its orbiters around itself and launches them when its primary weapon fires at an enemy unit (AI, or the player with a locked target) or its primary laser touches one. Independent of weapon/weapon_2..4/mgun, which keep working normally. 0, absent or a Weapon that is not an orbiter = off (vanilla). Local games only: no orbiters in network games.
 ------------------------------------------------------------------------------------------------------------------------
 
 ## Weapons (Weapons.cfg)
@@ -962,11 +978,11 @@ Artillery Shell supports both a real ballistic trajectory and an emulated vertic
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_transfer_fade_inout = 900|1200` — `vertical_barrage` only. Milliseconds in `in|out` order: fade in from the start of descent over the target, fade out at the end of ascent over the launcher. A shell that fades out remains hidden while waiting at the top. Each fade is limited to its own flight phase. Each value accepts 0–32767; 0 disables that side. Missing or invalid = no fades. Visual only.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `artillery_shell_vertical_spread_xz = 2|2` — vertical_barrage only: X|Z spread while projectiles rise vertically. Format: x|z.
+- 🟢 `artillery_shell_vertical_spread_xz = 2|2` — vertical_barrage only: `X|Z` spread while projectiles rise vertically. Format: `x|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_speed = 1800` — Projectile speed used by both modes.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `artillery_shell_range_minmax = 1600|8500` — XZ distance from the source within which a barrage area may be selected manually or acquired automatically (format min|max).
+- 🟢 `artillery_shell_range_minmax = 1600|8500` — XZ distance from the source within which a barrage area may be selected manually or acquired automatically (format `min|max`).
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `artillery_shell_requires_radar = 1` — 1 requires the target area to be visible on the faction radar; 0 permits targeting unrevealed areas.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1010,7 +1026,7 @@ Continuous beam instead of a physical projectile. Damage is tick-based, can ramp
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `laser_chain_energy_mult = 0.8` — Damage multiplier applied at each chain jump. 1.0 = no loss; 0.8 = each jump retains 80% of the previous damage.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `laser_fade_inout = 90|90` — Spatial fades in world units: fade-in distance from the muzzle | fade-out distance toward a real impact. 0 disables that side. A missing or malformed group, or a negative or non-finite part, disables both; values are capped at 50000. The fade dims both the opacity and the brightness of additive (glowing) beam surfaces, so it is visible on glowing tubes too. Appearance only: damage, collision and impact position are unchanged.
+- 🟢 `laser_fade_inout = 90|90` — Spatial fades in world units: fade-in distance from the muzzle `|` fade-out distance toward a real impact. 0 disables that side. A missing or malformed group, or a negative or non-finite part, disables both; values are capped at 50000. The fade dims both the opacity and the brightness of additive (glowing) beam surfaces, so it is visible on glowing tubes too. Appearance only: damage, collision and impact position are unchanged.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `laser_burn_decal_frequency = 5` — Continuous burn: how many decals are laid per 100 world units of path while the beam's ground contact point moves (5 = one every 20 units; fractions such as 0.5 are allowed). With it, the weapon's `ground_decal_id` / `ground_decal_size` (impact_world decal) is painted as a strip instead of one decal every 160 ms: each decal is laid along the travel direction, with a smooth edge, the profile's width and a length that overlaps the next one. The classic `crater_radius` / `crater_depth` / `crater_rim` keys are unchanged: with the burn on they dig along the same path, each crater scaled so the trench is as deep as `crater_depth`. Missing, zero, negative or invalid = off: a laser without it never digs and keeps its old single decals. Positive values are kept between 0.05 and 10. A unit hit or no contact ends the strip. Strip decals have a constant width (the minimum of `ground_decal_size` and of the profile's `stretch_xz` Z range) and no smoke. Ready-made profile: `new_decal 5` (`laser_burn`, `Laser_Burn.png`: charred soot with a glowing seam, long side along the beam). Every decal / crater counts against `gfx.ground_decal_limit` and `game.deformation_max_craters`: raise them for long burns.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1027,25 +1043,35 @@ Laser rules:
 - `shot_time` does not control beam density: `laser_spacing` and the model scale do. A ready-made animated tube is `Data/Models/Base/New/Shared/Laser_Tube/VP_LASER_TUBE.BASE`.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `model = orbiter` — Guardian projectile carried by a Vehicle through `orbiter_weapon`, never fired from a weapon slot. Orbiters appear one at a time around the carrier and circle it slowly. When the carrier attacks an enemy unit (AI: weapon or MGUN; player: weapon, laser or MGUN) they leave it, dance around the enemy and dive through it. Each strike goes through the enemy's collision surface (collision shape, or collision radius without one) like a normal penetrating weapon: when it enters and again when it leaves, it deals its full `energy` and triggers every hit effect (hit sound, detonate effects, shake, palette) at that surface point. The last strike explodes where it leaves the surface, with the normal impact and blast. Allies, buildings and terrain never trigger them. Target lost = back to guard; carrier destroyed = they explode in place. Speed comes from `start_speed`, damage from `energy` (and `blast_*` on the last strike), visuals and sounds from the usual `vp_*`/`snd_*` keys; `life_time` is the safety limit of one siege. Every `orbiter_*` key is optional.
+- 🟢 `model = orbiter` — Projectile carried by a Vehicle through `orbiter_weapon`, never fired from a weapon slot. Orbiters appear one at a time around the carrier and wait there. When the carrier fires its primary weapon at an enemy unit (AI, or the player with a locked target), or its primary laser touches one, the waiting orbiters are launched after `orbiter_strike_first_delay`. A launched orbiter is a classic guided projectile: every generic projectile key of its Weapon works (`start_speed`, `homing_force`, `homing_time`, `chaos_factor`, `drive_time`, `life_time`, tracer, `begin_fx`, impact, blast, debuffs, Deflect). With `orbiter_strike_count = 1` it ends with the classic impact. With more strikes, the first unit hit is strike 1: the orbiter passes through the body, dances around that unit and dives through it again until the last strike. Every strike deals its `energy` and every hit effect where it enters the collision surface and again where it leaves it; the last one explodes where it leaves, with the normal impact and blast. Missing the target = classic impact on terrain or buildings. Target lost during the dance = back to guard; carrier destroyed = waiting or dancing orbiters explode in place, flying ones fly on. Every `orbiter_*` key is optional.
+- Notes:
+  - The launch sound and `begin_fx trigger = launch` play when an orbiter is launched, not when it appears.
+  - A new trigger during an attack only changes its target; orbiters already flying keep theirs.
+  - The dance dives always home in on the target; `homing_*` and `chaos_factor` apply to the launch flight.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_count = 2~3` — Maximum orbiters alive around the carrier, 1..8 (`min~max` rolled once per unit). Default 1.
+- 🟢 `orbiter_count = 2~3` — Maximum orbiters alive around the carrier, 1..16 (`min~max` rolled once per unit). Default 1.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_respawn_time = 4000~6000` — Milliseconds before a missing orbiter is replaced, 100..600000 (`min~max` rolled for each orbiter). Default 4000.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_fade_in = 800` — Fade-in time in milliseconds when an orbiter appears, 0..10000 (single value). An orbiter attacks only after its fade-in. Default 800.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_guard_radius = 60~90` — Distance of the guard orbit from the carrier centre (`min~max` rolled for each orbiter). 0 or absent = automatic from the carrier size. Never closer than the carrier body.
+- 🟢 `orbiter_guard_radius = 60~90` — Distance of the guard place from the carrier centre (`min~max` rolled for each orbiter; with `orbiter_guard_speed` or `orbiter_guard_chaos_factor` every orbiter uses the middle of the range, so the ring stays even). 0 or absent = automatic from the carrier size. Never closer than the carrier body.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_guard_speed = 3` — How fast the waiting orbiters turn around the carrier, 0..10, decimals allowed (5 = about one radian per second). They hold evenly spaced places on a ring turned with the carrier's heading; 0 = the ring stands still.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_guard_chaos_factor = 2.5` — How unpredictable the waiting orbiters are, 0..10, decimals allowed. 0 = perfectly ordered on the ring (with `orbiter_guard_speed = 0` they stand still); higher values make each one wander wider and faster around its place (5 = like the classic orbit). If only one of the two guard keys is given, the other uses 4 (speed) or 5 (chaos). Both absent = the classic free orbit.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_siege_radius = 100~160` — Size of the dance around the target (`min~max` rolled for each siege). 0 or absent = automatic from the target size. Never smaller than the target body.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_first_strike_delay = 1200~2000` — Milliseconds of dance around the target before the first strike, 0..60000 (`min~max` rolled for each siege). Default 1500.
+- 🟢 `orbiter_strike_mode = one_by_one` — How the waiting orbiters are launched: `all_at_once` (default) launches every ready orbiter together; `one_by_one` launches the ready one nearest the enemy and the next after `shot_time` of the orbiter Weapon (`shot_time_user` when the player drives). Ends when no orbiter is ready or the enemy is lost; the next primary-weapon shot starts a new attack. Invalid = previous value.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_strikes = 3` — Strikes through the target, 1..20 (`min~max` rolled for each siege). The last strike detonates the orbiter. Default 3.
+- 🟢 `orbiter_strike_first_delay = 300` — Milliseconds between the trigger and the first launch, 0..60000 (`min~max` rolled for each attack). Default 0.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `orbiter_strike_count = 3` — Strikes through the target, 1..20 (`min~max` rolled at each launch). 1 = one classic impact; more = the first hit starts the dance and the last strike detonates. Default 3.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_strike_interval = 700~1100` — Milliseconds of dance between two strikes, 100..60000 (`min~max` rolled for each pause). Default 900.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_energy_mult = 1.25` — Damage cascade between consecutive strikes, 0.05..10 (single value). Strike N (its entry and its exit hit) deals energy × mult^N: 1 = always the same; 0.4 = each strike deals 40% of the previous one; 1.25 = each strike deals 25% more than the previous one. Default 1.
+- 🟢 `orbiter_strike_energy_mult = 1.25` — Damage cascade between consecutive strikes, 0.05..10 (single value). Strike N (its entry and its exit hit) deals energy × mult^N: 1 = always the same; 0.4 = each strike deals 40% of the previous one; 1.25 = each strike deals 25% more than the previous one. Default 1.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Damage and targets
@@ -1170,9 +1196,9 @@ Chain Weapon propagation continues a hit from one enemy unit to another nearby t
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `delay_time = 500` — Delay in milliseconds between impact and detonation (time-fused bombs); 0 = explodes on contact. Against units the projectile attaches to the target and explodes when the timer ends; if the target dies or is removed first, the projectile disappears at once without exploding.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `homing_time = 3000` — Missile and homing_bomb only: guidance duration in ms. On expiry, a powered missile keeps thrusting along the direction it was flying when guidance ended until `drive_time` expires. A homing bomb stops steering and applying thrust, and continues under gravity and drag. 0, absent or invalid = no guidance time limit.
+- 🟢 `homing_time = 3000` — Missile, homing_bomb and launched orbiter only: guidance duration in ms. On expiry, a powered missile keeps thrusting along the direction it was flying when guidance ended until `drive_time` expires. A homing bomb stops steering and applying thrust, and continues under gravity and drag. 0, absent or invalid = no guidance time limit.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `homing_force = 4` — missile and homing_bomb only: extra turn speed toward the target in radians per second (about 1 gentle, 4 firm, 10 almost locked), added to the normal tracking. Active while the projectile has a live target and `homing_time` has not expired, also after `drive_time` ends. When the player fires, it applies only with a locked (red) crosshair; AI units are unchanged. Range 0-10; 0, absent or invalid = vanilla.
+- 🟢 `homing_force = 4` — missile, homing_bomb and launched orbiter only: extra turn speed toward the target in radians per second (about 1 gentle, 4 firm, 10 almost locked), added to the normal tracking. Active while the projectile has a live target and `homing_time` has not expired, also after `drive_time` ends. When the player fires, it applies only with a locked (red) crosshair; AI units are unchanged. Range 0-10; 0, absent or invalid = vanilla.
 ------------------------------------------------------------------------------------------------------------------------
 
 Spiral and Chaos are alternative projectile-motion modifiers. If both are configured and valid, Chaos takes priority.
@@ -1217,13 +1243,13 @@ Spiral and Chaos are alternative projectile-motion modifiers. If both are config
 - **Scope:** volumes apply to AI attacks, including guns firing normal Weapons. Manual fire, MGUN, kamikaze and artillery_shell are unchanged. Debug: F9 draws the volume of the selected Weapon slot in orange.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ai_fire_trigger_box_below_xyz = 200|1200|400` — AI only: finite downward box for bomb, homing_bomb and downward laser, `total_width|vertical_depth|total_length` (X|Y|Z). It starts at the muzzle, follows the heading and stays vertical despite pitch or roll. Width covers the whole `fire_x` interval plus padding; Y is a finite depth independent of terrain height. Units are acquired by sphere contact at the sides and end cap; sector targets by point containment. A single 0, absent or invalid value keeps the legacy fire control.
+- 🟢 `ai_fire_trigger_box_below_xyz = 200|1200|400` — AI only: finite downward box for bomb, homing_bomb and downward laser, `total_width|vertical_depth|total_length` (`X|Y|Z`). It starts at the muzzle, follows the heading and stays vertical despite pitch or roll. Width covers the whole `fire_x` interval plus padding; Y is a finite depth independent of terrain height. Units are acquired by sphere contact at the sides and end cap; sector targets by point containment. A single 0, absent or invalid value keeps the legacy fire control.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ai_fire_trigger_cone_below_xyz = 30|20|1200` — AI only: downward elliptical cone for bomb, homing_bomb and downward laser, `lateral_angle|fore_aft_angle|vertical_depth`. Both full angles are in degrees, strictly between 0 and 180; the third value is the finite depth straight down. The cone stays vertical and follows the heading, with its origin at the muzzle, and covers the whole `fire_x` interval.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ai_fire_trigger_box_forward_xyz = 100|80|1200` — AI only: muzzle-local forward box, `total_width|total_height|axial_depth`. Width and height are centered on the firing axis and the volume follows pitch and roll. Models: rocket, missile, grenade, arc_grenade and non-downward laser.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ai_fire_trigger_cone_forward_xyz = 30|20|1200` — AI only: forward elliptical cone, `horizontal_angle|vertical_angle|axial_depth`. Both full angles are in degrees, strictly between 0 and 180; 30|20 means +/-15 horizontally and +/-10 vertically. Depth ends at a flat cap. Same models as the forward box.
+- 🟢 `ai_fire_trigger_cone_forward_xyz = 30|20|1200` — AI only: forward elliptical cone, `horizontal_angle|vertical_angle|axial_depth`. Both full angles are in degrees, strictly between 0 and 180; `30|20` means +/-15 horizontally and +/-10 vertically. Depth ends at a flat cap. Same models as the forward box.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ai_fire_trigger_forward_max_inclination = 25` — Per Weapon with a forward box or cone: maximum downward tilt toward ground targets, in degrees, 0 to below 90. Helicopters, fixed-wing aircraft and UFOs only: when attacking a ground target ahead of the nose, the volume tilts downward (never upward) toward the aim point up to this angle, so a plane passing over its target does not fire straight down. Tanks, cars and guns ignore it and downward volumes do not tilt. 0 or absent = vanilla (the volume stays on the hull axes).
 ------------------------------------------------------------------------------------------------------------------------
@@ -1243,7 +1269,7 @@ Progressive fire rate accelerates a continuously firing Weapon from its normal s
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ramp_up_max_shot_time = 150` — Minimum shot interval reached at the end of ramp_up_time. Ramp progress resets when FIRE is released or the sequence is interrupted.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ramp_up_max_weapon_spread_xy = 1|1` — Final random spread of this Weapon at the end of ramp_up_time (format x|y, horizontal_vertical). Decreases the X and Y of the Vehicle's weapon_spread_xyz without increasing an already lower value. Requires active ramp-up; 0/absent/invalid = disabled for that axis.
+- 🟢 `ramp_up_max_weapon_spread_xy = 1|1` — Final random spread of this Weapon at the end of ramp_up_time (format `x|y`, horizontal_vertical). Decreases the X and Y of the Vehicle's weapon_spread_xyz without increasing an already lower value. Requires active ramp-up; 0/absent/invalid = disabled for that axis.
 ------------------------------------------------------------------------------------------------------------------------
 
 Optional overheat behavior starts only after the Weapon has reached and then maintained ramp_up_max_shot_time for the configured delay.
@@ -1333,15 +1359,15 @@ Mesh tracers are an extra visual layer that follows the real projectile trajecto
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tracer_3ds = Data/Models/3ds/mgun_tracer_cross.3ds` — External 3DS model used by the Weapon tracer. Only a 3DS is accepted: the tracer is bent and shaded vertex by vertex, which VP and BASE models cannot do.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tracer_tint = 255|80|80|180` — General R|G|B|A tracer tint. Alpha 0 disables the effect.
+- 🟢 `tracer_tint = 255|80|80|180` — General `R|G|B|A` tracer tint. Alpha 0 disables the effect.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tracer_head_tint = 255|80|80|180` — R|G|B|A tint of the tracer head. Absent = tracer_tint.
+- 🟢 `tracer_head_tint = 255|80|80|180` — `R|G|B|A` tint of the tracer head. Absent = tracer_tint.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tracer_tail_tint = 255|80|80|180` — R|G|B|A tint of the tracer tail. Absent = tracer_tint.
+- 🟢 `tracer_tail_tint = 255|80|80|180` — `R|G|B|A` tint of the tracer tail. Absent = tracer_tint.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tracer_size_xyz = 4|4|100` — Tracer size (format x|y|z): X base width (range 0..100), Y size (range 0..100; invalid inherits X), Z maximum visible length along the Weapon's real trajectory (range 0..6000). A 0/invalid X or Z disables the tracer.
+- 🟢 `tracer_size_xyz = 4|4|100` — Tracer size (format `x|y|z`): X base width (range 0..100), Y size (range 0..100; invalid inherits X), Z maximum visible length along the Weapon's real trajectory (range 0..6000). A 0/invalid X or Z disables the tracer.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tracer_pos_xyz = 0|0|0` — Local X|Y|Z position relative to Weapon launch point. Clamped to -6000..6000. Format: x|y|z.
+- 🟢 `tracer_pos_xyz = 0|0|0` — Local `X|Y|Z` position relative to Weapon launch point. Clamped to -6000..6000. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tracer_head_size = 4` — Uniform X/Y head size. Range 0..100; 0 creates a point; absent/invalid uses size_x/size_y. Z length is controlled only by size_z to keep the tracer continuous.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1353,23 +1379,23 @@ Mesh tracers are an extra visual layer that follows the real projectile trajecto
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tracer_pulse_rate = 0` — Width-pulsation intensity, range 0..10. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tracer_pulse_speed = 0` — Pulsation speed in cycles per second, range 0..10. 0 = disabled; requires tracer_pulse_rate > 0.
+- 🟢 `tracer_pulse_speed = 0` — Pulsation speed in cycles per second, range 0..10. 0 = disabled; requires tracer_pulse_rate `>` 0.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tint = 40|120|255|255` — RGBA tint applied to the main VP/BASE/3DS visual. It never tints the Genesis plasma: the Genesis uses the faction colour, and the Resistance keeps the original cyan.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spin_xyz = 0|0|10` — X|Y|Z spin intensity of the main VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
+- 🟢 `spin_xyz = 0|0|10` — `X|Y|Z` spin intensity of the main VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `scale_xyz = 1.0|1.0|3.0` — X|Y|Z visual scale of all VP/BASE/3DS states, including dead and megadeth. Does not change collision geometry. Default: 1.0. Format: x|y|z.
+- 🟢 `scale_xyz = 1.0|1.0|3.0` — `X|Y|Z` visual scale of all VP/BASE/3DS states, including dead and megadeth. Does not change collision geometry. Default: 1.0. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `rotation_xyz = 0|0|0` — Fixed X|Y|Z visual rotation in degrees. 0 or absent = no rotation. Format: x|y|z.
+- 🟢 `rotation_xyz = 0|0|0` — Fixed `X|Y|Z` visual rotation in degrees. 0 or absent = no rotation. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 
 VP trail controls affect only embedded VP trails, particles and children; they never tint or transform an external 3DS model.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_trail_scale_xyz = 1.0|1.0|1.0` — X|Y|Z scale of VP trails, particles and embedded children only. Format: x|y|z.
+- 🟢 `vp_trail_scale_xyz = 1.0|1.0|1.0` — `X|Y|Z` scale of VP trails, particles and embedded children only. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp_trail_spin_xyz = 0|0|10` — X|Y|Z spin intensity of VP trails, particles and embedded children only: 0-10. Format: x|y|z.
+- 🟢 `vp_trail_spin_xyz = 0|0|10` — `X|Y|Z` spin intensity of VP trails, particles and embedded children only: 0-10. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `vp_trail_tint = 255|255|255|255` — RGBA tint applied only to VP trails, particles and embedded children; does not modify a 3DS model.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1385,19 +1411,19 @@ Weapon decorations use the same periodic/persistent system as Vehicles, with off
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_3ds = Data/Models/3ds/FX/decoration.3ds` — 3DS decoration model; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_scale_xyz = 1.0|1.0|1.0` — X|Y|Z scale of active decoration. Format: x|y|z.
+- 🟢 `decoration_fx_scale_xyz = 1.0|1.0|1.0` — `X|Y|Z` scale of active decoration. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_spin_xyz = 0|0|0` — X|Y|Z spin intensity: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
+- 🟢 `decoration_fx_spin_xyz = 0|0|0` — `X|Y|Z` spin intensity: 0-10, decimals allowed; 0 = no spin. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_tint = 255|95|70|200` — RGBA tint applied to the main decoration visual.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_fade_inout = 500|500` — Main VP/3DS decoration fade-in and fade-out in milliseconds (format in|out). 0 or absent = immediate appearance/disappearance.
+- 🟢 `decoration_fx_fade_inout = 500|500` — Main VP/3DS decoration fade-in and fade-out in milliseconds (format `in|out`). 0 or absent = immediate appearance/disappearance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_vp_trail_tint = 255|255|255|255` — RGBA tint of VP decoration particles/trails. Alpha 0 = invisible.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_vp_trail_scale_xyz = 1.0|1.0|1.0` — X|Y scale of VP decoration particles/trails, plus a Z multiplier for particle/trail duration and therefore apparent trail length (format x|y|z).
+- 🟢 `decoration_fx_vp_trail_scale_xyz = 1.0|1.0|1.0` — `X|Y` scale of VP decoration particles/trails, plus a Z multiplier for particle/trail duration and therefore apparent trail length (format `x|y|z`).
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_vp_trail_fade_inout = 500|500` — Time in milliseconds (format in|out) for VP decoration particles/trails to fade in to their configured opacity (in) and to fade out to invisible (out). 0 or absent = immediate.
+- 🟢 `decoration_fx_vp_trail_fade_inout = 500|500` — Time in milliseconds (format `in|out`) for VP decoration particles/trails to fade in to their configured opacity (in) and to fade out to invisible (out). 0 or absent = immediate.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_duration = 1000` — Total periodic-decoration duration in milliseconds.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1407,7 +1433,7 @@ Weapon decorations use the same periodic/persistent system as Vehicles, with off
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_random_pos = 90` — XYZ position randomization around the parent Vehicle/Weapon.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_offset_xyz = 0|0|-40` — X|Y|Z offset from the parent Vehicle/Weapon center. Format: x|y|z.
+- 🟢 `decoration_fx_offset_xyz = 0|0|-40` — `X|Y|Z` offset from the parent Vehicle/Weapon center. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_mode = persistent` — Persistent mode: the decoration stays active while the parent Weapon is active. It uses `decoration_fx_vp`, `base`, `3ds`, `scale_xyz`, `spin_xyz`, `tint`, `fade_inout`, `vp_trail_*` and `offset_xyz`; `duration`, `interval`, `count` and `random_pos` are not used.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1415,7 +1441,7 @@ Weapon decorations use the same periodic/persistent system as Vehicles, with off
 ### Impact effects
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `dest_fx = death_46_0_0_0` — Effect spawned on impact. Format type_ID_X_Y_Z: death when it hits a unit, megadeth when it hits terrain or buildings, then the effect ID (Bruch first, then a legacy Vehicle) and its X, Y and Z offset. The | separator is also accepted.
+- 🔵 `dest_fx = death_46_0_0_0` — Effect spawned on impact. Format type_ID_X_Y_Z: death when it hits a unit, megadeth when it hits terrain or buildings, then the effect ID (Bruch first, then a legacy Vehicle) and its X, Y and Z offset. The `|` separator is also accepted.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `ext_dest_fx = megadeth_17_10_-20_0` — Extended variant of dest_fx with the same format. Rarely used. Alias: extended_dest_fx.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1449,7 +1475,7 @@ Weapon `begin_fx` uses the same Bruch reference and emission fields as [Vehicle 
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `snd_<event>_ext = 1_100_22050_0_0_sounds/extra.wav` — Additional sample. Format loop_volume_sampleRate_offset_sampleCount_file.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_<event>_fade_inout = 150|300` — Volume fade-in and fade-out of the event sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_slot = 2` — Screen color flash: effect type (1 red, 2 blue, 3 green, 4 inverse, 5 dark inverse, 6 black and white, 7 turquoise inverse).
 ------------------------------------------------------------------------------------------------------------------------
@@ -1459,7 +1485,7 @@ Weapon `begin_fx` uses the same Bruch reference and emission fields as [Vehicle 
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `pal_<event>_mag1 = 1` — Final intensity of the flash.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of the color flash in milliseconds (format in|out). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `pal_<event>_fade_inout = 150|300` — Fade-in and fade-out of the color flash in milliseconds (format `in|out`). The fade-out ends together with `pal_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_slot = 1` — Camera shake: shake type.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1477,7 +1503,7 @@ Weapon `begin_fx` uses the same Bruch reference and emission fields as [Vehicle 
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `shk_<event>_mute = 0` — How much the audio is attenuated during the shake.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of the camera shake in milliseconds (format in|out). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_<event>_fade_inout = 150|300` — Fade-in and fade-out of the camera shake in milliseconds (format `in|out`). The fade-out ends together with `shk_<event>_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `snd_launch_sample = sounds/Laser.WAV` — Laser-specific behavior: non-looping launch sound played when FIRE begins/is held.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1511,7 +1537,7 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_launch_player_mag1 = 0.5` — Final player-only launch-shake intensity.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_launch_player_fade_inout = 150|300` — Fade-in and fade-out of the player-only launch shake in milliseconds (format in|out). The fade-out ends together with `shk_launch_player_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_launch_player_fade_inout = 150|300` — Fade-in and fade-out of the player-only launch shake in milliseconds (format `in|out`). The fade-out ends together with `shk_launch_player_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_cluster_slot = 4` — Palette slot used at split. 0/absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1523,7 +1549,7 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_cluster_radius = 4000` — Maximum cluster palette-effect radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_cluster_fade_inout = 150|300` — Fade-in and fade-out of the cluster split palette effect in milliseconds (format in|out). The fade-out ends together with `pal_cluster_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `pal_cluster_fade_inout = 150|300` — Fade-in and fade-out of the cluster split palette effect in milliseconds (format `in|out`). The fade-out ends together with `pal_cluster_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_cluster_slot = 1` — Shake slot used at split. 0/absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1535,11 +1561,11 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_cluster_radius = 4000` — Maximum cluster-shake radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_cluster_fade_inout = 150|300` — Fade-in and fade-out of the cluster split shake in milliseconds (format in|out). The fade-out ends together with `shk_cluster_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_cluster_fade_inout = 150|300` — Fade-in and fade-out of the cluster split shake in milliseconds (format `in|out`). The fade-out ends together with `shk_cluster_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_cluster_mute = 0.02` — Legacy cluster-shake distance attenuation factor used only when shk_cluster_radius = 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_cluster_xyz = 0.2|0.2|0.2` — Random cluster-shake strength multiplier on the X|Y|Z axis. Format: x|y|z.
+- 🟢 `shk_cluster_xyz = 0.2|0.2|0.2` — Random cluster-shake strength multiplier on the `X|Y|Z` axis. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_cluster_sample = sounds/Smex02.wav` — Sound played when clustering activates.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1549,7 +1575,7 @@ Player-only launch shake is separate from world-space SHK effects: it shakes onl
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_cluster_radius = 4000` — Maximum cluster-sound radius. Volume decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_cluster_fade_inout = 150|300` — Volume fade-in and fade-out of the cluster split sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_cluster_fade_inout = 150|300` — Volume fade-in and fade-out of the cluster split sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### OpenNeoUA special features
@@ -1561,13 +1587,13 @@ Cluster Weapons split into child Weapons after a timer or on impact. Child count
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `cluster_weapon_id = 3` — Weapon ID generated as the cluster child.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `cluster_trigger_time = 1000` — > 0 = timed cluster trigger in milliseconds. 0 or absent = cluster splits on impact.
+- 🟢 `cluster_trigger_time = 1000` — `>` 0 = timed cluster trigger in milliseconds. 0 or absent = cluster splits on impact.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `cluster_horizontal_angle = 0~360` — Horizontal cluster direction. Single value = fixed angle; `min~max` = range. `0~360` distributes clusters uniformly.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `cluster_vertical_angle = -45~45` — Vertical cluster direction. Single value = fixed angle; `min~max` = random angle in range.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `cluster_spread_xy = 60|60` — Random X|Y deviation applied after the base angle direction; may be combined with angle parameters. Format: x|y.
+- 🟢 `cluster_spread_xy = 60|60` — Random `X|Y` deviation applied after the base angle direction; may be combined with angle parameters. Format: `x|y`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `cluster_ai_group_radius = 600` — AI Smart only (weapon_ai_switch_mode = smart). Enemies usually enter a fire volume one at a time, so a lone enemy counts as a group when another enemy stands within this radius of the unit the shot will go to. The AI then prefers this cluster Weapon. 0 or absent = only enemies inside the volume count (two are required). Maximum 5000.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1613,7 +1639,7 @@ Cluster Weapons split into child Weapons after a timer or on impact. Child count
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_genesis_pitch = 0` — Fixed pitch, `min~max` range or `auto`. With `building_time` the time sets the pitch (4.4 = cost 440, 10 = cost 1000; above 10 unchanged); without it a number or range is used as written and `auto` follows the energy.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_genesis_fade_inout = 150|300` — Volume fade-in and fade-out of the construction sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_genesis_fade_inout = 150|300` — Volume fade-in and fade-out of the construction sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_genesis_slot = 1` — Construction palette slot of this building. 0 or absent = off. The effect lasts the whole construction (`building_time`, or the vanilla time), going from `mag0` to `mag1`; there is no time key. Independent of audio and visual plasma.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1621,7 +1647,7 @@ Cluster Weapons split into child Weapons after a timer or on impact. Child count
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_genesis_mag1 = 0` — Final palette effect intensity.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_genesis_fade_inout = 150|300` — Fade-in and fade-out of the construction palette effect in milliseconds (format in|out). The fade-out ends when the construction ends. 0 or absent = no fade.
+- 🟢 `pal_genesis_fade_inout = 150|300` — Fade-in and fade-out of the construction palette effect in milliseconds (format `in|out`). The fade-out ends when the construction ends. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_genesis_slot = 1` — Enables the construction camera shake of this building. 0 or absent = off. Like the palette it lasts the whole construction, from `mag0` to `mag1`, with no time key; axes and distance fade use the same defaults as vehicle sound events.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1629,7 +1655,7 @@ Cluster Weapons split into child Weapons after a timer or on impact. Child count
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_genesis_mag1 = 0` — Final shake intensity.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_genesis_fade_inout = 150|300` — Fade-in and fade-out of the construction shake in milliseconds (format in|out). The fade-out ends when the construction ends. 0 or absent = no fade.
+- 🟢 `shk_genesis_fade_inout = 150|300` — Fade-in and fade-out of the construction shake in milliseconds (format `in|out`). The fade-out ends when the construction ends. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `building_description = Defense outpost` — Optional building description shown in the Database. If absent, the Description row is not shown.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1687,19 +1713,19 @@ Building decorations can be periodic (spawned at intervals) or persistent (activ
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_3ds = Data/Models/3ds/FX/decoration.3ds` — 3DS decoration model; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_scale_xyz = 1.0|1.0|1.0` — X|Y|Z scale of the active decoration visual. Format: x|y|z.
+- 🟢 `decoration_fx_scale_xyz = 1.0|1.0|1.0` — `X|Y|Z` scale of the active decoration visual. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_spin_xyz = 0|0|0` — X|Y|Z spin intensity for the decoration VP/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
+- 🟢 `decoration_fx_spin_xyz = 0|0|0` — `X|Y|Z` spin intensity for the decoration VP/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_tint = 255|95|70|200` — RGBA tint applied to the main decoration visual.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_fade_inout = 500|500` — Main VP/3DS decoration fade-in and fade-out in milliseconds (format in|out). 0 or absent = immediate appearance/disappearance.
+- 🟢 `decoration_fx_fade_inout = 500|500` — Main VP/3DS decoration fade-in and fade-out in milliseconds (format `in|out`). 0 or absent = immediate appearance/disappearance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_vp_trail_tint = 255|255|255|255` — RGBA tint of VP decoration particles/trails. Under additive blending, fading also attenuates visual intensity correctly.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_vp_trail_scale_xyz = 1.0|1.0|1.0` — X|Y scale of VP decoration particles/trails, plus a Z multiplier for particle/trail duration and therefore apparent trail length (format x|y|z).
+- 🟢 `decoration_fx_vp_trail_scale_xyz = 1.0|1.0|1.0` — `X|Y` scale of VP decoration particles/trails, plus a Z multiplier for particle/trail duration and therefore apparent trail length (format `x|y|z`).
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_vp_trail_fade_inout = 500|500` — Time in milliseconds (format in|out) for VP decoration particles/trails to fade in to their configured opacity (in) and to fade out to invisible (out). 0 or absent = immediate.
+- 🟢 `decoration_fx_vp_trail_fade_inout = 500|500` — Time in milliseconds (format `in|out`) for VP decoration particles/trails to fade in to their configured opacity (in) and to fade out to invisible (out). 0 or absent = immediate.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_duration = 1000` — Total duration in milliseconds of each periodic decoration instance.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1709,7 +1735,7 @@ Building decorations can be periodic (spawned at intervals) or persistent (activ
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_random_pos = 90` — XYZ position randomization around the center of the building sector.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `decoration_fx_offset_xyz = 0|0|-40` — X|Y|Z offset from the center of the building sector. Format: x|y|z.
+- 🟢 `decoration_fx_offset_xyz = 0|0|-40` — `X|Y|Z` offset from the center of the building sector. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `decoration_fx_mode = persistent` — Persistent mode: the decoration stays active while the building is active and alive. It uses `decoration_fx_vp`, `base`, `3ds`, `scale_xyz`, `spin_xyz`, `tint`, `fade_inout`, `vp_trail_*` and `offset_xyz`; `duration`, `interval`, `count` and `random_pos` are not used.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1796,7 +1822,7 @@ end
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵🟢 `snd_normal_pitch = 0` — Pitch of the Building sound. Ranges with `min~max` are accepted.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_normal_fade_inout = 150|300` — Volume fade-in and fade-out of the Building sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_normal_fade_inout = 150|300` — Volume fade-in and fade-out of the Building sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 
 ## Bruch (Bruch.cfg)
@@ -1873,7 +1899,7 @@ end
 
 Buffs are reusable profiles linked from a Vehicle with `buff_id`. `new_buff` may appear in any script under Data/Scripts (Buffs.cfg is the recommended file) and never inside `new_vehicle`.
 
-A unit can carry any number of different Buffs at once and they never replace each other, the same rule as Debuffs. Each profile keeps its own icon and look (only Buffs that are currently working show their icon and glow). Several Deflect Buffs add their charges together and are spent in the order the unit received them. An overload breaks only the Deflect in use, while laser contact breaks every Deflect. Invisibility and invulnerability are active as long as any Buff provides them.
+A unit can carry any number of different Buffs at once and they never replace each other, the same rule as Debuffs. Each profile keeps its own icon and look (only Buffs that are currently working show their icon and glow). Several Deflect Buffs add their stacks together and are spent in the order the unit received them. An overload breaks only the Deflect in use, while laser contact breaks every Deflect. Invisibility and invulnerability are active as long as any Buff provides them. The stacks left are shown as a small number at the bottom-right of the Buff icon (Buffs sharing one icon add theirs up).
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `new_buff 1` — Starts reusable Buff profile ID 1. Multiple Vehicles may reference the same ID through buff_id.
@@ -1898,7 +1924,13 @@ A unit can carry any number of different Buffs at once and they never replace ea
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `invulnerable = 1` — Makes the unit immune to damage while this Buff property remains active.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `deflect_charges = 4` — Deflect charges available when the unit is created. Each normal projectile within the supported threshold consumes one charge and is physically deflected; Deflect ends at 0 charges. MGUN hits are blocked without consuming charges.
+- 🟢 `stacks = 4` — Deflect stacks available when the unit is created, 1..99. Each normal projectile within the supported threshold spends one stack and is physically deflected; a blast (AOE) within the threshold spends one stack and is fully blocked. Deflect ends at 0 stacks. MGUN hits are blocked without spending stacks. 0 or absent = no Deflect.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `stacks_recharge_time = 4000` — Milliseconds to get one spent stack back, up to `stacks`, 1..600000; the Buff and its icon come back with the first one. 0 or absent = no recharge.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `deflect_to_enemy = 1` — 1 = a deflected round is hurled at an enemy of the deflecting unit (the shooter, else the nearest enemy within 1500, else the normal bounce direction; never back into the unit) and now belongs to the deflecting unit. 0 or absent = it bounces off at random as before. Local games only: network games keep the bounce.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `deflect_weapon = 52` — Weapon ID: the deflected round is replaced by this Weapon's projectile, sent the same way (at the enemy with `deflect_to_enemy = 1`, otherwise along the bounce direction). Laser, kamikaze, orbiter and artillery-shell Weapons are ignored. 0, absent or invalid = the round itself is deflected. Local games only.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `deflect_max_energy = 5000` — Maximum attack energy Deflect can stop. If a projectile or AOE exceeds this threshold, all remaining Deflect charges are destroyed and the attack passes through normally. 0 or absent = no energy limit.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1917,7 +1949,7 @@ A unit can carry any number of different Buffs at once and they never replace ea
 
 Debuffs are reusable profiles linked from a Weapon with `debuff_id` (SuperItems have their own `debuff_id`). `new_debuff` may appear in any script under Data/Scripts (Debuffs.cfg is the recommended file) and never inside `new_weapon`. Host Stations stay protected from mind control and stun even when Debuffs may affect Host Stations.
 
-A unit can carry any number of different Debuffs at once and they never cancel or replace each other. Each profile keeps its own duration, damage ticks, icon and visuals. A new hit by a profile the unit already carries only refreshes that one (and adds a layer with `stack_max`). The maluses of different Debuffs multiply, so they never pass 100% together. With several stuns the strongest `stun_motion_level` applies, and unit fire is blocked if any stun blocks it. The unit takes the tint of the newest Debuff that defines one. All Debuffs share one sound channel: the last one applied with a sound owns it.
+A unit can carry any number of different Debuffs at once and they never cancel or replace each other. Each profile keeps its own duration, damage ticks, icon and visuals. A new hit by a profile the unit already carries only refreshes that one (and adds a layer with `stacks`). The maluses of different Debuffs multiply, so they never pass 100% together. With several stuns the strongest `stun_motion_level` applies, and unit fire is blocked if any stun blocks it. The unit takes the tint of the newest Debuff that defines one. All Debuffs share one sound channel: the last one applied with a sound owns it.
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `new_debuff 1` — Starts reusable Debuff profile ID 1. Multiple Weapons and SuperItems may reference the same ID through debuff_id.
@@ -1926,7 +1958,7 @@ A unit can carry any number of different Debuffs at once and they never cancel o
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `allow_on_children = 0` — Automatically propagates the active Debuff to child units generated directly by the affected unit. 0 or absent = disabled.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `stack_max = 5` — Maximum number of layers, 1-99. Each new hit by this same profile on a unit that already carries it adds one layer of every malus (`force_malus`, `maxrot_malus`, `shield_malus`, `mgun_shot_time_malus`, `shot_time_malus`, `damage_malus`, `regen_malus`): with `shield_malus = -15%` two layers give -30%, each malus capped at -100%. Every hit renews `duration`. The layer count is shown as a small number at the bottom-right of the status icon. Other Debuffs on the unit are not affected. 0, absent or invalid = no stacking and no number.
+- 🟢 `stacks = 5` — Maximum number of layers, 1-99. Each new hit by this same profile on a unit that already carries it adds one layer of every malus (`force_malus`, `maxrot_malus`, `shield_malus`, `mgun_shot_time_malus`, `shot_time_malus`, `damage_malus`, `regen_malus`): with `shield_malus = -15%` two layers give -30%, each malus capped at -100%. Every hit renews `duration`. The layer count is shown as a small number at the bottom-right of the status icon. Other Debuffs on the unit are not affected. 0, absent or invalid = no stacking and no number.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `icon = Graphics/StatusIcons/electrified.svg` — Data-relative icon shown while the unit is debuffed. Empty/invalid = no icon.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1960,9 +1992,21 @@ A unit can carry any number of different Debuffs at once and they never cancel o
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `regen_malus = -50%` — Modifier to the energy the affected unit gains from friendly power stations and allied mobile generators (Host Stations only with `allow_on_host_station = 1`). Example: -50% halves the gain. The drain of enemy power stations is not changed. 0 or absent = unchanged.
 ------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_vehicle = 18|21` — Vehicle ID spawned when a unit dies while carrying this Debuff. Same key, values and limits as the Vehicle `at_death_spawn_vehicle`. If the unit carries several Debuffs with these keys, the most recently applied one is used. The Debuff's set replaces the unit's own `at_death_spawn_*` completely, so a death never spawns twice. Unlike the Vehicle key, the new units belong to the side that applied the Debuff (when that side is unknown, to the dead unit's side), keep their own AI instead of inheriting the dead unit's orders, and the player does not take control of them. Absent = no spawn from this Debuff.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_count = 2` — Number of units spawned, 1-8. Default 1. Same as the Vehicle key.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_random_pos = 30` — Radius around the dead unit for random placement. 0 or absent = on the spot. Same as the Vehicle key.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_instant = 1` — 1 = units appear at once, without the Genesis sequence. Same as the Vehicle key.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_immunity_time = 2000` — Milliseconds the spawned units stay invulnerable. Same as the Vehicle key.
+------------------------------------------------------------------------------------------------------------------------
+- 🟢 `at_death_spawn_units_eject_force = 1` — Strength of the random push given to each spawned unit, 0-10. Same as the Vehicle key.
+------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_pitch_malus = -50%` — Pitch modifier for sounds emitted by the affected unit. Negative lowers pitch, positive raises it. 0 or absent = unchanged.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `vp = 123|123|123|123|123|123|123|123` — VP visuals generated by the debuff. Multiple VP IDs may be separated with |. If 3ds is configured, the 3DS visual is generated alongside the VPs.
+- 🟢 `vp = 123|123|123|123|123|123|123|123` — VP visuals generated by the debuff. Multiple VP IDs may be separated with `|`. If 3ds is configured, the 3DS visual is generated alongside the VPs.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `3ds = Data/Models/3ds/electrified.3ds` — Optional external 3DS visual generated alongside the debuff VPs, relative to Data. If missing/unloadable, configured VP visuals remain active.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1984,7 +2028,7 @@ A unit can carry any number of different Debuffs at once and they never cancel o
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_radius = 3000` — Maximum debuff-sound radius. Volume decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_fade_inout = 150|300` — Volume fade-in and fade-out of the debuff sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_fade_inout = 150|300` — Volume fade-in and fade-out of the debuff sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_slot = 4` — Palette-effect slot used by the debuff.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1996,7 +2040,7 @@ A unit can carry any number of different Debuffs at once and they never cancel o
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_radius = 3000` — Maximum debuff palette-effect radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_fade_inout = 150|300` — Fade-in and fade-out of the debuff palette effect in milliseconds (format in|out). The fade-out ends together with `pal_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `pal_fade_inout = 150|300` — Fade-in and fade-out of the debuff palette effect in milliseconds (format `in|out`). The fade-out ends together with `pal_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_slot = 1` — Shake slot used by the debuff.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2008,7 +2052,7 @@ A unit can carry any number of different Debuffs at once and they never cancel o
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_radius = 3000` — Maximum debuff-shake radius. Intensity decreases linearly to 0 at the limit. 0 or absent = legacy behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_fade_inout = 150|300` — Fade-in and fade-out of the debuff shake in milliseconds (format in|out). The fade-out ends together with `shk_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_fade_inout = 150|300` — Fade-in and fade-out of the debuff shake in milliseconds (format `in|out`). The fade-out ends together with `shk_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_mute = 0.02` — Legacy debuff-shake distance attenuation factor used only when shk_radius = 0.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2028,7 +2072,7 @@ At least one of `vp`, `3ds` or `base` is required and `count` must be positive, 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `loop_sound = sounds/ambient/spore.wav` — Optional sound loop played while the atmospheric profile is active on screen. Empty/absent = no loop sound.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `loop_sound_volume = 70` — Volume of the atmospheric profile loop sound. <= 0 = muted/disabled. Runtime default: 100.
+- 🟢 `loop_sound_volume = 70` — Volume of the atmospheric profile loop sound. `<=` 0 = muted/disabled. Runtime default: 100.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `3ds = Data/Models/3ds/Radiation.3ds` — 3DS model spawned by this atmospheric profile. `vp` (number) and `base` (BASE path) are accepted instead or together; the 3DS wins, then the BASE, then the VP.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2038,23 +2082,23 @@ At least one of `vp`, `3ds` or `base` is required and `count` must be positive, 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `count = 135` — Number of 3DS meshes maintained within the configured player-centered spawn volume. Values above 512 are clamped to 512.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_radius_xyz = 1950|720|1950` — Random X|Y|Z spawn radius around the player/viewer. Format: x|y|z.
+- 🟢 `spawn_radius_xyz = 1950|720|1950` — Random `X|Y|Z` spawn radius around the player/viewer. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spawn_offset_xyz = 0|260|0` — X|Y|Z offset of the spawn volume relative to the viewer. Format: x|y|z.
+- 🟢 `spawn_offset_xyz = 0|260|0` — `X|Y|Z` offset of the spawn volume relative to the viewer. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `lifetime_minmax = 5000~9000` — Minimum and maximum mesh lifetime in milliseconds (format `min~max`).
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `velocity_xyz = 8|-18|5` — Base X|Y|Z mesh velocity. Format: x|y|z.
+- 🟢 `velocity_xyz = 8|-18|5` — Base `X|Y|Z` mesh velocity. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `velocity_random_xyz = 40|22|40` — Random X|Y|Z velocity variation. Format: x|y|z.
+- 🟢 `velocity_random_xyz = 40|22|40` — Random `X|Y|Z` velocity variation. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `scale_xyz = 3.2|3.2|3.2` — X|Y|Z scale of spawned meshes. Format: x|y|z.
+- 🟢 `scale_xyz = 3.2|3.2|3.2` — `X|Y|Z` scale of spawned meshes. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `spin_xyz = 0.20|0.55|0.25` — Continuous X|Y|Z rotation rate/intensity. Format: x|y|z.
+- 🟢 `spin_xyz = 0.20|0.55|0.25` — Continuous `X|Y|Z` rotation rate/intensity. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `fade_inout = 300|700` — Mesh fade-in and fade-out durations in milliseconds (format in|out).
+- 🟢 `fade_inout = 300|700` — Mesh fade-in and fade-out durations in milliseconds (format `in|out`).
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `tint = 170|255|145|165` — Mesh tint in R|G|B|A format.
+- 🟢 `tint = 170|255|145|165` — Mesh tint in `R|G|B|A` format.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end` — Closes the block.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2078,7 +2122,7 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `wave_3ds = Data/Models/3ds/FX/nuclear_wave.3ds` — 3DS model for the wave front, relative to Data; takes priority over wave_base and wave_vp.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `wave_scale_xyz = 1.0|1.0|1.0` — Base X|Y|Z scale multipliers for the VP/BASE/3DS wave visual (format x|y|z). X and Z grow automatically with the wave radius; the vertical Y does not. <= 0 or invalid = 1.0 for that axis.
+- 🟢 `wave_scale_xyz = 1.0|1.0|1.0` — Base `X|Y|Z` scale multipliers for the VP/BASE/3DS wave visual (format `x|y|z`). X and Z grow automatically with the wave radius; the vertical Y does not. `<=` 0 or invalid = 1.0 for that axis.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `wave_tint = 255|255|255|255` — RGBA tint applied to the wave visual for VP, BASE and 3DS.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2088,19 +2132,19 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `wave_end_speed = 2000` — Final wave-front speed in world units per second. Must be positive.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `wave_push_force = 6` — One-shot push intensity 0..10 applied to every unit reached by the wave. Uses the shared push curve: 100 * intensity^2 after push_resistance. Also affects allies and invulnerable units; static GUNs are excluded. The per-target one-shot state is saved.
+- 🟢 `wave_push_force = 6` — One-shot push intensity 0..10 applied to every unit reached by the wave. Uses the shared push curve: `100 * intensity^2` after push_resistance. Also affects allies and invulnerable units; static GUNs are excluded. The per-target one-shot state is saved.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `wave_unit_energy = 50000` — Base energy removed from valid enemy units reached by the wave. Passes through the target's shield. 0 = no unit energy removed.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `wave_building_total_destruction = 15%` — Percentage of intact buildings reached by the wave that are destroyed completely. Remaining buildings are damaged when possible.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `push_force = 10` — Instantaneous push intensity 0..10 generated at the detonation center. Uses the same shared curve, 100 * intensity^2, after falloff and push_resistance.
+- 🟢 `push_force = 10` — Instantaneous push intensity 0..10 generated at the detonation center. Uses the same shared curve, `100 * intensity^2`, after falloff and push_resistance.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `push_radius = 2000` — XZ radius of the instantaneous detonation push. <= 0 disables push_force.
+- 🟢 `push_radius = 2000` — XZ radius of the instantaneous detonation push. `<=` 0 disables push_force.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `push_falloff = 1` — Detonation-push falloff: 1 reduces intensity with distance; 0 keeps the same intensity throughout push_radius.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `fade_inout = 500|1000` — Fade-in and fade-out in milliseconds for the VP/BASE/3DS wave visual (format in|out). The fade-out happens when the wave reaches the map's natural limit. 0 or absent = immediate.
+- 🟢 `fade_inout = 500|1000` — Fade-in and fade-out in milliseconds for the VP/BASE/3DS wave visual (format `in|out`). The fade-out happens when the wave reaches the map's natural limit. 0 or absent = immediate.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `debuff_id = 2` — ID of the new_debuff profile applied when the wave reaches a unit. -1, absent or unknown = no Debuff.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2112,7 +2156,7 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_detonate_radius = 10000` — Maximum detonation-sound hearing radius. 0 = legacy attenuation behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_detonate_fade_inout = 150|300` — Volume fade-in and fade-out of the detonation sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_detonate_fade_inout = 150|300` — Volume fade-in and fade-out of the detonation sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_detonate_slot = 1` — Palette-effect slot activated at detonation. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2124,7 +2168,7 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_detonate_radius = 10000` — Maximum radius of the detonation palette effect.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_detonate_fade_inout = 150|300` — Fade-in and fade-out of the detonation palette effect in milliseconds (format in|out). The fade-out ends together with `pal_detonate_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `pal_detonate_fade_inout = 150|300` — Fade-in and fade-out of the detonation palette effect in milliseconds (format `in|out`). The fade-out ends together with `pal_detonate_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_detonate_slot = 1` — Shake slot activated at detonation. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2138,7 +2182,7 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_detonate_mute = 0.02` — Legacy distance attenuation factor used only when shk_detonate_radius = 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_detonate_fade_inout = 150|300` — Fade-in and fade-out of the detonation shake in milliseconds (format in|out). The fade-out ends together with `shk_detonate_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_detonate_fade_inout = 150|300` — Fade-in and fade-out of the detonation shake in milliseconds (format `in|out`). The fade-out ends together with `shk_detonate_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_detonate_x = 0.2` — Random shake strength multiplier on the X axis.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2154,7 +2198,7 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `snd_wave_radius = 2000` — Maximum hearing radius measured from the wave front. 0 = legacy attenuation behavior.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `snd_wave_fade_inout = 150|300` — Volume fade-in and fade-out of the wave sound in milliseconds (format in|out). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
+- 🟢 `snd_wave_fade_inout = 150|300` — Volume fade-in and fade-out of the wave sound in milliseconds (format `in|out`). A one-shot sample fades out over its own length; a looping sound only fades in. If both fades are longer than the sound they shrink together. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_wave_slot = 1` — Palette-effect slot activated when the wave front enters the listener radius. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2166,7 +2210,7 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `pal_wave_radius = 2000` — Distance from the front within which the palette effect may activate. 0 or absent uses 2400 as the front activation threshold while preserving legacy radius behavior for the effect.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `pal_wave_fade_inout = 150|300` — Fade-in and fade-out of the wave palette effect in milliseconds (format in|out). The fade-out ends together with `pal_wave_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `pal_wave_fade_inout = 150|300` — Fade-in and fade-out of the wave palette effect in milliseconds (format `in|out`). The fade-out ends together with `pal_wave_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_wave_slot = 1` — Shake slot activated when the wave front enters the listener radius. 0 = disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2180,7 +2224,7 @@ SuperItem profiles are defined with `new_superitem <id>` in scripts loaded by St
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_wave_mute = 0.02` — Legacy distance attenuation factor used only when shk_wave_radius = 0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `shk_wave_fade_inout = 150|300` — Fade-in and fade-out of the wave shake in milliseconds (format in|out). The fade-out ends together with `shk_wave_time`; a looping effect only fades in. 0 or absent = no fade.
+- 🟢 `shk_wave_fade_inout = 150|300` — Fade-in and fade-out of the wave shake in milliseconds (format `in|out`). The fade-out ends together with `shk_wave_time`; a looping effect only fades in. 0 or absent = no fade.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `shk_wave_x = 0.2` — Random wave-shake strength multiplier on the X axis.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2230,7 +2274,7 @@ A key written for the other mode is ignored and logged. Invalid `effect_*` value
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `texture = Graphics/GroundDecals/Impact.png` — Optional Data-relative texture; empty = procedural shape, unloadable file = decal discarded.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `stretch_xz = 0.8~1.2|0.8~1.2` — Local X|Z stretch (format x|z). Each axis takes a single value (fixed) or a random `min~max`. Default: 1|1; stretched axes rotate with the decal.
+- 🟢 `stretch_xz = 0.8~1.2|0.8~1.2` — Local `X|Z` stretch (format `x|z`). Each axis takes a single value (fixed) or a random `min~max`. Default: `1|1`; stretched axes rotate with the decal.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `tint = 255|255|255|180` — RGBA tint; alpha 0 rejects the profile.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2240,13 +2284,13 @@ A key written for the other mode is ignored and logged. Invalid `effect_*` value
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `duration = permanent` — Required: permanent or positive milliseconds. Missing/invalid rejects the profile. Still subject to gfx.ground_decal_limit.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `fade_inout = 0|1000` — Decal fade-in and fade-out in milliseconds (format in|out); in 0 = immediate, out is ignored for permanent duration.
+- 🟢 `fade_inout = 0|1000` — Decal fade-in and fade-out in milliseconds (format `in|out`); in 0 = immediate, out is ignored for permanent duration.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_active_time = 20000~25000` — How long the effect keeps emitting over the decal, in ms; single value or `min~max`. Default `20000~25000`; maximum 3600000. The decal itself lasts `duration`. Valid in both modes.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_retrigger_interval = 30000~45000` — How often the whole effect restarts, in ms; single value or `min~max`. 0 = one activation only (default). With an interval the effect repeats for the whole decal life and each activation lasts at most the interval. Maximum 3600000. Valid in both modes.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `effect_fade_inout = 3000|20000` — Rise only. Smoke fade-in and fade-out in milliseconds (format in|out). Default: 3000|20000; in 0 = immediate appearance, out 0 = abrupt stop.
+- 🟢 `effect_fade_inout = 3000|20000` — Rise only. Smoke fade-in and fade-out in milliseconds (format `in|out`). Default: `3000|20000`; in 0 = immediate appearance, out 0 = abrupt stop.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_count = 10~30` — Rise only. Concurrent puffs for radius 50, scaled with decal size and capped at 50. Single value or `min~max`; 0 = no smoke. Default: `10~30`.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2264,7 +2308,7 @@ A key written for the other mode is ignored and logged. Invalid `effect_*` value
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_intensity = 120` — Rise only. Opacity percentage. Range: 0-300; default: 120.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `effect_tint = 70|70|70|150` — Effect RGBA tint. Default: 70|70|70|150. Also used by ground_pulse.
+- 🟢 `effect_tint = 70|70|70|150` — Effect RGBA tint. Default: `70|70|70|150`. Also used by ground_pulse.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `effect_chance = 100` — Probability that a decal emits the effect, in percent; the roll is fixed per decal. Range: 0-100; default: 100; 0 = never.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2413,7 +2457,7 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.handbrake_sound = sounds/new/handbrake.wav` — Sound played when the handbrake is activated.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.player_tank_brake_time = 1500` — Time in milliseconds for a player tank to come to a natural stop after releasing acceleration. <= 0 or absent = vanilla behavior.
+- 🟢 `game.player_tank_brake_time = 1500` — Time in milliseconds for a player tank to come to a natural stop after releasing acceleration. `<=` 0 or absent = vanilla behavior.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.sprint_force_up = 60%` — Maximum force increase during Sprint. With %, a proportion of the unit's original force; without %, a fixed amount.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2465,7 +2509,7 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.elite_unit_max_glow_intensity = 1.0` — Maximum Elite glow intensity at full medals. Scales linearly with medal progress and reuses the glow_intensity rendering path. Range 0-1; 0/absent disables Elite glow.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.elite_unit_glow_tint = 0|150|255|255` — R|G|B|A tint used by the Elite glow, reusing buff_glow_tint rendering semantics. Components are clamped to 0-255.
+- 🟢 `game.elite_unit_glow_tint = 0|150|255|255` — `R|G|B|A` tint used by the Elite glow, reusing buff_glow_tint rendering semantics. Components are clamped to 0-255.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.elite_unit_glow_pulse_seconds = 2.0` — Seconds per complete Elite glow pulse, reusing glow_pulse_seconds timing. 0/absent = steady glow; maximum 60 seconds.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2506,10 +2550,10 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 
 ### Graphics
 
-> **Graphics chip.** On a computer with two graphics chips the game asks the NVIDIA or AMD driver for the fast one by itself, so no setting is needed. `Data/Env/ypa_log.txt` names the chip that got the window ("Graphics chip in use") and warns when it is a built-in one, which can cost most of the frame rate. On Windows pick the card for OpenNeoUA.exe in Settings > System > Display > Graphics. On Linux the game requests the NVIDIA card like `prime-run` (falling back to the default one); with an AMD or Intel card start the game with `DRI_PRIME=1`.
+> **Graphics chip.** On a computer with two graphics chips the game asks the NVIDIA or AMD driver for the fast one by itself, so no setting is needed. `Data/Env/ypa_log.txt` names the chip that got the window ("Graphics chip in use") and warns when it is a built-in one, which can cost most of the frame rate. On Windows pick the card for OpenNeoUA.exe in Settings `>` System `>` Display `>` Graphics. On Linux the game requests the NVIDIA card like `prime-run` (falling back to the default one); with an AMD or Intel card start the game with `DRI_PRIME=1`.
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `game.black_sect_units_tint = 140|140|140|125` — Black Sect unit tint in R|G|B|A format. Each component ranges from 0 to 255.
+- 🟢 `game.black_sect_units_tint = 140|140|140|125` — Black Sect unit tint in `R|G|B|A` format. Each component ranges from 0 to 255.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.blending = 1` — Graphics blending mode: 0 = default, 1 = additive, 2 = sharp.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2527,11 +2571,11 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.horizon_fog_enable = yes` — Enables transparent horizon fog independently from horizon darkening.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.horizon_fog_color = 150|155|160` — Transparent horizon-fog color in R|G|B format. 150|155|160 is a light gray.
+- 🟢 `gfx.horizon_fog_color = 150|155|160` — Transparent horizon-fog color in `R|G|B` format. `150|155|160` is a light gray.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.horizon_dark_enable = yes` — Enables horizon darkening independently from transparent fog.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.horizon_dark_color = 0|0|0` — Horizon-darkening color in R|G|B format. 0|0|0 is pure black.
+- 🟢 `gfx.horizon_dark_color = 0|0|0` — Horizon-darkening color in `R|G|B` format. `0|0|0` is pure black.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.vhs_filter_shader = res/ua_cinematic_1998_vhs.ps` — Shader path for the VHS filter. Missing/unloadable = filter disabled.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2553,9 +2597,9 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_3ds = Data/Models/3ds/FX/regen.3ds` — 3DS model for the Regen effect, relative to Data; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_fx_scale = 1.0` — Uniform scale of the Regen effect: the VP/BASE/3DS visual, or the generated + symbol (30 units at 1.0, max 500). <= 0 or invalid = 1.0.
+- 🟢 `gfx.regen_fx_scale = 1.0` — Uniform scale of the Regen effect: the VP/BASE/3DS visual, or the generated + symbol (30 units at 1.0, max 500). `<=` 0 or invalid = 1.0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_fx_spin_xyz = 0|0|0` — X|Y|Z spin intensity for the Regen VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
+- 🟢 `gfx.regen_fx_spin_xyz = 0|0|0` — `X|Y|Z` spin intensity for the Regen VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_fx_tint = 80|255|120|230` — RGBA tint of the Regen effect, applied to VP/BASE/3DS or to the procedural + symbol.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2571,7 +2615,7 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.regen_symbol_rise_speed = 100` — Upward movement speed of the Regen effect: the generated + symbol, or a configured gfx.regen_fx_3ds/base/vp. 0 = does not rise.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.regen_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the Regen effect: the generated + symbol, or a configured gfx.regen_fx_3ds/base/vp (format in|out). 0 = immediate appearance/disappearance.
+- 🟢 `gfx.regen_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the Regen effect: the generated + symbol, or a configured gfx.regen_fx_3ds/base/vp (format `in|out`). 0 = immediate appearance/disappearance.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_vp = 0` — Legacy VP for the Drain effect; final fallback before the procedural - symbol.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2579,9 +2623,9 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_3ds = Data/Models/3ds/FX/drain.3ds` — 3DS model for the Drain effect, relative to Data; takes priority over BASE and VP.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_fx_scale = 1.0` — Uniform scale of the Drain effect: the VP/BASE/3DS visual, or the generated - symbol (30 units at 1.0, max 500). <= 0 or invalid = 1.0.
+- 🟢 `gfx.drain_fx_scale = 1.0` — Uniform scale of the Drain effect: the VP/BASE/3DS visual, or the generated - symbol (30 units at 1.0, max 500). `<=` 0 or invalid = 1.0.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_fx_spin_xyz = 0|0|0` — X|Y|Z spin intensity for the Drain VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: x|y|z.
+- 🟢 `gfx.drain_fx_spin_xyz = 0|0|0` — `X|Y|Z` spin intensity for the Drain VP/BASE/3DS visual: 0-10, decimals allowed; 0 = no spin. Format: `x|y|z`.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_fx_tint = 255|80|80|230` — RGBA tint of the Drain effect, applied to VP/BASE/3DS or to the procedural - symbol.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2597,7 +2641,7 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.drain_symbol_rise_speed = 100` — Upward movement speed of the Drain effect: the generated - symbol, or a configured gfx.drain_fx_3ds/base/vp. 0 = does not rise.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.drain_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the Drain effect: the generated - symbol, or a configured gfx.drain_fx_3ds/base/vp (format in|out). 0 = immediate appearance/disappearance.
+- 🟢 `gfx.drain_symbol_fade_inout = 150|300` — Fade-in and fade-out durations in milliseconds for the Drain effect: the generated - symbol, or a configured gfx.drain_fx_3ds/base/vp (format `in|out`). 0 = immediate appearance/disappearance.
 ------------------------------------------------------------------------------------------------------------------------
 
 ### World HP and shield bars
@@ -2653,9 +2697,9 @@ Regen and Drain feedback can use external VP/BASE/3DS visuals; without one, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ui.genesis_list_x = 0` — X position of the Genesis/Creation list. 0 = attached to the left edge; absent/invalid = legacy position.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.genesis_list_width = 180` — Width of the Genesis/Creation list. Absent/invalid/<= 0 = legacy width.
+- 🟢 `ui.genesis_list_width = 180` — Width of the Genesis/Creation list. Absent/invalid/`<= 0` = legacy width.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `ui.genesis_list_height = 220` — Height of the Genesis/Creation list. Absent/invalid/<= 0 = legacy height.
+- 🟢 `ui.genesis_list_height = 220` — Height of the Genesis/Creation list. Absent/invalid/`<= 0` = legacy height.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `ui.genesis_list_opacity = 220` — Genesis/Creation list background opacity. 0 = fully transparent, 255 = fully opaque. Icons, text and numbers are unaffected. Absent/invalid = 220.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2773,7 +2817,7 @@ Classic slots:
 Custom slots:
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.color_eff[9] = 255|102|7` — Defines a custom palette slot (8..16) with R|G|B parts 0-255; PAL parameters reference it through `pal_*_slot`. Can also be declared in OpenNeoUA.ini. Vanilla slots are unchanged. Example: `gfx.color_eff[9] = 255|102|7` is orange.
+- 🟢 `gfx.color_eff[9] = 255|102|7` — Defines a custom palette slot (8..16) with `R|G|B` parts 0-255; PAL parameters reference it through `pal_*_slot`. Can also be declared in OpenNeoUA.ini. Vanilla slots are unchanged. Example: `gfx.color_eff[9] = 255|102|7` is orange.
 ------------------------------------------------------------------------------------------------------------------------
 
 Palette balance rules for the events explode, airexplode, goingdown, launch, hit and normal of Vehicles and Weapons (applied to every script entry that defines them; cluster, beam, build, genesis, detonate and wave events are not covered). The screen is the scene times the sum of (magnitude x slot colour) plus the normal image weighted by 1 minus the total magnitude, so effects active together add up (up to `audio.num_palfx`, 8 at most) and a total above 1 hides the normal image.
@@ -2810,7 +2854,7 @@ Palette balance rules for the events explode, airexplode, goingdown, launch, hit
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `unit_limit_arg = 5` — Extra argument of the limit.
 ------------------------------------------------------------------------------------------------------------------------
-- 🔵 `easy_cheat_keys = 0` — 1 lets the cheat keys (keypad * and /) work without holding the right mouse button.
+- 🔵 `easy_cheat_keys = 0` — 1 lets the cheat keys (keypad `*` and `/`) work without holding the right mouse button.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `multi_building = yes` — yes allows several buildings in the same sector.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3580,7 +3624,7 @@ Location blocks belong in an LDF, never in OpenNeoUA.ini or Nucleus.ini. Without
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `fade_out_ms = 750` — Fade-out duration, 0-10000 ms; default 750. Zero means immediate disappearance.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `point = 4800|-6000` — Polygon vertex in world X|Z coordinates. Repeat for every vertex (3-256).
+- 🟢 `point = 4800|-6000` — Polygon vertex in world `X|Z` coordinates. Repeat for every vertex (3-256).
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `end` — Implicitly joins the last vertex to the first.
 ------------------------------------------------------------------------------------------------------------------------
@@ -3657,9 +3701,9 @@ How the parameters above are handled in OpenNeoUA Studio. They do not change the
 
 ### Models
 
-- **Missing texture fallback:** Import Model and the Studio preview try the first readable same-named file in the model folder and its subfolders after a normal lookup reports a missing texture. The orange Loaded (fallback) status warns that it is outside the active set lookup and may display different colors. Choose Source can override it. Resources > Model Resources reopens the importer with the open external model, its current archive and manual choices.
+- **Missing texture fallback:** Import Model and the Studio preview try the first readable same-named file in the model folder and its subfolders after a normal lookup reports a missing texture. The orange Loaded (fallback) status warns that it is outside the active set lookup and may display different colors. Choose Source can override it. Resources `>` Model Resources reopens the importer with the open external model, its current archive and manual choices.
 - **Models without copies of set textures:** in Import Model, select the installed set's `Set.BAS`. Existing loose files win and missing resources, including textures referenced by `.ANM` frames, are resolved from the archive. The palette and rendering tables (`PALETTE`, `REMAP`) are read from the installed set's folders and must stay in the installation. The Export Model button writes a complete package with textures and rendering profile: remove the original resources you do not intend to distribute. A custom texture absent from the set needs its own file.
-- **Apply to States** (Model Editor toolbar, or File > Apply Changes to Other States): finds the other states of the open model through Entity List, folder names, Bas Manager and similar shape, shows each one with the changes applied and writes only the ticked states. Faces are paired by position; animated faces and faces of one state only are left alone. Nothing is ticked automatically. A Genesis state has only animated faces, so it cannot be paired: with "Rebuild the shape of Genesis states" on, it takes the whole shape of the open model and every face gets the Genesis material again (emitters keep their place).
+- **Apply to States** (Model Editor toolbar, or File `>` Apply Changes to Other States): finds the other states of the open model through Entity List, folder names, Bas Manager and similar shape, shows each one with the changes applied and writes only the ticked states. Faces are paired by position; animated faces and faces of one state only are left alone. Nothing is ticked automatically. A Genesis state has only animated faces, so it cannot be paired: with "Rebuild the shape of Genesis states" on, it takes the whole shape of the open model and every face gets the Genesis material again (emitters keep their place).
 - **Viewport context menu:** Select All Emitters and Deselect All Emitters operate on the current model's emitter anchor vertices. With one vertex selected, Add Emitter attaches the chosen emitter to that vertex. With the selection cleared, Add Emitter lets you pick the anchor after choosing the emitter. Clear the selection to use Add Texture or Add ANM. Add Texture places a static, rectangular face with the chosen bitmap and its aspect ratio. Replace Texture and Replace ANM follow the selected faces' material bindings.
 - **Generate Model Genesis:** converts every polygon surface of the current model, regardless of selection.
 - **Texture mapping copy:** previews and copies the selected faces' mappings to chosen loose BASE states. Faces must match uniquely and the destination must resolve the same texture.
@@ -3691,7 +3735,7 @@ OpenNeoUA Studio resolves Bruch IDs for entity and sector effect previews using 
 - **External sectors (Sector Editor, File menu):** Export Sector writes the current sector as a folder (`Data/Models/Sector/<Name>/<Name>.sector`) or as a `.onua` archive of that folder. Models, skeletons and textures that exist in `Set.BAS` are written by name only; only your own loose files are copied. Import Sector opens a `.sector` file or a `.onua` archive (unpacked into `Data/Models/Sector/<Name>` first) in a free slot for editing. Its own models are never saved into the set: export it again, then clear or wipe the slot before Overwrite Set (the save is refused while a sector still uses them).
 - **Map Editor and Entity Designer:** building previews of an external `sec_type` show that sector; map tiles, icons and typ_map still use the fallback set sector.
 - **Map icons tab:** the current sector at the five map zooms (own icons where set, vanilla symbols elsewhere). Generate icons draws them from the geometry of the sector's own models (every zoom and damage state); set models keep their vanilla symbol. Load cell icon / Load sector icon take your PNG or SVG; Generate missing icons on export is on by default. Icons go into the `map/` folder of the exported sector.
-- **Play:** The Sector Editor opens with playback enabled. Play/Pause keeps the same preview, camera, zoom and selection. All editors share the same Play/Pause button. Play, >> and Speed animate the entire sector in the main preview, including every cell's animated textures and emitters. The explicitly selected model preview still plays that model alone. Changing damage state while playing shows each cell's outgoing destruction effects at its sector position; an effect whose FX vehicle is not defined in the scripts is reported in the status bar.
+- **Play:** The Sector Editor opens with playback enabled. Play/Pause keeps the same preview, camera, zoom and selection. All editors share the same Play/Pause button. Play, `>>` and Speed animate the entire sector in the main preview, including every cell's animated textures and emitters. The explicitly selected model preview still plays that model alone. Changing damage state while playing shows each cell's outgoing destruction effects at its sector position; an effect whose FX vehicle is not defined in the scripts is reported in the status bar.
 - **Destruction effects:** Definitions shows named effect choices and separate Side X, Forward Z and Height fields. Forward Z is displayed in model-space coordinates; the editor converts it back to the original file axes on save. Preview selected plays that row in the main sector view. Unknown effect IDs are preserved and identified as missing from the scripts.
 - **Definitions** follows the model of the selected cell in the current damage state.
 - **MCP:** `export_external_sector` (with `map_icons`, default true) and `import_external_sector` operations of `studio_set_edit` (see `studio_help('sets')`).

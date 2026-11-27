@@ -131,12 +131,8 @@ bool NC_STACK_ypabact::UsesDownwardAlternativeView()
     if ( !_world )
         return false;
 
-    int weaponId = GetCurrentWeaponId();
-    if ( weaponId < 0 || weaponId >= (int)_world->GetWeaponsProtos().size() )
-        return false;
-
-    const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(weaponId);
-    return wproto.IsBombLike();
+    const World::TWeapProto *wproto = _world->FindWeaponProto(GetCurrentWeaponId());
+    return wproto && wproto->IsBombLike();
 }
 
 vec3d NC_STACK_ypabact::GetAlternativeViewAimDirection() const

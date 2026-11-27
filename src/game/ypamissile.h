@@ -74,6 +74,8 @@ public:
     void MakeImpactCrater(const ypaworld_arg136 &hit);
     void MakePendingWorldMark();
     bool HasImpactCrater() const;
+    // This projectile's weapon proto (_vehicleID), or nullptr without a world/valid id.
+    World::TWeapProto *GetWeaponProto() const;
 
     NC_STACK_ypamissile();
     virtual ~NC_STACK_ypamissile() {};
@@ -163,12 +165,16 @@ public:
     bool WeaponSoundEventsEnabled() const
     { return _weaponSoundEventsEnabled; }
 
-    // OpenNeoUA Orbiter (ypamissile_orbiter.cpp). The carrier spawns the
-    // projectile with BeginOrbiterGuard() and sends it with BeginOrbiterSiege().
-    void BeginOrbiterGuard(NC_STACK_ypabact *carrier, const World::TWeapProto &proto);
-    bool BeginOrbiterSiege(NC_STACK_ypabact *target);
-    bool IsOrbiterAlive() const;    // guarding or besieging, not yet spent
+    // OpenNeoUA Orbiter (ypamissile_orbiter.cpp). The carrier spawns the projectile
+    // with BeginOrbiterGuard() and launches it with LaunchOrbiter(): from then on it
+    // flies as a classic projectile until it hits a unit (ContinueOrbiterSiege()).
+    void BeginOrbiterGuard(NC_STACK_ypabact *carrier, const World::TWeapProto &proto, int slot, int slotCount);
+    bool LaunchOrbiter(NC_STACK_ypabact *target);
+    bool IsOrbiterAlive() const;    // guarding, flying or besieging, not yet spent
     bool IsOrbiterGuarding() const; // guarding and fully faded in: ready to attack
+    bool IsOrbiterClassicFlight() const { return _orbiterState == ORBITER_FLIGHT; }
+    int GetOrbiterSlot() const { return _orbiterSlot; }
+    void LeaveOrbiterFlight();      // a redirected or converted round is no longer the carrier's orbiter
     virtual float GetRenderFadeAlpha() const override;
     float GetArtilleryTransferFadeAlpha() const;
 
@@ -182,6 +188,7 @@ protected:
                                   const vec3d &targetCenter, float targetRadius,
                                   const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
                                  float weaponRadius, const vec3d *surfaceNormal = nullptr);
+    void ApplyDeflectExtras(NC_STACK_ypabact *deflector, const vec3d &outward);
     bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = nullptr,
                                float *appliedStrength = nullptr, bool enqueue = true,
                                NC_STACK_ypabact *directionTarget = nullptr);
@@ -230,11 +237,13 @@ protected:
     void ResetOrbiterState();
     void UpdateOrbiter(update_msg *arg);
     void UpdateOrbiterGuard(NC_STACK_ypabact *carrier, float dt);
+    vec3d OrbiterGuardTarget(NC_STACK_ypabact *carrier) const;
     void OrbiterStrike(NC_STACK_ypabact *target, bool final, bool advance);
     void OrbiterExitHit(NC_STACK_ypabact *target, const vec3d &exitPoint, const vec3d &resumePos);
     void OrbiterDetonate();
     void OrbiterSurfacePass(NC_STACK_ypabact *target, const vec3d &before, bool wasDiving, World::Orbiter::SiegeEvent event);
     void KeepOrbiterAboveWorld();
+    bool ContinueOrbiterSiege(NC_STACK_ypabact *target);
     bool BeginBoomerangReturn();
     void UpdateBoomerangReturn(update_msg *arg);
     void FinishBoomerangReturn();
@@ -366,7 +375,8 @@ protected:
     int   _artilleryShellVerticalDescentTime = 0;
     std::array<int, 2> _artilleryShellTransferFadeInOut{};
     // OpenNeoUA Orbiter state (meaningful only while _orbiterState != ORBITER_OFF).
-    enum OrbiterState { ORBITER_OFF = 0, ORBITER_GUARD, ORBITER_SIEGE };
+    // FLIGHT = launched: the classic projectile path flies it until it hits a unit.
+    enum OrbiterState { ORBITER_OFF = 0, ORBITER_GUARD, ORBITER_FLIGHT, ORBITER_SIEGE };
     int _orbiterState = ORBITER_OFF;
     int32_t _orbiterCarrierGid = 0;
     int32_t _orbiterTargetGid = 0;
@@ -382,8 +392,11 @@ protected:
     bool _orbiterInside = false;      // the orbiter is inside the besieged unit's collision (entered, not yet left)
     bool _orbiterPassStruck = false;  // the current pass already struck at the entry surface
     bool _orbiterFinalPass = false;   // this pass is the last strike: it detonates where it leaves the surface
-    bool _orbiterExiting = false;     // last pass: flying straight on through the body towards the exit surface
+    bool _orbiterExiting = false;     // flying straight on through the body towards the exit surface
     float _orbiterExitTravel = 0.0f;  // distance flown since the last centre crossing (safety limit)
+    int _orbiterSlot = 0;             // place on the guard ring (orbiter_guard_speed / chaos)
+    int _orbiterSlotCount = 1;
+    int _orbiterStrikeCount = 1;      // rolled at launch
 
     World::TWeaponTracerConfig _weaponTracer;
     bool _weaponTracerStarted = false;

@@ -171,6 +171,18 @@ inline double fSign(double x)
     return 1.0;
 }
 
+// Deterministic 32-bit integer mixer (lowbias32): same output on every machine,
+// so visual noise seeded from ids or game time never drifts between players.
+inline uint32_t MixHash32(uint32_t x)
+{
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
 std::string correctSeparatorAndExt(std::string str);
 
 int StriCmp(const std::string &a, const std::string &b);
@@ -178,6 +190,9 @@ int StriCmp(const std::string &a, const std::string &b);
 // (non-zero = true). Returns false when the text is none of these; StrGetBool then reads it as off.
 bool StrParseBool(const std::string &str, bool *out);
 bool StrGetBool(const std::string &str);
+// Whole-string int32 reader (decimal, 0x hex or leading-0 octal, as std::stoll base 0).
+// False on empty text, trailing characters or values outside int32.
+bool StrParseInt32(const std::string &str, int32_t *out);
 // Copy of `str` without leading and trailing whitespace.
 std::string StrTrim(const std::string &str);
 

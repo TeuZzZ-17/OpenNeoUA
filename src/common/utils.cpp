@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <limits>
 
 #include "common/includes.h"
 #include "common/utils.h"
@@ -526,6 +527,29 @@ bool StrGetBool(const std::string &str)
 {
     bool value = false;
     return StrParseBool(str, &value) && value;
+}
+
+bool StrParseInt32(const std::string &str, int32_t *out)
+{
+    if ( !out || str.empty() )
+        return false;
+
+    try
+    {
+        size_t pos = 0;
+        const long long value = std::stoll(str, &pos, 0);
+        if ( pos != str.size() ||
+             value < std::numeric_limits<int32_t>::min() ||
+             value > std::numeric_limits<int32_t>::max() )
+            return false;
+
+        *out = (int32_t)value;
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 std::string StrTrim(const std::string &str)

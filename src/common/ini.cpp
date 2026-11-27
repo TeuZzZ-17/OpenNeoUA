@@ -55,27 +55,6 @@ inline Key& Deref(Key *a)
     return *a;
 }
 
-static bool ParseInt32(const std::string &str, int32_t *out)
-{
-    try
-    {
-        size_t pos = 0;
-        long long value = std::stoll(str, &pos, 0);
-
-        if ( pos != str.size() ||
-             value < std::numeric_limits<int32_t>::min() ||
-             value > std::numeric_limits<int32_t>::max() )
-            return false;
-
-        *out = (int32_t)value;
-        return true;
-    }
-    catch (...)
-    {
-        return false;
-    }
-}
-
 static void WarnInvalidValue(const Key &key, const std::string &value)
 {
     ypa_log_out("WARNING: invalid INI value [%s=%s]; using the default value.\n",
@@ -130,7 +109,7 @@ void ParseLine(std::string line, std::vector<T> *lst)
                     int32_t value = 0;
                     if ( splt.GetNext(&tmp) &&
                          ((key.Type == KT_LIMIT && !StriCmp(tmp, "no_limit")) ||
-                          ParseInt32(tmp, &value)) )
+                          StrParseInt32(tmp, &value)) )
                     {
                         key.Value = key.Type == KT_LIMIT && !StriCmp(tmp, "no_limit")
                                       ? std::numeric_limits<int32_t>::max()
@@ -217,11 +196,6 @@ bool ParseIniFile(std::string iniFile, PKeyList *lst)
         return false;
     ApplyPredefinedIniKeys(lst);
     return true;
-}
-
-bool ParseIniFileOverlay(std::string iniFile, KeyList *lst)
-{
-    return ParseIniFileImpl(iniFile, lst, false);
 }
 
 bool ParseIniFileOverlay(std::string iniFile, PKeyList *lst)

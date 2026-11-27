@@ -16,7 +16,7 @@
 
 SFXEngine SFXEngine::SFXe;
 
-static int SFX_SampleFrameSize(ALenum format)
+int SFX_SampleFrameSize(ALenum format)
 {
     switch (format)
     {

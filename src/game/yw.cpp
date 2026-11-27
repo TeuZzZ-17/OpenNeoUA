@@ -2718,18 +2718,28 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
         bacto->_vehicleID = bruch ? 0 : vhcl_id->vehicle_id;
         bacto->_mimic_disguise_vehicleID = mimicDisguiseVehicleId > 0 ? mimicDisguiseVehicleId : 0;
         bacto->_isDummy = false; // set by gun_type for BACT_TYPES_GUN
-        bacto->_weapon = vhcl.weapon;
+        // A Weapon ID outside the table (script typo, stale ID) means no primary weapon
+        // instead of an out_of_range crash when the unit is created.
+        int primaryWeapon = vhcl.weapon;
+        if ( primaryWeapon != -1 && (primaryWeapon < 0 || (size_t)primaryWeapon >= _weaponProtos.size()) )
+        {
+            ypa_log_out("WARNING: vehicle %d: weapon = %d is not a valid Weapon ID; the unit has no primary weapon.\n",
+                        (int)vhcl_id->vehicle_id, primaryWeapon);
+            primaryWeapon = -1;
+        }
+
+        bacto->_weapon = primaryWeapon;
         bacto->_extra_weapons = vhcl.extra_weapons;
         bacto->_weapon_player_switch_mode = vhcl.weapon_player_switch_mode;
         bacto->_weapon_ai_switch_mode = vhcl.weapon_ai_switch_mode;
         bacto->_weapon_slot_index = 0;
-        bacto->_current_weapon_id = vhcl.weapon;
+        bacto->_current_weapon_id = primaryWeapon;
         bacto->_current_weapon_source_slot = 0;
 
-        if ( vhcl.weapon == -1 )
+        if ( primaryWeapon == -1 )
             bacto->_weapon_flags = 0;
         else
-            bacto->_weapon_flags = _weaponProtos.at( vhcl.weapon )._weaponFlags;
+            bacto->_weapon_flags = _weaponProtos.at( primaryWeapon )._weaponFlags;
 
         bacto->_mgun = vhcl.mgun;
         bacto->_mgun_set = vhcl.mgun_set;
@@ -2864,14 +2874,8 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
         bacto->_spawn_last_time = 0;
         bacto->_spawn_waiting = true;
         bacto->_at_death_spawn_units = deathProto.at_death_spawn_units;
-        bacto->_at_death_spawn_vehicle = deathProto.at_death_spawn_vehicle;
-        bacto->_at_death_spawn_count = deathProto.at_death_spawn_count > 0 ? deathProto.at_death_spawn_count : 1;
-        if ( bacto->_at_death_spawn_count > 8 )
-            bacto->_at_death_spawn_count = 8;
-        bacto->_at_death_spawn_random_pos = deathProto.at_death_spawn_random_pos > 0.0 ? deathProto.at_death_spawn_random_pos : 0.0;
-        bacto->_at_death_spawn_instant = deathProto.at_death_spawn_instant ? 1 : 0;
-        bacto->_at_death_spawn_immunity_time = deathProto.at_death_spawn_immunity_time > 0 ? deathProto.at_death_spawn_immunity_time : 0;
-        bacto->_eject_force = deathProto.eject_force;
+        bacto->_at_death_spawn = deathProto.at_death_spawn;
+        bacto->_at_death_spawn_owner = -1;
         bacto->_at_death_spawn_done = false;
         bacto->_at_death_spawn_protection_end_time = 0;
         bacto->_at_death_spawn_restore_vulnerable = false;
@@ -2891,6 +2895,8 @@ NC_STACK_ypabact *NC_STACK_ypaworld::SpawnVehiclePrototype(ypaworld_arg146 *vhcl
         bacto->_orbiter_weapon = vhcl.orbiter_weapon;
         bacto->_orbiter_count = -1;
         bacto->_orbiter_next_spawn_time = 0;
+        bacto->_orbiter_attack_gid = 0;
+        bacto->_orbiter_next_launch_time = 0;
         bacto->_radial_shot_enable = vhcl.radial_shot_enable;
         bacto->_radial_shot_weapon = vhcl.radial_shot_weapon;
         bacto->_radial_shot_trigger_radius = vhcl.radial_shot_trigger_radius > 0.0 ? vhcl.radial_shot_trigger_radius : 0.0;
@@ -4461,23 +4467,7 @@ cellArea *NC_STACK_ypaworld::GetSector(int32_t x, int32_t y)
 
 cellArea *NC_STACK_ypaworld::GetSector(const Common::Point &sec)
 {
-    if (_cells.empty())
-        return nullptr;
-
-    if (sec.x >= 0 && sec.x < _mapSize.x
-    &&  sec.y >= 0 && sec.y < _mapSize.y)
-        return &_cells(sec.x, sec.y);
-    return nullptr;
-}
-
-cellArea *NC_STACK_ypaworld::GetSector(size_t id)
-{
-    if (_cells.empty())
-        return nullptr;
-
-    if (id >= 0 && id < _cells.size())
-        return &_cells.At(id);
-    return nullptr;
+    return GetSector(sec.x, sec.y);
 }
 
 cellArea &NC_STACK_ypaworld::SectorAt(int32_t x, int32_t y)
@@ -4555,11 +4545,6 @@ int32_t NC_STACK_ypaworld::GetLegoBld(const cellArea *cell, int bldX, int bldY)
     TSubSectorDesc *ssec = _secTypeArray[ cell->type_id ].SubSectors.At(bldX, bldY);
     int32_t hlth = cell->buildings_health.Get(bldX, bldY);
     return ssec->HPModels[ _buildHealthModelId[ hlth ] ];
-}
-
-int32_t NC_STACK_ypaworld::GetLegoBld(const Common::Point &cell, int bldX, int bldY)
-{
-    return GetLegoBld(&SectorAt(cell), bldX, bldY);
 }
 
 TCellFillerCh::~TCellFillerCh()

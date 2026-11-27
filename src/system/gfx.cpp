@@ -65,12 +65,7 @@ static int GameplayAwareShaderRandom()
 
     // Visual noise is part of the rendered game domain too. Quantize to a
     // nominal ~60 Hz game-time tick so F4 slows changes and F6 freezes them.
-    uint32_t x = (uint32_t)(System::GameClock.VisualTime() / 16);
-    x ^= x >> 16;
-    x *= 0x7feb352dU;
-    x ^= x >> 15;
-    x *= 0x846ca68bU;
-    x ^= x >> 16;
+    const uint32_t x = MixHash32((uint32_t)(System::GameClock.VisualTime() / 16));
     return (int)(x & 0x7fffffffU);
 }
 

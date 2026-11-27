@@ -66,6 +66,47 @@ int main()
         Check(g.radius >= 40.0f, "guard radius below the hard limit is raised");
     }
 
+    // Ring guard: chaos 0 = evenly spaced at the exact radius; speed 0 = still;
+    // with chaos the wander never enters the carrier.
+    {
+        Rng rng(3);
+        Guard g = MakeGuard(rng, 100.0f, 40.0f);
+        bool spaced = true;
+        for (int slot = 0; slot < 6; slot++)
+        {
+            const vec3d a = RingGuardOffset(g, slot, 6, 0.0f, 0.0f, 0.0f);
+            const vec3d b = RingGuardOffset(g, (slot + 1) % 6, 6, 0.0f, 0.0f, 0.0f);
+            const double horiz = std::sqrt(a.x * a.x + a.z * a.z);
+            const double gap = std::sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z));
+            if ( std::fabs(horiz - 100.0) > 1e-3 || std::fabs(gap - 100.0) > 1e-3 ) // hexagon side = radius
+                spaced = false;
+        }
+        Check(spaced, "ordered ring: exact radius and equal spacing");
+
+        g.time = 7.0f;
+        const vec3d still0 = RingGuardOffset(g, 2, 6, 0.0f, 0.0f, 0.0f);
+        const vec3d still1 = RingGuardOffset(g, 2, 6, 0.0f, 0.0f, 9.0f);
+        Check((still0 - still1).length() < 1e-6, "speed 0 and chaos 0: still");
+        const vec3d turned = RingGuardOffset(g, 2, 6, 5.0f, 0.0f, 1.0f);
+        Check(std::fabs(std::sqrt(turned.x * turned.x + turned.z * turned.z) - 100.0) < 1e-3 &&
+              (turned - still0).length() > 1.0, "speed turns the ring at the same radius");
+
+        bool inside = false;
+        for (uint32_t seed = 1; seed < 100; seed++)
+        {
+            Rng r(seed);
+            Guard wander = MakeGuard(r, r.Range(10.0f, 200.0f), 40.0f);
+            for (int i = 0; i < 1000; i++)
+            {
+                wander.time = i * 0.05f;
+                const vec3d o = RingGuardOffset(wander, (int)(seed % 8), 8, 3.0f, 10.0f, i * 0.05f);
+                if ( std::sqrt(o.x * o.x + o.z * o.z) < wander.minRadius - 1e-3 )
+                    inside = true;
+            }
+        }
+        Check(!inside, "chaotic ring never enters the carrier");
+    }
+
     // Steering never turns more than allowed and keeps unit length.
     {
         vec3d out = SteerToward(vec3d(1.0, 0.0, 0.0), vec3d(-1.0, 0.0, 0.0), 0.1);

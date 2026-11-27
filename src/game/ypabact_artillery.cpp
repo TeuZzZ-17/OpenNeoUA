@@ -234,7 +234,7 @@ float NC_STACK_ypabact::GetArtilleryShellReadinessRatio()
 
     int weaponId = 0;
     NC_STACK_ypabact *actor = ypabact_GetManualArtilleryShellActor(this, &weaponId);
-    if ( !actor || weaponId <= 0 || (size_t)weaponId >= _world->GetWeaponsProtos().size() )
+    if ( !actor || weaponId <= 0 || !_world->FindWeaponProto(weaponId) )
         return IsArtilleryShellPlatform() ? 1.0f : 0.0f;
 
     // While a barrage is actively spending its shot budget, the platform is not
@@ -572,7 +572,7 @@ bool ypabact_FindArtilleryShellTargetZone(NC_STACK_ypabact *unit, const World::T
 bool ypabact_FireArtilleryShell(NC_STACK_ypabact *unit, int weaponId, const World::TWeapProto &wproto, const vec3d &targetCenter)
 {
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
-    if ( !world || weaponId <= 0 || (size_t)weaponId >= world->GetWeaponsProtos().size() )
+    if ( !world || weaponId <= 0 || !world->FindWeaponProto(weaponId) )
         return false;
 
     // Artillery bypasses LaunchMissile(), but still belongs to the primary Weapon.
@@ -970,8 +970,9 @@ void NC_STACK_ypabact::QueueManualArtilleryShell(const vec3d &targetPos)
         return;
 
     int weaponId = ypabact_GetArtilleryShellWeaponId(this);
-    if ( weaponId <= 0 || (size_t)weaponId >= _world->GetWeaponsProtos().size() )
+    const World::TWeapProto *wproto = weaponId > 0 ? _world->FindWeaponProto(weaponId) : nullptr;
+    if ( !wproto )
         return;
 
-    ypabact_QueueArtilleryShellTarget(this, _world->GetWeaponsProtos().at(weaponId), targetPos);
+    ypabact_QueueArtilleryShellTarget(this, *wproto, targetPos);
 }

@@ -511,9 +511,9 @@ void NC_STACK_ypagun::AI_layer3(update_msg *arg)
         {
             _search_time2 = _clock;
             bool isArc = false;
-            if ( _gunType == GUN_TYPE_REAL && _world && _weapon >= 0 &&
-                 (size_t)_weapon < _world->GetWeaponsProtos().size() )
-                isArc = _world->GetWeaponsProtos().at(_weapon).IsArcGrenade();
+            const World::TWeapProto *gunWeapon = _world ? _world->FindWeaponProto(_weapon) : nullptr;
+            if ( _gunType == GUN_TYPE_REAL && gunWeapon )
+                isArc = gunWeapon->IsArcGrenade();
             if ( !isArc && !HasDirectFireLineOfSight(GetBodyPosition(), _secndT.pbact->_position) )
                 dropTarget = true;
         }
@@ -772,10 +772,10 @@ void NC_STACK_ypagun::FightWithBact(bact_arg75 *arg)
     }
 
     const int checkedWeapon = hasConfiguredTrigger ? fireTest.weapon : _weapon;
-    if ( !usesTriggerArea && _gunType == GUN_TYPE_REAL && _world && checkedWeapon >= 0 &&
-         (size_t)checkedWeapon < _world->GetWeaponsProtos().size() )
+    const World::TWeapProto *checkedProto = _world ? _world->FindWeaponProto(checkedWeapon) : nullptr;
+    if ( !usesTriggerArea && _gunType == GUN_TYPE_REAL && checkedProto )
     {
-        const World::TWeapProto &wproto = _world->GetWeaponsProtos().at(checkedWeapon);
+        const World::TWeapProto &wproto = *checkedProto;
         usesArcGrenade = wproto.IsArcGrenade();
         if ( usesArcGrenade )
         {

@@ -340,9 +340,7 @@ int NC_STACK_ypamissile::ApplyEnergyToBact(NC_STACK_ypabact *bct, int baseEnergy
     if ( _world && userHost && !(userHost->_owner == _owner || !_world->_isNetGame) )
         return 0;
 
-    World::TWeapProto *wproto = nullptr;
-    if ( _world && _vehicleID >= 0 && (size_t)_vehicleID < _world->GetWeaponsProtos().size() )
-        wproto = &_world->GetWeaponsProtos().at(_vehicleID);
+    World::TWeapProto *wproto = GetWeaponProto();
 
     bool preAppliedDebuff = false;
     if ( applyDebuff && wproto && wproto->debuff.valid && wproto->debuff.shield_malus > 0.0f &&
@@ -382,12 +380,6 @@ void NC_STACK_ypamissile::ApplyDirectHitToBact(NC_STACK_ypabact *bct, bool apply
 
     bct->_status_flg &= ~BACT_STFLAG_LAND;
     RememberDirectHitUnit(bct);
-
-    // OpenNeoUA Orbiter: a player's weapon hit on an enemy unit sends the
-    // carrier's orbiters. Orbiter strikes themselves never re-trigger it.
-    if ( applyDamage && _mislType != MISL_ORBITER && _mislEmitter &&
-         _mislEmitter->getBACT_inputting() )
-        _mislEmitter->EngageOrbiters(bct);
 
     NC_STACK_ypabact *pushRecipient = ypamissile_ResolveDirectPushRecipient(bct);
     bool wasAlive = pushRecipient == bct && ypamissile_IsAliveForDeathPush(bct);
@@ -785,8 +777,7 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
 {
     bool doBlastDamage = (_mislBlastEnergy > 0);
     bool doBlastPush   = isfinite(_mislBlastPush) && _mislBlastPush > 0;
-    World::TWeapProto *proto = _world && (size_t)_vehicleID < _world->GetWeaponsProtos().size()
-        ? &_world->GetWeaponsProtos().at(_vehicleID) : nullptr;
+    World::TWeapProto *proto = GetWeaponProto();
     const bool hasDebuff = proto && proto->blast_debuff.valid;
 
     if ( !isfinite(_mislBlastRadius) || _mislBlastRadius <= 0.0 || (!doBlastDamage && !doBlastPush && !hasDebuff) || !_world )
@@ -933,8 +924,8 @@ void NC_STACK_ypamissile::ApplyBlastToUnits()
 float NC_STACK_ypamissile::GetBuildingBlastDistance(const vec3d &buildingCenter) const
 {
     const float legacyDistance = (buildingCenter - _position).length();
-    if ( !_world || (size_t)_vehicleID >= _world->GetWeaponsProtos().size() ||
-         !_world->GetWeaponsProtos()[_vehicleID].IsKamikaze() )
+    const World::TWeapProto *wproto = GetWeaponProto();
+    if ( !wproto || !wproto->IsKamikaze() )
         return legacyDistance;
 
     // Kamikaze detonates near the building surface, which can be far above its

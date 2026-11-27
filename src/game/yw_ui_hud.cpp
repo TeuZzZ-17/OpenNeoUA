@@ -1590,40 +1590,39 @@ void yw_RenderHUDVectorGFX(NC_STACK_ypaworld *yw, CmdStream *cur)
     if ( robo_map.IsOpen() )
         GFX::Engine.raster_func221(Common::Rect());
 
-    if ( yw->_userUnit && yw->_userUnit->_vehicleID >= 0 && (size_t)yw->_userUnit->_vehicleID < yw->_vhclProtos.size() )
+    World::TVhclProto *cockpitProto =
+        yw->_userUnit && yw->FindVhclProto(yw->_userUnit->_vehicleID)
+            ? yw->FindVhclProto(yw->_userUnit->GetRuntimeVehicleID()) : nullptr;
+    if ( cockpitProto )
     {
-        uint8_t protoId = yw->_userUnit->_mimic_disguise_vehicleID ? yw->_userUnit->_mimic_disguise_vehicleID : yw->_userUnit->_vehicleID;
-        if ( (size_t)protoId < yw->_vhclProtos.size() )
+        constexpr float hudX = -0.7f;
+        constexpr float hudY = 0.3f;
+        StatusIconRenderCockpit(yw, wis, yw->_userUnit,
+                                cockpitProto, hudX, hudY);
+
+        const uint8_t killMarks = yw->_userUnit->GetSessionKillMarks();
+        if ( killMarks > 0 )
         {
-            constexpr float hudX = -0.7f;
-            constexpr float hudY = 0.3f;
-            StatusIconRenderCockpit(yw, wis, yw->_userUnit,
-                                    &yw->_vhclProtos[protoId], hudX, hudY);
-
-            const uint8_t killMarks = yw->_userUnit->GetSessionKillMarks();
-            if ( killMarks > 0 )
+            constexpr int markGap = 2;
+            constexpr int markHeight = 3;
+            const float weaponNameY = hudY - wis->field_92 * 12.0f;
+            const int weaponNameCenterX = (yw->_screenSize.x / 2) +
+                                          (yw->_screenSize.x / 2) * hudX;
+            const int weaponNameCenterY = (yw->_screenSize.y / 2) +
+                                          (yw->_screenSize.y / 2) * weaponNameY;
+            const int tipYScreen = weaponNameCenterY - yw->_fontH - markGap;
+            if ( tipYScreen - markHeight >= 4 )
             {
-                constexpr int markGap = 2;
-                constexpr int markHeight = 3;
-                const float weaponNameY = hudY - wis->field_92 * 12.0f;
-                const int weaponNameCenterX = (yw->_screenSize.x / 2) +
-                                              (yw->_screenSize.x / 2) * hudX;
-                const int weaponNameCenterY = (yw->_screenSize.y / 2) +
-                                              (yw->_screenSize.y / 2) * weaponNameY;
-                const int tipYScreen = weaponNameCenterY - yw->_fontH - markGap;
-                if ( tipYScreen - markHeight >= 4 )
-                {
-                    const int killMarkCenterX = weaponNameCenterX -
-                                                yw->_screenSize.x / 2;
-                    const int tipY = tipYScreen - yw->_screenSize.y / 2;
-                    SDL_Color markerColor = yw->GetColor(yw->_userUnit->_owner);
-                    SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
+                const int killMarkCenterX = weaponNameCenterX -
+                                            yw->_screenSize.x / 2;
+                const int tipY = tipYScreen - yw->_screenSize.y / 2;
+                SDL_Color markerColor = yw->GetColor(yw->_userUnit->_owner);
+                SDL_Color shadowColor = yw_GetNeutralSelectionShadowColor();
 
-                    yw_DrawWorldKillMarks(killMarkCenterX + 1, tipY + 1,
-                                          killMarks, shadowColor);
-                    yw_DrawWorldKillMarks(killMarkCenterX, tipY,
-                                          killMarks, markerColor);
-                }
+                yw_DrawWorldKillMarks(killMarkCenterX + 1, tipY + 1,
+                                      killMarks, shadowColor);
+                yw_DrawWorldKillMarks(killMarkCenterX, tipY,
+                                      killMarks, markerColor);
             }
         }
     }
@@ -1912,15 +1911,15 @@ void yw_RenderUnitLifeBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabac
                                 statusAnchorTop = artilleryShellCooldownTop;
                             }
 
-                            uint8_t protoId = bact->_mimic_disguise_vehicleID ? bact->_mimic_disguise_vehicleID : bact->_vehicleID;
+                            World::TVhclProto *runtimeProto = yw->FindVhclProto(bact->GetRuntimeVehicleID());
                             const uint8_t killMarks = bact->GetSessionKillMarks();
                             const bool showKillMarks = killMarks > 0;
                             constexpr int markGap = 2;
                             constexpr int markHeight = 3;
                             const int killMarkReserve = showKillMarks ? markGap + markHeight + markGap : 0;
                             int killMarkCenterX = v42 + v43 / 2 - yw->_screenSize.x / 2;
-                            if ( (size_t)protoId < yw->_vhclProtos.size() )
-                                StatusIconRenderWorld(yw, bact, &yw->_vhclProtos[protoId],
+                            if ( runtimeProto )
+                                StatusIconRenderWorld(yw, bact, runtimeProto,
                                                       v42, statusAnchorTop, v43, barHeight,
                                                       worldUiOpacity, killMarkReserve,
                                                       &killMarkCenterX);
@@ -2388,11 +2387,7 @@ void yw_RenderHUDTarget(NC_STACK_ypaworld *yw, sklt_wis *wis)
 
         if ( yw->_userUnit )
         {
-            uint8_t protoId = yw->_userUnit->_mimic_disguise_vehicleID ? yw->_userUnit->_mimic_disguise_vehicleID : yw->_userUnit->_vehicleID;
-            if ( (size_t)protoId < yw->_vhclProtos.size() )
-                vhcl = &yw->_vhclProtos[ protoId ];
-            else
-                vhcl = nullptr;
+            vhcl = yw->FindVhclProto(yw->_userUnit->GetRuntimeVehicleID());
         }
         else
             vhcl = nullptr;

@@ -247,11 +247,9 @@ void ypabact_ApplyLaserUnitTick(NC_STACK_ypabact *shooter, World::TWeapProto &wp
         dmg.unit = shooter;
         target->ModifyEnergy(&dmg);
 
-        // OpenNeoUA Orbiter: a player laser hit sends the orbiters (the AI
-        // already sent them when it opened fire through LaunchMissile).
-        if ( playerControlled )
-            shooter->EngageOrbiters(target);
-
+        // OpenNeoUA Orbiter: a primary-weapon laser touching an enemy unit is a shot at a
+        // target too (AI and player, locked or not); during an attack it only re-aims it.
+        shooter->EngageOrbiters(target);
     }
     if ( !aiFriendlyContact && ypabact_CanApplyLaserDamage(shooter) &&
          wproto.debuff.valid && target->_energy > 0 && target->_status != BACT_STATUS_DEAD )
@@ -1624,14 +1622,14 @@ void NC_STACK_ypabact::UpdateLaser(update_msg *arg)
     _laser_requests.clear();
 
     // Not firing this frame, or weapon invalid => beam off.
-    if ( !requested || requests.empty() ||
-         !_world || _laser_weapon < 0 || (size_t)_laser_weapon >= _world->GetWeaponsProtos().size() )
+    World::TWeapProto *laserProto = _world ? _world->FindWeaponProto(_laser_weapon) : nullptr;
+    if ( !requested || requests.empty() || !laserProto )
     {
         StopLaser();
         return;
     }
 
-    World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_laser_weapon);
+    World::TWeapProto &wproto = *laserProto;
     if ( !wproto.IsLaser() )
     {
         StopLaser();

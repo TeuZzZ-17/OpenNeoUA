@@ -48,7 +48,9 @@ def main():
     objects = [arg for arg in link_args if arg.endswith(".obj") and not (args.replace_ypabact and arg.endswith("/ypabact.cpp.obj"))]
     libraries = [arg for arg in link_args if arg.startswith("-l") or arg.endswith(".a")]
     response = output / f"{name}.rsp"
-    response.write_text("\n".join('"' + arg.replace("\\", "/") + '"' for arg in [str(obj), *objects, *libraries, "-o", str(executable)]), encoding="utf-8")
+    # Probes keep whole worlds on the stack: main's frame exceeds the 2 MB default (0xC00000FD).
+    stack = "-Wl,--stack,16777216"
+    response.write_text("\n".join('"' + arg.replace("\\", "/") + '"' for arg in [str(obj), *objects, *libraries, stack, "-o", str(executable)]), encoding="utf-8")
     subprocess.run([str(compiler), "@" + str(response)], cwd=build, env=env, check=True)
     return subprocess.run([str(executable), *args.probe_args], cwd=root.parent, env=env).returncode
 

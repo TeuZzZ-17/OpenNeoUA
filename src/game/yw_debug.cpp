@@ -1070,10 +1070,9 @@ void NC_STACK_ypaworld::debug_draw_coll_spheres()
         if ( unit->_bact_type != BACT_TYPES_MISSLE &&
              unit->_bact_type != BACT_TYPES_ROBO &&
              unit->_bact_type != BACT_TYPES_GUN &&
-             (size_t)(unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID) < _vhclProtos.size() )
+             FindVhclProto(unit->GetRuntimeVehicleID()) )
         {
-            uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
-            const World::TVhclProto &proto = _vhclProtos[protoId];
+            const World::TVhclProto &proto = *FindVhclProto(unit->GetRuntimeVehicleID());
             if ( proto.power > 0 && proto.power_radius > 0.01f )
                 drawFlatRing(pos, proto.power_radius, 60, 120, 230);
         }

@@ -65,12 +65,16 @@ static Sint64 myseekfunc(SDL_RWops *context, Sint64 offset, int whence)
 static size_t myreadfunc(SDL_RWops *context, void *ptr, size_t size, size_t maxnum)
 {
     FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
+    if ( !size )
+        return 0;
     return fil->read(ptr, size * maxnum) / size;
 }
 
 static size_t mywritefunc(SDL_RWops *context, const void *ptr, size_t size, size_t num)
 {
     FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
+    if ( !size )
+        return 0;
     return fil->write(ptr, size * num) / size;
 }
 
@@ -83,7 +87,7 @@ static int myclosefunc(SDL_RWops *context)
     return 0;
 }
 
-static SDL_RWops * MyCustomRWop(FSMgr::FileHandle *fil)
+SDL_RWops *NC_STACK_image::OpenRWops(FSMgr::FileHandle *fil)
 {
     SDL_RWops *c = SDL_AllocRW();
 
@@ -130,7 +134,7 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
     if (!fil)
         return nullptr;
 
-    SDL_RWops *rwops = MyCustomRWop(fil);
+    SDL_RWops *rwops = OpenRWops(fil);
     if (!rwops)
     {
         delete fil;
@@ -167,7 +171,7 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
             fil = uaOpenFileAlloc(tmpBuf, "rb");
             if ( fil )
             {
-                rwops = MyCustomRWop(fil);
+                rwops = OpenRWops(fil);
                 if ( !rwops )
                     delete fil;
             }
@@ -245,7 +249,7 @@ bool NC_STACK_image::SavePng(ResBitmap *bitm, const std::string &fname)
     if (!fil || !fil->OK())
         return false;
 
-    SDL_RWops *rwops = MyCustomRWop(fil);
+    SDL_RWops *rwops = OpenRWops(fil);
     if (!rwops)
         return false;
 

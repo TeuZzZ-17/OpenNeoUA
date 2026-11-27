@@ -216,29 +216,6 @@ static bool RVAtoFileOffset(uint32_t rva,
     return false;
 }
 
-static bool ParseIntegerID(const std::string &text, int32_t *out)
-{
-    if (!out || text.empty())
-        return false;
-
-    try
-    {
-        size_t consumed = 0;
-        const long long value = std::stoll(text, &consumed, 0);
-        if (consumed != text.size() ||
-            value < std::numeric_limits<int32_t>::min() ||
-            value > std::numeric_limits<int32_t>::max())
-            return false;
-
-        *out = static_cast<int32_t>(value);
-        return true;
-    }
-    catch (...)
-    {
-        return false;
-    }
-}
-
 static bool LoadLngRange(const std::string &filename,
                          std::vector<std::string> *strings,
                          int32_t minimumID,
@@ -302,7 +279,7 @@ static bool LoadLngRange(const std::string &filename,
             continue;
         }
 
-        if (!ParseIntegerID(line.substr(first, separator - first), &currentID))
+        if (!StrParseInt32(line.substr(first, separator - first), &currentID))
         {
             ypa_log_out("Locale: ignored invalid ID on line %d in %s\n",
                         static_cast<int>(lineNumber), filename.c_str());

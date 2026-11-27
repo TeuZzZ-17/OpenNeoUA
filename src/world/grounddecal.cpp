@@ -36,11 +36,6 @@ struct TGroundDecalShapePoint
     float v = 0.5f;
 };
 
-static bool GroundDecalFinitePoint(const vec3d &point)
-{
-    return std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
-}
-
 static bool GroundDecalWorldCell(NC_STACK_ypaworld *world, const Common::Point &cellId)
 {
     return world->IsGamePlaySector(cellId);
@@ -82,8 +77,8 @@ static bool GroundDecalHitNormal(const ypaworld_arg136 &hit, vec3d *normal)
         return false;
 
     vec3d candidate = polygon.Normal();
-    if ( !GroundDecalFinitePoint(candidate) || candidate.normalise() <= 0.001f ||
-         !GroundDecalFinitePoint(candidate) )
+    if ( !candidate.IsFinite() || candidate.normalise() <= 0.001f ||
+         !candidate.IsFinite() )
         return false;
 
     // No direction known: keep the side facing up (world Y points down).
@@ -428,7 +423,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecalInSphere(const World::TChainFXConfig &co
 bool NC_STACK_ypaworld::FindWorldSurfaceInSphere(const vec3d &center, float radius,
                                                  ypaworld_arg136 &surfaceHit)
 {
-    if ( !GroundDecalFinitePoint(center) || !std::isfinite(radius) || radius <= 0.0f ||
+    if ( !center.IsFinite() || !std::isfinite(radius) || radius <= 0.0f ||
          _mapSize.x <= 0 || _mapSize.y <= 0 )
         return false;
 
@@ -480,7 +475,7 @@ bool NC_STACK_ypaworld::FindWorldSurfaceInSphere(const vec3d &center, float radi
                      (size_t)polygon.num_vertices > polygon.v.size() )
                     continue;
                 vec3d normal = polygon.Normal();
-                if ( !GroundDecalFinitePoint(normal) || normal.normalise() <= 0.001f )
+                if ( !normal.IsFinite() || normal.normalise() <= 0.001f )
                     continue;
 
                 std::vector<vec3d> points;
@@ -490,7 +485,7 @@ bool NC_STACK_ypaworld::FindWorldSurfaceInSphere(const vec3d &center, float radi
                     if ( vertexId < 0 || (size_t)vertexId >= skeleton->POO.size() )
                         break;
                     const vec3d point = location.pos + skeleton->POO[vertexId];
-                    if ( !GroundDecalFinitePoint(point) )
+                    if ( !point.IsFinite() )
                         break;
                     points.push_back(point);
                 }
@@ -549,7 +544,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
          !supportedTrigger ||
          (!config.ground_decal_permanent && config.duration <= 0) ||
          config.ground_decal_tint.a <= 0.0f ||
-         !hit.isect || !GroundDecalFinitePoint(hit.isectPos) )
+         !hit.isect || !hit.isectPos.IsFinite() )
         return false;
 
     vec3d normal;
@@ -567,7 +562,7 @@ bool NC_STACK_ypaworld::SpawnGroundDecal(const World::TChainFXConfig &config,
     const float decalSizeZ = decalSize * decalStretchZ;
     // Burn strip stamp: the long side follows the travel direction.
     const bool isStroke = stroke && std::isfinite(stroke->length) && stroke->length > 0.0f &&
-                          GroundDecalFinitePoint(stroke->dir);
+                          stroke->dir.IsFinite();
     if ( isStroke )
         decalSizeX = std::max(stroke->length, decalSizeZ * 0.5f);
 

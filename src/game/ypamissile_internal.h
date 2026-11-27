@@ -18,8 +18,6 @@
 
 // ---- functions that used to be file-static ----
 float ypamissile_Clamp01(float value);
-bool ypamissile_WeaponTracerFinite(const vec3d &value);
-bool ypamissile_WeaponTracerFinite(const World::TVisualTint &tint);
 bool ypamissile_IsAliveForDeathPush(NC_STACK_ypabact *target);
 NC_STACK_ypabact *ypamissile_ResolveDirectPushRecipient(NC_STACK_ypabact *target);
 float ypamissile_GetPushAtDeathMultiplier();

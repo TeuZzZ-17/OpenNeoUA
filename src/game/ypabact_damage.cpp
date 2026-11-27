@@ -438,6 +438,8 @@ void NC_STACK_ypabact::Die()
     if ( _isUnitGunChild )
         ypabact_SafeDetachControlFrom(this, _parent);
 
+    // Before the Debuffs are cleared: the newest one with death_spawn_* decides what spawns.
+    ypabact_ApplyDebuffDeathSpawn(this);
     ClearActiveDebuff();
     _carrier_spawned_gids.clear();
     CleanupUnitGuns(true, true);

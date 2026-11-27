@@ -296,12 +296,23 @@ static bool ParseBuffParam(ScriptParser::Parser &parser,
         buff.invisible_reveal_base = p2;
     else if ( !StriCmp(p1, "invulnerable") )
         buff.invulnerable = StrGetBool(p2);
-    else if ( !StriCmp(p1, "deflect_charges") )
+    else if ( !StriCmp(p1, "stacks") )
+    {
+        // Buff stacks are Deflect charges: each blocked round or blast spends one.
+        const long value = parser.stol(p2, nullptr, 0);
+        buff.deflect_charges = value > 0 ? (int)std::min<long>(value, 99) : 0;
+    }
+    else if ( !StriCmp(p1, "stacks_recharge_time") )
     {
         const long value = parser.stol(p2, nullptr, 0);
-        buff.deflect_charges = value > 0
-            ? (int)std::min<long>(value, std::numeric_limits<int>::max())
-            : 0;
+        buff.stacks_recharge_time = value > 0 ? (int)std::min<long>(value, 600000) : 0;
+    }
+    else if ( !StriCmp(p1, "deflect_to_enemy") )
+        buff.deflect_to_enemy = StrGetBool(p2);
+    else if ( !StriCmp(p1, "deflect_weapon") )
+    {
+        const long value = parser.stol(p2, nullptr, 0);
+        buff.deflect_weapon = value > 0 ? (int)std::min<long>(value, std::numeric_limits<int>::max()) : 0;
     }
     else if ( !StriCmp(p1, "deflect_max_energy") )
     {
@@ -363,8 +374,9 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
         debuff.allow_on_host_station = StrGetBool(p2);
     else if ( !StriCmp(p1, "allow_on_children") )
         debuff.allow_on_children = StrGetBool(p2);
-    else if ( !StriCmp(p1, "stack_max") )
+    else if ( !StriCmp(p1, "stacks") )
     {
+        // Debuff stacks: maximum layers of this profile on one unit.
         const long value = parser.stol(p2, nullptr, 0);
         debuff.stack_max = value >= 1 && value <= 99 ? (int)value : 0;
     }
@@ -431,6 +443,8 @@ static bool ParseDebuffParam(ScriptParser::Parser &parser,
     }
     else if ( !StriCmp(p1, "icon") )
         debuff.icon = p2;
+    else if ( ParseDeathSpawnParam(parser, p1, p2, debuff.death_spawn) )
+        return true;
     else if ( !StriCmp(p1, "snd_sample") )
         debuff.tick_snd.MainSample.Name = p2;
     else if ( !StriCmp(p1, "snd_pitch") )
@@ -1520,7 +1534,7 @@ static int ParseChainFXBlock(ScriptParser::Parser &parser,
     bool hasPhysicalVehicleKey = false;
     std::shared_ptr<World::TChainFXPhysical> physical(new World::TChainFXPhysical());
     for (World::TVhclSound &sound : physical->sounds)
-        InitStatusSoundFXDefaults(sound, 120);
+        InitSoundFXDefaults(sound, 120);
     ChainFXPhysicalSoundParser physicalSounds(*physical);
     bool hasInlinePhysicalKey = false;
     bool hasOffset = false;

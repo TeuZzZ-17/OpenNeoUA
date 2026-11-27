@@ -116,7 +116,7 @@ bool yw_IsValidMobilePowerGenerator(NC_STACK_ypaworld *yw, NC_STACK_ypabact *uni
          (unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2)) ||
          unit->_bact_type == BACT_TYPES_MISSLE ||
          unit->_bact_type == BACT_TYPES_ROBO ||
-         (size_t)(unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID) >= yw->_vhclProtos.size() )
+         !yw->FindVhclProto(unit->GetRuntimeVehicleID()) )
         return false;
 
     // OpenNeoUA: normal guns/flaks/radars never become power generators merely
@@ -130,8 +130,7 @@ bool yw_IsValidMobilePowerGenerator(NC_STACK_ypaworld *yw, NC_STACK_ypabact *uni
             return false;
     }
 
-    uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
-    const World::TVhclProto &proto = yw->_vhclProtos[protoId];
+    const World::TVhclProto &proto = *yw->FindVhclProto(unit->GetRuntimeVehicleID());
     return proto.power > 0 && proto.power_radius > 0.0;
 }
 
@@ -346,8 +345,7 @@ void yw_AddMobilePowerInfluenceFromGenerator(NC_STACK_ypaworld *yw,
 
     if ( yw_IsValidMobilePowerGenerator(yw, generator) )
     {
-        uint8_t protoId = generator->_mimic_disguise_vehicleID ? generator->_mimic_disguise_vehicleID : generator->_vehicleID;
-        const World::TVhclProto &proto = yw->_vhclProtos[protoId];
+        const World::TVhclProto &proto = yw->_vhclProtos[generator->GetRuntimeVehicleID()];
 
         float dx = target->_position.x - generator->_position.x;
         float dz = target->_position.z - generator->_position.z;

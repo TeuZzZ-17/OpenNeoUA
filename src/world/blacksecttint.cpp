@@ -1,6 +1,4 @@
 // Wireframe/visual tint of the Black Sect faction.
-#include <cerrno>
-#include <cstdlib>
 #include <string>
 
 #include "blacksecttint.h"
@@ -15,71 +13,15 @@ namespace BlackSectTint
 
 static TVisualTint s_tint;
 
-static bool ParseTintComponent(const char *&pos, int *out)
-{
-    errno = 0;
-    char *end = nullptr;
-    long value = std::strtol(pos, &end, 10);
-
-    if ( end == pos || errno == ERANGE )
-        return false;
-
-    *out = (int)value;
-    pos = end;
-    return true;
-}
-
-static bool ParseTintComponents(const std::string &str, int comp[4])
-{
-    const char *pos = str.c_str();
-
-    for (int i = 0; i < 4; i++)
-    {
-        if ( !ParseTintComponent(pos, &comp[i]) )
-            return false;
-
-        if ( i < 3 )
-        {
-            if ( *pos != '|' )
-                return false;
-
-            pos++;
-        }
-    }
-
-    return *pos == '\0';
-}
-
 static TVisualTint ParseTint(const std::string &str)
 {
-    int comp[4] = { 140, 140, 140, 255 };
-    int parsed[4] = { 140, 140, 140, 255 };
-
-    if ( ParseTintComponents(str, parsed) )
-    {
-        comp[0] = parsed[0];
-        comp[1] = parsed[1];
-        comp[2] = parsed[2];
-        comp[3] = parsed[3];
-    }
-    else
+    TVisualTint tint;
+    if ( !ParseVisualTint(str, &tint) )
     {
         ypa_log_out("Warning: invalid game.black_sect_units_tint '%s', using 140|140|140|255\n",
                     str.c_str());
+        ParseVisualTint("140|140|140|255", &tint);
     }
-
-    auto clamp255 = [](int v) -> float
-    {
-        if ( v < 0 )   v = 0;
-        if ( v > 255 ) v = 255;
-        return (float)v / 255.0f;
-    };
-
-    TVisualTint tint;
-    tint.r = clamp255(comp[0]);
-    tint.g = clamp255(comp[1]);
-    tint.b = clamp255(comp[2]);
-    tint.a = clamp255(comp[3]);
     return tint;
 }
 

@@ -87,14 +87,41 @@ bool ParseOrbiterParam(const std::string &p1, const std::string &p2,
         return true;
     };
 
-    if ( intRange("orbiter_count", 1, 8, orbiter.count_min, orbiter.count_max) ||
+    // Guard motion levels: one value 0..10, decimals allowed.
+    auto level = [&](const char *key, float &out) -> bool
+    {
+        if ( StriCmp(p1, key) )
+            return false;
+        float a = 0.0f, b = 0.0f;
+        if ( ParseScriptFloatRange(p2, a, b) && a == b && a >= 0.0f && a <= 10.0f )
+            out = a;
+        else
+            ypa_log_out("WARNING: %s = %s is invalid (0..10); previous value retained.\n", key, p2.c_str());
+        return true;
+    };
+
+    if ( intRange("orbiter_count", 1, 16, orbiter.count_min, orbiter.count_max) ||
          intRange("orbiter_respawn_time", 100, 600000, orbiter.respawn_time_min, orbiter.respawn_time_max) ||
-         intRange("orbiter_first_strike_delay", 0, 60000, orbiter.first_strike_delay_min, orbiter.first_strike_delay_max) ||
-         intRange("orbiter_strikes", 1, 20, orbiter.strikes_min, orbiter.strikes_max) ||
+         intRange("orbiter_strike_first_delay", 0, 60000, orbiter.strike_first_delay_min, orbiter.strike_first_delay_max) ||
+         intRange("orbiter_strike_count", 1, 20, orbiter.strike_count_min, orbiter.strike_count_max) ||
          intRange("orbiter_strike_interval", 100, 60000, orbiter.strike_interval_min, orbiter.strike_interval_max) ||
          radiusRange("orbiter_guard_radius", orbiter.guard_radius_min, orbiter.guard_radius_max) ||
-         radiusRange("orbiter_siege_radius", orbiter.siege_radius_min, orbiter.siege_radius_max) )
+         radiusRange("orbiter_siege_radius", orbiter.siege_radius_min, orbiter.siege_radius_max) ||
+         level("orbiter_guard_speed", orbiter.guard_speed) ||
+         level("orbiter_guard_chaos_factor", orbiter.guard_chaos) )
         return true;
+
+    if ( !StriCmp(p1, "orbiter_strike_mode") )
+    {
+        if ( !StriCmp(p2, "all_at_once") )
+            orbiter.strike_mode = TWeaponOrbiterConfig::STRIKE_ALL_AT_ONCE;
+        else if ( !StriCmp(p2, "one_by_one") )
+            orbiter.strike_mode = TWeaponOrbiterConfig::STRIKE_ONE_BY_ONE;
+        else
+            ypa_log_out("WARNING: orbiter_strike_mode = %s is invalid (all_at_once or one_by_one); previous value retained.\n",
+                        p2.c_str());
+        return true;
+    }
 
     if ( !StriCmp(p1, "orbiter_fade_in") )
     {
@@ -106,13 +133,13 @@ bool ParseOrbiterParam(const std::string &p1, const std::string &p2,
         return true;
     }
 
-    if ( !StriCmp(p1, "orbiter_energy_mult") )
+    if ( !StriCmp(p1, "orbiter_strike_energy_mult") )
     {
         float a = 0.0f, b = 0.0f;
         if ( ParseScriptFloatRange(p2, a, b) && a == b && a >= 0.05f && a <= 10.0f )
-            orbiter.energy_mult = a;
+            orbiter.strike_energy_mult = a;
         else
-            ypa_log_out("WARNING: orbiter_energy_mult = %s is invalid (0.05..10); previous value retained.\n", p2.c_str());
+            ypa_log_out("WARNING: orbiter_strike_energy_mult = %s is invalid (0.05..10); previous value retained.\n", p2.c_str());
         return true;
     }
 
@@ -256,29 +283,11 @@ bool WeaponProtoParser::IsScope(ScriptParser::Parser &parser, const std::string 
         _wpn->blast_debuff_name.clear();
         _wpn->blast_debuff = TWeaponDebuffConfig();
         _wpn->cluster = TWeaponClusterConfig();
-        _wpn->cluster.snd.volume = 120;
-        _wpn->cluster.snd.sndPrm.mag0 = 1.0;
-        _wpn->cluster.snd.sndPrm.time = 1000;
-        _wpn->cluster.snd.sndPrm_shk.mag0 = 1.0;
-        _wpn->cluster.snd.sndPrm_shk.time = 1000;
-        _wpn->cluster.snd.sndPrm_shk.mute = 0.02;
-        _wpn->cluster.snd.sndPrm_shk.pos.x = 0.2;
-        _wpn->cluster.snd.sndPrm_shk.pos.y = 0.2;
-        _wpn->cluster.snd.sndPrm_shk.pos.z = 0.2;
+        InitSoundFXDefaults(_wpn->cluster.snd, 120);
         _wpn->chain = TWeaponChainConfig();
 
         for (TVhclSound &fx : _wpn->sndFXes)
-        {
-            fx.sndPrm.mag0 = 1.0;
-            fx.sndPrm_shk.mag0 = 1.0;
-            fx.sndPrm_shk.mute = 0.02;
-            fx.sndPrm_shk.pos.x = 0.2;
-            fx.sndPrm_shk.pos.y = 0.2;
-            fx.sndPrm_shk.pos.z = 0.2;
-            fx.volume = 120;
-            fx.sndPrm.time = 1000;
-            fx.sndPrm_shk.time = 1000;
-        }
+            InitSoundFXDefaults(fx, 120);
 
         // OpenNeoUA custom: player-only launch shake defaults. Slot 0 keeps the
         // feature disabled; mute 0 makes the local feedback independent from

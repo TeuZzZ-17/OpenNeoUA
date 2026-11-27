@@ -115,7 +115,6 @@ void yw_UpdateKamikazeFireTimeScaleHpDrain(NC_STACK_ypaworld *yw, int32_t frameT
 int yw_SelectMimicVehicleID(const std::vector<World::TVhclProto> &protos, int shellVehicleId);
 mat3x3 yw_BuildVPRotationMatrix(const vec3d &degrees);
 vec3d yw_SafeVPScale(const vec3d &scale);
-bool yw_IsFinitePoint(const vec3d &point);
 void yw_CollectAttachedFXTriangles(NC_STACK_base *base, const mat3x3 &rot, const vec3d &pos, std::vector<yw_AttachedFXTriangle> *triangles);
 void yw_CollectAttachedFXShapeTriangles(const Collision::Shape &shape, std::vector<yw_AttachedFXTriangle> *triangles);
 void yw_BuildAttachedFXSilhouette(const std::vector<yw_AttachedFXTriangle> &triangles, bool dropThinParts, NC_STACK_ypaworld::TAttachedFXGeometryCache *cache);

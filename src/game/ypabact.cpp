@@ -336,12 +336,8 @@ void NC_STACK_ypabact::ResetFeatureRuntimeState()
     _spawn_instant = 0;
     _spawn_last_time = 0;
     _at_death_spawn_units = 0;
-    _at_death_spawn_vehicle = 0;
-    _at_death_spawn_count = 1;
-    _at_death_spawn_random_pos = 0.0;
-    _at_death_spawn_instant = 0;
-    _at_death_spawn_immunity_time = 0;
-    _eject_force = 0.0f;
+    _at_death_spawn = World::TDeathSpawnConfig();
+    _at_death_spawn_owner = -1;
     _at_death_spawn_done = false;
     _at_death_spawn_protection_end_time = 0;
     _at_death_spawn_restore_vulnerable = false;
@@ -357,6 +353,8 @@ void NC_STACK_ypabact::ResetFeatureRuntimeState()
     _orbiter_weapon = 0;
     _orbiter_count = -1;
     _orbiter_next_spawn_time = 0;
+    _orbiter_attack_gid = 0;
+    _orbiter_next_launch_time = 0;
     _radial_shot_enable = 0;
     _radial_shot_weapon = 0;
     _radial_shot_trigger_radius = 0.0;
@@ -1082,7 +1080,10 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
                 createState.unsetFlags = 0;
                 createState.newStatus = BACT_STATUS_CREATE;
                 gunObj->SetState(&createState);
-                gunObj->_scale_time = gunObj->GetCreationTime(gunObj->_energy_max * 0.2);
+                // Born with the carrier: same Genesis clock while it is still being created.
+                gunObj->_scale_time = _status == BACT_STATUS_CREATE
+                    ? std::max(1, _scale_time)
+                    : gunObj->GetCreationTime(gunObj->_energy_max * 0.2);
             }
             else
             {
@@ -1104,8 +1105,17 @@ void NC_STACK_ypabact::UpdateUnitGuns(update_msg *)
             continue;
         }
 
+        // A mounted gun is born with its carrier: while the carrier is in Genesis the gun
+        // shares its remaining time and scale and sits on the scaled mount point.
+        const bool carrierGenesis = _status == BACT_STATUS_CREATE && gunObj->_status == BACT_STATUS_CREATE;
+        if ( carrierGenesis )
+        {
+            gunObj->_scale_time = std::max(1, _scale_time);
+            gunObj->_scale = _scale;
+        }
+
         bact_arg80 posArg;
-        posArg.pos = _position + _rotation.Transpose().Transform(gun.pos);
+        posArg.pos = _position + _rotation.Transpose().Transform(carrierGenesis ? gun.pos * _scale.x : gun.pos);
         posArg.field_C = 4;
 
         gunObj->_owner = _owner;
@@ -2320,7 +2330,7 @@ void NC_STACK_ypabact::Renew()
     if ( _spawn_sound_active )
         SFXEngine::SFXe.sub_424000(&_soundcarrier, World::TVhclProto::SND_SPAWN);
     _spawn_sound_active = false;
-    _eject_force = 0.0f;
+    _at_death_spawn.eject_force = 0.0f;
     _debugIgnoredByAI = false;
     if (_world && _world->_collisionScene) _world->_collisionScene->Forget(this);
     _collisionShape.reset();
@@ -2501,7 +2511,9 @@ void NC_STACK_ypabact::CreationTimeUpdate(update_msg *arg)
         else
             _scale = vec3d( GenesisScaleCurve / ((float)_scale_time / 1000.0 + GenesisScaleCurve) + GenesisScaleBase );
 
-        _rotation = mat3x3::RotateY( 2.5 / _scale.x * v30 ) * _rotation;
+        // A mounted gun turns with its carrier (UpdateUnitGuns), not with its own spin.
+        if ( !(_isUnitGunChild && _parent && _parent->_status == BACT_STATUS_CREATE) )
+            _rotation = mat3x3::RotateY( 2.5 / _scale.x * v30 ) * _rotation;
     }
     else
     {

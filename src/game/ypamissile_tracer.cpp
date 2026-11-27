@@ -13,18 +13,6 @@
 #include <math.h>
 #include "game/ypamissile_internal.h"
 
-bool ypamissile_WeaponTracerFinite(const vec3d &value)
-{
-    return std::isfinite(value.x) && std::isfinite(value.y) &&
-           std::isfinite(value.z);
-}
-
-bool ypamissile_WeaponTracerFinite(const World::TVisualTint &tint)
-{
-    return std::isfinite(tint.r) && std::isfinite(tint.g) &&
-           std::isfinite(tint.b) && std::isfinite(tint.a);
-}
-
 void NC_STACK_ypamissile::ConfigureWeaponTracer(
     const World::TWeaponTracerConfig &config, bool supported)
 {
@@ -37,8 +25,8 @@ void NC_STACK_ypamissile::ConfigureWeaponTracer(
                             std::isfinite(config.size_x) && config.size_x > 0.01f &&
                             std::isfinite(config.ResolveSizeY()) &&
                             config.ResolveSizeY() >= 0.0f &&
-                            ypamissile_WeaponTracerFinite(config.pos) &&
-                            ypamissile_WeaponTracerFinite(config.tint) &&
+                            config.pos.IsFinite() &&
+                            config.tint.IsFinite() &&
                             config.tint.a > 0.0f;
     _weaponTracerStarted = false;
     _weaponTracerVisualSeed = 0;
@@ -59,7 +47,7 @@ void NC_STACK_ypamissile::StartWeaponTracer()
     // sampled tracer point, starting here at launch, so the complete trail stays
     // attached to the authored position relative to the projectile transform.
     const vec3d point = GetWeaponTracerPosition();
-    if ( !ypamissile_WeaponTracerFinite(point) )
+    if ( !point.IsFinite() )
     {
         _weaponTracerStarted = false;
         return;
@@ -112,7 +100,7 @@ void NC_STACK_ypamissile::UpdateWeaponTracer()
 
     const vec3d point = GetWeaponTracerPosition();
 
-    if ( ypamissile_WeaponTracerFinite(point) )
+    if ( point.IsFinite() )
     {
         if ( _weaponTracerPoints.empty() )
         {

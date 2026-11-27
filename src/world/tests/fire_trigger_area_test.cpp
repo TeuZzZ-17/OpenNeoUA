@@ -1551,8 +1551,8 @@ void TestImplicitFeatureGroups() {
                             "new_vehicle 205", "model = tank", "at_death_spawn_units_eject_force = 99", "end",
                             "new_vehicle 206", "model = tank", "at_death_spawn_units_eject_force = nan", "end"}),
           "spawn-at-death ejection force parses");
-    Check(w._vhclProtos[203].eject_force == 4 && w._vhclProtos[204].eject_force == 0 &&
-          w._vhclProtos[205].eject_force == 10 && w._vhclProtos[206].eject_force == 0,
+    Check(w._vhclProtos[203].at_death_spawn.eject_force == 4 && w._vhclProtos[204].at_death_spawn.eject_force == 0 &&
+          w._vhclProtos[205].at_death_spawn.eject_force == 10 && w._vhclProtos[206].at_death_spawn.eject_force == 0,
           "ejection force clamps valid values and disables invalid input");
 
     Check(!ParseBuildings(w, {"new_building 200", "model = building", "spawn_vehicle = 1", "end"}),

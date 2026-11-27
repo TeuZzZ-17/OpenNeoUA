@@ -62,6 +62,11 @@ struct TVisualTint
         return r == 1.0 && g == 1.0 && b == 1.0 && a == 1.0;
     }
 
+    bool IsFinite() const
+    {
+        return std::isfinite(r) && std::isfinite(g) && std::isfinite(b) && std::isfinite(a);
+    }
+
     bool ColorizesRGB() const
     {
         return r != 1.0 || g != 1.0 || b != 1.0;
@@ -579,9 +584,26 @@ struct TVehicleBuffConfig
     std::string deflect_3ds;
     std::string deflect_base;
 
+    // stacks: deflect_charges is the authored `stacks` value (charges left at runtime).
+    int stacks_recharge_time = 0;    // ms to get one stack back up to `stacks`; 0 = no recharge
+    bool deflect_to_enemy = false;   // hurl the deflected round at an enemy instead of bouncing it
+    int deflect_weapon = 0;          // turn the deflected round into this Weapon's projectile; 0 = keep it
+
     float glow_intensity = 0.0f;
     TVisualTint glow_tint;
     float glow_pulse_seconds = 0.0f;
+};
+
+// at_death_spawn_*: what a unit spawns when it dies. Same keys in Vehicles and Debuffs; a Debuff's
+// config (newest one carried) replaces the unit's own.
+struct TDeathSpawnConfig
+{
+    std::vector<int16_t> vehicles; // one picked at random per spawned unit; empty = off
+    int count = 1;
+    float random_pos = 0.0f;
+    bool instant = false;
+    int immunity_time = 0;
+    float eject_force = 0.0f;
 };
 
 struct TWeaponDebuffConfig
@@ -621,6 +643,7 @@ struct TWeaponDebuffConfig
     TAbsoluteOrPercent random_max_offset;
     TVisualTint vp_trail_tint;
     bool has_vp_trail_tint = false;
+    TDeathSpawnConfig death_spawn;
     TVhclSound tick_snd;
 
     TWeaponDebuffConfig()
@@ -731,12 +754,16 @@ struct TWeaponChainConfig
     int jump_delay = 0;
 };
 
-// OpenNeoUA Orbiter ("model = orbiter"): guardian projectiles that circle their
-// carrier, then besiege an enemy, pass through it several times and detonate on
-// the last strike. Every *_min/*_max pair comes from a fixed value or "min~max"
-// and is rolled at use time. Values are sanitized by the parser.
+// OpenNeoUA Orbiter ("model = orbiter"): guardian projectiles that wait around their
+// carrier, are launched as classic projectiles when the carrier fires its primary
+// weapon at an enemy, and (with more than one strike) besiege the unit they hit,
+// passing through it until the last strike detonates. Every *_min/*_max pair comes
+// from a fixed value or "min~max" and is rolled at use time. Values are sanitized
+// by the parser.
 struct TWeaponOrbiterConfig
 {
+    enum { STRIKE_ALL_AT_ONCE = 0, STRIKE_ONE_BY_ONE = 1 };
+
     int count_min = 1;               // live orbiters kept around the carrier
     int count_max = 1;
     int respawn_time_min = 4000;     // ms before a missing orbiter is replaced
@@ -744,15 +771,21 @@ struct TWeaponOrbiterConfig
     int fade_in = 800;               // ms of alpha fade when an orbiter appears
     float guard_radius_min = 0.0f;   // 0 = automatic from the carrier size
     float guard_radius_max = 0.0f;
+    // Guard motion 0..10; both < 0 (absent) = the classic free orbit.
+    float guard_speed = -1.0f;
+    float guard_chaos = -1.0f;
     float siege_radius_min = 0.0f;   // 0 = automatic from the target size
     float siege_radius_max = 0.0f;
-    int first_strike_delay_min = 1500; // ms of dance around the target before the first strike
-    int first_strike_delay_max = 1500;
-    int strikes_min = 3;             // passes through the target; the last one detonates
-    int strikes_max = 3;
-    int strike_interval_min = 900;   // ms between two strikes
+    int strike_mode = STRIKE_ALL_AT_ONCE;
+    int strike_first_delay_min = 0;  // ms from the trigger to the (first) launch
+    int strike_first_delay_max = 0;
+    int strike_count_min = 3;        // passes through the target; the last one detonates
+    int strike_count_max = 3;
+    int strike_interval_min = 900;   // ms of dance between two strikes
     int strike_interval_max = 900;
-    float energy_mult = 1.0f;        // damage of strike N = energy * energy_mult^N (cascade)
+    float strike_energy_mult = 1.0f; // damage of strike N = energy * mult^N (cascade)
+
+    bool HasRingGuard() const { return guard_speed >= 0.0f || guard_chaos >= 0.0f; }
 };
 
 struct TRoboGun
@@ -976,12 +1009,7 @@ struct TVhclProto
     bool spawn_count_defined = false;
     int spawn_instant = 0;
     int at_death_spawn_units = 0;
-    int16_t at_death_spawn_vehicle = 0;
-    int at_death_spawn_count = 1;
-    float at_death_spawn_random_pos = 0.0;
-    int at_death_spawn_instant = 0;
-    int at_death_spawn_immunity_time = 0;
-    float eject_force = 0.0f;
+    TDeathSpawnConfig at_death_spawn;
     // OpenNeoUA Orbiter: weapon id of a "model = orbiter" Weapon carried as
     // guardian projectiles. 0 = off (vanilla). Independent of weapon/mgun slots.
     int orbiter_weapon = 0;
@@ -1643,7 +1671,9 @@ struct TWeapProto
     ~TWeapProto();
 };
 
-bool ParseVisualTint(const std::string &text, TVisualTint *out);
+// Parses "r|g|b|a" (0-255 integers, clamped). alphaOptional also accepts "r|g|b"
+// with alpha 255. Returns false and leaves *out untouched on any malformed part.
+bool ParseVisualTint(const std::string &text, TVisualTint *out, bool alphaOptional = false);
 const TVisualTint &GetOwnerWireframeTint(int owner);
 
 // Resolve the authored gameplay class of a runtime unit. Mimics use their

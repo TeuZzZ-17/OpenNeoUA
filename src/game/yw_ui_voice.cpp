@@ -508,8 +508,7 @@ void NC_STACK_ypaworld::VoiceMessagePlayMsg(NC_STACK_ypabact *unit, int priority
 
             if ( msgvals.v1 == 1 )
             {
-                uint8_t protoId = unit->_mimic_disguise_vehicleID ? unit->_mimic_disguise_vehicleID : unit->_vehicleID;
-                World::TVhclProto &vhclProto = _vhclProtos[protoId];
+                World::TVhclProto &vhclProto = _vhclProtos[unit->GetRuntimeVehicleID()];
                 packVoice = !vhclProto.speech_voicepack.empty();
                 const int speechEvent = World::Speech::EventIndexFromMsgID(msgID);
 

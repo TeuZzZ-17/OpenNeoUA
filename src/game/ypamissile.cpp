@@ -262,8 +262,11 @@ void NC_STACK_ypamissile::Render(baseRender_msg *arg)
 {
     // Preserve the complete existing projectile VP path, including particles,
     // tint, scale and projectile visual motion. The procedural tracer is queued in addition.
-    // Additive VP materials need brightness attenuation as well as alpha.
-    const float transferFade = GetArtilleryTransferFadeAlpha();
+    // Additive VP materials need brightness attenuation as well as alpha. The same
+    // factor carries the orbiter fade-in: transparent cards (tracy) ignore tint alpha.
+    float transferFade = GetArtilleryTransferFadeAlpha();
+    if ( _orbiterState != ORBITER_OFF && !_artilleryShellVerticalBarrage )
+        transferFade *= GetRenderFadeAlpha();
     if ( transferFade > 0.0f )
     {
         const float previousFade = arg->vpFadeFactor;
@@ -360,7 +363,142 @@ void NC_STACK_ypamissile::DeflectFromUnitCollision(NC_STACK_ypabact *target,
     {
         const vec3d impactPos = targetCenter + outward * std::max(0.0f, targetRadius);
         target->SpawnBuffDeflectVisual(impactPos, _rotation);
+        ApplyDeflectExtras(target, outward);
     }
+}
+
+// Deflect Buff extras, local games only (network games keep the plain bounce):
+//  deflect_to_enemy = 1 aims the round at an enemy of the deflecting unit: the shooter,
+//  else the nearest enemy, else the bounce direction;
+//  deflect_weapon replaces the round with that Weapon's projectile, sent the same way.
+//  Without deflect_weapon the deflected round itself now belongs to the deflecting unit.
+//  An aim behind the hit surface (`outward`) keeps the bounce direction, so the round
+//  never flies back into the deflecting unit.
+void NC_STACK_ypamissile::ApplyDeflectExtras(NC_STACK_ypabact *deflector, const vec3d &outward)
+{
+    const World::TVehicleBuffConfig &buff = deflector->_buff;
+    if ( (!buff.deflect_to_enemy && buff.deflect_weapon <= 0) || _world->_isNetGame )
+        return;
+
+    const auto isEnemy = [deflector](NC_STACK_ypabact *unit)
+    {
+        return unit && unit != deflector && unit->_bact_type != BACT_TYPES_MISSLE &&
+               unit->_owner != World::OWNER_0 && unit->_owner != deflector->_owner &&
+               unit->_status != BACT_STATUS_DEAD &&
+               !(unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
+    };
+
+    NC_STACK_ypabact *aim = nullptr;
+    if ( buff.deflect_to_enemy )
+    {
+        NC_STACK_ypabact *shooter = GetLauncherBact();
+        aim = isEnemy(shooter) ? shooter : deflector->FindNearestEnemy(1500.0f);
+    }
+
+    vec3d dir = _fly_dir;
+    if ( aim )
+    {
+        vec3d toAim = aim->_position - _position;
+        if ( toAim.normalise() > 0.001 && toAim.dot(outward) > 0.0 )
+            dir = toAim;
+    }
+
+    const World::TWeapProto *deflectProto = buff.deflect_weapon > 0 ? _world->FindWeaponProto(buff.deflect_weapon) : nullptr;
+    if ( deflectProto )
+    {
+        const World::TWeapProto &wproto = *deflectProto;
+        if ( !wproto.IsLaser() && !wproto.IsKamikaze() && !wproto.IsOrbiter() && !wproto.IsArtilleryShell() )
+        {
+            ypaworld_arg146 spawn;
+            spawn.vehicle_id = buff.deflect_weapon;
+            spawn.pos = _position;
+            NC_STACK_ypamissile *shot = _world->ypaworld_func147(&spawn);
+            if ( shot )
+            {
+                shot->ConfigureSpawnedProjectileBase(deflector, deflector->_host_station, deflector->_owner, dir);
+                shot->_fly_dir_length = wproto.start_speed;
+                if ( !(wproto._weaponFlags & 0x12) )
+                    shot->_fly_dir_length *= 0.2;
+                shot->_rotation.SetZ(dir);
+                shot->_rotation.SetX(_rotation.AxisX());
+                shot->_rotation.SetY(shot->_rotation.AxisZ() * shot->_rotation.AxisX());
+                shot->StartWeaponTracer();
+                shot->_kidRef.Detach();
+                shot->_parent = nullptr;
+                deflector->_missiles_list.push_back(shot);
+
+                setTarget_msg tgt = {};
+                tgt.priority = 0;
+                if ( aim && shot->GetMissileType() == MISL_TARGETED )
+                {
+                    tgt.tgt.pbact = aim;
+                    tgt.tgt_type = BACT_TGT_TYPE_UNIT;
+                    tgt.tgt_pos = aim->_position;
+                }
+                else
+                {
+                    tgt.tgt_type = BACT_TGT_TYPE_DRCT;
+                    tgt.tgt_pos = dir;
+                }
+                shot->SetTarget(&tgt);
+                if ( shot->GetMissileType() == MISL_DIRECT )
+                {
+                    shot->_primTtype = BACT_TGT_TYPE_DRCT;
+                    shot->_target_dir = dir;
+                }
+                SFXEngine::SFXe.startSound(&shot->_soundcarrier, World::TWeapProto::SND_LAUNCH);
+
+                // The incoming round is consumed by the conversion: silent removal.
+                setState_msg death = {};
+                death.newStatus = BACT_STATUS_DEAD;
+                ResetViewing();
+                SetStateInternal(&death, false);
+                return;
+            }
+        }
+    }
+
+    if ( !buff.deflect_to_enemy )
+        return;
+
+    // The same round, sent at the enemy: it now belongs to the deflecting unit (its
+    // missile list too, so kill credit and launcher lifetime stay consistent).
+    LeaveOrbiterFlight();
+    if ( NC_STACK_ypabact *shooter = GetLauncherBact() )
+        shooter->_missiles_list.remove(this);
+    deflector->_missiles_list.push_back(this);
+    SetLauncherBact(deflector);
+    _owner = deflector->_owner;
+    _host_station = deflector->_host_station;
+    _mislDirectHitUnits.clear();
+
+    _fly_dir = dir;
+    _target_vec = dir;
+    _mislHomingExitDirection = dir;
+    _rotation.SetZ(dir);
+    vec3d x = vec3d::OY(-1.0) * dir;
+    if ( x.normalise() > 0.001f )
+    {
+        _rotation.SetX(x);
+        _rotation.SetY(dir * x);
+    }
+
+    setTarget_msg tgt = {};
+    tgt.priority = 0;
+    if ( aim && _mislType == MISL_TARGETED )
+    {
+        tgt.tgt.pbact = aim;
+        tgt.tgt_type = BACT_TGT_TYPE_UNIT;
+        tgt.tgt_pos = aim->_position;
+    }
+    else
+    {
+        tgt.tgt_type = BACT_TGT_TYPE_DRCT;
+        tgt.tgt_pos = dir;
+    }
+    SetTarget(&tgt);
+    if ( _mislType == MISL_ARC_GRENADE )
+        _arcGrenadeVelocity = dir * _fly_dir_length;
 }
 
 bool NC_STACK_ypamissile::TubeCollisionTest(bool applyDirectDamage, NC_STACK_ypabact **hitTarget, bool *deflected)
@@ -1048,10 +1186,9 @@ void NC_STACK_ypamissile::ChangeSectorEnergy(yw_arg129 *arg)
 {
     // Use the weapon model here: a deflected round can leave the artillery flight path
     // and reach this same damage path as an ordinary projectile.
+    const World::TWeapProto *ownProto = GetWeaponProto();
     if ( arg->field_10 > 0 && _owner != World::OWNER_0 &&
-         (_isArtilleryShellProjectile ||
-          ((size_t)_vehicleID < _world->GetWeaponsProtos().size() &&
-           _world->GetWeaponsProtos()[_vehicleID].IsArtilleryShell())) )
+         (_isArtilleryShellProjectile || (ownProto && ownProto->IsArtilleryShell())) )
     {
         const Common::Point cellId = World::PositionToSectorID(arg->pos);
         if ( _world->IsSector(cellId) )
@@ -1121,13 +1258,9 @@ void NC_STACK_ypamissile::AttachDelayedDetonationToTarget(NC_STACK_ypabact *targ
     // delay_time_debuff_id belongs to the successful attachment event, not to
     // the later explosion. Reuse the normal Debuff runtime so duration,
     // refresh, Host Station rules and all future Debuff behavior stay shared.
-    if ( _world && _vehicleID >= 0 &&
-         (size_t)_vehicleID < _world->GetWeaponsProtos().size() )
-    {
-        World::TWeapProto &wproto = _world->GetWeaponsProtos().at(_vehicleID);
-        if ( wproto.delay_time_debuff.valid )
-            target->ApplyDebuff(wproto.delay_time_debuff, _mislEmitter);
-    }
+    World::TWeapProto *wproto = GetWeaponProto();
+    if ( wproto && wproto->delay_time_debuff.valid )
+        target->ApplyDebuff(wproto->delay_time_debuff, _mislEmitter);
 }
 
 bool NC_STACK_ypamissile::BeginBoomerangReturn()
@@ -1228,8 +1361,9 @@ void NC_STACK_ypamissile::UpdateBoomerangReturn(update_msg *arg)
 
 void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
 {
-    // OpenNeoUA Orbiter: guard/siege flight is fully isolated (ypamissile_orbiter.cpp).
-    if (_orbiterState != ORBITER_OFF && _status == BACT_STATUS_NORMAL)
+    // OpenNeoUA Orbiter: guard/siege flight is fully isolated (ypamissile_orbiter.cpp);
+    // a launched orbiter (FLIGHT) uses the classic path below.
+    if (_orbiterState != ORBITER_OFF && _orbiterState != ORBITER_FLIGHT && _status == BACT_STATUS_NORMAL)
     {
         UpdateOrbiter(arg);
         return;
@@ -1419,6 +1553,10 @@ void NC_STACK_ypamissile::AI_layer3(update_msg *arg)
             bool deflected = false;
             if ( TubeCollisionTest(_mislDelayTime <= 0, &hitTarget, &deflected) )
             {
+                // A launched orbiter with more strikes turns this hit into strike 1.
+                if ( hitTarget && hitTarget->_bact_type != BACT_TYPES_MISSLE && _mislDelayTime <= 0 &&
+                     ContinueOrbiterSiege(hitTarget) )
+                    return;
                 if (_boomerangReturnMode == World::TWeapProto::BOOMERANG_LIFETIME_OR_IMPACT &&
                     hitTarget && hitTarget->_bact_type != BACT_TYPES_MISSLE && BeginBoomerangReturn())
                 {
@@ -2002,11 +2140,15 @@ void NC_STACK_ypamissile::DetonateKamikazePayload(NC_STACK_ypabact *directHit)
     StartDestFXByType(World::DestFX::FX_MEGADETH);
 }
 
+World::TWeapProto *NC_STACK_ypamissile::GetWeaponProto() const
+{
+    return _world ? _world->FindWeaponProto(_vehicleID) : nullptr;
+}
+
 bool NC_STACK_ypamissile::HasImpactCrater() const
 {
-    return _world && _vehicleID >= 0 &&
-           (size_t)_vehicleID < _world->GetWeaponsProtos().size() &&
-           _world->GetWeaponsProtos().at(_vehicleID).crater.defined;
+    const World::TWeapProto *wproto = GetWeaponProto();
+    return wproto && wproto->crater.defined;
 }
 
 // OpenNeoUA custom: crater_radius / crater_depth dig the ground at a real
@@ -2017,7 +2159,7 @@ void NC_STACK_ypamissile::MakeImpactCrater(const ypaworld_arg136 &hit)
         return;
 
     _impactCraterMade = true;
-    _world->SpawnTerrainCrater(_world->GetWeaponsProtos().at(_vehicleID).crater, hit);
+    _world->SpawnTerrainCrater(GetWeaponProto()->crater, hit);
 }
 
 // OpenNeoUA custom: decal and crater of a shot that stayed stuck for delay_time, made when it
@@ -2147,11 +2289,11 @@ void NC_STACK_ypamissile::SetLauncherBact(NC_STACK_ypabact *bact)
         _debugPlayerProjectile=bact->IsPlayerTimeOwner();
     _mislEmitter = bact;
     _boomerangReturnMode = World::TWeapProto::BOOMERANG_NONE;
-    if (bact && _world && _vehicleID >= 0 && (size_t)_vehicleID < _world->GetWeaponsProtos().size())
+    const World::TWeapProto *proto = bact ? GetWeaponProto() : nullptr;
+    if (proto)
     {
-        const auto &proto = _world->GetWeaponsProtos()[_vehicleID];
-        if (!proto.IsLaser() && !proto.IsArtilleryShell() && !proto.IsKamikaze() && proto.delay_time <= 0)
-            _boomerangReturnMode = proto.boomerang_return_mode;
+        if (!proto->IsLaser() && !proto->IsArtilleryShell() && !proto->IsKamikaze() && proto->delay_time <= 0)
+            _boomerangReturnMode = proto->boomerang_return_mode;
         _boomerangEmitterGid = bact->_gid;
         _boomerangFireLocal = bact->_rotation.Transform(_position - bact->GetBodyPosition());
     }

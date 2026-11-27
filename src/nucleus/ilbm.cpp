@@ -4,6 +4,7 @@
 #include "nucleus/nucleas.h"
 #include "nucleus/rsrc.h"
 #include "nucleus/ilbm.h"
+#include "nucleus/image.h"
 #include "common/utils.h"
 
 
@@ -451,69 +452,6 @@ static rsrc *ILBM_ReadOpenedOrVanilla(NC_STACK_ilbm *obj, IDVList &stak, const s
     return nullptr;
 }
 
-static Sint64 ILBM_PngRwSize(SDL_RWops *context)
-{
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    size_t curr = fil->tell();
-    fil->seek(0, SEEK_END);
-    size_t sz = fil->tell();
-    fil->seek(curr, SEEK_SET);
-    return sz;
-}
-
-static Sint64 ILBM_PngRwSeek(SDL_RWops *context, Sint64 offset, int whence)
-{
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    int origin = SEEK_SET;
-    if ( whence == RW_SEEK_CUR )
-        origin = SEEK_CUR;
-    else if ( whence == RW_SEEK_END )
-        origin = SEEK_END;
-    else if ( whence != RW_SEEK_SET )
-        return -1;
-
-    if ( fil->seek(offset, origin) != 0 )
-        return -1;
-    return fil->tell();
-}
-
-static size_t ILBM_PngRwRead(SDL_RWops *context, void *ptr, size_t size, size_t maxnum)
-{
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    if (!size)
-        return 0;
-    return fil->read(ptr, size * maxnum) / size;
-}
-
-static size_t ILBM_PngRwWrite(SDL_RWops *, const void *, size_t, size_t)
-{
-    return 0;
-}
-
-static int ILBM_PngRwClose(SDL_RWops *context)
-{
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    delete fil;
-    SDL_FreeRW(context);
-    return 0;
-}
-
-static SDL_RWops *ILBM_PngRwFromFile(FSMgr::FileHandle *fil)
-{
-    SDL_RWops *rwops = SDL_AllocRW();
-    if (!rwops)
-        return nullptr;
-
-    rwops->size = ILBM_PngRwSize;
-    rwops->seek = ILBM_PngRwSeek;
-    rwops->read = ILBM_PngRwRead;
-    rwops->write = ILBM_PngRwWrite;
-    rwops->close = ILBM_PngRwClose;
-    rwops->type = 0x4F55504E;
-    rwops->hidden.unknown.data2 = fil;
-    return rwops;
-}
-
 static void ILBM_SkipEmbeddedChunk(IFFile *mfile);
 
 static UA_PALETTE *ILBM_CopyPngPalette(SDL_Surface *loaded)
@@ -625,7 +563,7 @@ static SDL_Surface *ILBM_PrepareTruecolorPngSurface(SDL_Surface *loaded, int tra
     return rgba;
 }
 
-static void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s)
+void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s)
 {
     if ( !s || !s->format )
         return;
@@ -722,7 +660,7 @@ static rsrc *ILBM_ReadPngOverride(NC_STACK_ilbm *obj, IDVList &stak, const std::
         return nullptr;
     }
 
-    SDL_RWops *rwops = ILBM_PngRwFromFile(fil);
+    SDL_RWops *rwops = NC_STACK_image::OpenRWops(fil);
     if ( !rwops )
     {
         delete fil;

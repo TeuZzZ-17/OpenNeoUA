@@ -12,7 +12,7 @@ bool ypabact_CanUseRadialShot(NC_STACK_ypabact *unit)
     if ( unit->_radial_shot_mode == 1 )
         return false;
 
-    if ( unit->_radial_shot_weapon <= 0 || (size_t)unit->_radial_shot_weapon >= unit->getBACT_pWorld()->GetWeaponsProtos().size() )
+    if ( unit->_radial_shot_weapon <= 0 || !unit->getBACT_pWorld()->FindWeaponProto(unit->_radial_shot_weapon) )
         return false;
 
     if ( unit->_radial_shot_trigger_radius <= 0.0 )
@@ -80,12 +80,11 @@ bool ypabact_FireRadialShotShot(NC_STACK_ypabact *unit, int shotIndex, int total
         return false;
 
     NC_STACK_ypaworld *world = unit->getBACT_pWorld();
-    if ( (size_t)unit->_radial_shot_weapon >= world->GetWeaponsProtos().size() )
+    World::TWeapProto *radialProto = world->FindWeaponProto(unit->_radial_shot_weapon);
+    if ( !radialProto || !(radialProto->_weaponFlags & YPA_WEAPON_FLAG_PROJECTILE) )
         return false;
 
-    World::TWeapProto &wproto = world->GetWeaponsProtos().at(unit->_radial_shot_weapon);
-    if ( !(wproto._weaponFlags & YPA_WEAPON_FLAG_PROJECTILE) )
-        return false;
+    World::TWeapProto &wproto = *radialProto;
 
     vec3d localDir = ypabact_GetRadialShotLocalDirection(unit, shotIndex, totalShots);
     vec3d shotDir = unit->_rotation.Transpose().Transform(localDir);
@@ -184,7 +183,7 @@ bool ypabact_CanUseRadialShotAtDeath(NC_STACK_ypabact *unit)
     if ( !unit->_radial_shot_enable || unit->_radial_shot_mode != 1 || unit->_radial_shot_at_death_done )
         return false;
 
-    if ( unit->_radial_shot_weapon <= 0 || (size_t)unit->_radial_shot_weapon >= unit->getBACT_pWorld()->GetWeaponsProtos().size() )
+    if ( unit->_radial_shot_weapon <= 0 || !unit->getBACT_pWorld()->FindWeaponProto(unit->_radial_shot_weapon) )
         return false;
 
     if ( unit->_radial_shot_shots <= 0 )

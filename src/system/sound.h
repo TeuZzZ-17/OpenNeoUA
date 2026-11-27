@@ -39,6 +39,9 @@ struct TSampleData
     std::vector<uint8_t> _Buffer;
 };
 
+// Bytes per sample frame of an OpenAL buffer format (unknown formats count as 1).
+int SFX_SampleFrameSize(ALenum format);
+
 struct TSampleParams
 {
     TSampleData *Sample = nullptr;

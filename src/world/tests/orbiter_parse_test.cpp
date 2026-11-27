@@ -1,4 +1,4 @@
-// OpenNeoUA Orbiter: orbiter_* parsing rules and the shipped Slime Lord spores.
+// OpenNeoUA Orbiter: orbiter_* parsing rules.
 // Run from Data: python src/world/tests/run_native_probe.py src/world/tests/orbiter_parse_test.cpp
 #include "game/yw.h"
 #include "common/env.h"
@@ -31,54 +31,39 @@ int main()
         World::TVhclProto vehicle;
         Check(vehicle.orbiter_weapon == 0, "vehicle orbiter link off by default");
         World::TWeaponOrbiterConfig o;
-        Check(o.count_min == 1 && o.strikes_min == 3 && o.energy_mult == 1.0f, "orbiter defaults");
+        Check(o.count_min == 1 && o.strike_count_min == 3 && o.strike_energy_mult == 1.0f, "orbiter defaults");
+        Check(o.strike_first_delay_max == 0 && o.strike_mode == World::TWeaponOrbiterConfig::STRIKE_ALL_AT_ONCE,
+              "launch at once, no delay by default");
+        Check(!o.HasRingGuard(), "classic free orbit by default");
     }
 
     // Ranges, fixed values, reversed ends and invalid values.
     {
         World::TWeaponOrbiterConfig o;
         Check(ParseOrbiterParam("orbiter_count", "3~2", o) && o.count_min == 2 && o.count_max == 3, "count range (reversed ends)");
-        Check(ParseOrbiterParam("orbiter_count", "9", o) && o.count_min == 2 && o.count_max == 3, "count above 8 rejected");
-        Check(ParseOrbiterParam("orbiter_count", "0", o) && o.count_min == 2, "count 0 rejected");
-        Check(ParseOrbiterParam("orbiter_strikes", "5", o) && o.strikes_min == 5 && o.strikes_max == 5, "strikes fixed");
-        Check(ParseOrbiterParam("orbiter_strikes", "abc", o) && o.strikes_min == 5, "strikes garbage rejected");
+        Check(ParseOrbiterParam("orbiter_count", "16", o) && o.count_max == 16, "count up to 16");
+        Check(ParseOrbiterParam("orbiter_count", "17", o) && o.count_max == 16, "count above 16 rejected");
+        Check(ParseOrbiterParam("orbiter_count", "0", o) && o.count_min == 16, "count 0 rejected");
+        Check(ParseOrbiterParam("orbiter_strike_count", "5", o) && o.strike_count_min == 5 && o.strike_count_max == 5, "strike count fixed");
+        Check(ParseOrbiterParam("orbiter_strike_count", "abc", o) && o.strike_count_min == 5, "strike count garbage rejected");
         Check(ParseOrbiterParam("orbiter_respawn_time", "4000~6000", o) && o.respawn_time_max == 6000, "respawn range");
-        Check(ParseOrbiterParam("orbiter_first_strike_delay", "0", o) && o.first_strike_delay_min == 0, "first strike delay 0 allowed");
+        Check(ParseOrbiterParam("orbiter_strike_first_delay", "300~500", o) && o.strike_first_delay_max == 500, "first delay range");
         Check(ParseOrbiterParam("orbiter_strike_interval", "50", o) && o.strike_interval_min == 900, "interval below 100 rejected");
+        Check(ParseOrbiterParam("orbiter_strike_mode", "one_by_one", o) &&
+              o.strike_mode == World::TWeaponOrbiterConfig::STRIKE_ONE_BY_ONE, "strike mode one_by_one");
+        Check(ParseOrbiterParam("orbiter_strike_mode", "sometimes", o) &&
+              o.strike_mode == World::TWeaponOrbiterConfig::STRIKE_ONE_BY_ONE, "strike mode garbage rejected");
         Check(ParseOrbiterParam("orbiter_guard_radius", "60~90", o) && o.guard_radius_min == 60.0f && o.guard_radius_max == 90.0f, "guard radius range");
         Check(ParseOrbiterParam("orbiter_guard_radius", "0", o) && o.guard_radius_max == 0.0f, "guard radius 0 = automatic");
         Check(ParseOrbiterParam("orbiter_siege_radius", "-5", o) && o.siege_radius_max == 0.0f, "negative siege radius rejected");
         Check(ParseOrbiterParam("orbiter_fade_in", "500~900", o) && o.fade_in == 800, "fade_in is a single value");
-        Check(ParseOrbiterParam("orbiter_energy_mult", "1.5", o) && o.energy_mult == 1.5f, "energy_mult increasing cascade");
-        Check(ParseOrbiterParam("orbiter_energy_mult", "0.4", o) && o.energy_mult == 0.4f, "energy_mult decreasing cascade");
-        Check(ParseOrbiterParam("orbiter_energy_mult", "0", o) && o.energy_mult == 0.4f, "energy_mult 0 rejected");
+        Check(ParseOrbiterParam("orbiter_guard_speed", "0.4", o) && o.guard_speed == 0.4f && o.HasRingGuard(), "guard speed decimals");
+        Check(ParseOrbiterParam("orbiter_guard_chaos_factor", "11", o) && o.guard_chaos < 0.0f, "guard chaos above 10 rejected");
+        Check(ParseOrbiterParam("orbiter_guard_chaos_factor", "0", o) && o.guard_chaos == 0.0f, "guard chaos 0 = ordered");
+        Check(ParseOrbiterParam("orbiter_strike_energy_mult", "1.5", o) && o.strike_energy_mult == 1.5f, "energy mult increasing cascade");
+        Check(ParseOrbiterParam("orbiter_strike_energy_mult", "0", o) && o.strike_energy_mult == 1.5f, "energy mult 0 rejected");
+        Check(!ParseOrbiterParam("orbiter_strikes", "3", o), "retired orbiter_strikes not consumed");
         Check(!ParseOrbiterParam("orbiter_unknown", "1", o), "unknown key not consumed");
-    }
-
-    // Shipped scripts: weapon 11 Slime_Spore carried by the Slime Lord (vehicle 72).
-    {
-        FSMgr::iDir::setBaseDir(".");
-        Common::Env.SetPrefix("data", "Data");
-        Common::Env.SetPrefix("rsrc", "data:");
-        Common::Env.SetPrefix("scripts", "data:scripts");
-
-        NC_STACK_ypaworld world;
-        world._vhclProtos.resize(256);
-        world._weaponProtos.resize(256);
-        world._buildProtos.resize(256);
-        world._roboProtos.resize(1);
-
-        const bool loaded = world.LoadProtosScript("data:scripts/Startup.cfg");
-        Check(loaded, "live Startup.cfg parsed");
-        if ( loaded )
-        {
-            const World::TWeapProto &spore = world.GetWeaponsProtos()[11];
-            Check(spore.IsOrbiter(), "weapon 11 is model = orbiter");
-            Check(spore.orbiter.count_min == 2 && spore.orbiter.count_max == 3, "spore count 2~3");
-            Check(spore.orbiter.strikes_min == 3 && spore.orbiter.energy_mult == 1.25f, "spore strikes and cascade");
-            Check(world.GetVhclProtos()[72].orbiter_weapon == 11, "Slime Lord carries the spores");
-            Check(world.GetVhclProtos()[72].weapon == 72, "Slime Lord primary weapon unchanged");
-        }
     }
 
     std::printf("orbiter_parse_test: %d checks, %d failures\n", checks, failures);

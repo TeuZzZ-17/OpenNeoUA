@@ -83,13 +83,6 @@ int32_t NC_STACK_ypaworld::SpawnTransientVisualBase(NC_STACK_base *base, const v
     return fx.id;
 }
 
-int32_t NC_STACK_ypaworld::SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const vec3d &velocity)
-{
-    return SpawnTransientVisual(modelId, external3dsPath, std::string(), pos, rot,
-                                lifeTime, scale, tint, axisScale, spin,
-                                particleControls, fadeIn, fadeOut, velocity);
-}
-
 int32_t NC_STACK_ypaworld::SpawnTransientVisual(int32_t modelId, const std::string &external3dsPath, const std::string &externalBasePath, const vec3d &pos, const mat3x3 &rot, int32_t lifeTime, float scale, const World::TVisualTint &tint, const vec3d &axisScale, const vec3d &spin, const TTransientVPParticleControls &particleControls, int32_t fadeIn, int32_t fadeOut, const vec3d &velocity)
 {
     if ( !external3dsPath.empty() )

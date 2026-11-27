@@ -116,6 +116,7 @@ struct TActiveDebuffState
     World::TAbsoluteOrPercent random_max_offset;
     World::TVisualTint vp_trail_tint;
     bool has_vp_trail_tint = false;
+    World::TDeathSpawnConfig death_spawn;
     TSampleData *snd_sample = nullptr;
     int snd_volume = 120;
     int snd_pitch = 0;
@@ -159,6 +160,7 @@ struct TActiveDebuffState
         random_max_offset.Clear();
         vp_trail_tint = World::TVisualTint();
         has_vp_trail_tint = false;
+        death_spawn = World::TDeathSpawnConfig();
         snd_sample = nullptr;
         snd_volume = 120;
         snd_pitch = 0;
@@ -175,8 +177,9 @@ struct TActiveDebuffState
 struct TActiveBuffState
 {
     World::TVehicleBuffConfig config; // profile copy; config.deflect_charges = charges left
-    int deflect_max = 0;              // Deflect charges when applied (save/load, "has Deflect")
+    int deflect_max = 0;              // Deflect charges (stacks) when full (save/load, "has Deflect")
     int expire_time = 0;              // 0 = permanent
+    int next_recharge_time = 0;       // _clock of the next recharged stack; 0 = not scheduled
 };
 
 enum BACT_TGT_TYPE
@@ -577,6 +580,7 @@ public:
     // send them against an enemy unit this unit attacks (or, as player, hits).
     void UpdateOrbiters(update_msg *arg);
     void EngageOrbiters(NC_STACK_ypabact *enemy);
+    NC_STACK_ypabact *FindNearestEnemy(float radius); // live enemy unit, horizontal distance; nullptr = none
     // Render-only alpha multiplier (1 = opaque). Used by appearing orbiters.
     virtual float GetRenderFadeAlpha() const { return 1.0f; }
     void UpdateArtilleryShell(update_msg *arg); // OpenNeoUA custom: radar-guided artillery shell barrage AI
@@ -779,6 +783,9 @@ public:
     //                             unit-gun/dummy children, their carrier) the moment it
     //                             performs a real attack. No-op once revealed/normal.
     bool IsInvisibleUnrevealed() const { return _invisibleUnrevealed; }
+    // Vehicle proto that drives behaviour, HUD and saves: the copied proto while a
+    // model = mimic unit is disguised, otherwise the unit's own _vehicleID.
+    uint8_t GetRuntimeVehicleID() const { return _mimic_disguise_vehicleID ? _mimic_disguise_vehicleID : _vehicleID; }
     bool IsIgnoredByAI() const;
     bool CanBeSeenByAIOrRadar() const { return !_invisibleUnrevealed && !IsIgnoredByAI(); }
     void RevealInvisibleOnAttack();
@@ -1350,12 +1357,8 @@ public:
     int _spawn_last_time;
     bool _spawn_waiting = true;
     int _at_death_spawn_units;
-    int _at_death_spawn_vehicle;
-    int _at_death_spawn_count;
-    float _at_death_spawn_random_pos;
-    int _at_death_spawn_instant;
-    int _at_death_spawn_immunity_time;
-    float _eject_force = 0.0f;
+    World::TDeathSpawnConfig _at_death_spawn; // the vehicle's own, or the one of a Debuff (set in Die())
+    int16_t _at_death_spawn_owner = -1;       // side of a Debuff's spawn (who applied it); -1 = the dead unit's side
     bool _at_death_spawn_done;
     int _at_death_spawn_protection_end_time;
     bool _at_death_spawn_restore_vulnerable;
@@ -1373,6 +1376,8 @@ public:
     int _orbiter_weapon;
     int _orbiter_count;           // rolled max live orbiters; -1 = not rolled yet
     int _orbiter_next_spawn_time; // _clock of the next spawn; 0 = not scheduled
+    int32_t _orbiter_attack_gid = 0;   // enemy of the running attack; 0 = none
+    int _orbiter_next_launch_time = 0; // _clock of the next launch of the running attack
     int _radial_shot_enable;
     int _radial_shot_weapon;
     float _radial_shot_trigger_radius;

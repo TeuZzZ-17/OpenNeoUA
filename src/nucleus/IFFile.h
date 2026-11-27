@@ -128,7 +128,6 @@ public:
 
     static FSMgr::FileHandle UAOpenFileWithSetLooseOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction = nullptr);
     static FSMgr::FileHandle UAOpenFileWithSetLooseEmbeddedOverride(const std::string &filename, const std::string &mode, SetLooseOverride *out, const char *sourceFunction = nullptr);
-    static FSMgr::FileHandle UAOpenFileWithSetLooseEmrsOverride(const std::string &filename, const std::string &mode, const std::string &className, const std::string &payload, SetLooseOverride *out, const char *sourceFunction = nullptr, size_t currentOffset = (size_t)-1);
     static FSMgr::FileHandle UAOpenFileVanilla(const std::string &filename, const std::string &mode);
     static IFFile *RsrcOpenIFFileVanilla(const std::string &filename, const std::string &mode);
     static IFFile UAOpenIFFileVanilla(const std::string &filename, const std::string &mode);

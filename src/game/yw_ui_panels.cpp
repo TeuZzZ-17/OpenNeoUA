@@ -201,7 +201,7 @@ void gui_update_create_btn__sub0(NC_STACK_ypaworld *yw)
 
             int v17 = dround(yw->sub_4498F4() * 2 * proto.GetProductionCost() / 100.0);
 
-            const std::string v8 = yw->ResolveGameplayVehicleName(proto);
+            const std::string v8 = yw->GetVehicleName(proto);
             const int remaining = yw->_userRobo
                 ? yw->GetVehicleProductionLimitRemaining(yw->_userRobo->_owner, v5)
                 : -1;
@@ -219,7 +219,7 @@ void gui_update_create_btn__sub0(NC_STACK_ypaworld *yw)
 
             int v18 = dround(yw->sub_4498F4() * v10.GetProductionCost() / 100.0);
 
-            std::string v13 = yw->ResolveGameplayBuildingName(v10, yw->_isNetGame);
+            std::string v13 = yw->GetBuildingName(v10, yw->_isNetGame);
 
             if ( v3 == gui_lstvw.selectedEntry )
                 v21 = 1;

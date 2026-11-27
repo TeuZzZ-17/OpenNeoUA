@@ -118,6 +118,32 @@ inline vec3d GuardOffset(const Guard &g)
     return vec3d(r * std::cos(angle), h, r * std::sin(angle));
 }
 
+// ---- Ring guard (orbiter_guard_speed / orbiter_guard_chaos_factor) ---------
+
+// Every orbiter owns place `slot` of `count` on an evenly spaced ring in the
+// carrier's horizontal frame (x right, z forward, slot 0 in front).
+//  speed 0..10 turns the whole ring (0 = still, 5 = about one radian a second);
+//  ringTime is shared by every place of one carrier, so the spacing never changes.
+//  chaos 0..10 adds each orbiter's own wander around its place, from none
+//  (perfectly ordered) to wide, fast and erratic (5 = like the classic orbit).
+// The wander uses the orbiter's own g.time and seeds. Never closer than minRadius.
+inline vec3d RingGuardOffset(const Guard &g, int slot, int count, float speed, float chaos, float ringTime)
+{
+    count = std::max(count, 1);
+    speed = std::max(0.0f, std::min(speed, 10.0f));
+    chaos = std::max(0.0f, std::min(chaos, 10.0f));
+
+    const float k = chaos / 5.0f;                       // 1 = classic orbit amplitude
+    const float t = g.time * (1.0f + 0.15f * chaos);    // more chaos = faster changes
+    const float angle = 6.2831853f * (float)(slot % count) / (float)count +
+                        0.2f * speed * ringTime +
+                        k * (0.45f * std::sin(0.37f * t + g.seedA) + 0.20f * std::sin(1.30f * t + g.seedB));
+    const float r = std::max(g.minRadius, g.radius * (1.0f + k * 0.15f * std::sin(0.53f * t + g.seedB)));
+    // Slightly above the carrier centre (negative y = up), wandering up and down with chaos.
+    const float h = g.radius * (-0.15f + k * 0.30f * std::sin(0.71f * t + g.seedC));
+    return vec3d(r * std::sin(angle), h, r * std::cos(angle));
+}
+
 // ---- Siege ---------------------------------------------------------------
 
 enum SiegeEvent

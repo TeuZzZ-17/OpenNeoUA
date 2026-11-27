@@ -275,8 +275,9 @@ bool StatusIconBlinkPhaseVisible(const StatusIconBlinkEntry &entry, uint32_t now
     return ((elapsed / STATUS_ICON_BLINK_PHASE_MS) & 1U) == 0U;
 }
 
-// Stack layers of the unit's Debuff become a small number on its icon. Only profiles
-// with stack_max show it; every other icon stays as it was.
+// `stacks` become a small number on the status icon: Debuff layers (profiles with stacks)
+// and the stacks left on Buffs (Buffs sharing one icon add theirs up). Every other icon
+// stays as it was.
 static void StatusIconApplyBadges(const NC_STACK_ypabact *bact, StatusIconBlinkRenderList &icons, int count)
 {
     for (const TActiveDebuffState &debuff : bact->_debuff_list)
@@ -289,6 +290,21 @@ static void StatusIconApplyBadges(const NC_STACK_ypabact *bact, StatusIconBlinkR
             if ( !StriCmp(icons[i].path, debuff.icon) )
                 icons[i].badge = debuff.stack_count;
         }
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        int stacks = 0;
+        bool hasStacks = false;
+        for (const TActiveBuffState &buff : bact->_buff_list)
+        {
+            if ( buff.deflect_max <= 0 || StriCmp(icons[i].path, buff.config.icon) )
+                continue;
+            hasStacks = true;
+            stacks += buff.config.deflect_charges;
+        }
+        if ( hasStacks )
+            icons[i].badge = stacks;
     }
 }
 
@@ -474,12 +490,8 @@ int ResolveUnitDisplayVehicleProtoId(NC_STACK_ypaworld *yw, const NC_STACK_ypaba
     if ( !yw || !bact )
         return -1;
 
-    int protoId = bact->_mimic_disguise_vehicleID ? bact->_mimic_disguise_vehicleID : bact->_vehicleID;
-
-    if ( protoId < 0 || (size_t)protoId >= yw->_vhclProtos.size() )
-        return -1;
-
-    return protoId;
+    const int protoId = bact->GetRuntimeVehicleID();
+    return yw->FindVhclProto(protoId) ? protoId : -1;
 }
 
 bool StatusIconIsSvgPath(const std::string &path)
