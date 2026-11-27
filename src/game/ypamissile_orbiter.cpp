@@ -392,9 +392,14 @@ bool NC_STACK_ypamissile::LaunchOrbiter(NC_STACK_ypabact *target)
     _fly_dir = dir;
     _fly_dir_length = carrier->_fly_dir_length + proto.start_speed;
     _mislHomingExitDirection = dir;
+    // Level frame built on the launch direction: the carrier's X axis is not
+    // perpendicular to it from a side ring place, and would shear the shard.
+    vec3d x = vec3d::OY(-1.0) * dir;
+    if ( x.normalise() <= 0.001 )
+        x = carrier->_rotation.AxisX();
     _rotation.SetZ(dir);
-    _rotation.SetX(carrier->_rotation.AxisX());
-    _rotation.SetY(_rotation.AxisZ() * _rotation.AxisX());
+    _rotation.SetX(x);
+    _rotation.SetY(dir * x);
     _old_pos = _position;
 
     setTarget_msg tgt;

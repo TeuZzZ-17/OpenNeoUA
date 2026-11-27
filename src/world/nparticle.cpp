@@ -74,7 +74,9 @@ void ParticleSystem::UpdateRender(area_arg_65 *rndrParams, int32_t delta)
         float frameScale = (float)particleDelta * (60.0f / 1024.0f);
 
         f.Vec += (f.pParticleGen->_accelStart + f.pParticleGen->_accelDelta * visualAge) * frameScale;
-        f.Pos += f.Vec * fsec + NC_STACK_particle::RandVec() * (f.pParticleGen->_noisePower * frameScale);
+        // Noise is a random walk: its spread grows with the square root of the
+        // step count, so each step scales by sqrt(frameScale) to match 60fps.
+        f.Pos += f.Vec * fsec + NC_STACK_particle::RandVec() * (f.pParticleGen->_noisePower * std::sqrt(frameScale));
         float baseScale = f.pParticleGen->_scaleStart + f.pParticleGen->_scaleDelta * visualAge;
         vec3d scl(baseScale * f.Scale.x, baseScale * f.Scale.y, baseScale * f.Scale.z);
 

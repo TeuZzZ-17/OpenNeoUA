@@ -234,9 +234,11 @@ vec3d NC_STACK_particle::RandVec()
 
 void NC_STACK_particle::UpdateAccelMagnify()
 {
-    _accelDelta = (_accelEnd - _accelStart) / (float)_genLifeTime;
+    // A zero context lifetime would turn the deltas into inf/NaN.
+    const float span = _genLifeTime > 0 ? (float)_genLifeTime : 1.0f;
+    _accelDelta = (_accelEnd - _accelStart) / span;
 
-    _magnifyDelta = (_magnifyEnd - _magnifyStart) / (float)_genLifeTime;
+    _magnifyDelta = (_magnifyEnd - _magnifyStart) / span;
 }
 
 void NC_STACK_particle::UpdateLifeStages()
@@ -481,7 +483,7 @@ size_t NC_STACK_particle::LoadingFromIFF(IFFile **file)
     {
         UpdateAccelMagnify();
 
-        _genPause = 1024 / _genRate;
+        SetGenRate(_genRate);
         _scaleDelta = (_scaleEnd - _scaleStart) / _lifeTime;
 
         _SetLifeStages(tmp);
@@ -548,6 +550,10 @@ size_t NC_STACK_particle::Emit(area_arg_65 *arg, InstanceOpts * uopts)
     opts->Age = arg->timeStamp - opts->TimeStamp;
 
     int32_t maxTime = Common::MAX(_genLifeTime, _genEnd);
+
+    // Bad data (zero cycle or birth rate) would divide by zero or loop forever.
+    if (maxTime <= 0 || _genPause <= 0)
+        return 1;
 
     if (opts->Age >= maxTime)
     {
@@ -667,7 +673,8 @@ void NC_STACK_particle::SetContextLifeTime(int lftime)
 void NC_STACK_particle::SetGenRate(int rate)
 {
     _genRate = rate;
-    _genPause = 1024 / rate;
+    // rate <= 0 stops emission; above 1024 the pause would be 0 and Emit would never end.
+    _genPause = rate > 0 ? Common::MAX(1, 1024 / rate) : 0;
 }
 
 void NC_STACK_particle::SetParticleLifeTime(int lftime)
