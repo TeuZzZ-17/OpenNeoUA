@@ -527,7 +527,7 @@ bool yw_ReadSurfacePixel(SDL_Surface *surface, int x, int y, Uint32 *out)
     if ( !surface || !out || x < 0 || y < 0 || x >= surface->w || y >= surface->h )
         return false;
 
-    const int bpp = surface->format->BytesPerPixel;
+    const int bpp = SDL_BYTESPERPIXEL(surface->format);
     Uint8 *p = (Uint8 *)surface->pixels + y * surface->pitch + x * bpp;
 
     switch ( bpp )
@@ -589,12 +589,12 @@ SDL_Color yw_GetMapProjectileOwnerColor(NC_STACK_ypaworld *yw, int owner, int ti
         return fallback;
 
     Uint32 colorKey = 0;
-    const bool hasColorKey = SDL_GetColorKey(surface, &colorKey) == 0;
+    const bool hasColorKey = SDL_GetSurfaceColorKey(surface, &colorKey);
 
     bool locked = false;
     if ( SDL_MUSTLOCK(surface) )
     {
-        if ( SDL_LockSurface(surface) != 0 )
+        if ( !SDL_LockSurface(surface) )
             return fallback;
         locked = true;
     }
@@ -614,7 +614,7 @@ SDL_Color yw_GetMapProjectileOwnerColor(NC_STACK_ypaworld *yw, int owner, int ti
                 continue;
 
             Uint8 r = 0, g = 0, b = 0, a = 255;
-            SDL_GetRGBA(pixel, surface->format, &r, &g, &b, &a);
+            SDL_GetRGBA(pixel, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &r, &g, &b, &a);
 
             // Font transparency is usually yellow colorkey; keep this guard too
             // because some loaded/converted surfaces can hide the raw key value.
@@ -896,7 +896,7 @@ SDL_Color yw_GetMapTitleBackgroundColor(NC_STACK_ypaworld *yw)
     bool locked = false;
     if ( SDL_MUSTLOCK(surface) )
     {
-        if ( SDL_LockSurface(surface) != 0 )
+        if ( !SDL_LockSurface(surface) )
             return fallback;
         locked = true;
     }
@@ -913,7 +913,7 @@ SDL_Color yw_GetMapTitleBackgroundColor(NC_STACK_ypaworld *yw)
         return fallback;
 
     SDL_Color color;
-    SDL_GetRGBA(pixel, surface->format, &color.r, &color.g, &color.b, &color.a);
+    SDL_GetRGBA(pixel, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &color.r, &color.g, &color.b, &color.a);
     color.a = 255;
     return color;
 }
@@ -958,13 +958,13 @@ void yw_RenderMapBackground(NC_STACK_ypaworld *yw)
         GFX::Engine.DrawVirtualUISolidRect(
             (float)rect.x, (float)rect.y,
             (float)(rect.x + rect.w), (float)(rect.y + rect.h),
-            GFX::TGLColor(color.r * inv255, color.g * inv255,
+            GFX::TColorF(color.r * inv255, color.g * inv255,
                           color.b * inv255, color.a * inv255));
     }
     else
     {
-        SDL_FillRect(surface, &rect,
-                     SDL_MapRGBA(surface->format, color.r, color.g, color.b, color.a));
+        SDL_FillSurfaceRect(surface, &rect,
+                     SDL_MapSurfaceRGBA(surface, color.r, color.g, color.b, color.a));
     }
 }
 

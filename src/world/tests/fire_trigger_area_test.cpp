@@ -1313,17 +1313,17 @@ void TestDebugSegmentClipping() {
     Check(yw_ProjectDebugSegment(vec3d(-5, 0, 2), vec3d(5, 0, 2), projection, 1, 320, 200, &line) &&
           line.x1 == 0 && line.x2 == 319 && line.y1 == 100 && line.y2 == 100,
           "debug edge crossing viewport survives with both endpoints off screen");
-    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, 320, 200, 32, SDL_PIXELFORMAT_ARGB8888);
+    SDL_Surface *surface = SDL_CreateSurface(320, 200, SDL_PIXELFORMAT_ARGB8888);
     Check(surface != nullptr, "offscreen debug drawing surface created");
     if ( surface ) {
-        SDL_FillRect(surface, nullptr, 0);
+        SDL_FillSurfaceRect(surface, nullptr, 0);
         GFX::GFXEngine::DrawLine(surface, line, 255, 150, 30);
-        const uint32_t orange = SDL_MapRGB(surface->format, 255, 150, 30);
+        const uint32_t orange = SDL_MapSurfaceRGB(surface, 255, 150, 30);
         const uint32_t *pixels = (const uint32_t *)surface->pixels;
         const int row = 100*surface->pitch/4;
         Check(pixels[row] == orange && pixels[row+160] == orange && pixels[row+319] == orange,
               "production DrawLine draws the clipped edge through both screen borders");
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
     }
     Check(yw_ProjectDebugSegment(vec3d(0.1, 0, -2), vec3d(0.2, 0, 5), projection, 1, 320, 200, &line),
           "debug edge crossing near plane keeps its visible part");

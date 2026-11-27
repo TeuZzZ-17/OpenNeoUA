@@ -735,8 +735,8 @@ static void StatusIconRenderBadge(int left, int top, int size, int value, uint8_
     const int x0 = left + size - width;
     const int y0 = top + size - 5 * unit;
     const float alpha = opacity / 255.0f;
-    const GFX::TGLColor shadow(0.0f, 0.0f, 0.0f, alpha);
-    const GFX::TGLColor fill(1.0f, 1.0f, 0.6f, alpha);
+    const GFX::TColorF shadow(0.0f, 0.0f, 0.0f, alpha);
+    const GFX::TColorF fill(1.0f, 1.0f, 0.6f, alpha);
 
     for (int pass = 0; pass < 2; pass++)
     {
@@ -826,7 +826,7 @@ void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World:
     StatusIconRenderBlinkList(yw, icons, iconCount, left, top, STATUS_ICON_SIZE, opacity);
 }
 
-GFX::TGLColor yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TGLColor &fallback)
+GFX::TColorF yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TColorF &fallback)
 {
     const std::vector<std::string> parts = Stok::Split(key.Get<std::string>(), "|, \t");
     if ( parts.size() != 4 )
@@ -848,7 +848,7 @@ GFX::TGLColor yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TGLColor &f
         return fallback;
     }
 
-    return GFX::TGLColor(component[0] / 255.0f, component[1] / 255.0f,
+    return GFX::TColorF(component[0] / 255.0f, component[1] / 255.0f,
                          component[2] / 255.0f, component[3] / 255.0f);
 }
 
@@ -870,13 +870,13 @@ const YWProceduralStatusBarConfig &yw_GetProceduralStatusBarConfig()
     return config;
 }
 
-GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &lowTint,
-                                           const GFX::TGLColor &fullTint,
+GFX::TColorF yw_StatusBarTintLerp(const GFX::TColorF &lowTint,
+                                           const GFX::TColorF &fullTint,
                                            float ratio, uint8_t opacity)
 {
     ratio = std::max(0.0f, std::min(1.0f, ratio));
     const float opacityMul = opacity / 255.0f;
-    return GFX::TGLColor(lowTint.r + (fullTint.r - lowTint.r) * ratio,
+    return GFX::TColorF(lowTint.r + (fullTint.r - lowTint.r) * ratio,
                          lowTint.g + (fullTint.g - lowTint.g) * ratio,
                          lowTint.b + (fullTint.b - lowTint.b) * ratio,
                          (lowTint.a + (fullTint.a - lowTint.a) * ratio) * opacityMul);
@@ -907,11 +907,11 @@ bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int value,
     value = std::max(0, std::min(value, maxValue));
     const float ratio = (float)value / (float)maxValue;
 
-    const GFX::TGLColor &fullTint = config.hpFullTint;
-    const GFX::TGLColor &lowTint = config.hpLowTint;
-    const GFX::TGLColor &emptyTint = config.hpEmptyTint;
-    const GFX::TGLColor activeTint = yw_StatusBarTintLerp(lowTint, fullTint, ratio, opacity);
-    GFX::TGLColor inactiveTint = emptyTint;
+    const GFX::TColorF &fullTint = config.hpFullTint;
+    const GFX::TColorF &lowTint = config.hpLowTint;
+    const GFX::TColorF &emptyTint = config.hpEmptyTint;
+    const GFX::TColorF activeTint = yw_StatusBarTintLerp(lowTint, fullTint, ratio, opacity);
+    GFX::TColorF inactiveTint = emptyTint;
     inactiveTint.a *= opacity / 255.0f;
 
     // Keep the V2 50% vertical thickness, but render the bar as one continuous
@@ -985,14 +985,14 @@ void yw_RenderProceduralShieldBar(int left, int top, int width, int height,
         const float scale = (float)width / (float)maxValue;
         const float lostLeft = (float)left + std::max(0, value) * scale;
         const float lostRight = std::max(lostLeft + 1.0f, (float)left + std::min(fullValue, maxValue) * scale);
-        const GFX::TGLColor lostTint(1.0f, 0.3f, 0.2f, 0.9f * opacity / 255.0f);
+        const GFX::TColorF lostTint(1.0f, 0.3f, 0.2f, 0.9f * opacity / 255.0f);
         GFX::Engine.DrawVirtualUISolidRect(lostLeft, (float)top, std::min(lostRight, (float)(left + width)),
                                            (float)(top + height), lostTint);
     }
 }
 
 void yw_RenderProceduralProgressBar(int left, int top, int width, int height, float ratio,
-                                    const GFX::TGLColor &tint, uint8_t opacity, float fillAlpha)
+                                    const GFX::TColorF &tint, uint8_t opacity, float fillAlpha)
 {
     if ( width <= 0 || height <= 0 )
         return;
@@ -1003,9 +1003,9 @@ void yw_RenderProceduralProgressBar(int left, int top, int width, int height, fl
     // Keep the empty track clearly readable without competing with the fill.
     constexpr float trackAlpha = 0.4f;
 
-    GFX::TGLColor trackTint = tint;
+    GFX::TColorF trackTint = tint;
     trackTint.a *= trackAlpha * opacityMul;
-    GFX::TGLColor fillTint = tint;
+    GFX::TColorF fillTint = tint;
     fillTint.a *= opacityMul * fillAlpha;
 
     const float barLeft = (float)left;

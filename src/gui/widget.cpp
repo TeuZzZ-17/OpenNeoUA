@@ -20,7 +20,7 @@ Widget::~Widget()
     Unparent();
 
     if (_hwSurface)
-        SDL_FreeSurface(_hwSurface);
+        SDL_DestroySurface(_hwSurface);
 
     if (_hwTex)
         delete _hwTex;

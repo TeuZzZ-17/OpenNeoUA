@@ -41,7 +41,7 @@ struct area_arg_65
     int ambientLight;
     uint32_t flags;
     // OpenNeoUA custom: per-emitter tint copied to particles spawned during this render.
-    GFX::TGLColor tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+    GFX::TColorF tint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
     // When true, tint is treated as a target hue rather than an RGB multiplier.
     // Used by faction-coloured plasma so the cyan source VP can become red/yellow/etc.
     bool colorizeTint = false;
@@ -66,7 +66,7 @@ struct area_arg_65
         fadeLength = 0.0;
         ambientLight = 0;
         flags = 0;
-        tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+        tint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
         colorizeTint = false;
         particleScale = vec3d(1.0, 1.0, 1.0);
         particleSpin = vec3d(0.0, 0.0, 0.0);
@@ -85,7 +85,7 @@ struct baseRender_msg
     float maxZ = 0.;
     uint32_t flags = 0;
     // OpenNeoUA custom: per-render main visual target hue/alpha. Neutral (1,1,1,1) = no change.
-    GFX::TGLColor tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+    GFX::TColorF tint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
     // Render tint as a target hue while preserving source intensity/alpha.
     bool colorizeTint = false;
     // OpenNeoUA custom: transient VP fade factor. The mesh renderer uses this
@@ -93,7 +93,7 @@ struct baseRender_msg
     // RGB intensity while ordinary alpha-blended materials keep using alpha.
     float vpFadeFactor = 1.0f;
     // OpenNeoUA custom: per-render particle controls inherited by emitted particles.
-    GFX::TGLColor particleTint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+    GFX::TColorF particleTint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
     bool particleColorizeTint = false;
     vec3d particleScale = vec3d(1.0, 1.0, 1.0);
     vec3d particleSpin = vec3d(0.0, 0.0, 0.0);

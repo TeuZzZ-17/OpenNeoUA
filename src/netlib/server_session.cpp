@@ -68,7 +68,7 @@ void ZNDServer::SessionDisconnectAllUsers(NetSession *ses, uint8_t type)
 {
     if (ses && !ses->lobby)
     {
-        if (SDL_LockMutex(sendPktListMutex) == 0)
+        SDL_LockMutex(sendPktListMutex);
         {
             RefData *dat = SYSDataGenSesLeave(type);
 

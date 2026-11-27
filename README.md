@@ -38,6 +38,8 @@ For the latest implementation details, the current OpenNeoUA source code and run
 
 OpenNeoUA is currently distributed as source code. On Windows, the executable must first be built with the 64-bit MinGW environment provided by MSYS2.
 
+The engine uses SDL3 and draws through SDL_GPU on Vulkan: the computer needs a graphics driver with Vulkan support (any current NVIDIA, AMD or Intel driver). Without one the game shows an error and closes.
+
 ## 1. Install and update MSYS2
 
 1. Download and install MSYS2:
@@ -57,7 +59,7 @@ OpenNeoUA is currently distributed as source code. On Windows, the executable mu
 4. Install the required 64-bit development packages:
 
    ```bash
-   pacman -S --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_image mingw-w64-x86_64-SDL2_ttf mingw-w64-x86_64-SDL2_net mingw-w64-x86_64-openal mingw-w64-x86_64-libvorbis mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-lua
+   pacman -S --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-sdl3 mingw-w64-x86_64-sdl3-image mingw-w64-x86_64-sdl3-ttf mingw-w64-x86_64-shaderc mingw-w64-x86_64-openal mingw-w64-x86_64-libvorbis mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-lua
    ```
 
 ## 2. Assemble the original game data and OpenNeoUA
@@ -148,6 +150,8 @@ OpenNeoUA is currently distributed as source code. On Windows, the executable mu
     ```
 
     The last two lines describe merged contents, not two extra folders to create. For example, original and repository scripts share `Data\Scripts\`.
+
+    When updating from a build older than the SDL3 engine, delete `SDL2.dll`, `SDL2_image.dll`, `SDL2_net.dll` and `SDL2_ttf.dll` from the main folder: the engine no longer uses them.
 
 ## 5. Run and verify OpenNeoUA
 

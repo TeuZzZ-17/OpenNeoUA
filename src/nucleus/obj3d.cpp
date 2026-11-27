@@ -388,7 +388,7 @@ GFX::TRenderParams NC_STACK_Obj3D::Mtl::GenParams() const
             tmp.Tex = diffuseMap->GetBitmap();
     }
 
-    tmp.Color = GFX::TGLColor(diffuse[0], diffuse[1], diffuse[2], d);
+    tmp.Color = GFX::TColorF(diffuse[0], diffuse[1], diffuse[2], d);
 
     if (d < 1.0)
         tmp.Flags |= GFX::RFLAGS_LUMTRACY;

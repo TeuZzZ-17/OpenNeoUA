@@ -264,7 +264,7 @@ static void WeaponTracerQueueSegment(baseRender_msg *arg, GFX::TMesh *mesh,
     flags |= additive ? GFX::RFLAGS_LUMTRACY : GFX::RFLAGS_ALPHABLEND;
     render.Flags = flags | arg->flags;
     render.Color = mesh->Mat.Color;
-    render.ColorMul = GFX::TGLColor(tint.r, tint.g, tint.b,
+    render.ColorMul = GFX::TColorF(tint.r, tint.g, tint.b,
                                     tint.a * clampedAlpha);
     render.Colorize = tint.ColorizesRGB();
 

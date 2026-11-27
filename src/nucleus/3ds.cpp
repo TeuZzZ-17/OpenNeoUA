@@ -736,6 +736,6 @@ GFX::TRenderParams NC_STACK_3ds::GenRenderParams(d3dsMaterial *mat)
             tmp.Tex = mat->texture1_map.tex->GetBitmap();
     }
 
-    tmp.Color = GFX::TGLColor(mat->diffuse[0], mat->diffuse[1], mat->diffuse[2], 1.0 - mat->transparency);
+    tmp.Color = GFX::TColorF(mat->diffuse[0], mat->diffuse[1], mat->diffuse[2], 1.0 - mat->transparency);
     return tmp;
 }

@@ -1,13 +1,7 @@
-#version 120
-
-
-uniform sampler2D texture;
-uniform ivec2 screenSize;
-uniform int randval;
-uniform int millisecs;
-uniform float vhsStrength;
-
-
+// VHS filter (gfx.vhs_filter_shader): 1998 cinematic tape look.
+// Post shader: the engine puts its declarations in front of this text
+// (uTexture, uAux, PostParams, texCoords, fragColor, sampleScreen; see
+// OpenNeoUA_Parameter_Guide_EN.md, Graphics). Write only functions and main().
 
 const float UA_PI = 3.14159265359;
 
@@ -28,7 +22,7 @@ float uaBell(float x)
 
 void main()
 {
-    vec2 originalUv = gl_TexCoord[0].xy;
+    vec2 originalUv = texCoords;
     vec2 realSize = max(vec2(screenSize), vec2(1.0));
     float aspect = realSize.x / realSize.y;
 
@@ -71,14 +65,14 @@ void main()
 
     vec2 snappedUv = (floor(warpedUv * virtualSize) + 0.5) / virtualSize;
 
-    vec4 centerSample = texture2D(texture, snappedUv);
+    vec4 centerSample = sampleScreen(uTexture, snappedUv);
     vec3 center = centerSample.rgb;
-    vec3 left   = texture2D(texture, clamp(snappedUv - vec2(virtualPixel.x, 0.0), vec2(0.0), vec2(1.0))).rgb;
-    vec3 right  = texture2D(texture, clamp(snappedUv + vec2(virtualPixel.x, 0.0), vec2(0.0), vec2(1.0))).rgb;
-    vec3 down   = texture2D(texture, clamp(snappedUv - vec2(0.0, virtualPixel.y), vec2(0.0), vec2(1.0))).rgb;
-    vec3 up     = texture2D(texture, clamp(snappedUv + vec2(0.0, virtualPixel.y), vec2(0.0), vec2(1.0))).rgb;
-    vec3 farLeft = texture2D(texture, clamp(snappedUv - vec2(virtualPixel.x * 2.0, 0.0), vec2(0.0), vec2(1.0))).rgb;
-    vec3 farRight = texture2D(texture, clamp(snappedUv + vec2(virtualPixel.x * 2.0, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 left   = sampleScreen(uTexture, clamp(snappedUv - vec2(virtualPixel.x, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 right  = sampleScreen(uTexture, clamp(snappedUv + vec2(virtualPixel.x, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 down   = sampleScreen(uTexture, clamp(snappedUv - vec2(0.0, virtualPixel.y), vec2(0.0), vec2(1.0))).rgb;
+    vec3 up     = sampleScreen(uTexture, clamp(snappedUv + vec2(0.0, virtualPixel.y), vec2(0.0), vec2(1.0))).rgb;
+    vec3 farLeft = sampleScreen(uTexture, clamp(snappedUv - vec2(virtualPixel.x * 2.0, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 farRight = sampleScreen(uTexture, clamp(snappedUv + vec2(virtualPixel.x * 2.0, 0.0), vec2(0.0), vec2(1.0))).rgb;
 
     // v6: slightly stronger low-bandwidth reconstruction. Fine texture detail
     // is fused without changing geometry, depth, culling or render distance.
@@ -91,13 +85,13 @@ void main()
     float chromaPulse = 0.5 + 0.5 * sin(time * 0.93);
     float redOffset = 2.15 + chromaPulse * 0.45;
     float blueOffset = 2.55 + chromaPulse * 0.55;
-    vec3 redNear = texture2D(texture,
+    vec3 redNear = sampleScreen(uTexture,
         clamp(snappedUv + vec2(virtualPixel.x * redOffset, 0.0), vec2(0.0), vec2(1.0))).rgb;
-    vec3 redFar = texture2D(texture,
+    vec3 redFar = sampleScreen(uTexture,
         clamp(snappedUv + vec2(virtualPixel.x * (redOffset + 1.45), 0.0), vec2(0.0), vec2(1.0))).rgb;
-    vec3 blueNear = texture2D(texture,
+    vec3 blueNear = sampleScreen(uTexture,
         clamp(snappedUv - vec2(virtualPixel.x * blueOffset, 0.0), vec2(0.0), vec2(1.0))).rgb;
-    vec3 blueFar = texture2D(texture,
+    vec3 blueFar = sampleScreen(uTexture,
         clamp(snappedUv - vec2(virtualPixel.x * (blueOffset + 1.65), 0.0), vec2(0.0), vec2(1.0))).rgb;
 
     vec3 chroma = soft;
@@ -117,11 +111,11 @@ void main()
     vec2 echoShift = vec2(virtualPixel.x * echoPixels * chromaDir,
                           virtualPixel.y * echoVertical);
 
-    vec3 echoRed = texture2D(texture,
+    vec3 echoRed = sampleScreen(uTexture,
         clamp(snappedUv + echoShift, vec2(0.0), vec2(1.0))).rgb;
-    vec3 echoGreen = texture2D(texture,
+    vec3 echoGreen = sampleScreen(uTexture,
         clamp(snappedUv - echoShift * 0.38, vec2(0.0), vec2(1.0))).rgb;
-    vec3 echoBlue = texture2D(texture,
+    vec3 echoBlue = sampleScreen(uTexture,
         clamp(snappedUv - echoShift * 0.82, vec2(0.0), vec2(1.0))).rgb;
 
     float centerLumForEcho = uaLuma(center);
@@ -142,7 +136,7 @@ void main()
     chroma += temporalChromaEcho * chromaEchoMask * analogue
             * (0.17 + 0.15 * strength);
 
-    vec3 ghostTap = texture2D(texture,
+    vec3 ghostTap = sampleScreen(uTexture,
         clamp(snappedUv - vec2(virtualPixel.x * 2.8, 0.0), vec2(0.0), vec2(1.0))).rgb;
     float ghostLum = max(uaLuma(ghostTap) - 0.60, 0.0);
     chroma += vec3(1.00, 0.72, 0.40) * ghostLum * analogue * 0.12;
@@ -214,5 +208,5 @@ void main()
     float vignette = smoothstep(0.42, 1.48, dot(edge, edge));
     color *= 1.0 - vignette * (0.045 + 0.050 * strength);
 
-    gl_FragColor = vec4(clamp(color, 0.0, 1.0), centerSample.a);
+    fragColor = vec4(clamp(color, 0.0, 1.0), centerSample.a);
 }

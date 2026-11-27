@@ -63,7 +63,6 @@ Common::Ini::Key IniConf::GfxAtmosphereContrast("gfx.atmosphere_contrast", Commo
 Common::Ini::Key IniConf::GfxAtmosphereSaturation("gfx.atmosphere_saturation", Common::Ini::KT_WORD, std::string("0.80"));
 Common::Ini::Key IniConf::GfxAtmosphereVignette("gfx.atmosphere_vignette", Common::Ini::KT_WORD, std::string("0.60"));
 Common::Ini::Key IniConf::GfxVhsFilterShader("gfx.vhs_filter_shader", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs.ps"));
-Common::Ini::Key IniConf::GfxVhsFilterShaderVbo("gfx.vhs_filter_shader_vbo", Common::Ini::KT_STRING, std::string("res/ua_cinematic_1998_vhs_vbo.ps"));
 Common::Ini::Key IniConf::GfxVhsFilterStrength("gfx.vhs_filter_strength", Common::Ini::KT_WORD, std::string("0.60"));
 Common::Ini::Key IniConf::GfxVideoFilterMode("gfx.video_filter_mode", Common::Ini::KT_DIGIT, (int32_t)0);
 Common::Ini::Key IniConf::GfxHorizonFadeMode("gfx.horizon_fade_mode", Common::Ini::KT_DIGIT, (int32_t)0);
@@ -89,8 +88,6 @@ Common::Ini::Key IniConf::GfxColorEff13("gfx.color_eff[13]", Common::Ini::KT_WOR
 Common::Ini::Key IniConf::GfxColorEff14("gfx.color_eff[14]", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxColorEff15("gfx.color_eff[15]", Common::Ini::KT_WORD, std::string());
 Common::Ini::Key IniConf::GfxColorEff16("gfx.color_eff[16]", Common::Ini::KT_WORD, std::string());
-
-Common::Ini::Key IniConf::GfxVBO("gfx.vbo", Common::Ini::KT_BOOL, true);
 
 // Stored as a single token when saved by Options, e.g. Liberation_Mono_Regular.
 // KT_STRING is intentionally kept so older test builds with spaces still parse.
@@ -835,9 +832,7 @@ void IniConf::Init()
         , &MenuWindowed
 
         , &GfxAdditionalModes
-        , &GfxVBO
         , &GfxVhsFilterShader
-        , &GfxVhsFilterShaderVbo
         , &GfxVhsFilterStrength
         , &GfxVideoFilterMode
         , &GfxHorizonFadeMode

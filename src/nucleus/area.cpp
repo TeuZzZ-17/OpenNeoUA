@@ -353,7 +353,7 @@ void NC_STACK_area::GenMesh(std::list<GFX::TMesh> *meshList, NC_STACK_skeleton *
             msh->Vertexes.emplace_back();
             msh->Vertexes.back().Pos = dat->POO[ pol.v[i] ];
             msh->Vertexes.back().TexCoordId = i;
-            msh->Vertexes.back().Color = GFX::TGLColor(clr, clr, clr, alpha);
+            msh->Vertexes.back().Color = GFX::TColorF(clr, clr, clr, alpha);
 
             if (coords)
                 msh->Vertexes.back().TexCoord = coords->at(i);
@@ -422,7 +422,7 @@ GFX::TRenderParams NC_STACK_area::GetRenderParams( size_t )
 
     if (_texImg)
     {
-        params.Color = GFX::TGLColor(clr, clr, clr, 1.0);
+        params.Color = GFX::TColorF(clr, clr, clr, 1.0);
         params.TexSource = _texImg;
 
         if (_texImg->IsDynamic())
@@ -432,7 +432,7 @@ GFX::TRenderParams NC_STACK_area::GetRenderParams( size_t )
     }
     else
     {
-        params.Color = GFX::TGLColor(0.0, 0.0, 0.0, 1.0);
+        params.Color = GFX::TColorF(0.0, 0.0, 0.0, 1.0);
     }
 
     return params;

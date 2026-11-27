@@ -146,9 +146,9 @@ bool DigMesh(const GFX::TMesh &source, const vec3d &origin,
         vertex.Pos = vec3f(p.x + sample.OffsetX() - origin.x, p.y + sample.OffsetY() - origin.y,
                            p.z + sample.OffsetZ() - origin.z);
         vertex.TexCoord = tUtV(p.u, p.v);
-        vertex.Color = GFX::TGLColor(Unit(p.color[0] * shade), Unit(p.color[1] * shade),
+        vertex.Color = GFX::TColorF(Unit(p.color[0] * shade), Unit(p.color[1] * shade),
                                      Unit(p.color[2] * shade), p.color[3]);
-        vertex.ComputedColor = GFX::TGLColor(Unit(p.computed[0] * shade), Unit(p.computed[1] * shade),
+        vertex.ComputedColor = GFX::TColorF(Unit(p.computed[0] * shade), Unit(p.computed[1] * shade),
                                              Unit(p.computed[2] * shade), p.computed[3]);
         vertex.TexCoordId = texCoordId;
         out->Vertexes.push_back(vertex);

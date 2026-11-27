@@ -76,8 +76,8 @@ int main(int, char **)
     const std::string videoMode((std::istreambuf_iterator<char>(videoInput)), std::istreambuf_iterator<char>());
     videoInput.close();
     System::Init();
-    auto *window = SDL_GL_GetCurrentWindow();
-    if (!window) { std::printf("No GL context\n"); return 2; }
+    auto *window = System::GetWindow();
+    if (!window) { std::printf("No window\n"); return 2; }
     SDL_HideWindow(window);
     FSMgr::iDir::setBaseDir("");
     Common::Env.SetPrefix("data", "Data"); Common::Env.SetPrefix("env", "Data/Env");

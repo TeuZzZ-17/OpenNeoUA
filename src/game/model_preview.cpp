@@ -377,11 +377,11 @@ void ModelPreview::Render(baseRender_msg &arg, const vec3d &position, int yaw, i
         auto render = renderContext;
         if (authoredTransforms)
         {
-            render.tint = GFX::TGLColor(part.tint.r,part.tint.g,part.tint.b,part.tint.a);
+            render.tint = GFX::TColorF(part.tint.r,part.tint.g,part.tint.b,part.tint.a);
             render.colorizeTint = part.tint.ColorizesRGB();
             render.excludeSectorTerrainFromTint = !part.root;
             const auto &tint=part.weapon?part.trailTint:part.tint;
-            render.particleTint=GFX::TGLColor(tint.r,tint.g,tint.b,tint.a);
+            render.particleTint=GFX::TColorF(tint.r,tint.g,tint.b,tint.a);
             render.particleColorizeTint=tint.ColorizesRGB();
             render.particleScale=part.weapon?vec3d(part.trailScale.x,part.trailScale.y,1.0):part.scale;
             render.particleLifetimeScale=part.weapon?part.trailScale.z:1.0f;

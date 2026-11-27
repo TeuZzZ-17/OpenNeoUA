@@ -10,12 +10,8 @@ extern "C" {
 #include "movie.h"
 #include "fsmgr.h"
 
-#if defined(__APPLE__) && defined(__MACH__)
-#include <OpenGL/gl.h>
-#else
-#include <GL/gl.h>
-#endif
 #include "system.h"
+#include "gpu.h"
 #include "sound.h"
 
 #if (LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(57, 33, 100))
@@ -71,7 +67,7 @@ struct TMovie::Context
     bool fileEOF = false;
 
     struct SwsContext *sws_ctx = nullptr;
-    GLuint screenTex = 0;
+    GPU::TextureId screenTex = 0;
 
     uint8_t *dst_data[4];
     int dst_linesize[4];
@@ -100,41 +96,23 @@ void TMovie::Init()
 #endif
 }
 
-int TMovie::EventsWatcher(void *, SDL_Event *event)
+bool TMovie::EventsWatcher(void *, SDL_Event *event)
 {
     switch(event->type)
     {
-        case SDL_WINDOWEVENT:
-        {
-            switch(event->window.event)
-            {
-            case SDL_WINDOWEVENT_RESIZED:
-            case SDL_WINDOWEVENT_SIZE_CHANGED:
-                {
-                    Common::Point scrSz = System::GetResolution();
-                    glViewport(0, 0, scrSz.x, scrSz.y);
-                }
-                break;
-            default:
-                break;
-            }
-
-        }
-        break;
-
-        case SDL_KEYDOWN:
+        case SDL_EVENT_KEY_DOWN:
             Instance._ctx->playing = false;
-            return 0;
+            return false;
 
-        case SDL_KEYUP:
-        case SDL_TEXTINPUT:
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP:
-        case SDL_MOUSEMOTION:
-            return 0;
+        case SDL_EVENT_KEY_UP:
+        case SDL_EVENT_TEXT_INPUT:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_MOTION:
+            return false;
     }
 
-    return 1; // This event can be passed to another event watcher
+    return true; // This event can be passed to another event watcher
 }
 
 
@@ -252,8 +230,8 @@ void TMovie::Close()
     _ctx->audioStream = -1;
     _ctx->videoStream = -1;
 
-    if (_ctx->screenTex != 0)
-        glDeleteTextures(1, &_ctx->screenTex);
+    GPU::DestroyTexture(_ctx->screenTex);
+    _ctx->screenTex = 0;
 
     if (_ctx->swr_ctx)
     {
@@ -391,7 +369,7 @@ void TMovie::ProcessFrame(uint32_t tm)
                         _ctx->VidCodecCtx->pix_fmt,
                         frm->width,
                         frm->height,
-                        AV_PIX_FMT_RGB24,
+                        AV_PIX_FMT_RGBA,
                         SWS_BILINEAR,
                         nullptr,
                         nullptr,
@@ -399,7 +377,7 @@ void TMovie::ProcessFrame(uint32_t tm)
                         );
 
         av_image_alloc(_ctx->dst_data, _ctx->dst_linesize,
-                  frm->width, frm->height, AV_PIX_FMT_RGB24, 1);
+                  frm->width, frm->height, AV_PIX_FMT_RGBA, 1);
 
 
     }
@@ -410,7 +388,8 @@ void TMovie::ProcessFrame(uint32_t tm)
 
 
     Common::Point scrSz = System::GetResolution();
-    glViewport(0, 0, scrSz.x, scrSz.y);
+    GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
+    GPU::SetViewport(0, 0, scrSz.x, scrSz.y);
 
     GFX::Engine.SetProjectionMatrix( mat4x4f() );
     GFX::Engine.SetModelViewMatrix( mat4x4f() );
@@ -425,29 +404,20 @@ void TMovie::ProcessFrame(uint32_t tm)
 
     GFX::Engine.SetRenderStates(0);
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f );
-    glClear(GL_COLOR_BUFFER_BIT);
+    GPU::Clear(true, false, 0.0f, 0.0f, 0.0f, 1.0f);
 
-    if (_ctx->screenTex == 0)
+    // One RGBA texture of the video size, filled with every new frame.
+    int texW = 0, texH = 0;
+    if (!GPU::TextureSize(_ctx->screenTex, &texW, &texH) || texW != frm->width || texH != frm->height)
     {
-        glGenTextures(1, &_ctx->screenTex);
-
-        pStates.Tex = _ctx->screenTex;
-        GFX::Engine.SetRenderStates(0);
-
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frm->width, frm->height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        GPU::DestroyTexture(_ctx->screenTex);
+        _ctx->screenTex = GPU::CreateTexture(frm->width, frm->height, GPU::Format::RGBA8, GPU::USAGE_SAMPLED);
     }
+    GPU::UploadTexture(_ctx->screenTex, _ctx->dst_data[0], _ctx->dst_linesize[0]);
 
     pStates.Tex = _ctx->screenTex;
+    pStates.LinearFilter = true;
     GFX::Engine.SetRenderStates(0);
-
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frm->width, frm->height, GL_RGB, GL_UNSIGNED_BYTE, _ctx->dst_data[0]);
 
     double scrAspect = (double)scrSz.x / (double)scrSz.y;
     double frmAspect = (double)frm->width / (double)frm->height;
@@ -467,7 +437,7 @@ void TMovie::ProcessFrame(uint32_t tm)
 
     GFX::Engine.DrawVtxQuad(vtx);
 
-    System::Flip();
+    GPU::Present();
 
     pStates = saved;
 

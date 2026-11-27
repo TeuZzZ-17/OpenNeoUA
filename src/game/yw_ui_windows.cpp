@@ -109,14 +109,14 @@ void yw_ClearVirtualUiWindowRect(NC_STACK_ypaworld *yw, const GuiBase *window)
         return;
 
     SDL_Rect oldClip;
-    SDL_GetClipRect(surface, &oldClip);
-    SDL_SetClipRect(surface, nullptr);
+    SDL_GetSurfaceClipRect(surface, &oldClip);
+    SDL_SetSurfaceClipRect(surface, nullptr);
 
     SDL_Rect clearRect = {left, top, right - left, bottom - top};
-    SDL_FillRect(surface, &clearRect,
-                 SDL_MapRGBA(surface->format, 0, 0, 0, 0));
+    SDL_FillSurfaceRect(surface, &clearRect,
+                 SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0));
 
-    SDL_SetClipRect(surface, &oldClip);
+    SDL_SetSurfaceClipRect(surface, &oldClip);
 }
 
 void yw_ClearPriorityGameplayUiUnderlay(NC_STACK_ypaworld *yw)

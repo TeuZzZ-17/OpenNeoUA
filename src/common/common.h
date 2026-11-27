@@ -7,7 +7,24 @@
 #include <array>
 #include <deque>
 #include <utility>
-#include <SDL2/SDL.h>
+#include <cmath>
+#include <SDL3/SDL.h>
+
+namespace Common
+{
+// 8-bit indexed surface with its palette. SDL3 creates indexed surfaces without
+// one, and conversions or blits of a palette-less surface fail.
+inline SDL_Surface *CreateIndexedSurface(int w, int h)
+{
+    SDL_Surface *surface = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_INDEX8);
+    if ( surface && !SDL_CreateSurfacePalette(surface) )
+    {
+        SDL_DestroySurface(surface);
+        return nullptr;
+    }
+    return surface;
+}
+}
 
 #ifdef ABS
 #undef ABS

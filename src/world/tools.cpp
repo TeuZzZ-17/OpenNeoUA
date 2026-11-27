@@ -20,10 +20,10 @@ Common::PlaneBytes GetPlaneBytesFromBitmap(NC_STACK_bitmap *bitmap)
         return plane;
 
     // Only 8 bits per pixel support
-    if (ibitm->swTex->format->BytesPerPixel != 1)
+    if (SDL_BYTESPERPIXEL(ibitm->swTex->format) != 1)
         return plane;
 
-    if ( SDL_LockSurface(ibitm->swTex) != 0 )
+    if ( !SDL_LockSurface(ibitm->swTex) )
         return plane;
 
     plane.Resize(ibitm->swTex->w, ibitm->swTex->h);

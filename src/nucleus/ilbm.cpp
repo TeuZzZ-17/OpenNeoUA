@@ -1,5 +1,5 @@
 // ILBM/VBMP image loader (NC_STACK_ilbm).
-#include <SDL2/SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 #include "common/includes.h"
 #include "nucleus/nucleas.h"
 #include "nucleus/rsrc.h"
@@ -351,7 +351,7 @@ rsrc * NC_STACK_ilbm::READ_ILBM(IDVList &stak, IFFile *mfil, int transp)
 
             if ( bitm )
             {
-                bitm->swTex = SDL_CreateRGBSurface(0, bitm->width, bitm->height, 8, 0, 0, 0, 0);
+                bitm->swTex = Common::CreateIndexedSurface(bitm->width, bitm->height);
 
                 if ( ILBM__OR__VBMP )
                 {
@@ -385,7 +385,7 @@ rsrc * NC_STACK_ilbm::READ_ILBM(IDVList &stak, IFFile *mfil, int transp)
 
     if (bitm && bitm->swTex)
     {
-        if (bitm->swTex->format->palette)
+        if (SDL_GetSurfacePalette(bitm->swTex))
         {
             UA_PALETTE *pal = bitm->palette;
             if (!pal)
@@ -395,10 +395,10 @@ rsrc * NC_STACK_ilbm::READ_ILBM(IDVList &stak, IFFile *mfil, int transp)
             {
                 UA_PALETTE tmp;
                 GFX::Engine.ConvAlphaPalette(&tmp, *pal, transp);
-                SDL_SetPaletteColors(bitm->swTex->format->palette, tmp.data(), 0, 256);
+                SDL_SetPaletteColors(SDL_GetSurfacePalette(bitm->swTex), tmp.data(), 0, 256);
             }
             else
-                SDL_SetPaletteColors(bitm->swTex->format->palette, pal->data(), 0, 256);
+                SDL_SetPaletteColors(SDL_GetSurfacePalette(bitm->swTex), pal->data(), 0, 256);
         }
 
         if ( convertColor )
@@ -406,7 +406,7 @@ rsrc * NC_STACK_ilbm::READ_ILBM(IDVList &stak, IFFile *mfil, int transp)
             SDL_Surface *screenFmt = GFX::Engine.ConvertToScreenFormat(bitm->swTex);
             if (screenFmt)
             {
-                SDL_FreeSurface(bitm->swTex);
+                SDL_DestroySurface(bitm->swTex);
                 bitm->swTex = screenFmt;
 
                 if (bitm->palette)
@@ -469,12 +469,12 @@ static UA_PALETTE *ILBM_CopyPngPalette(SDL_Surface *loaded)
             clr = {0, 0, 0, 255};
     }
 
-    if ( loaded->format->palette )
+    if ( SDL_GetSurfacePalette(loaded) )
     {
-        int colors = std::min(loaded->format->palette->ncolors, 256);
+        int colors = std::min(SDL_GetSurfacePalette(loaded)->ncolors, 256);
         for (int i = 0; i < colors; i++)
         {
-            pal->at(i) = loaded->format->palette->colors[i];
+            pal->at(i) = SDL_GetSurfacePalette(loaded)->colors[i];
             pal->at(i).a = 255;
         }
     }
@@ -498,10 +498,10 @@ static uint8_t ILBM_MaxRgb(uint8_t r, uint8_t g, uint8_t b)
 
 static SDL_Surface *ILBM_PrepareTruecolorPngSurface(SDL_Surface *loaded, int transp)
 {
-    if ( !loaded || loaded->format->palette || !transp )
+    if ( !loaded || SDL_GetSurfacePalette(loaded) || !transp )
         return loaded;
 
-    SDL_Surface *rgba = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_ABGR8888, 0);
+    SDL_Surface *rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_ABGR8888);
     if ( !rgba )
         return loaded;
 
@@ -511,10 +511,10 @@ static SDL_Surface *ILBM_PrepareTruecolorPngSurface(SDL_Surface *loaded, int tra
         uint8_t *row = (uint8_t *)rgba->pixels + y * rgba->pitch;
         for (int x = 0; x < rgba->w; x++)
         {
-            uint32_t *pixel = (uint32_t *)(row + x * rgba->format->BytesPerPixel);
+            uint32_t *pixel = (uint32_t *)(row + x * SDL_BYTESPERPIXEL(rgba->format));
 
             uint8_t r, g, b, a;
-            SDL_GetRGBA(*pixel, rgba->format, &r, &g, &b, &a);
+            SDL_GetRGBA(*pixel, SDL_GetPixelFormatDetails(rgba->format), SDL_GetSurfacePalette(rgba), &r, &g, &b, &a);
 
             const bool chromaTransparent = (r == 255 && g == 255 && b == 0);
             if ( chromaTransparent || a == 0 )
@@ -554,12 +554,12 @@ static SDL_Surface *ILBM_PrepareTruecolorPngSurface(SDL_Surface *loaded, int tra
                 a = 255;
             }
 
-            *pixel = SDL_MapRGBA(rgba->format, r, g, b, a);
+            *pixel = SDL_MapSurfaceRGBA(rgba, r, g, b, a);
         }
     }
     SDL_UnlockSurface(rgba);
 
-    SDL_FreeSurface(loaded);
+    SDL_DestroySurface(loaded);
     return rgba;
 }
 
@@ -568,7 +568,7 @@ void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s)
     if ( !s || !s->format )
         return;
 
-    if ( s->format->BitsPerPixel != 32 || !s->format->Amask )
+    if ( SDL_BITSPERPIXEL(s->format) != 32 || !SDL_GetPixelFormatDetails(s->format)->Amask )
     {
         SDL_SetSurfaceBlendMode(s, SDL_BLENDMODE_NONE);
         return;
@@ -577,7 +577,7 @@ void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s)
     bool locked = false;
     if ( SDL_MUSTLOCK(s) )
     {
-        if ( SDL_LockSurface(s) != 0 )
+        if ( !SDL_LockSurface(s) )
         {
             SDL_SetSurfaceBlendMode(s, SDL_BLENDMODE_NONE);
             return;
@@ -585,7 +585,7 @@ void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s)
         locked = true;
     }
 
-    const uint32_t colorKey = SDL_MapRGB(s->format, 255, 255, 0);
+    const uint32_t colorKey = SDL_MapSurfaceRGB(s, 255, 255, 0);
 
     for (int y = 0; y < s->h; y++)
     {
@@ -595,12 +595,12 @@ void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s)
         for (int x = 0; x < s->w; x++)
         {
             uint8_t r, g, b, a;
-            SDL_GetRGBA(pixel[x], s->format, &r, &g, &b, &a);
+            SDL_GetRGBA(pixel[x], SDL_GetPixelFormatDetails(s->format), SDL_GetSurfacePalette(s), &r, &g, &b, &a);
 
             if ( a < 128 )
                 pixel[x] = colorKey;
             else
-                pixel[x] = SDL_MapRGBA(s->format, r, g, b, 255);
+                pixel[x] = SDL_MapSurfaceRGBA(s, r, g, b, 255);
         }
     }
 
@@ -612,10 +612,10 @@ void ILBM_NormalizeLegacyColorKeyPngSurface(SDL_Surface *s)
 
 static SDL_Surface *ILBM_NormalizeIndexedPngSurface(SDL_Surface *loaded, UA_PALETTE *pal, int alphaPalette, int transp)
 {
-    if ( !loaded || !loaded->format->palette )
+    if ( !loaded || !SDL_GetSurfacePalette(loaded) )
         return loaded;
 
-    SDL_Surface *indexed = SDL_CreateRGBSurface(0, loaded->w, loaded->h, 8, 0, 0, 0, 0);
+    SDL_Surface *indexed = Common::CreateIndexedSurface(loaded->w, loaded->h);
     if ( !indexed )
         return nullptr;
 
@@ -630,21 +630,21 @@ static SDL_Surface *ILBM_NormalizeIndexedPngSurface(SDL_Surface *loaded, UA_PALE
     SDL_UnlockSurface(indexed);
     SDL_UnlockSurface(loaded);
 
-    if ( indexed->format->palette && pal )
+    if ( SDL_GetSurfacePalette(indexed) && pal )
     {
         if ( alphaPalette )
         {
             UA_PALETTE tmp;
             GFX::Engine.ConvAlphaPalette(&tmp, *pal, transp);
-            SDL_SetPaletteColors(indexed->format->palette, tmp.data(), 0, 256);
+            SDL_SetPaletteColors(SDL_GetSurfacePalette(indexed), tmp.data(), 0, 256);
         }
         else
         {
-            SDL_SetPaletteColors(indexed->format->palette, pal->data(), 0, 256);
+            SDL_SetPaletteColors(SDL_GetSurfacePalette(indexed), pal->data(), 0, 256);
         }
     }
 
-    SDL_FreeSurface(loaded);
+    SDL_DestroySurface(loaded);
     return indexed;
 }
 
@@ -660,29 +660,29 @@ static rsrc *ILBM_ReadPngOverride(NC_STACK_ilbm *obj, IDVList &stak, const std::
         return nullptr;
     }
 
-    SDL_RWops *rwops = NC_STACK_image::OpenRWops(fil);
+    SDL_IOStream *rwops = NC_STACK_image::OpenRWops(fil);
     if ( !rwops )
     {
         delete fil;
         return nullptr;
     }
 
-    SDL_Surface *loaded = IMG_Load_RW(rwops, 1);
+    SDL_Surface *loaded = IMG_Load_IO(rwops, true);
     if ( !loaded )
         return nullptr;
 
     if ( loaded->w <= 0 || loaded->h <= 0 )
     {
-        SDL_FreeSurface(loaded);
+        SDL_DestroySurface(loaded);
         return nullptr;
     }
 
-    if ( legacyColorKey && loaded->format->palette )
+    if ( legacyColorKey && SDL_GetSurfacePalette(loaded) )
     {
-        SDL_Surface *rgba = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_ABGR8888, 0);
+        SDL_Surface *rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_ABGR8888);
         if ( rgba )
         {
-            SDL_FreeSurface(loaded);
+            SDL_DestroySurface(loaded);
             loaded = rgba;
         }
     }
@@ -690,14 +690,14 @@ static rsrc *ILBM_ReadPngOverride(NC_STACK_ilbm *obj, IDVList &stak, const std::
     rsrc *res = obj->NC_STACK_rsrc::rsrc_func64(stak);
     if ( !res )
     {
-        SDL_FreeSurface(loaded);
+        SDL_DestroySurface(loaded);
         return nullptr;
     }
 
     ResBitmap *bitm = new ResBitmap;
     if ( !bitm )
     {
-        SDL_FreeSurface(loaded);
+        SDL_DestroySurface(loaded);
         obj->NC_STACK_rsrc::rsrc_func65(res);
         return nullptr;
     }
@@ -706,7 +706,7 @@ static rsrc *ILBM_ReadPngOverride(NC_STACK_ilbm *obj, IDVList &stak, const std::
     bitm->height = loaded->h;
     res->data = bitm;
 
-    if ( loaded->format->palette )
+    if ( SDL_GetSurfacePalette(loaded) )
     {
         bitm->palette = ILBM_CopyPngPalette(loaded);
         int alphaPalette = stak.Get<int32_t>(NC_STACK_ilbm::ATT_ALPHAPALETTE, 1);
@@ -726,7 +726,7 @@ static rsrc *ILBM_ReadPngOverride(NC_STACK_ilbm *obj, IDVList &stak, const std::
         SDL_Surface *screenFmt = GFX::Engine.ConvertToScreenFormat(bitm->swTex);
         if ( screenFmt )
         {
-            SDL_FreeSurface(bitm->swTex);
+            SDL_DestroySurface(bitm->swTex);
             bitm->swTex = screenFmt;
             if ( bitm->palette )
             {

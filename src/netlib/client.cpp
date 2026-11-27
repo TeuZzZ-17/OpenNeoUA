@@ -325,7 +325,7 @@ void ZNDClient::Start(const std::string &name, const IPaddress &addr)
         return;
 
     mode = MODE_CLIENT;
-    sock = SDLNet_UDP_Open(0);
+    sock = Net::UdpOpen(0);
 
     cServAddress = addr;
     cME.name = name;
@@ -385,7 +385,7 @@ bool ZNDClient::GetSessions(SessionInfoVect &dst)
 
     bool res = false;
 
-    if (SDL_LockMutex(eSyncMutex) == 0)
+    SDL_LockMutex(eSyncMutex);
     {
         if (eStatus & FLAGS_SESSIONS_LIST_GET)
         {
@@ -440,7 +440,7 @@ bool ZNDClient::GetUsers(UserInfoVect &dst)
 
     bool res = false;
 
-    if (SDL_LockMutex(eSyncMutex) == 0)
+    SDL_LockMutex(eSyncMutex);
     {
         if (eStatus & FLAGS_USERS_LIST_GET)
         {
@@ -462,7 +462,7 @@ bool ZNDClient::GetUser(UserInfo &dst, const char *name)
 
     bool res = false;
 
-    if (SDL_LockMutex(eSyncMutex) == 0)
+    SDL_LockMutex(eSyncMutex);
     {
         if (eStatus & FLAGS_USERS_LIST_GET)
         {
@@ -489,7 +489,7 @@ bool ZNDClient::GetUser(UserInfo &dst, uint64_t _ID)
 
     bool res = false;
 
-    if (SDL_LockMutex(eSyncMutex) == 0)
+    SDL_LockMutex(eSyncMutex);
     {
         if (eStatus & FLAGS_USERS_LIST_GET)
         {

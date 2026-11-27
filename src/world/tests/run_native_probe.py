@@ -27,7 +27,9 @@ def main():
     env["PATH"] = str(compiler.parent) + os.pathsep + env.get("PATH", "")
     commands = subprocess.check_output([str(ninja), "-C", str(build), "-t", "commands", "OpenNeoUA"], text=True, env=env).splitlines()
     compile_line = next(line for line in commands if "speech.cpp.obj" in line and " -c " in line)
-    compile_args = shlex.split(compile_line.replace("\\", "/"))[1:]
+    compile_args = shlex.split(compile_line.replace("\\", "/"))
+    # Skip launchers (ccache) and the compiler itself: keep only its flags.
+    compile_args = compile_args[next(i for i, a in enumerate(compile_args) if a.endswith("c++.exe")) + 1:]
     flags = compile_args[:compile_args.index("-MD")]
     output = build / "probes"
     output.mkdir(exist_ok=True)
@@ -45,7 +47,9 @@ def main():
         inputs = shlex.split(edge.split(":", 1)[1].split(" | ")[0])[1:]
         libs_line = next(line for line in text[text.index(edge):].splitlines() if line.strip().startswith("LINK_LIBRARIES ="))
         link_args = inputs + shlex.split(libs_line.split("=", 1)[1])
-    objects = [arg for arg in link_args if arg.endswith(".obj") and not (args.replace_ypabact and arg.endswith("/ypabact.cpp.obj"))]
+    # sdl_entry holds the platform main/WinMain: probes bring their own main.
+    objects = [arg for arg in link_args if arg.endswith(".obj") and not arg.endswith("/sdl_entry.cpp.obj")
+               and not (args.replace_ypabact and arg.endswith("/ypabact.cpp.obj"))]
     libraries = [arg for arg in link_args if arg.startswith("-l") or arg.endswith(".a")]
     response = output / f"{name}.rsp"
     # Probes keep whole worlds on the stack: main's frame exceeds the 2 MB default (0xC00000FD).

@@ -8,7 +8,7 @@
 //   - writes the craters to a save file and reads them back;
 //   - times drawing and ray tests with the limit full of craters.
 // Run from "UA Rising"; <folder>/../cap_cfg.txt holds "level mode plan".
-// Mode 1 = no colour effects, 2 = old OpenGL path (no VBO). Plans:
+// Mode 1 = no colour effects. Plans:
 //   (any other word)   everything above;
 //   decals, decalsflat decals on dug and dented surfaces / the same with no crater;
 //   userarea, userreal the user's test area, checker / real decal;
@@ -25,13 +25,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include <SDL2/SDL_opengl.h>
 
 #include "common/utils.h"
 #include "game/yw.h"
 #include "game/yw_internal.h"
 #include "gui/uacommon.h"
 #include "system/gfx.h"
+#include "system/gpu.h"
 #include "system/inivals.h"
 #include "system/system.h"
 #include "system/tform.h"
@@ -764,20 +764,21 @@ void Dig(NC_STACK_ypaworld *w, const Spot &s, bool withDecal, bool check)
     }
 }
 
+// Saves the frame GPU::Present has just shown (rows come bottom first).
 void SavePixels(const std::string &path)
 {
     const Common::Point res = System::GetResolution();
-    std::vector<uint8_t> pixels((size_t)res.x * res.y * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadBuffer(GL_BACK);
-    glReadPixels(0, 0, res.x, res.y, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    int w = res.x, h = res.y;
+    std::vector<uint8_t> pixels;
+    if (!GPU::ReadLastFrameRGB(&pixels, &w, &h))
+        return;
 
     FILE *file = fopen(path.c_str(), "wb");
     if (!file)
         return;
-    fprintf(file, "P6\n%d %d\n255\n", res.x, res.y);
-    for (int y = res.y - 1; y >= 0; --y)
-        fwrite(&pixels[(size_t)y * res.x * 3], 3, res.x, file);
+    fprintf(file, "P6\n%d %d\n255\n", w, h);
+    for (int y = h - 1; y >= 0; --y)
+        fwrite(&pixels[(size_t)y * w * 3], 3, w, file);
     fclose(file);
 }
 
@@ -1632,8 +1633,7 @@ void Advance()
     case STAGE_DONE:
         if (capturePending)
             break;
-        fprintf(logFile, "CHECKS %d FAILED %d\ndone glError=0x%x\n", checksTotal, checksFailed,
-                (unsigned)glGetError());
+        fprintf(logFile, "CHECKS %d FAILED %d\ndone\n", checksTotal, checksFailed);
         fclose(logFile);
         _exit(0);
     }
@@ -1679,9 +1679,10 @@ extern "C" void __wrap__ZN17NC_STACK_ypaworld27ApplyTerrainCratersToFillerEP13TC
                                             (double)SDL_GetPerformanceFrequency());
 }
 
-extern "C" void __real__ZN6System4FlipEv();
-extern "C" void __wrap__ZN6System4FlipEv()
+extern "C" void __real__ZN3GPU7PresentEv();
+extern "C" void __wrap__ZN3GPU7PresentEv()
 {
+    __real__ZN3GPU7PresentEv();
     if (!captureName.empty())
     {
         SavePixels(outDir + "/" + captureName + ".ppm");
@@ -1699,7 +1700,6 @@ extern "C" void __wrap__ZN6System4FlipEv()
                        names[pass] + ".ppm");
         }
     }
-    __real__ZN6System4FlipEv();
 }
 
 extern "C" bool __real__ZN6System13ProcessEventsEv();
@@ -1799,25 +1799,20 @@ extern "C" void __wrap__ZN3GFX9GFXEngine9RasterizeEj(GFX::GFXEngine *engine, uin
         return;
     }
 
-    glFinish();
+    // Recording only: the GPU runs the frame in GPU::Present.
     const uint64_t start = SDL_GetPerformanceCounter();
     __real__ZN3GFX9GFXEngine9RasterizeEj(engine, stages);
-    glFinish();
     rasterMs += (double)(SDL_GetPerformanceCounter() - start) * 1000.0 /
                 (double)SDL_GetPerformanceFrequency();
     ++rasterCount;
 }
 
-extern "C" void __real__ZN6System4InitEb(bool);
-extern "C" void __wrap__ZN6System4InitEb(bool oldGL)
+// Mode 1 = no scene target: colour effects off, the world is drawn straight to the window.
+extern "C" void __real__ZN6System4InitEv();
+extern "C" void __wrap__ZN6System4InitEv()
 {
     LoadConfig();
     if (cfgMode == 1)
         System::IniConf::GfxColorEffects.Value = (int32_t)0;
-    else if (cfgMode == 2)
-    {
-        System::IniConf::GfxVBO.Value = false;
-        oldGL = true;
-    }
-    __real__ZN6System4InitEb(oldGL);
+    __real__ZN6System4InitEv();
 }

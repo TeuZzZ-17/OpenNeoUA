@@ -707,6 +707,38 @@ bool NC_STACK_ypaworld::CreateVideoControls()
 
     v70 = 0;
 
+    // OpenNeoUA: read-only notice of the renderer in use, in the empty row above
+    // Interface Resolution (the legacy title rows are hidden).
+    {
+        std::string api = GFX::Engine.GpuApi();
+        if ( !api.empty() )
+            api[0] = (char)toupper((unsigned char)api[0]);
+        std::string notice = "Renderer: " + api + " (SDL_GPU)  -  " + GFX::Engine.GpuRenderer();
+        if ( GFX::Engine.GpuIsIntegrated() )
+            notice += "  (integrated)";
+
+        btn_64arg.tileset_down = 16;
+        btn_64arg.tileset_up = 16;
+        btn_64arg.field_3A = 16;
+        btn_64arg.button_type = NC_STACK_button::TYPE_CAPTION;
+        btn_64arg.xpos = 0;
+        btn_64arg.ypos = vertMenuSpace + _fontH;
+        btn_64arg.width = menuWidth;
+        btn_64arg.caption = notice;
+        btn_64arg.caption2.clear();
+        btn_64arg.downCode = 0;
+        btn_64arg.upCode = 0;
+        btn_64arg.pressedCode = 0;
+        btn_64arg.flags = NC_STACK_button::FLAG_CENTER | NC_STACK_button::FLAG_TEXT;
+        btn_64arg.button_id = 2;
+        btn_64arg.txt_r = _iniColors[68].r;
+        btn_64arg.txt_g = _iniColors[68].g;
+        btn_64arg.txt_b = _iniColors[68].b;
+
+        if ( !_GameShell->video_button->Add(&btn_64arg) )
+            ypa_log_out("Unable to add renderer notice\n");
+    }
+
     btn_64arg.tileset_down = 16;
     btn_64arg.tileset_up = 16;
     btn_64arg.field_3A = 16;
@@ -833,7 +865,7 @@ bool NC_STACK_ypaworld::CreateVideoControls()
                                 btn_64arg.txt_g = _iniColors[68].g;
                                 btn_64arg.txt_b = _iniColors[68].b;
 
-                                if ( true ) // OpenNeoUA: 3D device selector hidden from Options UI (renderer = current OpenNeoUA/OpenGL device)
+                                if ( true ) // OpenNeoUA: 3D device selector hidden from Options UI (renderer = the SDL_GPU device in use)
                                 {
                                     int v117 = dword_5A50B2 - 6 * buttonsSpace - 2 * checkBoxWidth;
 

@@ -3,15 +3,10 @@
 
 #include <list>
 #include <inttypes.h>
-#include <SDL2/SDL.h>
-
-#if defined(__APPLE__) && defined(__MACH__)
-#include <OpenGL/gl.h>
-#else
-#include <GL/gl.h>
-#endif
+#include <SDL3/SDL.h>
 
 #include "common/common.h"
+#include "system/gpu.h"
 
 namespace Gui
 {
@@ -31,15 +26,15 @@ public:
     bool MoveToFirst(Widget *w);
 };
 
+// Texture of a hardware-drawn widget, filled again from its surface every frame.
+// One texture is enough: the GPU layer keeps the image each draw has used.
 struct StreamTex
 {
     Common::Point Size;
-    std::array<uint32_t, 2> Texs = Common::ArrayInit<uint32_t, 2>(0);
-    int32_t nextTex = 0;
+    GPU::TextureId Tex = 0;
 
-    StreamTex();
     ~StreamTex();
-    void Stream(Common::Point sz, int32_t fmt, int32_t type, const void *data);
+    void Stream(SDL_Surface *surface);
 };
 
 struct Timer

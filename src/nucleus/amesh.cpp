@@ -276,7 +276,7 @@ void NC_STACK_amesh::GenMesh(std::list<GFX::TMesh> *meshList, NC_STACK_skeleton 
                 msh->Vertexes.emplace_back();
                 msh->Vertexes.back().Pos = dat->POO[ pol.v[j] ];
                 msh->Vertexes.back().TexCoordId = j;
-                msh->Vertexes.back().Color = GFX::TGLColor(clr, clr, clr, alpha);
+                msh->Vertexes.back().Color = GFX::TColorF(clr, clr, clr, alpha);
 
                 msh->BoundBox.Add( dat->POO[ pol.v[j] ] );
 

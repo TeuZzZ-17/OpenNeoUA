@@ -6,8 +6,8 @@
 #include <algorithm>
 #include <cctype>
 #include <vector>
-#include <SDL2/SDL_image.h>
-#include <SDL2/SDL_net.h>
+#include <SDL3_image/SDL_image.h>
+#include "netlib/udpsocket.h"
 #include "../fmtlib/printf.h"
 
 #include "system.h"
@@ -108,7 +108,6 @@ static TFontLookup FontsLookup[]
 
 
 static SDL_Window *window = nullptr;
-static SDL_GLContext cont = nullptr;
 static ResRatio winRes(640, 480);
 static bool curRelMouse = false;
 
@@ -195,8 +194,8 @@ static void ScanFontDir(const std::string &path)
                     TTF_Font *fnt = TTF_OpenFont(nod->getPath().c_str(), 12);
                     if (fnt)
                     {
-                        const char *familyName = TTF_FontFaceFamilyName(fnt);
-                        const char *styleName = TTF_FontFaceStyleName(fnt);
+                        const char *familyName = TTF_GetFontFamilyName(fnt);
+                        const char *styleName = TTF_GetFontStyleName(fnt);
 
                         if (familyName && familyName[0])
                             FontsList.push_back( FontNode(nod->getPath(), familyName, styleName ? styleName : "") );
@@ -384,125 +383,28 @@ TTF_Font *LoadFont(const std::string &fontname, int height)
 
 
 
-#ifndef _WIN32
-// Linux has no equivalent of the two exported names Windows drivers read, but
-// it decides inside the process instead: the NVIDIA library looks at these
-// variables when the first context is created, which is what the `prime-run`
-// command sets. So the program can set them itself, before SDL starts.
-//
-// Only done when the NVIDIA driver is actually loaded, and never over a choice
-// already made by whoever started the game. On a computer with one graphics
-// card they change nothing. If a context cannot be created with them, they are
-// dropped and the window is tried again, so this can never stop the game.
-//
-// Mesa (AMD and Intel) uses DRI_PRIME instead, and which card the number picks
-// depends on the computer, so it is left to the person: with a built-in chip
-// the graphics log says to start the game with DRI_PRIME=1.
-namespace
+// Resizable game window centred on the primary display.
+static SDL_Window *CreateGameWindow()
 {
-
-bool FileExists(const char *path)
-{
-    FILE *file = fopen(path, "rb");
-    if ( !file )
-        return false;
-    fclose(file);
-    return true;
+    // No API flag: the GPU device claims the window later (GPU::Init).
+    SDL_Window *wnd = SDL_CreateWindow("OpenNeoUA (Urban Assault)", winRes.W, winRes.H,
+                                       SDL_WINDOW_RESIZABLE);
+    if (wnd)
+        SDL_SetWindowPosition(wnd, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    return wnd;
 }
 
-bool NvidiaDriverLoaded()
-{
-    return FileExists("/proc/driver/nvidia/version") || FileExists("/dev/nvidia0");
-}
-
-bool AskedForNvidiaOffload = false;
-
-void AskNvidiaForTheGraphicsCard()
-{
-    if ( !NvidiaDriverLoaded() )
-        return;
-
-    // setenv with overwrite 0 keeps anything the person set themselves.
-    const bool hadOffload = getenv("__NV_PRIME_RENDER_OFFLOAD") != nullptr;
-    const bool hadVendor = getenv("__GLX_VENDOR_LIBRARY_NAME") != nullptr;
-    if ( hadOffload && hadVendor )
-        return;
-
-    setenv("__NV_PRIME_RENDER_OFFLOAD", "1", 0);
-    setenv("__GLX_VENDOR_LIBRARY_NAME", "nvidia", 0);
-    AskedForNvidiaOffload = !hadOffload || !hadVendor;
-}
-
-void StopAskingNvidiaForTheGraphicsCard()
-{
-    if ( !AskedForNvidiaOffload )
-        return;
-
-    unsetenv("__NV_PRIME_RENDER_OFFLOAD");
-    unsetenv("__GLX_VENDOR_LIBRARY_NAME");
-    AskedForNvidiaOffload = false;
-}
-
-}
-#endif
-
-void Init(bool oldGL)
+void Init()
 {
     EventHandlers.clear();
 
-#ifndef _WIN32
-    AskNvidiaForTheGraphicsCard();
-#endif
-
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) < 0)
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC))
     {
         printf("Couldn't initialize SDL: %s", SDL_GetError());
         return;
     }
 
-    if (oldGL)
-    {
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-    }
-    else
-    {
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-    }
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-
-    window = SDL_CreateWindow("OpenNeoUA (Urban Assault)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winRes.W, winRes.H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-
-    if (window)
-        cont = SDL_GL_CreateContext(window);
-
-#ifndef _WIN32
-    // Asking for the graphics card must never cost the game its window.
-    if ( (!window || !cont) && AskedForNvidiaOffload )
-    {
-        printf("Could not use the graphics card (%s); starting with the default one.\n",
-               SDL_GetError());
-        StopAskingNvidiaForTheGraphicsCard();
-
-        if ( cont )
-        {
-            SDL_GL_DeleteContext(cont);
-            cont = nullptr;
-        }
-        if ( window )
-        {
-            SDL_DestroyWindow(window);
-            window = nullptr;
-        }
-
-        window = SDL_CreateWindow("OpenNeoUA (Urban Assault)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, winRes.W, winRes.H, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-        if (window)
-            cont = SDL_GL_CreateContext(window);
-    }
-#endif
+    window = CreateGameWindow();
 
     if (!window)
     {
@@ -510,27 +412,27 @@ void Init(bool oldGL)
         return;
     }
 
+    // SDL3 sends text events only after SDL_StartTextInput (SDL2 had them on by
+    // default). No on-screen keyboard: names and chat are typed on real keys.
+    SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0");
+    SDL_StartTextInput(window);
+
     TTF_Init();
 
     ScanFonts();
 
-    IMG_Init(IMG_INIT_JPG | IMG_INIT_PNG | IMG_INIT_TIF | IMG_INIT_WEBP);
-
-    SDLNet_Init();
+    Net::Init();
 }
 
 void Deinit()
 {
-    IMG_Quit();
-
     FontsList.clear();
 
-    if (!cont)
-        SDL_GL_DeleteContext(cont);
-
-    if (!window)
+    if (window)
         SDL_DestroyWindow(window);
+    window = nullptr;
 
+    TTF_Quit();
     SDL_Quit();
 }
 
@@ -542,38 +444,27 @@ bool ProcessEvents()
     {
         switch(event.type)
         {
-        case SDL_WINDOWEVENT:
+        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
         {
-            switch(event.window.event)
-            {
-            case SDL_WINDOWEVENT_RESIZED:
-            case SDL_WINDOWEVENT_SIZE_CHANGED:
-
-                int w, h;
-                SDL_GL_GetDrawableSize(window, &w, &h);
-                winRes = ResRatio(w, h);
-                break;
-
-            case SDL_WINDOWEVENT_CLOSE:
-                return true;
-
-            default:
-                break;
-            }
-
+            int w = 0, h = 0;
+            SDL_GetWindowSizeInPixels(window, &w, &h);
+            winRes = ResRatio(w, h);
         }
         break;
 
-        case SDL_QUIT:
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        case SDL_EVENT_QUIT:
             return true;
 
         default:
             break;
         }
 
+        // A handler returning false consumes the event.
         for(SDL_EventFilter &e : EventHandlers)
         {
-            if ( (e)(nullptr, &event) == 0 )
+            if ( !(e)(nullptr, &event) )
                 break;
         }
     }
@@ -591,36 +482,32 @@ int GetDisplayRefreshRate()
     if ( !window )
         return 0;
 
-    const int display = SDL_GetWindowDisplayIndex(window);
-    SDL_DisplayMode mode;
-    if ( display < 0 || SDL_GetCurrentDisplayMode(display, &mode) != 0 )
-        return 0;
-
-    return mode.refresh_rate;
+    const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
+    return mode ? (int)(mode->refresh_rate + 0.5f) : 0;
 }
 
 bool IsFullscreenWindow()
 {
-    return window && (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
+    return window && (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
 }
 
-void Flip()
+SDL_Window *GetWindow()
 {
-    SDL_GL_SwapWindow(window);
+    return window;
 }
 
-void SetVideoMode(const Common::Point &sz, uint32_t full, SDL_DisplayMode *mode)
+void SetVideoMode(const Common::Point &sz, bool full)
 {
     if (window)
     {
+        // Fullscreen is borderless at desktop resolution (SDL2 FULLSCREEN_DESKTOP):
+        // the game keeps its own resolution and scales it to the screen.
+        if (full)
+            SDL_SetWindowFullscreenMode(window, nullptr);
         SDL_SetWindowFullscreen(window, full);
+        SDL_SyncWindow(window);
 
-        if (full != 0 && mode)
-        {
-            SDL_Delay(250);
-            SDL_SetWindowDisplayMode(window, mode);
-        }
-        else
+        if (!full)
         {
             if (winRes != sz)
             {
@@ -639,8 +526,8 @@ void SetVideoMode(const Common::Point &sz, uint32_t full, SDL_DisplayMode *mode)
             }
         }
 
-        int w, h;
-        SDL_GL_GetDrawableSize(window, &w, &h);
+        int w = 0, h = 0;
+        SDL_GetWindowSizeInPixels(window, &w, &h);
         winRes = ResRatio(w, h);
     }
 }
@@ -649,15 +536,12 @@ void SetReleativeMouse(bool mode)
 {
     if (mode != curRelMouse)
     {
-        if (mode)
-            SDL_SetRelativeMouseMode(SDL_TRUE);
-        else
+        SDL_SetWindowRelativeMouseMode(window, mode);
+        if (!mode)
         {
-            SDL_SetRelativeMouseMode(SDL_FALSE);
-
             int WW = 0, WH = 0;
             SDL_GetWindowSize(window, &WW, &WH);
-            SDL_WarpMouseInWindow(window, WW / 2, WH / 2);
+            SDL_WarpMouseInWindow(window, WW / 2.0f, WH / 2.0f);
         }
 
         curRelMouse = mode;
@@ -680,7 +564,7 @@ void EventsDeleteHandler(SDL_EventFilter func)
 void PostQuitMessage()
 {
     SDL_Event event;
-    event.type = SDL_QUIT;
+    event.type = SDL_EVENT_QUIT;
     SDL_PushEvent(&event);
 }
 

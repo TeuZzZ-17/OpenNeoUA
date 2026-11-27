@@ -1,4 +1,4 @@
-// Hidden OpenGL validation of the production menu, real assets and UI composition.
+// Hidden GPU validation of the production menu, real assets and UI composition.
 #include <bits/stdc++.h>
 #define protected public
 #define private public
@@ -8,12 +8,13 @@
 #include "common/env.h"
 #include "common/utils.h"
 #include "system/system.h"
+#include "system/gpu.h"
 #include "system/inivals.h"
 #include "nucleus/loaders.h"
 #include "locale/locale.h"
 #include "world/parsers.h"
-#include <SDL_image.h>
-#include <SDL_ttf.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <direct.h>
 #undef protected
 #undef private
@@ -24,17 +25,16 @@ extern int yw_write_user(FSMgr::FileHandle *,UserData *);
 extern NC_STACK_bitmap *yw_LoadDatabaseBackground(bool);
 
 
+// Saves the frame last shown by GPU::Present (rows come bottom first).
 static void Capture(const std::string &path,int width,int height)
 {
-    auto *surface=SDL_CreateRGBSurfaceWithFormat(0,width,height,32,SDL_PIXELFORMAT_RGBA32);
-    std::vector<uint8_t> pixels(width*height*4);
-    glReadBuffer(GL_FRONT);
-    glReadPixels(0,0,width,height,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
-    glReadBuffer(GL_BACK);
+    std::vector<uint8_t> pixels;
+    if(!GPU::ReadLastFrameRGB(&pixels,&width,&height))return;
+    auto *surface=SDL_CreateSurface(width, height, SDL_PIXELFORMAT_RGB24);
     for(int y=0;y<height;++y)
-        std::memcpy((char*)surface->pixels+y*surface->pitch,pixels.data()+(height-y-1)*width*4,width*4);
+        std::memcpy((char*)surface->pixels+y*surface->pitch,pixels.data()+(height-y-1)*width*3,width*3);
     const auto filename=path.substr(0,path.size()-4)+"_"+std::to_string(width)+"x"+std::to_string(height)+".png";
-    IMG_SavePNG(surface,filename.c_str());SDL_FreeSurface(surface);
+    IMG_SavePNG(surface,filename.c_str());SDL_DestroySurface(surface);
 }
 
 int main(int argc,char **argv)
@@ -54,8 +54,8 @@ int main(int argc,char **argv)
             else std::remove("Data/Env/vid.def");
         }
     } restoreVideo{hadVideoFile,videoMode};
-    System::Init();auto *window=SDL_GL_GetCurrentWindow();
-    if(!window){std::printf("No GL context: %s\n",SDL_GetError());return 2;}
+    System::Init();auto *window=System::GetWindow();
+    if(!window){std::printf("No window: %s\n",SDL_GetError());return 2;}
     SDL_HideWindow(window);
     FSMgr::iDir::setBaseDir("");
     Common::Env.SetPrefix("data","Data");Common::Env.SetPrefix("env","Data/Env");
@@ -73,7 +73,7 @@ int main(int argc,char **argv)
     const Common::Point resolution(argc>1?std::atoi(argv[1]):640,argc>2?std::atoi(argv[2]):480);
     // Exercise arbitrary drawable sizes without depending on the monitor's
     // advertised video modes or writing the user's env/vid.def.
-    System::SetVideoMode(resolution,0,nullptr);
+    System::SetVideoMode(resolution,false);
     GFX::Engine.SetResVariables(resolution);
     GFX::Engine.ApplyResolution();GFX::Engine.RecreateScreenSurface();GFX::Engine.UpdateFBOSizes();
     SDL_PumpEvents();System::ProcessEvents();
@@ -158,7 +158,7 @@ int main(int argc,char **argv)
     user.db_session->card.description="Compact shared card with every authored combat class visible. Description stays beside the complete VS grid instead of pushing ratings below the screen.";
     user.PopulateDetailPane();draw("database-full-card");
     for(const auto &line:user.db_session->text)
-    {int w=0,h=0;TTF_SizeUTF8(user.db_session->detailFont,line.c_str(),&w,&h);check(w<=layout.width*62/100-12,"detail text wraps to measured font width");}
+    {int w=0,h=0;TTF_GetStringSize(user.db_session->detailFont, line.c_str(), 0, &w, &h);check(w<=layout.width*62/100-12,"detail text wraps to measured font width");}
     check(user.db_session->versusRows.empty(),"VS never enters the scrolling text flow");
     user.db_tab=2;user.db_page=0;user.db_selected=0;user.PopulateDatabasePage();draw("database-buildings");
     check(user.db_session->card.valid,"building card binds to shared definitions");

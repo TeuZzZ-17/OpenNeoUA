@@ -29,7 +29,8 @@ int CountCommandersTargeting(NC_STACK_yparobo *robo, int tgType, uint32_t primCo
     int count = 0;
     for ( NC_STACK_ypabact *node : robo->_kidList )
     {
-        if ( node->_status == BACT_STATUS_DEAD )
+        // Same rule as yparobo_func128: a dying commander holds no target.
+        if ( node->_status == BACT_STATUS_DEAD || (node->_status_flg & BACT_STFLAG_DEATH1) )
             continue;
         if ( node->_primTtype != tgType && robo->_roboDockTargetType != tgType )
             continue;

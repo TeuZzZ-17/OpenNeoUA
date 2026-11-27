@@ -66,7 +66,6 @@ public:
     static Common::Ini::Key GfxAtmosphereSaturation;
     static Common::Ini::Key GfxAtmosphereVignette;
     static Common::Ini::Key GfxVhsFilterShader;
-    static Common::Ini::Key GfxVhsFilterShaderVbo;
     static Common::Ini::Key GfxVhsFilterStrength;
     static Common::Ini::Key GfxVideoFilterMode;
     static Common::Ini::Key GfxHorizonFadeMode;
@@ -375,8 +374,6 @@ public:
     static Common::Ini::Key GfxGroundDecalLimit;
     static Common::Ini::Key GfxGroundDecalEffectLimit; // gfx.ground_decal_effect_limit: maximum smoking ground decals
     static Common::Ini::Key MenuWindowed;
-
-    static Common::Ini::Key GfxVBO;
 
     static Common::Ini::Key UiMenuFont; // OpenNeoUA: ui.menu_font (default Default) - menu/interface TTF face selector
     static Common::Ini::Key UiRetroCursors; // OpenNeoUA: ui.retro_cursors (default no) - alpha mouse cursors from Res/Retro

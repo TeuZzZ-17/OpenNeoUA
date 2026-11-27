@@ -3752,7 +3752,7 @@ void UserData::GameShellUiHandleInput()
                 if (clpbrd)
                 {
                     IPaddress tmp;
-                    if (SDLNet_ResolveHost(&tmp, clpbrd, 0) == 0)
+                    if (Net::ResolveHost(&tmp, clpbrd, 0))
                     {
                         netName = clpbrd;
                         netNameCurPos = netName.size();

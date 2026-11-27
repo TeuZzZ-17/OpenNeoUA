@@ -9,7 +9,7 @@
 #include "inttypes.h"
 #include "common/crc32.h"
 #include "common/env.h"
-#include <SDL2/SDL_timer.h>
+#include <SDL3/SDL_timer.h>
 
 
 int read_yes_no_status(const std::string &file, int result)

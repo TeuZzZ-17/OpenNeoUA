@@ -25,7 +25,7 @@
 #include "system/gametime.h"
 #include "system/system.h"
 #include "system/framepacer.h"
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <cmath>
 #include "world/spin.h"
 #include "common/crashdiag.h"
@@ -158,7 +158,7 @@ void NC_STACK_ypaworld::DebugDrawInfoOverlay()
                       hz > 0 ? std::to_string(hz) : std::string("?"), vsyncText,
                       limit > 0 ? std::to_string(limit) : std::string("unlimited"),
                       res.x, res.y, System::IsFullscreenWindow() ? "fullscreen" : "windowed",
-                      SDL_GetCPUCount()));
+                      SDL_GetNumLogicalCPUCores()));
 
     // --- Graphics chip
     const bool igpu = GFX::Engine.GpuIsIntegrated();
@@ -166,7 +166,7 @@ void NC_STACK_ypaworld::DebugDrawInfoOverlay()
         line(255, 170, 60, fmt::sprintf("GPU: %s   [integrated, iGPU]", GFX::Engine.GpuRenderer()));
     else
         line(110, 255, 140, fmt::sprintf("GPU: %s   [dedicated]", GFX::Engine.GpuRenderer()));
-    line(160, 175, 190, fmt::sprintf("OpenGL: %s   (%s)", GFX::Engine.GpuGlVersion(), GFX::Engine.GpuVendor()));
+    line(160, 175, 190, fmt::sprintf("Graphics API: %s (SDL_GPU)", GFX::Engine.GpuApi()));
 
     // --- World
     if ( _viewerBact )

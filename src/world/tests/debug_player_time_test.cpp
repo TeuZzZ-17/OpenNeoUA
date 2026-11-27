@@ -57,7 +57,7 @@ int main()
     NC_STACK_particle emitter;emitter._lifeTime=1000;emitter._scaleStart=1;
     System::IniConf::GfxParticlesLimit.Value=(int32_t)100;
     Particles particles;
-    particles.AddParticle(&emitter,vec3d(),vec3d(100,0,0),0,GFX::TGLColor(1,1,1,1),vec3d(1),vec3d(),1,false,false,true);
+    particles.AddParticle(&emitter,vec3d(),vec3d(100,0,0),0,GFX::TColorF(1,1,1,1),vec3d(1),vec3d(),1,false,false,true);
     particles.AddParticle(&emitter,vec3d(),vec3d(100,0,0));
     TF::TForm3D view;view.CalcSclRot=mat3x3::Ident();
     area_arg_65 render;render.ViewTForm=&view;

@@ -137,7 +137,7 @@ void NC_STACK_ypaworld::RenderGroundDecalSmoke(baseRender_msg *arg)
         render.Tex = mesh->Mat.Tex;
         render.Flags = mesh->Mat.Flags | arg->flags | GFX::RFLAGS_DISABLE_ZWRITE | GFX::RFLAGS_ALPHABLEND;
         render.Color = mesh->Mat.Color;
-        render.ColorMul = GFX::TGLColor(GroundDecalSmokeClampUnit(red),
+        render.ColorMul = GFX::TColorF(GroundDecalSmokeClampUnit(red),
                                         GroundDecalSmokeClampUnit(green),
                                         GroundDecalSmokeClampUnit(blue), alpha);
         render.Colorize = true;

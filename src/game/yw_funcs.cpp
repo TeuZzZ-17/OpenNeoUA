@@ -140,7 +140,7 @@ static void FontLoadOpenUASheet(TileMap *tileset)
         if ( tileset->extraImg )
         {
             ILBM_NormalizeLegacyColorKeyPngSurface(tileset->extraImg->GetSwTex());
-            SDL_SetColorKey(tileset->extraImg->GetSwTex(), SDL_TRUE, SDL_MapRGB(tileset->extraImg->GetSwTex()->format, 255, 255, 0));
+            SDL_SetSurfaceColorKey(tileset->extraImg->GetSwTex(), true, SDL_MapSurfaceRGB(tileset->extraImg->GetSwTex(), 255, 255, 0));
 
             const int h = (int)std::stol(fntHeight, nullptr, 0);
             FontReadGlyphs(fil, [&](uint32_t chr, int x, int y, int w)
@@ -206,7 +206,7 @@ TileMap * NC_STACK_ypaworld::yw_LoadFont(const std::string &fontname)
     }
 
     ILBM_NormalizeLegacyColorKeyPngSurface(tileset->img->GetSwTex());
-    SDL_SetColorKey(tileset->img->GetSwTex(), SDL_TRUE, SDL_MapRGB(tileset->img->GetSwTex()->format, 255, 255, 0));
+    SDL_SetSurfaceColorKey(tileset->img->GetSwTex(), true, SDL_MapSurfaceRGB(tileset->img->GetSwTex(), 255, 255, 0));
 
     tileset->h = std::stol(fntHeight, nullptr, 0);
 
@@ -258,7 +258,7 @@ TileMap * NC_STACK_ypaworld::yw_LoadTileSet(const std::string &bitmap, Common::P
     }
 
     ILBM_NormalizeLegacyColorKeyPngSurface(tileset->img->GetSwTex());
-    SDL_SetColorKey(tileset->img->GetSwTex(), SDL_TRUE, SDL_MapRGB(tileset->img->GetSwTex()->format, 255, 255, 0));
+    SDL_SetSurfaceColorKey(tileset->img->GetSwTex(), true, SDL_MapSurfaceRGB(tileset->img->GetSwTex(), 255, 255, 0));
 
     tileset->h = chrSz.y;
 

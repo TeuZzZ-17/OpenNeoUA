@@ -32,7 +32,7 @@ static float ParticleSystem_MaxScaleAxis(const vec3d &scale)
     return maxScale > 0.0f ? maxScale : 1.0f;
 }
 
-void ParticleSystem::AddParticle(NC_STACK_particle *base, const vec3d& pos, const vec3d& vec, int32_t age, const GFX::TGLColor &tint, const vec3d &scale, const vec3d &spin, float lifetimeScale, bool tintAlphaAffectsAdditive, bool colorizeTint, bool debugPlayer)
+void ParticleSystem::AddParticle(NC_STACK_particle *base, const vec3d& pos, const vec3d& vec, int32_t age, const GFX::TColorF &tint, const vec3d &scale, const vec3d &spin, float lifetimeScale, bool tintAlphaAffectsAdditive, bool colorizeTint, bool debugPlayer)
 {
     if ( !std::isfinite(lifetimeScale) || lifetimeScale <= 0.0f )
         lifetimeScale = 1.0f;

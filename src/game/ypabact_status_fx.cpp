@@ -1171,7 +1171,7 @@ void NC_STACK_ypabact::UpdateDecorationFX(update_msg *)
 }
 
 bool ypabact_GetPlasmaFactionTint(NC_STACK_ypabact *bact,
-                                            GFX::TGLColor *outTint)
+                                            GFX::TColorF *outTint)
 {
     return bact && bact->getBACT_pWorld() &&
            bact->getBACT_pWorld()->GetPlasmaFactionTint(bact->_owner, outTint);
@@ -1180,16 +1180,16 @@ bool ypabact_GetPlasmaFactionTint(NC_STACK_ypabact *bact,
 // The Genesis plasma has its own colour: the script `tint` of the unit never applies to it
 // (a red tint would make the Resistance Genesis red). Only the faction colour does, and the
 // Resistance keeps the original cyan plasma.
-void ypabact_ApplyGenesisPlasmaTint(NC_STACK_ypabact *bact, GFX::TGLColor *tint, GFX::TGLColor *particleTint,
+void ypabact_ApplyGenesisPlasmaTint(NC_STACK_ypabact *bact, GFX::TColorF *tint, GFX::TColorF *particleTint,
                                     bool *colorize, bool *particleColorize)
 {
-    const GFX::TGLColor neutral(1.0f, 1.0f, 1.0f, 1.0f);
+    const GFX::TColorF neutral(1.0f, 1.0f, 1.0f, 1.0f);
     *tint = neutral;
     *particleTint = neutral;
     *colorize = false;
     *particleColorize = false;
 
-    GFX::TGLColor plasmaTint;
+    GFX::TColorF plasmaTint;
     if ( ypabact_GetPlasmaFactionTint(bact, &plasmaTint) )
     {
         *tint = plasmaTint;

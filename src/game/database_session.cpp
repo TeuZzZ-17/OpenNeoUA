@@ -35,7 +35,7 @@ DatabaseSession::DatabaseSession() { carrier.Resize(1); }
 DatabaseSession::~DatabaseSession()
 {
     StopAudio();
-    for(auto &entry:captions)SDL_FreeSurface(entry.second);
+    for(auto &entry:captions)SDL_DestroySurface(entry.second);
     if(detailFont)TTF_CloseFont(detailFont);
     preview.Clear();
     if (resources)
@@ -70,7 +70,7 @@ bool DatabaseSession::LoadResources()
 void DatabaseSession::LoadDetailFont(int size)
 {
     if(detailFont&&detailFontSize==size)return;
-    for(auto &entry:captions)SDL_FreeSurface(entry.second);
+    for(auto &entry:captions)SDL_DestroySurface(entry.second);
     captions.clear();
     if(detailFont)TTF_CloseFont(detailFont);
     const auto parts=Stok::Split(System::ResolveMenuFontDescr(Locale::Text::Font()),",");

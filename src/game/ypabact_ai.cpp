@@ -8,12 +8,34 @@ bool NC_STACK_ypabact::HasDirectFireLineOfSight(const vec3d &from, const vec3d &
     if ( !_world )
         return true;
 
-    ypaworld_arg136 sight;
-    sight.stPos = from;
-    sight.vect = to - from;
-    sight.flags = 0;
-    _world->ypaworld_func149(&sight);
-    return !(sight.isect && sight.tVal < 0.92f);
+    const vec3d path = to - from;
+    const float length = path.length();
+    if ( length <= 0.0f )
+        return true;
+
+    // A turret starts inside the building it stands on: geometry within the
+    // shooter's own radius is skipped by tracing again just past it.
+    const float ownSkip = std::max(_radius, 1.0f) / length;
+    float startT = 0.0f;
+    for ( int pass = 0; pass < 3; pass++ )
+    {
+        ypaworld_arg136 sight;
+        sight.stPos = from + path * startT;
+        sight.vect = path * (1.0f - startT);
+        sight.flags = 0;
+        _world->ypaworld_func149(&sight);
+        if ( !sight.isect )
+            return true;
+
+        const float hitT = startT + sight.tVal * (1.0f - startT);
+        if ( hitT >= 0.92f )
+            return true;
+        if ( hitT > ownSkip )
+            return false;
+
+        startT = std::min(ownSkip, 0.92f) + 0.001f;
+    }
+    return false;
 }
 
 float NC_STACK_ypabact::ComputeAIEffectiveFireRange(const World::TWeapProto *w) const

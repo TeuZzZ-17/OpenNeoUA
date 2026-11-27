@@ -188,7 +188,7 @@ protected:
                                   const vec3d &targetCenter, float targetRadius,
                                   const vec3d &oldWeaponCenter, const vec3d &newWeaponCenter,
                                  float weaponRadius, const vec3d *surfaceNormal = nullptr);
-    void ApplyDeflectExtras(NC_STACK_ypabact *deflector, const vec3d &outward);
+    void ApplyDeflectExtras(NC_STACK_ypabact *deflector);
     bool ApplyDirectPushToBact(NC_STACK_ypabact *bct, vec3d *appliedDir = nullptr,
                                float *appliedStrength = nullptr, bool enqueue = true,
                                NC_STACK_ypabact *directionTarget = nullptr);

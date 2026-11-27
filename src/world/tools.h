@@ -569,7 +569,7 @@ inline float ComputeTemporalEnvelope(double elapsed, double totalDuration,
 
 // Single VP fade path shared by transient visual effects. Callers provide the
 // effect-local timeline; ordinary materials use the factor as alpha, while
-// additive LUMTRACY materials use it as RGB intensity because GL_ONE/GL_ONE
+// additive LUMTRACY materials use it as RGB intensity because One/One blending
 // ignores source alpha. Scale, lifetime and gameplay state remain unchanged.
 inline float ComputeVPFadeEnvelope(double elapsed, double totalDuration,
                                    double fadeIn, double fadeOut)

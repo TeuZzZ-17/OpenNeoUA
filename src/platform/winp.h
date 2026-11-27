@@ -58,10 +58,10 @@ protected:
     static void CheckJoy();
     static void KeyDown(int16_t vk);
     static void KeyUp(int16_t vk);
-    static int InputWatch(void *, SDL_Event *event);
+    static bool InputWatch(void *, SDL_Event *event);
 
-    static SDL_JoystickGUID sdlReadJoyGuid();
-    static bool sdlGUIDcmp(SDL_JoystickGUID &gd1, SDL_JoystickGUID &gd2);
+    static SDL_GUID sdlReadJoyGuid();
+    static bool sdlGUIDcmp(SDL_GUID &gd1, SDL_GUID &gd2);
     static int sdlJoyAxis(SDL_Joystick* joystick, int axis);
     static void sdlJoyReadMapping(SDL_Joystick* joystick);
 
@@ -102,7 +102,7 @@ protected:
 
 
     static bool                 _joyEnable;
-    static SDL_JoystickGUID     _joyWantGuid;
+    static SDL_GUID     _joyWantGuid;
 
     static SDL_Joystick        *_joyHandle;
     static SDL_Haptic          *_joyHaptic;

@@ -153,12 +153,12 @@ void NC_STACK_ypaworld::RenderPlasmaCurrencyBank()
     const int top = _GameShell&&_GameShell->EnvMode==ENVMODE_WORKSHOP?DatabaseLayout::For(*this,true).line+2:margin;
 
     SDL_Rect oldClip;
-    SDL_GetClipRect(screen, &oldClip);
-    SDL_SetClipRect(screen, nullptr);
+    SDL_GetSurfaceClipRect(screen, &oldClip);
+    SDL_SetSurfaceClipRect(screen, nullptr);
 
-    const Uint32 border = SDL_MapRGB(screen->format, 47, 92, 104);
-    const Uint32 body = SDL_MapRGB(screen->format, 7, 18, 23);
-    const Uint32 glow = SDL_MapRGB(screen->format, 83, 184, 210);
+    const Uint32 border = SDL_MapSurfaceRGB(screen, 47, 92, 104);
+    const Uint32 body = SDL_MapSurfaceRGB(screen, 7, 18, 23);
+    const Uint32 glow = SDL_MapSurfaceRGB(screen, 83, 184, 210);
 
     // Body with a chamfered lower-left corner, built from one-pixel rows.
     for ( int y = 0; y < height; y++ )
@@ -166,14 +166,14 @@ void NC_STACK_ypaworld::RenderPlasmaCurrencyBank()
         const int cut = (y >= height - notch) ? (notch - (height - 1 - y)) : 0;
         SDL_Rect row = {left + cut, top + y, width - cut, 1};
         const bool edge = (y == 0 || y == height - 1);
-        SDL_FillRect(screen, &row, edge ? border : body);
+        SDL_FillSurfaceRect(screen, &row, edge ? border : body);
         SDL_Rect side = {left + cut, top + y, 1, 1};
-        SDL_FillRect(screen, &side, border);
+        SDL_FillSurfaceRect(screen, &side, border);
         SDL_Rect right = {left + width - 1, top + y, 1, 1};
-        SDL_FillRect(screen, &right, border);
+        SDL_FillSurfaceRect(screen, &right, border);
     }
     SDL_Rect strip = {left + notch, top + height - 2, width - notch - 1, 1};
-    SDL_FillRect(screen, &strip, glow);
+    SDL_FillSurfaceRect(screen, &strip, glow);
 
     NC_STACK_bitmap *icon = StatusIconLoad(StatusIconPlasmaPath(this), iconSize, iconSize);
     if ( icon )
@@ -189,7 +189,7 @@ void NC_STACK_ypaworld::RenderPlasmaCurrencyBank()
     FontUA::FormateClippedText(font, &text, amount, available, ' ');
     FontUA::set_end(&text);
     GFX::Engine.ProcessDrawSeq(text);
-    SDL_SetClipRect(screen, &oldClip);
+    SDL_SetSurfaceClipRect(screen, &oldClip);
 }
 
 SDL_Color yw_GetNeutralSelectionShadowColor()

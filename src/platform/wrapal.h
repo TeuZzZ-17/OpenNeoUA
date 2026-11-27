@@ -13,8 +13,8 @@
 #include <AL/alc.h>
 #endif
 
-#include <SDL2/SDL_thread.h>
-#include <SDL2/SDL_mutex.h>
+#include <SDL3/SDL_thread.h>
+#include <SDL3/SDL_Mutex.h>
 
 #define OV_EXCLUDE_STATIC_CALLBACKS
 #include <vorbis/vorbisfile.h>
@@ -89,7 +89,7 @@ protected:
     ALenum _format;
     int _freq;
 
-    SDL_mutex *_mutex;
+    SDL_Mutex *_mutex;
     int _status;
     size_t _loops;
 
@@ -207,7 +207,7 @@ private:
 
     static int _updateThread(void *data);
 
-    SDL_mutex *mutex;
+    SDL_Mutex *mutex;
     SDL_Thread *updateThread;
 };
 

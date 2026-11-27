@@ -1,15 +1,9 @@
-// GFXEngine: rendering back end (OpenGL), render nodes, textures, 2D drawing.
+// GFXEngine: rendering back end (SDL_GPU, see gpu.h), render nodes, textures, 2D drawing.
 #include "../fmtlib/printf.h"
 // Extended unit-icon keys retain the original 256-entry font table.
 #include "common/glyph_key.h"
-#include <SDL2/SDL_opengl.h>
 
-#if defined(__APPLE__) && defined(__MACH__)
-#include <OpenGL/glext.h>
-#else
-#include <GL/glext.h>
 #include <queue>
-#endif
 
 #include "gfx.h"
 #include "common/utils.h"
@@ -26,7 +20,6 @@
 #include "gametime.h"
 #include "framepacer.h"
 #include "world/locations.h"
-#include "glfuncs.h"
 
 #include <algorithm>
 #include <cctype>
@@ -34,10 +27,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <utility>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 namespace GFX
 {
@@ -47,8 +36,8 @@ int GFXEngine::can_srcblend;
 int GFXEngine::can_destblend;
 int GFXEngine::can_stippling;
 
-SDL_PixelFormat *GFXEngine::_pixfmt = nullptr;
-GLint GFXEngine::_glPixfmt, GFXEngine::_glPixtype;
+const SDL_PixelFormatDetails *GFXEngine::_pixfmt = nullptr;
+GPU::Format GFXEngine::_texFormat = GPU::Format::RGBA8;
 bool GFXEngine::_staticInited = false;
 
 
@@ -95,7 +84,7 @@ struct HorizonFogConfig
     float FogStart = 0.0f;
     float FogLength = 0.0f;
     float FogStrength = 0.8f;
-    TGLColor FogColor = TGLColor(150.0f / 255.0f, 155.0f / 255.0f, 160.0f / 255.0f, 1.0f);
+    TColorF FogColor = TColorF(150.0f / 255.0f, 155.0f / 255.0f, 160.0f / 255.0f, 1.0f);
 
     bool DarkEnable = true;
     bool DarkStartOverride = false;
@@ -103,7 +92,7 @@ struct HorizonFogConfig
     float DarkStart = 0.0f;
     float DarkLength = 0.0f;
     float DarkStrength = 0.65f;
-    TGLColor DarkColor = TGLColor(0.0, 0.0, 0.0, 1.0);
+    TColorF DarkColor = TColorF(0.0, 0.0, 0.0, 1.0);
 };
 
 static HorizonFogConfig gHorizonFogConfig;
@@ -164,7 +153,7 @@ static int HorizonClampColor(int v)
     return v;
 }
 
-static TGLColor HorizonParseColor(std::string s, const TGLColor &fallback)
+static TColorF HorizonParseColor(std::string s, const TColorF &fallback)
 {
     s = StrTrim(s);
     if (s.empty())
@@ -180,7 +169,7 @@ static TGLColor HorizonParseColor(std::string s, const TGLColor &fallback)
         int g = HorizonClampColor(std::stoi(parts[1]));
         int b = HorizonClampColor(std::stoi(parts[2]));
 
-        return TGLColor((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, 1.0f);
+        return TColorF((float)r / 255.0f, (float)g / 255.0f, (float)b / 255.0f, 1.0f);
     }
     catch (...)
     {
@@ -354,24 +343,21 @@ void GFXEngine::StaticInit()
 
     _staticInited = true;
 
-    SDL_DisplayMode curr;
-    SDL_GetCurrentDisplayMode(0, &curr);
-
-    switch(curr.format)
+    // Surfaces keep the desktop's byte order; textures use the matching GPU format.
+    const SDL_DisplayMode *curr = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+    switch(curr ? curr->format : SDL_PIXELFORMAT_UNKNOWN)
     {
-        case SDL_PIXELFORMAT_RGB888:
+        case SDL_PIXELFORMAT_XRGB8888:
         case SDL_PIXELFORMAT_ARGB8888:
-            _pixfmt = SDL_AllocFormat( SDL_PIXELFORMAT_ARGB8888 );
-            _glPixfmt = GL_BGRA;
-            _glPixtype = GL_UNSIGNED_BYTE;
+            _pixfmt = SDL_GetPixelFormatDetails( SDL_PIXELFORMAT_ARGB8888 );
+            _texFormat = GPU::Format::BGRA8;
             break;
 
-        case SDL_PIXELFORMAT_BGR888:
+        case SDL_PIXELFORMAT_XBGR8888:
         case SDL_PIXELFORMAT_ABGR8888:
         default:
-            _pixfmt = SDL_AllocFormat( SDL_PIXELFORMAT_ABGR8888 );
-            _glPixfmt = GL_RGBA;
-            _glPixtype = GL_UNSIGNED_BYTE;
+            _pixfmt = SDL_GetPixelFormatDetails( SDL_PIXELFORMAT_ABGR8888 );
+            _texFormat = GPU::Format::RGBA8;
             break;
     }
 }
@@ -467,7 +453,7 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
 
                 if ( txt->flag & 0xE )
                 {
-                    TTF_SizeUTF8(_font.ttfFont, txt->string.c_str(), &cx, &cy);
+                    TTF_GetStringSize(_font.ttfFont, txt->string.c_str(), 0, &cx, &cy);
                 }
 
                 int p1 = txt->p1;
@@ -512,7 +498,7 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                     }
                 }
 
-                SDL_SetClipRect(Screen(), &clipRect);
+                SDL_SetSurfaceClipRect(Screen(), &clipRect);
 
 
                 int v10 = ((p4 - _font.height) / 2) - 2 + p2;
@@ -532,16 +518,16 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
 
                 if (_solidFont)
                 {
-                    tmp = TTF_RenderUTF8_Solid(_font.ttfFont, txt->string.c_str(), clr);
+                    tmp = TTF_RenderText_Solid(_font.ttfFont, txt->string.c_str(), 0, clr);
                 }
                 else
                 {
-                    tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
+                    tmp = TTF_RenderText_Blended(_font.ttfFont, txt->string.c_str(), 0, clr);
                 }
 
                 if (!tmp)
                 {
-                    SDL_SetClipRect(Screen(), nullptr);
+                    SDL_SetSurfaceClipRect(Screen(), nullptr);
                     return;
                 }
 
@@ -563,15 +549,15 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
 
                 if (_solidFont)
                 {
-                    SDL_SetPaletteColors(tmp->format->palette, &clr, 1, 1);
+                    SDL_SetPaletteColors(SDL_GetSurfacePalette(tmp), &clr, 1, 1);
                 }
                 else
                 {
-                    SDL_FreeSurface(tmp);
-                    tmp = TTF_RenderUTF8_Blended(_font.ttfFont, txt->string.c_str(), clr);
+                    SDL_DestroySurface(tmp);
+                    tmp = TTF_RenderText_Blended(_font.ttfFont, txt->string.c_str(), 0, clr);
                     if (!tmp)
                     {
-                        SDL_SetClipRect(Screen(), nullptr);
+                        SDL_SetSurfaceClipRect(Screen(), nullptr);
                         return;
                     }
 
@@ -584,9 +570,9 @@ void GFXEngine::DrawTextEntry(const ScreenText *txt)
                 want.y = v10;
 
                 SDL_BlitSurface(tmp, nullptr, Screen(), &want);
-                SDL_FreeSurface(tmp);
+                SDL_DestroySurface(tmp);
 
-                SDL_SetClipRect(Screen(), nullptr);
+                SDL_SetSurfaceClipRect(Screen(), nullptr);
             }
         }
     }
@@ -619,8 +605,8 @@ void GFXEngine::DrawScreenText()
 
 void GFXEngine::ClearLocationTitle()
 {
-    if (_locationTitle) SDL_FreeSurface(_locationTitle);
-    if (_locationLabel) SDL_FreeSurface(_locationLabel);
+    if (_locationTitle) SDL_DestroySurface(_locationTitle);
+    if (_locationLabel) SDL_DestroySurface(_locationLabel);
     if (_locationFont) TTF_CloseFont(_locationFont);
     if (_locationLabelFont) TTF_CloseFont(_locationLabelFont);
     _locationTitle=nullptr; _locationLabel=nullptr;
@@ -649,14 +635,14 @@ void GFXEngine::DrawLocationTitle(const std::string &name, const SDL_Color &colo
             _locationFont=System::LoadFont("xolonium bold",size);
             if (!_locationFont) break;
             int width=0, height=0;
-            if (TTF_SizeUTF8(_locationFont,display.c_str(),&width,&height)==0 && width<=available) break;
+            if (TTF_GetStringSize(_locationFont, display.c_str(), 0, &width, &height) && width<=available) break;
             TTF_CloseFont(_locationFont); _locationFont=nullptr;
         }
         _locationLabelFont=System::LoadFont("xolonium bold",std::max(10,int(canvas->h*.023)));
         TTF_Font *titleFont=_locationFont ? _locationFont : _font.ttfFont;
         TTF_Font *labelFont=_locationLabelFont ? _locationLabelFont : _font.ttfFont;
-        if (titleFont) _locationTitle=TTF_RenderUTF8_Blended(titleFont,display.c_str(),color);
-        if (labelFont) _locationLabel=TTF_RenderUTF8_Blended(labelFont,"LOCATION",SDL_Color{144,185,194,255});
+        if (titleFont) _locationTitle=TTF_RenderText_Blended(titleFont, display.c_str(), 0, color);
+        if (labelFont) _locationLabel=TTF_RenderText_Blended(labelFont, "LOCATION", 0, SDL_Color{144,185,194,255});
     }
     const uint8_t alpha=uint8_t(std::min(1.f,opacity)*255);
     const int top=int(canvas->h*.19);
@@ -670,12 +656,12 @@ void GFXEngine::DrawLocationTitle(const std::string &name, const SDL_Color &colo
             SDL_SetSurfaceColorMod(surface,0,0,0);
             SDL_SetSurfaceAlphaMod(surface,uint8_t(alpha*.63f));
             ++target.x; target.y+=2;
-            SDL_BlitScaled(surface,nullptr,canvas,&target);
+            SDL_BlitSurfaceScaled(surface, nullptr, canvas, &target, SDL_SCALEMODE_NEAREST);
             --target.x; target.y-=2;
             SDL_SetSurfaceColorMod(surface,255,255,255);
         }
         SDL_SetSurfaceAlphaMod(surface,alpha);
-        SDL_BlitScaled(surface,nullptr,canvas,&target);
+        SDL_BlitSurfaceScaled(surface, nullptr, canvas, &target, SDL_SCALEMODE_NEAREST);
     };
     blit(_locationLabel,top,false);
     blit(_locationTitle,top+28,true);
@@ -689,7 +675,7 @@ int GFXEngine::MeasureScreenTextWidth(const std::string &text) const
     int width = 0;
     int height = 0;
 
-    if ( _font.ttfFont && TTF_SizeUTF8(_font.ttfFont, text.c_str(), &width, &height) == 0 )
+    if ( _font.ttfFont && TTF_GetStringSize(_font.ttfFont, text.c_str(), 0, &width, &height) )
         return width;
 
     return 0;
@@ -701,13 +687,6 @@ void GFXEngine::initPolyEngine()
     _states.LinearFilter = (_filter != 0);
 
     SetRenderStates(1);
-
-    glEnable(GL_CULL_FACE);
-
-    if (_dither)
-        glEnable(GL_DITHER);
-    else
-        glDisable(GL_DITHER);
 }
 
 int GFXEngine::LoadFontByDescr(const std::string &fontname)
@@ -802,24 +781,8 @@ size_t GFXEngine::windd_func0(IDVList &stak)
 
     _solidFont = System::IniConf::GfxSolidFont.Get<bool>();
 
-    switch( System::IniConf::GfxVsync.Get<int>() )
-    {
-        case 0:
-            SDL_GL_SetSwapInterval(0);
-            break;
-
-        default:
-        case 1:
-            SDL_GL_SetSwapInterval(1);
-            break;
-
-        case 2:
-            {
-                if ( SDL_GL_SetSwapInterval(-1) == -1)
-                    SDL_GL_SetSwapInterval(1);
-            }
-            break;
-    }
+    // 0 off, 1 on, 2 adaptive (mailbox when the display offers it).
+    GPU::SetVSync(System::IniConf::GfxVsync.Get<int>());
 
     System::Frames.SetFrameRateLimit(System::NormalizeFrameRateLimit(System::IniConf::GfxMaxFps.Get<int32_t>()));
 
@@ -1002,7 +965,7 @@ size_t GFXEngine::raster_func202(rstr_arg204 *arg)
     SDL_Rect src = r1;
     SDL_Rect dst = r2;
 
-    SDL_BlitScaled(arg->pbitm->swTex, &src, Screen(), &dst);
+    SDL_BlitSurfaceScaled(arg->pbitm->swTex, &src, Screen(), &dst, SDL_SCALEMODE_NEAREST);
 
     return 1;
 }
@@ -1042,7 +1005,7 @@ size_t GFXEngine::BlitPixelRect(ResBitmap *pbitm, Common::Rect r1, Common::Rect 
         SDL_Rect dst = r2;
         if (opacity == 255)
         {
-            SDL_BlitScaled(pbitm->swTex, &src, Screen(), &dst);
+            SDL_BlitSurfaceScaled(pbitm->swTex, &src, Screen(), &dst, SDL_SCALEMODE_NEAREST);
             return 1;
         }
 
@@ -1052,7 +1015,7 @@ size_t GFXEngine::BlitPixelRect(ResBitmap *pbitm, Common::Rect r1, Common::Rect 
         SDL_GetSurfaceBlendMode(pbitm->swTex, &oldBlendMode);
         SDL_SetSurfaceAlphaMod(pbitm->swTex, opacity);
         SDL_SetSurfaceBlendMode(pbitm->swTex, SDL_BLENDMODE_BLEND);
-        SDL_BlitScaled(pbitm->swTex, &src, Screen(), &dst);
+        SDL_BlitSurfaceScaled(pbitm->swTex, &src, Screen(), &dst, SDL_SCALEMODE_NEAREST);
         SDL_SetSurfaceAlphaMod(pbitm->swTex, oldOpacity);
         SDL_SetSurfaceBlendMode(pbitm->swTex, oldBlendMode);
     }
@@ -1077,584 +1040,60 @@ size_t GFXEngine::raster_func204(rstr_arg204 *arg)
     return BlitPixelRect(arg->pbitm, r1, r2, arg->opacity);
 }
 
+// Copies the render states the standard shader reads into its uniforms. Pipeline
+// states (blend, depth, colour writes) are taken by each draw from _states.
 void GFXEngine::SetRenderStates(int setAll)
 {
-    GfxStates *newStates;
+    const GfxStates &s = (setAll < 2) ? _states : _lastStates;
 
-    if (setAll < 2)
-        newStates = &_states;
-    else
-        newStates = &_lastStates;
+    _stdParams.Textured = s.Tex ? 1 : 0;
+    _stdParams.Flat = s.Shaded ? 0 : 1;
+    _stdParams.ATest = s.AlphaTest ? 1 : 0;
 
-    bool forceSetShader = false;
-    if (setAll)
-        forceSetShader = true;
-
-    if (_glext)
+    if (s.Fog)
     {
-        if (setAll || (newStates->Prog.ID != _lastStates.Prog.ID))
-        {
-            if (_vbo && _lastStates.Prog.ID)
-            {
-                if (_lastStates.Prog.PosLoc != -1)
-                    Glext::GLDisableVertexAttribArray(_lastStates.Prog.PosLoc);
-
-                if (_lastStates.Prog.ColorLoc != -1)
-                    Glext::GLDisableVertexAttribArray(_lastStates.Prog.ColorLoc);
-
-                if (_lastStates.Prog.UVLoc != -1)
-                    Glext::GLDisableVertexAttribArray(_lastStates.Prog.UVLoc);
-            }
-
-            Glext::GLUseProgram(newStates->Prog.ID);
-
-            forceSetShader = true;
-
-            if (_vbo && newStates->Prog.ID)
-            {
-                if (newStates->Prog.PosLoc != -1)
-                    Glext::GLEnableVertexAttribArray(newStates->Prog.PosLoc);
-
-                if (newStates->Prog.ColorLoc != -1)
-                    Glext::GLEnableVertexAttribArray(newStates->Prog.ColorLoc);
-            }
-        }
-    }
-
-    if (_vbo)
-    {
-        if (setAll || (newStates->DataBuf != _lastStates.DataBuf))
-        {
-            Glext::GLBindBuffer(GL_ARRAY_BUFFER, newStates->DataBuf);
-        }
-
-        if (setAll || (newStates->IndexBuf != _lastStates.IndexBuf))
-        {
-            Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, newStates->IndexBuf);
-        }
-
-        if (forceSetShader || (newStates->Tex != _lastStates.Tex))
-        {
-            if (newStates->Tex)
-            {
-                if (newStates->Prog.UVLoc != -1)
-                    Glext::GLEnableVertexAttribArray(newStates->Prog.UVLoc);
-
-                glBindTexture(GL_TEXTURE_2D, newStates->Tex);
-
-                _vboStatesBlock.Textured = 1;
-            }
-            else
-            {
-                if (newStates->Prog.UVLoc != -1)
-                    Glext::GLDisableVertexAttribArray(newStates->Prog.UVLoc);
-
-                glBindTexture(GL_TEXTURE_2D, 0);
-
-                _vboStatesBlock.Textured = 0;
-            }
-            _vboStatesChanged = true;
-        }
-
-        if ((forceSetShader || (newStates->Fog != _lastStates.Fog) ||
-            (newStates->FogLength != _lastStates.FogLength) ||
-            (newStates->FogStart != _lastStates.FogStart) ||
-            (newStates->FogStrength != _lastStates.FogStrength) ||
-            (newStates->FogColor.r != _lastStates.FogColor.r) ||
-            (newStates->FogColor.g != _lastStates.FogColor.g) ||
-            (newStates->FogColor.b != _lastStates.FogColor.b)) )
-        {
-            if (newStates->Fog)
-            {
-                _vboStatesBlock.Fog = 1.0;
-                _vboStatesBlock.FogStart = newStates->FogStart;
-                _vboStatesBlock.FogLength = newStates->FogLength;
-                _vboStatesBlock.FogStrength = newStates->FogStrength;
-                _vboStatesBlock.FogColor[0] = newStates->FogColor.r;
-                _vboStatesBlock.FogColor[1] = newStates->FogColor.g;
-                _vboStatesBlock.FogColor[2] = newStates->FogColor.b;
-                _vboStatesBlock.FogColor[3] = 1.0;
-            }
-            else
-            {
-                _vboStatesBlock.Fog = 0.0;
-            }
-            _vboStatesChanged = true;
-        }
-
-        if ((forceSetShader || (newStates->AFog != _lastStates.AFog) ||
-            (newStates->AFogLength != _lastStates.AFogLength) ||
-            (newStates->AFogStart != _lastStates.AFogStart) ||
-            (newStates->AFogStrength != _lastStates.AFogStrength) ||
-            (newStates->AFogColor.r != _lastStates.AFogColor.r) ||
-            (newStates->AFogColor.g != _lastStates.AFogColor.g) ||
-            (newStates->AFogColor.b != _lastStates.AFogColor.b)) )
-        {
-            if (newStates->AFog)
-            {
-                _vboStatesBlock.AFog = (float)newStates->AFog;
-                _vboStatesBlock.AFogStart = newStates->AFogStart;
-                _vboStatesBlock.AFogLength = newStates->AFogLength;
-                _vboStatesBlock.AFogStrength = newStates->AFogStrength;
-                _vboStatesBlock.AtmosphereColor[0] = newStates->AFogColor.r;
-                _vboStatesBlock.AtmosphereColor[1] = newStates->AFogColor.g;
-                _vboStatesBlock.AtmosphereColor[2] = newStates->AFogColor.b;
-                _vboStatesBlock.AtmosphereColor[3] = 1.0;
-            }
-            else
-            {
-                _vboStatesBlock.AFog = 0.0;
-            }
-            _vboStatesChanged = true;
-        }
-
-        if (forceSetShader || (newStates->Shaded != _lastStates.Shaded))
-        {
-            if (newStates->Shaded)
-            {
-                _vboStatesBlock.Flat = 0;
-            }
-            else
-            {
-                _vboStatesBlock.Flat = 1;
-            }
-            _vboStatesChanged = true;
-        }
-
-        if (setAll || (newStates->AlphaTest != _lastStates.AlphaTest))
-        {
-            if (newStates->AlphaTest == false)
-            {
-                _vboStatesBlock.ATest = 0;
-            }
-            else
-            {
-                _vboStatesBlock.ATest = 1;
-            }
-            _vboStatesChanged = true;
-        }
+        _stdParams.Fog = 1.0;
+        _stdParams.FogStart = s.FogStart;
+        _stdParams.FogLength = s.FogLength;
+        _stdParams.FogStrength = s.FogStrength;
+        _stdParams.FogColor[0] = s.FogColor.r;
+        _stdParams.FogColor[1] = s.FogColor.g;
+        _stdParams.FogColor[2] = s.FogColor.b;
+        _stdParams.FogColor[3] = 1.0;
     }
     else
+        _stdParams.Fog = 0.0;
+
+    if (s.AFog)
     {
-        if (setAll || (newStates->Stipple != _lastStates.Stipple))
-        {
-        }
-
-        if (setAll || (newStates->Fog != _lastStates.Fog) ||
-            (newStates->FogLength != _lastStates.FogLength) ||
-            (newStates->FogStart != _lastStates.FogStart) ||
-            (newStates->FogColor.r != _lastStates.FogColor.r) ||
-            (newStates->FogColor.g != _lastStates.FogColor.g) ||
-            (newStates->FogColor.b != _lastStates.FogColor.b) )
-        {
-            if (newStates->Fog)
-            {
-                glEnable(GL_FOG);
-                glFogf(GL_FOG_DENSITY, 1.0);
-                glFogi(GL_FOG_MODE, GL_LINEAR);
-                glHint(GL_FOG_HINT, GL_DONT_CARE);
-
-                float fcolors[4] = {
-                    newStates->FogColor.r,
-                    newStates->FogColor.g,
-                    newStates->FogColor.b,
-                    1.0
-                };
-
-                glFogfv(GL_FOG_COLOR, fcolors);
-
-                glFogf(GL_FOG_START, newStates->FogStart);
-                glFogf(GL_FOG_END, newStates->FogStart + newStates->FogLength);
-            }
-            else
-            {
-                glDisable(GL_FOG);
-            }
-        }
-
-        if (setAll || (newStates->Shaded != _lastStates.Shaded))
-        {
-            if (newStates->Shaded)
-                glShadeModel(GL_SMOOTH);
-            else
-                glShadeModel(GL_FLAT);
-        }
-
-        if (setAll || (newStates->Tex != _lastStates.Tex))
-        {
-            if (newStates->Tex)
-            {
-                glEnable(GL_TEXTURE_2D);
-                glBindTexture(GL_TEXTURE_2D, newStates->Tex);
-                glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-            }
-            else
-            {
-                glDisable(GL_TEXTURE_2D);
-                glBindTexture(GL_TEXTURE_2D, 0);
-                glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-            }
-        }
-
-        if (setAll || (newStates->AlphaTest != _lastStates.AlphaTest))
-        {
-            if (newStates->AlphaTest == false)
-            {
-                glDisable(GL_ALPHA_TEST);
-            }
-            else
-            {
-                glEnable(GL_ALPHA_TEST);
-                glAlphaFunc(GL_GREATER, 0.0);
-            }
-        }
+        _stdParams.AFog = (float)s.AFog;
+        _stdParams.AFogStart = s.AFogStart;
+        _stdParams.AFogLength = s.AFogLength;
+        _stdParams.AFogStrength = s.AFogStrength;
+        _stdParams.AtmosphereColor[0] = s.AFogColor.r;
+        _stdParams.AtmosphereColor[1] = s.AFogColor.g;
+        _stdParams.AtmosphereColor[2] = s.AFogColor.b;
+        _stdParams.AtmosphereColor[3] = 1.0;
     }
-
-    if (setAll || (newStates->DepthTest != _lastStates.DepthTest))
-    {
-        if (newStates->DepthTest)
-        {
-            glEnable(GL_DEPTH_TEST);
-            glDepthFunc(GL_LEQUAL);
-        }
-        else
-        {
-            glDisable(GL_DEPTH_TEST);
-        }
-    }
-
-    if (setAll || (newStates->Tex != _lastStates.Tex)
-               || (newStates->LinearFilter != _lastStates.LinearFilter) )
-    {
-        if (newStates->Tex)
-        {
-            if (newStates->LinearFilter)
-            {
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            }
-            else
-            {
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            }
-        }
-    }
-
-    if (setAll || (newStates->SrcBlend != _lastStates.SrcBlend)
-                   || (newStates->DstBlend != _lastStates.DstBlend))
-    {
-        glBlendFunc(newStates->SrcBlend, newStates->DstBlend);
-    }
-
-    if (setAll || (newStates->TexBlend != _lastStates.TexBlend))
-    {
-        if (newStates->TexBlend == 0)
-            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-        else if (newStates->TexBlend == 1)
-        {
-            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_TEXTURE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_RGB, GL_PREVIOUS);
-            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
-            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
-            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
-        }
-        else if (newStates->TexBlend == 2)
-            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-        else if (newStates->TexBlend == 3)
-        {
-            // Colorized fixed-function fallback: vertex RGB already carries
-            // target hue/intensity. Ignore source texture RGB but retain its
-            // alpha mask, so cyan plasma does not suppress red/yellow channels.
-            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PREVIOUS);
-            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
-            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
-            glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE1_ALPHA, GL_PREVIOUS);
-            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
-            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
-        }
-    }
-
-    if (setAll || (newStates->AlphaBlend != _lastStates.AlphaBlend))
-    {
-        if (newStates->AlphaBlend)
-            glEnable(GL_BLEND);
-        else
-            glDisable(GL_BLEND);
-    }
-
-    if (setAll || (newStates->Zwrite != _lastStates.Zwrite))
-    {
-        if (newStates->Zwrite)
-            glDepthMask(GL_TRUE);
-        else
-            glDepthMask(GL_FALSE);
-    }
+    else
+        _stdParams.AFog = 0.0;
 
     if (setAll < 2)
         _lastStates = _states;
 }
 
-void GFXEngine::RenderingMeshOld(TRenderNode *nod)
+GPU::DrawState GFXEngine::StdDrawState(GPU::Layout layout) const
 {
-    if ( !_sceneBeginned )
-        return;
-
-    if (!nod)
-        return;
-
-    TMesh *mesh = nod->Mesh;
-
-    if (!mesh)
-        return;
-
-    uint32_t flags = nod->Flags;
-
-    _states.Shaded = false;
-    _states.Stipple = false;
-    _states.SrcBlend = GL_ONE;
-    _states.DstBlend = GL_ZERO;
-    _states.TexBlend = 0; //REPLACE
-    _states.AlphaBlend = false;
-    _states.Zwrite = true;
-    _states.Tex = 0;
-    _states.LinearFilter = (_filter != 0);
-    _states.Fog = false;
-    _states.AlphaTest = false;
-    _states.AFog = false;
-    _states.Prog = TShaderProg();
-
-    bool useComputedColor = false;
-
-    if ( flags & RFLAGS_TEXTURED )
-    {
-        if (nod->Tex)
-            _states.Tex = nod->Tex->hwTex;
-    }
-
-    if ( flags & RFLAGS_SHADED )
-    {
-        _states.TexBlend = 2; //MODULATE
-        _states.Shaded = true;
-    }
-
-    if ( flags & RFLAGS_FOG )
-    {
-        _states.Fog = true;
-        _states.FogStart = nod->FogStart;
-        _states.FogLength = nod->FogLength;
-        _states.FogStrength = 1.0f;
-        _states.FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
-    }
-
-    if ( flags & RFLAGS_LUMTRACY )
-    {
-        if ( !_zbuf_when_tracy )
-            _states.Zwrite = false;
-
-        if ( can_destblend )
-        {
-            _states.AlphaBlend = true;
-            _states.TexBlend = 1; //MODULATEALPHA;
-            _states.SrcBlend = GL_ONE;
-            _states.DstBlend = GL_ONE;
-            _states.Shaded = false;
-        }
-        else if ( can_srcblend )
-        {
-            _states.AlphaBlend = true;
-            _states.TexBlend = 1; //MODULATEALPHA;
-            _states.SrcBlend = GL_SRC_ALPHA;
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-            _states.Shaded = false;
-        }
-        else if ( can_stippling )
-        {
-            _states.AlphaBlend = true;
-            _states.TexBlend = 1; //MODULATEALPHA;
-            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
-            _states.Stipple = true;
-            _states.Shaded = false;
-        }
-    }
-    else if ( flags & RFLAGS_ZEROTRACY )
-    {
-        _states.AlphaTest = true;
-
-        if ( _pixfmt->BytesPerPixel != 1 )
-        {
-            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
-        }
-
-        _states.AlphaBlend = true;
-        _states.LinearFilter = false;
-        _states.TexBlend = 2; //MODULATE
-    }
-    else if ( flags & RFLAGS_ALPHABLEND )
-    {
-        _states.AlphaBlend = true;
-        _states.SrcBlend = GL_SRC_ALPHA;
-        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-        _states.TexBlend = 2; //MODULATE
-    }
-
-    if (flags & RFLAGS_SKY)
-    {
-        _states.Fog = false;
-        _states.Shaded = true;
-    }
-
-
-    if (flags & RFLAGS_COMPUTED_COLOR)
-        useComputedColor = true;
-
-    if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && nod->FogLength > 0.0f)
-    {
-        const bool atmosphereFog = HorizonAlphaFogEnabled(nod->FogLength);
-        const bool darkFog = HorizonDarkFogEnabled(nod->FogLength);
-
-        // Fixed-function fallback: emulate Atmosphere V2 per vertex. Unlike the
-        // old path, world geometry never loses alpha, so the sky cannot bleed
-        // through opaque terrain/buildings. VBO mode performs the same blend
-        // per pixel in the standard fragment shader.
-        _states.Fog = false;
-        _states.AFog = false;
-
-        if (atmosphereFog || darkFog)
-        {
-            const float atmosphereStart = HorizonAlphaFogStart(nod->FogStart, nod->FogLength);
-            const float atmosphereLength = HorizonAlphaFogLength(nod->FogLength);
-            const float darkStart = HorizonDarkFogStart(nod->FogStart, nod->FogLength);
-            const float darkLength = HorizonDarkFogLength(nod->FogLength);
-
-            for (TVertex &v : mesh->Vertexes)
-            {
-                const TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
-                TGLColor out = src;
-                const vec3d viewPos = nod->TForm.Transform(v.Pos);
-
-                if (atmosphereFog)
-                {
-                    const float f = HorizonFogFactor(viewPos, atmosphereStart, atmosphereLength) *
-                                    gHorizonFogConfig.FogStrength;
-                    out.r += (gHorizonFogConfig.FogColor.r - out.r) * f;
-                    out.g += (gHorizonFogConfig.FogColor.g - out.g) * f;
-                    out.b += (gHorizonFogConfig.FogColor.b - out.b) * f;
-                }
-
-                if (darkFog)
-                {
-                    const float f = HorizonFogFactor(viewPos, darkStart, darkLength) *
-                                    gHorizonFogConfig.DarkStrength;
-                    out.r += (gHorizonFogConfig.DarkColor.r - out.r) * f;
-                    out.g += (gHorizonFogConfig.DarkColor.g - out.g) * f;
-                    out.b += (gHorizonFogConfig.DarkColor.b - out.b) * f;
-                }
-
-                out.a = src.a;
-                v.ComputedColor = out;
-            }
-            useComputedColor = true;
-        }
-    }
-
-    TGLColor effectiveColorMul = nod->ColorMul;
-    float vpFadeFactor = nod->VPFadeFactor;
-    if ( !std::isfinite(vpFadeFactor) )
-        vpFadeFactor = 1.0f;
-    vpFadeFactor = std::max(0.0f, std::min(vpFadeFactor, 1.0f));
-
-    // LUMTRACY uses GL_ONE/GL_ONE when destination blending is available.
-    // Alpha does not attenuate RGB in that additive path, so transient VP
-    // fades must scale RGB intensity instead. Keep this separate from the
-    // ordinary tint alpha path to avoid double-fading alpha-blended meshes.
-    if ( (flags & RFLAGS_LUMTRACY) && can_destblend && vpFadeFactor < 1.0f )
-    {
-        effectiveColorMul.r *= vpFadeFactor;
-        effectiveColorMul.g *= vpFadeFactor;
-        effectiveColorMul.b *= vpFadeFactor;
-    }
-
-    if ( nod->Colorize )
-    {
-        // True hue replacement for the legacy fixed-function renderer. Preserve
-        // source vertex intensity/alpha and use the texture only as an alpha
-        // mask when present. This avoids cyan-channel multiplication artefacts.
-        for (TVertex &v : mesh->Vertexes)
-        {
-            const TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
-            const float intensity = std::max(src.r, std::max(src.g, src.b));
-            v.ComputedColor.r = effectiveColorMul.r * intensity;
-            v.ComputedColor.g = effectiveColorMul.g * intensity;
-            v.ComputedColor.b = effectiveColorMul.b * intensity;
-            v.ComputedColor.a = src.a * effectiveColorMul.a;
-        }
-        useComputedColor = true;
-
-        if ( flags & RFLAGS_TEXTURED )
-            _states.TexBlend = 3;
-
-        if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
-        {
-            _states.AlphaBlend = true;
-            _states.SrcBlend = GL_SRC_ALPHA;
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-        }
-    }
-    // OpenNeoUA custom VP tint: ordinary per-node color multiplier.
-    else if ( effectiveColorMul.r != 1.0 || effectiveColorMul.g != 1.0 ||
-              effectiveColorMul.b != 1.0 || effectiveColorMul.a != 1.0 )
-    {
-        for (TVertex &v : mesh->Vertexes)
-        {
-            TGLColor src = useComputedColor ? v.ComputedColor : v.Color;
-            v.ComputedColor.r = src.r * effectiveColorMul.r;
-            v.ComputedColor.g = src.g * effectiveColorMul.g;
-            v.ComputedColor.b = src.b * effectiveColorMul.b;
-            v.ComputedColor.a = src.a * effectiveColorMul.a;
-        }
-        useComputedColor = true;
-
-        if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
-        {
-            _states.AlphaBlend = true;
-            _states.SrcBlend = GL_SRC_ALPHA;
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-        }
-    }
-
-    if (flags & RFLAGS_DISABLE_ZWRITE)
-        _states.Zwrite = false;
-
-    SetRenderStates(0);
-
-    SetModelViewMatrix( nod->TForm );
-
-    glVertexPointer(3, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].Pos);
-
-    if (useComputedColor)
-        glColorPointer(4, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].ComputedColor);
-    else
-        glColorPointer(4, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].Color);
-
-    if (flags & RFLAGS_TEXTURED)
-    {
-        if ( (flags & RFLAGS_DYNAMIC_TEXTURE) && nod->coordsID >= 0 )
-            glTexCoordPointer(2, GL_FLOAT, sizeof(tUtV), nod->Mesh->CoordsCache.at( nod->coordsID ).Coords.data());
-        else
-            glTexCoordPointer(2, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].TexCoord);
-    }
-
-    glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, mesh->Indixes.data());
+    GPU::DrawState state;
+    state.program = _states.Prog;
+    state.layout = layout;
+    state.blend = _states.AlphaBlend;
+    state.src = _states.SrcBlend;
+    state.dst = _states.DstBlend;
+    state.depthTest = _states.DepthTest;
+    state.depthWrite = _states.Zwrite;
+    state.colorWrite = _colorWrite;
+    return state;
 }
 
 // Fog of a node: the same result for meshes and for the decals painted on them.
@@ -1666,7 +1105,7 @@ void GFXEngine::ApplyFogStates(uint32_t flags, float fogStart, float fogLength)
         _states.FogStart = fogStart;
         _states.FogLength = fogLength;
         _states.FogStrength = 1.0f;
-        _states.FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
+        _states.FogColor = TColorF(0.0, 0.0, 0.0, 1.0);
     }
 
     if ((flags & RFLAGS_ALPHA_FOG) && (flags & RFLAGS_FOG) && !(flags & RFLAGS_SKY) && fogLength > 0.0f)
@@ -1710,16 +1149,14 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
 
     TMesh *mesh = nod->Mesh;
 
-    if (!mesh)
+    if (!mesh || !mesh->gpuVertexBuf || !mesh->gpuIndexBuf)
         return;
 
     uint32_t flags = nod->Flags;
 
     _states.Shaded = false;
-    _states.Stipple = false;
-    _states.SrcBlend = GL_ONE;
-    _states.DstBlend = GL_ZERO;
-    _states.TexBlend = 0; //REPLACE
+    _states.SrcBlend = GPU::Blend::One;
+    _states.DstBlend = GPU::Blend::Zero;
     _states.AlphaBlend = false;
     _states.Zwrite = true;
     _states.Tex = 0;
@@ -1737,7 +1174,6 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
 
     if ( flags & RFLAGS_SHADED )
     {
-        _states.TexBlend = 2; //MODULATE
         _states.Shaded = true;
     }
 
@@ -1749,26 +1185,22 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
         if ( can_destblend )
         {
             _states.AlphaBlend = true;
-            _states.TexBlend = 1; //MODULATEALPHA;
-            _states.SrcBlend = GL_ONE;
-            _states.DstBlend = GL_ONE;
+            _states.SrcBlend = GPU::Blend::One;
+            _states.DstBlend = GPU::Blend::One;
             _states.Shaded = false;
         }
         else if ( can_srcblend )
         {
             _states.AlphaBlend = true;
-            _states.TexBlend = 1; //MODULATEALPHA;
-            _states.SrcBlend = GL_SRC_ALPHA;
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+            _states.SrcBlend = GPU::Blend::SrcAlpha;
+            _states.DstBlend = GPU::Blend::OneMinusSrcAlpha;
             _states.Shaded = false;
         }
         else if ( can_stippling )
         {
             _states.AlphaBlend = true;
-            _states.TexBlend = 1; //MODULATEALPHA;
-            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
-            _states.Stipple = true;
+            _states.SrcBlend = GPU::Blend::SrcAlpha;
+            _states.DstBlend = GPU::Blend::OneMinusSrcAlpha;
             _states.Shaded = false;
         }
     }
@@ -1776,21 +1208,20 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
     {
         _states.AlphaTest = true;
 
-        if ( _pixfmt->BytesPerPixel != 1 )
+        if ( _pixfmt->bytes_per_pixel != 1 )
         {
-            _states.SrcBlend = GL_SRC_ALPHA;//D3DBLEND_SRCALPHA;,
-            _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;//D3DBLEND_INVSRCALPHA;
+            _states.SrcBlend = GPU::Blend::SrcAlpha;
+            _states.DstBlend = GPU::Blend::OneMinusSrcAlpha;
         }
 
         _states.AlphaBlend = true;
         _states.LinearFilter = false;
-        _states.TexBlend = 2; //MODULATE
     }
     else if ( flags & RFLAGS_ALPHABLEND )
     {
         _states.AlphaBlend = true;
-        _states.SrcBlend = GL_SRC_ALPHA;
-        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        _states.SrcBlend = GPU::Blend::SrcAlpha;
+        _states.DstBlend = GPU::Blend::OneMinusSrcAlpha;
     }
 
     if (flags & RFLAGS_SKY)
@@ -1801,14 +1232,14 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
 
     ApplyFogStates(flags, nod->FogStart, nod->FogLength);
 
-    TGLColor effectiveColorMul = nod->ColorMul;
+    TColorF effectiveColorMul = nod->ColorMul;
     float vpFadeFactor = nod->VPFadeFactor;
     if ( !std::isfinite(vpFadeFactor) )
         vpFadeFactor = 1.0f;
     vpFadeFactor = std::max(0.0f, std::min(vpFadeFactor, 1.0f));
 
     // See RenderingMeshOld(): additive LUMTRACY ignores source alpha with
-    // GL_ONE/GL_ONE, so only transient VP fades attenuate RGB in that path.
+    // GPU::Blend::One/GPU::Blend::One, so only transient VP fades attenuate RGB in that path.
     if ( (flags & RFLAGS_LUMTRACY) && can_destblend && vpFadeFactor < 1.0f )
     {
         effectiveColorMul.r *= vpFadeFactor;
@@ -1820,82 +1251,44 @@ void GFXEngine::RenderingMesh(TRenderNode *nod)
     if ( effectiveColorMul.a < 1.0 && !_states.AlphaBlend )
     {
         _states.AlphaBlend = true;
-        _states.SrcBlend = GL_SRC_ALPHA;
-        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        _states.SrcBlend = GPU::Blend::SrcAlpha;
+        _states.DstBlend = GPU::Blend::OneMinusSrcAlpha;
     }
-
-    _states.DataBuf = nod->Mesh->glDataBuf;
-    _states.IndexBuf = nod->Mesh->glIndexBuf;
 
     SetRenderStates(0);
 
     SetModelViewMatrix(nod->TForm);
 
-    Glext::GLVertexAttribPointer(_lastStates.Prog.PosLoc, 3, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Pos));
+    // OpenNeoUA custom VP tint: the per-node colour multiplier of the shader.
+    _stdParams.Colorize = nod->Colorize ? 1 : 0;
+    _stdParams.ColorMul[0] = effectiveColorMul.r;
+    _stdParams.ColorMul[1] = effectiveColorMul.g;
+    _stdParams.ColorMul[2] = effectiveColorMul.b;
+    _stdParams.ColorMul[3] = effectiveColorMul.a;
 
-    if (flags & RFLAGS_COMPUTED_COLOR)
-        Glext::GLVertexAttribPointer(_lastStates.Prog.ColorLoc, 4, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, ComputedColor));
-    else
-        Glext::GLVertexAttribPointer(_lastStates.Prog.ColorLoc, 4, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Color));
+    GPU::Streams streams;
+    streams.buffer = mesh->gpuVertexBuf;
+    streams.pos = offsetof(TVertex, Pos);
+    streams.color = (flags & RFLAGS_COMPUTED_COLOR) ? offsetof(TVertex, ComputedColor) : offsetof(TVertex, Color);
+    streams.uv = offsetof(TVertex, TexCoord);
 
-    if (flags & RFLAGS_TEXTURED)
+    GPU::Layout layout = GPU::Layout::Mesh;
+    if ( (flags & RFLAGS_TEXTURED) && (flags & RFLAGS_DYNAMIC_TEXTURE) && nod->coordsID >= 0 )
     {
-        if ( (flags & RFLAGS_DYNAMIC_TEXTURE) && nod->coordsID >= 0 )
-            Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(tUtV), (void *)(size_t)nod->Mesh->CoordsCache.at( nod->coordsID ).BufferPos);
-        else
-            Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, TexCoord));
+        layout = GPU::Layout::MeshCachedUV;
+        streams.uv = mesh->CoordsCache.at( nod->coordsID ).BufferPos;
     }
 
-    // OpenNeoUA custom VP tint: push the per-node color multiplier to the shader UBO.
-    const int32_t colorize = nod->Colorize ? 1 : 0;
-    if ( _vboStatesBlock.Colorize != colorize )
-    {
-        _vboStatesBlock.Colorize = colorize;
-        _vboStatesChanged = true;
-    }
-
-    if ( _vboStatesBlock.ColorMul[0] != effectiveColorMul.r ||
-         _vboStatesBlock.ColorMul[1] != effectiveColorMul.g ||
-         _vboStatesBlock.ColorMul[2] != effectiveColorMul.b ||
-         _vboStatesBlock.ColorMul[3] != effectiveColorMul.a )
-    {
-        _vboStatesBlock.ColorMul[0] = effectiveColorMul.r;
-        _vboStatesBlock.ColorMul[1] = effectiveColorMul.g;
-        _vboStatesBlock.ColorMul[2] = effectiveColorMul.b;
-        _vboStatesBlock.ColorMul[3] = effectiveColorMul.a;
-        _vboStatesChanged = true;
-    }
-
-    CommitUBOParameters();
-    glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, nullptr);
+    const GPU::Sampler sampler = {_states.Tex, _states.LinearFilter};
+    GPU::Draw(StdDrawState(layout), streams, mesh->gpuIndexBuf, sizeof(IndexType) == 2,
+              (uint32_t)mesh->Indixes.size(), 0, &sampler, 1,
+              &_stdParams, sizeof(_stdParams), &_stdParams, sizeof(_stdParams));
 }
 
 void GFXEngine::RenderNode(TRenderNode *node)
 {
-    if (!node)
-        return;
-
-    switch(node->Type)
-    {
-        case TRenderNode::TYPE_MESH:
-            if (_vbo)
-                RenderingMesh(node);
-            else
-                RenderingMeshOld(node);
-            break;
-
-        case TRenderNode::TYPE_PARTICLE:
-        {
-            if (_vbo)
-                RenderingMesh(node);
-            else
-                RenderingMeshOld(node);
-        }
-            break;
-
-        default:
-            break;
-    }
+    if (node && (node->Type == TRenderNode::TYPE_MESH || node->Type == TRenderNode::TYPE_PARTICLE))
+        RenderingMesh(node);
 }
 
 void GFXEngine::QueueRenderMesh(TRenderNode *nod)
@@ -1935,38 +1328,27 @@ void GFXEngine::QueueRenderDecal(const TDecalDraw &decal)
     _renderDecalList.push_back(decal);
 }
 
+// Copies the depth drawn so far (world surfaces only) for the decal shader.
 bool GFXEngine::EnsureDecalDepthTexture(const Common::Point &scrSz)
 {
     if (scrSz.x <= 0 || scrSz.y <= 0)
         return false;
 
-    if (!_decalDepthTex)
+    const GPU::TextureId depth = GPU::CurrentDepthTarget();
+    int w = 0, h = 0;
+    if (!GPU::TextureSize(depth, &w, &h))
+        return false;
+
+    if (!_decalDepthTex || _decalDepthTexSize != Common::Point(w, h))
     {
-        glGenTextures(1, &_decalDepthTex);
-        _decalDepthTexSize = Common::Point();
+        GPU::DestroyTexture(_decalDepthTex);
+        _decalDepthTex = GPU::CreateTexture(w, h, GPU::Format::Depth, GPU::USAGE_SAMPLED | GPU::USAGE_TARGET);
+        _decalDepthTexSize = Common::Point(w, h);
     }
     if (!_decalDepthTex)
         return false;
 
-    Glext::GLActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, _decalDepthTex);
-
-    if (_decalDepthTexSize.x != scrSz.x || _decalDepthTexSize.y != scrSz.y)
-    {
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, scrSz.x, scrSz.y, 0,
-                     GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-        _decalDepthTexSize = scrSz;
-    }
-
-    // Works the same on the scene FBO and on the window: the copy reads the
-    // depth of whichever framebuffer is being drawn.
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, scrSz.x, scrSz.y);
-
-    Glext::GLActiveTexture(GL_TEXTURE0);
+    GPU::CopyTexture(depth, _decalDepthTex);
     return true;
 }
 
@@ -2029,10 +1411,11 @@ static bool DecalScreenRect(const TDecalDraw &decal, const mat3x3 &worldToView,
         return (std::max(-1.0f, std::min(ndc, 1.0f)) + 1.0f) * 0.5f * (float)size;
     };
 
+    // Pixels with the origin at the top-left corner, like the scissor.
     out->left = (int)std::floor(pixel(left, scrSz.x));
     out->right = (int)std::ceil(pixel(right, scrSz.x));
-    out->top = (int)std::floor(pixel(bottom, scrSz.y));
-    out->bottom = (int)std::ceil(pixel(top, scrSz.y));
+    out->top = scrSz.y - (int)std::ceil(pixel(top, scrSz.y));
+    out->bottom = scrSz.y - (int)std::floor(pixel(bottom, scrSz.y));
     return out->right > out->left && out->bottom > out->top;
 }
 
@@ -2063,80 +1446,47 @@ static mat3x3 DecalInverse(const mat3x3 &m)
 // craters and dents, and the normal it had (see decalshader.h). The depth
 // copied for the decals is the depth buffer of this pass, so only what is
 // really visible is written. False when nothing was written.
+// Draws the dug meshes of the frame (_decalDugList) once more into the rest
+// texture: for each of their visible pixels, where its point was before the
+// craters and dents, and the normal it had (see decalshader.h). The depth
+// tested is the copy taken for the decals, so only what is really visible is
+// written. False when nothing was written.
 bool GFXEngine::DrawDecalRest(const Common::Point &scrSz, const float *viewToWorldColumns)
 {
-    if (_decalDugList.empty() || !_decalRestProg.ID || _decalRestUnusable)
+    if (_decalDugList.empty() || !_decalRestProg || !_decalDepthTex)
         return false;
 
-    GLint sceneFbo = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &sceneFbo);
-
-    if (!_decalRestFbo)
+    if (!_decalRestTex || _decalRestTexSize != _decalDepthTexSize)
     {
-        Glext::GLGenFramebuffers(1, &_decalRestFbo);
-        glGenTextures(1, &_decalRestTex);
-        _decalRestTexSize = Common::Point();
-    }
-    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _decalRestFbo);
-
-    if (_decalRestTexSize.x != scrSz.x || _decalRestTexSize.y != scrSz.y)
-    {
-        Glext::GLActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, _decalRestTex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        GPU::DestroyTexture(_decalRestTex);
         // Full floats: the alpha carries a packed normal of 24 bits.
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, scrSz.x, scrSz.y, 0, GL_RGBA, GL_FLOAT, nullptr);
-        Glext::GLActiveTexture(GL_TEXTURE0);
-
-        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _decalRestTex, 0);
-        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _decalDepthTex, 0);
-        _decalRestTexSize = scrSz;
-
-        if (Glext::GLCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        {
-            // Decals still work: on dug surfaces they are projected as on any other.
-            _decalRestUnusable = true;
-            log_d3dlog("Decal rest target not available: decals do not follow craters\n");
-            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, (GLuint)sceneFbo);
-            return false;
-        }
+        _decalRestTex = GPU::CreateTexture(_decalDepthTexSize.x, _decalDepthTexSize.y, GPU::Format::RGBA32F,
+                                           GPU::USAGE_SAMPLED | GPU::USAGE_TARGET);
+        _decalRestTexSize = _decalDepthTexSize;
     }
+    if (!_decalRestTex)
+        return false;
 
-    GLfloat oldClear[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    glGetFloatv(GL_COLOR_CLEAR_VALUE, oldClear);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glClearColor(oldClear[0], oldClear[1], oldClear[2], oldClear[3]);
+    const GPU::TextureId sceneColor = GPU::CurrentColorTarget();
+    const GPU::TextureId sceneDepth = GPU::CurrentDepthTarget();
+    GPU::SetTarget(_decalRestTex, _decalDepthTex);
+    GPU::Clear(true, false);
 
-    _states.Prog = _decalRestProg;
-    _states.DepthTest = true;
-    _states.Zwrite = false;
-    _states.AlphaTest = false;
-    _states.AlphaBlend = false;
-    _states.Fog = false;
-    _states.AFog = 0;
-    _states.TexBlend = 0;
-    _states.LinearFilter = false;
-    _states.Tex = 0;
-    SetRenderStates(0);
+    TDecalRestParams params = {};
+    std::memcpy(params.Proj, &_stdParams.Proj.m00, sizeof(params.Proj));
+    for (int column = 0; column < 3; ++column)
+        for (int row = 0; row < 3; ++row)
+            params.ViewToWorld[column * 4 + row] = viewToWorldColumns[column * 3 + row];
+    params.ViewToWorld[15] = 1.0f;
 
-    Glext::GLUniform1i(_decalRestProg.ImageLoc, 0);
-    Glext::GLUniformMatrix3fv(_decalRestProg.ViewToWorldLoc, 1, GL_FALSE, viewToWorldColumns);
-    if (_vbo)
-    {
-        Glext::GLUniformMatrix4fv(_decalRestProg.ProjLoc, 1, GL_FALSE, &_vboStatesBlock.Proj.m00);
-        Glext::GLEnableVertexAttribArray(_decalRestProg.RestAttrLoc);
-    }
-    else
-        glEnableClientState(GL_NORMAL_ARRAY);
-
+    GPU::DrawState state;
+    state.program = _decalRestProg;
+    state.layout = GPU::Layout::Rest;
+    state.depthTest = true;
+    state.depthWrite = false;
     // The same triangles were drawn by another program: a small pull toward the
     // camera keeps them in front of their own depth.
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-1.0f, -1.0f);
+    state.depthBias = true;
 
     for (TRenderNode *node : _decalDugList)
     {
@@ -2144,49 +1494,28 @@ bool GFXEngine::DrawDecalRest(const Common::Point &scrSz, const float *viewToWor
         // Holes of a cut-out texture show what is behind: nothing is written there.
         const bool cut = (node->Flags & RFLAGS_ZEROTRACY) && node->Tex && node->Tex->hwTex;
 
-        _states.Tex = cut ? node->Tex->hwTex : 0;
-        if (_vbo)
-        {
-            _states.DataBuf = mesh->glDataBuf;
-            _states.IndexBuf = mesh->glIndexBuf;
-        }
-        SetRenderStates(0);
-        Glext::GLUniform1f(_decalRestProg.CutLoc, cut ? 1.0f : 0.0f);
+        const mat4x4f view = mat4x4f(node->TForm).Transpose();
+        std::memcpy(params.View, &view.m00, sizeof(params.View));
+        params.Cut[0] = cut ? 1.0f : 0.0f;
 
-        if (_vbo)
-        {
-            const mat4x4f view = mat4x4f(node->TForm).Transpose();
-            Glext::GLUniformMatrix4fv(_decalRestProg.ViewLoc, 1, GL_FALSE, &view.m00);
-            Glext::GLVertexAttribPointer(_decalRestProg.PosLoc, 3, GL_FLOAT, GL_FALSE, sizeof(TVertex),
-                                         (void *)offsetof(TVertex, Pos));
-            Glext::GLVertexAttribPointer(_decalRestProg.RestAttrLoc, 3, GL_FLOAT, GL_FALSE, sizeof(vec3f),
-                                         (void *)(size_t)mesh->RestBufferPos);
-            if (cut)
-                Glext::GLVertexAttribPointer(_decalRestProg.UVLoc, 2, GL_FLOAT, GL_FALSE, sizeof(TVertex),
-                                             (void *)offsetof(TVertex, TexCoord));
-            glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, nullptr);
-        }
-        else
-        {
-            SetModelViewMatrix(node->TForm);
-            glVertexPointer(3, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].Pos);
-            glNormalPointer(GL_FLOAT, sizeof(vec3f), mesh->Rest.data());
-            if (cut)
-                glTexCoordPointer(2, GL_FLOAT, sizeof(TVertex), &mesh->Vertexes[0].TexCoord);
-            glDrawElements(GL_TRIANGLES, mesh->Indixes.size(), GLINDEXTYPE, mesh->Indixes.data());
-        }
+        GPU::Streams streams;
+        streams.buffer = mesh->gpuVertexBuf;
+        streams.pos = offsetof(TVertex, Pos);
+        streams.uv = offsetof(TVertex, TexCoord);
+        streams.rest = mesh->RestBufferPos;
+
+        const GPU::Sampler sampler = {cut ? node->Tex->hwTex : 0, false};
+        GPU::Draw(state, streams, mesh->gpuIndexBuf, sizeof(IndexType) == 2,
+                  (uint32_t)mesh->Indixes.size(), 0, &sampler, 1,
+                  &params, sizeof(params), &params, sizeof(params));
     }
 
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    if (_vbo)
-        Glext::GLDisableVertexAttribArray(_decalRestProg.RestAttrLoc);
-    else
-        glDisableClientState(GL_NORMAL_ARRAY);
-
-    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, (GLuint)sceneFbo);
+    GPU::SetTarget(sceneColor, sceneDepth);
     return true;
 }
 
+// Paints the queued decals over the world drawn so far. No unit is in the depth
+// buffer yet, so they can never receive a decal.
 // Paints the queued decals over the world drawn so far. No unit is in the depth
 // buffer yet, so they can never receive a decal.
 void GFXEngine::DrawDecalPass()
@@ -2195,7 +1524,7 @@ void GFXEngine::DrawDecalPass()
         return;
 
     const Common::Point scrSz = System::GetResolution();
-    if (!_decalProg.ID || !EnsureDecalDepthTexture(scrSz))
+    if (!_decalProg || !EnsureDecalDepthTexture(scrSz))
     {
         _renderDecalList.clear();
         return;
@@ -2204,10 +1533,10 @@ void GFXEngine::DrawDecalPass()
     const GfxStates saved = _states;
 
     const mat3x3 viewToWorld = DecalInverse(_decalWorldToView);
-    const GLfloat viewToWorldColumns[9] = {
-        (GLfloat)viewToWorld.m00, (GLfloat)viewToWorld.m10, (GLfloat)viewToWorld.m20,
-        (GLfloat)viewToWorld.m01, (GLfloat)viewToWorld.m11, (GLfloat)viewToWorld.m21,
-        (GLfloat)viewToWorld.m02, (GLfloat)viewToWorld.m12, (GLfloat)viewToWorld.m22};
+    const float viewToWorldColumns[9] = {
+        (float)viewToWorld.m00, (float)viewToWorld.m10, (float)viewToWorld.m20,
+        (float)viewToWorld.m01, (float)viewToWorld.m11, (float)viewToWorld.m21,
+        (float)viewToWorld.m02, (float)viewToWorld.m12, (float)viewToWorld.m22};
 
     const bool restOn = DrawDecalRest(scrSz, viewToWorldColumns);
 
@@ -2215,40 +1544,35 @@ void GFXEngine::DrawDecalPass()
     _states.AFog = 0;
     ApplyFogStates(_decalRenderFlags | RFLAGS_FOG, _decalFogStart, _decalFogLength);
 
-    _states.Prog = _decalProg;
-    _states.DepthTest = false;
-    _states.Zwrite = false;
-    _states.AlphaTest = false;
-    _states.AlphaBlend = true;
-    _states.SrcBlend = GL_SRC_ALPHA;
-    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-    _states.LinearFilter = (_filter != 0);
-    _states.Tex = 0;
-    SetRenderStates(0);
+    TDecalParams params = {};
+    params.ScreenInv[0] = 1.0f / (float)_decalDepthTexSize.x;
+    params.ScreenInv[1] = 1.0f / (float)_decalDepthTexSize.y;
+    params.RestOn = restOn ? 1.0f : 0.0f;
+    params.Project[0] = 1.0f / _frustum.m00;
+    params.Project[1] = 1.0f / _frustum.m11;
+    params.Project[2] = _frustum.m22;
+    params.Project[3] = _frustum.m23;
+    for (int column = 0; column < 3; ++column)
+        for (int row = 0; row < 3; ++row)
+            params.ViewToWorld[column * 4 + row] = viewToWorldColumns[column * 3 + row];
+    const float fog[4] = {_states.Fog ? 1.0f : 0.0f, _states.FogStart, _states.FogLength, _states.FogStrength};
+    const float alphaFog[4] = {(float)_states.AFog, _states.AFogStart, _states.AFogLength, _states.AFogStrength};
+    std::memcpy(params.Fog, fog, sizeof(fog));
+    std::memcpy(params.AlphaFog, alphaFog, sizeof(alphaFog));
+    params.FogColor[0] = _states.FogColor.r;
+    params.FogColor[1] = _states.FogColor.g;
+    params.FogColor[2] = _states.FogColor.b;
+    params.AtmosphereColor[0] = _states.AFogColor.r;
+    params.AtmosphereColor[1] = _states.AFogColor.g;
+    params.AtmosphereColor[2] = _states.AFogColor.b;
 
-    if (restOn)
-    {
-        Glext::GLActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, _decalRestTex);
-        Glext::GLActiveTexture(GL_TEXTURE0);
-    }
-
-    Glext::GLUniform1i(_decalProg.ImageLoc, 0);
-    Glext::GLUniform1i(_decalProg.SceneDepthLoc, 1);
-    Glext::GLUniform1i(_decalProg.RestLoc, 2);
-    Glext::GLUniform1f(_decalProg.RestOnLoc, restOn ? 1.0f : 0.0f);
-    Glext::GLUniform2f(_decalProg.ScreenInvLoc, 1.0f / (float)scrSz.x, 1.0f / (float)scrSz.y);
-    Glext::GLUniform4f(_decalProg.ProjectLoc, 1.0f / _frustum.m00, 1.0f / _frustum.m11,
-                       _frustum.m22, _frustum.m23);
-    Glext::GLUniformMatrix3fv(_decalProg.ViewToWorldLoc, 1, GL_FALSE, viewToWorldColumns);
-    Glext::GLUniform4f(_decalProg.FogLoc, _states.Fog ? 1.0f : 0.0f, _states.FogStart,
-                       _states.FogLength, _states.FogStrength);
-    Glext::GLUniform4f(_decalProg.AlphaFogLoc, (float)_states.AFog, _states.AFogStart,
-                       _states.AFogLength, _states.AFogStrength);
-    Glext::GLUniform3f(_decalProg.FogColorLoc, _states.FogColor.r, _states.FogColor.g,
-                       _states.FogColor.b);
-    Glext::GLUniform3f(_decalProg.AtmosphereColorLoc, _states.AFogColor.r, _states.AFogColor.g,
-                       _states.AFogColor.b);
+    GPU::DrawState state;
+    state.program = _decalProg;
+    state.blend = true;
+    state.src = GPU::Blend::SrcAlpha;
+    state.dst = GPU::Blend::OneMinusSrcAlpha;
+    state.depthTest = false;
+    state.depthWrite = false;
 
     static const std::array<TVertex, 4> quad = {
         GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 0.0) ),
@@ -2256,9 +1580,12 @@ void GFXEngine::DrawDecalPass()
         GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
         GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(0.0, 0.0) )
     };
-
-    glEnable(GL_SCISSOR_TEST);
-    bool quadUploaded = false;
+    // The quad never changes: once in the frame arena, only the draws repeat.
+    const uint32_t base = GPU::PushTransient(quad.data(), sizeof(TVertex) * quad.size());
+    GPU::Streams streams;
+    streams.pos = base + offsetof(TVertex, Pos);
+    streams.color = base + offsetof(TVertex, Color);
+    streams.uv = base + offsetof(TVertex, TexCoord);
 
     // Oldest first: the newest impact ends on top.
     for (const TDecalDraw &decal : _renderDecalList)
@@ -2268,31 +1595,42 @@ void GFXEngine::DrawDecalPass()
             !DecalScreenRect(decal, _decalWorldToView, _frustum, _frustumNear, scrSz, &rect))
             continue;
 
-        glScissor(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+        const GPU::Rect scissor = {rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top};
+        GPU::SetScissor(&scissor);
 
-        _states.Tex = decal.Tex ? decal.Tex->hwTex : 0;
-        SetRenderStates(0);
+        const GPU::TextureId image = decal.Tex ? decal.Tex->hwTex : 0;
+        params.Textured = image ? 1.0f : 0.0f;
+        params.Origin[0] = decal.Origin.x;
+        params.Origin[1] = decal.Origin.y;
+        params.Origin[2] = decal.Origin.z;
+        params.AxisT[0] = decal.AxisT.x;
+        params.AxisT[1] = decal.AxisT.y;
+        params.AxisT[2] = decal.AxisT.z;
+        params.AxisB[0] = decal.AxisB.x;
+        params.AxisB[1] = decal.AxisB.y;
+        params.AxisB[2] = decal.AxisB.z;
+        params.AxisN[0] = decal.AxisN.x;
+        params.AxisN[1] = decal.AxisN.y;
+        params.AxisN[2] = decal.AxisN.z;
+        params.Size[0] = decal.SizeT;
+        params.Size[1] = decal.SizeB;
+        params.EdgeFade = decal.EdgeFade;
+        params.Colorize = decal.Colorize ? 1.0f : 0.0f;
+        params.Tint[0] = decal.Tint.r;
+        params.Tint[1] = decal.Tint.g;
+        params.Tint[2] = decal.Tint.b;
+        params.Tint[3] = decal.Tint.a;
+        std::memcpy(params.Shape, decal.Shape, sizeof(params.Shape));
 
-        Glext::GLUniform3f(_decalProg.OriginLoc, decal.Origin.x, decal.Origin.y, decal.Origin.z);
-        Glext::GLUniform3f(_decalProg.AxisTLoc, decal.AxisT.x, decal.AxisT.y, decal.AxisT.z);
-        Glext::GLUniform3f(_decalProg.AxisBLoc, decal.AxisB.x, decal.AxisB.y, decal.AxisB.z);
-        Glext::GLUniform3f(_decalProg.AxisNLoc, decal.AxisN.x, decal.AxisN.y, decal.AxisN.z);
-        Glext::GLUniform2f(_decalProg.SizeLoc, decal.SizeT, decal.SizeB);
-        Glext::GLUniform1f(_decalProg.EdgeFadeLoc, decal.EdgeFade);
-        Glext::GLUniform1fv(_decalProg.ShapeLoc, DECAL_SHAPE_SAMPLES, decal.Shape);
-        Glext::GLUniform4f(_decalProg.TintLoc, decal.Tint.r, decal.Tint.g, decal.Tint.b, decal.Tint.a);
-        Glext::GLUniform1f(_decalProg.ColorizeLoc, decal.Colorize ? 1.0f : 0.0f);
-        Glext::GLUniform1f(_decalProg.TexturedLoc, _states.Tex ? 1.0f : 0.0f);
-
-        // The quad never changes: once in the buffer, only the draw call repeats.
-        if (_vbo && quadUploaded)
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
-        else
-            DrawVtxQuad(quad);
-        quadUploaded = true;
+        const GPU::Sampler samplers[3] = {
+            {image, _filter != 0},
+            {_decalDepthTex, false},
+            {restOn ? _decalRestTex : 0, false}};
+        GPU::Draw(state, streams, GPU::QuadIndexBuffer(), true, 6, 0, samplers, 3,
+                  nullptr, 0, &params, sizeof(params));
     }
 
-    glDisable(GL_SCISSOR_TEST);
+    GPU::SetScissor(nullptr);
     _renderDecalList.clear();
 
     _states = saved;
@@ -2324,7 +1662,7 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
         // horizon mask, so already-prepared sectors are revealed smoothly instead
         // of popping in one whole sector at a time.
         SetProjectionMatrix(_frustum);
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+        _colorWrite = false;
 
         for (size_t nodeIndex = 0; nodeIndex < _renderSkyBoxList.size(); nodeIndex++)
         {
@@ -2335,7 +1673,7 @@ void GFXEngine::Rasterize(uint32_t RasterEtapes)
             node->Flags = originalFlags;
         }
 
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        _colorWrite = true;
         _renderSkyBoxList.clear();
 
         // Every non-sky queue continues with the same normal world projection.
@@ -2440,7 +1778,7 @@ int GFXEngine::raster_func208(TileMap *t)
 void GFXEngine::ClearUiAccentCache()
 {
     for (auto &entry : _uiAccentSurfaces)
-        SDL_FreeSurface(entry.second);
+        SDL_DestroySurface(entry.second);
 
     _uiAccentSurfaces.clear();
     _uiAccentCacheValid = false;
@@ -2548,23 +1886,23 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
     if (cached != _uiAccentSurfaces.end())
         return cached->second;
 
-    SDL_Surface *copy = SDL_ConvertSurface(source, source->format, 0);
+    SDL_Surface *copy = SDL_DuplicateSurface(source);
     if (!copy)
         return source;
 
     Uint32 sourceColorKey = 0;
-    const bool hasColorKey = SDL_GetColorKey(source, &sourceColorKey) == 0;
+    const bool hasColorKey = SDL_GetSurfaceColorKey(source, &sourceColorKey);
     if (hasColorKey)
-        SDL_SetColorKey(copy, SDL_TRUE, sourceColorKey);
+        SDL_SetSurfaceColorKey(copy, true, sourceColorKey);
 
     const bool fullFactionAtlas = IsFullFactionUiAtlas(tilesetId);
-    const int bytesPerPixel = copy->format->BytesPerPixel;
-    if (SDL_LockSurface(source) != 0)
+    const int bytesPerPixel = SDL_BYTESPERPIXEL(copy->format);
+    if (!SDL_LockSurface(source))
     {
-        SDL_FreeSurface(copy);
+        SDL_DestroySurface(copy);
         return source;
     }
-    if (bytesPerPixel >= 2 && bytesPerPixel <= 4 && SDL_LockSurface(copy) == 0)
+    if (bytesPerPixel >= 2 && bytesPerPixel <= 4 && SDL_LockSurface(copy))
     {
         for (int y = 0; y < copy->h; ++y)
         {
@@ -2596,7 +1934,7 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
                     continue;
 
                 SDL_Color original;
-                SDL_GetRGBA(value, copy->format, &original.r, &original.g,
+                SDL_GetRGBA(value, SDL_GetPixelFormatDetails(copy->format), SDL_GetSurfacePalette(copy), &original.r, &original.g,
                             &original.b, &original.a);
 
                 SDL_Color themed;
@@ -2625,11 +1963,11 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
                     continue;
                 }
 
-                value = SDL_MapRGBA(copy->format, themed.r, themed.g,
+                value = SDL_MapSurfaceRGBA(copy, themed.r, themed.g,
                                     themed.b, original.a);
                 // A visible yellow accent must not become the transparent key.
                 if (hasColorKey && value == sourceColorKey)
-                    value ^= 1u << copy->format->Bshift;
+                    value ^= 1u << SDL_GetPixelFormatDetails(copy->format)->Bshift;
                 if (bytesPerPixel == 2)
                     memcpy(pixel, &value, 2);
                 else if (bytesPerPixel == 3)
@@ -2654,7 +1992,7 @@ SDL_Surface *GFXEngine::GetUiAccentSurface(SDL_Surface *source, const SDL_Color 
     else
     {
         SDL_UnlockSurface(source);
-        SDL_FreeSurface(copy);
+        SDL_DestroySurface(copy);
         return source;
     }
 
@@ -2685,7 +2023,7 @@ void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *incl
 
     int v11;
 
-    int bytesPerColor = Screen()->format->BytesPerPixel;
+    int bytesPerColor = SDL_BYTESPERPIXEL(Screen()->format);
 
     int32_t curPos = 0;
     const CmdStream *curStream = &drawSeq;
@@ -3048,8 +2386,8 @@ void GFXEngine::raster_func221(const Common::Rect &arg)
     _inverseClip.bottom = _field_550 + arg.bottom;
 }
 
-// Which graphics chip really got the window. On a machine with two of them the
-// program asks for the fast one (see the exported names in main.cpp), but a
+// Which graphics chip really got the window. On a machine with two of them SDL_GPU
+// picks the dedicated Vulkan device (and main.cpp exports the driver hints), but a
 // system setting can still override that, so say plainly what is in use: a slow
 // chip explains far more frame drops than any game setting. Written on the first
 // frame because the log files are emptied while the graphics are starting.
@@ -3060,7 +2398,7 @@ void GFXEngine::ReportGraphicsChip()
     _graphicsChipReported = true;
 
     ReadGraphicsChip();
-    ypa_log_out("Graphics chip in use: %s (%s)\n", _gpuRenderer.c_str(), _gpuVendor.c_str());
+    ypa_log_out("Graphics chip in use: %s (%s)\n", _gpuRenderer.c_str(), _gpuApi.c_str());
 
     const bool integrated = _gpuIntegrated;
 
@@ -3072,8 +2410,7 @@ void GFXEngine::ReportGraphicsChip()
                     "         If this computer has one, choose it for OpenNeoUA.exe in "
                     "Settings, System, Display, Graphics, and pick High performance.\n");
 #else
-        // An NVIDIA card is asked for in System::Init; reaching here with a
-        // built-in chip means there is none, so the advice is the Mesa one.
+        // Both commands also choose the Vulkan device on Linux.
         ypa_log_out("WARNING: this looks like a built-in graphics chip, which is much slower "
                     "than a graphics card.\n"
                     "         If this computer has one, start the game with DRI_PRIME=1 "
@@ -3082,19 +2419,15 @@ void GFXEngine::ReportGraphicsChip()
     }
 }
 
-// Reads the OpenGL strings once and decides whether the chip is built into the processor.
+// Reads the device names once and decides whether the chip is built into the processor.
 void GFXEngine::ReadGraphicsChip()
 {
     if ( _graphicsChipRead )
         return;
     _graphicsChipRead = true;
 
-    const char *renderer = (const char *)glGetString(GL_RENDERER);
-    const char *vendor = (const char *)glGetString(GL_VENDOR);
-    const char *version = (const char *)glGetString(GL_VERSION);
-    _gpuRenderer = renderer ? renderer : "unknown";
-    _gpuVendor = vendor ? vendor : "unknown";
-    _gpuGlVersion = version ? version : "unknown";
+    _gpuRenderer = GPU::DeviceName();
+    _gpuApi = GPU::DriverName();
 
     std::string name = _gpuRenderer;
     for (char &letter : name)
@@ -3120,39 +2453,26 @@ void GFXEngine::BeginFrame()
     ReportGraphicsChip();
 
     setViewZoom(1.0f);
-    SDL_FillRect(Screen(), nullptr, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
+    SDL_FillSurfaceRect(Screen(), nullptr, SDL_MapSurfaceRGBA(Screen(), 0, 0, 0, 0) );
 
     Common::Point scrSz = System::GetResolution();
-    glViewport(0, 0, scrSz.x, scrSz.y);
-
-    bool saved = _states.Zwrite;
-
-    _states.Zwrite = true;
-    SetRenderStates(0);
 
     if (_colorEffects)
     {
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+        // The window is cleared, then the 3D scene goes to its own target.
+        GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
+        GPU::Clear(true, true);
+        CreateSceneTargets(scrSz);
+        GPU::SetTarget(_sceneTex, _sceneDepth);
     }
+    else
+        GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
 
-    glClearColor(0, 0, 0, 0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    _states.Zwrite = saved;
-    SetRenderStates(0);
-
-    if (!_vbo)
-    {
-        glEnableClientState(GL_VERTEX_ARRAY);
-        glEnableClientState(GL_COLOR_ARRAY);
-    }
+    GPU::SetViewport(0, 0, scrSz.x, scrSz.y);
+    GPU::Clear(true, true);
 
     _states.Prog = _stdShaderProg;
+    SetRenderStates(0);
 }
 
 void GFXEngine::EndFrame()
@@ -3167,7 +2487,7 @@ void GFXEngine::EndFrame()
     {
         if (drawWorldBeforeUi)
         {
-            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+            GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
             DrawFBO();
         }
 
@@ -3178,39 +2498,33 @@ void GFXEngine::EndFrame()
 
         if (_colorEffects == 1 && !_atmosphereActive)
         {
-            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+            GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
             DrawFBO();
         }
 
         Common::Point scrSz = System::GetResolution();
         if (EnsureVhsFilterTexture(scrSz))
         {
-            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glViewport(0, 0, scrSz.x, scrSz.y);
-            glReadBuffer(GL_BACK);
-            glBindTexture(GL_TEXTURE_2D, _vhsCopyTex);
-            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, scrSz.x, scrSz.y);
-            glBindTexture(GL_TEXTURE_2D, 0);
+            // The finished frame is copied, processed at the VHS size, then blended back.
+            GPU::CopyTexture(GPU::BACKBUFFER, _vhsCopyTex);
 
-            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsOutFbo);
-            glViewport(0, 0, _vhsOutTexSize.x, _vhsOutTexSize.y);
-            glClearColor(0, 0, 0, 0);
-            glClear(GL_COLOR_BUFFER_BIT);
+            GPU::SetTarget(_vhsOutTex, 0);
+            GPU::SetViewport(0, 0, _vhsOutTexSize.x, _vhsOutTexSize.y);
+            GPU::Clear(true, false);
             DrawVhsEffect();
 
-            Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glViewport(0, 0, scrSz.x, scrSz.y);
-            glClearColor(0, 0, 0, 0);
-            glClear(GL_COLOR_BUFFER_BIT);
+            GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
+            GPU::SetViewport(0, 0, scrSz.x, scrSz.y);
+            GPU::Clear(true, false);
             DrawVhsFilter();
         }
 
-        System::Flip();
+        GPU::Present();
         return;
     }
     else if (drawWorldBeforeUi)
     {
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+        GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
         DrawFBO();
     }
 
@@ -3221,11 +2535,11 @@ void GFXEngine::EndFrame()
 
     if (_colorEffects == 1 && !_vhsFilterActive && !_atmosphereActive)
     {
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+        GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
         DrawFBO();
     }
 
-    System::Flip();
+    GPU::Present();
 }
 
 void GFXEngine::SetColorEffectsPowers(const std::vector<ColorFx> &arg)
@@ -3313,44 +2627,30 @@ void GFXEngine::LoadCustomColorEffectsFromConfig()
 
 bool GFXEngine::AllocTexture(ResBitmap *bitm)
 {
-    if (bitm->swTex && !bitm->hwTex)
+    if (!bitm->swTex || bitm->hwTex)
+        return true;
+
+    SDL_Surface *source = bitm->swTex;
+    SDL_Surface *converted = nullptr;
+    if (source->format != _pixfmt->format)
     {
-        glGenTextures(1, &bitm->hwTex);
-
-        if (!bitm->hwTex)
-        {
+        converted = ConvertSDLSurface(source, _pixfmt->format);
+        if (!converted)
             return false;
-        }
-
-        _states.Tex = bitm->hwTex;
-        SetRenderStates(0);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        if (bitm->swTex->format->format == _pixfmt->format)
-        {
-            SDL_LockSurface(bitm->swTex);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bitm->width, bitm->height, 0, _glPixfmt, _glPixtype, bitm->swTex->pixels);
-            SDL_UnlockSurface(bitm->swTex);
-        }
-        else
-        {
-            SDL_Surface *conv = ConvertSDLSurface(bitm->swTex, _pixfmt);
-            if ( !conv )
-                return false;
-
-            SDL_LockSurface(conv);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bitm->width, bitm->height, 0, _glPixfmt, _glPixtype, conv->pixels);
-            SDL_UnlockSurface(conv);
-
-            SDL_FreeSurface(conv);
-        }
+        source = converted;
     }
 
-    return true;
+    bitm->hwTex = GPU::CreateTexture(source->w, source->h, _texFormat, GPU::USAGE_SAMPLED);
+    if (bitm->hwTex)
+    {
+        SDL_LockSurface(source);
+        GPU::UploadTexture(bitm->hwTex, source->pixels, source->pitch);
+        SDL_UnlockSurface(source);
+    }
+
+    if (converted)
+        SDL_DestroySurface(converted);
+    return bitm->hwTex != 0;
 }
 
 void GFXEngine::FreeTexture(ResBitmap *bitm)
@@ -3358,16 +2658,13 @@ void GFXEngine::FreeTexture(ResBitmap *bitm)
     if ( !bitm->hwTex )
         return;
 
-    // OpenGL can reuse the name after deletion. Clear the cached binding and
-    // its shader state while the old texture is still valid.
-    if ( _lastStates.Tex == bitm->hwTex || _states.Tex == bitm->hwTex )
-    {
+    // Ids are reused: forget the cached binding of the old texture.
+    if ( _states.Tex == bitm->hwTex )
         _states.Tex = 0;
-        if ( _lastStates.Tex == bitm->hwTex )
-            SetRenderStates(0);
-    }
+    if ( _lastStates.Tex == bitm->hwTex )
+        _lastStates.Tex = 0;
 
-    glDeleteTextures(1, &bitm->hwTex);
+    GPU::DestroyTexture(bitm->hwTex);
     bitm->hwTex = 0;
 }
 
@@ -3578,7 +2875,7 @@ UA_PALETTE *GFXEngine::GetPalette()
 void GFXEngine::draw2DandFlush()
 {
     if (_colorEffects)
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
+        GPU::SetTarget(GPU::BACKBUFFER, GPU::BACKBUFFER_DEPTH);
 
     Gui::Root::Instance.Draw(Screen());
     if (_virtualUiPass)
@@ -3597,10 +2894,10 @@ void GFXEngine::draw2DandFlush()
     }
     Gui::Root::Instance.HwCompose();
 
-    SDL_FillRect(Screen(), nullptr, SDL_MapRGBA(Screen()->format, 0, 0, 0, 0) );
+    SDL_FillSurfaceRect(Screen(), nullptr, SDL_MapSurfaceRGBA(Screen(), 0, 0, 0, 0) );
 
     if (_colorEffects)
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _fbo);
+        GPU::SetTarget(_sceneTex, _sceneDepth);
 }
 
 void GFXEngine::matrixAspectCorrection(mat3x3 &inout, bool invert)
@@ -3723,44 +3020,17 @@ void GFXEngine::ConvAlphaPalette(UA_PALETTE *dst, const UA_PALETTE &src, bool tr
 
 SDL_Surface *GFXEngine::CreateSurfaceScreenFormat(int width, int height)
 {
-#if SDL_VERSION_ATLEAST(2,0,5)
-    return SDL_CreateRGBSurfaceWithFormat(0, width, height, _pixfmt->BitsPerPixel, _pixfmt->format);
-#else
-    return SDL_CreateRGBSurface(0, width, height, _pixfmt->BitsPerPixel, _pixfmt->Rmask, _pixfmt->Gmask, _pixfmt->Bmask, _pixfmt->Amask );
-#endif
+    return SDL_CreateSurface(width, height, _pixfmt->format);
 }
 
 SDL_Surface *GFXEngine::ConvertToScreenFormat(SDL_Surface *src)
 {
-    return ConvertSDLSurface(src, _pixfmt);
+    return ConvertSDLSurface(src, _pixfmt->format);
 }
 
-SDL_Surface * GFXEngine::ConvertSDLSurface(SDL_Surface *src, const SDL_PixelFormat * fmt)
+SDL_Surface * GFXEngine::ConvertSDLSurface(SDL_Surface *src, SDL_PixelFormat fmt)
 {
-#if (SDL_COMPILEDVERSION == SDL_VERSIONNUM(2, 0, 12))
-    /***
-     * Workaround for bug with convertation of surface with palette introduced
-     * in SDL2 2.0.12 and fixed soon but after release.
-     ***/
-    if (src->format->BytesPerPixel == 1)
-    {
-#if SDL_VERSION_ATLEAST(2,0,5)
-        SDL_Surface *tmp = SDL_CreateRGBSurfaceWithFormat(0, src->w, src->h, fmt->BitsPerPixel, fmt->format);
-#else
-        SDL_Surface *tmp = SDL_CreateRGBSurface(0, src->w, src->h, fmt->BitsPerPixel, fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask );
-#endif
-        SDL_BlendMode blend = SDL_BLENDMODE_NONE;
-        SDL_GetSurfaceBlendMode(src, &blend);
-        SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_NONE);
-        SDL_BlitSurface(src, nullptr, tmp, nullptr);
-        SDL_SetSurfaceBlendMode(src, blend);
-        return tmp;
-    }
-    else
-        return SDL_ConvertSurface(src, fmt, 0);
-#else
-    return SDL_ConvertSurface(src, fmt, 0);
-#endif
+    return SDL_ConvertSurface(src, fmt);
 }
 
 
@@ -3892,7 +3162,6 @@ GfxMode::GfxMode(GfxMode &&g)
     w = std::move(g.w);
     h = std::move(g.h);
     bpp = std::move(g.bpp);
-    mode = std::move(g.mode);
     name = std::move(g.name);
     windowed = std::move(g.windowed);
 }
@@ -3902,7 +3171,6 @@ GfxMode::GfxMode(const GfxMode &g)
     w = g.w;
     h = g.h;
     bpp = g.bpp;
-    mode = g.mode;
     name = g.name;
     windowed = g.windowed;
 }
@@ -3918,7 +3186,6 @@ GfxMode& GfxMode::operator=(const GfxMode &g)
     w = g.w;
     h = g.h;
     bpp = g.bpp;
-    mode = g.mode;
     name = g.name;
     windowed = g.windowed;
     return *this;
@@ -4018,7 +3285,7 @@ void GFXEngine::LoadCursorSet(bool retro)
     {
         cursors[i] = LoadCursor(names[i], retro);
         if ( !cursors[i] )
-            cursors[i] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
+            cursors[i] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
     }
 
     if ( CurrentCursorID > 0 )
@@ -4026,7 +3293,7 @@ void GFXEngine::LoadCursorSet(bool retro)
 
     for (SDL_Cursor *old : previous)
         if ( old )
-            SDL_FreeCursor(old);
+            SDL_DestroyCursor(old);
 }
 
 SDL_Cursor *GFXEngine::LoadCursor(const std::string &name, bool retro)
@@ -4124,7 +3391,7 @@ SDL_Cursor *GFXEngine::LoadCursor(const std::string &name, bool retro)
     delete fil;
 
 
-    SDL_Surface *cursr = SDL_CreateRGBSurface(0, width, height, 32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000);
+    SDL_Surface *cursr = SDL_CreateSurface(width, height, SDL_GetPixelFormatForMasks(32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000));
 
     for (int y = 0; y < height; y++)
     {
@@ -4159,7 +3426,7 @@ SDL_Cursor *GFXEngine::LoadCursor(const std::string &name, bool retro)
 
     SDL_Cursor* cursor = SDL_CreateColorCursor(cursr, hotX, hotY);
 
-    SDL_FreeSurface(cursr);
+    SDL_DestroySurface(cursr);
 
     return cursor;
 }
@@ -4168,7 +3435,14 @@ void GFXEngine::Init()
 {
     StaticInit();
 
-    _glext = Glext::init();
+    if (!GPU::Init(System::GetWindow(), System::IniConf::GfxVsync.Get<int>(), sizeof(TVertex)))
+    {
+        // No OpenGL fallback: SDL_GPU needs a Vulkan driver for this window.
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenNeoUA",
+            "No graphics card with Vulkan support was found.\n"
+            "Update the graphics driver, then start OpenNeoUA again.", System::GetWindow());
+        std::exit(1);
+    }
 
     SetDeviceByGUID( read_guid("env/guid3d.def") );
 
@@ -4178,26 +3452,7 @@ void GFXEngine::Init()
     HorizonLoadConfigFromIni();
     LoadCustomColorEffectsFromConfig();
 
-    _vbo = System::IniConf::GfxVBO.Get<bool>();
     _colorEffects = System::IniConf::GfxColorEffects.Get<int32_t>();
-
-    if (!_glext)
-    {
-        _colorEffects = 0;
-        _vbo = false;
-    }
-
-    if (_vbo)
-    {
-        Glext::GLGenVertexArrays(1, &_globalVao);
-        Glext::GLBindVertexArray(_globalVao);
-
-        Glext::GLGenBuffers(1, &_vboParams);
-        Glext::GLBindBuffer(GL_UNIFORM_BUFFER, _vboParams);
-        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, nullptr, GL_STREAM_DRAW);
-
-        Glext::GLBindBufferBase(GL_UNIFORM_BUFFER, _vboParamsBlockBinding, _vboParams);
-    }
 
     std::array<Common::Point, 17> checkModes
     {{
@@ -4210,23 +3465,16 @@ void GFXEngine::Init()
 
     graphicsModes.reserve(checkModes.size());
 
+    const SDL_DisplayID display = SDL_GetPrimaryDisplay();
     for(Common::Point m : checkModes)
     {
-        SDL_DisplayMode target, closest;
-
-        target.w = m.x;
-        target.h = m.y;
-        target.format = _pixfmt->format;
-        target.refresh_rate = 0;
-        target.driverdata   = 0;
-
-        if (SDL_GetClosestDisplayMode(0, &target, &closest) )
+        SDL_DisplayMode closest;
+        if ( SDL_GetClosestFullscreenDisplayMode(display, m.x, m.y, 0.0f, false, &closest) )
         {
             GfxMode mode;
             mode.w = closest.w;
             mode.h = closest.h;
-            mode.mode = closest;
-            mode.bpp = _pixfmt->BytesPerPixel;
+            mode.bpp = _pixfmt->bytes_per_pixel;
             mode.name = GfxMode::GenName(mode.w, mode.h);
 
             AddGfxMode(mode);
@@ -4240,27 +3488,16 @@ void GFXEngine::Init()
         std::vector<std::string> vals = Stok::Split(mod, ":-x \t");
         if (vals.size() >= 2)
         {
-            SDL_DisplayMode target, closest;
-
-            target.w = std::stoi(vals[0]);
-            target.h = std::stoi(vals[1]);
-            target.format = _pixfmt->format;
-            target.refresh_rate = 0;
-            target.driverdata   = 0;
+            SDL_DisplayMode closest;
 
             GfxMode mode;
-            mode.w = target.w;
-            mode.h = target.h;
-            mode.mode = target;
-            mode.bpp = _pixfmt->BytesPerPixel;
+            mode.w = std::stoi(vals[0]);
+            mode.h = std::stoi(vals[1]);
+            mode.bpp = _pixfmt->bytes_per_pixel;
             mode.name = GfxMode::GenName(mode.w, mode.h);
 
-            if (SDL_GetClosestDisplayMode(0, &target, &closest) )
-            {
-                mode.mode = closest;
+            if ( SDL_GetClosestFullscreenDisplayMode(display, mode.w, mode.h, 0.0f, false, &closest) )
                 mode.bpp = SDL_BYTESPERPIXEL(closest.format) * 8;
-                mode.name = GfxMode::GenName(mode.w, mode.h);
-            }
 
             AddGfxMode(mode);
         }
@@ -4281,120 +3518,35 @@ void GFXEngine::Init()
 
     LoadPalette(System::IniConf::GfxPalette.Get<std::string>());
 
-    if (_vbo)
+    std::string error;
+    _stdShaderProg = GPU::CreateProgram(_stdVShaderText, _stdPShaderText, 1, "standard", &error);
+    if (!_stdShaderProg)
     {
-        _stdPsShader = CompileShader(GL_FRAGMENT_SHADER, _stdPShaderText);
-        _stdVsShader = CompileShader(GL_VERTEX_SHADER,   _stdVShaderText);
-        uint32_t progID = Glext::GLCreateProgram();
-
-        Glext::GLAttachShader(progID, _stdPsShader);
-        Glext::GLAttachShader(progID, _stdVsShader);
-        Glext::GLLinkProgram(progID);
-
-        _stdShaderProg = TShaderProg( progID );
-
-        BindVBOParameters(_stdShaderProg);
+        log_d3dlog("Standard shader failed to compile: %s\n", error.c_str());
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenNeoUA",
+                                 "The standard shader could not be built (see env/d3dlog.txt).",
+                                 System::GetWindow());
+        std::exit(1);
     }
 
-    if (_glext)
+    _decalProg = GPU::CreateProgram(DecalVertexShaderText(), DecalFragmentShaderText(), 3, "decal", &error);
+    if (!_decalProg)
+        log_d3dlog("Decal shader failed to compile: ground decals are disabled\n%s\n", error.c_str());
+    else
     {
-        _decalPsShader = CompileShader(GL_FRAGMENT_SHADER, DecalFragmentShaderText());
-        _decalVsShader = CompileShader(GL_VERTEX_SHADER, DecalVertexShaderText(_vbo));
-
-        uint32_t progID = Glext::GLCreateProgram();
-
-        Glext::GLAttachShader(progID, _decalPsShader);
-        Glext::GLAttachShader(progID, _decalVsShader);
-        Glext::GLLinkProgram(progID);
-
-        GLint linked = GL_FALSE;
-        Glext::GLGetProgramiv(progID, GL_LINK_STATUS, &linked);
-        if (linked == GL_TRUE)
-            _decalProg = TDecalProg(progID);
-        else
-        {
-            Glext::GLDeleteProgram(progID);
-            log_d3dlog("Decal shader failed to link: ground decals are disabled\n");
-        }
-
-        // Rest pass of the decals: it needs a float render target, which a GL
-        // older than 3.0 has only with these two extensions.
-        const char *glVersion = (const char *)glGetString(GL_VERSION);
-        const char *glExtensions = (const char *)glGetString(GL_EXTENSIONS);
-        const bool floatTarget = (glVersion && std::atoi(glVersion) >= 3) ||
-            (glExtensions && std::strstr(glExtensions, "GL_ARB_texture_float") &&
-             std::strstr(glExtensions, "GL_ARB_color_buffer_float"));
-        _decalRestUnusable = !floatTarget;
-        if (_decalProg.ID && floatTarget)
-        {
-            _decalRestPsShader = CompileShader(GL_FRAGMENT_SHADER, DecalRestFragmentShaderText());
-            _decalRestVsShader = CompileShader(GL_VERTEX_SHADER, DecalRestVertexShaderText(_vbo));
-
-            progID = Glext::GLCreateProgram();
-            Glext::GLAttachShader(progID, _decalRestPsShader);
-            Glext::GLAttachShader(progID, _decalRestVsShader);
-            Glext::GLLinkProgram(progID);
-
-            linked = GL_FALSE;
-            Glext::GLGetProgramiv(progID, GL_LINK_STATUS, &linked);
-            if (linked == GL_TRUE)
-                _decalRestProg = TDecalRestProg(progID);
-            else
-            {
-                Glext::GLDeleteProgram(progID);
-                log_d3dlog("Decal rest shader failed to link: decals do not follow craters\n");
-            }
-        }
+        _decalRestProg = GPU::CreateProgram(DecalRestVertexShaderText(), DecalRestFragmentShaderText(), 1,
+                                            "decal_rest", &error);
+        if (!_decalRestProg)
+            log_d3dlog("Decal rest shader failed to compile: decals do not follow craters\n%s\n", error.c_str());
     }
 
     if (_colorEffects > 0)
     {
-        Glext::GLGenFramebuffers(1, &_fbo);
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _fbo);
-
-        glGenTextures(1, &_fboTex);
-        glBindTexture(GL_TEXTURE_2D, _fboTex);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, 640, 480, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-
-        Glext::GLGenRenderbuffers(1, &_fbod);
-        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, _fbod);
-        Glext::GLRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 640, 480);
-
-
-        Glext::GLFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, _fbod);
-
-        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _fboTex, 0);
-
-        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, 0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        if (_vbo)
-        {
-            _psShader = LoadShader(GL_FRAGMENT_SHADER, "res/clreff_vbo.ps");
-            _vsShader = LoadShader(GL_VERTEX_SHADER, "res/clreff_vbo.vs");
-        }
-        else
-        {
-            _psShader = LoadShader(GL_FRAGMENT_SHADER, "res/clreff.ps");
-            _vsShader = LoadShader(GL_VERTEX_SHADER, "res/clreff.vs");
-        }
-
-        uint32_t progID = Glext::GLCreateProgram();
-
-        Glext::GLAttachShader(progID, _psShader);
-        Glext::GLAttachShader(progID, _vsShader);
-        Glext::GLLinkProgram(progID);
-
-        _colorEffectsShaderProg = TColorEffectsProg(progID);
-
-        if (_vbo)
-            BindVBOParameters(_colorEffectsShaderProg);
+        CreateSceneTargets(System::GetResolution());
+        _colorEffectsShaderProg = LoadPostProgram("res/clreff.ps", "Colour effects");
+        // Without its post program the scene is drawn straight to the window.
+        if (!_colorEffectsShaderProg)
+            _colorEffects = 0;
     }
 
     // OpenNeoUA custom: load the fullscreen visual filter selected in nucleus.ini.
@@ -4422,12 +3574,12 @@ void GFXEngine::Deinit()
     }
 
     if (ScreenSurface)
-        SDL_FreeSurface(ScreenSurface);
+        SDL_DestroySurface(ScreenSurface);
 
     ScreenSurface = nullptr;
 
     if (VirtualUISurface)
-        SDL_FreeSurface(VirtualUISurface);
+        SDL_DestroySurface(VirtualUISurface);
 
     VirtualUISurface = nullptr;
     _virtualUiPass = false;
@@ -4435,100 +3587,44 @@ void GFXEngine::Deinit()
     _virtualUiResolution = Common::Point();
     _virtualUiTextureSize = Common::Point();
 
-    if (virtualUiTex)
-        glDeleteTextures(1, &virtualUiTex);
+    GPU::DestroyTexture(screenTex);
+    GPU::DestroyTexture(virtualUiTex);
+    screenTex = virtualUiTex = 0;
 
-    virtualUiTex = 0;
+    GPU::DestroyProgram(_stdShaderProg);
+    GPU::DestroyProgram(_decalProg);
+    GPU::DestroyProgram(_decalRestProg);
+    GPU::DestroyTexture(_decalDepthTex);
+    GPU::DestroyTexture(_decalRestTex);
+    _stdShaderProg = _decalProg = _decalRestProg = 0;
+    _decalDepthTex = _decalRestTex = 0;
+    _decalDepthTexSize = _decalRestTexSize = Common::Point();
 
-    if (_stdQuadDataBuf)
-        Glext::GLDeleteBuffers(1, &_stdQuadDataBuf);
-
-    _stdQuadDataBuf = 0;
-
-    if (_stdQuadIndexBuf)
-        Glext::GLDeleteBuffers(1, &_stdQuadIndexBuf);
-
-    _stdQuadIndexBuf = 0;
-
-    if (_stdShaderProg.ID)
-        Glext::GLDeleteProgram(_stdShaderProg.ID);
-
-    if (_stdVsShader)
-        Glext::GLDeleteShader(_stdVsShader);
-
-    if (_stdPsShader)
-        Glext::GLDeleteShader(_stdPsShader);
-
-    _stdShaderProg.ID = 0;
-    _stdVsShader = 0;
-    _stdPsShader = 0;
-
-    if (_decalProg.ID)
-        Glext::GLDeleteProgram(_decalProg.ID);
-    if (_decalPsShader)
-        Glext::GLDeleteShader(_decalPsShader);
-    if (_decalVsShader)
-        Glext::GLDeleteShader(_decalVsShader);
-    if (_decalDepthTex)
-        glDeleteTextures(1, &_decalDepthTex);
-    if (_decalRestProg.ID)
-        Glext::GLDeleteProgram(_decalRestProg.ID);
-    if (_decalRestPsShader)
-        Glext::GLDeleteShader(_decalRestPsShader);
-    if (_decalRestVsShader)
-        Glext::GLDeleteShader(_decalRestVsShader);
-    if (_decalRestTex)
-        glDeleteTextures(1, &_decalRestTex);
-
-    _decalProg = TDecalProg();
-    _decalPsShader = 0;
-    _decalVsShader = 0;
-    _decalDepthTex = 0;
-    _decalDepthTexSize = Common::Point();
-    _decalRestProg = TDecalRestProg();
-    _decalRestPsShader = 0;
-    _decalRestVsShader = 0;
-    _decalRestTex = 0;
-    _decalRestTexSize = Common::Point();
-
-    // The atmospheric program reuses the color-effects vertex shader, so
-    // release its program before deleting that shared shader object.
     FreeAtmosphereShader();
     _atmosphereEnabled = false;
     _atmosphereActive = false;
 
-    if (_colorEffectsShaderProg.ID)
-        Glext::GLDeleteProgram(_colorEffectsShaderProg.ID);
-
-    if (_psShader)
-        Glext::GLDeleteShader(_psShader);
-
-    if (_vsShader)
-        Glext::GLDeleteShader(_vsShader);
-
-    _colorEffectsShaderProg.ID = 0;
-    _vsShader = 0;
-    _psShader = 0;
+    GPU::DestroyProgram(_colorEffectsShaderProg);
+    _colorEffectsShaderProg = 0;
+    GPU::DestroyTexture(_sceneTex);
+    GPU::DestroyTexture(_sceneDepth);
+    _sceneTex = _sceneDepth = 0;
+    _sceneSize = Common::Point();
 
     // OpenNeoUA custom: free the visual filter LUT texture
-    if (_visualFilterLut)
-        glDeleteTextures(1, &_visualFilterLut);
+    GPU::DestroyTexture(_visualFilterLut);
     _visualFilterLut = 0;
     _visualFilterActive = false;
 
     FreeVhsFilterShader();
-    if (_vhsCopyTex)
-        glDeleteTextures(1, &_vhsCopyTex);
-    if (_vhsOutTex)
-        glDeleteTextures(1, &_vhsOutTex);
-    _vhsFbo = 0;
-    _vhsOutFbo = 0;
-    _vhsFboReady = false;
-    _vhsCopyTex = 0;
-    _vhsOutTex = 0;
+    GPU::DestroyTexture(_vhsCopyTex);
+    GPU::DestroyTexture(_vhsOutTex);
+    _vhsCopyTex = _vhsOutTex = 0;
     _vhsCopyTexSize = Common::Point();
     _vhsOutTexSize = Common::Point();
     _vhsFilterActive = false;
+
+    GPU::Shutdown();
 }
 
 GFXEngine::~GFXEngine()
@@ -4536,27 +3632,12 @@ GFXEngine::~GFXEngine()
     Deinit();
 }
 
-int GFXEngine::EventsWatcher(void *, SDL_Event *event)
+bool GFXEngine::EventsWatcher(void *, SDL_Event *event)
 {
-    switch(event->type)
-    {
-    case SDL_WINDOWEVENT:
-    {
-        switch(event->window.event)
-        {
-        case SDL_WINDOWEVENT_RESIZED:
-        case SDL_WINDOWEVENT_SIZE_CHANGED:
-            Instance.UpdateFBOSizes();
-            break;
-        default:
-            break;
-        }
+    if ( event->type == SDL_EVENT_WINDOW_RESIZED || event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED )
+        Instance.UpdateFBOSizes();
 
-    }
-    break;
-    }
-
-    return 1; // This event can be passed to another event watcher
+    return true; // This event can be passed to another event watcher
 }
 
 void GFXEngine::SetCursor(int curID, int force)
@@ -4571,14 +3652,14 @@ void GFXEngine::SetCursor(int curID, int force)
     if ( sett )
     {
         if ( curID == 0 )
-            SDL_ShowCursor(SDL_DISABLE);
+            SDL_HideCursor();
         else if ( curID <= 11 )
         {
             if ( cursors[curID - 1] )
                 SDL_SetCursor( cursors[curID - 1] );
 
             if (!CurrentCursorID)
-                SDL_ShowCursor(SDL_ENABLE);
+                SDL_ShowCursor();
         }
 
     }
@@ -4695,10 +3776,7 @@ void GFXEngine::SetResolution(const Common::Point &res, bool windowed)
         picked = windd_func0__sub0("env/vid.def");
     }
 
-    if (!picked.windowed)
-        System::SetVideoMode(Common::Point(picked.w, picked.h), SDL_WINDOW_FULLSCREEN_DESKTOP, &picked.mode);
-    else
-        System::SetVideoMode(Common::Point(picked.w, picked.h), 0, nullptr);
+    System::SetVideoMode(Common::Point(picked.w, picked.h), !picked.windowed);
 
     SetResVariables(picked);
     ApplyResolution();
@@ -4845,17 +3923,6 @@ void GFXEngine::SetVisualFilter(const std::string &filterName)
         return;
     }
 
-    if (!_glext)
-    {
-        // No GL extensions -> no post-process path at all; remember the name but stay inert.
-        _visualFilterActive = false;
-        _visualFilterStrength = 0.0f;
-        _visualFilterName = "Standard";
-        ypa_log_out("Visual filter: [%s] requested but GL extensions are unavailable; filter inactive.\n",
-                    name.c_str());
-        return;
-    }
-
     // Ensure ".pal" extension
     std::string file = name;
     if (file.size() < 4 || StriCmp(file.substr(file.size() - 4), ".pal"))
@@ -4976,21 +4043,18 @@ void GFXEngine::SetVisualFilter(const std::string &filterName)
 
     ilbm->Delete();
 
+    // 256x1 RGBA ramp, sampled with linear filtering and clamped edges.
+    std::array<uint8_t, 256 * 4> rgba;
+    for (int i = 0; i < 256; i++)
+    {
+        rgba[i * 4 + 0] = lut[i * 3 + 0];
+        rgba[i * 4 + 1] = lut[i * 3 + 1];
+        rgba[i * 4 + 2] = lut[i * 3 + 2];
+        rgba[i * 4 + 3] = 255;
+    }
     if (!_visualFilterLut)
-        glGenTextures(1, &_visualFilterLut);
-
-    // Upload on texture unit 1 so the engine's unit-0 binding cache is never disturbed.
-    Glext::GLActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, _visualFilterLut);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 256, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, lut.data());
-    // Smooth ramp -> GL_LINEAR; clamp at the edges.
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    Glext::GLActiveTexture(GL_TEXTURE0);
+        _visualFilterLut = GPU::CreateTexture(256, 1, GPU::Format::RGBA8, GPU::USAGE_SAMPLED);
+    GPU::UploadTexture(_visualFilterLut, rgba.data(), 256 * 4);
 
     _visualFilterActive = true;
     _visualFilterStrength = strength;
@@ -5066,92 +4130,19 @@ static float ParseAtmosphereValue(std::string s, float fallback, float minValue,
 
 void GFXEngine::FreeAtmosphereShader()
 {
-    if (_atmosphereShaderProg.ID)
-        Glext::GLDeleteProgram(_atmosphereShaderProg.ID);
-    if (_atmospherePsShader)
-        Glext::GLDeleteShader(_atmospherePsShader);
-
-    _atmosphereShaderProg = TAtmosphereProg();
-    _atmospherePsShader = 0;
+    GPU::DestroyProgram(_atmosphereShaderProg);
+    _atmosphereShaderProg = 0;
 }
 
 bool GFXEngine::LoadAtmosphereShader()
 {
-    if (_atmosphereShaderProg.ID)
+    if (_atmosphereShaderProg)
         return true;
 
-    const std::string shaderPath = _vbo ? "res/atmosphere_vbo.ps" : "res/atmosphere.ps";
-    _atmospherePsShader = LoadShader(GL_FRAGMENT_SHADER, shaderPath);
-    if (!_atmospherePsShader)
-    {
-        ypa_log_out("WARNING: Atmospheric pass shader [%s] is missing or failed to compile; continuing with the existing renderer.\n",
-                    shaderPath.c_str());
-        return false;
-    }
-
-    if (!_vsShader)
-    {
-        ypa_log_out("WARNING: Atmospheric pass cannot reuse the fullscreen vertex shader; continuing with the existing renderer.\n");
-        FreeAtmosphereShader();
-        return false;
-    }
-
-    uint32_t progID = Glext::GLCreateProgram();
-    if (!progID)
-    {
-        ypa_log_out("WARNING: Atmospheric pass program could not be created; continuing with the existing renderer.\n");
-        FreeAtmosphereShader();
-        return false;
-    }
-
-    Glext::GLAttachShader(progID, _atmospherePsShader);
-    Glext::GLAttachShader(progID, _vsShader);
-    Glext::GLLinkProgram(progID);
-
-    GLint linked = GL_FALSE;
-    Glext::GLGetProgramiv(progID, GL_LINK_STATUS, &linked);
-    if (linked == GL_FALSE)
-    {
-        GLint logLength = 0;
-        Glext::GLGetProgramiv(progID, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 0)
-        {
-            std::vector<char> logBuffer((size_t)logLength + 1, 0);
-            Glext::GLGetProgramInfoLog(progID, logLength, nullptr, logBuffer.data());
-            ypa_log_out("WARNING: Atmospheric pass shader link failed: %s\n", logBuffer.data());
-        }
-        else
-        {
-            ypa_log_out("WARNING: Atmospheric pass shader link failed; continuing with the existing renderer.\n");
-        }
-
-        Glext::GLDeleteProgram(progID);
-        FreeAtmosphereShader();
-        return false;
-    }
-
-    _atmosphereShaderProg = TAtmosphereProg(progID);
-    if (_vbo)
-        BindVBOParameters(_atmosphereShaderProg);
-
-    if (_atmosphereShaderProg.NormLoc < 0 ||
-        _atmosphereShaderProg.InvLoc < 0 ||
-        _atmosphereShaderProg.ScrSizeLoc < 0 ||
-        _atmosphereShaderProg.FilterLutLoc < 0 ||
-        _atmosphereShaderProg.FilterStrengthLoc < 0 ||
-        _atmosphereShaderProg.StrengthLoc < 0 ||
-        _atmosphereShaderProg.ExposureLoc < 0 ||
-        _atmosphereShaderProg.ContrastLoc < 0 ||
-        _atmosphereShaderProg.SaturationLoc < 0 ||
-        _atmosphereShaderProg.VignetteLoc < 0)
-    {
-        ypa_log_out("WARNING: Atmospheric pass shader [%s] is missing one or more required uniforms; continuing with the existing renderer.\n",
-                    shaderPath.c_str());
-        FreeAtmosphereShader();
-        return false;
-    }
-
-    return true;
+    _atmosphereShaderProg = LoadPostProgram("res/atmosphere.ps", "Atmospheric pass");
+    if (!_atmosphereShaderProg)
+        ypa_log_out("WARNING: Atmospheric pass unavailable; continuing with the existing renderer.\n");
+    return _atmosphereShaderProg != 0;
 }
 
 void GFXEngine::ApplyAtmosphereFromConfig()
@@ -5177,12 +4168,6 @@ void GFXEngine::ApplyAtmosphereFromConfig()
     _atmosphereVignette = ParseAtmosphereValue(
         System::IniConf::GfxAtmosphereVignette.Get<std::string>(), 0.6f, 0.0f, 1.0f);
 
-    if (!_glext)
-    {
-        ypa_log_out("WARNING: Atmospheric pass requested but GL extensions are unavailable; continuing with the existing renderer.\n");
-        return;
-    }
-
     if (_colorEffects <= 0)
     {
         ypa_log_out("WARNING: Atmospheric pass requested but gfx.color_effects=0 disables the scene framebuffer; continuing with the existing renderer.\n");
@@ -5201,35 +4186,15 @@ void GFXEngine::ApplyAtmosphereFromConfig()
                 _atmosphereVignette);
 }
 
-static std::string VhsBlendShaderText(bool vbo)
+// Blend of the VHS image over the finished frame (post shader body, see _postPrelude).
+static const char *VhsBlendShaderText()
 {
-    if (vbo)
-    {
-        return
-            "#version 140\n"
-            "uniform sampler2D texture;\n"
-            "uniform sampler2D vhsTexture;\n"
-            "uniform float vhsStrength;\n"
-            "in vec2 texCoords;\n"
-            "void main()\n"
-            "{\n"
-            "    vec4 base = texture2D(texture, texCoords);\n"
-            "    vec4 vhs = texture2D(vhsTexture, texCoords);\n"
-            "    gl_FragColor = mix(base, vhs, clamp(vhsStrength, 0.0, 1.0));\n"
-            "}\n";
-    }
-
     return
-        "#version 120\n"
-        "uniform sampler2D texture;\n"
-        "uniform sampler2D vhsTexture;\n"
-        "uniform float vhsStrength;\n"
         "void main()\n"
         "{\n"
-        "    vec2 uv = gl_TexCoord[0].xy;\n"
-        "    vec4 base = texture2D(texture, uv);\n"
-        "    vec4 vhs = texture2D(vhsTexture, uv);\n"
-        "    gl_FragColor = mix(base, vhs, clamp(vhsStrength, 0.0, 1.0));\n"
+        "    vec4 base = sampleScreen(uTexture, texCoords);\n"
+        "    vec4 vhs = sampleScreen(uAux, texCoords);\n"
+        "    fragColor = mix(base, vhs, clamp(vhsStrength, 0.0, 1.0));\n"
         "}\n";
 }
 
@@ -5248,13 +4213,6 @@ void GFXEngine::SetVhsFilterEnabled(bool enabled)
     {
         _vhsFilterActive = false;
         ypa_log_out("VHS filter: disabled because gfx.vhs_filter_strength is 0\n");
-        return;
-    }
-
-    if (!_glext)
-    {
-        _vhsFilterActive = false;
-        ypa_log_out("WARNING: VHS filter requested but GL extensions are unavailable; continuing without VHS.\n");
         return;
     }
 
@@ -5284,92 +4242,42 @@ void GFXEngine::ApplyVhsFilterFromConfig()
 
 void GFXEngine::FreeVhsFilterShader()
 {
-    if (_vhsBlendProg.ID)
-        Glext::GLDeleteProgram(_vhsBlendProg.ID);
-    if (_vhsFilterProg.ID)
-        Glext::GLDeleteProgram(_vhsFilterProg.ID);
-    if (_vhsBlendPsShader)
-        Glext::GLDeleteShader(_vhsBlendPsShader);
-    if (_vhsPsShader)
-        Glext::GLDeleteShader(_vhsPsShader);
-    if (_vhsVsShader)
-        Glext::GLDeleteShader(_vhsVsShader);
-
-    _vhsFilterProg = TVhsFilterProg();
-    _vhsBlendProg = TVhsBlendProg();
-    _vhsBlendPsShader = 0;
-    _vhsPsShader = 0;
-    _vhsVsShader = 0;
+    GPU::DestroyProgram(_vhsFilterProg);
+    GPU::DestroyProgram(_vhsBlendProg);
+    _vhsFilterProg = 0;
+    _vhsBlendProg = 0;
 }
 
 bool GFXEngine::LoadVhsFilterShader()
 {
-    std::string shaderPath = StrTrim(_vbo
-                           ? System::IniConf::GfxVhsFilterShaderVbo.Get<std::string>()
-                           : System::IniConf::GfxVhsFilterShader.Get<std::string>());
-
-    // Both modes share the existing final-frame effect and strength blend.
+    std::string shaderPath = StrTrim(System::IniConf::GfxVhsFilterShader.Get<std::string>());
+    // Both modes share the final-frame effect and strength blend.
     if (_originalVideoFilter)
-        shaderPath = _vbo ? "res/original_video_vbo.ps" : "res/original_video.ps";
+        shaderPath = "res/original_video.ps";
 
-    if (_vhsFilterProg.ID && !StriCmp(shaderPath, _vhsFilterShaderPath))
+    if (_vhsFilterProg && !StriCmp(shaderPath, _vhsFilterShaderPath))
         return true;
 
     FreeVhsFilterShader();
     _vhsFilterShaderPath = shaderPath;
 
-    _vhsPsShader = LoadShader(GL_FRAGMENT_SHADER, shaderPath);
-    if (!_vhsPsShader)
+    _vhsFilterProg = LoadPostProgram(shaderPath, "VHS filter");
+    if (!_vhsFilterProg)
     {
-        ypa_log_out("WARNING: VHS filter shader [%s] is missing or failed to compile; continuing without VHS.\n",
-                    shaderPath.c_str());
+        ypa_log_out("WARNING: VHS filter unavailable; continuing without VHS.\n");
         return false;
     }
 
-    const std::string vertexPath = _vbo ? "res/clreff_vbo.vs" : "res/clreff.vs";
-    _vhsVsShader = LoadShader(GL_VERTEX_SHADER, vertexPath);
-    if (!_vhsVsShader)
+    std::string error;
+    _vhsBlendProg = GPU::CreateProgram(_postVShaderText, _postPrelude + VhsBlendShaderText(), 2,
+                                       "vhs_blend", &error);
+    if (!_vhsBlendProg)
     {
-        ypa_log_out("WARNING: VHS filter vertex shader [%s] is missing or failed to compile; continuing without VHS.\n",
-                    vertexPath.c_str());
+        ypa_log_out("WARNING: VHS filter blend shader failed to compile; continuing without VHS.\n%s\n",
+                    error.c_str());
         FreeVhsFilterShader();
         return false;
     }
-
-    uint32_t progID = Glext::GLCreateProgram();
-    Glext::GLAttachShader(progID, _vhsPsShader);
-    Glext::GLAttachShader(progID, _vhsVsShader);
-    Glext::GLLinkProgram(progID);
-
-    _vhsFilterProg = TVhsFilterProg(progID);
-
-    _vhsBlendPsShader = CompileShader(GL_FRAGMENT_SHADER, VhsBlendShaderText(_vbo));
-    if (!_vhsBlendPsShader)
-    {
-        ypa_log_out("WARNING: VHS filter blend shader failed to compile; continuing without VHS.\n");
-        FreeVhsFilterShader();
-        return false;
-    }
-
-    uint32_t blendProgID = Glext::GLCreateProgram();
-    Glext::GLAttachShader(blendProgID, _vhsBlendPsShader);
-    Glext::GLAttachShader(blendProgID, _vhsVsShader);
-    Glext::GLLinkProgram(blendProgID);
-
-    _vhsBlendProg = TVhsBlendProg(blendProgID);
-
-    if (_vbo)
-    {
-        BindVBOParameters(_vhsFilterProg);
-        BindVBOParameters(_vhsBlendProg);
-    }
-
-    if (_vhsFilterProg.StrengthLoc < 0 && !_originalVideoFilter)
-    {
-        ypa_log_out("WARNING: VHS filter shader [%s] loaded but does not expose uniform vhsStrength; strength control is unavailable for this shader.\n",
-                    shaderPath.c_str());
-    }
-
     return true;
 }
 
@@ -5381,14 +4289,20 @@ uint8_t *GFXEngine::MakeScreenCopy(int *ow, int *oh)
     res.x &= ~1;
     res.y &= ~1;
 
-    uint8_t *buf = (uint8_t *)malloc(res.x * res.y * 3);
+    // RGB of the last shown frame, bottom row first.
+    std::vector<uint8_t> rgb;
+    int w = res.x, h = res.y;
+    if (!GPU::ReadLastFrameRGB(&rgb, &w, &h) || w <= 0 || h <= 0)
+    {
+        *ow = 0;
+        *oh = 0;
+        return nullptr;
+    }
 
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glReadBuffer(GL_FRONT);
-    glReadPixels(0, 0, res.x, res.y, GL_RGB, GL_UNSIGNED_BYTE, buf);
-
-    *ow = res.x;
-    *oh = res.y;
+    uint8_t *buf = (uint8_t *)malloc(rgb.size());
+    std::memcpy(buf, rgb.data(), rgb.size());
+    *ow = w;
+    *oh = h;
     return buf;
 }
 
@@ -5410,17 +4324,17 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
          !Common::Rect(surface->w, surface->h).IsIn(line.P2()) )
         return;
 
-    int rilWidth = surface->pitch / surface->format->BytesPerPixel;
+    int rilWidth = surface->pitch / SDL_BYTESPERPIXEL(surface->format);
 
     int xCount = line.Width();
     int yCount = line.Height();
 
-    uint32_t color = SDL_MapRGBA(surface->format, cr, cg, cb, 255);
+    uint32_t color = SDL_MapSurfaceRGBA(surface, cr, cg, cb, 255);
 
     // The virtual UI surface is transparent and composited over the 3D world
     // later. Pre-blending a partially transparent line against its cleared
     // black RGB turns the fade into an opaque black silhouette. Preserve the
-    // destination alpha here so the final OpenGL composition performs the
+    // destination alpha here so the final GPU composition performs the
     // actual fade against the world framebuffer.
     auto blendPixel = [&](uint32_t dstPixel) -> uint32_t
     {
@@ -5430,8 +4344,8 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
                 return color;
 
             uint8_t dr, dg, db;
-            SDL_GetRGB(dstPixel, surface->format, &dr, &dg, &db);
-            return SDL_MapRGB(surface->format,
+            SDL_GetRGB(dstPixel, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &dr, &dg, &db);
+            return SDL_MapSurfaceRGB(surface,
                 (uint8_t)((cr * alpha + dr * (255 - alpha)) / 255),
                 (uint8_t)((cg * alpha + dg * (255 - alpha)) / 255),
                 (uint8_t)((cb * alpha + db * (255 - alpha)) / 255));
@@ -5443,19 +4357,19 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
             return color;
 
         uint8_t dr, dg, db, da;
-        SDL_GetRGBA(dstPixel, surface->format, &dr, &dg, &db, &da);
+        SDL_GetRGBA(dstPixel, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &dr, &dg, &db, &da);
 
         const uint32_t invAlpha = 255u - alpha;
         const uint32_t outAlpha = alpha + (da * invAlpha + 127u) / 255u;
         if (outAlpha == 0)
-            return SDL_MapRGBA(surface->format, 0, 0, 0, 0);
+            return SDL_MapSurfaceRGBA(surface, 0, 0, 0, 0);
 
         const uint32_t denominator = outAlpha * 255u;
         const uint32_t outR = (cr * alpha * 255u + dr * da * invAlpha + denominator / 2u) / denominator;
         const uint32_t outG = (cg * alpha * 255u + dg * da * invAlpha + denominator / 2u) / denominator;
         const uint32_t outB = (cb * alpha * 255u + db * da * invAlpha + denominator / 2u) / denominator;
 
-        return SDL_MapRGBA(surface->format,
+        return SDL_MapSurfaceRGBA(surface,
                            (uint8_t)outR, (uint8_t)outG, (uint8_t)outB,
                            (uint8_t)outAlpha);
     };
@@ -5502,9 +4416,9 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
 
     void *surfPos = (void *) ((uint8_t *) surface->pixels
                     + line.y1 * surface->pitch
-                    + line.x1 * surface->format->BytesPerPixel );
+                    + line.x1 * SDL_BYTESPERPIXEL(surface->format) );
 
-    switch(surface->format->BytesPerPixel)
+    switch(SDL_BYTESPERPIXEL(surface->format))
     {
         case 1:
         {
@@ -5576,7 +4490,7 @@ void GFXEngine::DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t
 
 void GFXEngine::BlitScaleMasked(SDL_Surface *src, Common::Rect sRect, SDL_Surface *mask, uint8_t index, SDL_Surface *dst, Common::Rect dRect)
 {
-    if (mask->format->BitsPerPixel != 8)
+    if (SDL_BITSPERPIXEL(mask->format) != 8)
         return;
 
     if (src->w != mask->w || src->h != mask->h)
@@ -5593,9 +4507,9 @@ void GFXEngine::BlitScaleMasked(SDL_Surface *src, Common::Rect sRect, SDL_Surfac
         return;
 
     // Try fast
-    if (src->format->format == dst->format->format)
+    if (src->format == dst->format)
     {
-        switch(src->format->BytesPerPixel)
+        switch(SDL_BYTESPERPIXEL(src->format))
         {
             case 2:
             {
@@ -5673,8 +4587,8 @@ void GFXEngine::BlitScaleMasked(SDL_Surface *src, Common::Rect sRect, SDL_Surfac
         SDL_LockSurface(mask);
         SDL_LockSurface(dst);
 
-        uint8_t sbpp = src->format->BytesPerPixel;
-        uint8_t dbpp = dst->format->BytesPerPixel;
+        uint8_t sbpp = SDL_BYTESPERPIXEL(src->format);
+        uint8_t dbpp = SDL_BYTESPERPIXEL(dst->format);
 
         int32_t dY = (sRect.Height() << 16) / dRect.Height();
         int32_t dX = (sRect.Width()  << 16) / dRect.Width();
@@ -5698,8 +4612,8 @@ void GFXEngine::BlitScaleMasked(SDL_Surface *src, Common::Rect sRect, SDL_Surfac
                     for(int i = 0; i < sbpp; i++)
                         clr |= spix[i] << (i * 8);
 
-                    SDL_GetRGB(clr, src->format, &r, &g, &b);
-                    clr = SDL_MapRGB(dst->format, r, g, b);
+                    SDL_GetRGB(clr, SDL_GetPixelFormatDetails(src->format), SDL_GetSurfacePalette(src), &r, &g, &b);
+                    clr = SDL_MapSurfaceRGB(dst, r, g, b);
 
                     for(int i = 0; i < dbpp; i++)
                         dBuf[i] = (clr >> (i * 8)) & 0xFF;
@@ -5728,13 +4642,13 @@ void GFXEngine::DrawFillIntCpy(SDL_Surface *src, const Common::Rect &sRect, SDL_
 
     if (dw > sw)
     {
-        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
-        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * SDL_BYTESPERPIXEL(src->format);
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * SDL_BYTESPERPIXEL(dst->format);
 
         const int32_t nit = dw / sw;
-        const int32_t nit2 = (dw % sw) * dst->format->BytesPerPixel;
-        const int32_t cpsz = sw * dst->format->BytesPerPixel;
-        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel + nit2;
+        const int32_t nit2 = (dw % sw) * SDL_BYTESPERPIXEL(dst->format);
+        const int32_t cpsz = sw * SDL_BYTESPERPIXEL(dst->format);
+        const int32_t skipdst = dst->pitch - dw * SDL_BYTESPERPIXEL(dst->format) + nit2;
 
         int sptch = src->pitch;
 
@@ -5763,10 +4677,10 @@ void GFXEngine::DrawFillIntCpy(SDL_Surface *src, const Common::Rect &sRect, SDL_
     }
     else
     {
-        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
-        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * SDL_BYTESPERPIXEL(src->format);
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * SDL_BYTESPERPIXEL(dst->format);
 
-        const int32_t cpsz = dw * dst->format->BytesPerPixel;
+        const int32_t cpsz = dw * SDL_BYTESPERPIXEL(dst->format);
         const int32_t skipdst = dst->pitch;
 
         int sptch = src->pitch;
@@ -5805,18 +4719,18 @@ void GFXEngine::DrawFillIntCKey(SDL_Surface *src, const Common::Rect &sRect, SDL
     SDL_LockSurface(dst);
 
     uint32_t clrKey = 0;
-    SDL_GetColorKey(src, &clrKey);
+    SDL_GetSurfaceColorKey(src, &clrKey);
 
     if (dw > sw)
     {
-        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
-        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
-        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+        const int32_t skipdst = dst->pitch - dw * SDL_BYTESPERPIXEL(dst->format);
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * SDL_BYTESPERPIXEL(src->format);
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * SDL_BYTESPERPIXEL(dst->format);
 
         const int32_t nit = dw / sw;
         const int32_t nit2 = dw % sw;
 
-        const int sz = dst->format->BytesPerPixel;
+        const int sz = SDL_BYTESPERPIXEL(dst->format);
 
         int sptch = src->pitch;
 
@@ -5862,11 +4776,11 @@ void GFXEngine::DrawFillIntCKey(SDL_Surface *src, const Common::Rect &sRect, SDL
     }
     else
     {
-        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
-        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
-        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+        const int32_t skipdst = dst->pitch - dw * SDL_BYTESPERPIXEL(dst->format);
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * SDL_BYTESPERPIXEL(src->format);
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * SDL_BYTESPERPIXEL(dst->format);
 
-        const int sz = dst->format->BytesPerPixel;
+        const int sz = SDL_BYTESPERPIXEL(dst->format);
 
         int sptch = src->pitch;
 
@@ -5914,15 +4828,15 @@ void GFXEngine::DrawFillIntACpy(SDL_Surface* src, const Common::Rect& sRect, SDL
 
     if (dw > sw)
     {
-        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
-        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
-        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+        const int32_t skipdst = dst->pitch - dw * SDL_BYTESPERPIXEL(dst->format);
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * SDL_BYTESPERPIXEL(src->format);
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * SDL_BYTESPERPIXEL(dst->format);
 
         const int32_t nit = dw / sw;
         const int32_t nit2 = dw % sw;
-        uint32_t amask = src->format->Amask;
+        uint32_t amask = SDL_GetPixelFormatDetails(src->format)->Amask;
 
-        const int sz = dst->format->BytesPerPixel;
+        const int sz = SDL_BYTESPERPIXEL(dst->format);
 
         int sptch = src->pitch;
 
@@ -5968,14 +4882,14 @@ void GFXEngine::DrawFillIntACpy(SDL_Surface* src, const Common::Rect& sRect, SDL
     }
     else
     {
-        const int32_t skipdst = dst->pitch - dw * dst->format->BytesPerPixel;
-        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * src->format->BytesPerPixel;
-        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * dst->format->BytesPerPixel;
+        const int32_t skipdst = dst->pitch - dw * SDL_BYTESPERPIXEL(dst->format);
+        uint8_t *psrc = (uint8_t *)src->pixels + sRect.top * src->pitch + sRect.left * SDL_BYTESPERPIXEL(src->format);
+        uint8_t *pdst = (uint8_t *)dst->pixels + dRect.top * dst->pitch + dRect.left * SDL_BYTESPERPIXEL(dst->format);
 
-        const int sz = dst->format->BytesPerPixel;
+        const int sz = SDL_BYTESPERPIXEL(dst->format);
 
         int sptch = src->pitch;
-        uint32_t amask = src->format->Amask;
+        uint32_t amask = SDL_GetPixelFormatDetails(src->format)->Amask;
 
         int ln = 0;
         uint8_t *psrcl = psrc;
@@ -6013,16 +4927,16 @@ void GFXEngine::DrawFill(SDL_Surface *src, const Common::Rect &sRect, SDL_Surfac
     if (sRect.IsEmpty() || dRect.IsEmpty())
         return;
 
-    if (src->format->format == dst->format->format)
+    if (src->format == dst->format)
     {
 #if SDL_VERSION_ATLEAST(2, 0, 9)
-        if (SDL_HasColorKey(src))
+        if (SDL_SurfaceHasColorKey(src))
 #else
         uint32_t tmp;
-        if (SDL_GetColorKey(src, &tmp) == 0)
+        if (SDL_GetSurfaceColorKey(src, &tmp))
 #endif
         {
-            switch(src->format->BytesPerPixel)
+            switch(SDL_BYTESPERPIXEL(src->format))
             {
 
                 case 2:
@@ -6039,9 +4953,9 @@ void GFXEngine::DrawFill(SDL_Surface *src, const Common::Rect &sRect, SDL_Surfac
         }
         else
         {
-            if (src->format->Amask)
+            if (SDL_GetPixelFormatDetails(src->format)->Amask)
             {
-                switch(src->format->BytesPerPixel)
+                switch(SDL_BYTESPERPIXEL(src->format))
                 {
 
                     case 2:
@@ -6163,27 +5077,20 @@ void GFXEngine::BeginVirtualUI(const Common::Point &logicalSize)
     if (!VirtualUISurface ||
         VirtualUISurface->w != logicalSize.x ||
         VirtualUISurface->h != logicalSize.y ||
-        VirtualUISurface->format->format != ScreenSurface->format->format)
+        VirtualUISurface->format != ScreenSurface->format)
     {
         if (VirtualUISurface)
-            SDL_FreeSurface(VirtualUISurface);
+            SDL_DestroySurface(VirtualUISurface);
 
-        VirtualUISurface = SDL_CreateRGBSurface(0,
-                                             logicalSize.x,
-                                             logicalSize.y,
-                                             ScreenSurface->format->BitsPerPixel,
-                                             ScreenSurface->format->Rmask,
-                                             ScreenSurface->format->Gmask,
-                                             ScreenSurface->format->Bmask,
-                                             ScreenSurface->format->Amask);
+        VirtualUISurface = SDL_CreateSurface(logicalSize.x, logicalSize.y, SDL_GetPixelFormatForMasks(SDL_BITSPERPIXEL(ScreenSurface->format), SDL_GetPixelFormatDetails(ScreenSurface->format)->Rmask, SDL_GetPixelFormatDetails(ScreenSurface->format)->Gmask, SDL_GetPixelFormatDetails(ScreenSurface->format)->Bmask, SDL_GetPixelFormatDetails(ScreenSurface->format)->Amask));
         if (!VirtualUISurface)
             return;
 
         SDL_SetSurfaceBlendMode(VirtualUISurface, SDL_BLENDMODE_BLEND);
     }
 
-    SDL_FillRect(VirtualUISurface, nullptr,
-                 SDL_MapRGBA(VirtualUISurface->format, 0, 0, 0, 0));
+    SDL_FillSurfaceRect(VirtualUISurface, nullptr,
+                 SDL_MapSurfaceRGBA(VirtualUISurface, 0, 0, 0, 0));
 
     _virtualUiSavedClip = _clip;
     _virtualUiSavedInverseClip = _inverseClip;
@@ -6224,82 +5131,83 @@ void GFXEngine::EndVirtualUI()
 void GFXEngine::RecreateScreenSurface()
 {
     if ( ScreenSurface )
-        SDL_FreeSurface(ScreenSurface);
+        SDL_DestroySurface(ScreenSurface);
 
-    ScreenSurface = SDL_CreateRGBSurface(0, _resolution.x, _resolution.y, _pixfmt->BitsPerPixel, _pixfmt->Rmask, _pixfmt->Gmask, _pixfmt->Bmask, _pixfmt->Amask);
+    ScreenSurface = SDL_CreateSurface(_resolution.x, _resolution.y, _pixfmt->format);
 
-    if ( !screenTex )
-        glGenTextures(1, &screenTex);
-
-    _states.Tex = screenTex;
-    SetRenderStates(0);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ScreenSurface->w, ScreenSurface->h, 0, _glPixfmt, _glPixtype, nullptr);
+    GPU::DestroyTexture(screenTex);
+    screenTex = GPU::CreateTexture(ScreenSurface->w, ScreenSurface->h, _texFormat, GPU::USAGE_SAMPLED);
 }
 
+// Two triangles with the current states and the standard shader uniforms.
 void GFXEngine::DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx)
 {
-    static const uint16_t indexes[6] = {0, 1, 2, 0, 2, 3};
+    // OpenNeoUA custom VP tint: screen/HUD/UI quads must never inherit a mesh tint.
+    _stdParams.ColorMul[0] = 1.0;
+    _stdParams.ColorMul[1] = 1.0;
+    _stdParams.ColorMul[2] = 1.0;
+    _stdParams.ColorMul[3] = 1.0;
+    _stdParams.Colorize = 0;
 
-    if (_vbo)
-    {
-        if (!_stdQuadDataBuf)
-        {
-            Glext::GLGenBuffers(1, &_stdQuadDataBuf);
-            Glext::GLBindBuffer(GL_ARRAY_BUFFER, _stdQuadDataBuf);
-            Glext::GLBufferData(GL_ARRAY_BUFFER, sizeof(TVertex) * vtx.size(), nullptr, GL_STREAM_DRAW);
-        }
+    const uint32_t base = GPU::PushTransient(vtx.data(), sizeof(TVertex) * vtx.size());
+    GPU::Streams streams;
+    streams.pos = base + offsetof(TVertex, Pos);
+    streams.color = base + offsetof(TVertex, Color);
+    streams.uv = base + offsetof(TVertex, TexCoord);
 
-        if (!_stdQuadIndexBuf)
-        {
-            Glext::GLGenBuffers(1, &_stdQuadIndexBuf);
-            Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _stdQuadIndexBuf);
-            Glext::GLBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indexes), &indexes, GL_STATIC_DRAW);
-        }
+    const GPU::Sampler sampler = {_states.Tex, _states.LinearFilter};
+    GPU::Draw(StdDrawState(GPU::Layout::Mesh), streams, GPU::QuadIndexBuffer(), true, 6, 0, &sampler, 1,
+              &_stdParams, sizeof(_stdParams), &_stdParams, sizeof(_stdParams));
+}
 
-        _states.DataBuf = _stdQuadDataBuf;
-        _states.IndexBuf = _stdQuadIndexBuf;
+// Full-screen pass of a post program (see _postPrelude).
+void GFXEngine::DrawPostQuad(GPU::ProgramId program, GPU::TextureId image, GPU::TextureId aux,
+                             bool blend, GPU::Blend src, GPU::Blend dst, const TPostParams &params)
+{
+    if (!program)
+        return;
 
-        SetRenderStates(0);
+    static const std::array<TVertex, 4> quad = {
+        GFX::TVertex( vec3f(-1.0,  1.0, 0.0) ),
+        GFX::TVertex( vec3f(-1.0, -1.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0, -1.0, 0.0) ),
+        GFX::TVertex( vec3f( 1.0,  1.0, 0.0) )
+    };
+    const uint32_t base = GPU::PushTransient(quad.data(), sizeof(TVertex) * quad.size());
+    GPU::Streams streams;
+    streams.pos = base + offsetof(TVertex, Pos);
+    streams.color = base + offsetof(TVertex, Color);
+    streams.uv = base + offsetof(TVertex, TexCoord);
 
-        Glext::GLBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(TVertex) * vtx.size(), vtx.data());
+    GPU::DrawState state;
+    state.program = program;
+    state.blend = blend;
+    state.src = src;
+    state.dst = dst;
+    state.depthTest = false;
+    state.depthWrite = false;
 
-        if (_lastStates.Prog.PosLoc != -1)
-            Glext::GLVertexAttribPointer(_lastStates.Prog.PosLoc, 3, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Pos));
-        if (_lastStates.Prog.ColorLoc != -1)
-            Glext::GLVertexAttribPointer(_lastStates.Prog.ColorLoc, 4, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, Color));
-        if (_lastStates.Prog.UVLoc != -1)
-            Glext::GLVertexAttribPointer(_lastStates.Prog.UVLoc, 2, GL_FLOAT, GL_FALSE,  sizeof(TVertex), (void *)offsetof(TVertex, TexCoord));
+    const GPU::Sampler samplers[2] = {{image, true}, {aux, true}};
+    GPU::Draw(state, streams, GPU::QuadIndexBuffer(), true, 6, 0, samplers, 2,
+              nullptr, 0, &params, sizeof(params));
+}
 
-        // OpenNeoUA custom VP tint: screen/HUD/UI quads must never inherit a mesh tint.
-        if ( _vboStatesBlock.Colorize != 0 ||
-             _vboStatesBlock.ColorMul[0] != 1.0 || _vboStatesBlock.ColorMul[1] != 1.0 ||
-             _vboStatesBlock.ColorMul[2] != 1.0 || _vboStatesBlock.ColorMul[3] != 1.0 )
-        {
-            _vboStatesBlock.ColorMul[0] = 1.0;
-            _vboStatesBlock.ColorMul[1] = 1.0;
-            _vboStatesBlock.ColorMul[2] = 1.0;
-            _vboStatesBlock.ColorMul[3] = 1.0;
-            _vboStatesBlock.Colorize = 0;
-            _vboStatesChanged = true;
-        }
-
-        CommitUBOParameters();
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
-    }
-    else
-    {
-        glVertexPointer(3, GL_FLOAT, sizeof(TVertex), &vtx[0].Pos);
-        glColorPointer(4, GL_FLOAT, sizeof(TVertex), &vtx[0].Color);
-        glTexCoordPointer(2, GL_FLOAT, sizeof(TVertex), &vtx[0].TexCoord);
-
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, &indexes);
-    }
+// Uniforms every post pass shares: palette flash, screen size, random and clock.
+TPostParams GFXEngine::PostParamsBase(const Common::Point &scrSz) const
+{
+    TPostParams params = {};
+    params.normclr[0] = _normClr.x;
+    params.normclr[1] = _normClr.y;
+    params.normclr[2] = _normClr.z;
+    params.invclr[0] = _invClr.x;
+    params.invclr[1] = _invClr.y;
+    params.invclr[2] = _invClr.z;
+    params.screenSize[0] = scrSz.x;
+    params.screenSize[1] = scrSz.y;
+    params.randval = GameplayAwareShaderRandom();
+    params.millisecs = GameplayAwareShaderTime();
+    params.vhsStrength = _vhsFilterStrength;
+    return params;
 }
 
 void GFXEngine::DrawScreenSurface()
@@ -6307,7 +5215,7 @@ void GFXEngine::DrawScreenSurface()
     GfxStates save = _states;
 
     Common::Point scrSz = System::GetResolution();
-    glViewport(0, 0, scrSz.x, scrSz.y);
+    GPU::SetViewport(0, 0, scrSz.x, scrSz.y);
 
     SetProjectionMatrix( mat4x4f() );
     SetModelViewMatrix( mat4x4f() );
@@ -6315,10 +5223,9 @@ void GFXEngine::DrawScreenSurface()
     _states.DepthTest = false;
     _states.Zwrite = false;
     _states.AlphaBlend = true;
-    _states.SrcBlend = GL_SRC_ALPHA;
-    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+    _states.SrcBlend = GPU::Blend::SrcAlpha;
+    _states.DstBlend = GPU::Blend::OneMinusSrcAlpha;
     _states.Tex = screenTex;
-    _states.TexBlend = 2;
     _states.Prog = _stdShaderProg;
     _states.AlphaTest = false;
     _states.Shaded = true;
@@ -6326,8 +5233,9 @@ void GFXEngine::DrawScreenSurface()
 
     SetRenderStates(0);
 
-    // Will be binded with SetRenderStates
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, ScreenSurface->w, ScreenSurface->h, _glPixfmt, _glPixtype, ScreenSurface->pixels);
+    SDL_LockSurface(ScreenSurface);
+    GPU::UploadTexture(screenTex, ScreenSurface->pixels, ScreenSurface->pitch);
+    SDL_UnlockSurface(ScreenSurface);
 
     static std::array<TVertex, 4> vtx = {
         GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 0.0) ),
@@ -6342,7 +5250,7 @@ void GFXEngine::DrawScreenSurface()
 }
 
 void GFXEngine::DrawVirtualUISolidRect(float left, float top, float right, float bottom,
-                                        const TGLColor &color)
+                                        const TColorF &color)
 {
     if ( !_virtualUiPass || !VirtualUISurface ||
          color.a <= 0.0f || right <= left || bottom <= top )
@@ -6371,7 +5279,7 @@ void GFXEngine::DrawVirtualUISolidRect(float left, float top, float right, float
         if ( y1 - y0 == 1 )
         {
             SDL_Rect pixel = { x0, y0, 1, 1 };
-            SDL_FillRect(VirtualUISurface, &pixel, SDL_MapRGBA(VirtualUISurface->format, r, g, b, a));
+            SDL_FillSurfaceRect(VirtualUISurface, &pixel, SDL_MapSurfaceRGBA(VirtualUISurface, r, g, b, a));
         }
         else
         {
@@ -6395,44 +5303,33 @@ void GFXEngine::DrawVirtualUISurface()
     GfxStates save = _states;
 
     Common::Point scrSz = System::GetResolution();
-    glViewport(0, 0, scrSz.x, scrSz.y);
+    GPU::SetViewport(0, 0, scrSz.x, scrSz.y);
 
     SetProjectionMatrix(mat4x4f());
     SetModelViewMatrix(mat4x4f());
 
-    if (!virtualUiTex)
-        glGenTextures(1, &virtualUiTex);
-
     _states.DepthTest = false;
     _states.Zwrite = false;
     _states.AlphaBlend = true;
-    _states.SrcBlend = GL_SRC_ALPHA;
-    _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
-    _states.Tex = virtualUiTex;
-    _states.TexBlend = 2;
+    _states.SrcBlend = GPU::Blend::SrcAlpha;
+    _states.DstBlend = GPU::Blend::OneMinusSrcAlpha;
     _states.Prog = _stdShaderProg;
     _states.AlphaTest = false;
     _states.Shaded = true;
     _states.LinearFilter = (_virtualUiStyle == VirtualUIStyle::SMOOTH);
 
-    SetRenderStates(0);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    SDL_LockSurface(VirtualUISurface);
     const Common::Point surfaceSize(VirtualUISurface->w, VirtualUISurface->h);
-    if (_virtualUiTextureSize != surfaceSize)
+    if (!virtualUiTex || _virtualUiTextureSize != surfaceSize)
     {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surfaceSize.x, surfaceSize.y, 0,
-                     _glPixfmt, _glPixtype, VirtualUISurface->pixels);
+        GPU::DestroyTexture(virtualUiTex);
+        virtualUiTex = GPU::CreateTexture(surfaceSize.x, surfaceSize.y, _texFormat, GPU::USAGE_SAMPLED);
         _virtualUiTextureSize = surfaceSize;
     }
-    else
-    {
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, surfaceSize.x, surfaceSize.y,
-                        _glPixfmt, _glPixtype, VirtualUISurface->pixels);
-    }
+    _states.Tex = virtualUiTex;
+    SetRenderStates(0);
+
+    SDL_LockSurface(VirtualUISurface);
+    GPU::UploadTexture(virtualUiTex, VirtualUISurface->pixels, VirtualUISurface->pitch);
     SDL_UnlockSurface(VirtualUISurface);
 
     static std::array<TVertex, 4> vtx = {
@@ -6448,157 +5345,83 @@ void GFXEngine::DrawVirtualUISurface()
     _virtualUiPending = false;
 }
 
-uint32_t GFXEngine::CompileShader(int32_t type, const std::string &string)
-{
-    GLuint sh = Glext::GLCreateShader(type);
-    if (!sh)
-        return 0;
-
-    const GLchar *source = (const GLchar *)string.c_str();
-
-    Glext::GLShaderSource(sh, 1, &source, 0);
-    Glext::GLCompileShader(sh);
-
-    GLint tmpvar;
-    Glext::GLGetShaderiv(sh, GL_COMPILE_STATUS, &tmpvar);
-
-    if (tmpvar == GL_FALSE)
-    {
-        Glext::GLGetShaderiv(sh, GL_INFO_LOG_LENGTH, &tmpvar);
-        if (tmpvar > 0)
-        {
-            char *logbuff = new char[tmpvar + 2];
-            Glext::GLGetShaderInfoLog(sh, tmpvar, nullptr, logbuff);
-            printf("Shader error: %s\n", logbuff);
-            log_d3dlog("Shader error: %s\n", logbuff);
-            delete[] logbuff;
-        }
-        Glext::GLDeleteShader(sh);
-        return 0;
-    }
-
-    return sh;
-}
-
-
-uint32_t GFXEngine::LoadShader(int32_t type, const std::string &fl)
+std::string GFXEngine::ReadShaderFile(const std::string &fl)
 {
     FSMgr::FileHandle *f = FSMgr::iDir::openFileAlloc(uaDataFirstResolvedReadPath(fl), "rb");
     if (!f)
-        return 0;
+        return std::string();
 
     f->seek(0, SEEK_END);
-    size_t sz = f->tell();
+    const size_t sz = f->tell();
     f->seek(0, SEEK_SET);
 
-    char *tmp = new char[sz];
-    f->read(tmp, sz);
-
-    std::string b;
-    b.assign(tmp, sz);
-
-    delete[] tmp;
-
+    std::string text(sz, '\0');
+    f->read(&text[0], sz);
     delete f;
+    return text;
+}
 
-    return CompileShader(type, b);
+GPU::ProgramId GFXEngine::LoadPostProgram(const std::string &fragmentPath, const std::string &what)
+{
+    std::string text = ReadShaderFile(fragmentPath);
+    if (text.empty())
+    {
+        ypa_log_out("WARNING: %s shader [%s] is missing.\n", what.c_str(), fragmentPath.c_str());
+        return 0;
+    }
+
+    // The prelude brings its own #version; a #version line in the file would break it.
+    if (text.compare(0, 8, "#version") == 0)
+    {
+        const size_t eol = text.find('\n');
+        text.erase(0, eol == std::string::npos ? text.size() : eol + 1);
+    }
+
+    std::string error;
+    const GPU::ProgramId program = GPU::CreateProgram(_postVShaderText, _postPrelude + text, 2, fragmentPath, &error);
+    if (!program)
+        ypa_log_out("WARNING: %s shader [%s] failed to compile:\n%s\n", what.c_str(), fragmentPath.c_str(),
+                    error.c_str());
+    return program;
 }
 
 void GFXEngine::DrawFBO()
 {
-    GfxStates save = _states;
-
-    TColorEffectsProg *postProg = &_colorEffectsShaderProg;
-    if (_atmosphereActive && _atmosphereShaderProg.ID)
-        postProg = &_atmosphereShaderProg;
+    GPU::ProgramId postProg = _colorEffectsShaderProg;
+    if (_atmosphereActive && _atmosphereShaderProg)
+        postProg = _atmosphereShaderProg;
+    if (!postProg || !_sceneTex)
+        return;
 
     Common::Point scrSz = System::GetResolution();
-    glViewport(0, 0, scrSz.x, scrSz.y);
+    GPU::SetViewport(0, 0, scrSz.x, scrSz.y);
 
-    SetProjectionMatrix( mat4x4f() );
-    SetModelViewMatrix( mat4x4f() );
+    TPostParams params = PostParamsBase(scrSz);
+    if (postProg == _atmosphereShaderProg)
+    {
+        params.atmosphereStrength = _atmosphereStrength;
+        params.atmosphereExposure = _atmosphereExposure;
+        params.atmosphereContrast = _atmosphereContrast;
+        params.atmosphereSaturation = _atmosphereSaturation;
+        params.atmosphereVignette = _atmosphereVignette;
+    }
+    // OpenNeoUA custom: fullscreen visual filter LUT. Strength 0 => passthrough.
+    params.filterStrength = (_visualFilterActive && _visualFilterLut) ? _visualFilterStrength : 0.0f;
 
-    _states.DepthTest = false;
-    _states.Zwrite = false;
-    _states.AlphaBlend = true;
-
+    GPU::Blend src = _states.SrcBlend;
+    GPU::Blend dst = _states.DstBlend;
     if (_fboBlend == 0)
     {
-        _states.SrcBlend = GL_ONE;
-        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        src = GPU::Blend::One;
+        dst = GPU::Blend::OneMinusSrcAlpha;
     }
     else if (_fboBlend == 1)
     {
-        _states.SrcBlend = GL_SRC_ALPHA;
-        _states.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        src = GPU::Blend::SrcAlpha;
+        dst = GPU::Blend::OneMinusSrcAlpha;
     }
 
-    _states.Tex = _fboTex;
-    _states.TexBlend = 2;
-    _states.Prog = *postProg;
-
-    _states.AlphaTest = false;
-    _states.Shaded = true;
-    _states.LinearFilter = true;
-
-    // Apply texture and program
-    SetRenderStates(0);
-
-    if (postProg->NormLoc >= 0)
-        Glext::GLUniform3f(postProg->NormLoc, _normClr.x, _normClr.y, _normClr.z);
-
-    if (postProg->InvLoc >= 0)
-        Glext::GLUniform3f(postProg->InvLoc, _invClr.x, _invClr.y, _invClr.z);
-
-    if (postProg->RandLoc >= 0)
-        Glext::GLUniform1i(postProg->RandLoc, GameplayAwareShaderRandom());
-
-    if (postProg->ScrSizeLoc >= 0)
-        Glext::GLUniform2i(postProg->ScrSizeLoc, scrSz.x, scrSz.y);
-
-    if (postProg->MillisecsLoc >= 0)
-        Glext::GLUniform1i(postProg->MillisecsLoc, GameplayAwareShaderTime());
-
-    if (_atmosphereActive && postProg == &_atmosphereShaderProg)
-    {
-        if (_atmosphereShaderProg.StrengthLoc >= 0)
-            Glext::GLUniform1f(_atmosphereShaderProg.StrengthLoc, _atmosphereStrength);
-        if (_atmosphereShaderProg.ExposureLoc >= 0)
-            Glext::GLUniform1f(_atmosphereShaderProg.ExposureLoc, _atmosphereExposure);
-        if (_atmosphereShaderProg.ContrastLoc >= 0)
-            Glext::GLUniform1f(_atmosphereShaderProg.ContrastLoc, _atmosphereContrast);
-        if (_atmosphereShaderProg.SaturationLoc >= 0)
-            Glext::GLUniform1f(_atmosphereShaderProg.SaturationLoc, _atmosphereSaturation);
-        if (_atmosphereShaderProg.VignetteLoc >= 0)
-            Glext::GLUniform1f(_atmosphereShaderProg.VignetteLoc, _atmosphereVignette);
-    }
-
-    // OpenNeoUA custom: fullscreen visual filter LUT.
-    // Strength 0 => shader passthrough (identical to vanilla post-process output).
-    if (postProg->FilterStrengthLoc >= 0)
-    {
-        float strength = (_visualFilterActive && _visualFilterLut) ? _visualFilterStrength : 0.0f;
-        Glext::GLUniform1f(postProg->FilterStrengthLoc, strength);
-
-        if (strength > 0.0f && postProg->FilterLutLoc >= 0)
-        {
-            Glext::GLUniform1i(postProg->FilterLutLoc, 1);
-            Glext::GLActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, _visualFilterLut);
-            Glext::GLActiveTexture(GL_TEXTURE0); // engine assumes unit 0 is active
-        }
-    }
-
-    static std::array<TVertex, 4> vtx = {
-        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 1.0) ),
-        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
-        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 0.0) ),
-        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 1.0) )
-    };
-
-    DrawVtxQuad(vtx);
-
-    _states = save;
+    DrawPostQuad(postProg, _sceneTex, _visualFilterLut, true, src, dst, params);
 }
 
 bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
@@ -6611,166 +5434,48 @@ bool GFXEngine::EnsureVhsFilterTexture(const Common::Point &scrSz)
         outputSize.y = 240;
         outputSize.x = std::max(1, (int)std::lround((double)scrSz.x * 240.0 / scrSz.y));
     }
-    if (!_vhsCopyTex)
+
+    // The copy has the backbuffer format: a texture copy needs equal formats.
+    if (!_vhsCopyTex || _vhsCopyTexSize != scrSz)
     {
-        glGenTextures(1, &_vhsCopyTex);
-        _vhsCopyTexSize = Common::Point();
+        GPU::DestroyTexture(_vhsCopyTex);
+        _vhsCopyTex = GPU::CreateTexture(scrSz.x, scrSz.y, GPU::Format::BGRA8, GPU::USAGE_SAMPLED);
+        _vhsCopyTexSize = scrSz;
+    }
+    if (!_vhsOutTex || _vhsOutTexSize != outputSize)
+    {
+        GPU::DestroyTexture(_vhsOutTex);
+        _vhsOutTex = GPU::CreateTexture(outputSize.x, outputSize.y, GPU::Format::BGRA8,
+                                        GPU::USAGE_SAMPLED | GPU::USAGE_TARGET);
+        _vhsOutTexSize = outputSize;
     }
 
-    if (!_vhsFbo)
-        Glext::GLGenFramebuffers(1, &_vhsFbo);
-    if (!_vhsOutFbo)
-        Glext::GLGenFramebuffers(1, &_vhsOutFbo);
-    if (!_vhsOutTex)
-        glGenTextures(1, &_vhsOutTex);
-
-    if (_vhsCopyTexSize == scrSz && _vhsOutTexSize == outputSize && _vhsFboReady)
-        return true;
-
-    glBindTexture(GL_TEXTURE_2D, _vhsCopyTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glBindTexture(GL_TEXTURE_2D, _vhsOutTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, outputSize.x, outputSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsFbo);
-    Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _vhsCopyTex, 0);
-
-    GLenum fboStatus = Glext::GLCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (fboStatus == GL_FRAMEBUFFER_COMPLETE)
+    if (!_vhsCopyTex || !_vhsOutTex)
     {
-        Glext::GLBindFramebuffer(GL_FRAMEBUFFER, _vhsOutFbo);
-        Glext::GLFrameBufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _vhsOutTex, 0);
-        fboStatus = Glext::GLCheckFramebufferStatus(GL_FRAMEBUFFER);
-    }
-    Glext::GLBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    if (fboStatus != GL_FRAMEBUFFER_COMPLETE)
-    {
-        ypa_log_out("WARNING: VHS filter framebuffer is incomplete (status=0x%X); disabling VHS and keeping the visual filter path.\n",
-                    (unsigned int)fboStatus);
+        ypa_log_out("WARNING: VHS filter textures could not be created; disabling VHS and keeping the visual filter path.\n");
         _vhsFilterActive = false;
-        _vhsFboReady = false;
         return false;
     }
-
-    _vhsCopyTexSize = scrSz;
-    _vhsOutTexSize = outputSize;
-    _vhsFboReady = true;
     return true;
 }
 
 void GFXEngine::DrawVhsEffect()
 {
-    if (!_vhsFilterActive || !_vhsFilterProg.ID || _vhsFilterStrength <= 0.0f)
+    if (!_vhsFilterActive || !_vhsFilterProg || _vhsFilterStrength <= 0.0f)
         return;
 
-    GfxStates save = _states;
-
-    Common::Point scrSz = System::GetResolution();
-    if (!EnsureVhsFilterTexture(scrSz))
-        return;
-
-    glViewport(0, 0, _vhsOutTexSize.x, _vhsOutTexSize.y);
-
-    SetProjectionMatrix( mat4x4f() );
-    SetModelViewMatrix( mat4x4f() );
-
-    _states.DepthTest = false;
-    _states.Zwrite = false;
-    _states.AlphaBlend = false;
-    _states.Tex = _vhsCopyTex;
-    _states.TexBlend = 2;
-    _states.Prog = _vhsFilterProg;
-    _states.AlphaTest = false;
-    _states.Shaded = true;
-    _states.LinearFilter = true;
-
-    SetRenderStates(0);
-
-    if (_vhsFilterProg.RandLoc >= 0)
-        Glext::GLUniform1i(_vhsFilterProg.RandLoc, GameplayAwareShaderRandom());
-
-    if (_vhsFilterProg.ScrSizeLoc >= 0)
-        Glext::GLUniform2i(_vhsFilterProg.ScrSizeLoc, scrSz.x, scrSz.y);
-
-    if (_vhsFilterProg.MillisecsLoc >= 0)
-        Glext::GLUniform1i(_vhsFilterProg.MillisecsLoc, GameplayAwareShaderTime());
-
-    if (_vhsFilterProg.StrengthLoc >= 0)
-        Glext::GLUniform1f(_vhsFilterProg.StrengthLoc, _vhsFilterStrength);
-
-    static std::array<TVertex, 4> vtx = {
-        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 1.0) ),
-        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
-        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 0.0) ),
-        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 1.0) )
-    };
-
-    DrawVtxQuad(vtx);
-
-    _states = save;
+    // The effect target is set by EndFrame; screenSize stays the window size.
+    const TPostParams params = PostParamsBase(System::GetResolution());
+    DrawPostQuad(_vhsFilterProg, _vhsCopyTex, 0, false, GPU::Blend::One, GPU::Blend::Zero, params);
 }
 
 void GFXEngine::DrawVhsFilter()
 {
-    if (!_vhsFilterActive || !_vhsBlendProg.ID || _vhsFilterStrength <= 0.0f)
+    if (!_vhsFilterActive || !_vhsBlendProg || _vhsFilterStrength <= 0.0f)
         return;
 
-    GfxStates save = _states;
-
-    Common::Point scrSz = System::GetResolution();
-    if (!EnsureVhsFilterTexture(scrSz))
-        return;
-
-    glViewport(0, 0, scrSz.x, scrSz.y);
-
-    SetProjectionMatrix( mat4x4f() );
-    SetModelViewMatrix( mat4x4f() );
-
-    _states.DepthTest = false;
-    _states.Zwrite = false;
-    _states.AlphaBlend = false;
-    _states.Tex = _vhsCopyTex;
-    _states.TexBlend = 2;
-    _states.Prog = _vhsBlendProg;
-    _states.AlphaTest = false;
-    _states.Shaded = true;
-    _states.LinearFilter = true;
-
-    SetRenderStates(0);
-
-    if (_vhsBlendProg.VhsTexLoc >= 0)
-    {
-        Glext::GLUniform1i(_vhsBlendProg.VhsTexLoc, 1);
-        Glext::GLActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, _vhsOutTex);
-        Glext::GLActiveTexture(GL_TEXTURE0);
-    }
-
-    if (_vhsBlendProg.StrengthLoc >= 0)
-        Glext::GLUniform1f(_vhsBlendProg.StrengthLoc, _vhsFilterStrength);
-
-    static std::array<TVertex, 4> vtx = {
-        GFX::TVertex( vec3f(-1.0,  1.0, 0.0), tUtV(0.0, 1.0) ),
-        GFX::TVertex( vec3f(-1.0, -1.0, 0.0), tUtV(0.0, 0.0) ),
-        GFX::TVertex( vec3f( 1.0, -1.0, 0.0), tUtV(1.0, 0.0) ),
-        GFX::TVertex( vec3f( 1.0,  1.0, 0.0), tUtV(1.0, 1.0) )
-    };
-
-    DrawVtxQuad(vtx);
-
-    _states = save;
+    const TPostParams params = PostParamsBase(System::GetResolution());
+    DrawPostQuad(_vhsBlendProg, _vhsCopyTex, _vhsOutTex, false, GPU::Blend::One, GPU::Blend::Zero, params);
 }
 
 void GFXEngine::SetFBOBlending(int mode)
@@ -6781,22 +5486,20 @@ void GFXEngine::SetFBOBlending(int mode)
 void GFXEngine::UpdateFBOSizes()
 {
     if (_colorEffects)
-    {
-        Common::Point scrSz = System::GetResolution();
+        CreateSceneTargets(System::GetResolution());
+}
 
-        _states.Tex = _fboTex;
-        SetRenderStates(0);
+// Colour and depth targets of the 3D scene, at the window size.
+void GFXEngine::CreateSceneTargets(const Common::Point &size)
+{
+    if (_sceneTex && _sceneSize == size)
+        return;
 
-        glTexImage2D(GL_TEXTURE_2D, 0, FBOTEXTYPE, scrSz.x, scrSz.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, _fbod);
-        Glext::GLRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, scrSz.x, scrSz.y);
-        Glext::GLBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-        if (_vhsCopyTex)
-            _vhsCopyTexSize = Common::Point();
-        _vhsFboReady = false;
-    }
+    GPU::DestroyTexture(_sceneTex);
+    GPU::DestroyTexture(_sceneDepth);
+    _sceneTex = GPU::CreateTexture(size.x, size.y, GPU::Format::RGBA16F, GPU::USAGE_SAMPLED | GPU::USAGE_TARGET);
+    _sceneDepth = GPU::CreateTexture(size.x, size.y, GPU::Format::Depth, GPU::USAGE_SAMPLED | GPU::USAGE_TARGET);
+    _sceneSize = size;
 }
 
 SDL_Color GFXEngine::Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
@@ -6892,8 +5595,8 @@ TMesh::TMesh(const TMesh &b)
     Rest = b.Rest;
     BoundBox = b.BoundBox;
 
-    glDataBuf = 0;
-    glIndexBuf = 0;
+    gpuVertexBuf = 0;
+    gpuIndexBuf = 0;
 }
 
 TMesh::TMesh(TMesh &&b) noexcept
@@ -6906,10 +5609,10 @@ TMesh::TMesh(TMesh &&b) noexcept
     RestBufferPos = b.RestBufferPos;
     BoundBox = std::move(b.BoundBox);
 
-    glDataBuf = b.glDataBuf;
-    glIndexBuf = b.glIndexBuf;
-    b.glDataBuf = 0;
-    b.glIndexBuf = 0;
+    gpuVertexBuf = b.gpuVertexBuf;
+    gpuIndexBuf = b.gpuIndexBuf;
+    b.gpuVertexBuf = 0;
+    b.gpuIndexBuf = 0;
 }
 
 TMesh &TMesh::operator=(const TMesh& b)
@@ -6926,8 +5629,8 @@ TMesh &TMesh::operator=(const TMesh& b)
     Rest = b.Rest;
     BoundBox = b.BoundBox;
 
-    glDataBuf = 0;
-    glIndexBuf = 0;
+    gpuVertexBuf = 0;
+    gpuIndexBuf = 0;
 
     return *this;
 }
@@ -6947,10 +5650,10 @@ TMesh &TMesh::operator=(TMesh &&b) noexcept
     RestBufferPos = b.RestBufferPos;
     BoundBox = std::move(b.BoundBox);
 
-    glDataBuf = b.glDataBuf;
-    glIndexBuf = b.glIndexBuf;
-    b.glDataBuf = 0;
-    b.glIndexBuf = 0;
+    gpuVertexBuf = b.gpuVertexBuf;
+    gpuIndexBuf = b.gpuIndexBuf;
+    b.gpuVertexBuf = 0;
+    b.gpuIndexBuf = 0;
 
     return *this;
 }
@@ -6960,207 +5663,61 @@ TMesh::~TMesh()
     GFX::Engine.MeshFreeVBO(this);
 
     // Just notify about still existing buffers
-    if (glDataBuf || glIndexBuf)
+    if (gpuVertexBuf || gpuIndexBuf)
         printf("TMesh still has buffers!\n");
 }
 
+// One vertex buffer per mesh: the vertices, then each UV cache, then the rest
+// places of a dug mesh (for the decals); the triangles in the index buffer.
 void GFXEngine::MeshMakeVBO(TMesh *mesh)
 {
-    if (_vbo)
+    const uint32_t vtxDataSz = mesh->Vertexes.size() * sizeof(TVertex);
+    const uint32_t coordDataSz = mesh->Vertexes.size() * sizeof(tUtV);
+    const uint32_t restDataSz = mesh->Rest.size() * sizeof(vec3f);
+
+    std::vector<uint8_t> data(vtxDataSz + mesh->CoordsCache.size() * coordDataSz + restDataSz);
+    if (vtxDataSz)
+        std::memcpy(data.data(), mesh->Vertexes.data(), vtxDataSz);
+
+    uint32_t off = vtxDataSz;
+    for (TCoordsCache &cch : mesh->CoordsCache)
     {
-        if (!mesh->glDataBuf)
-            Glext::GLGenBuffers(1, &mesh->glDataBuf);
-
-        if (!mesh->glIndexBuf)
-            Glext::GLGenBuffers(1, &mesh->glIndexBuf);
-
-        Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->glIndexBuf);
-        Glext::GLBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->Indixes.size() * sizeof(IndexType), mesh->Indixes.data(), GL_STATIC_DRAW);
-
-        Glext::GLBindBuffer(GL_ARRAY_BUFFER, mesh->glDataBuf);
-        int32_t vtxDataSz = mesh->Vertexes.size() * sizeof(TVertex);
-        int32_t coordDataSz = mesh->Vertexes.size() * sizeof(tUtV);
-        int32_t restDataSz = mesh->Rest.size() * sizeof(vec3f);
-        Glext::GLBufferData(GL_ARRAY_BUFFER, vtxDataSz + mesh->CoordsCache.size() * coordDataSz + restDataSz, nullptr, GL_STATIC_DRAW);
-
-        int32_t off = 0;
-        Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, vtxDataSz, mesh->Vertexes.data());
-
-        off += vtxDataSz;
-        for (TCoordsCache &cch : mesh->CoordsCache)
-        {
-            Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, coordDataSz, cch.Coords.data());
-            cch.BufferPos = off;
-
-            off += coordDataSz;
-        }
-
-        // OpenNeoUA custom: rest places of a dug mesh, for the decals.
-        mesh->RestBufferPos = off;
-        if (restDataSz)
-            Glext::GLBufferSubData(GL_ARRAY_BUFFER, off, restDataSz, mesh->Rest.data());
-
-        Glext::GLBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _lastStates.IndexBuf);
-        Glext::GLBindBuffer(GL_ARRAY_BUFFER, _lastStates.DataBuf);
+        std::memcpy(data.data() + off, cch.Coords.data(), std::min<size_t>(coordDataSz, cch.Coords.size() * sizeof(tUtV)));
+        cch.BufferPos = off;
+        off += coordDataSz;
     }
+
+    // OpenNeoUA custom: rest places of a dug mesh, for the decals.
+    mesh->RestBufferPos = off;
+    if (restDataSz)
+        std::memcpy(data.data() + off, mesh->Rest.data(), restDataSz);
+
+    if (!mesh->gpuVertexBuf)
+        mesh->gpuVertexBuf = GPU::CreateBuffer(data.size(), 0);
+    GPU::UploadBuffer(mesh->gpuVertexBuf, data.data(), data.size());
+
+    const uint32_t indexSz = mesh->Indixes.size() * sizeof(IndexType);
+    if (!mesh->gpuIndexBuf)
+        mesh->gpuIndexBuf = GPU::CreateBuffer(indexSz, sizeof(IndexType));
+    GPU::UploadBuffer(mesh->gpuIndexBuf, mesh->Indixes.data(), indexSz);
 }
 
 void GFXEngine::MeshFreeVBO(TMesh *mesh)
 {
-    if (_vbo)
-    {
-        if (mesh->glDataBuf)
-        {
-            Glext::GLDeleteBuffers(1, &mesh->glDataBuf);
-            mesh->glDataBuf = 0;
-        }
-
-        if (mesh->glIndexBuf)
-        {
-            Glext::GLDeleteBuffers(1, &mesh->glIndexBuf);
-            mesh->glIndexBuf = 0;
-        }
-
-    }
-}
-
-void GFXEngine::BindVBOParameters(TShaderProg &shader)
-{
-    if (_vbo)
-    {
-        uint32_t blockIndex = Glext::GLGetUniformBlockIndex(shader.ID, "Parameters");
-        if (blockIndex != GL_INVALID_INDEX)
-            Glext::GLUniformBlockBinding(shader.ID, blockIndex, _vboParamsBlockBinding);
-    }
-}
-
-void GFXEngine::CommitUBOParameters()
-{
-    if (_vbo && _vboStatesChanged)
-    {
-        _vboStatesChanged = false;
-
-        Glext::GLBindBuffer(GL_UNIFORM_BUFFER, _vboParams);
-
-        // Orphan ubo
-        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, nullptr, GL_STREAM_DRAW);
-
-        Glext::GLBufferData(GL_UNIFORM_BUFFER, _vboParamsSize, &_vboStatesBlock, GL_STREAM_DRAW);
-    }
+    GPU::DestroyBuffer(mesh->gpuVertexBuf);
+    GPU::DestroyBuffer(mesh->gpuIndexBuf);
+    mesh->gpuVertexBuf = 0;
+    mesh->gpuIndexBuf = 0;
 }
 
 void GFXEngine::SetProjectionMatrix(const mat4x4f &mat)
 {
-    mat4x4f tmp = mat.Transpose();
-    if (_vbo)
-    {
-        _vboStatesBlock.Proj = tmp;
-        _vboStatesChanged = true;
-    }
-    else
-    {
-        glMatrixMode(GL_PROJECTION);
-        glLoadMatrixf(&tmp.m00);
-    }
+    _stdParams.Proj = mat.Transpose();
 }
 
 void GFXEngine::SetModelViewMatrix(const mat4x4f &mat)
 {
-    mat4x4f tmp = mat.Transpose();
-    if (_vbo)
-    {
-        _vboStatesBlock.View = tmp;
-        _vboStatesChanged = true;
-    }
-    else
-    {
-        glMatrixMode(GL_MODELVIEW);
-        glLoadMatrixf(&tmp.m00);
-    }
-}
-
-TShaderProg::TShaderProg(uint32_t id)
-: ID(id)
-{
-    PosLoc = Glext::GLGetAttribLocation(ID, "vPos");
-    UVLoc  = Glext::GLGetAttribLocation(ID, "vUV");
-    ColorLoc = Glext::GLGetAttribLocation(ID, "vColor");
-}
-
-TDecalProg::TDecalProg(uint32_t id)
-: TShaderProg(id)
-{
-    ImageLoc = Glext::GLGetUniformLocation(ID, "uImage");
-    SceneDepthLoc = Glext::GLGetUniformLocation(ID, "uSceneDepth");
-    ScreenInvLoc = Glext::GLGetUniformLocation(ID, "uScreenInv");
-    ProjectLoc = Glext::GLGetUniformLocation(ID, "uProject");
-    ViewToWorldLoc = Glext::GLGetUniformLocation(ID, "uViewToWorld");
-    FogLoc = Glext::GLGetUniformLocation(ID, "uFog");
-    AlphaFogLoc = Glext::GLGetUniformLocation(ID, "uAlphaFog");
-    FogColorLoc = Glext::GLGetUniformLocation(ID, "uFogColor");
-    AtmosphereColorLoc = Glext::GLGetUniformLocation(ID, "uAtmosphereColor");
-    OriginLoc = Glext::GLGetUniformLocation(ID, "uOrigin");
-    AxisTLoc = Glext::GLGetUniformLocation(ID, "uAxisT");
-    AxisBLoc = Glext::GLGetUniformLocation(ID, "uAxisB");
-    AxisNLoc = Glext::GLGetUniformLocation(ID, "uAxisN");
-    SizeLoc = Glext::GLGetUniformLocation(ID, "uSize");
-    EdgeFadeLoc = Glext::GLGetUniformLocation(ID, "uEdgeFade");
-    RestLoc = Glext::GLGetUniformLocation(ID, "uRest");
-    RestOnLoc = Glext::GLGetUniformLocation(ID, "uRestOn");
-    ShapeLoc = Glext::GLGetUniformLocation(ID, "uShape");
-    TintLoc = Glext::GLGetUniformLocation(ID, "uTint");
-    ColorizeLoc = Glext::GLGetUniformLocation(ID, "uColorize");
-    TexturedLoc = Glext::GLGetUniformLocation(ID, "uTextured");
-}
-
-TDecalRestProg::TDecalRestProg(uint32_t id)
-: TShaderProg(id)
-{
-    RestAttrLoc = Glext::GLGetAttribLocation(ID, "vRest");
-    ProjLoc = Glext::GLGetUniformLocation(ID, "uProj");
-    ViewLoc = Glext::GLGetUniformLocation(ID, "uView");
-    ImageLoc = Glext::GLGetUniformLocation(ID, "uImage");
-    CutLoc = Glext::GLGetUniformLocation(ID, "uCut");
-    ViewToWorldLoc = Glext::GLGetUniformLocation(ID, "uViewToWorld");
-}
-
-TColorEffectsProg::TColorEffectsProg(uint32_t id)
-: TShaderProg(id)
-{
-    NormLoc = Glext::GLGetUniformLocation(ID, "normclr");
-    InvLoc = Glext::GLGetUniformLocation(ID, "invclr");
-    RandLoc = Glext::GLGetUniformLocation(ID, "randval");
-    ScrSizeLoc = Glext::GLGetUniformLocation(ID, "screenSize");
-    MillisecsLoc = Glext::GLGetUniformLocation(ID, "millisecs");
-    // OpenNeoUA custom: fullscreen visual filter
-    FilterLutLoc = Glext::GLGetUniformLocation(ID, "filterLut");
-    FilterStrengthLoc = Glext::GLGetUniformLocation(ID, "filterStrength");
-}
-
-TAtmosphereProg::TAtmosphereProg(uint32_t id)
-: TColorEffectsProg(id)
-{
-    StrengthLoc = Glext::GLGetUniformLocation(ID, "atmosphereStrength");
-    ExposureLoc = Glext::GLGetUniformLocation(ID, "atmosphereExposure");
-    ContrastLoc = Glext::GLGetUniformLocation(ID, "atmosphereContrast");
-    SaturationLoc = Glext::GLGetUniformLocation(ID, "atmosphereSaturation");
-    VignetteLoc = Glext::GLGetUniformLocation(ID, "atmosphereVignette");
-}
-
-TVhsFilterProg::TVhsFilterProg(uint32_t id)
-: TShaderProg(id)
-{
-    RandLoc = Glext::GLGetUniformLocation(ID, "randval");
-    ScrSizeLoc = Glext::GLGetUniformLocation(ID, "screenSize");
-    MillisecsLoc = Glext::GLGetUniformLocation(ID, "millisecs");
-    StrengthLoc = Glext::GLGetUniformLocation(ID, "vhsStrength");
-}
-
-TVhsBlendProg::TVhsBlendProg(uint32_t id)
-: TShaderProg(id)
-{
-    VhsTexLoc = Glext::GLGetUniformLocation(ID, "vhsTexture");
-    StrengthLoc = Glext::GLGetUniformLocation(ID, "vhsStrength");
+    _stdParams.View = mat.Transpose();
 }
 
 }

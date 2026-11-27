@@ -3,7 +3,7 @@
 
 #include <list>
 #include <inttypes.h>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include "common/common.h"
 #include "root.h"
 

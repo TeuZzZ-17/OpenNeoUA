@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <functional>
 #include <thread>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include "framepacer.h"
 
 #ifdef _WIN32

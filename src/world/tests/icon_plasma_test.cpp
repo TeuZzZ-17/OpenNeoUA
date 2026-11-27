@@ -111,10 +111,10 @@ int main()
         CHECK(font->Page('A') == font->img->GetSwTex());
         CHECK(font->Glyph(0x10fffd).w == font->map[0].w);
         auto &renderer = GFX::Engine;
-        renderer.ScreenSurface = SDL_CreateRGBSurfaceWithFormat(0, 64, 32, 32, SDL_PIXELFORMAT_ARGB8888);
+        renderer.ScreenSurface = SDL_CreateSurface(64, 32, SDL_PIXELFORMAT_ARGB8888);
         renderer.SetTileset(font, 28);
         auto render = [&](uint32_t glyph) {
-            SDL_FillRect(renderer.Screen(), nullptr, 0);
+            SDL_FillSurfaceRect(renderer.Screen(), nullptr, 0);
             CmdStream commands;
             FontUA::select_tileset(&commands, 28);
             FontUA::set_xpos(&commands, 0); FontUA::set_ypos(&commands, 0);
@@ -150,12 +150,12 @@ int main()
     player._vehicleID = 1;
     {
         // Genesis plasma ignores the script tint: Resistance keeps the original cyan, factions use their colour.
-        GFX::TGLColor tint(1.0f, 0.2f, 0.2f, 1.0f), particleTint(1.0f, 0.2f, 0.2f, 1.0f);
+        GFX::TColorF tint(1.0f, 0.2f, 0.2f, 1.0f), particleTint(1.0f, 0.2f, 0.2f, 1.0f);
         bool colorize = true, particleColorize = true;
         ypabact_ApplyGenesisPlasmaTint(&player, &tint, &particleTint, &colorize, &particleColorize);
         CHECK(!colorize && !particleColorize);
         CHECK(tint.r == 1.0f && tint.g == 1.0f && tint.b == 1.0f && particleTint.g == 1.0f);
-        tint = GFX::TGLColor(1.0f, 0.2f, 0.2f, 1.0f);
+        tint = GFX::TColorF(1.0f, 0.2f, 0.2f, 1.0f);
         ypabact_ApplyGenesisPlasmaTint(&enemy, &tint, &particleTint, &colorize, &particleColorize);
         CHECK(colorize && particleColorize);
     }

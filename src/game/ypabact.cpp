@@ -1817,9 +1817,9 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         return ypabact_IsTintableVisualBase(this, base);
     };
 
-    auto tintToGL = [](const World::TVisualTint &tint) -> GFX::TGLColor
+    auto tintToGL = [](const World::TVisualTint &tint) -> GFX::TColorF
     {
-        return GFX::TGLColor(tint.r, tint.g, tint.b, tint.a);
+        return GFX::TColorF(tint.r, tint.g, tint.b, tint.a);
     };
 
     auto applyRenderControls = [&](NC_STACK_base *base)
@@ -1832,7 +1832,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         if ( applyTint )
             arg->tint = tintToGL(effectiveTint);
         else
-            arg->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            arg->tint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
         arg->colorizeTint = applyTint && effectiveTint.ColorizesRGB();
 
         // Shared render-only glow path used by both Buff and Elite presentation.
@@ -1898,7 +1898,7 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
         }
         else
         {
-            arg->particleTint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            arg->particleTint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
             arg->particleColorizeTint = false;
             arg->particleScale = vec3d(1.0, 1.0, 1.0);
             arg->particleSpin = vec3d(0.0, 0.0, 0.0);
@@ -1943,8 +1943,8 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( scaled )
                     body->Bas->TForm().SclRot *= mat3x3::Scale(_vp_scale);
 
-                GFX::TGLColor oldTint = arg->tint;
-                GFX::TGLColor oldParticleTint = arg->particleTint;
+                GFX::TColorF oldTint = arg->tint;
+                GFX::TColorF oldParticleTint = arg->particleTint;
                 bool oldColorizeTint = arg->colorizeTint;
                 bool oldParticleColorizeTint = arg->particleColorizeTint;
                 vec3d oldParticleScale = arg->particleScale;
@@ -2006,8 +2006,8 @@ void NC_STACK_ypabact::Render(baseRender_msg *arg)
                 if ( scaled )
                     bd->vp->Bas->TForm().SclRot *= mat3x3::Scale(_vp_scale);
 
-                GFX::TGLColor oldTint = arg->tint;
-                GFX::TGLColor oldParticleTint = arg->particleTint;
+                GFX::TColorF oldTint = arg->tint;
+                GFX::TColorF oldParticleTint = arg->particleTint;
                 bool oldColorizeTint = arg->colorizeTint;
                 bool oldParticleColorizeTint = arg->particleColorizeTint;
                 vec3d oldParticleScale = arg->particleScale;

@@ -91,15 +91,15 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
             return;
 
         const GFX::TMesh *oldGenesis = bs77->genesisReference;
-        const GFX::TGLColor oldTint = bs77->tint;
-        const GFX::TGLColor oldParticleTint = bs77->particleTint;
+        const GFX::TColorF oldTint = bs77->tint;
+        const GFX::TColorF oldParticleTint = bs77->particleTint;
         const bool oldColorizeTint = bs77->colorizeTint;
         const bool oldParticleColorizeTint = bs77->particleColorizeTint;
         const bool oldExcludeSectorTerrainFromTint = bs77->excludeSectorTerrainFromTint;
 
         if ( !tint.IsNeutral() )
         {
-            const GFX::TGLColor renderTint(tint.r, tint.g, tint.b, tint.a);
+            const GFX::TColorF renderTint(tint.r, tint.g, tint.b, tint.a);
             bs77->tint = renderTint;
             bs77->particleTint = renderTint;
             bs77->colorizeTint = tint.ColorizesRGB();
@@ -108,8 +108,8 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
         }
         else
         {
-            bs77->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
-            bs77->particleTint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            bs77->tint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
+            bs77->particleTint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
             bs77->colorizeTint = false;
             bs77->particleColorizeTint = false;
             bs77->excludeSectorTerrainFromTint = false;
@@ -118,7 +118,7 @@ void NC_STACK_ypaworld::RenderSector(TRenderingSector *sct, baseRender_msg *bs77
         bs77->genesisReference = genesis;
         if (genesis)
         {
-            GFX::TGLColor plasmaTint(1.0f, 1.0f, 1.0f, 1.0f);
+            GFX::TColorF plasmaTint(1.0f, 1.0f, 1.0f, 1.0f);
             const bool colorize = GetPlasmaFactionTint(owner, &plasmaTint);
             bs77->tint = plasmaTint;
             bs77->particleTint = plasmaTint;

@@ -2,7 +2,7 @@
 #ifndef INPUT_FFEEDBACK_H_INCLUDE
 #define INPUT_FFEEDBACK_H_INCLUDE
 
-#include <SDL2/SDL_haptic.h>
+#include <SDL3/SDL_haptic.h>
 
 namespace Input { namespace FF {
 
@@ -28,9 +28,9 @@ public:
 
         if (dev)
         {
-            if ( SDL_HapticEffectSupported(dev, &descr) == SDL_TRUE )
+            if ( SDL_HapticEffectSupported(dev, &descr) == true )
             {
-                effectID = SDL_HapticNewEffect(dev, &descr);
+                effectID = SDL_CreateHapticEffect(dev, &descr);
 
                 if (effectID >= 0)
                     haptic = dev;
@@ -43,7 +43,7 @@ public:
         if (haptic)
         {
             if (effectID >= 0)
-                SDL_HapticDestroyEffect(haptic, effectID);
+                SDL_DestroyHapticEffect(haptic, effectID);
 
             effectID = -1;
             haptic = nullptr;
@@ -53,19 +53,19 @@ public:
     virtual void Run()
     {
         if (OK())
-            SDL_HapticRunEffect(haptic, effectID, 1);
+            SDL_RunHapticEffect(haptic, effectID, 1);
     }
 
     virtual void Stop()
     {
         if (OK())
-            SDL_HapticStopEffect(haptic, effectID);
+            SDL_StopHapticEffect(haptic, effectID);
     }
 
     virtual void UpdateHaptic(SDL_HapticEffect &data)
     {
         if (OK())
-            SDL_HapticUpdateEffect(haptic, effectID, &data);
+            SDL_UpdateHapticEffect(haptic, effectID, &data);
     }
 
     virtual bool OK()

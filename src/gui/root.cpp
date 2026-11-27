@@ -1,5 +1,3 @@
-#include <SDL2/SDL_opengl.h>
-
 #include "root.h"
 #include "widget.h"
 
@@ -13,7 +11,7 @@ Root Root::Instance;
 Root::~Root()
 {
     if (_dirtSurface)
-        SDL_FreeSurface(_dirtSurface);
+        SDL_DestroySurface(_dirtSurface);
 }
 
 uint32_t Root::GetNextId()
@@ -105,11 +103,11 @@ void Root::Draw(SDL_Surface *screen)
 
 void Root::ModAlpha(SDL_Surface *surf, Common::Rect space, uint8_t alpha)
 {
-    if ( alpha != 255 && surf->format->BitsPerPixel == 32 && surf->format->Amask)
+    if ( alpha != 255 && SDL_BITSPERPIXEL(surf->format) == 32 && SDL_GetPixelFormatDetails(surf->format)->Amask)
     {
-        int bpp = surf->format->BytesPerPixel;
-        uint32_t ashift = surf->format->Ashift;
-        uint32_t amask = surf->format->Amask;
+        int bpp = SDL_BYTESPERPIXEL(surf->format);
+        uint32_t ashift = SDL_GetPixelFormatDetails(surf->format)->Ashift;
+        uint32_t amask = SDL_GetPixelFormatDetails(surf->format)->Amask;
         uint32_t anmask = ~amask;
 
         if (space.IsEmpty())
@@ -119,7 +117,7 @@ void Root::ModAlpha(SDL_Surface *surf, Common::Rect space, uint8_t alpha)
 
         if (!space.IsEmpty())
         {
-            if ( SDL_LockSurface(surf) == 0 )
+            if ( SDL_LockSurface(surf) )
             {
                 for (int y = space.top; y < space.bottom; y++)
                 {
@@ -161,7 +159,7 @@ void Root::DrawWidget(SDL_Surface *screen, Common::Rect space, Common::Point par
                 {
                     mW = Common::MAX(_dirtSurface->w, w->_rect.Width());
                     mH = Common::MAX(_dirtSurface->h, w->_rect.Height());
-                    SDL_FreeSurface(_dirtSurface);
+                    SDL_DestroySurface(_dirtSurface);
                 }
                 else
                 {
@@ -235,7 +233,7 @@ void Root::HwPrepareWidget(Widget *w)
             if (!w->_hwSurface || w->_hwSurface->w != w->_rect.Width() || w->_hwSurface->h != w->_rect.Height())
             {
                 if (w->_hwSurface)
-                    SDL_FreeSurface(w->_hwSurface);
+                    SDL_DestroySurface(w->_hwSurface);
 
                 w->_hwSurface = CreateScreenFmtSurface(w->_rect.Width(), w->_rect.Height());
             }
@@ -245,7 +243,7 @@ void Root::HwPrepareWidget(Widget *w)
             if (drawWidget)
                 w->Draw( w->_hwSurface, widgetSpace );
             else
-                SDL_FillRect( w->_hwSurface, nullptr, SDL_MapRGBA(w->_hwSurface->format, 0, 0, 0, 0));
+                SDL_FillSurfaceRect( w->_hwSurface, nullptr, SDL_MapSurfaceRGBA(w->_hwSurface, 0, 0, 0, 0));
 
             Common::Point clientOffset(0, 0);
             Common::Rect clientSpace = widgetSpace;
@@ -641,13 +639,7 @@ SDL_Surface *Root::CreateScreenFmtSurface(uint32_t w, uint32_t h)
     if (w == 0 || h == 0)
         return nullptr;
 
-    SDL_PixelFormat *fmt = GFX::Engine.GetPixelFormat();
-
-#if SDL_VERSION_ATLEAST(2,0,5)
-    return SDL_CreateRGBSurfaceWithFormat(0, w, h, fmt->BitsPerPixel, fmt->format);
-#else
-    return SDL_CreateRGBSurface(0, w, h, fmt->BitsPerPixel, fmt->Rmask, fmt->Gmask, fmt->Bmask, fmt->Amask );
-#endif
+    return SDL_CreateSurface(w, h, GFX::Engine.GetPixelFormat()->format);
 
 }
 
@@ -665,8 +657,8 @@ void Root::HwCompose()
         pStates.Zwrite = false;
         pStates.DepthTest = false;
         pStates.AlphaBlend = true;
-        pStates.SrcBlend = GL_SRC_ALPHA;
-        pStates.DstBlend = GL_ONE_MINUS_SRC_ALPHA;
+        pStates.SrcBlend = GPU::Blend::SrcAlpha;
+        pStates.DstBlend = GPU::Blend::OneMinusSrcAlpha;
         pStates.Prog = GFX::Engine.GetStdShaderProg();
 
         GFX::Engine.SetRenderStates(0);
@@ -685,18 +677,16 @@ void Root::HwRenderWidget(Widget *w)
 {
     if (w && w->IsEnabled() && w->_alpha != 0 /*&& Common::Rect(_screenSize).IsIntersects(w->_rect)*/ && w->_hwSurface)
     {
-        SDL_LockSurface(w->_hwSurface);
         if (!w->_hwTex)
             w->_hwTex = new StreamTex();
 
-        w->_hwTex->Stream(Common::Point(w->_hwSurface->w, w->_hwSurface->h), GFX::Engine.GetGlPixFormat(), GFX::Engine.GetGlPixType(), w->_hwSurface->pixels);
-        SDL_UnlockSurface(w->_hwSurface);
+        w->_hwTex->Stream(w->_hwSurface);
 
         static std::array<GFX::TVertex, 4> vtx = {
-            GFX::TVertex( vec3f(w->_rect.left,  w->_rect.top,    0.0), tUtV(0.0, 0.0), GFX::TGLColor(1.0, 1.0, 1.0, w->_alpha / 255.0) ),
-            GFX::TVertex( vec3f(w->_rect.left,  w->_rect.bottom, 0.0), tUtV(0.0, 1.0), GFX::TGLColor(1.0, 1.0, 1.0, w->_alpha / 255.0) ),
-            GFX::TVertex( vec3f(w->_rect.right, w->_rect.bottom, 0.0), tUtV(1.0, 1.0), GFX::TGLColor(1.0, 1.0, 1.0, w->_alpha / 255.0) ),
-            GFX::TVertex( vec3f(w->_rect.right, w->_rect.top,    0.0), tUtV(1.0, 0.0), GFX::TGLColor(1.0, 1.0, 1.0, w->_alpha / 255.0) )
+            GFX::TVertex( vec3f(w->_rect.left,  w->_rect.top,    0.0), tUtV(0.0, 0.0), GFX::TColorF(1.0, 1.0, 1.0, w->_alpha / 255.0) ),
+            GFX::TVertex( vec3f(w->_rect.left,  w->_rect.bottom, 0.0), tUtV(0.0, 1.0), GFX::TColorF(1.0, 1.0, 1.0, w->_alpha / 255.0) ),
+            GFX::TVertex( vec3f(w->_rect.right, w->_rect.bottom, 0.0), tUtV(1.0, 1.0), GFX::TColorF(1.0, 1.0, 1.0, w->_alpha / 255.0) ),
+            GFX::TVertex( vec3f(w->_rect.right, w->_rect.top,    0.0), tUtV(1.0, 0.0), GFX::TColorF(1.0, 1.0, 1.0, w->_alpha / 255.0) )
         };
 
         GFX::Engine.DrawVtxQuad(vtx);
@@ -732,45 +722,30 @@ bool WidgetList::MoveToFirst(Widget *w)
 }
 
 
-StreamTex::StreamTex()
-{
-    glGenTextures(Texs.size(), Texs.data());
-}
-
 StreamTex::~StreamTex()
 {
-    glDeleteTextures(Texs.size(), Texs.data());
+    GPU::DestroyTexture(Tex);
 }
 
-void StreamTex::Stream(Common::Point sz, int32_t fmt, int32_t type, const void *data)
+void StreamTex::Stream(SDL_Surface *surface)
 {
-    GFX::GfxStates &pStates = GFX::Engine.States();
-
-    pStates.TexBlend = 2;
-
-    if (sz != Size)
+    const Common::Point sz(surface->w, surface->h);
+    if (!Tex || sz != Size)
     {
+        GPU::DestroyTexture(Tex);
+        Tex = GPU::CreateTexture(sz.x, sz.y, GFX::Engine.GetTexFormat(), GPU::USAGE_SAMPLED);
         Size = sz;
-        for (uint32_t t : Texs)
-        {
-            if ( t != 0 )
-            {
-                pStates.Tex = t;
-                GFX::Engine.SetRenderStates(0);
-
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Size.x, Size.y, 0, fmt, type, nullptr);
-            }
-        }
     }
 
-    pStates.Tex = Texs[nextTex];
+    SDL_LockSurface(surface);
+    GPU::UploadTexture(Tex, surface->pixels, surface->pitch);
+    SDL_UnlockSurface(surface);
+
+    GFX::GfxStates &pStates = GFX::Engine.States();
+    pStates.Tex = Tex;
     pStates.LinearFilter =
         (GFX::Engine.GetVirtualUIStyle() == GFX::VirtualUIStyle::SMOOTH);
     GFX::Engine.SetRenderStates(0);
-
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Size.x, Size.y, fmt, type, data);
-
-    nextTex = (nextTex + 1) % Texs.size();
 }
 
 }

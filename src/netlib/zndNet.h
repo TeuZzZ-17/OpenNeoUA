@@ -1,9 +1,9 @@
 #ifndef ZNDNET_H_INCLUDED
 #define ZNDNET_H_INCLUDED
 
-#include <SDL2/SDL_thread.h>
-#include <SDL2/SDL_mutex.h>
-#include <SDL2/SDL_net.h>
+#include <SDL3/SDL_thread.h>
+#include <SDL3/SDL_Mutex.h>
+#include "udpsocket.h"
 #include <list>
 #include <string>
 #include <deque>
@@ -200,19 +200,19 @@ protected:
     SDL_Thread   *recvThread;
 
     InRawList   recvPktList;
-    SDL_mutex  *recvPktListMutex;
+    SDL_Mutex  *recvPktListMutex;
     ////
 
     // Sending packets
     SDL_Thread   *sendThread;
 
     SendingList   sendPktList;
-    SDL_mutex  *sendPktListMutex; //Only for pushing to the end
+    SDL_Mutex  *sendPktListMutex; //Only for pushing to the end
 
     SendingList   confirmQueue;
-    SDL_mutex  *confirmQueueMutex;
+    SDL_Mutex  *confirmQueueMutex;
 
-    SDL_mutex  *sendModifyMutex; //Massive list changes, stop send iterations.
+    SDL_Mutex  *sendModifyMutex; //Massive list changes, stop send iterations.
 
     ////
 
@@ -227,11 +227,11 @@ protected:
 
 
 // External sync
-    SDL_mutex  *eSyncMutex;
+    SDL_Mutex  *eSyncMutex;
 
     EventList eEventList;
     int32_t eEventDataSize;
-    SDL_mutex  *eEventMutex;
+    SDL_Mutex  *eEventMutex;
     std::atomic_uint_fast32_t eEventWaitLock;
     std::atomic_uint_fast32_t eEventNextID;
 

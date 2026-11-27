@@ -1,6 +1,6 @@
 // ScriptParser: reader for the game's text scripts (begin_/end blocks, key = value lines).
 #include <limits>
-#include <SDL2/SDL_messagebox.h>
+#include <SDL3/SDL_messagebox.h>
 
 #include "common/def_parser.h"
 #include "common/utils.h"

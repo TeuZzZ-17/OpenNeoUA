@@ -755,10 +755,10 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
 
         // OpenNeoUA custom VP controls: affect only this transient model and
         // particles emitted by it, then restore defaults for other effects.
-        GFX::TGLColor oldTint = arg->tint;
+        GFX::TColorF oldTint = arg->tint;
         bool oldColorizeTint = arg->colorizeTint;
         float oldVPFadeFactor = arg->vpFadeFactor;
-        GFX::TGLColor oldParticleTint = arg->particleTint;
+        GFX::TColorF oldParticleTint = arg->particleTint;
         bool oldParticleColorizeTint = arg->particleColorizeTint;
         vec3d oldParticleScale = arg->particleScale;
         vec3d oldParticleSpin = arg->particleSpin;
@@ -789,7 +789,7 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
             }
 
             particleTint.a *= particleFadeFactor;
-            arg->particleTint = GFX::TGLColor(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
+            arg->particleTint = GFX::TColorF(particleTint.r, particleTint.g, particleTint.b, particleTint.a);
             arg->particleColorizeTint = it->particleControls.tint.ColorizesRGB();
             arg->particleScale = it->particleControls.scale;
             arg->particleLifetimeScale = it->particleControls.lifetimeScale;
@@ -797,7 +797,7 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
         }
         else
         {
-            arg->particleTint = GFX::TGLColor(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
+            arg->particleTint = GFX::TColorF(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
             arg->particleColorizeTint = it->tint.ColorizesRGB();
             arg->particleScale = renderScale;
             arg->particleLifetimeScale = 1.0f;
@@ -808,9 +808,9 @@ void yw_RenderTransientVPs(NC_STACK_ypaworld *world, std::list<NC_STACK_ypaworld
 
         bool tinted = !renderTint.IsNeutral();
         if ( tinted )
-            arg->tint = GFX::TGLColor(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
+            arg->tint = GFX::TColorF(renderTint.r, renderTint.g, renderTint.b, renderTint.a);
         else
-            arg->tint = GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+            arg->tint = GFX::TColorF(1.0, 1.0, 1.0, 1.0);
         // Alpha-only tint/fade must not force grayscale. RGB colorization is enabled
         // only when the authored tint actually changes the target hue.
         arg->colorizeTint = it->tint.ColorizesRGB();

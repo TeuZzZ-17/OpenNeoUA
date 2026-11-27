@@ -32,7 +32,7 @@ int main() {
     }
     NC_STACK_base base;
     GFX::TMesh source;
-    source.Mat.Color=GFX::TGLColor(0.4f,0.2f,0.1f,1);
+    source.Mat.Color=GFX::TColorF(0.4f,0.2f,0.1f,1);
     source.Vertexes.emplace_back(vec3f(0,0,0),tUtV(0,0),source.Mat.Color);
     source.Vertexes.emplace_back(vec3f(1,0,0),tUtV(1,0),source.Mat.Color);
     source.Vertexes.emplace_back(vec3f(0,1,0),tUtV(0,1),source.Mat.Color);
@@ -40,7 +40,7 @@ int main() {
     base.Meshes.push_back(source);
     GFX::TMesh reference;
     reference.Mat.Flags=GFX::RFLAGS_TEXTURED|GFX::RFLAGS_DYNAMIC_TEXTURE|GFX::RFLAGS_LUMTRACY;
-    reference.Mat.Color=GFX::TGLColor(0,1,1,1);
+    reference.Mat.Color=GFX::TColorF(0,1,1,1);
     reference.Vertexes=source.Vertexes;
     for(auto &v:reference.Vertexes) v.Color=reference.Mat.Color;
     ResBitmap frame;
@@ -162,7 +162,7 @@ int main() {
         Check(world.FindPlainGroundSecType(1)==-1,"no plain ground keeps legacy look");
         for(int type:{10,11,12,13}) world._secTypeArray[type]=TSectorDesc();
     }
-    GFX::TGLColor color;
+    GFX::TColorF color;
     Check(!world.GetPlasmaFactionTint(1,&color),"Resistance keeps original cyan");
     Check(!world.GetPlasmaFactionTint(0,&color),"neutral keeps source plasma");
     for(int owner=2;owner<=6;++owner) {

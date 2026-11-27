@@ -1059,7 +1059,7 @@ Laser rules:
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_guard_speed = 3` — How fast the waiting orbiters turn around the carrier, 0..10, decimals allowed (5 = about one radian per second). They hold evenly spaced places on a ring turned with the carrier's heading; 0 = the ring stands still.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `orbiter_guard_chaos_factor = 2.5` — How unpredictable the waiting orbiters are, 0..10, decimals allowed. 0 = perfectly ordered on the ring (with `orbiter_guard_speed = 0` they stand still); higher values make each one wander wider and faster around its place (5 = like the classic orbit). If only one of the two guard keys is given, the other uses 4 (speed) or 5 (chaos). Both absent = the classic free orbit.
+- 🟢 `orbiter_guard_chaos_factor = 2.5` — How unpredictable the waiting orbiters are, 0..10, decimals allowed. 0 = perfectly ordered on the ring (with `orbiter_guard_speed = 0` they stand still); higher values make each one wander wider and faster around its place (5 = like the classic orbit). If only one of the two guard keys is given, the other is 0. Both absent = the classic free orbit.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `orbiter_siege_radius = 100~160` — Size of the dance around the target (`min~max` rolled for each siege). 0 or absent = automatic from the target size. Never smaller than the target body.
 ------------------------------------------------------------------------------------------------------------------------
@@ -1335,7 +1335,7 @@ Weapon Ground Decal profiles paint a persistent or timed footprint on the world 
 - **Never deformed:** Host Stations and units. A direct hit on a ground unit marks nothing on it: the crater and the decal go on the ground under the hit point. AOE does not count.
 - **Stacking:** overlapping hits add up to at most 1.75 times the strongest.
 - **Lifetime:** deformations are saved with the game. Destroying a building removes the dents from hits on that piece; terrain craters last for the mission, subject to the limit or to new construction in that sector. Disabled in multiplayer.
-- **Decal:** the weapon decal follows the crater or dent and stays whole on the pit floor and steep walls. This needs float render targets (OpenGL 3, or ARB_texture_float and ARB_color_buffer_float); otherwise the decal is simply projected on the dug surface.
+- **Decal:** the weapon decal follows the crater or dent and stays whole on the pit floor and steep walls. If its shader cannot be built (see `Data/Env/d3dlog.txt`), the decal is simply projected on the dug surface.
 - **Map border:** the crater fades out near the border so the border stays whole. `game.deformation_max_craters` sets how many craters are kept.
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -1928,7 +1928,7 @@ A unit can carry any number of different Buffs at once and they never replace ea
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `stacks_recharge_time = 4000` — Milliseconds to get one spent stack back, up to `stacks`, 1..600000; the Buff and its icon come back with the first one. 0 or absent = no recharge.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `deflect_to_enemy = 1` — 1 = a deflected round is hurled at an enemy of the deflecting unit (the shooter, else the nearest enemy within 1500, else the normal bounce direction; never back into the unit) and now belongs to the deflecting unit. 0 or absent = it bounces off at random as before. Local games only: network games keep the bounce.
+- 🟢 `deflect_to_enemy = 1` — 1 = a deflected round is hurled back at its shooter (allies too), else at the nearest enemy within 1500, else along the normal bounce direction, whatever side it hit; it now belongs to the deflecting unit, so it never hits that unit or its allies. 0 or absent = it bounces off at random as before. Local games only: network games keep the bounce.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `deflect_weapon = 52` — Weapon ID: the deflected round is replaced by this Weapon's projectile, sent the same way (at the enemy with `deflect_to_enemy = 1`, otherwise along the bounce direction). Laser, kamikaze, orbiter and artillery-shell Weapons are ignored. 0, absent or invalid = the round itself is deflected. Local games only.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2550,16 +2550,16 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 
 ### Graphics
 
-> **Graphics chip.** On a computer with two graphics chips the game asks the NVIDIA or AMD driver for the fast one by itself, so no setting is needed. `Data/Env/ypa_log.txt` names the chip that got the window ("Graphics chip in use") and warns when it is a built-in one, which can cost most of the frame rate. On Windows pick the card for OpenNeoUA.exe in Settings `>` System `>` Display `>` Graphics. On Linux the game requests the NVIDIA card like `prime-run` (falling back to the default one); with an AMD or Intel card start the game with `DRI_PRIME=1`.
+> **Graphics chip.** The game draws through SDL_GPU on Vulkan: it needs a graphics driver with Vulkan support, otherwise it shows an error and closes. On a computer with two graphics chips it picks the dedicated card by itself, so no setting is needed. `Data/Env/ypa_log.txt` names the chip in use ("Graphics chip in use") and warns when it is a built-in one, which can cost most of the frame rate. On Windows the card can also be chosen for OpenNeoUA.exe in Settings `>` System `>` Display `>` Graphics; on Linux start the game with `prime-run` (NVIDIA) or `DRI_PRIME=1` (AMD or Intel).
 
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `game.black_sect_units_tint = 140|140|140|125` — Black Sect unit tint in `R|G|B|A` format. Each component ranges from 0 to 255.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.blending = 1` — Graphics blending mode: 0 = default, 1 = additive, 2 = sharp.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.vsync = 2` — Vertical synchronization: 0 = disabled, 1 = enabled, 2 = adaptive with fallback to mode 1.
+- 🟢 `gfx.vsync = 2` — Vertical synchronization: 0 = off (frames shown at once, tearing possible), 1 = on, 2 = low latency without tearing (mailbox) where the display allows it, otherwise 1. Missing or invalid = 1.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.color_effects = 1` — Enables the framebuffer used by post-processing color effects. 0 disables post-processing effects.
+- 🟢 `gfx.color_effects = 1` — Draws the 3D scene into its own image and finishes it with `res/clreff.ps` (palette flashes, visual filter). 0 = drawn straight to the window, no post-processing effects. If the shader cannot be built, 0 is used.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.maxfps = 60` — FPS limit. Safe default: 60. The FPS/Hz menu can expose values up to 240.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2577,9 +2577,12 @@ OpenNeoUA.ini is loaded after Nucleus.ini: when a key exists in both files, Open
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.horizon_dark_color = 0|0|0` — Horizon-darkening color in `R|G|B` format. `0|0|0` is pure black.
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.vhs_filter_shader = res/ua_cinematic_1998_vhs.ps` — Shader path for the VHS filter. Missing/unloadable = filter disabled.
-------------------------------------------------------------------------------------------------------------------------
-- 🟢 `gfx.vhs_filter_shader_vbo = res/ua_cinematic_1998_vhs_vbo.ps` — VBO shader path for the VHS filter. Missing/unloadable = filter disabled.
+- 🟢 `gfx.vhs_filter_shader = res/ua_cinematic_1998_vhs.ps` — Post shader of the VHS filter. Missing or not compiling = filter disabled (the error is in `Data/Env/ypa_log.txt`).
+
+Post shaders (`res/clreff.ps`, `res/atmosphere.ps`, `res/original_video.ps` and the VHS one) are GLSL 450 fragment shaders, compiled to SPIR-V at startup:
+- The file holds only its functions and `main()`, which writes `fragColor`.
+- The engine adds in front: the samplers `uTexture` (image being processed) and `uAux` (filter ramp, or the VHS image), the `PostParams` block (`normclr`, `invclr`, `filterStrength`, `vhsStrength`, `screenSize`, `randval`, `millisecs`, `atmosphere*`), the input `texCoords` (0,0 = bottom-left) and `sampleScreen(image, uv)` to read a screen image at a `texCoords` position.
+- A leading `#version` line is ignored; OpenGL-only shaders (`gl_FragColor`, `varying`, `uniform` outside the block) do not compile.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `gfx.atmosphere_fx = yes` — Enables the world Atmosphere pass. no = vanilla rendering; missing shader = vanilla fallback.
 ------------------------------------------------------------------------------------------------------------------------
@@ -2740,8 +2743,6 @@ Base configuration file of the engine. OpenNeoUA.ini is loaded after it and wins
 - 🔵 `gfx.custommodes = 1920x1080,2560x1440` — Extra resolutions to add to the list, separated by commas.
 ------------------------------------------------------------------------------------------------------------------------
 - 🔵 `gfx.palette = standard.pal` — Color palette loaded at startup.
-------------------------------------------------------------------------------------------------------------------------
-- 🔵 `gfx.vbo = on` — on renders with vertex buffers (faster).
 ------------------------------------------------------------------------------------------------------------------------
 
 ### Drivers and leftovers of the original engine
@@ -3634,7 +3635,7 @@ Location blocks belong in an LDF, never in OpenNeoUA.ini or Nucleus.ini. Without
 ## Debug controls (F1-F12)
 
 ------------------------------------------------------------------------------------------------------------------------
-- 🟢 `F1` — New debug mode: toggles a Minecraft F3-style information panel at the top left. It shows: build, FPS (measured, average and 1% low), frame time, display refresh rate (Hz), VSync, FPS cap, resolution, the graphics chip in use (flagged as integrated, iGPU, or dedicated), OpenGL version, position and sector, level and time, draw distance, sectors, polygons, unit and effect counts. The old DPS meter has been removed.
+- 🟢 `F1` — New debug mode: toggles a Minecraft F3-style information panel at the top left. It shows: build, FPS (measured, average and 1% low), frame time, display refresh rate (Hz), VSync, FPS cap, resolution, the graphics chip in use (flagged as integrated, iGPU, or dedicated) and the graphics API, position and sector, level and time, draw distance, sectors, polygons, unit and effect counts. The old DPS meter has been removed.
 ------------------------------------------------------------------------------------------------------------------------
 - 🟢 `F2` — New debug mode: slows the world to 20% of normal speed; the controlled unit, its mounted parts, actions and player-fired projectiles remain at normal speed. Other allies stay slowed. Toggles on/off; F4 still freezes everything. Single-player only.
 ------------------------------------------------------------------------------------------------------------------------

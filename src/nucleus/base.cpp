@@ -549,7 +549,7 @@ size_t NC_STACK_base::Render(baseRender_msg *arg, Instance * inst, bool doCopy /
             rend.Color = msh.Mat.Color;
             rend.ColorMul = applyTint
                 ? arg->tint
-                : GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+                : GFX::TColorF(1.0, 1.0, 1.0, 1.0);
             rend.Colorize = applyTint && arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags;
@@ -680,7 +680,7 @@ size_t NC_STACK_base::RenderImmediately(baseRender_msg *arg, Instance * inst)
             rend.Color = msh.Mat.Color;
             rend.ColorMul = applyTint
                 ? arg->tint
-                : GFX::TGLColor(1.0, 1.0, 1.0, 1.0);
+                : GFX::TColorF(1.0, 1.0, 1.0, 1.0);
             rend.Colorize = applyTint && arg->colorizeTint;
             rend.VPFadeFactor = arg->vpFadeFactor;
             rend.Flags = msh.Mat.Flags | arg->flags;

@@ -8,6 +8,7 @@
 #include "common/env.h"
 #include "common/utils.h"
 #include "system/system.h"
+#include "system/gpu.h"
 #include "system/inivals.h"
 #include "nucleus/loaders.h"
 #include "world/parsers.h"
@@ -38,8 +39,8 @@ int main(int argc, char **argv)
             else std::remove("Data/Env/vid.def");
         }
     } restoreVideo{hadVideoFile,videoMode};
-    System::Init();auto *window=SDL_GL_GetCurrentWindow();
-    if(!window){std::printf("No GL context: %s\n",SDL_GetError());return 2;}
+    System::Init();auto *window=System::GetWindow();
+    if(!window){std::printf("No window: %s\n",SDL_GetError());return 2;}
     SDL_HideWindow(window);
     FSMgr::iDir::setBaseDir("");
     Common::Env.SetPrefix("data","Data");Common::Env.SetPrefix("env","Data/Env");
@@ -51,7 +52,7 @@ int main(int argc, char **argv)
     else std::remove("Data/Env/vid.def");
     const Common::Point resolution(640,480);
     // Keep the native probe hidden at a small fixed drawable size.
-    System::SetVideoMode(resolution,0,nullptr);
+    System::SetVideoMode(resolution,false);
     GFX::Engine.SetResVariables(resolution);
     GFX::Engine.ApplyResolution();GFX::Engine.RecreateScreenSurface();GFX::Engine.UpdateFBOSizes();
     SDL_PumpEvents();System::ProcessEvents();
@@ -73,8 +74,8 @@ int main(int argc, char **argv)
 
     int checks=0,failures=0;
     auto check=[&](bool ok,const char *label){++checks;if(!ok){++failures;std::printf("FAIL %s\n",label);}};
-    std::printf("VBO enabled: %d\n",GFX::Engine._vbo);
-    check(GFX::Engine._vbo,"production VBO renderer active");
+    std::printf("GPU device: %s (%s)\n",GPU::DeviceName().c_str(),GPU::DriverName().c_str());
+    check(GPU::IsReady(),"production SDL_GPU renderer active");
     // Replay the reported options in memory; do not edit the user's building script.
     ScriptParser::HandlersList fixture{new World::Parsers::BuildProtoParser(world.get())};
     check(ScriptParser::ParseStringList({"modify_building 78", "building_time = 10",
@@ -119,18 +120,18 @@ int main(int argc, char **argv)
     for(int y=0;y<count;++y)for(int x=0;x<count;++x) {
         auto *base=world->_legoArray[sector.SubSectors.At(x,y)->HPModels[0]].Base;
         auto *instance=base->GenRenderInstance();
-        std::vector<std::pair<GLuint,GLuint>> originalBuffers;
-        for(const auto &mesh:base->Meshes) originalBuffers.emplace_back(mesh.glDataBuf,mesh.glIndexBuf);
+        std::vector<std::pair<GPU::BufferId,GPU::BufferId>> originalBuffers;
+        for(const auto &mesh:base->Meshes) originalBuffers.emplace_back(mesh.gpuVertexBuf,mesh.gpuIndexBuf);
         auto &variants=base->GetRenderMeshes(instance,reference,true);
         auto &again=base->GetRenderMeshes(instance,reference,true);
-        check(&variants==&again && variants.front().glDataBuf==again.front().glDataBuf,"GPU variant reused across frames");
+        check(&variants==&again && variants.front().gpuVertexBuf==again.front().gpuVertexBuf,"GPU variant reused across frames");
         size_t sourceIndex=0;
         for(const auto &mesh:base->Meshes) {
-            check(originalBuffers[sourceIndex++]==std::make_pair(mesh.glDataBuf,mesh.glIndexBuf),"original building GPU buffers remain unchanged");
+            check(originalBuffers[sourceIndex++]==std::make_pair(mesh.gpuVertexBuf,mesh.gpuIndexBuf),"original building GPU buffers remain unchanged");
         }
         for(auto &mesh:variants)if(!mesh.Vertexes.empty()&&!mesh.Indixes.empty()) {
-            std::printf("LEGO[%d,%d] verts=%zu buffer=%u index=%u\n",x,y,mesh.Vertexes.size(),mesh.glDataBuf,mesh.glIndexBuf);
-            check(mesh.glDataBuf!=0 && mesh.glIndexBuf!=0,"construction mesh has GPU buffers before rendering");
+            std::printf("LEGO[%d,%d] verts=%zu buffer=%u index=%u\n",x,y,mesh.Vertexes.size(),mesh.gpuVertexBuf,mesh.gpuIndexBuf);
+            check(mesh.gpuVertexBuf!=0 && mesh.gpuIndexBuf!=0,"construction mesh has GPU buffers before rendering");
             if(!NC_STACK_base::IsSectorTerrainMesh(mesh))
                 check(mesh.CoordsCache.size()==reference->CoordsCache.size() && mesh.Mat.TexSource==reference->Mat.TexSource,"construction mesh animated like the vehicle Genesis");
             if(argc>1 && std::string(argv[1])=="--draw") {
@@ -139,12 +140,10 @@ int main(int argc, char **argv)
                 if(!mesh.CoordsCache.empty()){node.coordsID=(int)mesh.CoordsCache.size()-1;node.Tex=mesh.CoordsCache.back().Tex;}
                 node.TForm=mat4x4(vec3d(0,0,-3000));
                 GFX::Engine.BeginFrame();GFX::Engine.BeginScene();
-                while(glGetError()!=GL_NO_ERROR) {}
                 std::puts("Drawing exact construction mesh...");
                 GFX::Engine.RenderNode(&node);
-                glFinish();
-                check(glGetError()==GL_NO_ERROR,"real construction draw completes without GL error");
                 GFX::Engine.EndScene();GFX::Engine.EndFrame();
+                check(GPU::IsReady(),"real construction draw is presented by the GPU device");
             }
         }
         delete instance;

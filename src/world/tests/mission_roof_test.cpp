@@ -38,8 +38,8 @@ int main()
             else std::remove("Data/Env/vid.def");
         }
     } restoreVideo{hadVideoFile,videoMode};
-    System::Init();auto *window=SDL_GL_GetCurrentWindow();
-    if(!window){std::printf("No GL context: %s\n",SDL_GetError());return 2;}
+    System::Init();auto *window=System::GetWindow();
+    if(!window){std::printf("No window: %s\n",SDL_GetError());return 2;}
     SDL_HideWindow(window);
     FSMgr::iDir::setBaseDir("");
     Common::Env.SetPrefix("data","Data");Common::Env.SetPrefix("env","Data/Env");
@@ -51,7 +51,7 @@ int main()
     else std::remove("Data/Env/vid.def");
     const Common::Point resolution(640,480);
     // Keep the native probe hidden at a small fixed drawable size.
-    System::SetVideoMode(resolution,0,nullptr);
+    System::SetVideoMode(resolution,false);
     GFX::Engine.SetResVariables(resolution);
     GFX::Engine.ApplyResolution();GFX::Engine.RecreateScreenSurface();GFX::Engine.UpdateFBOSizes();
     SDL_PumpEvents();System::ProcessEvents();

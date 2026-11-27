@@ -7,12 +7,12 @@
 //
 // Build: compile with the game flags plus -fno-access-control and
 // -DCAPTURE_DIR="<folder>", then link it BEFORE the game objects (main.cpp.obj
-// included) with --wrap on _ZN6System4FlipEv, _ZN6System13ProcessEventsEv,
-// _ZN6System4InitEb, _ZN3GFX9GFXEngine9RasterizeEj,
+// included) with --wrap on _ZN3GPU7PresentEv, _ZN6System13ProcessEventsEv,
+// _ZN6System4InitEv, _ZN3GFX9GFXEngine9RasterizeEj,
 // _ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi and
 // _ZN17NC_STACK_ypaworld16ProcessGameShellEv.
 // Run from "UA Rising". <folder>/../cap_cfg.txt holds "level mode plan":
-// mode 0 = default, 1 = no scene FBO, 2 = legacy GL (gfx.vbo off);
+// mode 0 = default, 1 = no scene target (colour effects off);
 // plan "stations" = every power station type, "all" = also city, units, stress,
 // "taer" = the real decal block of Weapon 38 (20 Tons Taerbomb) dropped from above.
 // Needs Data/Graphics/GroundDecals/_capture_checker.png (any checkerboard): the
@@ -26,12 +26,12 @@
 #include <string>
 #include <vector>
 
-#include <SDL2/SDL_opengl.h>
 
 #include "game/yw.h"
 #include "game/yw_internal.h"
 #include "gui/uacommon.h"
 #include "system/gfx.h"
+#include "system/gpu.h"
 #include "system/inivals.h"
 #include "system/system.h"
 #include "system/tform.h"
@@ -463,20 +463,21 @@ void PrepareDecals(NC_STACK_ypaworld *w, const Shot &shot, int currentPass)
     fflush(logFile);
 }
 
+// Saves the frame GPU::Present has just shown (rows come bottom first).
 void SavePixels(const std::string &path)
 {
     const Common::Point res = System::GetResolution();
-    std::vector<uint8_t> pixels((size_t)res.x * res.y * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadBuffer(GL_BACK);
-    glReadPixels(0, 0, res.x, res.y, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    int w = res.x, h = res.y;
+    std::vector<uint8_t> pixels;
+    if (!GPU::ReadLastFrameRGB(&pixels, &w, &h))
+        return;
 
     FILE *file = fopen(path.c_str(), "wb");
     if (!file)
         return;
-    fprintf(file, "P6\n%d %d\n255\n", res.x, res.y);
-    for (int y = res.y - 1; y >= 0; --y)
-        fwrite(&pixels[(size_t)y * res.x * 3], 3, res.x, file);
+    fprintf(file, "P6\n%d %d\n255\n", w, h);
+    for (int y = h - 1; y >= 0; --y)
+        fwrite(&pixels[(size_t)y * w * 3], 3, w, file);
     fclose(file);
 }
 
@@ -538,7 +539,7 @@ void Advance()
         break;
 
     case STAGE_DONE:
-        fprintf(logFile, "done glError=0x%x\n", (unsigned)glGetError());
+        fprintf(logFile, "done\n");
         fclose(logFile);
         _exit(0);
     }
@@ -546,16 +547,16 @@ void Advance()
 
 }
 
-extern "C" void __real__ZN6System4FlipEv();
-extern "C" void __wrap__ZN6System4FlipEv()
+extern "C" void __real__ZN3GPU7PresentEv();
+extern "C" void __wrap__ZN3GPU7PresentEv()
 {
+    __real__ZN3GPU7PresentEv();
     if (capturePending)
     {
         capturePending = false;
         static const char *names[] = {"a_none", "b_decal", "c_checker", "d_damaged", "e_destroyed"};
         SavePixels(outDir + "/" + shots[shotIndex].name + "_" + names[pass] + ".ppm");
     }
-    __real__ZN6System4FlipEv();
 }
 
 extern "C" bool __real__ZN6System13ProcessEventsEv();
@@ -625,26 +626,20 @@ extern "C" void __wrap__ZN3GFX9GFXEngine9RasterizeEj(GFX::GFXEngine *engine, uin
         return;
     }
 
-    glFinish();
+    // Recording only: the GPU runs the frame in GPU::Present.
     const uint64_t start = SDL_GetPerformanceCounter();
     __real__ZN3GFX9GFXEngine9RasterizeEj(engine, stages);
-    glFinish();
     rasterMs[pass] += (double)(SDL_GetPerformanceCounter() - start) * 1000.0 /
                       (double)SDL_GetPerformanceFrequency();
     ++rasterCount[pass];
 }
 
-// CAPTURE_MODE 1 = no scene FBO (depth read from the window), 2 = legacy GL path.
-extern "C" void __real__ZN6System4InitEb(bool);
-extern "C" void __wrap__ZN6System4InitEb(bool oldGL)
+// Mode 1 = no scene target: colour effects off, the world is drawn straight to the window.
+extern "C" void __real__ZN6System4InitEv();
+extern "C" void __wrap__ZN6System4InitEv()
 {
     LoadConfig();
     if (cfgMode == 1)
         System::IniConf::GfxColorEffects.Value = (int32_t)0;
-    else if (cfgMode == 2)
-    {
-        System::IniConf::GfxVBO.Value = false;
-        oldGL = true;
-    }
-    __real__ZN6System4InitEb(oldGL);
+    __real__ZN6System4InitEv();
 }

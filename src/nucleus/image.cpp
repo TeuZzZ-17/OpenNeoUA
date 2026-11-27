@@ -1,7 +1,7 @@
 // NC_STACK_image: bitmap created from an image file.
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_rwops.h>
-#include <SDL2/SDL_image.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_iostream.h>
+#include <SDL3_image/SDL_image.h>
 #include "nucleus/nucleas.h"
 #include "nucleus/rsrc.h"
 #include "nucleus/image.h"
@@ -27,85 +27,62 @@ size_t NC_STACK_image::Init(IDVList &stak)
 
 
 
-static Sint64 mysizefunc(SDL_RWops * context)
+// SDL_IOStream over an engine file handle (Data paths, archives and overrides).
+static Sint64 FileIOSize(void *userdata)
 {
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-
-    size_t curr = fil->tell();
+    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)userdata;
+    const size_t curr = fil->tell();
     fil->seek(0, SEEK_END);
-    size_t sz = fil->tell();
+    const size_t sz = fil->tell();
     fil->seek(curr, SEEK_SET);
-    return sz;
+    return (Sint64)sz;
 }
 
-static Sint64 myseekfunc(SDL_RWops *context, Sint64 offset, int whence)
+static Sint64 FileIOSeek(void *userdata, Sint64 offset, SDL_IOWhence whence)
 {
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    switch (whence)
-    {
-    case RW_SEEK_SET:
-        if ( fil->seek(offset, SEEK_SET) != 0 )
-            return -1;
-        break;
-    case RW_SEEK_CUR:
-        if ( fil->seek(offset, SEEK_CUR) != 0 )
-            return -1;
-        break;
-    case RW_SEEK_END:
-        if ( fil->seek(offset, SEEK_END) != 0 )
-            return -1;
-        break;
-    default:
-        SDL_SetError("Can't seek of this kind of whence");
+    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)userdata;
+    const int origin = whence == SDL_IO_SEEK_CUR ? SEEK_CUR : whence == SDL_IO_SEEK_END ? SEEK_END : SEEK_SET;
+    if ( fil->seek(offset, origin) != 0 )
         return -1;
-    }
-    return fil->tell();
+    return (Sint64)fil->tell();
 }
 
-static size_t myreadfunc(SDL_RWops *context, void *ptr, size_t size, size_t maxnum)
+static size_t FileIORead(void *userdata, void *ptr, size_t size, SDL_IOStatus *status)
 {
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    if ( !size )
-        return 0;
-    return fil->read(ptr, size * maxnum) / size;
+    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)userdata;
+    const size_t got = size ? fil->read(ptr, size) : 0;
+    if ( got < size )
+        *status = fil->eof() ? SDL_IO_STATUS_EOF : SDL_IO_STATUS_ERROR;
+    return got;
 }
 
-static size_t mywritefunc(SDL_RWops *context, const void *ptr, size_t size, size_t num)
+static size_t FileIOWrite(void *userdata, const void *ptr, size_t size, SDL_IOStatus *status)
 {
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    if ( !size )
-        return 0;
-    return fil->write(ptr, size * num) / size;
+    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)userdata;
+    const size_t put = size ? fil->write(ptr, size) : 0;
+    if ( put < size )
+        *status = SDL_IO_STATUS_ERROR;
+    return put;
 }
 
-static int myclosefunc(SDL_RWops *context)
+static bool FileIOClose(void *userdata)
 {
-    FSMgr::FileHandle *fil = (FSMgr::FileHandle *)context->hidden.unknown.data2;
-    delete fil;
-
-    SDL_FreeRW(context);
-    return 0;
+    delete (FSMgr::FileHandle *)userdata;
+    return true;
 }
 
-SDL_RWops *NC_STACK_image::OpenRWops(FSMgr::FileHandle *fil)
+SDL_IOStream *NC_STACK_image::OpenRWops(FSMgr::FileHandle *fil)
 {
-    SDL_RWops *c = SDL_AllocRW();
-
-    if (c == nullptr)
-        return nullptr;
-
-    c->size = mysizefunc;
-    c->seek = myseekfunc;
-    c->read = myreadfunc;
-    c->write = mywritefunc;
-    c->close = myclosefunc;
-    c->type = 0xF00BA91;
-    c->hidden.unknown.data2 = fil;
-    return c;
+    SDL_IOStreamInterface iface;
+    SDL_INIT_INTERFACE(&iface);
+    iface.size = FileIOSize;
+    iface.seek = FileIOSeek;
+    iface.read = FileIORead;
+    iface.write = FileIOWrite;
+    iface.close = FileIOClose;
+    return SDL_OpenIO(&iface, fil);
 }
 
-#if defined(SDL_IMAGE_VERSION_ATLEAST)
-#if SDL_IMAGE_VERSION_ATLEAST(2, 6, 0)
 static bool IsSvgResourceName(const std::string &resName)
 {
     const size_t extPos = resName.find_last_of('.');
@@ -114,8 +91,6 @@ static bool IsSvgResourceName(const std::string &resName)
 
     return !StriCmp(resName.substr(extPos + 1), "svg");
 }
-#endif
-#endif
 
 
 
@@ -134,7 +109,7 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
     if (!fil)
         return nullptr;
 
-    SDL_RWops *rwops = OpenRWops(fil);
+    SDL_IOStream *rwops = OpenRWops(fil);
     if (!rwops)
     {
         delete fil;
@@ -143,8 +118,6 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
 
     SDL_Surface *loaded = nullptr;
 
-#if defined(SDL_IMAGE_VERSION_ATLEAST)
-#if SDL_IMAGE_VERSION_ATLEAST(2, 6, 0)
     const int requestedWidth = stak.Get<int32_t>(BMD_ATT_WIDTH, 0);
     const int requestedHeight = stak.Get<int32_t>(BMD_ATT_HEIGHT, 0);
     const bool hasSizedSvgRequest = IsSvgResourceName(resName) &&
@@ -153,19 +126,19 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
 
     if ( hasSizedSvgRequest )
     {
-        loaded = IMG_LoadSizedSVG_RW(rwops, requestedWidth, requestedHeight);
+        loaded = IMG_LoadSizedSVG_IO(rwops, requestedWidth, requestedHeight);
         if ( loaded )
         {
-            SDL_RWclose(rwops);
+            SDL_CloseIO(rwops);
             rwops = nullptr;
         }
-        else if ( SDL_RWseek(rwops, 0, RW_SEEK_SET) < 0 )
+        else if ( SDL_SeekIO(rwops, 0, SDL_IO_SEEK_SET) < 0 )
         {
             // The custom stream is normally seekable. If a backend refuses
             // the rewind, reopen it so the legacy loader still gets a full
             // fallback attempt instead of turning a sized SVG failure into a
             // new hard failure.
-            SDL_RWclose(rwops);
+            SDL_CloseIO(rwops);
             rwops = nullptr;
 
             fil = uaOpenFileAlloc(tmpBuf, "rb");
@@ -177,13 +150,10 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
             }
         }
     }
-#endif
-#endif
 
-    // Keep the existing loader as the universal fallback. This is also the
-    // only path compiled when SDL_image is older than 2.6.0.
+    // Keep the existing loader as the universal fallback.
     if ( !loaded && rwops )
-        loaded = IMG_Load_RW(rwops, 1);
+        loaded = IMG_Load_IO(rwops, true);
 
     if (!loaded)
     {
@@ -195,14 +165,14 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
 
     if ( !res )
     {
-        SDL_FreeSurface(loaded);
+        SDL_DestroySurface(loaded);
         return nullptr;
     }
 
     ResBitmap *bitm = new ResBitmap;
     if ( !bitm )
     {
-        SDL_FreeSurface(loaded);
+        SDL_DestroySurface(loaded);
         rsrc_func65(res);
         return nullptr;
     }
@@ -218,19 +188,19 @@ rsrc * NC_STACK_image::rsrc_func64(IDVList &stak)
         SDL_Surface *screenFmt = GFX::Engine.ConvertToScreenFormat(loaded);
         if (screenFmt)
         {
-            SDL_FreeSurface(bitm->swTex);
+            SDL_DestroySurface(bitm->swTex);
             bitm->swTex = screenFmt;
         }
     }
-    else if (loaded->format->palette)
+    else if (SDL_GetSurfacePalette(loaded))
     {
         if ( !bitm->palette )
             bitm->palette = new UA_PALETTE;
 
         if ( bitm->palette )
         {
-            for (int i = 0; i < loaded->format->palette->ncolors; i++)
-                (*bitm->palette)[i] = loaded->format->palette->colors[i];
+            for (int i = 0; i < SDL_GetSurfacePalette(loaded)->ncolors; i++)
+                (*bitm->palette)[i] = SDL_GetSurfacePalette(loaded)->colors[i];
         }
     }
 
@@ -249,9 +219,9 @@ bool NC_STACK_image::SavePng(ResBitmap *bitm, const std::string &fname)
     if (!fil || !fil->OK())
         return false;
 
-    SDL_RWops *rwops = OpenRWops(fil);
+    SDL_IOStream *rwops = OpenRWops(fil);
     if (!rwops)
         return false;
 
-    return IMG_SavePNG_RW(bitm->swTex, rwops, 1) == 0;
+    return IMG_SavePNG_IO(bitm->swTex, rwops, true);
 }

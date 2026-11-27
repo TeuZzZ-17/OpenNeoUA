@@ -363,27 +363,28 @@ void NC_STACK_ypamissile::DeflectFromUnitCollision(NC_STACK_ypabact *target,
     {
         const vec3d impactPos = targetCenter + outward * std::max(0.0f, targetRadius);
         target->SpawnBuffDeflectVisual(impactPos, _rotation);
-        ApplyDeflectExtras(target, outward);
+        ApplyDeflectExtras(target);
     }
 }
 
 // Deflect Buff extras, local games only (network games keep the plain bounce):
-//  deflect_to_enemy = 1 aims the round at an enemy of the deflecting unit: the shooter,
-//  else the nearest enemy, else the bounce direction;
+//  deflect_to_enemy = 1 aims the round at the shooter (even an ally), else the nearest
+//  enemy, else the bounce direction;
 //  deflect_weapon replaces the round with that Weapon's projectile, sent the same way.
 //  Without deflect_weapon the deflected round itself now belongs to the deflecting unit.
-//  An aim behind the hit surface (`outward`) keeps the bounce direction, so the round
-//  never flies back into the deflecting unit.
-void NC_STACK_ypamissile::ApplyDeflectExtras(NC_STACK_ypabact *deflector, const vec3d &outward)
+//  The aim always wins over the bounce (no hit-surface test: grazing or overshooting
+//  hits gave sideways normals). The round belongs to the deflecting unit, so it never hits it.
+void NC_STACK_ypamissile::ApplyDeflectExtras(NC_STACK_ypabact *deflector)
 {
     const World::TVehicleBuffConfig &buff = deflector->_buff;
     if ( (!buff.deflect_to_enemy && buff.deflect_weapon <= 0) || _world->_isNetGame )
         return;
 
-    const auto isEnemy = [deflector](NC_STACK_ypabact *unit)
+    // Any living shooter is sent its round back, allies included (friendly fire):
+    // only the nearest-enemy fallback is limited to enemies.
+    const auto isLiveShooter = [deflector](NC_STACK_ypabact *unit)
     {
         return unit && unit != deflector && unit->_bact_type != BACT_TYPES_MISSLE &&
-               unit->_owner != World::OWNER_0 && unit->_owner != deflector->_owner &&
                unit->_status != BACT_STATUS_DEAD &&
                !(unit->_status_flg & (BACT_STFLAG_DEATH1 | BACT_STFLAG_DEATH2));
     };
@@ -392,14 +393,14 @@ void NC_STACK_ypamissile::ApplyDeflectExtras(NC_STACK_ypabact *deflector, const 
     if ( buff.deflect_to_enemy )
     {
         NC_STACK_ypabact *shooter = GetLauncherBact();
-        aim = isEnemy(shooter) ? shooter : deflector->FindNearestEnemy(1500.0f);
+        aim = isLiveShooter(shooter) ? shooter : deflector->FindNearestEnemy(1500.0f);
     }
 
     vec3d dir = _fly_dir;
     if ( aim )
     {
         vec3d toAim = aim->_position - _position;
-        if ( toAim.normalise() > 0.001 && toAim.dot(outward) > 0.0 )
+        if ( toAim.normalise() > 0.001 )
             dir = toAim;
     }
 

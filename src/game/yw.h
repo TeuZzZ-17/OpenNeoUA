@@ -2572,7 +2572,7 @@ public:
 
 
     SDL_Color GetColor(int color_id);
-    bool GetPlasmaFactionTint(int owner, GFX::TGLColor *outTint);
+    bool GetPlasmaFactionTint(int owner, GFX::TColorF *outTint);
     SDL_Color GetFactionBoxTextColor() const;
     bool ParseColorString(int color_id, const std::string &color_string);
 
@@ -3142,7 +3142,7 @@ public:
         int32_t endingParticleFadeOut = 0;
         World::TVisualTint tint; // OpenNeoUA custom: VP tint for this spawned model (e.g. laser beam body)
         // Extra brightness multiplier (0..1), separate from tint alpha. Feeds vpFadeFactor so
-        // additive (GL_ONE/GL_ONE) surfaces dim too. 1 = neutral for every other effect.
+        // additive (One/One) surfaces dim too. 1 = neutral for every other effect.
         float intensity = 1.0f;
         TTransientVPParticleControls particleControls;
 

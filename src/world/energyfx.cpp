@@ -334,7 +334,7 @@ static void ProceduralEnergyFXBuildQuadMesh(GFX::TMesh *mesh)
     GFX::TVertex v1(vec3f( 0.5f, -0.5f, 0.0f));
     GFX::TVertex v2(vec3f( 0.5f,  0.5f, 0.0f));
     GFX::TVertex v3(vec3f(-0.5f,  0.5f, 0.0f));
-    v0.Color = v1.Color = v2.Color = v3.Color = GFX::TGLColor(1.0f, 1.0f, 1.0f, 1.0f);
+    v0.Color = v1.Color = v2.Color = v3.Color = GFX::TColorF(1.0f, 1.0f, 1.0f, 1.0f);
     mesh->Vertexes.push_back(v0);
     mesh->Vertexes.push_back(v1);
     mesh->Vertexes.push_back(v2);
@@ -349,7 +349,7 @@ static void ProceduralEnergyFXBuildQuadMesh(GFX::TMesh *mesh)
     mesh->Mat = GFX::TRenderParams(GFX::RFLAGS_FOG |
                                    GFX::RFLAGS_DISABLE_ZWRITE |
                                    GFX::RFLAGS_ALPHABLEND);
-    mesh->Mat.Color = GFX::TGLColor(1.0f, 1.0f, 1.0f, 1.0f);
+    mesh->Mat.Color = GFX::TColorF(1.0f, 1.0f, 1.0f, 1.0f);
     mesh->RecalcBoundBox();
     GFX::Engine.MeshMakeVBO(mesh);
 }
@@ -449,7 +449,7 @@ void NC_STACK_ypaworld::RenderProceduralEnergyFX(baseRender_msg *arg)
                 render.Mesh = &_proceduralEnergyFXQuadMesh;
                 render.Flags = _proceduralEnergyFXQuadMesh.Mat.Flags | arg->flags;
                 render.Color = _proceduralEnergyFXQuadMesh.Mat.Color;
-                render.ColorMul = GFX::TGLColor(it->tint.r, it->tint.g, it->tint.b,
+                render.ColorMul = GFX::TColorF(it->tint.r, it->tint.g, it->tint.b,
                                                 it->tint.a * fade * alpha);
                 render.Colorize = it->tint.ColorizesRGB();
                 render.TForm = transform;

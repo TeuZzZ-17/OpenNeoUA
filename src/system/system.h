@@ -5,15 +5,8 @@
 #include <string>
 #include <vector>
 
-#if defined(__APPLE__) && defined(__MACH__)
-#include <OpenGL/gl.h>
-#else
-#include <GL/gl.h>
-#endif
-
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
-#include <SDL2/SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include "common/common.h"
 
@@ -35,16 +28,16 @@ namespace System
         operator Common::Point() const;
     };
 
-    void Init(bool oldGL = false);
+    void Init();
     void Deinit();
 
     // Events update cycle
     bool ProcessEvents();
 
-    // Draw content of backbuffer
-    void Flip();
+    // The game window (the GPU device draws into it, see gpu.h).
+    SDL_Window *GetWindow();
 
-    void SetVideoMode(const Common::Point &sz, uint32_t full, SDL_DisplayMode *mode);
+    void SetVideoMode(const Common::Point &sz, bool full);
 
     void SetReleativeMouse(bool mode);
 

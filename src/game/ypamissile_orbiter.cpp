@@ -350,11 +350,11 @@ vec3d NC_STACK_ypamissile::OrbiterGuardTarget(NC_STACK_ypabact *carrier) const
         forward = vec3d(0.0, 0.0, 1.0);
     const vec3d right(forward.z, 0.0, -forward.x);
 
-    // Only one of the two given: the other keeps a value close to the classic orbit.
+    // Only one of the two given: the absent one is 0.
     const vec3d local = World::Orbiter::RingGuardOffset(
         _orbiterGuard, _orbiterSlot, _orbiterSlotCount,
-        cfg.guard_speed >= 0.0f ? cfg.guard_speed : 4.0f,
-        cfg.guard_chaos >= 0.0f ? cfg.guard_chaos : 5.0f,
+        cfg.guard_speed >= 0.0f ? cfg.guard_speed : 0.0f,
+        cfg.guard_chaos >= 0.0f ? cfg.guard_chaos : 0.0f,
         carrier->_clock * 0.001f);
     return center + right * local.x + forward * local.z + vec3d(0.0, local.y, 0.0);
 }
@@ -478,7 +478,7 @@ void NC_STACK_ypamissile::UpdateOrbiterGuard(NC_STACK_ypabact *carrier, float dt
     // ring follows tighter so it keeps its shape while the carrier moves.
     const World::TWeaponOrbiterConfig &cfg = _world->GetWeaponsProtos().at(_vehicleID).orbiter;
     const double follow = !cfg.HasRingGuard() ? 4.0
-        : 9.0 - 0.5 * (double)(cfg.guard_chaos >= 0.0f ? cfg.guard_chaos : 5.0f);
+        : 9.0 - 0.5 * (double)(cfg.guard_chaos >= 0.0f ? cfg.guard_chaos : 0.0f);
     _position += (desired - _position) * (1.0 - exp(-follow * dt));
 
     // Hard rule: never inside the carrier, even while it moves or turns.

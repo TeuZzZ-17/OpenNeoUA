@@ -2,6 +2,9 @@
 // menu (game shell), gameplay and replay screens.
 #define GLOBAL
 #include <fstream>
+// main() below is the game's SDL_main; the platform entry is platform/sdl_entry.cpp.
+#define SDL_MAIN_NOIMPL
+#include <SDL3/SDL_main.h>
 #include "system/fsmgr.h"
 #include "common/utils.h"
 #include "system/system.h"
@@ -736,11 +739,10 @@ void ShutdownWorld()
 } // namespace
 
 #ifdef _WIN32
-// Laptops with two graphics chips give an old OpenGL program the integrated one
-// unless the program asks for the fast one. These two exported names are what
-// the NVIDIA and AMD drivers look for when the process starts, so they cannot
-// be a setting: the choice is already made before any file is read. Machines
-// with a single graphics chip ignore them.
+// Laptops with two graphics chips may give a program the integrated one. SDL_GPU
+// already prefers a dedicated card among the Vulkan devices; these two exported
+// names also tell the NVIDIA and AMD drivers, which read them when the process
+// starts, so they cannot be a setting. Machines with one graphics chip ignore them.
 extern "C"
 {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
@@ -780,7 +782,7 @@ int main(int argc, char *argv[])
     CrashDiag::Init(System::IniConf::GameCrashDiagnostics.Get<bool>(),
                     std::string("OpenNeoUA ") + __DATE__ + " " + __TIME__);
     CrashDiag::SetPhase("SystemInit");
-    System::Init(!System::IniConf::GfxVBO.Get<bool>());
+    System::Init();
 
     CrashDiag::SetPhase("GraphicsInit");
     GFX::Engine.Init();

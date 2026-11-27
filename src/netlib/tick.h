@@ -1,6 +1,8 @@
 #ifndef ZNDNET_TICK_H_INCLUDED
 #define ZNDNET_TICK_H_INCLUDED
 
+#include <SDL3/SDL_timer.h>
+
 namespace ZNDNet
 {
 

@@ -109,15 +109,15 @@ struct YwLoadedUiBitmap
 struct YWProceduralStatusBarConfig
 {
     bool hpEnabled = false;
-    GFX::TGLColor hpFullTint = GFX::TGLColor(0.0f, 217.0f / 255.0f, 81.0f / 255.0f, 1.0f);
-    GFX::TGLColor hpLowTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 1.0f);
-    GFX::TGLColor hpEmptyTint = GFX::TGLColor(1.0f, 0.0f, 0.0f, 0.0f);
+    GFX::TColorF hpFullTint = GFX::TColorF(0.0f, 217.0f / 255.0f, 81.0f / 255.0f, 1.0f);
+    GFX::TColorF hpLowTint = GFX::TColorF(1.0f, 0.0f, 0.0f, 1.0f);
+    GFX::TColorF hpEmptyTint = GFX::TColorF(1.0f, 0.0f, 0.0f, 0.0f);
     bool shieldEnabled = false;
     // Same teal as the classic Shield squares in MAPMISC, so the world Shield
     // bar matches the cockpit Shield display.
-    GFX::TGLColor shieldTint = GFX::TGLColor(0.0f, 137.0f / 255.0f, 170.0f / 255.0f, 1.0f);
+    GFX::TColorF shieldTint = GFX::TColorF(0.0f, 137.0f / 255.0f, 170.0f / 255.0f, 1.0f);
     bool cooldownEnabled = false;
-    GFX::TGLColor cooldownTint = GFX::TGLColor(1.0f, 1.0f, 1.0f, 1.0f);
+    GFX::TColorF cooldownTint = GFX::TColorF(1.0f, 1.0f, 1.0f, 1.0f);
 };
 
 struct TPlasmaCurrencyHudLayout
@@ -231,16 +231,16 @@ void StatusIconCollectMountedUnitGunIcons(const std::vector<World::TRoboGun> &gu
 int StatusIconCollect(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, StatusIconList &icons);
 void StatusIconRenderBlinkList(NC_STACK_ypaworld *yw, const StatusIconBlinkRenderList &icons, int iconCount, int left, int top, int size, uint8_t opacity = 255);
 void StatusIconRenderWorld(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact, World::TVhclProto *vhcl, int barLeft, int barTop, int barWidth, int barHeight, uint8_t opacity, int bottomReserve, int *markerCenterX);
-GFX::TGLColor yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TGLColor &fallback);
+GFX::TColorF yw_ReadStatusBarTint(Common::Ini::Key &key, const GFX::TColorF &fallback);
 const YWProceduralStatusBarConfig &yw_GetProceduralStatusBarConfig();
-GFX::TGLColor yw_StatusBarTintLerp(const GFX::TGLColor &lowTint, const GFX::TGLColor &fullTint, float ratio, uint8_t opacity);
+GFX::TColorF yw_StatusBarTintLerp(const GFX::TColorF &lowTint, const GFX::TColorF &fullTint, float ratio, uint8_t opacity);
 void yw_GetProceduralHpStripRect(int top, int cellHeight, int *outTop, int *outHeight);
 bool yw_RenderProceduralHpBar(int left, int top, int squareCount, int value, int maxValue, int cellWidth, int cellHeight, uint8_t opacity, bool hideFilled = false, bool hideEmpty = false);
 void yw_GetWorldShieldBarRect(int hpLeft, int hpTop, int hpWidth, int cellHeight, bool proceduralHp, int *outLeft, int *outTop, int *outWidth, int *outHeight);
 void yw_RenderProceduralShieldBar(int left, int top, int width, int height, int value, int maxValue, uint8_t opacity, int fullValue = 0);
 void yw_RenderUnitSquareBar(NC_STACK_ypaworld *yw, CmdStream *cur, int left, int top, int squareCount, int value, int maxValue, uint8_t filledTile, uint8_t emptyTile, uint8_t opacity = 255);
 void yw_RenderProceduralProgressBar(int left, int top, int width, int height, float ratio,
-                                    const GFX::TGLColor &tint, uint8_t opacity, float fillAlpha);
+                                    const GFX::TColorF &tint, uint8_t opacity, float fillAlpha);
 bool yw_CanSeeUnitCooldown(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact);
 bool yw_ShouldRenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact);
 bool yw_RenderArtilleryShellCooldownBar(NC_STACK_ypaworld *yw, CmdStream *cur, NC_STACK_ypabact *bact, int left, int top, int squareCount);

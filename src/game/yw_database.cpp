@@ -11,7 +11,7 @@ std::string text(int id) { return Locale::Text::OpenUA(id); }
 void fill(SDL_Surface *s,int x,int y,int w,int h,Uint32 color)
 {
     if(w<=0||h<=0)return;
-    SDL_Rect r{x,y,w,h};SDL_FillRect(s,&r,color);
+    SDL_Rect r{x,y,w,h};SDL_FillSurfaceRect(s,&r,color);
 }
 void caption(NC_STACK_ypaworld *w,const std::string &s,int x,int y,int width)
 {
@@ -26,16 +26,16 @@ void smallCaption(DatabaseSession &session,const std::string &value,int x,int y,
     if(value.empty()||width<=0||!session.detailFont)return;
     auto found=session.captions.find(value);
     if(found==session.captions.end())
-        found=session.captions.emplace(value,TTF_RenderUTF8_Blended(session.detailFont,value.c_str(),SDL_Color{217,241,245,255})).first;
+        found=session.captions.emplace(value,TTF_RenderText_Blended(session.detailFont, value.c_str(), 0, SDL_Color{217,241,245,255})).first;
     auto *text=found->second;if(!text)return;
     SDL_Rect from{0,0,std::min(width,text->w),text->h},to{x,y,from.w,from.h};
-    if(fit&&text->w>width)SDL_BlitScaled(text,nullptr,GFX::Engine.Screen(),&to);
+    if(fit&&text->w>width)SDL_BlitSurfaceScaled(text, nullptr, GFX::Engine.Screen(), &to, SDL_SCALEMODE_NEAREST);
     else SDL_BlitSurface(text,&from,GFX::Engine.Screen(),&to);
 }
 int smallWidth(DatabaseSession &session,const std::string &value)
 {
     int width=0,height=0;
-    if(session.detailFont)TTF_SizeUTF8(session.detailFont,value.c_str(),&width,&height);
+    if(session.detailFont)TTF_GetStringSize(session.detailFont, value.c_str(), 0, &width, &height);
     return width;
 }
 std::vector<std::string> wrapCaption(DatabaseSession &session,const std::string &value,int width,int maxLines)
@@ -90,9 +90,9 @@ void blocks(SDL_Surface *s,int x,int y,int width,int line,int count)
     const int gap=std::max(2,line/7),size=std::max(2,std::min(line/2,(width-9*gap)/10));
     for(int i=0;i<10;++i)
     {
-        fill(s,x+i*(size+gap),y,size,size,SDL_MapRGB(s->format,48,91,103));
+        fill(s,x+i*(size+gap),y,size,size,SDL_MapSurfaceRGB(s,48,91,103));
         fill(s,x+i*(size+gap)+1,y+1,size-2,size-2,
-             i<count?SDL_MapRGB(s->format,118,193,198):SDL_MapRGB(s->format,5,12,16));
+             i<count?SDL_MapSurfaceRGB(s,118,193,198):SDL_MapSurfaceRGB(s,5,12,16));
     }
 }
 }
@@ -305,8 +305,8 @@ void UserData::RenderDatabaseEntryMedia()
 {
     if(!db_session)return;
     const auto l=DatabaseLayout::For(*p_YW,db_workshop);auto *surface=GFX::Engine.Screen();if(!surface)return;
-    SDL_Rect oldClip;SDL_GetClipRect(surface,&oldClip);SDL_SetClipRect(surface,nullptr);
-    const auto body=SDL_MapRGB(surface->format,5,12,16),edge=SDL_MapRGB(surface->format,48,91,103);
+    SDL_Rect oldClip;SDL_GetSurfaceClipRect(surface,&oldClip);SDL_SetSurfaceClipRect(surface,nullptr);
+    const auto body=SDL_MapSurfaceRGB(surface,5,12,16),edge=SDL_MapSurfaceRGB(surface,48,91,103);
     const auto &card=db_session->card;
     const int modelHeight=l.previewHeight-(card.weapons.empty()?0:2*l.detailLine);
     // Opaque reading panels keep text legible over either authored background.
@@ -314,7 +314,7 @@ void UserData::RenderDatabaseEntryMedia()
     fill(surface,l.right-4,panelTop,l.width+4,l.bottom-panelTop,body);
     fill(surface,l.right,l.previewTop,l.previewWidth,l.previewHeight,edge);
     fill(surface,l.right+1,l.previewTop+1,l.previewWidth-2,l.previewHeight-2,
-         db_session->preview.Available()?SDL_MapRGBA(surface->format,0,0,0,0):body);
+         db_session->preview.Available()?SDL_MapSurfaceRGBA(surface,0,0,0,0):body);
     if(db_session->preview.Available())
     {
         const int step=std::max(0,std::min(250,(int)DTime));db_session->rotationTime+=step;
@@ -343,7 +343,7 @@ void UserData::RenderDatabaseEntryMedia()
             const int size=std::max(l.line,2*l.detailLine);
             const int width=std::max(1,size*source.w/source.h);
             SDL_Rect target{l.right+l.previewWidth-width-6,l.previewTop+6,width,size};
-            SDL_BlitScaled(font.Page(card.icon),&source,surface,&target);
+            SDL_BlitSurfaceScaled(font.Page(card.icon), &source, surface, &target, SDL_SCALEMODE_NEAREST);
         }
     }
     int statRow=0;
@@ -421,5 +421,5 @@ void UserData::RenderDatabaseEntryMedia()
         if(!db_session->transactionMessage.empty())
             smallCaption(*db_session,db_session->transactionMessage,8,l.bottom-5*l.line,l.listWidth-16,true);
     }
-    SFXEngine::SFXe.UpdateSoundCarrier(&db_session->carrier);SDL_SetClipRect(surface,&oldClip);
+    SFXEngine::SFXe.UpdateSoundCarrier(&db_session->carrier);SDL_SetSurfaceClipRect(surface,&oldClip);
 }

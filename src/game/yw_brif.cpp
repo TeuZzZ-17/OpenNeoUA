@@ -928,7 +928,7 @@ static void yw_BriefingBlendRow(SDL_Surface *surface, int y, int x0, int x1,
                                 uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha)
 {
     if (!surface || y < 0 || y >= surface->h || x0 > x1 || alpha == 0) return;
-    const int bpp = surface->format->BytesPerPixel;
+    const int bpp = SDL_BYTESPERPIXEL(surface->format);
     uint8_t *pixelPtr = static_cast<uint8_t *>(surface->pixels) + y * surface->pitch + x0 * bpp;
     const uint32_t invAlpha = 255u - alpha;
 
@@ -936,21 +936,21 @@ static void yw_BriefingBlendRow(SDL_Surface *surface, int y, int x0, int x1,
         uint32_t *p = reinterpret_cast<uint32_t *>(pixelPtr);
         for (int x = x0; x <= x1; ++x, ++p) {
             uint8_t dr, dg, db;
-            SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+            SDL_GetRGB(*p, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &dr, &dg, &db);
             const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
             const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
             const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
-            *p = SDL_MapRGB(surface->format, nr, ng, nb);
+            *p = SDL_MapSurfaceRGB(surface, nr, ng, nb);
         }
     } else if (bpp == 2) {
         uint16_t *p = reinterpret_cast<uint16_t *>(pixelPtr);
         for (int x = x0; x <= x1; ++x, ++p) {
             uint8_t dr, dg, db;
-            SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+            SDL_GetRGB(*p, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &dr, &dg, &db);
             const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
             const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
             const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
-            *p = static_cast<uint16_t>(SDL_MapRGB(surface->format, nr, ng, nb));
+            *p = static_cast<uint16_t>(SDL_MapSurfaceRGB(surface, nr, ng, nb));
         }
     }
 }
@@ -959,26 +959,26 @@ static void yw_BriefingBlendPixel(SDL_Surface *surface, int x, int y,
                                   uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha)
 {
     if (!surface || x < 0 || x >= surface->w || y < 0 || y >= surface->h || alpha == 0) return;
-    const int bpp = surface->format->BytesPerPixel;
+    const int bpp = SDL_BYTESPERPIXEL(surface->format);
     uint8_t *pixelPtr = static_cast<uint8_t *>(surface->pixels) + y * surface->pitch + x * bpp;
     const uint32_t invAlpha = 255u - alpha;
 
     if (bpp == 4) {
         uint32_t *p = reinterpret_cast<uint32_t *>(pixelPtr);
         uint8_t dr, dg, db;
-        SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+        SDL_GetRGB(*p, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &dr, &dg, &db);
         const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
         const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
         const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
-        *p = SDL_MapRGB(surface->format, nr, ng, nb);
+        *p = SDL_MapSurfaceRGB(surface, nr, ng, nb);
     } else if (bpp == 2) {
         uint16_t *p = reinterpret_cast<uint16_t *>(pixelPtr);
         uint8_t dr, dg, db;
-        SDL_GetRGB(*p, surface->format, &dr, &dg, &db);
+        SDL_GetRGB(*p, SDL_GetPixelFormatDetails(surface->format), SDL_GetSurfacePalette(surface), &dr, &dg, &db);
         const uint8_t nr = static_cast<uint8_t>((cr * alpha + dr * invAlpha) / 255u);
         const uint8_t ng = static_cast<uint8_t>((cg * alpha + dg * invAlpha) / 255u);
         const uint8_t nb = static_cast<uint8_t>((cb * alpha + db * invAlpha) / 255u);
-        *p = static_cast<uint16_t>(SDL_MapRGB(surface->format, nr, ng, nb));
+        *p = static_cast<uint16_t>(SDL_MapSurfaceRGB(surface, nr, ng, nb));
     }
 }
 
@@ -1109,7 +1109,7 @@ static void yw_RenderBriefingLocations(NC_STACK_ypaworld *yw, TBriefengScreen *b
     renderItems.reserve(locations.size());
 
     if (drawAreas && SDL_MUSTLOCK(canvas)) {
-        if (SDL_LockSurface(canvas) < 0) return;
+        if (!SDL_LockSurface(canvas)) return;
     }
 
     std::vector<float> nodeX;
@@ -1198,7 +1198,7 @@ static void yw_RenderBriefingLocations(NC_STACK_ypaworld *yw, TBriefengScreen *b
         const uint8_t cr = rgb.r, cg = rgb.g, cb = rgb.b;
         const std::string displayName = World::LocationDisplayName(item.area->name);
 
-        SDL_Surface *textSurf = TTF_RenderUTF8_Blended(font, displayName.c_str(), SDL_Color{cr, cg, cb, 255});
+        SDL_Surface *textSurf = TTF_RenderText_Blended(font, displayName.c_str(), 0, SDL_Color{cr, cg, cb, 255});
         if (!textSurf) continue;
 
         int textW = textSurf->w;
@@ -1212,7 +1212,7 @@ static void yw_RenderBriefingLocations(NC_STACK_ypaworld *yw, TBriefengScreen *b
         if (labelScale < 1.0f) {
             textW = int(textW * labelScale);
             textH = int(textH * labelScale);
-            if (textW < 4 || textH < 3) { SDL_FreeSurface(textSurf); continue; }
+            if (textW < 4 || textH < 3) { SDL_DestroySurface(textSurf); continue; }
         }
 
         const float centerX = (item.minPx + item.maxPx) * 0.5f;
@@ -1248,9 +1248,9 @@ static void yw_RenderBriefingLocations(NC_STACK_ypaworld *yw, TBriefengScreen *b
         if (textW == textSurf->w && textH == textSurf->h) {
             SDL_BlitSurface(textSurf, nullptr, canvas, &dstRect);
         } else {
-            SDL_BlitScaled(textSurf, nullptr, canvas, &dstRect);
+            SDL_BlitSurfaceScaled(textSurf, nullptr, canvas, &dstRect, SDL_SCALEMODE_NEAREST);
         }
-        SDL_FreeSurface(textSurf);
+        SDL_DestroySurface(textSurf);
     }
 }
 

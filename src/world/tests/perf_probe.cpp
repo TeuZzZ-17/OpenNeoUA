@@ -2,14 +2,13 @@
 // executable with ld --wrap, so the game sources stay untouched.
 //
 // It starts a real level, lets the real game run, and reports for every frame:
-//   - where the CPU time goes (simulation, queue building, submission, swap);
-//   - how long the GPU takes, with real timer queries;
+//   - where the CPU time goes (simulation, queue building, recording, present);
 //   - how many draw calls, state changes and triangles each frame costs;
 //   - which frames stutter, and what was slow in them.
 //
 // Scenario is read from <CAPTURE_DIR>/../perf_cfg.txt: "level frames decals mode sweep".
 //   decals: 0 none, N spread around the player, -N all piled on one spot
-//   mode:   0 game settings, 1 no scene FBO, 2 legacy GL, 3 no vsync/limit, 4 plain vsync
+//   mode:   0 game settings, 1 no scene target, 3 no vsync/limit, 4 plain vsync
 //   sweep:  0 still, 1 turn the camera, 2 fly the player across the map
 //
 // Build and link exactly like decal_capture.cpp (see its header), with --wrap on
@@ -23,21 +22,14 @@
 #include <string>
 #include <vector>
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
-#ifndef GL_TIME_ELAPSED
-#define GL_TIME_ELAPSED 0x88BF
-#endif
-#ifndef GL_QUERY_RESULT_AVAILABLE
-#define GL_QUERY_RESULT_AVAILABLE 0x8867
-#define GL_QUERY_RESULT 0x8866
-#endif
+#include <SDL3/SDL.h>
 
 #include "game/yw.h"
 #include "game/yw_internal.h"
 #include "gui/uacommon.h"
 #include "gui/root.h"
 #include "system/gfx.h"
+#include "system/gpu.h"
 #include "system/inpt.h"
 #include "system/framepacer.h"
 #include "system/inivals.h"
@@ -90,48 +82,13 @@ struct Stat
     }
 };
 
-// ------------------------------------------------------------ GPU queries ---
-typedef void (APIENTRY *GenQueriesFn)(GLsizei, GLuint *);
-typedef void (APIENTRY *DeleteQueriesFn)(GLsizei, const GLuint *);
-typedef void (APIENTRY *BeginQueryFn)(GLenum, GLuint);
-typedef void (APIENTRY *EndQueryFn)(GLenum);
-typedef void (APIENTRY *GetQueryObjectuivFn)(GLuint, GLenum, GLuint *);
-typedef void (APIENTRY *GetQueryObjectui64vFn)(GLuint, GLenum, GLuint64 *);
-
-GenQueriesFn glGenQueries_ = nullptr;
-BeginQueryFn glBeginQuery_ = nullptr;
-EndQueryFn glEndQuery_ = nullptr;
-GetQueryObjectuivFn glGetQueryObjectuiv_ = nullptr;
-GetQueryObjectui64vFn glGetQueryObjectui64v_ = nullptr;
-
-// Four queries in flight: reading the newest one back would stall the CPU and
-// hide the very stutter we are looking for.
-const int QUERY_SLOTS = 4;
-GLuint gpuQuery[QUERY_SLOTS] = {0, 0, 0, 0};
-bool gpuQueryBusy[QUERY_SLOTS] = {false, false, false, false};
-int gpuSlot = 0;
-bool gpuReady = false;
-
-void InitGpuQueries()
-{
-    glGenQueries_ = (GenQueriesFn)SDL_GL_GetProcAddress("glGenQueries");
-    glBeginQuery_ = (BeginQueryFn)SDL_GL_GetProcAddress("glBeginQuery");
-    glEndQuery_ = (EndQueryFn)SDL_GL_GetProcAddress("glEndQuery");
-    glGetQueryObjectuiv_ = (GetQueryObjectuivFn)SDL_GL_GetProcAddress("glGetQueryObjectuiv");
-    glGetQueryObjectui64v_ = (GetQueryObjectui64vFn)SDL_GL_GetProcAddress("glGetQueryObjectui64v");
-    gpuReady = glGenQueries_ && glBeginQuery_ && glEndQuery_ &&
-               glGetQueryObjectuiv_ && glGetQueryObjectui64v_;
-    if (gpuReady)
-        glGenQueries_(QUERY_SLOTS, gpuQuery);
-}
-
 // --------------------------------------------------------------- scenario ---
 struct Config
 {
     int level = 1;
     int frames = 900;
     int decals = 0;
-    int mode = 0;       // 1 = no scene FBO, 2 = legacy GL, 3 = no frame limit/vsync
+    int mode = 0;       // 1 = no scene target, 3 = no frame limit/vsync, 4 = plain vsync
     int sweep = 1;      // Turn the camera, so sector streaming is exercised.
 };
 
@@ -159,13 +116,13 @@ void LoadConfig()
 enum Stage
 {
     S_FRAME, S_SIM, S_RENDER_CPU, S_RASTER_CPU, S_SWAP, S_LIMITER,
-    S_UI, S_GUI_SW, S_GUI_HW, S_SECTORS, S_FILLERS, S_DECALS, S_SMOKE, S_PARTICLES, S_GPU, S_COUNT
+    S_UI, S_GUI_SW, S_GUI_HW, S_SECTORS, S_FILLERS, S_DECALS, S_SMOKE, S_PARTICLES, S_COUNT
 };
 
 const char *stageName[S_COUNT] = {
     "frame (senza attesa)", "  simulazione", "  costruzione lista", "  invio alla GPU",
     "  attesa schermo", "attesa limite fps", "  interfaccia+post", "    gui software", "    gui hardware", "    settori", "    raccordi",
-    "    decal", "    fumo decal", "    particelle", "GPU (frame intero)"};
+    "    decal", "    fumo decal", "    particelle"};
 
 Stat stats[S_COUNT];
 double frameStage[S_COUNT];
@@ -177,7 +134,7 @@ double currentTexturePrepare, currentTextureMs;
 // The worst frames, with their breakdown.
 struct SlowFrame
 {
-    double total, sim, render, raster, swap, gpu, draws;
+    double total, sim, render, raster, swap, draws;
     int index;
 };
 std::vector<SlowFrame> slowFrames;
@@ -281,13 +238,13 @@ void Report()
 
     std::sort(slowFrames.begin(), slowFrames.end(),
               [](const SlowFrame &a, const SlowFrame &b) { return a.total > b.total; });
-    fprintf(logFile, "\npeggiori frame (ms): %-8s %-8s %-8s %-8s %-8s %-8s %s\n",
-            "totale", "sim", "lista", "invio", "scambio", "gpu", "disegni");
+    fprintf(logFile, "\npeggiori frame (ms): %-8s %-8s %-8s %-8s %-8s %s\n",
+            "totale", "sim", "lista", "invio", "scambio", "disegni");
     for (size_t i = 0; i < slowFrames.size() && i < 10; ++i)
     {
         const SlowFrame &f = slowFrames[i];
-        fprintf(logFile, "              #%-6d %-8.2f %-8.2f %-8.2f %-8.2f %-8.2f %-8.2f %.0f\n",
-                f.index, f.total, f.sim, f.render, f.raster, f.swap, f.gpu, f.draws);
+        fprintf(logFile, "              #%-6d %-8.2f %-8.2f %-8.2f %-8.2f %-8.2f %.0f\n",
+                f.index, f.total, f.sim, f.render, f.raster, f.swap, f.draws);
     }
     fflush(logFile);
 }
@@ -335,7 +292,6 @@ void EndFrameStats()
     slow.render = frameStage[S_RENDER_CPU];
     slow.raster = frameStage[S_RASTER_CPU];
     slow.swap = frameStage[S_SWAP];
-    slow.gpu = frameStage[S_GPU];
     slow.draws = currentDraw;
     slow.index = runFrames;
     slowFrames.push_back(slow);
@@ -394,8 +350,8 @@ void __wrap__ZN3Gui4Root9HwComposeEv(Gui::Root *root)
 }
 
 bool __real__ZN6System13ProcessEventsEv();
-void __real__ZN6System4FlipEv();
-void __real__ZN6System4InitEb(bool);
+void __real__ZN3GPU7PresentEv();
+void __real__ZN6System4InitEv();
 void __real__ZN17NC_STACK_ypaworld16ProcessGameShellEv(NC_STACK_ypaworld *);
 void __real__ZN17NC_STACK_ypaworld7ProcessEP10base_64arg(NC_STACK_ypaworld *, base_64arg *);
 void __real__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(NC_STACK_ypaworld *, base_64arg *, int);
@@ -413,16 +369,11 @@ void __real__ZN17NC_STACK_ypaworld22RenderGroundDecalSmokeEP14baseRender_msg(NC_
 void __real__ZN5World14ParticleSystem12UpdateRenderEP11area_arg_65i(World::ParticleSystem *, area_arg_65 *, int);
 void __real__ZN17NC_STACK_ypaworld13PrepareFillerEP8cellAreaS1_ffbP13TCellFillerChb(NC_STACK_ypaworld *, cellArea *, cellArea *, float, float, bool, TCellFillerCh *, bool);
 
-void __wrap__ZN6System4InitEb(bool oldGL)
+void __wrap__ZN6System4InitEv()
 {
     LoadConfig();
     if (cfg.mode == 1)
         System::IniConf::GfxColorEffects.Value = (int32_t)0;
-    else if (cfg.mode == 2)
-    {
-        System::IniConf::GfxVBO.Value = false;
-        oldGL = true;
-    }
     else if (cfg.mode == 3)
     {
         System::IniConf::GfxVsync.Value = (int32_t)0;
@@ -430,7 +381,7 @@ void __wrap__ZN6System4InitEb(bool oldGL)
     }
     else if (cfg.mode == 4)   // vsync on, single refresh
         System::IniConf::GfxVsync.Value = (int32_t)1;
-    __real__ZN6System4InitEb(oldGL);
+    __real__ZN6System4InitEv();
 }
 
 // Frame boundary: everything between two of these calls is one frame.
@@ -440,21 +391,13 @@ bool __wrap__ZN6System13ProcessEventsEv()
     {
         LoadConfig();
         logFile = fopen((outDir + "/perf.log").c_str(), "w");
-        InitGpuQueries();
         const Common::Point screen = System::GetResolution();
-        const char *renderer = (const char *)glGetString(GL_RENDERER);
-        const char *vendor = (const char *)glGetString(GL_VENDOR);
-        const char *version = (const char *)glGetString(GL_VERSION);
-        SDL_DisplayMode mode;
-        const int refresh = SDL_GetCurrentDisplayMode(0, &mode) == 0 ? mode.refresh_rate : 0;
-        fprintf(logFile, "GPU in uso: %s | %s | GL %s\n", renderer ? renderer : "?",
-                vendor ? vendor : "?", version ? version : "?");
-        fprintf(logFile, "schermo %dx%d a %d Hz | vsync ini=%d, swap interval reale=%d | maxfps=%d"
-                         " | vbo=%d color_effects=%d query GPU=%d\n",
+        const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+        const int refresh = mode ? (int)mode->refresh_rate : 0;
+        fprintf(logFile, "GPU in uso: %s | %s\n", GPU::DeviceName().c_str(), GPU::DriverName().c_str());
+        fprintf(logFile, "schermo %dx%d a %d Hz | vsync ini=%d | maxfps=%d | color_effects=%d\n",
                 screen.x, screen.y, refresh, System::IniConf::GfxVsync.Get<int32_t>(),
-                SDL_GL_GetSwapInterval(), System::IniConf::GfxMaxFps.Get<int32_t>(),
-                System::IniConf::GfxVBO.Get<bool>() ? 1 : 0,
-                System::IniConf::GfxColorEffects.Get<int32_t>(), gpuReady ? 1 : 0);
+                System::IniConf::GfxMaxFps.Get<int32_t>(), System::IniConf::GfxColorEffects.Get<int32_t>());
         fflush(logFile);
     }
 
@@ -464,24 +407,6 @@ bool __wrap__ZN6System13ProcessEventsEv()
     if (phase == PH_RUN)
     {
         frameStage[S_FRAME] = Now() - frameStart;
-
-        // Read back a GPU query from three frames ago: never stalls the CPU.
-        if (gpuReady)
-        {
-            const int slot = (gpuSlot + 1) % QUERY_SLOTS;
-            if (gpuQueryBusy[slot])
-            {
-                GLuint available = 0;
-                glGetQueryObjectuiv_(gpuQuery[slot], GL_QUERY_RESULT_AVAILABLE, &available);
-                if (available)
-                {
-                    GLuint64 elapsed = 0;
-                    glGetQueryObjectui64v_(gpuQuery[slot], GL_QUERY_RESULT, &elapsed);
-                    frameStage[S_GPU] = (double)elapsed / 1000000.0;
-                    gpuQueryBusy[slot] = false;
-                }
-            }
-        }
 
         EndFrameStats();
         if (++runFrames >= cfg.frames)
@@ -556,18 +481,6 @@ void __wrap__ZN17NC_STACK_ypaworld7ProcessEP10base_64arg(NC_STACK_ypaworld *w, b
 
 void __wrap__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(NC_STACK_ypaworld *w, base_64arg *arg, int a2)
 {
-    if (gpuReady && phase == PH_RUN)
-    {
-        gpuSlot = (gpuSlot + 1) % QUERY_SLOTS;
-        if (!gpuQueryBusy[gpuSlot])
-        {
-            glBeginQuery_(GL_TIME_ELAPSED, gpuQuery[gpuSlot]);
-            gpuQueryBusy[gpuSlot] = true;
-        }
-        else
-            gpuSlot = (gpuSlot + QUERY_SLOTS - 1) % QUERY_SLOTS;
-    }
-
     const double start = Now();
     __real__ZN17NC_STACK_ypaworld10RenderGameEP10base_64argi(w, arg, a2);
     frameStage[S_RENDER_CPU] = (Now() - start) - frameStage[S_RASTER_CPU];
@@ -587,14 +500,12 @@ void __wrap__ZN3GFX9GFXEngine8EndFrameEv(GFX::GFXEngine *engine)
     frameStage[S_UI] = (Now() - start) - frameStage[S_SWAP];
 }
 
-// The swap is where the wait for the screen happens: measured on its own.
-void __wrap__ZN6System4FlipEv()
+// The present runs the recorded frame on the GPU and waits for the screen:
+// measured on its own.
+void __wrap__ZN3GPU7PresentEv()
 {
-    if (gpuReady && phase == PH_RUN && gpuQueryBusy[gpuSlot])
-        glEndQuery_(GL_TIME_ELAPSED);
-
     const double start = Now();
-    __real__ZN6System4FlipEv();
+    __real__ZN3GPU7PresentEv();
     frameStage[S_SWAP] = Now() - start;
 }
 

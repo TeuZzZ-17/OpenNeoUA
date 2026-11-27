@@ -19,7 +19,9 @@
 // below). A dug pixel is then mapped exactly as on the untouched world: no
 // guess about the crater shape is made here.
 //
-// The file has no dependencies so a test can compile the same text on a real GPU.
+// GLSL 450 for SDL_GPU (see stdshdr.cpp for the resource sets). gl_FragCoord and
+// the screen textures have their origin at the top-left corner. The file has no
+// dependencies so a test can compile the same text.
 #ifndef SYSTEM_DECALSHADER_H_INCLUDED
 #define SYSTEM_DECALSHADER_H_INCLUDED
 
@@ -30,6 +32,39 @@ namespace GFX
 
 // Radii of the jagged decal outline, equally spaced around the centre.
 constexpr int DECAL_SHAPE_SAMPLES = 24;
+
+// Uniforms of the decal pass (std140, fragment set 3). Shape holds the
+// DECAL_SHAPE_SAMPLES radii four per vec4.
+struct TDecalParams
+{
+    float ScreenInv[2];   // 1 / screen size
+    float RestOn;         // 0 = no dug surface in this frame, uRest is not read
+    float Textured;
+    float Project[4];     // 1/m00, 1/m11, then A and B of z_ndc = A + B / z
+    float ViewToWorld[12];// camera axes to world axes, three vec4 columns
+    float Fog[4];         // same four values of the standard shader
+    float AlphaFog[4];
+    float FogColor[4];
+    float AtmosphereColor[4];
+    float Origin[4];      // impact point, relative to the camera
+    float AxisT[4];       // decal plane axes and surface normal
+    float AxisB[4];
+    float AxisN[4];
+    float Size[2];        // decal size along T and B
+    float EdgeFade;       // 0 = hard edge, 1 = fades across the whole decal
+    float Colorize;       // 1 = Tint.rgb replaces the hue
+    float Tint[4];
+    float Shape[DECAL_SHAPE_SAMPLES];
+};
+
+// Uniforms of the rest pass (std140, same block in both stages).
+struct TDecalRestParams
+{
+    float Proj[16];
+    float View[16];
+    float ViewToWorld[16];  // upper 3x3 used
+    float Cut[4];           // x: 1 = the mesh has holes where its texture is clear
+};
 
 // A rest normal travels in the alpha of the rest texture: two numbers of 12
 // bits (octahedral map) in one float, plus 1 so that 0 means "not dug".
@@ -59,64 +94,60 @@ vec3 unpackNormal(float value)
 )GLSL";
 }
 
+inline std::string DecalRestParamsText(int set)
+{
+    return "layout(set = " + std::to_string(set) + R"GLSL(, binding = 0, std140) uniform RestParams
+{
+    mat4 uProj;
+    mat4 uView;
+    mat4 uViewToWorld;
+    vec4 uCut;
+};
+)GLSL";
+}
+
 // Rest pass: a dug mesh drawn again, writing where each pixel's point was
 // before the craters and dents (camera-relative, world axes) and the normal
 // the surface had there.
-inline std::string DecalRestVertexShaderText(bool vbo)
+inline std::string DecalRestVertexShaderText()
 {
-    if ( vbo )
-        return
-            "#version 120\n"
-            "uniform mat4 uProj;\n"
-            "uniform mat4 uView;\n"
-            "attribute vec3 vPos;\n"
-            "attribute vec3 vRest;\n"
-            "attribute vec2 vUV;\n"
-            "varying vec3 vNowView;\n"
-            "varying vec3 vRestView;\n"
-            "varying vec2 vTexCoord;\n"
-            "void main()\n"
-            "{\n"
-            "    vec4 tformed = uView * vec4(vPos, 1.0);\n"
-            "    gl_Position = uProj * tformed;\n"
-            "    vNowView = tformed.xyz;\n"
-            "    vRestView = (uView * vec4(vRest, 1.0)).xyz;\n"
-            "    vTexCoord = vUV;\n"
-            "}\n";
-
-    // Fixed-function arrays: the rest place comes in the normal array.
-    return
-        "#version 120\n"
-        "varying vec3 vNowView;\n"
-        "varying vec3 vRestView;\n"
-        "varying vec2 vTexCoord;\n"
-        "void main()\n"
-        "{\n"
-        "    gl_Position = ftransform();\n"
-        "    vNowView = (gl_ModelViewMatrix * gl_Vertex).xyz;\n"
-        "    vRestView = (gl_ModelViewMatrix * vec4(gl_Normal, 1.0)).xyz;\n"
-        "    vTexCoord = gl_MultiTexCoord0.xy;\n"
-        "}\n";
+    return "#version 450\n" + DecalRestParamsText(1) + R"GLSL(
+layout(location = 0) in vec3 vPos;
+layout(location = 2) in vec2 vUV;
+layout(location = 3) in vec3 vRest;
+layout(location = 0) out vec3 vNowView;
+layout(location = 1) out vec3 vRestView;
+layout(location = 2) out vec2 vTexCoord;
+void main()
+{
+    vec4 tformed = uView * vec4(vPos, 1.0);
+    gl_Position = uProj * tformed;
+    gl_Position.z = (gl_Position.z + gl_Position.w) * 0.5;
+    vNowView = tformed.xyz;
+    vRestView = (uView * vec4(vRest, 1.0)).xyz;
+    vTexCoord = vUV;
+}
+)GLSL";
 }
 
 inline std::string DecalRestFragmentShaderText()
 {
-    return std::string("#version 120\n") + DecalNormalPackText() + R"GLSL(
-uniform sampler2D uImage;       // Texture of the mesh (read only when uCut is 1).
-uniform float uCut;             // 1 = the mesh has holes where its texture is clear.
-uniform mat3 uViewToWorld;      // Camera axes to world axes.
-varying vec3 vNowView;
-varying vec3 vRestView;
-varying vec2 vTexCoord;
+    return "#version 450\n" + DecalRestParamsText(3) + DecalNormalPackText() + R"GLSL(
+layout(set = 2, binding = 0) uniform sampler2D uImage;   // texture of the mesh (read only when cut)
+layout(location = 0) in vec3 vNowView;
+layout(location = 1) in vec3 vRestView;
+layout(location = 2) in vec2 vTexCoord;
+layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    if (uCut != 0.0 && texture2D(uImage, vTexCoord).a <= 0.0)
+    if (uCut.x != 0.0 && texture(uImage, vTexCoord).a <= 0.0)
         discard;
 
     // The rest places of a triangle lie on the polygon it was cut from, so
     // this is that polygon's normal, whatever shape the triangle has now.
-    vec3 normal = cross(uViewToWorld * dFdx(vRestView), uViewToWorld * dFdy(vRestView));
+    mat3 viewToWorld = mat3(uViewToWorld);
+    vec3 normal = cross(viewToWorld * dFdx(vRestView), viewToWorld * dFdy(vRestView));
     float size = length(normal);
     if (size <= 0.0)
         discard;
@@ -124,63 +155,61 @@ void main()
     if (dot(cross(dFdx(vNowView), dFdy(vNowView)), vNowView) > 0.0)
         normal = -normal;
 
-    gl_FragColor = vec4(uViewToWorld * vRestView, packNormal(normal / size));
+    fragColor = vec4(viewToWorld * vRestView, packNormal(normal / size));
 }
 )GLSL";
 }
 
-// #version 120 is the only level that exists on both GL paths (gfx.vbo on/off).
-inline std::string DecalVertexShaderText(bool vbo)
+inline std::string DecalVertexShaderText()
 {
-    if ( vbo )
-        return
-            "#version 120\n"
-            "attribute vec3 vPos;\n"
-            "void main() { gl_Position = vec4(vPos.xy, 0.0, 1.0); }\n";
-
-    return
-        "#version 120\n"
-        "void main() { gl_Position = vec4(gl_Vertex.xy, 0.0, 1.0); }\n";
+    return R"GLSL(#version 450
+layout(location = 0) in vec3 vPos;
+layout(location = 1) in vec4 vColor;
+layout(location = 2) in vec2 vUV;
+void main() { gl_Position = vec4(vPos.xy, 0.0, 1.0); }
+)GLSL";
 }
 
 inline std::string DecalFragmentShaderText()
 {
-    return std::string("#version 120\n#define SHAPE_SAMPLES ") +
+    return std::string("#version 450\n#define SHAPE_SAMPLES ") +
            std::to_string(DECAL_SHAPE_SAMPLES) + "\n" + DecalNormalPackText() + R"GLSL(
-uniform sampler2D uImage;       // Decal image (unused when uTextured is 0).
-uniform sampler2D uSceneDepth;  // Depth of the world, without any unit.
-uniform sampler2D uRest;        // Rest place and normal of the dug pixels (alpha 0: not dug).
-uniform float uRestOn;          // 0 = no dug surface in this frame, uRest is not read.
-uniform vec2 uScreenInv;        // 1 / screen size.
-uniform vec4 uProject;          // 1/m00, 1/m11, then A and B of z_ndc = A + B / z.
-uniform mat3 uViewToWorld;      // Camera axes to world axes.
-uniform vec4 uFog;              // Same four values of the standard shader.
-uniform vec4 uAlphaFog;
-uniform vec3 uFogColor;
-uniform vec3 uAtmosphereColor;
+layout(set = 2, binding = 0) uniform sampler2D uImage;       // decal image (unused when not textured)
+layout(set = 2, binding = 1) uniform sampler2D uSceneDepth;  // depth of the world, without any unit
+layout(set = 2, binding = 2) uniform sampler2D uRest;        // rest place and normal of the dug pixels
+layout(set = 3, binding = 0, std140) uniform DecalParams
+{
+    vec4 uScreen;            // xy = 1 / screen size, z = rest on, w = textured
+    vec4 uProject;
+    mat3 uViewToWorld;
+    vec4 uFog;
+    vec4 uAlphaFog;
+    vec4 uFogColor;
+    vec4 uAtmosphereColor;
+    vec4 uOrigin;
+    vec4 uAxisT4;
+    vec4 uAxisB4;
+    vec4 uAxisN4;
+    vec4 uSizeFade;          // xy = size, z = edge fade, w = colorize
+    vec4 uTint;
+    vec4 uShape[SHAPE_SAMPLES / 4];
+};
+layout(location = 0) out vec4 fragColor;
 
-uniform vec3 uOrigin;           // Impact point, relative to the camera.
-uniform vec3 uAxisT;            // Decal plane axes and surface normal.
-uniform vec3 uAxisB;
-uniform vec3 uAxisN;
-uniform vec2 uSize;             // Decal size along T and B.
-uniform float uEdgeFade;        // 0 = hard edge, 1 = fades across the whole decal.
-uniform float uShape[SHAPE_SAMPLES];
-uniform vec4 uTint;
-uniform float uColorize;        // 1 = uTint.rgb replaces the hue.
-uniform float uTextured;
+float shapeRadius(int i) { return uShape[i / 4][i % 4]; }
 
 // 1/z is the value that changes linearly across a flat polygon on screen.
 float inverseDepth(vec2 frag)
 {
-    float depth = texture2D(uSceneDepth, frag * uScreenInv).r;
+    float depth = texture(uSceneDepth, frag * uScreen.xy).r;
     return (depth * 2.0 - 1.0 - uProject.z) / uProject.w;
 }
 
 vec3 viewPosition(vec2 frag, float invZ)
 {
     float z = 1.0 / invZ;
-    vec2 ndc = frag * uScreenInv * 2.0 - 1.0;
+    vec2 uv = frag * uScreen.xy;
+    vec2 ndc = vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     return vec3(ndc * z * uProject.xy, z);
 }
 
@@ -216,6 +245,12 @@ float horizonFogFactor(float distanceValue, float startValue, float lengthValue,
 
 void main()
 {
+    vec3 uAxisT = uAxisT4.xyz;
+    vec3 uAxisB = uAxisB4.xyz;
+    vec3 uAxisN = uAxisN4.xyz;
+    vec2 uSize = uSizeFade.xy;
+    float uEdgeFade = uSizeFade.z;
+
     vec2 frag = gl_FragCoord.xy;
     float invZ = inverseDepth(frag);
     vec3 view = viewPosition(frag, invZ);
@@ -223,9 +258,9 @@ void main()
 
     // A dug pixel is mapped where its point was before the craters and dents:
     // there the world is as it always was, so the rules below need no change.
-    vec4 rest = uRestOn != 0.0 ? texture2D(uRest, frag * uScreenInv) : vec4(0.0);
+    vec4 rest = uScreen.z != 0.0 ? texture(uRest, frag * uScreen.xy) : vec4(0.0);
     bool dug = rest.a > 0.5;
-    vec3 offset = (dug ? rest.xyz : world) - uOrigin;
+    vec3 offset = (dug ? rest.xyz : world) - uOrigin.xyz;
 
     // Up to this height a level surface counts as the hit surface itself: the
     // impact point comes from collision, which never matches the visuals exactly.
@@ -290,18 +325,18 @@ void main()
     float slot = fract(angle / 6.28318530718) * float(SHAPE_SAMPLES);
     int first = int(floor(slot));
     int next = first + 1 >= SHAPE_SAMPLES ? 0 : first + 1;
-    float boundary = mix(uShape[first], uShape[next], slot - floor(slot));
+    float boundary = mix(shapeRadius(first), shapeRadius(next), slot - floor(slot));
     if (radius > boundary)
         discard;
 
     vec4 source;
     float start = 1.0 - uEdgeFade;
     float span = max(uEdgeFade, 0.0001);
-    if (uTextured != 0.0)
+    if (uScreen.w != 0.0)
     {
         // Same fade of the image on every surface, measured from the image centre.
         float t = clamp((radius * 2.0 - start) / span, 0.0, 1.0);
-        source = texture2D(uImage, uv);
+        source = texture(uImage, uv);
         source.a *= uEdgeFade > 0.0 ? 1.0 - t * t * (3.0 - 2.0 * t) : 1.0;
     }
     else
@@ -315,7 +350,7 @@ void main()
     }
 
     vec4 color;
-    if (uColorize != 0.0)
+    if (uSizeFade.w != 0.0)
     {
         float intensity = max(source.r, max(source.g, source.b));
         color = vec4(uTint.rgb * intensity, source.a * uTint.a);
@@ -328,19 +363,19 @@ void main()
     if (uAlphaFog.x != 0.0)
     {
         float fadeDistance = uAlphaFog.x == 2.0 ? view.z : length(view.xz);
-        color.rgb = mix(color.rgb, uAtmosphereColor,
+        color.rgb = mix(color.rgb, uAtmosphereColor.rgb,
                         horizonFogFactor(fadeDistance, uAlphaFog.y, uAlphaFog.z, uAlphaFog.w));
         if (uFog.x != 0.0)
-            color.rgb = mix(color.rgb, uFogColor,
+            color.rgb = mix(color.rgb, uFogColor.rgb,
                             horizonFogFactor(fadeDistance, uFog.y, uFog.z, uFog.w));
     }
     else if (uFog.x != 0.0 && uFog.z > 0.0)
     {
-        color.rgb = mix(color.rgb, uFogColor,
+        color.rgb = mix(color.rgb, uFogColor.rgb,
                         clamp((view.z - uFog.y) / uFog.z, 0.0, 1.0) * uFog.w);
     }
 
-    gl_FragColor = color;
+    fragColor = color;
 }
 )GLSL";
 }

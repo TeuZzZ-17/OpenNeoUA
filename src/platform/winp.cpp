@@ -38,7 +38,7 @@ Common::Point NC_STACK_winp::_mMUpos;
 
 
 bool                 NC_STACK_winp::_joyEnable = false;
-SDL_JoystickGUID     NC_STACK_winp::_joyWantGuid;
+SDL_GUID     NC_STACK_winp::_joyWantGuid;
 
 SDL_Joystick        *NC_STACK_winp::_joyHandle = nullptr;
 SDL_Haptic          *NC_STACK_winp::_joyHaptic = nullptr;
@@ -79,9 +79,9 @@ void sdlInputLog(const char *format, ...)
     va_end(va);
 }
 
-SDL_JoystickGUID NC_STACK_winp::sdlReadJoyGuid()
+SDL_GUID NC_STACK_winp::sdlReadJoyGuid()
 {
-    SDL_JoystickGUID guid;
+    SDL_GUID guid;
 
     FSMgr::FileHandle *f = nullptr;
 
@@ -100,22 +100,22 @@ SDL_JoystickGUID NC_STACK_winp::sdlReadJoyGuid()
         if (endp != std::string::npos)
             buf.erase(endp);
 
-        guid = SDL_JoystickGetGUIDFromString(buf.c_str());
+        guid = SDL_StringToGUID(buf.c_str());
     }
     else
-        std::memset(&guid, 0, sizeof(SDL_JoystickGUID));
+        std::memset(&guid, 0, sizeof(SDL_GUID));
 
     return guid;
 }
 
-bool NC_STACK_winp::sdlGUIDcmp(SDL_JoystickGUID &gd1, SDL_JoystickGUID &gd2)
+bool NC_STACK_winp::sdlGUIDcmp(SDL_GUID &gd1, SDL_GUID &gd2)
 {
-    return std::memcmp(&gd1, &gd2, sizeof(SDL_JoystickGUID)) == 0;
+    return std::memcmp(&gd1, &gd2, sizeof(SDL_GUID)) == 0;
 }
 
 int NC_STACK_winp::sdlJoyAxis(SDL_Joystick* joystick, int axis)
 {
-    int tmp = SDL_JoystickGetAxis(joystick, _joyAxisMap[axis]);
+    int tmp = SDL_GetJoystickAxis(joystick, _joyAxisMap[axis]);
 
     if ( _joyAxisMapInv[axis] )
         tmp = -tmp;
@@ -136,7 +136,7 @@ int NC_STACK_winp::sdlJoyAxis(SDL_Joystick* joystick, int axis)
 void NC_STACK_winp::sdlJoyReadMapping(SDL_Joystick* joystick)
 {
     char bf[64];
-    SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(joystick), bf, 64);
+    SDL_GUIDToString(SDL_GetJoystickGUID(joystick), bf, sizeof(bf));
     std::string guid(bf);
 
     for (size_t i = 0; i < MAXJOYHAT; i++)
@@ -231,39 +231,43 @@ void NC_STACK_winp::KeyUp(int16_t vk)
         _kbdLastDown = Input::KC_NONE;
 }
 
-int NC_STACK_winp::InputWatch(void *, SDL_Event *event)
+bool NC_STACK_winp::InputWatch(void *, SDL_Event *event)
 {
+    // SDL3 reports sub-pixel relative motion; keep the remainder so slow mouse
+    // moves still turn the camera like the integer deltas of SDL2 did.
+    static float motionRestX = 0.0f, motionRestY = 0.0f;
+
     switch(event->type)
     {
-    case SDL_KEYDOWN:
+    case SDL_EVENT_KEY_DOWN:
         {
-            auto it = KBDMapping.find(event->key.keysym.scancode);
+            auto it = KBDMapping.find(event->key.scancode);
             if (it != KBDMapping.end())
                 KeyDown(it->second);
         }
         break;
 
-    case SDL_KEYUP:
+    case SDL_EVENT_KEY_UP:
         {
-            auto it = KBDMapping.find(event->key.keysym.scancode);
+            auto it = KBDMapping.find(event->key.scancode);
             if (it != KBDMapping.end())
                 KeyUp(it->second);
         }
         break;
 
-    case SDL_TEXTINPUT:
+    case SDL_EVENT_TEXT_INPUT:
     {
-        for( char c : event->text.text)
+        for (const char *c = event->text.text; c && *c; ++c)
         {
-            if (!c || _inputText.size() >= MAXCHARQUEUE)
+            if (_inputText.size() >= MAXCHARQUEUE)
                 break;
 
-            _inputText.push(c);
+            _inputText.push(*c);
         }
     }
     break;
 
-    case SDL_MOUSEBUTTONDOWN:
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
     {
         Common::Point pos = GFX::GFXEngine::Instance.ConvertPosTo2DStuff( Common::Point(event->button.x, event->button.y) );
         if ( !Gui::Root::Instance.MouseDown(pos, event->button.button, event->button.clicks) )
@@ -271,7 +275,7 @@ int NC_STACK_winp::InputWatch(void *, SDL_Event *event)
     }
     break;
 
-    case SDL_MOUSEBUTTONUP:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
     {
         Common::Point pos = GFX::GFXEngine::Instance.ConvertPosTo2DStuff( Common::Point(event->button.x, event->button.y) );
         if ( !Gui::Root::Instance.MouseUp(pos, event->button.button, event->button.clicks) )
@@ -279,24 +283,28 @@ int NC_STACK_winp::InputWatch(void *, SDL_Event *event)
     }
     break;
 
-    case SDL_MOUSEMOTION:
+    case SDL_EVENT_MOUSE_MOTION:
     {
-        Common::Point pos = GFX::GFXEngine::Instance.ConvertPosTo2DStuff( Common::Point(event->button.x, event->button.y) );
-        Common::Point rel = Common::Point(event->motion.xrel, event->motion.yrel);
+        Common::Point pos = GFX::GFXEngine::Instance.ConvertPosTo2DStuff( Common::Point(event->motion.x, event->motion.y) );
+        motionRestX += event->motion.xrel;
+        motionRestY += event->motion.yrel;
+        Common::Point rel = Common::Point((int)motionRestX, (int)motionRestY);
+        motionRestX -= rel.x;
+        motionRestY -= rel.y;
         if ( !Gui::Root::Instance.MouseMove(pos, rel) )
             OnMouseMove(pos, rel);
     }
     break;
 
-    case SDL_MOUSEWHEEL:
-        _mWheel += event->wheel.y;
+    case SDL_EVENT_MOUSE_WHEEL:
+        _mWheel += event->wheel.integer_y;   // whole notches, like SDL2
         break;
 
     default:
         break;
     }
 
-    return 1;
+    return true;
 }
 
 
@@ -661,7 +669,7 @@ void NC_STACK_winp::CheckJoy()
         _joyXYpos.x = sdlJoyAxis(_joyHandle, 0);
         _joyXYpos.y = sdlJoyAxis(_joyHandle, 1);
 
-        int joyaxs = SDL_JoystickNumAxes(_joyHandle);
+        int joyaxs = SDL_GetNumJoystickAxes(_joyHandle);
 
         if ( joyaxs > 2 )
             _joyZRZpos.x = sdlJoyAxis(_joyHandle, 2);
@@ -675,7 +683,7 @@ void NC_STACK_winp::CheckJoy()
 
         for (int i = 0; i < 8; i++ )
         {
-            if ( SDL_JoystickGetButton(_joyHandle, _joyButtonMap[i]) )
+            if ( SDL_GetJoystickButton(_joyHandle, _joyButtonMap[i]) )
             {
                 _joyButtonStates |= 1 << i;
 
@@ -688,9 +696,9 @@ void NC_STACK_winp::CheckJoy()
             }
         }
 
-        if ( SDL_JoystickNumHats(_joyHandle) > 0)
+        if ( SDL_GetNumJoystickHats(_joyHandle) > 0)
         {
-            switch( SDL_JoystickGetHat(_joyHandle, _joyHatMap[0]) )
+            switch( SDL_GetJoystickHat(_joyHandle, _joyHatMap[0]) )
             {
             case SDL_HAT_UP:
                 _joyPov.x = 0;
@@ -928,38 +936,40 @@ void NC_STACK_winp::InitFirst()
     sdlInputResetLog();
     _joyWantGuid = sdlReadJoyGuid();
 
-    int numJoy = SDL_NumJoysticks();
+    int numJoy = 0;
+    SDL_JoystickID *joysticks = SDL_GetJoysticks(&numJoy);
 
-    if (numJoy)
+    if (joysticks && numJoy)
     {
         for (int i = 0; i < numJoy; i++)
         {
-            SDL_JoystickGUID jGUID = SDL_JoystickGetDeviceGUID(i);
+            SDL_GUID jGUID = SDL_GetJoystickGUIDForID(joysticks[i]);
 
             char guidBuff[64];
-            SDL_JoystickGetGUIDString(jGUID, guidBuff, sizeof(guidBuff));
+            SDL_GUIDToString(jGUID, guidBuff, sizeof(guidBuff));
 
-            sdlInputLog("Found joystick #%d: %s\n\tGUID:%s\n", i, SDL_JoystickNameForIndex(i), guidBuff);
+            sdlInputLog("Found joystick #%d: %s\n\tGUID:%s\n", i, SDL_GetJoystickNameForID(joysticks[i]), guidBuff);
 
             if (!_joyHandle && sdlGUIDcmp(jGUID, _joyWantGuid) )
-                _joyHandle = SDL_JoystickOpen(i);
+                _joyHandle = SDL_OpenJoystick(joysticks[i]);
         }
 
         if ( !_joyHandle )
-            _joyHandle = SDL_JoystickOpen(0);
+            _joyHandle = SDL_OpenJoystick(joysticks[0]);
 
-        _joyHaptic = SDL_HapticOpenFromJoystick(_joyHandle);
+        _joyHaptic = SDL_OpenHapticFromJoystick(_joyHandle);
     }
     else
     {
         sdlInputLog("No joysticks found\n");
     }
+    SDL_free(joysticks);
 
     if (_joyHandle)
     {
         _joyEnable = true;
-        sdlInputLog("\nSelected joystick: %s\n", SDL_JoystickName(_joyHandle));
-        sdlInputLog("\tAxes:%d\tHats:%d\tButtons:%d\tBalls:%d\n", SDL_JoystickNumAxes(_joyHandle), SDL_JoystickNumHats(_joyHandle), SDL_JoystickNumButtons(_joyHandle), SDL_JoystickNumBalls(_joyHandle));
+        sdlInputLog("\nSelected joystick: %s\n", SDL_GetJoystickName(_joyHandle));
+        sdlInputLog("\tAxes:%d\tHats:%d\tButtons:%d\tBalls:%d\n", SDL_GetNumJoystickAxes(_joyHandle), SDL_GetNumJoystickHats(_joyHandle), SDL_GetNumJoystickButtons(_joyHandle), SDL_GetNumJoystickBalls(_joyHandle));
         sdlJoyReadMapping(_joyHandle);
         sdlInputLog("\n");
     }

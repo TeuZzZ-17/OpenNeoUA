@@ -71,7 +71,7 @@ void UA::DrawText(SDL_Surface *srf, const std::string &text, int flag, const SDL
     int cx = 0, cy = 0;
 
     if ( flag & (TXTFLAG_RIGHTALIGN | TXTFLAG_CENTER | TXTFLAG_RELWIDTH) )
-        TTF_SizeUTF8(_UATTF, text.c_str(), &cx, &cy);
+        TTF_GetStringSize(_UATTF, text.c_str(), 0, &cx, &cy);
 
     Common::PointRect pp = area;
     if ( flag & TXTFLAG_RELWIDTH )
@@ -108,7 +108,7 @@ void UA::DrawText(SDL_Surface *srf, const std::string &text, int flag, const SDL
         }
     }
 
-    SDL_SetClipRect(srf, &clipRect);
+    SDL_SetSurfaceClipRect(srf, &clipRect);
 
     int dy = pp.y + ((pp.h - _UAFontH) / 2) - 2;
     if ( flag & TXTFLAG_PRESSED )
@@ -127,12 +127,12 @@ void UA::DrawText(SDL_Surface *srf, const std::string &text, int flag, const SDL
 
     if (System::IniConf::GfxSolidFont.Get<bool>())
     {
-        tmp = TTF_RenderUTF8_Solid(_UATTF, text.c_str(), clr);
+        tmp = TTF_RenderText_Solid(_UATTF, text.c_str(), 0, clr);
         SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_NONE);
     }
     else
     {
-        tmp = TTF_RenderUTF8_Blended(_UATTF, text.c_str(), clr);
+        tmp = TTF_RenderText_Blended(_UATTF, text.c_str(), 0, clr);
         SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND);
     }
 
@@ -148,12 +148,12 @@ void UA::DrawText(SDL_Surface *srf, const std::string &text, int flag, const SDL
 
     if (System::IniConf::GfxSolidFont.Get<bool>())
     {
-        SDL_SetPaletteColors(tmp->format->palette, &clr, 1, 1);
+        SDL_SetPaletteColors(SDL_GetSurfacePalette(tmp), &clr, 1, 1);
     }
     else
     {
-        SDL_FreeSurface(tmp);
-        tmp = TTF_RenderUTF8_Blended(_UATTF, text.c_str(), clr);
+        SDL_DestroySurface(tmp);
+        tmp = TTF_RenderText_Blended(_UATTF, text.c_str(), 0, clr);
         SDL_SetSurfaceBlendMode(tmp, SDL_BLENDMODE_BLEND);
     }
 
@@ -163,10 +163,10 @@ void UA::DrawText(SDL_Surface *srf, const std::string &text, int flag, const SDL
     want.y = dy;
 
     SDL_BlitSurface(tmp, nullptr, srf, &want);
-    SDL_FreeSurface(tmp);
+    SDL_DestroySurface(tmp);
 
 
-    SDL_SetClipRect(srf, nullptr);
+    SDL_SetSurfaceClipRect(srf, nullptr);
 }
 
 }

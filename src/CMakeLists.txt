@@ -57,6 +57,7 @@ set(SOURCES
     locale/locale.cpp
     gui/lstvw.cpp
     main.cpp
+    platform/sdl_entry.cpp
     nucleus/IFFile.cpp
     platform/network.cpp
     netlib/client.cpp
@@ -66,6 +67,7 @@ set(SOURCES
     netlib/server_threads.cpp
     netlib/single.cpp
     netlib/single_threads.cpp
+    netlib/udpsocket.cpp
     netlib/zndNet.cpp
     nucleus/nucleas.cpp
     nucleus/obj3d.cpp
@@ -78,7 +80,7 @@ set(SOURCES
     system/framepacer.cpp
     system/gametime.cpp
     system/gfx.cpp
-    system/glfuncs.cpp
+    system/gpu.cpp
     system/inivals.cpp
     system/inpt.cpp
     system/luascript.cpp
@@ -198,17 +200,18 @@ find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 add_subdirectory(third_party/bullet)
 
-pkg_search_module(SDL2 REQUIRED sdl2)
-link_directories(${SDL2_LIBRARY_DIRS})
+pkg_search_module(SDL3 REQUIRED sdl3)
+link_directories(${SDL3_LIBRARY_DIRS})
 
-pkg_search_module(SDL2_IMAGE REQUIRED SDL2_image)
-link_directories(${SDL2_IMAGE_LIBRARY_DIRS})
+pkg_search_module(SDL3_IMAGE REQUIRED sdl3-image)
+link_directories(${SDL3_IMAGE_LIBRARY_DIRS})
 
-pkg_search_module(SDL2_TTF REQUIRED SDL2_ttf)
-link_directories(${SDL2_TTF_LIBRARY_DIRS})
+pkg_search_module(SDL3_TTF REQUIRED sdl3-ttf)
+link_directories(${SDL3_TTF_LIBRARY_DIRS})
 
-pkg_search_module(SDL2_NET REQUIRED SDL2_net)
-link_directories(${SDL2_NET_LIBRARY_DIRS})
+# GLSL shaders (built-in and Data/res) are compiled to SPIR-V at runtime.
+pkg_search_module(SHADERC REQUIRED shaderc)
+link_directories(${SHADERC_LIBRARY_DIRS})
 
 pkg_search_module(VORBISFILE REQUIRED vorbisfile)
 link_directories(${VORBISFILE_LIBRARY_DIRS})
@@ -226,7 +229,6 @@ pkg_check_modules(
     libswresample
 )
 
-find_package(OpenGL REQUIRED)
 find_package(OpenAL REQUIRED)
 find_package(Lua REQUIRED)
 
@@ -256,11 +258,10 @@ endif()
 target_link_libraries(
     OpenNeoUA
 
-    ${SDL2_LIBRARIES}
-    ${SDL2_IMAGE_LIBRARIES}
-    ${SDL2_TTF_LIBRARIES}
-    ${SDL2_NET_LIBRARIES}
-    ${OPENGL_LIBRARIES}
+    ${SDL3_LIBRARIES}
+    ${SDL3_IMAGE_LIBRARIES}
+    ${SDL3_TTF_LIBRARIES}
+    ${SHADERC_LIBRARIES}
     ${VORBISFILE_LIBRARIES}
     ${OPENAL_LIBRARY}
     ${LUA_LIBRARIES}
@@ -271,7 +272,7 @@ target_link_libraries(
 )
 
 if(WIN32)
-    target_link_libraries(OpenNeoUA dbghelp psapi)
+    target_link_libraries(OpenNeoUA dbghelp psapi ws2_32)
 endif()
 
 target_include_directories(
@@ -280,11 +281,10 @@ target_include_directories(
 
     ${PROJECT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
-    ${SDL2_INCLUDE_DIRS}
-    ${SDL2_IMAGE_INCLUDE_DIRS}
-    ${SDL2_TTF_INCLUDE_DIRS}
-    ${SDL2_NET_INCLUDE_DIRS}
-    ${OpenGL_INCLUDE_DIR}
+    ${SDL3_INCLUDE_DIRS}
+    ${SDL3_IMAGE_INCLUDE_DIRS}
+    ${SDL3_TTF_INCLUDE_DIRS}
+    ${SHADERC_INCLUDE_DIRS}
     ${VORBISFILE_INCLUDE_DIRS}
     ${OPENAL_INCLUDE_DIR}
     ${LUA_INCLUDE_DIR}

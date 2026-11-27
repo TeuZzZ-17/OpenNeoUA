@@ -23,7 +23,7 @@ int ZNDServer::_RecvThread(void *data)
 
         while (!_this->threadsEnd)
         {
-            int numrecv = SDLNet_UDP_RecvV(_this->sock, inpkt);
+            int numrecv = Net::UdpRecv(_this->sock, inpkt);
 
             if (numrecv > 0)
             {
@@ -72,7 +72,7 @@ int ZNDServer::_SendThread(void *data)
             if (_this->threadsEnd)
                 lastloop = true;
 
-            if (SDL_LockMutex(_this->sendModifyMutex) == 0)
+            SDL_LockMutex(_this->sendModifyMutex);
             {
                 SendingList::iterator it = _this->sendPktList.begin();
                 size_t sendedBytes = 0;
@@ -101,10 +101,10 @@ int ZNDServer::_SendThread(void *data)
                         if ( PrepareOutPacket(*dta, pkt) == 1 )
                         {
                             sendedBytes += pkt.len;
-                            SDLNet_UDP_Send(_this->sock, -1, &pkt);
+                            Net::UdpSend(_this->sock, &pkt);
                         }
 
-                        if ( SDL_LockMutex(_this->sendPktListMutex) == 0 )
+                        SDL_LockMutex(_this->sendPktListMutex);
                         {
                             delete dta;
                             it = _this->sendPktList.erase(it);
@@ -130,11 +130,11 @@ int ZNDServer::_SendThread(void *data)
                             if ( res != 0 )
                             {
                                 sendedBytes += pkt.len;
-                                SDLNet_UDP_Send(_this->sock, -1, &pkt);
+                                Net::UdpSend(_this->sock, &pkt);
 
                                 if (res == 1) //All data send
                                 {
-                                    if ( SDL_LockMutex(_this->sendPktListMutex) == 0 )
+                                    SDL_LockMutex(_this->sendPktListMutex);
                                     {
                                         it = _this->sendPktList.erase(it);
                                         SDL_UnlockMutex(_this->sendPktListMutex);
@@ -146,7 +146,7 @@ int ZNDServer::_SendThread(void *data)
                                         {
                                             dta->timeout = TIMEOUT_GARANT + _this->ttime.GetTicks();
 
-                                            if ( SDL_LockMutex(_this->confirmQueueMutex) == 0 )
+                                            SDL_LockMutex(_this->confirmQueueMutex);
                                             {
                                                 _this->confirmQueue.push_back(dta);
                                                 SDL_UnlockMutex(_this->confirmQueueMutex);
@@ -165,7 +165,7 @@ int ZNDServer::_SendThread(void *data)
                             }
                             else
                             {
-                                if ( SDL_LockMutex(_this->sendPktListMutex)  == 0 )
+                                SDL_LockMutex(_this->sendPktListMutex);
                                 {
                                     it = _this->sendPktList.erase(it);
                                     SDL_UnlockMutex(_this->sendPktListMutex);
@@ -209,7 +209,7 @@ int ZNDServer::_UpdateThread(void *data)
     {
         uint32_t pktsRecv = 0;
 
-        if (SDL_LockMutex(_this->eSyncMutex) == 0)
+        SDL_LockMutex(_this->eSyncMutex);
         {
             uint64_t forceBrake = _this->ttime.GetTicks() + TIMEOUT_SRV_RECV_MAX;
             while (_this->ttime.GetTicks() < forceBrake)
@@ -260,7 +260,7 @@ int ZNDServer::_UpdateThread(void *data)
     _this->Pending_Clear();
     _this->Recv_Clear();
 
-    SDLNet_UDP_Close(_this->sock);
+    Net::UdpClose(_this->sock);
 
     _this->SessionClear();
 

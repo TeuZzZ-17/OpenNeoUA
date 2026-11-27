@@ -735,7 +735,7 @@ void NC_STACK_ypaworld::RenderGroundDecals(baseRender_msg *arg)
             draw.Moved = it->moved;
             draw.Shape = it->shape.data();
             draw.Tex = it->texture;
-            draw.Tint = GFX::TGLColor(it->tint.r, it->tint.g, it->tint.b, it->tint.a * fade);
+            draw.Tint = GFX::TColorF(it->tint.r, it->tint.g, it->tint.b, it->tint.a * fade);
             draw.Colorize = it->tint.ColorizesRGB();
             GFX::Engine.QueueRenderDecal(draw);
         }

@@ -104,7 +104,7 @@ void UAWindow::Draw(SDL_Surface *surface, const Common::Rect &dirt)
         _UATiles[TILESET_MAPHORZ]->Draw(surface, _areaResize, 'G');
 
     /*SDL_Rect tmp = _client;
-    SDL_FillRect(surface, &tmp, SDL_MapRGB(surface->format, 255, 0, 0));*/
+    SDL_FillSurfaceRect(surface, &tmp, SDL_MapSurfaceRGB(surface, 255, 0, 0));*/
 }
 
 void UAWindow::MouseDown(Common::Point pos, Common::Point scrPos, int button)

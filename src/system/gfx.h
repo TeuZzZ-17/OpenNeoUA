@@ -1,4 +1,4 @@
-// GFXEngine: rendering back end (OpenGL), render nodes, textures, 2D drawing.
+// GFXEngine: rendering back end (SDL_GPU, see gpu.h), render nodes, textures, 2D drawing.
 #ifndef ENGINE_GFX_H_INCLUDED
 #define ENGINE_GFX_H_INCLUDED
 
@@ -18,6 +18,7 @@
 #include "common/cachestor.h"
 #include "common/line.h"
 #include "decalshader.h"
+#include "gpu.h"
 
 
 #define GFX_MAX_VERTEX 12
@@ -32,7 +33,7 @@ struct ResBitmap
     int16_t height = 0;
     UA_PALETTE *palette = nullptr;
     SDL_Surface *swTex = nullptr;
-    GLuint hwTex = 0;
+    GPU::TextureId hwTex = 0;
 };
 
 typedef std::vector<uint8_t> CmdStream;
@@ -102,21 +103,9 @@ constexpr float VIEW_ZOOM_MIN = 1.0f;
 constexpr float VIEW_ZOOM_MAX = 8.0f;
 
 #ifndef GFXSHORTINDEX
-
 typedef uint32_t IndexType;
-#define GLINDEXTYPE GL_UNSIGNED_INT
-
 #else
-
 typedef uint16_t IndexType;
-#define GLINDEXTYPE GL_UNSIGNED_SHORT
-
-#endif
-
-#ifndef __EMSCRIPTEN__
-#define FBOTEXTYPE GL_RGBA32F
-#else
-#define FBOTEXTYPE GL_RGBA
 #endif
 
 enum RFLAGS
@@ -144,15 +133,16 @@ enum RFLAGS
 constexpr float WORLD_FAR_CLIP = 65536.0f;
 constexpr float SKY_FAR_CLIP = 262144.0f;
 
-struct __attribute__((packed)) TGLColor
+// RGBA colour in floats: vertex colours, tints, fog.
+struct __attribute__((packed)) TColorF
 {
     float r = 1.0;
     float g = 1.0;
     float b = 1.0;
     float a = 1.0;
 
-    TGLColor() = default;
-    TGLColor(float _r, float _g, float _b, float _a = 1.0)
+    TColorF() = default;
+    TColorF(float _r, float _g, float _b, float _a = 1.0)
         : r(_r), g(_g), b(_b), a(_a) {};
 };
 
@@ -195,7 +185,7 @@ struct TRenderParams
     ResBitmap *Tex = nullptr;
 
     uint32_t Flags = 0;
-    TGLColor Color;
+    TColorF Color;
 
     TRenderParams() = default;
     TRenderParams(const TRenderParams &) = default;
@@ -221,7 +211,7 @@ struct TCoordsCache
     ResBitmap *Tex = nullptr;
     std::vector<tUtV> Coords;
 
-    // OpenGL
+    // Byte offset of these UVs inside the mesh vertex buffer.
     int32_t BufferPos = 0;
 };
 
@@ -230,14 +220,14 @@ struct TVertex
     vec3f Pos;
     //vec3f Normal;
     tUtV  TexCoord;
-    TGLColor Color;
-    TGLColor ComputedColor;
+    TColorF Color;
+    TColorF ComputedColor;
     uint32_t TexCoordId = 0;
 
     TVertex() = default;
     TVertex(const vec3f &p): Pos(p) {};
     TVertex(const vec3f &p, const tUtV &uv): Pos(p), TexCoord(uv) {};
-    TVertex(const vec3f &p, const tUtV &uv, const TGLColor &clr): Pos(p), TexCoord(uv), Color(clr) {};
+    TVertex(const vec3f &p, const tUtV &uv, const TColorF &clr): Pos(p), TexCoord(uv), Color(clr) {};
 };
 
 class TMesh
@@ -253,7 +243,7 @@ public:
     // moved it (same count as Vertexes). Empty on a mesh that was never dug.
     // The decals read it to stay painted on a surface that changed shape.
     std::vector<vec3f> Rest;
-    int32_t RestBufferPos = 0;   // Place of Rest inside glDataBuf.
+    int32_t RestBufferPos = 0;   // Byte offset of Rest inside gpuVertexBuf.
 
     TBoundBox BoundBox;
 
@@ -272,11 +262,10 @@ public:
             BoundBox.Add(v.Pos);
     }
 
-    // OpenGL
-    // Do not copy it!
-    GLuint glDataBuf = 0;
-    GLuint glIndexBuf = 0;
-    //GLuint glVao = 0;
+    // GPU buffers made by MeshMakeVBO: vertices, UV caches and rest places in one
+    // vertex buffer, triangles in the index buffer. Copies never share them.
+    GPU::BufferId gpuVertexBuf = 0;
+    GPU::BufferId gpuIndexBuf = 0;
 };
 
 struct TRenderNode
@@ -297,13 +286,13 @@ struct TRenderNode
     ResBitmap *Tex = nullptr;
 
     uint32_t Flags = 0;
-    TGLColor Color;
+    TColorF Color;
     // OpenNeoUA custom: per-node visual target hue/alpha. Neutral (1,1,1,1) = no change.
-    TGLColor ColorMul = TGLColor(1.0, 1.0, 1.0, 1.0);
+    TColorF ColorMul = TColorF(1.0, 1.0, 1.0, 1.0);
     // Treat ColorMul.rgb as a replacement hue instead of a channel multiplier.
     bool Colorize = false;
     // OpenNeoUA custom: transient VP fade kept separate from ColorMul alpha so
-    // GL_ONE/GL_ONE LUMTRACY materials can attenuate their additive RGB output.
+    // additive (One/One) LUMTRACY materials can attenuate their RGB output.
     float VPFadeFactor = 1.0f;
 
     mat4x4 TForm;
@@ -350,119 +339,17 @@ struct TDecalDraw
     float Moved = 0.0f;   // How far craters and dents may have moved the surface under it.
     const float *Shape = nullptr;   // DECAL_SHAPE_SAMPLES radii, owned by the caller.
     ResBitmap *Tex = nullptr;
-    TGLColor Tint = TGLColor(1.0, 1.0, 1.0, 1.0);
+    TColorF Tint = TColorF(1.0, 1.0, 1.0, 1.0);
     bool Colorize = false;
 };
 
-struct TShaderProg
-{
-    uint32_t ID = 0;
-    int32_t PosLoc = -1;
-    int32_t ColorLoc = -1;
-    int32_t UVLoc = -1;
-
-    TShaderProg() = default;
-    TShaderProg(uint32_t id);
-};
-
-struct TDecalProg : TShaderProg
-{
-    int32_t ImageLoc = -1;
-    int32_t SceneDepthLoc = -1;
-    int32_t ScreenInvLoc = -1;
-    int32_t ProjectLoc = -1;
-    int32_t ViewToWorldLoc = -1;
-    int32_t FogLoc = -1;
-    int32_t AlphaFogLoc = -1;
-    int32_t FogColorLoc = -1;
-    int32_t AtmosphereColorLoc = -1;
-    int32_t OriginLoc = -1;
-    int32_t AxisTLoc = -1;
-    int32_t AxisBLoc = -1;
-    int32_t AxisNLoc = -1;
-    int32_t SizeLoc = -1;
-    int32_t EdgeFadeLoc = -1;
-    int32_t RestLoc = -1;
-    int32_t RestOnLoc = -1;
-    int32_t ShapeLoc = -1;
-    int32_t TintLoc = -1;
-    int32_t ColorizeLoc = -1;
-    int32_t TexturedLoc = -1;
-
-    TDecalProg() = default;
-    TDecalProg(uint32_t id);
-};
-
-// Rest pass of the decals (see decalshader.h).
-struct TDecalRestProg : TShaderProg
-{
-    int32_t RestAttrLoc = -1;
-    int32_t ProjLoc = -1;
-    int32_t ViewLoc = -1;
-    int32_t ImageLoc = -1;
-    int32_t CutLoc = -1;
-    int32_t ViewToWorldLoc = -1;
-
-    TDecalRestProg() = default;
-    TDecalRestProg(uint32_t id);
-};
-
-struct TColorEffectsProg : TShaderProg
-{
-    int32_t NormLoc = -1;
-    int32_t InvLoc = -1;
-    int32_t RandLoc = -1;
-    int32_t ScrSizeLoc = -1;
-    int32_t MillisecsLoc = -1;
-    // OpenNeoUA custom: fullscreen visual filter (LUT indexed by luminance)
-    int32_t FilterLutLoc = -1;
-    int32_t FilterStrengthLoc = -1;
-
-    TColorEffectsProg() = default;
-    TColorEffectsProg(uint32_t id);
-};
-
-struct TAtmosphereProg : TColorEffectsProg
-{
-    int32_t StrengthLoc = -1;
-    int32_t ExposureLoc = -1;
-    int32_t ContrastLoc = -1;
-    int32_t SaturationLoc = -1;
-    int32_t VignetteLoc = -1;
-
-    TAtmosphereProg() = default;
-    TAtmosphereProg(uint32_t id);
-};
-
-struct TVhsFilterProg : TShaderProg
-{
-    int32_t RandLoc = -1;
-    int32_t ScrSizeLoc = -1;
-    int32_t MillisecsLoc = -1;
-    int32_t StrengthLoc = -1;
-
-    TVhsFilterProg() = default;
-    TVhsFilterProg(uint32_t id);
-};
-
-struct TVhsBlendProg : TShaderProg
-{
-    int32_t VhsTexLoc = -1;
-    int32_t StrengthLoc = -1;
-
-    TVhsBlendProg() = default;
-    TVhsBlendProg(uint32_t id);
-};
-
-
+// Render states of the next draws (see SetRenderStates and RenderingMesh).
 struct GfxStates
 {
-    uint32_t Tex = 0;
+    GPU::TextureId Tex = 0;
     bool Shaded = true;
-    bool Stipple = false;
-    uint32_t SrcBlend = GL_ONE;
-    uint32_t DstBlend = GL_ZERO;
-    int8_t TexBlend = 2;
+    GPU::Blend SrcBlend = GPU::Blend::One;
+    GPU::Blend DstBlend = GPU::Blend::Zero;
     bool AlphaBlend = false;
     bool Zwrite = true;
     bool LinearFilter = true;
@@ -471,19 +358,35 @@ struct GfxStates
     float FogStart = 3496.0;
     float FogLength = 600.0;
     float FogStrength = 1.0;
-    TGLColor FogColor = TGLColor(0.0, 0.0, 0.0, 1.0);
+    TColorF FogColor = TColorF(0.0, 0.0, 0.0, 1.0);
     int32_t AFog = 0; // 0: off, 1: radial smooth fade, 2: classic camera-depth fade
     float AFogStart = 3496.0;
     float AFogLength = 600.0;
     float AFogStrength = 1.0;
-    TGLColor AFogColor = TGLColor(0.588235f, 0.607843f, 0.627451f, 1.0f);
+    TColorF AFogColor = TColorF(0.588235f, 0.607843f, 0.627451f, 1.0f);
 
     bool DepthTest = true;
-
-    uint32_t DataBuf = 0;
-    uint32_t IndexBuf = 0;
-    TShaderProg Prog;
+    GPU::ProgramId Prog = 0;
 };
+
+// Uniforms of the post programs: PostParams of GFXEngine::_postPrelude (std140).
+struct TPostParams
+{
+    float normclr[3];
+    float filterStrength;
+    float invclr[3];
+    float vhsStrength;
+    int32_t screenSize[2];
+    int32_t randval;
+    int32_t millisecs;
+    float atmosphereStrength;
+    float atmosphereExposure;
+    float atmosphereContrast;
+    float atmosphereSaturation;
+    float atmosphereVignette;
+    float pad[3];
+};
+static_assert(sizeof(TPostParams) == 80, "TPostParams must match PostParams of _postPrelude");
 
 struct rstr_arg204
 {
@@ -567,7 +470,6 @@ struct GfxMode
     int h = 0;
     int bpp = 0;
     bool windowed = false;
-    SDL_DisplayMode mode = {0};
     std::string name;
 
     GfxMode() {};
@@ -649,8 +551,8 @@ public:
     static int can_stippling;
 
 protected:
-    static SDL_PixelFormat *_pixfmt;
-    static GLint _glPixfmt, _glPixtype;
+    static const SDL_PixelFormatDetails *_pixfmt;
+    static GPU::Format _texFormat;     // GPU texel format matching _pixfmt surfaces
     static bool _staticInited;
 
     static void StaticInit();
@@ -666,7 +568,7 @@ public:
     // Drawing into the same surface as the rest of the gameplay UI preserves
     // normal window layering automatically instead of requiring a later overlay pass.
     void DrawVirtualUISolidRect(float left, float top, float right, float bottom,
-                                const TGLColor &color);
+                                const TColorF &color);
     Common::Point GetVirtualUIResolution() const;
     void BeginVirtualUI(const Common::Point &logicalSize);
     void EndVirtualUI();
@@ -674,8 +576,10 @@ public:
     VirtualUIStyle GetVirtualUIStyle() const { return _virtualUiStyle; }
     bool IsVirtualUIPass() const { return _virtualUiPass; }
 
-    uint32_t LoadShader(int32_t type, const std::string &fl);
-    uint32_t CompileShader(int32_t type, const std::string &string);
+    // Text of a GLSL shader file of the game data (empty when missing).
+    static std::string ReadShaderFile(const std::string &path);
+    // Full-screen post program: built-in vertex shader + a Data/res fragment shader.
+    GPU::ProgramId LoadPostProgram(const std::string &fragmentPath, const std::string &what);
 
     void SetFBOBlending(int mode);
     void DrawFBO();
@@ -725,10 +629,9 @@ public:
     const std::string &GetVisualFilterName() const { return _visualFilterName; }
 
 
-    static SDL_PixelFormat *GetPixelFormat() { return _pixfmt; };
+    static const SDL_PixelFormatDetails *GetPixelFormat() { return _pixfmt; };
     static uint32_t GetPixelFormatU32() { return _pixfmt->format; };
-    static GLint GetGlPixFormat() { return _glPixfmt; };
-    static GLint GetGlPixType() { return _glPixtype; };
+    static GPU::Format GetTexFormat() { return _texFormat; };
 
 
     static void DrawLine(SDL_Surface *surface, const Common::Line &line, uint8_t cr, uint8_t cg, uint8_t cb, uint8_t alpha = 255, bool preserveSurfaceAlpha = false);
@@ -755,7 +658,8 @@ private:
     void AddGfxMode(const GfxMode &md);
     uint32_t CursPix(uint8_t *data, int ofs, int bpp);
 
-    static int EventsWatcher(void *, SDL_Event *event);
+    static bool EventsWatcher(void *, SDL_Event *event);
+    void CreateSceneTargets(const Common::Point &size);
 
 public:
     virtual size_t func0(IDVList &stak);
@@ -834,6 +738,12 @@ public:
     void draw2DandFlush();
 
     void DrawVtxQuad(const std::array<GFX::TVertex, 4> &vtx);
+    // Pipeline states of a standard-shader draw, from _states.
+    GPU::DrawState StdDrawState(GPU::Layout layout) const;
+    // Full-screen quad of a post program; image and aux are its two samplers.
+    void DrawPostQuad(GPU::ProgramId program, GPU::TextureId image, GPU::TextureId aux,
+                      bool blend, GPU::Blend src, GPU::Blend dst, const TPostParams &params);
+    TPostParams PostParamsBase(const Common::Point &scrSz) const;
 
     int LoadFontByDescr(const std::string &fontname);
     int MeasureScreenTextWidth(const std::string &text) const;
@@ -850,14 +760,13 @@ public:
     virtual SDL_Surface *CreateSurfaceScreenFormat(int width, int height);
     virtual SDL_Surface *ConvertToScreenFormat(SDL_Surface *src);
 
-    static SDL_Surface *ConvertSDLSurface(SDL_Surface *src, const SDL_PixelFormat * fmt);
+    static SDL_Surface *ConvertSDLSurface(SDL_Surface *src, SDL_PixelFormat fmt);
 
 
     float GetColorEffectPower(int id);
 
     Common::Point ConvertPosTo2DStuff(const Common::Point &pos);
 
-    void RenderingMeshOld(TRenderNode *mesh);
     void RenderingMesh(TRenderNode *mesh);
     void RenderNode(TRenderNode *node);
     void Rasterize(uint32_t RasterEtapes = RASTER_ALL);
@@ -874,13 +783,9 @@ public:
     GfxStates& States() { return _states; };
     const GfxStates& GetLastStates() { return _lastStates; };
 
-    const TShaderProg &GetStdShaderProg() { return _stdShaderProg; };
+    GPU::ProgramId GetStdShaderProg() { return _stdShaderProg; };
 
     void SetRenderStates(int arg);
-
-    void BindVBOParameters(TShaderProg &shader);
-
-    void CommitUBOParameters();
 
     void SetProjectionMatrix(const mat4x4f &mat);
     void SetModelViewMatrix(const mat4x4f &mat);
@@ -926,11 +831,10 @@ public:
     //Data
     //static constexpr const char * __ClassName = ;
 
-    // Graphics chip in use (OpenGL strings) and whether it is a chip built into the
-    // processor. Read lazily; call only with the GL context current (render thread).
+    // Graphics chip in use, the API that drives it and whether it is a chip built
+    // into the processor (debug overlay and the startup log).
     const std::string &GpuRenderer() { ReadGraphicsChip(); return _gpuRenderer; }
-    const std::string &GpuVendor() { ReadGraphicsChip(); return _gpuVendor; }
-    const std::string &GpuGlVersion() { ReadGraphicsChip(); return _gpuGlVersion; }
+    const std::string &GpuApi() { ReadGraphicsChip(); return _gpuApi; }
     bool GpuIsIntegrated() { ReadGraphicsChip(); return _gpuIntegrated; }
 
 
@@ -945,8 +849,8 @@ private:
 
     SDL_Surface *ScreenSurface = nullptr;
     SDL_Surface *VirtualUISurface = nullptr;
-    GLuint screenTex = 0;
-    GLuint virtualUiTex = 0;
+    GPU::TextureId screenTex = 0;
+    GPU::TextureId virtualUiTex = 0;
 
     bool _virtualUiPass = false;
     bool _virtualUiPending = false;
@@ -962,6 +866,8 @@ private:
 
     static const std::string _stdPShaderText;
     static const std::string _stdVShaderText;
+    static const std::string _postVShaderText;
+    static const std::string _postPrelude;
 
 public:
     int _forcesoftcursor;
@@ -1000,8 +906,6 @@ public:
     float _corrH, _corrIH;
     bool _solidFont;
 
-    bool _glext = false;
-    bool _vbo = false;
 
     // Display class
     SDL_Color _field_4 = {0}; // Color?
@@ -1048,26 +952,10 @@ protected:
     float _frustumFar;
     float _viewZoom = 1.0f;
 
-    uint32_t _stdPsShader = 0;
-    uint32_t _stdVsShader = 0;
-    TShaderProg _stdShaderProg;
+    GPU::ProgramId _stdShaderProg = 0;
 
-    uint32_t _vboParams = 0;
-
-    static constexpr int32_t _vboMProjOff = 0;   // 4 * 4 * 4 = 64
-    static constexpr int32_t _vboMViewOff = 64;  // 4 * 4 * 4 = 64
-    static constexpr int32_t _vboFogOff   = 128; // vec4: enable, start, length, strength
-    static constexpr int32_t _vboAFogOff  = 144; // vec4: enable, start, length, strength
-    static constexpr int32_t _vboTextured = 160; // 4
-    static constexpr int32_t _vboFlat     = 164; // 4
-    static constexpr int32_t _vboATest    = 168; // 4
-    // OpenNeoUA custom: visual target hue/alpha (std140 vec4 -> 16-byte aligned at 176)
-    static constexpr int32_t _vboColorMul = 176; // 4 * 4 = 16
-    static constexpr int32_t _vboFogColor = 192; // 4 * 4 = 16
-    static constexpr int32_t _vboAtmosphereColor = 208; // 4 * 4 = 16
-    static constexpr int32_t _vboParamsSize = 224;
-    static constexpr int32_t _vboParamsBlockBinding = 0;
-
+    // Uniforms of the standard shader (std140, same layout in both stages):
+    // matrices for the vertex stage, fog and material switches for the fragment one.
     struct
     {
         mat4x4f Proj;
@@ -1083,21 +971,15 @@ protected:
         int32_t Textured = 0;
         int32_t Flat = 0;
         int32_t ATest = 0;
-        int32_t Colorize = 0; // std140 bool at offset 172; reuses the previous padding slot
-        float   ColorMul[4] = {1.0, 1.0, 1.0, 1.0}; // std140 vec4 at offset 176
-        float   FogColor[4] = {0.0, 0.0, 0.0, 1.0}; // std140 vec4 at offset 192
-        float   AtmosphereColor[4] = {0.588235f, 0.607843f, 0.627451f, 1.0f}; // offset 208
-    } _vboStatesBlock;
-
-    bool _vboStatesChanged = true;
-
-    uint32_t _globalVao = 0;
+        int32_t Colorize = 0;
+        float   ColorMul[4] = {1.0, 1.0, 1.0, 1.0};
+        float   FogColor[4] = {0.0, 0.0, 0.0, 1.0};
+        float   AtmosphereColor[4] = {0.588235f, 0.607843f, 0.627451f, 1.0f};
+    } _stdParams;
 
     GfxStates _states;
     GfxStates _lastStates;
-
-    uint32_t _stdQuadDataBuf = 0;
-    uint32_t _stdQuadIndexBuf = 0;
+    bool _colorWrite = true;      // false while the sky writes only depth
 
     vec3d _normClr;
     vec3d _invClr;
@@ -1106,19 +988,18 @@ protected:
 
     int32_t _colorEffects = 0;
 
-    uint32_t _fbo = 0;
-    uint32_t _fbod = 0;
-    uint32_t _fboTex = 0;
+    // The 3D scene is drawn here when colour effects are on, then composed by the
+    // post program (DrawFBO). RGBA16F keeps additive light above 1 until then.
+    GPU::TextureId _sceneTex = 0;
+    GPU::TextureId _sceneDepth = 0;
+    Common::Point _sceneSize;
     int32_t _fboBlend = 0;
 
-    uint32_t _psShader = 0;
-    uint32_t _vsShader = 0;
-    TColorEffectsProg _colorEffectsShaderProg;
+    GPU::ProgramId _colorEffectsShaderProg = 0;
 
-    // OpenNeoUA custom: optional world-only atmospheric color pass. It reuses the
-    // existing scene FBO and fullscreen quad; no extra framebuffer is created.
-    uint32_t _atmospherePsShader = 0;
-    TAtmosphereProg _atmosphereShaderProg;
+    // OpenNeoUA custom: optional world-only atmospheric colour pass, drawn by its
+    // own post program in place of the colour effects one.
+    GPU::ProgramId _atmosphereShaderProg = 0;
     bool _atmosphereEnabled = false;
     bool _atmosphereActive = false;
     float _atmosphereStrength = 1.0f;
@@ -1128,46 +1009,34 @@ protected:
     float _atmosphereVignette = 0.0f;
 
     // OpenNeoUA custom: fullscreen visual filter state
-    uint32_t _visualFilterLut = 0;        // GL texture, 256x1 RGB LUT
+    GPU::TextureId _visualFilterLut = 0;  // 256x1 RGBA LUT
     float _visualFilterStrength = 0.0f;   // effective blend strength (0 => off)
     bool _visualFilterActive = false;     // true only when a real filter LUT is loaded
     std::string _visualFilterName;        // selected filter file name ("Standard" when none)
 
     // OpenNeoUA experimental: optional VHS post-process stacked after the visual filter.
-    uint32_t _vhsPsShader = 0;
-    uint32_t _vhsVsShader = 0;
-    uint32_t _vhsBlendPsShader = 0;
-    uint32_t _vhsFbo = 0;
-    uint32_t _vhsOutFbo = 0;
-    uint32_t _vhsCopyTex = 0;
-    uint32_t _vhsOutTex = 0;
+    GPU::TextureId _vhsCopyTex = 0;       // copy of the finished frame
+    GPU::TextureId _vhsOutTex = 0;        // VHS effect output (240 lines for original video)
     Common::Point _vhsCopyTexSize;
     Common::Point _vhsOutTexSize;
     bool _originalVideoFilter = false;
-    bool _vhsFboReady = false;
-    TVhsFilterProg _vhsFilterProg;
-    TVhsBlendProg _vhsBlendProg;
+    GPU::ProgramId _vhsFilterProg = 0;
+    GPU::ProgramId _vhsBlendProg = 0;
 
     bool _graphicsChipReported = false;
 
     // Filled once by ReadGraphicsChip (debug overlay and the startup log).
     bool _graphicsChipRead = false;
-    std::string _gpuRenderer, _gpuVendor, _gpuGlVersion;
+    std::string _gpuRenderer, _gpuApi;
     bool _gpuIntegrated = false;
 
-    TDecalProg _decalProg;
-    uint32_t _decalVsShader = 0;
-    uint32_t _decalPsShader = 0;
-    uint32_t _decalDepthTex = 0;
+    GPU::ProgramId _decalProg = 0;
+    GPU::TextureId _decalDepthTex = 0;    // copy of the world depth, read by the decals
     Common::Point _decalDepthTexSize;
     // Rest pass: its program, its float texture and the dug meshes of the frame.
-    TDecalRestProg _decalRestProg;
-    uint32_t _decalRestVsShader = 0;
-    uint32_t _decalRestPsShader = 0;
-    uint32_t _decalRestFbo = 0;
-    uint32_t _decalRestTex = 0;
+    GPU::ProgramId _decalRestProg = 0;
+    GPU::TextureId _decalRestTex = 0;
     Common::Point _decalRestTexSize;
-    bool _decalRestUnusable = false;   // No float render target on this GL.
     std::vector<TRenderNode *> _decalDugList;
     mat3x3 _decalWorldToView;
     uint32_t _decalRenderFlags = 0;

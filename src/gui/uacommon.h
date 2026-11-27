@@ -3,7 +3,7 @@
 
 #include <array>
 #include <inttypes.h>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 #include "common/common.h"
 #include "../system/gfx.h"
